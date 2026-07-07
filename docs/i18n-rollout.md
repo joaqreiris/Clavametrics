@@ -141,7 +141,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Daily Planning.html
 - ✅ RPE.html
 - ✅ Availability.html
-- ⬜ Chat & Tasks.html
+- ✅ Chat & Tasks.html
 - ⬜ Lineup.html
 
 ### Fase 3 — Técnico

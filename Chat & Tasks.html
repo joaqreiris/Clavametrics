@@ -353,10 +353,10 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="ctTeamSelect" onchange="ctOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+        <select id="ctTeamSelect" onchange="ctOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
       </div>
-      <div class="hub-crumb"><i class="ti ti-home"></i><span>Workspace</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Chat &amp; tasks</span></div>
-      <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="chat_tasks.workspace">Workspace</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="chat_tasks.breadcrumb">Chat &amp; tasks</span></div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="chat_tasks.search_players_sessions_microcycles" placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions">
         <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
         <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
@@ -364,8 +364,8 @@
     </div>
 
     <div class="ct-tabs">
-      <button class="ct-tab is-on" data-view="chat"><i class="ti ti-message-circle"></i>Chat<span class="badge" id="chatBadge" style="display:none">0</span></button>
-      <button class="ct-tab" data-view="tasks"><i class="ti ti-checklist"></i>Tasks<span class="badge" id="tasksBadge" style="display:none">0</span></button>
+      <button class="ct-tab is-on" data-view="chat"><i class="ti ti-message-circle"></i><span data-i18n="chat_tasks.chat">Chat</span><span class="badge" id="chatBadge" style="display:none">0</span></button>
+      <button class="ct-tab" data-view="tasks"><i class="ti ti-checklist"></i><span data-i18n="chat_tasks.tasks">Tasks</span><span class="badge" id="tasksBadge" style="display:none">0</span></button>
     </div>
 
     <!-- CHAT -->
@@ -373,10 +373,10 @@
       <div class="chat-layout">
 
         <aside class="chat-side">
-          <div class="chat-side-h"><h3>Inbox <span class="ct" id="inboxCount">0</span></h3><button title="New DM" onclick="openDmPicker()"><i class="ti ti-edit"></i></button></div>
-          <div class="chat-search"><input class="chat-search-input" placeholder="Search messages, files…"></div>
+          <div class="chat-side-h"><h3><span data-i18n="chat_tasks.inbox">Inbox</span> <span class="ct" id="inboxCount">0</span></h3><button data-i18n-attr="title:chat_tasks.new_dm" title="New DM" onclick="openDmPicker()"><i class="ti ti-edit"></i></button></div>
+          <div class="chat-search"><input class="chat-search-input" data-i18n-ph="chat_tasks.search_messages_files" placeholder="Search messages, files…"></div>
           <div class="chat-list" id="chatList">
-            <div style="padding:8px 12px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Loading…</div>
+            <div style="padding:8px 12px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)" data-i18n="common.loading">Loading…</div>
           </div>
         </aside>
 
@@ -384,8 +384,8 @@
           <div class="chat-h" id="chatHeader">
             <div class="av"><i class="ti ti-hash"></i></div>
             <div class="info">
-              <div class="name"># team</div>
-              <div class="meta"><span class="dot"></span>Loading…</div>
+              <div class="name" data-i18n="chat_tasks.team_channel_name"># team</div>
+              <div class="meta"><span class="dot"></span><span data-i18n="common.loading">Loading…</span></div>
             </div>
             <div class="right">
               <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
@@ -394,22 +394,22 @@
           </div>
 
           <div class="chat-body" id="chatBody">
-            <div style="text-align:center;padding:48px;color:var(--cm-fg-muted);font-size:13px">Loading…</div>
+            <div style="text-align:center;padding:48px;color:var(--cm-fg-muted);font-size:13px" data-i18n="common.loading">Loading…</div>
 
           </div>
 
           <div class="chat-composer" style="align-items:flex-end">
             <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.mp4,.mov" style="display:none" onchange="handleFileSelect(event)">
             <div class="chat-comp-tools">
-              <button title="Attach file" onclick="handleAttachClick()"><i class="ti ti-paperclip"></i></button>
-              <button title="Mention" onclick="toggleMentionPop(event)"><i class="ti ti-at"></i></button>
-              <button title="Emoji" onclick="toggleEmojiPop(event)"><i class="ti ti-mood-smile"></i></button>
-              <button title="Create task" onclick="composerCreateTask(event)"><i class="ti ti-flag-2"></i></button>
+              <button data-i18n-attr="title:chat_tasks.attach_file" title="Attach file" onclick="handleAttachClick()"><i class="ti ti-paperclip"></i></button>
+              <button data-i18n-attr="title:chat_tasks.mention" title="Mention" onclick="toggleMentionPop(event)"><i class="ti ti-at"></i></button>
+              <button data-i18n-attr="title:chat_tasks.emoji" title="Emoji" onclick="toggleEmojiPop(event)"><i class="ti ti-mood-smile"></i></button>
+              <button data-i18n-attr="title:chat_tasks.create_task" title="Create task" onclick="composerCreateTask(event)"><i class="ti ti-flag-2"></i></button>
             </div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
               <div id="pendingAtt" style="display:none"></div>
               <div id="linkPreviewDraft" style="display:none"></div>
-              <input class="chat-comp-input" id="msgInput" placeholder="Message — Enter to send, Shift+Enter for newline">
+              <input class="chat-comp-input" id="msgInput" data-i18n-ph="chat_tasks.message_placeholder" placeholder="Message — Enter to send, Shift+Enter for newline">
             </div>
             <button class="chat-send" onclick="sendMessage()"><i class="ti ti-send"></i></button>
             <div class="cmp-pop cmp-emoji is-hidden" id="emojiPop"></div>
@@ -420,47 +420,47 @@
         <aside class="chat-right">
           <div class="cr-section">
             <div class="cr-section-head">
-              <h4>About</h4>
-              <button id="chatAboutEditBtn" class="cr-head-btn" style="display:none" onclick="startEditAbout()" title="Edit description"><i class="ti ti-pencil" style="font-size:11px"></i></button>
+              <h4 data-i18n="chat_tasks.about">About</h4>
+              <button id="chatAboutEditBtn" class="cr-head-btn" style="display:none" onclick="startEditAbout()" data-i18n-attr="title:chat_tasks.edit_description" title="Edit description"><i class="ti ti-pencil" style="font-size:11px"></i></button>
             </div>
-            <div id="chatAboutText" style="font:500 12.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+            <div id="chatAboutText" style="font:500 12.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="common.loading">Loading…</div>
             <div id="chatAboutEditArea" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
               <textarea id="chatAboutInput" rows="3" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;resize:vertical"></textarea>
               <div style="display:flex;gap:6px;justify-content:flex-end">
-                <button class="cm-btn is-outline is-sm" onclick="cancelEditAbout()">Cancel</button>
-                <button class="cm-btn is-primary is-sm" onclick="saveAbout()">Save</button>
+                <button class="cm-btn is-outline is-sm" onclick="cancelEditAbout()" data-i18n="common.cancel">Cancel</button>
+                <button class="cm-btn is-primary is-sm" onclick="saveAbout()" data-i18n="common.save">Save</button>
               </div>
             </div>
           </div>
           <div class="cr-section">
-            <h4 id="chatRightMembersTitle">Members</h4>
+            <h4 id="chatRightMembersTitle" data-i18n="chat_tasks.members">Members</h4>
             <div id="chatRightMembers"></div>
           </div>
           <div class="cr-section">
             <div class="cr-section-head">
-              <h4 id="pinnedFilesTitle">Pinned files</h4>
-              <button class="cr-head-btn" onclick="openPinFileForm()" title="Pin a file"><i class="ti ti-plus" style="font-size:11px"></i></button>
+              <h4 id="pinnedFilesTitle" data-i18n="chat_tasks.pinned_files">Pinned files</h4>
+              <button class="cr-head-btn" onclick="openPinFileForm()" data-i18n-attr="title:chat_tasks.pin_a_file" title="Pin a file"><i class="ti ti-plus" style="font-size:11px"></i></button>
             </div>
             <div id="pinFileForm" style="display:none;flex-direction:column;gap:6px;margin-top:4px">
-              <input type="text" id="pinFileUrl" placeholder="File URL or link…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-              <input type="text" id="pinFileName" placeholder="File name…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+              <input type="text" id="pinFileUrl" data-i18n-ph="chat_tasks.file_url_or_link" placeholder="File URL or link…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+              <input type="text" id="pinFileName" data-i18n-ph="chat_tasks.file_name" placeholder="File name…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
               <select id="pinFileType" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-                <option value="">Type (optional)</option>
-                <option value="pdf">PDF</option>
-                <option value="image">Image</option>
-                <option value="spreadsheet">Spreadsheet</option>
-                <option value="video">Video</option>
-                <option value="other">Other</option>
+                <option value="" data-i18n="chat_tasks.type_optional">Type (optional)</option>
+                <option value="pdf" data-i18n="chat_tasks.type_pdf">PDF</option>
+                <option value="image" data-i18n="chat_tasks.type_image">Image</option>
+                <option value="spreadsheet" data-i18n="chat_tasks.type_spreadsheet">Spreadsheet</option>
+                <option value="video" data-i18n="chat_tasks.type_video">Video</option>
+                <option value="other" data-i18n="chat_tasks.type_other">Other</option>
               </select>
               <div style="display:flex;gap:6px;justify-content:flex-end">
-                <button class="cm-btn is-outline is-sm" onclick="closePinFileForm()">Cancel</button>
-                <button class="cm-btn is-primary is-sm" onclick="savePinFile()">Pin</button>
+                <button class="cm-btn is-outline is-sm" onclick="closePinFileForm()" data-i18n="common.cancel">Cancel</button>
+                <button class="cm-btn is-primary is-sm" onclick="savePinFile()" data-i18n="chat_tasks.pin">Pin</button>
               </div>
             </div>
             <div id="pinnedFilesContainer"></div>
           </div>
           <div class="cr-section">
-            <h4 id="chatRightTasksTitle">Open tasks</h4>
+            <h4 id="chatRightTasksTitle" data-i18n="chat_tasks.open_tasks">Open tasks</h4>
             <div id="chatRightTasks" style="display:flex;flex-direction:column;gap:6px"></div>
           </div>
         </aside>
@@ -473,44 +473,44 @@
       <div class="tasks-page">
 
         <div class="tasks-bar">
-          <h1>Tasks</h1>
-          <span class="sub" id="tasksSub">Loading…</span>
+          <h1 data-i18n="chat_tasks.tasks">Tasks</h1>
+          <span class="sub" id="tasksSub" data-i18n="common.loading">Loading…</span>
           <div class="right">
-            <button class="tasks-pill is-on" data-filter="all">All<span class="ct" id="pillCtAll">—</span></button>
-            <button class="tasks-pill" data-filter="mine">Mine<span class="ct" id="pillCtMine">—</span></button>
-            <button class="tasks-pill" data-filter="overdue">Overdue<span class="ct" id="pillCtOverdue">—</span></button>
-            <button class="tasks-pill" data-filter="today">Due today<span class="ct" id="pillCtToday">—</span></button>
-            <button class="tasks-pill" data-filter="matchday">Match-day<span class="ct" id="pillCtMatchday">—</span></button>
-            <button class="tasks-pill" data-filter="medical">Medical<span class="ct" id="pillCtMedical">—</span></button>
-            <button class="tasks-pill" data-filter="routine">Routine<span class="ct" id="pillCtRoutine">—</span></button>
+            <button class="tasks-pill is-on" data-filter="all"><span data-i18n="common.all">All</span><span class="ct" id="pillCtAll">—</span></button>
+            <button class="tasks-pill" data-filter="mine"><span data-i18n="chat_tasks.mine">Mine</span><span class="ct" id="pillCtMine">—</span></button>
+            <button class="tasks-pill" data-filter="overdue"><span data-i18n="chat_tasks.overdue">Overdue</span><span class="ct" id="pillCtOverdue">—</span></button>
+            <button class="tasks-pill" data-filter="today"><span data-i18n="chat_tasks.due_today">Due today</span><span class="ct" id="pillCtToday">—</span></button>
+            <button class="tasks-pill" data-filter="matchday"><span data-i18n="chat_tasks.filter_match_day">Match-day</span><span class="ct" id="pillCtMatchday">—</span></button>
+            <button class="tasks-pill" data-filter="medical"><span data-i18n="chat_tasks.medical">Medical</span><span class="ct" id="pillCtMedical">—</span></button>
+            <button class="tasks-pill" data-filter="routine"><span data-i18n="chat_tasks.routine">Routine</span><span class="ct" id="pillCtRoutine">—</span></button>
             <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
-            <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Filter</button>
-            <button class="cm-btn is-primary is-sm" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:14px"></i>New task</button>
+            <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i><span data-i18n="chat_tasks.filter">Filter</span></button>
+            <button class="cm-btn is-primary is-sm" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="chat_tasks.new_task">New task</span></button>
           </div>
         </div>
 
         <div class="kanban">
 
           <div class="col">
-            <div class="col-h"><span class="dot" style="background:var(--cm-fg-muted)"></span><span class="l">Backlog</span><span class="ct" id="ctBacklog">0</span><button><i class="ti ti-dots"></i></button></div>
+            <div class="col-h"><span class="dot" style="background:var(--cm-fg-muted)"></span><span class="l" data-i18n="chat_tasks.col_backlog">Backlog</span><span class="ct" id="ctBacklog">0</span><button><i class="ti ti-dots"></i></button></div>
             <div class="col-body" id="colBacklog"></div>
-            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i>Add task</button>
+            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="chat_tasks.add_task">Add task</span></button>
           </div>
 
           <div class="col">
-            <div class="col-h"><span class="dot" style="background:var(--cm-info)"></span><span class="l">In progress</span><span class="ct" id="ctInprogress">0</span><button><i class="ti ti-dots"></i></button></div>
+            <div class="col-h"><span class="dot" style="background:var(--cm-info)"></span><span class="l" data-i18n="chat_tasks.col_in_progress">In progress</span><span class="ct" id="ctInprogress">0</span><button><i class="ti ti-dots"></i></button></div>
             <div class="col-body" id="colInprogress"></div>
-            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i>Add task</button>
+            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="chat_tasks.add_task">Add task</span></button>
           </div>
 
           <div class="col">
-            <div class="col-h"><span class="dot" style="background:var(--cm-warning)"></span><span class="l">Blocked / review</span><span class="ct" id="ctBlocked">0</span><button><i class="ti ti-dots"></i></button></div>
+            <div class="col-h"><span class="dot" style="background:var(--cm-warning)"></span><span class="l" data-i18n="chat_tasks.col_blocked_review">Blocked / review</span><span class="ct" id="ctBlocked">0</span><button><i class="ti ti-dots"></i></button></div>
             <div class="col-body" id="colBlocked"></div>
-            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i>Add task</button>
+            <button class="col-add" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="chat_tasks.add_task">Add task</span></button>
           </div>
 
           <div class="col">
-            <div class="col-h"><span class="dot" style="background:var(--cm-success)"></span><span class="l">Done · 7d</span><span class="ct" id="ctDone">0</span><button><i class="ti ti-dots"></i></button></div>
+            <div class="col-h"><span class="dot" style="background:var(--cm-success)"></span><span class="l" data-i18n="chat_tasks.col_done_7d">Done · 7d</span><span class="ct" id="ctDone">0</span><button><i class="ti ti-dots"></i></button></div>
             <div class="col-body" id="colDone"></div>
           </div>
 
@@ -525,10 +525,10 @@
 <div class="dm-picker-overlay hidden" id="dmPickerOverlay" onclick="closeDmPicker(event)">
   <div class="dm-picker">
     <div class="dm-picker-head">
-      <h3>New Direct Message</h3>
+      <h3 data-i18n="chat_tasks.new_direct_message">New Direct Message</h3>
       <button class="dm-picker-close" onclick="closeDmPicker()">×</button>
     </div>
-    <input class="dm-picker-search" id="dmPickerSearch" placeholder="Search member…" oninput="renderDmPicker()" autocomplete="off">
+    <input class="dm-picker-search" id="dmPickerSearch" data-i18n-ph="chat_tasks.search_member" placeholder="Search member…" oninput="renderDmPicker()" autocomplete="off">
     <div class="dm-picker-list" id="dmPickerList"></div>
   </div>
 </div>
@@ -537,56 +537,56 @@
 <div class="cm-panel-overlay" id="newTaskOverlay" onclick="if(event.target===this)closeNewTask()"></div>
 <div class="cm-panel" id="newTaskPanel">
   <div class="cm-panel-head">
-    <h3>New Task</h3>
+    <h3 data-i18n="chat_tasks.new_task_title">New Task</h3>
     <button class="close" onclick="closeNewTask()"><i class="ti ti-x" style="font-size:14px"></i></button>
   </div>
   <div class="cm-panel-body">
-    <div class="cm-field"><label>Title *</label><input type="text" id="newTaskTitle" placeholder="Task title…"></div>
-    <div class="cm-field"><label>Description</label><textarea id="newTaskDesc" placeholder="Details, context…"></textarea></div>
-    <div class="cm-field"><label>Assignment</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.title_label">Title *</label><input type="text" id="newTaskTitle" data-i18n-ph="chat_tasks.task_title_ph" placeholder="Task title…"></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.description">Description</label><textarea id="newTaskDesc" data-i18n-ph="chat_tasks.details_context" placeholder="Details, context…"></textarea></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.assignment">Assignment</label>
       <div id="newTaskModeSeg" style="display:flex;gap:6px">
-        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setNewTaskMode('me')">For me</button>
-        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setNewTaskMode('roles')">By role(s)</button>
+        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setNewTaskMode('me')" data-i18n="chat_tasks.for_me">For me</button>
+        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setNewTaskMode('roles')" data-i18n="chat_tasks.by_role_s">By role(s)</button>
       </div>
     </div>
     <!-- Person dropdown kept in DOM (L1 shelves arbitrary-person assignment; decided later). -->
-    <div class="cm-field" id="newTaskAssigneeField" style="display:none"><label>Assign to</label><select id="newTaskAssignee"><option value="">— Unassigned —</option></select></div>
-    <div class="cm-field" id="newTaskRolesField" style="display:none"><label>Roles</label>
+    <div class="cm-field" id="newTaskAssigneeField" style="display:none"><label data-i18n="chat_tasks.assign_to">Assign to</label><select id="newTaskAssignee"><option value="" data-i18n="chat_tasks.unassigned">— Unassigned —</option></select></div>
+    <div class="cm-field" id="newTaskRolesField" style="display:none"><label data-i18n="chat_tasks.roles">Roles</label>
       <div id="newTaskRoles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       <div id="newTaskRolesHint" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px"></div>
     </div>
-    <div class="cm-field"><label>Due date</label><input type="date" id="newTaskDue"></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.due_date">Due date</label><input type="date" id="newTaskDue"></div>
     <div class="cm-field">
-      <label>Reminders</label>
+      <label data-i18n="chat_tasks.reminders">Reminders</label>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','day')">1 day before</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','hour')">1 hour before</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','due')">On due date</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','custom')">Custom</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','day')" data-i18n="chat_tasks.1_day_before">1 day before</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','hour')" data-i18n="chat_tasks.1_hour_before">1 hour before</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','due')" data-i18n="chat_tasks.on_due_date">On due date</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('newTaskRemindersList','newTaskDue','custom')" data-i18n="chat_tasks.custom">Custom</button>
       </div>
       <div id="newTaskRemindersList"></div>
-      <button type="button" class="cm-btn is-outline is-sm" onclick="addReminderRow('newTaskRemindersList','')"><i class="ti ti-plus" style="font-size:13px"></i>Add reminder</button>
+      <button type="button" class="cm-btn is-outline is-sm" onclick="addReminderRow('newTaskRemindersList','')"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="chat_tasks.add_reminder">Add reminder</span></button>
     </div>
-    <div class="cm-field"><label>Priority</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.priority">Priority</label>
       <select id="newTaskPriority">
-        <option value="low">Low</option>
-        <option value="medium" selected>Medium</option>
-        <option value="high">High</option>
-        <option value="urgent">Urgent</option>
+        <option value="low" data-i18n="chat_tasks.prio_low">Low</option>
+        <option value="medium" selected data-i18n="chat_tasks.prio_medium">Medium</option>
+        <option value="high" data-i18n="chat_tasks.prio_high">High</option>
+        <option value="urgent" data-i18n="chat_tasks.prio_urgent">Urgent</option>
       </select>
     </div>
-    <div class="cm-field"><label>Category</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.category">Category</label>
       <select id="newTaskCategory">
-        <option value="general" selected>General</option>
-        <option value="match_day">Match-day</option>
-        <option value="medical">Medical</option>
-        <option value="routine">Routine</option>
+        <option value="general" selected data-i18n="chat_tasks.cat_general">General</option>
+        <option value="match_day" data-i18n="chat_tasks.cat_match_day">Match-day</option>
+        <option value="medical" data-i18n="chat_tasks.cat_medical">Medical</option>
+        <option value="routine" data-i18n="chat_tasks.cat_routine">Routine</option>
       </select>
     </div>
   </div>
   <div class="cm-panel-foot">
-    <button class="cm-btn is-outline is-sm" onclick="closeNewTask()">Cancel</button>
-    <button class="cm-btn is-primary is-sm" onclick="saveNewTask()">Create Task</button>
+    <button class="cm-btn is-outline is-sm" onclick="closeNewTask()" data-i18n="common.cancel">Cancel</button>
+    <button class="cm-btn is-primary is-sm" onclick="saveNewTask()" data-i18n="chat_tasks.create_task_btn">Create Task</button>
   </div>
 </div>
 
@@ -594,65 +594,65 @@
 <div class="cm-panel-overlay" id="detailOverlay" onclick="if(event.target===this)closeTaskDetail()"></div>
 <div class="cm-panel" id="detailPanel">
   <div class="cm-panel-head">
-    <h3 id="detailTitle">Edit task</h3>
+    <h3 id="detailTitle" data-i18n="chat_tasks.edit_task">Edit task</h3>
     <button class="close" onclick="closeTaskDetail()"><i class="ti ti-x" style="font-size:14px"></i></button>
   </div>
   <div class="cm-panel-body">
-    <div class="cm-field"><label>Title *</label><input type="text" id="detailTitleInput" placeholder="Task title…"></div>
-    <div class="cm-field"><label>Description</label><textarea id="detailDescInput" placeholder="Details, context…"></textarea></div>
-    <div class="cm-field"><label>Assignment</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.title_label">Title *</label><input type="text" id="detailTitleInput" data-i18n-ph="chat_tasks.task_title_ph" placeholder="Task title…"></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.description">Description</label><textarea id="detailDescInput" data-i18n-ph="chat_tasks.details_context" placeholder="Details, context…"></textarea></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.assignment">Assignment</label>
       <div id="detailModeSeg" style="display:flex;gap:6px">
-        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setDetailMode('me')">For me</button>
-        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setDetailMode('roles')">By role(s)</button>
+        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setDetailMode('me')" data-i18n="chat_tasks.for_me">For me</button>
+        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setDetailMode('roles')" data-i18n="chat_tasks.by_role_s">By role(s)</button>
       </div>
     </div>
-    <div class="cm-field" id="detailRolesField" style="display:none"><label>Roles</label>
+    <div class="cm-field" id="detailRolesField" style="display:none"><label data-i18n="chat_tasks.roles">Roles</label>
       <div id="detailRoles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       <div id="detailRolesHint" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px"></div>
     </div>
-    <div class="cm-field"><label>Status</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.status">Status</label>
       <select id="detailStatus">
-        <option value="pending">Backlog</option>
-        <option value="in_progress">In Progress</option>
-        <option value="cancelled">Blocked / Review</option>
-        <option value="done">Done</option>
+        <option value="pending" data-i18n="chat_tasks.status_backlog">Backlog</option>
+        <option value="in_progress" data-i18n="chat_tasks.status_in_progress">In Progress</option>
+        <option value="cancelled" data-i18n="chat_tasks.status_blocked_review">Blocked / Review</option>
+        <option value="done" data-i18n="chat_tasks.status_done">Done</option>
       </select>
     </div>
-    <div class="cm-field"><label>Due date</label><input type="date" id="detailDueInput"></div>
+    <div class="cm-field"><label data-i18n="chat_tasks.due_date">Due date</label><input type="date" id="detailDueInput"></div>
     <div class="cm-field">
-      <label>Reminders</label>
+      <label data-i18n="chat_tasks.reminders">Reminders</label>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','day')">1 day before</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','hour')">1 hour before</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','due')">On due date</button>
-        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','custom')">Custom</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','day')" data-i18n="chat_tasks.1_day_before">1 day before</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','hour')" data-i18n="chat_tasks.1_hour_before">1 hour before</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','due')" data-i18n="chat_tasks.on_due_date">On due date</button>
+        <button type="button" class="cm-btn is-outline is-sm" onclick="addPresetReminder('detailRemindersList','detailDueInput','custom')" data-i18n="chat_tasks.custom">Custom</button>
       </div>
       <div id="detailRemindersList"></div>
-      <button type="button" class="cm-btn is-outline is-sm" onclick="addReminderRow('detailRemindersList','')"><i class="ti ti-plus" style="font-size:13px"></i>Add reminder</button>
+      <button type="button" class="cm-btn is-outline is-sm" onclick="addReminderRow('detailRemindersList','')"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="chat_tasks.add_reminder">Add reminder</span></button>
     </div>
-    <div class="cm-field"><label>Priority</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.priority">Priority</label>
       <select id="detailPriority">
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-        <option value="urgent">Urgent</option>
+        <option value="low" data-i18n="chat_tasks.prio_low">Low</option>
+        <option value="medium" data-i18n="chat_tasks.prio_medium">Medium</option>
+        <option value="high" data-i18n="chat_tasks.prio_high">High</option>
+        <option value="urgent" data-i18n="chat_tasks.prio_urgent">Urgent</option>
       </select>
     </div>
-    <div class="cm-field"><label>Category</label>
+    <div class="cm-field"><label data-i18n="chat_tasks.category">Category</label>
       <select id="detailCategory">
-        <option value="general">General</option>
-        <option value="match_day">Match day</option>
-        <option value="medical">Medical</option>
-        <option value="routine">Routine</option>
-        <option value="event">Event</option>
+        <option value="general" data-i18n="chat_tasks.cat_general">General</option>
+        <option value="match_day" data-i18n="chat_tasks.cat_match_day">Match day</option>
+        <option value="medical" data-i18n="chat_tasks.cat_medical">Medical</option>
+        <option value="routine" data-i18n="chat_tasks.cat_routine">Routine</option>
+        <option value="event" data-i18n="chat_tasks.cat_event">Event</option>
       </select>
     </div>
   </div>
   <div class="cm-panel-foot">
-    <button class="cm-btn is-outline is-sm" onclick="closeTaskDetail()">Cancel</button>
+    <button class="cm-btn is-outline is-sm" onclick="closeTaskDetail()" data-i18n="common.cancel">Cancel</button>
     <div style="flex:1"></div>
-    <button class="cm-btn is-sm" id="detailDeleteBtn" onclick="deleteDetailTask()" style="color:var(--cm-danger);border:1px solid var(--cm-danger-bd);background:var(--cm-danger-bg)">Delete</button>
-    <button class="cm-btn is-primary is-sm" onclick="saveDetail()">Save</button>
+    <button class="cm-btn is-sm" id="detailDeleteBtn" onclick="deleteDetailTask()" style="color:var(--cm-danger);border:1px solid var(--cm-danger-bd);background:var(--cm-danger-bg)" data-i18n="common.delete">Delete</button>
+    <button class="cm-btn is-primary is-sm" onclick="saveDetail()" data-i18n="common.save">Save</button>
   </div>
 </div>
 
@@ -660,17 +660,17 @@
 <div class="pin-modal-overlay" id="pinModalOverlay" onclick="if(event.target===this)closePinModal()">
   <div class="pin-modal">
     <div class="pin-modal-head">
-      <h3>Pin to channel</h3>
+      <h3 data-i18n="chat_tasks.pin_to_channel">Pin to channel</h3>
       <button class="pin-modal-close" onclick="closePinModal()">×</button>
     </div>
     <div class="pin-modal-tabs">
-      <button class="pin-modal-tab is-on" data-pm-tab="upload" onclick="switchPinTab('upload')"><i class="ti ti-upload" style="font-size:13px;margin-right:5px"></i>Upload file</button>
-      <button class="pin-modal-tab" data-pm-tab="link" onclick="switchPinTab('link')"><i class="ti ti-link" style="font-size:13px;margin-right:5px"></i>Add link</button>
+      <button class="pin-modal-tab is-on" data-pm-tab="upload" onclick="switchPinTab('upload')"><i class="ti ti-upload" style="font-size:13px;margin-right:5px"></i><span data-i18n="chat_tasks.upload_file">Upload file</span></button>
+      <button class="pin-modal-tab" data-pm-tab="link" onclick="switchPinTab('link')"><i class="ti ti-link" style="font-size:13px;margin-right:5px"></i><span data-i18n="chat_tasks.add_link">Add link</span></button>
     </div>
     <div class="pin-modal-body" id="pinModalBody"></div>
     <div class="pin-modal-foot">
-      <button class="cm-btn is-outline is-sm" onclick="closePinModal()">Cancel</button>
-      <button class="cm-btn is-primary is-sm" id="pinModalSaveBtn" onclick="savePinModal()">Pin</button>
+      <button class="cm-btn is-outline is-sm" onclick="closePinModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="pinModalSaveBtn" onclick="savePinModal()" data-i18n="chat_tasks.pin">Pin</button>
     </div>
   </div>
 </div>
@@ -701,6 +701,13 @@ let urlDetectTimer    = null;
 let pinModalTab       = 'upload';
 let pinModalFile      = null;
 
+// ── i18n helper ──
+function tt(key, fallbackEN, vars) {
+  const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+  return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+}
+function i18nLocale() { return (window.CM_I18N && CM_I18N.current) || 'en'; }
+
 // ── UTILS ──
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -712,18 +719,19 @@ function formatTime(iso) {
   if (!iso) return '';
   const d = new Date(iso), now = new Date();
   if (d.toDateString() === now.toDateString())
-    return d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-  return d.toLocaleDateString([], { month:'short', day:'numeric' });
+    return d.toLocaleTimeString(i18nLocale(), { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleDateString(i18nLocale(), { month:'short', day:'numeric' });
 }
 function formatDate(str) {
   if (!str) return '';
   const d = new Date(str + 'T00:00:00'), now = new Date();
   now.setHours(0,0,0,0);
   const diff = Math.round((d - now) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff < 0)  return 'Overdue · ' + d.toLocaleDateString([], { month:'short', day:'numeric' });
-  return d.toLocaleDateString([], { month:'short', day:'numeric' });
+  if (diff === 0) return tt('chat_tasks.due_today_word', 'Today');
+  if (diff === 1) return tt('chat_tasks.due_tomorrow', 'Tomorrow');
+  const dateStr = d.toLocaleDateString(i18nLocale(), { month:'short', day:'numeric' });
+  if (diff < 0)  return tt('chat_tasks.due_overdue', 'Overdue · ' + dateStr, { date: dateStr });
+  return dateStr;
 }
 function isOverdue(str) { return str && new Date(str+'T00:00:00') < new Date(new Date().toDateString()); }
 function isToday(str)   { return str && new Date(str+'T00:00:00').toDateString() === new Date().toDateString(); }
@@ -752,7 +760,7 @@ async function loadAbout() {
     .select('description').eq('id', currentUser.clubId).single();
   const text = data?.description || '';
   const el = document.getElementById('chatAboutText');
-  if (el) el.textContent = text || 'No description yet.';
+  if (el) el.textContent = text || tt('chat_tasks.no_description_yet', 'No description yet.');
   const editBtn = document.getElementById('chatAboutEditBtn');
   if (editBtn && ['admin','owner'].includes(currentUser?.role)) editBtn.style.display = '';
 }
@@ -760,7 +768,8 @@ async function loadAbout() {
 function startEditAbout() {
   const text = document.getElementById('chatAboutText').textContent;
   const inp = document.getElementById('chatAboutInput');
-  if (inp) inp.value = text === 'No description yet.' ? '' : text;
+  const _noDesc = tt('chat_tasks.no_description_yet', 'No description yet.');
+  if (inp) inp.value = (text === _noDesc || text === 'No description yet.') ? '' : text;
   document.getElementById('chatAboutText').style.display = 'none';
   const editBtn = document.getElementById('chatAboutEditBtn');
   if (editBtn) editBtn.style.display = 'none';
@@ -781,8 +790,8 @@ async function saveAbout() {
   const text = (document.getElementById('chatAboutInput').value || '').trim();
   const { error } = await window.sb.from('clubs')
     .update({ description: text }).eq('id', currentUser.clubId);
-  if (error) { console.error('About save error:', error); alert('Error saving description: ' + error.message); return; }
-  document.getElementById('chatAboutText').textContent = text || 'No description yet.';
+  if (error) { console.error('About save error:', error); alert(tt('chat_tasks.error_saving_desc', 'Error saving description: ' + error.message, { msg: error.message })); return; }
+  document.getElementById('chatAboutText').textContent = text || tt('chat_tasks.no_description_yet', 'No description yet.');
   cancelEditAbout();
 }
 
@@ -810,9 +819,9 @@ function renderPinnedFiles() {
   const container = document.getElementById('pinnedFilesContainer');
   const titleEl   = document.getElementById('pinnedFilesTitle');
   if (!container) return;
-  if (titleEl) titleEl.textContent = pinnedFiles.length ? `Pinned files · ${pinnedFiles.length}` : 'Pinned files';
+  if (titleEl) titleEl.textContent = pinnedFiles.length ? tt('chat_tasks.pinned_files_count', `Pinned files · ${pinnedFiles.length}`, { n: pinnedFiles.length }) : tt('chat_tasks.pinned_files', 'Pinned files');
   if (!pinnedFiles.length) {
-    container.innerHTML = '<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:4px 0">No pinned files</div>';
+    container.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:4px 0">${esc(tt('chat_tasks.no_pinned_files', 'No pinned files'))}</div>`;
     return;
   }
   container.innerHTML = pinnedFiles.map(f => {
@@ -820,8 +829,8 @@ function renderPinnedFiles() {
     return `<div class="cr-file">
       <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
       <div class="body"><div class="t">${esc(f.file_name)}</div><div class="s">${formatTime(f.pinned_at)}</div></div>
-      <a href="${esc(f.file_url)}" download target="_blank" class="cr-file-dl" title="Download"><i class="ti ti-download" style="font-size:12px"></i></a>
-      <button class="cr-unpin" onclick="unpinFile('${f.id}')" title="Unpin"><i class="ti ti-x" style="font-size:10px"></i></button>
+      <a href="${esc(f.file_url)}" download target="_blank" class="cr-file-dl" title="${esc(tt('chat_tasks.download', 'Download'))}"><i class="ti ti-download" style="font-size:12px"></i></a>
+      <button class="cr-unpin" onclick="unpinFile('${f.id}')" title="${esc(tt('chat_tasks.unpin', 'Unpin'))}"><i class="ti ti-x" style="font-size:10px"></i></button>
     </div>`;
   }).join('');
 }
@@ -852,7 +861,7 @@ async function savePinFile() {
     pinned_by: currentUser.id,
     team_id:   currentUser.teamId || null
   }).select().single();
-  if (error) { console.error('Pin file error:', error); alert('Error pinning file: ' + error.message); return; }
+  if (error) { console.error('Pin file error:', error); alert(tt('chat_tasks.error_pinning_file', 'Error pinning file: ' + error.message, { msg: error.message })); return; }
   if (data) { pinnedFiles.unshift(data); renderPinnedFiles(); closePinFileForm(); }
 }
 
@@ -956,7 +965,7 @@ async function loadDmPreviews() {
 function renderMessages() {
   const wrap = document.getElementById('chatBody');
   if (!messages.length) {
-    wrap.innerHTML = '<div style="text-align:center;padding:48px;color:var(--cm-fg-muted);font-size:13px">No messages yet.</div>';
+    wrap.innerHTML = `<div style="text-align:center;padding:48px;color:var(--cm-fg-muted);font-size:13px">${esc(tt('chat_tasks.no_messages_yet', 'No messages yet.'))}</div>`;
     return;
   }
   let html = '', lastDay = '';
@@ -965,8 +974,8 @@ function renderMessages() {
     if (day !== lastDay) {
       lastDay = day;
       const label = day === new Date().toDateString()
-        ? 'Today'
-        : new Date(msg.created_at).toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' });
+        ? tt('chat_tasks.day_today', 'Today')
+        : new Date(msg.created_at).toLocaleDateString(i18nLocale(), { weekday:'short', month:'short', day:'numeric' });
       html += `<div class="chat-day">${label}</div>`;
     }
     html += renderMsgHTML(msg);
@@ -1006,7 +1015,7 @@ function renderAttHTML(msg) {
   const size = formatFileSize(msg.attachment_size);
   return `<div class="att" onclick="window.open('${esc(msg.attachment_url)}','_blank')">
     <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
-    <div><div class="t">${esc(msg.attachment_name || 'File')}</div>${size ? `<div class="s">${size}</div>` : ''}</div>
+    <div><div class="t">${esc(msg.attachment_name || tt('chat_tasks.file_fallback', 'File'))}</div>${size ? `<div class="s">${size}</div>` : ''}</div>
     <i class="ti ti-download" style="margin-left:auto;font-size:13px;color:var(--cm-fg-muted)"></i>
   </div>`;
 }
@@ -1065,7 +1074,7 @@ async function sendMessage() {
       attData = { attachment_url: url, attachment_name: pendingAttachment.name, attachment_size: pendingAttachment.size, attachment_type: pendingAttachment.type };
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Error uploading file: ' + (err.message || err));
+      alert(tt('chat_tasks.error_uploading_file', 'Error uploading file: ' + (err.message || err), { msg: (err.message || err) }));
       if (sendBtn) sendBtn.disabled = false;
       return;
     }
@@ -1105,33 +1114,34 @@ function renderConvList() {
   const others = members.filter(m => m.id !== currentUser.id);
   const groupActive = activeConv === 'group';
   const lastGroup = messages.length && activeConv === 'group' ? messages[messages.length - 1] : null;
+  const _you = tt('chat_tasks.you_prefix', 'You: ');
   const groupPreview = lastGroup
     ? `${lastGroup.sender_name}: ${(lastGroup.content || '').slice(0, 40)}`
-    : 'Team channel';
+    : tt('chat_tasks.team_channel', 'Team channel');
 
-  let html = `<div class="chat-list-label">Channels</div>
+  let html = `<div class="chat-list-label">${esc(tt('chat_tasks.channels', 'Channels'))}</div>
     <div class="conv${groupActive ? ' is-on' : ''}" onclick="selectConv('group')">
       <div class="av g"><i class="ti ti-hash"></i></div>
       <div class="body">
-        <div class="name-row"><span class="name"># team</span></div>
+        <div class="name-row"><span class="name">${esc(tt('chat_tasks.team_channel_name', '# team'))}</span></div>
         <div class="preview">${esc(groupPreview)}</div>
       </div>
     </div>
     <div class="chat-list-label" style="display:flex;align-items:center">
-      Direct messages
-      <button onclick="openDmPicker()" style="margin-left:auto;background:none;border:none;color:var(--cm-fg-muted);cursor:pointer;padding:2px 4px;border-radius:4px" title="New DM"><i class="ti ti-edit" style="font-size:13px"></i></button>
+      ${esc(tt('chat_tasks.direct_messages', 'Direct messages'))}
+      <button onclick="openDmPicker()" style="margin-left:auto;background:none;border:none;color:var(--cm-fg-muted);cursor:pointer;padding:2px 4px;border-radius:4px" title="${esc(tt('chat_tasks.new_dm', 'New DM'))}"><i class="ti ti-edit" style="font-size:13px"></i></button>
     </div>`;
 
   for (const m of others) {
     const name    = m.full_name || '?';
     const isActive = activeConv === m.id;
     const last    = dmLastMsg[m.id];
-    let preview   = 'No messages yet';
+    let preview   = tt('chat_tasks.no_messages_conv', 'No messages yet');
     if (isActive && messages.length) {
       const lm = messages[messages.length - 1];
-      preview = (lm.sender_id === currentUser.id ? 'You: ' : '') + (lm.content || '').slice(0, 38);
+      preview = (lm.sender_id === currentUser.id ? _you : '') + (lm.content || '').slice(0, 38);
     } else if (last) {
-      preview = (last.sender_id === currentUser.id ? 'You: ' : '') + (last.content || '').slice(0, 38);
+      preview = (last.sender_id === currentUser.id ? _you : '') + (last.content || '').slice(0, 38);
     }
     const unread = dmUnread[m.id] || 0;
     html += `<div class="conv${isActive ? ' is-on' : ''}" onclick="selectConv('${m.id}')">
@@ -1160,7 +1170,7 @@ async function selectConv(id) {
   }, { onConflict: 'user_id,channel_key,club_id' });
   renderedIds.clear();
   messages = [];
-  document.getElementById('chatBody').innerHTML = '<div style="text-align:center;padding:48px;color:var(--cm-fg-muted)">Loading…</div>';
+  document.getElementById('chatBody').innerHTML = `<div style="text-align:center;padding:48px;color:var(--cm-fg-muted)">${esc(tt('common.loading', 'Loading…'))}</div>`;
   renderConvList();
   updateChatHeader();
   await loadMessages();
@@ -1174,8 +1184,8 @@ function updateChatHeader() {
     el.innerHTML = `
       <div class="av"><i class="ti ti-hash"></i></div>
       <div class="info">
-        <div class="name"># team</div>
-        <div class="meta"><span class="dot"></span>${members.length} members · Team channel</div>
+        <div class="name">${esc(tt('chat_tasks.team_channel_name', '# team'))}</div>
+        <div class="meta"><span class="dot"></span>${esc(tt('chat_tasks.n_members_team', `${members.length} members · Team channel`, { n: members.length }))}</div>
       </div>
       <div class="right">
         <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
@@ -1183,12 +1193,12 @@ function updateChatHeader() {
       </div>`;
   } else {
     const m = members.find(x => x.id === activeConv);
-    const name = m ? (m.full_name || '?') : 'User';
+    const name = m ? (m.full_name || '?') : tt('chat_tasks.user_fallback', 'User');
     el.innerHTML = `
       <div class="av">${initials(name)}</div>
       <div class="info">
         <div class="name">${esc(name)}</div>
-        <div class="meta">${esc(m?.role || 'Direct message')}</div>
+        <div class="meta">${esc(m?.role || tt('chat_tasks.direct_message', 'Direct message'))}</div>
       </div>
       <div class="right">
         <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
@@ -1202,23 +1212,23 @@ function renderChatRightMembers() {
   const el = document.getElementById('chatRightMembers');
   if (!el) return;
   const show = members.slice(0, 5);
-  document.getElementById('chatRightMembersTitle').textContent = `Members · ${members.length}`;
+  document.getElementById('chatRightMembersTitle').textContent = tt('chat_tasks.members_count', `Members · ${members.length}`, { n: members.length });
   el.innerHTML = show.map(m => {
     const name = m.full_name || '?';
     return `<div class="cr-member">
       <div class="av">${initials(name)}</div>
       <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.role || '')}</div></div>
     </div>`;
-  }).join('') + (members.length > 5 ? `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:3px 0 0">+ ${members.length - 5} more</div>` : '');
+  }).join('') + (members.length > 5 ? `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:3px 0 0">${esc(tt('chat_tasks.n_more', `+ ${members.length - 5} more`, { n: members.length - 5 }))}</div>` : '');
 }
 
 function renderChatRightTasks() {
   const el = document.getElementById('chatRightTasks');
   if (!el) return;
   const open = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').slice(0, 3);
-  document.getElementById('chatRightTasksTitle').textContent = `Open tasks · ${open.length}`;
+  document.getElementById('chatRightTasksTitle').textContent = tt('chat_tasks.open_tasks_count', `Open tasks · ${open.length}`, { n: open.length });
   if (!open.length) {
-    el.innerHTML = '<div style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">No open tasks</div>';
+    el.innerHTML = `<div style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(tt('chat_tasks.no_open_tasks', 'No open tasks'))}</div>`;
     return;
   }
   el.innerHTML = open.map(t => {
@@ -1247,7 +1257,7 @@ function renderDmPicker() {
   const list   = document.getElementById('dmPickerList');
   const others = members.filter(m => m.id !== currentUser.id);
   const fil    = q ? others.filter(m => (m.full_name || '').toLowerCase().includes(q)) : others;
-  if (!fil.length) { list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font-size:13px">No members</div>'; return; }
+  if (!fil.length) { list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font-size:13px">${esc(tt('chat_tasks.no_members', 'No members'))}</div>`; return; }
   list.innerHTML = fil.map(m => {
     const name = m.full_name || '?';
     return `<div class="conv" style="margin:2px 0" onclick="pickDm('${m.id}')">
@@ -1332,9 +1342,9 @@ function renderKanban(tasks) {
   const open = allTasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length;
   const overdue = allTasks.filter(t => t.due_date && isOverdue(t.due_date) && t.status !== 'done').length;
   const today   = allTasks.filter(t => t.due_date && isToday(t.due_date)   && t.status !== 'done').length;
-  let sub = `${open} open`;
-  if (today)   sub += ` · ${today} due today`;
-  if (overdue) sub += ` · ${overdue} overdue`;
+  let sub = tt('chat_tasks.sub_open', `${open} open`, { n: open });
+  if (today)   sub += ' · ' + tt('chat_tasks.sub_due_today', `${today} due today`, { n: today });
+  if (overdue) sub += ' · ' + tt('chat_tasks.sub_overdue', `${overdue} overdue`, { n: overdue });
   document.getElementById('tasksSub').textContent = sub;
 }
 
@@ -1377,7 +1387,7 @@ function roleAssigneeHTML(t) {
   (t.assigned_roles || []).forEach(r => {
     const rl = (r || '').toLowerCase();
     if (rl && !matched.has(rl)) {
-      chips.push(`<div class="av tn" title="No ${esc(roleLabel(rl))} in this team" style="width:auto;padding:0 7px;border-radius:9px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg-muted)">${esc(roleLabel(rl))}</div>`);
+      chips.push(`<div class="av tn" title="${esc(tt('chat_tasks.no_role_in_team', `No ${roleLabel(rl)} in this team`, { role: roleLabel(rl) }))}" style="width:auto;padding:0 7px;border-radius:9px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg-muted)">${esc(roleLabel(rl))}</div>`);
     }
   });
   return chips.join('');
@@ -1424,7 +1434,7 @@ function openTaskDetail(taskId) {
   }
   // Reset the delete confirmation state each time the modal opens.
   const _del = document.getElementById('detailDeleteBtn');
-  if (_del) _del.textContent = 'Delete';
+  if (_del) _del.textContent = tt('common.delete', 'Delete');
   _detailDeleteArmed = false;
   document.getElementById('detailPanel').dataset.taskId = taskId;
   loadTaskReminders(taskId, 'detailRemindersList');   // pending rows editable, sent ones shown as history
@@ -1443,7 +1453,7 @@ function populateDetailRoleChips(preselected) {
   const pre = new Set((preselected || []).map(r => (r || '').toLowerCase()));
   const roles = [...new Set((members || []).map(m => (m.role || '').trim()).filter(Boolean))].sort();
   box.innerHTML = '';
-  if (!roles.length) { box.innerHTML = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">No staff roles in this team.</span>'; return; }
+  if (!roles.length) { box.innerHTML = `<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">${esc(tt('chat_tasks.no_staff_roles', 'No staff roles in this team.'))}</span>`; return; }
   roles.forEach(r => {
     const on = pre.has(r.toLowerCase());
     const b = document.createElement('button');
@@ -1474,7 +1484,7 @@ function setDetailMode(mode, preselectedRoles) {
   if (rolesField) rolesField.style.display = (mode === 'roles') ? '' : 'none';
   if (mode === 'roles') {
     populateDetailRoleChips(preselectedRoles);
-    if (hint) hint.textContent = currentUser.teamId ? '' : 'Select an active team to assign by role.';
+    if (hint) hint.textContent = currentUser.teamId ? '' : tt('chat_tasks.select_active_team_role_hint', 'Select an active team to assign by role.');
   }
 }
 
@@ -1482,17 +1492,17 @@ async function saveDetail() {
   const taskId = document.getElementById('detailPanel').dataset.taskId;
   if (!taskId) return;
   const title = document.getElementById('detailTitleInput').value.trim();
-  if (!title) { document.getElementById('detailTitleInput').focus(); alert('Title is required'); return; }
+  if (!title) { document.getElementById('detailTitleInput').focus(); alert(tt('chat_tasks.title_required', 'Title is required')); return; }
 
   // Assignment: strictly one or the other (never both).
   const mode = _detailMode || 'me';
   let assigned_to = null, assigned_to_name = null, assigned_roles = null;
   if (mode === 'roles') {
-    if (!currentUser.teamId) { alert('Select an active team to assign by role'); return; }
+    if (!currentUser.teamId) { alert(tt('chat_tasks.select_active_team_role', 'Select an active team to assign by role')); return; }
     const roles = [...document.querySelectorAll('#detailRoles .role-chip.is-on')].map(el => el.dataset.role);
     if (!roles.length) {
       const h = document.getElementById('detailRolesHint');
-      if (h) h.textContent = 'Pick at least one role.';
+      if (h) h.textContent = tt('chat_tasks.pick_at_least_one_role', 'Pick at least one role.');
       return;
     }
     assigned_roles = roles;
@@ -1514,7 +1524,7 @@ async function saveDetail() {
   const { error } = await window.sb.from('tasks').update(patch).eq('id', taskId);
   if (error) {
     console.error('Task update error:', error);
-    alert('Error saving task: ' + error.message);
+    alert(tt('chat_tasks.error_saving_task', 'Error saving task: ' + error.message, { msg: error.message }));
     return;
   }
 
@@ -1556,8 +1566,8 @@ async function saveDetail() {
           user_id: uid,
           club_id: currentUser.clubId,
           type:    'task_completed',
-          title:   `Task completed: ${title}`,
-          body:    `Completed by ${currentUser.name}`,
+          title:   tt('chat_tasks.notif_task_completed', `Task completed: ${title}`, { title }),
+          body:    tt('chat_tasks.notif_completed_by', `Completed by ${currentUser.name}`, { who: currentUser.name }),
           link:    '/Chat & Tasks.html',
         })));
       }
@@ -1573,7 +1583,7 @@ async function deleteDetailTask() {
   const btn = document.getElementById('detailDeleteBtn');
   if (!_detailDeleteArmed) {
     _detailDeleteArmed = true;
-    if (btn) btn.textContent = "Delete this task? This can't be undone.";
+    if (btn) btn.textContent = tt('chat_tasks.delete_confirm', "Delete this task? This can't be undone.");
     return;
   }
   const taskId = document.getElementById('detailPanel').dataset.taskId;
@@ -1581,7 +1591,7 @@ async function deleteDetailTask() {
   const { error } = await window.sb.from('tasks').delete().eq('id', taskId);
   if (error) {
     console.error('Task delete error:', error);
-    alert('Error deleting task: ' + error.message);
+    alert(tt('chat_tasks.error_deleting_task', 'Error deleting task: ' + error.message, { msg: error.message }));
     return;
   }
   allTasks = allTasks.filter(x => x.id !== taskId);
@@ -1620,12 +1630,12 @@ function reminderRowHTML(value, sent) {
   if (sent) {
     return `<div class="rmd-row" data-sent="1" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
       <input type="datetime-local" value="${value}" disabled style="flex:1;opacity:.55">
-      <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">sent</span>
+      <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(tt('chat_tasks.sent', 'sent'))}</span>
     </div>`;
   }
   return `<div class="rmd-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
     <input type="datetime-local" class="rmd-input" value="${value}" style="flex:1">
-    <button type="button" class="cm-btn is-outline is-sm" onclick="this.closest('.rmd-row').remove()" title="Remove"><i class="ti ti-x" style="font-size:13px"></i></button>
+    <button type="button" class="cm-btn is-outline is-sm" onclick="this.closest('.rmd-row').remove()" title="${esc(tt('chat_tasks.remove', 'Remove'))}"><i class="ti ti-x" style="font-size:13px"></i></button>
   </div>`;
 }
 function addReminderRow(listId, value) {
@@ -1682,13 +1692,13 @@ async function saveNewTask() {
   if (mode === 'roles') {
     // Role-assigned tasks need a team: the RLS role branch requires team_id IN my_team_ids().
     if (!currentUser.teamId) {
-      alert('Select an active team before assigning a task by role.');
+      alert(tt('chat_tasks.select_active_team_role_new', 'Select an active team before assigning a task by role.'));
       return;
     }
     const roles = [...document.querySelectorAll('#newTaskRoles .role-chip.is-on')].map(el => el.dataset.role);
     if (!roles.length) {
       const hint = document.getElementById('newTaskRolesHint');
-      if (hint) hint.textContent = 'Pick at least one role.';
+      if (hint) hint.textContent = tt('chat_tasks.pick_at_least_one_role', 'Pick at least one role.');
       return;
     }
     assigned_roles = roles;
@@ -1715,7 +1725,7 @@ async function saveNewTask() {
   }).select().single();
   if (error) {
     console.error('Task insert error:', error);
-    alert('Error creating task: ' + error.message);
+    alert(tt('chat_tasks.error_creating_task', 'Error creating task: ' + error.message, { msg: error.message }));
     return;
   }
   if (!data) {
@@ -1756,8 +1766,8 @@ async function saveNewTask() {
           user_id: m.id,
           club_id: currentUser.clubId,
           type:    'task_assigned',
-          title:   `New task: ${title}`,
-          body:    `Assigned to you · ${roleLabel(m.role)}`,
+          title:   tt('chat_tasks.notif_new_task', `New task: ${title}`, { title }),
+          body:    tt('chat_tasks.notif_assigned_to_you', `Assigned to you · ${roleLabel(m.role)}`, { role: roleLabel(m.role) }),
           link:    '/Chat & Tasks.html',
         })));
       }
@@ -1771,7 +1781,7 @@ function populateAssigneeSelects() {
   ['newTaskAssignee'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
-    sel.innerHTML = '<option value="">— Unassigned —</option>';
+    sel.innerHTML = `<option value="">${esc(tt('chat_tasks.unassigned', '— Unassigned —'))}</option>`;
     members.forEach(m => {
       const o = document.createElement('option');
       o.value = m.id;
@@ -1790,7 +1800,7 @@ function populateRoleChips() {
   // Available roles = unique roles present in the active-team member list.
   const roles = [...new Set((members || []).map(m => (m.role || '').trim()).filter(Boolean))].sort();
   box.innerHTML = '';
-  if (!roles.length) { box.innerHTML = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">No staff roles in this team.</span>'; return; }
+  if (!roles.length) { box.innerHTML = `<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">${esc(tt('chat_tasks.no_staff_roles', 'No staff roles in this team.'))}</span>`; return; }
   roles.forEach(r => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1822,7 +1832,7 @@ function setNewTaskMode(mode) {
   if (rolesField)    rolesField.style.display = (mode === 'roles') ? '' : 'none';
   if (mode === 'roles') {
     populateRoleChips();   // rebuild fresh (all unselected) each time role mode is entered
-    if (hint) hint.textContent = currentUser.teamId ? '' : 'Select an active team to assign by role.';
+    if (hint) hint.textContent = currentUser.teamId ? '' : tt('chat_tasks.select_active_team_role_hint', 'Select an active team to assign by role.');
   }
 }
 
@@ -2015,10 +2025,10 @@ async function pinFileDirectly(url, name, type) {
   const convId = activeConv === 'group' ? 'group' : activeConv;
   const { data, error } = await window.sb.from('pinned_files').insert({
     club_id:   currentUser.clubId, conv_id: convId,
-    file_url:  url, file_name: name || 'File', file_type: type || null, pinned_by: currentUser.id
+    file_url:  url, file_name: name || tt('chat_tasks.file_fallback', 'File'), file_type: type || null, pinned_by: currentUser.id
   }).select().single();
-  if (error) { console.error('Pin error:', error); alert('Error pinning: ' + error.message); return; }
-  if (data) { pinnedFiles.unshift(data); renderPinnedFiles(); showToast('Pinned'); }
+  if (error) { console.error('Pin error:', error); alert(tt('chat_tasks.error_pinning', 'Error pinning: ' + error.message, { msg: error.message })); return; }
+  if (data) { pinnedFiles.unshift(data); renderPinnedFiles(); showToast(tt('chat_tasks.pinned_toast', 'Pinned')); }
 }
 
 function showToast(msg) {
@@ -2049,17 +2059,17 @@ function switchPinTab(tab) {
     body.innerHTML = `
       <div id="pinUploadArea" style="border:2px dashed var(--cm-border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;color:var(--cm-fg-muted);transition:border-color 120ms" onclick="document.getElementById('pinFileInputModal').click()" onmouseenter="this.style.borderColor='var(--cm-accent)'" onmouseleave="this.style.borderColor='var(--cm-border)'">
         <i class="ti ti-cloud-upload" style="font-size:28px;display:block;margin-bottom:8px"></i>
-        <div style="font:500 12.5px/1.5 var(--cm-font-sans)">Click to select a file<br><span style="font-size:11px;color:var(--cm-fg-faint)">PDF · DOCX · XLSX · PNG · JPG · MP4 · MOV</span></div>
+        <div style="font:500 12.5px/1.5 var(--cm-font-sans)">${esc(tt('chat_tasks.click_select_file', 'Click to select a file'))}<br><span style="font-size:11px;color:var(--cm-fg-faint)">${esc(tt('chat_tasks.upload_formats', 'PDF · DOCX · XLSX · PNG · JPG · MP4 · MOV'))}</span></div>
       </div>
       <input type="file" id="pinFileInputModal" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.mp4,.mov" style="display:none" onchange="handlePinFileSelect(event)">
       <div id="pinUploadPreview"></div>`;
   } else {
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">URL *</label><input type="text" id="pinLinkUrl" placeholder="https://…" style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:var(--cm-body);color:var(--cm-fg);outline:none;box-sizing:border-box"></div>
-      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Name *</label><input type="text" id="pinLinkName" placeholder="File name…" style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:var(--cm-body);color:var(--cm-fg);outline:none;box-sizing:border-box"></div>
-      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Type</label>
+      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${esc(tt('chat_tasks.url_required', 'URL *'))}</label><input type="text" id="pinLinkUrl" placeholder="https://…" style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:var(--cm-body);color:var(--cm-fg);outline:none;box-sizing:border-box"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${esc(tt('chat_tasks.name_required', 'Name *'))}</label><input type="text" id="pinLinkName" placeholder="${esc(tt('chat_tasks.file_name', 'File name…'))}" style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:var(--cm-body);color:var(--cm-fg);outline:none;box-sizing:border-box"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label style="font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${esc(tt('chat_tasks.type_label', 'Type'))}</label>
         <select id="pinLinkType" style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:var(--cm-body);color:var(--cm-fg);outline:none">
-          <option value="">Other</option><option value="pdf">PDF</option><option value="image">Image</option><option value="spreadsheet">Spreadsheet</option><option value="video">Video</option>
+          <option value="">${esc(tt('chat_tasks.type_other', 'Other'))}</option><option value="pdf">${esc(tt('chat_tasks.type_pdf', 'PDF'))}</option><option value="image">${esc(tt('chat_tasks.type_image', 'Image'))}</option><option value="spreadsheet">${esc(tt('chat_tasks.type_spreadsheet', 'Spreadsheet'))}</option><option value="video">${esc(tt('chat_tasks.type_video', 'Video'))}</option>
         </select>
       </div>`;
   }
@@ -2082,8 +2092,8 @@ function handlePinFileSelect(e) {
 async function savePinModal() {
   const btn = document.getElementById('pinModalSaveBtn');
   if (pinModalTab === 'upload') {
-    if (!pinModalFile) { alert('Select a file first.'); return; }
-    if (btn) { btn.textContent = 'Uploading…'; btn.disabled = true; }
+    if (!pinModalFile) { alert(tt('chat_tasks.select_file_first', 'Select a file first.')); return; }
+    if (btn) { btn.textContent = tt('chat_tasks.uploading', 'Uploading…'); btn.disabled = true; }
     try {
       const safeName = pinModalFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path     = `${currentUser.clubId}/pinned/${Date.now()}-${safeName}`;
@@ -2094,9 +2104,9 @@ async function savePinModal() {
       closePinModal();
     } catch (err) {
       console.error('Pin upload error:', err);
-      alert('Error uploading: ' + (err.message || err));
+      alert(tt('chat_tasks.error_uploading', 'Error uploading: ' + (err.message || err), { msg: (err.message || err) }));
     } finally {
-      if (btn) { btn.textContent = 'Pin'; btn.disabled = false; }
+      if (btn) { btn.textContent = tt('chat_tasks.pin', 'Pin'); btn.disabled = false; }
     }
   } else {
     const url  = (document.getElementById('pinLinkUrl')?.value  || '').trim();
@@ -2153,7 +2163,7 @@ function _openMentionPop() {
           <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.role || '')}</div></div>
         </div>`;
       }).join('')
-    : `<div class="cmp-m-empty">No members</div>`;
+    : `<div class="cmp-m-empty">${esc(tt('chat_tasks.no_members', 'No members'))}</div>`;
   pop.querySelectorAll('.cmp-m-item').forEach(el => {
     el.addEventListener('click', () => {
       const m = members[+el.dataset.mi];
@@ -2241,6 +2251,22 @@ document.getElementById('msgInput')?.addEventListener('input', e => {
   }
 });
 
+// Re-render JS-built chrome when the language changes (static nodes are handled
+// by the sidebar's i18n runtime; only re-paint text, never touch realtime/scroll).
+document.addEventListener('cm:langchanged', () => {
+  if (!currentUser) return;
+  try {
+    renderConvList();
+    updateChatHeader();
+    renderMessages();
+    renderChatRightMembers();
+    renderChatRightTasks();
+    renderPinnedFiles();
+    renderKanban(getFilteredTasks());
+    updatePillCounts();
+  } catch (_) {}
+});
+
 boot();
 
   async function ctInitTeamSwitch() {
@@ -2252,7 +2278,7 @@ boot();
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('ctTeamSelect');
     if (!sel) return;
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${esc(tt('chat_tasks.no_teams', 'No teams'))}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     currentUser.teamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===currentUser.teamId?'selected':''}>${t.name}</option>`).join('');
