@@ -392,7 +392,7 @@
 
     const { data: player } = await window.sb.from('players')
       .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
-      .eq('id', id).eq('club_id', clubId).single();
+      .eq('id', id).eq('club_id', clubId).is('archived_at', null).single();
 
     if (!player) {
       page.innerHTML = emptyState('ti-user-off', 'Player not found',

@@ -545,7 +545,8 @@
       .from('players')
       .select(_luSel)
       .eq('club_id', clubId)
-      .neq('status', 'inactive');
+      .neq('status', 'inactive')
+      .is('archived_at', null);
     if (_luTeamId) _luPlQ = _luPlQ.eq('player_teams.team_id', _luTeamId);
     const { data } = await _luPlQ.order('last_name');
     const _seenLu = new Set();

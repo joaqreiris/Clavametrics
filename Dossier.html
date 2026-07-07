@@ -342,7 +342,7 @@ async function boot(){
 
   const { data: player } = await window.sb.from('players')
     .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id,scouting_summary')
-    .eq('id', id).eq('club_id', clubId).single();
+    .eq('id', id).eq('club_id', clubId).is('archived_at', null).single();
   if(!player){ host.innerHTML = notFoundSheet(L); return; }
 
   // KPIs (minutes, matches, availabilityPct, season window)
@@ -476,7 +476,7 @@ async function boot(){
     try {
       // Cohorte por MEMBRESÍA (player_teams!inner) para incluir a los secundarios de la categoría.
       // Se mantiene el equipo PRIMARIO del jugador (Dossier se abre por jugador, sin equipo activo).
-      const { data: mates } = await window.sb.from('players').select('id, player_teams!inner(team_id)').eq('club_id',clubId).eq('player_teams.team_id',player.team_id);
+      const { data: mates } = await window.sb.from('players').select('id, player_teams!inner(team_id)').eq('club_id',clubId).eq('player_teams.team_id',player.team_id).is('archived_at', null);
       const _seenMates=new Set();
       const ids=(mates||[]).filter(p=>_seenMates.has(p.id)?false:(_seenMates.add(p.id),true)).map(p=>p.id);
       if(ids.length){
