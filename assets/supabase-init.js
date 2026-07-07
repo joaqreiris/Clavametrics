@@ -203,6 +203,9 @@
         const prof = await window.getProfile();
         const role = (prof?.role || '').toLowerCase();
         if (role === 'admin' || role === 'owner') return { all: true, keys: new Set() };
+        // Super-admin de plataforma: bypass total en CUALQUIER club (su profiles.role
+        // en un club ajeno no es admin/owner, pero la RLS ya lo exceptúa vía is_super_admin()).
+        try { if (await window.isSuperAdmin()) return { all: true, keys: new Set() }; } catch (_) {}
         const clubId = await window.getClubId();
         const { data: { user } } = await window.sb.auth.getUser();
         if (!clubId || !user) return { all: true, keys: new Set() }; // fail-open
