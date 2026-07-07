@@ -1286,6 +1286,9 @@
 // GPS Analysis — Interactive controls
 // ══════════════════════════════════════════════════════════════
 
+// ── i18n helper for JS-painted (dynamic) UI labels ────────────
+function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+
 // ── State ─────────────────────────────────────────────────────
 window.gpState = {
   datePreset: 'last30',
@@ -1335,10 +1338,10 @@ function getDateRange(state) {
 
 function getDatePresetLabel(state) {
   const s = state || window.gpState;
-  const m = { last7:'Last 7 days', last30:'Last 30 days', last90:'Last 90 days', currentMC:'Current MC',
-               currentMonth:'Current month', currentSeason:'Current season', allTime:'All time' };
+  const m = { last7:tt('gps_analysis.preset_last7','Last 7 days'), last30:tt('gps_analysis.preset_last30','Last 30 days'), last90:tt('gps_analysis.preset_last90','Last 90 days'), currentMC:tt('gps_analysis.preset_current_mc','Current MC'),
+               currentMonth:tt('gps_analysis.preset_current_month','Current month'), currentSeason:tt('gps_analysis.preset_current_season','Current season'), allTime:tt('gps_analysis.preset_all_time','All time') };
   if (s.datePreset === 'custom') return `${s.dateFrom || '?'} — ${s.dateTo || '?'}`;
-  return m[s.datePreset] || 'Last 30 days';
+  return m[s.datePreset] || tt('gps_analysis.preset_last30','Last 30 days');
 }
 
 // ── Prefs persistence — by (clubId, userId) ────────────────────
@@ -1364,9 +1367,9 @@ function applyGpsPrefs(prefs) {
   const drLabel = document.getElementById('dateRangeLabel');
   if (drLabel) drLabel.textContent = getDatePresetLabel();
   const mcLabel = document.getElementById('mcLabel');
-  if (mcLabel) mcLabel.textContent = (window.gpState.microcycle && window.gpState.microcycle !== 'All') ? window.gpState.microcycle : 'All MCs';
+  if (mcLabel) mcLabel.textContent = (window.gpState.microcycle && window.gpState.microcycle !== 'All') ? window.gpState.microcycle : tt('gps_analysis.all_mcs','All MCs');
   const plLabel = document.getElementById('playerLabel');
-  if (plLabel) plLabel.textContent = window.gpState.playerName || 'All players';
+  if (plLabel) plLabel.textContent = window.gpState.playerName || tt('gps_analysis.filter_all_players','All players');
   const histPill = document.getElementById('histPill');
   if (histPill) histPill.classList.toggle('is-on', !!window.gpState.includeHistorical);
 }
@@ -1375,10 +1378,22 @@ function applyGpsPrefs(prefs) {
 function _updateGpSub(playerCount, sessionCount) {
   const sub = document.getElementById('gpSub');
   if (!sub) return;
+  window._gpLastCounts = { playerCount, sessionCount };
   const label = getDatePresetLabel();
-  const hist  = window.gpState.includeHistorical ? ' · including historical' : '';
-  sub.textContent = `${playerCount ?? '—'} players · ${sessionCount ?? '—'} sessions · ${label}${hist}`;
+  const hist  = window.gpState.includeHistorical ? ` · ${tt('gps_analysis.including_historical','including historical')}` : '';
+  sub.dataset.gpFilled = '1';
+  sub.textContent = `${tt('gps_analysis.gp_sub_counts','{players} players · {sessions} sessions', { players: playerCount ?? '—', sessions: sessionCount ?? '—' })} · ${label}${hist}`;
 }
+
+// ── Re-paint JS-painted filter labels on language change ───────
+// Re-applies the date/MC/player pills from current state (idempotent)
+// and the subtitle from the last known counts. Does NOT touch builder state.
+window.addEventListener('cm:langchanged', () => {
+  try { applyGpsPrefs(window.gpState); } catch(_) {}
+  if (window._gpLastCounts) {
+    _updateGpSub(window._gpLastCounts.playerCount, window._gpLastCounts.sessionCount);
+  }
+});
 
 // ── Helpers ───────────────────────────────────────────────────
 function getISOWeek(d) {
@@ -2929,13 +2944,13 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
     pop.style.minWidth = '220px';
 
     const presets = [
-      { preset: 'last7',         label: 'Last 7 days' },
-      { preset: 'last30',        label: 'Last 30 days' },
-      { preset: 'last90',        label: 'Last 90 days' },
-      { preset: 'currentMC',     label: 'Current microcycle' },
-      { preset: 'currentMonth',  label: 'Current month' },
-      { preset: 'currentSeason', label: 'Current season' },
-      { preset: 'allTime',       label: 'All time' },
+      { preset: 'last7',         label: tt('gps_analysis.preset_last7','Last 7 days') },
+      { preset: 'last30',        label: tt('gps_analysis.preset_last30','Last 30 days') },
+      { preset: 'last90',        label: tt('gps_analysis.preset_last90','Last 90 days') },
+      { preset: 'currentMC',     label: tt('gps_analysis.preset_current_microcycle','Current microcycle') },
+      { preset: 'currentMonth',  label: tt('gps_analysis.preset_current_month','Current month') },
+      { preset: 'currentSeason', label: tt('gps_analysis.preset_current_season','Current season') },
+      { preset: 'allTime',       label: tt('gps_analysis.preset_all_time','All time') },
     ];
     presets.forEach(p => {
       const btn = document.createElement('button');
@@ -2945,7 +2960,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       btn.addEventListener('click', e => {
         e.stopPropagation(); closePop();
         window.gpState.datePreset = p.preset;
-        document.getElementById('dateRangeLabel').textContent = p.label;
+        document.getElementById('dateRangeLabel').textContent = getDatePresetLabel();
         saveGpsPrefs();
         window.renderView?.();
         window.refreshDashboard?.();
@@ -3005,11 +3020,11 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       const k = `MC ${getISOWeek(d)}`;
       if (!weeks[k]) weeks[k] = { label: k, date: s.session_date, mcId: s.microcycle_id || null };
     });
-    const mcItems = [{ label: 'All MCs', mc: 'All', mcId: null }, ...Object.values(weeks).slice(0, 12).map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label, mcId: w.mcId }))];
+    const mcItems = [{ label: tt('gps_analysis.all_mcs','All MCs'), mc: 'All', mcId: null }, ...Object.values(weeks).slice(0, 12).map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label, mcId: w.mcId }))];
     makePopover(pill, mcItems, item => {
       window.gpState.microcycle = item.mc;
       window.gpState.mcId = item.mcId || null;
-      document.getElementById('mcLabel').textContent = item.mc === 'All' ? 'All MCs' : item.mc;
+      document.getElementById('mcLabel').textContent = item.mc === 'All' ? tt('gps_analysis.all_mcs','All MCs') : item.mc;
       showToast(`Microcycle → ${item.mc}`);
       saveGpsPrefs();
       window.renderView?.();
@@ -3038,12 +3053,12 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       list.innerHTML = '';
       const allBtn = document.createElement('button');
       allBtn.className = 'gp-popover-item';
-      allBtn.textContent = 'All players';
+      allBtn.textContent = tt('gps_analysis.filter_all_players','All players');
       allBtn.addEventListener('click', evt => {
         evt.stopPropagation(); closePop();
         window.gpState.playerId   = null;
         window.gpState.playerName = null;
-        document.getElementById('playerLabel').textContent = 'All players';
+        document.getElementById('playerLabel').textContent = tt('gps_analysis.filter_all_players','All players');
         saveGpsPrefs(); window.renderView?.();
       });
       list.appendChild(allBtn);
@@ -3839,7 +3854,7 @@ window.refreshDashboard = async function (opts = {}) {
       // If session falls outside current range, switch to allTime + enable historical if needed
       if (sessDate < from || sessDate > to) {
         window.gpState.datePreset = 'allTime';
-        document.getElementById('dateRangeLabel').textContent = 'All time';
+        document.getElementById('dateRangeLabel').textContent = tt('gps_analysis.preset_all_time','All time');
       }
       if (sess.is_historical && !window.gpState.includeHistorical) {
         window.gpState.includeHistorical = true;
@@ -3874,7 +3889,7 @@ window.refreshDashboard = async function (opts = {}) {
   if (!reports?.length) {
     // Show informative empty state
     const sub = document.getElementById('gpSub');
-    if (sub && !sub.textContent.includes('sessions')) {
+    if (sub && sub.dataset.gpFilled !== '1') {
       _updateGpSub(playerCount, 0);
     }
     return;
@@ -8768,13 +8783,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 </script>
 
 <script>
-  const titles = {
-    ind:  ['· Player Week Report', '— week vs match reference'],
-    grp:  ['· Session Control',    '— daily training review · squad-wide'],
-    mind: ['· Match Performance',  '— player season analysis'],
-    mgrp: ['· Load Monitoring',    '— ACWR · acute:chronic workload ratio'],
-    mc:   ['· Microcycle Compare', '— MD code comparison vs previous MCs'],
-  };
+  function getSecTitles() {
+    return {
+      ind:  ['· ' + tt('gps_analysis.sec_ind_title','Player Week Report'),   '— ' + tt('gps_analysis.sec_ind_sub','week vs match reference')],
+      grp:  ['· ' + tt('gps_analysis.sec_grp_title','Session Control'),      '— ' + tt('gps_analysis.sec_grp_sub','daily training review · squad-wide')],
+      mind: ['· ' + tt('gps_analysis.sec_mind_title','Match Performance'),   '— ' + tt('gps_analysis.sec_mind_sub','player season analysis')],
+      mgrp: ['· ' + tt('gps_analysis.sec_mgrp_title','Load Monitoring'),     '— ACWR · ' + tt('gps_analysis.sec_mgrp_sub','acute:chronic workload ratio')],
+      mc:   ['· ' + tt('gps_analysis.sec_mc_title','Microcycle Compare'),    '— ' + tt('gps_analysis.sec_mc_sub','MD code comparison vs previous MCs')],
+    };
+  }
+  function _applySecLabels(v) {
+    const titles = getSecTitles();
+    const secTitleEl = document.getElementById('secTitle');
+    if (secTitleEl) secTitleEl.textContent = titles[v]?.[0] || '';
+    const subEl = document.getElementById('secSub');
+    if (subEl && titles[v]?.[1]) subEl.textContent = titles[v][1];
+  }
+  // Re-paint section title/sub on language change (uses current view).
+  window.addEventListener('cm:langchanged', () => {
+    _applySecLabels(window.gpState?.view || 'ind');
+  });
   document.getElementById('sections').addEventListener('click', (e) => {
     const b = e.target.closest('.gp-sec'); if (!b) return;
     document.querySelectorAll('#sections .gp-sec').forEach(o => o.classList.remove('is-on'));
@@ -8783,9 +8811,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     document.querySelectorAll('.gp-view').forEach(x => x.classList.toggle('is-on', x.dataset.view === v));
     document.querySelector('.gp-dash-bar').dataset.view = v;
     window.gpState.view = v;
-    document.getElementById('secTitle').textContent = titles[v]?.[0] || '';
-    const subEl = document.getElementById('secSub');
-    if (subEl && titles[v]?.[1]) subEl.textContent = titles[v][1];
+    _applySecLabels(v);
     // Re-render with cached data when switching sections (avoids re-fetch overhead)
     if (window._gpReports?.length) {
       _updateSquadRanking(window._gpReports);
@@ -8955,7 +8981,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     // (Descriptor "jugador · posición" removido de la fila "Dashboard": el contexto
     //  de datos lo da la barra de filtros. Mantengo el subtítulo genérico de la vista.)
     const indSub = document.getElementById('secSub');
-    if (indSub) indSub.textContent = '— week vs match reference';
+    if (indSub) indSub.textContent = '— ' + tt('gps_analysis.sec_ind_sub','week vs match reference');
   }
 
   // ── init ─────────────────────────────────────────────────────
@@ -10320,7 +10346,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
                                 currSessCount, refAvgSessCount, currLabel, refLabel }) {
     if (!_mcExpBody) return;
     try {
-      if (_mcExpSub) _mcExpSub.textContent = 'sessions per player · comparability check';
+      if (_mcExpSub) _mcExpSub.textContent = tt('gps_analysis.mc_exp_sub','sessions per player · comparability check');
 
       const allPids = [...new Set([
         ...Object.keys(currSessCount),
@@ -10405,7 +10431,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const metaLabel = metaDef?.label || metricKey;
       const metaUnit  = metaDef?.unit  || '';
       if (_mcMoversSub) _mcMoversSub.textContent =
-        `${metaLabel} · top gains & drops vs reference`;
+        tt('gps_analysis.mc_movers_sub','{metric} · top gains & drops vs reference', { metric: metaLabel });
 
       const valid = rows.filter(r => r.diff_pct != null);
       if (!valid.length) {
@@ -10931,7 +10957,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const lbl = cat?.label || _mpTdMetric.replace(/_/g,' ');
       document.getElementById('mp-td-metric-label').textContent = lbl;
       const sub = document.getElementById('mp-td-sub');
-      if (sub) sub.textContent = `${lbl} · minutes played line`;
+      if (sub) sub.textContent = tt('gps_analysis.mp_td_sub','{metric} · minutes played line', { metric: lbl });
       _mpTdPopup?.remove(); _mpTdPopup = null;
       document.removeEventListener('click', _mpTdOutside);
       _mpRenderTDChart(_mpCurrentRows);
@@ -13036,7 +13062,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const sel = document.getElementById('sc-vs-compare-sel');
     if (!sel) return;
     const sessionId = window._scState?.sessionId;
-    sel.innerHTML = '<option value="">Compare with…</option>';
+    sel.innerHTML = '<option value="">' + tt('gps_analysis.compare_with','Compare with…') + '</option>';
     if (!sessionId || !window.sb) return;
 
     const clubId = window._gpClubId || await window.getClubId?.();
@@ -13060,7 +13086,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       sel.innerHTML = `<option value="">No ${mdCode} sessions available</option>`;
       return;
     }
-    sel.innerHTML = '<option value="">Compare with…</option>';
+    sel.innerHTML = '<option value="">' + tt('gps_analysis.compare_with','Compare with…') + '</option>';
     candidates.forEach(s => {
       const o = document.createElement('option');
       o.value = s.id;
