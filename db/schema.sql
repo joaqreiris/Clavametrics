@@ -4231,6 +4231,9 @@ create policy "ce_scoped_select" on public.calendar_events as permissive for sel
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
+create policy "calendar_events_super_all" on public.calendar_events as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.card_accumulations enable row level security;
 create policy "club_card_accumulations" on public.card_accumulations as permissive for all to public
   using ((club_id = ( SELECT profiles.club_id
@@ -4331,6 +4334,9 @@ create policy "competitions_all" on public.competitions as permissive for all to
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
 
+create policy "competitions_super_all" on public.competitions as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.dashboard_cards enable row level security;
 create policy "club members manage dashboard cards" on public.dashboard_cards as permissive for all to authenticated
   using ((dashboard_id IN ( SELECT dashboards.id
@@ -4382,6 +4388,9 @@ create policy "dossier_templates_update" on public.dossier_templates as permissi
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 
+create policy "dossier_templates_super_all" on public.dossier_templates as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.drills enable row level security;
 create policy "drills_delete" on public.drills as permissive for delete to public
   using ((club_id IN ( SELECT profiles.club_id
@@ -4399,6 +4408,9 @@ create policy "drills_update" on public.drills as permissive for update to publi
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "drills_super_all" on public.drills as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.evaluations enable row level security;
 create policy "evaluations_scoped_insert" on public.evaluations as permissive for insert to authenticated
@@ -4427,6 +4439,9 @@ create policy "exercises_scoped_select" on public.exercises as permissive for se
   using (((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (visible_teams IS NULL) OR (cardinality(visible_teams) = 0) OR (visible_teams && ( SELECT ARRAY( SELECT my_team_ids() AS my_team_ids) AS "array")))));
+
+create policy "exercises_super_all" on public.exercises as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.foods enable row level security;
 create policy "foods_read" on public.foods as permissive for select to authenticated
@@ -4479,6 +4494,9 @@ create policy "force_tests write club" on public.force_tests as permissive for a
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 
+create policy "force_tests_super_all" on public.force_tests as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.gps_column_mappings enable row level security;
 create policy "club members can manage their column mappings" on public.gps_column_mappings as permissive for all to public
   using ((club_id IN ( SELECT profiles.club_id
@@ -4522,6 +4540,9 @@ create policy "gps_period_reports_club_all" on public.gps_period_reports as perm
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
 
+create policy "gps_period_reports_super_all" on public.gps_period_reports as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.gps_report_metrics enable row level security;
 create policy "gps_report_metrics_del" on public.gps_report_metrics as permissive for delete to authenticated
   using (((club_id = get_user_club_id()) OR is_super_admin()));
@@ -4547,6 +4568,9 @@ alter table public.gym_exercises enable row level security;
 create policy "Club members can manage gym_exercises" on public.gym_exercises as permissive for all to public
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
+
+create policy "gym_exercises_super_all" on public.gym_exercises as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.gym_session_templates enable row level security;
 create policy "gym_session_templates_rw" on public.gym_session_templates as permissive for all to authenticated
@@ -4574,6 +4598,9 @@ create policy "individual_plans_all" on public.individual_plans as permissive fo
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "individual_plans_super_all" on public.individual_plans as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.injuries enable row level security;
 create policy "injuries_scoped_insert" on public.injuries as permissive for insert to authenticated
@@ -4838,6 +4865,9 @@ create policy "mesocycles_all" on public.mesocycles as permissive for all to aut
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
 
+create policy "mesocycles_super_all" on public.mesocycles as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.messages enable row level security;
 create policy "messages_insert" on public.messages as permissive for insert to public
   with check ((club_id = ( SELECT profiles.club_id
@@ -4856,6 +4886,9 @@ create policy "mc_scoped_cud" on public.microcycles as permissive for all to pub
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "mc_scoped_select" on public.microcycles as permissive for select to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+create policy "microcycles_super_all" on public.microcycles as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.notification_settings enable row level security;
 create policy "notif_settings_staff" on public.notification_settings as permissive for all to public
@@ -5006,6 +5039,9 @@ create policy "player_teams_select" on public.player_teams as permissive for sel
 create policy "player_teams_write" on public.player_teams as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND has_full_planning_access()))
   with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
+create policy "player_teams_super_all" on public.player_teams as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public
@@ -5145,11 +5181,17 @@ create policy "season_phases_all" on public.season_phases as permissive for all 
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
 
+create policy "season_phases_super_all" on public.season_phases as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.seasons enable row level security;
 create policy "seasons_all" on public.seasons as permissive for all to authenticated
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "seasons_super_all" on public.seasons as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.session_exercises enable row level security;
 create policy "club_members_manage_session_exercises" on public.session_exercises as permissive for all to public
@@ -5159,6 +5201,9 @@ create policy "club_members_manage_session_exercises" on public.session_exercise
   with check ((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "session_exercises_super_all" on public.session_exercises as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.share_links enable row level security;
 create policy "share_links_anon_read" on public.share_links as permissive for select to anon
@@ -5204,6 +5249,9 @@ create policy "Team-scoped task visibility" on public.tasks as permissive for se
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()) OR ((assigned_roles IS NOT NULL) AND (my_role() = ANY (assigned_roles)) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))));
 
+create policy "tasks_super_all" on public.tasks as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.task_reminders enable row level security;
 create policy "Club members can view task_reminders" on public.task_reminders as permissive for select to public
   using ((club_id = get_user_club_id()));
@@ -5238,6 +5286,9 @@ create policy "ts_scoped_cud" on public.training_sessions as permissive for all 
 create policy "ts_scoped_select" on public.training_sessions as permissive for select to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
+create policy "training_sessions_super_all" on public.training_sessions as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 alter table public.treatment_templates enable row level security;
 create policy "treatment_templates_club_delete" on public.treatment_templates as permissive for delete to public
   using ((club_id IN ( SELECT profiles.club_id
@@ -5251,6 +5302,9 @@ create policy "treatment_templates_club_select" on public.treatment_templates as
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "treatment_templates_super_all" on public.treatment_templates as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.treatments enable row level security;
 create policy "treatments_cud" on public.treatments as permissive for all to authenticated
@@ -5306,6 +5360,9 @@ create policy "videos update club" on public.videos as permissive for update to 
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+create policy "videos_super_all" on public.videos as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.wellness enable row level security;
 create policy "wellness_scoped_insert" on public.wellness as permissive for insert to authenticated
