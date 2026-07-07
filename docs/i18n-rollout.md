@@ -148,7 +148,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Planner.html  *(Drill Designer)*
 - ✅ Exercises Library.html
 - ✅ Daily/Sessions History.html  → `Sessions History.html`
-- ⬜ Annual Planner.html
+- ✅ Annual Planner.html
 - ⬜ Match Reports.html
 - ⬜ Evaluations.html
 - ⬜ Individual Planner.html
