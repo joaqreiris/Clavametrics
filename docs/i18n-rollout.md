@@ -152,7 +152,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Match Reports.html
 - ✅ Evaluations.html
 - ✅ Individual Planner.html
-- ⬜ Individual Plans.html
+- ✅ Individual Plans.html
 - ⬜ Video Room.html
 - ⬜ Video Detail.html
 
