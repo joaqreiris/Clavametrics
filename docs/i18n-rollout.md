@@ -153,7 +153,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Evaluations.html
 - ✅ Individual Planner.html
 - ✅ Individual Plans.html
-- ⬜ Video Room.html
+- ✅ Video Room.html
 - ⬜ Video Detail.html
 
 ### Fase 4 — Rendimiento
