@@ -64,7 +64,7 @@
   const state = { clubId:null, teamId:null, players:[], refDate:iso(new Date()),
     metric:'srpe', model:'ewma', coupled:false, availWindow:7, chart:null,
     lastSquad:null, lastStress:null, lastExposure:null,
-    catalog:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[] };
+    catalog:[], cols:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[] };
 
   function metricKey(){ return METRIC_MAP[state.metric] || 'srpe_load'; }
   function metricLabel(){ const m=window.gpsACWR?.getMetric(metricKey()); return tt('load_monitor.metric_'+state.metric, m? m.label : 's-RPE'); }
@@ -212,7 +212,10 @@
     const { data:sess } = await sb().from('training_sessions').select('id,session_date').eq('club_id',state.clubId).gte('session_date',fromDate).lte('session_date',toDate);
     if(!sess?.length) return {};
     const sd=Object.fromEntries(sess.map(s=>[s.id,s.session_date])), ids=sess.map(s=>s.id);
-    const cols='player_id,session_id,total_distance,high_speed_distance,distance_per_minute,accelerations,decelerations,player_load';
+    const active=state.cols||[];
+    const colSet=new Set(['player_id','session_id']);
+    active.forEach(k=>{ if(k==='accel_decel'){ colSet.add('accelerations'); colSet.add('decelerations'); } else colSet.add(k); });
+    const cols=Array.from(colSet).join(',');
     let rows;
     try{
       rows = window.cmFetchAll
@@ -220,8 +223,9 @@
         : ((await sb().from('gps_reports').select(cols).eq('club_id',state.clubId).in('session_id',ids)).data||[]);
     }catch{ rows=[]; }
     const byP={};
-    (rows||[]).forEach(r=>{ const date=sd[r.session_id]; if(!date) return; (byP[r.player_id]||(byP[r.player_id]=[])).push({ date,
-      dist:+r.total_distance||0, hid:+r.high_speed_distance||0, mmin:+r.distance_per_minute||0, ad:(+r.accelerations||0)+(+r.decelerations||0), load:+r.player_load||0 }); });
+    (rows||[]).forEach(r=>{ const date=sd[r.session_id]; if(!date) return;
+      const rec={ date }; active.forEach(k=>{ rec[k]=colVal(r,k); });
+      (byP[r.player_id]||(byP[r.player_id]=[])).push(rec); });
     return byP;
   }
 
@@ -242,11 +246,28 @@
   }
 
   // ── Risk signals (multi-metric ACWR over a 28-day window) ────────────────────
-  const SIGNAL_ELIGIBLE = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld'];
-  const SIGNAL_DEFAULT  = ['high_speed_distance','very_high_speed_distance','sprint_distance','accel_decel'];   // high-intensity
+  // Core gps_reports metrics that can be a table column (master), + derived A+D.
+  const COL_ELIGIBLE = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','distance_per_minute','hmld'];
+  const COL_DEFAULT  = ['total_distance','high_speed_distance','distance_per_minute','accel_decel','player_load'];   // the 5 legacy columns
+  // Metrics that can act as a risk signal (cumulative load; rates like m/min excluded).
+  const SIGNAL_KEYS  = new Set(['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld','accel_decel']);
+  const SIGNAL_DEFAULT = ['high_speed_distance','very_high_speed_distance','sprint_distance','accel_decel'];   // high-intensity
+
   function catalogKeys(){ return new Set((state.catalog||[]).map(m=>m.key)); }
-  function eligibleSignals(){ const ck=catalogKeys(); const out=SIGNAL_ELIGIBLE.filter(k=>ck.has(k)); if(ck.has('accelerations')&&ck.has('decelerations')) out.push('accel_decel'); return out; }
-  function signalLabel(key){ if(key==='accel_decel') return 'A+D'; const m=(state.catalog||[]).find(x=>x.key===key); return m? m.label : key; }
+  function colDef(key){ return (state.catalog||[]).find(x=>x.key===key)||null; }
+  function signalLabel(key){ if(key==='accel_decel') return 'A+D'; const m=colDef(key); return m? m.label : key; }
+  function colLabel(key){ return signalLabel(key); }
+  function colUnit(key){ if(key==='accel_decel') return ''; const m=colDef(key); return m&&m.unit? m.unit : ''; }
+  function colVal(row, key){ return key==='accel_decel'? (+row.accelerations||0)+(+row.decelerations||0) : (+row[key]||0); }
+
+  // ── Columns (master) ─────────────────────────────────────────────────────────
+  function eligibleCols(){ const ck=catalogKeys(); const out=COL_ELIGIBLE.filter(k=>ck.has(k)); if(ck.has('accelerations')&&ck.has('decelerations')) out.push('accel_decel'); return out; }
+  function defaultCols(){ const el=new Set(eligibleCols()); const d=COL_DEFAULT.filter(k=>el.has(k)); if(d.length) return d; const e=eligibleCols(); return e.length? e.slice(0,5) : COL_DEFAULT.slice(); }
+  function loadCols(){ try{ const s=JSON.parse(localStorage.getItem(`cm_lm_avail_cols_${state.clubId}`)||'null'); if(Array.isArray(s)){ const f=eligibleCols().filter(k=>s.includes(k)); if(f.length) return f; } }catch{} return defaultCols(); }
+  function saveCols(){ try{ localStorage.setItem(`cm_lm_avail_cols_${state.clubId}`, JSON.stringify(state.cols)); }catch{} }
+
+  // ── Signals = SUB-TOGGLE of active columns (only load metrics among them) ─────
+  function eligibleSignals(){ return (state.cols||[]).filter(k=> SIGNAL_KEYS.has(k)); }
   function defaultSignalSet(){ const el=new Set(eligibleSignals()); const d=SIGNAL_DEFAULT.filter(k=>el.has(k)); return d.length? d : eligibleSignals().slice(0,3); }
   function loadSignalSet(){ try{ const s=JSON.parse(localStorage.getItem(`cm_lm_risk_signals_${state.clubId}`)||'null'); if(Array.isArray(s)){ const f=s.filter(k=>eligibleSignals().includes(k)); if(f.length) return f; } }catch{} return defaultSignalSet(); }
   function saveSignalSet(){ try{ localStorage.setItem(`cm_lm_risk_signals_${state.clubId}`, JSON.stringify(state.signalSet)); }catch{} }
@@ -298,20 +319,42 @@
     }));
   }
 
+  function renderColsPopover(){
+    const el=$('colsList'); if(!el) return;
+    const elig=eligibleCols();
+    if(!elig.length){ el.innerHTML=`<div style="font:var(--cm-body-sm);color:var(--cm-fg-faint);padding:4px 2px">—</div>`; return; }
+    el.innerHTML=elig.map(k=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;color:var(--cm-fg)"><input type="checkbox" data-col="${esc(k)}" ${state.cols.includes(k)?'checked':''}> ${esc(colLabel(k))}</label>`).join('');
+    el.querySelectorAll('input[data-col]').forEach(inp=> inp.addEventListener('change', async ()=>{
+      const k=inp.dataset.col;
+      if(inp.checked){ if(!state.cols.includes(k)) state.cols.push(k); } else state.cols=state.cols.filter(x=>x!==k);
+      state.cols = eligibleCols().filter(x=> state.cols.includes(x));   // keep stable catalog order
+      saveCols();
+      state.signalSet = state.signalSet.filter(x=> eligibleSignals().includes(x));   // signals sub-toggle of columns
+      saveSignalSet(); renderSignalsPopover();
+      await renderAvailability();
+    }));
+  }
+
   function updateSortHeaders(){
     document.querySelectorAll('#availTableWrap thead th[data-sort]').forEach(th=>{
       const on=th.dataset.sort===state.sortKey; th.classList.toggle('is-sorted', on); th.setAttribute('data-dir', on?state.sortDir:'');
     });
   }
   function rowSortVal(row, key){
-    switch(key){
-      case 'player': return row.name.toLowerCase();
-      case 'avail':  return row.availRank;
-      case 'mins':   return row.mins;
-      case 'risk':   return row.risk.insufficient? -1 : row.risk.count + (row.risk.worstAcwr||0)/100;
-      case 'dist': case 'hid': case 'mmin': case 'ad': case 'load': { const m=row.metrics[key]; return (m&&m.enough)? m.latest : null; }
-      default: return 0;
-    }
+    if(key==='player') return row.name.toLowerCase();
+    if(key==='avail')  return row.availRank;
+    if(key==='mins')   return row.mins;
+    if(key==='risk')   return row.risk.insufficient? -1 : row.risk.count + (row.risk.worstAcwr||0)/100;
+    const m=row.metrics&&row.metrics[key]; if(m) return m.enough? m.latest : null;   // dynamic metric column
+    return 0;
+  }
+  function renderAvailHead(){
+    const row=$('availHeadRow'); if(!row) return;
+    const metricTh=(state.cols||[]).map(k=> `<th class="num" data-sort="${esc(k)}">${esc(colLabel(k))}</th>`).join('');
+    row.innerHTML = `<th data-sort="player">${esc(tt('common.player','Player'))}</th>`
+      + `<th data-sort="avail">${esc(tt('load_monitor.col_availability','Availability'))}</th>`
+      + metricTh
+      + `<th class="num" data-sort="risk">${esc(tt('load_monitor.col_risk','Risk'))}</th>`;
   }
   function renderAvailRows(){
     const body=$('availBody'); if(!body) return;
@@ -335,7 +378,7 @@
 
     // status buckets: [avail-color-class, i18n-label-suffix, sort-rank]. Covers players.status AND availability.status.
     const availCls={ available:['ok','available',1], modified:['mod','modified',2], partial:['mod','partial',2], limited:['mod','limited',2], injured:['out','injured',3], unavailable:['out','unavailable',3], sick:['out','sick',3], away:['unk','away',0] };
-    const cols=[['dist','m'],['hid','m'],['mmin','m/min'],['ad',''],['load','AU']];
+    const cols=state.cols||[];   // active columns (catalog keys)
 
     state.availRows = state.players.map(p=>{
       const recs=(gps[p.id]||[]).slice().sort((a,b)=> a.date<b.date?-1:1);
@@ -351,14 +394,15 @@
         : `<span class="mins-none">—</span>`;
 
       const metrics={};
-      const cells = cols.map(([k,unit])=>{
+      const cells = cols.map(k=>{
         if(!enough){ metrics[k]={enough:false,latest:null}; return `<td class="lm-sparkcell insufficient"><span class="insuf">n&lt;4</span></td>`; }
         const series=recs.map(r=>r[k]);
         const latest=series[series.length-1], mn=mean(series);
         metrics[k]={enough:true,latest};
         const hot = mn && latest>mn*1.2, cool = mn && latest<mn*0.8;
-        const disp = (k==='mmin')? latest.toFixed(1) : latest>=1000?(latest/1000).toFixed(1)+'k':Math.round(latest);
-        return `<td><div class="lm-sparkcell">${spark(series, hot?cssVar('--cm-danger','#ef4444'):cool?cssVar('--cm-success','#22c55e'):accent(),26)}<div class="n ${hot?'hot':cool?'cool':''}">${disp}${unit?`<small style="opacity:.6">${unit}</small>`:''}</div></div></td>`;
+        const unit=colUnit(k);
+        const disp = (k==='distance_per_minute')? latest.toFixed(1) : latest>=1000?(latest/1000).toFixed(1)+'k':Math.round(latest);
+        return `<td><div class="lm-sparkcell">${spark(series, hot?cssVar('--cm-danger','#ef4444'):cool?cssVar('--cm-success','#22c55e'):accent(),26)}<div class="n ${hot?'hot':cool?'cool':''}">${disp}${unit?`<small style="opacity:.6">${esc(unit)}</small>`:''}</div></div></td>`;
       }).join('');
 
       // Risk = multi-metric signals (ACWR>1.3 per metric of the active set)
@@ -384,6 +428,7 @@
       return { name: name||'', availRank: av[2]!=null?av[2]:0, mins, metrics, risk: rs, html };
     });
 
+    renderAvailHead();
     updateSortHeaders();
     renderAvailRows();
   }
@@ -542,13 +587,21 @@
       sigBtn.addEventListener('click', e=>{ e.stopPropagation(); renderSignalsPopover(); sigPop.classList.toggle('on'); });
       document.addEventListener('click', e=>{ if(sigPop.classList.contains('on') && !sigPop.contains(e.target) && !sigBtn.contains(e.target)) sigPop.classList.remove('on'); });
     }
-    // Sortable availability headers (default worst-first by risk)
-    document.querySelectorAll('#availTableWrap thead th[data-sort]').forEach(th=> th.addEventListener('click', ()=>{
+    // Columns config popover (master selector of which metrics to show)
+    const colBtn=$('colsBtn'), colPop=$('colsPop');
+    if(colBtn&&colPop){
+      renderColsPopover();
+      colBtn.addEventListener('click', e=>{ e.stopPropagation(); renderColsPopover(); colPop.classList.toggle('on'); });
+      document.addEventListener('click', e=>{ if(colPop.classList.contains('on') && !colPop.contains(e.target) && !colBtn.contains(e.target)) colPop.classList.remove('on'); });
+    }
+    // Sortable availability headers — delegated (headers are re-rendered dynamically)
+    const availHead=document.querySelector('#availTableWrap thead');
+    availHead?.addEventListener('click', e=>{ const th=e.target.closest('th[data-sort]'); if(!th) return;
       const k=th.dataset.sort;
       if(state.sortKey===k) state.sortDir = state.sortDir==='desc'?'asc':'desc';
       else { state.sortKey=k; state.sortDir = k==='player'?'asc':'desc'; }
       updateSortHeaders(); renderAvailRows();
-    }));
+    });
     // Re-render dynamic text when the language changes (static tags handled by CM_I18N).
     document.addEventListener('cm:langchanged', ()=> loadAll());
   }
@@ -562,6 +615,7 @@
     if(!state.clubId){ console.warn('[LM] no club id'); return; }
 
     try { state.catalog = await window.getCatalog?.(state.clubId) || []; } catch { state.catalog=[]; }
+    state.cols = loadCols();
     state.signalSet = loadSignalSet();
 
     await initTeamSwitch();
