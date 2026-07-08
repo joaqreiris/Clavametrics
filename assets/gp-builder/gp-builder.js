@@ -478,66 +478,14 @@
               <span class="s" id="gpbSelKind">bars · draft</span>
             </span>
           </div>
-          <div class="es-mode" id="gpbMode">
-            <button class="is-on" data-mode="classic"><i class="ti ti-adjustments-alt"></i>Clásico</button>
-            <button data-mode="dd"><i class="ti ti-drag-drop"></i>Drag &amp; drop</button>
-          </div>
           <div class="es-tabs" id="gpbTabs">
             <button class="is-on" data-tab="setup"><i class="ti ti-settings-2"></i>Setup</button>
             <button data-tab="style"><i class="ti ti-palette"></i>Style</button>
           </div>
         </div>
         <div class="es-p-b" id="gpbPaneBody">
-          <div class="pane is-on" data-pane="setup">
-            <div class="es-sec">
-              <div class="lab">Analyze by</div>
-              <div class="es-seg" id="gpbSource">
-                <button class="is-on" data-source="session"><i class="ti ti-calendar-stats"></i>Session</button>
-                <button data-source="task"><i class="ti ti-soccer-field"></i>Task</button>
-              </div>
-            </div>
-            <div class="es-sec">
-              <div class="lab">Title</div>
-              <input class="es-input" id="gpbTitle" placeholder="Auto-generated">
-            </div>
-            <div class="es-sec">
-              <div class="lab">
-                Chart type
-                <span class="req" id="gpbMetReq">*</span>
-                <span class="hint" id="gpbMetHint">pick 1</span>
-              </div>
-              <div class="es-types" id="gpbTypes"></div>
-            </div>
-            <div class="es-sec">
-              <div class="lab">Scope</div>
-              <div class="es-seg" id="gpbScope">
-                <button class="is-on" data-scope="player"><i class="ti ti-user"></i><span id="gpbDimName">Player</span></button>
-                <button data-scope="squad"><i class="ti ti-users"></i>Squad</button>
-              </div>
-            </div>
-            <div class="es-sec">
-              <div class="lab">Metrics</div>
-              <div class="es-fields" id="gpbMetrics"></div>
-              <div id="gpbMetZone" style="min-height:6px"></div>
-              <button class="es-add" id="gpbAddMetric"><i class="ti ti-plus"></i>Add metric</button>
-            </div>
-            <div class="es-sec">
-              <div class="lab">Time range</div>
-              <button class="es-select" id="gpbRange">
-                <i class="ti ti-calendar-week"></i>
-                <span id="gpbRangeName">MC (current)</span>
-                <i class="ti ti-chevron-down cv"></i>
-              </button>
-            </div>
-            <div class="es-sec">
-              <div class="lab">Comparison</div>
-              <button class="es-select" id="gpbCompare">
-                <i class="ti ti-target"></i>
-                <span id="gpbCompareName">vs role baseline</span>
-                <i class="ti ti-chevron-down cv"></i>
-              </button>
-            </div>
-          </div>
+          <!-- Classic "Setup" pane removed — the D&D pane (data-pane="dd") is the setup now.
+               The "Setup" tab routes to it; the "Style" tab reuses the pane below. -->
           <div class="pane" data-pane="style">
             <div class="es-sec">
               <div class="lab">Accent color</div>
@@ -730,6 +678,7 @@
     openPanel();
     buildStaticPanel();
     syncAll();
+    renderDDPane();   // D&D is the only editor → render its pane now that S is ready
 
     // cancel when view switches
     document.getElementById('sections')?.addEventListener('click', _onViewSwitch, { once:true });
@@ -1081,9 +1030,10 @@
     const saveBtn = document.getElementById('gpbSave');
     if (saveBtn) saveBtn.textContent = 'Update card';
 
-    document.getElementById('gpbTitle').value = S.title;
+    // Title seeds into the D&D input via ddConfigHTML(S.title) on renderDDPane — no classic input.
     pulseNext = true;
     syncAll();
+    renderDDPane();   // D&D is the only editor → render its pane now that S is seeded
   }
 
   // ── Panel open / close ─────────────────────────────────────
@@ -1092,14 +1042,16 @@
     panelEl.removeAttribute('hidden');
     panelEl.classList.add('is-open');
     document.body.classList.add('gpb-open');
-    document.getElementById('gpbTitle').value = S.title || '';
-    // default = modo clásico (red de seguridad); el D&D es opcional vía el toggle
-    _bMode = 'classic';
-    panelEl.classList.remove('is-ddmode');
-    document.body.classList.remove('gpb-ddmode');
-    panelEl.querySelectorAll('#gpbMode button').forEach(b => b.classList.toggle('is-on', b.dataset.mode === 'classic'));
-    // switch to setup tab
-    panelEl.querySelector('.es-tabs button[data-tab="setup"]')?.click();
+    // Drag & drop is the ONLY editor now → always open in D&D. `_bMode` is kept as the constant
+    // 'dd' so the D&D reuse-paths that still check it keep working (no mode toggle anymore).
+    _bMode = 'dd';
+    panelEl.classList.add('is-ddmode');
+    document.body.classList.add('gpb-ddmode');
+    // Show the D&D "Setup" tab + pane DIRECTLY (don't rely on the tab handler — it's wired later
+    // in buildStaticPanel, and S may not be seeded yet). renderDDPane() runs after syncAll() in the
+    // build/edit flows, once S is ready.
+    panelEl.querySelectorAll('.es-tabs button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === 'setup'));
+    panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === 'dd'));
   }
 
   function closePanel() {
@@ -1118,21 +1070,8 @@
     if (staticBuilt) return;
     staticBuilt = true;
 
-    // viz type buttons
-    document.getElementById('gpbTypes').innerHTML = Object.entries(VIZ_TYPES).map(([id,t]) =>
-      `<button class="es-tswatch" data-type="${esc(id)}"${id==='bars'?' style="position:relative"':''}><i class="ti ${t.icon}"></i><span>${t.name}</span>${id==='bars'?'<i class="ti ti-chevron-down" data-bars-menu title="Bar options" style="position:absolute;top:3px;right:4px;font-size:12px;opacity:.7"></i>':''}</button>`
-    ).join('');
-    document.getElementById('gpbTypes').querySelectorAll('[data-type]').forEach(b =>
-      b.onclick = () => setType(b.dataset.type)
-    );
-    // Bars caret → switch to bars (if needed) and open the orientation/stacked popover.
-    // stopPropagation so the caret click doesn't bubble to the swatch's setType.
-    const barsCaret = document.getElementById('gpbTypes').querySelector('[data-bars-menu]');
-    if (barsCaret) barsCaret.onclick = e => {
-      e.stopPropagation();
-      if (S && S.type !== 'bars') setType('bars');
-      togglePop(barsCaret, 'bars');
-    };
+    // (Classic viz-type swatches removed — the D&D toolbar #gpbDDSeg / ddSetType is the type
+    //  picker now, and the bars caret is the D&D "Bar options" button via data-ddpop="bars".)
 
     // colors
     document.getElementById('gpbColors').innerHTML = COLORS.map(c =>
@@ -1162,10 +1101,7 @@
       };
     });
 
-    // toggle de modo de construcción: Clásico ↔ Drag & drop (mismo S)
-    panelEl.querySelectorAll('#gpbMode button').forEach(btn => {
-      btn.onclick = () => setBuilderMode(btn.dataset.mode);
-    });
+    // (Mode toggle removed — Drag & drop is the only editor now.)
 
     // Eventos del modo D&D, delegados en el host estable #gpbDDPane (su innerHTML
     // se reemplaza en cada re-render, por eso se delega en el contenedor).
@@ -1279,21 +1215,8 @@
       });
     }
 
-    // source (Analyze by: Session / Task)
-    document.getElementById('gpbSource')?.querySelectorAll('button').forEach(b => {
-      b.onclick = () => setSource(b.dataset.source);
-    });
-
-    // scope
-    document.getElementById('gpbScope').querySelectorAll('button').forEach(b => {
-      b.onclick = () => {
-        if (!S) return;
-        document.getElementById('gpbScope').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o===b));
-        S.scope = b.dataset.scope;
-        S.scopeTouched = true;   // explicit user choice → no auto-default afterwards
-        pulseNext = true; renderCard();
-      };
-    });
+    // (Classic source + scope bindings removed — the D&D Config has its own #gpbDDSource /
+    //  #gpbDDScope, wired in the delegated D&D handler; setSource is still reused there.)
 
     // size
     document.getElementById('gpbSize').querySelectorAll('button').forEach(b => {
@@ -1317,23 +1240,8 @@
       };
     });
 
-    // title input
-    document.getElementById('gpbTitle').addEventListener('input', e => {
-      if (!S) return; S.title = e.target.value; renderCard();
-    });
-
-    // add metric
-    document.getElementById('gpbAddMetric').onclick = e => { closePop(); openFly(e.currentTarget); };
-
-    // range / compare selects
-    document.getElementById('gpbRange').onclick = e => togglePop(e.currentTarget, 'range');
-    document.getElementById('gpbCompare').onclick = e => togglePop(e.currentTarget, 'compare');
-
-    // drag-to-metric-well
-    const metZone = document.getElementById('gpbMetZone');
-    metZone.addEventListener('dragover', e => { if (dragMetricId) { e.preventDefault(); metZone.classList.add('drag-over'); } });
-    metZone.addEventListener('dragleave', () => metZone.classList.remove('drag-over'));
-    metZone.addEventListener('drop', e => { if (!dragMetricId) return; e.preventDefault(); addMetric(dragMetricId); metZone.classList.remove('drag-over'); });
+    // (Classic title / add-metric / range / compare / metric-well bindings removed — the D&D
+    //  Config provides #gpbDDTitle, the fields pantry, and data-ddpop range/compare/bars.)
 
     // buttons
     document.getElementById('gpbCancel').onclick = cancelBuild;
@@ -1388,21 +1296,8 @@
 
   // ── Type / metric management ──────────────────────────────
 
-  function setType(id) {
-    if (!S) return;
-    pulseNext = true;
-    S.type = id;
-    // A NEW table card defaults to squad (a player-scoped table shows a single
-    // player → confusing by default). Strict === false so a saved card being
-    // edited (scopeTouched undefined) or an explicit user choice is never overridden.
-    if (id === 'table' && S.scopeTouched === false) S.scope = 'squad';
-    const t = VIZ_TYPES[id];
-    if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
-    S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
-    if (!S.dimensions) S.dimensions = [];
-    if (S.dimensions.length > (t.dimMax || 0)) S.dimensions = S.dimensions.slice(0, t.dimMax || 0);
-    syncAll();
-  }
+  // (Classic setType() removed — the D&D toolbar uses ddSetType(). The table→squad default was
+  //  ported there.)
 
   function addMetric(id) {
     if (!S) return;
@@ -1451,11 +1346,13 @@
 
   function syncTypes() {
     if (!S) return;
-    document.getElementById('gpbTypes').querySelectorAll('[data-type]').forEach(b =>
+    // All targets live in the (removed) classic Setup pane → guarded so the shared syncAll()
+    // (used by the D&D) never touches a missing node. The D&D syncs its own type/scope/source.
+    document.getElementById('gpbTypes')?.querySelectorAll('[data-type]').forEach(b =>
       b.classList.toggle('is-on', b.dataset.type === S.type)
     );
-    document.getElementById('gpbMetHint').textContent = VIZ_REQ_LBL[S.type];
-    document.getElementById('gpbScope').querySelectorAll('button').forEach(b =>
+    const hint = document.getElementById('gpbMetHint'); if (hint) hint.textContent = VIZ_REQ_LBL[S.type];
+    document.getElementById('gpbScope')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.scope === S.scope)
     );
     document.getElementById('gpbSource')?.querySelectorAll('button').forEach(b =>
@@ -1468,8 +1365,8 @@
     const rangeName = RANGES.find(r=>r.id===S.range)?.name || S.range;
     const cmpName   = (S.compare === 'mc') ? `vs ${mcLabel(S.refMcId)}`
       : (COMPARES.find(c=>c.id===S.compare)?.name || S.compare);
-    document.getElementById('gpbRangeName').textContent   = rangeName;
-    document.getElementById('gpbCompareName').textContent = cmpName;
+    const _rn = document.getElementById('gpbRangeName');   if (_rn) _rn.textContent = rangeName;   // classic Setup (may be removed)
+    const _cn = document.getElementById('gpbCompareName'); if (_cn) _cn.textContent = cmpName;
     // D&D compact config mirrors the SAME S. Update the labels IN PLACE (don't rebuild the
     // buttons) so an open range/compare popover stays anchored — exactly like the classic panel.
     const ddR = document.getElementById('gpbDDRangeName');   if (ddR) ddR.textContent = rangeName;
@@ -1534,6 +1431,7 @@
   function renderMetrics() {
     if (!S) return;
     const wrap = document.getElementById('gpbMetrics');
+    if (!wrap) return;   // classic Setup pane removed → nothing to render here (D&D uses ddMetChip)
     if (!S.dimensions) S.dimensions = [];
     const dimsHtml = S.dimensions.map(d => {
       const def = DIM_MAP.get(d.id);
@@ -1660,10 +1558,8 @@
     } else if (kind === 'nodata') {
       body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div><button class="cm-btn is-outline is-sm" id="gpbFixScope" style="margin-top:4px"><i class="ti ti-user" style="font-size:14px"></i>Switch to Player</button></div>`;
       document.getElementById('gpbFixScope')?.addEventListener('click', () => {
-        S.scope = 'player';
-        document.getElementById('gpbScope').querySelectorAll('button').forEach(b => b.classList.toggle('is-on', b.dataset.scope==='player'));
-        document.getElementById('gpbDimName').textContent = 'Player';
-        pulseNext = true; renderCard();
+        S.scope = 'player'; S.scopeTouched = true;
+        ddSyncFromS();   // reflect in the D&D Config scope + re-render the card (no classic pane)
       }, { once:true });
     }
   }
@@ -4616,23 +4512,10 @@
     };
   }
 
-  // ── Fields flyout ─────────────────────────────────────────
-
-  function openFly(trigger) {
-    document.getElementById('gpbFlySearch').value = '';
-    renderFlyBody('');
-    flyBk.classList.add('is-on');
-    flyEl.style.visibility = 'hidden';
-    flyEl.classList.add('is-open');
-    const r = trigger.getBoundingClientRect();
-    const fw = flyEl.offsetWidth;
-    let left = r.left - fw - 10; if (left < 12) left = 12;
-    let top  = r.top; if (top + flyEl.offsetHeight > innerHeight - 12) top = Math.max(70, innerHeight - flyEl.offsetHeight - 12);
-    flyEl.style.left = left + 'px';
-    flyEl.style.top  = top  + 'px';
-    flyEl.style.visibility = '';
-    setTimeout(() => document.getElementById('gpbFlySearch').focus(), 50);
-  }
+  // ── Fields flyout (dormant) ───────────────────────────────
+  // The flyout is the classic "Add metric" catalog; its opener (openFly, triggered by the removed
+  // #gpbAddMetric) is gone — the D&D fields pantry replaces it. closeFly() stays because the shared
+  // setSource() calls it; renderFlyBody() stays for the calc-metric re-render guard. Both no-op now.
 
   function closeFly() {
     flyEl.classList.remove('is-open');
@@ -4849,7 +4732,7 @@
     table:   { name:'Table',   icon:'ti-table',        dimAx:'rows',                  metAx:'columns' },
     heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
   };
-  let _bMode   = 'classic';  // modo de construcción del builder: 'classic' | 'dd'
+  let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
 
   function _ddAxes()    { return DD_TYPES[S && S.type] || DD_TYPES.bars; }
@@ -5101,6 +4984,9 @@
   function ddSetType(id) {
     if (!S || !VIZ_TYPES[id]) return;
     S.type = id;
+    // A NEW table card defaults to squad scope (a player-scoped table shows a single player →
+    // confusing). Ported from the removed classic setType(). scopeTouched===false = untouched.
+    if (id === 'table' && S.scopeTouched === false) S.scope = 'squad';
     const t = VIZ_TYPES[id];
     if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
     S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
@@ -5189,27 +5075,7 @@
     return chips.length;
   }
 
-  // Cambia el modo de construcción. Ambos modos editan el MISMO S → al volver
-  // a clásico, syncAll() repinta los controles desde S; al entrar a D&D,
-  // renderDDPane() refleja S. Nada se pierde porque el state es el mismo.
-  function setBuilderMode(m) {
-    if (!panelEl) return;
-    _bMode = m;
-    panelEl.classList.toggle('is-ddmode', m === 'dd');
-    document.body.classList.toggle('gpb-ddmode', m === 'dd');   // widens the drawer for the 2-column D&D layout
-    panelEl.querySelectorAll('#gpbMode button').forEach(b => b.classList.toggle('is-on', b.dataset.mode === m));
-    if (m === 'dd') {
-      // Default to the D&D "Setup" view (zones). The Style tab is now available in D&D and reuses
-      // the classic Style pane (CSS no longer hides .es-tabs in dd).
-      panelEl.querySelectorAll('.es-tabs button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === 'setup'));
-      panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === 'dd'));
-      renderDDPane();
-    } else {
-      const tab = panelEl.querySelector('.es-tabs button.is-on')?.dataset.tab || 'setup';
-      panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === tab));
-      if (S) syncAll();
-    }
-  }
+  // (setBuilderMode removed — Drag & drop is the only editor; openPanel() sets _bMode='dd' once.)
 
   // ══════════════════════════════════════════════════════════════════════
   //  MÉTRICAS CALCULADAS · editor de fórmula (Prompt 1 — editor + catálogo)
@@ -5708,9 +5574,10 @@
       return m;
     });
 
-    document.getElementById('gpbTitle').value = S.title;
+    // Title seeds into the D&D input via ddConfigHTML(S.title) on renderDDPane — no classic input.
     pulseNext = true;
     syncAll();
+    renderDDPane();   // D&D is the only editor → render its pane now that S is seeded
   };
 
   /**

@@ -43,43 +43,9 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .es-sec > .lab .req { color: var(--cm-accent); font-size: 12px; line-height: 0; }
 .es-sec > .lab .hint { margin-left: auto; font: 500 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint); text-transform: none; letter-spacing: 0; }
 
-/* viz type grid */
-.es-types { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
-.es-tswatch { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 2px; border-radius: var(--cm-r-3); border: 1px solid var(--cm-border); background: var(--cm-bg-soft); color: var(--cm-fg-muted); cursor: pointer; }
-.es-tswatch:hover { border-color: var(--cm-border-strong); color: var(--cm-fg); background: var(--cm-surface); }
-.es-tswatch .ti { font-size: 18px; }
-.es-tswatch span { font: 500 8.5px/1 var(--cm-font-sans); }
-.es-tswatch.is-on { border-color: var(--cm-accent); background: var(--cm-accent-soft); color: var(--cm-accent); box-shadow: 0 0 0 2px var(--cm-focus-ring); }
-
-/* metric field chips */
-/* Densidad compacta unificada con el modo drag & drop (.bdd-dock): filas más
-   finas, ícono/chip más chico y agg chip compacto. Solo densidad, misma lógica. */
-.es-fields { display: flex; flex-direction: column; gap: 4px; }
-.es-field { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--cm-r-3); border: 1px solid var(--cm-border); background: var(--cm-bg-soft); cursor: grab; }
-.es-field.is-dragging { opacity: .55; }
-.es-field.drop-before { border-top: 2px solid var(--cm-accent); }
-.es-field .ftype { width: 18px; height: 18px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font: 700 9px/1 var(--cm-font-mono); flex-shrink: 0; }
-.es-field .ftype.met { background: var(--cm-accent-soft); color: var(--cm-accent); }
-.es-field .ftype.dim { background: var(--cm-info-bg, #eff6ff); color: var(--cm-info, #2563EB); width: auto; min-width: 18px; padding: 0 5px; }
-.es-field.is-dim { background: var(--cm-info-bg, #eff6ff); border-color: var(--cm-info-bd, #bfdbfe); cursor: default; }
-.es-field .fnm { min-width: 0; }
-.es-field .fnm .t { font: 600 11.5px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.es-field .fnm .s { font: 500 9.5px/1 var(--cm-font-mono); color: var(--cm-fg-muted); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
-.es-field .pk { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.es-field .pk.peak { background: var(--cm-violet, #7C3AED); }
-.es-field .pk.accum { background: var(--cm-neutral, #64748B); }
-.es-field .frm { width: 20px; height: 20px; border-radius: 6px; border: 0; background: transparent; color: var(--cm-fg-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.es-field .frm:hover { background: var(--cm-danger-bg); color: var(--cm-danger); }
-.es-field .frm .ti { font-size: 12px; }
-.es-aggchip { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--cm-border); background: var(--cm-surface); color: var(--cm-fg); font: 600 9.5px/1 var(--cm-font-mono); cursor: pointer; }
-.es-aggchip:hover { border-color: var(--cm-border-strong); }
-.es-aggchip .ti { font-size: 10px; color: var(--cm-fg-muted); }
-.es-add { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: var(--cm-r-3); border: 1.5px dashed var(--cm-border-strong); background: transparent; color: var(--cm-fg-muted); font: 600 12px/1 var(--cm-font-sans); cursor: pointer; width: 100%; margin-top: 8px; }
-.es-add:hover { border-color: var(--cm-accent); color: var(--cm-accent); background: var(--cm-accent-soft); }
-.es-add .ti { font-size: 15px; }
-.es-add.disabled { opacity: .45; pointer-events: none; }
-.es-add.gpb-pulse { border-color: var(--cm-accent); color: var(--cm-accent); animation: gpbPulse 1.6s ease infinite; }
-@keyframes gpbPulse { 0%,100% { box-shadow: 0 0 0 0 var(--cm-focus-ring); } 50% { box-shadow: 0 0 0 4px var(--cm-focus-ring); } }
+/* (Removed: classic Setup-pane CSS — .es-types/.es-tswatch (viz swatches), .es-fields/.es-field
+   (metric chips), .es-aggchip, .es-add + gpbPulse. Those elements no longer exist; the D&D uses
+   #gpbDDSeg + .bdd-* instead.) */
 
 /* select controls */
 .es-select { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 11px; border-radius: var(--cm-r-3); border: 1px solid var(--cm-border); background: var(--cm-bg-soft); cursor: pointer; font: 600 12.5px/1 var(--cm-font-sans); color: var(--cm-fg); width: 100%; }
@@ -481,16 +447,9 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
    ============================================================= */
 
 /* ── toggle de modo de construcción (en el header del drawer) ── */
-.es-mode { display:flex; gap:2px; margin:0 0 10px; padding:3px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
-.es-mode button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; height:30px; border:0; border-radius:var(--cm-r-2);
-  background:transparent; color:var(--cm-fg-muted); font:600 12px/1 var(--cm-font-sans); cursor:pointer;
-  transition:background var(--cm-dur-1) var(--cm-ease), color var(--cm-dur-1) var(--cm-ease); }
-.es-mode button .ti { font-size:15px; }
-.es-mode button:hover { color:var(--cm-fg); }
-.es-mode button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
-/* En modo D&D los tabs SE MUESTRAN (patrón Data Studio): "Setup" enruta al pane de zonas del
-   D&D y "Style" reusa el pane Style del clásico. La lógica de ruteo vive en el handler de tabs
-   y en setBuilderMode(). */
+/* (Removed: .es-mode — the classic/D&D mode toggle no longer exists; D&D is the only editor.) */
+/* Los tabs Setup/Style (patrón Data Studio): "Setup" enruta al pane de zonas del D&D y "Style"
+   reusa el pane Style. La lógica de ruteo vive en el handler de tabs. */
 /* D&D usa un panel ANGOSTO y minimalista (~380px, no media pantalla) para que el gráfico en
    edición quede cómodo al lado. El padding de la página se corre lo justo. */
 .es-panel.is-ddmode { width: min(380px, 96vw); }
