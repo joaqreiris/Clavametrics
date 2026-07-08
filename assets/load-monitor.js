@@ -346,7 +346,9 @@
       const av=availCls[status]||['unk',null,0];
       const avLbl=av[1]?tt('load_monitor.avail_'+av[1], av[1]):'—';
       const mins=arecs.filter(r=> r.date>=winFrom).reduce((s,r)=> s+(+r.minutes||0), 0);
-      const minsDisp=mins>0? `${mins}′` : '—';
+      const minsHtml=mins>0
+        ? `<span class="mins" title="${esc(tt('load_monitor.mins_window','total minutes in the selected window'))}">${esc(tt('load_monitor.col_mins','Min'))} ${mins}′</span>`
+        : `<span class="mins-none">—</span>`;
 
       const metrics={};
       const cells = cols.map(([k,unit])=>{
@@ -373,7 +375,7 @@
       const html = `<tr>
         <td><div class="lm-player"><div class="who"><div class="nm">${esc(name||tt('common.player','Player'))}</div>
           <div class="role"><span class="pos-chip ${posc}">${esc((p.position||'—').toUpperCase())}</span>${p.number!=null?`#${esc(p.number)}`:''}</div>
-          <div class="mins" title="${esc(tt('load_monitor.mins_window','minutes in window'))}">${esc(tt('load_monitor.col_mins','Min'))} ${minsDisp}</div></div></div></td>
+          ${minsHtml}</div></div></td>
         <td><span class="lm-avail ${av[0]}"><span class="cm-dot"></span>${esc(avLbl)}</span></td>
         ${cells}
         ${riskCell}
