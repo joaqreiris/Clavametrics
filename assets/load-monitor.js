@@ -63,7 +63,8 @@
   // ── state ─────────────────────────────────────────────────────────────────
   const state = { clubId:null, teamId:null, players:[], refDate:iso(new Date()),
     metric:'srpe', model:'ewma', coupled:false, availWindow:7, chart:null,
-    lastSquad:null, lastStress:null, lastExposure:null };
+    lastSquad:null, lastStress:null, lastExposure:null,
+    catalog:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[] };
 
   function metricKey(){ return METRIC_MAP[state.metric] || 'srpe_load'; }
   function metricLabel(){ const m=window.gpsACWR?.getMetric(metricKey()); return tt('load_monitor.metric_'+state.metric, m? m.label : 's-RPE'); }
@@ -240,53 +241,149 @@
     return byP;   // per player: chronological [{date,status,minutes}]
   }
 
+  // ── Risk signals (multi-metric ACWR over a 28-day window) ────────────────────
+  const SIGNAL_ELIGIBLE = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld'];
+  const SIGNAL_DEFAULT  = ['high_speed_distance','very_high_speed_distance','sprint_distance','accel_decel'];   // high-intensity
+  function catalogKeys(){ return new Set((state.catalog||[]).map(m=>m.key)); }
+  function eligibleSignals(){ const ck=catalogKeys(); const out=SIGNAL_ELIGIBLE.filter(k=>ck.has(k)); if(ck.has('accelerations')&&ck.has('decelerations')) out.push('accel_decel'); return out; }
+  function signalLabel(key){ if(key==='accel_decel') return 'A+D'; const m=(state.catalog||[]).find(x=>x.key===key); return m? m.label : key; }
+  function defaultSignalSet(){ const el=new Set(eligibleSignals()); const d=SIGNAL_DEFAULT.filter(k=>el.has(k)); return d.length? d : eligibleSignals().slice(0,3); }
+  function loadSignalSet(){ try{ const s=JSON.parse(localStorage.getItem(`cm_lm_risk_signals_${state.clubId}`)||'null'); if(Array.isArray(s)){ const f=s.filter(k=>eligibleSignals().includes(k)); if(f.length) return f; } }catch{} return defaultSignalSet(); }
+  function saveSignalSet(){ try{ localStorage.setItem(`cm_lm_risk_signals_${state.clubId}`, JSON.stringify(state.signalSet)); }catch{} }
+
+  // Per-player risk from the active signal set. A metric is a "signal" if its ACWR > 1.3.
+  // → { signals:[{key,label,acwr}], count, worstAcwr, insufficient }
+  async function fetchSignalRisk(){
+    const set=state.signalSet||[]; if(!set.length) return {};
+    const colSet=new Set(['player_id','session_id']);
+    set.forEach(k=>{ if(k==='accel_decel'){ colSet.add('accelerations'); colSet.add('decelerations'); } else colSet.add(k); });
+    const cols=Array.from(colSet).join(',');
+    const from=offset(state.refDate,-27);   // 28-day chronic window (independent of availWindow)
+    const { data:sess } = await sb().from('training_sessions').select('id,session_date').eq('club_id',state.clubId).gte('session_date',from).lte('session_date',state.refDate);
+    if(!sess?.length) return {};
+    const sd=Object.fromEntries(sess.map(s=>[s.id,s.session_date])), ids=sess.map(s=>s.id);
+    let rows;
+    try{
+      rows = window.cmFetchAll
+        ? await window.cmFetchAll(()=> sb().from('gps_reports').select(cols).eq('club_id',state.clubId).in('session_id',ids), {label:'lm.signals'})
+        : ((await sb().from('gps_reports').select(cols).eq('club_id',state.clubId).in('session_id',ids)).data||[]);
+    }catch{ rows=[]; }
+    const byP={};
+    (rows||[]).forEach(r=>{ const date=sd[r.session_id]; if(!date) return;
+      const per=(byP[r.player_id]||(byP[r.player_id]={_dates:new Set()})); per._dates.add(date);
+      set.forEach(k=>{ const val=k==='accel_decel'?(+r.accelerations||0)+(+r.decelerations||0):(+r[k]); if(val==null||isNaN(val)) return; (per[k]||(per[k]=[])).push({date,value:val}); });
+    });
+    const minSess=(window.gpsACWR?.CONFIG?.minSessions)||4;
+    const out={};
+    Object.entries(byP).forEach(([pid,per])=>{
+      if(per._dates.size<minSess){ out[pid]={ signals:[], count:0, worstAcwr:null, insufficient:true }; return; }
+      const signals=[]; let worst=null;
+      set.forEach(k=>{ const recs=per[k]; if(!recs||!recs.length) return; const a=window.gpsACWR.acwrForRecords(recs, state.refDate); if(a==null) return; if(worst==null||a>worst) worst=a; if(a>1.3) signals.push({ key:k, label:signalLabel(k), acwr:a }); });
+      signals.sort((x,y)=> y.acwr-x.acwr);
+      out[pid]={ signals, count:signals.length, worstAcwr:worst, insufficient: worst==null };
+    });
+    return out;
+  }
+
+  function renderSignalsPopover(){
+    const el=$('signalsList'); if(!el) return;
+    const elig=eligibleSignals();
+    if(!elig.length){ el.innerHTML=`<div style="font:var(--cm-body-sm);color:var(--cm-fg-faint);padding:4px 2px">—</div>`; return; }
+    el.innerHTML=elig.map(k=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;color:var(--cm-fg)"><input type="checkbox" data-sig="${esc(k)}" ${state.signalSet.includes(k)?'checked':''}> ${esc(signalLabel(k))}</label>`).join('');
+    el.querySelectorAll('input[data-sig]').forEach(inp=> inp.addEventListener('change', async ()=>{
+      const k=inp.dataset.sig;
+      if(inp.checked){ if(!state.signalSet.includes(k)) state.signalSet.push(k); } else state.signalSet=state.signalSet.filter(x=>x!==k);
+      saveSignalSet();
+      await renderAvailability();
+    }));
+  }
+
+  function updateSortHeaders(){
+    document.querySelectorAll('#availTableWrap thead th[data-sort]').forEach(th=>{
+      const on=th.dataset.sort===state.sortKey; th.classList.toggle('is-sorted', on); th.setAttribute('data-dir', on?state.sortDir:'');
+    });
+  }
+  function rowSortVal(row, key){
+    switch(key){
+      case 'player': return row.name.toLowerCase();
+      case 'avail':  return row.availRank;
+      case 'mins':   return row.mins;
+      case 'risk':   return row.risk.insufficient? -1 : row.risk.count + (row.risk.worstAcwr||0)/100;
+      case 'dist': case 'hid': case 'mmin': case 'ad': case 'load': { const m=row.metrics[key]; return (m&&m.enough)? m.latest : null; }
+      default: return 0;
+    }
+  }
+  function renderAvailRows(){
+    const body=$('availBody'); if(!body) return;
+    const arr=(state.availRows||[]).slice();
+    const key=state.sortKey||'risk', dir=state.sortDir==='asc'?1:-1;
+    arr.sort((a,b)=>{ let va=rowSortVal(a,key), vb=rowSortVal(b,key);
+      const na=va==null||(typeof va==='number'&&isNaN(va)), nb=vb==null||(typeof vb==='number'&&isNaN(vb));
+      if(na&&nb) return 0; if(na) return 1; if(nb) return -1;
+      const cmp=typeof va==='string'? va.localeCompare(vb) : va-vb; return cmp*dir; });
+    body.innerHTML = arr.map(r=> r.html).join('');
+  }
+
   async function renderAvailability(acwrPer){
     const body=$('availBody'), empty=$('availEmpty'), sub=$('availSub'); if(!body) return;
     if(sub) sub.innerHTML = `${esc(tt('load_monitor.avail_sub', `Per-player ${state.availWindow}-day GPS trend · flagged worst-first`, { days: state.availWindow }))} · <span class="mono">${esc(tt('load_monitor.avail_note','avg hides the individual'))}</span>`;
     const winFrom=offset(state.refDate,-state.availWindow);
-    const [gps, avail] = await Promise.all([ fetchGpsDaily(winFrom,state.refDate), fetchAvailability() ]);
+    const [gps, avail, sig] = await Promise.all([ fetchGpsDaily(winFrom,state.refDate), fetchAvailability(), fetchSignalRisk() ]);
 
-    if(!state.players.length){ body.innerHTML=''; if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:24px;text-align:center;color:var(--cm-fg-faint)">${esc(tt('load_monitor.avail_none','No players in this squad.'))}</div>`; } return; }
+    if(!state.players.length){ state.availRows=[]; body.innerHTML=''; if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:24px;text-align:center;color:var(--cm-fg-faint)">${esc(tt('load_monitor.avail_none','No players in this squad.'))}</div>`; } return; }
     if(empty) empty.style.display='none';
 
-    // status buckets + i18n label suffix. Covers players.status AND availability.status.
-    const availCls={ available:['ok','available'], modified:['mod','modified'], partial:['mod','partial'], limited:['mod','limited'], injured:['out','injured'], unavailable:['out','unavailable'], sick:['out','sick'], away:['unk','away'] };
+    // status buckets: [avail-color-class, i18n-label-suffix, sort-rank]. Covers players.status AND availability.status.
+    const availCls={ available:['ok','available',1], modified:['mod','modified',2], partial:['mod','partial',2], limited:['mod','limited',2], injured:['out','injured',3], unavailable:['out','unavailable',3], sick:['out','sick',3], away:['unk','away',0] };
     const cols=[['dist','m'],['hid','m'],['mmin','m/min'],['ad',''],['load','AU']];
 
-    const rows = state.players.map(p=>{
+    state.availRows = state.players.map(p=>{
       const recs=(gps[p.id]||[]).slice().sort((a,b)=> a.date<b.date?-1:1);
       const enough = recs.length>=3;
       const posc=POS_CSS[(p.position||'').toUpperCase()]||'mf';
       const arecs=avail[p.id]||[];
       const status=arecs.length? arecs[arecs.length-1].status : p.status;   // most recent record ≤ refDate, else global
-      const av=availCls[status]||['unk',null];
+      const av=availCls[status]||['unk',null,0];
       const avLbl=av[1]?tt('load_monitor.avail_'+av[1], av[1]):'—';
       const mins=arecs.filter(r=> r.date>=winFrom).reduce((s,r)=> s+(+r.minutes||0), 0);
       const minsDisp=mins>0? `${mins}′` : '—';
-      const acwr=acwrPer?.[p.id]?.acwr;
-      const insuf=acwrPer?.[p.id]?.insufficient;
-      const riskCls = (acwr==null)?'low': acwr>1.5?'high': acwr>1.3?'med':'low';
-      const riskLab = (acwr==null)? (insuf?'n<4':'—') : acwr>1.5?tt('load_monitor.risk_high','High'): acwr>1.3?tt('load_monitor.risk_med','Med'):tt('load_monitor.risk_low','Low');
 
+      const metrics={};
       const cells = cols.map(([k,unit])=>{
-        if(!enough) return `<td class="lm-sparkcell insufficient"><span class="insuf">n&lt;4</span></td>`;
+        if(!enough){ metrics[k]={enough:false,latest:null}; return `<td class="lm-sparkcell insufficient"><span class="insuf">n&lt;4</span></td>`; }
         const series=recs.map(r=>r[k]);
         const latest=series[series.length-1], mn=mean(series);
+        metrics[k]={enough:true,latest};
         const hot = mn && latest>mn*1.2, cool = mn && latest<mn*0.8;
         const disp = (k==='mmin')? latest.toFixed(1) : latest>=1000?(latest/1000).toFixed(1)+'k':Math.round(latest);
         return `<td><div class="lm-sparkcell">${spark(series, hot?cssVar('--cm-danger','#ef4444'):cool?cssVar('--cm-success','#22c55e'):accent(),26)}<div class="n ${hot?'hot':cool?'cool':''}">${disp}${unit?`<small style="opacity:.6">${unit}</small>`:''}</div></div></td>`;
       }).join('');
 
-      return `<tr>
-        <td><div class="lm-player"><div class="who"><div class="nm">${esc((p.first_name||'')+' '+(p.last_name||'')).trim()||tt('common.player','Player')}</div>
+      // Risk = multi-metric signals (ACWR>1.3 per metric of the active set)
+      const rs = sig[p.id] || { signals:[], count:0, worstAcwr:null, insufficient:true };
+      const riskCls = rs.insufficient? 'low' : ((rs.worstAcwr!=null&&rs.worstAcwr>1.5)||rs.count>=2)?'high': rs.count===1?'med':'low';
+      const riskLab = rs.insufficient? 'n<4'
+        : (rs.count===0? tt('load_monitor.risk_none','No signals')
+          : rs.count===1? tt('load_monitor.risk_count_one','1 signal')
+          : tt('load_monitor.risk_count_many','{n} signals',{n:rs.count}));
+      const detail = rs.signals.map(s=> `${s.label} ${s.acwr.toFixed(2)}`).join(' · ');
+      const riskCell = `<td><div class="lm-risk ${riskCls}"${detail?` title="${esc(detail)}"`:''}><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span>${detail?`<span class="sig">${esc(detail)}</span>`:''}</div></td>`;
+
+      const name=((p.first_name||'')+' '+(p.last_name||'')).trim();
+      const html = `<tr>
+        <td><div class="lm-player"><div class="who"><div class="nm">${esc(name||tt('common.player','Player'))}</div>
           <div class="role"><span class="pos-chip ${posc}">${esc((p.position||'—').toUpperCase())}</span>${p.number!=null?`#${esc(p.number)}`:''}</div>
           <div class="mins" title="${esc(tt('load_monitor.mins_window','minutes in window'))}">${esc(tt('load_monitor.col_mins','Min'))} ${minsDisp}</div></div></div></td>
         <td><span class="lm-avail ${av[0]}"><span class="cm-dot"></span>${esc(avLbl)}</span></td>
         ${cells}
-        <td><div class="lm-risk ${riskCls}"><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span></div></td>
+        ${riskCell}
       </tr>`;
-    }).join('');
-    body.innerHTML=rows;
+
+      return { name: name||'', availRank: av[2]!=null?av[2]:0, mins, metrics, risk: rs, html };
+    });
+
+    updateSortHeaders();
+    renderAvailRows();
   }
 
   // ── Decision queue (auto-derived + user-added) ───────────────────────────────
@@ -436,6 +533,20 @@
     $('btnRefresh')?.addEventListener('click', ()=> loadAll());
     $('btnExportMd')?.addEventListener('click', exportMd);
     $('btnAddAction')?.addEventListener('click', addAction);
+    // Risk-signals config popover (checkboxes of eligible catalog metrics)
+    const sigBtn=$('signalsBtn'), sigPop=$('signalsPop');
+    if(sigBtn&&sigPop){
+      renderSignalsPopover();
+      sigBtn.addEventListener('click', e=>{ e.stopPropagation(); renderSignalsPopover(); sigPop.classList.toggle('on'); });
+      document.addEventListener('click', e=>{ if(sigPop.classList.contains('on') && !sigPop.contains(e.target) && !sigBtn.contains(e.target)) sigPop.classList.remove('on'); });
+    }
+    // Sortable availability headers (default worst-first by risk)
+    document.querySelectorAll('#availTableWrap thead th[data-sort]').forEach(th=> th.addEventListener('click', ()=>{
+      const k=th.dataset.sort;
+      if(state.sortKey===k) state.sortDir = state.sortDir==='desc'?'asc':'desc';
+      else { state.sortKey=k; state.sortDir = k==='player'?'asc':'desc'; }
+      updateSortHeaders(); renderAvailRows();
+    }));
     // Re-render dynamic text when the language changes (static tags handled by CM_I18N).
     document.addEventListener('cm:langchanged', ()=> loadAll());
   }
@@ -447,6 +558,9 @@
     try { state.clubId = await window.getClubId(); } catch { state.clubId=null; }
     try { window.applyClubTheme?.(); } catch {}
     if(!state.clubId){ console.warn('[LM] no club id'); return; }
+
+    try { state.catalog = await window.getCatalog?.(state.clubId) || []; } catch { state.catalog=[]; }
+    state.signalSet = loadSignalSet();
 
     await initTeamSwitch();
     await loadPlayers();

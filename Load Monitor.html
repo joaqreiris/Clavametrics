@@ -1449,6 +1449,12 @@ body.cm::before {
   padding: 10px 12px; border-bottom: var(--cm-bw) solid var(--cm-border);
 }
 .lm-table thead th.num { text-align: center; }
+.lm-table thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; transition: color var(--cm-dur-1); }
+.lm-table thead th[data-sort]:hover { color: var(--cm-fg-muted); }
+.lm-table thead th.is-sorted { color: var(--cm-fg-strong); }
+.lm-table thead th.is-sorted::after { content: '▾'; font-size: 9px; margin-left: 4px; opacity: .85; }
+.lm-table thead th.is-sorted[data-dir="asc"]::after { content: '▴'; }
+.lm-risk .sig { font: 500 9.5px/1.25 var(--cm-font-mono); color: var(--cm-fg-faint); max-width: 128px; text-align: center; }
 .lm-table tbody td { padding: 12px; border-bottom: var(--cm-bw) solid var(--cm-border-soft); vertical-align: middle; }
 .lm-table tbody tr:last-child td { border-bottom: 0; }
 .lm-table tbody tr { transition: background var(--cm-dur-1); }
@@ -1714,6 +1720,14 @@ body.cm::before {
             <div class="sub" id="availSub"></div>
           </div>
           <div class="lm-head-actions">
+            <div class="lm-pop-wrap">
+              <button class="cm-icon-btn is-sm" id="signalsBtn" data-i18n-attr="title:load_monitor.risk_signals_title" title="Risk signals"><i class="ti ti-adjustments-horizontal"></i></button>
+              <div class="lm-pop" id="signalsPop" style="width:232px">
+                <div class="lm-pop-lab" data-i18n="load_monitor.risk_signals_title">Risk signals</div>
+                <div id="signalsList" style="padding:2px 8px 4px"></div>
+                <div class="lm-pop-note" data-i18n="load_monitor.risk_signals_hint">Choose which metrics count as a signal</div>
+              </div>
+            </div>
             <div class="lm-seg" id="availSeg">
               <button class="on" data-win="7">7D</button>
               <button data-win="28">28D</button>
@@ -1724,14 +1738,14 @@ body.cm::before {
           <table class="lm-table">
             <thead>
               <tr>
-                <th data-i18n="common.player">Player</th>
-                <th data-i18n="load_monitor.col_availability">Availability</th>
-                <th class="num" data-i18n="load_monitor.col_dist">Dist</th>
-                <th class="num">HID</th>
-                <th class="num">m/min</th>
-                <th class="num">A+D</th>
-                <th class="num" data-i18n="load_monitor.col_load">Load</th>
-                <th class="num" data-i18n="load_monitor.col_risk">Risk</th>
+                <th data-sort="player" data-i18n="common.player">Player</th>
+                <th data-sort="avail" data-i18n="load_monitor.col_availability">Availability</th>
+                <th class="num" data-sort="dist" data-i18n="load_monitor.col_dist">Dist</th>
+                <th class="num" data-sort="hid">HID</th>
+                <th class="num" data-sort="mmin">m/min</th>
+                <th class="num" data-sort="ad">A+D</th>
+                <th class="num" data-sort="load" data-i18n="load_monitor.col_load">Load</th>
+                <th class="num" data-sort="risk" data-i18n="load_monitor.col_risk">Risk</th>
               </tr>
             </thead>
             <tbody id="availBody"></tbody>
@@ -1763,6 +1777,7 @@ body.cm::before {
 <div id="settings-host"></div>
 
 <!-- App logic (real data) -->
+<script src="assets/gps-reader.js"></script>
 <script src="assets/gps-acwr.js"></script>
 <script src="assets/gps-exposure.js"></script>
 <script src="assets/stressors.js"></script>
