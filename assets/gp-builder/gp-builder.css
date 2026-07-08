@@ -630,6 +630,16 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(380px, 96vw); }
 .bdd-chip .x:hover { background:var(--cm-danger-bg); color:var(--cm-danger); }
 .bdd-chip .x .ti { font-size:13px; }
 .bdd-chip.is-dragging { opacity:0.5; border-style:dashed; }
+/* Bar/Line combo toggle on a metric chip (bars only). Two icon halves; the active mode is
+   tinted with the accent. Toggles the metric's .line prop. */
+.bdd-line { display:inline-flex; align-items:center; height:22px; flex-shrink:0; border:1px solid var(--cm-border);
+  border-radius:var(--cm-r-2); overflow:hidden; background:var(--cm-bg-soft); cursor:pointer; padding:0; }
+.bdd-line .ti { width:22px; height:100%; display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+  color:var(--cm-fg-muted); transition:background var(--cm-dur-1), color var(--cm-dur-1); }
+.bdd-line .ti:first-child { background:var(--cm-accent); color:var(--cm-fg-on-accent); }            /* bar = default active */
+.bdd-line.is-line .ti:first-child { background:transparent; color:var(--cm-fg-muted); }
+.bdd-line.is-line .ti:last-child  { background:var(--cm-accent); color:var(--cm-fg-on-accent); }    /* line active */
+.bdd-line:hover { border-color:var(--cm-border-strong); }
 .bdd-agg { position:relative; flex-shrink:0; }
 .bdd-agg select { -webkit-appearance:none; appearance:none; height:23px; padding:0 21px 0 8px; border:1px solid var(--cm-border);
   border-radius:var(--cm-r-2); background:var(--cm-bg-soft); color:var(--cm-fg); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em;
