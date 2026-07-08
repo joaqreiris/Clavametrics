@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#15803D">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/i18n.js" defer></script>
 <style>
   body.cm{background:var(--cm-bg);color:var(--cm-fg-strong);font-family:var(--cm-font-sans);margin:0}
   .pf-wrap{max-width:980px;margin:0 auto;padding:32px 20px}
@@ -49,42 +50,42 @@
 </head>
 <body class="cm">
   <div class="pf-wrap" id="pfRoot" style="display:none">
-    <a class="pf-back" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to app</a>
+    <a class="pf-back" href="Hub.html"><i class="ti ti-arrow-left"></i><span data-i18n="platform.back_to_app">Back to app</span></a>
     <div class="pf-head">
-      <h1>Platform Admin</h1>
-      <span class="pf-badge">Owner only</span>
+      <h1 data-i18n="platform.title">Platform Admin</h1>
+      <span class="pf-badge" data-i18n="platform.owner_only">Owner only</span>
     </div>
-    <p class="pf-sub">Manage plans, pricing and quotes. Changes here affect all clubs.</p>
+    <p class="pf-sub" data-i18n="platform.subtitle">Manage plans, pricing and quotes. Changes here affect all clubs.</p>
     <div class="pf-tabs">
-      <button class="pf-tab is-active" data-tab="plans">Plans</button>
-      <button class="pf-tab" data-tab="calculator">Budget calculator</button>
+      <button class="pf-tab is-active" data-tab="plans" data-i18n="platform.tab_plans">Plans</button>
+      <button class="pf-tab" data-tab="calculator" data-i18n="platform.tab_calculator">Budget calculator</button>
     </div>
     <section class="pf-panel is-active" id="pfPlans">
       <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;margin-bottom:22px;background:var(--cm-bg)">
-        <h3 style="margin:0 0 4px;font-size:15px">Grant complimentary plan</h3>
-        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px">Give a club a plan without payment — for testing, partners or trials.</p>
+        <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.grant_title">Grant complimentary plan</h3>
+        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.grant_desc">Give a club a plan without payment — for testing, partners or trials.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)">Club
-            <select id="pfCompClub" style="min-width:240px;padding:8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong)"><option value="">Loading…</option></select>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)"><span data-i18n="platform.club">Club</span>
+            <select id="pfCompClub" style="min-width:240px;padding:8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong)"><option value="" data-i18n="common.loading">Loading…</option></select>
           </label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)">Plan
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)"><span data-i18n="platform.plan">Plan</span>
             <select id="pfCompPlan" style="padding:8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong)">
-              <option value="full">Full</option><option value="professional">Professional</option><option value="basic">Basic</option><option value="initiation">Free</option>
+              <option value="full" data-i18n="platform.plan_full">Full</option><option value="professional" data-i18n="platform.plan_professional">Professional</option><option value="basic" data-i18n="platform.plan_basic">Basic</option><option value="initiation" data-i18n="platform.plan_free">Free</option>
             </select>
           </label>
-          <button id="pfCompGrant" class="pf-save" style="height:37px">Grant to club</button>
+          <button id="pfCompGrant" class="pf-save" style="height:37px" data-i18n="platform.grant_to_club">Grant to club</button>
         </div>
         <div id="pfCompMsg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
         <div style="margin-top:18px">
-          <div style="font-size:11px;color:var(--cm-fg-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Active complimentary subscriptions</div>
-          <div id="pfCompList" style="font-size:13px">Loading…</div>
+          <div style="font-size:11px;color:var(--cm-fg-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em" data-i18n="platform.comp_active">Active complimentary subscriptions</div>
+          <div id="pfCompList" style="font-size:13px" data-i18n="common.loading">Loading…</div>
         </div>
       </div>
-      <div id="pfPlansMatrix"><div class="pf-loading">Plans editor — coming next.</div></div>
+      <div id="pfPlansMatrix"><div class="pf-loading" data-i18n="platform.plans_editor_soon">Plans editor — coming next.</div></div>
     </section>
-    <section class="pf-panel" id="pfCalculator"><div class="pf-loading">Budget calculator — coming next.</div></section>
+    <section class="pf-panel" id="pfCalculator"><div class="pf-loading" data-i18n="platform.calc_soon">Budget calculator — coming next.</div></section>
   </div>
-  <div class="pf-loading" id="pfGate">Checking access…</div>
+  <div class="pf-loading" id="pfGate" data-i18n="platform.checking_access">Checking access…</div>
 
 <script>
 (async function(){
@@ -106,21 +107,27 @@
       if(t.dataset.tab==='calculator' && !_calcDrawn){ window.pfRenderCalc(); _calcDrawn=true; }
     });
   });
+  document.addEventListener('cm:langchanged', ()=>{
+    try { window.pfRenderPlans && window.pfRenderPlans(); } catch(e){}
+    try { if(_calcDrawn && window.pfRenderCalc) window.pfRenderCalc(); } catch(e){}
+  });
 })();
 </script>
 
 <script>
-  // Catálogo de features (key → label legible). Es la fuente de los toggles.
+  function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+  // Catálogo de features (key → i18n key + fallback legible). Es la fuente de los toggles.
+  // La 1ª col (feature key) es DATA (se persiste en plans.features) → NO traducir; solo el label visible.
   const FEATURE_CATALOG = [
-    ['squad','Squad'],['wellness_capture','Wellness — capture'],['rpe_capture','RPE — capture'],
-    ['athlete_app','Athlete app'],['calendar','Calendar'],['daily_planning','Daily planning'],
-    ['sessions_library','Exercises Library (browse)'],['drill_designer','Drill Designer (create)'],
-    ['wellness_analysis','Wellness/RPE — analysis'],['evaluations','Evaluations'],['injuries','Injuries'],
-    ['availability','Availability'],['gps_analysis','GPS Analysis'],['annual_planner','Annual Planner'],
-    ['gym','Gym (planner + library)'],['load_monitor','Load Monitor'],['load_wellness_cross','Load × wellness cross'],
-    ['individual_planner','Individual Planner'],['physio','Physio'],['rehab_planner','Rehab Planner'],
-    ['match_reports','Match Reports'],['lineup','Lineup'],['multi_staff','Multi-staff / roles'],
-    ['nutrition','Nutrition'],['video_room','Video Room'],
+    ['squad','platform.feat_squad','Squad'],['wellness_capture','platform.feat_wellness_capture','Wellness — capture'],['rpe_capture','platform.feat_rpe_capture','RPE — capture'],
+    ['athlete_app','platform.feat_athlete_app','Athlete app'],['calendar','platform.feat_calendar','Calendar'],['daily_planning','platform.feat_daily_planning','Daily planning'],
+    ['sessions_library','platform.feat_sessions_library','Exercises Library (browse)'],['drill_designer','platform.feat_drill_designer','Drill Designer (create)'],
+    ['wellness_analysis','platform.feat_wellness_analysis','Wellness/RPE — analysis'],['evaluations','platform.feat_evaluations','Evaluations'],['injuries','platform.feat_injuries','Injuries'],
+    ['availability','platform.feat_availability','Availability'],['gps_analysis','platform.feat_gps_analysis','GPS Analysis'],['annual_planner','platform.feat_annual_planner','Annual Planner'],
+    ['gym','platform.feat_gym','Gym (planner + library)'],['load_monitor','platform.feat_load_monitor','Load Monitor'],['load_wellness_cross','platform.feat_load_wellness_cross','Load × wellness cross'],
+    ['individual_planner','platform.feat_individual_planner','Individual Planner'],['physio','platform.feat_physio','Physio'],['rehab_planner','platform.feat_rehab_planner','Rehab Planner'],
+    ['match_reports','platform.feat_match_reports','Match Reports'],['lineup','platform.feat_lineup','Lineup'],['multi_staff','platform.feat_multi_staff','Multi-staff / roles'],
+    ['nutrition','platform.feat_nutrition','Nutrition'],['video_room','platform.feat_video_room','Video Room'],
   ];
   let _plans = [];
   function pfMsg(t){ const e=document.getElementById('pfMsg'); if(e) e.textContent=t; }
@@ -134,29 +141,29 @@
       const numRow = (label, field) => `<tr><td class="lbl">${label}</td>`+
         _plans.map(p=>`<td><input class="pf-num" type="number" step="any" min="0"
           data-plan="${p.id}" data-field="${field}" value="${p[field]??''}" placeholder="∞"></td>`).join('')+`</tr>`;
-      const featRow = ([key,label]) => `<tr><td class="lbl">${label}</td>`+
+      const featRow = ([key,i18nKey,label]) => `<tr><td class="lbl">${tt(i18nKey,label)}</td>`+
         _plans.map(p=>{ const on=(p.features||[]).includes(key);
           return `<td><input type="checkbox" data-plan="${p.id}" data-feat="${key}" ${on?'checked':''}></td>`; }).join('')+`</tr>`;
       host.innerHTML = `
         <div class="pf-annual">
-          Annual price = monthly ×
+          ${tt('platform.annual_price_eq','Annual price = monthly ×')}
           <input class="pf-num" id="pfAnnualMonths" type="number" min="1" step="1" value="10" style="width:56px;text-align:center">
-          months
-          <button class="pf-mini" id="pfApplyAnnual">Apply to all</button>
-          <span class="pf-hint">10 = 2 months free (~17% off)</span>
+          ${tt('platform.months','months')}
+          <button class="pf-mini" id="pfApplyAnnual">${tt('platform.apply_to_all','Apply to all')}</button>
+          <span class="pf-hint">${tt('platform.annual_hint','10 = 2 months free (~17% off)')}</span>
         </div>
         <table class="pf-tbl">
-          <thead><tr><th class="lbl">Plan</th>${_plans.map(p=>`<th>${p.name}<span class="slug">${p.slug}</span></th>`).join('')}</tr></thead>
+          <thead><tr><th class="lbl">${tt('platform.col_plan','Plan')}</th>${_plans.map(p=>`<th>${p.name}<span class="slug">${p.slug}</span></th>`).join('')}</tr></thead>
           <tbody>
-            ${numRow('Price / month (USD)','price_monthly')}
-            ${numRow('Price / year (USD)','price_yearly')}
-            ${numRow('Max players','max_players')}
-            ${numRow('Max staff','max_staff')}
-            <tr class="sep"><td colspan="${_plans.length+1}">Features</td></tr>
+            ${numRow(tt('platform.row_price_month','Price / month (USD)'),'price_monthly')}
+            ${numRow(tt('platform.row_price_year','Price / year (USD)'),'price_yearly')}
+            ${numRow(tt('platform.row_max_players','Max players'),'max_players')}
+            ${numRow(tt('platform.row_max_staff','Max staff'),'max_staff')}
+            <tr class="sep"><td colspan="${_plans.length+1}">${tt('platform.row_features','Features')}</td></tr>
             ${FEATURE_CATALOG.map(featRow).join('')}
           </tbody>
         </table>
-        <button class="pf-save" id="pfSaveBtn">Save changes</button>
+        <button class="pf-save" id="pfSaveBtn">${tt('platform.save_changes','Save changes')}</button>
         <div class="pf-msg" id="pfMsg"></div>`;
       document.getElementById('pfSaveBtn').addEventListener('click', pfSavePlans);
       document.getElementById('pfApplyAnnual').addEventListener('click', ()=>{
@@ -167,13 +174,13 @@
           const mv = m.value.trim()==='' ? 0 : Number(m.value);
           y.value = mv * n;
         });
-        pfMsg('Annual prices filled (×'+n+'). Review and Save.');
+        pfMsg(tt('platform.annual_filled','Annual prices filled (×'+n+'). Review and Save.',{n}));
       });
-    } catch(e){ host.innerHTML = '<div class="pf-loading">Could not load plans.</div>'; }
+    } catch(e){ host.innerHTML = '<div class="pf-loading">'+tt('platform.could_not_load_plans','Could not load plans.')+'</div>'; }
   };
 
   async function pfSavePlans(){
-    pfMsg('Saving…');
+    pfMsg(tt('common.saving','Saving…'));
     try {
       const numVal = (pid, field, dflt=null) => {
         const v = document.querySelector(`[data-plan="${pid}"][data-field="${field}"]`).value.trim();
@@ -193,8 +200,8 @@
         const { error } = await window.sb.from('plans').update(payload).eq('id', p.id);
         if (error) throw error;
       }
-      pfMsg('Saved ✓');
-    } catch(e){ pfMsg('Save failed: ' + (e.message||e)); }
+      pfMsg(tt('common.saved','Saved')+' ✓');
+    } catch(e){ pfMsg(tt('platform.save_failed','Save failed: '+(e.message||e),{msg:(e.message||e)})); }
   }
 </script>
 
@@ -213,11 +220,11 @@
     const host = document.getElementById('pfCalculator');
     if (!_plans || !_plans.length){
       try { const { data } = await window.sb.from('plans').select('*').order('sort_order'); _plans = data||[]; }
-      catch(e){ host.innerHTML='<div class="pf-loading">Could not load plans.</div>'; return; }
+      catch(e){ host.innerHTML='<div class="pf-loading">'+tt('platform.could_not_load_plans','Could not load plans.')+'</div>'; return; }
     }
     host.innerHTML = `
       <div id="pfCalcRows"></div>
-      <button class="pf-addcat" id="pfAddCat"><i class="ti ti-plus"></i> Add category</button>
+      <button class="pf-addcat" id="pfAddCat"><i class="ti ti-plus"></i> ${tt('platform.add_category','Add category')}</button>
       <div class="pf-summary" id="pfCalcSummary"></div>`;
     document.getElementById('pfAddCat').addEventListener('click', ()=>{ _calcRows.push({planId:_plans[0].id}); pfDrawCalc(); });
     if (_calcRows.length===0) _calcRows.push({planId:_plans[0].id});
@@ -229,10 +236,10 @@
     wrap.innerHTML = _calcRows.map((r,i)=>{
       const p = _plans.find(x=>x.id===r.planId) || _plans[0];
       return `<div class="pf-calc-row">
-        <span class="pf-cat">Category ${i+1}</span>
+        <span class="pf-cat">${tt('platform.category_n','Category '+(i+1),{n:i+1})}</span>
         <select data-row="${i}">${_plans.map(pl=>`<option value="${pl.id}" ${pl.id===r.planId?'selected':''}>${pl.name} — $${pl.price_monthly}/mo</option>`).join('')}</select>
         <span class="pf-line">$${p.price_monthly}/mo</span>
-        <button class="pf-x" data-del="${i}" title="Remove">×</button>
+        <button class="pf-x" data-del="${i}" title="${tt('platform.remove','Remove')}">×</button>
       </div>`;
     }).join('');
     wrap.querySelectorAll('select').forEach(s=>s.addEventListener('change',e=>{ _calcRows[+e.target.dataset.row].planId=e.target.value; pfDrawCalc(); }));
@@ -250,11 +257,11 @@
     const annualMonths = Number(document.getElementById('pfAnnualMonths')?.value) || 10;
     const annual = monthly * annualMonths;
     document.getElementById('pfCalcSummary').innerHTML = `
-      <div class="pf-srow"><span>Categories</span><span>${rows.length} (${paidCount} paid)</span></div>
-      <div class="pf-srow"><span>Subtotal / month</span><span>$${subtotal.toFixed(2)}</span></div>
-      <div class="pf-srow pf-disc"><span>Volume discount (${pct}%)</span><span>−$${discount.toFixed(2)}</span></div>
-      <div class="pf-srow total"><span>Total / month</span><span>$${monthly.toFixed(2)}</span></div>
-      <div class="pf-srow"><span>Total / year (×${annualMonths})</span><span>$${annual.toFixed(2)}</span></div>`;
+      <div class="pf-srow"><span>${tt('platform.calc_categories','Categories')}</span><span>${tt('platform.calc_cats_summary',rows.length+' ('+paidCount+' paid)',{count:rows.length,paid:paidCount})}</span></div>
+      <div class="pf-srow"><span>${tt('platform.calc_subtotal_month','Subtotal / month')}</span><span>$${subtotal.toFixed(2)}</span></div>
+      <div class="pf-srow pf-disc"><span>${tt('platform.calc_volume_discount','Volume discount ('+pct+'%)',{pct})}</span><span>−$${discount.toFixed(2)}</span></div>
+      <div class="pf-srow total"><span>${tt('platform.calc_total_month','Total / month')}</span><span>$${monthly.toFixed(2)}</span></div>
+      <div class="pf-srow"><span>${tt('platform.calc_total_year','Total / year (×'+annualMonths+')',{n:annualMonths})}</span><span>$${annual.toFixed(2)}</span></div>`;
   }
 </script>
   <script>
@@ -266,8 +273,8 @@
       try{
         const { data, error }=await sb.from('clubs').select('id, name').order('name');
         if(error) throw error;
-        sel.innerHTML = (data&&data.length) ? data.map(c=>`<option value="${c.id}">${c.name||c.id}</option>`).join('') : '<option value="">No clubs found</option>';
-      }catch(e){ sel.innerHTML='<option value="">Cannot list clubs</option>'; }
+        sel.innerHTML = (data&&data.length) ? data.map(c=>`<option value="${c.id}">${c.name||c.id}</option>`).join('') : '<option value="">'+tt('platform.no_clubs','No clubs found')+'</option>';
+      }catch(e){ sel.innerHTML='<option value="">'+tt('platform.cannot_list_clubs','Cannot list clubs')+'</option>'; }
     }
     async function loadComps(){
       const host=$('pfCompList'); if(!host) return;
@@ -276,29 +283,30 @@
           .select('team_id, teams(name, clubs(name)), plans(name, slug)')
           .eq('is_comp', true).eq('status','active');
         if(error) throw error;
-        if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">None yet.</span>'; return; }
+        if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">'+tt('platform.comp_none','None yet.')+'</span>'; return; }
         host.innerHTML = data.map(r=>{
           const club=r.teams?.clubs?.name||'', team=r.teams?.name||r.team_id, plan=r.plans?.name||r.plans?.slug||'';
           return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--cm-border-soft)">
             <span>${club} · <strong>${team}</strong> — ${plan}</span>
-            <button class="pf-mini" data-revoke="${r.team_id}">Revoke</button></div>`;
+            <button class="pf-mini" data-revoke="${r.team_id}">${tt('platform.revoke','Revoke')}</button></div>`;
         }).join('');
         host.querySelectorAll('[data-revoke]').forEach(b=>b.addEventListener('click',()=>revoke(b.dataset.revoke)));
-      }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">Cannot load.</span>'; }
+      }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">'+tt('platform.cannot_load','Cannot load.')+'</span>'; }
     }
     async function grant(){
       const club=$('pfCompClub')?.value, plan=$('pfCompPlan')?.value;
-      if(!club){ msg('Pick a club first.',true); return; }
-      msg('Granting…');
-      try{ const { error }=await sb.rpc('grant_comp_subscription_club',{ p_club_id:club, p_plan_slug:plan }); if(error) throw error; msg('Granted ✓'); await loadComps(); }
-      catch(e){ msg('Failed: '+(e.message||e),true); }
+      if(!club){ msg(tt('platform.pick_club_first','Pick a club first.'),true); return; }
+      msg(tt('platform.granting','Granting…'));
+      try{ const { error }=await sb.rpc('grant_comp_subscription_club',{ p_club_id:club, p_plan_slug:plan }); if(error) throw error; msg(tt('platform.granted','Granted ✓')); await loadComps(); }
+      catch(e){ msg(tt('platform.failed','Failed: '+(e.message||e),{msg:(e.message||e)}),true); }
     }
     async function revoke(teamId){
-      if(!confirm('Revoke this complimentary subscription?')) return;
+      if(!confirm(tt('platform.revoke_confirm','Revoke this complimentary subscription?'))) return;
       try{ const { error }=await sb.rpc('revoke_comp_subscription',{ p_team_id:teamId }); if(error) throw error; await loadComps(); }
-      catch(e){ alert('Failed: '+(e.message||e)); }
+      catch(e){ alert(tt('platform.failed','Failed: '+(e.message||e),{msg:(e.message||e)})); }
     }
-    function init(){ if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant); }
+    function init(){ if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant);
+      document.addEventListener('cm:langchanged', ()=>{ try{ loadComps(); }catch(e){} }); }
     if(document.readyState!=='loading') init(); else document.addEventListener('DOMContentLoaded', init);
   })();
   </script>

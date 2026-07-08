@@ -177,7 +177,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Billing.html
 - ✅ Plan Picker.html
 - ✅ Player.html
-- ⬜ Platform.html  *(Platform Admin)*
+- ✅ Platform.html  *(Platform Admin)*
 
 ### Fase 7 — Marketing (switch de runtime, §5)
 - ⬜ Home.html  → cambiar include a `assets/i18n.js`
