@@ -10,8 +10,20 @@
 (function () {
   'use strict';
 
+  // i18n helper: CM_I18N.t with an English fallback (already interpolated).
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+  const errUnknown = () => tt('clinical_record.err_unknown', 'unknown error');
+  const errSave = e => tt('clinical_record.err_save', 'Could not save: {msg}', { msg: (e && e.message) || errUnknown() });
+  const errDelete = e => tt('clinical_record.err_delete', 'Could not delete: {msg}', { msg: (e && e.message) || errUnknown() });
+  const errContext = () => tt('clinical_record.err_context', 'Missing club or player context.');
+  const errUpload = e => tt('clinical_record.err_upload', 'Upload failed: {msg}', { msg: (e && e.message) || errUnknown() });
+  const errFileSize = () => tt('clinical_record.err_file_size', 'File must be ≤ 15MB.');
+
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const EMPTY = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-faint)">None recorded</span>';
+  const EMPTY = () => '<span style="font:var(--cm-body-sm);color:var(--cm-fg-faint)">' + esc(tt('clinical_record.none_recorded', 'None recorded')) + '</span>';
   const DASH = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-faint)">—</span>';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -19,8 +31,8 @@
   const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
   const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = !!v; };
   const arr = v => Array.isArray(v) ? v : [];
-  const emptyRow = cols => '<tr><td colspan="' + cols + '" class="cr-empty">No records</td></tr>';
-  const emptyBlock = () => '<div class="cr-empty">No records</div>';
+  const emptyRow = cols => '<tr><td colspan="' + cols + '" class="cr-empty">' + esc(tt('clinical_record.no_records', 'No records')) + '</td></tr>';
+  const emptyBlock = () => '<div class="cr-empty">' + esc(tt('clinical_record.no_records', 'No records')) + '</div>';
 
   const _today = new Date(); _today.setHours(0, 0, 0, 0);
   const todayISO = () => _today.getFullYear() + '-' +
@@ -109,6 +121,9 @@ function getBodyCoords(area) {
   let _bodyView = 'front';      // #bodymap-overview Front/Back view
   let _injView = 'front';       // #bodymap-injuries Front/Back view
   let _profile = null;          // player_medical_profile row (reused for sex)
+  let _player = null;           // players row (kept for cm:langchanged re-render)
+  let _txRows = [];             // treatments rows (kept for cm:langchanged re-render)
+  let _txNameMap = {};          // performer id -> name (kept for cm:langchanged re-render)
   let _bodySex = 'male';        // silhouette sex: 'male' | 'female'
   let _playerId = null;
   let _clubId = null;
@@ -130,10 +145,10 @@ function getBodyCoords(area) {
   function fillInjurySelect(selId, selected) {
     const sel = document.getElementById(selId);
     if (!sel) return;
-    const opts = ['<option value="">— None —</option>'];
+    const opts = ['<option value="">' + tt('clinical_record.none', '— None —') + '</option>'];
     arr(_injuries).forEach(i => {
       if (!i || !i.id) return;
-      const label = (i.sub_classification || i.injury_type || 'Injury') +
+      const label = (i.sub_classification || i.injury_type || tt('clinical_record.injury', 'Injury')) +
         (i.body_area ? ' · ' + i.body_area : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
       opts.push('<option value="' + esc(i.id) + '"' + (String(selected) === String(i.id) ? ' selected' : '') + '>' + esc(label) + '</option>');
     });
@@ -142,7 +157,7 @@ function getBodyCoords(area) {
 
   // small inline edit (pencil) button for table rows — data-id + given class
   const editBtn = (id, cls) => '<button type="button" class="' + cls + '" data-id="' + esc(id) +
-    '" title="Edit" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
+    '" title="' + esc(tt('common.edit', 'Edit')) + '" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
@@ -188,7 +203,8 @@ function getBodyCoords(area) {
       const color = SEV_COLOR[g.worst] || '#EA580C';
       const r = g.total >= 3 ? 5.5 : 4;
       const pulseCls = g.active ? ' pulse' : '';
-      const tip = g.area + ' · ' + g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries') + ' · worst: ' + g.worst;
+      const tip = g.area + ' · ' + tt('clinical_record.injury_count', g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries'), { count: g.total }) +
+        ' · ' + tt('clinical_record.worst', 'worst') + ': ' + tSevLabel(g.worst);
       const cx = pt[0], cy = pt[1];
       html += '<circle data-area="' + esc(g.area) + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color +
         '" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot' + pulseCls + '"><title>' + esc(tip) + '</title></circle>';
@@ -203,11 +219,21 @@ function getBodyCoords(area) {
   function paintCard(card, view) { setSilhouette(card, view); renderHeatmap(card, view); }
 
   // ── Injury-history tab: mappings, season helper, filters & table ────────────
+  // Canonical-keyed label maps: the object VALUE is the English fallback; the
+  // visible text is translated via tt() at render time (data-vs-UI: keys stay EN).
   const TISSUE = { muscular: 'Muscle', acl: 'ACL', ligament: 'Ligament', tendon: 'Tendon', bone: 'Bone', other: 'Other' };
+  const TISSUE_KEY = { muscular: 'muscle', acl: 'acl', ligament: 'ligament', tendon: 'tendon', bone: 'bone', other: 'other' };
   const MECH = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', unknown: '—' };
+  const MECH_KEY = { contact: 'mech_contact', non_contact: 'mech_non_contact', overuse: 'mech_overuse', unknown: null };
   const SEV_PILL = { minor: '', moderate: 'is-warning', severe: 'is-danger' };
+  const SEV_LABEL_KEY = { minor: 'sev_minor', moderate: 'sev_moderate', severe: 'sev_severe' };
   const STATUS_PILL = { active: ['is-danger', 'Active'], returning: ['is-warning', 'Returning'], cleared: ['is-success', 'Resolved'] };
+  const STATUS_LABEL_KEY = { active: 'st_active', returning: 'st_returning', cleared: 'st_resolved' };
   const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+  // Translated label helpers (fall back to the English map value).
+  const tTissue = c => tt('clinical_record.' + (TISSUE_KEY[c] || 'other'), TISSUE[c] || 'Other');
+  const tSevLabel = sev => tt('clinical_record.' + (SEV_LABEL_KEY[sev] || 'sev_minor'), cap(sev));
 
   // Football season (Aug 1 → Jul 31) label from a date → "2025/26".
   function seasonLabel(iso) {
@@ -219,11 +245,16 @@ function getBodyCoords(area) {
     return startY + '/' + String(startY + 1).slice(2);
   }
 
+  // Filter comparisons use the canonical English TISSUE value; display uses tTissue().
   function tissueLabel(inj) { return inj.injury_category ? (TISSUE[inj.injury_category] || 'Other') : null; }
+  function tissueDisplay(inj) { return inj.injury_category ? tTissue(inj.injury_category) : null; }
 
   function mechLabel(inj) {
-    if (inj.injury_mechanism) return MECH[inj.injury_mechanism] || '—';
-    if (inj.mechanism) return inj.mechanism;
+    if (inj.injury_mechanism) {
+      const k = MECH_KEY[inj.injury_mechanism];
+      return k ? tt('clinical_record.' + k, MECH[inj.injury_mechanism] || '—') : (MECH[inj.injury_mechanism] || '—');
+    }
+    if (inj.mechanism) return inj.mechanism;   // free-text data → intact
     return '—';
   }
 
@@ -240,12 +271,13 @@ function getBodyCoords(area) {
 
   const selVal = id => { const e = document.getElementById(id); return e ? e.value : 'all'; };
 
-  function fillSelect(id, allLabel, values) {
+  // value stays canonical (for filtering); labelFn only changes the visible text.
+  function fillSelect(id, allLabel, values, labelFn) {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
-    sel.innerHTML = '<option value="all">' + allLabel + '</option>' +
-      values.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
+    sel.innerHTML = '<option value="all">' + esc(allLabel) + '</option>' +
+      values.map(v => '<option value="' + esc(v) + '">' + esc(labelFn ? labelFn(v) : v) + '</option>').join('');
     if (cur && [].some.call(sel.options, o => o.value === cur)) sel.value = cur;
   }
 
@@ -256,9 +288,13 @@ function getBodyCoords(area) {
       if (inj.body_area) zones.add(inj.body_area);
       const t = tissueLabel(inj); if (t) tissues.add(t);
     });
-    fillSelect('flt-season', 'All seasons', [...seasons].sort().reverse());
-    fillSelect('flt-zone', 'All zones', [...zones].sort());
-    fillSelect('flt-tissue', 'All tissue', [...tissues].sort());
+    // English TISSUE value -> translated label (rebuilt each call for langchange).
+    const tissueDisplayMap = {};
+    Object.keys(TISSUE).forEach(k => { tissueDisplayMap[TISSUE[k]] = tTissue(k); });
+    fillSelect('flt-season', tt('clinical_record.all_seasons', 'All seasons'), [...seasons].sort().reverse());
+    fillSelect('flt-zone', tt('clinical_record.all_zones', 'All zones'), [...zones].sort());
+    fillSelect('flt-tissue', tt('clinical_record.all_tissue', 'All tissue'), [...tissues].sort(),
+      v => tissueDisplayMap[v] || v);
   }
 
   function filteredInjuries() {
@@ -276,15 +312,15 @@ function getBodyCoords(area) {
     if (!tbody) return;
     const rows = filteredInjuries().slice()
       .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')));
-    setText('inj-count', rows.length + ' ' + (rows.length === 1 ? 'injury' : 'injuries'));
+    setText('inj-count', tt('clinical_record.injury_count', rows.length + ' ' + (rows.length === 1 ? 'injury' : 'injuries'), { count: rows.length }));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="cr-empty">No injuries recorded</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="cr-empty">' + esc(tt('clinical_record.no_injuries', 'No injuries recorded')) + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(inj => {
       const sev = String(inj.severity || 'minor').toLowerCase();
-      const sevPill = '<span class="cm-pill ' + (SEV_PILL[sev] || '') + '"><span class="cm-dot"></span>' + esc(cap(sev)) + '</span>';
-      const st = STATUS_PILL[inj.status] || ['', inj.status || '—'];
+      const sevPill = '<span class="cm-pill ' + (SEV_PILL[sev] || '') + '"><span class="cm-dot"></span>' + esc(tSevLabel(sev)) + '</span>';
+      const st = STATUS_PILL[inj.status] ? [STATUS_PILL[inj.status][0], tt('clinical_record.' + STATUS_LABEL_KEY[inj.status], STATUS_PILL[inj.status][1])] : ['', inj.status || '—'];
       const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
       const rtp = inj.returned_date ? esc(fmtDate(inj.returned_date))
         : (inj.expected_return ? '~' + esc(fmtDate(inj.expected_return)) : '—');
@@ -292,7 +328,7 @@ function getBodyCoords(area) {
       return '<tr>' +
         '<td class="c-date">' + esc(fmtDate(inj.start_date) || '—') + '</td>' +
         '<td class="cr-zone">' + esc(inj.body_area || '—') + '</td>' +
-        '<td>' + esc(tissueLabel(inj) || '—') + '</td>' +
+        '<td>' + esc(tissueDisplay(inj) || '—') + '</td>' +
         '<td class="c-dx">' + esc(diagnosis) + '</td>' +
         '<td class="c-muted">' + esc(mechLabel(inj)) + '</td>' +
         '<td>' + sevPill + '</td>' +
@@ -304,20 +340,25 @@ function getBodyCoords(area) {
   }
 
   // ── Surgical history tab ────────────────────────────────────────────────────
-  const LAT_SUFFIX = { left: ' · L', right: ' · R', bilateral: ' · Bilateral' };
+  const latSuffix = lat => {
+    if (lat === 'left') return ' · ' + tt('clinical_record.lat_l', 'L');
+    if (lat === 'right') return ' · ' + tt('clinical_record.lat_r', 'R');
+    if (lat === 'bilateral') return ' · ' + tt('clinical_record.bilateral', 'Bilateral');
+    return '';
+  };
   function renderSurgeries(rows) {
     rows = arr(rows);
     const tbody = document.getElementById('surg-tbody');
     if (!tbody) return;
-    setText('surg-count', rows.length + ' ' + (rows.length === 1 ? 'procedure' : 'procedures'));
+    setText('surg-count', tt('clinical_record.procedure_count', rows.length + ' ' + (rows.length === 1 ? 'procedure' : 'procedures'), { count: rows.length }));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="cr-empty">No procedures recorded</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="cr-empty">' + esc(tt('clinical_record.no_procedures', 'No procedures recorded')) + '</td></tr>';
       return;
     }
     const byId = {};
     arr(_injuries).forEach(i => { if (i && i.id) byId[i.id] = i; });
     tbody.innerHTML = rows.map(s => {
-      const proc = esc(s.procedure || '—') + (LAT_SUFFIX[s.laterality] || '');
+      const proc = esc(s.procedure || '—') + latSuffix(s.laterality);
       const sc = [s.surgeon, s.clinic].filter(Boolean).join(' · ');
       let rel = '—';
       if (s.related_injury_id && byId[s.related_injury_id]) {
@@ -361,7 +402,7 @@ function getBodyCoords(area) {
     setVal('surg-outcome', s ? s.outcome : '');
     fillInjurySelect('surg-injury', s ? s.related_injury_id : '');
     setVal('surg-notes', s ? s.notes : '');
-    const title = document.getElementById('surg-modal-title'); if (title) title.textContent = s ? 'Edit procedure' : 'Add procedure';
+    const title = document.getElementById('surg-modal-title'); if (title) title.textContent = s ? tt('clinical_record.edit_procedure', 'Edit procedure') : tt('clinical_record.add_procedure', 'Add procedure');
     const del = document.getElementById('surg-delete'); if (del) del.style.display = s ? '' : 'none';
     const ov = document.getElementById('modalSurgery'); if (ov) ov.classList.add('is-open');
   }
@@ -375,7 +416,7 @@ function getBodyCoords(area) {
     const err = document.getElementById('surg-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
 
     const procedure = val('surg-procedure');
-    if (!procedure) { if (err) { err.textContent = 'Procedure is required.'; err.style.display = 'block'; } return; }
+    if (!procedure) { if (err) { err.textContent = tt('clinical_record.err_procedure_required', 'Procedure is required.'); err.style.display = 'block'; } return; }
 
     const lat = val('surg-laterality');
     const fields = {
@@ -392,7 +433,7 @@ function getBodyCoords(area) {
 
     const btn = document.getElementById('surg-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
       let error;
       if (_editingSurgId) {
         ({ error } = await window.sb.from('surgeries').update(fields).eq('id', _editingSurgId));
@@ -405,14 +446,14 @@ function getBodyCoords(area) {
       await loadSurgeries();
     } catch (e) {
       console.error('[Clinical record] save surgery failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
   async function deleteSurgery(id) {
-    if (!window.confirm('Delete this procedure?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_procedure', 'Delete this procedure?'))) return;
     const err = document.getElementById('surg-error');
     try {
       const { error } = await window.sb.from('surgeries').delete().eq('id', id);
@@ -421,18 +462,26 @@ function getBodyCoords(area) {
       await loadSurgeries();
     } catch (e) {
       console.error('[Clinical record] delete surgery failed', e);
-      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errDelete(e); err.style.display = 'block'; }
     }
   }
 
   // ── Illness & episodes tab (illness/other → table, concussion → GRTP log) ────
   const EP_STATUS_PILL = { active: ['is-danger', 'Active'], monitoring: ['is-warning', 'Monitoring'], resolved: ['is-success', 'Resolved'] };
+  const EP_STATUS_KEY = { active: 'st_active', monitoring: 'st_monitoring', resolved: 'st_resolved' };
+  const epStatusPill = status => {
+    const m = EP_STATUS_PILL[status];
+    if (!m) return ['', status || '—'];
+    return [m[0], tt('clinical_record.' + EP_STATUS_KEY[status], m[1])];
+  };
   const epEditBtn = id => '<button type="button" class="ep-edit-btn" data-id="' + esc(id) +
-    '" title="Edit" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
+    '" title="' + esc(tt('common.edit', 'Edit')) + '" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
   const GRTP_STEPS = [
     'Symptom-limited activity', 'Light aerobic', 'Sport-specific',
     'Non-contact drills', 'Full-contact practice', 'Return to sport',
   ];
+  const GRTP_STEP_KEY = ['grtp_1', 'grtp_2', 'grtp_3', 'grtp_4', 'grtp_5', 'grtp_6'];
+  const grtpStepLabel = i => tt('clinical_record.' + GRTP_STEP_KEY[i], GRTP_STEPS[i]);
 
   function daysBetween(startIso, endIso) {
     const a = new Date((startIso || '') + 'T00:00:00'), b = new Date((endIso || '') + 'T00:00:00');
@@ -448,8 +497,8 @@ function getBodyCoords(area) {
       parts.push('<div><div class="cr-mini-lab">' + esc(label) + '</div>' +
         '<div style="font:var(--cm-body-sm);color:var(--cm-fg-strong)">' + esc(String(val)) + '</div></div>');
     };
-    push('SCAT baseline', scat.baseline);
-    push('SCAT score', scat.score);
+    push(tt('clinical_record.scat_baseline', 'SCAT baseline'), scat.baseline);
+    push(tt('clinical_record.scat_score', 'SCAT score'), scat.score);
     if (!parts.length) return '';
     return '<div style="display:flex;gap:24px;margin:12px 0 4px">' + parts.join('') + '</div>';
   }
@@ -463,14 +512,14 @@ function getBodyCoords(area) {
     let html = '<div class="cr-grtp">';
     for (let i = 1; i <= 6; i++) {
       const step = gmap[i] || {};
-      const label = step.label || GRTP_STEPS[i - 1];
+      const label = step.label || grtpStepLabel(i - 1);
       const done = step.done === true;
       const dateCell = done
         ? '<input type="date" class="cm-input grtp-date" data-ep="' + ep + '" data-step="' + i + '" value="' +
             esc(step.date || todayISO()) + '" style="height:26px;padding:0 6px;font-size:11px">'
         : '<span style="color:var(--cm-fg-faint)">—</span>';
       html += '<div class="cr-grtp-step' + (done ? ' is-done' : '') + '" data-ep="' + ep + '" data-step="' + i + '">' +
-        '<div class="cr-grtp-n grtp-toggle" data-ep="' + ep + '" data-step="' + i + '" style="cursor:pointer" title="Toggle step">' + i + '</div>' +
+        '<div class="cr-grtp-n grtp-toggle" data-ep="' + ep + '" data-step="' + i + '" style="cursor:pointer" title="' + esc(tt('clinical_record.toggle_step', 'Toggle step')) + '">' + i + '</div>' +
         '<div class="cr-grtp-l">' + esc(label) + '</div>' +
         '<div class="cr-grtp-d">' + dateCell + '</div>' +
         '</div>';
@@ -486,12 +535,12 @@ function getBodyCoords(area) {
     // ── Illness table ──
     const tbody = document.getElementById('ill-tbody');
     if (tbody) {
-      setText('ill-count', illness.length + ' ' + (illness.length === 1 ? 'episode' : 'episodes'));
+      setText('ill-count', tt('clinical_record.episode_count', illness.length + ' ' + (illness.length === 1 ? 'episode' : 'episodes'), { count: illness.length }));
       if (!illness.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No episodes recorded</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">' + esc(tt('clinical_record.no_episodes', 'No episodes recorded')) + '</td></tr>';
       } else {
         tbody.innerHTML = illness.map(e => {
-          const st = EP_STATUS_PILL[e.status] || ['', e.status || '—'];
+          const st = epStatusPill(e.status);
           const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
           const days = (e.days_lost != null) ? e.days_lost
             : (e.end_date ? (daysBetween(e.start_date, e.end_date) ?? '—') : '—');
@@ -511,21 +560,21 @@ function getBodyCoords(area) {
     const cbody = document.getElementById('concussion-body');
     if (cbody) {
       if (!concussions.length) {
-        cbody.innerHTML = '<div class="cr-empty" style="padding:8px 0">No concussions recorded</div>';
+        cbody.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_concussions', 'No concussions recorded')) + '</div>';
       } else {
         cbody.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">' + concussions.map(e => {
-          const st = EP_STATUS_PILL[e.status] || ['', e.status || '—'];
+          const st = epStatusPill(e.status);
           const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
           const days = (e.days_lost != null) ? String(e.days_lost)
             : (e.end_date ? String(daysBetween(e.start_date, e.end_date) ?? '—') : '—');
           const warn = e.status !== 'resolved' ? ' class="is-warn"' : '';
           return '<div class="cr-conc-card">' +
             '<div style="display:flex;justify-content:flex-end;margin-bottom:2px">' + epEditBtn(e.id) + '</div>' +
-            '<div class="cr-kv"><span>Concussion</span><b>' + esc(fmtDate(e.start_date) || '—') + '</b></div>' +
-            '<div class="cr-kv"><span>Days lost</span><b' + warn + '>' + esc(days) + '</b></div>' +
-            '<div class="cr-kv" style="margin-bottom:6px"><span>Status</span><b>' + statusPill + '</b></div>' +
+            '<div class="cr-kv"><span>' + esc(tt('clinical_record.concussion', 'Concussion')) + '</span><b>' + esc(fmtDate(e.start_date) || '—') + '</b></div>' +
+            '<div class="cr-kv"><span>' + esc(tt('clinical_record.days_lost', 'Days lost')) + '</span><b' + warn + '>' + esc(days) + '</b></div>' +
+            '<div class="cr-kv" style="margin-bottom:6px"><span>' + esc(tt('clinical_record.status', 'Status')) + '</span><b>' + statusPill + '</b></div>' +
             scatHtml(e.detail && e.detail.scat) +
-            '<div class="cr-mini-lab" style="margin:12px 0 8px">Graduated return to play</div>' +
+            '<div class="cr-mini-lab" style="margin:12px 0 8px">' + esc(tt('clinical_record.graduated_rtp', 'Graduated return to play')) + '</div>' +
             grtpLadder(e.detail, e.id) +
             '</div>';
         }).join('') + '</div>';
@@ -575,7 +624,7 @@ function getBodyCoords(area) {
     setVal('ep-end', ep ? ep.end_date : '');
     setVal('ep-days', ep && ep.days_lost != null ? ep.days_lost : '');
     setVal('ep-notes', ep ? ep.notes : '');
-    const title = document.getElementById('ep-modal-title'); if (title) title.textContent = ep ? 'Edit episode' : 'Add episode';
+    const title = document.getElementById('ep-modal-title'); if (title) title.textContent = ep ? tt('clinical_record.edit_episode', 'Edit episode') : tt('clinical_record.add_episode', 'Add episode');
     const del = document.getElementById('ep-delete'); if (del) del.style.display = ep ? '' : 'none';
     epToggleCategory();
     const ov = document.getElementById('modalEpisode'); if (ov) ov.classList.add('is-open');
@@ -591,7 +640,7 @@ function getBodyCoords(area) {
 
     const category = val('ep-category'), diagnosis = val('ep-diagnosis'), start = val('ep-start'), status = val('ep-status');
     if (!category || !diagnosis || !start || !status) {
-      if (err) { err.textContent = 'Category, diagnosis, start date and status are required.'; err.style.display = 'block'; }
+      if (err) { err.textContent = tt('clinical_record.err_episode_required', 'Category, diagnosis, start date and status are required.'); err.style.display = 'block'; }
       return;
     }
     const end = nn(val('ep-end'));
@@ -620,7 +669,7 @@ function getBodyCoords(area) {
 
     const btn = document.getElementById('ep-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
       let error;
       if (_editingEpId) {
         ({ error } = await window.sb.from('medical_episodes').update(fields).eq('id', _editingEpId));
@@ -633,14 +682,14 @@ function getBodyCoords(area) {
       await loadEpisodes();
     } catch (e) {
       console.error('[Clinical record] save episode failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
   async function deleteEpisode(id) {
-    if (!window.confirm('Delete this episode?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_episode', 'Delete this episode?'))) return;
     const err = document.getElementById('ep-error');
     try {
       const { error } = await window.sb.from('medical_episodes').delete().eq('id', id);
@@ -649,7 +698,7 @@ function getBodyCoords(area) {
       await loadEpisodes();
     } catch (e) {
       console.error('[Clinical record] delete episode failed', e);
-      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errDelete(e); err.style.display = 'block'; }
     }
   }
 
@@ -694,6 +743,7 @@ function getBodyCoords(area) {
 
   // ── Treatment log tab ───────────────────────────────────────────────────────
   const RESP_PILL = { improving: ['is-success', 'Improving'], stable: ['', 'Stable'], worsening: ['is-danger', 'Worsening'] };
+  const RESP_KEY = { improving: 'resp_improving', stable: 'resp_stable', worsening: 'resp_worsening' };
   function modalitiesLabel(m) {
     if (!Array.isArray(m)) return '—';
     const parts = m.map(x => {
@@ -708,13 +758,13 @@ function getBodyCoords(area) {
     rows = arr(rows); nameMap = nameMap || {};
     const tbody = document.getElementById('tx-tbody');
     if (!tbody) return;
-    setText('tx-count', rows.length + ' ' + (rows.length === 1 ? 'treatment' : 'treatments'));
+    setText('tx-count', tt('clinical_record.treatment_count', rows.length + ' ' + (rows.length === 1 ? 'treatment' : 'treatments'), { count: rows.length }));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No treatments recorded</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">' + esc(tt('clinical_record.no_treatments', 'No treatments recorded')) + '</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(t => {
-      const type = t.type || (t.treatment_type === 'preventive' ? 'Preventive' : 'Rehab');
+      const type = t.type || (t.treatment_type === 'preventive' ? tt('clinical_record.preventive', 'Preventive') : tt('clinical_record.rehab', 'Rehab'));
       let pain = '—';
       if (t.pain_pre != null && t.pain_post != null) {
         const color = t.pain_post < t.pain_pre ? 'var(--cm-success)'
@@ -723,7 +773,7 @@ function getBodyCoords(area) {
       }
       const who = nameMap[t.performed_by || t.physio_id] || '—';
       const rp = RESP_PILL[t.player_status];
-      const resp = rp ? '<span class="cm-pill ' + rp[0] + '"><span class="cm-dot"></span>' + rp[1] + '</span>' : '—';
+      const resp = rp ? '<span class="cm-pill ' + rp[0] + '"><span class="cm-dot"></span>' + esc(tt('clinical_record.' + RESP_KEY[t.player_status], rp[1])) + '</span>' : '—';
       return '<tr>' +
         '<td class="c-date">' + esc(fmtDate(t.date) || '—') + '</td>' +
         '<td>' + esc(type) + '</td>' +
@@ -737,19 +787,21 @@ function getBodyCoords(area) {
 
   // ── Imaging & studies tab ───────────────────────────────────────────────────
   const MODALITY_LABEL = { mri: 'MRI', ultrasound: 'Ultrasound', xray: 'X-ray', ct: 'CT', lab: 'Lab', other: 'Other' };
+  const MODALITY_KEY = { mri: 'mri', ultrasound: 'ultrasound', xray: 'xray', ct: 'ct', lab: 'lab', other: 'other' };
+  const tModality = m => MODALITY_LABEL[m] ? tt('clinical_record.' + MODALITY_KEY[m], MODALITY_LABEL[m]) : (m ? cap(m) : tt('clinical_record.study', 'Study'));
   const MODALITY_ICON = { mri: 'ti-scan', ultrasound: 'ti-wave-sine', xray: 'ti-bone', ct: 'ti-body-scan', lab: 'ti-test-pipe', other: 'ti-file-description' };
   const IMG_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?|#|$)/i;
   function renderStudies(rows) {
     rows = arr(rows);
     const grid = document.getElementById('img-grid');
     if (!grid) return;
-    setText('img-count', rows.length + ' ' + (rows.length === 1 ? 'study' : 'studies'));
+    setText('img-count', tt('clinical_record.study_count', rows.length + ' ' + (rows.length === 1 ? 'study' : 'studies'), { count: rows.length }));
     if (!rows.length) {
-      grid.innerHTML = '<div class="cr-empty" style="padding:8px 0">No studies recorded</div>';
+      grid.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_studies', 'No studies recorded')) + '</div>';
       return;
     }
     grid.innerHTML = rows.map(s => {
-      const label = MODALITY_LABEL[s.modality] || (s.modality ? cap(s.modality) : 'Study');
+      const label = tModality(s.modality);
       // file_url is a bucket PATH; only legacy http(s) links are used as a thumbnail
       const isHttp = s.file_url && /^https?:\/\//i.test(String(s.file_url));
       const thumb = isHttp
@@ -759,7 +811,7 @@ function getBodyCoords(area) {
         ? '<div class="cr-img-find" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.finding) + '</div>'
         : '';
       const open = s.file_url
-        ? '<span class="cr-img-open study-open" data-url="' + esc(s.file_url) + '" style="cursor:pointer;font:500 12px/1 var(--cm-font-sans)">Open</span>'
+        ? '<span class="cr-img-open study-open" data-url="' + esc(s.file_url) + '" style="cursor:pointer;font:500 12px/1 var(--cm-font-sans)">' + esc(tt('clinical_record.open', 'Open')) + '</span>'
         : '';
       return '<div class="cm-card cr-img-card">' +
         thumb +
@@ -811,10 +863,10 @@ function getBodyCoords(area) {
     const fileInput = document.getElementById('study-file'); if (fileInput) fileInput.value = '';
     const cur = document.getElementById('study-current');
     if (cur) {
-      if (s && s.file_url) { cur.style.display = ''; cur.textContent = 'Current file: ' + studyFileName(s.file_url) + ' — uploading a new file replaces it.'; }
+      if (s && s.file_url) { cur.style.display = ''; cur.textContent = tt('clinical_record.current_file', 'Current file: {name} — uploading a new file replaces it.', { name: studyFileName(s.file_url) }); }
       else { cur.style.display = 'none'; cur.textContent = ''; }
     }
-    const title = document.getElementById('study-modal-title'); if (title) title.textContent = s ? 'Edit study' : 'Add study';
+    const title = document.getElementById('study-modal-title'); if (title) title.textContent = s ? tt('clinical_record.edit_study', 'Edit study') : tt('clinical_record.add_study', 'Add study');
     const del = document.getElementById('study-delete'); if (del) del.style.display = s ? '' : 'none';
     const ov = document.getElementById('modalStudy'); if (ov) ov.classList.add('is-open');
   }
@@ -829,23 +881,23 @@ function getBodyCoords(area) {
     const fail = msg => { if (err) { err.textContent = msg; err.style.display = 'block'; } };
 
     const modality = val('study-modality');
-    if (!modality) { fail('Modality is required.'); return; }
+    if (!modality) { fail(tt('clinical_record.err_modality_required', 'Modality is required.')); return; }
 
     const fileInput = document.getElementById('study-file');
     const file = (fileInput && fileInput.files && fileInput.files[0]) || null;
 
     const btn = document.getElementById('study-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
 
       let file_url;
       if (file) {
         const okType = /^image\//.test(file.type) || file.type === 'application/pdf';
-        if (!okType) { fail('File must be an image or PDF.'); return; }
-        if (file.size > 15 * 1024 * 1024) { fail('File must be ≤ 15MB.'); return; }
+        if (!okType) { fail(tt('clinical_record.err_file_image_pdf', 'File must be an image or PDF.')); return; }
+        if (file.size > 15 * 1024 * 1024) { fail(errFileSize()); return; }
         const path = _clubId + '/' + _playerId + '/studies/' + Date.now() + '_' + sanitizeName(file.name);
         const { error: upErr } = await window.sb.storage.from(MEDIA_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
-        if (upErr) { fail('Upload failed: ' + ((upErr && upErr.message) || 'unknown error')); return; }
+        if (upErr) { fail(errUpload(upErr)); return; }
         file_url = path;
       } else if (_editingStudyId) {
         const cur = arr(_studies).find(x => String(x.id) === String(_editingStudyId)) || {};
@@ -876,14 +928,14 @@ function getBodyCoords(area) {
       await loadStudies();
     } catch (e) {
       console.error('[Clinical record] save study failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
   async function deleteStudy(id) {
-    if (!window.confirm('Delete this study?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_study', 'Delete this study?'))) return;
     const s = arr(_studies).find(x => String(x.id) === String(id));
     const err = document.getElementById('study-error');
     try {
@@ -898,40 +950,42 @@ function getBodyCoords(area) {
       await loadStudies();
     } catch (e) {
       console.error('[Clinical record] delete study failed', e);
-      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errDelete(e); err.style.display = 'block'; }
     }
   }
 
   // ── Documents tab (signed URLs generated on-demand at click) ────────────────
   const DOC_ICON = { report: 'ti-file-text', consent: 'ti-file-check', certificate: 'ti-certificate', insurance: 'ti-shield', other: 'ti-file' };
   const DOC_LABEL = { report: 'Report', consent: 'Consent', certificate: 'Certificate', insurance: 'Insurance', other: 'Other' };
+  const DOC_KEY = { report: 'report', consent: 'consent', certificate: 'certificate', insurance: 'insurance', other: 'other' };
+  const tDocLabel = t => DOC_LABEL[t] ? tt('clinical_record.' + DOC_KEY[t], DOC_LABEL[t]) : (t ? cap(t) : tt('clinical_record.document', 'Document'));
   function renderDocuments(rows) {
     rows = arr(rows);
     const list = document.getElementById('doc-list');
     if (!list) return;
-    setText('doc-count', rows.length + ' ' + (rows.length === 1 ? 'file' : 'files'));
+    setText('doc-count', tt('clinical_record.file_count', rows.length + ' ' + (rows.length === 1 ? 'file' : 'files'), { count: rows.length }));
     if (!rows.length) {
-      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No documents</div>';
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_documents', 'No documents')) + '</div>';
       return;
     }
     list.innerHTML = rows.map(d => {
       const icon = DOC_ICON[d.type] || 'ti-file';
-      const label = DOC_LABEL[d.type] || (d.type ? cap(d.type) : 'Document');
+      const label = tDocLabel(d.type);
       const meta = [label, fmtDate(d.doc_date)].filter(Boolean).join(' · ');
       const hasFile = !!d.file_path;
       const attrs = hasFile
         ? ' data-path="' + esc(d.file_path) + '" style="cursor:pointer"'
-        : ' style="cursor:default;opacity:.6" title="No file attached"';
+        : ' style="cursor:default;opacity:.6" title="' + esc(tt('clinical_record.no_file_attached', 'No file attached')) + '"';
       return '<div class="cr-doc"' + attrs + '>' +
         '<div class="cr-doc-ic"><i class="ti ' + icon + '"></i></div>' +
         '<div class="cr-doc-main">' +
-          '<div class="cr-doc-name">' + esc(d.title || 'Untitled') + '</div>' +
+          '<div class="cr-doc-name">' + esc(d.title || tt('clinical_record.untitled', 'Untitled')) + '</div>' +
           '<div class="cr-doc-meta">' + esc(meta || '—') + '</div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:6px;margin-left:auto">' +
           (hasFile ? '<i class="ti ti-external-link" style="color:var(--cm-fg-faint);margin-right:2px"></i>' : '') +
           editBtn(d.id, 'doc-edit-btn') +
-          '<button type="button" class="doc-del-btn" data-id="' + esc(d.id) + '" title="Delete" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-trash"></i></button>' +
+          '<button type="button" class="doc-del-btn" data-id="' + esc(d.id) + '" title="' + esc(tt('common.delete', 'Delete')) + '" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-trash"></i></button>' +
         '</div>' +
         '</div>';
     }).join('');
@@ -960,10 +1014,10 @@ function getBodyCoords(area) {
     const fileInput = document.getElementById('doc-file'); if (fileInput) fileInput.value = '';
     const cur = document.getElementById('doc-current');
     if (cur) {
-      if (d && d.file_path) { cur.style.display = ''; cur.textContent = 'Current file: ' + studyFileName(d.file_path) + ' — uploading a new file replaces it.'; }
+      if (d && d.file_path) { cur.style.display = ''; cur.textContent = tt('clinical_record.current_file', 'Current file: {name} — uploading a new file replaces it.', { name: studyFileName(d.file_path) }); }
       else { cur.style.display = 'none'; cur.textContent = ''; }
     }
-    const title = document.getElementById('doc-modal-title'); if (title) title.textContent = d ? 'Edit document' : 'Add document';
+    const title = document.getElementById('doc-modal-title'); if (title) title.textContent = d ? tt('clinical_record.edit_document', 'Edit document') : tt('clinical_record.add_document', 'Add document');
     const ov = document.getElementById('modalDoc'); if (ov) ov.classList.add('is-open');
   }
   function closeDocModal() {
@@ -977,25 +1031,25 @@ function getBodyCoords(area) {
     const fail = msg => { if (err) { err.textContent = msg; err.style.display = 'block'; } };
 
     const type = val('doc-type'), title = val('doc-title');
-    if (!type || !title) { fail('Type and title are required.'); return; }
+    if (!type || !title) { fail(tt('clinical_record.err_type_title_required', 'Type and title are required.')); return; }
 
     const fileInput = document.getElementById('doc-file');
     const file = (fileInput && fileInput.files && fileInput.files[0]) || null;
-    if (!_editingDocId && !file) { fail('A file is required.'); return; }
+    if (!_editingDocId && !file) { fail(tt('clinical_record.err_file_required', 'A file is required.')); return; }
 
     const btn = document.getElementById('doc-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
 
       let file_path = null;
       if (file) {
         const okType = /^image\//.test(file.type) || file.type === 'application/pdf' || /\.docx?$/i.test(file.name) ||
           file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        if (!okType) { fail('File must be an image, PDF or Word document.'); return; }
-        if (file.size > 15 * 1024 * 1024) { fail('File must be ≤ 15MB.'); return; }
+        if (!okType) { fail(tt('clinical_record.err_file_image_pdf_word', 'File must be an image, PDF or Word document.')); return; }
+        if (file.size > 15 * 1024 * 1024) { fail(errFileSize()); return; }
         const path = _clubId + '/' + _playerId + '/docs/' + Date.now() + '_' + sanitizeName(file.name);
         const { error: upErr } = await window.sb.storage.from(MEDIA_BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined });
-        if (upErr) { fail('Upload failed: ' + ((upErr && upErr.message) || 'unknown error')); return; }
+        if (upErr) { fail(errUpload(upErr)); return; }
         file_path = path;
       }
 
@@ -1016,14 +1070,14 @@ function getBodyCoords(area) {
       await loadDocs();
     } catch (e) {
       console.error('[Clinical record] save document failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
   }
 
   async function deleteDoc(id) {
-    if (!window.confirm('Delete this document?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_document', 'Delete this document?'))) return;
     const d = arr(_documents).find(x => String(x.id) === String(id));
     try {
       const { error } = await window.sb.from('medical_documents').delete().eq('id', id);
@@ -1035,12 +1089,13 @@ function getBodyCoords(area) {
       await loadDocs();
     } catch (e) {
       console.error('[Clinical record] delete document failed', e);
-      window.alert('Could not delete the document.');
+      window.alert(tt('clinical_record.err_delete_document', 'Could not delete the document.'));
     }
   }
 
   // ── Overview: identity meta, current status, active issue, KPIs, timeline ───
   const PLAYER_STATUS = { available: ['is-success', 'Available'], injured: ['is-danger', 'Injured'], modified: ['is-warning', 'Modified'], unavailable: ['', 'Unavailable'] };
+  const PLAYER_STATUS_KEY = { available: 'ps_available', injured: 'ps_injured', modified: 'ps_modified', unavailable: 'ps_unavailable' };
 
   function fmtDateLong(iso) {
     if (!iso) return null;
@@ -1074,7 +1129,7 @@ function getBodyCoords(area) {
     if (player.position) meta += '<span class="cm-pill">' + esc(player.position) + '</span>';
     const age = ageFrom(player.date_of_birth);
     const dob = player.date_of_birth ? fmtDateLong(player.date_of_birth) : null;
-    const ageDob = [age != null ? age + ' yrs' : null, dob].filter(Boolean).join(' · ');
+    const ageDob = [age != null ? tt('clinical_record.years_short', '{n} yrs', { n: age }) : null, dob].filter(Boolean).join(' · ');
     if (ageDob) meta += (meta ? '<span class="sep">·</span>' : '') + '<span>' + esc(ageDob) + '</span>';
     setHTML('cr-id-meta', meta || DASH);
 
@@ -1084,26 +1139,34 @@ function getBodyCoords(area) {
       .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')))[0] || null;
 
     // current status card (from player.status)
-    const ps = PLAYER_STATUS[player.status] || ['', 'Unknown'];
-    const big = player.status === 'available' ? 'Full training' : (open ? 'Managing active issue' : ps[1]);
+    const psm = PLAYER_STATUS[player.status];
+    const psLabel = psm ? tt('clinical_record.' + PLAYER_STATUS_KEY[player.status], psm[1]) : tt('clinical_record.unknown', 'Unknown');
+    const ps = [psm ? psm[0] : '', psLabel];
+    const big = player.status === 'available'
+      ? tt('clinical_record.full_training', 'Full training')
+      : (open ? tt('clinical_record.managing_active_issue', 'Managing active issue') : ps[1]);
     setHTML('cr-cur-status', '<span class="cm-pill ' + ps[0] + '"><span class="cm-dot"></span>' + esc(ps[1]) +
       '</span><span class="big">' + esc(big) + '</span>');
     const subEl = document.querySelector('.cr-status-sub');
     if (subEl) subEl.innerHTML = open && open.expected_return
-      ? 'Expected return · <b style="color:var(--cm-fg-strong)">' + esc(fmtDate(open.expected_return) || '—') + '</b>'
+      ? esc(tt('clinical_record.expected_return', 'Expected return')) + ' · <b style="color:var(--cm-fg-strong)">' + esc(fmtDate(open.expected_return) || '—') + '</b>'
       : '';
 
     // active issue card
     const issueEl = document.querySelector('.cr-issue');
     if (issueEl) {
       if (open) {
-        const diag = open.sub_classification || open.injury_type || 'Active injury';
-        const p = 'Onset ' + (fmtDate(open.start_date) || '—') + ' · ' + daysOut(open) + ' days · ' + (open.status || '');
+        const diag = open.sub_classification || open.injury_type || tt('clinical_record.active_injury', 'Active injury');
+        const statusTxt = open.status && STATUS_LABEL_KEY[open.status]
+          ? tt('clinical_record.' + STATUS_LABEL_KEY[open.status], STATUS_PILL[open.status] ? STATUS_PILL[open.status][1] : open.status)
+          : (open.status || '');
+        const p = tt('clinical_record.onset', 'Onset') + ' ' + (fmtDate(open.start_date) || '—') + ' · ' +
+          tt('clinical_record.days_count', daysOut(open) + ' days', { count: daysOut(open) }) + ' · ' + statusTxt;
         issueEl.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-bandage"></i></div>' +
           '<div><h3>' + esc(diag) + '</h3><p>' + esc(p) + '</p></div>';
       } else {
         issueEl.innerHTML = '<div class="cr-issue-ic" style="background:var(--cm-success-bg);color:var(--cm-success);border-color:var(--cm-success-bd)">' +
-          '<i class="ti ti-check"></i></div><div><h3>No active issue</h3></div>';
+          '<i class="ti ti-check"></i></div><div><h3>' + esc(tt('clinical_record.no_active_issue', 'No active issue')) + '</h3></div>';
       }
     }
 
@@ -1119,26 +1182,37 @@ function getBodyCoords(area) {
       const lastStart = injs.map(i => i.start_date).filter(Boolean).sort().reverse()[0];
       const sinceLast = lastStart ? Math.max(0, Math.round((_today - new Date(lastStart + 'T00:00:00')) / 86400000)) : null;
       krow.innerHTML =
-        kpiCard('Injuries', 'ti-bandage', total, '', 'career') +
-        kpiCard('Days lost', 'ti-calendar-off', daysLost, 'd', 'career') +
-        kpiCard('Active', 'ti-alert-triangle', activeN, '', 'now', activeN > 0 ? 'is-warn' : '') +
-        kpiCard('Severe', 'ti-urgent', severeN, '', 'career') +
-        kpiCard('Avg days', 'ti-clock', avgDays, 'd', 'per injury') +
-        kpiCard('Since last', 'ti-history', sinceLast == null ? '—' : sinceLast, sinceLast == null ? '' : 'd', 'ago');
+        kpiCard(tt('clinical_record.kpi_injuries', 'Injuries'), 'ti-bandage', total, '', tt('clinical_record.kpi_career', 'career')) +
+        kpiCard(tt('clinical_record.kpi_days_lost', 'Days lost'), 'ti-calendar-off', daysLost, tt('clinical_record.unit_d', 'd'), tt('clinical_record.kpi_career', 'career')) +
+        kpiCard(tt('clinical_record.kpi_active', 'Active'), 'ti-alert-triangle', activeN, '', tt('clinical_record.kpi_now', 'now'), activeN > 0 ? 'is-warn' : '') +
+        kpiCard(tt('clinical_record.kpi_severe', 'Severe'), 'ti-urgent', severeN, '', tt('clinical_record.kpi_career', 'career')) +
+        kpiCard(tt('clinical_record.kpi_avg_days', 'Avg days'), 'ti-clock', avgDays, tt('clinical_record.unit_d', 'd'), tt('clinical_record.kpi_per_injury', 'per injury')) +
+        kpiCard(tt('clinical_record.kpi_since_last', 'Since last'), 'ti-history', sinceLast == null ? '—' : sinceLast, sinceLast == null ? '' : tt('clinical_record.unit_d', 'd'), tt('clinical_record.kpi_ago', 'ago'));
     }
 
     renderTimeline();
   }
 
   // Per-season (Aug→Jul) injury timeline with severity-coloured marks.
-  const TL_MONTHS = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
+  // Season-order (Aug→Jul) short month labels, localized via Intl.
+  function tlMonths() {
+    const loc = (window.CM_I18N && CM_I18N.current) || 'en';
+    const out = [];
+    for (let k = 0; k < 12; k++) {
+      const monthIdx = (7 + k) % 12; // 7 = Aug
+      try {
+        out.push(new Intl.DateTimeFormat(loc, { month: 'short' }).format(new Date(2021, monthIdx, 1)));
+      } catch (_) { out.push(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthIdx]); }
+    }
+    return out;
+  }
   const TL_SEV = { minor: 'mild', moderate: 'moderate', severe: 'severe' };
   function renderTimeline() {
     const el = document.getElementById('timeline');
     if (!el) return;
     const injs = arr(_injuries).filter(i => i.start_date);
     if (!injs.length) {
-      el.innerHTML = '<div class="cr-empty" style="padding:8px 0">No injuries recorded</div>';
+      el.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_injuries', 'No injuries recorded')) + '</div>';
       return;
     }
     const bySeason = {};
@@ -1146,7 +1220,7 @@ function getBodyCoords(area) {
     const seasons = Object.keys(bySeason).sort().reverse();
 
     let html = '<div class="tl-grid">';
-    html += '<div></div><div class="tl-track tl-months">' + TL_MONTHS.map(m => '<span>' + m + '</span>').join('') + '</div>';
+    html += '<div></div><div class="tl-track tl-months">' + tlMonths().map(m => '<span>' + esc(m) + '</span>').join('') + '</div>';
     seasons.forEach(s => {
       html += '<div class="tl-rowhead">' + esc(s) + '</div><div class="tl-track">';
       for (let c = 0; c < 12; c++) html += '<div class="tl-cell"></div>';
@@ -1156,7 +1230,7 @@ function getBodyCoords(area) {
         const mi = (d.getMonth() - 7 + 12) % 12;
         const left = ((mi + 0.5) / 12 * 100).toFixed(2);
         const cls = TL_SEV[String(i.severity || 'minor').toLowerCase()] || 'mild';
-        const tip = (i.sub_classification || i.injury_type || 'Injury') +
+        const tip = (i.sub_classification || i.injury_type || tt('clinical_record.injury', 'Injury')) +
           (i.body_area ? ' · ' + i.body_area : '') + ' · ' + (fmtDate(i.start_date) || '');
         html += '<button class="tl-mark ' + cls + '" style="left:' + left + '%" title="' + esc(tip) + '"><span class="tl-mark-dot"></span></button>';
       });
@@ -1166,26 +1240,27 @@ function getBodyCoords(area) {
   }
 
   // ── Edit modal · Medical baseline ───────────────────────────────────────────
+  const SEV_OPT_KEY = { mild: 'sev_mild', moderate: 'sev_moderate', severe: 'sev_severe' };
   function sevOpt(v, cur) {
-    return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + cap(v) + '</option>';
+    return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + esc(tt('clinical_record.' + SEV_OPT_KEY[v], cap(v))) + '</option>';
   }
   function allergyRowHtml(a) {
     a = a || {};
     return '<div class="cr-rep-row">' +
-      '<input class="cm-input bf-al-sub" placeholder="Substance" value="' + esc(a.substance || '') + '">' +
-      '<input class="cm-input bf-al-rx" placeholder="Reaction" value="' + esc(a.reaction || '') + '">' +
+      '<input class="cm-input bf-al-sub" placeholder="' + esc(tt('clinical_record.substance', 'Substance')) + '" value="' + esc(a.substance || '') + '">' +
+      '<input class="cm-input bf-al-rx" placeholder="' + esc(tt('clinical_record.reaction', 'Reaction')) + '" value="' + esc(a.reaction || '') + '">' +
       '<select class="cm-select bf-al-sev" style="max-width:130px">' +
         sevOpt('mild', a.severity) + sevOpt('moderate', a.severity) + sevOpt('severe', a.severity) +
       '</select>' +
-      '<button type="button" class="cr-rep-del" title="Remove"><i class="ti ti-trash"></i></button>' +
+      '<button type="button" class="cr-rep-del" title="' + esc(tt('clinical_record.remove', 'Remove')) + '"><i class="ti ti-trash"></i></button>' +
       '</div>';
   }
   function chronicRowHtml(c) {
     c = c || {};
     return '<div class="cr-rep-row">' +
-      '<input class="cm-input bf-ch-name" placeholder="Condition" value="' + esc(c.name || '') + '">' +
-      '<input class="cm-input bf-ch-notes" placeholder="Notes" value="' + esc(c.notes || '') + '">' +
-      '<button type="button" class="cr-rep-del" title="Remove"><i class="ti ti-trash"></i></button>' +
+      '<input class="cm-input bf-ch-name" placeholder="' + esc(tt('clinical_record.condition', 'Condition')) + '" value="' + esc(c.name || '') + '">' +
+      '<input class="cm-input bf-ch-notes" placeholder="' + esc(tt('clinical_record.notes', 'Notes')) + '" value="' + esc(c.notes || '') + '">' +
+      '<button type="button" class="cr-rep-del" title="' + esc(tt('clinical_record.remove', 'Remove')) + '"><i class="ti ti-trash"></i></button>' +
       '</div>';
   }
 
@@ -1256,7 +1331,7 @@ function getBodyCoords(area) {
     if (err) { err.style.display = 'none'; err.textContent = ''; }
     if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
       const { data, error } = await window.sb.from('player_medical_profile')
         .upsert(payload, { onConflict: 'player_id' })
         .select('blood_type,blood_phenotype,allergies,chronic_conditions,family_history,emergency_contact,treating_physician,insurance,last_review_date,next_review_date,sex')
@@ -1279,7 +1354,7 @@ function getBodyCoords(area) {
       closeBaselineModal();
     } catch (e) {
       console.error('[Clinical record] baseline save failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) ? e.message : 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1302,21 +1377,21 @@ function getBodyCoords(area) {
     if (!list) return;
     const rows = arr(_meds);
     if (!rows.length) {
-      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No medications recorded</div>';
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_medications', 'No medications recorded')) + '</div>';
       return;
     }
     list.innerHTML = rows.map(m => {
       const meta = [m.dose, m.frequency, m.reason].filter(Boolean).join(' · ');
       const tue = m.tue ? ' <span class="cr-tue">TUE</span>' : '';
       const inactive = m.active === false
-        ? ' <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Inactive</span>' : '';
+        ? ' <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">' + esc(tt('clinical_record.inactive', 'Inactive')) + '</span>' : '';
       return '<div class="cr-med-row" data-id="' + esc(m.id) + '" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--cm-border-soft)">' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">' + esc(m.name || '—') + tue + inactive + '</div>' +
           (meta ? '<div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">' + esc(meta) + '</div>' : '') +
         '</div>' +
-        '<button type="button" class="cr-rep-del bf-med-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
-        '<button type="button" class="cr-rep-del bf-med-del" title="Delete"><i class="ti ti-trash"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-med-edit" title="' + esc(tt('common.edit', 'Edit')) + '"><i class="ti ti-pencil"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-med-del" title="' + esc(tt('common.delete', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
         '</div>';
     }).join('');
   }
@@ -1325,7 +1400,7 @@ function getBodyCoords(area) {
     _editingMedId = null;
     ['med-name', 'med-dose', 'med-freq', 'med-reason', 'med-start', 'med-end', 'med-notes'].forEach(id => setVal(id, ''));
     setChk('med-supp', false); setChk('med-tue', false); setChk('med-active', true);
-    const btn = document.getElementById('med-save'); if (btn) btn.textContent = 'Save medication';
+    const btn = document.getElementById('med-save'); if (btn) btn.textContent = tt('clinical_record.save_medication', 'Save medication');
     const err = document.getElementById('med-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
   }
 
@@ -1337,12 +1412,12 @@ function getBodyCoords(area) {
     setVal('med-reason', m.reason); setVal('med-start', m.start_date); setVal('med-end', m.end_date);
     setChk('med-supp', m.is_supplement); setChk('med-tue', m.tue); setChk('med-active', m.active !== false);
     setVal('med-notes', m.notes);
-    const btn = document.getElementById('med-save'); if (btn) btn.textContent = 'Update medication';
+    const btn = document.getElementById('med-save'); if (btn) btn.textContent = tt('clinical_record.update_medication', 'Update medication');
     const form = document.getElementById('med-form'); if (form && form.scrollIntoView) form.scrollIntoView({ block: 'nearest' });
   }
 
   async function deleteMed(id) {
-    if (!window.confirm('Delete this medication?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_medication', 'Delete this medication?'))) return;
     const err = document.getElementById('med-error');
     try {
       const { error } = await window.sb.from('player_medications').delete().eq('id', id);
@@ -1351,7 +1426,7 @@ function getBodyCoords(area) {
       await loadMeds();
     } catch (e) {
       console.error('[Clinical record] delete medication failed', e);
-      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errDelete(e); err.style.display = 'block'; }
     }
   }
 
@@ -1363,7 +1438,7 @@ function getBodyCoords(area) {
     if (err) { err.style.display = 'none'; err.textContent = ''; }
 
     const name = val('med-name');
-    if (!name) { if (err) { err.textContent = 'Name is required.'; err.style.display = 'block'; } return; }
+    if (!name) { if (err) { err.textContent = tt('clinical_record.err_name_required', 'Name is required.'); err.style.display = 'block'; } return; }
 
     const fields = {
       name: name,
@@ -1380,7 +1455,7 @@ function getBodyCoords(area) {
 
     const btn = document.getElementById('med-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
       let error;
       if (_editingMedId) {
         ({ error } = await window.sb.from('player_medications').update(fields).eq('id', _editingMedId));
@@ -1393,7 +1468,7 @@ function getBodyCoords(area) {
       await loadMeds();
     } catch (e) {
       console.error('[Clinical record] save medication failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1425,18 +1500,18 @@ function getBodyCoords(area) {
     if (!list) return;
     const rows = arr(_screenings);
     if (!rows.length) {
-      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No screenings recorded</div>';
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">' + esc(tt('clinical_record.no_screenings', 'No screenings recorded')) + '</div>';
       return;
     }
     list.innerHTML = rows.map(s => {
       const tl = SCREEN_TL[s.status] || 'ok';
       const dotColor = tl === 'bad' ? 'var(--cm-danger)' : tl === 'warn' ? 'var(--cm-warning)' : 'var(--cm-success)';
-      const name = SCREEN_LABEL[s.type] || (s.type ? cap(s.type) : '—');
+      const name = tScreenLabel(s.type);
       const perf = fmtDate(s.performed_on);
       let due = '';
       if (s.next_due) {
         const d = daysFromToday(s.next_due);
-        due = d < 0 ? '<span style="color:var(--cm-warning)">Overdue</span>' : 'Due ' + esc(fmtDate(s.next_due) || '');
+        due = d < 0 ? '<span style="color:var(--cm-warning)">' + esc(overdueLabel()) + '</span>' : esc(dueLabel(s.next_due));
       }
       const bits = [];
       if (s.result) bits.push(esc(s.result));
@@ -1450,8 +1525,8 @@ function getBodyCoords(area) {
           '<div style="font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">' + esc(name) + '</div>' +
           '<div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">' + meta + '</div>' +
         '</div>' +
-        '<button type="button" class="cr-rep-del bf-scr-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
-        '<button type="button" class="cr-rep-del bf-scr-del" title="Delete"><i class="ti ti-trash"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-scr-edit" title="' + esc(tt('common.edit', 'Edit')) + '"><i class="ti ti-pencil"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-scr-del" title="' + esc(tt('common.delete', 'Delete')) + '"><i class="ti ti-trash"></i></button>' +
         '</div>';
     }).join('');
   }
@@ -1461,7 +1536,7 @@ function getBodyCoords(area) {
     ['scr-performed', 'scr-result', 'scr-next', 'scr-docurl', 'scr-notes'].forEach(id => setVal(id, ''));
     setVal('scr-type', '');
     setVal('scr-status', 'ok');
-    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = 'Save screening';
+    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = tt('clinical_record.save_screening', 'Save screening');
     const err = document.getElementById('scr-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
   }
 
@@ -1472,12 +1547,12 @@ function getBodyCoords(area) {
     setVal('scr-type', s.type); setVal('scr-status', s.status || 'ok');
     setVal('scr-performed', s.performed_on); setVal('scr-result', s.result);
     setVal('scr-next', s.next_due); setVal('scr-docurl', s.doc_url); setVal('scr-notes', s.notes);
-    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = 'Update screening';
+    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = tt('clinical_record.update_screening', 'Update screening');
     const form = document.getElementById('scr-form'); if (form && form.scrollIntoView) form.scrollIntoView({ block: 'nearest' });
   }
 
   async function deleteScreening(id) {
-    if (!window.confirm('Delete this screening?')) return;
+    if (!window.confirm(tt('clinical_record.confirm_delete_screening', 'Delete this screening?'))) return;
     const err = document.getElementById('scr-error');
     try {
       const { error } = await window.sb.from('medical_screenings').delete().eq('id', id);
@@ -1486,7 +1561,7 @@ function getBodyCoords(area) {
       await loadScreenings();
     } catch (e) {
       console.error('[Clinical record] delete screening failed', e);
-      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errDelete(e); err.style.display = 'block'; }
     }
   }
 
@@ -1497,7 +1572,7 @@ function getBodyCoords(area) {
     if (err) { err.style.display = 'none'; err.textContent = ''; }
 
     const type = val('scr-type'), status = val('scr-status');
-    if (!type || !status) { if (err) { err.textContent = 'Type and status are required.'; err.style.display = 'block'; } return; }
+    if (!type || !status) { if (err) { err.textContent = tt('clinical_record.err_type_status_required', 'Type and status are required.'); err.style.display = 'block'; } return; }
 
     const fields = {
       type: type,
@@ -1511,7 +1586,7 @@ function getBodyCoords(area) {
 
     const btn = document.getElementById('scr-save'); if (btn) btn.disabled = true;
     try {
-      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      if (!_clubId || !_playerId) throw new Error(errContext());
       let error;
       if (_editingScrId) {
         ({ error } = await window.sb.from('medical_screenings').update(fields).eq('id', _editingScrId));
@@ -1524,7 +1599,7 @@ function getBodyCoords(area) {
       await loadScreenings();
     } catch (e) {
       console.error('[Clinical record] save screening failed', e);
-      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+      if (err) { err.textContent = errSave(e); err.style.display = 'block'; }
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1572,7 +1647,7 @@ function getBodyCoords(area) {
     setHTML('cr-cur-status', DASH);
     const sub = document.querySelector('.cr-status-sub'); if (sub) sub.innerHTML = '';
     const issue = document.querySelector('.cr-issue');
-    if (issue) issue.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-check"></i></div><div><h3>No active issue</h3></div>';
+    if (issue) issue.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-check"></i></div><div><h3>' + esc(tt('clinical_record.no_active_issue', 'No active issue')) + '</h3></div>';
     setHTML('kpi-row', '');
     setHTML('timeline', '');
     document.querySelectorAll('.body-hotspots').forEach(s => { s.innerHTML = ''; }); // clear hotspots, keep silhouettes
@@ -1848,7 +1923,7 @@ function getBodyCoords(area) {
     const last = p.last_review_date, next = p.next_review_date;
 
     setText('cr-last-review', fmtDate(last) || '—');
-    if (last) { const d = daysFromToday(last); setText('cr-last-review-note', d === 0 ? 'today' : (d < 0 ? (-d) + ' days ago' : 'in ' + d + 'd')); }
+    if (last) { const d = daysFromToday(last); setText('cr-last-review-note', d === 0 ? tt('common.today', 'today') : (d < 0 ? tt('clinical_record.days_ago', '{n} days ago', { n: -d }) : tt('clinical_record.in_days', 'in {n}d', { n: d }))); }
     else setText('cr-last-review-note', '');
 
     setText('next-review', fmtDate(next) || '—');
@@ -1856,7 +1931,7 @@ function getBodyCoords(area) {
     if (stat) stat.classList.remove('is-soon', 'is-overdue');
     if (next) {
       const d = daysFromToday(next);
-      setText('next-review-note', d < 0 ? 'overdue' : (d === 0 ? 'today' : 'in ' + d + 'd'));
+      setText('next-review-note', d < 0 ? tt('clinical_record.overdue_lc', 'overdue') : (d === 0 ? tt('common.today', 'today') : tt('clinical_record.in_days', 'in {n}d', { n: d })));
       if (stat) { if (d < 0) stat.classList.add('is-overdue'); else if (d <= 14) stat.classList.add('is-soon'); }
     } else setText('next-review-note', '');
 
@@ -1873,12 +1948,12 @@ function getBodyCoords(area) {
       const t = [a.reaction, a.severity].filter(Boolean).join(' — ');
       return '<span class="cr-tag' + (sev ? ' is-danger' : '') + '"' + (t ? ' title="' + esc(t) + '"' : '') + '>' +
         (sev ? '<i class="ti ti-alert-triangle-filled" style="font-size:13px;"></i>' : '') + esc(a.substance || '—') + '</span>';
-    }).join('') : EMPTY);
+    }).join('') : EMPTY());
 
     const ch = arr(p.chronic_conditions);
     setHTML('cr-chronic', ch.length ? ch.map(c =>
       '<span class="cr-tag"' + (c.notes ? ' title="' + esc(c.notes) + '"' : '') + '>' + esc(c.name || '—') + '</span>'
-    ).join('') : EMPTY);
+    ).join('') : EMPTY());
 
     const ec = p.emergency_contact || null;
     if (ec && (ec.name || ec.phone)) {
@@ -1904,17 +1979,17 @@ function getBodyCoords(area) {
     arr(p.chronic_conditions).forEach(c =>
       chips.push('<span class="cr-chip"><i class="ti ti-activity"></i>' + esc(c.name || '') + '</span>'));
     if (p.blood_type)
-      chips.push('<span class="cr-chip is-mono"><i class="ti ti-droplet"></i>Blood <b>' + esc(p.blood_type) + '</b></span>');
+      chips.push('<span class="cr-chip is-mono"><i class="ti ti-droplet"></i>' + esc(tt('clinical_record.blood', 'Blood')) + ' <b>' + esc(p.blood_type) + '</b></span>');
 
     if (!chips.length) { row.style.display = 'none'; return; }
     row.style.display = '';
-    row.innerHTML = '<span class="cr-alerts-lab"><i class="ti ti-urgent"></i>Medical alerts</span>' + chips.join('');
+    row.innerHTML = '<span class="cr-alerts-lab"><i class="ti ti-urgent"></i>' + esc(tt('clinical_record.medical_alerts', 'Medical alerts')) + '</span>' + chips.join('');
   }
 
   // ── Medications & supplements (baseline card) ───────────────────────────────
   function renderMeds(rows) {
     rows = arr(rows);
-    if (!rows.length) { setHTML('cr-meds', EMPTY); return; }
+    if (!rows.length) { setHTML('cr-meds', EMPTY()); return; }
     setHTML('cr-meds', rows.map(m => {
       const txt = esc(m.name || '—') + (m.frequency ? ' · ' + esc(m.frequency) : '');
       const tue = m.tue ? ' <span class="cr-tue">TUE</span>' : '';
@@ -1926,23 +2001,28 @@ function getBodyCoords(area) {
 
   // ── Cardiac & PCMA screening (traffic-light rows) ───────────────────────────
   const SCREEN_LABEL = { ecg: 'ECG · 12-lead', echo: 'Echocardiogram', stress_test: 'Stress test', vision: 'Vision', dental: 'Dental', other: 'Other' };
+  const SCREEN_KEY = { ecg: 'screen_ecg', echo: 'echocardiogram', stress_test: 'stress_test', vision: 'vision', dental: 'dental', other: 'other' };
   const SCREEN_TL = { ok: 'ok', warning: 'warn', abnormal: 'bad' };
+  // hoisted function declarations so renderScrList (defined earlier) can use them.
+  function tScreenLabel(type) { return SCREEN_LABEL[type] ? tt('clinical_record.' + SCREEN_KEY[type], SCREEN_LABEL[type]) : (type ? cap(type) : '—'); }
+  function overdueLabel() { return tt('clinical_record.overdue', 'Overdue'); }
+  function dueLabel(iso) { return tt('clinical_record.due', 'Due {date}', { date: fmtDate(iso) || '' }); }
   function renderScreenings(rows) {
     rows = arr(rows);
     const body = document.getElementById('cr-pcma');
     if (!body) return;
     if (!rows.length) {
-      body.innerHTML = '<div style="padding:14px 0;text-align:center;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No screenings recorded</div>';
+      body.innerHTML = '<div style="padding:14px 0;text-align:center;font:var(--cm-body-sm);color:var(--cm-fg-faint)">' + esc(tt('clinical_record.no_screenings', 'No screenings recorded')) + '</div>';
       return;
     }
     body.innerHTML = rows.map(s => {
       const tl = SCREEN_TL[s.status] || 'ok';
-      const name = SCREEN_LABEL[s.type] || esc(s.type || '—');
+      const name = esc(tScreenLabel(s.type));
       const perf = fmtDate(s.performed_on) || '—';
       let due = '';
       if (s.next_due) {
         const d = daysFromToday(s.next_due);
-        due = d < 0 ? '<b style="color:var(--cm-warning)">Overdue</b>' : '<b>Due ' + esc(fmtDate(s.next_due)) + '</b>';
+        due = d < 0 ? '<b style="color:var(--cm-warning)">' + esc(overdueLabel()) + '</b>' : '<b>' + esc(dueLabel(s.next_due)) + '</b>';
       }
       return '<div class="cr-pcma-row">' +
         '<span class="cr-pcma-name"><span class="cr-tl ' + tl + '"></span>' + name + '</span>' +
@@ -1957,12 +2037,12 @@ function getBodyCoords(area) {
     if (!(await window.guardModule('clinical'))) return;
     try {
       const playerId = new URLSearchParams(location.search).get('player');
-      if (!playerId) { showError('No player specified.'); return; }
+      if (!playerId) { showError(tt('clinical_record.no_player_specified', 'No player specified.')); return; }
       _playerId = playerId;
 
       let clubId = null;
       try { clubId = await window.getClubId(); } catch (_) {}
-      if (!clubId) { showError('No club found for this account.'); return; }
+      if (!clubId) { showError(tt('clinical_record.no_club_found', 'No club found for this account.')); return; }
       _clubId = clubId;
 
       let player = null;
@@ -1972,14 +2052,14 @@ function getBodyCoords(area) {
           .eq('id', playerId).single();
         player = data;
       } catch (_) {}
-      if (!player) { showError('Player not found.'); return; }
+      if (!player) { showError(tt('clinical_record.player_not_found', 'Player not found.')); return; }
 
       const name = (((player.first_name || '') + ' ' + (player.last_name || '')).trim()) || '—';
       const num = (player.number ?? '') === '' ? '' : ('#' + player.number);
       setText('cr-name', name);
       setText('cr-num', num);
       setText('cr-crumb-name', name);
-      document.title = 'Clinical record — ' + name + ' · ClavaMetrics';
+      document.title = tt('clinical_record.doc_title', 'Clinical record — {name} · ClavaMetrics', { name: name });
 
       const photo = document.getElementById('cr-photo');
       if (photo) {
@@ -2030,6 +2110,7 @@ function getBodyCoords(area) {
       paintCard(injuriesCard(), _injView);
       populateInjuryFilters();
       renderInjuryTable();
+      _player = player;
       renderOverview(player);
 
       // ── Surgical history (loads _surgeries; related injury looked up in _injuries) ──
@@ -2053,8 +2134,9 @@ function getBodyCoords(area) {
             arr(profs).forEach(pr => { if (pr && pr.id) nameMap[pr.id] = pr.full_name || '—'; });
           } catch (_) {}
         }
+        _txRows = rows; _txNameMap = nameMap;
         renderTreatments(rows, nameMap);
-      } catch (_) { renderTreatments([], {}); }
+      } catch (_) { _txRows = []; _txNameMap = {}; renderTreatments([], {}); }
 
       // ── Imaging & studies (loads _studies, renders #img-grid) ──
       await loadStudies();
@@ -2065,6 +2147,31 @@ function getBodyCoords(area) {
       doneLoading();
     }
   }
+
+  // Re-render everything the JS builds when the language changes (static DOM is
+  // handled by sidebar.js). Guards keep this a no-op before data has loaded.
+  document.addEventListener('cm:langchanged', () => {
+    try {
+      const p = _profile || {};
+      renderReview(p);
+      renderBaseline(p);
+      renderAlerts(p);
+      renderMeds(_meds);
+      renderMedsList();
+      renderScreenings(_screenings);
+      renderScrList();
+      populateInjuryFilters();
+      renderInjuryTable();
+      paintCard(overviewCard(), _bodyView);
+      paintCard(injuriesCard(), _injView);
+      if (_player) renderOverview(_player);
+      renderSurgeries(_surgeries);
+      renderEpisodes(_episodes);
+      renderTreatments(_txRows, _txNameMap);
+      renderStudies(_studies);
+      renderDocuments(_documents);
+    } catch (e) { console.warn('[Clinical record] langchange re-render failed', e); }
+  });
 
   resetRegions();
   boot();

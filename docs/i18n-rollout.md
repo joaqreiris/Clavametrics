@@ -166,7 +166,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 ### Fase 5 — Médico
 - ✅ Injuries.html
 - ✅ Clinical Records.html
-- ⬜ Clinical Record.html
+- ✅ Clinical Record.html
 - ⬜ Physio.html  *(Treatments)*
 - ⬜ Rehab & Preventives.html
 - ⬜ Rehab Planner.html
