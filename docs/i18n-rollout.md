@@ -170,7 +170,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Physio.html  *(Treatments)*
 - ✅ Rehab & Preventives.html
 - ✅ Rehab Planner.html
-- ⬜ Dossier.html
+- ✅ Dossier.html
 
 ### Fase 6 — Admin / workspace
 - ⬜ Admin.html
