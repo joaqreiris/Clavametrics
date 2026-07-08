@@ -1150,11 +1150,15 @@
       b.onclick = () => { if (!S) return; S.palette = b.dataset.pal; syncStyle(); renderCard(); }
     );
 
-    // tabs (sólo relevantes en modo clásico; el toggle de modo oculta .es-tabs en D&D)
+    // tabs Setup/Style. En D&D el tab "Setup" enruta al pane de zonas (data-pane="dd") — reemplaza
+    // al Setup del clásico — y "Style" reusa el MISMO pane Style del clásico (mismos handlers/S).
+    // En clásico, tab === pane como siempre.
     panelEl.querySelectorAll('.es-tabs button').forEach(btn => {
       btn.onclick = () => {
         panelEl.querySelectorAll('.es-tabs button').forEach(o => o.classList.toggle('is-on', o===btn));
-        panelEl.querySelectorAll('.es-p-b .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === btn.dataset.tab));
+        const pane = (_bMode === 'dd' && btn.dataset.tab === 'setup') ? 'dd' : btn.dataset.tab;
+        panelEl.querySelectorAll('.es-p-b .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === pane));
+        if (pane === 'dd') renderDDPane();
       };
     });
 
@@ -5146,6 +5150,9 @@
     document.body.classList.toggle('gpb-ddmode', m === 'dd');   // widens the drawer for the 2-column D&D layout
     panelEl.querySelectorAll('#gpbMode button').forEach(b => b.classList.toggle('is-on', b.dataset.mode === m));
     if (m === 'dd') {
+      // Default to the D&D "Setup" view (zones). The Style tab is now available in D&D and reuses
+      // the classic Style pane (CSS no longer hides .es-tabs in dd).
+      panelEl.querySelectorAll('.es-tabs button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === 'setup'));
       panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === 'dd'));
       renderDDPane();
     } else {
