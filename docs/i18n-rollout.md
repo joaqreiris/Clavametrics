@@ -180,9 +180,9 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Platform.html  *(Platform Admin)*
 
 ### Fase 7 — Marketing (switch de runtime, §5)
-- ⬜ Home.html  → cambiar include a `assets/i18n.js`
-- ⬜ Contact.html
-- ⬜ Pricing.html
+- ✅ Home.html  → cambiar include a `assets/i18n.js`
+- ✅ Contact.html
+- ✅ Pricing.html
 - ⬜ Borrar `i18n.js` raíz (después de las tres)
 
 ### Skip / más adelante
