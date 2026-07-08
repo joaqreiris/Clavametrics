@@ -4,6 +4,11 @@
 (function () {
   'use strict';
 
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+
   // ─── Data: REHAB week 4, Mon → Sun ───
   // type codes match CSS .t-* classes
   const WEEK_REHAB = [
@@ -186,6 +191,10 @@
     physio: ['ti-stethoscope',  'is-physio', 'Physio'],
     recov:  ['ti-droplet',      'is-recov',  'Recov']
   };
+  // Localized label lookups (re-resolve on each render / language change)
+  const typeLabel = t => tt('rehab_planner.type_' + t, TYPE_LABEL[t] || t);
+  const respLabel = r => tt('rehab_planner.resp_' + r, RESP_LABEL[r] || r);
+  const modeLabel = m => tt('rehab_planner.mode_' + m, (MODE_PILL[m] && MODE_PILL[m][2]) || m);
 
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
   const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
@@ -198,7 +207,7 @@
     if (!root) return;
     const cats = [...new Set(LIBRARY.map(e => e.category).filter(Boolean))].sort();
     root.innerHTML = ['All', ...cats].map(c =>
-      `<button class="rp-lib-chip${libCat === c ? ' is-on' : ''}" data-cat="${c}">${c === 'All' ? 'All' : (TYPE_LABEL[c] || cap(c))}</button>`
+      `<button class="rp-lib-chip${libCat === c ? ' is-on' : ''}" data-cat="${c}">${c === 'All' ? tt('common.all', 'All') : (TYPE_LABEL[c] ? typeLabel(c) : cap(c))}</button>`
     ).join('');
     $$('#lib-filters .rp-lib-chip').forEach(b => b.addEventListener('click', () => {
       libCat = b.dataset.cat;
@@ -220,7 +229,7 @@
     });
 
     if (!rows.length) {
-      root.innerHTML = `<div style="padding:18px 8px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${libLoaded ? 'No exercises match.' : 'Loading library…'}</div>`;
+      root.innerHTML = `<div style="padding:18px 8px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${libLoaded ? tt('rehab_planner.no_exercises_match', 'No exercises match.') : tt('rehab_planner.loading_library', 'Loading library…')}</div>`;
       return;
     }
 
@@ -236,10 +245,10 @@
             <span>${ex.region}</span>
             ${ex.category ? `<span class="sep">·</span><span>${cap(ex.category)}</span>` : ''}
             ${ex.complexity ? `<span class="sep">·</span><span>${ex.complexity}</span>` : ''}
-            ${ex.custom ? '<span class="tag">Custom</span>' : ''}
+            ${ex.custom ? `<span class="tag">${tt('rehab_planner.custom_tag','Custom')}</span>` : ''}
           </div>
         </div>
-        <button class="add-btn" title="Add to selected block"><i class="ti ti-plus"></i></button>
+        <button class="add-btn" title="${tt('rehab_planner.add_to_selected','Add to selected block')}"><i class="ti ti-plus"></i></button>
       `;
       root.appendChild(row);
       row.querySelector('.add-btn')?.addEventListener('click', () => window._rpAddExerciseToSelected?.(ex));
@@ -259,12 +268,12 @@
       head.className = 'rp-day-h';
       head.innerHTML = `
         <div class="top">
-          <span class="dow">${day.dow}${day.today ? ' · TODAY' : ''}</span>
+          <span class="dow">${day.dow}${day.today ? ' · ' + tt('rehab_planner.today_tag','TODAY') : ''}</span>
           <span class="dom">${day.dom}</span>
         </div>
         <div class="pillrow">${(day.mode || []).map(m => {
-          const [icon, cls, label] = MODE_PILL[m];
-          return `<span class="rp-mini-pill ${cls}"><i class="ti ${icon}"></i>${label}</span>`;
+          const [icon, cls] = MODE_PILL[m];
+          return `<span class="rp-mini-pill ${cls}"><i class="ti ${icon}"></i>${modeLabel(m)}</span>`;
         }).join('')}</div>
       `;
       card.appendChild(head);
@@ -273,7 +282,7 @@
       const body = document.createElement('div');
       body.className = 'rp-day-body';
       if (day.rest) {
-        body.innerHTML = `<i class="ti ti-bed"></i><span>Active rest</span><span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Wellness check only</span>`;
+        body.innerHTML = `<i class="ti ti-bed"></i><span>${tt('rehab_planner.active_rest','Active rest')}</span><span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('rehab_planner.wellness_check_only','Wellness check only')}</span>`;
       } else {
         let totalAu = 0, totalDur = 0;
         day.blocks.forEach((b, bi) => {
@@ -303,29 +312,29 @@
               <div class="rp-block-time">${b.dur}'</div>
             </div>
             <div class="rp-block-meta">
-              <span class="au">${b.au} AU</span>
+              <span class="au">${b.au} ${tt('rehab_planner.col_au','AU')}</span>
               <span class="sep">·</span>
-              <span>${b.exercises} ex</span>
+              <span>${tt('rehab_planner.n_ex','{count} ex', { count: b.exercises })}</span>
               <span class="sep">·</span>
-              <span class="resp ${b.resp}"><span class="dot"></span>${RESP_LABEL[b.resp]}</span>
+              <span class="resp ${b.resp}"><span class="dot"></span>${respLabel(b.resp)}</span>
             </div>
             ${gpsHtml}
             ${contraHtml}
-            ${b.target ? `<div class="rp-block-target"><i class="ti ti-target"></i>Targets · ${b.target}</div>` : ''}
+            ${b.target ? `<div class="rp-block-target"><i class="ti ti-target"></i>${tt('rehab_planner.targets_label','Targets')} · ${b.target}</div>` : ''}
           `;
           body.appendChild(block);
         });
         // add-block
         const addBtn = document.createElement('button');
         addBtn.className = 'rp-add-block';
-        addBtn.innerHTML = `<i class="ti ti-plus"></i> Add block`;
+        addBtn.innerHTML = `<i class="ti ti-plus"></i> ${tt('rehab_planner.add_block','Add block')}`;
         body.appendChild(addBtn);
         card.appendChild(body);
 
         // footer totals
         const foot = document.createElement('div');
         foot.className = 'rp-day-totals';
-        foot.innerHTML = `<span><strong>${totalDur}'</strong> total</span> <span><strong>${totalAu}</strong> AU</span>`;
+        foot.innerHTML = `<span><strong>${totalDur}'</strong> ${tt('rehab_planner.total','total')}</span> <span><strong>${totalAu}</strong> ${tt('rehab_planner.col_au','AU')}</span>`;
         card.appendChild(foot);
         return root.appendChild(card);
       }
@@ -341,12 +350,12 @@
     WEEK.forEach(day => {
       const dayRow = document.createElement('tr');
       dayRow.className = 'is-day-h';
-      dayRow.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · TODAY' : ''}</td>`;
+      dayRow.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('rehab_planner.today_tag','TODAY') : ''}</td>`;
       tbody.appendChild(dayRow);
       if (day.rest) {
         const r = document.createElement('tr');
         r.className = 'is-rest';
-        r.innerHTML = `<td colspan="8">— Active rest · wellness check only</td>`;
+        r.innerHTML = `<td colspan="8">— ${tt('rehab_planner.active_rest','Active rest')} · ${tt('rehab_planner.wellness_check_only','Wellness check only').toLowerCase()}</td>`;
         tbody.appendChild(r);
         return;
       }
@@ -355,11 +364,11 @@
         if (b.selected) r.style.background = 'var(--cm-bg-soft)';
         const gpsStr = (b.gps || []).map(g => `${g.l} ${g.v}`).join(' · ') || '—';
         r.innerHTML = `
-          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${TYPE_LABEL[b.type]}</span></span></td>
+          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
           <td class="mono">${b.dur}'</td>
-          <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${RESP_LABEL[b.resp]}</span></td>
-          <td class="mono">${b.exercises} ex</td>
-          <td class="mono">${b.au < 50 ? 'Low' : b.au < 150 ? 'Mod' : 'High'}</td>
+          <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${respLabel(b.resp)}</span></td>
+          <td class="mono">${tt('rehab_planner.n_ex','{count} ex', { count: b.exercises })}</td>
+          <td class="mono">${b.au < 50 ? tt('rehab_planner.intensity_low','Low') : b.au < 150 ? tt('rehab_planner.intensity_mod','Mod') : tt('rehab_planner.intensity_high','High')}</td>
           <td class="mono" style="color:var(--cm-fg-muted)">${gpsStr}</td>
           <td class="mono" style="color:var(--cm-fg-strong);font-weight:600">${b.au}</td>
           <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.restr ? '<span style="color:#B91C1C"><i class="ti ti-alert-triangle"></i> ' + b.restr + '</span>' : (b.notes || '—')}</td>
@@ -379,12 +388,12 @@
       row.className = 'rp-tl-row';
       const dayCol = document.createElement('div');
       dayCol.className = 'day';
-      dayCol.innerHTML = `<span class="dow">${day.dow}</span> ${day.dom}<div class="since">${day.today ? 'D24 · today' : ''}</div>`;
+      dayCol.innerHTML = `<span class="dow">${day.dow}</span> ${day.dom}<div class="since">${day.today ? 'D24 · ' + tt('rehab_planner.today_lc','today') : ''}</div>`;
       row.appendChild(dayCol);
       const track = document.createElement('div');
       track.className = 'rp-tl-track';
       if (day.rest) {
-        track.innerHTML = `<span class="rp-tl-rest"><i class="ti ti-bed"></i> Active rest</span>`;
+        track.innerHTML = `<span class="rp-tl-rest"><i class="ti ti-bed"></i> ${tt('rehab_planner.active_rest','Active rest')}</span>`;
       } else {
         day.blocks.forEach(b => {
           const w = (b.dur / 90) * 100;
@@ -425,7 +434,7 @@
     if (mode === 'rehab') {
       WEEK = WEEK_REHAB;
       tag.className = 'mode-tag is-rehab';
-      tag.innerHTML = '<i class="ti ti-activity-heartbeat"></i> Rehab · RTP';
+      tag.innerHTML = '<i class="ti ti-activity-heartbeat"></i> ' + tt('rehab_planner.tag_rehab_rtp', 'Rehab · RTP');
       phasebar.style.display = '';
       trainbar.classList.add('rp-hidden');
       $('#macro').style.display = '';
@@ -445,7 +454,7 @@
     } else if (mode === 'perf') {
       WEEK = WEEK_REHAB; // unused in this module now
       tag.className = 'mode-tag is-perf';
-      tag.innerHTML = '<i class="ti ti-trending-up"></i> Performance';
+      tag.innerHTML = '<i class="ti ti-trending-up"></i> ' + tt('rehab_planner.tag_performance', 'Performance');
       phasebar.style.display = 'none';
       trainbar.classList.add('rp-hidden');
       criteriaCard.classList.add('rp-hidden');
@@ -460,7 +469,7 @@
     } else { // prev
       WEEK = WEEK_PREV;
       tag.className = 'mode-tag is-prev';
-      tag.innerHTML = '<i class="ti ti-shield-half-filled"></i> Preventive';
+      tag.innerHTML = '<i class="ti ti-shield-half-filled"></i> ' + tt('rehab_planner.preventive', 'Preventive');
       phasebar.style.display = 'none';
       trainbar.classList.remove('rp-hidden');
       $('#macro').style.display = 'none';
@@ -498,7 +507,7 @@
     $('#view-planner').classList.add('rp-hidden');
     $('#view-picker').classList.remove('rp-hidden');
     $('#back-to-picker').style.display = 'none';
-    $('#crumb-now').textContent = 'New plan';
+    $('#crumb-now').textContent = tt('rehab_planner.new_plan', 'New plan');
   }
 
   // ─── Wire up ───
@@ -599,5 +608,26 @@
       setDensity: (d) => { document.body.dataset.rpDensity = d; },
       setShowMacro: (on) => { $('#macro').style.display = on ? '' : 'none'; }
     };
+
+    // Re-render dynamic chrome on language change (keeps DB-loaded data intact:
+    // WEEK is whatever was last set, so re-rendering only re-localizes labels).
+    document.addEventListener('cm:langchanged', () => {
+      renderKanban();
+      renderTable();
+      renderTimeline();
+      renderLibChips();
+      renderLibrary();
+      // Re-localize the mode tag label without clobbering DB-loaded context.
+      const tag = $('#mode-tag');
+      const mode = document.body.dataset.rpMode;
+      if (tag && mode) {
+        if (mode === 'rehab')      tag.innerHTML = '<i class="ti ti-activity-heartbeat"></i> ' + tt('rehab_planner.tag_rehab_rtp', 'Rehab · RTP');
+        else if (mode === 'perf')  tag.innerHTML = '<i class="ti ti-trending-up"></i> ' + tt('rehab_planner.tag_performance', 'Performance');
+        else if (mode === 'prev')  tag.innerHTML = '<i class="ti ti-shield-half-filled"></i> ' + tt('rehab_planner.preventive', 'Preventive');
+      }
+      // Re-run DB-driven builders if the plan is loaded (re-localizes phasebar/macro/gate/trainbar).
+      if (typeof window._rpRefreshPhases === 'function') window._rpRefreshPhases();
+      if (typeof window._rpRefreshTrainbar === 'function') window._rpRefreshTrainbar();
+    });
   });
 })();
