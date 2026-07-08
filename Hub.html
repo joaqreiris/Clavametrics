@@ -2013,6 +2013,9 @@ function renderTasks(tasks, view = 'my') {
   ]);
 
   // ── Dynamic module footers ─────────────────────────────────────────────────
+  // Wrapped in a function so cm:langchanged can re-render them from cached data
+  // (they were previously a one-shot block → stale language after a lang switch).
+  function _renderModuleFooters() {
   {
     // Planner — MD-X label from current microcycle match_date
     const el = document.getElementById('modFootPlanner');
@@ -2146,6 +2149,8 @@ function renderTasks(tasks, view = 'my') {
       else                       { _acwrEl.textContent = tt('hub.high_risk_zone','High risk zone');    _acwrEl.style.color = 'var(--cm-danger)'; }
     }
   }
+  } // end _renderModuleFooters
+  _renderModuleFooters();
 
   // ── Sparklines — 7-day historical data ────────────────────────────────────
   const last7days = Array.from({length: 7}, (_, i) => {
@@ -2460,6 +2465,7 @@ function renderTasks(tasks, view = 'my') {
     try { renderAvailabilityPills(pillSource); } catch (e) {}
     try { if (_kpiSel.includes('weather')) _loadWeather(); } catch (e) {}
     try { _populateExtras(); } catch (e) {}
+    try { _renderModuleFooters(); } catch (e) {}
   };
   document.addEventListener('cm:langchanged', () => { try { window._hubRerender(); } catch (e) {} });
 
