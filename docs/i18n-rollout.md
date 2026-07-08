@@ -168,7 +168,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Clinical Records.html
 - ✅ Clinical Record.html
 - ✅ Physio.html  *(Treatments)*
-- ⬜ Rehab & Preventives.html
+- ✅ Rehab & Preventives.html
 - ⬜ Rehab Planner.html
 - ⬜ Dossier.html
 
