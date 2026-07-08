@@ -1588,37 +1588,31 @@ body.cm::before {
   <main class="hub-main">
 <div class="cm-topbar">
       <div class="cm-crumb">
-        <i class="ti ti-radar-2"></i><span>Performance</span>
-        <span class="sep">/</span><span class="here">Load monitor</span>
+        <i class="ti ti-radar-2"></i><span data-i18n="load_monitor.crumb_performance">Performance</span>
+        <span class="sep">/</span><span class="here" data-i18n="load_monitor.crumb_title">Load monitor</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;margin-left:14px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="teamSel" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option data-i18n="common.loading">Loading…</option></select>
       </div>
       <div class="cm-topbar-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions, files…">
+        <input data-i18n-ph="load_monitor.search_ph" placeholder="Search players, sessions, files…">
         <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
       </div>
       <div class="cm-topbar-actions">
-        <button class="cm-icon-btn" id="btnRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
-        <button class="cm-btn is-primary is-sm"><i class="ti ti-file-export"></i>Export MD report</button>
+        <button class="cm-icon-btn" id="btnRefresh" data-i18n-attr="title:load_monitor.refresh" title="Refresh"><i class="ti ti-refresh"></i></button>
+        <button class="cm-btn is-primary is-sm" id="btnExportMd"><i class="ti ti-file-export"></i><span data-i18n="load_monitor.export_md">Export MD report</span></button>
+        <button class="cm-icon-btn" data-open-settings data-i18n-attr="title:common.settings" title="Settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
     <section class="cm-page">
       <header class="cm-page-header" style="align-items:flex-start; margin-bottom:18px;">
         <div style="flex:1;">
-          <div class="cm-eyebrow" style="margin-bottom:8px;">Load management · microcycle 14</div>
-          <h1>Load monitor</h1>
-          <p>Sunday, July 5, 2026 · MD-3 before LAFC (away) · 24 of 31 available</p>
-        </div>
-        <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
-          
-          <div class="cm-field" style="min-width:180px;">
-            <label class="cm-label" for="teamSel" style="color:var(--cm-fg-faint); font-size:10.5px; letter-spacing:var(--cm-tr-eyebrow); text-transform:uppercase;">Team</label>
-            <select id="teamSel" class="cm-select" style="cursor:pointer;">
-              <option selected="">First team</option>
-              <option>Whole club</option>
-              <option>U21 squad</option>
-            </select>
-          </div>
+          <div class="cm-eyebrow" style="margin-bottom:8px;" data-i18n="load_monitor.eyebrow">Load management</div>
+          <h1 data-i18n="load_monitor.crumb_title">Load monitor</h1>
+          <p id="lmPageCtx">…</p>
         </div>
       </header>
 
@@ -1626,32 +1620,32 @@ body.cm::before {
       <div class="cm-card lm-acwr" style="margin-bottom:16px;">
         <div class="lm-head">
           <div class="h">
-            <h2>Acute:chronic workload ratio</h2>
+            <h2 data-i18n="load_monitor.acwr_title2">Acute:chronic workload ratio</h2>
             <div class="sub" id="acwrSub">s-RPE · rolling 7:28 · last 6 weeks</div>
           </div>
           <div class="lm-head-actions">
             <select id="metricSel" class="lm-metric-sel" title="Base metric">
-              <option value="srpe" selected="">s-RPE</option>
-              <option value="pl">Player Load</option>
-              <option value="hsr">HSR</option>
-              <option value="sprint">Sprint distance</option>
-              <option value="sprints">Sprints</option>
-              <option value="accdec">Accel + Decel</option>
+              <option value="srpe" selected="" data-i18n="load_monitor.metric_srpe">s-RPE</option>
+              <option value="pl" data-i18n="load_monitor.metric_pl">Player Load</option>
+              <option value="hsr" data-i18n="load_monitor.metric_hsr">HSR</option>
+              <option value="sprint" data-i18n="load_monitor.metric_sprint">Sprint distance</option>
+              <option value="sprints" data-i18n="load_monitor.metric_sprints">Sprints</option>
+              <option value="accdec" data-i18n="load_monitor.metric_accdec">Accel + Decel</option>
             </select>
             <div class="lm-pop-wrap">
               <button class="cm-icon-btn" id="settingsBtn" title="Model settings"><i class="ti ti-adjustments"></i></button>
               <div class="lm-pop" id="settingsPop">
-                <div class="lm-pop-lab">Smoothing model</div>
+                <div class="lm-pop-lab" data-i18n="load_monitor.acwr_smoothing">Smoothing model</div>
                 <div class="lm-seg2" data-set="model">
-                  <button class="on">EWMA</button>
-                  <button>Rolling avg</button>
+                  <button class="on" data-model="ewma">EWMA</button>
+                  <button data-model="ra" data-i18n="load_monitor.acwr_rolling">Rolling avg</button>
                 </div>
-                <div class="lm-pop-lab">Coupling</div>
+                <div class="lm-pop-lab" data-i18n="load_monitor.acwr_coupling">Coupling</div>
                 <div class="lm-seg2" data-set="couple">
-                  <button class="on">Uncoupled</button>
-                  <button>Coupled</button>
+                  <button class="on" data-couple="0" data-i18n="load_monitor.acwr_uncoupled">Uncoupled</button>
+                  <button data-couple="1" data-i18n="load_monitor.acwr_coupled">Coupled</button>
                 </div>
-                <div class="lm-pop-note">Base metric: <b id="metricName">s-RPE</b>. Uncoupled removes acute load from the chronic denominator — the stricter reading.</div>
+                <div class="lm-pop-note"><span data-i18n="load_monitor.acwr_note_pre">Base metric:</span> <b id="metricName">s-RPE</b>. <span data-i18n="load_monitor.acwr_note_post">Uncoupled removes acute load from the chronic denominator — the stricter reading.</span></div>
               </div>
             </div>
           </div>
@@ -1660,20 +1654,20 @@ body.cm::before {
           <!-- Cover KPI: dominant = players in risk zone -->
           <div class="lm-acwr-side">
             <div class="lm-kpi-lead">
-              <div class="cap"><i class="ti ti-alert-triangle"></i>Players in risk zone</div>
-              <div class="val"><span id="kpiN">5</span><span class="den" id="kpiDen">/ 24</span></div>
-              <div class="foot" id="kpiFoot"><b>5</b> players ≥ 1.3 ACWR · <b>1</b> above 1.5 (danger).</div>
+              <div class="cap"><i class="ti ti-alert-triangle"></i><span data-i18n="load_monitor.kpi_risk_zone">Players in risk zone</span></div>
+              <div class="val"><span id="kpiN">—</span><span class="den" id="kpiDen">/ —</span></div>
+              <div class="foot" id="kpiFoot"></div>
             </div>
             <div class="lm-kpi-sub">
-              <span class="k">Squad ACWR</span>
-              <span class="v" id="kpiAvg">1.18<small>squad median</small></span>
+              <span class="k" data-i18n="load_monitor.kpi_squad_acwr">Squad ACWR</span>
+              <span class="v" id="kpiAvg">—</span>
             </div>
             <div class="lm-zones">
-              <div class="zt">Zones</div>
-              <div class="lm-zone" data-zone="under"><span class="sw sw-under"></span>Underloaded<span class="rng">&lt; 0.80</span></div>
-              <div class="lm-zone" data-zone="sweet"><span class="sw sw-sweet"></span>Sweet spot<span class="rng">0.80–1.30</span></div>
-              <div class="lm-zone" data-zone="over"><span class="sw sw-over"></span>Overreach<span class="rng">1.30–1.50</span></div>
-              <div class="lm-zone" data-zone="danger"><span class="sw sw-danger"></span>Danger<span class="rng">&gt; 1.50</span></div>
+              <div class="zt" data-i18n="load_monitor.zones_label">Zones</div>
+              <div class="lm-zone" data-zone="under"><span class="sw sw-under"></span><span data-i18n="load_monitor.zone_underloaded">Underloaded</span><span class="rng">&lt; 0.80</span></div>
+              <div class="lm-zone" data-zone="sweet"><span class="sw sw-sweet"></span><span data-i18n="load_monitor.zone_sweet_spot">Sweet spot</span><span class="rng">0.80–1.30</span></div>
+              <div class="lm-zone" data-zone="over"><span class="sw sw-over"></span><span data-i18n="load_monitor.zone_overreach">Overreach</span><span class="rng">1.30–1.50</span></div>
+              <div class="lm-zone" data-zone="danger"><span class="sw sw-danger"></span><span data-i18n="load_monitor.zone_danger">Danger</span><span class="rng">&gt; 1.50</span></div>
             </div>
           </div>
           <!-- Chart -->
@@ -1686,8 +1680,8 @@ body.cm::before {
         <div class="cm-card">
           <div class="lm-head">
             <div class="h">
-              <h2>GPS exposure</h2>
-              <div class="sub">Weekly totals vs 4-week baseline · <span class="mono">2026-06-08 → 07-05</span></div>
+              <h2 data-i18n="load_monitor.gps_exposure2">GPS exposure</h2>
+              <div class="sub"></div>
             </div>
             <div class="lm-head-actions">
               <span class="cm-pill"><span class="cm-dot" style="color:var(--cm-fg-faint)"></span>26 athletes · 34 sessions</span>
@@ -1701,8 +1695,8 @@ body.cm::before {
         <div class="cm-card">
           <div class="lm-head">
             <div class="h">
-              <h2>Impending stressors</h2>
-              <div class="sub">Load modifiers · next 21 days</div>
+              <h2 data-i18n="load_monitor.stressors_title">Impending stressors</h2>
+              <div class="sub" data-i18n="load_monitor.stressors_sub">Load modifiers · next 21 days</div>
             </div>
             <div class="lm-head-actions">
               <span class="cm-pill is-danger"><span class="cm-dot"></span>2 high</span>
@@ -1716,13 +1710,13 @@ body.cm::before {
       <div class="cm-card" style="margin-bottom:16px;">
         <div class="lm-head">
           <div class="h">
-            <h2>Availability watch</h2>
-            <div class="sub">Per-player 7-day GPS trend · flagged worst-first · <span class="mono">avg hides the individual</span></div>
+            <h2 data-i18n="load_monitor.avail_title">Availability watch</h2>
+            <div class="sub" id="availSub"></div>
           </div>
           <div class="lm-head-actions">
-            <div class="lm-seg">
-              <button class="on">7D</button>
-              <button>28D</button>
+            <div class="lm-seg" id="availSeg">
+              <button class="on" data-win="7">7D</button>
+              <button data-win="28">28D</button>
             </div>
           </div>
         </div>
@@ -1730,14 +1724,14 @@ body.cm::before {
           <table class="lm-table">
             <thead>
               <tr>
-                <th>Player</th>
-                <th>Availability</th>
-                <th class="num">Dist</th>
+                <th data-i18n="common.player">Player</th>
+                <th data-i18n="load_monitor.col_availability">Availability</th>
+                <th class="num" data-i18n="load_monitor.col_dist">Dist</th>
                 <th class="num">HID</th>
                 <th class="num">m/min</th>
                 <th class="num">A+D</th>
-                <th class="num">Load</th>
-                <th class="num">Risk</th>
+                <th class="num" data-i18n="load_monitor.col_load">Load</th>
+                <th class="num" data-i18n="load_monitor.col_risk">Risk</th>
               </tr>
             </thead>
             <tbody id="availBody"></tbody>
@@ -1750,11 +1744,11 @@ body.cm::before {
       <div class="cm-card">
         <div class="lm-head">
           <div class="h">
-            <h2>Decision queue</h2>
-            <div class="sub">Prioritised actions for this microcycle</div>
+            <h2 data-i18n="load_monitor.dq_title">Decision queue</h2>
+            <div class="sub" data-i18n="load_monitor.dq_sub">Prioritised actions for this microcycle</div>
           </div>
           <div class="lm-head-actions">
-            <button class="cm-btn is-outline is-sm"><i class="ti ti-plus"></i>Add action</button>
+            <button class="cm-btn is-outline is-sm" id="btnAddAction"><i class="ti ti-plus"></i><span data-i18n="load_monitor.dq_add">Add action</span></button>
           </div>
         </div>
         <div class="lm-dq" id="dqList"></div>
@@ -1764,9 +1758,20 @@ body.cm::before {
   </main>
 </div>
 
+<!-- Settings drawer + tweaks (saved user config: language / theme) -->
+<div id="tweaks-root" style="position:fixed;bottom:16px;right:16px;z-index:1000"></div>
+<div id="settings-host"></div>
+
 <!-- App logic (real data) -->
 <script src="assets/gps-acwr.js"></script>
 <script src="assets/gps-exposure.js"></script>
 <script src="assets/stressors.js"></script>
 <script src="assets/load-monitor.js"></script>
+
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
 </body></html>

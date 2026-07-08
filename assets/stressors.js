@@ -124,7 +124,8 @@
   }
 
   // ── core: build stressor list ───────────────────────────────────────────────
-  async function build({ clubId, teamId, refStr, days }) {
+  async function build({ clubId, teamId, refStr, days, tt }) {
+    const T = (typeof tt === 'function') ? tt : (k, fb) => fb;   // i18n (optional)
     const to = offset(refStr, days);
 
     let q = window.sb.from('calendar_events')
@@ -160,8 +161,8 @@
         stressors.push({
           date: matches[i].date, kind: 'cong', icon: 'ti-calendar-stats',
           sev: gap <= TURNAROUND.high ? 'high' : 'watch',
-          title: `Short turnaround · ${gap}d since last match`,
-          hint: `vs ${esc(matches[i].opponent || matches[i].title || 'match')}`,
+          title: T('load_monitor.st_short_turnaround', `Short turnaround · ${gap}d since last match`, { gap }),
+          hint: T('load_monitor.st_vs', `vs ${esc(matches[i].opponent || matches[i].title || 'match')}`, { opp: esc(matches[i].opponent || matches[i].title || 'match') }),
         });
       }
     }
@@ -170,7 +171,7 @@
       if (daysBetween(matches[i - 2].date, matches[i].date) <= 8) {
         stressors.push({
           date: matches[i].date, kind: 'cong', icon: 'ti-stack-2', sev: 'high',
-          title: '3 matches in 8 days', hint: 'fixture congestion',
+          title: T('load_monitor.st_density', '3 matches in 8 days'), hint: T('load_monitor.st_density_hint', 'fixture congestion'),
         });
       }
     }
@@ -189,8 +190,8 @@
       if (sev === null) continue;                            // short hop, not noteworthy
       stressors.push({
         date: ev.date, kind: 'travel', icon: 'ti-plane', sev,
-        title: km != null ? `Travel · ${km.toLocaleString()} km` : 'Travel / away fixture',
-        hint: dest ? `to ${esc(dest)}` : '',
+        title: km != null ? T('load_monitor.st_travel_km', `Travel · ${km.toLocaleString()} km`, { km: km.toLocaleString() }) : T('load_monitor.st_travel', 'Travel / away fixture'),
+        hint: dest ? T('load_monitor.st_travel_to', `to ${esc(dest)}`, { dest: esc(dest) }) : '',
       });
     }
 
@@ -211,7 +212,7 @@
         if (!sev) continue;
         stressors.push({
           date: m.date, kind: 'heat', icon: 'ti-flame', sev,
-          title: `Heat · ${Math.round(app)}°F apparent`,
+          title: T('load_monitor.st_heat', `Heat · ${Math.round(app)}°F apparent`, { t: Math.round(app) }),
           hint: `${esc(c.label || loc)}`,
         });
       }
