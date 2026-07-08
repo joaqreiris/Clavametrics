@@ -158,7 +158,7 @@
       const gap = daysBetween(matches[i - 1].date, matches[i].date);
       if (gap <= TURNAROUND.watch) {
         stressors.push({
-          date: matches[i].date, kind: 'cong', icon: 'ti-calendar-exclamation',
+          date: matches[i].date, kind: 'cong', icon: 'ti-calendar-stats',
           sev: gap <= TURNAROUND.high ? 'high' : 'watch',
           title: `Short turnaround · ${gap}d since last match`,
           hint: `vs ${esc(matches[i].opponent || matches[i].title || 'match')}`,
@@ -210,7 +210,7 @@
         const sev = app >= HEAT.high ? 'high' : app >= HEAT.watch ? 'watch' : null;
         if (!sev) continue;
         stressors.push({
-          date: m.date, kind: 'heat', icon: 'ti-temperature-sun', sev,
+          date: m.date, kind: 'heat', icon: 'ti-flame', sev,
           title: `Heat · ${Math.round(app)}°F apparent`,
           hint: `${esc(c.label || loc)}`,
         });

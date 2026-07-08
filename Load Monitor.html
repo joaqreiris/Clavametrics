@@ -1,8 +1,21 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="hybrid"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Load monitor · ClavaMetrics</title>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="load_monitor.page_title">Load monitor — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>/* ============================================================
    ClavaMetrics — Design System entry point
    Consumers link THIS one file. It is an @import manifest only.
@@ -1568,45 +1581,12 @@ body.cm::before {
 </style>
 </head>
 <body class="cm">
-
-<div style="display:grid; grid-template-columns:248px 1fr; min-height:100vh;">
-
-  <!-- ── Sidebar ── -->
-  <aside class="cm-shell-side">
-    <div class="cm-side-brand">
-      <span class="cm-logo-mark" style="width:30px;height:30px;border-radius:7px;"></span>
-      <div style="flex:1; min-width:0;">
-        <div class="cm-side-brand-name">Clava FC</div>
-        <div class="cm-side-brand-meta">First team · 2025/26</div>
-      </div>
-    </div>
-    <nav class="cm-side-nav">
-      <div class="cm-side-group-label">Overview</div>
-      <a class="cm-side-item"><i class="ti ti-home"></i><span>Staff Hub</span></a>
-      <a class="cm-side-item"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
-      <a class="cm-side-item"><i class="ti ti-users"></i><span>Squad</span></a>
-      <div class="cm-side-group-label">Performance</div>
-      <a class="cm-side-item" href="Wellness - Monitor.html"><i class="ti ti-heartbeat"></i><span>Wellness</span><span class="cm-side-count">3</span></a>
-      <a class="cm-side-item" href="Session RPE - Monitor.html"><i class="ti ti-activity-heartbeat"></i><span>Session RPE</span></a>
-      <a class="cm-side-item is-active"><i class="ti ti-radar-2"></i><span>Load monitor</span><span class="cm-side-count">5</span></a>
-      <a class="cm-side-item" href="Force Tests - Team View.html"><i class="ti ti-clipboard-data"></i><span>Evaluations</span></a>
-      <a class="cm-side-item"><i class="ti ti-bandage"></i><span>Injuries</span><span class="cm-side-count">3</span></a>
-    </nav>
-    <div class="cm-side-foot">
-      <div class="cm-side-user">
-        <span class="av">JR</span>
-        <div class="who">
-          <div class="name">Joaquín R.</div>
-          <div class="role">Head of performance</div>
-        </div>
-        <i class="ti ti-selector"></i>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ── Main ── -->
-  <main class="cm-shell-main">
-    <div class="cm-topbar">
+<div class="hub-shell" data-screen-label="05 Load Monitor">
+  <!-- Real app sidebar (injected by sidebar.js into #hub-side-root) -->
+  <div id="hub-side-root"></div>
+  <!-- Main -->
+  <main class="hub-main">
+<div class="cm-topbar">
       <div class="cm-crumb">
         <i class="ti ti-radar-2"></i><span>Performance</span>
         <span class="sep">/</span><span class="here">Load monitor</span>
@@ -1630,6 +1610,7 @@ body.cm::before {
           <p>Sunday, July 5, 2026 · MD-3 before LAFC (away) · 24 of 31 available</p>
         </div>
         <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
+          
           <div class="cm-field" style="min-width:180px;">
             <label class="cm-label" for="teamSel" style="color:var(--cm-fg-faint); font-size:10.5px; letter-spacing:var(--cm-tr-eyebrow); text-transform:uppercase;">Team</label>
             <select id="teamSel" class="cm-select" style="cursor:pointer;">
@@ -1783,14 +1764,7 @@ body.cm::before {
   </main>
 </div>
 
-
-
-
-
-<!-- ── App logic (real data) ── -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/supabase-init.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<!-- App logic (real data) -->
 <script src="assets/gps-acwr.js"></script>
 <script src="assets/gps-exposure.js"></script>
 <script src="assets/stressors.js"></script>

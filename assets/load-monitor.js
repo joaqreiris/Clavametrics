@@ -33,6 +33,17 @@
   function mean(a){ const v=a.filter(x=>x!=null&&isFinite(x)); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; }
   function accent(){ return getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#6366f1'; }
   function cssVar(n,f){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f; }
+  // header helpers (wire the design's static counters to real data)
+  function cardOf(id){ const el=document.getElementById(id); return el? el.closest('.cm-card') : null; }
+  function setSub(card, txt){ const el=card&&card.querySelector('.lm-head .sub'); if(el) el.textContent=txt; }
+  function setPill(card, html, danger){ const el=card&&card.querySelector('.lm-head .cm-pill'); if(el){ el.innerHTML='<span class="cm-dot"></span>'+html; el.classList.toggle('is-danger', !!danger); } }
+  function setPageContext(){
+    const hp=document.querySelector('.cm-page-header p');
+    if(hp){ const av=state.players.filter(p=>p.status==='available').length;
+      const d=new Date(state.refDate+'T00:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+      hp.textContent=`${d} · ${av} of ${state.players.length} available`; }
+    const eb=document.querySelector('.cm-page-header .cm-eyebrow'); if(eb) eb.textContent='Load management';
+  }
 
   // Tiny inline sparkline (matches the design's .spark svg boxes).
   function spark(vals, stroke, h){
@@ -144,6 +155,7 @@
         <div class="base"><span>baseline</span><span>${fmt(t.baseline,t.fmt)}</span></div>
       </div>`;
     }).join('');
+    try{ const card=cardOf('gpsGrid'); setSub(card, `Weekly totals vs 4-week baseline · ${offset(state.refDate,-6)} \u2192 ${state.refDate}`); setPill(card, `${res.athletes} athletes \u00b7 ${res.sessions} sessions`, false); }catch(e){}
   }
 
   // ── Impending stressors ─────────────────────────────────────────────────────
@@ -154,7 +166,7 @@
     catch { res=null; }
     const items = res?.stressors || [];
     if(!items.length){ list.innerHTML=`<div style="padding:26px 8px;text-align:center;color:var(--cm-fg-faint)"><i class="ti ti-circle-check" style="font-size:22px;color:var(--cm-success)"></i><div style="margin-top:6px">No flagged stressors in the next 21 days.</div></div>`; return; }
-    const ico={ heat:'ti-temperature-sun', travel:'ti-plane', cong:'ti-calendar-exclamation' };
+    const ico={ heat:'ti-flame', travel:'ti-plane', cong:'ti-calendar-stats' };
     list.innerHTML = items.map(s=>{
       const dt=new Date(s.date+'T00:00:00');
       const when=`<div class="d">${dt.getDate()} ${dt.toLocaleDateString(undefined,{month:'short'})}</div><div class="t">${dt.toLocaleDateString(undefined,{weekday:'short'})}</div>`;
@@ -169,6 +181,7 @@
         <span class="cm-pill ${s.sev==='high'?'is-danger':''}" style="align-self:start"><span class="cm-dot"></span>${s.sev}</span>
       </div>`;
     }).join('');
+    try{ const hi=items.filter(x=>x.sev==='high').length; const card=cardOf('stressList'); setPill(card, `${hi} high`, hi>0); }catch(e){}
   }
 
   // ── Availability watch (per-player 7-day GPS sparklines + risk) ──────────────
@@ -242,7 +255,7 @@
     if(danger.length) items.push({ ic:'ti-alert-triangle', prio:'high', t:`Review high-speed exposure for ${danger.length} player${danger.length>1?'s':''}`, who:`Sport Science · ${danger.map(nameOf).slice(0,3).join(', ')}${danger.length>3?'…':''}` });
     if(over.length)   items.push({ ic:'ti-activity', prio:'med', t:`Adjust MD-2 loading · ${over.length} in overreach`, who:'Fitness coach' });
     const hiStr=(stressors?.stressors||[]).filter(s=>s.sev==='high');
-    hiStr.slice(0,2).forEach(s=> items.push({ ic: s.kind==='heat'?'ti-temperature-sun':s.kind==='travel'?'ti-plane':'ti-calendar-exclamation', prio:'med', t:`Mitigation plan · ${esc(s.title)}`, who:`${new Date(s.date+'T00:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short'})}` }));
+    hiStr.slice(0,2).forEach(s=> items.push({ ic: s.kind==='heat'?'ti-flame':s.kind==='travel'?'ti-plane':'ti-calendar-stats', prio:'med', t:`Mitigation plan · ${esc(s.title)}`, who:`${new Date(s.date+'T00:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short'})}` }));
     const restr=state.players.filter(p=>['injured','modified','unavailable','sick'].includes(p.status));
     if(restr.length) items.push({ ic:'ti-heart-rate-monitor', prio:'med', t:`Rehab progression update · ${restr.length} players`, who:'Medical' });
     items.push({ ic:'ti-clipboard-check', prio:'low', t:'Confirm starting XI for MD', who:'Head coach' });
@@ -259,6 +272,7 @@
 
   // ── orchestration ────────────────────────────────────────────────────────────
   async function loadAll(){
+    setPageContext();
     // ACWR + KPIs + chart
     await renderACWR();
     // squad snapshot (reused for availability risk + decision queue)
