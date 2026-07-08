@@ -174,7 +174,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 
 ### Fase 6 — Admin / workspace
 - ✅ Admin.html
-- ⬜ Billing.html
+- ✅ Billing.html
 - ⬜ Plan Picker.html
 - ⬜ Player.html
 - ⬜ Platform.html  *(Platform Admin)*
