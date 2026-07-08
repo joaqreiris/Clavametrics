@@ -15,6 +15,12 @@
 (function () {
   'use strict';
 
+  // i18n: use the shared CM_I18N runtime when present; fall back to English.
+  function tt(key, fb, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fb != null ? fb : key);
+  }
+
   // Metrics mirror the GPS units' external-load streams.
   // agg: how a week is aggregated for one player ('sum' volume, 'mean' rate).
   const METRICS = [
@@ -159,11 +165,14 @@
   }
 
   // ── render ────────────────────────────────────────────────────────────────
-  async function render({ clubId, players, mount, refDate }) {
+  let _lastArgs = null;
+  async function render(opts) {
+    const { clubId, players, mount, refDate } = opts || {};
     if (!mount) return;
+    _lastArgs = opts;
     styleInject();
     const ref = refDate || iso(new Date());
-    mount.innerHTML = `<div class="gpx-card"><div class="gpx-loading"><i class="ti ti-loader-2"></i> Loading GPS exposure…</div></div>`;
+    mount.innerHTML = `<div class="gpx-card"><div class="gpx-loading"><i class="ti ti-loader-2"></i> ${esc(tt('gps_exposure.loading', 'Loading GPS exposure…'))}</div></div>`;
 
     const from = offset(ref, -(7 * WEEKS_SHOWN + 1));
     const playerIds = new Set((players || []).map(p => p.id));
@@ -174,8 +183,8 @@
     if (!rows.length) {
       mount.innerHTML = `<div class="gpx-card"><div class="gpx-empty">
         <i class="ti ti-satellite" style="font-size:22px"></i>
-        <span class="t">No GPS data yet</span>
-        <span>Import GPS/wearable sessions to see squad exposure trends.</span></div></div>`;
+        <span class="t">${esc(tt('gps_exposure.empty_title', 'No GPS data yet'))}</span>
+        <span>${esc(tt('gps_exposure.empty_desc', 'Import GPS/wearable sessions to see squad exposure trends.'))}</span></div></div>`;
       return;
     }
 
@@ -208,19 +217,20 @@
         const dTxt = delta == null ? '—' : (delta > 0 ? '+' : '') + delta.toFixed(0) + '%';
         const spark = [...series].reverse();   // oldest → newest for the sparkline
         return `<div class="gpx-tile">
-          <div class="lab"><span class="nm">${esc(m.label)}</span><span class="gpx-delta ${dCls}">${dTxt}</span></div>
+          <div class="lab"><span class="nm">${esc(tt('gps_exposure.m_' + m.key, m.label))}</span><span class="gpx-delta ${dCls}">${dTxt}</span></div>
           <div class="val">${fmtVal(current, m.fmt)}${m.unit ? `<sub>${esc(m.unit)}</sub>` : ''}</div>
           ${sparkline(spark, accent)}
-          <div class="base">baseline ${fmtVal(baseline, m.fmt)} · ${BASELINE_WEEKS}-wk avg</div>
+          <div class="base">${esc(tt('gps_exposure.baseline', `baseline ${fmtVal(baseline, m.fmt)} · ${BASELINE_WEEKS}-wk avg`, { val: fmtVal(baseline, m.fmt), weeks: BASELINE_WEEKS }))}</div>
         </div>`;
       }).join('');
     }
 
     function paint() {
       const scope = level === 'squad'
-        ? `${availableIds.length} athletes`
-        : esc(nameById[selPlayer] || 'Player');
-      mount.querySelector('.gpx-sub').textContent = `last 7 days vs ${BASELINE_WEEKS}-wk baseline · ${scope}`;
+        ? tt('gps_exposure.athletes', `${availableIds.length} athletes`, { count: availableIds.length })
+        : (nameById[selPlayer] || tt('gps_exposure.player', 'Player'));
+      mount.querySelector('.gpx-sub').textContent =
+        tt('gps_exposure.sub', `last 7 days vs ${BASELINE_WEEKS}-wk baseline · ${scope}`, { weeks: BASELINE_WEEKS, scope });
       mount.querySelector('.gpx-grid').innerHTML = tiles();
       const psel = mount.querySelector('.gpx-player');
       if (psel) psel.style.display = level === 'player' ? '' : 'none';
@@ -229,15 +239,15 @@
     mount.innerHTML = `<div class="gpx-card">
       <div class="gpx-head">
         <i class="ti ti-satellite"></i>
-        <h3>GPS Exposure</h3>
+        <h3>${esc(tt('gps_exposure.title', 'GPS Exposure'))}</h3>
         <span class="sub gpx-sub"></span>
         <div class="right">
-          <select class="gpx-select gpx-player" title="Player">
-            ${availableIds.map(id => `<option value="${esc(id)}">${esc(nameById[id] || 'Player')}</option>`).join('')}
+          <select class="gpx-select gpx-player" title="${esc(tt('gps_exposure.player', 'Player'))}">
+            ${availableIds.map(id => `<option value="${esc(id)}">${esc(nameById[id] || tt('gps_exposure.player', 'Player'))}</option>`).join('')}
           </select>
           <div class="gpx-seg gpx-level">
-            <button data-lvl="squad" class="is-on">Squad</button>
-            <button data-lvl="player">Per player</button>
+            <button data-lvl="squad" class="is-on">${esc(tt('gps_exposure.squad', 'Squad'))}</button>
+            <button data-lvl="player">${esc(tt('gps_exposure.per_player', 'Per player'))}</button>
           </div>
         </div>
       </div>
@@ -254,6 +264,9 @@
 
     paint();
   }
+
+  // Re-render on language change so labels/chrome follow the active locale.
+  document.addEventListener('cm:langchanged', () => { if (_lastArgs) render(_lastArgs); });
 
   window.gpsExposure = { render, METRICS };
 })();

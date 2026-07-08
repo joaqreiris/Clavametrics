@@ -1282,18 +1282,29 @@
   });
 
   // ── ACWR metric selector + model popover ─────────────────────────────────
+  // Localised label for an ACWR metric (data lives in gps-acwr.js; text in locales).
+  function lmAcwrMetricLabel(m) { return tt('load_monitor.acwr_metric_' + m.key, m.label); }
+  function lmFillAcwrMetricOptions() {
+    const sel = document.getElementById('lmAcwrMetric');
+    if (!sel || !window.gpsACWR?.METRICS) return;
+    sel.innerHTML = window.gpsACWR.METRICS
+      .map(m => `<option value="${m.key}">${lmAcwrMetricLabel(m)}${m.unit ? ` (${m.unit})` : ''}</option>`).join('');
+    sel.value = acwrMetric;
+  }
+  function lmUpdateAcwrSub() {
+    const meta = window.gpsACWR.getMetric(acwrMetric);
+    const sub = document.querySelector('.lm-card .lm-card-h .sub[data-i18n="load_monitor.acwr_sub"]');
+    if (sub) sub.textContent = tt('load_monitor.acwr_sub_metric',
+      `${lmAcwrMetricLabel(meta)} · ${acwrModel.toUpperCase()} · squad average`,
+      { metric: lmAcwrMetricLabel(meta), model: acwrModel.toUpperCase() });
+  }
   (function wireAcwrControls() {
     const metricSel = document.getElementById('lmAcwrMetric');
     if (metricSel && window.gpsACWR?.METRICS) {
-      metricSel.innerHTML = window.gpsACWR.METRICS
-        .map(m => `<option value="${m.key}">${m.label}${m.unit ? ` (${m.unit})` : ''}</option>`).join('');
-      metricSel.value = acwrMetric;
+      lmFillAcwrMetricOptions();
       metricSel.addEventListener('change', async () => {
         acwrMetric = metricSel.value;
-        // Update the sub-label so users know which stream is charted.
-        const meta = window.gpsACWR.getMetric(acwrMetric);
-        const sub = document.querySelector('.lm-card .lm-card-h .sub[data-i18n="load_monitor.acwr_sub"]');
-        if (sub) sub.textContent = `${meta.label} · ${acwrModel.toUpperCase()} · squad average`;
+        lmUpdateAcwrSub();   // reflect which stream is charted
         await loadData(currentPeriod);
       });
     }
@@ -1426,6 +1437,8 @@
   document.addEventListener('cm:langchanged', () => {
     renderWellHeads();
     renderWellBars();
+    lmFillAcwrMetricOptions();   // re-localise ACWR metric options
+    lmUpdateAcwrSub();
     loadData(currentPeriod);
     updateSortHeaders();
   });
