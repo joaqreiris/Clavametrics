@@ -153,20 +153,20 @@
     <div class="hub-topbar">
       <div class="hub-crumb">
         <i class="ti ti-home"></i>
-        <a href="Squad.html">Squad</a>
+        <a href="Squad.html" data-i18n="squad.squad">Squad</a>
         <span class="sep">/</span>
         <span id="ppCrumbCat">…</span>
         <span class="sep">/</span>
-        <span id="ppCrumbName" style="color:var(--cm-fg-strong);font-weight:600">Player</span>
+        <span id="ppCrumbName" style="color:var(--cm-fg-strong);font-weight:600" data-i18n="common.player">Player</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions, microcycles…">
+        <input placeholder="Search players, sessions, microcycles…" data-i18n-ph="squad.search_players_sessions_microcycles">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" title="Notifications" data-i18n-attr="title:squad.notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help" data-i18n-attr="title:squad.help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings data-i18n-attr="title:squad.settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -189,6 +189,12 @@
 <script defer src="theme-tweaks.js"></script>
 
 <script>
+  // ── i18n helper ───────────────────────────────────────────────
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+
   // ── Helpers ───────────────────────────────────────────────────
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -210,10 +216,10 @@
   function statusMeta(status) {
     const s = (status || '').toLowerCase();
     const map = {
-      available:   { label: 'Available',   color: 'var(--cm-success)' },
-      injured:     { label: 'Injured',     color: 'var(--cm-danger)'  },
-      modified:    { label: 'Modified',    color: 'var(--cm-warning)' },
-      unavailable: { label: 'Unavailable', color: 'var(--cm-neutral)' },
+      available:   { label: tt('squad.status_available',   'Available'),   color: 'var(--cm-success)' },
+      injured:     { label: tt('squad.status_injured',     'Injured'),     color: 'var(--cm-danger)'  },
+      modified:    { label: tt('squad.status_modified',    'Modified'),    color: 'var(--cm-warning)' },
+      unavailable: { label: tt('squad.status_unavailable', 'Unavailable'), color: 'var(--cm-neutral)' },
     };
     return map[s] || { label: status ? (status[0].toUpperCase() + status.slice(1)) : '—', color: 'var(--cm-neutral)' };
   }
@@ -244,7 +250,7 @@
     const page = document.getElementById('ppPage');
     const pk = posKey(player.position);
     const sm = statusMeta(player.status);
-    const full = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player';
+    const full = [player.first_name, player.last_name].filter(Boolean).join(' ') || tt('common.player', 'Player');
     const monogram = [player.first_name, player.last_name]
       .filter(Boolean).map(n => n[0]).join('').toUpperCase() || '?';
 
@@ -264,12 +270,12 @@
       ? `<span class="pp-numbadge">${esc(player.number)}</span>` : '';
 
     const kpis = [
-      { key: 'minutes',      label: 'Minutes played' },
-      { key: 'trainings',    label: 'Trainings done' },
-      { key: 'availability', label: 'Availability'   },
-      { key: 'days_out',     label: 'Days out'       },
-      { key: 'acwr',         label: 'ACWR'           },
-      { key: 'readiness',    label: 'Readiness'      },
+      { key: 'minutes',      label: tt('player.kpi_minutes',      'Minutes played') },
+      { key: 'trainings',    label: tt('player.kpi_trainings',    'Trainings done') },
+      { key: 'availability', label: tt('player.kpi_availability', 'Availability')   },
+      { key: 'days_out',     label: tt('player.kpi_days_out',     'Days out')       },
+      { key: 'acwr',         label: tt('player.kpi_acwr',         'ACWR')           },
+      { key: 'readiness',    label: tt('player.kpi_readiness',    'Readiness')      },
     ].map(k => `<div class="pp-kpi" data-kpi="${k.key}">
         <span class="lbl">${k.label}</span>
         <span class="val">…</span>
@@ -277,16 +283,16 @@
       </div>`).join('');
 
     const tabs = [
-      { id: 'overview',     label: 'Overview' },
-      { id: 'physical',     label: 'Physical & tests' },
-      { id: 'load',         label: 'Load & wellness' },
-      { id: 'availability', label: 'Availability & injuries' },
+      { id: 'overview',     label: tt('player.tab_overview',     'Overview') },
+      { id: 'physical',     label: tt('player.tab_physical',     'Physical & tests') },
+      { id: 'load',         label: tt('player.tab_load',         'Load & wellness') },
+      { id: 'availability', label: tt('player.tab_availability', 'Availability & injuries') },
     ];
     const tabBtns = tabs.map((t, i) =>
       `<button class="pp-tab ${i === 0 ? 'is-on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('');
     const panels = tabs.map((t, i) =>
       `<div class="pp-panel ${i === 0 ? 'is-on' : ''}" data-panel="${t.id}">
-        ${emptyState('ti-tools', 'This section is built in the next step.', '')}
+        ${emptyState('ti-tools', tt('player.section_next_step', 'This section is built in the next step.'), '')}
       </div>`).join('');
 
     page.innerHTML = `
@@ -303,11 +309,11 @@
             <span class="pp-chip pp-cat">${esc(catLabel || '—')}</span>
           </div>
           <div class="pp-facts">
-            <div class="pp-fact"><span class="lbl">Age</span><span class="val">${age(player.date_of_birth)}</span></div>
-            <div class="pp-fact"><span class="lbl">Nationality</span><span class="val">${esc(player.nationality || '—')}</span></div>
-            <div class="pp-fact"><span class="lbl">Height / Weight</span><span class="val">${esc(anthro)}</span></div>
-            <div class="pp-fact"><span class="lbl">Foot</span><span class="val">${esc(cap(player.dominant_foot))}</span></div>
-            <div class="pp-fact"><span class="lbl">Joined</span><span class="val">—</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('squad.age', 'Age'))}</span><span class="val">${age(player.date_of_birth)}</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('squad.nationality', 'Nationality'))}</span><span class="val">${esc(player.nationality || '—')}</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('player.height_weight', 'Height / Weight'))}</span><span class="val">${esc(anthro)}</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('squad.foot', 'Foot'))}</span><span class="val">${esc(cap(player.dominant_foot))}</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('player.joined', 'Joined'))}</span><span class="val">—</span></div>
           </div>
         </div>
       </div>
@@ -342,34 +348,34 @@
     // minutes — total match minutes; subtitle = match count
     setKpi('minutes',
       k.minutes != null ? String(k.minutes) : '—',
-      k.matches != null ? `${k.matches} matches` : '');
+      k.matches != null ? tt('player.sub_matches', `${k.matches} matches`, { count: k.matches }) : '');
 
     // trainings — done / total
     setKpi('trainings',
       k.trainingsDone != null ? String(k.trainingsDone) : '—',
-      k.trainingsTotal != null ? `of ${k.trainingsTotal}` : '');
+      k.trainingsTotal != null ? tt('player.sub_of_total', `of ${k.trainingsTotal}`, { count: k.trainingsTotal }) : '');
 
     // availability — % of tracked days available
     setKpi('availability',
       k.availabilityPct != null ? `${k.availabilityPct}%` : '—',
-      k.availabilityPct != null ? 'days available' : '');
+      k.availabilityPct != null ? tt('player.sub_days_available', 'days available') : '');
 
-    // days_out — distinct days unavailable; subtitle = source
+    // days_out — distinct days unavailable; subtitle = source (source is data)
     setKpi('days_out',
       k.daysOut != null ? String(k.daysOut) : '—',
-      k.daysOut != null && k.daysOutSource ? `from ${k.daysOutSource}` : '');
+      k.daysOut != null && k.daysOutSource ? tt('player.sub_from_source', `from ${k.daysOutSource}`, { source: k.daysOutSource }) : '');
 
-    // acwr — Player Load acute:chronic
+    // acwr — Player Load acute:chronic (acwrLabel comes from the shared GPS module)
     setKpi('acwr',
       k.acwr != null ? k.acwr.toFixed(2) : '—',
       k.acwr != null
-        ? `${k.acwrLabel ? k.acwrLabel + ' · ' : ''}Player Load`
+        ? `${k.acwrLabel ? k.acwrLabel + ' · ' : ''}${tt('player.sub_player_load', 'Player Load')}`
         : (k.acwrLabel || ''));
 
     // readiness — 7-day wellness average
     setKpi('readiness',
       k.readiness != null ? `${k.readiness.toFixed(1)}/10` : '—',
-      k.readiness != null ? '7-day avg' : '');
+      k.readiness != null ? tt('player.sub_7day_avg', '7-day avg') : '');
   }
 
   // ── Boot ──────────────────────────────────────────────────────
@@ -381,8 +387,9 @@
     const page = document.getElementById('ppPage');
 
     if (!id) {
-      page.innerHTML = emptyState('ti-user-off', 'No player selected',
-        'Open this page from the Squad with a player selected.');
+      page.innerHTML = emptyState('ti-user-off',
+        tt('player.empty_no_selection_title', 'No player selected'),
+        tt('player.empty_no_selection_body', 'Open this page from the Squad with a player selected.'));
       return;
     }
 
@@ -395,8 +402,9 @@
       .eq('id', id).eq('club_id', clubId).is('archived_at', null).single();
 
     if (!player) {
-      page.innerHTML = emptyState('ti-user-off', 'Player not found',
-        'This player does not exist or belongs to another club.');
+      page.innerHTML = emptyState('ti-user-off',
+        tt('player.empty_not_found_title', 'Player not found'),
+        tt('player.empty_not_found_body', 'This player does not exist or belongs to another club.'));
       return;
     }
 
@@ -422,6 +430,56 @@
       ['minutes', 'trainings', 'availability', 'days_out', 'acwr', 'readiness']
         .forEach(key => setKpi(key, '—', ''));
     }
+
+    // Re-translate the JS-rendered chrome in place on language change, without
+    // discarding the tab panels rendered by the shared modules.
+    document.addEventListener('cm:langchanged', () => {
+      // KPI labels + subtitles
+      const kpiLabels = {
+        minutes:      tt('player.kpi_minutes',      'Minutes played'),
+        trainings:    tt('player.kpi_trainings',    'Trainings done'),
+        availability: tt('player.kpi_availability', 'Availability'),
+        days_out:     tt('player.kpi_days_out',     'Days out'),
+        acwr:         tt('player.kpi_acwr',         'ACWR'),
+        readiness:    tt('player.kpi_readiness',    'Readiness'),
+      };
+      Object.keys(kpiLabels).forEach(key => {
+        const el = page.querySelector(`.pp-kpi[data-kpi="${key}"] .lbl`);
+        if (el) el.textContent = kpiLabels[key];
+      });
+      if (kpis) fillKpis(kpis);
+      // Tab labels
+      const tabLabels = {
+        overview:     tt('player.tab_overview',     'Overview'),
+        physical:     tt('player.tab_physical',     'Physical & tests'),
+        load:         tt('player.tab_load',         'Load & wellness'),
+        availability: tt('player.tab_availability', 'Availability & injuries'),
+      };
+      Object.keys(tabLabels).forEach(id => {
+        const el = page.querySelector(`.pp-tab[data-tab="${id}"]`);
+        if (el) el.textContent = tabLabels[id];
+      });
+      // Fact labels (order matches renderProfile)
+      const factLabels = [
+        tt('squad.age', 'Age'),
+        tt('squad.nationality', 'Nationality'),
+        tt('player.height_weight', 'Height / Weight'),
+        tt('squad.foot', 'Foot'),
+        tt('player.joined', 'Joined'),
+      ];
+      page.querySelectorAll('.pp-facts .pp-fact .lbl').forEach((el, i) => {
+        if (factLabels[i] != null) el.textContent = factLabels[i];
+      });
+      // Status badge label
+      const badge = page.querySelector('.pp-idtop .pp-badge');
+      if (badge) {
+        const sm = statusMeta(player.status);
+        const dot = badge.querySelector('.dot');
+        badge.textContent = '';
+        if (dot) badge.appendChild(dot);
+        badge.appendChild(document.createTextNode(sm.label));
+      }
+    });
 
     // Cohorte del benchmark = EQUIPO ACTIVO que se está viendo (no el primario del jugador),
     // con fallback al primario solo si no hay equipo activo en sesión. Así, ver al jugador desde

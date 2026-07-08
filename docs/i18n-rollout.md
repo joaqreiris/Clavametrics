@@ -176,7 +176,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Admin.html
 - ✅ Billing.html
 - ✅ Plan Picker.html
-- ⬜ Player.html
+- ✅ Player.html
 - ⬜ Platform.html  *(Platform Admin)*
 
 ### Fase 7 — Marketing (switch de runtime, §5)
