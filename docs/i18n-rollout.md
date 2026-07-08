@@ -183,7 +183,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Home.html  → cambiar include a `assets/i18n.js`
 - ✅ Contact.html
 - ✅ Pricing.html
-- ⬜ Borrar `i18n.js` raíz (después de las tres)
+- ✅ Borrar `i18n.js` raíz (después de las tres)
 
 ### Skip / más adelante
 - ⏭️ Evaluations-old.html  *(deprecada)*
