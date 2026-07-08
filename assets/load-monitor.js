@@ -150,7 +150,9 @@
     catch { res=null; }
     state.lastExposure = (res&&res.ok)? res : null;
     if(!res || !res.ok){
-      grid.innerHTML=''; if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:26px;text-align:center;color:var(--cm-fg-faint)"><i class="ti ti-satellite" style="font-size:22px"></i><div style="margin-top:6px">${esc(tt('load_monitor.gps_none','No GPS data yet'))}</div></div>`; }
+      grid.innerHTML='';
+      try{ setPill(cardOf('gpsGrid'), esc(tt('load_monitor.exp_pill_empty','no GPS sessions')), false); }catch{}
+      if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:26px;text-align:center;color:var(--cm-fg-faint)"><i class="ti ti-satellite" style="font-size:22px"></i><div style="margin-top:6px">${esc(tt('load_monitor.gps_none','No GPS data yet'))}</div></div>`; }
       return;
     }
     if(empty) empty.style.display='none';
