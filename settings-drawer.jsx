@@ -135,34 +135,34 @@ const BillingPanel = () => {
 
   return <>
     <div className="sd-section">
-      <div className="sd-section-h"><div className="sd-section-l">Workspace subscription</div></div>
+      <div className="sd-section-h"><div className="sd-section-l">{_t("settings.workspace_subscription","Workspace subscription")}</div></div>
       <div className="sd-section-body">
         <div className="sd-billing-card">
           <div className="sd-billing-row">
-            <span className="sd-row-label">Plan</span>
+            <span className="sd-row-label">{_t("settings.plan","Plan")}</span>
             <span className="sd-billing-val">{loading ? '…' : (plan || '—')}</span>
           </div>
           <div className="sd-billing-row">
-            <span className="sd-row-label">Monthly amount</span>
+            <span className="sd-row-label">{_t("settings.monthly_amount","Monthly amount")}</span>
             <span className="sd-billing-val">{loading ? '…' : (amount ? `$${amount}` : '—')}</span>
           </div>
           <div className="sd-billing-row">
-            <span className="sd-row-label">Next billing date</span>
-            <span className="sd-billing-val">{loading ? '…' : (next ? new Date(next).toLocaleDateString([], { month:'long', day:'numeric', year:'numeric' }) : '—')}</span>
+            <span className="sd-row-label">{_t("settings.next_billing","Next billing date")}</span>
+            <span className="sd-billing-val">{loading ? '…' : (next ? new Date(next).toLocaleDateString((window.CM_I18N && CM_I18N.current) || [], { month:'long', day:'numeric', year:'numeric' }) : '—')}</span>
           </div>
           <div className="sd-billing-row">
-            <span className="sd-row-label">Status</span>
+            <span className="sd-row-label">{_t("settings.status","Status")}</span>
             <span className="sd-billing-val" style={{color: status === 'active' ? 'var(--cm-success)' : 'var(--cm-fg-muted)'}}>{loading ? '…' : (status || '—')}</span>
           </div>
         </div>
         <div style={{padding:'10px 14px', borderTop:'1px solid var(--cm-border-soft)'}}>
           <a href="Billing.html" style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12.5,fontWeight:500,color:'var(--cm-accent)',textDecoration:'none'}}>
-            Ver detalle completo <i className="ti ti-arrow-right" style={{fontSize:13}}></i>
+            {_t("settings.view_full_detail","View full detail")} <i className="ti ti-arrow-right" style={{fontSize:13}}></i>
           </a>
         </div>
         <div className="sd-note" style={{marginTop:12}}>
           <i className="ti ti-brand-stripe"></i>
-          Billing is managed via Stripe. Subscription data syncs automatically when the webhook is active. Contact your admin to change plans.
+          {_t("settings.billing_stripe_note","Billing is managed via Stripe. Subscription data syncs automatically when the webhook is active. Contact your admin to change plans.")}
         </div>
       </div>
     </div>
@@ -264,16 +264,16 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
     <>
       <style>{SD_CSS}</style>
       <div className={`sd-overlay ${open ? "is-open" : ""}`} onClick={onClose} />
-      <aside className={`sd-drawer ${open ? "is-open" : ""}`} role="dialog" aria-label="Settings">
+      <aside className={`sd-drawer ${open ? "is-open" : ""}`} role="dialog" aria-label={_t("settings.title","Settings")}>
         <header className="sd-head">
           <div className="sd-head-l">
             <i className="ti ti-settings"></i>
             <div>
-              <div className="sd-title">Settings</div>
-              <div className="sd-sub">Appearance · workspace · account</div>
+              <div className="sd-title">{_t("settings.title","Settings")}</div>
+              <div className="sd-sub">{_t("settings.subtitle","Appearance · workspace · account")}</div>
             </div>
           </div>
-          <button className="sd-x" onClick={onClose} aria-label="Close">
+          <button className="sd-x" onClick={onClose} aria-label={_t("settings.close","Close")}>
             <i className="ti ti-x"></i>
           </button>
         </header>
@@ -286,7 +286,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
             { id:"billing",       icon:"ti-credit-card",  label:"Billing" },
           ].map(({ id, icon, label }) => (
             <button key={id} className={`sd-tab ${tab === id ? "is-on" : ""}`} onClick={() => setTab(id)}>
-              <i className={`ti ${icon}`}></i>{label}
+              <i className={`ti ${icon}`}></i>{_t("settings.tab." + id, label)}
             </button>
           ))}
         </nav>
@@ -295,7 +295,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
 
           {/* ── APPEARANCE TAB ── */}
           {tab === "appearance" && <>
-            <Section label="Theme" hint="How the chrome looks across the app.">
+            <Section label={_t("settings.theme","Theme")} hint={_t("settings.theme.hint","How the chrome looks across the app.")}>
               <div className="sd-tiles">
                 {["light","dark","hybrid"].map((t) => (
                   <button
@@ -307,7 +307,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                       <div className="sd-tile-pv-c" style={{ background: t === "dark" ? "#161616" : "#fff", borderColor: themeBorder(t) }} />
                     </div>
                     <div className="sd-tile-label">
-                      <span>{t === "light" ? "Light" : t === "dark" ? "Dark" : "Hybrid"}</span>
+                      <span>{_t("settings.theme_" + t, t === "light" ? "Light" : t === "dark" ? "Dark" : "Hybrid")}</span>
                       {s.theme === t ? <i className="ti ti-check"></i> : null}
                     </div>
                   </button>
@@ -315,7 +315,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
               </div>
             </Section>
 
-            <Section label="Accent" hint="Used for primary buttons, active nav, and focus rings.">
+            <Section label={_t("settings.accent","Accent")} hint={_t("settings.accent.hint","Used for primary buttons, active nav, and focus rings.")}>
               <div className="sd-swatches">
                 {swatchesForTheme.map(([key, v]) => (
                   <button
@@ -331,7 +331,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
             </Section>
 
             {s.theme !== "light" ? (
-              <Section label="Sidebar tone">
+              <Section label={_t("settings.sidebar_tone","Sidebar tone")}>
                 <div className="sd-chips">
                   {[
                     { v:"default", l:"Default" },
@@ -340,32 +340,32 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                     { v:"forest",  l:"Forest" },
                     { v:"zinc",    l:"Zinc" },
                   ].map(o => (
-                    <button key={o.v} className={`sd-chip ${s.sidebarHue === o.v ? "is-on" : ""}`} onClick={() => set({ sidebarHue: o.v })}>{o.l}</button>
+                    <button key={o.v} className={`sd-chip ${s.sidebarHue === o.v ? "is-on" : ""}`} onClick={() => set({ sidebarHue: o.v })}>{_t("settings.tone_" + o.v, o.l)}</button>
                   ))}
                 </div>
               </Section>
             ) : null}
 
-            <Section label="Density" hint="Affects vertical padding inside cards & tables.">
+            <Section label={_t("settings.density","Density")} hint={_t("settings.density.hint","Affects vertical padding inside cards & tables.")}>
               <div className="sd-chips">
                 {[
-                  { v:"compact",     l:"Compact" },
-                  { v:"balanced",    l:"Balanced" },
-                  { v:"comfortable", l:"Comfy" },
+                  { v:"compact",     l:"Compact",  k:"compact" },
+                  { v:"balanced",    l:"Balanced", k:"balanced" },
+                  { v:"comfortable", l:"Comfy",    k:"comfy" },
                 ].map(o => (
-                  <button key={o.v} className={`sd-chip ${s.density === o.v ? "is-on" : ""}`} onClick={() => set({ density: o.v })}>{o.l}</button>
+                  <button key={o.v} className={`sd-chip ${s.density === o.v ? "is-on" : ""}`} onClick={() => set({ density: o.v })}>{_t("settings.density_" + o.k, o.l)}</button>
                 ))}
               </div>
             </Section>
 
-            <Section label="Corners">
+            <Section label={_t("settings.corners","Corners")}>
               <div className="sd-chips">
                 {[
                   { v:"tight",   l:"Tight" },
                   { v:"regular", l:"Regular" },
                   { v:"soft",    l:"Soft" },
                 ].map(o => (
-                  <button key={o.v} className={`sd-chip ${s.radius === o.v ? "is-on" : ""}`} onClick={() => set({ radius: o.v })}>{o.l}</button>
+                  <button key={o.v} className={`sd-chip ${s.radius === o.v ? "is-on" : ""}`} onClick={() => set({ radius: o.v })}>{_t("settings.corners_" + o.v, o.l)}</button>
                 ))}
               </div>
             </Section>
@@ -386,21 +386,21 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
               </div>
             </Section>
 
-            <Section label="Reset">
+            <Section label={_t("settings.reset","Reset")}>
               {resetConfirm ? (
                 <div className="sd-reset-confirm">
-                  <span>Reset all appearance settings?</span>
+                  <span>{_t("settings.reset_confirm","Reset all appearance settings?")}</span>
                   <button className="sd-reset-yes" onClick={() => {
                     localStorage.removeItem(SETTINGS_KEY);
                     const d = initSettings();
                     setS(d);
                     setResetConfirm(false);
-                  }}><i className="ti ti-check"></i>Yes, reset</button>
-                  <button className="sd-reset-no" onClick={() => setResetConfirm(false)}>Cancel</button>
+                  }}><i className="ti ti-check"></i>{_t("settings.reset_yes","Yes, reset")}</button>
+                  <button className="sd-reset-no" onClick={() => setResetConfirm(false)}>{_t("settings.cancel","Cancel")}</button>
                 </div>
               ) : (
                 <button className="sd-reset" onClick={() => setResetConfirm(true)}>
-                  <i className="ti ti-rotate"></i>Reset to workspace defaults
+                  <i className="ti ti-rotate"></i>{_t("settings.reset_defaults","Reset to workspace defaults")}
                 </button>
               )}
             </Section>
@@ -408,16 +408,16 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
 
           {/* ── NOTIFICATIONS TAB ── */}
           {tab === "notifications" && <>
-            <Section label="In-app alerts" hint="Shown as badges and banners inside the app.">
+            <Section label={_t("settings.inapp_alerts","In-app alerts")} hint={_t("settings.inapp_alerts.hint","Shown as badges and banners inside the app.")}>
               {[
-                { key:"alertInjury",  label:"Injury reported",         sub:"Badge on the Treatments nav item" },
-                { key:"alertTask",    label:"Task assigned to me",      sub:"Badge on the Tasks nav item" },
-                { key:"alertSession", label:"Session published",        sub:"Shown in Hub activity feed" },
-              ].map(({ key, label, sub }) => (
+                { key:"alertInjury",  k:"injury",  label:"Injury reported",         sub:"Badge on the Treatments nav item" },
+                { key:"alertTask",    k:"task",     label:"Task assigned to me",      sub:"Badge on the Tasks nav item" },
+                { key:"alertSession", k:"session",  label:"Session published",        sub:"Shown in Hub activity feed" },
+              ].map(({ key, k, label, sub }) => (
                 <div key={key} className="sd-toggle-row">
                   <div className="sd-row-l">
-                    <div className="sd-row-label">{label}</div>
-                    <div className="sd-row-sub">{sub}</div>
+                    <div className="sd-row-label">{_t("settings.alert_" + k, label)}</div>
+                    <div className="sd-row-sub">{_t("settings.alert_" + k + ".sub", sub)}</div>
                   </div>
                   <button
                     role="switch" aria-checked={!!(s.notif && s.notif[key])}
@@ -428,15 +428,15 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                 </div>
               ))}
             </Section>
-            <Section label="Email digest" hint="Requires email delivery to be configured by the workspace admin.">
+            <Section label={_t("settings.email_digest","Email digest")} hint={_t("settings.email_digest.hint","Requires email delivery to be configured by the workspace admin.")}>
               {[
-                { key:"emailWeekly",  label:"Weekly summary",    sub:"Sent every Monday morning" },
-                { key:"emailInjury",  label:"Injury alerts",     sub:"Immediate — for medical staff" },
-              ].map(({ key, label, sub }) => (
+                { key:"emailWeekly",  k:"weekly",  label:"Weekly summary",    sub:"Sent every Monday morning" },
+                { key:"emailInjury",  k:"injury",  label:"Injury alerts",     sub:"Immediate — for medical staff" },
+              ].map(({ key, k, label, sub }) => (
                 <div key={key} className="sd-toggle-row">
                   <div className="sd-row-l">
-                    <div className="sd-row-label">{label}</div>
-                    <div className="sd-row-sub">{sub}</div>
+                    <div className="sd-row-label">{_t("settings.email_" + k, label)}</div>
+                    <div className="sd-row-sub">{_t("settings.email_" + k + ".sub", sub)}</div>
                   </div>
                   <button
                     role="switch" aria-checked={!!(s.notif && s.notif[key])}
@@ -446,13 +446,13 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                   </button>
                 </div>
               ))}
-              <div className="sd-note"><i className="ti ti-info-circle"></i>Email delivery is not yet configured for this workspace. Preferences are saved for when it is.</div>
+              <div className="sd-note"><i className="ti ti-info-circle"></i>{_t("settings.email_note","Email delivery is not yet configured for this workspace. Preferences are saved for when it is.")}</div>
             </Section>
           </>}
 
           {/* ── ACCOUNT TAB ── */}
           {tab === "account" && <>
-            <Section label="Signed in as">
+            <Section label={_t("settings.signed_in_as","Signed in as")}>
               <div className="sd-account-row">
                 <div className="sd-account-avatar">{profile ? (profile.full_name || profile.email || '?')[0].toUpperCase() : '?'}</div>
                 <div>
@@ -462,12 +462,12 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                 </div>
               </div>
             </Section>
-            <Section label="Session">
+            <Section label={_t("settings.session","Session")}>
               <button className="sd-reset sd-signout" onClick={async () => {
                 await window.sb.auth.signOut();
                 window.location.href = 'Login.html';
               }}>
-                <i className="ti ti-logout"></i>Sign out
+                <i className="ti ti-logout"></i>{_t("settings.sign_out","Sign out")}
               </button>
             </Section>
           </>}
@@ -478,7 +478,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
         </div>
 
         <footer className="sd-foot">
-          <span><i className="ti ti-cloud"></i>Saved to cloud &amp; this device</span>
+          <span><i className="ti ti-cloud"></i>{_t("settings.saved_footer","Saved to cloud & this device")}</span>
         </footer>
       </aside>
     </>
