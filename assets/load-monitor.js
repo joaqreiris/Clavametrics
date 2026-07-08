@@ -224,24 +224,45 @@
     return byP;
   }
 
+  // Daily availability records (status + minutes) from public.availability.
+  async function fetchAvailability(){
+    const ids=state.players.map(p=>p.id); if(!ids.length) return {};
+    const from=offset(state.refDate,-120);   // lookback for "most recent status <= refDate"
+    let rows;
+    try{
+      rows = window.cmFetchAll
+        ? await window.cmFetchAll(()=> sb().from('availability').select('player_id,date,status,minutes').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate), {label:'lm.availability'})
+        : ((await sb().from('availability').select('player_id,date,status,minutes').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate)).data||[]);
+    }catch{ rows=[]; }
+    const byP={};
+    (rows||[]).forEach(r=>{ (byP[r.player_id]||(byP[r.player_id]=[])).push(r); });
+    Object.values(byP).forEach(a=> a.sort((x,y)=> x.date<y.date?-1:1));
+    return byP;   // per player: chronological [{date,status,minutes}]
+  }
+
   async function renderAvailability(acwrPer){
     const body=$('availBody'), empty=$('availEmpty'), sub=$('availSub'); if(!body) return;
     if(sub) sub.innerHTML = `${esc(tt('load_monitor.avail_sub', `Per-player ${state.availWindow}-day GPS trend · flagged worst-first`, { days: state.availWindow }))} · <span class="mono">${esc(tt('load_monitor.avail_note','avg hides the individual'))}</span>`;
-    const from=offset(state.refDate,-state.availWindow);
-    const gps=await fetchGpsDaily(from,state.refDate);
+    const winFrom=offset(state.refDate,-state.availWindow);
+    const [gps, avail] = await Promise.all([ fetchGpsDaily(winFrom,state.refDate), fetchAvailability() ]);
 
     if(!state.players.length){ body.innerHTML=''; if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:24px;text-align:center;color:var(--cm-fg-faint)">${esc(tt('load_monitor.avail_none','No players in this squad.'))}</div>`; } return; }
     if(empty) empty.style.display='none';
 
-    const availCls={ available:['ok','available'], modified:['mod','modified'], injured:['out','injured'], unavailable:['out','unavailable'], sick:['out','sick'], away:['unk','away'] };
+    // status buckets + i18n label suffix. Covers players.status AND availability.status.
+    const availCls={ available:['ok','available'], modified:['mod','modified'], partial:['mod','partial'], limited:['mod','limited'], injured:['out','injured'], unavailable:['out','unavailable'], sick:['out','sick'], away:['unk','away'] };
     const cols=[['dist','m'],['hid','m'],['mmin','m/min'],['ad',''],['load','AU']];
 
     const rows = state.players.map(p=>{
       const recs=(gps[p.id]||[]).slice().sort((a,b)=> a.date<b.date?-1:1);
       const enough = recs.length>=3;
       const posc=POS_CSS[(p.position||'').toUpperCase()]||'mf';
-      const av=availCls[p.status]||['unk',null];
+      const arecs=avail[p.id]||[];
+      const status=arecs.length? arecs[arecs.length-1].status : p.status;   // most recent record ≤ refDate, else global
+      const av=availCls[status]||['unk',null];
       const avLbl=av[1]?tt('load_monitor.avail_'+av[1], av[1]):'—';
+      const mins=arecs.filter(r=> r.date>=winFrom).reduce((s,r)=> s+(+r.minutes||0), 0);
+      const minsDisp=mins>0? `${mins}′` : '—';
       const acwr=acwrPer?.[p.id]?.acwr;
       const insuf=acwrPer?.[p.id]?.insufficient;
       const riskCls = (acwr==null)?'low': acwr>1.5?'high': acwr>1.3?'med':'low';
@@ -258,7 +279,8 @@
 
       return `<tr>
         <td><div class="lm-player"><div class="who"><div class="nm">${esc((p.first_name||'')+' '+(p.last_name||'')).trim()||tt('common.player','Player')}</div>
-          <div class="role"><span class="pos-chip ${posc}">${esc((p.position||'—').toUpperCase())}</span>${p.number!=null?`#${esc(p.number)}`:''}</div></div></div></td>
+          <div class="role"><span class="pos-chip ${posc}">${esc((p.position||'—').toUpperCase())}</span>${p.number!=null?`#${esc(p.number)}`:''}</div>
+          <div class="mins" title="${esc(tt('load_monitor.mins_window','minutes in window'))}">${esc(tt('load_monitor.col_mins','Min'))} ${minsDisp}</div></div></div></td>
         <td><span class="lm-avail ${av[0]}"><span class="cm-dot"></span>${esc(avLbl)}</span></td>
         ${cells}
         <td><div class="lm-risk ${riskCls}"><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span></div></td>
