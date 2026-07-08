@@ -1174,11 +1174,17 @@
       // buscador del panel de campos — filtra la lista, no toca S
       ddPane.addEventListener('input', e => {
         const s = e.target.closest('#gpbDDSearch');
-        if (!s) return;
-        _ddQuery = s.value;
-        renderDDPanelOnly();
-        const ns = document.getElementById('gpbDDSearch');
-        if (ns) { ns.focus(); const v = ns.value; ns.setSelectionRange(v.length, v.length); }
+        if (s) {
+          _ddQuery = s.value;
+          renderDDPanelOnly();
+          const ns = document.getElementById('gpbDDSearch');
+          if (ns) { ns.focus(); const v = ns.value; ns.setSelectionRange(v.length, v.length); }
+          return;
+        }
+        // D&D Title input → same as the classic #gpbTitle: write S.title, re-render only the card
+        // preview (NOT the D&D pane — that would rebuild the input and drop focus mid-typing).
+        const t = e.target.closest('#gpbDDTitle');
+        if (t) { if (!S) return; S.title = t.value; renderCard(); }
       });
 
       // inicio del arrastre (campo del panel o chip ya colocado)
@@ -1249,6 +1255,10 @@
         // Config section (not draggable) — reuse the SAME classic logic on the SAME S.
         const scBtn = e.target.closest('#gpbDDScope button[data-scope]');
         if (scBtn) { if (!S) return; S.scope = scBtn.dataset.scope; S.scopeTouched = true; ddSyncFromS(); return; }
+        // Analyze by: Session / Task — reuse the classic setSource (prunes dims/metrics + syncAll);
+        // then re-render the D&D pane so the zones reflect the pruning.
+        const srcBtn = e.target.closest('#gpbDDSource button[data-source]');
+        if (srcBtn) { setSource(srcBtn.dataset.source); if (_bMode === 'dd') renderDDPane(); return; }
         const ddPop = e.target.closest('[data-ddpop]');
         if (ddPop) { togglePop(ddPop, ddPop.dataset.ddpop); return; }   // reuse the classic range/compare popover
         const rmDim = e.target.closest('[data-rmdim]');
@@ -1463,6 +1473,15 @@
     const ddC = document.getElementById('gpbDDCompareName'); if (ddC) ddC.textContent = cmpName;
     document.getElementById('gpbDDScope')?.querySelectorAll('button')
       .forEach(b => b.classList.toggle('is-on', b.dataset.scope === S.scope));
+    // Source (Session/Task) mirror + title value — keep the D&D and classic inputs in sync with S
+    // (so switching modes reflects edits made in the other). Skip the focused input mid-typing.
+    document.getElementById('gpbDDSource')?.querySelectorAll('button')
+      .forEach(b => b.classList.toggle('is-on', b.dataset.source === (S.source || 'session')));
+    const _title = S.title || '';
+    ['gpbTitle', 'gpbDDTitle'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && document.activeElement !== el && el.value !== _title) el.value = _title;
+    });
   }
 
   function syncStyle() {
@@ -4977,14 +4996,30 @@
   // from the SAME state S and driven by the SAME classic logic (togglePop for range/compare;
   // scope writes S.scope). Value labels have stable ids so syncSelects() updates them in place
   // (keeps the buttons — and any open popover anchor — alive), mirroring the classic panel.
+  // i18n helper: use the page's global tt() when present, else the English fallback. The builder
+  // is otherwise English-only; new labels go through this so they can be translated (en/es/pt).
+  const _tt = (key, en) => (typeof window !== 'undefined' && window.tt) ? window.tt(key, en) : en;
+
   function ddConfigHTML() {
     if (!S) return '';
     const rangeName = RANGES.find(r => r.id === S.range)?.name || S.range;
     const cmpName = S.compare === 'none' ? 'No comparison'
       : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : (COMPARES.find(c => c.id === S.compare)?.name || 'Comparison'));
+    const src = S.source || 'session';
     return `<div class="bdd-config">
       <div class="bdd-config-h"><i class="ti ti-adjustments-horizontal"></i><span class="t">Configuration</span><span class="s">Set, don't drag</span></div>
       <div class="bdd-cfg-grid">
+        <div class="bdd-cfg-f">
+          <span class="k">${_tt('gps_analysis.builder_analyze_by', 'Analyze by')}</span>
+          <div class="es-seg" id="gpbDDSource">
+            <button data-source="session" class="${src==='session'?'is-on':''}"><i class="ti ti-calendar-stats"></i>${_tt('gps_analysis.builder_source_session', 'Session')}</button>
+            <button data-source="task" class="${src==='task'?'is-on':''}"><i class="ti ti-soccer-field"></i>${_tt('gps_analysis.builder_source_task', 'Task')}</button>
+          </div>
+        </div>
+        <div class="bdd-cfg-f">
+          <span class="k">${_tt('gps_analysis.builder_title', 'Title')}</span>
+          <input class="es-input bdd-cfg-input" id="gpbDDTitle" type="text" placeholder="${esc(_tt('gps_analysis.builder_title_placeholder', 'Chart title'))}" value="${esc(S.title || '')}">
+        </div>
         <div class="bdd-cfg-f">
           <span class="k">Scope</span>
           <div class="es-seg" id="gpbDDScope">
