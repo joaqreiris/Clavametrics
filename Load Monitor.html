@@ -16,6 +16,8 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="assets/gps-acwr.js"></script>
+<script src="assets/gps-exposure.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -431,6 +433,33 @@
                 <span class="it"><span class="sw" style="background:var(--cm-fg-muted);opacity:0.6"></span><span data-i18n="load_monitor.legend_chronic">Chronic (28‑day rolling)</span></span>
                 <span class="it"><span class="sw dash"></span><span data-i18n="load_monitor.legend_sweet_spot">Sweet‑spot</span></span>
               </div>
+              <style>
+                .lm-acwr-select{height:28px;padding:0 26px 0 9px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);
+                  background:var(--cm-bg-soft);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer;}
+                .lm-acwr-wrap{position:relative;}
+                .lm-acwr-pop{position:absolute;top:34px;right:0;z-index:40;width:250px;padding:12px;background:var(--cm-surface);
+                  border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-2);}
+                .lm-acwr-pop .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);}
+                .lm-acwr-pop .seg{display:inline-flex;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);overflow:hidden;}
+                .lm-acwr-pop .seg button{padding:5px 9px;font:600 11px/1 var(--cm-font-sans);background:var(--cm-bg-soft);color:var(--cm-fg-muted);border:0;cursor:pointer;}
+                .lm-acwr-pop .seg button.is-on{background:var(--cm-accent);color:#fff;}
+                .lm-acwr-pop .hint{margin:6px 0 0;font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);}
+              </style>
+              <span class="lm-acwr-wrap">
+                <select id="lmAcwrMetric" class="lm-acwr-select" data-i18n-attr="title:load_monitor.acwr_metric_title" title="ACWR base metric"></select>
+              </span>
+              <span class="lm-acwr-wrap">
+                <button class="cm-icon-btn" id="lmAcwrSettingsBtn" data-i18n-attr="title:load_monitor.acwr_model_title" title="ACWR model"><i class="ti ti-adjustments-horizontal"></i></button>
+                <div class="lm-acwr-pop" id="lmAcwrPop" style="display:none">
+                  <div class="row"><span data-i18n="load_monitor.acwr_model">Model</span>
+                    <div class="seg" id="lmAcwrModelSeg"><button data-model="ewma" class="is-on">EWMA</button><button data-model="ra">Rolling</button></div>
+                  </div>
+                  <div class="row"><span data-i18n="load_monitor.acwr_chronic_window">Chronic window</span>
+                    <div class="seg" id="lmAcwrCoupleSeg"><button data-couple="0" class="is-on" data-i18n="load_monitor.acwr_uncoupled">Uncoupled</button><button data-couple="1" data-i18n="load_monitor.acwr_coupled">Coupled</button></div>
+                  </div>
+                  <p class="hint" data-i18n="load_monitor.acwr_model_hint">EWMA + uncoupled is the evidence-based default (Williams 2017; Lolli/Windt).</p>
+                </div>
+              </span>
               <button class="cm-icon-btn" id="lmChartDlBtn" data-i18n-attr="title:load_monitor.download_png" title="Download PNG"><i class="ti ti-download"></i></button>
               <button class="cm-icon-btn" id="lmChartMaxBtn" data-i18n-attr="title:load_monitor.fullscreen" title="Fullscreen"><i class="ti ti-maximize"></i></button>
             </div>
@@ -439,181 +468,28 @@
             <span class="pill green"><span class="d"></span><span data-i18n="load_monitor.pill_sweet_spot">0.8 – 1.3 sweet‑spot</span></span>
             <span class="pill warn"><span class="d"></span><span data-i18n="load_monitor.pill_overreach">1.3 – 1.5 overreach</span></span>
             <span class="pill red"><span class="d"></span><span data-i18n="load_monitor.pill_danger">&gt; 1.5 danger</span></span>
-            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"><span data-i18n="load_monitor.squad_avg_today">Squad avg today</span> · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
+            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"><span data-i18n="load_monitor.squad_avg_today">Squad avg today</span> · <strong id="lmAcwrToday" style="color:var(--cm-fg-muted);font-weight:600">—</strong></span>
           </div>
           <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px;overflow:visible">
             <canvas id="acwrChart" style="display:none"></canvas>
             <div id="acwrEmpty" style="display:none;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)" data-i18n="load_monitor.no_rpe_28d">No RPE data in the last 28 days</div>
-            <!-- static SVG shown until JS replaces it -->
-            <svg id="acwrSvg" viewBox="0 0 880 360" preserveAspectRatio="none" style="width:100%;height:360px;display:block" font-family="Geist, ui-sans-serif, system-ui, sans-serif">
-
-              <!-- Plot area: x 60-840, y 30-260 ; ratio plot.  Session-bars: y 280-340 -->
-              <defs>
-                <linearGradient id="acuteFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"  stop-color="var(--cm-accent)" stop-opacity="0.18"/>
-                  <stop offset="100%" stop-color="var(--cm-accent)" stop-opacity="0"/>
-                </linearGradient>
-                <pattern id="matchDayHatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
-                  <line x1="0" y1="0" x2="0" y2="6" stroke="var(--cm-danger)" stroke-width="1" opacity="0.18"/>
-                </pattern>
-              </defs>
-
-              <!-- ── Y axis: ratio ── -->
-              <g font-size="11" font-weight="500" font-feature-settings="'tnum' 1" fill="var(--cm-fg-muted)" font-family="Geist Mono, ui-monospace, SFMono-Regular, Menlo, monospace">
-                <text x="54" y="34"  text-anchor="end">2.0</text>
-                <text x="54" y="81"  text-anchor="end">1.5</text>
-                <text x="54" y="128" text-anchor="end">1.3</text>
-                <text x="54" y="175" text-anchor="end">1.0</text>
-                <text x="54" y="222" text-anchor="end">0.8</text>
-                <text x="54" y="263" text-anchor="end">0.5</text>
-              </g>
-              <text x="20" y="148" font-size="10.5" font-weight="500" fill="var(--cm-fg-faint)" text-anchor="middle" letter-spacing="0.08em"
-                    transform="rotate(-90 20 148)" font-family="Geist, ui-sans-serif">ACWR RATIO</text>
-
-              <!-- ── Grid ── -->
-              <g stroke="var(--cm-border-soft)" stroke-width="1">
-                <line x1="60" y1="30"  x2="840" y2="30"/>
-                <line x1="60" y1="81"  x2="840" y2="81"/>
-                <line x1="60" y1="175" x2="840" y2="175"/>
-                <line x1="60" y1="263" x2="840" y2="263"/>
-              </g>
-
-              <!-- ── Zone bands ── -->
-              <rect x="60" y="30"  width="780" height="51"  fill="var(--cm-danger)"   opacity="0.05"/>
-              <rect x="60" y="81"  width="780" height="47"  fill="var(--cm-warning)"  opacity="0.08"/>
-              <rect x="60" y="128" width="780" height="94"  fill="var(--cm-success)"  opacity="0.06"/>
-              <rect x="60" y="222" width="780" height="41"  fill="var(--cm-info)"     opacity="0.04"/>
-
-              <!-- Zone right-edge labels -->
-              <g font-size="10" font-weight="600" font-family="Geist Mono, ui-monospace, monospace" letter-spacing="0.06em">
-                <text x="836" y="46"  text-anchor="end" fill="var(--cm-danger)"  opacity="0.85">DANGER</text>
-                <text x="836" y="103" text-anchor="end" fill="var(--cm-warning)" opacity="0.85">OVERREACH</text>
-                <text x="836" y="180" text-anchor="end" fill="var(--cm-success)" opacity="0.85">SWEET‑SPOT</text>
-                <text x="836" y="248" text-anchor="end" fill="var(--cm-info)"    opacity="0.85">UNDERLOADED</text>
-              </g>
-
-              <!-- Match-day vertical markers -->
-              <g>
-                <rect x="248" y="30" width="2" height="233" fill="url(#matchDayHatch)"/>
-                <rect x="528" y="30" width="2" height="233" fill="url(#matchDayHatch)"/>
-                <rect x="760" y="30" width="2" height="233" fill="url(#matchDayHatch)"/>
-              </g>
-              <g font-size="10" font-weight="600" font-family="Geist Mono, ui-monospace, monospace" letter-spacing="0.04em" fill="var(--cm-danger)">
-                <text x="249" y="23" text-anchor="middle" opacity="0.8">MATCH</text>
-                <text x="529" y="23" text-anchor="middle" opacity="0.8">MATCH</text>
-                <text x="761" y="23" text-anchor="middle" opacity="0.8">MATCH</text>
-              </g>
-
-              <!-- ── Chronic line + halo band ── -->
-              <path d="M 60,200 L 122,196 L 184,190 L 246,184 L 308,180 L 370,176 L 432,170 L 494,164 L 556,158 L 618,150 L 680,142 L 742,134 L 804,126 L 840,120"
-                    fill="none" stroke="var(--cm-fg-muted)" stroke-width="6" opacity="0.10" stroke-linecap="round"/>
-              <path d="M 60,200 L 122,196 L 184,190 L 246,184 L 308,180 L 370,176 L 432,170 L 494,164 L 556,158 L 618,150 L 680,142 L 742,134 L 804,126 L 840,120"
-                    fill="none" stroke="var(--cm-fg-muted)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7" stroke-linecap="round"/>
-
-              <!-- ── Acute fill ── -->
-              <path d="M 60,196 L 122,188 L 184,178 L 246,194 L 308,168 L 370,160 L 432,150 L 494,138 L 556,128 L 618,116 L 680,106 L 742,94 L 804,82 L 840,86 L 840,263 L 60,263 Z"
-                    fill="url(#acuteFill)"/>
-              <!-- ── Acute line ── -->
-              <path d="M 60,196 L 122,188 L 184,178 L 246,194 L 308,168 L 370,160 L 432,150 L 494,138 L 556,128 L 618,116 L 680,106 L 742,94 L 804,82 L 840,86"
-                    fill="none" stroke="var(--cm-accent)" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
-
-              <!-- Data points -->
-              <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="1.5">
-                <circle cx="60"  cy="196" r="3"/>
-                <circle cx="122" cy="188" r="3"/>
-                <circle cx="184" cy="178" r="3"/>
-                <circle cx="246" cy="194" r="3"/>
-                <circle cx="308" cy="168" r="3"/>
-                <circle cx="370" cy="160" r="3"/>
-                <circle cx="432" cy="150" r="3"/>
-                <circle cx="494" cy="138" r="3"/>
-                <circle cx="556" cy="128" r="3"/>
-                <circle cx="618" cy="116" r="3"/>
-                <circle cx="680" cy="106" r="3"/>
-                <circle cx="742" cy="94"  r="3"/>
-                <circle cx="804" cy="82"  r="3.5"/>
-                <circle cx="840" cy="86"  r="5" stroke-width="2.5"/>
-              </g>
-
-              <!-- Annotation: peak point -->
-              <g transform="translate(764, 82)">
-                <line x1="-22" y1="0" x2="-6" y2="0" stroke="var(--cm-fg-strong)" stroke-width="1"/>
-                <circle cx="0" cy="0" r="3.5" fill="var(--cm-warning)" stroke="var(--cm-surface)" stroke-width="1.5"/>
-                <g transform="translate(-130, -36)">
-                  <rect width="104" height="30" rx="5" fill="var(--cm-fg-strong)"/>
-                  <text x="8" y="13" font-size="10.5" font-weight="500" fill="var(--cm-bg)" font-family="Geist, ui-sans-serif">May 14 · MD‑4</text>
-                  <text x="8" y="24" font-size="10.5" font-weight="600" fill="#FCD34D" font-family="Geist Mono, ui-monospace, monospace">ACWR 1.42 · +6%</text>
-                </g>
-              </g>
-
-              <!-- Today vertical -->
-              <line x1="840" y1="30" x2="840" y2="263" stroke="var(--cm-fg-strong)" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.4"/>
-              <g transform="translate(840, 12)">
-                <rect x="-26" y="-2" width="52" height="18" rx="4" fill="var(--cm-fg-strong)"/>
-                <text x="0" y="11" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--cm-bg)" font-family="Geist Mono, ui-monospace, monospace" letter-spacing="0.04em">TODAY</text>
-              </g>
-
-              <!-- ── Daily session-load bars (mini chart at bottom) ── -->
-              <text x="20" y="315" font-size="10.5" font-weight="500" fill="var(--cm-fg-faint)" text-anchor="middle" letter-spacing="0.08em"
-                    transform="rotate(-90 20 315)" font-family="Geist, ui-sans-serif">SESSION LOAD</text>
-              <g>
-                <rect x="54" y="280" width="790" height="60" fill="var(--cm-bg-soft)" opacity="0.5" rx="3"/>
-                <!-- Bars: simulated daily session load — 14 day samples at every other x position ~28 bars at every 28px -->
-                <g fill="var(--cm-accent)" opacity="0.85">
-                  <rect x="64"  y="320" width="18" height="15" rx="1"/>
-                  <rect x="86"  y="312" width="18" height="23" rx="1"/>
-                  <rect x="108" y="305" width="18" height="30" rx="1"/>
-                  <rect x="130" y="315" width="18" height="20" rx="1"/>
-                  <rect x="152" y="298" width="18" height="37" rx="1"/>
-                  <rect x="174" y="302" width="18" height="33" rx="1"/>
-                  <rect x="196" y="328" width="18" height="7"  rx="1"/>
-                  <rect x="218" y="325" width="18" height="10" rx="1"/>
-                  <rect x="240" y="289" width="18" height="46" rx="1" fill="var(--cm-danger)"/>
-                  <rect x="262" y="316" width="18" height="19" rx="1"/>
-                  <rect x="284" y="304" width="18" height="31" rx="1"/>
-                  <rect x="306" y="299" width="18" height="36" rx="1"/>
-                  <rect x="328" y="307" width="18" height="28" rx="1"/>
-                  <rect x="350" y="320" width="18" height="15" rx="1"/>
-                  <rect x="372" y="297" width="18" height="38" rx="1"/>
-                  <rect x="394" y="301" width="18" height="34" rx="1"/>
-                  <rect x="416" y="310" width="18" height="25" rx="1"/>
-                  <rect x="438" y="326" width="18" height="9"  rx="1"/>
-                  <rect x="460" y="294" width="18" height="41" rx="1"/>
-                  <rect x="482" y="302" width="18" height="33" rx="1"/>
-                  <rect x="504" y="308" width="18" height="27" rx="1"/>
-                  <rect x="526" y="284" width="18" height="51" rx="1" fill="var(--cm-danger)"/>
-                  <rect x="548" y="321" width="18" height="14" rx="1"/>
-                  <rect x="570" y="300" width="18" height="35" rx="1"/>
-                  <rect x="592" y="295" width="18" height="40" rx="1"/>
-                  <rect x="614" y="307" width="18" height="28" rx="1"/>
-                  <rect x="636" y="312" width="18" height="23" rx="1"/>
-                  <rect x="658" y="319" width="18" height="16" rx="1"/>
-                  <rect x="680" y="290" width="18" height="45" rx="1"/>
-                  <rect x="702" y="296" width="18" height="39" rx="1"/>
-                  <rect x="724" y="304" width="18" height="31" rx="1"/>
-                  <rect x="746" y="309" width="18" height="26" rx="1"/>
-                  <rect x="758" y="282" width="18" height="53" rx="1" fill="var(--cm-danger)"/>
-                  <rect x="780" y="317" width="18" height="18" rx="1"/>
-                  <rect x="802" y="291" width="18" height="44" rx="1"/>
-                  <rect x="824" y="301" width="18" height="34" rx="1"/>
-                </g>
-              </g>
-
-              <!-- ── X axis ── -->
-              <line x1="60" y1="263" x2="840" y2="263" stroke="var(--cm-border-strong)" stroke-width="1"/>
-              <g font-size="11" font-weight="500" fill="var(--cm-fg-muted)" font-family="Geist Mono, ui-monospace, monospace" font-feature-settings="'tnum' 1">
-                <text x="60"  y="354" text-anchor="middle">Apr 19</text>
-                <text x="184" y="354" text-anchor="middle">Apr 26</text>
-                <text x="308" y="354" text-anchor="middle">May 3</text>
-                <text x="432" y="354" text-anchor="middle">May 10</text>
-                <text x="556" y="354" text-anchor="middle">May 14</text>
-                <text x="680" y="354" text-anchor="middle">May 16</text>
-                <text x="840" y="354" text-anchor="end">May 17</text>
-              </g>
-              <!-- X axis label -->
-              <text x="450" y="354" font-size="10.5" font-weight="500" fill="var(--cm-fg-faint)" text-anchor="middle" letter-spacing="0.08em" font-family="Geist, ui-sans-serif"></text>
-
-            </svg>
+            <!-- Neutral loading skeleton — swapped for <canvas id="acwrChart"> once data arrives -->
+            <style>
+              @keyframes acwrShimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+              #acwrSvg.acwr-skeleton .sk, #acwrSvg.acwr-skeleton .sk-plot, #acwrSvg.acwr-skeleton .sk-bars span {
+                background:linear-gradient(90deg,var(--cm-bg-soft) 25%,var(--cm-bg-sunk) 37%,var(--cm-bg-soft) 63%);
+                background-size:800px 100%; animation:acwrShimmer 1.4s ease-in-out infinite; border-radius:var(--cm-r-3);
+              }
+              #acwrSvg.acwr-skeleton .sk-plot { flex:1; }
+              #acwrSvg.acwr-skeleton .sk-bars { display:flex; gap:6px; align-items:flex-end; height:60px; }
+              #acwrSvg.acwr-skeleton .sk-bars span { flex:1; border-radius:2px 2px 0 0; }
+            </style>
+            <div id="acwrSvg" class="acwr-skeleton" aria-hidden="true"
+                 style="height:360px;display:flex;flex-direction:column;gap:12px;padding:6px 6px 4px">
+              <div class="sk" style="width:34%;height:14px"></div>
+              <div class="sk-plot"></div>
+              <div class="sk-bars"><span style="height:40%"></span><span style="height:65%"></span><span style="height:50%"></span><span style="height:80%"></span><span style="height:55%"></span><span style="height:70%"></span><span style="height:35%"></span><span style="height:60%"></span><span style="height:75%"></span><span style="height:45%"></span><span style="height:68%"></span><span style="height:52%"></span><span style="height:72%"></span><span style="height:48%"></span><span style="height:62%"></span><span style="height:58%"></span></div>
+            </div>
           </div>
         </div>
 
@@ -684,6 +560,9 @@
 
         </div>
       </div>
+
+      <!-- GPS Exposure (external-load weekly exposure vs 4-week baseline) -->
+      <div id="lmGpsExposure" style="margin-top:14px"></div>
 
       <!-- Player table -->
       <div class="lm-card">
@@ -921,6 +800,10 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
   let currentPeriod     = '28d';
+  // ── ACWR model state (see assets/gps-acwr.js) ─────────────────────────────
+  let acwrMetric        = 'srpe_load';   // selected base metric (internal or GPS)
+  let acwrModel         = (window.gpsACWR?.CONFIG?.model)   || 'ewma';   // 'ewma' | 'ra'
+  let acwrCoupled       = (window.gpsACWR?.CONFIG?.coupled) || false;    // uncoupled by default
   let sortMode          = 'acwr';
   let sortDir           = 'desc';
   const SORT_DEFAULT_DIR = { num:'asc', name:'asc', pos:'asc', acwr:'desc', rpe:'desc', wellness:'desc', ac:'desc', zone:'asc' };
@@ -980,7 +863,7 @@
   // ── Render player table (client-side, no re-fetch) ─────────────────────────
   function renderTable() {
     if (!lastTableData) return;
-    const { players: pts, acwrByPlayer, playerLoadHist, latestRpeMap } = lastTableData;
+    const { players: pts, acwrByPlayer, acwrInsufficient = {}, playerLoadHist, latestRpeMap } = lastTableData;
 
     const sortValue = (p, mode) => {
       const id = p.id;
@@ -1031,7 +914,9 @@
 
       const cellAcwr = acwr != null
         ? `<td><div class="lm-cell"><span class="lm-cell-v ${acwr>1.5?'danger':acwr>1.3?'warn':acwr>=0.8?'good':''}">${acwr}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${acwr>1.5?'red':acwr>1.3?'amber':'green'}" style="width:${Math.min(100,Math.round(acwr/2*100))}%"></span></div></div></td>`
-        : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+        : (acwrInsufficient[p.id]
+            ? `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)" title="${tt('load_monitor.acwr_insufficient','Not enough sessions for a reliable ACWR (need 4+ in the chronic window)')}">n&lt;4</span></div></td>`
+            : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`);
       const cellRpe = rpeScore != null
         ? `<td><div class="lm-cell"><span class="lm-cell-v ${rpeScore>=8?'danger':rpeScore>=6?'warn':'good'}">${rpeScore}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${rpeScore>=8?'red':rpeScore>=6?'amber':'green'}" style="width:${Math.round(rpeScore*10)}%"></span></div></div></td>`
         : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
@@ -1212,6 +1097,7 @@
     const totalRpe = sessionsData.reduce((n, s) => n + (s.rpe||[]).length, 0);
     console.log(`[LM] period=${period} sessions=${sessionsData.length} rpe records=${totalRpe}`);
 
+    // s-RPE history (session-load bars, CSV acute/chronic columns, latest RPE).
     const playerLoadHist = {};
     sessionsData.forEach(s => {
       (s.rpe || []).forEach(r => {
@@ -1220,12 +1106,34 @@
       });
     });
 
+    // ── ACWR via the shared engine (window.gpsACWR) ───────────────────────────
+    // Metric is user-selectable (internal s-RPE OR external GPS). Model defaults to
+    // EWMA (Williams 2017) and chronic is uncoupled from acute (Lolli/Windt) — see
+    // assets/gps-acwr.js. Records are normalised to { date, value } per player.
+    let recordsByPlayer;
+    if (acwrMetric === 'srpe_load') {
+      recordsByPlayer = {};
+      Object.entries(playerLoadHist).forEach(([pid, recs]) => {
+        recordsByPlayer[pid] = recs.map(r => ({ date: r.date, value: r.load }));
+      });
+    } else {
+      recordsByPlayer = await window.gpsACWR.fetchByPlayer({
+        clubId, metricKey: acwrMetric, from: lookbackFrom, to: todayStr });
+    }
+    // Daily total of the selected metric — drives the chart's session-load bars.
+    const metricDailyTotal = {};
+    Object.values(recordsByPlayer).forEach(recs => recs.forEach(r => {
+      metricDailyTotal[r.date] = (metricDailyTotal[r.date] || 0) + (Number(r.value) || 0);
+    }));
+
+    const _minSess = (window.gpsACWR.CONFIG && window.gpsACWR.CONFIG.minSessions) || 4;
     const acwrByPlayer = {};
-    Object.entries(playerLoadHist).forEach(([pid, recs]) => {
-      const recs28  = recs.filter(r => r.date >= from28dStr);
-      const acute   = recs28.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
-      const chronic = recs28.reduce((s,r) => s+r.load, 0) / 4;
-      acwrByPlayer[pid] = chronic > 0 ? +(acute/chronic).toFixed(2) : null;
+    const acwrInsufficient = {}; // pid → true when < minSessions in the chronic window
+    Object.entries(recordsByPlayer).forEach(([pid, recs]) => {
+      const sess = new Set(recs.filter(r => r.date >= from28dStr).map(r => r.date)).size;
+      if (sess < _minSess) { acwrByPlayer[pid] = null; acwrInsufficient[pid] = true; return; }
+      const a = window.gpsACWR.acwrForRecords(recs, todayStr, { model: acwrModel, coupled: acwrCoupled });
+      acwrByPlayer[pid] = a != null ? +a.toFixed(2) : null;
     });
 
     const acwrVals      = Object.values(acwrByPlayer).filter(v => v != null);
@@ -1241,7 +1149,7 @@
     if (latestSess?.rpe) latestSess.rpe.forEach(r => { latestRpeMap[r.player_id] = r.rpe; });
 
     lastTableData = {
-      players, acwrByPlayer, playerLoadHist, latestRpeMap,
+      players, acwrByPlayer, acwrInsufficient, playerLoadHist, latestRpeMap,
       sweetCount: sweetPlayers.length, overCount: overPlayers.length,
       dangerCount: dangerPlayers.length, noDataCount: noDataPlayers.length
     };
@@ -1331,18 +1239,19 @@
       });
       const n = labels.length;
 
+      // Squad-average ACWR trend for the selected metric, evaluated at each
+      // session date with the shared engine (EWMA / uncoupled). Averaging the
+      // per-player ratios (not pooling the squad) keeps at-risk players visible.
       const acwrTrend = sessForChart.map(sess => {
-        const d7  = new Date(new Date(sess.session_date+'T12:00:00') - 7*86400000).toISOString().split('T')[0];
-        const d28 = new Date(new Date(sess.session_date+'T12:00:00') - 28*86400000).toISOString().split('T')[0];
-        const vals = Object.entries(playerLoadHist).map(([, recs]) => {
-          const acute   = recs.filter(r => r.date <= sess.session_date && r.date > d7).reduce((s,r) => s+r.load, 0);
-          const chronic = recs.filter(r => r.date <= sess.session_date && r.date > d28).reduce((s,r) => s+r.load, 0) / 4;
-          return chronic > 0 ? acute/chronic : null;
+        const vals = Object.values(recordsByPlayer).map(recs => {
+          const upto = recs.filter(r => r.date <= sess.session_date);
+          return window.gpsACWR.acwrForRecords(upto, sess.session_date, { model: acwrModel, coupled: acwrCoupled });
         }).filter(v => v != null);
         return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : null;
       });
 
-      const sessionLoads = sessForChart.map(s => (s.rpe||[]).reduce((sum,r) => sum+(r.load||0), 0));
+      // Bars = daily total of the selected metric (falls back to s-RPE load).
+      const sessionLoads = sessForChart.map(s => Math.round(metricDailyTotal[s.session_date] || 0));
       const maxLoad      = Math.max(...sessionLoads, 1);
       const accent       = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
 
@@ -1371,6 +1280,50 @@
       await loadData(btn.dataset.period || btn.textContent.trim());
     });
   });
+
+  // ── ACWR metric selector + model popover ─────────────────────────────────
+  (function wireAcwrControls() {
+    const metricSel = document.getElementById('lmAcwrMetric');
+    if (metricSel && window.gpsACWR?.METRICS) {
+      metricSel.innerHTML = window.gpsACWR.METRICS
+        .map(m => `<option value="${m.key}">${m.label}${m.unit ? ` (${m.unit})` : ''}</option>`).join('');
+      metricSel.value = acwrMetric;
+      metricSel.addEventListener('change', async () => {
+        acwrMetric = metricSel.value;
+        // Update the sub-label so users know which stream is charted.
+        const meta = window.gpsACWR.getMetric(acwrMetric);
+        const sub = document.querySelector('.lm-card .lm-card-h .sub[data-i18n="load_monitor.acwr_sub"]');
+        if (sub) sub.textContent = `${meta.label} · ${acwrModel.toUpperCase()} · squad average`;
+        await loadData(currentPeriod);
+      });
+    }
+
+    const pop = document.getElementById('lmAcwrPop');
+    const settingsBtn = document.getElementById('lmAcwrSettingsBtn');
+    settingsBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', e => {
+      if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && e.target !== settingsBtn)
+        pop.style.display = 'none';
+    });
+
+    document.querySelectorAll('#lmAcwrModelSeg button').forEach(b => {
+      b.addEventListener('click', async () => {
+        acwrModel = b.dataset.model;
+        document.querySelectorAll('#lmAcwrModelSeg button').forEach(x => x.classList.toggle('is-on', x === b));
+        await loadData(currentPeriod);
+      });
+    });
+    document.querySelectorAll('#lmAcwrCoupleSeg button').forEach(b => {
+      b.addEventListener('click', async () => {
+        acwrCoupled = b.dataset.couple === '1';
+        document.querySelectorAll('#lmAcwrCoupleSeg button').forEach(x => x.classList.toggle('is-on', x === b));
+        await loadData(currentPeriod);
+      });
+    });
+  })();
 
   // Export CSV
   document.getElementById('lmExportBtn')?.addEventListener('click', exportCSV);
@@ -1462,6 +1415,11 @@
 
   await loadData('28d');
   updateSortHeaders();
+
+  // GPS Exposure card (external-load weekly exposure vs 4-week baseline).
+  if (window.gpsExposure) {
+    window.gpsExposure.render({ clubId, players, mount: document.getElementById('lmGpsExposure') });
+  }
 
   // Re-render everything the JS builds when the language changes (static tags are
   // handled by sidebar.js; here we redo dynamic labels, chart date axis, tables…).
