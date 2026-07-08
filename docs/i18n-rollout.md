@@ -173,7 +173,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Dossier.html
 
 ### Fase 6 — Admin / workspace
-- ⬜ Admin.html
+- ✅ Admin.html
 - ⬜ Billing.html
 - ⬜ Plan Picker.html
 - ⬜ Player.html
