@@ -1260,7 +1260,10 @@
         const srcBtn = e.target.closest('#gpbDDSource button[data-source]');
         if (srcBtn) { setSource(srcBtn.dataset.source); if (_bMode === 'dd') renderDDPane(); return; }
         const ddPop = e.target.closest('[data-ddpop]');
-        if (ddPop) { togglePop(ddPop, ddPop.dataset.ddpop); return; }   // reuse the classic range/compare popover
+        if (ddPop) { togglePop(ddPop, ddPop.dataset.ddpop); return; }   // reuse the classic range/compare/bars popover
+        // Bar/Line combo on a metric chip (bars only) — toggle the SAME m.line as the classic.
+        const lineBtn = e.target.closest('[data-dd-line]');
+        if (lineBtn) { const m = (S.metrics || []).find(x => x.id === lineBtn.dataset.ddLine); if (m) { m.line = !m.line; ddSyncFromS(); } return; }
         const rmDim = e.target.closest('[data-rmdim]');
         if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
         const rmMet = e.target.closest('[data-rm]');
@@ -4912,10 +4915,17 @@
   function ddMetChip(m) {
     const cat  = catalogMap.get(m.id) || { name: m.id, unit: '', group_name: 'custom' };
     const opts = AGGS.map(a => `<option value="${a.id}" ${a.id === m.agg ? 'selected' : ''}>${a.short}</option>`).join('');
+    // Bar/Line combo — only for bars (same condition as the classic renderMetrics). Toggles the
+    // SAME m.line prop. Uses a D&D-only attr (data-dd-line) so it never collides with the classic
+    // data-line-for (which renderMetrics binds directly on the classic #gpbMetrics chips).
+    const lineToggle = S && S.type === 'bars'
+      ? `<button class="bdd-line${m.line ? ' is-line' : ''}" data-dd-line="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}"><i class="ti ti-chart-bar"></i><i class="ti ti-chart-line"></i></button>`
+      : '';
     return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(metIcon(cat))}"></i></span>
       <span class="nm">${esc(cat.name)}</span>
+      ${lineToggle}
       <span class="bdd-agg"><select data-agg-for="${esc(m.id)}">${opts}</select><i class="ti ti-selector car"></i></span>
       <button class="x" data-rm="${esc(m.id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
@@ -5035,6 +5045,10 @@
           <span class="k">Comparison</span>
           <button class="es-select bdd-cfg-sel" data-ddpop="compare"><i class="ti ti-target"></i><span class="v" id="gpbDDCompareName">${esc(cmpName)}</span><i class="ti ti-chevron-down cv"></i></button>
         </div>
+        ${S.type === 'bars' ? `<div class="bdd-cfg-f">
+          <span class="k">${_tt('gps_analysis.builder_bar_options', 'Bar options')}</span>
+          <button class="es-select bdd-cfg-sel" data-ddpop="bars"><i class="ti ti-chart-bar"></i><span class="v">${_tt('gps_analysis.builder_orientation_stacked', 'Orientation & stacked')}</span><i class="ti ti-chevron-down cv"></i></button>
+        </div>` : ''}
       </div>
     </div>`;
   }
