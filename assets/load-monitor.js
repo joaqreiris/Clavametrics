@@ -238,7 +238,7 @@
     // (por ahora `minutes` no existe en la tabla → pedirla daba 400 y tumbaba el repintado de columnas).
     try{
       rows = window.cmFetchAll
-        ? await window.cmFetchAll(()=> sb().from('availability').select('player_id,date,status').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate), {label:'lm.availability'})
+        ? await window.cmFetchAll(()=> sb().from('availability').select('player_id,date,status').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate), {label:'lm.availability', orderBy:'date'})
         : ((await sb().from('availability').select('player_id,date,status').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate)).data||[]);
     }catch{ rows=[]; }
     const byP={};
