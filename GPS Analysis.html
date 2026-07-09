@@ -816,7 +816,7 @@
         <div class="right">
           <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
           <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
-          <button class="pill" id="playerPill"><i class="ti ti-user"></i><span id="playerLabel">All players</span></button>
+          <button class="pill" id="playerPill"><i class="ti ti-user"></i><span id="playerLabel" data-i18n="gps_analysis.filter_all_players">All players</span></button>
           <!-- Baseline pill removed: comparison is NOT a global filter — it lives PER CARD
                (config.comparison, opt-in via the card builder's Comparison dropdown). -->
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines." data-i18n-attr="title:gps_analysis.historical_tip"><i class="ti ti-history"></i><span data-i18n="gps_analysis.historical">Historical</span></button>
@@ -1473,7 +1473,7 @@ function makeSearchPopover(anchor, players) {
     if (!filt.length) {
       const em = document.createElement('div');
       em.style.cssText = 'padding:8px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
-      em.textContent = 'No players found';
+      em.textContent = tt('gps_analysis.no_players_found','No players found');
       list.appendChild(em); return;
     }
     filt.slice(0, 20).forEach(p => {
@@ -2659,13 +2659,13 @@ function _openCardPlayerPicker(anchor, cardEl) {
   if (!config) return;
   const cur     = config.scope?.playerId || null;
   const players = window.gpFilterBar?.getPlayerOptions?.() || [];
-  const opts = [{ value: null, label: 'Follow the bar filter' },
+  const opts = [{ value: null, label: tt('gps_analysis.follow_bar_filter','Follow the bar filter') },
                 ...players.map(p => ({ value: p.value, label: p.label }))];
   makePopover(anchor, opts.map(o => ({ label: (o.value === cur ? '✓ ' : '') + o.label, value: o.value })), async item => {
     config.scope = config.scope || { level: 'player' };
     if (item.value) config.scope.playerId = item.value; else delete config.scope.playerId;
     _persistCardScope(cardEl, config);
-    showToast(item.value ? `Card pinned → ${item.label}` : 'Card follows the bar filter');
+    showToast(item.value ? tt('gps_analysis.card_pinned','Card pinned → {name}',{name:item.label}) : tt('gps_analysis.card_follows_filter','Card follows the bar filter'));
   });
 }
 
@@ -2675,7 +2675,7 @@ function _unpinCardPlayer(cardEl) {
   if (!config?.scope) return;
   delete config.scope.playerId;
   _persistCardScope(cardEl, config);
-  showToast('Card follows the bar filter');
+  showToast(tt('gps_analysis.card_follows_filter','Card follows the bar filter'));
 }
 
 // Shared: refresh the chip, persist (saved cards only) and re-resolve just this card.
@@ -2803,12 +2803,12 @@ gpGearBtn?.addEventListener('click', async e => {
   const n  = window._gpSessionCount;
   const fc = await _gpFlaggedCount();   // periods awaiting review
   makePopover(gpGearBtn, [
-    { label: 'Data sources' + (Number.isFinite(n) ? ` · ${n} GPS sessions` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
-    { label: 'GPS settings',    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
-    { label: 'Metrics catalog', icon: 'ti-list',                   act: 'gpCatalogBtn' },
-    { label: 'Assign rivals',   icon: 'ti-ball-football',          act: 'rivals' },
+    { label: tt('gps_analysis.data_sources','Data sources') + (Number.isFinite(n) ? ` · ${tt('gps_analysis.n_gps_sessions','{n} GPS sessions',{n})}` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
+    { label: tt('gps_analysis.gps_settings','GPS settings'),    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
+    { label: tt('gps_analysis.metrics_catalog','Metrics catalog'), icon: 'ti-list',                   act: 'gpCatalogBtn' },
+    { label: tt('gps_analysis.assign_rivals','Assign rivals'),   icon: 'ti-ball-football',          act: 'rivals' },
     { sep: true },
-    { label: 'Flagged periods' + (fc ? ` · ${fc} need review` : ''), icon: 'ti-flag', act: 'flagged' },
+    { label: tt('gps_analysis.flagged_periods','Flagged periods') + (fc ? ` · ${tt('gps_analysis.n_need_review','{n} need review',{n:fc})}` : ''), icon: 'ti-flag', act: 'flagged' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
     else if (item.act === 'rivals') _gpOpenAssignRivals();
@@ -2903,15 +2903,15 @@ const exportBtn = document.querySelector('.gp-bar .right .cm-btn.is-outline');
 exportBtn?.addEventListener('click', e => {
   e.stopPropagation();
   makePopover(exportBtn, [
-    { label: 'PDF report',         icon: 'ti-file-type-pdf' },
-    { label: 'CSV · current view', icon: 'ti-table-export' },
-    { label: 'PNG snapshot',       icon: 'ti-photo-down' },
-    { label: 'Share link',         icon: 'ti-link' },
+    { label: tt('gps_analysis.export_pdf','PDF report'),         icon: 'ti-file-type-pdf', act: 'pdf' },
+    { label: tt('gps_analysis.export_csv','CSV · current view'), icon: 'ti-table-export', act: 'csv' },
+    { label: tt('gps_analysis.export_png','PNG snapshot'),       icon: 'ti-photo-down', act: 'png' },
+    { label: tt('gps_analysis.export_share','Share link'),       icon: 'ti-link', act: 'share' },
   ], item => {
-    if (item.label === 'CSV · current view') {
+    if (item.act === 'csv') {
       const ths = [...document.querySelectorAll('.gp-view.is-on .gp-zt thead th')];
       const trs = [...document.querySelectorAll('.gp-view.is-on .gp-zt tbody tr')];
-      if (!trs.length) { showToast('No table data in this view'); return; }
+      if (!trs.length) { showToast(tt('gps_analysis.no_table_data','No table data in this view')); return; }
       const lines = [ths.map(h => `"${h.textContent.trim()}"`).join(',')];
       trs.forEach(tr => lines.push([...tr.querySelectorAll('td')].map(td => `"${td.textContent.trim().replace(/\s+/g,' ')}"`).join(',')));
       const a = Object.assign(document.createElement('a'), {
@@ -2919,12 +2919,12 @@ exportBtn?.addEventListener('click', e => {
         download: 'gps_export.csv',
       });
       a.click();
-      showToast('CSV exported');
-    } else if (item.label === 'Share link') {
-      navigator.clipboard.writeText(location.href).then(() => showToast('Link copied'));
+      showToast(tt('gps_analysis.csv_exported','CSV exported'));
+    } else if (item.act === 'share') {
+      navigator.clipboard.writeText(location.href).then(() => showToast(tt('gps_analysis.link_copied','Link copied')));
     } else {
-      console.log('TODO:', item.label);
-      showToast(item.label + ' — coming soon');
+      console.log('TODO:', item.act);
+      showToast(tt('gps_analysis.coming_soon_item','{item} — coming soon',{item:item.label}));
     }
   });
 });
@@ -3036,7 +3036,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   if (pill.id === 'playerPill') {
     const clubId = await window.getClubId();
     const { data: players } = await _gpRoster(clubId, window._gpTeamId);
-    if (!players?.length) { showToast('No players found'); return; }
+    if (!players?.length) { showToast(tt('gps_analysis.no_players_found','No players found')); return; }
     // Inject "All players" option into search popover via wrapper
     closePop();
     const pop = document.createElement('div');
@@ -3066,7 +3066,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       if (!filt.length && q) {
         const em = document.createElement('div');
         em.style.cssText = 'padding:8px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
-        em.textContent = 'No players found'; list.appendChild(em); return;
+        em.textContent = tt('gps_analysis.no_players_found','No players found'); list.appendChild(em); return;
       }
       filt.slice(0, 20).forEach(p => {
         const btn = document.createElement('button');
@@ -3109,27 +3109,27 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   if (ic.includes('ti-bookmark')) {
     const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
     _svList(view).then(saved => {
-      const svItems = [{ label: 'Save current view…', icon: 'ti-device-floppy', action: 'save' }];
+      const svItems = [{ label: tt('gps_analysis.save_current_view','Save current view…'), icon: 'ti-device-floppy', action: 'save' }];
       if (saved.length) {
         svItems.push({ sep: true });
         saved.forEach(v => {
           svItems.push({ label: v.name, icon: 'ti-bookmark', action: 'load', data: v });
-          svItems.push({ label: `Delete "${v.name}"`, icon: 'ti-trash', action: 'delete', data: v });
+          svItems.push({ label: tt('gps_analysis.delete_view','Delete "{name}"',{name:v.name}), icon: 'ti-trash', action: 'delete', data: v });
         });
       }
       makePopover(pill, svItems, async item => {
         if (item.action === 'save') {
-          const name = prompt('Nombre de la vista:');
+          const name = prompt(tt('gps_analysis.view_name_prompt','View name:'));
           if (!name?.trim()) return;
           await _svSave(view, name.trim());
         } else if (item.action === 'load') {
           await _svLoad(view, item.data.snapDid, item.data.name);
         } else if (item.action === 'delete') {
           await _svDelete(view, item.data.snapDid);
-          showToast(`View "${item.data.name}" deleted`);
+          showToast(tt('gps_analysis.view_deleted','View "{name}" deleted',{name:item.data.name}));
         }
       });
-    }).catch(e => { console.error('_svList:', e); showToast('Failed to load views', true); });
+    }).catch(e => { console.error('_svList:', e); showToast(tt('gps_analysis.failed_load_views','Failed to load views'), true); });
     return;
   }
 
@@ -3153,38 +3153,38 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   const isXmatch   = card?.id === 'card-xmatch';
   const isAcwr     = card?.id === 'card-acwr';
   makePopover(btn, [
-    { label: 'Duplicate',     icon: 'ti-copy' },
-    ...(!isPwTable && !isXmatch && !isAcwr ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
-    ...(isWkOnWk   ? [{ label: 'Edit thresholds', icon: 'ti-adjustments-horizontal' }] : []),
-    ...(isXmatch   ? [{ label: 'Edit metrics',    icon: 'ti-layout-list' }] : []),
-    { label: 'Remove',        icon: 'ti-trash' },
+    { label: tt('gps_analysis.card_menu_duplicate','Duplicate'),     icon: 'ti-copy', act: 'duplicate' },
+    ...(!isPwTable && !isXmatch && !isAcwr ? [{ label: tt('gps_analysis.card_menu_change_metric','Change metric'), icon: 'ti-chart-bar', act: 'change_metric' }] : []),
+    ...(isWkOnWk   ? [{ label: tt('gps_analysis.card_menu_edit_thresholds','Edit thresholds'), icon: 'ti-adjustments-horizontal', act: 'edit_thresholds' }] : []),
+    ...(isXmatch   ? [{ label: tt('gps_analysis.card_menu_edit_metrics','Edit metrics'),    icon: 'ti-layout-list', act: 'edit_metrics' }] : []),
+    { label: tt('gps_analysis.card_menu_remove','Remove'),        icon: 'ti-trash', act: 'remove' },
   ], item => {
-    if (item.label === 'Duplicate') {
+    if (item.act === 'duplicate') {
       // Builder cards → clone the gp.card/v1 CONFIG + new id (persisted, editable
       // independently). Science cards keep the legacy DOM clone (not config-backed).
       if (_gpIsBuilderCard(card)) {
         const view = card.closest('.gp-view')?.dataset.view
                   || document.querySelector('.gp-view.is-on')?.dataset.view;
         const grid = card.closest('.gp-grid') || document.querySelector('.gp-view.is-on .gp-grid');
-        _gpInsertConfigIntoView(card.__config, view, grid, _gpCardSize(card)).then(el => el && showToast('Card duplicated'));
+        _gpInsertConfigIntoView(card.__config, view, grid, _gpCardSize(card)).then(el => el && showToast(tt('gps_analysis.card_duplicated','Card duplicated')));
       } else {
         const clone = card.cloneNode(true);
         initSizeToggles(clone);
         card.after(clone);
-        showToast('Card duplicated');
+        showToast(tt('gps_analysis.card_duplicated','Card duplicated'));
       }
-    } else if (item.label === 'Remove') {
+    } else if (item.act === 'remove') {
       _gpRemoveCardCoherent(card);   // catalog → stash; custom/pasted → delete row. Same as Delete key.
-    } else if (item.label === 'Change metric') {
-      if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
+    } else if (item.act === 'change_metric') {
+      if (!card.dataset.cardId) { showToast(tt('gps_analysis.change_metric_na','Change metric not available for this card')); return; }
       openChangeMetricModal(card);
-    } else if (item.label === 'Edit thresholds') {
+    } else if (item.act === 'edit_thresholds') {
       _openWkThreshEditor(card, btn);
-    } else if (item.label === 'Edit metrics') {
+    } else if (item.act === 'edit_metrics') {
       _openXmatchMetricsEditor(card, btn);
     } else {
-      console.log('TODO:', item.label);
-      showToast(item.label + ' — coming soon');
+      console.log('TODO:', item.act);
+      showToast(tt('gps_analysis.coming_soon_item','{item} — coming soon',{item:item.label}));
     }
   });
 });
@@ -4485,7 +4485,7 @@ function _showCardError(cardId, err) {
 function _showCardEmpty(cardId, msg) {
   const card = document.getElementById(cardId);
   const body = card?.querySelector('.gp-c-b');
-  if (body) body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;padding:14px;color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans)">' + (msg || 'No data') + '</div>';
+  if (body) body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;padding:14px;color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans)">' + (msg || tt('gps_analysis.no_data','No data')) + '</div>';
 }
 
 window.gpRenderScienceCards = async function (reports, clubId) {
@@ -5017,7 +5017,7 @@ async function _updateRadar(reports, state) {
     if (!hasSome) {
       canvas.style.display = 'none';
       if (radarEmpty) {
-        radarEmpty.textContent = 'Personal baseline available after 3 official matches (Miguel et al. 2022)';
+        radarEmpty.textContent = tt('gps_analysis.personal_baseline_hint','Personal baseline available after 3 official matches (Miguel et al. 2022)');
         radarEmpty.style.display = 'block';
       }
       return;
@@ -10178,7 +10178,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mcRenderMonotony(monoData, metricKey);
       _mcRenderMovers(playerRows, metricKey);
       _mcRenderExposure(exposureData);
-    } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
+    } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = tt('gps_analysis.error_loading_data','Error loading data.'); }
   }
 
   // ── Diff by metric ────────────────────────────────────────────
@@ -10554,7 +10554,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       if (!labels.length) {
         _mcShapeCanvas.getContext('2d').clearRect(0, 0, _mcShapeCanvas.width, _mcShapeCanvas.height);
-        if (_mcShapeSub) _mcShapeSub.textContent = 'No day-level data available';
+        if (_mcShapeSub) _mcShapeSub.textContent = tt('gps_analysis.no_day_level_data','No day-level data available');
         return;
       }
 
@@ -10640,7 +10640,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       if (!points || points.length < 2) {
         _mcTrendCanvas.getContext('2d').clearRect(0, 0, _mcTrendCanvas.width, _mcTrendCanvas.height);
-        if (_mcTrendSub) _mcTrendSub.textContent = 'Not enough data — need ≥ 2 microcycles';
+        if (_mcTrendSub) _mcTrendSub.textContent = tt('gps_analysis.not_enough_data_mc','Not enough data — need ≥ 2 microcycles');
         return;
       }
 
@@ -11219,7 +11219,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     try {
       const clubId = await window.getClubId?.();
-      if (!clubId || !window.sb || !window.gpsACWR) { lmInfo.textContent = 'Not ready.'; return; }
+      if (!clubId || !window.sb || !window.gpsACWR) { lmInfo.textContent = tt('gps_analysis.not_ready','Not ready.'); return; }
 
       // Fecha de referencia derivada de la barra (fin del rango elegido); null = hoy.
       const refDate = window.gpFilterBar?.getState?.()?.date?.to || null;
@@ -11239,7 +11239,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _renderGauges(teamAcwr);
       _renderAlerts(metricKey);
       _renderTable();
-    } catch (e) { console.error('lmLoad:', e); lmInfo.textContent = 'Error calculating ACWR.'; }
+    } catch (e) { console.error('lmLoad:', e); lmInfo.textContent = tt('gps_analysis.error_calc_acwr','Error calculating ACWR.'); }
   }
 
   // ── gauges ───────────────────────────────────────────────────
@@ -11289,7 +11289,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }
 
     if (!alerts.length) {
-      alertsBody.innerHTML = '<div class="lm-alert-list"><div style="color:var(--cm-success);font:600 12.5px/1.3 var(--cm-font-sans);padding:10px 14px">All players in sweet spot or under-training. No alerts.</div></div>';
+      alertsBody.innerHTML = '<div class="lm-alert-list"><div style="color:var(--cm-success);font:600 12.5px/1.3 var(--cm-font-sans);padding:10px 14px">' + tt('gps_analysis.acwr_no_alerts','All players in sweet spot or under-training. No alerts.') + '</div></div>';
       return;
     }
 
@@ -11526,7 +11526,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     _initialized = true;
     try {
       const clubId = await window.getClubId?.();
-      if (!clubId || !window.sb) { scInfo.textContent = 'Not connected.'; return; }
+      if (!clubId || !window.sb) { scInfo.textContent = tt('gps_analysis.not_connected','Not connected.'); return; }
 
       // Load persisted layout (KPI slots + table cols)
       await Promise.all([_scInitKpiSlots(), _scInitTableCols()]);
@@ -11541,7 +11541,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       _allSessions = sessions || [];
       window._scAllSessions = _allSessions;
-      if (!_allSessions.length) { scInfo.textContent = 'No sessions found.'; return; }
+      if (!_allSessions.length) { scInfo.textContent = tt('gps_analysis.no_sessions_found','No sessions found.'); return; }
 
       // Diagnóstico de datos MD
       const withMd = _allSessions.filter(s => _getMdCode(s) !== null).length;
@@ -11570,7 +11570,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         _buildCompareDateOptions();
         await _loadSessionData(_st.sessionId);
       }
-    } catch (e) { console.error('scInit:', e); scInfo.textContent = 'Error loading sessions.'; }
+    } catch (e) { console.error('scInit:', e); scInfo.textContent = tt('gps_analysis.error_loading_sessions','Error loading sessions.'); }
   }
 
   // List all sessions grouped by MC in a single <select>, ordered latest-first
@@ -11603,7 +11603,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }
     if (noMc.length) {
       const grp = document.createElement('optgroup');
-      grp.label = 'Other';
+      grp.label = tt('gps_analysis.optgroup_other','Other');
       noMc.forEach(s => addOpt(s, grp));
       sessSel.appendChild(grp);
     }
@@ -11822,7 +11822,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       window._ztRender?.();
       window._scOutliersRender?.();
       window._vsReload?.();
-    } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = 'Error loading data.'; }
+    } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = tt('gps_analysis.error_loading_data','Error loading data.'); }
   }
 
   // ── render KPIs (chip-based, metric-swappable) ───────────────
