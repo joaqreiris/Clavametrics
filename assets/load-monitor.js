@@ -234,10 +234,12 @@
     const ids=state.players.map(p=>p.id); if(!ids.length) return {};
     const from=offset(state.refDate,-120);   // lookback for "most recent status <= refDate"
     let rows;
+    // TODO: reconectar minutos cuando confirmemos el nombre real de la columna en `availability`
+    // (por ahora `minutes` no existe en la tabla → pedirla daba 400 y tumbaba el repintado de columnas).
     try{
       rows = window.cmFetchAll
-        ? await window.cmFetchAll(()=> sb().from('availability').select('player_id,date,status,minutes').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate), {label:'lm.availability'})
-        : ((await sb().from('availability').select('player_id,date,status,minutes').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate)).data||[]);
+        ? await window.cmFetchAll(()=> sb().from('availability').select('player_id,date,status').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate), {label:'lm.availability'})
+        : ((await sb().from('availability').select('player_id,date,status').eq('club_id',state.clubId).in('player_id',ids).gte('date',from).lte('date',state.refDate)).data||[]);
     }catch{ rows=[]; }
     const byP={};
     (rows||[]).forEach(r=>{ (byP[r.player_id]||(byP[r.player_id]=[])).push(r); });
@@ -371,7 +373,11 @@
     const body=$('availBody'), empty=$('availEmpty'), sub=$('availSub'); if(!body) return;
     if(sub) sub.innerHTML = `${esc(tt('load_monitor.avail_sub', `Per-player ${state.availWindow}-day GPS trend · flagged worst-first`, { days: state.availWindow }))} · <span class="mono">${esc(tt('load_monitor.avail_note','avg hides the individual'))}</span>`;
     const winFrom=offset(state.refDate,-state.availWindow);
-    const [gps, avail, sig] = await Promise.all([ fetchGpsDaily(winFrom,state.refDate), fetchAvailability(), fetchSignalRisk() ]);
+    const [gps, avail, sig] = await Promise.all([
+      fetchGpsDaily(winFrom,state.refDate).catch(()=>({})),
+      fetchAvailability().catch(()=>({})),
+      fetchSignalRisk().catch(()=>({})),
+    ]);
 
     if(!state.players.length){ state.availRows=[]; body.innerHTML=''; if(empty){ empty.style.display='block'; empty.innerHTML=`<div style="padding:24px;text-align:center;color:var(--cm-fg-faint)">${esc(tt('load_monitor.avail_none','No players in this squad.'))}</div>`; } return; }
     if(empty) empty.style.display='none';
