@@ -39,6 +39,20 @@
     { id: 'all',   label: 'All time',     days: null },
   ];
 
+  // ── i18n: solo LABELS de UI (los key/id/valores de lógica quedan en inglés) ──
+  const _FB_I18N = {
+    'All MD':'filterbar.all_md','All time':'filterbar.all_time','All players':'filterbar.all_players',
+    'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals',
+    'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
+    'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
+    'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
+    'Search…':'filterbar.search','Search date…':'filterbar.search_date','No club data yet.':'filterbar.no_club_data',
+    'No dates with data yet.':'filterbar.no_dates_data','No dates for the current filters.':'filterbar.no_dates_filter',
+    'No options for the current filters.':'filterbar.no_options'
+  };
+  function T(en){ const k=_FB_I18N[en]; if(!k) return en; const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(k):null; return (v&&v!==k)?v:en; }
+  function _fbActive(n){ if(window.CM_I18N&&CM_I18N.t){ const v=CM_I18N.t('filterbar.active_filters',{count:n}); if(v&&v!=='filterbar.active_filters') return v; } return n===1?'1 active filter':`${n} active filters`; }
+
   // ── Estado (en memoria) ─────────────────────────────────────────────────
   const state = {
     md_code:    [],                            // valores seleccionados
@@ -270,7 +284,7 @@
 
       // handle de arrastre: el drag se inicia SOLO desde el grip (no rompe el click del trigger)
       const grip = el('span', 'fb-grip', `<i class="ti ti-grip-vertical"></i>`);
-      grip.title = 'Drag to reorder';
+      grip.title = T('Drag to reorder');
       grip.addEventListener('mousedown', () => { drop.draggable = true; });
       drop.prepend(grip);
       drop.addEventListener('dragstart', e => {
@@ -288,9 +302,9 @@
       trig.type = 'button';
       trig.innerHTML =
         `<i class="ti ${cfg.icon}"></i>` +
-        `<span class="fb-trigger-label">${cfg.placeholder}</span>` +
+        `<span class="fb-trigger-label">${T(cfg.placeholder)}</span>` +
         `<span class="fb-count"></span>` +
-        `<span class="fb-clear" role="button" title="Clear"><i class="ti ti-x"></i></span>` +
+        `<span class="fb-clear" role="button" title="${T('Clear')}"><i class="ti ti-x"></i></span>` +
         `<i class="ti ti-chevron-down fb-caret"></i>`;
       drop.appendChild(trig);
       drop.appendChild(cfg.date ? buildDatePanel() : buildMultiPanel(cfg));
@@ -298,7 +312,7 @@
       // botón de QUITAR el filtro de la barra (distinto de la ✕ de limpiar selección)
       const remove = el('span', 'fb-remove', `<i class="ti ti-x"></i>`);
       remove.setAttribute('role', 'button');
-      remove.title = 'Remove filter';
+      remove.title = T('Remove filter');
       remove.addEventListener('click', (e) => { e.stopPropagation(); removeFilter(cfg.key); });
       drop.appendChild(remove);
 
@@ -314,7 +328,7 @@
 
     // "+ Add filter": muestra los filtros ocultos para volver a agregarlos.
     const addWrap = el('div', 'fb-addwrap');
-    const addBtn = el('button', 'fb-addfilter', `<i class="ti ti-plus"></i><span>Add filter</span>`);
+    const addBtn = el('button', 'fb-addfilter', `<i class="ti ti-plus"></i><span>${T('Add filter')}</span>`);
     addBtn.type = 'button';
     const addMenu = el('div', 'fb-addmenu');
     addBtn.addEventListener('click', (e) => {
@@ -342,8 +356,8 @@
     applyFilterOrder();
 
     const right = el('div', 'gp-fbar-right');
-    const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">No filters</span>`);
-    const clearAll = el('button', 'fb-clear-all', `<i class="ti ti-x"></i>Clear`);
+    const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">${T('No filters')}</span>`);
+    const clearAll = el('button', 'fb-clear-all', `<i class="ti ti-x"></i>${T('Clear')}`);
     clearAll.type = 'button';
     clearAll.addEventListener('click', clearAll_);
     right.appendChild(global);
@@ -359,7 +373,7 @@
     // al instante. El panel queda abierto para seguir tildando varias opciones.
     const panel = el('div', 'fb-panel');
     panel.innerHTML =
-      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Search…"></div>` +
+      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="${T('Search…')}"></div>` +
       `<div class="fb-actions-top">` +
         `<button class="fb-link" type="button" data-act="all">Select all</button>` +
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
@@ -377,10 +391,10 @@
     const panel = el('div', 'fb-panel fb-panel-date');
     panel.innerHTML =
       `<div class="fb-presets">` +
-        DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${p.label}</button>`).join('') +
+        DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${T(p.label)}</button>`).join('') +
       `</div>` +
       `<div class="fb-date-h">Specific dates</div>` +
-      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Search date…"></div>` +
+      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="${T('Search date…')}"></div>` +
       `<div class="fb-actions-top">` +
         `<button class="fb-link" type="button" data-act="all">Select all</button>` +
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
@@ -427,11 +441,11 @@
     const list = root?.querySelector('.fb-drop[data-key="date"] .fb-date-list');
     if (!list) return;
     const opts = options.date || [];
-    if (!opts.length) { list.innerHTML = `<div class="fb-empty">No dates with data yet.</div>`; return; }
+    if (!opts.length) { list.innerHTML = `<div class="fb-empty">${T('No dates with data yet.')}</div>`; return; }
     const draft = drafts.date || (drafts.date = new Set());
     const valid = _validCache && _validCache.date;    // dates possible under the OTHER filters
     const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
-    if (!shown.length) { list.innerHTML = `<div class="fb-empty">No dates for the current filters.</div>`; return; }
+    if (!shown.length) { list.innerHTML = `<div class="fb-empty">${T('No dates for the current filters.')}</div>`; return; }
     list.innerHTML = shown.map(o =>
       `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
       `<span>${escHtml(o.label)}</span></label>`
@@ -466,13 +480,13 @@
     const list = root.querySelector(`.fb-drop[data-key="${key}"] .fb-list`);
     if (!list) return;
     const opts = options[key] || [];
-    if (!opts.length) { list.innerHTML = `<div class="fb-empty">No club data yet.</div>`; return; }
+    if (!opts.length) { list.innerHTML = `<div class="fb-empty">${T('No club data yet.')}</div>`; return; }
     const draft = drafts[key] || new Set();
     const valid = _validCache && _validCache[key];   // Set de valores posibles según los OTROS filtros
     // Mostrar SOLO lo elegible: las opciones imposibles no se renderizan (las ya elegidas
     // se mantienen). Se recuperan al limpiar o quitar la selección que acota.
     const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
-    if (!shown.length) { list.innerHTML = `<div class="fb-empty">Sin opciones para los filtros actuales.</div>`; return; }
+    if (!shown.length) { list.innerHTML = `<div class="fb-empty">${T('No options for the current filters.')}</div>`; return; }
     list.innerHTML = shown.map(o =>
       `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
       (o.crest ? `<img src="${escAttr(o.crest)}" alt="" style="width:16px;height:16px;object-fit:contain;border-radius:2px;margin-right:2px" onerror="this.remove()">` : '') +
@@ -542,7 +556,7 @@
     drop.classList.toggle('is-active', active);
     drop.classList.remove('is-multi');
 
-    if (!active) { labelEl.textContent = cfg.placeholder; return; }
+    if (!active) { labelEl.textContent = T(cfg.placeholder); return; }
 
     if (key === 'date') {
       labelEl.textContent = dateLabel();
@@ -567,7 +581,7 @@
     }
     if (state.date.preset) {
       const p = DATE_PRESETS.find(x => x.id === state.date.preset);
-      return p ? p.label : state.date.preset;
+      return p ? T(p.label) : state.date.preset;
     }
     const f = state.date.from, t = state.date.to;
     if (f && t && f === t) return _fmtDateLabel(f);     // single day
@@ -581,7 +595,7 @@
     const n = activeCount();
     const g = root.querySelector('.fb-global');
     g.querySelector('.fb-global-txt').textContent =
-      n === 0 ? 'No filters' : (n === 1 ? '1 active filter' : `${n} active filters`);
+      n === 0 ? T('No filters') : _fbActive(n);
     g.classList.toggle('is-on', n > 0);
     root.querySelector('.fb-clear-all').disabled = n === 0;
   }
@@ -686,7 +700,7 @@
     if (!menu) return;
     const hidden = DROPS.filter(d => !isFilterVisible(d.key));
     if (!hidden.length) {
-      menu.innerHTML = `<div class="fb-addempty">All filters added</div>`;
+      menu.innerHTML = `<div class="fb-addempty">${T('All filters added')}</div>`;
       return;
     }
     menu.innerHTML = hidden.map(d =>
@@ -885,6 +899,18 @@
     // cambiar de dashboard (tab) → cargar los filtros guardados de ese dashboard
     document.getElementById('sections')?.addEventListener('click', e => {
       if (e.target.closest('.gp-sec')) setTimeout(onDashChange, 0);
+    });
+
+    // re-traducir labels de UI al cambiar idioma (sin re-fetch; preserva estado/selección)
+    document.addEventListener('cm:langchanged', () => {
+      try {
+        DROPS.forEach(d => updateTrigger(d.key));
+        updateGlobal();
+        const ab = root.querySelector('.fb-addfilter span'); if (ab) ab.textContent = T('Add filter');
+        const ca = root.querySelector('.fb-clear-all'); if (ca && ca.lastChild) ca.lastChild.textContent = T('Clear');
+        root.querySelectorAll('.fb-clear').forEach(c => c.title = T('Clear'));
+        root.querySelectorAll('.fb-remove').forEach(c => c.title = T('Remove filter'));
+      } catch (e) {}
     });
   }
 
