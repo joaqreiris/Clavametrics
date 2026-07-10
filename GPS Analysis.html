@@ -489,6 +489,9 @@
   .gp-popover-item .ti { font-size:14px; color:var(--cm-fg-muted); }
   .gp-popover-sep { height:1px; background:var(--cm-border-soft); margin:4px 0; }
   .gp-modal-overlay { position:fixed; inset:0; background:rgba(8,10,12,.55); backdrop-filter:blur(4px); z-index:950; display:flex; align-items:center; justify-content:center; }
+  /* Overlays STACKED on top of another modal (e.g. delete/merge confirm over the metrics catalog).
+     990 sits above the base modal (950) but below toasts (1000). */
+  .gp-modal-overlay.is-nested { z-index:990; }
   .gp-modal { background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:0 20px 60px rgba(0,0,0,.25); width:560px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
   .gp-modal-h { display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--cm-border); }
   .gp-modal-h h3 { font:600 15px/1 var(--cm-font-sans); letter-spacing:-.01em; color:var(--cm-fg-strong); flex:1; }
@@ -8559,7 +8562,7 @@ async function openGpsMetricsCatalog() {
     const def = catalog.find(d => d.key === key);
     if (!def || def.is_core) return;
     const dOv = document.createElement('div');
-    dOv.className = 'gp-modal-overlay'; dOv.style.zIndex = '820';
+    dOv.className = 'gp-modal-overlay is-nested';   // stacked above the catalog modal (950)
     const dModal = document.createElement('div');
     dModal.className = 'gp-modal'; dModal.style.maxWidth = '420px';
     dModal.innerHTML = `
@@ -8602,7 +8605,7 @@ async function openGpsMetricsCatalog() {
     const targets = catalog.filter(d => d.key !== sourceKey);
     if (!targets.length) { showToast('No other metrics to merge into'); return; }
     const mOv = document.createElement('div');
-    mOv.className = 'gp-modal-overlay'; mOv.style.zIndex = '820';
+    mOv.className = 'gp-modal-overlay is-nested';   // stacked above the catalog modal (950)
     const mModal = document.createElement('div');
     mModal.className = 'gp-modal'; mModal.style.maxWidth = '440px';
     mModal.innerHTML = `
