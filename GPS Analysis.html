@@ -1914,6 +1914,12 @@ async function loadLayout(viewKey) {
 //   loaded:true, layout:[…] → a saved layout exists → apply it.
 //   loaded:true, layout:null→ CONFIRMED no saved row → genuine first-time → apply + persist defaults.
 // Used by applyDefault* so a null load can never overwrite the persisted layout with defaults.
+//
+// In-memory cache of the LAST SUCCESSFUL strict load per viewKey (array or null). Written only on
+// loaded:true — a transient failure (loaded:false) never overwrites a good value. This is the SINGLE
+// SOURCE OF TRUTH for the builder-card reorder: _mountSavedBuilderCards reads it instead of firing a
+// second loadLayout() that could return null on a cold/slow load and make the reorder silently skip.
+const _layoutStrictCache = new Map();   // viewKey → layout (array | null), last successful load
 async function _loadLayoutStrict(viewKey) {
   const did = _DASHBOARD_IDS[viewKey];
   if (!did || !window.sb) return { loaded: false, layout: null };
@@ -1924,7 +1930,9 @@ async function _loadLayoutStrict(viewKey) {
     const { data, error } = await window.sb.from('gps_dashboard_layouts')
       .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
     if (error) { console.warn(`_loadLayoutStrict(${viewKey}): DB error — NOT touching layout:`, error.message); return { loaded: false, layout: null }; }
-    return { loaded: true, layout: (data?.layout && data.layout.length) ? data.layout : null };
+    const layout = (data?.layout && data.layout.length) ? data.layout : null;
+    _layoutStrictCache.set(viewKey, layout);   // cache the confirmed result for the reorder pass
+    return { loaded: true, layout };
   } catch (err) { console.warn(`_loadLayoutStrict(${viewKey}): load failed — NOT touching layout:`, err); return { loaded: false, layout: null }; }
 }
 
@@ -3702,10 +3710,16 @@ async function _mountSavedBuilderCards(clubId) {
     // async, possibly AFTER applyDefaultLayoutGeneric already ran — so without re-applying
     // their x/y/w/h they'd lose size/position and fall back to the CSS default (span 6 /
     // row 11). Keyed by card_id (= the card's UUID = dataset.cardId).
+    //
+    // SINGLE SOURCE OF TRUTH: reuse the layout applyDefault*/_loadLayoutStrict already resolved for
+    // this view (cached in _layoutStrictCache) instead of firing a SECOND loadLayout() here. That
+    // second fetch could return null on a cold/slow load (or a transient uid/cid-not-ready) and make
+    // the reorder below silently skip → builder cards left in dashboard_cards order = "scrambled".
+    // Falling back to loadLayout() only when the cache has no entry (mount ran outside the init flow).
     let _coordsById = null;
     let _lay = null;
     try {
-      _lay = await loadLayout(view);
+      _lay = _layoutStrictCache.has(view) ? _layoutStrictCache.get(view) : await loadLayout(view);
       _coordsById = new Map((_lay || [])
         .filter(c => [c.x, c.y, c.w, c.h].every(Number.isFinite))
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
@@ -4137,12 +4151,18 @@ async function _detectSmartDefault(clubId, userId) {
     ]);
     // Mount saved builder cards BEFORE the grid is revealed, so they appear directly at their
     // final size/position (skeleton inside) instead of mounting late into a visible grid and
-    // then being re-placed — the "explosion" on load. Bounded by a timeout so a slow cards/
-    // layout fetch can't hold the whole dashboard blank.
+    // then being re-placed — the "explosion" on load.
+    //
+    // WAIT FOR THE REAL MOUNT: previously this was Promise.race(mount, 1500ms). On a cold load
+    // (e.g. navigating Admin→GPS) the mount + reorder often took longer than 1500ms, so the grid
+    // was revealed mid-mount → builder cards appeared before _reorderGrid ran = scrambled. Now we
+    // AWAIT the mount so the user only ever sees the grid AFTER it is fully ordered. The high
+    // timeout is a SAFETY NET only (a hung fetch can't blank the dashboard forever) — the normal
+    // flow resolves on the real mount, well before it fires.
     if (window.loadCardsForView && window.sb) {
       await Promise.race([
         _mountSavedBuilderCards(clubId).catch(e => console.warn('_mountSavedBuilderCards:', e)),
-        new Promise(r => setTimeout(r, 1500)),
+        new Promise(r => setTimeout(r, 9000)),   // safety net only — normal flow awaits the real mount
       ]);
     }
   } catch (e) {
