@@ -408,6 +408,43 @@
     } catch { return true; }
   }
 
+  // ── "Has data" gate ────────────────────────────────────────
+  // A metric is OFFERED in the builder only if it has ≥1 non-null value in the DB (NON-NULL
+  // criterion — a value of 0 still counts). CORE metrics are columns in gps_reports; CUSTOM (EAV)
+  // metrics are metric_key rows in gps_report_metrics. This covers BOTH API and CSV (both land in
+  // those tables). A metric mapped but not yet synced has no data → hidden until the first sync
+  // (intended: "no data → don't show"). Result is cached per club.
+  const _CORE_DATA_COLS = ['total_distance', 'high_speed_distance', 'sprint_distance', 'accelerations',
+    'decelerations', 'max_speed', 'player_load', 'avg_speed', 'very_high_speed_distance', 'hmld',
+    'time_played', 'sprint_count', 'distance_per_minute'];
+  const _hasDataCache = new Map();   // clubId → Set<string> of metric keys with ≥1 non-null value
+
+  async function _loadHasData(clubId, rows) {
+    if (_hasDataCache.has(clubId)) return _hasDataCache.get(clubId);
+    const has = new Set();
+    const customKeys = rows.filter(r => !r.is_core).map(r => r.key);
+    // The project has no server-side aggregates enabled, so we probe existence per column/key with
+    // a limit-1 query instead of one count() aggregate. Bounded (~13 core + N custom), run fully
+    // concurrently, once per club (cached below).
+    const coreChecks = _CORE_DATA_COLS.map(async (col) => {
+      try {
+        const { data } = await window.sb.from('gps_reports')
+          .select('id').eq('club_id', clubId).not(col, 'is', null).limit(1);
+        if (data && data.length) has.add(col);
+      } catch { /* on error leave it out → metric hidden, non-fatal */ }
+    });
+    const customChecks = customKeys.map(async (key) => {
+      try {
+        const { data } = await window.sb.from('gps_report_metrics')
+          .select('report_id').eq('club_id', clubId).eq('metric_key', key).limit(1);
+        if (data && data.length) has.add(key);
+      } catch { /* hidden on error */ }
+    });
+    await Promise.all([...coreChecks, ...customChecks]);
+    _hasDataCache.set(clubId, has);
+    return has;
+  }
+
   async function loadCatalog(clubId) {
     const { data } = await window.sb
       .from('gps_metric_definitions')
@@ -415,7 +452,11 @@
       .eq('club_id', clubId)
       .order('display_order', { ascending: true });
 
-    const rows = data || [];
+    // Filter to metrics that actually have data (see _loadHasData). Built-in DERIVED (acc_dec) and
+    // TASK metrics are added AFTER this and are NOT filtered — they stay offered regardless.
+    const allRows = data || [];
+    const hasData = await _loadHasData(clubId, allRows);
+    const rows = allRows.filter(r => hasData.has(r.key));
     catalogMap = new Map();
 
     // group for flyout
