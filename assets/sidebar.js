@@ -250,7 +250,7 @@ html.cm-rail .hub-nav-grip{display:none}
   function renderNav() {
     const savedAll = _navOrder();
     return NAV_GROUPS.map(g => `
-      <div class="hub-nav-group">
+      <div class="hub-nav-group" data-group-key="${g.label}">
         <div class="hub-nav-label" data-i18n="shell.group.${g.label.toLowerCase()}">${g.label}</div>
         ${_orderItems(g.items, savedAll[g.label]).map(item => {
           const active = isActive(item.href) ? ' is-active' : '';
@@ -313,9 +313,9 @@ html.cm-rail .hub-nav-grip{display:none}
   function _persistNavOrder(nav) {
     const order = {};
     nav.querySelectorAll('.hub-nav-group').forEach(group => {
-      const label = group.querySelector('.hub-nav-label');
-      if (!label) return;
-      order[label.textContent.trim()] = [...group.querySelectorAll('.hub-nav-item')]
+      const key = group.getAttribute('data-group-key');
+      if (!key) return;
+      order[key] = [...group.querySelectorAll('.hub-nav-item')]
         .map(a => a.getAttribute('data-nav-href'))
         .filter(Boolean);
     });
