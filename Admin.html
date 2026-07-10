@@ -2299,11 +2299,17 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         <h3 style="margin:0;font-size:16px">${tt('admin.gps_map_metrics_title','Map metrics — Catapult')}</h3>
         <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
       </div>
-      <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
-        ${tt('admin.gps_map_metrics_hint','Map each Catapult parameter to a core metric or a custom one. Unmapped parameters are shown first.')}
+      <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span>${tt('admin.gps_map_metrics_hint','Map each Catapult parameter to a core metric or a custom one. Unmapped parameters are shown first.')}</span>
+        <span data-counts style="white-space:nowrap;font-variant-numeric:tabular-nums"></span>
       </div>
-      <div style="padding:10px 18px 0">
-        <input data-search type="text" placeholder="${tt('admin.gps_search_metrics','Search metrics…')}" style="width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+      <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input data-search type="text" placeholder="${tt('admin.gps_search_metrics','Search metrics…')}" style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+        <div data-statefilter style="display:inline-flex;border:1px solid var(--cm-border);border-radius:8px;overflow:hidden;flex-shrink:0">
+          <button type="button" data-sf="all" style="padding:7px 12px;border:0;border-right:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);font:inherit;font-size:12px;cursor:pointer">${tt('admin.gps_filter_all','All')}</button>
+          <button type="button" data-sf="mapped" style="padding:7px 12px;border:0;border-right:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);font:inherit;font-size:12px;cursor:pointer">${tt('admin.gps_filter_mapped','Mapped')}</button>
+          <button type="button" data-sf="unmapped" style="padding:7px 12px;border:0;background:transparent;color:var(--cm-fg-muted);font:inherit;font-size:12px;cursor:pointer">${tt('admin.gps_filter_unmapped','Unmapped')}</button>
+        </div>
       </div>
       <div data-list style="overflow:auto;padding:6px 18px"></div>
       <div data-newpanel style="display:none;padding:12px 18px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft)"></div>
@@ -2326,12 +2332,35 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         ${cust?`<optgroup label="${tt('admin.gps_custom_metrics','Custom metrics')}">${cust}</optgroup>`:''}
         <option value="__new__">${tt('admin.gps_create_new_metric_opt','+ Create new metric…')}</option>`;
     }
+    // Mapping-status filter: 'all' | 'mapped' | 'unmapped'. Combines with text.
+    // A row is "mapped" when its target select has a non-empty value (live).
+    let stateFilter='all';
+    function _updateCounts(){
+      let m=0,u=0;
+      listEl.querySelectorAll('[data-t]').forEach(sel=>{ sel.value!==''?m++:u++; });
+      const c=ov.querySelector('[data-counts]'); if(c) c.textContent=tt('admin.gps_map_counts','{m} mapped · {u} unmapped',{ m, u });
+    }
     function _applyFilter(){
       const q=(ov.querySelector('[data-search]').value||'').trim().toLowerCase();
       listEl.querySelectorAll('[data-search-row]').forEach(el=>{
-        el.style.display=(!q||el.dataset.searchRow.includes(q))?'':'none';
+        const sel=el.querySelector('[data-t]');
+        const isMapped=!!(sel && sel.value!=='');
+        const passText=(!q||el.dataset.searchRow.includes(q));
+        const passState=(stateFilter==='all')||(stateFilter==='mapped'?isMapped:!isMapped);
+        el.style.display=(passText&&passState)?'':'none';
+      });
+      _updateCounts();
+    }
+    const _sfWrap=ov.querySelector('[data-statefilter]');
+    function _paintSF(){
+      _sfWrap.querySelectorAll('[data-sf]').forEach(b=>{
+        const on=b.dataset.sf===stateFilter;
+        b.style.background=on?'var(--cm-accent,#2563eb)':'transparent';
+        b.style.color=on?'#fff':'var(--cm-fg-muted)';
       });
     }
+    _sfWrap.querySelectorAll('[data-sf]').forEach(b=>b.addEventListener('click',()=>{ stateFilter=b.dataset.sf; _paintSF(); _applyFilter(); }));
+    _paintSF();
     function paint(){
       listEl.innerHTML=rows.map((r,i)=>`
         <div data-search-row="${_esc(((r.p.name||'')+' '+(r.p.slug||'')).toLowerCase())}" style="display:grid;grid-template-columns:1.5fr 1.6fr 90px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--cm-border)${r.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
@@ -2344,6 +2373,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         const i=+s.dataset.t;
         if(s.value==='__new__'){ s.value=rows[i].target; _showNewMetric(i); return; }
         rows[i].target=s.value;
+        _applyFilter();   // status may have changed → re-filter + refresh counts
       }));
       listEl.querySelectorAll('[data-c]').forEach(inp=>inp.addEventListener('input',()=>{ rows[+inp.dataset.c].conv=inp.value; }));
       _applyFilter();   // keep the current search applied across re-paints
