@@ -308,31 +308,34 @@
     return out;
   }
 
-  function renderSignalsPopover(){
+  // Unified "Metrics" popover: columns = master, signals = sub-toggle of active+eligible columns.
+  function renderMetricsPopover(){
     const el=$('signalsList'); if(!el) return;
-    const elig=eligibleSignals();
-    if(!elig.length){ el.innerHTML=`<div style="font:var(--cm-body-sm);color:var(--cm-fg-faint);padding:4px 2px">—</div>`; return; }
-    el.innerHTML=elig.map(k=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;color:var(--cm-fg)"><input type="checkbox" data-sig="${esc(k)}" ${state.signalSet.includes(k)?'checked':''}> ${esc(signalLabel(k))}</label>`).join('');
-    el.querySelectorAll('input[data-sig]').forEach(inp=> inp.addEventListener('change', async ()=>{
-      const k=inp.dataset.sig;
-      if(inp.checked){ if(!state.signalSet.includes(k)) state.signalSet.push(k); } else state.signalSet=state.signalSet.filter(x=>x!==k);
-      saveSignalSet();
-      await renderAvailability();
-    }));
-  }
-
-  function renderColsPopover(){
-    const el=$('colsList'); if(!el) return;
     const elig=eligibleCols();
     if(!elig.length){ el.innerHTML=`<div style="font:var(--cm-body-sm);color:var(--cm-fg-faint);padding:4px 2px">—</div>`; return; }
-    el.innerHTML=elig.map(k=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;color:var(--cm-fg)"><input type="checkbox" data-col="${esc(k)}" ${state.cols.includes(k)?'checked':''}> ${esc(colLabel(k))}</label>`).join('');
+    const sigTag=esc(tt('load_monitor.signal_tag','signal'));
+    el.innerHTML=elig.map(k=>{
+      const isCol=state.cols.includes(k);
+      const sigOk=isCol && SIGNAL_KEYS.has(k);   // signal only when shown as column AND load-metric eligible
+      const isSig=state.signalSet.includes(k);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;color:var(--cm-fg)">`
+        + `<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans)"><input type="checkbox" data-col="${esc(k)}" ${isCol?'checked':''}> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(colLabel(k))}</span></label>`
+        + `<label style="display:flex;align-items:center;gap:5px;cursor:${sigOk?'pointer':'not-allowed'};opacity:${sigOk?'1':'.4'};color:var(--cm-fg-muted);font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.04em"><input type="checkbox" data-sig="${esc(k)}" ${isSig?'checked':''} ${sigOk?'':'disabled'}> ${sigTag}</label>`
+        + `</div>`;
+    }).join('');
     el.querySelectorAll('input[data-col]').forEach(inp=> inp.addEventListener('change', async ()=>{
       const k=inp.dataset.col;
       if(inp.checked){ if(!state.cols.includes(k)) state.cols.push(k); } else state.cols=state.cols.filter(x=>x!==k);
       state.cols = eligibleCols().filter(x=> state.cols.includes(x));   // keep stable catalog order
       saveCols();
-      state.signalSet = state.signalSet.filter(x=> eligibleSignals().includes(x));   // signals sub-toggle of columns
-      saveSignalSet(); renderSignalsPopover();
+      state.signalSet = state.signalSet.filter(x=> eligibleSignals().includes(x));   // drop signals whose column was removed
+      saveSignalSet(); renderMetricsPopover();   // refresh disabled state of signal checks
+      await renderAvailability();
+    }));
+    el.querySelectorAll('input[data-sig]').forEach(inp=> inp.addEventListener('change', async ()=>{
+      const k=inp.dataset.sig;
+      if(inp.checked){ if(!state.signalSet.includes(k)) state.signalSet.push(k); } else state.signalSet=state.signalSet.filter(x=>x!==k);
+      saveSignalSet();
       await renderAvailability();
     }));
   }
@@ -586,19 +589,12 @@
     $('btnRefresh')?.addEventListener('click', ()=> loadAll());
     $('btnExportMd')?.addEventListener('click', exportMd);
     $('btnAddAction')?.addEventListener('click', addAction);
-    // Risk-signals config popover (checkboxes of eligible catalog metrics)
+    // Unified Metrics popover: columns (master) + which count as risk signal (sub-toggle)
     const sigBtn=$('signalsBtn'), sigPop=$('signalsPop');
     if(sigBtn&&sigPop){
-      renderSignalsPopover();
-      sigBtn.addEventListener('click', e=>{ e.stopPropagation(); renderSignalsPopover(); sigPop.classList.toggle('on'); });
+      renderMetricsPopover();
+      sigBtn.addEventListener('click', e=>{ e.stopPropagation(); renderMetricsPopover(); sigPop.classList.toggle('on'); });
       document.addEventListener('click', e=>{ if(sigPop.classList.contains('on') && !sigPop.contains(e.target) && !sigBtn.contains(e.target)) sigPop.classList.remove('on'); });
-    }
-    // Columns config popover (master selector of which metrics to show)
-    const colBtn=$('colsBtn'), colPop=$('colsPop');
-    if(colBtn&&colPop){
-      renderColsPopover();
-      colBtn.addEventListener('click', e=>{ e.stopPropagation(); renderColsPopover(); colPop.classList.toggle('on'); });
-      document.addEventListener('click', e=>{ if(colPop.classList.contains('on') && !colPop.contains(e.target) && !colBtn.contains(e.target)) colPop.classList.remove('on'); });
     }
     // Sortable availability headers — delegated (headers are re-rendered dynamically)
     const availHead=document.querySelector('#availTableWrap thead');
