@@ -187,7 +187,10 @@ Deno.serve(async (req: Request) => {
     const { data: mappings } = await adminClient
       .from('gps_column_mappings')
       .select('source_column_name, target_metric, unit_conversion')
-      .eq('club_id', clubId).eq('source_label', 'catapult');
+      .eq('club_id', clubId).eq('source_label', 'catapult')
+      // Deterministic order so target-collision resolution never depends on Postgres row order.
+      // (source_column_name is stable + unique per club/source_label — see collision rule below.)
+      .order('source_column_name', { ascending: true });
     const resolveMap = new Map<string, { target: string; conv: number }>();
     for (const m of (mappings || [])) {
       resolveMap.set(String(m.source_column_name), {
@@ -216,8 +219,19 @@ Deno.serve(async (req: Request) => {
 
     // Shared normalizer — turns a /stats row into { core, extras } via the same
     // resolveMap + unit_conversion, for BOTH session and period grains.
+    //
+    // TARGET-COLLISION RULE (core columns): when several Catapult slugs map to the SAME core column
+    // and more than one carries a value in a row, the SPECIFIC (club-real) slug wins over the
+    // GENERIC seed slug. "Generic" = a key of SLUG_MAP (the auto-seed vocabulary, e.g.
+    // acceleration_count); anything else is a club-specific slug (e.g. gen2_acceleration_band…).
+    // Ties within the same tier resolve to the FIRST slug in the deterministic
+    // .order(source_column_name) fetch above — so the winner never depends on Postgres row order.
+    // The common case (one slug per column, after cleaning mappings) is unaffected: no collision.
+    // Non-core (EAV) targets keep append semantics (unchanged).
+    const isGenericSeed = (slug: string) => Object.prototype.hasOwnProperty.call(SLUG_MAP, slug);
     const normalizeMetrics = (row: Record<string, unknown>) => {
       const core: Record<string, number> = {};
+      const corePrio: Record<string, number> = {};   // target → specificity of the slug that set it
       const extras: { metric_key: string; value: number }[] = [];
       const slugs = new Set<string>([...mappedSlugs, ...Object.keys(row)]);
       for (const slug of slugs) {
@@ -232,7 +246,14 @@ Deno.serve(async (req: Request) => {
         const num = raw * map.conv;
         if (!isFinite(num)) continue;
         if (GPS_REPORT_COLS.has(map.target)) {
-          core[map.target] = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
+          const val = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
+          const prio = isGenericSeed(slug) ? 0 : 1;   // 1 = club-specific → beats the generic seed
+          // Assign only if nothing set yet, or the new slug is strictly more specific. Same-tier
+          // collisions keep the first slug (deterministic via the ordered fetch) → no overwrite.
+          if (corePrio[map.target] === undefined || prio > corePrio[map.target]) {
+            core[map.target] = val;
+            corePrio[map.target] = prio;
+          }
         } else {
           extras.push({ metric_key: map.target, value: +num.toFixed(4) });
         }
