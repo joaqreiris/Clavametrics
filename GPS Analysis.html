@@ -1583,16 +1583,11 @@ const GP_CARD_DEFS = {
 // Stash: card elements removed from dashboard but recoverable
 const _cardStash = new Map(); // cardId → HTMLElement
 
-// One-time layout reset (v2): tras la limpieza de dashboards, forzamos UNA vez por
-// vista el nuevo default mínimo (2 cards) aunque exista un layout guardado viejo.
-// Luego el comportamiento normal de layout persistido se reanuda.
-const _LAYOUT_RESET_TAG = 'gpsLayoutReset_v2_';
-function _layoutNeedsReset(viewKey) {
-  try { return !localStorage.getItem(_LAYOUT_RESET_TAG + viewKey); } catch { return false; }
-}
-function _markLayoutReset(viewKey) {
-  try { localStorage.setItem(_LAYOUT_RESET_TAG + viewKey, '1'); } catch {}
-}
+// REMOVED — the one-time "layout reset (v2)" mechanism. It was gated by a localStorage flag
+// (gpsLayoutReset_v2_<view>), so clearing the browser cache / "Clear site data" wiped the flag and
+// re-triggered the reset EVERY time — destructively overwriting the user's saved Supabase layout
+// with the defaults. A destructive migration must never depend on volatile localStorage. The
+// migration is long done; the persisted layout (gps_dashboard_layouts) is the single source of truth.
 
 // Stash every catalog card for viewKey whose data-card-id is NOT in activeIds.
 function _stashAbsentCards(viewKey, activeIds) {
@@ -1912,6 +1907,27 @@ async function loadLayout(viewKey) {
   } catch (err) { console.warn('loadLayout: unexpected error (using defaults):', err); return null; }
 }
 
+// Like loadLayout() but DISTINGUISHES "genuinely no saved row" (first-time user) from "couldn't
+// load" (uid/cid not ready, or DB/network error). Returns { loaded, layout }:
+//   loaded:false            → load failed / not ready → callers MUST NOT write defaults (would
+//                             destroy a saved layout on a transient failure).
+//   loaded:true, layout:[…] → a saved layout exists → apply it.
+//   loaded:true, layout:null→ CONFIRMED no saved row → genuine first-time → apply + persist defaults.
+// Used by applyDefault* so a null load can never overwrite the persisted layout with defaults.
+async function _loadLayoutStrict(viewKey) {
+  const did = _DASHBOARD_IDS[viewKey];
+  if (!did || !window.sb) return { loaded: false, layout: null };
+  try {
+    const uid = await gpsGetUserId();
+    const cid = await window.getClubId?.();
+    if (!uid || !cid) return { loaded: false, layout: null };   // not ready → don't touch the layout
+    const { data, error } = await window.sb.from('gps_dashboard_layouts')
+      .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
+    if (error) { console.warn(`_loadLayoutStrict(${viewKey}): DB error — NOT touching layout:`, error.message); return { loaded: false, layout: null }; }
+    return { loaded: true, layout: (data?.layout && data.layout.length) ? data.layout : null };
+  } catch (err) { console.warn(`_loadLayoutStrict(${viewKey}): load failed — NOT touching layout:`, err); return { loaded: false, layout: null }; }
+}
+
 // ── Restore helpers (size + order) ─────────────────────────────
 function _applyCardSize(card, size, span) {
   if (!card) return;
@@ -1992,17 +2008,16 @@ async function applyGrpDefaultLayout() {
   const defs = (GP_CARD_DEFS.grp || []).filter(d => d.id && !d.stub);
 
   try {
-    const layout = await loadLayout('grp');
+    const { loaded, layout } = await _loadLayoutStrict('grp');
+    if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
 
-    if (!layout?.length || _layoutNeedsReset('grp')) {
-      // First load (o reset one-time) — stash todo menos los defaults
+    if (!layout) {
+      // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (_GRP_DEFAULTS.has(def.id)) continue;
         const card = document.getElementById(def.id);
         if (card) { _cardStash.set(def.id, card); card.remove(); }
       }
-      _markLayoutReset('grp');
-      // Persist the initial minimal layout
       await saveLayout('grp').catch(e => console.warn('applyGrpDefaultLayout save:', e));
       return;
     }
@@ -2040,16 +2055,16 @@ async function applyMcDefaultLayout() {
   const defs = (GP_CARD_DEFS.mc || []).filter(d => d.id && !d.stub);
 
   try {
-    const layout = await loadLayout('mc');
+    const { loaded, layout } = await _loadLayoutStrict('mc');
+    if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
 
-    if (!layout?.length || _layoutNeedsReset('mc')) {
-      // First load (o reset one-time) — stash todo menos los defaults
+    if (!layout) {
+      // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (_MC_DEFAULTS.has(def.id)) continue;
         const card = document.getElementById(def.id);
         if (card) { _cardStash.set(def.id, card); card.remove(); }
       }
-      _markLayoutReset('mc');
       await saveLayout('mc').catch(e => console.warn('applyMcDefaultLayout save:', e));
       return;
     }
@@ -2081,15 +2096,15 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
   if (!grid) return;
   const defs = (GP_CARD_DEFS[viewKey] || []).filter(d => d.id && !d.stub);
   try {
-    const layout = await loadLayout(viewKey);
-    if (!layout?.length || _layoutNeedsReset(viewKey)) {
-      // First load (o reset one-time a los nuevos defaults mínimos) — stashar todo menos los defaults
+    const { loaded, layout } = await _loadLayoutStrict(viewKey);
+    if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
+    if (!layout) {
+      // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (defaultsSet.has(def.id)) continue;
         const card = document.getElementById(def.id);
         if (card) { _cardStash.set(def.id, card); card.remove(); }
       }
-      _markLayoutReset(viewKey);
       await saveLayout(viewKey).catch(e => console.warn(`applyDefaultLayout(${viewKey}) save:`, e));
       return;
     }
