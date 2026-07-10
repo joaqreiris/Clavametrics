@@ -265,7 +265,7 @@
   }
 
   // Signal setters the app calls after auth / club load.
-  function setUserPref(lang)   { userPref = lang || null; if (userPref) { try { localStorage.setItem(LS_KEY, normalize(userPref)); } catch(e){} apply(userPref, { persistLocal:false }); syncMenu(); } }
+  function setUserPref(lang)   { userPref = normalize(lang) || null; reevaluate(); }
   function setClubCountry(cc)  { clubCountry = cc || null; reevaluate(); }
   function setGeoCountry(cc)   { geoCountry = cc || null; reevaluate(); }
   function setCloudSaver(fn)   { cloudSaver = typeof fn === "function" ? fn : null; }
