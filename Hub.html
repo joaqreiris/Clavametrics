@@ -950,6 +950,13 @@
           <div class="section-header">
             <h2 data-i18n="hub.recent_activity">Recent activity</h2>
             <div class="right">
+              <div id="actFilterChips" style="display:inline-flex;gap:4px;margin-right:8px;flex-wrap:wrap">
+                <button type="button" class="act-chip" data-cat="all"      data-i18n="hub.filter_all">All</button>
+                <button type="button" class="act-chip" data-cat="medical"  data-i18n="hub.filter_medical">Medical</button>
+                <button type="button" class="act-chip" data-cat="load"     data-i18n="hub.filter_load">Load</button>
+                <button type="button" class="act-chip" data-cat="planning" data-i18n="hub.filter_planning">Planning</button>
+                <button type="button" class="act-chip" data-cat="squad"    data-i18n="hub.filter_squad">Squad</button>
+              </div>
               <button id="btnViewAllActivity" class="cm-btn is-ghost is-sm"><span data-i18n="hub.view_all">View all</span> <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
             </div>
           </div>
@@ -1355,6 +1362,39 @@ document.getElementById('btnViewAllActivity')?.addEventListener('click', () => {
   window.location.href = 'Chat%20%26%20Tasks.html';
 });
 
+// ── Recent activity: category filter ──────────────────────────
+const HUB_ACT_CATS = {
+  medical:  new Set(['injury.logged','injury.cleared','treatment.adaptation','medical.episode']),
+  load:     new Set(['gps.imported','rpe.submitted','wellness.submitted','evaluation.recorded']),
+  planning: new Set(['session.published','session.modified','microcycle.published','lineup.published','match_report.created']),
+  squad:    new Set(['member.joined','task.created','task.completed','player.added','player.archived','availability.changed']),
+};
+let _hubActFilter = 'all';
+function hubActMatches(action){
+  if (_hubActFilter === 'all') return true;
+  const set = HUB_ACT_CATS[_hubActFilter];
+  return set ? set.has(action) : true;
+}
+function hubFmtDay(ds){
+  if (!ds) return '';
+  const d = new Date(String(ds).slice(0,10) + 'T12:00:00');
+  return isNaN(d) ? '' : d.toLocaleDateString(ttLocale() || 'en-US', { day:'numeric', month:'short' });
+}
+function hubSyncActChips(){
+  document.querySelectorAll('#actFilterChips .act-chip').forEach(btn => {
+    const on = btn.dataset.cat === _hubActFilter;
+    btn.style.cssText = `padding:3px 9px;border-radius:999px;font:600 11px/1 var(--cm-font-sans);cursor:pointer;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'}`;
+  });
+}
+document.getElementById('actFilterChips')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.act-chip'); if (!btn) return;
+  _hubActFilter = btn.dataset.cat || 'all';
+  hubSyncActChips();
+  renderActivity().catch(() => {});
+});
+hubSyncActChips();
+document.addEventListener('cm:langchanged', hubSyncActChips);
+
 function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount, squadCount, wellnessCount, todaySession }) {
   const navInj   = document.getElementById('navInjuriesCount');
   const navLoad  = document.getElementById('navLoadCount');
@@ -1437,20 +1477,23 @@ async function renderActivity() {
   const clubId = window._hubClubId;
   if (!clubId) return;
 
-  const { data: rows } = await window.sb
+  const { data: allRows } = await window.sb
     .from('activity_log')
     .select('id, action, entity_id, player_id, actor_id, actor_label, summary, created_at')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false })
-    .limit(8);
+    .limit(50);
 
   feed.querySelectorAll('.activity-row:not(.is-header)').forEach(el => el.remove());
-  if (!rows || !rows.length) return;
+  if (!allRows || !allRows.length) return;
+
+  const rows = allRows.filter(r => hubActMatches(r.action));   // client-side category filter
+  if (!rows.length) return;
 
   // Sin FKs declaradas: resolvemos nombres con lookups por id
   const playerIds = [...new Set(rows.map(r => r.player_id).filter(Boolean))];
   const actorIds  = [...new Set(rows.map(r => r.actor_id).filter(Boolean))];
-  const sessIds   = [...new Set(rows.filter(r => r.action === 'gps.imported').map(r => r.entity_id).filter(Boolean))];
+  const sessIds   = [...new Set(rows.filter(r => r.action === 'gps.imported' || r.action === 'session.modified').map(r => r.entity_id).filter(Boolean))];
 
   const [playersRes, actorsRes, sessRes] = await Promise.all([
     playerIds.length ? window.sb.from('players').select('id, first_name, last_name').in('id', playerIds) : Promise.resolve({ data: [] }),
@@ -1465,7 +1508,33 @@ async function renderActivity() {
   const sessMap = {};
   (sessRes.data || []).forEach(s => { sessMap[s.id] = s.title; });
 
-  rows.forEach(r => {
+  // Collapse consecutive same-day gps.imported rows into ONE grouped entry (trigger writes 1/session).
+  const items = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.action === 'gps.imported') {
+      const day = (r.created_at || '').slice(0, 10);
+      let j = i; const grp = [];
+      while (j < rows.length && rows[j].action === 'gps.imported' && (rows[j].created_at || '').slice(0, 10) === day) { grp.push(rows[j]); j++; }
+      if (grp.length > 1) { items.push({ gps: grp }); i = j - 1; continue; }
+    }
+    items.push({ r });
+  }
+
+  let _shown = 0;
+  items.forEach(it => {
+    if (_shown >= 8) return;
+    if (it.gps) {
+      const grp = it.gps;
+      const ds = grp.map(g => ((g.summary && (g.summary.session_date || g.summary.date)) || g.created_at || ''))
+        .map(x => String(x).slice(0, 10)).filter(Boolean).sort();
+      const what = tt('hub.act_gps_grouped','Imported GPS data · {n} sessions ({from} → {to})',
+        { n: grp.length, from: hubFmtDay(ds[0]), to: hubFmtDay(ds[ds.length - 1]) });
+      _appendActRow({ icon:'ti-radar-2', color:'', who: tt('hub.gps_sync','GPS sync'), role: tt('hub.integration','Integration'), what, when: grp[0].created_at });
+      _shown++;
+      return;
+    }
+    const r = it.r;
     const s = r.summary || {};
     const actor = r.actor_id ? actorMap[r.actor_id] : null;
     const player = r.player_id ? (playerMap[r.player_id] || tt('common.player','Player')) : tt('common.player','Player');
@@ -1532,10 +1601,60 @@ async function renderActivity() {
         who = actor?.name || tt('hub.new_member','New member'); role = actor?.role || s.role || tt('hub.staff','Staff');
         what = tt('hub.act_joined_club','Joined the club') + (s.role ? ` · <span class="target">${s.role}</span>` : '');
         break;
+      case 'availability.changed':
+        icon = 'ti-user-check';
+        who = actor?.name || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_availability','{player} availability: {from} → {to}', { player, from: s.from ?? s.old_status ?? s.old ?? '', to: s.to ?? s.new_status ?? s.status ?? '' });
+        break;
+      case 'session.modified':
+        icon = 'ti-edit';
+        who = actor?.name || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_session_modified','Modified session {title}', { title: s.title ?? sessMap[r.entity_id] ?? '' });
+        break;
+      case 'match_report.created':
+        icon = 'ti-report';
+        who = actor?.name || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_match_report','Created match report · {date}', { date: s.match_date ?? s.date ?? '' });
+        break;
+      case 'evaluation.recorded':
+        icon = 'ti-clipboard-data';
+        who = actor?.name || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_evaluation','Recorded evaluation for {player}', { player });
+        break;
+      case 'medical.episode':
+        icon = 'ti-stethoscope'; color = 'var(--cm-danger)';
+        who = actor?.name || tt('hub.medical_staff','Medical staff'); role = actor?.role || tt('hub.medical','Medical');
+        what = tt('hub.act_medical_episode','New medical episode · {player}', { player });
+        break;
+      case 'microcycle.published':
+        icon = 'ti-calendar-check';
+        who = actor?.name || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_microcycle_pub','Published microcycle {name}', { name: s.name ?? '' });
+        break;
+      case 'lineup.published':
+        icon = 'ti-users';
+        who = actor?.name || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_lineup_pub','Published lineup');
+        break;
+      case 'player.added':
+        icon = 'ti-user-plus'; color = 'var(--cm-success)';
+        who = actor?.name || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_player_added','Added player {name}', { name: s.name ?? s.player_name ?? player });
+        break;
+      case 'player.archived':
+        icon = 'ti-user-minus';
+        who = actor?.name || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
+        what = tt('hub.act_player_archived','Archived player {name}', { name: s.name ?? s.player_name ?? player });
+        break;
       default:
         return;
     }
 
+    _appendActRow({ icon, color, who, role, what, when: r.created_at });
+    _shown++;
+  });
+
+  function _appendActRow({ icon, color, who, role, what, when }) {
     const initials = (who || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
     const row = document.createElement('div');
     row.className = 'activity-row'; row.setAttribute('role', 'row');
@@ -1543,9 +1662,9 @@ async function renderActivity() {
       `<div class="ind" role="cell"><i class="ti ${icon}"${color ? ` style="color:${color}"` : ''} aria-hidden="true"></i></div>` +
       `<div class="who" role="cell"><div class="av" aria-hidden="true">${initials}</div><div><div class="name">${who}</div><div class="cm-meta">${role}</div></div></div>` +
       `<div class="what" role="cell">${what}</div>` +
-      `<div class="when" role="cell" style="text-align:right">${formatAgo(r.created_at)}</div>`;
+      `<div class="when" role="cell" style="text-align:right">${formatAgo(when)}</div>`;
     feed.appendChild(row);
-  });
+  }
 }
 
 function renderAvailabilityPills(records) {
