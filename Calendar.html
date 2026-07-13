@@ -3414,19 +3414,29 @@ async function saveEvt() {
     const dates = generateRecurrenceDates(date, pattern, until, customDates);
     if (!dates.length) { showCalToast(tt('calendar.no_dates_generated','No dates generated — check recurrence settings.')); saving.style.display='none'; saveBtn.disabled=false; return; }
     const groupId = crypto.randomUUID();
-    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
-    if (type === 'match') {
-      basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
-      basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
-      const compId = document.getElementById('calEvtF_competition').value || null;
-      const comp   = _calComps.find(c => c.id === compId);
-      basePayload.competition_id = compId;
-      basePayload.competition    = comp ? comp.comp_type : 'friendly';
-      basePayload.season_id      = _calSeasonId;
-      basePayload.location    = document.getElementById('calEvtF_location').value.trim() || null;
+    let rows, table;
+    if (isCalEvt) {
+      const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
+      if (type === 'match') {
+        basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
+        basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
+        const compId = document.getElementById('calEvtF_competition').value || null;
+        const comp   = _calComps.find(c => c.id === compId);
+        basePayload.competition_id = compId;
+        basePayload.competition    = comp ? comp.comp_type : 'friendly';
+        basePayload.season_id      = _calSeasonId;
+        basePayload.location    = document.getElementById('calEvtF_location').value.trim() || null;
+      }
+      rows  = dates.map(d => ({ ...basePayload, date: d }));
+      table = 'calendar_events';
+    } else {
+      // Session types (tactical/gym/other) must route to training_sessions, same as the non-recurrent branch.
+      // NOTE: training_sessions has no recurrence_group_id column → omitted; each occurrence is a standalone session.
+      const basePayload = { title, session_type: type, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo, club_id: clubId, team_id: _activeTeamId };
+      rows  = dates.map(d => ({ ...basePayload, session_date: d }));
+      table = 'training_sessions';
     }
-    const rows = dates.map(d => ({ ...basePayload, date: d }));
-    ({ error } = await window.sb.from('calendar_events').insert(rows));
+    ({ error } = await window.sb.from(table).insert(rows));
     saving.style.display = 'none'; saveBtn.disabled = false;
     if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
     closeEvtModal();

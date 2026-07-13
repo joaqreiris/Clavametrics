@@ -1557,13 +1557,30 @@ async function dpAutoSaveSession() {
     const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
     saveError = error;
   } else {
-    payload.team_id = _dpTeamId;
-    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
-    saveError = error;
-    if (!error && data?.id) {
-      _dpCurrentSessionId = data.id;
-      await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
-      _dpUpdatePublishBtn();
+    // Anti-duplicate guard: a session for this day/team may already exist (e.g. created from
+    // Calendar) even if loadDay didn't set _dpCurrentSessionId. Re-check before inserting a second one.
+    const { data: existing } = await window.sb.from('training_sessions')
+      .select('id').eq('club_id', _dpClubId).eq('team_id', _dpTeamId)
+      .eq('session_date', date).eq('is_historical', false)
+      .order('created_at', { ascending: true }).limit(1);
+    const existingId = existing?.[0]?.id || null;
+    if (existingId) {
+      _dpCurrentSessionId = existingId;
+      const { error } = await window.sb.from('training_sessions').update(payload).eq('id', existingId).eq('club_id', _dpClubId);
+      saveError = error;
+      if (!error) {
+        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+        _dpUpdatePublishBtn();
+      }
+    } else {
+      payload.team_id = _dpTeamId;
+      const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+      saveError = error;
+      if (!error && data?.id) {
+        _dpCurrentSessionId = data.id;
+        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+        _dpUpdatePublishBtn();
+      }
     }
   }
 
