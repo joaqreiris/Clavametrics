@@ -4530,6 +4530,7 @@ function _showCardEmpty(cardId, msg) {
 }
 
 window.gpRenderScienceCards = async function (reports, clubId) {
+  console.warn('[ACWR DIAG] enter', { clubId, reports: reports?.length ?? null, preset: window.gpState?.datePreset, teamId: window._gpTeamId || null });
   // Synchronous cards first — each isolated so one failure never cascades
   try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
   try { _renderOutliers(reports); } catch(e) { _showCardError('card-outliers', e); }
@@ -4554,6 +4555,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
 
   const [{ data: histSessions }, ] = await Promise.all([sciQry]);
 
+  console.warn('[ACWR DIAG] histSessions', { count: histSessions?.length ?? null, cutoff, rangeFrom, rangeTo });
   if (!histSessions?.length) return;
 
   const hids = histSessions.map(s => s.id);
