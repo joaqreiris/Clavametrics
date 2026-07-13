@@ -176,9 +176,11 @@ create table if not exists public.club_gps_settings (
   active_metrics text[] default ARRAY['total_distance'::text, 'high_speed_distance'::text, 'sprint_distance'::text, 'max_speed'::text, 'accelerations'::text, 'player_load'::text],
   updated_at timestamp with time zone default now(),
   gps_builder_enabled boolean default true not null,
+  acwr_model text default 'ewma'::text not null,
   constraint club_gps_settings_pkey primary key (club_id),
   constraint club_gps_settings_baseline_n_check CHECK (((baseline_n >= 3) AND (baseline_n <= 10))),
-  constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text])))
+  constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text]))),
+  constraint club_gps_settings_acwr_model_check CHECK ((acwr_model = ANY (ARRAY['ra'::text, 'ewma'::text])))
 );
 
 create table if not exists public.club_modules (
