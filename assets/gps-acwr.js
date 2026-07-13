@@ -107,17 +107,31 @@
     return ZONES[ZONES.length - 1];
   }
 
-  // ── Date helpers ──────────────────────────────────────────────────────────
-  function _dateStr(d) { return d.toISOString().slice(0, 10); }
+  // ── Date helpers (defensive: NEVER throw on invalid/missing input) ────────
+  // A single bad date (undefined/null/unparseable, or a NaN offset that corrupts a Date via
+  // setDate) used to reach Date.toISOString() → "RangeError: Invalid time value", which bubbled up
+  // and blanked the ACWR chart. These helpers now return null / [] on bad input so callers can
+  // degrade to an empty series instead of crashing.
+  function _isValidDate(d) { return d instanceof Date && !isNaN(d.getTime()); }
+  function _dateStr(d) { return _isValidDate(d) ? d.toISOString().slice(0, 10) : null; }
+  // Normalize any input (Date | 'YYYY-MM-DD' | null/undefined) → valid 'YYYY-MM-DD' string, or null.
+  function _validDay(s) {
+    if (s == null || s === '') return null;
+    if (s instanceof Date) return _dateStr(s);
+    const d = new Date(String(s) + 'T00:00:00');
+    return _isValidDate(d) ? _dateStr(d) : null;
+  }
   function _offsetDate(refStr, days) {
-    const d = new Date(refStr + 'T00:00:00');
+    const d = new Date(String(refStr) + 'T00:00:00');
+    if (!_isValidDate(d) || !Number.isFinite(days)) return null;   // bad ref or NaN offset → null, don't crash
     d.setDate(d.getDate() + days);
     return _dateStr(d);
   }
   function _enumDays(fromStr, toStr) {
     const out = [];
-    const cur = new Date(fromStr + 'T00:00:00');
-    const end = new Date(toStr + 'T00:00:00');
+    const cur = new Date(String(fromStr) + 'T00:00:00');
+    const end = new Date(String(toStr) + 'T00:00:00');
+    if (!_isValidDate(cur) || !_isValidDate(end)) return out;   // invalid range → empty (never loop on NaN)
     let guard = 0;
     while (cur <= end && guard++ < 4000) { out.push(_dateStr(cur)); cur.setDate(cur.getDate() + 1); }
     return out;
@@ -290,7 +304,7 @@
   async function calculateSquad({ clubId, refDate, metricKey, model, coupled }) {
     await _ensureModel(clubId);
     const o = _opts({ model, coupled });
-    const ref = refDate || _dateStr(new Date());
+    const ref = _validDay(refDate) || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const byPlayer = await fetchByPlayer({ clubId, metricKey: metricKey || METRICS[0].key, from, to: ref });
 
@@ -327,11 +341,13 @@
   // that scope respected — this function never fetches.
   function squadTimeline(byPlayer, dayFrom, dayTo, opts, fillFrom) {
     const o = _opts(opts);
-    const _fill = fillFrom || dayFrom;
-    const days = _enumDays(dayFrom, dayTo);
+    const _from = _validDay(dayFrom), _to = _validDay(dayTo);
+    if (!_from || !_to) return { dates: [], squadAcwr: [], squadLoad: [] };   // invalid range → empty, no crash
+    const _fill = _validDay(fillFrom) || _from;
+    const days = _enumDays(_from, _to);
     const perPlayerDaily = {};
     for (const [pid, recs] of Object.entries(byPlayer || {}))
-      perPlayerDaily[pid] = dailyFill(recs, _fill, dayTo);
+      perPlayerDaily[pid] = dailyFill(recs, _fill, _to);
 
     const dates = [], squadAcwr = [], squadLoad = [];
     for (const day of days) {
@@ -354,12 +370,16 @@
   async function calculateSquadTimeline({ clubId, fromDate, toDate, metricKey, model, coupled }) {
     await _ensureModel(clubId);
     const o = _opts({ model, coupled });
-    const to = toDate || _dateStr(new Date());
+    const to = _validDay(toDate) || _dateStr(new Date());
+    const from = _validDay(fromDate);
+    // No valid start date (caller passed undefined/invalid fromDate) → degrade to an empty series
+    // instead of throwing "RangeError: Invalid time value" (which blanked the ACWR chart).
+    if (!from || !to) return { dates: [], squadAcwr: [], squadLoad: [] };
     // Look back an extra chronic window so the earliest chart points have a
     // fully-populated chronic baseline (otherwise the initial ACWR is inflated).
-    const fetchFrom = _offsetDate(fromDate, -(o.chronicDays - 1));
+    const fetchFrom = _offsetDate(from, -(o.chronicDays - 1)) || from;
     const byPlayer = await fetchByPlayer({ clubId, metricKey: metricKey || METRICS[0].key, from: fetchFrom, to });
-    return squadTimeline(byPlayer, fromDate, to, o, fetchFrom);
+    return squadTimeline(byPlayer, from, to, o, fetchFrom);
   }
 
   // ── Backward-compatible wrappers (used by player-load.js et al.) ──────────
@@ -367,7 +387,7 @@
   async function calculateTeamACWR({ clubId, refDate, model, coupled }) {
     await _ensureModel(clubId);
     const o = _opts({ model, coupled });
-    const ref = refDate || _dateStr(new Date());
+    const ref = _validDay(refDate) || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const raw = await _fetchRaw(clubId, from, ref, new Set(METRICS.map(m => m.source)));
     const out = {};
@@ -388,7 +408,7 @@
     // Returns { [player_id]: { sessCount, insufficient, <metric>:ratio, ... } }
     await _ensureModel(clubId);
     const o = _opts({ model, coupled });
-    const ref = refDate || _dateStr(new Date());
+    const ref = _validDay(refDate) || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const raw = await _fetchRaw(clubId, from, ref, new Set(METRICS.map(m => m.source)));
     const result = {};
