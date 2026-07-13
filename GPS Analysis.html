@@ -8318,21 +8318,24 @@ const _GPS_METRIC_LABELS = {
 };
 
 async function loadGpsSettings(clubId) {
-  if (!clubId) return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  if (!clubId) return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null, acwr_model: 'ewma' };
   try {
     const { data } = await window.sb.from('club_gps_settings')
-      .select('baseline_n, baseline_mode, active_metrics')
+      .select('baseline_n, baseline_mode, active_metrics, acwr_model')
       .eq('club_id', clubId).maybeSingle();
-    return data || { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+    return data
+      ? { ...data, acwr_model: data.acwr_model || 'ewma' }
+      : { baseline_n: 5, baseline_mode: 'personal', active_metrics: null, acwr_model: 'ewma' };
   } catch {
-    return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+    return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null, acwr_model: 'ewma' };
   }
 }
 
 function openGpsSettings() {
-  const s = window._gpSettings || { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  const s = window._gpSettings || { baseline_n: 5, baseline_mode: 'personal', active_metrics: null, acwr_model: 'ewma' };
   const n    = s.baseline_n ?? 5;
   const mode = s.baseline_mode || 'personal';
+  const acwrModel = s.acwr_model || 'ewma';
   const defaultMetrics = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
   const active = s.active_metrics || defaultMetrics;
 
@@ -8378,6 +8381,15 @@ function openGpsSettings() {
         </div>
       </div>
       <div>
+        <div style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${tt('gps_analysis.settings_acwr_model','ACWR model')}</div>
+        <select id="gpsAcwrModel" style="width:100%;height:30px;padding:0 8px;border-radius:5px;border:1px solid var(--cm-border-soft);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+          <option value="ewma" ${acwrModel === 'ewma' ? 'selected' : ''}>${tt('gps_analysis.settings_acwr_ewma','EWMA (exponentially weighted)')}</option>
+          <option value="ra" ${acwrModel === 'ra' ? 'selected' : ''}>${tt('gps_analysis.settings_acwr_ra','Rolling average')}</option>
+        </select>
+        <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">${tt('gps_analysis.settings_acwr_help','EWMA weights recent days more heavily. Rolling average treats all days in the window equally.')}</div>
+        <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px;font-style:italic">${tt('gps_analysis.settings_acwr_global','Applies to all ACWR displays across the app.')}</div>
+      </div>
+      <div>
         <div style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Active metrics in Z-score matrix</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">${metricsHTML}</div>
       </div>
@@ -8396,6 +8408,7 @@ function openGpsSettings() {
     const baseline_n = Math.min(10, Math.max(3, isNaN(rawN) ? 5 : rawN));
     const baseline_mode   = document.querySelector('input[name="gpsMode"]:checked')?.value || 'personal';
     const active_metrics  = [...document.querySelectorAll('input[name="metric"]:checked')].map(i => i.value);
+    const acwr_model      = document.getElementById('gpsAcwrModel')?.value === 'ra' ? 'ra' : 'ewma';
 
     const clubId = window._gpClubId;
     if (!clubId) return;
@@ -8405,7 +8418,7 @@ function openGpsSettings() {
     btn.textContent = 'Saving…';
 
     const { error } = await window.sb.from('club_gps_settings').upsert(
-      { club_id: clubId, baseline_n, baseline_mode, active_metrics, updated_at: new Date().toISOString() },
+      { club_id: clubId, baseline_n, baseline_mode, active_metrics, acwr_model, updated_at: new Date().toISOString() },
       { onConflict: 'club_id' }
     );
 
@@ -8416,7 +8429,7 @@ function openGpsSettings() {
       return;
     }
 
-    window._gpSettings = { baseline_n, baseline_mode, active_metrics };
+    window._gpSettings = { baseline_n, baseline_mode, active_metrics, acwr_model };
     window.invalidateSettingsCache?.(clubId);
     window.invalidateBaselineCache?.();
     ov.remove();
