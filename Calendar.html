@@ -1371,6 +1371,7 @@
                 <select id="calEvtF_pattern">
                   <option value="daily" data-i18n="calendar.every_day">Every day</option>
                   <option value="weekdays" data-i18n="calendar.weekdays">Weekdays</option>
+                  <option value="mc_days" data-i18n="calendar.mc_days">Pick days in microcycle</option>
                   <option value="custom" data-i18n="calendar.custom_dates">Custom dates</option>
                 </select>
               </div>
@@ -1382,6 +1383,13 @@
             <div class="sq-modal-field" id="calEvtCustomDatesWrap" style="display:none">
               <label for="calEvtF_customDates" data-i18n="calendar.custom_dates_label">Custom dates (one per line, YYYY-MM-DD)</label>
               <textarea id="calEvtF_customDates" rows="4" placeholder="2026-06-01&#10;2026-06-02&#10;2026-06-03"></textarea>
+            </div>
+            <div class="sq-modal-field" id="calEvtMcDaysWrap" style="display:none">
+              <label for="calEvtF_mcPick" data-i18n="calendar.mc_pick_label">Microcycle</label>
+              <select id="calEvtF_mcPick"></select>
+              <div data-i18n="calendar.mc_days_hint" style="font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin:6px 0 4px">Click the days to repeat this event</div>
+              <div id="calEvtF_mcChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+              <div id="calEvtF_mcCount" style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:8px"></div>
             </div>
           </div>
         </div>
@@ -2496,7 +2504,77 @@ const DURATION_DEFAULTS = {
   day_off:null,
 };
 
+// ── "Pick days in microcycle" recurrence UI ───────────────────
+function _mcRangeLabel(m){
+  const f = ds => new Date(ds + 'T12:00:00').toLocaleDateString(ttLocale(), { day:'numeric', month:'short' });
+  return (m.name || tt('calendar.microcycle','Microcycle')) + ' · ' + f(m.start_date) + '–' + f(m.end_date);
+}
+function calRenderMcPick(){
+  const sel   = document.getElementById('calEvtF_mcPick');
+  const chips = document.getElementById('calEvtF_mcChips');
+  if (!sel || !chips) return;
+  const evtDate = document.getElementById('calEvtF_date').value || TODAY;
+  const mcs = (_allMCs || []).filter(m => m.start_date && m.end_date)
+    .slice().sort((a, b) => a.start_date < b.start_date ? -1 : 1);
+  if (!mcs.length){
+    sel.innerHTML = '';
+    chips.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">${_esc(tt('calendar.no_matches_yet','—'))}</div>`;
+    calUpdateMcCount();
+    return;
+  }
+  // Preselect the MC that contains the event date; otherwise the nearest one.
+  let pick = mcs.find(m => m.start_date <= evtDate && evtDate <= m.end_date);
+  if (!pick){
+    const dist = m => evtDate < m.start_date
+      ? (new Date(m.start_date) - new Date(evtDate))
+      : (new Date(evtDate) - new Date(m.end_date));
+    pick = mcs.slice().sort((a, b) => Math.abs(dist(a)) - Math.abs(dist(b)))[0];
+  }
+  sel.innerHTML = mcs.map(m => `<option value="${_esc(m.id)}"${m.id === pick.id ? ' selected' : ''}>${_esc(_mcRangeLabel(m))}</option>`).join('');
+  calRenderMcChips();
+}
+function calRenderMcChips(){
+  const sel   = document.getElementById('calEvtF_mcPick');
+  const chips = document.getElementById('calEvtF_mcChips');
+  if (!sel || !chips) return;
+  const mc = (_allMCs || []).find(m => m.id === sel.value);
+  if (!mc){ chips.innerHTML = ''; calUpdateMcCount(); return; }
+  const evtDate = document.getElementById('calEvtF_date').value || '';
+  let html = '', cur = new Date(mc.start_date + 'T12:00:00');
+  const end = new Date(mc.end_date + 'T12:00:00'), guard = 400;
+  let i = 0;
+  while (cur <= end && i++ < guard){
+    const ds = cur.toISOString().slice(0, 10);
+    const on = ds === evtDate;   // preselect the event's own day
+    const wd = cur.toLocaleDateString(ttLocale(), { weekday:'short' });
+    html += `<button type="button" class="cal-mcchip${on ? ' on' : ''}" data-date="${ds}" onclick="calToggleMcChip(this)"
+      style="cursor:pointer;padding:4px 8px;border-radius:6px;font:600 10.5px/1.15 var(--cm-font-sans);text-align:center;border:1px solid ${on ? 'var(--cm-accent)' : 'var(--cm-border)'};background:${on ? 'var(--cm-accent)' : 'var(--cm-surface)'};color:${on ? '#fff' : 'var(--cm-fg-strong)'}">${_esc(wd)} ${cur.getDate()}</button>`;
+    cur = new Date(cur.getTime() + 86400000);
+  }
+  chips.innerHTML = html;
+  calUpdateMcCount();
+}
+function calToggleMcChip(el){
+  const on = el.classList.toggle('on');
+  el.style.border     = '1px solid ' + (on ? 'var(--cm-accent)' : 'var(--cm-border)');
+  el.style.background = on ? 'var(--cm-accent)' : 'var(--cm-surface)';
+  el.style.color      = on ? '#fff' : 'var(--cm-fg-strong)';
+  calUpdateMcCount();
+}
+function calUpdateMcCount(){
+  const el = document.getElementById('calEvtF_mcCount');
+  if (!el) return;
+  const n = document.querySelectorAll('#calEvtF_mcChips .cal-mcchip.on').length;
+  el.textContent = tt('calendar.mc_days_count', `${n} days selected`, { n });
+}
+
 function generateRecurrenceDates(startDate, pattern, until, customDatesText) {
+  if (pattern === 'mc_days') {
+    return [...document.querySelectorAll('#calEvtF_mcChips .cal-mcchip.on')]
+      .map(el => el.dataset.date)
+      .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .sort();
+  }
   if (pattern === 'custom') {
     return (customDatesText || '').split('\n').map(l => l.trim()).filter(l => /^\d{4}-\d{2}-\d{2}$/.test(l));
   }
@@ -3581,9 +3659,14 @@ document.getElementById('calEvtF_repeat').addEventListener('change', function() 
 });
 document.getElementById('calEvtF_pattern').addEventListener('change', function() {
   const isCustom = this.value === 'custom';
-  document.getElementById('calEvtRecurUntilWrap').style.display = isCustom ? 'none' : '';
+  const isMcDays = this.value === 'mc_days';
+  // "Until" only applies to daily/weekdays; custom & mc_days pick explicit dates.
+  document.getElementById('calEvtRecurUntilWrap').style.display  = (isCustom || isMcDays) ? 'none' : '';
   document.getElementById('calEvtCustomDatesWrap').style.display = isCustom ? '' : 'none';
+  document.getElementById('calEvtMcDaysWrap').style.display      = isMcDays ? '' : 'none';
+  if (isMcDays) calRenderMcPick();
 });
+document.getElementById('calEvtF_mcPick').addEventListener('change', calRenderMcChips);
 
 // Reload sessions when user returns to this tab (sync changes from Daily/Gym Planning)
 document.addEventListener('visibilitychange', () => {
