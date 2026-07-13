@@ -4116,10 +4116,13 @@ async function _detectSmartDefault(clubId, userId) {
   window._gpClubId = clubId;
   window._gpUserId = profile?.id || null;
 
-  // Load per-club GPS settings (baseline N, mode, active metrics)
+  // Load per-club GPS settings (baseline N, mode, active metrics, ACWR model)
   if (typeof loadGpsSettings === 'function') {
     window._gpSettings = await loadGpsSettings(clubId);
   }
+  // Feed the club-configured ACWR model into the single engine so EVERY surface on this page
+  // (chart, gauges, table) computes the SAME ratio. UNCOUPLED always (methodological decision).
+  window.gpsACWR?.configure?.({ model: window._gpSettings?.acwr_model || 'ewma', coupled: false });
 
   // Load metric catalog (used by charts for dynamic labels/units)
   if (typeof window.getCatalog === 'function') {
@@ -4563,7 +4566,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   let histLoads;
   try {
     histLoads = await window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports')
-      .select(`session_id,player_load${_acwrCols}`)
+      .select(`session_id,player_id,player_load${_acwrCols}`)
       .eq('club_id', clubId)
       .eq('is_invalid', false)
       .in('session_id', hids.slice(0, 400))), { label: 'acwr.histLoads' });
@@ -4574,7 +4577,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       console.error('[GPS ACWR] base-metric "' + acwrMetric + '" select failed, falling back to player_load:', histLoadsErr);
       acwrMetric = 'player_load';
       histLoads = await window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports')
-        .select('session_id,player_load')
+        .select('session_id,player_id,player_load')
         .eq('club_id', clubId)
         .eq('is_invalid', false)
         .in('session_id', hids.slice(0, 400))), { label: 'acwr.histLoads.fallback' }).catch(() => []);
@@ -4641,16 +4644,36 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // ── ACWR chart ────────────────────────────────────────────
   try {
   const canvasACWR = document.getElementById('canvasACWR');
-  const acwrData = window.gpScience ? window.gpScience.acwr(acwrInput || []) : [];
+  // UNIFIED ENGINE: per-player → squad mean via window.gpsACWR (same engine as gauges/table/Player/
+  // Dossier/Gym), with the club-configured model and UNCOUPLED always. Replaces the old
+  // gpScience.acwr (RA, coupled, squad-POOLED) so the chart matches every other ACWR surface.
+  // Base metric stays per-card (card-acwr[data-metric-key]); season window + stabilization kept.
+  const _acwrModel = window._gpSettings?.acwr_model || 'ewma';
+  const _sessDateById = Object.fromEntries(histSessions.map(s => [s.id, s.session_date]));
+  const _byPlayerAcwr = {};
+  (histLoads || []).forEach(r => {
+    const _d = _sessDateById[r.session_id];
+    if (!_d || !r.player_id) return;
+    const _v = Number(r[acwrMetric]);
+    if (!Number.isFinite(_v)) return;
+    (_byPlayerAcwr[r.player_id] || (_byPlayerAcwr[r.player_id] = [])).push({ date: _d, value: _v });
+  });
+  // Season boundary preserved: window starts at acwrInput[0] (already season-capped above) and the
+  // daily-fill hard-stops there (no look-back across the season start).
+  const _acwrFrom = acwrInput[0]?.date || rangeFrom;
+  const _acwrSeries = window.gpsACWR?.squadTimeline
+    ? window.gpsACWR.squadTimeline(_byPlayerAcwr, _acwrFrom, rangeTo, { model: _acwrModel, coupled: false })
+    : { dates: [], squadAcwr: [] };
+  const acwrData = _acwrSeries.dates.map((date, i) => ({ date, ratio: _acwrSeries.squadAcwr[i] }));
   // Flag provisional points: chronic has < 28 days of history since the baseline anchor.
   if (_baselineAnchor) acwrData.forEach(d => {
     d.provisional = Math.round((new Date(d.date) - new Date(_baselineAnchor)) / 86400000) < 28;
   });
   const _firstReliable = acwrData.findIndex(d => !d.provisional);   // -1 ⇒ all provisional
-  if (canvasACWR && window.gpScience && !acwrData.length) {
+  if (canvasACWR && !acwrData.length) {
     // Computed but nothing to plot → soft empty state (don't abort the other cards).
     _showCardEmpty('card-acwr', 'No data');
-  } else if (canvasACWR && window.gpScience) {
+  } else if (canvasACWR) {
     Chart.getChart(canvasACWR)?.destroy();
     // Reflect the chosen base metric in the in-chart dropdown chip.
     const _acwrChip = document.querySelector('#card-acwr [data-acwr-metric-pick]');
@@ -9753,7 +9776,14 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       return;
     }
 
-    const acwrData = window.gpScience.acwr(daily);
+    // Unified engine: this single player's series via window.gpsACWR (club model, uncoupled) — same
+    // math as the squad chart/gauges/table, just scoped to one player. Replaces gpScience.acwr.
+    const _pwModel = window._gpSettings?.acwr_model || 'ewma';
+    const _pwByPlayer = { [playerId]: daily.map(d => ({ date: d.date, value: d.load })) };
+    const _pwSeries = window.gpsACWR?.squadTimeline
+      ? window.gpsACWR.squadTimeline(_pwByPlayer, daily[0].date, daily[daily.length - 1].date, { model: _pwModel, coupled: false })
+      : { dates: [], squadAcwr: [] };
+    const acwrData = _pwSeries.dates.map((date, i) => ({ date, ratio: _pwSeries.squadAcwr[i] }));
     const accent   = _accentHex();
     new Chart(canvas, {
       type: 'line',

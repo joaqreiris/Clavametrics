@@ -616,6 +616,11 @@
     try { window.applyClubTheme?.(); } catch {}
     if(!state.clubId){ console.warn('[LM] no club id'); return; }
 
+    // Default the ACWR model to the club setting (club_gps_settings.acwr_model) so Load Monitor
+    // agrees with every other surface out of the box. UNCOUPLED always. The model/coupling toggles
+    // remain as an analyst override, but the DEFAULT view is the unified club model.
+    try { state.model = await window.gpsACWR?.loadClubModel?.(state.clubId) || state.model; state.coupled = false; } catch {}
+
     try { state.catalog = await window.getCatalog?.(state.clubId) || []; } catch { state.catalog=[]; }
     state.cols = loadCols();
     state.signalSet = loadSignalSet();

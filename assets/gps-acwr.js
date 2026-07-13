@@ -51,6 +51,50 @@
   // Default engine configuration. Callers can override per-call.
   const CONFIG = { acuteDays: 7, chronicDays: 28, model: 'ewma', coupled: false, minSessions: 4 };
 
+  // Merge overrides onto CONFIG WITHOUT letting an explicit `undefined` clobber a default. Callers
+  // routinely pass { model, coupled } where those are undefined → they must fall back to CONFIG
+  // (the club-configured model), not reset it to the hard default.
+  function _opts(overrides) {
+    const o = Object.assign({}, CONFIG);
+    if (overrides) for (const k in overrides) if (overrides[k] !== undefined) o[k] = overrides[k];
+    return o;
+  }
+
+  // ── Unified model source (single source of truth across ALL surfaces) ────────────────────────
+  // The model (ra|ewma) comes from the club setting club_gps_settings.acwr_model. configure() sets
+  // it directly (when the caller already holds the setting, e.g. GPS Analysis' window._gpSettings);
+  // loadClubModel() lazily fetches + caches it per club so pages that DON'T load _gpSettings (Player,
+  // Dossier, Gym Planner, Hub, Load Monitor) converge on the same value. The high-level calculators
+  // below call _ensureModel(clubId) so every surface picks up the club model with zero per-page wiring.
+  // Coupling stays UNCOUPLED (methodological decision): CONFIG.coupled defaults to false.
+  const _clubModelCache = new Map();     // clubId → 'ra'|'ewma'
+  const _clubModelPending = new Map();   // clubId → Promise (dedupe concurrent loads)
+  function configure(opts) {
+    if (opts && (opts.model === 'ra' || opts.model === 'ewma')) CONFIG.model = opts.model;
+    if (opts && typeof opts.coupled === 'boolean') CONFIG.coupled = opts.coupled;
+    return CONFIG.model;
+  }
+  async function loadClubModel(clubId) {
+    if (!clubId || !window.sb) return CONFIG.model;
+    if (_clubModelCache.has(clubId)) { CONFIG.model = _clubModelCache.get(clubId); return CONFIG.model; }
+    if (_clubModelPending.has(clubId)) return _clubModelPending.get(clubId);
+    const p = (async () => {
+      let model = 'ewma';
+      try {
+        const { data } = await window.sb.from('club_gps_settings')
+          .select('acwr_model').eq('club_id', clubId).maybeSingle();
+        if (data && (data.acwr_model === 'ra' || data.acwr_model === 'ewma')) model = data.acwr_model;
+      } catch { /* default ewma on error */ }
+      _clubModelCache.set(clubId, model);
+      _clubModelPending.delete(clubId);
+      CONFIG.model = model;
+      return model;
+    })();
+    _clubModelPending.set(clubId, p);
+    return p;
+  }
+  const _ensureModel = loadClubModel;   // alias for readability at call sites
+
   function getMetric(key) { return METRICS.find(m => m.key === key) || METRICS[0]; }
   function metricValue(metric, row) {
     if (typeof metric.derive === 'function') return metric.derive(row);
@@ -94,7 +138,7 @@
   // ACWR from a zero-filled daily series, evaluated at the LAST day.
   // opts: { model:'ewma'|'ra', coupled:bool, acuteDays, chronicDays }
   function acwrFromDaily(daily, opts) {
-    const o = Object.assign({}, CONFIG, opts);
+    const o = _opts(opts);
     if (!daily.length) return null;
 
     if (o.model === 'ra') {
@@ -121,7 +165,7 @@
 
   // Convenience: ACWR for a player's raw records at a reference date.
   function acwrForRecords(records, refStr, opts) {
-    const o = Object.assign({}, CONFIG, opts);
+    const o = _opts(opts);
     const from = _offsetDate(refStr, -(o.chronicDays - 1));
     return acwrFromDaily(dailyFill(records, from, refStr), o);
   }
@@ -244,7 +288,8 @@
    * squadAcwr = MEAN of individual ACWRs (never pool the squad into one series).
    */
   async function calculateSquad({ clubId, refDate, metricKey, model, coupled }) {
-    const o = Object.assign({}, CONFIG, { model, coupled });
+    await _ensureModel(clubId);
+    const o = _opts({ model, coupled });
     const ref = refDate || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const byPlayer = await fetchByPlayer({ clubId, metricKey: metricKey || METRICS[0].key, from, to: ref });
@@ -275,18 +320,18 @@
    * → { dates:[], squadAcwr:[], squadLoad:[] } — squad-average ACWR per day plus
    *   the total daily session load, for the trend chart.
    */
-  async function calculateSquadTimeline({ clubId, fromDate, toDate, metricKey, model, coupled }) {
-    const o = Object.assign({}, CONFIG, { model, coupled });
-    const to = toDate || _dateStr(new Date());
-    // Look back an extra chronic window so the earliest chart points have a
-    // fully-populated chronic baseline (otherwise the initial ACWR is inflated).
-    const fetchFrom = _offsetDate(fromDate, -(o.chronicDays - 1));
-    const byPlayer = await fetchByPlayer({ clubId, metricKey: metricKey || METRICS[0].key, from: fetchFrom, to });
-
-    const days = _enumDays(fromDate, to);
+  // Pure per-player→mean timeline from ALREADY-FETCHED records. Same engine (acwrFromDaily) so the
+  // curve matches the point values everywhere. `fillFrom` (default dayFrom) is the daily-fill start:
+  // pass an earlier date to give the first plotted day a populated chronic window; keep it = dayFrom
+  // to hard-stop the look-back at a season boundary. Callers that pre-scope players (team/filter) get
+  // that scope respected — this function never fetches.
+  function squadTimeline(byPlayer, dayFrom, dayTo, opts, fillFrom) {
+    const o = _opts(opts);
+    const _fill = fillFrom || dayFrom;
+    const days = _enumDays(dayFrom, dayTo);
     const perPlayerDaily = {};
-    for (const [pid, recs] of Object.entries(byPlayer))
-      perPlayerDaily[pid] = dailyFill(recs, fetchFrom, to);
+    for (const [pid, recs] of Object.entries(byPlayer || {}))
+      perPlayerDaily[pid] = dailyFill(recs, _fill, dayTo);
 
     const dates = [], squadAcwr = [], squadLoad = [];
     for (const day of days) {
@@ -306,10 +351,22 @@
     return { dates, squadAcwr, squadLoad };
   }
 
+  async function calculateSquadTimeline({ clubId, fromDate, toDate, metricKey, model, coupled }) {
+    await _ensureModel(clubId);
+    const o = _opts({ model, coupled });
+    const to = toDate || _dateStr(new Date());
+    // Look back an extra chronic window so the earliest chart points have a
+    // fully-populated chronic baseline (otherwise the initial ACWR is inflated).
+    const fetchFrom = _offsetDate(fromDate, -(o.chronicDays - 1));
+    const byPlayer = await fetchByPlayer({ clubId, metricKey: metricKey || METRICS[0].key, from: fetchFrom, to });
+    return squadTimeline(byPlayer, fromDate, to, o, fetchFrom);
+  }
+
   // ── Backward-compatible wrappers (used by player-load.js et al.) ──────────
   // Both compute every metric from a SINGLE raw fetch per source (2 queries max).
   async function calculateTeamACWR({ clubId, refDate, model, coupled }) {
-    const o = Object.assign({}, CONFIG, { model, coupled });
+    await _ensureModel(clubId);
+    const o = _opts({ model, coupled });
     const ref = refDate || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const raw = await _fetchRaw(clubId, from, ref, new Set(METRICS.map(m => m.source)));
@@ -329,7 +386,8 @@
   }
   async function calculatePlayerACWR({ clubId, refDate, model, coupled }) {
     // Returns { [player_id]: { sessCount, insufficient, <metric>:ratio, ... } }
-    const o = Object.assign({}, CONFIG, { model, coupled });
+    await _ensureModel(clubId);
+    const o = _opts({ model, coupled });
     const ref = refDate || _dateStr(new Date());
     const from = _offsetDate(ref, -(o.chronicDays - 1));
     const raw = await _fetchRaw(clubId, from, ref, new Set(METRICS.map(m => m.source)));
@@ -351,8 +409,10 @@
   window.gpsACWR = {
     // config + metadata
     METRICS, ZONES, CONFIG, getMetric, getZone,
+    // unified model source (single source of truth: club_gps_settings.acwr_model)
+    configure, loadClubModel,
     // pure core
-    dailyFill, acwrFromDaily, acwrForRecords,
+    dailyFill, acwrFromDaily, acwrForRecords, squadTimeline,
     // data + high level
     fetchByPlayer, calculateSquad, calculateSquadTimeline,
     // legacy

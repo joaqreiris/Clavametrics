@@ -23,6 +23,10 @@
     },
 
     // ── ACWR (Acute:Chronic Workload Ratio) ───────────────────
+    // @deprecated Use window.gpsACWR (assets/gps-acwr.js) — the single unified engine (club-
+    // configured model, uncoupled, per-player→mean). This RA/coupled/squad-pooled variant is NO
+    // LONGER USED by any surface (kept only for reference / potential ad-hoc callers). Do not add
+    // new callers: it will disagree with every other ACWR display in the app.
     // daily: array of { date: 'YYYY-MM-DD', load: number }
     // Returns same array augmented with { acute, chronic, ratio }
     acwr(daily) {
