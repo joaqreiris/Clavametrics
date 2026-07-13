@@ -1595,6 +1595,12 @@
           </select>
         </div>
       </div>
+      <div class="sq-modal-row" id="calMcTypeWrap" style="display:none">
+        <div class="sq-modal-field">
+          <label for="calMcF_type" data-i18n="annual_planner.micro_type">Micro type</label>
+          <select id="calMcF_type"></select>
+        </div>
+      </div>
     </div>
     <div class="sq-modal-foot">
       <button class="cm-btn is-ghost is-sm" id="calMcDelete" style="display:none;color:var(--cm-danger,#dc2626)"><i class="ti ti-trash" style="font-size:13px"></i><span data-i18n="calendar.delete_microcycle">Delete microcycle</span></button>
@@ -1673,6 +1679,7 @@ let _ribbonV2Meta = null;    // { ribbonStart, ribbonEnd } — set by renderSeas
 let _ribbonV2Centered = false; // V2 initial auto-scroll to today done once (don't yank scroll on re-render)
 let _calComps = [];          // competitions of the active season (from Annual Planner)
 let _calSeasonId = null;     // id of the active/most-recent season for this team
+let _calPlanModel = 'tactical';   // seasons.planning_model of the active season (gates micro_type)
 let _calSeason = null;       // full active/most-recent season row
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
@@ -1787,8 +1794,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Microcycle select fields — module-level so accessible from all listeners
-const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,md_overrides';
+const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,md_overrides,micro_type';
 const MC_FULL_SELECT = MC_BASE_SELECT + ',publish_players,publish_medical,publish_board,published_at,publish_config';
+
+// Micro type (Seirul·lo typed micros) — mirror Annual Planner's model gating so we don't
+// offer a concept the season's periodization model doesn't use. Same keys as PLAN_MODELS/MICRO_TYPES.
+const CAL_PLAN_USES_MICROTYPE = { tactical:false, structured:true, atr:false, verheijen:false };
+const CAL_MICRO_TYPES = ['adjustment','load','impact','competitive'];
+const CAL_MICROTYPE_FB = { adjustment:'Adjustment', load:'Load', impact:'Impact', competitive:'Competitive' };
+function calModelUsesMicroType(){ return !!CAL_PLAN_USES_MICROTYPE[_calPlanModel || 'tactical']; }
+function calMicroTypeLabel(k){ return tt('annual_planner.microtype_' + k, CAL_MICROTYPE_FB[k] || k); }
 
 // ── Publish state ────────────────────────────────────────────────
 function _pubBadgeEl(group) { return document.getElementById('calPubBadge' + group.charAt(0).toUpperCase() + group.slice(1)); }
@@ -3683,6 +3698,18 @@ function openMcModal(existingMc) {
   document.getElementById('calMcF_start').value    = existingMc?.start_date || '';
   document.getElementById('calMcF_end').value      = existingMc?.end_date   || '';
   document.getElementById('calMcF_comp').value     = existingMc?.color       || '';
+  // Micro type — only for periodization models that use it (mirror Annual Planner).
+  const typeWrap = document.getElementById('calMcTypeWrap');
+  const typeSel  = document.getElementById('calMcF_type');
+  if (calModelUsesMicroType()){
+    const cur = existingMc?.micro_type || '';
+    typeSel.innerHTML = `<option value="">${tt('annual_planner.type_opt','— Type')}</option>` +
+      CAL_MICRO_TYPES.map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${calMicroTypeLabel(k)}</option>`).join('');
+    typeWrap.style.display = '';
+  } else {
+    typeSel.innerHTML = '';
+    typeWrap.style.display = 'none';
+  }
   document.getElementById('calMcSaving').style.display = 'none';
   document.getElementById('calMcSave').disabled = false;
   document.getElementById('calMcBackdrop').classList.add('is-open');
@@ -3717,10 +3744,13 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     end_date:   end,
     color:      document.getElementById('calMcF_comp').value     || null,
   };
+  if (calModelUsesMicroType()) payload.micro_type = document.getElementById('calMcF_type').value || null;
 
   let error;
   if (_editMcId) {
-    ({ error } = await window.sb.from('microcycles').update(payload).eq('id', _editMcId));
+    const { data: upd, error: e1 } = await window.sb.from('microcycles').update(payload).eq('id', _editMcId).select('id');
+    error = e1;
+    if (!error && (!upd || !upd.length)) { saving.style.display = 'none'; saveBtn.disabled = false; showCalToast(tt('annual_planner.save_no_rows','Nothing was saved (no matching microcycle).')); return; }
   } else {
     payload.id = crypto.randomUUID();
     payload.team_id = _activeTeamId;
@@ -4276,7 +4306,7 @@ function mcMatchDate(mc) { return mcMatch(mc)?.session_date || null; }
 
 // Load the active season + its competitions (from Annual Planner model)
 async function loadCalCompetitions() {
-  _calComps = []; _calSeasonId = null; _calSeason = null;
+  _calComps = []; _calSeasonId = null; _calSeason = null; _calPlanModel = 'tactical';
   if (!_clubId || !_activeTeamId) return;
   const { data: seasons } = await window.sb
     .from('seasons').select('*')
@@ -4287,6 +4317,7 @@ async function loadCalCompetitions() {
   const current = seasons.find(s => s.start_date <= TODAY && s.end_date >= TODAY);
   _calSeason = current || seasons[0];
   _calSeasonId = _calSeason.id;
+  _calPlanModel = _calSeason.planning_model || 'tactical';
   const { data: comps } = await window.sb
     .from('competitions').select('id,name,comp_type,color')
     .eq('season_id', _calSeasonId).order('created_at');
