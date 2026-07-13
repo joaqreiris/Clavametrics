@@ -2989,7 +2989,7 @@ function showRecurDeleteDialog(session) {
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:20px';
   ov.innerHTML = `
-    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-2);max-width:360px;width:100%;padding:20px" onclick="event.stopPropagation()">
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-2);max-width:360px;width:100%;padding:20px">
       <div style="font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">${_esc(tt('calendar.delete_recurring_title','Delete recurring event'))}</div>
       <div style="font:500 13px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:16px">${_esc(tt('calendar.delete_recurring_body','This event is part of a series.'))}</div>
       <div style="display:flex;flex-direction:column;gap:8px">
@@ -2998,21 +2998,30 @@ function showRecurDeleteDialog(session) {
         <button class="cm-btn is-ghost is-sm" data-act="cancel">${_esc(tt('common.cancel','Cancel'))}</button>
       </div>
     </div>`;
-  const close = () => ov.remove();
-  ov.addEventListener('click', async (e) => {
-    const act = e.target.closest('button')?.dataset.act;
-    if (!act || act === 'cancel') { close(); return; }   // backdrop click (no button) also cancels
+  const panel = ov.firstElementChild;
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  // Buttons wired on the PANEL (delegated) — the overlay click never sees them if the panel stops the bubble.
+  panel.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) { e.stopPropagation(); return; }   // click inside the panel but not on a button: keep open
+    const act = btn.dataset.act;
     close();
     if (act === 'one')      await deleteEvt(session.id, session.source);
     else if (act === 'all') await deleteEvtSeries(session.recurrence_group_id, session.source);
+    // 'cancel' → just close()
   });
+  // Backdrop click (on the overlay itself) closes without deleting.
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
   document.body.appendChild(ov);
 }
 
 async function deleteEvt(id, source) {
   const table = (source === 'session') ? 'training_sessions' : 'calendar_events';
-  const { error } = await window.sb.from(table).delete().eq('id', id);
+  const { data: del, error } = await window.sb.from(table).delete().eq('id', id).select('id');
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+  if (!del || !del.length) { showCalToast(tt('calendar.delete_no_rows','Nothing was deleted.')); return; }
   showCalToast(tt('calendar.event_deleted','Event deleted.'));
   await loadSessions();
   await refreshRibbonMatches();
@@ -3020,8 +3029,9 @@ async function deleteEvt(id, source) {
 
 async function deleteEvtSeries(recurrenceGroupId, source) {
   const table = (source === 'session') ? 'training_sessions' : 'calendar_events';
-  const { error } = await window.sb.from(table).delete().eq('recurrence_group_id', recurrenceGroupId);
+  const { data: del, error } = await window.sb.from(table).delete().eq('recurrence_group_id', recurrenceGroupId).select('id');
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+  if (!del || !del.length) { showCalToast(tt('calendar.delete_no_rows','Nothing was deleted.')); return; }
   showCalToast(tt('calendar.series_deleted','Series deleted.'));
   await loadSessions();
   await refreshRibbonMatches();
