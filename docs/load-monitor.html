@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Load Monitor — ClavaMetrics Docs</title>
+<meta name="description" content="A squad-level workload-risk dashboard built on the acute:chronic workload ratio (ACWR) — who is underloaded, in the sweet spot, overreaching or in the danger zone.">
+<link rel="icon" type="image/png" href="/assets/clava-app-192.png">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="theme-color" content="#15803D">
+<link rel="canonical" href="https://clavametrics.vercel.app/docs/load-monitor">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://clavametrics.vercel.app/docs/load-monitor">
+<meta property="og:title" content="Load Monitor — ClavaMetrics Docs">
+<meta property="og:description" content="A squad-level workload-risk dashboard built on the acute:chronic workload ratio (ACWR) — who is underloaded, in the sweet spot, overreaching or in the danger zone.">
+<meta property="og:image" content="https://clavametrics.vercel.app/assets/clava-app-512.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Load Monitor — ClavaMetrics Docs">
+<meta name="twitter:description" content="A squad-level workload-risk dashboard built on the acute:chronic workload ratio (ACWR) — who is underloaded, in the sweet spot, overreaching or in the danger zone.">
+<link rel="stylesheet" href="/clavametrics.css">
+<link rel="stylesheet" href="/marketing.css">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body class="cm">
+
+<!-- ════════════════ NAV ════════════════ -->
+<nav class="mk-nav">
+  <a class="mk-brand" href="/Home.html">
+    <span class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 18V10"></path><path d="M12 18V5"></path><path d="M19 18v-9"></path>
+      </svg>
+    </span>
+    <span class="name">ClavaMetrics</span>
+  </a>
+  <div class="mk-links">
+    <a href="/Home.html#modules">Product</a>
+    <a href="/Home.html#how">How it works</a>
+    <a href="/Pricing.html">Pricing</a>
+    <a href="/docs" class="is-active">Docs</a>
+  </div>
+  <div class="mk-cta">
+    <a class="signin" href="/Login.html">Sign in</a>
+    <a class="cm-btn is-primary is-sm" href="/Register.html" style="text-decoration:none">
+      <span>Start free</span><i class="ti ti-arrow-right" style="font-size:14px"></i>
+    </a>
+  </div>
+</nav>
+
+<button class="dx-side-toggle" type="button" aria-expanded="false" aria-controls="dxSide">
+  <i class="ti ti-menu-2"></i><span>Browse docs</span>
+</button>
+
+<div class="dx-shell">
+  <!-- ── Left sidebar ── -->
+  <aside class="dx-side" id="dxSide">
+    <div class="dx-search">
+      <div class="dx-search-input">
+        <i class="ti ti-search"></i>
+        <input type="search" id="dxSearchInput" placeholder="Search the docs…" autocomplete="off" aria-label="Search documentation">
+        <kbd>/</kbd>
+      </div>
+      <div class="dx-results" id="dxResults" hidden></div>
+    </div>
+    <div class="dx-side-world"><h4><i class="ti ti-calendar-stats"></i>Planning</h4><a href="/docs/calendar">Calendar</a></div>
+<div class="dx-side-world"><h4><i class="ti ti-chart-line"></i>Performance</h4><a href="/docs/gps-analysis">GPS Analysis</a><a href="/docs/load-monitor" class="is-active">Load Monitor</a></div>
+
+
+
+  </aside>
+
+  <!-- ── Content ── -->
+  <main class="dx-main">
+    <nav class="dx-crumb" aria-label="Breadcrumb">
+      <a href="/docs">Docs</a><span class="sep">/</span>
+      <a href="/docs#performance">Performance</a><span class="sep">/</span>
+      <span>Load Monitor</span>
+    </nav>
+    <header class="dx-head">
+      <h1>Load Monitor</h1>
+      <p class="dx-summary">A squad-level workload-risk dashboard built on the acute:chronic workload ratio (ACWR) — who is underloaded, in the sweet spot, overreaching or in the danger zone.</p>
+      <span class="dx-apppage"><i class="ti ti-app-window"></i>App page: Load Monitor.html</span>
+    </header>
+    <article class="dx-article">
+      <h2 id="what-it-is">What it is</h2>
+<p>The Load Monitor is a squad-wide readiness dashboard centered on the <strong>acute:chronic workload ratio (ACWR)</strong>. It reads each player's recent load against their own rolling baseline and sorts the squad into workload zones — underloaded, sweet spot, overreach, or high risk — so the staff can see at a glance who needs pulling back and who has room to push.</p>
+<h2 id="when-you-use-it">When you use it</h2>
+<p>Use it in the daily planning routine — typically before or after a session — to check the squad's risk picture, spot players trending into the danger zone, and cross-read ACWR against today's wellness and session-RPE. It complements the <a href="/docs/calendar">Calendar</a> (which creates the sessions the load is calculated from) and <a href="/docs/gps-analysis">GPS Analysis</a> (which offers the same engine with deeper per-metric drilldowns).</p>
+<h2 id="how-it-works">How it works</h2>
+<p><strong>Pick the squad and the period.</strong> The team selector scopes all data to one category. A segmented control switches the time window: <strong>7d</strong>, <strong>28d</strong> (default), <strong>Microcycle</strong>, or <strong>Season</strong>. Changing it re-scopes the chart, the distribution and every card.</p>
+<p><strong>Read the KPI strip.</strong> Four cards summarize the squad: average ACWR (with a mini zone bar), number of players in the danger zone, wellness average for today, and average session-RPE over the last seven days.</p>
+<p><strong>Read the chart.</strong> The main chart plots the squad-average ACWR over time as a line, with daily load drawn as bars behind it, and dashed reference lines at the zone thresholds. Importantly, the squad line is the <strong>mean of each player's ACWR</strong>, not a single pooled squad ratio — averaging ratios rather than raw loads keeps high-volume players from dominating the number.</p>
+<p><strong>Read the distribution and wellness.</strong> A donut breaks the squad into sweet-spot / overreach / danger / no-data slices (toggle it to a table if you prefer names and values). A wellness panel shows today's check-in dimensions (Sleep, Mood, Fatigue, Stress, Soreness — or the Hooper index if the club uses it), colored by how favorable each is.</p>
+<p><strong>Work the player table.</strong> Every player appears with jersey number, position, an ACWR value and bar, session-RPE, wellness, their acute/chronic figures, and a zone pill. You can:</p>
+<ul><li><strong>Filter by zone</strong> — All, Danger, Overreach, Sweet-spot, Underloaded.</li><li><strong>Group by</strong> Position, Status or Age, and <strong>sort</strong> by any column (ACWR sorts high-first by default; players with no data always sort last).</li><li><strong>Act on a wellness flag</strong> — a flagged row (reported sore area or wellness note) opens a modal where you can <strong>Mark as seen</strong> or <strong>Create a follow-up in Injuries</strong>.</li></ul>
+<p><strong>Tune the model.</strong> Two controls change how ACWR is computed (see Key concepts): a <strong>metric</strong> selector chooses which load stream feeds the ratio (session-RPE load by default, or a GPS metric), and a <strong>model</strong> popover toggles <strong>EWMA vs Rolling average</strong> and <strong>Uncoupled vs Coupled</strong> chronic windows.</p>
+<p><strong>Export.</strong> Export the table to CSV (player, position, ACWR, acute and chronic load, zone, last RPE, sessions), and save the chart or distribution as a PNG.</p>
+<h2 id="key-concepts">Key concepts</h2>
+<p><strong>ACWR (acute:chronic workload ratio).</strong> A dimensionless ratio of recent load (the <strong>acute</strong> window, last 7 days) to the player's rolling baseline (the <strong>chronic</strong> window, last 28 days). It is a flag for how fast load is changing, not a verdict — read it alongside wellness, RPE and medical judgment.</p>
+<p><strong>The zones.</strong> The Load Monitor uses these boundaries (from the shared ACWR engine):</p>
+<table><thead><tr><th>Zone</th><th>ACWR</th><th>Reading</th></tr></thead><tbody><tr><td>Underloaded</td><td>below 0.8</td><td>Recent load is under baseline — sub-optimal stimulus, detraining risk.</td></tr><tr><td>Sweet spot</td><td>0.8 – 1.3</td><td>Load is progressing in step with the baseline — the target range.</td></tr><tr><td>Overreach</td><td>1.3 – 1.5</td><td>Elevated, tolerable short-term (e.g. a loading block or taper) — watch closely.</td></tr><tr><td>High risk</td><td>1.5 and above</td><td>An acute spike — the danger zone; combine with wellness before deciding.</td></tr></tbody></table>
+<p>A player needs at least <strong>4 sessions</strong> in the chronic window to get an ACWR; below that they show as "no data" and are left out of the squad average.</p>
+<p><strong>EWMA vs Rolling average.</strong> The <strong>EWMA</strong> (exponentially weighted moving average) model is the evidence-based default: it weights recent days more and avoids the artificial "spike" a plain rolling average produces when old sessions drop off the 7-day edge. The <strong>Rolling</strong> model is the simple mean of the window. The active model is a <strong>club-wide setting</strong>, so every page that shows ACWR (Load Monitor, GPS Analysis, player dossiers) reads the same number.</p>
+<p><strong>Coupled vs uncoupled.</strong> By default the windows are <strong>uncoupled</strong>: the chronic window is days 8–28, excluding the acute 7 days. This stops the recent spike you are trying to detect from also inflating the baseline it is measured against (the methodologically preferred approach). <strong>Coupled</strong> includes all 28 days in the chronic window.</p>
+<p><strong>s-RPE (session RPE) load.</strong> The default load stream. For each session, load = <strong>RPE (0–10) × duration (minutes)</strong>, in arbitrary units — an internal, perception-based measure of how hard the session was. The metric selector can swap this for a GPS stream (player load, total distance, high-speed distance, sprint distance, sprints, or accelerations+decelerations) when GPS data is available.</p>
+<p><strong>Acute vs chronic load.</strong> Acute is the sum of load over the last 7 days — the recent stress. Chronic is the player's rolling baseline over 28 days — the load they are conditioned for. ACWR is simply acute relative to chronic.</p>
+<h2 id="faq">FAQ</h2>
+<p><strong>What ACWR is "good"?</strong> The 0.8–1.3 sweet spot is the target. 1.3–1.5 is overreach — acceptable briefly but worth watching. 1.5 and above is the high-risk spike zone. Below 0.8 is underloading.</p>
+<p><strong>Why does a player show no ACWR?</strong> They have fewer than 4 sessions in the last 28 days, so there isn't enough history for a reliable baseline. They're excluded from the squad average until they cross that threshold.</p>
+<p><strong>Which load does ACWR use?</strong> Session-RPE load by default (RPE × minutes). Use the metric selector to base it on a GPS stream instead, where GPS data exists.</p>
+<p><strong>Why is the squad line an average of ratios?</strong> Because averaging each player's ACWR (rather than pooling raw squad load) prevents high-minute players from skewing the team-level picture — it reflects team risk more faithfully.</p>
+<p><strong>Where does the load data come from?</strong> From training sessions and their RPE entries (and, for GPS metrics, from imported/synced GPS reports). The <a href="/docs/calendar">Calendar</a> creates the sessions; wellness flags link through to Injuries.</p>
+<h2 id="related">Related</h2>
+<ul><li><a href="/docs/gps-analysis">GPS Analysis</a> — the same ACWR engine, plus per-metric and per-player analysis.</li><li><a href="/docs/calendar">Calendar</a> — where the sessions and planned load originate.</li></ul>
+    </article>
+  </main>
+
+  <!-- ── Right TOC ── -->
+  <aside class="dx-toc">
+    <h5>On this page</h5>
+    <nav id="dxToc"><a href="#what-it-is">What it is</a><a href="#when-you-use-it">When you use it</a><a href="#how-it-works">How it works</a><a href="#key-concepts">Key concepts</a><a href="#faq">FAQ</a><a href="#related">Related</a></nav>
+  </aside>
+</div>
+
+<!-- ════════════════ FOOTER ════════════════ -->
+<footer class="mk-foot">
+  <div class="mk-foot-inner">
+    <div class="mk-foot-brand">
+      <a class="mk-brand" href="/Home.html">
+        <span class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"></path><path d="M12 18V5"></path><path d="M19 18v-9"></path></svg>
+        </span>
+        <span class="name">ClavaMetrics</span>
+      </a>
+      <p>The performance OS for clubs and federations. Every sport, every category, one workspace.</p>
+    </div>
+    <div class="mk-foot-col">
+      <h4>Product</h4>
+      <a href="/Home.html#modules">Features</a>
+      <a href="/Home.html#how">How it works</a>
+      <a href="/Pricing.html">Pricing</a>
+      <a href="/Login.html">Sign in</a>
+    </div>
+    <div class="mk-foot-col">
+      <h4>Docs</h4>
+      <a href="/docs">Support center</a>
+      <a href="/docs/calendar">Calendar</a>
+      <a href="/docs/gps-analysis">GPS Analysis</a>
+      <a href="/docs/load-monitor">Load Monitor</a>
+    </div>
+    <div class="mk-foot-col">
+      <h4>Company</h4>
+      <a href="/Contact.html">Contact</a>
+    </div>
+  </div>
+  <div class="mk-foot-bottom">
+    <span>© ClavaMetrics, Inc. · Performance OS for sport</span>
+  </div>
+</footer>
+
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>
