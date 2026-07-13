@@ -560,6 +560,7 @@ async function apSelectSeason(id){
   await apLoadPhases();
   await apLoadComps();
   await apLoadMatches();
+  await apLoadDayEvents();
   if (apModelCfg().usesBlocks) await apLoadPeriodization();
   await apLoadTimeline();
 }
@@ -810,6 +811,7 @@ function apRenderTimeline(){
 let _apEditingPhase = null;
 let _apComps = [], _apEditingComp = null;
 let _apMatches = [], _apImportRows = [], _apImportNewComps = [], _apEditingMatch = null;
+let _apDayEvents = {};   // { 'YYYY-MM-DD': [{id, source:'event'|'session', type, title}] }
 let _apMacros = [], _apMesos = [], _apExpandedMacro = null, _apEditingMacro = null, _apEditingMeso = null;
 const LOAD_MODELS = {
   structured: { label:'Structured', bg:'#E1F5EE', tx:'#085041' },
@@ -1035,6 +1037,82 @@ async function apLoadMatches(){
     .eq('season_id', _apSeasonId).eq('type', 'match').order('date');
   _apMatches = data || [];
   apRenderMatchesList();
+}
+
+// ── Day events layer (informational chips derived from the real agenda) ──────
+function apEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function apEvtIcon(type){
+  const M = { match:'ti-ball-football', training:'ti-run', tactical:'ti-run', gym:'ti-barbell', travel:'ti-plane', day_off:'ti-bed', recovery:'ti-snowflake', evaluation:'ti-clipboard-list' };
+  return M[type] || 'ti-calendar-event';
+}
+const AP_LIGHT_EVTS = [
+  { type:'travel',     k:'annual_planner.evt_travel',     fb:'Travel' },
+  { type:'day_off',    k:'annual_planner.evt_day_off',    fb:'Day off' },
+  { type:'recovery',   k:'annual_planner.evt_recovery',   fb:'Recovery' },
+  { type:'evaluation', k:'annual_planner.evt_evaluation', fb:'Evaluation' },
+];
+const AP_LIGHT_SET = new Set(AP_LIGHT_EVTS.map(e => e.type));
+
+async function apLoadDayEvents(){
+  _apDayEvents = {};
+  if (!_apSeasonId || !_apSeasonStart || !_apSeasonEnd) return;
+  const [ce, ts] = await Promise.all([
+    window.sb.from('calendar_events').select('id,date,type,title')
+      .eq('club_id', _apClubId).eq('team_id', _apTeamId)
+      .gte('date', _apSeasonStart).lte('date', _apSeasonEnd),
+    window.sb.from('training_sessions').select('id,session_date,session_type,title')
+      .eq('club_id', _apClubId).eq('team_id', _apTeamId).eq('is_historical', false)
+      .gte('session_date', _apSeasonStart).lte('session_date', _apSeasonEnd)
+  ]);
+  const push = (ds, ev) => { if (!ds) return; (_apDayEvents[ds] || (_apDayEvents[ds] = [])).push(ev); };
+  (ce.data || []).forEach(e => push((e.date || '').split('T')[0], { id: e.id, source:'event', type: e.type, title: e.title || '' }));
+  (ts.data || []).forEach(s => push((s.session_date || '').split('T')[0], { id: s.id, source:'session', type: s.session_type, title: s.title || '' }));
+}
+
+function apOpenSessionDay(ds, type){
+  const page = (type === 'gym') ? 'Gym Planner.html' : 'Daily Planning.html';
+  window.location.href = page + '?date=' + encodeURIComponent(ds);
+}
+
+async function apAddDayEvent(ds, type){
+  const label = tt('annual_planner.evt_' + type, type);
+  const { error } = await window.sb.from('calendar_events').insert({
+    id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
+    type, date: ds, title: label
+  });
+  if (error){ alert(tt('annual_planner.could_not_save','Could not save: ' + error.message, {msg:error.message})); return; }
+  await apLoadDayEvents();
+  apMicroEditorRender();
+}
+
+async function apDelDayEvent(id){
+  const { error } = await window.sb.from('calendar_events').delete().eq('id', id);
+  if (error){ alert(tt('annual_planner.could_not_delete','Could not delete: ' + error.message, {msg:error.message})); return; }
+  await apLoadDayEvents();
+  apMicroEditorRender();
+}
+
+function apOpenAddEvtMenu(ds, btn){
+  document.getElementById('apAddEvtMenu')?.remove();
+  const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'apAddEvtMenu';
+  menu.style.cssText = `position:fixed;z-index:9999;top:${r.bottom+4}px;left:${Math.max(6, Math.min(r.left, window.innerWidth-166))}px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;box-shadow:var(--cm-shadow-2);padding:4px;min-width:150px`;
+  menu.innerHTML = AP_LIGHT_EVTS.map(e => `<button data-type="${e.type}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;background:none;border:0;border-radius:6px;cursor:pointer;color:var(--cm-fg-strong);font:500 12px/1 var(--cm-font-sans);text-align:left"><i class="ti ${apEvtIcon(e.type)}" style="font-size:14px"></i>${apEsc(tt(e.k, e.fb))}</button>`).join('');
+  menu.addEventListener('click', async (ev) => {
+    const t = ev.target.closest('[data-type]')?.dataset.type; if (!t) return;
+    menu.remove();
+    await apAddDayEvent(ds, t);
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', function _c(e){ if (!menu.contains(e.target)){ menu.remove(); document.removeEventListener('click', _c); } }), 0);
+}
+
+function apToast(msg){
+  let t = document.getElementById('apToast');
+  if (!t){ t = document.createElement('div'); t.id = 'apToast'; t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;background:var(--cm-fg-strong);color:var(--cm-surface);padding:8px 14px;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);box-shadow:var(--cm-shadow-2);opacity:0;transition:opacity .15s;pointer-events:none'; document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, 1800);
 }
 
 function apRenderMatchesList(){
@@ -1573,8 +1651,9 @@ function apMicroEditorRender(){
   if (!ed) return;
   if (!_apSelectedMicro){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
   const mi = _apTL.micros.find(m => m.id === _apSelectedMicro);
-  if (!mi){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
+  if (!mi){ ed.classList.add('is-hidden'); ed.innerHTML = ''; ed.removeAttribute('data-micro-id'); return; }
   ed.classList.remove('is-hidden');
+  ed.dataset.microId = mi.id;   // stable id fallback for apSaveMicro (selection can get toggled off)
   // Read-only panel in the big timeline view (until "Edit microcycles" is pressed)
   if (_apView === 'big' && !_apEditMode){
     const rm = (_apMatches || []).find(m => m.date >= mi.start_date && m.date <= mi.end_date)
@@ -1618,11 +1697,25 @@ function apMicroEditorRender(){
     const mdOpts = [['', auto.label ? tt('annual_planner.auto_suffix', `${auto.label} · auto`, {label:auto.label}) : tt('annual_planner.auto','Auto')], ...MD_CHOICES.map(v => [v, v]), ['none', tt('annual_planner.md_none','— none')]]
       .map(([v, l]) => `<option value="${v}"${v === curMd ? ' selected' : ''}>${l}</option>`).join('');
     const mdEdited = curMd !== '';
+    // Event chips derived from the real agenda (calendar_events + training_sessions).
+    const _evs = _apDayEvents[ds] || [];
+    let dayChips = `<div title="${apEsc(tt('annual_planner.day_events','Events'))}" style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center;margin-top:4px">`;
+    dayChips += _evs.map(ev => {
+      const _ic = apEvtIcon(ev.type);
+      const _t  = apEsc(ev.title || ev.type || '');
+      if (ev.source === 'session'){
+        return `<span onclick="apOpenSessionDay('${ds}','${ev.type}')" title="${_t}" style="display:inline-flex;align-items:center;padding:2px 3px;border-radius:4px;background:var(--cm-surface);border:1px solid var(--cm-border);cursor:pointer;color:${dt.tx}"><i class="ti ${_ic}" style="font-size:11px"></i></span>`;
+      }
+      const _x = AP_LIGHT_SET.has(ev.type) ? `<i class="ti ti-x" onclick="event.stopPropagation();apDelDayEvent('${ev.id}')" title="${apEsc(tt('common.delete','Delete'))}" style="font-size:9px;cursor:pointer;margin-left:1px;opacity:.55"></i>` : '';
+      return `<span title="${_t}" style="display:inline-flex;align-items:center;gap:1px;padding:2px 3px;border-radius:4px;background:var(--cm-surface);border:1px solid var(--cm-border);color:${dt.tx}"><i class="ti ${_ic}" style="font-size:11px"></i>${_x}</span>`;
+    }).join('');
+    dayChips += `<button onclick="apOpenAddEvtMenu('${ds}',this)" title="${apEsc(tt('annual_planner.add_event','Add event'))}" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;padding:0;border:1px dashed var(--cm-border);border-radius:4px;background:none;color:var(--cm-fg-faint);cursor:pointer;font:600 11px/1 var(--cm-font-sans);opacity:.6">+</button></div>`;
     dayCards += `<div style="border:0.5px solid var(--cm-border);border-radius:8px;padding:7px 5px 6px;text-align:center;background:${dt.bg}">
       <div style="font:600 10px/1 var(--cm-font-sans);color:${dt.tx}">${DOW[cur.getDay()]}</div>
       <div style="font:600 13px/1 var(--cm-font-mono);color:${dt.tx};margin:2px 0 4px">${cur.getDate()}</div>
       <select onchange="apSetMD('${ds}', this.value)" title="Match Day — auto by default, editable" style="width:100%;font:700 8px/1 var(--cm-font-mono);border:1px ${mdEdited?'solid':'dashed'} ${mdEdited?dt.tx:'var(--cm-border)'};border-radius:4px;background:transparent;color:${dt.tx};height:18px;cursor:pointer;margin-bottom:4px;text-align:center;text-align-last:center;opacity:${mdEdited?1:.7}">${mdOpts}</select>
       <select onchange="apSetDayType('${ds}', this.value)" style="width:100%;font:500 9px/1 var(--cm-font-sans);border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-surface);color:var(--cm-fg-strong);height:23px;cursor:pointer">${opts}</select>
+      ${dayChips}
     </div>`;
     cur.setDate(cur.getDate() + 1);
   }
@@ -1665,7 +1758,10 @@ function apEmbedMatch(start, end){
 }
 
 async function apSaveMicro(){
-  const id = _apSelectedMicro; if (!id) return;
+  let id = _apSelectedMicro;
+  if (!id){ const ed = document.getElementById('apMicroEditor'); id = (ed && ed.dataset.microId) || null; }
+  if (!id){ alert(tt('annual_planner.no_micro_selected','Select a microcycle first.')); return; }
+  _apSelectedMicro = id;   // re-anchor selection so the editor stays open after re-render
   const name  = document.getElementById('apMicroEd_name').value.trim();
   const start = document.getElementById('apMicroEd_start').value;
   const end   = document.getElementById('apMicroEd_end').value;
@@ -1682,10 +1778,12 @@ async function apSaveMicro(){
   if (emb) Object.assign(payload, emb);
   if (mesoEl) payload.mesocycle_id = mesoEl.value || null;
   if (typeEl) payload.micro_type = typeEl.value || null;
-  const { error } = await window.sb.from('microcycles').update(payload).eq('id', id);
+  const { data: upd, error } = await window.sb.from('microcycles').update(payload).eq('id', id).select('id');
   if (error){ alert(tt('annual_planner.could_not_save','Could not save: ' + error.message, {msg:error.message})); return; }
+  if (!upd || !upd.length){ alert(tt('annual_planner.save_no_rows','Nothing was saved (no matching microcycle).')); return; }
   await apLoadTimeline();
   apMicroEditorRender();
+  apToast(tt('common.saved','Saved'));
   if (_overlap.length){ const _names = _overlap.map(m=>m.name||tt('annual_planner.untitled','untitled')).join(', '); alert(tt('annual_planner.overlap_warn',`Heads up: these dates overlap ${_overlap.length} other microcycle${_overlap.length>1?'s':''} (${_names}).`, {count:_overlap.length, names:_names})); }
 }
 
