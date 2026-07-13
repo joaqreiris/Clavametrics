@@ -4566,7 +4566,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   let histLoads;
   try {
     histLoads = await window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports')
-      .select(`session_id,player_id,player_load${_acwrCols}`)
+      .select(`session_id,player_id,player_load${_acwrCols},players!inner(position)`)
       .eq('club_id', clubId)
       .eq('is_invalid', false)
       .in('session_id', hids.slice(0, 400))), { label: 'acwr.histLoads' });
@@ -4577,7 +4577,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       console.error('[GPS ACWR] base-metric "' + acwrMetric + '" select failed, falling back to player_load:', histLoadsErr);
       acwrMetric = 'player_load';
       histLoads = await window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports')
-        .select('session_id,player_id,player_load')
+        .select('session_id,player_id,player_load,players!inner(position)')
         .eq('club_id', clubId)
         .eq('is_invalid', false)
         .in('session_id', hids.slice(0, 400))), { label: 'acwr.histLoads.fallback' }).catch(() => []);
@@ -4650,10 +4650,14 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // Base metric stays per-card (card-acwr[data-metric-key]); season window + stabilization kept.
   const _acwrModel = window._gpSettings?.acwr_model || 'ewma';
   const _sessDateById = Object.fromEntries(histSessions.map(s => [s.id, s.session_date]));
+  // Respect the ACTIVE player/position filter (was ignored before → chart showed the whole squad
+  // regardless of the filter). Same predicate as the Load-Monitoring gauges/table.
+  const _acwrPred = _gpAcwrEffective();
   const _byPlayerAcwr = {};
   (histLoads || []).forEach(r => {
     const _d = _sessDateById[r.session_id];
     if (!_d || !r.player_id) return;
+    if (!_acwrPred(r.player_id, r.players?.position)) return;
     const _v = Number(r[acwrMetric]);
     if (!Number.isFinite(_v)) return;
     (_byPlayerAcwr[r.player_id] || (_byPlayerAcwr[r.player_id] = [])).push({ date: _d, value: _v });
@@ -4951,6 +4955,15 @@ window.gpRenderScienceCards = async function (reports, clubId) {
 if (window._gpReports && window._gpClubId) {
   window.gpRenderScienceCards(window._gpReports, window._gpClubId);
 }
+
+// Re-render the bespoke science cards (incl. the ACWR chart) when the filters change, so the ACWR
+// surface tracks the active player/position filter like the builder cards do. The ACWR chart
+// re-fetches with the current filter state (via _gpAcwrEffective), so a stale _gpReports is fine.
+document.addEventListener('gpfilter:change', () => {
+  if (window._gpReports && window._gpClubId && typeof window.gpRenderScienceCards === 'function') {
+    window.gpRenderScienceCards(window._gpReports, window._gpClubId);
+  }
+});
 </script>
 
 <script>
@@ -4965,6 +4978,31 @@ function _scopeTeam(q) {
     ? q.in('player_id', window._gpPlayerIds) : q;
 }
 window._scopeTeam = _scopeTeam;
+
+// Effective-player predicate for the ACWR surfaces — the SINGLE source of scope so the bespoke
+// science chart and the Load-Monitoring gauges/table respect the active filter IDENTICALLY:
+//   team roster (window._gpPlayerIds)  ∩  ( selected player (gpState.playerId)
+//                                           | filter-bar players (getState().playerIds)
+//                                           | filter-bar positions (getState().positions) )
+// Mirrors the resolver precedence: a single selected player wins over the multi-select filters.
+// `posOf(pid)` maps a playerId → position (needed only when a position filter is active and the
+// caller doesn't already carry the position on the row).
+function _gpAcwrEffective(posOf) {
+  const FB    = window.gpFilterBar?.getState?.() || null;
+  const sel   = window.gpState?.playerId || null;
+  const team  = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? new Set(window._gpPlayerIds) : null;
+  const fbP   = FB?.playerIds?.length ? new Set(FB.playerIds) : null;
+  const fbPos = FB?.positions?.length ? new Set(FB.positions) : null;
+  return (pid, pos) => {
+    if (!pid) return false;
+    if (team && !team.has(pid)) return false;
+    if (sel) return pid === sel;                 // one selected player → only that player
+    if (fbP && !fbP.has(pid)) return false;
+    if (fbPos) { const p = pos !== undefined ? pos : (posOf ? posOf(pid) : undefined); if (!fbPos.has(p)) return false; }
+    return true;
+  };
+}
+window._gpAcwrEffective = _gpAcwrEffective;
 
 async function _fetchReports(state) {
   const clubId = window._gpClubId;
@@ -11305,14 +11343,24 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // Fecha de referencia derivada de la barra (fin del rango elegido); null = hoy.
       const refDate = window.gpFilterBar?.getState?.()?.date?.to || null;
 
-      const [teamAcwr, playerAcwr, players] = await Promise.all([
-        window.gpsACWR.calculateTeamACWR({ clubId, refDate }),
+      const [playerAcwr, players] = await Promise.all([
         window.gpsACWR.calculatePlayerACWR({ clubId, refDate }),
         _gpRoster(clubId, window._gpTeamId),
       ]);
 
       _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
-      _playerAcwrData = playerAcwr || {};
+      // Respect the active player/position filter (same predicate as the science chart) so gauges,
+      // table and chart all show the SAME set under the same filter. calculatePlayerACWR is
+      // club-wide; we narrow it here and recompute the team average from the filtered players.
+      const _pred = _gpAcwrEffective(pid => _playerMap[pid]?.position);
+      _playerAcwrData = Object.fromEntries(Object.entries(playerAcwr || {}).filter(([pid]) => _pred(pid)));
+
+      // Team gauges = per-player → mean over the FILTERED set (matches the chart's aggregation).
+      const teamAcwr = {};
+      for (const m of (window.gpsACWR.ACWR_METRICS || [])) {
+        const vals = Object.values(_playerAcwrData).map(p => p[m.key]).filter(v => v != null);
+        teamAcwr[m.key] = vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
+      }
 
       const metricKey = 'player_load';   // métrica base ACWR (default); el ACWR no depende de ella
       lmInfo.textContent = `Ref: ${refDate || 'today'} · ${Object.keys(_playerAcwrData).length} players`;
