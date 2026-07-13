@@ -2,9 +2,10 @@
 
 ## ⚠️ Fuente de verdad del esquema: [`../db/schema.sql`](../db/schema.sql)
 
-El esquema **vivo y completo** de la base (112 tablas, 238 FKs, 5 vistas, 63 funciones,
-29 triggers, 227 políticas RLS) está reconstruido por introspección en vivo en
-**[`db/schema.sql`](../db/schema.sql)** — regenerado por última vez el **2026-07-05**.
+El esquema **vivo y completo** de la base (112 tablas, 238 FKs, 5 vistas, 71 funciones,
+39 triggers, 227 políticas RLS) está reconstruido por introspección en vivo en
+**[`db/schema.sql`](../db/schema.sql)** — regenerado por última vez el **2026-07-05**;
+parcheado a mano (introspección puntual) para las migraciones **120–121** el **2026-07-13**.
 Ese es el archivo único que describe la DB. El diagrama por dominio está en
 [`docs/schema-diagram.md`](../docs/schema-diagram.md) y la auditoría en
 [`docs/migrations-audit.md`](../docs/migrations-audit.md).
@@ -14,19 +15,19 @@ Ese es el archivo único que describe la DB. El diagrama por dominio está en
 ```
 migrations/
 ├── README.md          ← este archivo
-├── applied/           ← histórico: 120 migraciones YA aplicadas a prod (read-only)
+├── applied/           ← histórico: 122 migraciones YA aplicadas a prod (read-only)
 └── legacy/            ← predecesores sin numerar del esquema base (read-only)
 ```
 
 - **`applied/`** — todas las migraciones que ya corrieron en la DB de producción
-  (004→119, con algunos números duplicados y headers con número equivocado, fruto de
+  (004→121, con algunos números duplicados y headers con número equivocado, fruto de
   aplicarlas a mano sin runner). Se conservan como **registro histórico**. NO re-aplicar,
   NO renumerar: ya están reflejadas en `db/schema.sql`. Las 106→119 (antes sueltas en la
   raíz de `migrations/`) se archivaron aquí el 2026-07-05 tras regenerar `schema.sql`;
   su propósito está documentado en la tabla de abajo.
 - **`legacy/`** — SQL viejos sin numerar que crearon parte del esquema base.
 
-## Qué hace cada migración 106→119
+## Qué hace cada migración 106→121
 
 Referencia rápida de las últimas migraciones (ya en `db/schema.sql`). El archivo de cada
 una en `applied/` tiene el rationale completo en su header.
@@ -47,6 +48,8 @@ una en `applied/` tiene el rationale completo en su header.
 | 117 | `my_player_ids_player_teams` | `my_player_ids()` resuelve equipos contra `player_teams` (M:N) en vez de `players.team_id` (solo el equipo primario). Habilita jugadores multi-equipo. |
 | 118 | `players_rls_player_teams` | RLS de `players`: el staff de CUALQUIER equipo del jugador ve/edita su ficha (M:N vía `player_teams`), no solo el equipo primario. |
 | 119 | `tasks_assigned_roles` | Columna `tasks.assigned_roles text[]` (asignar tareas por ROL del staff, visible dentro del equipo) + fn reusable `get_user_role()` + una rama a la policy SELECT `Team-scoped task visibility`. |
+| 120 | `training_sessions_recurrence_group` | Columna `training_sessions.recurrence_group_id uuid` + índice parcial. Da paridad con `calendar_events.recurrence_group_id` (024): tras el ruteo por tipo, las sesiones recurrentes viven en `training_sessions` y necesitan agruparse para borrar/gestionar la serie completa. Aditiva. |
+| 121 | `activity_log_more_events` | 8 triggers nuevos que alimentan "Recent activity": `availability.changed` (solo UPDATE con cambio de status, para no inundar con el autofill diario), `session.modified`, `match_report.created`, `evaluation.recorded` (evaluations + force_tests), `medical.episode`, `microcycle.published`, `lineup.published`, `player.added`/`archived`. SECURITY DEFINER, escriben a `activity_log`. |
 
 ## Cómo hacer cambios de esquema de ahora en más
 

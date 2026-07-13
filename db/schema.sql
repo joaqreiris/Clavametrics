@@ -4,8 +4,8 @@
 -- (proyecto xesrumijvdmqjrufgeka / Kime-app, PostgreSQL 17.6).
 -- Generado: 2026-07-05.  NO editar a mano: regenerar desde la DB.
 --
--- 112 tablas | 238 FKs | 5 vistas | 63 funciones
--- | 29 triggers | 227 politicas RLS
+-- 112 tablas | 238 FKs | 5 vistas | 71 funciones
+-- | 39 triggers | 227 politicas RLS
 -- Incluye: tablas, tipos, PK/UNIQUE/CHECK, FK (con ON DELETE), indices,
 --          vistas, funciones (cuerpos reales), triggers, RLS + politicas.
 -- No incluye: GRANTs por rol, datos/seeds, objetos de schemas auth/storage.
@@ -2006,6 +2006,7 @@ create table if not exists public.training_sessions (
   gym_content jsonb,
   external_activity_id text,
   gps_targets jsonb default '{}'::jsonb not null,
+  recurrence_group_id uuid,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
   constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'other'::text])))
@@ -2018,6 +2019,7 @@ CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING 
 CREATE INDEX idx_training_sessions_attributes ON public.training_sessions USING gin (session_attributes);
 CREATE INDEX idx_training_sessions_club_microcycle ON public.training_sessions USING btree (club_id, microcycle_id);
 CREATE UNIQUE INDEX uq_training_sessions_club_activity ON public.training_sessions USING btree (club_id, external_activity_id) WHERE (external_activity_id IS NOT NULL);
+CREATE INDEX training_sessions_recurrence_group_id_idx ON public.training_sessions USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 
 create table if not exists public.treatment_templates (
   id uuid default gen_random_uuid() not null,
@@ -3830,6 +3832,40 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trg_act_availability()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'UPDATE' and OLD.status is distinct from NEW.status then
+    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+    values (NEW.club_id,
+            public.activity_team_for_player(NEW.player_id::uuid),
+            'availability.changed', 'availability', null, NEW.player_id::uuid,
+            jsonb_build_object('date', NEW.date, 'from', OLD.status, 'to', NEW.status));
+  end if;
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_evaluation()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+  values (NEW.club_id,
+          public.activity_team_for_player(NEW.player_id),
+          'evaluation.recorded', TG_TABLE_NAME, NEW.id, NEW.player_id,
+          jsonb_build_object('test_date', NEW.test_date, 'kind', TG_TABLE_NAME));
+  return NEW;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_act_gps()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3871,6 +3907,90 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trg_act_lineup_pub()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if NEW.published_at is not null
+     and (TG_OP = 'INSERT' or OLD.published_at is distinct from NEW.published_at) then
+    insert into public.activity_log (club_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.published_by, 'lineup.published', 'lineups', NEW.id,
+            jsonb_build_object('match_id', NEW.match_id));
+  end if;
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_match_report()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.activity_log (club_id, action, entity_table, entity_id, summary)
+  values (NEW.club_id, 'match_report.created', 'match_reports', NEW.id,
+          jsonb_build_object('match_date', NEW.match_date));
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_medical_episode()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+  values (NEW.club_id,
+          public.activity_team_for_player(NEW.player_id),
+          'medical.episode', 'medical_episodes', NEW.id, NEW.player_id,
+          jsonb_build_object('start_date', NEW.start_date, 'status', NEW.status));
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_microcycle_pub()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if NEW.published_at is not null
+     and (TG_OP = 'INSERT' or OLD.published_at is distinct from NEW.published_at) then
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, NEW.published_by, 'microcycle.published', 'microcycles', NEW.id,
+            jsonb_build_object('name', NEW.name, 'start_date', NEW.start_date));
+  end if;
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_player()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'INSERT' then
+    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+    values (NEW.club_id, NEW.team_id, 'player.added', 'players', NEW.id, NEW.id,
+            jsonb_build_object('name', coalesce(NEW.first_name,'') || ' ' || coalesce(NEW.last_name,'')));
+  elsif TG_OP = 'UPDATE' and OLD.archived_at is null and NEW.archived_at is not null then
+    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+    values (NEW.club_id, NEW.team_id, 'player.archived', 'players', NEW.id, NEW.id,
+            jsonb_build_object('name', coalesce(NEW.first_name,'') || ' ' || coalesce(NEW.last_name,'')));
+  end if;
+  return NEW;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_act_rpe()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3898,6 +4018,26 @@ begin
      and (TG_OP = 'INSERT' or OLD.published is distinct from NEW.published) then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
     values (NEW.club_id, NEW.team_id, NEW.coach_id, 'session.published', 'training_sessions', NEW.id,
+            jsonb_build_object('title', NEW.title, 'session_type', NEW.session_type));
+  end if;
+  return NEW;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.trg_act_session_mod()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'UPDATE' and OLD.published is true and NEW.published is true
+     and (OLD.title is distinct from NEW.title
+          or OLD.session_date is distinct from NEW.session_date
+          or OLD.duration is distinct from NEW.duration
+          or OLD.session_time is distinct from NEW.session_time) then
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, NEW.coach_id, 'session.modified', 'training_sessions', NEW.id,
             jsonb_build_object('title', NEW.title, 'session_type', NEW.session_type));
   end if;
   return NEW;
@@ -4146,11 +4286,14 @@ create or replace view public.wellness_latest as
 
 -- ========================== TRIGGERS ==========================
 
+CREATE TRIGGER act_availability AFTER UPDATE ON public.availability FOR EACH ROW EXECUTE FUNCTION trg_act_availability();
 CREATE TRIGGER club_branding_updated_at BEFORE UPDATE ON public.club_branding FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER club_settings_updated_at BEFORE UPDATE ON public.club_settings FOR EACH ROW EXECUTE FUNCTION set_club_settings_updated_at();
 CREATE TRIGGER trg_seed_core_metrics AFTER INSERT ON public.clubs FOR EACH ROW EXECUTE FUNCTION seed_core_metrics_for_club();
 CREATE TRIGGER trg_seed_default_exercises AFTER INSERT ON public.clubs FOR EACH ROW EXECUTE FUNCTION seed_default_exercises_for_club();
 CREATE TRIGGER drills_updated_at BEFORE UPDATE ON public.drills FOR EACH ROW EXECUTE FUNCTION set_drills_updated_at();
+CREATE TRIGGER act_evaluation AFTER INSERT ON public.evaluations FOR EACH ROW EXECUTE FUNCTION trg_act_evaluation();
+CREATE TRIGGER act_force_test AFTER INSERT ON public.force_tests FOR EACH ROW EXECUTE FUNCTION trg_act_evaluation();
 CREATE TRIGGER trg_gps_int_updated BEFORE UPDATE ON public.gps_integrations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_gps_metric_def_updated_at BEFORE UPDATE ON public.gps_metric_definitions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_gps_period_reports_updated BEFORE UPDATE ON public.gps_period_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -4158,12 +4301,17 @@ CREATE TRIGGER act_gps AFTER INSERT ON public.gps_reports FOR EACH ROW EXECUTE F
 CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
+CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
 CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
 CREATE TRIGGER load_templates_updated_at BEFORE UPDATE ON public.load_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_match_report AFTER INSERT ON public.match_reports FOR EACH ROW EXECUTE FUNCTION trg_act_match_report();
 CREATE TRIGGER match_reports_updated_at BEFORE UPDATE ON public.match_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_medical_episode AFTER INSERT ON public.medical_episodes FOR EACH ROW EXECUTE FUNCTION trg_act_medical_episode();
+CREATE TRIGGER act_microcycle_pub AFTER INSERT OR UPDATE ON public.microcycles FOR EACH ROW EXECUTE FUNCTION trg_act_microcycle_pub();
 CREATE TRIGGER trg_nutrition_targets_updated_at BEFORE UPDATE ON public.nutrition_targets FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER plans_updated_at BEFORE UPDATE ON public.plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_sync_player_primary_team AFTER INSERT OR DELETE OR UPDATE ON public.player_teams FOR EACH ROW EXECUTE FUNCTION sync_player_primary_team();
+CREATE TRIGGER act_player AFTER INSERT OR UPDATE ON public.players FOR EACH ROW EXECUTE FUNCTION trg_act_player();
 CREATE TRIGGER preventive_routines_updated_at BEFORE UPDATE ON public.preventive_routines FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER rehab_plans_updated_at BEFORE UPDATE ON public.rehab_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER rehab_protocols_updated_at BEFORE UPDATE ON public.rehab_protocols FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -4173,6 +4321,7 @@ CREATE TRIGGER seasons_updated_at BEFORE UPDATE ON public.seasons FOR EACH ROW E
 CREATE TRIGGER subscriptions_updated_at BEFORE UPDATE ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_single_primary BEFORE INSERT OR UPDATE OF is_primary ON public.teams FOR EACH ROW WHEN (new.is_primary) EXECUTE FUNCTION enforce_single_primary_team();
 CREATE TRIGGER act_session AFTER INSERT OR UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session();
+CREATE TRIGGER act_session_mod AFTER UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session_mod();
 CREATE TRIGGER act_treatment AFTER INSERT OR UPDATE ON public.treatments FOR EACH ROW EXECUTE FUNCTION trg_act_treatment();
 CREATE TRIGGER act_wellness AFTER INSERT ON public.wellness FOR EACH ROW EXECUTE FUNCTION trg_act_wellness();
 CREATE TRIGGER act_task AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION trg_act_task();
