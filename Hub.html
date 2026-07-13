@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/gps-acwr.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -1903,19 +1904,23 @@ function renderTasks(tasks, view = 'my') {
   });
 
   let acwrWarningCount = 0;
-  if (!rpeRes.error && rpeRes.data?.length) {
-    const loads = {};
+  if (!rpeRes.error && rpeRes.data?.length && window.gpsACWR) {
+    // Unified ACWR: same engine + model as the rest of the app (club_gps_settings.acwr_model,
+    // UNCOUPLED, per-player → mean). Reuses the rpe already fetched — no extra query. Replaces the
+    // old inline sum-based ratio (acute/(chronic/4)) so Hub agrees with GPS Analysis / Load Monitor.
+    await window.gpsACWR.loadClubModel(window._hubClubId);
+    const recsByPlayer = {};
     rpeRes.data.forEach(session => {
-      const isAcute = session.session_date >= date7;
       (session.rpe || []).forEach(r => {
-        if (!loads[r.player_id]) loads[r.player_id] = { acute: 0, chronic: 0 };
-        loads[r.player_id].chronic += r.load || 0;
-        if (isAcute) loads[r.player_id].acute += r.load || 0;
+        if (r.load == null) return;
+        (recsByPlayer[r.player_id] || (recsByPlayer[r.player_id] = []))
+          .push({ date: session.session_date, value: Number(r.load) });
       });
     });
-    const acwrs = Object.values(loads)
-      .map(({ acute, chronic }) => chronic > 0 ? acute / (chronic / 4) : null)
-      .filter(v => v !== null);
+    const _ref = new Date().toISOString().slice(0, 10);
+    const acwrs = Object.values(recsByPlayer)
+      .map(recs => window.gpsACWR.acwrForRecords(recs, _ref, { coupled: false }))
+      .filter(v => v != null);
     acwrWarningCount = acwrs.filter(v => v > 1.5).length;
     if (acwrs.length) {
       const avg = acwrs.reduce((a, b) => a + b, 0) / acwrs.length;

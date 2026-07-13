@@ -1107,9 +1107,12 @@
     });
 
     // ── ACWR via the shared engine (window.gpsACWR) ───────────────────────────
-    // Metric is user-selectable (internal s-RPE OR external GPS). Model defaults to
-    // EWMA (Williams 2017) and chronic is uncoupled from acute (Lolli/Windt) — see
-    // assets/gps-acwr.js. Records are normalised to { date, value } per player.
+    // Metric is user-selectable (internal s-RPE OR external GPS). The model comes from the club
+    // setting (club_gps_settings.acwr_model) via the shared engine so this page agrees with all
+    // others; chronic is uncoupled from acute (Lolli/Windt) — see assets/gps-acwr.js. Records are
+    // normalised to { date, value } per player.
+    acwrModel   = await (window.gpsACWR.loadClubModel?.(clubId) ?? Promise.resolve(acwrModel));
+    acwrCoupled = false;
     let recordsByPlayer;
     if (acwrMetric === 'srpe_load') {
       recordsByPlayer = {};
