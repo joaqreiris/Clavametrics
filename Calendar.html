@@ -1184,7 +1184,7 @@
           <!-- Planned workload by MC -->
           <div class="cal-card">
             <div class="cal-card-h">
-              <h3 data-i18n="calendar.planned_workload">Planned workload</h3>
+              <h3 data-i18n="calendar.planned_workload" data-i18n-attr="title:calendar.planned_workload_hint" title="Planned load: duration × estimated RPE. Player-reported RPE is not counted here.">Planned workload</h3>
               <span class="sub" data-i18n="calendar.last5_next3">last 5 · next 3 microcycles</span>
               <div class="right">
                 <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
@@ -2477,7 +2477,7 @@ async function renderWorkload() {
     const gymH = d.gymAu ? `${Math.round((d.gymAu / maxAu) * 95)}%` : '0';
     const _mcNm = d.mc.name || 'MC';
     const tooltip = d.au > 0
-      ? (d.pending ? tt('calendar.wk_tooltip_au_pending','{name}: {au} AU · {p} pending RPE',{name:_mcNm,au:d.au,p:d.pending}) : tt('calendar.wk_tooltip_au','{name}: {au} AU',{name:_mcNm,au:d.au}))
+      ? (d.pending ? tt('calendar.wk_tooltip_au_no_est_rpe','{name}: {au} AU · {p} without estimated RPE',{name:_mcNm,au:d.au,p:d.pending}) : tt('calendar.wk_tooltip_au','{name}: {au} AU',{name:_mcNm,au:d.au}))
       : tt('calendar.wk_tooltip_no_rpe','{name}: no RPE data',{name:_mcNm});
     return `<div class="wk-bar-grp" title="${tooltip}">
       <div class="wk-bar tr"  style="height:${trH}"></div>
@@ -2491,7 +2491,7 @@ async function renderWorkload() {
   }).join('');
 
   const curPending = mcData.find(d => d.mc.id === currentMcId)?.pending || 0;
-  const pendingNote = curPending > 0 ? `<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px">${tt('calendar.pending_rpe_current','{n} session pending RPE in current MC|{n} sessions pending RPE in current MC',{n:curPending,count:curPending})}</div>` : '';
+  const pendingNote = curPending > 0 ? `<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px">${tt('calendar.no_est_rpe_current','{n} session without estimated RPE in current MC|{n} sessions without estimated RPE in current MC',{n:curPending,count:curPending})}</div>` : '';
 
   chartEl.innerHTML = `
     <div class="wk-rows">${barsHtml || '<div style="width:100%;text-align:center;padding:20px 0;color:var(--cm-fg-faint);font:var(--cm-meta)">—</div>'}</div>
