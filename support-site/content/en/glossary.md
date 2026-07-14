@@ -11,7 +11,7 @@ summary: The single source of truth for ClavaMetrics' domain concepts — ACWR, 
 
 This glossary is the single source of truth for the domain concepts used across ClavaMetrics. Each entry gives a short definition, how the app actually computes it (the real formula, taken from the code), how to read it and its limits, and references. Other pages link their first mention of a term here rather than re-defining it.
 
-## ACWR
+## ACWR {#acwr}
 
 **Acute:chronic workload ratio** — recent load (the **acute** window) divided by the rolling baseline (the **chronic** window). It's a dimensionless number that flags how fast a player's load is changing relative to what they're conditioned for.
 
@@ -26,35 +26,35 @@ The windows are **uncoupled** by default: the chronic window excludes the acute 
 
 **How to read it — and an honesty note.** ACWR is a *signal of load change*, not a prediction of injury. The "sweet spot" idea and the use of ACWR as an injury predictor are **methodologically contested** in the literature: the ratio has mathematical-coupling and analytical problems, and the protective "sweet spot" has **not replicated consistently** across studies. Treat ACWR as one input — read it alongside wellness, session-RPE and, above all, medical judgment — never as a verdict. **See References 1, 3–9.**
 
-## s-RPE
+## s-RPE {#s-rpe}
 
 **Session RPE (session load)** — an internal-load measure combining how hard a session felt with how long it lasted.
 
 **How ClavaMetrics computes it.** **s-RPE = RPE × session duration in minutes**, in arbitrary units (au), with RPE on a **1–10** scale. A 60-minute session rated 7 = 420 au. This is the per-player, per-session load that feeds ACWR when the s-RPE metric is selected. **See Reference 10.**
 
-## Acute and chronic load
+## Acute and chronic load {#acute-and-chronic-load}
 
 **Acute load** is the total (or EWMA-weighted) load over the recent window (**7 days** in ClavaMetrics) — the current stress. **Chronic load** is the rolling baseline over the longer window (**28 days**) — what the player is conditioned to tolerate. [ACWR](glossary#acwr) is acute relative to chronic. In the uncoupled model the chronic window excludes the acute days so the two don't overlap.
 
-## EWMA
+## EWMA {#ewma}
 
 **Exponentially weighted moving average** — a way of averaging a time series that gives more weight to recent values. ClavaMetrics uses it as the default [ACWR](glossary#acwr) model because, unlike a plain rolling average, it weights recent load more heavily and avoids the artificial jump a rolling average produces when an old session drops off the edge of the window.
 
 **How ClavaMetrics computes it.** Decay factor **λ = 2/(N+1)** for a window of N days; each day: `value = load·λ + previous·(1−λ)`, applied with N=7 for the acute series and N=28 for the chronic series. **See Reference 2.**
 
-## MD (matchday offset)
+## MD (matchday offset) {#md-matchday-offset}
 
 **Match-day minus / plus** — each day of a training week is labeled relative to the match. **MD** is the match; **MD-1 … MD-6** count backwards from it; **MD+1, MD+2 …** count forward (recovery). It's the backbone of weekly planning: the offset signals the intended role and load of the day. In ClavaMetrics the offset is derived automatically from the microcycle's match date and can be overridden per day. See [Morphocycle](glossary#morphocycle) for the methodology this comes from.
 
-## Microcycle
+## Microcycle {#microcycle}
 
 A **microcycle** is a training block, usually a week, built around one match. It bounds a set of sessions with a start and end date and (usually) a target match, and carries the [MD](glossary#md-matchday-offset) structure for its days. Microcycles are the atomic unit of the season plan.
 
-## Morphocycle
+## Morphocycle {#morphocycle}
 
 The **morphocycle** is the weekly structure of Tactical Periodization (Vítor Frade's methodology): the week is organized around the match using the [MD-](glossary#md-matchday-offset) days, with a characteristic distribution of effort (e.g. varying the dominant contraction/tension, duration and speed demands as the match approaches). ClavaMetrics represents it through the MD- day labels and their default day types. (See the References note on methodology sources.)
 
-## Periodization models
+## Periodization models {#periodization-models}
 
 The season-planning frameworks ClavaMetrics offers on the [Annual Planner](/support/annual-planner):
 
@@ -65,25 +65,25 @@ The season-planning frameworks ClavaMetrics offers on the [Annual Planner](/supp
 
 These are selectable methodologies; the app tracks the structure, not the training prescription. **See Reference 12** and the References note.
 
-## Player load
+## Player load {#player-load}
 
 An accelerometer-derived measure of external load (in arbitrary units) accumulated from a player's movement (acceleration/velocity exposure). In ClavaMetrics it's one of the GPS metrics that can feed [ACWR](glossary#acwr), and it's the default base metric for the load and fitness/fatigue readings. The exact computation is proprietary to the GPS provider (Catapult/StatSports), so ClavaMetrics reads it from the imported data rather than computing it.
 
-## HSR, VHSR and sprint distance
+## HSR, VHSR and sprint distance {#hsr-vhsr-and-sprint-distance}
 
 Distance covered above set speed thresholds: **high-speed running (HSR)**, **very-high-speed running (VHSR)** and **sprint distance**, each accumulating the metres run above its threshold. They quantify the high-intensity portion of a session.
 
 **Important:** the speed thresholds are **configurable per club** in ClavaMetrics (and vary by provider and methodology), so this glossary deliberately does **not** publish fixed cut-off values — check your club's configured thresholds.
 
-## Accelerations and decelerations (A+D)
+## Accelerations and decelerations (A+D) {#accelerations-and-decelerations-ad}
 
 Counts of acceleration and deceleration efforts above a threshold — a proxy for the mechanical, change-of-pace load that distance alone misses. ClavaMetrics' combined **A+D** metric is simply **accelerations + decelerations** summed, available as an [ACWR](glossary#acwr) base metric. As with speed zones, the effort thresholds come from the GPS provider/club configuration.
 
-## Availability status
+## Availability status {#availability-status}
 
 Each player carries a daily availability status on the [Availability](/support/availability) matrix. The set is: **available** (full), **partial / limited** (modified training), **injured / unavailable** (out), **sick** (illness), **away** (national-team duty), and **absent** (match context, zero minutes). Available and partial count toward the trainable squad; injured, sick and away count as out. Statuses are set manually and auto-filled from active injuries without overwriting manual entries.
 
-## Planned load vs actual load
+## Planned load vs actual load {#planned-load-vs-actual-load}
 
 **Planned load** is what you *intend*: in planning views ClavaMetrics computes it as the **estimated RPE × duration** you set on a session (the same [s-RPE](glossary#s-rpe) formula, but using the staff's *estimated* RPE). **Actual load** is what was *delivered*: the players' reported session-RPE after training, and the external GPS load.
 

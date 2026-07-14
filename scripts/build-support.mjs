@@ -97,8 +97,13 @@ function renderMarkdown(body) {
     const h = line.match(/^(#{2,3})\s+(.*)$/);
     if (h) {
       const level = h[1].length;
-      const txt = h[2].trim();
-      const id = slugifyHeading(txt);
+      let txt = h[2].trim();
+      // Explicit stable id via trailing `{#anchor}` — lets translated headings
+      // keep the same anchor so cross-language links (e.g. glossary#acwr) hold.
+      let id;
+      const am = txt.match(/\s*\{#([a-z0-9-]+)\}\s*$/i);
+      if (am) { id = am[1]; txt = txt.slice(0, am.index).trim(); }
+      else { id = slugifyHeading(txt); }
       if (level === 2) headings.push({ id, text: txt });
       out.push("<h" + level + ' id="' + id + '">' + renderInline(txt) + "</h" + level + ">");
       i++;
@@ -178,6 +183,7 @@ function renderMarkdown(body) {
   // Plain-text version for the search index.
   const text = body
     .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\{#[\w-]+\}/g, " ")
     .replace(/[#>*`_|-]/g, " ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\s+/g, " ")
