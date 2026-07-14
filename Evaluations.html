@@ -5073,6 +5073,31 @@
       value=pct; unit='%BF'; evalType='Body composition';
       computed={ inputs:{method,gender,age,weight}, density:+density.toFixed(5), pct, fatMass:+(weight*pct/100).toFixed(1), leanMass:+(weight*(1-pct/100)).toFixed(1) };
 
+      // Also write a structured row into body_composition (single source of truth for anthropometry).
+      // Resilient: a failure here must NOT block the evaluations insert below.
+      try {
+        const sfVal = id => { const v = parseFloat(document.getElementById(`paSF_${id}`)?.value); return isFinite(v) ? v : null; };
+        const sum = ['chest','abdomen','thigh','tricep','suprailiac','subscapular','midaxillary','bicep']
+          .reduce((a,id) => a + (sfVal(id) || 0), 0);
+        const bcRow = {
+          player_id: pid, club_id: _clubId,
+          measured_date: testDate,
+          method: 'skinfold',
+          weight_kg: weight,
+          body_fat_pct: pct,
+          lean_mass_kg: +(weight * (1 - pct/100)).toFixed(1),
+          sf_chest: sfVal('chest'), sf_abdominal: sfVal('abdomen'), sf_thigh: sfVal('thigh'),
+          sf_triceps: sfVal('tricep'), sf_supraspinal: sfVal('suprailiac'), sf_subscapular: sfVal('subscapular'),
+          sf_midaxillary: sfVal('midaxillary'), sf_biceps: sfVal('bicep'),
+          sf_formula: method.toUpperCase(),           // 'JP3' | 'JP7' | 'DW4'
+          sum_skinfolds: sum || null,
+          age_years: age,
+          sex: gender === 'F' ? 'female' : 'male'
+        };
+        const { error: bcErr } = await window.sb.from('body_composition').insert(bcRow);
+        if (bcErr) console.error('body_composition insert failed:', bcErr);
+      } catch (e) { console.error('body_composition insert exception:', e); }
+
     } else if (cfg.key === 'fvprofile') {
       const G=9.81;
       const pairs=[...document.querySelectorAll('.fv-row')].reduce((acc,r)=>{
