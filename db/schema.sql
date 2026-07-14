@@ -81,8 +81,38 @@ create table if not exists public.body_composition (
   notes text,
   created_by uuid,
   created_at timestamp with time zone default now(),
+  -- Raw skinfolds (mm)
+  sf_triceps numeric,
+  sf_subscapular numeric,
+  sf_biceps numeric,
+  sf_iliac_crest numeric,
+  sf_supraspinal numeric,
+  sf_abdominal numeric,
+  sf_thigh numeric,
+  sf_calf numeric,
+  sf_chest numeric,
+  sf_midaxillary numeric,
+  -- Girths / breadths for Heath-Carter (cm)
+  girth_arm_flexed numeric,
+  girth_calf numeric,
+  breadth_humerus numeric,
+  breadth_femur numeric,
+  waist_cm numeric,
+  height_cm numeric,
+  -- Context for the equations
+  age_years numeric,
+  sex text,
+  -- Derived values (computed by the app)
+  sf_formula text,
+  sum_skinfolds numeric,
+  bmi numeric,
+  rfm numeric,
+  soma_endo numeric,
+  soma_meso numeric,
+  soma_ecto numeric,
   constraint body_composition_pkey primary key (id),
-  constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text])))
+  constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text]))),
+  constraint body_composition_sex_check CHECK ((sex is null or sex = ANY (ARRAY['male'::text, 'female'::text])))
 );
 CREATE INDEX idx_body_composition_club ON public.body_composition USING btree (club_id);
 CREATE INDEX idx_body_composition_player_date ON public.body_composition USING btree (player_id, measured_date DESC);
