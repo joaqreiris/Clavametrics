@@ -6,8 +6,8 @@ El esquema **vivo y completo** de la base (112 tablas, 238 FKs, 5 vistas, 63 fun
 29 triggers, 227 políticas RLS) está reconstruido por introspección en vivo en
 **[`db/schema.sql`](../db/schema.sql)** — regenerado por última vez el **2026-07-05**.
 Ese es el archivo único que describe la DB. El diagrama por dominio está en
-[`docs/schema-diagram.md`](../docs/schema-diagram.md) y la auditoría en
-[`docs/migrations-audit.md`](../docs/migrations-audit.md).
+[`docs/schema-diagram.md`](../internal-docs/schema-diagram.md) y la auditoría en
+[`docs/migrations-audit.md`](../internal-docs/migrations-audit.md).
 
 ## Estructura
 

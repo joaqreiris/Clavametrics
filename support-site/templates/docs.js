@@ -1,8 +1,8 @@
 /* =============================================================
    ClavaMetrics — Support center client script
-   Client-side search over /docs/search-index.json, mobile sidebar
+   Client-side search over /support/search-index.json, mobile sidebar
    toggle, and TOC scroll-spy. No build step, no dependencies.
-   Source: docs-site/templates/docs.js → copied to /docs/docs.js.
+   Source: support-site/templates/docs.js → copied to /support/docs.js.
    ============================================================= */
 (function () {
   "use strict";
@@ -15,7 +15,7 @@
 
   function loadIndex() {
     if (index) return Promise.resolve(index);
-    return fetch("/docs/search-index.json")
+    return fetch("/support/search-index.json")
       .then(function (r) { return r.json(); })
       .then(function (data) { index = data; return index; })
       .catch(function () { index = []; return index; });
@@ -39,7 +39,7 @@
       return;
     }
     box.innerHTML = results.map(function (p, i) {
-      return '<a href="/docs/' + p.slug + '" data-i="' + i + '">' +
+      return '<a href="/support/' + p.slug + '" data-i="' + i + '">' +
         '<span class="r-world">' + escapeHtml(p.worldTitle || p.world) + '</span>' +
         '<span class="r-title">' + escapeHtml(p.title) + '</span></a>';
     }).join("");

@@ -13,7 +13,7 @@ GPS Analysis is the workspace for external-load data. It turns per-player GPS me
 
 ## When you use it
 
-Use it after each session or match to review what athletes actually did, and across the week to compare planned versus delivered load, spot outliers, and track fitness and fatigue. It shares its ACWR engine with the [Load Monitor](/docs/load-monitor); GPS Analysis is where you go for the deeper, per-metric and per-player drilldown.
+Use it after each session or match to review what athletes actually did, and across the week to compare planned versus delivered load, spot outliers, and track fitness and fatigue. It shares its ACWR engine with the [Load Monitor](/support/load-monitor); GPS Analysis is where you go for the deeper, per-metric and per-player drilldown.
 
 ## How it works
 
@@ -41,7 +41,7 @@ Use it after each session or match to review what athletes actually did, and acr
 
 **Player load.** A cumulative measure of external load in arbitrary units, derived from movement (acceleration/velocity exposure). It's the default base metric for ACWR and the fitness-fatigue model.
 
-**ACWR.** The acute:chronic workload ratio — recent load (roughly 7 days) over the rolling baseline (roughly 28 days). GPS Analysis uses the same shared, club-configured ACWR engine as the [Load Monitor](/docs/load-monitor); you can base it on player load, total distance, HSR, sprint distance or accelerations.
+**ACWR.** The acute:chronic workload ratio — recent load (roughly 7 days) over the rolling baseline (roughly 28 days). GPS Analysis uses the same shared, club-configured ACWR engine as the [Load Monitor](/support/load-monitor); you can base it on player load, total distance, HSR, sprint distance or accelerations.
 
 **Fitness · Fatigue · Form (CTL / ATL / TSB).** The Banister model: **CTL** (chronic training load, ~28-day EWMA) reads as fitness, **ATL** (acute training load, ~7-day EWMA) as fatigue, and **TSB** (training stress balance, CTL − ATL) as form — positive is fresh, negative is fatigued.
 
@@ -65,5 +65,5 @@ Use it after each session or match to review what athletes actually did, and acr
 
 ## Related
 
-- [Load Monitor](/docs/load-monitor) — the squad-level ACWR view built on the same engine.
-- [Calendar](/docs/calendar) — where sessions are scheduled and planned load is set.
+- [Load Monitor](/support/load-monitor) — the squad-level ACWR view built on the same engine.
+- [Calendar](/support/calendar) — where sessions are scheduled and planned load is set.

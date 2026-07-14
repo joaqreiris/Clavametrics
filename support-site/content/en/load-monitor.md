@@ -13,7 +13,7 @@ The Load Monitor is a squad-wide readiness dashboard centered on the **acute:chr
 
 ## When you use it
 
-Use it in the daily planning routine — typically before or after a session — to check the squad's risk picture, spot players trending into the danger zone, and cross-read ACWR against today's wellness and session-RPE. It complements the [Calendar](/docs/calendar) (which creates the sessions the load is calculated from) and [GPS Analysis](/docs/gps-analysis) (which offers the same engine with deeper per-metric drilldowns).
+Use it in the daily planning routine — typically before or after a session — to check the squad's risk picture, spot players trending into the danger zone, and cross-read ACWR against today's wellness and session-RPE. It complements the [Calendar](/support/calendar) (which creates the sessions the load is calculated from) and [GPS Analysis](/support/gps-analysis) (which offers the same engine with deeper per-metric drilldowns).
 
 ## How it works
 
@@ -68,9 +68,9 @@ A player needs at least **4 sessions** in the chronic window to get an ACWR; bel
 
 **Why is the squad line an average of ratios?** Because averaging each player's ACWR (rather than pooling raw squad load) prevents high-minute players from skewing the team-level picture — it reflects team risk more faithfully.
 
-**Where does the load data come from?** From training sessions and their RPE entries (and, for GPS metrics, from imported/synced GPS reports). The [Calendar](/docs/calendar) creates the sessions; wellness flags link through to Injuries.
+**Where does the load data come from?** From training sessions and their RPE entries (and, for GPS metrics, from imported/synced GPS reports). The [Calendar](/support/calendar) creates the sessions; wellness flags link through to Injuries.
 
 ## Related
 
-- [GPS Analysis](/docs/gps-analysis) — the same ACWR engine, plus per-metric and per-player analysis.
-- [Calendar](/docs/calendar) — where the sessions and planned load originate.
+- [GPS Analysis](/support/gps-analysis) — the same ACWR engine, plus per-metric and per-player analysis.
+- [Calendar](/support/calendar) — where the sessions and planned load originate.

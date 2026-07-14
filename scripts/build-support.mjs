@@ -2,17 +2,17 @@
 /* =============================================================
    ClavaMetrics — Support center generator (Markdown → HTML)
    -------------------------------------------------------------
-   Reads docs-site/content/<lang>/*.md, renders each to a static
-   HTML page under /docs, builds the /docs hub grouped by world,
+   Reads support-site/content/<lang>/*.md, renders each to a static
+   HTML page under /support, builds the /support hub grouped by world,
    and a client-side search index.
 
    No build step at runtime, no dependencies: this is run by hand
    (like scripts/i18n.mjs) and the generated HTML is committed.
 
-       node scripts/build-docs.mjs
+       node scripts/build-support.mjs
 
    Add a page  = drop a new .md (with frontmatter) in content/en/.
-   Add a world = edit docs-site/docs-index.json.
+   Add a world = edit support-site/docs-index.json.
    Only English is generated for now; the layout (content/<lang>/)
    is already i18n-ready for when translations are added.
    ============================================================= */
@@ -23,9 +23,9 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const SITE = join(ROOT, "docs-site");
+const SITE = join(ROOT, "support-site");
 const TPL = join(SITE, "templates");
-const OUT = join(ROOT, "docs");
+const OUT = join(ROOT, "support");
 const LANG = "en"; // only language generated for now
 
 /* ─────────────────────────── Frontmatter ─────────────────────────── */
@@ -233,7 +233,7 @@ function buildSidebar(activeSlug) {
         items
           .map(
             (p) =>
-              '<a href="/docs/' + p.slug + '"' +
+              '<a href="/support/' + p.slug + '"' +
               (p.slug === activeSlug ? ' class="is-active"' : "") +
               ">" + p.title + "</a>"
           )
@@ -288,7 +288,7 @@ const worldsHtml = worlds
         items
           .map(
             (p) =>
-              '<a class="dx-card" href="/docs/' + p.slug + '">' +
+              '<a class="dx-card" href="/support/' + p.slug + '">' +
               "<h3>" + escapeHtml(p.title) + '<i class="ti ti-arrow-right"></i></h3>' +
               "<p>" + escapeHtml(p.summary) + "</p></a>"
           )
@@ -320,7 +320,7 @@ const searchIndex = pages.map((p) => ({
 writeFileSync(join(OUT, "search-index.json"), JSON.stringify(searchIndex));
 
 /* ─────────────────────────── Summary ─────────────────────────── */
-console.log("ClavaMetrics docs generated →  /docs\n");
+console.log("ClavaMetrics support center generated →  /support\n");
 console.log("  index.html            hub (" + pages.length + " pages, " + worlds.length + " worlds)");
 for (const w of worlds) {
   const items = pagesByWorld[w.id];

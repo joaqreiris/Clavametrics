@@ -70,5 +70,5 @@ Navigate with the **Today** button, the previous/next arrows (step by week in Mi
 
 ## Related
 
-- [Load Monitor](/docs/load-monitor) — the load you plan here feeds the acute:chronic ratios there.
-- [GPS Analysis](/docs/gps-analysis) — compare what you planned against what athletes actually did.
+- [Load Monitor](/support/load-monitor) — the load you plan here feeds the acute:chronic ratios there.
+- [GPS Analysis](/support/gps-analysis) — compare what you planned against what athletes actually did.
