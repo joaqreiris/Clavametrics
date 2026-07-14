@@ -1671,18 +1671,37 @@
     const cl = v => Math.max(0, Math.min(255, Math.round(v*f)));
     return '#' + [cl(r),cl(g),cl(b)].map(v => v.toString(16).padStart(2,'0')).join('');
   }
-  function addBall() {
-    const shadow = new fabric.Ellipse({ rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:15, originX:'center', originY:'center' });
-    const shell  = new fabric.Circle({ radius:15, fill:'#ffffff', stroke:'#0f172a', strokeWidth:1.5, originX:'center', originY:'center' });
-    const R = 7.5, RIM = 15, pts = [], seams = [];
-    for (let i = 0; i < 5; i++) {
-      const a = -Math.PI/2 + i * 2*Math.PI/5;
-      const px = Math.cos(a)*R, py = Math.sin(a)*R;
-      pts.push({ x:px, y:py });
-      seams.push(new fabric.Line([px, py, Math.cos(a)*RIM, Math.sin(a)*RIM], { stroke:'#0f172a', strokeWidth:1.6, strokeLineCap:'round' }));
+  // Real ball artwork from assets/soccer-ball.svg (viewBox 512×512). The file is
+  // white-on-black: a full-bleed background rect + the ball as one white path. We
+  // cache only the artwork's 'd' (background rect excluded) and paint it dark on a
+  // white base circle so it reads on any canvas background.
+  let _ballPathCache = null;
+  async function _loadBallPath() {
+    if (_ballPathCache !== null) return _ballPathCache;
+    try {
+      const txt = await (await fetch('assets/soccer-ball.svg')).text();
+      const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+      const paths = [...doc.querySelectorAll('path')];
+      // skip the full-bleed background rect path
+      const art = paths.find(p => !/^M0 0h512v512H0z$/i.test((p.getAttribute('d')||'').trim()));
+      _ballPathCache = art ? art.getAttribute('d') : '';
+    } catch(_) { _ballPathCache = ''; }
+    return _ballPathCache;
+  }
+  async function addBall() {
+    const d = await _loadBallPath();
+    const R = 15;                                   // on-canvas ball radius (keep current visual size)
+    const shadow = new fabric.Ellipse({ left:0, top:15.5, rx:13, ry:3, fill:'rgba(0,0,0,.25)', originX:'center', originY:'center' });
+    const base   = new fabric.Circle({ radius:R, fill:'#ffffff', stroke:'#1e293b', strokeWidth:1.2, originX:'center', originY:'center' });
+    let art = null;
+    if (d) {
+      art = new fabric.Path(d, { fill:'#1e293b', originX:'center', originY:'center' });   // dark panels/seams
+      const s = (R*2) / 512 * 1.0;                  // scale 512-viewBox artwork to the ball diameter
+      art.scale(s);
+      art.set({ left:0, top:0 });
     }
-    const pentagon = new fabric.Polygon(pts, { fill:'#0f172a', originX:'center', originY:'center' });
-    finishAdd(new fabric.Group([shadow, shell, ...seams, pentagon]), 'ball');
+    const grp = new fabric.Group([shadow, base, ...(art?[art]:[])], { originX:'center', originY:'center' });
+    finishAdd(grp, 'ball');
   }
   function addCone(color = '#f97316') {
     const shadow = new fabric.Ellipse({ rx:14, ry:4, fill:'rgba(0,0,0,0.22)', top:16, originX:'center', originY:'center' });
