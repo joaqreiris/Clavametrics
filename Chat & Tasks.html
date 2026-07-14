@@ -1080,10 +1080,6 @@ async function sendMessage() {
 
   const lpData = draftLinkPreview ? { link_preview: draftLinkPreview } : {};
 
-  inp.value = '';
-  removePendingAtt();
-  clearLinkPreview();
-
   const { data, error } = await window.sb.from('messages').insert({
     club_id:      currentUser.clubId,
     sender_id:    currentUser.id,
@@ -1096,11 +1092,17 @@ async function sendMessage() {
     ...lpData
   }).select().single();
 
-  if (!error && data) {
-    messages.push(data);
-    appendMsg(data);
-    if (activeConv !== 'group') { dmLastMsg[activeConv] = data; renderConvList(); }
+  if (error) {
+    console.error('sendMessage failed:', error);
+    alert('Could not send: ' + (error.message || error.code || 'unknown error'));
+    return;                       // keep the typed text + pending attachment so nothing is lost
   }
+  inp.value = '';
+  removePendingAtt();
+  clearLinkPreview();
+  messages.push(data);
+  appendMsg(data);
+  if (activeConv !== 'group') { dmLastMsg[activeConv] = data; renderConvList(); }
 }
 
 // ── CONV LIST ──
@@ -1940,7 +1942,7 @@ async function uploadAttachment(file) {
   const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path      = `${currentUser.clubId}/${channelId}/${Date.now()}-${safeName}`;
   const { error } = await window.sb.storage.from('chat-attachments').upload(path, file, { cacheControl: '3600', upsert: false });
-  if (error) throw error;
+  if (error) { console.error('uploadAttachment failed:', error); throw error; }
   const { data: { publicUrl } } = window.sb.storage.from('chat-attachments').getPublicUrl(path);
   return { url: publicUrl };
 }
