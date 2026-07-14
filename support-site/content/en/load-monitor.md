@@ -9,7 +9,7 @@ summary: A squad-level workload-risk dashboard built on the acute:chronic worklo
 
 ## What it is
 
-The Load Monitor is a squad-wide readiness dashboard centered on the **acute:chronic workload ratio (ACWR)**. It reads each player's recent load against their own rolling baseline and sorts the squad into workload zones — underloaded, sweet spot, overreach, or high risk — so the staff can see at a glance who needs pulling back and who has room to push.
+The Load Monitor is a squad-wide readiness dashboard centered on the **[acute:chronic workload ratio (ACWR)](glossary#acwr)**. It reads each player's recent load against their own rolling baseline and sorts the squad into workload zones — underloaded, sweet spot, overreach, or high risk — so the staff can see at a glance who needs pulling back and who has room to push.
 
 ## When you use it
 

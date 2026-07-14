@@ -9,7 +9,7 @@ summary: The team's planning canvas — microcycles, training sessions, matches 
 
 ## What it is
 
-The Calendar is where the technical staff lays out the team's schedule: training sessions, matches, recovery, and logistics (travel, meals, meetings, press) organized into **microcycles** and structured around the **match-day-minus (MD-)** framework.
+The Calendar is where the technical staff lays out the team's schedule: training sessions, matches, recovery, and logistics (travel, meals, meetings, press) organized into **[microcycles](glossary#microcycle)** and structured around the **[match-day-minus (MD-)](glossary#md-matchday-offset)** framework.
 
 ## When you use it
 

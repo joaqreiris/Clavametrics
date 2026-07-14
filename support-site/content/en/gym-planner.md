@@ -42,7 +42,7 @@ You open it from the [Calendar](/support/calendar) by clicking a gym session for
 
 **SR vs VBT.** Each main exercise is prescribed either as **SR** (sets × reps, the default) or **VBT** (velocity-based training, prescribing by bar velocity). The mode is saved per exercise.
 
-**AI-assisted generation.** The assistant **only selects from your club's existing, tagged Gym Library exercises — it never invents exercises.** It reads your objective plus optional context (player count, emphasis, and soft signals like the match day, team ACWR zone and readiness trend) and returns a **draft** — warm-up, plyometrics and main-work rows built from real exercise IDs. You confirm before it replaces the current session, and every field stays fully editable afterward. If nothing in the library is tagged yet, it asks you to tag exercises in the Gym Library first.
+**AI-assisted generation.** The assistant **only selects from your club's existing, tagged Gym Library exercises — it never invents exercises.** It reads your objective plus optional context (player count, emphasis, and soft signals like the match day, team [ACWR](glossary#acwr) zone and readiness trend) and returns a **draft** — warm-up, plyometrics and main-work rows built from real exercise IDs. You confirm before it replaces the current session, and every field stays fully editable afterward. If nothing in the library is tagged yet, it asks you to tag exercises in the Gym Library first.
 
 **Load groups.** Rather than one prescription for everyone, Load groups clusters the squad into tiers from their strength-test values and shows a per-tier load range for a chosen %RM — so each athlete lifts relative to their own test.
 

@@ -33,7 +33,7 @@ To look back — audit what was actually done, review load progression across a 
 
 **Planned vs historical.** A **planned** session is created in [Daily Planning](/support/daily-planning) for forward scheduling and may not have load data yet. A **historical** session already carries its delivered data. The archive holds both; planning surfaces only the planned ones.
 
-**Why the archive matters.** The chronic side of ACWR needs weeks of load history. Historical imports let you back-fill that history, so the [Load Monitor](/support/load-monitor) can compute a meaningful acute:chronic ratio from day one and you can analyze load retrospectively — without those back-filled sessions cluttering the planning calendar.
+**Why the archive matters.** The chronic side of [ACWR](glossary#acwr) needs weeks of load history. Historical imports let you back-fill that history, so the [Load Monitor](/support/load-monitor) can compute a meaningful acute:chronic ratio from day one and you can analyze load retrospectively — without those back-filled sessions cluttering the planning calendar.
 
 **Load (AU).** Each session's load in arbitrary units is derived from RPE × duration (per-player where session-RPE exists, otherwise from the estimated RPE), which is what the load bands and the Load Monitor build on.
 

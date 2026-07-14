@@ -13,7 +13,7 @@ Daily Planning is where you build the **content of a single training session** f
 
 ## When you use it
 
-You land here from the [Calendar](/support/calendar) by opening a training session, then design the day: confirm the session's time, microcycle and MD- context, set the squad and any physio adaptations, add the activation and field drills, and check the totals and projected GPS load before printing or publishing the session sheet for the field.
+You land here from the [Calendar](/support/calendar) by opening a training session, then design the day: confirm the session's time, [microcycle](glossary#microcycle) and [MD-](glossary#md-matchday-offset) context, set the squad and any physio adaptations, add the activation and field drills, and check the totals and projected GPS load before printing or publishing the session sheet for the field.
 
 ## How it works
 
@@ -42,7 +42,7 @@ In each, add a drill **from the Exercises Library** (drills built in the planner
 
 **Phases (activation vs main).** A session is split into an **activation** phase and a **main / field** phase. Both grids feed the session totals and the GPS projection, but keeping them separate mirrors how the session actually runs and prints.
 
-**Planned load (AU).** The planned load in arbitrary units is **expected RPE × total session duration (minutes)** — a subjective, intent-based estimate of how demanding the session should be. It's the planning-side counterpart to the delivered s-RPE load reported after the session (see [RPE](/support/rpe)) and the external GPS load (see [GPS Analysis](/support/gps-analysis)).
+**Planned load (AU).** The planned load in arbitrary units is **expected RPE × total session duration (minutes)** — a subjective, intent-based estimate of how demanding the session should be. It's the planning-side counterpart to the delivered [s-RPE](glossary#s-rpe) load reported after the session (see [RPE](/support/rpe)) and the external GPS load (see [GPS Analysis](/support/gps-analysis)).
 
 **Interval structure (series / work / rest).** A drill's duration can be a flat number of minutes or an interval structure — series × work time, plus rest between them. The **work** minutes drive the GPS projection (time actually spent working); the **total** minutes (work + rest) drive the session time totals.
 

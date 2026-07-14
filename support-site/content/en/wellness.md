@@ -43,7 +43,7 @@ For the four Hooper items, **higher is worse**. Mood is shown but not added into
 
 **Pain flags.** A check-in can flag sore body areas (hamstring, quads, calves, groin, knee, ankle, shoulder, back) plus a free note. Reporting an area raises an alert to the medical/coaching staff — separate from the Hooper score (pain isn't summed into it).
 
-**Why it's read with load, never alone.** Subjective wellness is an early-warning input, not a verdict. A high Hooper score on its own means little; a high Hooper score **on top of high training load** is the combination that flags elevated risk. That's why you read it next to the day's s-RPE (see [RPE](/support/rpe)) and the acute:chronic ratio (see [Load Monitor](/support/load-monitor)) rather than in isolation.
+**Why it's read with load, never alone.** Subjective wellness is an early-warning input, not a verdict. A high Hooper score on its own means little; a high Hooper score **on top of high training load** is the combination that flags elevated risk. That's why you read it next to the day's [s-RPE](glossary#s-rpe) (see [RPE](/support/rpe)) and the acute:chronic ratio (see [Load Monitor](/support/load-monitor)) rather than in isolation.
 
 ## FAQ
 

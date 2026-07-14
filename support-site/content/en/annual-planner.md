@@ -9,7 +9,7 @@ summary: The season macro-plan — set a periodization model, lay out phases, co
 
 ## What it is
 
-The Annual Planner is the season-long macro view: you pick a **periodization model**, mark the **phases** of the year, load the **competitions and fixtures**, and break the season into **microcycles** (weeks) — optionally grouped into mesocycles — each anchored to its matches.
+The Annual Planner is the season-long macro view: you pick a **[periodization model](glossary#periodization-models)**, mark the **phases** of the year, load the **competitions and fixtures**, and break the season into **microcycles** (weeks) — optionally grouped into mesocycles — each anchored to its matches.
 
 ## When you use it
 

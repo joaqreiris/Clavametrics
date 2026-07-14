@@ -9,11 +9,11 @@ summary: A multi-view GPS dashboard — distance, speed zones, accelerations and
 
 ## What it is
 
-GPS Analysis is the workspace for external-load data. It turns per-player GPS metrics — distance, speed zones, accelerations, player load — into session reviews, weekly reports, match profiles and load-monitoring trends, compared against team baselines and injury-risk thresholds.
+GPS Analysis is the workspace for external-load data. It turns per-player GPS metrics — distance, speed zones, accelerations, [player load](glossary#player-load) — into session reviews, weekly reports, match profiles and load-monitoring trends, compared against team baselines and injury-risk thresholds.
 
 ## When you use it
 
-Use it after each session or match to review what athletes actually did, and across the week to compare planned versus delivered load, spot outliers, and track fitness and fatigue. It shares its ACWR engine with the [Load Monitor](/support/load-monitor); GPS Analysis is where you go for the deeper, per-metric and per-player drilldown.
+Use it after each session or match to review what athletes actually did, and across the week to compare planned versus delivered load, spot outliers, and track fitness and fatigue. It shares its [ACWR](glossary#acwr) engine with the [Load Monitor](/support/load-monitor); GPS Analysis is where you go for the deeper, per-metric and per-player drilldown.
 
 ## How it works
 

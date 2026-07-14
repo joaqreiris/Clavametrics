@@ -9,11 +9,11 @@ summary: The session-RPE monitor — collect each player's perceived exertion af
 
 ## What it is
 
-The RPE page is the session-RPE monitor: it collects each player's **rate of perceived exertion** after a session, computes the session load (**s-RPE = RPE × duration**), and shows who has responded, who's missing, and how hard the squad found the session.
+The RPE page is the session-RPE monitor: it collects each player's **rate of perceived exertion** after a session, computes the session load (**[s-RPE](glossary#s-rpe) = RPE × duration**), and shows who has responded, who's missing, and how hard the squad found the session.
 
 ## When you use it
 
-Right after a session. Players submit their RPE from a phone (no login needed) while it's fresh; staff watch the responses come in, chase the ones still missing, and review the squad's internal load. Those s-RPE values are what the [Load Monitor](/support/load-monitor) turns into ACWR.
+Right after a session. Players submit their RPE from a phone (no login needed) while it's fresh; staff watch the responses come in, chase the ones still missing, and review the squad's internal load. Those s-RPE values are what the [Load Monitor](/support/load-monitor) turns into [ACWR](glossary#acwr).
 
 ## How it works
 

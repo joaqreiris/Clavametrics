@@ -13,7 +13,7 @@ The Player Profile is a **read-only aggregator**: one athlete's key data from ac
 
 ## When you use it
 
-For a fast, all-in-one read on one player — a pre-session or pre-match briefing (availability, ACWR zone, readiness), a progress check (test evolution, wellness trend), or a review of injury history — without hopping between pages. You reach it from the [Squad](/support/squad) by opening a player.
+For a fast, all-in-one read on one player — a pre-session or pre-match briefing (availability, [ACWR](glossary#acwr) zone, readiness), a progress check (test evolution, wellness trend), or a review of injury history — without hopping between pages. You reach it from the [Squad](/support/squad) by opening a player.
 
 ## How it works
 
