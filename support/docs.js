@@ -7,6 +7,12 @@
 (function () {
   "use strict";
 
+  // Language base: /support (en) or /support/es · /support/pt.
+  var base = (function () {
+    var m = location.pathname.match(/^\/support\/(es|pt)(\/|$)/);
+    return m ? "/support/" + m[1] : "/support";
+  })();
+
   /* ── Search ── */
   var input = document.getElementById("dxSearchInput");
   var box = document.getElementById("dxResults");
@@ -15,7 +21,7 @@
 
   function loadIndex() {
     if (index) return Promise.resolve(index);
-    return fetch("/support/search-index.json")
+    return fetch(base + "/search-index.json")
       .then(function (r) { return r.json(); })
       .then(function (data) { index = data; return index; })
       .catch(function () { index = []; return index; });
@@ -39,7 +45,7 @@
       return;
     }
     box.innerHTML = results.map(function (p, i) {
-      return '<a href="/support/' + p.slug + '" data-i="' + i + '">' +
+      return '<a href="' + base + '/' + p.slug + '" data-i="' + i + '">' +
         '<span class="r-world">' + escapeHtml(p.worldTitle || p.world) + '</span>' +
         '<span class="r-title">' + escapeHtml(p.title) + '</span></a>';
     }).join("");

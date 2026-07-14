@@ -192,158 +192,165 @@ function renderMarkdown(body) {
   return { html: out.join("\n"), headings, text };
 }
 
+/* ─────────────────────────── UI strings (per language) ─────────────────────────── */
+// Doc-chrome strings around the translated content.
+const UI = {
+  en: {
+    htmlLang: "en", titleSuffix: "ClavaMetrics Support",
+    navProduct: "Product", navHow: "How it works", navPricing: "Pricing", navSupport: "Support",
+    navSignin: "Sign in", navStart: "Start free",
+    bcRoot: "Support", toc: "On this page", searchPh: "Search the docs…", browse: "Browse docs",
+    appPage: "App page:", comingSoon: "Documentation for this area is coming soon.",
+    hubEye: "Support center", hubTitle: "ClavaMetrics documentation",
+    hubIntro: "What every page of the platform does, how it fits your performance week, and the domain concepts behind it — written for the technical staff.",
+    hubSearchPh: "Search the docs — try “ACWR”, “microcycle”, “GPS”…",
+    footBrand: "The performance OS for clubs and federations. Every sport, every category, one workspace.",
+    footProduct: "Product", footFeatures: "Features", footDocs: "Support", footSupportCenter: "Support center",
+    footGlossary: "Glossary", footCompany: "Company", footContact: "Contact",
+    footCopy: "© ClavaMetrics, Inc. · Performance OS for sport",
+  },
+  es: {
+    htmlLang: "es", titleSuffix: "Soporte ClavaMetrics",
+    navProduct: "Producto", navHow: "Cómo funciona", navPricing: "Precios", navSupport: "Soporte",
+    navSignin: "Iniciar sesión", navStart: "Empezar gratis",
+    bcRoot: "Soporte", toc: "En esta página", searchPh: "Buscar en la documentación…", browse: "Ver documentación",
+    appPage: "Página de la app:", comingSoon: "La documentación de esta área está en camino.",
+    hubEye: "Centro de soporte", hubTitle: "Documentación de ClavaMetrics",
+    hubIntro: "Qué hace cada página de la plataforma, cómo encaja en tu semana de rendimiento y los conceptos de dominio detrás — escrito para el cuerpo técnico.",
+    hubSearchPh: "Buscá en la documentación — probá “ACWR”, “microciclo”, “GPS”…",
+    footBrand: "El sistema operativo del rendimiento para clubes y federaciones. Cada deporte, cada categoría, un solo espacio.",
+    footProduct: "Producto", footFeatures: "Funciones", footDocs: "Soporte", footSupportCenter: "Centro de soporte",
+    footGlossary: "Glosario", footCompany: "Empresa", footContact: "Contacto",
+    footCopy: "© ClavaMetrics, Inc. · El sistema operativo del rendimiento deportivo",
+  },
+  pt: {
+    htmlLang: "pt", titleSuffix: "Suporte ClavaMetrics",
+    navProduct: "Produto", navHow: "Como funciona", navPricing: "Preços", navSupport: "Suporte",
+    navSignin: "Entrar", navStart: "Começar grátis",
+    bcRoot: "Suporte", toc: "Nesta página", searchPh: "Buscar na documentação…", browse: "Ver documentação",
+    appPage: "Página do app:", comingSoon: "A documentação desta área está a caminho.",
+    hubEye: "Central de suporte", hubTitle: "Documentação da ClavaMetrics",
+    hubIntro: "O que cada página da plataforma faz, como se encaixa na sua semana de performance e os conceitos por trás — escrito para a comissão técnica.",
+    hubSearchPh: "Busque na documentação — tente “ACWR”, “microciclo”, “GPS”…",
+    footBrand: "O sistema operacional da performance para clubes e federações. Cada esporte, cada categoria, um só espaço.",
+    footProduct: "Produto", footFeatures: "Recursos", footDocs: "Suporte", footSupportCenter: "Central de suporte",
+    footGlossary: "Glossário", footCompany: "Empresa", footContact: "Contato",
+    footCopy: "© ClavaMetrics, Inc. · O sistema operacional da performance esportiva",
+  },
+};
+
 /* ─────────────────────────── Load inputs ─────────────────────────── */
 const idx = JSON.parse(readFileSync(join(SITE, "docs-index.json"), "utf8"));
 const worlds = idx.worlds;
 const worldById = Object.fromEntries(worlds.map((w) => [w.id, w]));
+const wTitle = (w, lang) => (w.i18n && w.i18n[lang] && w.i18n[lang].title) || w.title;
+const wSummary = (w, lang) => (w.i18n && w.i18n[lang] && w.i18n[lang].summary) || w.summary;
 
-const contentDir = join(SITE, "content", LANG);
-const files = readdirSync(contentDir).filter((f) => f.endsWith(".md"));
+const CONTENT = join(SITE, "content");
+const LANGS = readdirSync(CONTENT, { withFileTypes: true })
+  .filter((d) => d.isDirectory()).map((d) => d.name).filter((l) => UI[l])
+  .sort((a, b) => (a === "en" ? -1 : b === "en" ? 1 : a.localeCompare(b)));
 
-const pages = files.map((f) => {
-  const raw = readFileSync(join(contentDir, f), "utf8");
-  const { data, body } = parseFrontmatter(raw);
-  const rendered = renderMarkdown(body);
-  if (!data.slug) throw new Error(`Missing slug in frontmatter of ${f}`);
-  if (!worldById[data.world]) throw new Error(`Unknown world "${data.world}" in ${f} (see docs-index.json)`);
-  return {
-    file: f,
-    title: data.title || data.slug,
-    slug: data.slug,
-    world: data.world,
-    worldTitle: worldById[data.world].title,
-    app_page: data.app_page || "",
-    order: Number(data.order || 999),
-    summary: data.summary || "",
-    ...rendered,
-  };
-});
-
-// Group by world, ordered.
-const pagesByWorld = {};
-for (const w of worlds) {
-  pagesByWorld[w.id] = pages
-    .filter((p) => p.world === w.id)
-    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-}
-
-/* ─────────────────────────── Shared fragments ─────────────────────────── */
-function buildSidebar(activeSlug) {
-  return worlds
-    .map((w) => {
-      const items = pagesByWorld[w.id];
-      if (!items.length) return "";
-      return (
-        '<div class="dx-side-world">' +
-        '<h4><i class="ti ' + w.icon + '"></i>' + w.title + "</h4>" +
-        items
-          .map(
-            (p) =>
-              '<a href="/support/' + p.slug + '"' +
-              (p.slug === activeSlug ? ' class="is-active"' : "") +
-              ">" + p.title + "</a>"
-          )
-          .join("") +
-        "</div>"
-      );
-    })
-    .join("\n");
-}
+const pageTpl = readFileSync(join(TPL, "page.html"), "utf8");
+const indexTpl = readFileSync(join(TPL, "index.html"), "utf8");
+const SITE_URL = "https://clavametrics.vercel.app";
 
 function fill(tpl, map) {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in map ? map[k] : ""));
 }
+// Rewrite intra-support links into the language subtree (en stays at /support).
+function localize(html, lang) {
+  if (lang === "en") return html;
+  return html
+    .replace(/href="\/support\/([a-z0-9-]+)"/g, 'href="/support/' + lang + '/$1"')
+    .replace(/href="\/support"/g, 'href="/support/' + lang + '"');
+}
 
-/* ─────────────────────────── Emit ─────────────────────────── */
+/* ─────────────────────────── Emit (per language) ─────────────────────────── */
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
-
-const pageTpl = readFileSync(join(TPL, "page.html"), "utf8");
-const indexTpl = readFileSync(join(TPL, "index.html"), "utf8");
-
-// Copy static assets (single source of truth in docs-site/templates/).
-copyFileSync(join(TPL, "docs.css"), join(OUT, "docs.css"));
+copyFileSync(join(TPL, "docs.css"), join(OUT, "docs.css")); // shared, referenced absolutely
 copyFileSync(join(TPL, "docs.js"), join(OUT, "docs.js"));
 
-// Per-page HTML.
-for (const p of pages) {
-  const toc = p.headings.map((h) => '<a href="#' + h.id + '">' + h.text + "</a>").join("");
-  const appPage = p.app_page
-    ? '<span class="dx-apppage"><i class="ti ti-app-window"></i>App page: ' + escapeHtml(p.app_page) + "</span>"
-    : "";
-  const html = fill(pageTpl, {
-    TITLE: escapeHtml(p.title),
-    SLUG: p.slug,
-    META_DESC: escapeHtml(p.summary),
-    SUMMARY: escapeHtml(p.summary),
-    WORLD: p.world,
-    WORLD_TITLE: escapeHtml(p.worldTitle),
-    APP_PAGE: appPage,
-    ARTICLE: p.html,
-    TOC: toc || '<a href="#">—</a>',
-    SIDEBAR: buildSidebar(p.slug),
-  });
-  writeFileSync(join(OUT, p.slug + ".html"), html);
-}
+const helpMap = {};
+const summary = [];
 
-// Hub.
-const worldsHtml = worlds
-  .map((w) => {
+for (const lang of LANGS) {
+  const ui = UI[lang];
+  const base = lang === "en" ? "/support" : "/support/" + lang;
+  const outDir = lang === "en" ? OUT : join(OUT, lang);
+  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+
+  const files = readdirSync(join(CONTENT, lang)).filter((f) => f.endsWith(".md"));
+  const pages = files.map((f) => {
+    const { data, body } = parseFrontmatter(readFileSync(join(CONTENT, lang, f), "utf8"));
+    if (!data.slug) throw new Error(`Missing slug in ${lang}/${f}`);
+    if (!worldById[data.world]) throw new Error(`Unknown world "${data.world}" in ${lang}/${f}`);
+    return { file: f, title: data.title || data.slug, slug: data.slug, world: data.world,
+      app_page: data.app_page || "", order: Number(data.order || 999), summary: data.summary || "", ...renderMarkdown(body) };
+  });
+
+  const pagesByWorld = {};
+  for (const w of worlds) pagesByWorld[w.id] = pages.filter((p) => p.world === w.id).sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+
+  const langSwitch = (slug) => '<div class="dx-lang" role="group" aria-label="Language">' +
+    LANGS.map((l) => {
+      const href = (l === "en" ? "/support" : "/support/" + l) + (slug ? "/" + slug : "");
+      return '<a class="dx-lang-opt' + (l === lang ? " is-on" : "") + '" href="' + href + '" lang="' + l + '">' + l.toUpperCase() + "</a>";
+    }).join("") + "</div>";
+
+  const sidebar = (activeSlug) => worlds.map((w) => {
+    const items = pagesByWorld[w.id]; if (!items.length) return "";
+    return '<div class="dx-side-world"><h4><i class="ti ' + w.icon + '"></i>' + escapeHtml(wTitle(w, lang)) + "</h4>" +
+      items.map((p) => '<a href="' + base + "/" + p.slug + '"' + (p.slug === activeSlug ? ' class="is-active"' : "") + ">" + escapeHtml(p.title) + "</a>").join("") + "</div>";
+  }).join("\n");
+
+  for (const p of pages) {
+    const toc = p.headings.map((h) => '<a href="#' + h.id + '">' + escapeHtml(h.text) + "</a>").join("");
+    const appPage = p.app_page ? '<span class="dx-apppage"><i class="ti ti-app-window"></i>' + ui.appPage + " " + escapeHtml(p.app_page) + "</span>" : "";
+    const html = fill(pageTpl, {
+      HTML_LANG: ui.htmlLang, TITLE: escapeHtml(p.title), TITLE_SUFFIX: ui.titleSuffix, SLUG: p.slug,
+      CANON: SITE_URL + base + "/" + p.slug, META_DESC: escapeHtml(p.summary), SUMMARY: escapeHtml(p.summary),
+      WORLD: p.world, WORLD_TITLE: escapeHtml(wTitle(worldById[p.world], lang)), APP_PAGE: appPage,
+      ARTICLE: localize(p.html, lang), TOC: toc || '<a href="#">—</a>', SIDEBAR: sidebar(p.slug), LANG_SWITCH: langSwitch(p.slug),
+      NAV_PRODUCT: ui.navProduct, NAV_HOW: ui.navHow, NAV_PRICING: ui.navPricing, NAV_SUPPORT: ui.navSupport,
+      NAV_SIGNIN: ui.navSignin, NAV_START: ui.navStart, BASE: base, BC_ROOT: ui.bcRoot, TOC_TITLE: ui.toc,
+      SEARCH_PH: ui.searchPh, BROWSE: ui.browse, FOOT_BRAND: ui.footBrand, FOOT_PRODUCT: ui.footProduct,
+      FOOT_FEATURES: ui.footFeatures, FOOT_DOCS: ui.footDocs, FOOT_SUPPORT_CENTER: ui.footSupportCenter,
+      FOOT_GLOSSARY: ui.footGlossary, FOOT_COMPANY: ui.footCompany, FOOT_CONTACT: ui.footContact, FOOT_COPY: ui.footCopy,
+    });
+    writeFileSync(join(outDir, p.slug + ".html"), html);
+    if (lang === "en" && p.app_page) helpMap[p.app_page] = p.slug;
+  }
+
+  const worldsHtml = worlds.map((w) => {
     const items = pagesByWorld[w.id];
     const cards = items.length
-      ? '<div class="dx-card-grid">' +
-        items
-          .map(
-            (p) =>
-              '<a class="dx-card" href="/support/' + p.slug + '">' +
-              "<h3>" + escapeHtml(p.title) + '<i class="ti ti-arrow-right"></i></h3>' +
-              "<p>" + escapeHtml(p.summary) + "</p></a>"
-          )
-          .join("") +
-        "</div>"
-      : '<div class="dx-card-grid"><p class="dx-hub-empty">Documentation for this area is coming soon.</p></div>';
-    return (
-      '<section class="dx-hub-world" id="' + w.id + '">' +
-      '<div class="dx-hub-world-head">' +
-      '<span class="ic"><i class="ti ' + w.icon + '"></i></span>' +
-      "<div><h2>" + w.title + "</h2><p>" + escapeHtml(w.summary) + "</p></div></div>" +
-      cards +
-      "</section>"
-    );
-  })
-  .join("\n");
+      ? '<div class="dx-card-grid">' + items.map((p) => '<a class="dx-card" href="' + base + "/" + p.slug + '"><h3>' + escapeHtml(p.title) + '<i class="ti ti-arrow-right"></i></h3><p>' + escapeHtml(p.summary) + "</p></a>").join("") + "</div>"
+      : '<div class="dx-card-grid"><p class="dx-hub-empty">' + ui.comingSoon + "</p></div>";
+    return '<section class="dx-hub-world" id="' + w.id + '"><div class="dx-hub-world-head"><span class="ic"><i class="ti ' + w.icon + '"></i></span><div><h2>' + escapeHtml(wTitle(w, lang)) + "</h2><p>" + escapeHtml(wSummary(w, lang)) + "</p></div></div>" + cards + "</section>";
+  }).join("\n");
 
-writeFileSync(join(OUT, "index.html"), fill(indexTpl, { WORLDS: worldsHtml }));
+  writeFileSync(join(outDir, "index.html"), fill(indexTpl, {
+    HTML_LANG: ui.htmlLang, TITLE_SUFFIX: ui.titleSuffix, CANON: SITE_URL + base, HUB_EYE: ui.hubEye,
+    HUB_TITLE: ui.hubTitle, HUB_INTRO: escapeHtml(ui.hubIntro), HUB_SEARCH_PH: ui.hubSearchPh, WORLDS: worldsHtml,
+    LANG_SWITCH: langSwitch(""), NAV_PRODUCT: ui.navProduct, NAV_HOW: ui.navHow, NAV_PRICING: ui.navPricing,
+    NAV_SUPPORT: ui.navSupport, NAV_SIGNIN: ui.navSignin, NAV_START: ui.navStart, BASE: base,
+    FOOT_BRAND: ui.footBrand, FOOT_PRODUCT: ui.footProduct, FOOT_FEATURES: ui.footFeatures, FOOT_DOCS: ui.footDocs,
+    FOOT_SUPPORT_CENTER: ui.footSupportCenter, FOOT_GLOSSARY: ui.footGlossary, FOOT_COMPANY: ui.footCompany,
+    FOOT_CONTACT: ui.footContact, FOOT_COPY: ui.footCopy,
+  }));
 
-// Search index.
-const searchIndex = pages.map((p) => ({
-  slug: p.slug,
-  title: p.title,
-  world: p.world,
-  worldTitle: p.worldTitle,
-  headings: p.headings.map((h) => h.text),
-  text: p.text.slice(0, 1200),
-}));
-writeFileSync(join(OUT, "search-index.json"), JSON.stringify(searchIndex));
-
-// Help map: app_page (e.g. "Calendar.html") → support slug. Single source of
-// truth for the in-app "?" button (assets/help-link.js). Only pages that declare
-// an app_page are included.
-const helpMap = {};
-for (const p of pages) {
-  if (p.app_page) helpMap[p.app_page] = p.slug;
+  const searchIndex = pages.map((p) => ({ slug: p.slug, title: p.title, world: p.world,
+    worldTitle: wTitle(worldById[p.world], lang), headings: p.headings.map((h) => h.text), text: p.text.slice(0, 1200) }));
+  writeFileSync(join(outDir, "search-index.json"), JSON.stringify(searchIndex));
+  summary.push({ lang, n: pages.length });
 }
+
 writeFileSync(join(OUT, "help-map.json"), JSON.stringify(helpMap, null, 2) + "\n");
 
 /* ─────────────────────────── Summary ─────────────────────────── */
-console.log("ClavaMetrics support center generated →  /support\n");
-console.log("  index.html            hub (" + pages.length + " pages, " + worlds.length + " worlds)");
-for (const w of worlds) {
-  const items = pagesByWorld[w.id];
-  if (!items.length) continue;
-  console.log("  · " + w.title);
-  for (const p of items) console.log("      " + (p.slug + ".html").padEnd(24) + " ← " + p.file);
-}
-console.log("  search-index.json     " + searchIndex.length + " entries");
-console.log("  help-map.json         " + Object.keys(helpMap).length + " app pages mapped");
-console.log("  docs.css, docs.js     copied\n");
+console.log("ClavaMetrics support center generated\n");
+for (const s of summary) console.log("  " + (s.lang === "en" ? "/support" : "/support/" + s.lang).padEnd(14) + s.n + " pages + hub + search-index.json");
+console.log("  /support/help-map.json  " + Object.keys(helpMap).length + " app pages");
+console.log("  docs.css, docs.js       copied\n");
 console.log("Done.");
