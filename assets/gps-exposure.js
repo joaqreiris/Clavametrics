@@ -16,10 +16,7 @@
   'use strict';
 
   // i18n: use the shared CM_I18N runtime when present; fall back to English.
-  function tt(key, fb, vars) {
-    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
-    return (v && v !== key) ? v : (fb != null ? fb : key);
-  }
+  function tt(key, fb, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,fb,vars):(fb!=null?fb:key); }
 
   // Metrics mirror the GPS units' external-load streams.
   // agg: how a week is aggregated for one player ('sum' volume, 'mean' rate).

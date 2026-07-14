@@ -11,10 +11,7 @@
   'use strict';
 
   // i18n helper: CM_I18N.t with an English fallback (already interpolated).
-  function tt(key, fallbackEN, vars) {
-    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
-    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
-  }
+  function tt(key, fallbackEN, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,fallbackEN,vars):(fallbackEN!=null?fallbackEN:key); }
   const errUnknown = () => tt('clinical_record.err_unknown', 'unknown error');
   const errSave = e => tt('clinical_record.err_save', 'Could not save: {msg}', { msg: (e && e.message) || errUnknown() });
   const errDelete = e => tt('clinical_record.err_delete', 'Could not delete: {msg}', { msg: (e && e.message) || errUnknown() });

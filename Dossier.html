@@ -224,7 +224,7 @@ const DOSSIER_TEST_BY_KEY = Object.fromEntries(DOSSIER_TESTS.flatMap(g => g.item
 // i18n helper for the no-print config chrome (toolbar/config panels). The printed
 // SHEET localizes independently via LABELS + the ?lang= URL param (export intent);
 // only the app-facing config UI follows the CM_I18N app language.
-function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+function tt(key, fallbackEN, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,fallbackEN,vars):(fallbackEN!=null?fallbackEN:key); }
 // Per-panel localized labels (group headers + test display names) — display only;
 // matching/persistence use the catalog key/src, never these strings.
 function grpLabel(g){ const m={'Jumps & power':'dossier.grp_jumps','Speed & agility':'dossier.grp_speed','Endurance':'dossier.grp_endurance'}; return m[g]?tt(m[g],g):g; }

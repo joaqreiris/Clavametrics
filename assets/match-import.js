@@ -11,10 +11,7 @@
 (function(){
   'use strict';
   const $ = id => document.getElementById(id);
-  function tt(key, fallbackEN, vars){
-    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
-    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
-  }
+  function tt(key, fallbackEN, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,fallbackEN,vars):(fallbackEN!=null?fallbackEN:key); }
   function miLocale(){ return (window.CM_I18N && CM_I18N.current) || document.documentElement.lang || 'en'; }
   function miMonthDay(dt){ try { return new Intl.DateTimeFormat(miLocale(), { day:'numeric', month:'short', year:'numeric' }).format(dt); } catch(_) { return dt.toDateString(); } }
 

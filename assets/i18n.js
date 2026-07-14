@@ -174,6 +174,21 @@
     return interpolate(v, vars);
   }
 
+  // Canonical wrapper used by every page. Resolves the key from the dict; if the
+  // dict has not loaded yet (or the key is missing) it uses the inline English
+  // fallback — and, crucially, STILL runs plural + interpolation on it so callers
+  // never see a raw "{n} a|{n} b" template during the load race.
+  // Locale for pluralPick is the active `current` (same as dict values); for the
+  // en/es/pt one|other 2-form and zero|one|other 3-form we use, the category split
+  // matches, and pluralPick already falls back to count===1?one:other if Intl fails.
+  function tt(key, fallbackEN, vars) {
+    var v = raw(key);
+    if (v == null) v = (fallbackEN != null ? fallbackEN : key);
+    if (v === key) return key;                 // truly nothing to render but the key
+    if (vars && vars.count != null) v = pluralPick(v, vars.count);
+    return interpolate(v, vars);
+  }
+
   // ── Apply to the DOM ────────────────────────────────────────────────────────
   function parseVars(el) {
     var j = el.getAttribute("data-i18n-vars");
@@ -334,6 +349,9 @@
   // ── API ─────────────────────────────────────────────────────────────────────
   var api = {
     t: t,
+    tt: tt,
+    interpolate: interpolate,
+    pluralPick: pluralPick,
     setLang: setLang,
     applyTo: applyTo,
     setUserPref: setUserPref,

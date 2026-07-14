@@ -143,10 +143,7 @@
   let _currentMatch  = null;
 
   // ── i18n helper: t(key) with English fallback (already interpolated)
-  function tt (key, fallbackEN, vars) {
-    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
-    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
-  }
+  function tt (key, fallbackEN, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,fallbackEN,vars):(fallbackEN!=null?fallbackEN:key); }
 
   // ── Strings — resolved from i18n at render time (English is the fallback).
   //    `tagline` is overridden at runtime by club branding (see loadClubInfo/loadBranding).
