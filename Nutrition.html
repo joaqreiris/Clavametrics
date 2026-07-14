@@ -100,11 +100,13 @@
 
   /* Today's intake card */
   .nu-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:16px; }
-  .nu-card-h { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
-  .nu-card-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .nu-card-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .nu-card-h { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .nu-card-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; }
+  .nu-card-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .nu-card-h .right { margin-left:auto; display:flex; gap:6px; }
-  .nu-card-h .right button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .nu-card-h .right button:not(.nu-bc-tg) { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; } /* icon buttons only */
+  .nu-card-h .right .nu-bc-tg { width:auto; min-width:0; height:26px; padding:0 10px; border:0; border-radius:5px; background:transparent; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); white-space:nowrap; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .nu-card-h .right .nu-bc-tg.is-on { background:var(--cm-bg); color:var(--cm-fg-strong); box-shadow:0 1px 2px rgba(0,0,0,.06); }
   .nu-card-h .right button .ti { font-size:13px; }
 
   /* Donut ring + macros */
