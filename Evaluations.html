@@ -951,6 +951,34 @@
                 <div id="evSprintBulkMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
               </div>
 
+              <!-- Body composition → dedicated bulk grid (writes to body_composition) -->
+              <div id="evBcBulk" class="ev-card" style="display:none;margin-bottom:14px">
+                <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                  <div class="ev-frow" style="flex:0 0 150px;margin-bottom:0"><label class="ev-fl" data-i18n="common.date">Date</label><input id="evBcDate" type="date" class="ev-finput"></div>
+                  <div class="ev-frow" style="flex:0 0 170px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.bc_mode">Mode</label>
+                    <select id="evBcMode" class="ev-finput">
+                      <option value="results" data-i18n="evaluations.bc_mode_results">Results</option>
+                      <option value="skinfolds" data-i18n="evaluations.bc_mode_skinfolds">Skinfolds</option>
+                    </select></div>
+                  <div class="ev-frow" style="flex:0 0 150px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.method">Method</label>
+                    <select id="evBcMethod" class="ev-finput"></select></div>
+                  <div class="ev-frow" id="evBcFormulaWrap" style="flex:0 0 130px;margin-bottom:0;display:none"><label class="ev-fl" data-i18n="evaluations.formula">Formula</label>
+                    <select id="evBcFormula" class="ev-finput">
+                      <option value="JP3">JP3</option><option value="JP7">JP7</option><option value="DW4">DW4</option>
+                    </select></div>
+                  <div class="ev-spacer" style="flex:1"></div>
+                  <button id="evBcSave" class="cm-btn is-primary is-sm"><i class="ti ti-device-floppy" style="font-size:14px"></i><span data-i18n="evaluations.save_all">Save all</span></button>
+                </div>
+                <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px" data-i18n="evaluations.bc_bulk_hint">One measurement per player, written to the shared body-composition history. In Skinfolds mode %BF, lean mass and BMI are computed. Blank rows are skipped.</div>
+                <div style="overflow-x:auto;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4)">
+                  <table style="width:100%;border-collapse:collapse;min-width:560px">
+                    <thead id="evBcHead"></thead>
+                    <tbody id="evBcBody"></tbody>
+                  </table>
+                </div>
+                <div id="evBcMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
+              </div>
+
               <!-- force_tests → CSV import drawer -->
               <div id="evUploadForce" class="ev-card" style="display:none">
                 <div class="ev-placeholder">
@@ -1664,6 +1692,17 @@
       if (csvBtn) csvBtn.style.display = 'none';
       activateMini('uploadMode', 'manual');                            // our grid lives in the manual pane
       setupSprintBulk();
+    }
+
+    // Body composition: dedicated bulk grid (Results | Skinfolds) → writes to body_composition.
+    // Keeps the "New entry" launcher (individual skinfold panel); replaces the generic single-value grid.
+    var isBodyComp = (t.key === 'bodycomp');
+    document.getElementById('evBcBulk').style.display = isBodyComp ? '' : 'none';
+    if (isBodyComp){
+      document.getElementById('evUploadReal').style.display = 'none';   // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';   // no CSV importer for body composition
+      if (csvBtn) csvBtn.style.display = 'none';
+      setupBcBulk();
     }
 
     window.scrollTo(0,0);
@@ -3361,6 +3400,199 @@
     if (di) di.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); applySprintDists(); } });
   })();
 
+  // ════════════════════════════════════════════════════════════════════
+  //  Body composition · dedicated bulk grid → writes to body_composition
+  //  Results mode: weight/%BF/lean/height. Skinfolds mode: raw folds → Siri %BF
+  //  (via the shared sfBodyFatPct) + lean + BMI. One method per batch.
+  // ════════════════════════════════════════════════════════════════════
+  var _bcPlayerMeta = {};   // pid → { age, height, weight }
+  var BC_SITE_LABEL = { chest:'Pecho', abdomen:'Abdomen', thigh:'Muslo', triceps:'Tríceps', subscapular:'Subescapular', suprailiac:'Suprailíaco', midaxillary:'Axilar medio', biceps:'Bíceps' };
+  // Canonical fold → body_composition column (mirrors the individual save: suprailiac stored in sf_supraspinal).
+  var BC_SF_COL = { chest:'sf_chest', abdomen:'sf_abdominal', thigh:'sf_thigh', triceps:'sf_triceps', subscapular:'sf_subscapular', midaxillary:'sf_midaxillary', biceps:'sf_biceps', suprailiac:'sf_supraspinal' };
+
+  // Skinfold columns rendered for a formula (JP3 shows the union of both sexes; enabled per row).
+  function bcSkinfoldCols(formula){
+    var f = String(formula||'JP3').toUpperCase();
+    if (f === 'JP7') return sfFormulaSites('JP7');
+    if (f === 'DW4') return sfFormulaSites('DW4');
+    return ['chest','abdomen','thigh','triceps','suprailiac'];   // JP3 union
+  }
+
+  async function setupBcBulk(){
+    document.getElementById('evBcDate').value = evToday();
+    document.getElementById('evBcMsg').style.display = 'none';
+    document.getElementById('evBcMode').value = 'results';
+    _bcPlayerMeta = {};
+    try {
+      if (_teamPlayerIds && _teamPlayerIds.length){
+        var pr = await window.sb.from('players').select('id, date_of_birth, height, weight').eq('club_id', _clubId).in('id', _teamPlayerIds);
+        (pr.data || []).forEach(function(r){
+          var age = r.date_of_birth ? Math.floor((Date.now() - new Date(r.date_of_birth)) / (365.25 * 86400000)) : null;
+          _bcPlayerMeta[r.id] = { age: (isFinite(age) ? age : null), height: (r.height != null ? r.height : null), weight: (r.weight != null ? r.weight : null) };
+        });
+      }
+    } catch(e){ console.warn('[ev2] bc player meta failed', e); }
+    onBcModeChange();
+  }
+
+  function onBcModeChange(){
+    var mode = document.getElementById('evBcMode').value;
+    var methodSel = document.getElementById('evBcMethod');
+    var methodWrap = methodSel.closest('.ev-frow');
+    var formulaWrap = document.getElementById('evBcFormulaWrap');
+    if (mode === 'results'){
+      methodSel.innerHTML = '<option value="dexa">DEXA</option><option value="bia">BIA</option><option value="scale">'+esc(tt('evaluations.bc_scale','Scale'))+'</option>';
+      if (methodWrap) methodWrap.style.display = '';
+      formulaWrap.style.display = 'none';
+    } else {
+      if (methodWrap) methodWrap.style.display = 'none';   // method is implicitly 'skinfold'
+      formulaWrap.style.display = '';
+    }
+    renderBcBulkRoster();
+  }
+
+  function renderBcBulkRoster(){
+    var mode = document.getElementById('evBcMode').value;
+    var formula = document.getElementById('evBcFormula').value;
+    var th = document.getElementById('evBcHead'), tb = document.getElementById('evBcBody');
+    var thc = 'text-align:left;padding:10px 8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap';
+    var cell = 'padding:6px 8px;border-bottom:1px solid var(--cm-border-soft)';
+    var inpCss = 'height:30px;min-width:70px;padding:0 8px';
+    var cols;
+    if (mode === 'results'){
+      cols = [ {key:'weight_kg',label:esc(tt('evaluations.bc_weight_kg','Weight (kg)'))},
+               {key:'body_fat_pct',label:esc(tt('evaluations.bc_bodyfat','Body fat (%)'))},
+               {key:'lean_mass_kg',label:esc(tt('evaluations.bc_lean_kg','Lean mass (kg)'))},
+               {key:'height_cm',label:esc(tt('evaluations.bc_height_cm','Height (cm)'))} ];
+    } else {
+      cols = [ {key:'weight_kg',label:esc(tt('evaluations.bc_weight_kg','Weight (kg)'))},
+               {key:'height_cm',label:esc(tt('evaluations.bc_height_cm','Height (cm)'))} ]
+        .concat(bcSkinfoldCols(formula).map(function(s){ return { key:'sf_'+s, site:s, label:esc(BC_SITE_LABEL[s]||s)+' (mm)' }; }));
+    }
+    var head = '<th style="'+thc+'">'+esc(tt('evaluations.player','Player'))+'</th>';
+    if (mode === 'skinfolds') head += '<th style="'+thc+'">'+esc(tt('evaluations.sex','Sex'))+'</th>';
+    head += cols.map(function(c){ return '<th style="'+thc+'">'+c.label+'</th>'; }).join('');
+    if (mode === 'skinfolds') head += '<th style="'+thc+'">%BF</th>';
+    th.innerHTML = '<tr style="background:var(--cm-bg-soft)">'+head+'</tr>';
+
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var meta = _bcPlayerMeta[p.id] || {};
+      var tds = '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>';
+      if (mode === 'skinfolds'){
+        tds += '<td style="'+cell+'"><select class="ev-finput bc-sex" style="height:30px;min-width:60px;padding:0 6px" onchange="onBcSexChange(this)"><option value="M">M</option><option value="F">F</option></select></td>';
+      }
+      tds += cols.map(function(c){
+        var val = (c.key === 'height_cm' && meta.height != null) ? meta.height : '';   // prefill height from roster
+        var cls = c.key + (c.site ? ' bc-sf bc-sf-'+c.site : '');
+        return '<td style="'+cell+'"><input type="number" step="0.1" min="0" class="ev-finput '+cls+'" style="'+inpCss+'" value="'+val+'"></td>';
+      }).join('');
+      if (mode === 'skinfolds') tds += '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);white-space:nowrap" class="bc-result">—</td>';
+      return '<tr data-pid="'+p.id+'">'+tds+'</tr>';
+    }).join('') || '<tr><td colspan="20" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+
+    if (mode === 'skinfolds' && String(formula).toUpperCase() === 'JP3'){
+      document.querySelectorAll('#evBcBody tr').forEach(function(tr){ applyBcJp3Sex(tr); });
+    }
+  }
+
+  // JP3: enable only the current sex's sites in a row; clear + dim the others so they aren't saved.
+  function applyBcJp3Sex(tr){
+    var sexEl = tr.querySelector('.bc-sex');
+    var sex = sexEl ? sexEl.value : 'M';
+    var enabled = sfFormulaSites('JP3', sex);
+    ['chest','abdomen','thigh','triceps','suprailiac'].forEach(function(s){
+      var inp = tr.querySelector('.bc-sf-'+s); if (!inp) return;
+      var on = enabled.indexOf(s) !== -1;
+      inp.disabled = !on;
+      inp.style.opacity = on ? '' : '0.35';
+      if (!on) inp.value = '';
+    });
+  }
+
+  function onBcSexChange(sel){
+    var tr = sel.closest('tr'); if (!tr) return;
+    if (String(document.getElementById('evBcFormula').value).toUpperCase() === 'JP3') applyBcJp3Sex(tr);
+    bcUpdateRowResult(tr);
+  }
+
+  // Live %BF for a skinfold row (null when not yet computable).
+  function bcRowPct(tr){
+    if (document.getElementById('evBcMode').value !== 'skinfolds') return null;
+    var formula = document.getElementById('evBcFormula').value;
+    var meta = _bcPlayerMeta[tr.getAttribute('data-pid')] || {};
+    var sexEl = tr.querySelector('.bc-sex');
+    var folds = {};
+    bcSkinfoldCols(formula).forEach(function(s){
+      var el = tr.querySelector('.bc-sf-'+s);
+      if (el && !el.disabled){ var v = parseFloat(el.value); if (isFinite(v)) folds[s] = v; }
+    });
+    return sfBodyFatPct({ formula: formula, sex: (sexEl ? sexEl.value : 'M'), age: meta.age, folds: folds });
+  }
+
+  function bcUpdateRowResult(tr){
+    var cell = tr.querySelector('.bc-result'); if (!cell) return;
+    var pct = bcRowPct(tr);
+    if (pct == null){ cell.textContent = '—'; cell.style.color = 'var(--cm-fg-faint)'; }
+    else { cell.textContent = pct.toFixed(1) + '%'; cell.style.color = 'var(--cm-fg-muted)'; }
+  }
+
+  async function saveBcBulk(){
+    if (!_clubId) return;
+    var date = document.getElementById('evBcDate').value;
+    if (!date){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var mode = document.getElementById('evBcMode').value;
+    var formula = document.getElementById('evBcFormula').value;
+    var method = mode === 'skinfolds' ? 'skinfold' : document.getElementById('evBcMethod').value;
+    var rows = [];
+    document.querySelectorAll('#evBcBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var meta = _bcPlayerMeta[pid] || {};
+      var num = function(cls){ var el = tr.querySelector('.'+cls); if (!el || el.disabled) return null; var v = parseFloat(el.value); return isFinite(v) ? v : null; };
+      var height = num('height_cm'), weight = num('weight_kg');
+      if (mode === 'results'){
+        var bf = num('body_fat_pct'), lean = num('lean_mass_kg');
+        if (weight == null && bf == null && lean == null) return;   // blank (height alone is a prefill, not data)
+        if (lean == null && weight != null && bf != null) lean = +(weight * (1 - bf/100)).toFixed(1);
+        rows.push({ player_id: pid, club_id: _clubId, measured_date: date, method: method,
+          weight_kg: weight, body_fat_pct: bf, lean_mass_kg: lean, height_cm: height,
+          bmi: calcBMI(weight, height) });
+      } else {
+        var sexEl = tr.querySelector('.bc-sex');
+        var sex = sexEl ? sexEl.value : 'M';
+        var folds = {}, anyFold = false;
+        bcSkinfoldCols(formula).forEach(function(s){ var v = num('sf_'+s); if (v != null){ folds[s] = v; anyFold = true; } });
+        if (!anyFold && weight == null) return;   // blank row
+        var pct = sfBodyFatPct({ formula: formula, sex: sex, age: meta.age, folds: folds });
+        var sum = sfFormulaSites(formula, sex).reduce(function(a,k){ return a + (parseFloat(folds[k]) || 0); }, 0) || null;
+        var row = { player_id: pid, club_id: _clubId, measured_date: date, method: 'skinfold',
+          sf_formula: formula, sum_skinfolds: sum, weight_kg: weight, height_cm: height,
+          age_years: (meta.age != null ? meta.age : null), sex: (sex === 'F' ? 'female' : 'male'),
+          body_fat_pct: pct,
+          lean_mass_kg: (pct != null && weight != null) ? +(weight * (1 - pct/100)).toFixed(1) : null,
+          bmi: calcBMI(weight, height) };
+        Object.keys(BC_SF_COL).forEach(function(s){ if (folds[s] != null) row[BC_SF_COL[s]] = folds[s]; });
+        rows.push(row);
+        var rc = tr.querySelector('.bc-result'); if (rc && pct != null){ rc.textContent = pct.toFixed(1) + '%'; rc.style.color = 'var(--cm-fg-muted)'; }
+      }
+    });
+    if (!rows.length){ alert(tt('evaluations.no_valid_rows','No valid rows to save.')); return; }
+    var res = await window.sb.from('body_composition').insert(rows);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    var msg = document.getElementById('evBcMsg');
+    msg.textContent = tt('evaluations.n_records_saved','✓ '+rows.length+' record'+(rows.length>1?'s':'')+' saved',{count:rows.length});
+    msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  (function initBc(){
+    var s = document.getElementById('evBcSave'); if (s) s.addEventListener('click', saveBcBulk);
+    var m = document.getElementById('evBcMode'); if (m) m.addEventListener('change', onBcModeChange);
+    var f = document.getElementById('evBcFormula'); if (f) f.addEventListener('change', renderBcBulkRoster);
+    var b = document.getElementById('evBcBody'); if (b) b.addEventListener('input', function(e){ var tr = e.target.closest('tr'); if (tr) bcUpdateRowResult(tr); });
+  })();
+
   // English ordinal for the percentile badge (72 → "72nd"); es/pt use the raw {pct}.
   function sprintOrd(n){ var s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 
@@ -4492,6 +4724,60 @@
     };
   }
 
+  // ─── Skinfold %BF: single source of truth for the density → Siri (1956) equations ───
+  // Sites required by each formula (JP3 depends on sex). Canonical keys reused everywhere.
+  function sfFormulaSites(formula, sex){
+    var f = String(formula||'').toUpperCase();
+    var isF = String(sex||'M').toUpperCase().charAt(0) === 'F';
+    if (f === 'JP7') return ['chest','midaxillary','triceps','subscapular','abdomen','suprailiac','thigh'];
+    if (f === 'DW4') return ['biceps','triceps','subscapular','suprailiac'];
+    if (f === 'JP3') return isF ? ['triceps','suprailiac','thigh'] : ['chest','abdomen','thigh'];
+    return [];
+  }
+  // Body density → Siri %BF for JP3/JP7/DW4. folds: { canonicalSite: mm }. Returns number|null; never throws.
+  function sfBodyFatPct(o){
+    o = o || {};
+    var formula = String(o.formula||'').toUpperCase();
+    var sex = (String(o.sex||'M').toUpperCase().charAt(0) === 'F') ? 'F' : 'M';
+    var age = parseFloat(o.age);
+    var folds = o.folds || {};
+    if (!isFinite(age)) return null;
+    var sites = sfFormulaSites(formula, sex);
+    if (!sites.length) return null;
+    var S = 0;
+    for (var i=0;i<sites.length;i++){
+      var v = parseFloat(folds[sites[i]]);
+      if (!isFinite(v) || v <= 0) return null;   // every required site must be present
+      S += v;
+    }
+    var D = null;
+    if (formula === 'JP3'){
+      D = sex==='M' ? 1.10938-0.0008267*S+0.0000016*S*S-0.0002574*age
+                    : 1.0994921-0.0009929*S+0.0000023*S*S-0.0001392*age;
+    } else if (formula === 'JP7'){
+      D = sex==='M' ? 1.112-0.00043499*S+0.00000055*S*S-0.00028826*age
+                    : 1.097-0.00046971*S+0.00000056*S*S-0.00012828*age;
+    } else if (formula === 'DW4'){
+      var DW={M:[[17,19,1.1620,0.0630],[20,29,1.1631,0.0632],[30,39,1.1422,0.0544],[40,49,1.1620,0.0700]],
+              F:[[17,19,1.1549,0.0678],[20,29,1.1599,0.0717],[30,39,1.1423,0.0632],[40,49,1.1333,0.0612]]};
+      var rows = DW[sex] || DW.M;
+      var row = rows.find(function(r){ return age>=r[0] && age<=r[1]; }) || rows[rows.length-1];
+      D = row[2] - row[3]*Math.log10(S);
+    }
+    if (!D || D < 0.9 || D > 1.1) return null;
+    return +((4.95/D - 4.50)*100).toFixed(1);
+  }
+  // Read the individual skinfold panel's per-method inputs into canonical fold keys.
+  function readIndivFolds(method, gender){
+    var g = id => { var v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : undefined; };
+    var m = String(method||'jp3').toLowerCase();
+    if (m === 'jp7') return { chest:g('paSF_chest7'), midaxillary:g('paSF_axillary'), triceps:g('paSF_triceps7'), subscapular:g('paSF_subscapular'), abdomen:g('paSF_abdomen7'), suprailiac:g('paSF_suprailiac7'), thigh:g('paSF_thigh7') };
+    if (m === 'dw4') return { biceps:g('paSF_biceps'), triceps:g('paSF_tricepsDW'), subscapular:g('paSF_subscapularDW'), suprailiac:g('paSF_suprailiacDW') };
+    return String(gender||'M').toUpperCase().charAt(0)==='F'
+      ? { triceps:g('paSF_triceps'), suprailiac:g('paSF_suprailiac'), thigh:g('paSF_thigh') }
+      : { chest:g('paSF_chest'), abdomen:g('paSF_abdomen'), thigh:g('paSF_thigh') };
+  }
+
   // ─── Calc: Body Composition — Skinfolds (JP3/JP7/DW4 + Siri 1956) ───
   function calcSkinfold() {
     const method=document.getElementById('paSkinfoldMethod')?.value||'jp3';
@@ -4499,35 +4785,14 @@
     const age=parseFloat(document.getElementById('paSkinfoldAge')?.value);
     const weight=parseFloat(document.getElementById('paSkinfoldWeight')?.value);
     const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
-    const gv=id=>parseFloat(document.getElementById(id)?.value)||0;
-    let sum=0, density=null;
-    if (method==='jp3') {
-      if (gender==='M') sum=gv('paSF_chest')+gv('paSF_abdomen')+gv('paSF_thigh');
-      else sum=gv('paSF_triceps')+gv('paSF_suprailiac')+gv('paSF_thigh');
-      if (sum>0&&!isNaN(age)) {
-        if (gender==='M') density=1.10938-(0.0008267*sum)+(0.0000016*sum*sum)-(0.0002574*age);
-        else density=1.0994921-(0.0009929*sum)+(0.0000023*sum*sum)-(0.0001392*age);
-      }
-    } else if (method==='jp7') {
-      sum=gv('paSF_chest7')+gv('paSF_axillary')+gv('paSF_triceps7')+gv('paSF_subscapular')+gv('paSF_abdomen7')+gv('paSF_suprailiac7')+gv('paSF_thigh7');
-      if (sum>0&&!isNaN(age)) {
-        if (gender==='M') density=1.112-(0.00043499*sum)+(0.00000055*sum*sum)-(0.00028826*age);
-        else density=1.097-(0.00046971*sum)+(0.00000056*sum*sum)-(0.00012828*age);
-      }
-    } else if (method==='dw4') {
-      sum=gv('paSF_biceps')+gv('paSF_tricepsDW')+gv('paSF_subscapularDW')+gv('paSF_suprailiacDW');
-      if (sum>0&&!isNaN(age)) {
-        const L=Math.log10(sum);
-        const DW={M:[[17,19,1.1620,0.0630],[20,29,1.1631,0.0632],[30,39,1.1422,0.0544],[40,49,1.1620,0.0700]],F:[[17,19,1.1549,0.0678],[20,29,1.1599,0.0717],[30,39,1.1423,0.0632],[40,49,1.1333,0.0612]]};
-        const rows=DW[gender]||DW.M;
-        const row=rows.find(([lo,hi])=>age>=lo&&age<=hi)||rows[rows.length-1];
-        density=row[2]-(row[3]*L);
-      }
-    }
-    if (!density||sum===0) {
+    const _folds=readIndivFolds(method, gender);
+    const _sites=sfFormulaSites(method, gender);
+    const sum=_sites.reduce((a,k)=>a+(parseFloat(_folds[k])||0),0);
+    const pct=sfBodyFatPct({formula:method, sex:gender, age, folds:_folds});
+    if (pct===null) {
       resEl.innerHTML=''; zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">'+esc(tt('evaluations.enter_skinfolds','Enter the skinfolds to see the analysis'))+'</div>'; return;
     }
-    const pct=+((4.95/density-4.50)*100).toFixed(1);
+    const density=4.95/(pct/100+4.50);   // recover D from %BF for the readout
     const fatMass=!isNaN(weight)?+(weight*pct/100).toFixed(1):null;
     const leanMass=fatMass!==null?+(weight-fatMass).toFixed(1):null;
     // Optional anthropometry-derived metrics (only shown when their inputs are present)
@@ -5155,33 +5420,19 @@
       const age=parseFloat(document.getElementById('paSkinfoldAge')?.value);
       const weight=parseFloat(document.getElementById('paSkinfoldWeight')?.value);
       if (isNaN(age)||isNaN(weight)) { alert(tt('evaluations.enter_age_weight','Enter age and weight.')); return; }
-      const getSF=id=>parseFloat(document.getElementById(`paSF_${id}`)?.value)||0;
-      let density=0;
-      if (method==='jp3') {
-        if (gender==='M') { const S=getSF('chest')+getSF('abdomen')+getSF('thigh'); density=1.10938-0.0008267*S+0.0000016*S*S-0.0002574*age; }
-        else { const S=getSF('tricep')+getSF('suprailiac')+getSF('thigh'); density=1.0994921-0.0009929*S+0.0000023*S*S-0.0001392*age; }
-      } else if (method==='jp7') {
-        const S=getSF('chest')+getSF('midaxillary')+getSF('tricep')+getSF('subscapular')+getSF('abdomen')+getSF('suprailiac')+getSF('thigh');
-        density=gender==='M'?1.112-0.00043499*S+0.00000055*S*S-0.00028826*age:1.097-0.00046971*S+0.00000056*S*S-0.00012828*age;
-      } else {
-        const DW={M:[[17,19,1.1620,0.0630],[20,29,1.1631,0.0632],[30,39,1.1422,0.0544],[40,49,1.1620,0.0700]],F:[[17,19,1.1549,0.0678],[20,29,1.1599,0.0717],[30,39,1.1423,0.0632],[40,49,1.1333,0.0612]]};
-        const S=getSF('bicep')+getSF('tricep')+getSF('subscapular')+getSF('suprailiac');
-        const logS=Math.log(S), rows=DW[gender]||DW.M;
-        const row=rows.find(r=>age>=r[0]&&age<=r[1])||rows[rows.length-1];
-        density=row[2]-row[3]*logS;
-      }
-      if (!density||density<0.9||density>1.1) { alert(tt('evaluations.invalid_skinfold','Invalid skinfold values — check inputs.')); return; }
-      const pct=+((4.95/density-4.50)*100).toFixed(1);
+      const pct=sfBodyFatPct({ formula:method, sex:gender, age, folds:readIndivFolds(method, gender) });
+      if (pct===null) { alert(tt('evaluations.invalid_skinfold','Invalid skinfold values — check inputs.')); return; }
+      const density=4.95/(pct/100+4.50);   // recover D from %BF for the stored detail
       value=pct; unit='%BF'; evalType='Body composition';
       computed={ inputs:{method,gender,age,weight}, density:+density.toFixed(5), pct, fatMass:+(weight*pct/100).toFixed(1), leanMass:+(weight*(1-pct/100)).toFixed(1) };
 
       // Also write a structured row into body_composition (single source of truth for anthropometry).
       // Resilient: a failure here must NOT block the evaluations insert below.
       try {
-        const sfVal = id => { const v = parseFloat(document.getElementById(`paSF_${id}`)?.value); return isFinite(v) ? v : null; };
         const numId = id => { const v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : null; };
-        const sum = ['chest','abdomen','thigh','tricep','suprailiac','subscapular','midaxillary','bicep']
-          .reduce((a,id) => a + (sfVal(id) || 0), 0);
+        const nn = v => (isFinite(v) ? v : null);   // canonical fold → value|null
+        const folds = readIndivFolds(method, gender);   // { canonicalSite: mm }
+        const _siteSum = sfFormulaSites(method, gender).reduce((a,k) => a + (parseFloat(folds[k]) || 0), 0);
         const heightCm = numId('paSkinfoldHeight');
         const waistCm  = numId('paAnthroWaist');
         const bmi  = calcBMI(weight, heightCm);
@@ -5194,13 +5445,13 @@
           weight_kg: weight,
           body_fat_pct: pct,
           lean_mass_kg: +(weight * (1 - pct/100)).toFixed(1),
-          sf_chest: sfVal('chest'), sf_abdominal: sfVal('abdomen'), sf_thigh: sfVal('thigh'),
-          sf_triceps: sfVal('tricep'), sf_subscapular: sfVal('subscapular'),
-          sf_midaxillary: sfVal('midaxillary'), sf_biceps: sfVal('bicep'),
-          sf_supraspinal: (sfVal('supraspinal') != null ? sfVal('supraspinal') : sfVal('suprailiac')),
-          sf_calf: sfVal('calf'),
+          sf_chest: nn(folds.chest), sf_abdominal: nn(folds.abdomen), sf_thigh: nn(folds.thigh),
+          sf_triceps: nn(folds.triceps), sf_subscapular: nn(folds.subscapular),
+          sf_midaxillary: nn(folds.midaxillary), sf_biceps: nn(folds.biceps),
+          sf_supraspinal: (numId('paSF_supraspinal') != null ? numId('paSF_supraspinal') : nn(folds.suprailiac)),
+          sf_calf: numId('paSF_calf'),
           sf_formula: method.toUpperCase(),           // 'JP3' | 'JP7' | 'DW4'
-          sum_skinfolds: sum || null,
+          sum_skinfolds: _siteSum || null,
           age_years: age,
           sex: gender === 'F' ? 'female' : 'male',
           height_cm: heightCm,
