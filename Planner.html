@@ -1072,6 +1072,10 @@
               <span data-i18n="planner.prop_post_color">Post color</span>
               <input type="color" id="plPropGoalPostColor" value="#ffffff" data-i18n-attr="title:planner.prop_goalpost_color" title="Goal post color">
             </div>
+            <div id="plPropPole" style="display:none;align-items:center;gap:8px">
+              <span data-i18n="planner.prop_pole_color">Pole color</span>
+              <input type="color" id="plPropPoleColor" value="#ef4444" data-i18n-attr="title:planner.prop_pole_color" title="Pole color">
+            </div>
           </div>
 
           <div id="plPolyDoneBar">
@@ -1967,6 +1971,8 @@
   const _propBarrierColor   = document.getElementById('plPropBarrierColor');
   const _propGoalPostDiv    = document.getElementById('plPropGoalPost');
   const _propGoalPostColor  = document.getElementById('plPropGoalPostColor');
+  const _propPoleDiv        = document.getElementById('plPropPole');
+  const _propPoleColor      = document.getElementById('plPropPoleColor');
 
   function _rgbaToHex(c) {
     if (!c) return '#22c55e';
@@ -1989,7 +1995,7 @@
     if (!_propBar||!obj) return;
     _propArrowDiv.style.display='none'; _propZoneDiv.style.display='none';
     _propConeDiv.style.display='none';  _propBarrierDiv.style.display='none';
-    _propGoalPostDiv.style.display='none';
+    _propGoalPostDiv.style.display='none'; _propPoleDiv.style.display='none';
     if (obj._type==='arrow') {
       const d=_arrowData.get(obj._arrowId); if (!d) return;
       _propArrowColor.value=d.color.length===7?d.color:'#FBBF24';
@@ -2008,6 +2014,9 @@
     } else if (obj._type==='goalpost') {
       _propGoalPostColor.value = obj._goalpostColor || '#ffffff';
       _propGoalPostDiv.style.display='flex'; _propBar.style.display='flex';
+    } else if (obj._type==='pole') {
+      _propPoleColor.value = obj._poleColor || '#ef4444';
+      _propPoleDiv.style.display='flex'; _propBar.style.display='flex';
     } else {
       _propBar.style.display='none';
     }
@@ -2077,6 +2086,16 @@
     a.dirty = true; fc.renderAll();
   });
   _propGoalPostColor?.addEventListener('change', () => pushHistory());
+
+  _propPoleColor?.addEventListener('input', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'pole') return;
+    const c = _propPoleColor.value;
+    a._poleColor = c;
+    // Repaint only the coloured bands; the alternating white bands and the base stay.
+    (a._objects||[]).forEach(o => { if (o._role === 'band') o.set({ fill:c }); });
+    a.dirty = true; fc.renderAll();
+  });
+  _propPoleColor?.addEventListener('change', () => pushHistory());
 
   fc.on('selection:created', ({selected}) => {
     const obj=selected?.[0];
