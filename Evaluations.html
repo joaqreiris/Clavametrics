@@ -1388,6 +1388,11 @@
     'Mobility & screening':'evaluations.cat_mobility', 'Anthropometrics':'evaluations.cat_anthropometrics'
   };
   function catName(cat){ return tt(CAT_I18N[cat.name] || '', cat.name); }
+  // Localized display name for a test (falls back to the English catalog label).
+  var TEST_I18N = {
+    'Body composition':'evaluations.test_bodycomp', 'Somatotype':'evaluations.test_somato', 'BMI / RFM':'evaluations.test_bmirfm'
+  };
+  function testLabel(t){ return tt(TEST_I18N[t.label] || '', t.label); }
 
   var catalog = document.getElementById('catalogView');
   var detail  = document.getElementById('testDetailView');
@@ -1419,7 +1424,7 @@
       var cards = cat.tests.map(function(t){
         return '<button class="ev-test-card" data-open-test="'+t.key+'">'
           + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t.icon+'"></i></div>'
-          + '<div class="b-l">'+esc(t.label)+'</div>'
+          + '<div class="b-l">'+esc(testLabel(t))+'</div>'
           + '<div class="b-s">'+esc(t.sub)+'</div>'
           + '<div class="b-status" data-status="'+t.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
           + '</button>';
@@ -1612,7 +1617,7 @@
   // open a test from the catalog → detail view, in force or evaluations mode
   function openTestDetail(t){
     _openTest = t;
-    document.getElementById('evTestName').textContent = t.label;
+    document.getElementById('evTestName').textContent = testLabel(t);
     document.getElementById('evTestSub').textContent  = catName(t._cat) + ' · ' + t.sub;
     catalog.classList.remove('is-on');
     detail.classList.add('is-on');
@@ -1660,7 +1665,7 @@
       if (entrySeg) entrySeg.style.display = 'none';
       activateMini('entryMode', 'bulk');
       setupEvalUpload(t);
-      document.getElementById('evUploadCalcTitle').textContent = t.label;
+      document.getElementById('evUploadCalcTitle').textContent = testLabel(t);
       document.getElementById('evUploadCalcBtn').setAttribute('data-label', EV_CALC_LABEL[t.key]);
       document.getElementById('evVbtImportBtn').style.display = (t.key === 'vbt') ? '' : 'none';
     }
@@ -3409,7 +3414,8 @@
   //  (via the shared sfBodyFatPct) + lean + BMI. One method per batch.
   // ════════════════════════════════════════════════════════════════════
   var _bcPlayerMeta = {};   // pid → { age, height, weight }
-  var BC_SITE_LABEL = { chest:'Pecho', abdomen:'Abdomen', thigh:'Muslo', triceps:'Tríceps', subscapular:'Subescapular', suprailiac:'Suprailíaco', midaxillary:'Axilar medio', biceps:'Bíceps' };
+  var BC_SITE_LABEL = { chest:'Chest', abdomen:'Abdomen', thigh:'Thigh', triceps:'Triceps', subscapular:'Subscapular', suprailiac:'Suprailiac', midaxillary:'Midaxillary', biceps:'Biceps' };
+  function bcSiteLabel(s){ return tt('evaluations.bc_site_'+s, BC_SITE_LABEL[s]||s); }
   // Canonical fold → body_composition column (mirrors the individual save: suprailiac stored in sf_supraspinal).
   var BC_SF_COL = { chest:'sf_chest', abdomen:'sf_abdominal', thigh:'sf_thigh', triceps:'sf_triceps', subscapular:'sf_subscapular', midaxillary:'sf_midaxillary', biceps:'sf_biceps', suprailiac:'sf_supraspinal' };
 
@@ -3470,7 +3476,7 @@
     } else {
       cols = [ {key:'weight_kg',label:esc(tt('evaluations.bc_weight_kg','Weight (kg)'))},
                {key:'height_cm',label:esc(tt('evaluations.bc_height_cm','Height (cm)'))} ]
-        .concat(bcSkinfoldCols(formula).map(function(s){ return { key:'sf_'+s, site:s, label:esc(BC_SITE_LABEL[s]||s)+' (mm)' }; }));
+        .concat(bcSkinfoldCols(formula).map(function(s){ return { key:'sf_'+s, site:s, label:esc(bcSiteLabel(s))+' (mm)' }; }));
     }
     var head = '<th style="'+thc+'">'+esc(tt('evaluations.player','Player'))+'</th>';
     if (mode === 'skinfolds') head += '<th style="'+thc+'">'+esc(tt('evaluations.sex','Sex'))+'</th>';
@@ -6556,7 +6562,7 @@
       // open test detail (force or evaluations source)
       if (_openTest){
         var t = _openTest;
-        document.getElementById('evTestName').textContent = t.label;
+        document.getElementById('evTestName').textContent = testLabel(t);
         document.getElementById('evTestSub').textContent = catName(t._cat) + ' · ' + t.sub;
         if (t.src && t.src.from === 'force_tests'){ renderForceTeam(); renderForceIndiv(); }
         else { renderEvalTeam(); renderEvalIndiv(); }
