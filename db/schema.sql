@@ -1225,7 +1225,7 @@ create table if not exists public.messages (
   link_preview jsonb,
   team_id uuid,
   constraint messages_pkey primary key (id),
-  constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
+  constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'file'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );
 CREATE INDEX messages_club_created_idx ON public.messages USING btree (club_id, created_at DESC);
 CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, recipient_id) WHERE (recipient_id IS NOT NULL);
