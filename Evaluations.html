@@ -3749,7 +3749,7 @@
     const pid = document.getElementById('paPlayer')?.value;
     if (!pid || !_clubId) return;
     const { data } = await window.sb.from('players')
-      .select('id, first_name, last_name, date_of_birth, weight, position')
+      .select('id, first_name, last_name, date_of_birth, weight, height, position')
       .eq('id', pid).single();
     _paPlayerData = data;
     const cfg = _paCurrent?.cfg;
@@ -3786,6 +3786,10 @@
       if (data.weight) {
         const wEl = document.getElementById('paSkinfoldWeight');
         if (wEl && !wEl.value) { wEl.value = data.weight; calcSkinfold(); }
+      }
+      if (data.height) {
+        const hEl = document.getElementById('paSkinfoldHeight');
+        if (hEl && !hEl.value) { hEl.value = data.height; calcSkinfold(); }
       }
     }
     // Load previous test history for this player

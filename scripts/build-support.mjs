@@ -319,6 +319,15 @@ const searchIndex = pages.map((p) => ({
 }));
 writeFileSync(join(OUT, "search-index.json"), JSON.stringify(searchIndex));
 
+// Help map: app_page (e.g. "Calendar.html") → support slug. Single source of
+// truth for the in-app "?" button (assets/help-link.js). Only pages that declare
+// an app_page are included.
+const helpMap = {};
+for (const p of pages) {
+  if (p.app_page) helpMap[p.app_page] = p.slug;
+}
+writeFileSync(join(OUT, "help-map.json"), JSON.stringify(helpMap, null, 2) + "\n");
+
 /* ─────────────────────────── Summary ─────────────────────────── */
 console.log("ClavaMetrics support center generated →  /support\n");
 console.log("  index.html            hub (" + pages.length + " pages, " + worlds.length + " worlds)");
@@ -329,5 +338,6 @@ for (const w of worlds) {
   for (const p of items) console.log("      " + (p.slug + ".html").padEnd(24) + " ← " + p.file);
 }
 console.log("  search-index.json     " + searchIndex.length + " entries");
+console.log("  help-map.json         " + Object.keys(helpMap).length + " app pages mapped");
 console.log("  docs.css, docs.js     copied\n");
 console.log("Done.");
