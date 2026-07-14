@@ -62,3 +62,33 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 
 ### Load Monitor (`Load Monitor.html`)
 - Sin bloque TODO en la doc: la página se verificó contra el código (`gps-acwr.js`) y las zonas/modelo son fiables. Dudas menores del agente, **sin confirmar, baja prioridad:** límites del período "Microcycle"; si el flag de wellness reaparece tras una nueva entrada del jugador; group-by "Age" (¿implementado o solo sort?); jugadores multi-categoría (¿aparecen en ambos equipos?); si "Chronic" en el CSV export es media diaria o suma 28d.
+
+---
+
+## 4. Features marcadas como TODO al documentar la Tanda 2 (Annual Planner, Gym Planner, Drill Designer, Exercises Library)
+
+### 4.0 Discrepancia de taxonomía (8 vs. real) — REVISAR
+- **Qué:** el brief asumía una **taxonomía de 8 dimensiones** para drills, pero el código expone menos. **Exercises Library** filtra por **6** (Orientation, Intensity, Match Day, Game type, Focus, Team). **Drill Designer** (`Planner.html`) tiene **4** dimensiones de tag (Orientation, Intensity, Focus, Game type) + Match Day y formato.
+- **Evidencia:** `filters = {orientation, intensity, matchday, gametype, focus, team}` en `Exercises Library.html`; `ORIENT_META` / `INT_LABEL` / focus multi / game_type en `Planner.html`.
+- **Estado:** documenté las dimensiones reales (6 / 4). No aparecen principle / sub-principle / tactical-concept como dimensiones.
+- **Acción:** confirmar si el modelo real es de 6/4 o si esas 8 dimensiones viven en otra parte (¿otra tabla / otra pantalla?). Ajustar la doc según respuesta.
+
+> Nota: "Drill Designer.html" **no existe**; la página real es `Planner.html` (su `<title>` es "Drill Designer"). La doc usa `app_page: Planner.html`.
+
+### Annual Planner (`Annual Planner.html`)
+- **4.1 Presets de "phase types"** — se cargan de una tabla aparte (`phase_types`); los tipos de fase preset y si el staff los administra no son visibles en esta página. → confirmar.
+- **4.2 Match embebido en microciclo vs. eventos del Calendar** — un microciclo puede tener su propio match (`match_date`, `rival`…) independiente de los `calendar_events`; la lógica de de-duplicación entre ambos no se confirmó del todo. → verificar que no dupliquen/choquen.
+- **4.3 "Match time" del microciclo** — no está claro si se usa aguas abajo (Daily Planning) o es solo de referencia en el Planner. → confirmar.
+
+### Gym Planner (`Gym Planner.html`)
+- **4.4 Sin supersets / circuits** — no hay UI para agrupar ejercicios como superserie/circuito; cada fila es standalone. → definir si es feature pendiente.
+- **4.5 Sin reordenar filas** — no se encontró drag-para-reordenar ejercicios. → confirmar/implementar.
+- **4.6 Draft de IA sin persistencia** — si el coach cierra la pestaña antes de guardar, el draft generado se pierde (no se encontró autosave del draft). → definir si debería persistir.
+- **4.7 Templates no guardan adaptaciones** — al guardar un template se guardan warm-up/plyo/main pero **no** las adaptaciones individuales. → confirmar si es intencional.
+
+### Drill Designer (`Planner.html`)
+- **4.8 Share-to-chat** — la función de compartir a chat existe pero el handler vive en un módulo externo no verificado. → confirmar comportamiento.
+- **4.9 Subida de objetos custom** — botón "Upload object…" presente; la serialización/deserialización no se ve completa en el archivo. → confirmar que funciona end-to-end.
+
+### Exercises Library (`Exercises Library.html`)
+- (Cubierto por 4.0.) Además: el **GPS profile** por drill es derivado del mapeo `gps_drill_map` → `v_exercise_gps_profile`; el flujo de mapeo GPS (wizard "Map drills") es solo admin. → sin issue conocido, anotado como dependencia.
