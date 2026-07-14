@@ -159,3 +159,58 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 
 ### Injuries (`Injuries.html`)
 - **7.4 Sync de disponibilidad** — al **crear** una lesión no hay sync automático de `availability` (el autofill 'injured' lo hace la página Availability leyendo lesiones activas). El sync desde Injuries ocurre en avance de fase (fases 4+ → 'partial') y en discharge (→ 'available' desde returned_date, solo pisando filas 'injured'). → sin issue conocido; anotado para claridad del modelo.
+
+---
+
+## 8. Discrepancias brief-vs-código en la Tanda 5 (documenté lo que el código HACE)
+
+> Casos donde el brief asumía una feature que el código **no** implementa como se esperaba.
+> La doc refleja el comportamiento real y lo dejé marcado como TODO.
+
+### 8.1 Video Room ≠ "clips / tagging / share" — REVISAR wording de la app
+- **Qué:** el brief (y la descripción de la card en el Hub: "Clips · tagging · share") sugiere extracción de clips, tagging con timestamps y compartir. El código hace una **biblioteca de enlaces**: guarda el link a Google Drive/Dropbox + metadata + linkeo a nivel **video** con sesiones/jugadores/partidos (`video_sessions`/`video_players`/`video_matches`). **No** hay clip-level tagging, ni markers temporales, ni share-a-chat.
+- **Dónde:** `Video Room.html`, `Video Detail.html`, `migrations/applied/049_videos_module.sql`.
+- **Acción:** confirmar si clips/tagging/chat-share son roadmap; reformular el texto "Clips · tagging" del Hub para no prometer lo que no existe.
+
+### 8.2 Hub — Recent activity: GPS NO agrupado
+- **Qué:** el brief decía "el GPS viene agrupado". El feed registra un evento **`gps.imported` por import** (con el título de la sesión anexado), no un ítem agregado tipo "N sesiones".
+- **Dónde:** `Hub.html:1495-1498` (case `gps.imported`).
+- **Acción:** confirmar si un import masivo colapsa a una fila o genera varias; ajustar doc/comportamiento según se quiera.
+
+### 8.3 Hub — "pending RPE" es en realidad "submitted today"
+- **Qué:** en el Hub no hay concepto de "pending RPE". La card de RPE muestra **cuántos se enviaron hoy** (`hub.n_submitted_today`), no cuántos faltan. El "pending" del Hub es de la card **GPS** (sesiones recientes sin import). Nada de esto es wellness.
+- **Dónde:** `Hub.html:2097` (RPE submitted), `:2008` (GPS pending count).
+- **Acción:** aclarar naming si confunde.
+
+---
+
+## 9. Otros TODO de la Tanda 5 (Hub, Admin, Lineup, Match Reports, Dossier, Chat & Tasks)
+
+### Hub (`Hub.html`)
+- **9.1 "Customize" de módulos sin handler** — el botón existe pero no tiene listener (los KPIs sí se customizan y persisten en `profiles.settings.hub_kpis`). → implementar o quitar.
+
+### Admin (`Admin.html`) — permisos e integraciones
+- **9.2 ¿Cambiar rol re-aplica plantilla?** — `set_member_role` cambia `profiles.role` pero no se vio que re-aplique `role_default_modules` a `member_modules`. → confirmar; si no, el acceso puede quedar desalineado tras cambiar rol.
+- **9.3 StatSports PUSH — wiring app-side** — el setup es vía account manager (habilita Third-Party API) + se pega API key; el **endpoint/webhook receptor** en ClavaMetrics no se vio en el código de Admin. → confirmar cómo entra la data.
+- **9.4 Tabs coming-soon** — "Sections" (matriz de acceso) y "Security & SSO" marcadas coming-soon. → estado real.
+- **9.5 Stripe billing webhook pendiente** — la subscription no se rellena hasta que el webhook de Stripe esté vivo (liga con [[project_stripe_webhook]]).
+> Referencia confirmada (no TODO): modelo de permisos de 2 niveles (`role_default_modules` + `member_modules` + centinela `__managed__`, fail-open sin filas; owner/admin = todo). Solo owner/admin abren Admin.
+
+### Lineup (`Lineup.html`)
+- **9.6 Publicación a jugadores sin confirmar** — "Send to #match-day" marca `status='official'` (+`published_at`/`published_by`), pero no se confirmó que postee a un canal de chat ni que el link `?lineup=` sea **visible por jugadores** (no hay vista pública/anon confirmada). → definir el camino de publicación a jugadores.
+- **9.7 Status "locked"** — enum válido pero sin código que lo dispare. → definir uso.
+- **9.8 Botones Templates / Reset sin handler** — presentes en el HTML, sin listener visible. → implementar/quitar.
+
+### Match Reports (`Match Reports.html`)
+- **9.9 Minutos/ratings no propagan** — no se vio que `player_match_stats.minutes` alimente availability (match:N) ni que `rating` persista al perfil de temporada. → confirmar si deberían.
+- **9.10 Otros** — reports "standalone" sin `session_id` (uso poco claro); sin share-a-chat; `player_load` se selecciona pero no se renderiza; vistas ricas (shot map/heatmap/timeline) parecen ausentes/futuras.
+
+### Dossier (`Dossier.html`)
+- **9.11 Detalles menores** — el scouting summary se guarda a `players.scouting_summary` **solo al click** (no auto-save); filename del PDF es el default del browser; el accent color no persiste entre sesiones. → confirmar si es intencional.
+> Referencia confirmada (no TODO): percentiles vs cohorte del equipo con **mínimo 4 pares** (si no, barra neutral); plantillas en `dossier_templates`.
+
+### Chat & Tasks (`Chat & Tasks.html`)
+- **9.12 Message types sin cablear** — `task_ref`, `report_share`, `system` declarados pero no se ven usados en la UI (solo `text` y `file`). → implementar o limpiar.
+- **9.13 Entrega de reminders** — `task_reminders` guarda `remind_at`/`sent_at`; el proceso que efectivamente envía (push/email/in-app) corre **fuera** de esta página. → documentar/confirmar el job.
+- **9.14 Link task ↔ entidad** — no hay campo explícito task→player/session/injury (se infiere por category). → confirmar si se quiere link duro.
+- **9.15 Share-a-chat** — compartir un reporte/video a un mensaje no está cableado (relacionado con 8.1). → confirmar.
