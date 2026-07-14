@@ -117,3 +117,45 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 ### Player (`Player.html`)
 - **5.10 Campo "Joined"** — placeholder "—" (mismo caso que Squad, item 2.3). → cablear fecha.
 - **5.11 Acciones edit/export dossier/print** — referenciadas pero no cableadas en la página; la navegación se limita a tabs + breadcrumb a Squad. → definir/implementar.
+
+---
+
+## 6. CONTROL DE ACCESO A REVISAR (mundo médico — PRIORIDAD)
+
+> Datos de salud. Estos puntos NO son cosméticos: afectan confianza y potencial cumplimiento
+> normativo. Lo que está **confirmado** en el código se anota como referencia; lo que queda en
+> duda se marca para revisar antes de asumir nada.
+
+### 6.0 Modelo de acceso — CONFIRMADO (referencia, no es un TODO)
+- **`has_medical_access()`** (`db/schema.sql:3193`) = super-admin **o** `profiles.role ∈ (admin, owner, physio)`.
+- **7 tablas de ficha clínica** (`player_medical_profile`, `player_medications`, `medical_screenings`, `medical_episodes`, `surgeries`, `medical_studies`, `medical_documents`) → RLS `club + has_medical_access()`. Médico-only.
+- **Bucket `medical-documents`** (`migrations/applied/113_clinical_record_schema.sql:296`) → `public=false` (privado); RLS en `storage.objects` = carpeta de club + `has_medical_access()`; se sirve con signed URLs (1h, `clinical-record.js:1735`). ✔ Documentos NO públicos.
+- **Clinical Record (página)** → `guardModule('clinical')` redirige no-médicos al Hub.
+- **Injuries / treatments / rehab_plans** → RLS `player_id ∈ my_player_ids()` (por equipo), **NO** gated a médicos → visibles a staff del equipo.
+
+### 6.1 Clinical Records (índice) — ¿qué ve un no-médico? (REVISAR)
+- **Qué:** un comentario del código dice que coach/S&C ven una vista reducida (status, disponibilidad, RTP), pero **el índice NO oculta columnas por rol**. La protección real es el *module gate* (`member_modules`) + RLS (campos médico-only vuelven vacíos). La columna **"active issue"** expone el titular de la lesión (tipo + zona).
+- **Duda:** si un rol no-médico puede **abrir** el índice depende de la config de `member_modules` (no confirmable en el código).
+- **Acción:** confirmar qué puede abrir y ver realmente un no-médico; decidir si "active issue" debe mostrarse a no-médicos.
+
+### 6.2 Physio (página) — ¿gate médico? ¿notas visibles? (REVISAR)
+- **Qué:** a diferencia de Clinical Record, **no se confirmó** un gate médico-only en `Physio.html` (solo `guardModule()` genérico). Los `treatments` (incluidas **notas clínicas**) son team-scoped a nivel DB (`treatments_scoped_select` a `public`).
+- **Acción:** confirmar si un no-médico debe ver las **notas** del tratamiento, o solo la adaptación. Si no debe, falta gate/mascarado.
+
+### 6.3 Injuries / Rehab (páginas) — visibilidad de notas (REVISAR)
+- **Qué:** ninguna tiene gate médico-only propio más allá del guard general; ambas team-scoped (no médico-gated). Un no-médico ve el registro de lesión (tipo/zona/**notas**) y los planes de rehab.
+- **Acción:** confirmar visibilidad intencionada de notas/diagnóstico de lesión a roles no-médicos.
+
+---
+
+## 7. Otras limitaciones confirmadas en la Tanda 4 (no-acceso)
+
+### Physio (`Physio.html`)
+- **7.1 "✓ Applied" no persiste — CONFIRMADO** — no existe columna `applied`/`acknowledged` en `treatments`; solo `adaptation_sent_at` (momento del envío de la notificación, no de la aplicación). El "✓ Applied" del coach en Daily Planning es visual, no se guarda. (Confirma el item detectado en Daily Planning, 2.2.) → agregar campo de acknowledge si se quiere persistir.
+
+### Rehab & Preventives (`Rehab & Preventives.html`)
+- **7.2 Clear no cascada a injury/availability** — marcar un plan como `cleared` solo lo archiva; **no** cambia `injuries.status` ni `availability`. El retorno a disponibilidad es paso manual en Injuries (discharge) + Availability. → confirmar si es intencional o falta el cascade.
+- **7.3 Sin link automático rehab ↔ plan individual** — comparten librería de ejercicios y sistema de bloques (`block-drawer.js`, `usable_in`) pero **no hay FK ni auto-populado** entre `rehab_plans` e `individual_plans`. → confirmar si se espera auto-populado.
+
+### Injuries (`Injuries.html`)
+- **7.4 Sync de disponibilidad** — al **crear** una lesión no hay sync automático de `availability` (el autofill 'injured' lo hace la página Availability leyendo lesiones activas). El sync desde Injuries ocurre en avance de fase (fases 4+ → 'partial') y en discharge (→ 'available' desde returned_date, solo pisando filas 'injured'). → sin issue conocido; anotado para claridad del modelo.
