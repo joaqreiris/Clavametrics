@@ -3647,8 +3647,39 @@
           <div class="ev-frow"><label class="ev-fl">Peso <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(opcional)</span></label>
             <div class="pt-field"><div class="input-wrap"><input id="paSkinfoldWeight" type="number" min="30" max="200" step="0.5" class="ev-finput" placeholder="kg" oninput="calcSkinfold()"><span class="unit">kg</span></div></div></div>
         </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Altura <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(BMI · somatotipo)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paSkinfoldHeight" type="number" min="120" max="230" step="0.5" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          <div class="ev-frow"></div>
+        </div>
         <div class="pa-section">Pliegues cutáneos (mm)</div>
-        <div id="sfFoldsArea"></div>`;
+        <div id="sfFoldsArea"></div>
+        <div class="pa-section" style="cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none" onclick="var b=document.getElementById('paAnthroAdvanced');var i=this.querySelector('i');if(b){var open=b.style.display==='none';b.style.display=open?'':'none';if(i)i.className=open?'ti ti-chevron-down':'ti ti-chevron-right';}"><i class="ti ti-chevron-right"></i> Antropometría avanzada (opcional)</div>
+        <div id="paAnthroAdvanced" style="display:none">
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Cintura <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(RFM)</span></label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroWaist" type="number" min="40" max="200" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Perímetro brazo flex. <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(somatotipo)</span></label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroArmGirth" type="number" min="15" max="60" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Perímetro pantorrilla</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroCalfGirth" type="number" min="20" max="60" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Diámetro húmero</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroHumerus" type="number" min="4" max="12" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Diámetro fémur</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroFemur" type="number" min="6" max="14" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Pliegue supraespinal</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paSF_supraspinal" type="number" min="1" max="80" step="0.1" class="ev-finput" placeholder="mm" oninput="calcSkinfold()"><span class="unit">mm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Pliegue pantorrilla</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paSF_calf" type="number" min="1" max="80" step="0.1" class="ev-finput" placeholder="mm" oninput="calcSkinfold()"><span class="unit">mm</span></div></div></div>
+            <div class="ev-frow"></div>
+          </div>
+        </div>`;
 
     } else if (cfg.key === 'fvprofile') {
       specificFields = `
@@ -4400,6 +4431,63 @@
     calcSkinfold();
   }
 
+  // ─── Anthropometry helpers: BMI, RFM, Heath-Carter somatotype (pure, never throw) ───
+  function calcBMI(weightKg, heightCm){
+    if (!isFinite(weightKg) || !isFinite(heightCm) || weightKg <= 0 || heightCm <= 0) return null;
+    const m = heightCm / 100;
+    return +(weightKg / (m * m)).toFixed(1);
+  }
+  function calcRFM(heightCm, waistCm, gender){
+    if (!isFinite(heightCm) || !isFinite(waistCm) || heightCm <= 0 || waistCm <= 0) return null;
+    const sexFactor = gender === 'F' ? 1 : 0;
+    return +(64 - (20 * heightCm / waistCm) + (12 * sexFactor)).toFixed(1);
+  }
+  function calcSomatotype(x){
+    const out = { endo:null, meso:null, ecto:null };
+    if (!x || !isFinite(x.heightCm) || x.heightCm <= 0) return out;   // height needed by all three
+    const ok = v => v != null && isFinite(v);   // isFinite(null) is true, so guard explicitly
+    const clamp = v => { const r = +v.toFixed(1); return r < 0.1 ? 0.1 : r; };
+    // Endomorphy
+    if ([x.sfTriceps, x.sfSubscap, x.sfSupraspinal].every(ok)){
+      const X = (x.sfTriceps + x.sfSubscap + x.sfSupraspinal) * (170.18 / x.heightCm);
+      out.endo = clamp(-0.7182 + 0.1451*X - 0.00068*X*X + 0.0000014*X*X*X);
+    }
+    // Mesomorphy
+    if ([x.humerus, x.femur, x.armGirth, x.calfGirth, x.sfTriceps, x.sfCalf].every(ok)){
+      const cArm  = x.armGirth  - x.sfTriceps / 10;
+      const cCalf = x.calfGirth - x.sfCalf    / 10;
+      out.meso = clamp((0.858*x.humerus + 0.601*x.femur + 0.188*cArm + 0.161*cCalf) - (0.131*x.heightCm) + 4.5);
+    }
+    // Ectomorphy
+    if (isFinite(x.weightKg) && x.weightKg > 0){
+      const HWR = x.heightCm / Math.cbrt(x.weightKg);
+      let ecto;
+      if (HWR >= 40.75) ecto = 0.732*HWR - 28.58;
+      else if (HWR > 38.25) ecto = 0.463*HWR - 17.63;
+      else ecto = 0.1;
+      out.ecto = clamp(ecto);
+    }
+    return out;
+  }
+  // Gather the optional anthropometry inputs from the skinfold form (null when empty/invalid).
+  function readAnthroExtras(){
+    const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : null; };
+    const pick = (...ids) => { for (const id of ids){ const v = parseFloat(document.getElementById(id)?.value); if (isFinite(v)) return v; } return null; };
+    return {
+      heightCm:      num('paSkinfoldHeight'),
+      weightKg:      num('paSkinfoldWeight'),
+      waistCm:       num('paAnthroWaist'),
+      armGirth:      num('paAnthroArmGirth'),
+      calfGirth:     num('paAnthroCalfGirth'),
+      humerus:       num('paAnthroHumerus'),
+      femur:         num('paAnthroFemur'),
+      sfSupraspinal: num('paSF_supraspinal'),
+      sfCalf:        num('paSF_calf'),
+      sfTriceps:     pick('paSF_triceps', 'paSF_triceps7', 'paSF_tricepsDW'),
+      sfSubscap:     pick('paSF_subscapular', 'paSF_subscapularDW')
+    };
+  }
+
   // ─── Calc: Body Composition — Skinfolds (JP3/JP7/DW4 + Siri 1956) ───
   function calcSkinfold() {
     const method=document.getElementById('paSkinfoldMethod')?.value||'jp3';
@@ -4438,6 +4526,18 @@
     const pct=+((4.95/density-4.50)*100).toFixed(1);
     const fatMass=!isNaN(weight)?+(weight*pct/100).toFixed(1):null;
     const leanMass=fatMass!==null?+(weight-fatMass).toFixed(1):null;
+    // Optional anthropometry-derived metrics (only shown when their inputs are present)
+    const _ax=readAnthroExtras();
+    const bmi=calcBMI(weight, _ax.heightCm);
+    const rfm=calcRFM(_ax.heightCm, _ax.waistCm, gender);
+    const soma=calcSomatotype(_ax);
+    const somaTriplet=(soma.endo!=null||soma.meso!=null||soma.ecto!=null)
+      ? `${soma.endo!=null?soma.endo:'—'} – ${soma.meso!=null?soma.meso:'—'} – ${soma.ecto!=null?soma.ecto:'—'}` : null;
+    const anthroCells=[];
+    if (bmi!=null) anthroCells.push(`<div><div class="pa-hero-label">BMI</div><div class="pa-hero-val">${bmi}<small>kg/m²</small></div></div>`);
+    if (rfm!=null) anthroCells.push(`<div><div class="pa-hero-label">RFM</div><div class="pa-hero-val">${rfm}<small>%</small></div></div>`);
+    if (somaTriplet) anthroCells.push(`<div><div class="pa-hero-label">Somatotipo</div><div class="pa-hero-val" style="font-size:18px">${somaTriplet}</div></div>`);
+    const anthroHtml=anthroCells.length ? `<div class="pa-hero-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--cm-border-soft)">${anthroCells.join('')}</div>` : '';
     let bfClass,bfColor;
     if (gender==='M') {
       if (pct<6){bfClass='Muy bajo · riesgo salud';bfColor='#B91C1C';}
@@ -4462,6 +4562,7 @@
       <span class="pa-level-badge" style="background:${bfColor}18;color:${bfColor};border-color:${bfColor}40;margin-top:8px">${bfClass}</span>
       <div style="margin-top:4px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Σ = ${sum} mm · D = ${density.toFixed(4)} g/mL</div>
       ${isLow?`<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">🔴 Posible riesgo para la salud — consultar nutricionista</div>`:''}
+      ${anthroHtml}
     </div>`;
     const mName={'jp3':'Jackson &amp; Pollock 3 sitios','jp7':'Jackson &amp; Pollock 7 sitios','dw4':'Durnin &amp; Womersley 4 sitios'}[method];
     const table=(gender==='M'?[['< 6%','Muy bajo · riesgo','#B91C1C'],['6–13%','Atlético excelente','#15803D'],['14–17%','Bueno','#15803D'],['18–24%','Promedio','#B45309'],['> 25%','Por encima del prom.','#B91C1C']]:[['< 14%','Muy bajo · riesgo','#B91C1C'],['14–20%','Atlético excelente','#15803D'],['21–24%','Bueno','#15803D'],['25–31%','Promedio','#B45309'],['> 32%','Por encima del prom.','#B91C1C']]);
@@ -5074,8 +5175,14 @@
       // Resilient: a failure here must NOT block the evaluations insert below.
       try {
         const sfVal = id => { const v = parseFloat(document.getElementById(`paSF_${id}`)?.value); return isFinite(v) ? v : null; };
+        const numId = id => { const v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : null; };
         const sum = ['chest','abdomen','thigh','tricep','suprailiac','subscapular','midaxillary','bicep']
           .reduce((a,id) => a + (sfVal(id) || 0), 0);
+        const heightCm = numId('paSkinfoldHeight');
+        const waistCm  = numId('paAnthroWaist');
+        const bmi  = calcBMI(weight, heightCm);
+        const rfm  = calcRFM(heightCm, waistCm, gender);
+        const soma = calcSomatotype(readAnthroExtras());
         const bcRow = {
           player_id: pid, club_id: _clubId,
           measured_date: testDate,
@@ -5084,12 +5191,25 @@
           body_fat_pct: pct,
           lean_mass_kg: +(weight * (1 - pct/100)).toFixed(1),
           sf_chest: sfVal('chest'), sf_abdominal: sfVal('abdomen'), sf_thigh: sfVal('thigh'),
-          sf_triceps: sfVal('tricep'), sf_supraspinal: sfVal('suprailiac'), sf_subscapular: sfVal('subscapular'),
+          sf_triceps: sfVal('tricep'), sf_subscapular: sfVal('subscapular'),
           sf_midaxillary: sfVal('midaxillary'), sf_biceps: sfVal('bicep'),
+          sf_supraspinal: (sfVal('supraspinal') != null ? sfVal('supraspinal') : sfVal('suprailiac')),
+          sf_calf: sfVal('calf'),
           sf_formula: method.toUpperCase(),           // 'JP3' | 'JP7' | 'DW4'
           sum_skinfolds: sum || null,
           age_years: age,
-          sex: gender === 'F' ? 'female' : 'male'
+          sex: gender === 'F' ? 'female' : 'male',
+          height_cm: heightCm,
+          waist_cm: waistCm,
+          girth_arm_flexed: numId('paAnthroArmGirth'),
+          girth_calf: numId('paAnthroCalfGirth'),
+          breadth_humerus: numId('paAnthroHumerus'),
+          breadth_femur: numId('paAnthroFemur'),
+          bmi: bmi,
+          rfm: rfm,
+          soma_endo: soma.endo,
+          soma_meso: soma.meso,
+          soma_ecto: soma.ecto
         };
         const { error: bcErr } = await window.sb.from('body_composition').insert(bcRow);
         if (bcErr) console.error('body_composition insert failed:', bcErr);
