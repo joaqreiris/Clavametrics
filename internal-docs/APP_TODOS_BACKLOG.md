@@ -214,3 +214,15 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 - **9.13 Entrega de reminders** — `task_reminders` guarda `remind_at`/`sent_at`; el proceso que efectivamente envía (push/email/in-app) corre **fuera** de esta página. → documentar/confirmar el job.
 - **9.14 Link task ↔ entidad** — no hay campo explícito task→player/session/injury (se infiere por category). → confirmar si se quiere link duro.
 - **9.15 Share-a-chat** — compartir un reporte/video a un mensaje no está cableado (relacionado con 8.1). → confirmar.
+
+---
+
+## 10. Glosario — huecos bibliográficos a revisar
+
+> Al escribir el glosario (`support-site/content/en/glossary.md`) se verificó cada cita
+> contra PubMed/DOI. Las siguientes quedaron sin fuente primaria verificada.
+
+- **10.1 Seirul·lo "Microciclo Estructurado"** — no hay **fuente primaria peer-reviewed** confirmable. Se citó como proxy **Martín-García et al. 2018** (JSCR 32(12):3511–3518) y se menciona el libro *El microciclo estructurado* (Morales, 2020) como libro, no como paper. → conseguir la referencia preferida si se quiere citar a Seirul·lo directo.
+- **10.2 Morphocycle / Tactical Periodization (Frade)** — nombrada como metodología; **sin cita primaria verificada**. → definir fuente citable (libros de Frade/Tamarit, o revisiones).
+- **10.3 ATR (Issurin) y Verheijen** — nombradas como modelos de periodización; **sin cita primaria verificada** en el glosario. → agregar fuentes cuando se confirmen (p.ej. Issurin, *Block Periodization*).
+- Nota: correcciones aplicadas vs. la lista original — Impellizzeri "Part 2" es **2020** (no 2021); Impellizzeri IJSPP 2020 autores = Tenan/Kempton/Novak/Coutts (no Woodcock); Windt & Gabbett 2019 título real "Is it all for naught?…". Literatura nueva citada: Qin 2025 (meta-análisis), Carbone 2022 (Bayesian), Soligard 2016 (consenso IOC).
