@@ -42,3 +42,23 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 ### RPE (`RPE.html`)
 - **2.9 Tendencia / histórico de carga por jugador** — hay un control en la card pero está como "coming soon". → implementar el trend por jugador.
 - **2.10 Sin botón de export** — no se encontró export en esta página (los totales semanales / ACWR viven en Load Monitor). → confirmar si debería exportar o queda a propósito en Load Monitor.
+
+---
+
+## 3. Features marcadas como TODO al documentar las páginas piloto (batch 1)
+
+### Calendar (`Calendar.html`)
+- **3.1 Checklist "Tasks" en sesiones** — aparece una sección Tasks en el popover del evento, pero el comportamiento (CRUD, due dates) no se verificó. → confirmar si funciona.
+- **3.2 Export PDF (hoja semana/mes)** — presente en la página pero el comportamiento/formato exacto no se verificó. → confirmar salida.
+- **3.3 Ribbon de temporada alternativo** — existe en la página (`calRibbonV2`) pero parece oculto / no activo. → definir si es feature pendiente o muerto.
+
+### GPS Analysis (`GPS Analysis.html`) — stubs / "coming soon"
+- **3.4 Export PDF** — botón presente, handler muestra "coming soon".
+- **3.5 Provider sync** — Catapult / StatSports / Polar / WIMU / GPSports; placeholder "coming soon". Hoy la vía real es import de archivo.
+- **3.6 Panel "GPS settings" dedicado** — botón presente, "coming soon".
+- **3.7 Cambio de tipo de gráfico** — `TODO: switch chart type` en el código.
+- **3.8 Cards del catálogo en stub** — accel/decel asymmetry, personal-baseline trend, position box plot, squad readiness, halves drop-off, us-vs-opponent (aparecen deshabilitadas/`stub:true`).
+- **3.9 Umbrales de zonas de velocidad (HSR / VHSR / sprint)** — no expuestos en la UI; parecen configurables por club. → confirmar los valores reales antes de publicarlos en la doc.
+
+### Load Monitor (`Load Monitor.html`)
+- Sin bloque TODO en la doc: la página se verificó contra el código (`gps-acwr.js`) y las zonas/modelo son fiables. Dudas menores del agente, **sin confirmar, baja prioridad:** límites del período "Microcycle"; si el flag de wellness reaparece tras una nueva entrada del jugador; group-by "Age" (¿implementado o solo sort?); jugadores multi-categoría (¿aparecen en ambos equipos?); si "Chronic" en el CSV export es media diaria o suma 28d.
