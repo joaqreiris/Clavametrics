@@ -1440,7 +1440,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_team','_playerId','_objPath'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1565,17 +1565,19 @@
   function addPlayer(team='t1') {
     const label = String(_nextPlayerNum(team));
     const color = teamColors[team]||'#15803D', tc = teamText[team]||'#fff';
-    const circle = new fabric.Circle({ radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5, originX:'center', originY:'center' });
+    const shadow = new fabric.Ellipse({ rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:16, originX:'center', originY:'center' });
+    const circle = new fabric.Circle({ radius:16, fill:color, stroke:'rgba(255,255,255,0.9)', strokeWidth:2.5, originX:'center', originY:'center' });
+    const ring   = new fabric.Circle({ radius:14, fill:'transparent', stroke:'rgba(0,0,0,0.18)', strokeWidth:1, originX:'center', originY:'center' });
     const text   = new fabric.Text(label, { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0 });
     const _build = (extras=[]) => {
-      const grp = new fabric.Group([circle, ...extras, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
+      const grp = new fabric.Group([shadow, circle, ring, ...extras, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
       fc.add(grp); fc.setActiveObject(grp); fc.renderAll();
     };
     const crestUrl = (team === 't1') ? (club?.logo_url || null) : null;
     if (crestUrl) {
       const opts = crestUrl.startsWith('data:') ? {} : { crossOrigin:'anonymous' };
       fabric.Image.fromURL(crestUrl, img => {
-        if (img) { const s = 26/Math.max(img.width,img.height,1); img.set({scaleX:s,scaleY:s,originX:'center',originY:'center',opacity:0.38}); _build([img]); }
+        if (img) { const s = 22/Math.max(img.width,img.height,1); img.set({scaleX:s,scaleY:s,originX:'center',originY:'center',opacity:0.38}); _build([img]); }
         else { _build(); }
       }, opts);
     } else { _build(); }
@@ -1586,8 +1588,15 @@
     const tc     = teamText[team] || '#fff';
     const numStr = jerseyNum != null ? String(jerseyNum) : '?';
     const nameStr = (lastName || '?').substring(0, 8).toUpperCase();
+    const shadow = new fabric.Ellipse({
+      rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:16, left:0, originX:'center', originY:'center'
+    });
     const circle = new fabric.Circle({
-      radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5,
+      radius:16, fill:color, stroke:'rgba(255,255,255,0.9)', strokeWidth:2.5,
+      originX:'center', originY:'center', top:0, left:0
+    });
+    const ring = new fabric.Circle({
+      radius:14, fill:'transparent', stroke:'rgba(0,0,0,0.18)', strokeWidth:1,
       originX:'center', originY:'center', top:0, left:0
     });
     const numText = new fabric.Text(numStr, {
@@ -1596,10 +1605,10 @@
     });
     const nameText = new fabric.Text(nameStr, {
       fontSize:9, fontWeight:'600', fontFamily:'monospace',
-      fill:'rgba(255,255,255,0.95)', originX:'center', originY:'top', top:24, left:0,
+      fill:'rgba(255,255,255,0.95)', originX:'center', originY:'top', top:20, left:0,
       shadow: new fabric.Shadow({ color:'rgba(0,0,0,0.85)', blur:3, offsetX:0, offsetY:1 })
     });
-    const grp = new fabric.Group([circle, numText, nameText], {
+    const grp = new fabric.Group([shadow, circle, ring, numText, nameText], {
       left:x, top:y, originX:'center', originY:'center',
       _type:'player', _team:team, _playerId:playerId
     });
@@ -1654,55 +1663,93 @@
     grp.dirty = true;
     fc.renderAll(); pushHistory();
   }
+  // Multiply a #rrggbb colour by a factor (darken <1 / lighten >1) for derived shades.
+  function _shade(hex, f) {
+    const h = (hex || '').replace('#','');
+    if (h.length < 6) return hex;
+    let r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+    const cl = v => Math.max(0, Math.min(255, Math.round(v*f)));
+    return '#' + [cl(r),cl(g),cl(b)].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
   function addBall() {
-    const shell = new fabric.Circle({ radius:18, fill:'#f5f5f5', stroke:'#333', strokeWidth:2, originX:'center', originY:'center' });
-    const p1 = new fabric.Circle({ radius:5, fill:'#222', left:0,  top:-10, originX:'center', originY:'center' });
-    const p2 = new fabric.Circle({ radius:5, fill:'#222', left:9,  top:5,   originX:'center', originY:'center' });
-    const p3 = new fabric.Circle({ radius:5, fill:'#222', left:-9, top:5,   originX:'center', originY:'center' });
-    finishAdd(new fabric.Group([shell,p1,p2,p3]), 'ball');
+    const shadow = new fabric.Ellipse({ rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:15, originX:'center', originY:'center' });
+    const shell  = new fabric.Circle({ radius:15, fill:'#ffffff', stroke:'#0f172a', strokeWidth:1.5, originX:'center', originY:'center' });
+    const R = 7.5, RIM = 15, pts = [], seams = [];
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI/2 + i * 2*Math.PI/5;
+      const px = Math.cos(a)*R, py = Math.sin(a)*R;
+      pts.push({ x:px, y:py });
+      seams.push(new fabric.Line([px, py, Math.cos(a)*RIM, Math.sin(a)*RIM], { stroke:'#0f172a', strokeWidth:1.6, strokeLineCap:'round' }));
+    }
+    const pentagon = new fabric.Polygon(pts, { fill:'#0f172a', originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([shadow, shell, ...seams, pentagon]), 'ball');
   }
   function addCone(color = '#f97316') {
-    const body = new fabric.Triangle({ width:28, height:32, fill:color, stroke:'#c2600a', strokeWidth:1, originX:'center', originY:'center' });
-    const band = new fabric.Rect({ width:28, height:5, fill:'#fbbf24', top:10, originX:'center', originY:'center' });
-    const grp = new fabric.Group([body, band]);
+    const shadow = new fabric.Ellipse({ rx:14, ry:4, fill:'rgba(0,0,0,0.22)', top:16, originX:'center', originY:'center' });
+    const base   = new fabric.Ellipse({ rx:15, ry:4, fill:_shade(color,0.65), top:14.5, originX:'center', originY:'center', _role:'base' });
+    const body   = new fabric.Path('M0,-16 L11,13 Q0,16.5 -11,13 Z', { fill:color, originX:'center', originY:'center', _role:'body' });
+    const band   = new fabric.Path('M-4.9,-3 Q0,-4 4.9,-3 L7.2,3 Q0,4 -7.2,3 Z', { fill:'#fed7aa', originX:'center', originY:'center' });
+    const grp = new fabric.Group([shadow, base, body, band]);
     grp._coneColor = color;
     finishAdd(grp, 'cone');
   }
   function addBarrier(color = '#f59e0b') {
-    const COUNT = 4, bw = 8, hr = 4.5, bh = 13, gap = 5;
-    const step = bw + gap;
-    const startX = -(COUNT * step - gap) / 2 + bw / 2;
+    const COUNT = 4, step = 20;
+    const startX = -(COUNT - 1) * step / 2;
+    const bar = _shade(color, 1.35);
     const figs = [];
     for (let i = 0; i < COUNT; i++) {
       const x = startX + i * step;
-      figs.push(new fabric.Circle({ radius:hr, fill:color, stroke:'rgba(0,0,0,0.25)', strokeWidth:1, left:x, top:-(hr*2+bh+1), originX:'center', originY:'center' }));
-      figs.push(new fabric.Rect({ width:bw, height:bh, fill:color, stroke:'rgba(0,0,0,0.25)', strokeWidth:1, rx:2, left:x, top:-(bh/2), originX:'center', originY:'center' }));
+      figs.push(new fabric.Ellipse({ rx:9, ry:2.5, fill:'rgba(0,0,0,0.22)', left:x, top:12, originX:'center', originY:'center' }));
+      figs.push(new fabric.Path(`M${x-8},11 L${x-8},-2 Q${x-8},-9 ${x},-9 Q${x+8},-9 ${x+8},-2 L${x+8},11`,
+        { fill:'', stroke:color, strokeWidth:3.4, strokeLineCap:'round', _role:'arch' }));
+      figs.push(new fabric.Line([x-8, -2, x+8, -2], { stroke:bar, strokeWidth:3, strokeLineCap:'round', _role:'bar' }));
     }
     const grp = new fabric.Group(figs);
     grp._barrierColor = color;
     finishAdd(grp, 'barrier');
   }
-  function addPole() {
-    const red   = new fabric.Rect({ width:6, height:25, fill:'#dc2626', rx:2, left:0, top:-12.5, originX:'center', originY:'center' });
-    const white = new fabric.Rect({ width:6, height:25, fill:'#ffffff', rx:0, left:0, top:12.5,  originX:'center', originY:'center' });
-    finishAdd(new fabric.Group([red,white]), 'pole');
+  function addPole(color = '#ef4444') {
+    const shadow = new fabric.Ellipse({ rx:9, ry:3.5, fill:'rgba(0,0,0,0.22)', top:19, originX:'center', originY:'center' });
+    const base   = new fabric.Ellipse({ rx:8, ry:3, fill:'#334155', top:17, originX:'center', originY:'center' });
+    const BW = 5.2, BH = 8.5, N = 4, topY = -17;
+    const bands = [];
+    for (let i = 0; i < N; i++) {
+      const isColor = (i % 2 === 0);
+      bands.push(new fabric.Rect({
+        width:BW, height:BH, rx:2, fill: isColor ? color : '#ffffff',
+        left:0, top: topY + i*BH + BH/2, originX:'center', originY:'center',
+        _role: isColor ? 'band' : 'bandAlt'
+      }));
+    }
+    const outline = new fabric.Rect({ width:BW, height:BH*N, rx:2, fill:'transparent', stroke:'rgba(0,0,0,0.25)', strokeWidth:1, left:0, top: topY + BH*N/2, originX:'center', originY:'center' });
+    const grp = new fabric.Group([shadow, base, ...bands, outline]);
+    grp._poleColor = color;
+    finishAdd(grp, 'pole');
   }
   function addGoal() {
     finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2, strokeUniform:true }), 'goal');
   }
   function addGoalPost(color = '#ffffff') {
-    const W = 100, H = 40, T = 2.5;
-    const crossbar = new fabric.Rect({ width:W, height:T, fill:color, left:0, top:-(H/2), originX:'center', originY:'center' });
-    const postL    = new fabric.Rect({ width:T, height:H, fill:color, left:-(W/2), top:0,   originX:'center', originY:'center' });
-    const postR    = new fabric.Rect({ width:T, height:H, fill:color, left: W/2,   top:0,   originX:'center', originY:'center' });
-    const grp = new fabric.Group([postL, postR, crossbar]);
+    const W = 100, H = 40, T = 4, hw = W/2, hh = H/2;
+    const net = new fabric.Rect({ width:W-T, height:H-T, fill:'rgba(255,255,255,0.06)', left:0, top:0, originX:'center', originY:'center' });
+    const mesh = [];
+    for (let x = -30; x <= 30; x += 15) mesh.push(new fabric.Line([x, -(hh-3), x, hh-3], { stroke:'rgba(255,255,255,0.45)', strokeWidth:0.8 }));
+    for (let y = -10; y <= 10; y += 10) mesh.push(new fabric.Line([-(hw-3), y, hw-3, y], { stroke:'rgba(255,255,255,0.45)', strokeWidth:0.8 }));
+    const crossbar = new fabric.Rect({ width:W, height:T, rx:1.6, fill:color, left:0, top:-hh, originX:'center', originY:'center', _role:'frame' });
+    const postL    = new fabric.Rect({ width:T, height:H, rx:1.6, fill:color, left:-hw, top:0, originX:'center', originY:'center', _role:'frame' });
+    const postR    = new fabric.Rect({ width:T, height:H, rx:1.6, fill:color, left: hw, top:0, originX:'center', originY:'center', _role:'frame' });
+    const grp = new fabric.Group([net, ...mesh, crossbar, postL, postR]);
     grp._goalpostColor = color;
     finishAdd(grp, 'goalpost');
   }
   function addMannequin() {
-    const head = new fabric.Circle({ radius:6, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1.2, left:0, top:-22, originX:'center', originY:'center' });
-    const body = new fabric.Rect({ width:14, height:20, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1, rx:3, left:0, top:-2, originX:'center', originY:'center' });
-    finishAdd(new fabric.Group([head,body]), 'mannequin');
+    const shadow = new fabric.Ellipse({ rx:8, ry:3, fill:'rgba(0,0,0,0.22)', top:22, originX:'center', originY:'center' });
+    const base   = new fabric.Ellipse({ rx:7, ry:3, fill:'#334155', top:20, originX:'center', originY:'center' });
+    const pole   = new fabric.Rect({ width:3, height:12, fill:'#64748b', left:0, top:14, originX:'center', originY:'center' });
+    const torso  = new fabric.Path('M-7,8 L-6,-8 Q-6,-13 0,-13 Q6,-13 6,-8 L7,8 Z', { fill:'#eab308', stroke:'rgba(0,0,0,0.25)', strokeWidth:1, originX:'center', originY:'center' });
+    const head   = new fabric.Circle({ radius:5.4, fill:'#eab308', stroke:'rgba(0,0,0,0.25)', strokeWidth:1, left:0, top:-18, originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([shadow, base, pole, torso, head]), 'mannequin');
   }
   function addZoneRect() {
     finishAdd(new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4, strokeUniform:true }), 'zone');
@@ -1996,8 +2043,12 @@
     const a = fc.getActiveObject(); if (!a||a._type!=='cone') return;
     const c = _propConeColor.value;
     a._coneColor = c;
-    const tri = a._objects?.find(o => o.type === 'triangle');
-    if (tri) { tri.set({ fill:c }); a.dirty = true; fc.renderAll(); }
+    // New flat cone body is a Path tagged _role='body'; fall back to old Triangle child.
+    const body = a._objects?.find(o => o._role === 'body') || a._objects?.find(o => o.type === 'triangle');
+    if (body) body.set({ fill:c });
+    const base = a._objects?.find(o => o._role === 'base');
+    if (base) base.set({ fill:_shade(c, 0.65) });
+    a.dirty = true; fc.renderAll();
   });
   _propConeColor?.addEventListener('change', () => pushHistory());
 
@@ -2005,7 +2056,13 @@
     const a = fc.getActiveObject(); if (!a||a._type!=='barrier') return;
     const c = _propBarrierColor.value;
     a._barrierColor = c;
-    a._objects?.forEach(o => { o.set({ fill:c }); });
+    // New hurdles use _role tags (stroke-based); old barriers were filled primitives.
+    const tagged = a._objects?.some(o => o._role === 'arch' || o._role === 'bar');
+    a._objects?.forEach(o => {
+      if (!tagged) { o.set({ fill:c }); return; }
+      if (o._role === 'arch') o.set({ stroke:c });
+      else if (o._role === 'bar') o.set({ stroke:_shade(c, 1.35) });
+    });
     a.dirty = true; fc.renderAll();
   });
   _propBarrierColor?.addEventListener('change', () => pushHistory());
@@ -2014,7 +2071,9 @@
     const a = fc.getActiveObject(); if (!a || a._type !== 'goalpost') return;
     const c = _propGoalPostColor.value;
     a._goalpostColor = c;
-    a._objects?.forEach(o => { o.set({ fill: c }); });
+    // Only repaint the frame (posts/crossbar); leave the net + mesh lines untouched.
+    const tagged = a._objects?.some(o => o._role === 'frame');
+    a._objects?.forEach(o => { if (!tagged || o._role === 'frame') o.set({ fill:c }); });
     a.dirty = true; fc.renderAll();
   });
   _propGoalPostColor?.addEventListener('change', () => pushHistory());
