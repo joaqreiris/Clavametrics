@@ -92,3 +92,28 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 
 ### Exercises Library (`Exercises Library.html`)
 - (Cubierto por 4.0.) Además: el **GPS profile** por drill es derivado del mapeo `gps_drill_map` → `v_exercise_gps_profile`; el flujo de mapeo GPS (wizard "Map drills") es solo admin. → sin issue conocido, anotado como dependencia.
+
+---
+
+## 5. Features marcadas como TODO al documentar la Tanda 3 (Wellness, Evaluations, Sessions History, Player)
+
+> Nota: se documentó **Evaluations.html** (la v2 viva), no `Evaluations-old.html`.
+
+### Wellness (`Wellness.html`)
+- **5.1 Carga por parte del staff** — no se encontró path para que el staff cargue el check-in por el jugador (la submission es del lado del jugador vía link tokenizado). → confirmar si es intencional.
+- **5.2 Historial 7 días "coming soon"** — botón/vista de historial de 7 días aparece deshabilitado; el backend (`get_survey_history`) lo soporta pero no está cableado. → implementar/cablear.
+- **5.3 Sin export** — no se encontró export en la página. → confirmar si debería.
+- **5.4 `acknowledge_wellness` sin UI** — existe la función backend (marca `acknowledged_at`/`acknowledged_by`) pero no aparece cableada en el UI de Wellness. → cablear el "marcar como visto" de flags.
+
+### Evaluations (`Evaluations.html` v2)
+- **5.5 Sin "personal best"** — solo se trackea último valor + media personal; no hay campo/flag de mejor marca. → definir si se quiere.
+- **5.6 Sin edit/delete de resultados** — no se encontró UI para editar o borrar un resultado ya cargado. → confirmar dónde se gestiona (¿backend/Dossier?).
+- **5.7 "Export report"** — botón presente; formato/scope exacto sin confirmar. → verificar salida.
+- **5.8 Detalles sin confirmar** — umbrales de color de asimetría L/R; hand-off exacto de resultados de tests a los **load groups** del Gym Planner (ligado a item 4.x); integración con Dossier.
+
+### Sessions History (`Sessions History.html`)
+- **5.9 KPI "Compliance"** — renderiza "—%"; parece incompleto/no cableado (intención: carga planificada vs entregada). → confirmar si se implementa.
+
+### Player (`Player.html`)
+- **5.10 Campo "Joined"** — placeholder "—" (mismo caso que Squad, item 2.3). → cablear fecha.
+- **5.11 Acciones edit/export dossier/print** — referenciadas pero no cableadas en la página; la navegación se limita a tabs + breadcrumb a Squad. → definir/implementar.
