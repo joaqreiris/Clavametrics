@@ -1342,9 +1342,9 @@
       { key:'sitreach', label:'Sit & reach',        sub:'Posterior chain',            icon:'ti-yoga',     src:{from:'evaluations', match:'Sit'} },
     ]},
     { name:'Anthropometrics', icon:'ti-ruler', ic:'rgba(17,94,89,0.12)', ico:'#0F766E', tests:[
-      { key:'bodycomp',  label:'Body composition', sub:'JP3/JP7/DW4 · Siri %BF', icon:'ti-body-scan',  src:{from:'evaluations', match:'Body composition'} },
-      { key:'somato',    label:'Somatotype',       sub:'Heath-Carter',           icon:'ti-categories', src:{from:'evaluations', match:'Somatotype'} },
-      { key:'bmirfm',    label:'BMI / RFM',        sub:'Relative fat mass',      icon:'ti-percentage', src:{from:'evaluations', match:'BMI'} },
+      { key:'bodycomp',  label:'Body composition', sub:'JP3/JP7/DW4 · Siri %BF', icon:'ti-body-scan',  src:{from:'body_composition', field:'body_fat_pct'} },
+      { key:'somato',    label:'Somatotype',       sub:'Heath-Carter',           icon:'ti-categories', src:{from:'body_composition', field:'soma_meso'} },
+      { key:'bmirfm',    label:'BMI / RFM',        sub:'Relative fat mass',      icon:'ti-percentage', src:{from:'body_composition', field:'bmi'} },
     ]},
   ];
 
@@ -1497,14 +1497,42 @@
     return agg;
   }
 
+  // body_composition: aggregate by column → {count, lastDate, lastValue} (single source of truth for anthropometry)
+  async function fetchBodyCompAgg(){
+    var out = {};   // field -> { count, lastDate, lastValue }
+    if (!_clubId) return out;
+    try {
+      var q = window.sb.from('body_composition')
+        .select('player_id,measured_date,body_fat_pct,soma_endo,soma_meso,soma_ecto,bmi,rfm,weight_kg,lean_mass_kg')
+        .eq('club_id', _clubId).order('measured_date', { ascending:false });
+      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+      var res = await q;
+      (res.data || []).forEach(function(r){
+        ['body_fat_pct','soma_meso','bmi','rfm','weight_kg','lean_mass_kg'].forEach(function(f){
+          if (r[f] == null) return;
+          var a = out[f] || (out[f] = { count:0, lastDate:null, lastValue:null });
+          a.count++;
+          if (!a.lastDate || String(r.measured_date) > String(a.lastDate)) { a.lastDate = r.measured_date; a.lastValue = r[f]; }
+        });
+      });
+    } catch(e){ console.warn('[ev2] body_composition status failed', e); }
+    return out;
+  }
+
   // match aggregated source buckets to each catalog test (prefix match)
-  function buildStatusByKey(evalAgg, forceAgg){
+  function buildStatusByKey(evalAgg, forceAgg, bcAgg){
     var out = {};
     Object.keys(TEST_BY_KEY).forEach(function(key){
       var src = TEST_BY_KEY[key].src;
+      var st = { count:0, lastDate:null, lastValue:null };
+      if (src.from === 'body_composition') {
+        var bc = (bcAgg || {})[src.field];
+        if (bc) { st.count = bc.count; st.lastDate = bc.lastDate; st.lastValue = bc.lastValue; }
+        out[key] = st; return;      // skip the prefix-matching path
+      }
       var agg = src.from === 'force_tests' ? forceAgg : evalAgg;
       var prefix = src.from === 'force_tests' ? src.testType : src.match;
-      var st = { count:0, lastDate:null, lastValue:null };
       Object.keys(agg).forEach(function(type){
         if (!startsWithCI(type, prefix)) return;
         var a = agg[type];
@@ -1524,7 +1552,8 @@
     await loadTeamScope();
     var ev = await loadEvaluationStatus();
     var ft = await loadForceStatus();
-    var byKey = buildStatusByKey(ev, ft);
+    var bc = await fetchBodyCompAgg();
+    var byKey = buildStatusByKey(ev, ft, bc);
     paintAll(byKey);
   }
 
