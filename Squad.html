@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -1125,13 +1126,23 @@
     </div>
     <div class="sq-modal-body">
       <p id="sqImportInfo" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0"></p>
+      <p id="sqImportSummary" style="font:600 var(--cm-body-sm);margin:6px 0 0;display:none"></p>
       <div id="sqImportConflicts" style="display:none;padding:8px 12px;background:var(--cm-warning-bg);border:1px solid var(--cm-warning-bd);border-radius:var(--cm-r-3);font:var(--cm-body-sm);color:var(--cm-warning)"></div>
+      <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);margin:2px 0;cursor:pointer">
+        <input type="checkbox" id="sqImportSkipExisting" checked>
+        <span data-i18n="squad.import_skip_existing">Skip rows whose number is already in the squad</span>
+      </label>
       <div style="overflow-x:auto;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);max-height:320px;overflow-y:auto">
         <table style="width:100%;border-collapse:collapse;font:var(--cm-body-sm)">
           <thead id="sqImportThead" style="background:var(--cm-bg-soft);position:sticky;top:0"></thead>
           <tbody id="sqImportTbody"></tbody>
         </table>
       </div>
+      <p id="sqImportShowing" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:6px 0 0;display:none"></p>
+      <details style="margin-top:8px">
+        <summary style="font:var(--cm-body-sm);color:var(--cm-fg-muted);cursor:pointer" data-i18n="squad.import_help_summary">Accepted columns &amp; header aliases</summary>
+        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:6px 0 0;line-height:1.5" data-i18n="squad.import_help">Columns: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot. Header aliases accepted: Name/Full name (split into first/last by the last space), DOB/Birthdate → date of birth, Shirt/Jersey/No/# → number, Pos → position, Foot → dominant foot, Country → nationality, cm → height, kg → weight. Dates read as YYYY-MM-DD, DD/MM/YYYY or MM/DD/YYYY; ambiguous dates are read as DD/MM/YYYY.</p>
+      </details>
     </div>
     <div class="sq-modal-foot">
       <div class="grow"></div>
@@ -2380,78 +2391,272 @@ async function reloadPlayers() {
   // ── Import CSV ─────────────────────────────────────────────────
   const IMPORT_COLS = ['first_name','last_name','number','position','date_of_birth','nationality','height','weight','dominant_foot'];
 
-  function parseCSV(text) {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[\s\-]/g,'_').replace(/[^a-z_]/g,''));
-    return lines.slice(1).filter(l => l.trim()).map(line => {
-      const vals = [];
-      let cur = '', inQ = false;
-      for (const ch of line) {
-        if (ch === '"') { inQ = !inQ; }
-        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
-        else cur += ch;
-      }
-      vals.push(cur.trim());
-      const obj = {};
-      headers.forEach((h, i) => { if (IMPORT_COLS.includes(h)) obj[h] = vals[i] || ''; });
-      return obj;
+  // Map sanitized CSV headers → canonical column. Accepts common export aliases so we
+  // don't depend on exact header names (Excel exports, ES/PT headers, "Shirt #", etc.).
+  const IMPORT_HEADER_ALIASES = {
+    first_name:'first_name', firstname:'first_name', first:'first_name', given_name:'first_name', givenname:'first_name', nombre:'first_name', primer_nombre:'first_name',
+    last_name:'last_name', lastname:'last_name', last:'last_name', surname:'last_name', family_name:'last_name', apellido:'last_name', apellidos:'last_name', sobrenome:'last_name',
+    name:'name', full_name:'name', fullname:'name', player:'name', jugador:'name', jogador:'name',
+    number:'number', num:'number', no:'number', shirt:'number', shirt_number:'number', shirt_no:'number', jersey:'number', jersey_number:'number', jersey_no:'number', dorsal:'number', numero:'number',
+    position:'position', pos:'position', role:'position', posicion:'position', posicao:'position',
+    date_of_birth:'date_of_birth', dob:'date_of_birth', birthdate:'date_of_birth', birth_date:'date_of_birth', born:'date_of_birth', nacimiento:'date_of_birth', fecha_nacimiento:'date_of_birth', nascimento:'date_of_birth',
+    nationality:'nationality', country:'nationality', nation:'nationality', nacionalidad:'nationality', pais:'nationality',
+    height:'height', height_cm:'height', cm:'height', altura:'height', estatura:'height',
+    weight:'weight', weight_kg:'weight', kg:'weight', peso:'weight',
+    dominant_foot:'dominant_foot', foot:'dominant_foot', preferred_foot:'dominant_foot', strong_foot:'dominant_foot', pie:'dominant_foot', pie_habil:'dominant_foot', pe:'dominant_foot',
+  };
+  // Sanitize a header. '#' would be stripped, so turn it into 'no' first → maps to number.
+  function _impHeader(h){
+    return String(h||'').replace(/﻿/g,'').trim().toLowerCase()
+      .replace(/#/g,'no').replace(/[\s\-.]+/g,'_').replace(/[^a-z_]/g,'').replace(/^_+|_+$/g,'');
+  }
+
+  let _importRows = [];       // normalized rows: { status, notes, display, values, skip, skipReason }
+
+  function _impPad(n){ return String(n).padStart(2,'0'); }
+  function _impEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _impValidYMD(y,m,d){
+    if (y<1900 || y>2100 || m<1 || m>12 || d<1 || d>31) return false;
+    const dt = new Date(y, m-1, d);
+    return dt.getFullYear()===y && dt.getMonth()===m-1 && dt.getDate()===d;
+  }
+  // → { value:'YYYY-MM-DD', ambiguous? } | { error:true } | { value:null } (empty is allowed)
+  function _impParseDate(s){
+    s = String(s||'').trim();
+    if (!s) return { value:null };
+    let m = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);          // ISO YYYY-MM-DD
+    if (m){ const y=+m[1],mo=+m[2],d=+m[3]; return _impValidYMD(y,mo,d)?{value:`${y}-${_impPad(mo)}-${_impPad(d)}`}:{error:true}; }
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);            // D/M/Y or M/D/Y
+    if (m){
+      let a=+m[1], b=+m[2], y=+m[3];
+      if (y<100) y += (y>=30?1900:2000);
+      let d,mo,ambiguous=false;
+      if (a>12 && b<=12){ d=a; mo=b; }                 // clearly DD/MM
+      else if (b>12 && a<=12){ mo=a; d=b; }            // clearly MM/DD
+      else { d=a; mo=b; ambiguous=(a<=12 && b<=12); }  // ambiguous → assume DD/MM (soft warn)
+      if (_impValidYMD(y,mo,d)) return { value:`${y}-${_impPad(mo)}-${_impPad(d)}`, ambiguous };
+      if (_impValidYMD(y,d,mo)) return { value:`${y}-${_impPad(d)}-${_impPad(mo)}` };
+      return { error:true };
+    }
+    return { error:true };
+  }
+  function _impFoot(v){
+    const k = String(v||'').trim().toLowerCase();
+    if (!k) return { value:null };
+    if (['left','l','izquierda','izq','zurdo','esquerdo','gauche'].includes(k)) return { value:'left' };
+    if (['right','r','derecha','der','diestro','direito','droit'].includes(k)) return { value:'right' };
+    if (['both','ambidextrous','ambos','ambidiestro','ambidestro','b'].includes(k)) return { value:'both' };
+    return { value:null, warn:true };
+  }
+
+  // PapaParse row (canonical-keyed) → normalized, validated row with a status.
+  function _impNormalize(src){
+    const notes = [];
+    let status = 'ok';
+    const add = (level, code) => { notes.push(code); if (level==='error') status='error'; else if (status!=='error') status='warning'; };
+
+    // Name: prefer first/last; else split a single "name" by the last space (last word = surname).
+    let first = (src.first_name||'').trim();
+    let last  = (src.last_name||'').trim();
+    if (!first && !last && (src.name||'').trim()){
+      const parts = src.name.trim().split(/\s+/);
+      if (parts.length === 1){ first = parts[0]; last = ''; }
+      else { last = parts.pop(); first = parts.join(' '); }
+    }
+    if (!first && !last) add('error','no_name');
+
+    // Number: integer 1–99.
+    let number = null;
+    const numRaw = (src.number==null?'':String(src.number)).trim();
+    if (numRaw){
+      if (/^\d{1,3}$/.test(numRaw)){ const n = parseInt(numRaw,10); if (n>=1 && n<=99) number = n; else add('error','bad_number'); }
+      else add('error','bad_number');
+    }
+
+    // Date of birth → YYYY-MM-DD.
+    let dob = null;
+    const dr = _impParseDate(src.date_of_birth);
+    if (dr.error) add('error','bad_date');
+    else { dob = dr.value; if (dr.ambiguous) add('warn','ambiguous_date'); }
+
+    // Height: cm; metres (<3) → ×100; plausible 120–230.
+    let height = null;
+    const hRaw = String(src.height||'').replace(',','.').trim();
+    if (hRaw){
+      let h = parseFloat(hRaw);
+      if (!Number.isFinite(h)) add('warn','height_range');
+      else { if (h>0 && h<3) h = Math.round(h*100); if (h<120 || h>230) add('warn','height_range'); height = h; }
+    }
+
+    // Weight: kg; plausible 30–150.
+    let weight = null;
+    const wRaw = String(src.weight||'').replace(',','.').trim();
+    if (wRaw){
+      let w = parseFloat(wRaw);
+      if (!Number.isFinite(w)) add('warn','weight_range');
+      else { if (w<30 || w>150) add('warn','weight_range'); weight = w; }
+    }
+
+    // Position: normalize; unknown code → warn (kept as typed).
+    let position = null;
+    const pRaw = (src.position||'').trim();
+    if (pRaw){ position = normalizePosition(pRaw); if (!POS_CFG[position]) add('warn','unknown_position'); }
+
+    // Dominant foot.
+    const fr = _impFoot(src.dominant_foot);
+    if (fr.warn) add('warn','unknown_foot');
+    const foot = fr.value;
+
+    const nationality = (src.nationality||'').trim();
+    return {
+      status, notes, skip:false, skipReason:null,
+      display: {
+        first_name:first, last_name:last, number: number!=null?number:numRaw, position:pRaw,
+        date_of_birth: dob || (String(src.date_of_birth||'').trim()), nationality,
+        height: height!=null?height:String(src.height||'').trim(), weight: weight!=null?weight:String(src.weight||'').trim(),
+        dominant_foot: foot || String(src.dominant_foot||'').trim(),
+      },
+      values: {
+        first_name:first||null, last_name:last||null, number, position,
+        date_of_birth:dob, nationality:nationality||null, height, weight, dominant_foot:foot,
+      },
+    };
+  }
+
+  // Human-readable reason for a note/skip code.
+  function _impReason(code){
+    const M = {
+      no_name:            tt('squad.imp_no_name','Missing name'),
+      bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
+      bad_date:           tt('squad.imp_bad_date','Unrecognized date'),
+      ambiguous_date:     tt('squad.imp_ambiguous_date','Ambiguous date — read as DD/MM/YYYY'),
+      height_range:       tt('squad.imp_height_range','Height out of plausible range'),
+      weight_range:       tt('squad.imp_weight_range','Weight out of plausible range'),
+      unknown_position:   tt('squad.imp_unknown_position','Unrecognized position — kept as typed'),
+      unknown_foot:       tt('squad.imp_unknown_foot','Unrecognized foot — left blank'),
+      dup_file:           tt('squad.imp_dup_file','Duplicate row in the file'),
+      num_exists:         tt('squad.imp_num_exists','Number already in the squad'),
+    };
+    return M[code] || code;
+  }
+
+  // Mark duplicates (within the file) and, if the checkbox is on, rows whose number
+  // already exists in the squad. Recomputed whenever the checkbox toggles.
+  function _impApplyDedup(){
+    const skipExisting = document.getElementById('sqImportSkipExisting')?.checked;
+    const existingNums = new Set(_allPlayers.map(p => String(p.number)));
+    const seenNum = new Set(), seenName = new Set();
+    _importRows.forEach(r => {
+      r.skip = false; r.skipReason = null;
+      if (r.status === 'error') return;                     // errors never import (handled separately)
+      const numKey  = r.values.number!=null ? String(r.values.number) : null;
+      const nameKey = ((r.values.first_name||'')+'|'+(r.values.last_name||'')).toLowerCase().trim();
+      if (numKey && seenNum.has(numKey)) { r.skip=true; r.skipReason='dup_file'; return; }
+      if (nameKey!=='|' && seenName.has(nameKey)) { r.skip=true; r.skipReason='dup_file'; return; }
+      if (skipExisting && numKey && existingNums.has(numKey)) { r.skip=true; r.skipReason='num_exists'; return; }
+      if (numKey) seenNum.add(numKey);
+      if (nameKey!=='|') seenName.add(nameKey);
     });
   }
 
-  let _importRows = [];
-
-  function openImportModal(rows) {
-    _importRows = rows;
-    const existingNums = new Set(_allPlayers.map(p => String(p.number)));
-    const conflicts = rows.filter(r => r.number && existingNums.has(r.number)).map(r => `#${r.number}`);
-    document.getElementById('sqImportInfo').textContent = tt('squad.players_found_in_csv', `${rows.length} player${rows.length !== 1 ? 's' : ''} found in CSV.`, { count: rows.length });
-    const conflictEl = document.getElementById('sqImportConflicts');
-    if (conflicts.length) {
-      const _nums = [...new Set(conflicts)].join(', ');
-      conflictEl.textContent = tt('squad.jersey_conflicts', `⚠ Jersey numbers already in squad: ${_nums}. These rows will be imported — resolve conflicts manually if needed.`, { nums: _nums });
-      conflictEl.style.display = '';
-    } else {
-      conflictEl.style.display = 'none';
-    }
-    const displayCols = IMPORT_COLS.filter(c => rows.some(r => r[c]));
-    document.getElementById('sqImportThead').innerHTML = `<tr>${displayCols.map(c =>
-      `<th style="padding:7px 10px;font:500 11px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap">${c.replace(/_/g,' ')}</th>`
-    ).join('')}</tr>`;
-    document.getElementById('sqImportTbody').innerHTML = rows.slice(0,30).map(r =>
-      `<tr>${displayCols.map(c =>
-        `<td style="padding:7px 10px;border-bottom:1px solid var(--cm-border-soft);color:${r[c]?'var(--cm-fg)':'var(--cm-fg-faint)'}">${r[c]||'—'}</td>`
-      ).join('')}</tr>`
-    ).join('');
+  function openImportModal(rawRows) {
+    _importRows = rawRows.map(_impNormalize);
+    renderImportPreview();
     document.getElementById('sqImportBackdrop').classList.add('is-open');
+  }
+
+  const _IMP_TH = 'padding:7px 10px;font:500 11px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap';
+  const _IMP_TD = 'padding:7px 10px;border-bottom:1px solid var(--cm-border-soft)';
+
+  function renderImportPreview(){
+    _impApplyDedup();
+    const rows = _importRows;
+    const total   = rows.length;
+    const ready   = rows.filter(r => r.status==='ok' && !r.skip).length;
+    const warn    = rows.filter(r => r.status==='warning' && !r.skip).length;
+    const skipped = rows.filter(r => r.status==='error' || r.skip).length;
+    const importable = ready + warn;
+
+    document.getElementById('sqImportInfo').textContent =
+      tt('squad.players_found_in_csv', `${total} row${total!==1?'s':''} found in CSV.`, { count: total });
+    const sumEl = document.getElementById('sqImportSummary');
+    sumEl.style.display = '';
+    sumEl.textContent = tt('squad.import_summary',
+      `${total} rows · ${ready} ready · ${warn} with warnings · ${skipped} skipped`,
+      { total, ready, warn, skipped });
+
+    // Kept: jersey numbers already present in the squad (informational).
+    const existingNums = new Set(_allPlayers.map(p => String(p.number)));
+    const conflicts = [...new Set(rows.filter(r => r.values.number!=null && existingNums.has(String(r.values.number))).map(r => `#${r.values.number}`))];
+    const conflictEl = document.getElementById('sqImportConflicts');
+    if (conflicts.length){
+      const _nums = conflicts.join(', ');
+      conflictEl.textContent = tt('squad.jersey_conflicts', `⚠ Jersey numbers already in squad: ${_nums}.`, { nums: _nums });
+      conflictEl.style.display = '';
+    } else conflictEl.style.display = 'none';
+
+    const displayCols = IMPORT_COLS.filter(c => rows.some(r => r.display[c]!=='' && r.display[c]!=null));
+    document.getElementById('sqImportThead').innerHTML =
+      `<tr><th style="${_IMP_TH}">${tt('squad.import_col_status','Status')}</th>${displayCols.map(c =>
+        `<th style="${_IMP_TH}">${_impEsc(c.replace(/_/g,' '))}</th>`).join('')}</tr>`;
+
+    const LIMIT = 30;
+    document.getElementById('sqImportTbody').innerHTML = rows.slice(0, LIMIT).map(r => {
+      const isSkip = r.skip || r.status==='error';
+      const color  = r.status==='error' ? 'var(--cm-danger)' : (r.status==='warning' ? 'var(--cm-warning)' : 'var(--cm-success, #16A34A)');
+      const icon   = r.status==='error' ? 'ti-alert-circle' : (r.status==='warning' ? 'ti-alert-triangle' : 'ti-check');
+      const codes  = [...r.notes]; if (r.skipReason) codes.push(r.skipReason);
+      const tip    = codes.map(_impReason).join(' · ');
+      const tag    = isSkip ? ` <span style="font:600 10px/1 var(--cm-font-sans);text-transform:uppercase">${tt('squad.import_skipped_tag','skip')}</span>` : '';
+      return `<tr style="${isSkip?'opacity:0.5':''}" title="${_impEsc(tip)}">`+
+        `<td style="${_IMP_TD};white-space:nowrap;color:${color}"><i class="ti ${icon}"></i>${tag}</td>`+
+        displayCols.map(c => {
+          const v = r.display[c];
+          return `<td style="${_IMP_TD};color:${(v!==''&&v!=null)?'var(--cm-fg)':'var(--cm-fg-faint)'}">${(v!==''&&v!=null)?_impEsc(v):'—'}</td>`;
+        }).join('')+
+      `</tr>`;
+    }).join('');
+
+    const showEl = document.getElementById('sqImportShowing');
+    if (total > LIMIT){ showEl.style.display=''; showEl.textContent = tt('squad.import_showing', `Showing ${LIMIT} of ${total} rows.`, { shown: LIMIT, total }); }
+    else showEl.style.display='none';
+
+    const btn = document.getElementById('sqImportConfirm');
+    btn.disabled = importable === 0;
+    btn.textContent = importable>0
+      ? tt('squad.import_n_players', `Import ${importable} player${importable!==1?'s':''}`, { count: importable })
+      : tt('squad.import_players', 'Import players');
   }
 
   function closeImportModal() {
     document.getElementById('sqImportBackdrop').classList.remove('is-open');
     document.getElementById('sqImportFile').value = '';
     _importRows = [];
+    document.getElementById('sqImportSummary').style.display = 'none';
+    document.getElementById('sqImportShowing').style.display = 'none';
+    document.getElementById('sqImportConflicts').style.display = 'none';
   }
 
   async function confirmImport() {
-    if (!_importRows.length) return;
+    // Only OK + WARNING rows that aren't skipped (duplicates / existing numbers). Never ERROR.
+    const importable = _importRows.filter(r => r.status !== 'error' && !r.skip);
+    if (!importable.length) return;
     const saving = document.getElementById('sqImportSaving');
     const btn = document.getElementById('sqImportConfirm');
     saving.style.display = 'inline'; btn.disabled = true;
-    const rows = _importRows
-      .map(r => ({
-        club_id:       _currentClubId,
-        team_id:       _currentTeamId || null,
-        first_name:    r.first_name  || null,
-        last_name:     r.last_name   || null,
-        number:        parseInt(r.number) || null,
-        position:      normalizePosition(r.position),
-        date_of_birth: r.date_of_birth || null,
-        nationality:   r.nationality || null,
-        height:        parseFloat(r.height) || null,
-        weight:        parseFloat(r.weight) || null,
-        dominant_foot: r.dominant_foot || null,
-      }))
-      .filter(r => r.first_name || r.last_name);
+    const rows = importable.map(r => ({
+      club_id:       _currentClubId,
+      team_id:       _currentTeamId || null,
+      first_name:    r.values.first_name,
+      last_name:     r.values.last_name,
+      number:        r.values.number,
+      position:      r.values.position,
+      date_of_birth: r.values.date_of_birth,   // already normalized to YYYY-MM-DD
+      nationality:   r.values.nationality,
+      height:        r.values.height,
+      weight:        r.values.weight,
+      dominant_foot: r.values.dominant_foot,
+    }));
     const { data: insertedPlayers, error } = await window.sb.from('players').insert(rows).select('id');
     // Membresía primaria en la junction para los importados (solo admin; RLS lo refuerza).
     if (!error && _currentTeamId && _fullAccess && insertedPlayers?.length) {
@@ -2467,14 +2672,32 @@ async function reloadPlayers() {
   }
 
   document.getElementById('sqImportBtn')?.addEventListener('click', () => document.getElementById('sqImportFile').click());
-  document.getElementById('sqImportFile')?.addEventListener('change', async e => {
+  document.getElementById('sqImportFile')?.addEventListener('change', e => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    const rows = parseCSV(text);
-    if (!rows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); return; }
-    openImportModal(rows);
+    if (!window.Papa) { showToast(tt('squad.papaparse_not_loaded','CSV parser not loaded — reload the page and try again.')); e.target.value=''; return; }
+    // Papa reads the File directly: strips BOM, auto-detects delimiter ( , ; \t | ).
+    window.Papa.parse(file, {
+      header: true, skipEmptyLines: 'greedy', delimiter: '', transformHeader: _impHeader,
+      complete: (res) => {
+        const rawRows = (res.data || []).map(obj => {
+          const canon = {};
+          Object.keys(obj).forEach(h => {
+            const key = IMPORT_HEADER_ALIASES[h];
+            if (!key) return;
+            const val = obj[h];
+            if (key === 'name') canon.name = (canon.name ? canon.name + ' ' : '') + (val || '');
+            else if (canon[key] == null || canon[key] === '') canon[key] = val;
+          });
+          return canon;
+        }).filter(o => Object.values(o).some(v => String(v||'').trim()));
+        if (!rawRows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
+        openImportModal(rawRows);
+      },
+      error: () => showToast(tt('squad.csv_parse_error','Could not read the CSV file.')),
+    });
   });
+  document.getElementById('sqImportSkipExisting')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });
   document.getElementById('sqImportClose')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportCancel')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportConfirm')?.addEventListener('click', confirmImport);
