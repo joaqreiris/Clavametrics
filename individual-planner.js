@@ -105,6 +105,7 @@
   // ─── Edit/persistence plumbing ───
   let _contentChangeCbs = [];
   let _editingRef = null;   // { di, bi } while editing an existing block via block-drawer
+  let _selectedRef = null;  // { di, bi } currently selected block (drives the side panel)
   function _fireContentChange() {
     _contentChangeCbs.forEach(cb => { try { cb(); } catch (e) { console.error('[individual-sc] onContentChange cb', e); } });
   }
@@ -332,7 +333,69 @@
     }).join('');
   }
 
-  function renderAll() { renderKanban(); renderTable(); renderTimeline(); renderPhasebar(); }
+  // Week pager label ← real programme week (no fake dates).
+  function updatePager() {
+    const plan = window.__ipData && window.__ipData.plan;
+    const wk = (plan && plan.programme_week) || 1;
+    const el = document.getElementById('ip-pager-week');
+    if (el) el.textContent = tt('individual_planner.week_n', 'Week ' + wk, { n: wk });
+  }
+
+  // Block-detail side panel ← the selected real block, or an empty state.
+  function renderBlockPanel(block, di) {
+    const root = document.getElementById('ip-block-detail');
+    if (!root) return;
+    if (!block) {
+      const msg = (window.__ipData && window.__ipData.plan)
+        ? tt('individual_planner.select_block', 'Select a block to see its details')
+        : tt('individual_planner.no_blocks_yet', 'No blocks yet');
+      root.innerHTML = `<div style="padding:22px 14px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${msg}</div>`;
+      return;
+    }
+    const day = weekData()[di] || {};
+    const color = TYPE_COLOR[block.type] || '#64748B';
+    const exs = Array.isArray(block.exList) ? block.exList : [];
+    const sub = [];
+    if (day.dow) sub.push(esc(day.dow));
+    sub.push(esc(typeLabel(block.type)));
+    if (block.dur) sub.push(block.dur + ' ' + tt('individual_planner.min_short', 'min'));
+    if (block.resp) sub.push(esc(respLabel(block.resp)));
+    const metrics = `<div class="rp-bd-metrics">
+      <div class="rp-bd-metric"><div class="l">${tt('individual_planner.duration', 'Duration')}</div><div class="v">${block.dur || 0}<sub>${tt('individual_planner.min_short', 'min')}</sub></div></div>
+      <div class="rp-bd-metric"><div class="l">${tt('individual_planner.rpe_target', 'RPE target')}</div><div class="v">${block.rpe != null ? block.rpe : '—'}<sub>/10</sub></div></div>
+      <div class="rp-bd-metric"><div class="l">${tt('individual_planner.au', 'AU')}</div><div class="v">${block.au || 0}</div></div>
+    </div>`;
+    const exHtml = exs.length ? exs.map((ex, i) => {
+      const sets = Array.isArray(ex.sets) ? ex.sets : [];
+      const params = sets.map(s => {
+        const bits = [];
+        if (s.reps) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_reps', 'reps')}</span>${esc(s.reps)}</span>`);
+        if (s.load) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_load', 'load')}</span>${esc(s.load)}</span>`);
+        if (s.rest) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_rest', 'rest')}</span>${esc(s.rest)}</span>`);
+        return bits.join('');
+      }).join('');
+      const extra = [ex.side, ex.flag].filter(Boolean).map(esc).join(' · ');
+      return `<div class="rp-bd-ex"><div class="n">${i + 1}</div><div class="body"><div class="name">${esc(ex.name || '—')}</div><div class="params">${params}${extra ? `<span class="p">${extra}</span>` : ''}</div></div></div>`;
+    }).join('') : `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">${tt('individual_planner.no_exercises', 'No exercises')}</div>`;
+    const goal = block.goal ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('individual_planner.targets', 'Targets')}</div><div style="font:var(--cm-body-sm);color:#1D4ED8"><i class="ti ti-target"></i> ${esc(block.goal)}</div></div>` : '';
+    const notes = block.notes ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('individual_planner.notes', 'Notes')}</div><div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${esc(block.notes)}</div></div>` : '';
+    root.innerHTML = `
+      <div class="rp-bd-title"><span class="swatch" style="background:${color}"></span>${esc(block.name || '—')}</div>
+      <div class="rp-bd-sub">${sub.join('<span class="sep">·</span>')}</div>
+      ${metrics}
+      <div class="rp-bd-section"><div class="rp-bd-section-h">${tt('individual_planner.exercises_n', 'Exercises · ' + exs.length, { n: exs.length })}</div>${exHtml}</div>
+      ${goal}${notes}`;
+  }
+
+  function renderBlockPanelFromSel() {
+    if (!_selectedRef) return renderBlockPanel(null);
+    const days = weekData();
+    const b = (days[_selectedRef.di] && Array.isArray(days[_selectedRef.di].blocks)) ? days[_selectedRef.di].blocks[_selectedRef.bi] : null;
+    if (!b) { _selectedRef = null; return renderBlockPanel(null); }
+    renderBlockPanel(b, _selectedRef.di);
+  }
+
+  function renderAll() { renderKanban(); renderTable(); renderTimeline(); renderPhasebar(); updatePager(); renderBlockPanelFromSel(); }
 
   // ─── Route block-drawer saves into __ipData.plan.content (create/edit) ───
   window.addEventListener('blockdrawer:save', (e) => {
@@ -388,6 +451,8 @@
       const days = weekData();
       const b = days[di] && Array.isArray(days[di].blocks) ? days[di].blocks[bi] : null;
       if (!b) return;
+      _selectedRef = { di, bi };
+      renderBlockPanelFromSel();
       _editingRef = { di, bi };
       window.openBlockDrawer({ context: 'ip', existing: blockToExisting(b, days[di].dow || '', di) });
     });
@@ -397,6 +462,7 @@
       loadPlan: (plan, phases) => {
         window.__ipData = { plan: plan || null, phases: phases || [] };
         _editingRef = null;
+        _selectedRef = null;
         renderAll();
       },
       setPhases: (phases) => {

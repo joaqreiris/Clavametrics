@@ -119,47 +119,18 @@
 
       <!-- ─── Athlete strip ─── -->
       <div class="rp-athlete">
-        <div class="rp-athlete-av">LV</div>
+        <div class="rp-athlete-av" id="ip-athlete-av">—</div>
         <div class="rp-athlete-id">
           <div class="name">
-            Lautaro Vergara
+            <span id="ip-athlete-name">—</span>
             <span class="mode-tag is-perf"><i class="ti ti-user-cog"></i> <span data-i18n="individual_planner.individual_sc">Individual S&amp;C</span></span>
           </div>
           <div class="ctx">
-            <span><strong>CB</strong> · #4 · 24 y/o</span>
-            <span class="sep">·</span>
-            <span data-i18n="individual_planner.capacity_block_in_season">Capacity block · in-season</span>
-            <span class="sep">·</span>
-            <span data-i18n-html="individual_planner.programme_week">Programme week <strong>4</strong> of 12</span>
-            <span class="sep">·</span>
-            <span data-i18n-html="individual_planner.next_match">Next match · <strong>Jun 01</strong> vs. River</span>
+            <span class="ip-ctx-meta" id="ip-ctx-meta"></span>
           </div>
         </div>
-
-        <div class="rp-athlete-stat">
-          <div class="l">ACWR</div>
-          <div class="v">1.18</div>
-        </div>
-        <div class="rp-athlete-stat">
-          <div class="l" data-i18n="individual_planner.readiness">Readiness</div>
-          <div class="v">8.2<sub>/10</sub></div>
-        </div>
-        <div class="rp-athlete-stat">
-          <div class="l" data-i18n="individual_planner.match_min_last_4">Match min · last 4</div>
-          <div class="v">174<sub>'</sub></div>
-        </div>
-        <div class="rp-athlete-stat">
-          <div class="l" data-i18n="individual_planner.rm_squat">1RM squat</div>
-          <div class="v">162<sub>kg</sub></div>
-        </div>
-
-        <div class="rp-athlete-actions">
-          <div class="rp-athlete-team" title="Plan owners" data-i18n-attr="title:individual_planner.plan_owners">
-            <span class="av-mini sc">LP</span>
-            <span class="av-mini coach">DV</span>
-            <span class="label" data-i18n="individual_planner.owners">Owners</span>
-          </div>
-        </div>
+        <!-- TODO: ACWR / readiness / match-min / 1RM chips + owners were demo data.
+             Hidden until wired to Load Monitor (ACWR), GPS (match min), Evaluations (1RM) and plan owners. No fake numbers on screen. -->
       </div>
 
       <!-- ─── Training phases bar ─── -->
@@ -180,7 +151,9 @@
       </div>
 
       <!-- ─── Performance KPI strip ─── -->
-      <div class="ip-kpis">
+      <!-- TODO: planned-load KPIs (distance/HSR/sprints/strength/AU + vs-squad deltas) are not computed yet.
+           Hidden until derived from plan.content + GPS targets. No fake numbers on screen. -->
+      <div class="ip-kpis" style="display:none">
         <div class="ip-kpi">
           <div class="l"><i class="ti ti-route"></i><span data-i18n="individual_planner.total_distance_planned">Total distance · planned</span></div>
           <div class="v">22.5<sub>km</sub></div>
@@ -257,7 +230,7 @@
         </div>
         <div class="rp-week-pager">
           <button><i class="ti ti-chevron-left"></i></button>
-          <span class="label"><span data-i18n="individual_planner.week_n" data-i18n-vars='{"n":4}'>Week 4</span> <span class="sub">May 26 – Jun 01</span></span>
+          <span class="label"><span id="ip-pager-week">Week 1</span></span>
           <button><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="spacer"></div>
@@ -296,7 +269,7 @@
         <!-- TIMELINE -->
         <div id="view-timeline" class="rp-view-content rp-hidden">
           <div class="rp-timeline-wrap">
-            <div class="rp-tl-h"><i class="ti ti-timeline-event"></i> Week 4 · May 26 – Jun 01 · <span data-i18n="individual_planner.scaled_to_min" data-i18n-vars='{"n":120}'>scaled to 120 min</span></div>
+            <div class="rp-tl-h"><i class="ti ti-timeline-event"></i> <span data-i18n="individual_planner.scaled_to_min" data-i18n-vars='{"n":120}'>scaled to 120 min</span></div>
             <div class="rp-tl-rows" id="tl-rows"></div>
           </div>
         </div>
@@ -304,96 +277,16 @@
         <!-- SIDE PANEL -->
         <aside class="rp-side-panel">
 
-          <!-- Block detail -->
+          <!-- Block detail — populated by the engine from the selected block, or empty state -->
           <div class="rp-panel-card">
             <div class="rp-panel-h">
               <h3><i class="ti ti-target-arrow"></i> <span data-i18n="individual_planner.block_detail">Block detail</span></h3>
-              <div class="right">
-                <button class="ic-btn" title="Edit block" data-i18n-attr="title:individual_planner.edit_block" onclick="window.openBlockDrawer({ context:'ip', day:'Wed, May 28', existing: { type:'cond', name:'Aerobic capacity intervals', duration:42, rpe:8, owner:'sc', notes:'Outdoor, grass. Re-test MAS end of W5. Skip block if readiness < 6.', ctxField:'15:15 · 90% MAS', exerciseIds:['int1515','shut','tempo'] } })"><i class="ti ti-pencil"></i></button>
-                <button class="ic-btn" title="Duplicate" data-i18n-attr="title:individual_planner.duplicate"><i class="ti ti-copy"></i></button>
-                <button class="ic-btn" title="Remove" data-i18n-attr="title:individual_planner.remove"><i class="ti ti-trash"></i></button>
-              </div>
             </div>
-            <div class="rp-panel-b">
-              <div class="rp-bd-title">
-                <span class="swatch" style="background:#EA580C"></span>
-                Aerobic capacity intervals
-              </div>
-              <div class="rp-bd-sub">
-                <span>Wed · May 28</span>
-                <span class="sep">·</span>
-                <span data-i18n="individual_planner.type_cond">Conditioning</span>
-                <span class="sep">·</span>
-                <span>42 min</span>
-                <span class="sep">·</span>
-                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#1D4ED8;margin-right:4px;vertical-align:middle"></span><span data-i18n="individual_planner.resp_sc">S&amp;C</span> · L. Pérez</span>
-              </div>
-
-              <div class="rp-bd-metrics">
-                <div class="rp-bd-metric"><div class="l" data-i18n="individual_planner.volume">Volume</div><div class="v">8<sub data-i18n="individual_planner.reps">reps</sub></div></div>
-                <div class="rp-bd-metric"><div class="l" data-i18n="individual_planner.rpe_target">RPE target</div><div class="v">8<sub>/10</sub></div></div>
-                <div class="rp-bd-metric"><div class="l" data-i18n="individual_planner.au">AU</div><div class="v">412</div></div>
-              </div>
-
-              <div class="rp-bd-section">
-                <div class="rp-bd-section-h" data-i18n="individual_planner.exercises_n" data-i18n-vars='{"n":3}'>Exercises · 3</div>
-                <div class="rp-bd-ex">
-                  <div class="n">1</div>
-                  <div class="body">
-                    <div class="name">15:15 intervals · 90% MAS</div>
-                    <div class="params">
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_reps">reps</span>8</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_work">work</span>15s</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_rest">rest</span>15s</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_target">target</span>5.4 m/s</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="rp-bd-ex">
-                  <div class="n">2</div>
-                  <div class="body">
-                    <div class="name">Shuttle runs · 20m</div>
-                    <div class="params">
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_sets">sets</span>4</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_reps">reps</span>6</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_rest">rest</span>1:30</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_target">target</span>5.8s /run</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="rp-bd-ex">
-                  <div class="n">3</div>
-                  <div class="body">
-                    <div class="name">Tempo continuous · 70% HRmax</div>
-                    <div class="params">
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_dur">dur</span>12 min</span>
-                      <span class="p"><span class="l" data-i18n="individual_planner.param_hr">HR</span>140 bpm</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="rp-bd-section">
-                <div class="rp-bd-section-h" data-i18n="individual_planner.targets">Targets</div>
-                <div style="display:flex;flex-wrap:wrap;gap:5px">
-                  <span class="rp-gps-pill"><span class="l">TD</span><span class="v">3.6 km</span></span>
-                  <span class="rp-gps-pill"><span class="l">HSR</span><span class="v">680 m</span></span>
-                  <span class="rp-gps-pill"><span class="l">Vmax</span><span class="v">7.4 m/s</span></span>
-                  <span class="rp-gps-pill"><span class="l">Sprints</span><span class="v">14</span></span>
-                </div>
-              </div>
-
-              <div class="rp-bd-section">
-                <div class="rp-bd-section-h" data-i18n="individual_planner.notes">Notes</div>
-                <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45" data-i18n="individual_planner.block_notes_sample">
-                  Outdoor, grass. Re-test MAS at end of W5 to recalibrate. Skip block if readiness &lt; 6.
-                </div>
-              </div>
-            </div>
+            <div class="rp-panel-b" id="ip-block-detail"></div>
           </div>
 
-          <!-- Squad comparison -->
-          <div class="rp-panel-card">
+          <!-- Squad comparison — TODO: demo values; hidden until wired to GPS/squad averages. No fake numbers on screen. -->
+          <div class="rp-panel-card" style="display:none">
             <div class="rp-panel-h">
               <h3><i class="ti ti-chart-bar"></i> <span data-i18n="individual_planner.this_week_vs_squad">This week vs. squad</span></h3>
               <div class="right">
@@ -456,8 +349,8 @@
             </div>
           </div>
 
-          <!-- Strength / sprint benchmarks -->
-          <div class="rp-panel-card">
+          <!-- Strength / sprint benchmarks — TODO: demo values; hidden until wired to Evaluations. No fake numbers on screen. -->
+          <div class="rp-panel-card" style="display:none">
             <div class="rp-panel-h">
               <h3><i class="ti ti-gauge"></i> <span data-i18n="individual_planner.benchmarks">Benchmarks</span></h3>
               <div class="right">
@@ -498,7 +391,7 @@
 
       <div style="margin-top:14px;display:flex;gap:8px;align-items:center;font:var(--cm-body-sm);color:var(--cm-fg-muted)">
         <i class="ti ti-info-circle"></i>
-        <span data-i18n="individual_planner.linked">Linked:</span> <a href="GPS Analysis.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.gps_last_4_sessions">GPS · last 4 sessions</span></a> · <a href="Load Monitor.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.load_monitor">Load monitor</span> · ACWR 1.18</a> · <a href="Evaluations.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.last_evaluation">Last evaluation</span> · Apr 28</a>
+        <span data-i18n="individual_planner.linked">Linked:</span> <a href="GPS Analysis.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.gps_analysis">GPS analysis</span></a> · <a href="Load Monitor.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.load_monitor">Load monitor</span></a> · <a href="Evaluations.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px"><span data-i18n="individual_planner.last_evaluation">Evaluations</span></a>
       </div>
 
     </section>
@@ -592,17 +485,37 @@
     currentRow.status = st; ipToast(tt('individual_planner.status_updated','Status updated'));
   });
 
-  function reflectAthlete(pname, planName){
-    const av = document.querySelector('.rp-athlete-av'); if (av) av.textContent = initials(pname);
-    const nameEl = document.querySelector('.rp-athlete-id .name'); if (nameEl && nameEl.childNodes[0]) nameEl.childNodes[0].nodeValue = pname + ' ';
+  function playerAge(dob){
+    if (!dob) return null;
+    const d = new Date(dob); if (isNaN(d)) return null;
+    const now = new Date();
+    let a = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--;
+    return (a >= 0 && a < 130) ? a : null;
+  }
+  function reflectAthlete(pname, planName, player){
+    const av = document.getElementById('ip-athlete-av'); if (av) av.textContent = initials(pname);
+    const nameEl = document.getElementById('ip-athlete-name'); if (nameEl) nameEl.textContent = pname;
     const crumb = document.getElementById('ip-crumb-now'); if (crumb) crumb.textContent = pname + (planName ? ' · ' + planName : '');
+    const meta = document.getElementById('ip-ctx-meta');
+    if (meta){
+      const p = player || {};
+      const parts = [];
+      if (p.position) parts.push(p.position);
+      if (p.number) parts.push('#' + p.number);
+      const age = playerAge(p.date_of_birth);
+      if (age != null) parts.push(age + ' ' + tt('individual_planner.years_old','y/o'));
+      meta.textContent = parts.join(' · ');
+    }
   }
 
   // ── Fetch the club's active/draft individual plans ──────────
   const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
   let q = window.sb.from('individual_plans')
-    .select('id,name,goal,focus,status,start_date,programme_week,programme_total_weeks,player_id, players!inner(first_name,last_name,position,number,team_id)')
+    .select('id,name,goal,focus,status,start_date,programme_week,programme_total_weeks,player_id, players!inner(first_name,last_name,position,number,team_id,date_of_birth)')
     .eq('club_id', clubId).in('status', ['active','draft'])
+    .is('players.archived_at', null)
     .order('created_at', { ascending:false });
   if (team) q = q.eq('players.team_id', team);
   let { data: plans, error } = await q;
@@ -654,7 +567,7 @@
     currentRow = row;
     const p = plan.players || opts.players || {};
     const pname = `${p.first_name || ''} ${p.last_name || ''}`.trim() || row.name || '—';
-    reflectAthlete(pname, row.name);
+    reflectAthlete(pname, row.name, p);
     fillStatusSelect(row.status);
     setSaveState('');
     showPlanner();
@@ -667,7 +580,7 @@
   let _players = null;
   async function loadPlayers(){
     if (_players) return _players;
-    let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id').eq('club_id', clubId).neq('status','inactive').order('last_name', { ascending:true });
+    let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id,date_of_birth').eq('club_id', clubId).is('archived_at', null).order('last_name', { ascending:true });
     if (team) pq = pq.eq('team_id', team);
     const { data } = await pq;
     _players = data || [];
@@ -756,7 +669,7 @@
     const { data, error } = await window.sb.from('individual_plans').insert({
       club_id: clubId, player_id, name, goal, focus, start_date,
       programme_total_weeks: parseInt(weeks, 10) || 1, status: 'draft', content: {}, created_by: uid
-    }).select('*, players!inner(first_name,last_name,position,number,team_id)').single();
+    }).select('*, players!inner(first_name,last_name,position,number,team_id,date_of_birth)').single();
     btn.disabled = false;
     if (error){ console.error('[individual-sc] create plan failed:', error); ipToast(tt('individual_planner.create_failed','Could not create plan') + ': ' + (error.message || error.code || 'unknown'), 'error'); return; }
     ov.classList.remove('is-open');
@@ -765,7 +678,7 @@
     // Open it in the engine
     currentRow = data;
     const p = data.players || {};
-    reflectAthlete(`${p.first_name || ''} ${p.last_name || ''}`.trim() || data.name, data.name);
+    reflectAthlete(`${p.first_name || ''} ${p.last_name || ''}`.trim() || data.name, data.name, p);
     fillStatusSelect(data.status);
     setSaveState('');
     showPlanner();
