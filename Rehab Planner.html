@@ -597,6 +597,8 @@ function tt(key, fallbackEN, vars) {
         const ctx = await window.RehabCreate.buildInjuryRiskContext(plan.player_id, clubId);
         box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx);
         box.classList.remove('rp-hidden');
+        // Feed the block-drawer library picker: prioritize exercises for these risk zones (preventive only).
+        window.__rpRiskZones = ctx.zones || [];
       } catch (e) { console.error('[rehab-planner] risk context failed:', e); }
     })();
   }

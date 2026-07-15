@@ -30,6 +30,57 @@
   const libCache = {};                                  // context -> mapped array (fetched once per context)
   const CTX_USABLE = { ip: 'individual', rehab: 'rehab', prev: 'preventive' };
 
+  function _tt(key, en) { if (window.CM_I18N && CM_I18N.t) { const v = CM_I18N.t(key); if (v && v !== key) return v; } return en; }
+
+  // ── Risk-aware suggestions (preventive plans) ──────────────────────────────
+  // Map an injury body_area (side-stripped) → gym_exercises muscle_group values.
+  // Normalized (lowercase, letters only) so it matches tokens ('hip_flexors') or
+  // labels ('Hip Flexors'). Unmapped zones simply don't prioritize.
+  const _norm     = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const _normZone = s => String(s || '').toLowerCase().replace(/^(left|right)\s+/, '').replace(/[^a-z]/g, '');
+  const _SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
+  const ZONE_MUSCLES = {
+    hamstring: ['hamstrings'],
+    adductor:  ['adductors'],
+    groin:     ['adductors', 'hipflexors'],
+    calf:      ['calves', 'soleus'],
+    shin:      ['tibialisanterior'],
+    knee:      ['quadriceps', 'hamstrings'],
+    thigh:     ['quadriceps', 'hamstrings'],
+    hip:       ['hipflexors', 'glutes', 'glutemed'],
+    glute:     ['glutes', 'glutemed'],
+    ankle:     ['calves', 'soleus', 'tibialisanterior'],
+    achilles:  ['calves', 'soleus'],
+    chest:     ['chest'],
+    shoulder:  ['shoulders', 'rotatorcuff'],
+    arm:       ['biceps', 'triceps'],
+    lowerback: ['spinalerectors', 'erectors', 'ql', 'core'],
+    upperback: ['upperback', 'lats'],
+    abdomen:   ['core', 'obliques']
+  };
+  // riskZones: [{zone, count, maxSeverity}] → { normalizedMuscle: { score, label } }
+  function buildRiskMap(riskZones) {
+    if (!Array.isArray(riskZones) || !riskZones.length) return null;
+    const m = {};
+    riskZones.forEach(z => {
+      const muscles = ZONE_MUSCLES[_normZone(z.zone)];
+      if (!muscles) return;
+      const score = (Number(z.count) || 1) * 10 + (_SEV_RANK[String(z.maxSeverity || '').toLowerCase()] || 0);
+      muscles.forEach(mk => { if (!m[mk] || score > m[mk].score) m[mk] = { score, label: z.zone }; });
+    });
+    return Object.keys(m).length ? m : null;
+  }
+  function riskFor(ex) {
+    if (!state.riskMap) return null;
+    const r = _norm(ex.region);
+    if (!r) return null;
+    let best = null;
+    for (const mk in state.riskMap) {
+      if (r === mk || r.includes(mk)) { const c = state.riskMap[mk]; if (!best || c.score > best.score) best = c; }
+    }
+    return best;
+  }
+
   // YouTube id extractor (mirrors Gym Planner's resolver)
   function youtubeId(url) {
     if (!url) return null;
@@ -298,6 +349,9 @@
         return true;
       });
 
+      // Preventive risk suggestion: float risk-relevant exercises to the top (stable, no filtering).
+      if (state.riskMap) filtered.sort((a, b) => ((riskFor(b) ? riskFor(b).score : 0) - (riskFor(a) ? riskFor(a).score : 0)));
+
       listInner = filtered.length === 0
         ? h('div', { class: 'bd-empty' },
             h('i', { class: 'ti ti-mood-empty' }),
@@ -324,6 +378,14 @@
               exThumb(ex),
               h('div', { class: 'body' },
                 h('div', { class: 'name' }, ex.name),
+                (function () {
+                  const rk = riskFor(ex);
+                  return rk ? h('span', {
+                    class: 'bd-risk-chip',
+                    title: _tt('block_drawer.risk_suggested', 'Suggested — injury history'),
+                    style: 'display:inline-flex;align-items:center;gap:3px;margin-top:3px;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-danger,#DC2626);background:rgba(220,38,38,.1);padding:3px 6px;border-radius:5px'
+                  }, '⚠ ' + rk.label) : null;
+                })(),
                 h('div', { class: 'meta' },
                   h('span', null, ex.region),
                   ex.equip ? h('span', { class: 'sep' }, '·') : null,
@@ -624,11 +686,16 @@
     build();
     opts = opts || {};
     const existing = opts.existing;
+    const ctx = opts.context || 'rehab';
+    // Preventive plans prioritize risk-relevant exercises; zones come from the caller
+    // (opts.riskZones) or the planner global. Other contexts stay unprioritized.
+    const riskZones = opts.riskZones || (ctx === 'prev' ? window.__rpRiskZones : null);
     state = {
       open: true,
       mode: existing ? 'edit' : 'create',
       step: existing ? 3 : 1,
-      context: opts.context || 'rehab',
+      context: ctx,
+      riskMap: buildRiskMap(riskZones),
       dayLabel: opts.day || (existing && existing.day) || '',
       dayDate:  opts.dayDate || '',
       type: existing ? existing.type : null,
