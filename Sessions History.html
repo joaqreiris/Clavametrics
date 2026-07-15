@@ -238,7 +238,7 @@
         <div class="sh-kpi"><div class="l"><i class="ti ti-clipboard-list"></i><span data-i18n="sessions_history.kpi_sessions_ytd">Sessions YTD</span></div><div class="v" id="kpiSessions">—</div><div class="t" id="kpiSessionsTrend" data-i18n="common.loading">Loading…</div></div>
         <div class="sh-kpi"><div class="l"><i class="ti ti-clock"></i><span data-i18n="sessions_history.kpi_hours">Hours on pitch</span></div><div class="v" id="kpiHours">—</div><div class="t" id="kpiHoursTrend">—</div></div>
         <div class="sh-kpi"><div class="l"><i class="ti ti-activity"></i><span data-i18n="sessions_history.kpi_avg_load">Avg session load</span></div><div class="v" id="kpiAvgLoad">—</div><div class="t" id="kpiLoadTrend">—</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i><span data-i18n="sessions_history.kpi_compliance">Compliance</span></div><div class="v">—<sub>%</sub></div><div class="t" data-i18n="sessions_history.kpi_compliance_sub">planned ↔ delivered</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i><span data-i18n="sessions_history.kpi_compliance">Compliance</span></div><div class="v" id="kpiCompliance">—<sub>%</sub></div><div class="t" id="kpiComplianceSub" data-i18n="sessions_history.kpi_compliance_sub">planned ↔ delivered</div></div>
         <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i><span data-i18n="sessions_history.kpi_avg_attendance">Avg attendance</span></div><div class="v" id="kpiAttendance">—</div><div class="t" id="kpiAttTrend" data-i18n="sessions_history.kpi_att_sub">squad participation</div></div>
       </div>
 
@@ -615,6 +615,27 @@
       avgAtt = Math.round(sessWithRpe.reduce((t, s) => t + s.rpe.length, 0) / sessWithRpe.length / totalActivePlayers * 100);
     }
 
+    // ── Advanced compliance: planned vs delivered load, guarded so it can't mislead.
+    // planned = estimated_rpe × duration · delivered = MEDIAN of per-player s-RPE loads.
+    // A session only counts if ≥50% of the squad logged RPE AND both loads are > 0.
+    // Per-session score is bidirectional (over- and under-shooting penalise equally),
+    // clamped to [0,1]. `total` = planned sessions in scope; `n` = sessions that counted.
+    let complSum = 0, complN = 0, plannedTotal = 0;
+    filteredSessions.forEach(s => {
+      const planned = (s.estimated_rpe && s.duration) ? s.estimated_rpe * s.duration : 0;
+      if (planned > 0) plannedTotal++;
+      const coverage = totalActivePlayers > 0 ? (s.rpe?.length || 0) / totalActivePlayers : 0;
+      if (coverage < 0.5) return;
+      const loads = (s.rpe || []).map(r => r.load).filter(l => l != null).sort((a, b) => a - b);
+      if (!loads.length) return;
+      const mid = Math.floor(loads.length / 2);
+      const real = loads.length % 2 ? loads[mid] : (loads[mid - 1] + loads[mid]) / 2;
+      if (planned <= 0 || real <= 0) return;
+      complSum += Math.max(0, Math.min(1, 1 - Math.abs(real - planned) / planned));
+      complN++;
+    });
+    const compliance = complN ? Math.round(complSum / complN * 100) : null;
+
     document.getElementById('kpiSessions').textContent = ytd;
     document.getElementById('kpiHours').innerHTML = `${hrs}<sub>h</sub>`;
     document.getElementById('kpiAvgLoad').innerHTML = avgLd != null ? `${avgLd}<sub>AU</sub>` : '—';
@@ -623,6 +644,10 @@
     document.getElementById('kpiLoadTrend').textContent = avgLd != null ? tt('sessions_history.kpi_avg_players','avg across players') : tt('sessions_history.no_rpe_data','No RPE data');
     document.getElementById('kpiAttendance').innerHTML = avgAtt != null ? `${avgAtt}<sub>%</sub>` : '—';
     document.getElementById('kpiAttTrend').textContent = avgAtt != null ? tt('sessions_history.kpi_sessions_w_data', `${sessWithRpe.length} sessions w/ data`, { count: sessWithRpe.length }) : tt('sessions_history.no_rpe_data','No RPE data');
+    document.getElementById('kpiCompliance').innerHTML = compliance != null ? `${compliance}<sub>%</sub>` : '—<sub>%</sub>';
+    document.getElementById('kpiComplianceSub').textContent = compliance != null
+      ? tt('sessions_history.kpi_compliance_cov', `based on ${complN}/${plannedTotal} sessions with enough RPE`, { n: complN, total: plannedTotal })
+      : tt('sessions_history.kpi_compliance_nodata', 'not enough RPE data yet');
   }
 
   function renderActiveChips() {
