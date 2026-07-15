@@ -79,6 +79,11 @@
   .dp-physio-alert .z{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;background:rgba(255,255,255,0.5);font:600 10px/1 var(--cm-font-mono);color:#7C2D12}
   .dp-physio-alert .act button{height:26px;padding:0 9px;border-radius:6px;border:1px solid #B45309;background:transparent;color:#7C2D12;font:600 11px/1 var(--cm-font-sans);cursor:pointer}
   .dp-physio-alert .act button:hover{background:rgba(255,255,255,0.4)}
+  .dp-physio-alert .act{display:flex;align-items:center;gap:6px}
+  .dp-physio-alert.is-applied{background:var(--cm-surface);border-color:var(--cm-border);opacity:0.55}
+  .dp-physio-alert.is-applied .name,.dp-physio-alert.is-applied .note,.dp-physio-alert.is-applied .z{color:var(--cm-fg-muted)}
+  .dp-physio-alert .dp-adapt-applied{display:inline-flex;align-items:center;gap:3px;font:600 11px/1 var(--cm-font-sans);color:#16A34A;white-space:nowrap}
+  .dp-physio-alert .dp-adapt-undo{border-color:var(--cm-border)!important;color:var(--cm-fg-muted)!important}
 
   /* Squad grid */
   .dp-squad-h{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-soft)}
@@ -631,7 +636,7 @@ async function loadDay(dateStr) {
 
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
@@ -693,38 +698,78 @@ async function loadDay(dateStr) {
 
   dpRenderSquad(avMap);
 
-  const withAdapt = (adaptResult.data || []).filter(t => t.adaptation_notes);
-  const physioCard = document.querySelector('.dp-physio-card');
-  if (physioCard) physioCard.classList.toggle('is-empty', withAdapt.length === 0);
-  if (withAdapt.length) {
-    document.getElementById('dpPhysioCt').textContent = withAdapt.length;
-    document.getElementById('dpPhysioList').innerHTML = withAdapt.map(t => {
-      const pl = t.players || {};
-      const av2 = (`${pl.first_name||''} ${pl.last_name||''}`.trim()).split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase() || '?';
-      const adaptText = t.adaptation_notes || '';
-      const tt = t.treatment_type || 'rehab';
-      const ttDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${tt==='preventive'?'#16A34A':'#DC2626'};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>`;
-      const mods = Array.isArray(t.modalities) ? t.modalities : (t.type ? (Array.isArray(t.type) ? t.type : [t.type]) : []);
-      return `<div class="dp-physio-alert">
-        <div class="av">${av2}</div>
-        <div class="body">
-          <div class="name">${ttDot}${((pl.first_name||'')+' '+(pl.last_name||'')).trim()||tt('daily_planning.unknown','Unknown')} · #${pl.number??'—'} · ${pl.position||''}</div>
-          <div class="note">${adaptText}</div>
-          ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${m}</span>`).join('')}</div>` : ''}
-        </div>
-        <div class="act"><button title="${tt('daily_planning.mark_as_resolved','Mark as resolved')}" onclick="this.closest('.dp-physio-alert').style.opacity='0.4'">${tt('daily_planning.applied','✓ Applied')}</button></div>
-      </div>`;
-    }).join('');
-    // Build set of player IDs with active adaptation for squad badge overlay
-    window._dpAdaptPids = new Set(withAdapt.map(t => t.player_id));
-  } else {
-    document.getElementById('dpPhysioCt').textContent = '0';
-    document.getElementById('dpPhysioList').innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_physio_adaptations','No physio adaptations for this session.')}</div>`;
-    window._dpAdaptPids = new Set();
-  }
+  _dpPhysioRows = (adaptResult.data || []).filter(t => t.adaptation_notes);
+  dpRenderPhysioList();
 
   await dpRenderPrintSheet();
 }
+
+// Physio adaptation alerts — visual state derives ONLY from adaptation_applied_at so a
+// reload reflects what is persisted (never a local opacity flip).
+let _dpPhysioRows = [];
+function dpRenderPhysioList() {
+  const rows = _dpPhysioRows || [];
+  const physioCard = document.querySelector('.dp-physio-card');
+  if (physioCard) physioCard.classList.toggle('is-empty', rows.length === 0);
+  const ctEl = document.getElementById('dpPhysioCt');
+  const listEl = document.getElementById('dpPhysioList');
+  if (!rows.length) {
+    if (ctEl) ctEl.textContent = '0';
+    if (listEl) listEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_physio_adaptations','No physio adaptations for this session.')}</div>`;
+    window._dpAdaptPids = new Set();
+    return;
+  }
+  if (ctEl) ctEl.textContent = rows.length;
+  if (listEl) listEl.innerHTML = rows.map(t => {
+    const pl = t.players || {};
+    const av2 = (`${pl.first_name||''} ${pl.last_name||''}`.trim()).split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase() || '?';
+    const adaptText = t.adaptation_notes || '';
+    const ttype = t.treatment_type || 'rehab';
+    const ttDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ttype==='preventive'?'#16A34A':'#DC2626'};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>`;
+    const mods = Array.isArray(t.modalities) ? t.modalities : (t.type ? (Array.isArray(t.type) ? t.type : [t.type]) : []);
+    const applied = !!t.adaptation_applied_at;
+    const name = ((pl.first_name||'')+' '+(pl.last_name||'')).trim() || tt('daily_planning.unknown','Unknown');
+    let actHtml;
+    if (applied) {
+      const dateStr = new Date(t.adaptation_applied_at).toLocaleDateString(ttLocale(), { day:'2-digit', month:'short' });
+      actHtml = `<div class="act"><span class="dp-adapt-applied">✓ ${tt('daily_planning.applied_on','Applied · {date}',{date:dateStr})}</span>`
+        + `<button class="dp-adapt-undo" data-treatment-id="${t.id}">${tt('daily_planning.undo','Undo')}</button></div>`;
+    } else {
+      actHtml = `<div class="act"><button class="dp-adapt-apply" data-treatment-id="${t.id}">${tt('daily_planning.applied','✓ Applied')}</button></div>`;
+    }
+    return `<div class="dp-physio-alert${applied ? ' is-applied' : ''}">
+        <div class="av">${av2}</div>
+        <div class="body">
+          <div class="name">${ttDot}${name} · #${pl.number??'—'} · ${pl.position||''}</div>
+          <div class="note">${adaptText}</div>
+          ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${m}</span>`).join('')}</div>` : ''}
+        </div>
+        ${actHtml}
+      </div>`;
+  }).join('');
+  // Squad badge overlay: amber stays on while an adaptation exists but is not yet applied.
+  window._dpAdaptPids = new Set(rows.filter(t => !t.adaptation_applied_at).map(t => t.player_id));
+}
+
+// Persist the Applied/Undo decision via the reversible RPC; on success the row's
+// adaptation_applied_at is updated in memory and the card re-renders from that state.
+async function dpToggleAdapt(id) {
+  const { data, error } = await window.sb.rpc('toggle_adaptation_applied', { p_treatment_id: id });
+  if (error) { dpToast(tt('daily_planning.adapt_toggle_error','Could not update. Try again.')); return; }
+  const newApplied = (data && typeof data === 'object')
+    ? (Array.isArray(data) ? (data[0]?.adaptation_applied_at ?? data[0] ?? null) : (data.adaptation_applied_at ?? null))
+    : (data ?? null);
+  const row = _dpPhysioRows.find(t => String(t.id) === String(id));
+  if (row) row.adaptation_applied_at = newApplied;
+  const mapRow = Object.values(_dpDayAdaptMap).find(t => String(t.id) === String(id));
+  if (mapRow) mapRow.adaptation_applied_at = newApplied;
+  dpRenderPhysioList();
+  dpToast(newApplied ? tt('daily_planning.applied','✓ Applied') : tt('daily_planning.undo','Undo'));
+}
+document.getElementById('dpPhysioList')?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-treatment-id]');
+  if (btn) dpToggleAdapt(btn.dataset.treatmentId);
+});
 
 function dpMarkCalFields() {
   ['dpMicrocycle','dpMatchDay','dpStartTime','dpEstRpe'].forEach(id => {
