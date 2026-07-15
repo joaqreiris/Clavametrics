@@ -1018,6 +1018,40 @@
                   </div>
                 </div>
               </div>
+              <!-- Body composition dedicated CSV importer → body_composition -->
+              <div id="evBcCsv" style="display:none">
+                <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px"><span data-i18n="evaluations.import_results">Import results ·</span> <span style="color:var(--cm-fg-strong);text-transform:none;letter-spacing:0" data-i18n="evaluations.test_bodycomp">Body composition</span></div>
+                <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                  <div class="ev-frow" style="flex:0 0 160px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.bc_mode">Mode</label>
+                    <select id="evBcCsvMode" class="ev-finput" style="height:32px">
+                      <option value="results" data-i18n="evaluations.bc_mode_results">Results</option>
+                      <option value="skinfolds" data-i18n="evaluations.bc_mode_skinfolds">Skinfolds</option>
+                    </select></div>
+                  <div class="ev-frow" id="evBcCsvMethodWrap" style="flex:0 0 140px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.method">Method</label>
+                    <select id="evBcCsvMethod" class="ev-finput" style="height:32px"></select></div>
+                  <div class="ev-frow" id="evBcCsvFormulaWrap" style="flex:0 0 120px;margin-bottom:0;display:none"><label class="ev-fl" data-i18n="evaluations.formula">Formula</label>
+                    <select id="evBcCsvFormula" class="ev-finput" style="height:32px">
+                      <option value="JP3">JP3</option><option value="JP7">JP7</option><option value="DW4">DW4</option>
+                    </select></div>
+                  <div class="ev-frow" style="flex:0 0 150px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.date_fallback">Date (fallback)</label><input id="evBcCsvFallbackDate" type="date" class="ev-finput" style="height:32px"></div>
+                </div>
+                <div id="evBcCsvDropWrap">
+                  <div class="pt-drop" id="evBcCsvDrop" onclick="document.getElementById('evBcCsvFile').click()">
+                    <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4 data-i18n="evaluations.drop_csv_here">Drop CSV here or click to browse</h4><p data-i18n="evaluations.bc_csv_hint">Columns: Player + measurements. Players are matched by name; height falls back to the roster record.</p></div></div>
+                    <div class="formats"><span class="fmt">.csv</span><span class="fmt">.tsv</span></div>
+                  </div>
+                  <input type="file" id="evBcCsvFile" accept=".csv,.tsv,.txt" style="display:none">
+                </div>
+                <div id="evBcCsvMap" style="display:none">
+                  <div id="evBcCsvMapCols" class="ev-f2" style="margin-top:4px"></div>
+                  <div id="evBcCsvPreview" style="overflow-x:auto;max-height:280px;overflow-y:auto;margin:8px 0 12px"></div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <button class="cm-btn is-primary is-sm" id="evBcCsvImportBtn"><i class="ti ti-database-import" style="font-size:14px"></i><span data-i18n="evaluations.import_to_database">Import to database</span></button>
+                    <button class="cm-btn is-outline is-sm" id="evBcCsvResetBtn" data-i18n="evaluations.reset">Reset</button>
+                    <span id="evBcCsvResult" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-success)"></span>
+                  </div>
+                </div>
+              </div>
               <!-- H-FVP dedicated CSV importer (Player, Mass, Height, t5..t40, Date) -->
               <div id="evHfvpCsv" style="display:none">
                 <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px"><span data-i18n="evaluations.import_hfvp_profiles">Import H-FVP profiles ·</span> <span style="color:var(--cm-fg-strong);text-transform:none;letter-spacing:0" data-i18n="evaluations.sprint_hfvp">Sprint H-FVP</span></div>
@@ -1702,15 +1736,17 @@
       setupSprintBulk();
     }
 
-    // Body composition: dedicated bulk grid (Results | Skinfolds) → writes to body_composition.
-    // Keeps the "New entry" launcher (individual skinfold panel); replaces the generic single-value grid.
+    // Body composition: dedicated bulk grid + dedicated CSV importer → both write to body_composition.
+    // Keeps the "New entry" launcher (individual skinfold panel); replaces the generic single-value grid/CSV.
     var isBodyComp = (t.key === 'bodycomp');
     document.getElementById('evBcBulk').style.display = isBodyComp ? '' : 'none';
+    document.getElementById('evBcCsv').style.display  = isBodyComp ? '' : 'none';
     if (isBodyComp){
       document.getElementById('evUploadReal').style.display = 'none';   // hide generic Player+Value grid
-      document.getElementById('evCsvReal').style.display     = 'none';   // no CSV importer for body composition
-      if (csvBtn) csvBtn.style.display = 'none';
+      document.getElementById('evCsvReal').style.display     = 'none';   // hide generic CSV importer (use the dedicated one)
+      if (csvBtn) csvBtn.style.display = '';                            // keep the CSV tab (dedicated bodycomp importer)
       setupBcBulk();
+      setupBcCsv();
     }
 
     window.scrollTo(0,0);
@@ -3427,10 +3463,43 @@
     return ['chest','abdomen','thigh','triceps','suprailiac'];   // JP3 union
   }
 
-  async function setupBcBulk(){
-    document.getElementById('evBcDate').value = evToday();
-    document.getElementById('evBcMsg').style.display = 'none';
-    document.getElementById('evBcMode').value = 'results';
+  // Single source of truth for a body_composition row, used by BOTH the grid and the CSV importer.
+  //  ctx:  { player_id, club_id, date, age, sex }   (sex 'M'|'F', only used in skinfolds mode)
+  //  vals: results  → { weight, bf, lean, height }
+  //        skinfolds→ { weight, height, folds:{ site:mm } }
+  //  Returns the row object, or null when the row is blank.
+  function buildBodyCompRow(mode, method, formula, ctx, vals){
+    var base = { player_id: ctx.player_id, club_id: ctx.club_id, measured_date: ctx.date };
+    if (mode === 'results'){
+      var weight = vals.weight, bf = vals.bf, lean = vals.lean, height = vals.height;
+      if (weight == null && bf == null && lean == null) return null;   // blank (height alone is a prefill/fallback)
+      if (lean == null && weight != null && bf != null) lean = +(weight * (1 - bf/100)).toFixed(1);
+      base.method = method;
+      base.weight_kg = weight; base.body_fat_pct = bf; base.lean_mass_kg = lean;
+      base.height_cm = height; base.bmi = calcBMI(weight, height);
+      return base;
+    }
+    // skinfolds
+    var sex = (String(ctx.sex || 'M').toUpperCase().charAt(0) === 'F') ? 'F' : 'M';
+    var folds = vals.folds || {}, weightS = vals.weight, heightS = vals.height;
+    var anyFold = Object.keys(folds).some(function(s){ return folds[s] != null; });
+    if (!anyFold && weightS == null) return null;   // blank row
+    var pct = sfBodyFatPct({ formula: formula, sex: sex, age: ctx.age, folds: folds });
+    var sum = sfFormulaSites(formula, sex).reduce(function(a,k){ return a + (parseFloat(folds[k]) || 0); }, 0) || null;
+    base.method = 'skinfold';
+    base.sf_formula = formula; base.sum_skinfolds = sum;
+    base.weight_kg = weightS; base.height_cm = heightS;
+    base.age_years = (ctx.age != null ? ctx.age : null);
+    base.sex = (sex === 'F' ? 'female' : 'male');
+    base.body_fat_pct = pct;
+    base.lean_mass_kg = (pct != null && weightS != null) ? +(weightS * (1 - pct/100)).toFixed(1) : null;
+    base.bmi = calcBMI(weightS, heightS);
+    Object.keys(BC_SF_COL).forEach(function(s){ if (folds[s] != null) base[BC_SF_COL[s]] = folds[s]; });
+    return base;
+  }
+
+  // Roster age/height/weight for the current team — shared by the grid and the CSV importer.
+  async function loadBcPlayerMeta(){
     _bcPlayerMeta = {};
     try {
       if (_teamPlayerIds && _teamPlayerIds.length){
@@ -3441,6 +3510,13 @@
         });
       }
     } catch(e){ console.warn('[ev2] bc player meta failed', e); }
+  }
+
+  async function setupBcBulk(){
+    document.getElementById('evBcDate').value = evToday();
+    document.getElementById('evBcMsg').style.display = 'none';
+    document.getElementById('evBcMode').value = 'results';
+    await loadBcPlayerMeta();
     onBcModeChange();
   }
 
@@ -3558,31 +3634,22 @@
       var meta = _bcPlayerMeta[pid] || {};
       var num = function(cls){ var el = tr.querySelector('.'+cls); if (!el || el.disabled) return null; var v = parseFloat(el.value); return isFinite(v) ? v : null; };
       var height = num('height_cm'), weight = num('weight_kg');
+      var row;
       if (mode === 'results'){
-        var bf = num('body_fat_pct'), lean = num('lean_mass_kg');
-        if (weight == null && bf == null && lean == null) return;   // blank (height alone is a prefill, not data)
-        if (lean == null && weight != null && bf != null) lean = +(weight * (1 - bf/100)).toFixed(1);
-        rows.push({ player_id: pid, club_id: _clubId, measured_date: date, method: method,
-          weight_kg: weight, body_fat_pct: bf, lean_mass_kg: lean, height_cm: height,
-          bmi: calcBMI(weight, height) });
+        row = buildBodyCompRow('results', method, formula,
+          { player_id: pid, club_id: _clubId, date: date },
+          { weight: weight, bf: num('body_fat_pct'), lean: num('lean_mass_kg'), height: height });
       } else {
         var sexEl = tr.querySelector('.bc-sex');
-        var sex = sexEl ? sexEl.value : 'M';
-        var folds = {}, anyFold = false;
-        bcSkinfoldCols(formula).forEach(function(s){ var v = num('sf_'+s); if (v != null){ folds[s] = v; anyFold = true; } });
-        if (!anyFold && weight == null) return;   // blank row
-        var pct = sfBodyFatPct({ formula: formula, sex: sex, age: meta.age, folds: folds });
-        var sum = sfFormulaSites(formula, sex).reduce(function(a,k){ return a + (parseFloat(folds[k]) || 0); }, 0) || null;
-        var row = { player_id: pid, club_id: _clubId, measured_date: date, method: 'skinfold',
-          sf_formula: formula, sum_skinfolds: sum, weight_kg: weight, height_cm: height,
-          age_years: (meta.age != null ? meta.age : null), sex: (sex === 'F' ? 'female' : 'male'),
-          body_fat_pct: pct,
-          lean_mass_kg: (pct != null && weight != null) ? +(weight * (1 - pct/100)).toFixed(1) : null,
-          bmi: calcBMI(weight, height) };
-        Object.keys(BC_SF_COL).forEach(function(s){ if (folds[s] != null) row[BC_SF_COL[s]] = folds[s]; });
-        rows.push(row);
-        var rc = tr.querySelector('.bc-result'); if (rc && pct != null){ rc.textContent = pct.toFixed(1) + '%'; rc.style.color = 'var(--cm-fg-muted)'; }
+        var folds = {};
+        bcSkinfoldCols(formula).forEach(function(s){ var v = num('sf_'+s); if (v != null) folds[s] = v; });
+        row = buildBodyCompRow('skinfolds', 'skinfold', formula,
+          { player_id: pid, club_id: _clubId, date: date, age: meta.age, sex: (sexEl ? sexEl.value : 'M') },
+          { weight: weight, height: height, folds: folds });
+        var rc = tr.querySelector('.bc-result');
+        if (rc && row && row.body_fat_pct != null){ rc.textContent = row.body_fat_pct.toFixed(1) + '%'; rc.style.color = 'var(--cm-fg-muted)'; }
       }
+      if (row) rows.push(row);
     });
     if (!rows.length){ alert(tt('evaluations.no_valid_rows','No valid rows to save.')); return; }
     var res = await window.sb.from('body_composition').insert(rows);
@@ -3600,6 +3667,177 @@
     var m = document.getElementById('evBcMode'); if (m) m.addEventListener('change', onBcModeChange);
     var f = document.getElementById('evBcFormula'); if (f) f.addEventListener('change', renderBcBulkRoster);
     var b = document.getElementById('evBcBody'); if (b) b.addEventListener('input', function(e){ var tr = e.target.closest('tr'); if (tr) bcUpdateRowResult(tr); });
+  })();
+
+  // ─── Body composition · dedicated CSV importer (shares buildBodyCompRow with the grid) ───
+  var _bcCsv = null;   // { rows, headers }
+  var BC_SITE_GUESS = {
+    chest:/chest|pecho|peito|pector/, abdomen:/abdom/, thigh:/thigh|muslo|coxa|quad/,
+    triceps:/tricep|trícep/, subscapular:/subscap|subescap|subesc/, suprailiac:/suprail|iliac|ilíac|supraesp|supraspin/,
+    midaxillary:/midax|mid.?ax|axilar|axillary|axila/, biceps:/bicep|bícep/
+  };
+  // Field descriptors for the CSV mapper — the set depends on mode/formula (same fields the grid needs).
+  function bcCsvFields(mode, formula){
+    var f = [ { key:'player', label:tt('evaluations.player','Player'), req:true, guess:/name|player|athlete|jugador|jogador|nombre|nome/ },
+              { key:'date',   label:tt('common.date','Date'), guess:/date|fecha|data/ } ];
+    if (mode === 'skinfolds') f.push({ key:'sex', label:tt('evaluations.sex','Sex'), guess:/sex|sexo|gender|gener|género/ });
+    f.push({ key:'weight', label:tt('evaluations.bc_weight_kg','Weight (kg)'), guess:/peso|weight|kg\b|massa|mass\b/ });
+    f.push({ key:'height', label:tt('evaluations.bc_height_cm','Height (cm)'), guess:/altura|height|estatura|talla|statur|\bcm\b/ });
+    if (mode === 'results'){
+      f.push({ key:'bf',   label:tt('evaluations.bc_bodyfat','Body fat (%)'), guess:/fat|grasa|gordura|\bbf\b|body.?fat/ });
+      f.push({ key:'lean', label:tt('evaluations.bc_lean_kg','Lean mass (kg)'), guess:/lean|magra|magro|ffm|fat.?free/ });
+    } else {
+      bcSkinfoldCols(formula).forEach(function(s){ f.push({ key:'sf_'+s, site:s, label:bcSiteLabel(s)+' (mm)', guess:BC_SITE_GUESS[s] }); });
+    }
+    return f;
+  }
+  async function setupBcCsv(){
+    document.getElementById('evBcCsvFallbackDate').value = evToday();
+    document.getElementById('evBcCsvMode').value = 'results';
+    resetBcCsv();
+    await loadBcPlayerMeta();
+    onBcCsvModeChange();
+  }
+  function resetBcCsv(){
+    _bcCsv = null;
+    document.getElementById('evBcCsvMap').style.display = 'none';
+    document.getElementById('evBcCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evBcCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evBcCsvPreview').innerHTML = '';
+    document.getElementById('evBcCsvResult').textContent = '';
+  }
+  function onBcCsvModeChange(){
+    var mode = document.getElementById('evBcCsvMode').value;
+    var methodWrap = document.getElementById('evBcCsvMethodWrap');
+    var formulaWrap = document.getElementById('evBcCsvFormulaWrap');
+    if (mode === 'results'){
+      document.getElementById('evBcCsvMethod').innerHTML = '<option value="dexa">DEXA</option><option value="bia">BIA</option><option value="scale">'+esc(tt('evaluations.bc_scale','Scale'))+'</option>';
+      methodWrap.style.display = ''; formulaWrap.style.display = 'none';
+    } else {
+      methodWrap.style.display = 'none'; formulaWrap.style.display = '';
+    }
+    if (_bcCsv) populateBcCsvMap();
+  }
+  function parseBcCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    window.Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert(tt('evaluations.empty_csv','Empty CSV')); return; }
+      _bcCsv = { rows: rows, headers: (res.meta && res.meta.fields) || Object.keys(rows[0]) };
+      populateBcCsvMap();
+    }});
+  }
+  function populateBcCsvMap(){
+    if (!_bcCsv) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var heads = _bcCsv.headers;
+    var find = function(re){ return re ? heads.find(function(h){ return re.test(String(h).toLowerCase()); }) : null; };
+    var fields = bcCsvFields(mode, formula);
+    var cont = document.getElementById('evBcCsvMapCols');
+    cont.innerHTML = fields.map(function(fd){
+      var opts = (fd.req ? '' : '<option value="">'+esc(tt('evaluations.none_option','— none —'))+'</option>')
+        + heads.map(function(h){ return '<option value="'+esc(h)+'">'+esc(h)+'</option>'; }).join('');
+      return '<div class="ev-frow"><label class="ev-fl">'+esc(fd.label)+(fd.req?' <span style="color:var(--cm-danger)">*</span>':'')+'</label>'
+        + '<select class="ev-finput bc-csv-col" data-field="'+esc(fd.key)+'" style="height:32px">'+opts+'</select></div>';
+    }).join('');
+    fields.forEach(function(fd){
+      var sel = cont.querySelector('.bc-csv-col[data-field="'+fd.key+'"]'); if (!sel) return;
+      sel.value = find(fd.guess) || (fd.req ? (heads[0]||'') : '');
+      sel.onchange = renderBcCsvPreview;
+    });
+    document.getElementById('evBcCsvDropWrap').style.display = 'none';
+    document.getElementById('evBcCsvMap').style.display = '';
+    renderBcCsvPreview();
+  }
+  function bcCsvMapping(){
+    var m = {};
+    document.querySelectorAll('#evBcCsvMapCols .bc-csv-col').forEach(function(sel){ m[sel.getAttribute('data-field')] = sel.value; });
+    return m;
+  }
+  // Build a body_composition row from a raw CSV row via the SHARED buildBodyCompRow. Returns { player, row }.
+  function bcCsvBuildRow(r, mapping, mode, formula, fallbackDate){
+    var p = evMatchPlayer(r[mapping.player]);
+    if (!p) return { player:null, row:null };
+    var meta = _bcPlayerMeta[p.id] || {};
+    var cellNum = function(field){ var c = mapping[field]; if (!c) return null; var v = parseFloat(String(r[c]==null?'':r[c]).replace(',', '.')); return isFinite(v) ? v : null; };
+    var date = fallbackDate;
+    if (mapping.date && String(r[mapping.date]||'').trim()){ var d = new Date(String(r[mapping.date]).trim()); if (!isNaN(d)) date = d.toISOString().slice(0,10); }
+    var height = cellNum('height'); if (height == null && meta.height != null) height = meta.height;   // roster fallback
+    var weight = cellNum('weight');
+    var row;
+    if (mode === 'results'){
+      row = buildBodyCompRow('results', document.getElementById('evBcCsvMethod').value, formula,
+        { player_id:p.id, club_id:_clubId, date:date },
+        { weight:weight, bf:cellNum('bf'), lean:cellNum('lean'), height:height });
+    } else {
+      var sex = 'M';
+      if (mapping.sex){ var sv = String(r[mapping.sex]||'').trim().toUpperCase(); if (sv){ sex = (sv.charAt(0)==='F' || sv.indexOf('MUJ')===0 || sv.indexOf('FEM')===0) ? 'F' : 'M'; } }
+      var folds = {};
+      bcSkinfoldCols(formula).forEach(function(s){ var v = cellNum('sf_'+s); if (v != null) folds[s] = v; });
+      row = buildBodyCompRow('skinfolds', 'skinfold', formula,
+        { player_id:p.id, club_id:_clubId, date:date, age:meta.age, sex:sex },
+        { weight:weight, height:height, folds:folds });
+    }
+    return { player:p, row:row };
+  }
+  function renderBcCsvPreview(){
+    if (!_bcCsv) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var mapping = bcCsvMapping();
+    var fallback = document.getElementById('evBcCsvFallbackDate').value || evToday();
+    var matched = 0, unmatched = 0, trs = '';
+    _bcCsv.rows.forEach(function(r, idx){
+      var built = bcCsvBuildRow(r, mapping, mode, formula, fallback);
+      if (built.player && built.row) matched++; else unmatched++;
+      if (idx < 10){
+        var pct = built.row ? built.row.body_fat_pct : null;
+        trs += '<tr><td>'+esc(r[mapping.player]||'—')+'</td>'
+          + '<td>'+(built.player?esc(built.player.first_name+' '+built.player.last_name):'<span style="color:var(--cm-danger)">'+esc(tt('evaluations.no_match','no match'))+'</span>')+'</td>'
+          + '<td class="num">'+(built.row&&built.row.weight_kg!=null?built.row.weight_kg:'—')+'</td>'
+          + '<td class="num">'+(pct!=null?pct.toFixed(1)+'%':'—')+'</td></tr>';
+      }
+    });
+    document.getElementById('evBcCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+esc(tt('evaluations.n_matched_unmatched','{m} matched · {u} unmatched',{m:matched,u:unmatched}))+'</div>'
+      + '<table class="ft-table"><thead><tr><th>'+esc(tt('evaluations.csv_name','CSV name'))+'</th><th>'+esc(tt('evaluations.player','Player'))+'</th><th class="num">'+esc(tt('evaluations.bc_weight_kg','Weight (kg)'))+'</th><th class="num">%BF</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveBcCsv(){
+    if (!_bcCsv || !_clubId) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var mapping = bcCsvMapping();
+    if (!mapping.player){ alert(tt('evaluations.select_player_column','Select the player column.')); return; }
+    var fallback = document.getElementById('evBcCsvFallbackDate').value || evToday();
+    var rows = [], skipped = 0;
+    _bcCsv.rows.forEach(function(r){
+      var built = bcCsvBuildRow(r, mapping, mode, formula, fallback);
+      if (!built.player || !built.row){ skipped++; return; }
+      rows.push(built.row);
+    });
+    if (!rows.length){ alert(tt('evaluations.no_matched_rows','No matched rows with a value to import.')); return; }
+    var res = await window.sb.from('body_composition').insert(rows);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    document.getElementById('evBcCsvResult').textContent = tt('evaluations.n_records_imported','✓ Imported '+rows.length+' record'+(rows.length>1?'s':''),{count:rows.length})+(skipped?tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}):'');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetBcCsv, 2500);
+  }
+  (function initBcCsv(){
+    var fi = document.getElementById('evBcCsvFile');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseBcCsv(e.target.files[0]); });
+    var dz = document.getElementById('evBcCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor='var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseBcCsv(e.dataTransfer.files[0]); });
+    }
+    var ib = document.getElementById('evBcCsvImportBtn'); if (ib) ib.addEventListener('click', saveBcCsv);
+    var rb = document.getElementById('evBcCsvResetBtn'); if (rb) rb.addEventListener('click', resetBcCsv);
+    var m = document.getElementById('evBcCsvMode'); if (m) m.addEventListener('change', onBcCsvModeChange);
+    var f = document.getElementById('evBcCsvFormula'); if (f) f.addEventListener('change', function(){ if (_bcCsv) populateBcCsvMap(); });
+    var fd = document.getElementById('evBcCsvFallbackDate'); if (fd) fd.addEventListener('change', function(){ if (_bcCsv) renderBcCsvPreview(); });
   })();
 
   // English ordinal for the percentile badge (72 → "72nd"); es/pt use the raw {pct}.
