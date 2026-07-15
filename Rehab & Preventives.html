@@ -41,7 +41,7 @@
         <button class="cm-icon-btn" title="Notifications" data-i18n-attr="title:common.notifications"><i class="ti ti-bell"></i></button>
         <button class="cm-icon-btn" title="Settings" data-open-settings data-i18n-attr="title:common.settings"><i class="ti ti-settings"></i></button>
         <button class="cm-btn is-secondary"><i class="ti ti-download"></i> <span data-i18n="common.export">Export</span></button>
-        <a class="cm-btn is-primary" href="Rehab Planner.html"><i class="ti ti-plus"></i> <span data-i18n="rehab.new_plan">New plan</span></a>
+        <button class="cm-btn is-primary" id="rpv-new-plan"><i class="ti ti-plus"></i> <span data-i18n="rehab.new_plan">New plan</span></button>
       </div>
     </header>
 
@@ -473,6 +473,95 @@ function tt(key, fallbackEN, vars) {
       panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   }
+
+  // ── New plan: pick type + player → INSERT rehab_plans → open the planner (?plan=<id>) ──
+  (function(){
+    const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
+    let _players = null, _ov = null, _kind = 'rehab';
+    async function loadPlayers(){
+      if (_players) return _players;
+      let q = window.sb.from('players').select('id,first_name,last_name,position,number,team_id')
+        .eq('club_id', clubId).is('archived_at', null).order('last_name', { ascending:true });
+      if (team) q = q.eq('team_id', team);
+      const { data } = await q; _players = data || []; return _players;
+    }
+    function setKind(k){ _kind = k; _ov.querySelectorAll('[data-kind]').forEach(b => { b.className = 'cm-btn is-sm ' + (b.dataset.kind === k ? 'is-primary' : 'is-ghost'); }); }
+    async function create(){
+      const player_id = _ov.querySelector('#rpv-np-player').value;
+      const name = _ov.querySelector('#rpv-np-name').value.trim() || null;
+      const weeks = parseInt(_ov.querySelector('#rpv-np-weeks').value, 10) || 1;
+      if (!player_id){ alert(tt('rehab_planner.np_err_player', 'Pick a player first')); return; }
+      const btn = _ov.querySelector('#rpv-np-create'); btn.disabled = true;
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await window.sb.from('rehab_plans').insert({
+        club_id: clubId, player_id, kind: _kind, name, status: 'on_track',
+        programme_week: 1, programme_total_weeks: weeks, start_date: today
+      }).select('id').single();
+      btn.disabled = false;
+      if (error || !data){ console.error('[rehab] create plan failed:', error); alert(tt('rehab_planner.np_err_create', 'Could not create plan') + (error ? ': ' + (error.message || error.code || '') : '')); return; }
+      location.href = 'Rehab Planner.html?plan=' + data.id;
+    }
+    function build(){
+      if (_ov) return _ov;
+      _ov = document.createElement('div');
+      _ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9500;display:none;align-items:flex-start;justify-content:center;padding:8vh 16px;overflow:auto';
+      const lbl = 'font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      const row = 'display:flex;flex-direction:column;gap:5px;margin-bottom:13px';
+      _ov.innerHTML = `
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;width:480px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px;border-bottom:1px solid var(--cm-border)">
+            <h3 style="margin:0;font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('rehab_planner.np_title_new','New plan')}</h3>
+            <button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button>
+          </div>
+          <div style="padding:18px">
+            <div style="${row}">
+              <label style="${lbl}">${tt('rehab_planner.np_type','Type')}</label>
+              <div style="display:inline-flex;gap:6px">
+                <button type="button" data-kind="rehab" class="cm-btn is-sm is-primary">${tt('rehab_planner.rehab','Rehab')}</button>
+                <button type="button" data-kind="preventive" class="cm-btn is-sm is-ghost">${tt('rehab_planner.preventive','Preventive')}</button>
+              </div>
+            </div>
+            <div style="${row}">
+              <label style="${lbl}">${tt('rehab_planner.np_player','Player')}</label>
+              <select class="cm-select" id="rpv-np-player"></select>
+            </div>
+            <div style="${row}">
+              <label style="${lbl}">${tt('rehab_planner.np_name','Plan name')}</label>
+              <input class="cm-input" id="rpv-np-name" type="text" placeholder="${tt('rehab_planner.np_name_ph','e.g. ACL return-to-play')}">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <label style="${lbl}">${tt('rehab_planner.np_weeks','Total weeks')}</label>
+              <input class="cm-input" id="rpv-np-weeks" type="number" min="1" max="52" value="8">
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border)">
+            <button class="cm-btn is-ghost" data-close>${tt('common.cancel','Cancel')}</button>
+            <button class="cm-btn is-primary" id="rpv-np-create"><i class="ti ti-plus"></i> ${tt('rehab_planner.np_create','Create plan')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(_ov);
+      _ov.addEventListener('click', (e) => { if (e.target === _ov || e.target.closest('[data-close]')) _ov.style.display = 'none'; });
+      _ov.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => setKind(b.dataset.kind)));
+      _ov.querySelector('#rpv-np-create').addEventListener('click', create);
+      return _ov;
+    }
+    async function openNewPlan(){
+      const ov = build();
+      setKind('rehab');
+      const sel = ov.querySelector('#rpv-np-player');
+      sel.innerHTML = `<option value="">${tt('rehab_planner.np_select_player','Select player…')}</option>`;
+      (await loadPlayers()).forEach(p => {
+        const nm = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = `${nm}${p.number ? ' · #' + p.number : ''}${p.position ? ' · ' + p.position : ''}`;
+        sel.appendChild(o);
+      });
+      ov.querySelector('#rpv-np-name').value = '';
+      ov.style.display = 'flex';
+    }
+    document.getElementById('rpv-new-plan')?.addEventListener('click', openNewPlan);
+  })();
 
   // Initial sort
   document.querySelectorAll('.po-tbl tbody').forEach(sortTbody);
