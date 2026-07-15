@@ -4530,7 +4530,6 @@ function _showCardEmpty(cardId, msg) {
 }
 
 window.gpRenderScienceCards = async function (reports, clubId) {
-  console.warn('[ACWR DIAG] enter', { clubId, reports: reports?.length ?? null, preset: window.gpState?.datePreset, teamId: window._gpTeamId || null });
   // Synchronous cards first — each isolated so one failure never cascades
   try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
   try { _renderOutliers(reports); } catch(e) { _showCardError('card-outliers', e); }
@@ -4555,7 +4554,6 @@ window.gpRenderScienceCards = async function (reports, clubId) {
 
   const [{ data: histSessions }, ] = await Promise.all([sciQry]);
 
-  console.warn('[ACWR DIAG] histSessions', { count: histSessions?.length ?? null, cutoff, rangeFrom, rangeTo });
   if (!histSessions?.length) return;
 
   const hids = histSessions.map(s => s.id);
@@ -4673,24 +4671,6 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     ? window.gpsACWR.squadTimeline(_byPlayerAcwr, _acwrFrom, rangeTo, { model: _acwrModel, coupled: false })
     : { dates: [], squadAcwr: [] };
   const acwrData = _acwrSeries.dates.map((date, i) => ({ date, ratio: _acwrSeries.squadAcwr[i] }));
-  // TEMP DIAG (ACWR blank card): pinpoint where the data chain dies. Remove once fixed.
-  try {
-    const _fb = window.gpFilterBar?.getState?.() || null;
-    console.warn('[ACWR DIAG]', {
-      histLoads: (histLoads || []).length,
-      sampleRow: (histLoads || [])[0] || null,
-      players_after_filter: Object.keys(_byPlayerAcwr).length,
-      acwrMetric, model: _acwrModel,
-      from: _acwrFrom, to: rangeTo,
-      gpState_playerId: window.gpState?.playerId || null,
-      gpPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds.length : window._gpPlayerIds,
-      fb_playerIds: _fb?.playerIds?.length ?? null,
-      fb_positions: _fb?.positions ?? null,
-      dates: acwrData.length,
-      nonNullRatios: acwrData.filter(d => d.ratio != null).length,
-      canvasACWR: !!canvasACWR,
-    });
-  } catch (e) { console.warn('[ACWR DIAG] failed', e); }
   // Flag provisional points: chronic has < 28 days of history since the baseline anchor.
   if (_baselineAnchor) acwrData.forEach(d => {
     d.provisional = Math.round((new Date(d.date) - new Date(_baselineAnchor)) / 86400000) < 28;
