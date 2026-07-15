@@ -30,6 +30,29 @@
   const libCache = {};                                  // context -> mapped array (fetched once per context)
   const CTX_USABLE = { ip: 'individual', rehab: 'rehab', prev: 'preventive' };
 
+  // YouTube id extractor (mirrors Gym Planner's resolver)
+  function youtubeId(url) {
+    if (!url) return null;
+    const m = String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+  // Resolve a thumbnail per library item (image signed URL > YouTube thumb > null), stashed as e._thumb.
+  async function resolveThumbs(mapped) {
+    const paths = [], byPath = {};
+    mapped.forEach(e => { if (e.media_type === 'image' && e.media_ref) { paths.push(e.media_ref); byPath[e.media_ref] = e; } });
+    if (paths.length) {
+      try {
+        const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
+        (urls || []).forEach(u => { if (u && u.path && u.signedUrl && byPath[u.path]) byPath[u.path]._thumb = u.signedUrl; });
+      } catch (err) { console.warn('[block-drawer] media signed-url resolve failed:', err); }
+    }
+    mapped.forEach(e => {
+      if (e._thumb) return;
+      const yt = youtubeId(e.video_url);
+      e._thumb = yt ? `https://img.youtube.com/vi/${yt}/mqdefault.jpg` : null;
+    });
+  }
+
   function recomputeFilterOpts() {
     REGIONS = ['All', ...[...new Set(LIB.map(e => e.type).filter(Boolean))].sort()];  // ahora = categorías (ex.type)
     EQUIPS  = ['Any', ...[...new Set(LIB.map(e => e.equip).filter(Boolean))].sort()];
@@ -42,7 +65,7 @@
     try {
       const clubId = await window.getClubId();
       const { data, error } = await window.sb.from('gym_exercises')
-        .select('id,name,muscle_group,category,complexity,equipment,usable_in,is_default')
+        .select('id,name,muscle_group,category,complexity,equipment,usable_in,is_default,media_type,media_ref,video_url')
         .eq('club_id', clubId)
         .contains('usable_in', [want])
         .order('name');
@@ -60,8 +83,13 @@
       equip:       e.equipment || 'None',
       type:        e.category || '',
       complexity:  e.complexity || '',
-      custom:      !e.is_default          // club-owned exercises (not the seeded defaults)
+      custom:      !e.is_default,         // club-owned exercises (not the seeded defaults)
+      media_type:  e.media_type || null,
+      media_ref:   e.media_ref || null,
+      video_url:   e.video_url || null,
+      _thumb:      null                   // resolved below (image signed URL > YouTube thumb > null)
     }));
+    await resolveThumbs(mapped);
     libCache[context] = mapped;
     LIB = mapped.slice();
     recomputeFilterOpts();
@@ -251,6 +279,11 @@
 
     // list — loading state until the library has been fetched for this context
     const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    const exInitials = n => String(n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
+    const THUMB_BOX = 'width:28px;height:28px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center';
+    const exThumb = ex => ex._thumb
+      ? h('span', { class: 'bd-ex-thumb', style: THUMB_BOX, html: `<img src="${ex._thumb}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">` })
+      : h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
     let listInner;
     if (!libCache[state.context]) {
       listInner = h('div', { class: 'bd-empty' },
@@ -288,6 +321,7 @@
               }
             },
               h('div', { class: 'check' }),
+              exThumb(ex),
               h('div', { class: 'body' },
                 h('div', { class: 'name' }, ex.name),
                 h('div', { class: 'meta' },
