@@ -106,6 +106,7 @@
   let _contentChangeCbs = [];
   let _editingRef = null;   // { di, bi } while editing an existing block via block-drawer
   let _selectedRef = null;  // { di, bi } currently selected block (drives the side panel)
+  let _kpiScope = 'week';   // 'week' | 'programme' for the internal-load KPIs
   function _fireContentChange() {
     _contentChangeCbs.forEach(cb => { try { cb(); } catch (e) { console.error('[individual-sc] onContentChange cb', e); } });
   }
@@ -395,7 +396,63 @@
     renderBlockPanel(b, _selectedRef.di);
   }
 
-  function renderAll() { renderKanban(); renderTable(); renderTimeline(); renderPhasebar(); updatePager(); renderBlockPanelFromSel(); }
+  // ─── Internal-load KPIs (computed from real plan blocks) ───
+  const KPI_COLOR = { str:'#1E40AF', pow:'#7C3AED', cond:'#B45309', speed:'#0E7490', mob:'#15803D', prev:'#B91C1C' };
+  const KPI_LABEL_EN = { str:'Strength', pow:'Power', cond:'Conditioning', speed:'Speed', mob:'Mobility', prev:'Prevention', other:'Other' };
+  const focusColor = (b) => KPI_COLOR[b] || '#6B7280';
+  const focusLabel = (b) => tt('individual_planner.type_' + b, KPI_LABEL_EN[b] || b);
+
+  // All days across the plan content (programme scope); [] when empty (no scaffold fallback).
+  function programmeDays() {
+    const c = window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null;
+    const days = Array.isArray(c) ? c : (c && Array.isArray(c.days) ? c.days : null);
+    return days || [];
+  }
+
+  // Pure: sum sessions (block count), AU (Σ block.au, fallback dur*rpe) and AU by block type.
+  function ipComputeLoad(days) {
+    let sessions = 0, au = 0; const byType = {};
+    (days || []).forEach(d => {
+      const blocks = (d && Array.isArray(d.blocks)) ? d.blocks : [];
+      blocks.forEach(b => {
+        sessions++;
+        const a = (b.au != null) ? Number(b.au) || 0 : Math.round((Number(b.dur) || 0) * (Number(b.rpe) || 0));
+        au += a;
+        const t = b.type || 'other';
+        byType[t] = (byType[t] || 0) + a;
+      });
+    });
+    return { sessions, au, byType };
+  }
+
+  function renderKpis() {
+    const days = _kpiScope === 'programme' ? programmeDays() : weekData();
+    const { sessions, au, byType } = ipComputeLoad(days);
+    const sEl = document.getElementById('ip-kpi-sessions');
+    const lEl = document.getElementById('ip-kpi-load');
+    const bar = document.getElementById('ip-focus-bar');
+    const leg = document.getElementById('ip-focus-legend');
+    if (sEl) sEl.textContent = sessions > 0 ? String(sessions) : '—';
+    if (lEl) lEl.innerHTML = au > 0 ? (au.toLocaleString() + `<sub>${tt('individual_planner.au', 'AU')}</sub>`) : '—';
+
+    // Bucket AU into the 6 known focus types + "other".
+    const buckets = {};
+    Object.keys(byType).forEach(t => { const b = KPI_COLOR[t] ? t : 'other'; buckets[b] = (buckets[b] || 0) + byType[t]; });
+    const entries = Object.entries(buckets).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const total = entries.reduce((s, [, v]) => s + v, 0);
+
+    if (bar) {
+      bar.innerHTML = total > 0 ? entries.map(([b, v]) => `<span class="seg" title="${esc(focusLabel(b))}" style="width:${(v / total * 100).toFixed(1)}%;background:${focusColor(b)}"></span>`).join('') : '';
+      bar.classList.toggle('is-empty', total <= 0);
+    }
+    if (leg) {
+      leg.innerHTML = total > 0
+        ? entries.map(([b, v]) => `<span class="it"><span class="sw" style="background:${focusColor(b)}"></span>${esc(focusLabel(b))} <span class="pct">${Math.round(v / total * 100)}%</span></span>`).join('')
+        : `<span class="it">—</span>`;
+    }
+  }
+
+  function renderAll() { renderKanban(); renderTable(); renderTimeline(); renderPhasebar(); updatePager(); renderBlockPanelFromSel(); renderKpis(); }
 
   // ─── Route block-drawer saves into __ipData.plan.content (create/edit) ───
   window.addEventListener('blockdrawer:save', (e) => {
@@ -440,6 +497,15 @@
       b.addEventListener('click', () => showView(b.dataset.view));
     });
 
+    // Week ⇄ Programme scope toggle for the internal-load KPIs
+    $$('#ip-kpi-scope button').forEach(b => {
+      b.addEventListener('click', () => {
+        _kpiScope = b.dataset.scope === 'programme' ? 'programme' : 'week';
+        $$('#ip-kpi-scope button').forEach(x => x.classList.toggle('is-on', x.dataset.scope === _kpiScope));
+        renderKpis();
+      });
+    });
+
     document.addEventListener('click', (e) => {
       const blockEl = e.target.closest('.rp-block');
       if (!blockEl) return;
@@ -472,7 +538,7 @@
       getContent: () => (window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null),
       getPlan: () => (window.__ipData ? window.__ipData.plan : null),
       onContentChange: (cb) => { if (typeof cb === 'function') _contentChangeCbs.push(cb); },
-      setShowKpis: (on) => { document.querySelector('.ip-kpis').style.display = on ? '' : 'none'; },
+      setShowKpis: (on) => { const el = document.querySelector('.ip-loadkpis'); if (el) el.style.display = on ? '' : 'none'; },
       setShowTrainbar: (on) => { document.querySelector('.rp-trainbar').style.display = on ? '' : 'none'; },
       setShowSidePanel: (on) => {
         document.querySelector('.rp-side-panel').style.display = on ? '' : 'none';

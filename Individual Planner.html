@@ -165,73 +165,28 @@
         </div>
       </div>
 
-      <!-- ─── Performance KPI strip ─── -->
-      <!-- TODO: planned-load KPIs (distance/HSR/sprints/strength/AU + vs-squad deltas) are not computed yet.
-           Hidden until derived from plan.content + GPS targets. No fake numbers on screen. -->
-      <div class="ip-kpis" style="display:none">
-        <div class="ip-kpi">
-          <div class="l"><i class="ti ti-route"></i><span data-i18n="individual_planner.total_distance_planned">Total distance · planned</span></div>
-          <div class="v">22.5<sub>km</sub></div>
-          <div class="delta up"><i class="ti ti-trending-up"></i>+14% <span data-i18n="individual_planner.vs_squad">vs. squad</span></div>
-          <div class="ip-spark">
-            <div class="bar" style="height:50%"></div>
-            <div class="bar" style="height:60%"></div>
-            <div class="bar" style="height:55%"></div>
-            <div class="bar is-now" style="height:80%"></div>
-            <div class="bar is-target" style="height:70%"></div>
-            <div class="bar is-target" style="height:60%"></div>
+      <!-- ─── Internal-load KPIs (computed from real plan blocks) ─── -->
+      <div class="ip-loadkpis">
+        <div class="ip-loadkpis-h">
+          <span class="ip-loadkpis-title" data-i18n="individual_planner.internal_load">Internal load</span>
+          <div class="ip-scope-seg" id="ip-kpi-scope">
+            <button type="button" data-scope="week" class="is-on" data-i18n="individual_planner.scope_week">Week</button>
+            <button type="button" data-scope="programme" data-i18n="individual_planner.scope_programme">Programme</button>
           </div>
         </div>
-        <div class="ip-kpi">
-          <div class="l"><i class="ti ti-bolt"></i><span data-i18n="individual_planner.hsr_planned">HSR · planned</span></div>
-          <div class="v">1,420<sub>m</sub></div>
-          <div class="delta up"><i class="ti ti-trending-up"></i>+20% <span data-i18n="individual_planner.vs_squad">vs. squad</span></div>
-          <div class="ip-spark">
-            <div class="bar" style="height:30%"></div>
-            <div class="bar" style="height:40%"></div>
-            <div class="bar" style="height:55%"></div>
-            <div class="bar is-now" style="height:82%"></div>
-            <div class="bar is-target" style="height:65%"></div>
-            <div class="bar is-target" style="height:55%"></div>
+        <div class="ip-loadkpis-grid">
+          <div class="ip-kpi">
+            <div class="l"><i class="ti ti-clipboard-list"></i><span data-i18n="individual_planner.kpi_sessions">Sessions</span></div>
+            <div class="v" id="ip-kpi-sessions">—</div>
           </div>
-        </div>
-        <div class="ip-kpi">
-          <div class="l"><i class="ti ti-flame"></i><span data-i18n="individual_planner.sprints_planned">Sprints · planned</span></div>
-          <div class="v">28</div>
-          <div class="delta up"><i class="ti ti-trending-up"></i>+17% <span data-i18n="individual_planner.vs_squad">vs. squad</span></div>
-          <div class="ip-spark">
-            <div class="bar" style="height:40%"></div>
-            <div class="bar" style="height:55%"></div>
-            <div class="bar" style="height:60%"></div>
-            <div class="bar is-now" style="height:78%"></div>
-            <div class="bar is-target" style="height:62%"></div>
-            <div class="bar is-target" style="height:50%"></div>
+          <div class="ip-kpi">
+            <div class="l"><i class="ti ti-sum"></i><span data-i18n="individual_planner.kpi_load">Load</span></div>
+            <div class="v" id="ip-kpi-load">—</div>
           </div>
-        </div>
-        <div class="ip-kpi">
-          <div class="l"><i class="ti ti-barbell"></i><span data-i18n="individual_planner.strength_sessions">Strength · sessions</span></div>
-          <div class="v">3</div>
-          <div class="delta up"><i class="ti ti-trending-up"></i>+1 <span data-i18n="individual_planner.vs_squad">vs. squad</span></div>
-          <div class="ip-spark">
-            <div class="bar" style="height:50%"></div>
-            <div class="bar" style="height:60%"></div>
-            <div class="bar" style="height:75%"></div>
-            <div class="bar is-now" style="height:85%"></div>
-            <div class="bar is-target" style="height:70%"></div>
-            <div class="bar is-target" style="height:55%"></div>
-          </div>
-        </div>
-        <div class="ip-kpi">
-          <div class="l"><i class="ti ti-sum"></i><span data-i18n="individual_planner.total_au">Total AU</span></div>
-          <div class="v">2,840</div>
-          <div class="delta up"><i class="ti ti-trending-up"></i>+17% <span data-i18n="individual_planner.vs_squad">vs. squad</span></div>
-          <div class="ip-spark">
-            <div class="bar" style="height:42%"></div>
-            <div class="bar" style="height:55%"></div>
-            <div class="bar" style="height:68%"></div>
-            <div class="bar is-now" style="height:88%"></div>
-            <div class="bar is-target" style="height:72%"></div>
-            <div class="bar is-target" style="height:55%"></div>
+          <div class="ip-kpi ip-kpi-focus">
+            <div class="l"><i class="ti ti-chart-pie-2"></i><span data-i18n="individual_planner.kpi_focus">Focus split</span></div>
+            <div class="ip-focus-bar is-empty" id="ip-focus-bar"></div>
+            <div class="ip-focus-legend" id="ip-focus-legend"></div>
           </div>
         </div>
       </div>
