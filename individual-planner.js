@@ -74,6 +74,20 @@
     }
   ];
 
+  // ─── Module state: the plan currently loaded into the engine ───
+  window.__ipData = window.__ipData || { plan: null, phases: [] };
+
+  // Empty week scaffold (7 day cards, no blocks) — used when a plan has no content yet.
+  const EMPTY_WEEK = WEEK.map(d => ({ dow: d.dow, dom: d.dom, today: !!d.today, mode: [], blocks: [] }));
+
+  // Resolve the day/blocks array the views render from: plan.content (array or {days:[…]})
+  // falling back to the empty scaffold so an empty/new plan still renders a week grid.
+  function weekData() {
+    const c = window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null;
+    const days = Array.isArray(c) ? c : (c && Array.isArray(c.days) ? c.days : null);
+    return (days && days.length) ? days : EMPTY_WEEK;
+  }
+
   const TYPE_LABEL_EN = {
     warmup: 'Warm-up', myo: 'Myofascial', mob: 'Mobility', act: 'Activation',
     str: 'Strength', plyo: 'Plyometrics', skills: 'Skills', field: 'On-field',
@@ -100,7 +114,7 @@
 
   function renderKanban() {
     const root = $('#kanban'); root.innerHTML = '';
-    WEEK.forEach((day, di) => {
+    weekData().forEach((day, di) => {
       const card = document.createElement('div');
       card.className = 'rp-day' + (day.rest ? ' is-rest' : '') + (day.today ? ' is-today' : '');
       const head = document.createElement('div');
@@ -167,7 +181,7 @@
 
   function renderTable() {
     const tbody = $('#tbody'); tbody.innerHTML = '';
-    WEEK.forEach(day => {
+    weekData().forEach(day => {
       const dh = document.createElement('tr');
       dh.className = 'is-day-h';
       dh.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
@@ -199,7 +213,7 @@
 
   function renderTimeline() {
     const root = $('#tl-rows'); root.innerHTML = '';
-    WEEK.forEach(day => {
+    weekData().forEach(day => {
       const row = document.createElement('div');
       row.className = 'rp-tl-row';
       const dayCol = document.createElement('div');
@@ -253,6 +267,10 @@
 
     window.__ipApi = {
       showView,
+      loadPlan: (plan, phases) => {
+        window.__ipData = { plan: plan || null, phases: phases || [] };
+        renderAll();
+      },
       setShowKpis: (on) => { document.querySelector('.ip-kpis').style.display = on ? '' : 'none'; },
       setShowTrainbar: (on) => { document.querySelector('.rp-trainbar').style.display = on ? '' : 'none'; },
       setShowSidePanel: (on) => {

@@ -14,6 +14,28 @@
 <link rel="stylesheet" href="rehab-planner.css">
 <link rel="stylesheet" href="individual-planner.css">
 <link rel="stylesheet" href="block-drawer.css">
+<style>
+  .ip-picker{padding:24px 28px}
+  .ip-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
+  .ip-picker-head h1{margin:0 0 4px;font:var(--cm-h2);color:var(--cm-fg-strong)}
+  .ip-picker-head .sub{margin:0;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
+  .ip-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .ip-picker-loading,.ip-picker-empty{grid-column:1/-1;padding:40px 16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .ip-picker-empty i{display:block;font-size:34px;margin-bottom:10px;color:var(--cm-fg-faint)}
+  .ip-picker-empty .t{font:var(--cm-body);color:var(--cm-fg);margin-bottom:4px}
+  .ip-plan-card{text-align:left;cursor:pointer;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:16px;display:flex;flex-direction:column;gap:12px;transition:border-color .12s,box-shadow .12s}
+  .ip-plan-card:hover{border-color:var(--cm-accent);box-shadow:0 2px 10px rgba(0,0,0,.06)}
+  .ip-plan-card .top{display:flex;align-items:center;gap:11px}
+  .ip-plan-card .av{width:40px;height:40px;flex:none;border-radius:50%;background:var(--cm-bg-soft);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--cm-font-sans)}
+  .ip-plan-card .who .name{font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ip-plan-card .who .pos{font:500 11px/1.3 var(--cm-font-mono);letter-spacing:.04em;color:var(--cm-fg-muted);text-transform:uppercase;margin-top:2px}
+  .ip-plan-card .plan{font:var(--cm-body-sm);color:var(--cm-fg)}
+  .ip-plan-card .plan strong{color:var(--cm-fg-strong)}
+  .ip-plan-card .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .ip-plan-card .chip{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-radius:var(--cm-r-2);background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .ip-plan-card .chip.status-active{background:rgba(21,128,61,.12);color:#15803D}
+  .ip-plan-card .chip.status-draft{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
@@ -36,18 +58,32 @@
         <i class="ti ti-user-cog"></i>
         <a href="#" data-i18n="individual_planner.performance">Performance</a>
         <span class="sep">/</span>
-        <a href="Individual Plans.html" data-i18n="individual_planner.individual_sc">Individual S&amp;C</a>
+        <a href="#" class="js-ip-back" data-i18n="individual_planner.individual_sc">Individual S&amp;C</a>
         <span class="sep">/</span>
-        <span class="now">Lautaro Vergara · Capacity block</span>
+        <span class="now" id="ip-crumb-now">Individual S&amp;C</span>
       </div>
       <div class="actions">
-        <a class="cm-btn is-ghost" href="Individual Plans.html"><i class="ti ti-users"></i> <span data-i18n="individual_planner.switch_athlete">Switch athlete</span></a>
+        <a class="cm-btn is-ghost js-ip-back" href="#"><i class="ti ti-users"></i> <span data-i18n="individual_planner.switch_athlete">Switch athlete</span></a>
         <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
         <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> <span data-i18n="individual_planner.save_plan">Save plan</span></button>
       </div>
     </header>
 
-    <section class="rp-doc" data-screen-label="01 Individual S&C planner">
+    <!-- ─── PLAN PICKER (real data) ─── -->
+    <section id="ip-picker" class="ip-picker" data-screen-label="01 Individual S&C · plan picker">
+      <div class="ip-picker-head">
+        <div>
+          <h1 data-i18n="individual_planner.picker_title">Individual S&amp;C plans</h1>
+          <p class="sub" data-i18n="individual_planner.picker_intro">Pick an athlete's programme to open it in the planner.</p>
+        </div>
+        <button class="cm-btn is-primary" id="ip-new-plan"><i class="ti ti-plus"></i> <span data-i18n="individual_planner.new_plan">New plan</span></button>
+      </div>
+      <div class="ip-picker-grid" id="ip-picker-grid">
+        <div class="ip-picker-loading" data-i18n="individual_planner.picker_loading">Loading plans…</div>
+      </div>
+    </section>
+
+    <section id="ip-planner" class="rp-doc" data-screen-label="02 Individual S&C planner" style="display:none">
 
       <!-- ─── Athlete strip ─── -->
       <div class="rp-athlete">
@@ -448,30 +484,95 @@
 
 <script src="individual-planner.js"></script>
 <script src="block-drawer.js"></script>
-<script defer src="individual-planner-tweaks.js"></script>
 
 <script>
 (async () => {
+  function tt(key, en, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,en,vars):(en!=null?en:key); }
+
   const ok = await window.guardModule('individual-sc'); // gate + auth (inherits parent module permission)
   if (!ok) return;
   const clubId = await window.getClubId();
   window.applyClubTheme?.();
 
-  // Populate any player selects in the page with real players
-  const selects = document.querySelectorAll('select[id*="player"], select[name*="player"], .ip-player-select');
-  if (!selects.length) return;
-  const players = await window.getActivePlayers(clubId);
-  selects.forEach(sel => {
-    const placeholder = sel.options[0];
-    sel.innerHTML = '';
-    if (placeholder) sel.appendChild(placeholder);
-    players.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = `${window.formatPlayerName(p)} · #${p.number || '—'} · ${p.position || '—'}`;
-      sel.appendChild(opt);
+  const pickerEl  = document.getElementById('ip-picker');
+  const plannerEl = document.getElementById('ip-planner');
+  const gridEl    = document.getElementById('ip-picker-grid');
+
+  function showPicker(){ plannerEl.style.display = 'none'; pickerEl.style.display = ''; }
+  function showPlanner(){ pickerEl.style.display = 'none'; plannerEl.style.display = ''; }
+  document.querySelectorAll('.js-ip-back').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); showPicker(); }));
+
+  const initials = (name) => (name || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
+
+  // ── Fetch the club's active/draft individual plans ──────────
+  const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
+  let q = window.sb.from('individual_plans')
+    .select('id,name,goal,focus,status,start_date,programme_week,programme_total_weeks,player_id, players!inner(first_name,last_name,position,number,team_id)')
+    .eq('club_id', clubId).in('status', ['active','draft'])
+    .order('created_at', { ascending:false });
+  if (team) q = q.eq('players.team_id', team);
+  const { data: plans, error } = await q;
+  if (error) console.warn('[individual-sc] plans fetch', error);
+
+  function renderPicker(){
+    if (!plans || !plans.length){
+      gridEl.innerHTML = `<div class="ip-picker-empty">
+        <i class="ti ti-clipboard-off"></i>
+        <div class="t">${tt('individual_planner.picker_empty_title','No individual plans yet')}</div>
+        <div>${tt('individual_planner.picker_empty_body',"Create a programme to start planning an athlete's individual S&C.")}</div>
+      </div>`;
+      return;
+    }
+    gridEl.innerHTML = plans.map((pl, i) => {
+      const p = pl.players || {};
+      const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || '—';
+      const num  = p.number ? `#${p.number}` : '';
+      const pos  = p.position || '';
+      const wk   = tt('individual_planner.week_x_of_y', `Week <strong>${pl.programme_week||1}</strong> / ${pl.programme_total_weeks||1}`, { x: pl.programme_week||1, y: pl.programme_total_weeks||1 });
+      const st   = pl.status === 'draft' ? tt('individual_planner.status_draft','Draft') : tt('individual_planner.status_active','Active');
+      return `<button class="ip-plan-card" data-i="${i}">
+        <div class="top">
+          <div class="av">${initials(name)}</div>
+          <div class="who"><div class="name">${name}</div><div class="pos">${[num,pos].filter(Boolean).join(' · ')}</div></div>
+        </div>
+        <div class="plan"><strong>${pl.name || '—'}</strong></div>
+        <div class="meta">
+          ${pl.focus ? `<span class="chip">${pl.focus}</span>` : ''}
+          <span class="chip">${wk}</span>
+          <span class="chip status-${pl.status}">${st}</span>
+        </div>
+      </button>`;
+    }).join('');
+    gridEl.querySelectorAll('.ip-plan-card').forEach(card => {
+      card.addEventListener('click', () => openPlan(plans[+card.dataset.i]));
     });
+  }
+
+  async function openPlan(plan){
+    // Fetch the full row (incl. content) + its phases
+    const [{ data: full }, { data: phases }] = await Promise.all([
+      window.sb.from('individual_plans').select('*').eq('id', plan.id).single(),
+      window.sb.from('individual_plan_phases').select('*').eq('plan_id', plan.id).order('phase_order', { ascending:true })
+    ]);
+    const row = full || plan;
+    // Reflect athlete in the topbar/strip (light touch; engine renders the week from content)
+    const p = plan.players || {};
+    const pname = `${p.first_name || ''} ${p.last_name || ''}`.trim() || row.name || '—';
+    const av = document.querySelector('.rp-athlete-av'); if (av) av.textContent = initials(pname);
+    const nameEl = document.querySelector('.rp-athlete-id .name'); if (nameEl) nameEl.childNodes[0].nodeValue = pname + ' ';
+    const crumb = document.getElementById('ip-crumb-now'); if (crumb) crumb.textContent = pname + (row.name ? ' · ' + row.name : '');
+    showPlanner();
+    window.__ipApi?.loadPlan?.(row, phases || []);
+  }
+
+  document.getElementById('ip-new-plan')?.addEventListener('click', () => {
+    // Phase 2b wires the create flow. For now: open an empty plan scaffold.
+    showPlanner();
+    window.__ipApi?.loadPlan?.({ name: tt('individual_planner.new_plan','New plan'), content: {} }, []);
   });
+
+  renderPicker();
+  document.addEventListener('cm:langchanged', renderPicker);
 })();
 </script>
 <script>

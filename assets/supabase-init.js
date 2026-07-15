@@ -192,7 +192,7 @@
     { key:'load-monitor',     href:'Load Monitor.html',        icon:'ti-chart-line',        name:'Load monitor',          feature:'load_monitor' },
     { key:'gps',              href:'GPS Analysis.html',        icon:'ti-radar-2',           name:'GPS analysis',          feature:'gps_analysis' },
     { key:'gym-planner',      href:'Gym Planner.html',         icon:'ti-barbell',           name:'Gym planner',           feature:'gym' },
-    { key:'individual-sc',    href:'Individual Plans.html',    icon:'ti-user-cog',          name:'Individual S&C',        feature:'individual_planner' },
+    { key:'individual-sc',    href:'Individual Planner.html',  icon:'ti-user-cog',          name:'Individual S&C',        feature:'individual_planner' },
     { key:'gym-library',      href:'Gym Library.html',         icon:'ti-books',             name:'Gym library',           feature:'gym' },
     { key:'nutrition',        href:'Nutrition.html',           icon:'ti-apple',             name:'Nutrition',             feature:'nutrition' },
     { key:'clinical',         href:'Clinical Records.html',    icon:'ti-clipboard-heart',   name:'Clinical records',      feature:null },

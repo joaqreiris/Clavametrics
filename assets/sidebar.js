@@ -198,7 +198,7 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor',     key: 'load-monitor' },
       { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis',     key: 'gps' },
       { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner',      key: 'gym-planner' },
-      { href: 'Individual%20Plans.html', icon: 'ti-user-cog',         label: 'Individual S&C',   key: 'individual-sc' },
+      { href: 'Individual%20Planner.html', icon: 'ti-user-cog',       label: 'Individual S&C',   key: 'individual-sc' },
       { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library',      key: 'gym-library' },
       { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition',        key: 'nutrition' },
     ]},
