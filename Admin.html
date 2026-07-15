@@ -345,7 +345,7 @@
   .gps-sync-pct{font:600 11px var(--cm-font-mono);color:var(--cm-fg-muted);min-width:34px;text-align:right}
   .gps-sync-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--cm-fg-muted);margin-top:5px}
   .gps-sync-meta.is-err{color:var(--cm-danger)}
-  .gps-sync-retry{padding:4px 10px!important;font-size:11.5px!important}
+  .gps-sync-retry,.gps-sync-cancel{padding:4px 10px!important;font-size:11.5px!important}
 </style>
 </head>
 <body class="cm">
@@ -2561,7 +2561,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if(_hideTimers[jobId]) return;
     _hideTimers[jobId]=setTimeout(()=>{
       const intId=INTS[prov]?.id;
-      if(intId && _syncJobs[intId]?.id===jobId && _syncJobs[intId].status==='done'){ delete _syncJobs[intId]; _paintSyncBar(prov); }
+      const st=_syncJobs[intId]?.status;
+      if(intId && _syncJobs[intId]?.id===jobId && (st==='done'||st==='cancelled')){ delete _syncJobs[intId]; _paintSyncBar(prov); }
       delete _hideTimers[jobId];
     }, 10000);
   }
@@ -2584,6 +2585,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if(running && stale){ label=tt('admin.gps_sync_stalled','Sync stalled — the worker stopped responding.'); cls='s-error'; retry=true; }
     else if(running){ label=tt('admin.gps_syncing_progress','Syncing… {done}/{total} ({pct}%)',{ done, total, pct }); animated=true; }
     else if(job.status==='done'){ label=tt('admin.gps_sync_complete','Sync complete'); }
+    else if(job.status==='cancelled'){ label=tt('admin.gps_sync_cancelled','Cancelled'); }
     else if(job.status==='error'){ label=tt('admin.gps_sync_failed_x','Sync failed: {msg}',{ msg: job.error||'unknown' }); cls='s-error'; retry=true; }
 
     const sum = (t.activities!=null)
@@ -2600,12 +2602,33 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       <div class="gps-sync-meta ${cls==='s-error'?'is-err':''}">
         <span>${_esc(label)}</span>
         ${sum?`<span>· ${_esc(sum)}</span>`:''}
+        ${running?`<button class="gps-int-btn ghost gps-sync-cancel" data-synccancel="${prov}">${tt('admin.gps_cancel','Cancel')}</button>`:''}
         ${retry?`<button class="gps-int-btn ghost gps-sync-retry" data-syncretry="${prov}">${tt('admin.gps_retry','Retry')}</button>`:''}
       </div>`;
     const rb=bar.querySelector('[data-syncretry]'); if(rb) rb.addEventListener('click',()=>syncNow(prov));
+    const cb=bar.querySelector('[data-synccancel]'); if(cb) cb.addEventListener('click',()=>_cancelSync(prov));
 
     if(btn){ const busy=running && !stale; btn.disabled=busy; btn.textContent = busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now'); }
-    if(job.status==='done') _scheduleHide(prov, job.id);
+    if(job.status==='done'||job.status==='cancelled') _scheduleHide(prov, job.id);
+  }
+
+  // Cancel the active sync job for a provider (cooperative: the server flips status→'cancelled',
+  // the running worker stops chaining on its next chunk, the lock frees). Realtime repaints; we
+  // also flip the cached job optimistically in case the UPDATE event lags.
+  async function _cancelSync(prov){
+    const intId=INTS[prov]?.id; const job=intId?_syncJobs[intId]:null;
+    if(!job?.id) return;
+    if(!confirm(tt('admin.gps_cancel_confirm','Cancel this sync? Partial data will remain until the next sync.'))) return;
+    const cb=document.querySelector(`[data-synccancel="${prov}"]`);
+    if(cb){ cb.disabled=true; cb.textContent=tt('admin.gps_cancelling','Cancelling…'); }
+    try{
+      const { error }=await window.sb.functions.invoke('gps-sync',{ body:{ mode:'cancel', job_id: job.id } });
+      if(error){ let p=null; try{ p=await error.context?.json?.(); }catch(_){}; if(!p) throw error; }
+      if(intId && _syncJobs[intId]?.id===job.id){ _syncJobs[intId]=Object.assign({},_syncJobs[intId],{ status:'cancelled' }); _paintSyncBar(prov); }
+    }catch(e){
+      if(cb){ cb.disabled=false; cb.textContent=tt('admin.gps_cancel','Cancel'); }
+      msg(prov, tt('admin.gps_failed_x','Failed: {msg}',{ msg:(e.message||e) }), true);
+    }
   }
 
   // ── Map athletes (Catapult → players.external_gps_id) ─────────────────────
