@@ -584,6 +584,42 @@ create table if not exists public.gps_integrations (
 );
 CREATE INDEX idx_gps_integrations_club ON public.gps_integrations USING btree (club_id);
 
+-- One row per GPS sync JOB (server-side orchestration + progress). Kept SEPARATE from
+-- gps_integrations.status (that is CONNECTION state; a running sync is a job, not a connection
+-- state). The worker (service role) advances chunks_done/cursor/heartbeat_at; the client only
+-- reads it (Realtime) to show live progress and survives navigation. Sync is idempotent
+-- (delete+insert/upsert by external_activity_id) so cursor_* makes a killed job resumable.
+create table if not exists public.gps_sync_jobs (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  integration_id uuid not null,
+  status text default 'queued'::text not null,
+  range_from date not null,
+  range_to date not null,
+  cursor_from date,                 -- start of the chunk currently being processed (resume point)
+  cursor_to date,
+  chunks_total integer default 0 not null,
+  chunks_done integer default 0 not null,
+  totals jsonb default '{}'::jsonb not null,   -- running accumulator (activities, rows, periods, skipped, errors)
+  error text,
+  created_by uuid,
+  started_at timestamp with time zone,
+  heartbeat_at timestamp with time zone,       -- worker bumps it each chunk → stale ⇒ job died (reap on next enqueue)
+  finished_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint gps_sync_jobs_pkey primary key (id),
+  constraint gps_sync_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'error'::text])))
+);
+CREATE INDEX gps_sync_jobs_club_idx ON public.gps_sync_jobs USING btree (club_id, created_at DESC);
+-- LOCK: at most ONE active (queued|running) job per integration — a 2nd concurrent enqueue
+-- (double-click / other tab / other device) fails the insert atomically. A dead 'running' job
+-- (stale heartbeat_at) is reaped to 'error' by the worker before enqueuing, releasing the lock.
+CREATE UNIQUE INDEX gps_sync_jobs_one_active ON public.gps_sync_jobs USING btree (integration_id)
+  WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
+-- Realtime UPDATE events must carry club_id so the client's `filter: club_id=eq.X` matches on
+-- UPDATE (default replica identity is the PK only → club_id absent from the change record).
+ALTER TABLE public.gps_sync_jobs REPLICA IDENTITY FULL;
+
 create table if not exists public.gps_metric_definitions (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2260,6 +2296,8 @@ alter table public.gps_drill_map add constraint gps_drill_map_club_id_fkey FOREI
 alter table public.gps_drill_map add constraint gps_drill_map_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
 alter table public.gps_integration_secrets add constraint gps_integration_secrets_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
 alter table public.gps_integrations add constraint gps_integrations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_sync_jobs add constraint gps_sync_jobs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_sync_jobs add constraint gps_sync_jobs_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
 alter table public.gps_metric_definitions add constraint gps_metric_definitions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.gps_metric_definitions add constraint gps_metric_definitions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.gps_period_reports add constraint gps_period_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -4752,6 +4790,30 @@ create policy "gps_period_reports_club_all" on public.gps_period_reports as perm
 
 create policy "gps_period_reports_super_all" on public.gps_period_reports as permissive for all to authenticated
   using (is_super_admin()) with check (is_super_admin());
+
+alter table public.gps_sync_jobs enable row level security;
+-- SELECT: any member of the club can watch its sync progress (Realtime/polling).
+create policy "gps_sync_jobs_club_select" on public.gps_sync_jobs as permissive for select to public
+  using ((club_id = get_user_club_id()));
+-- INSERT: only admin/owner of the club may ENQUEUE a sync from the client. The worker runs
+-- with the service role (bypasses RLS) for all its UPDATEs — clients never update the job.
+create policy "gps_sync_jobs_admin_insert" on public.gps_sync_jobs as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+-- Super admins: full manage (consistency with the other *_super_all policies).
+create policy "gps_sync_jobs_super_all" on public.gps_sync_jobs as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+-- Realtime: emit row changes so Admin can subscribe to progress (postgres_changes, club_id filter).
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'gps_sync_jobs'
+  ) then
+    alter publication supabase_realtime add table public.gps_sync_jobs;
+  end if;
+end $$;
 
 alter table public.gps_report_metrics enable row level security;
 create policy "gps_report_metrics_del" on public.gps_report_metrics as permissive for delete to authenticated
