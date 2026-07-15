@@ -65,10 +65,14 @@
   .ip-share-link{display:flex;gap:8px;align-items:center}
   .ip-share-link input{flex:1;font:500 12px/1.4 var(--cm-font-mono)}
   .ip-share-off{font:var(--cm-body-sm);color:var(--cm-fg-muted);text-align:center;padding:6px}
+  /* Plan actions in the athlete header (relocated from topbar) */
+  .ip-head-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .cm-select.is-sm{height:32px;padding:0 8px;width:auto}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
 </head>
 <body class="cm">
 <div id="appBoot" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
@@ -84,6 +88,10 @@
 
     <!-- topbar -->
     <header class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="ip-team-select" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-user-cog"></i>
         <a href="#" data-i18n="individual_planner.performance">Performance</a>
@@ -92,12 +100,10 @@
         <span class="sep">/</span>
         <span class="now" id="ip-crumb-now">Individual S&amp;C</span>
       </div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="individual_planner.search_ph" placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions">
-        <a class="cm-btn is-ghost js-ip-back" href="#"><i class="ti ti-users"></i> <span data-i18n="individual_planner.switch_athlete">Switch athlete</span></a>
-        <select class="cm-select" id="ip-status" title="Plan status" data-i18n-attr="title:individual_planner.plan_status" style="width:auto;height:36px"></select>
-        <button class="cm-btn is-secondary" id="ip-share-btn"><i class="ti ti-share"></i> <span data-i18n="individual_planner.share_with_player">Share with player</span></button>
-        <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
-        <span class="ip-save-state" id="ip-save-state"></span>
+        <button class="cm-icon-btn" data-i18n-attr="title:individual_planner.coming_soon" title="Próximamente" disabled><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </header>
 
@@ -131,6 +137,15 @@
         </div>
         <!-- TODO: ACWR / readiness / match-min / 1RM chips + owners were demo data.
              Hidden until wired to Load Monitor (ACWR), GPS (match min), Evaluations (1RM) and plan owners. No fake numbers on screen. -->
+
+        <!-- Plan actions (relocated from the topbar, mirroring Gym's .gp-head action row) -->
+        <div class="ip-head-actions">
+          <a class="cm-btn is-outline is-sm js-ip-back" href="#"><i class="ti ti-users" style="font-size:14px"></i> <span data-i18n="individual_planner.switch_athlete">Switch athlete</span></a>
+          <select class="cm-select is-sm" id="ip-status" title="Plan status" data-i18n-attr="title:individual_planner.plan_status"></select>
+          <button class="cm-btn is-outline is-sm" id="ip-share-btn"><i class="ti ti-share" style="font-size:14px"></i> <span data-i18n="individual_planner.share_with_player">Share with player</span></button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i> <span data-i18n="common.export">Export</span></button>
+          <span class="ip-save-state" id="ip-save-state"></span>
+        </div>
       </div>
 
       <!-- ─── Training phases bar ─── -->
@@ -510,17 +525,48 @@
     }
   }
 
-  // ── Fetch the club's active/draft individual plans ──────────
-  const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
-  let q = window.sb.from('individual_plans')
-    .select('id,name,goal,focus,status,start_date,programme_week,programme_total_weeks,player_id, players!inner(first_name,last_name,position,number,team_id,date_of_birth)')
-    .eq('club_id', clubId).in('status', ['active','draft'])
-    .is('players.archived_at', null)
-    .order('created_at', { ascending:false });
-  if (team) q = q.eq('players.team_id', team);
-  let { data: plans, error } = await q;
-  if (error) console.warn('[individual-sc] plans fetch', error);
-  plans = plans || [];
+  // ── Active team (from the standard topbar selector) + club plans ──────────
+  let activeTeam = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
+  let plans = [];
+  async function loadPlans(){
+    let q = window.sb.from('individual_plans')
+      .select('id,name,goal,focus,status,start_date,programme_week,programme_total_weeks,player_id, players!inner(first_name,last_name,position,number,team_id,date_of_birth)')
+      .eq('club_id', clubId).in('status', ['active','draft'])
+      .is('players.archived_at', null)
+      .order('created_at', { ascending:false });
+    if (activeTeam) q = q.eq('players.team_id', activeTeam);
+    const { data, error } = await q;
+    if (error) console.warn('[individual-sc] plans fetch', error);
+    plans = data || [];
+    renderPicker();
+  }
+
+  // Standard topbar team selector (mirrors Gym/Evaluations wiring)
+  async function mountTeamSelect(){
+    const sel = document.getElementById('ip-team-select');
+    if (!sel) return;
+    let teams = [];
+    try { teams = (await window.getTeams(clubId)) || []; } catch(_){}
+    try {
+      const prof = await window.getProfile?.();
+      const bucket = ((prof && (prof.role || prof.club_role)) || '').toLowerCase();
+      let full = bucket === 'admin' || bucket === 'owner';
+      if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch(_){} }
+      if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch(_){}
+        const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
+    } catch(_){}
+    if (!teams.length){ sel.innerHTML = `<option value="">${tt('individual_planner.no_teams','No teams')}</option>`; return; }
+    if (!activeTeam || !teams.some(t => t.id === activeTeam)) activeTeam = teams[0].id;
+    sel.innerHTML = '';
+    teams.forEach(t => sel.appendChild(new Option(t.name, t.id, false, t.id === activeTeam)));
+    sel.addEventListener('change', async () => {
+      activeTeam = sel.value || null;
+      if (activeTeam) sessionStorage.setItem('cal_active_team', activeTeam);
+      _players = null;            // reset the New-plan dropdown cache for the new team
+      await loadPlans();
+      showPicker();
+    });
+  }
 
   function renderPicker(){
     if (!plans || !plans.length){
@@ -581,7 +627,7 @@
   async function loadPlayers(){
     if (_players) return _players;
     let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id,date_of_birth').eq('club_id', clubId).is('archived_at', null).order('last_name', { ascending:true });
-    if (team) pq = pq.eq('team_id', team);
+    if (activeTeam) pq = pq.eq('team_id', activeTeam);
     const { data } = await pq;
     _players = data || [];
     return _players;
@@ -843,7 +889,8 @@
   }
   document.getElementById('ip-share-btn')?.addEventListener('click', openShare);
 
-  renderPicker();
+  await mountTeamSelect();
+  await loadPlans();
   document.addEventListener('cm:langchanged', renderPicker);
 })();
 </script>
