@@ -1619,6 +1619,7 @@ create table if not exists public.players (
   last_name text not null,
   position text,
   date_of_birth date,
+  joined_date date,
   nationality text,
   height numeric(5,2),
   weight numeric(5,2),

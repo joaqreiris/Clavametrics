@@ -224,6 +224,13 @@
     return map[s] || { label: status ? (status[0].toUpperCase() + status.slice(1)) : '—', color: 'var(--cm-neutral)' };
   }
 
+  function fmtJoined(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt)) return '—';
+    const loc = (window.CM_I18N && window.CM_I18N.current) || 'en-GB';
+    return dt.toLocaleDateString(loc, { day:'2-digit', month:'2-digit', year:'numeric' });
+  }
   function age(dob) {
     if (!dob) return '—';
     const d = new Date(dob);
@@ -313,7 +320,7 @@
             <div class="pp-fact"><span class="lbl">${esc(tt('squad.nationality', 'Nationality'))}</span><span class="val">${esc(player.nationality || '—')}</span></div>
             <div class="pp-fact"><span class="lbl">${esc(tt('player.height_weight', 'Height / Weight'))}</span><span class="val">${esc(anthro)}</span></div>
             <div class="pp-fact"><span class="lbl">${esc(tt('squad.foot', 'Foot'))}</span><span class="val">${esc(cap(player.dominant_foot))}</span></div>
-            <div class="pp-fact"><span class="lbl">${esc(tt('player.joined', 'Joined'))}</span><span class="val">—</span></div>
+            <div class="pp-fact"><span class="lbl">${esc(tt('player.joined', 'Joined'))}</span><span class="val">${esc(fmtJoined(player.joined_date))}</span></div>
           </div>
         </div>
       </div>
@@ -398,7 +405,7 @@
     window.applyClubTheme();
 
     const { data: player } = await window.sb.from('players')
-      .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+      .select('id,first_name,last_name,number,position,nationality,date_of_birth,joined_date,height,weight,dominant_foot,status,photo_url,team_id')
       .eq('id', id).eq('club_id', clubId).is('archived_at', null).single();
 
     if (!player) {

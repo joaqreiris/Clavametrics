@@ -1061,6 +1061,13 @@
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
+          <label for="sqF_joined_date" data-i18n="player.joined_edit">Joined date</label>
+          <input type="date" id="sqF_joined_date">
+        </div>
+        <div class="sq-modal-field"></div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
           <label for="sqF_height_cm" data-i18n="squad.height_cm">Height (cm)</label>
           <input type="number" id="sqF_height_cm" placeholder="e.g. 182" min="140" max="220" data-i18n-ph="squad.eg_182">
         </div>
@@ -1530,7 +1537,7 @@ function renderTable() {
         <td class="sq-mono">${foot}</td>
         <td><span class="sq-anthro">${h}${w}</span></td>
         <td><span class="sq-role-pill">${(_teams.find(t => t.id === p.team_id)?.name) || '—'}</span></td>
-        <td class="sq-mono">—</td>
+        <td class="sq-mono">${fmtDob(p.joined_date)}</td>
         <td><div class="sq-row-actions"><button class="sq-menu-btn" data-id="${p.id}" title="${tt('squad.actions','Actions')}"><i class="ti ti-dots-vertical"></i></button></div></td>
       </tr>`;
     });
@@ -1636,7 +1643,7 @@ async function reloadPlayers() {
   }
   // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
   // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
-  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id,archived_at';
+  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,joined_date,height,weight,dominant_foot,status,photo_url,team_id,archived_at';
   const _archivedView = _currentTeamId === '__archived__';
   let q = window.sb.from('players')
     .select((_currentTeamId && !_archivedView) ? `${_cols},player_teams!inner(team_id)` : _cols)
@@ -1972,6 +1979,7 @@ async function reloadPlayers() {
     })();
     setSecPositions((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
+    document.getElementById('sqF_joined_date').value = player?.joined_date     || '';
     document.getElementById('sqF_nationality').value = player?.nationality     || '';
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
     document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
@@ -2074,6 +2082,7 @@ async function reloadPlayers() {
         return all.length ? all : null;
       })(),
       date_of_birth: document.getElementById('sqF_dob').value || null,
+      joined_date:   document.getElementById('sqF_joined_date').value || null,
       nationality:   document.getElementById('sqF_nationality').value.trim() || null,
       height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
       weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
@@ -2120,7 +2129,9 @@ async function reloadPlayers() {
     if (_editingId) {
       const photoUrl = await uploadPhoto(_editingId, _currentClubId);
       if (photoUrl) payload.photo_url = photoUrl;
-      ({ error } = await window.sb.from('players').update(payload).eq('id', _editingId));
+      // .select() so a 0-row update (e.g. blocked by RLS) surfaces instead of failing silently.
+      const { data: updated, error: updErr } = await window.sb.from('players').update(payload).eq('id', _editingId).select('id');
+      error = updErr || (updated && updated.length === 0 ? { message: tt('squad.update_blocked','Update did not affect any row (permissions?).') } : null);
       savedPlayerId = _editingId;
       savedClubId = _currentClubId;
     } else {
