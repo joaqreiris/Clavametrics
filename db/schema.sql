@@ -1772,6 +1772,7 @@ create table if not exists public.rehab_plans (
 );
 CREATE INDEX idx_rehab_plans_club ON public.rehab_plans USING btree (club_id);
 CREATE INDEX idx_rehab_plans_club_status ON public.rehab_plans USING btree (club_id, status);
+CREATE INDEX rehab_plans_injury_id_idx ON public.rehab_plans USING btree (injury_id);
 
 create table if not exists public.rehab_protocols (
   id uuid default gen_random_uuid() not null,
@@ -2387,7 +2388,7 @@ alter table public.protocol_blocks add constraint protocol_blocks_protocol_id_fk
 alter table public.rehab_plan_owners add constraint rehab_plan_owners_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES rehab_plans(id) ON DELETE CASCADE;
 alter table public.rehab_plan_owners add constraint rehab_plan_owners_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.rehab_plans add constraint rehab_plans_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
-alter table public.rehab_plans add constraint rehab_plans_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id);
+alter table public.rehab_plans add constraint rehab_plans_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
 alter table public.rehab_plans add constraint rehab_plans_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id);
 alter table public.rehab_protocols add constraint rehab_protocols_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.rehab_protocols add constraint rehab_protocols_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
