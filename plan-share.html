@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="plan_share.title_tab">Training plan — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<style>
+  html,body{background:var(--cm-bg,#0f1216)}
+  .ps-wrap{max-width:680px;margin:0 auto;padding:18px 16px 60px}
+  .ps-brand{display:flex;align-items:center;gap:8px;justify-content:center;margin:6px 0 18px;color:var(--cm-fg-muted)}
+  .ps-brand .mark{width:26px;height:26px;border-radius:7px;background:var(--cm-accent,#16A34A);color:#fff;display:flex;align-items:center;justify-content:center}
+  .ps-brand .mark i{font-size:16px}
+  .ps-brand .name{font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,14px);padding:16px;margin-bottom:14px}
+  /* Plan header */
+  .ps-head .who{display:flex;align-items:center;gap:12px}
+  .ps-head .av{width:46px;height:46px;flex:none;border-radius:50%;background:var(--cm-bg-soft);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 16px/1 var(--cm-font-sans)}
+  .ps-head .name{font:700 18px/1.15 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-head .sub{font:500 12.5px/1.3 var(--cm-font-mono);letter-spacing:.03em;color:var(--cm-fg-muted);margin-top:3px;text-transform:uppercase}
+  .ps-head .plan{margin-top:12px;font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .ps-chip{font:500 11px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .ps-chip.is-status{background:rgba(21,128,61,.12);color:#15803D}
+  .ps-chip.is-status.draft{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  /* Phasebar */
+  .ps-phases{display:flex;flex-wrap:wrap;gap:8px}
+  .ps-phase{flex:1 1 120px;border:1px solid var(--cm-border);border-left-width:4px;border-radius:8px;padding:9px 11px;background:var(--cm-bg-soft)}
+  .ps-phase .pn{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-phase .pw{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px}
+  .ps-phase .po{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
+  .ps-sec-h{font:600 12px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:20px 2px 10px}
+  /* Day */
+  .ps-day{margin-bottom:12px}
+  .ps-day-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+  .ps-day-h .dow{font:700 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-day-h .dom{font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .ps-rest{font:var(--cm-body-sm);color:var(--cm-fg-muted);padding:6px 2px}
+  /* Block */
+  .ps-block{border:1px solid var(--cm-border);border-radius:10px;overflow:hidden;margin-bottom:10px}
+  .ps-block-h{display:flex;align-items:center;gap:9px;padding:10px 12px;border-left:4px solid var(--cm-fg-faint);background:var(--cm-bg-soft)}
+  .ps-block-h .bn{font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1}
+  .ps-block-h .bt{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .ps-block-goal{padding:8px 12px 0;font:var(--cm-body-sm);color:#1D4ED8}
+  .ps-block-notes{padding:6px 12px 0;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
+  /* Exercise */
+  .ps-ex{display:flex;gap:11px;padding:11px 12px;border-top:1px solid var(--cm-border-soft,var(--cm-border))}
+  .ps-ex:first-child{border-top:0}
+  .ps-ex-thumb{width:52px;height:52px;flex:none;border-radius:8px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-muted);position:relative}
+  .ps-ex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .ps-ex-thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff}
+  .ps-ex-thumb .play i{font-size:20px}
+  .ps-ex-body{flex:1;min-width:0}
+  .ps-ex-name{font:600 13.5px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-ex-sets{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .ps-set{font:500 11px/1 var(--cm-font-mono);padding:4px 7px;border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .ps-ex-extra{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
+  .ps-watch{display:inline-flex;align-items:center;gap:5px;margin-top:7px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-accent,#16A34A);text-decoration:none}
+  /* States */
+  .ps-state{text-align:center;padding:60px 20px;color:var(--cm-fg-muted)}
+  .ps-state i{font-size:40px;display:block;margin-bottom:14px;color:var(--cm-fg-faint)}
+  .ps-state .t{font:600 17px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px}
+  .ps-foot{text-align:center;margin-top:24px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.05em;color:var(--cm-fg-faint);text-transform:uppercase}
+  @media print{ .ps-brand,.ps-foot{opacity:.6} .ps-block-h{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+</style>
+</head>
+<body class="cm">
+<div class="ps-wrap">
+  <div class="ps-brand">
+    <span class="mark"><i class="ti ti-activity-heartbeat"></i></span>
+    <span class="name">ClavaMetrics</span>
+  </div>
+  <div id="ps-root">
+    <div class="ps-state"><i class="ti ti-loader-2"></i><div data-i18n="plan_share.loading">Loading…</div></div>
+  </div>
+  <div class="ps-foot" data-i18n="plan_share.powered_by">Powered by ClavaMetrics</div>
+</div>
+
+<script src="assets/i18n.js" defer></script>
+<script>
+(function(){
+  'use strict';
+  var SB_URL = 'https://xesrumijvdmqjrufgeka.supabase.co';
+  var SB_KEY = 'sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
+  function tt(key, en, vars){
+    if (window.CM_I18N && CM_I18N.t){ var v = CM_I18N.t(key, vars); if (v != null && v !== key) return v; }
+    var s = (en != null ? en : key);
+    if (vars) s = s.replace(/\{(\w+)\}/g, function(_, k){ return vars[k] != null ? vars[k] : '{'+k+'}'; });
+    return s;
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  var TYPE_COLOR = { warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E', str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D', cond:'#EA580C', cool:'#64748B', assess:'#0EA5E9' };
+  var TYPE_LABEL_EN = { warmup:'Warm-up', myo:'Myofascial', mob:'Mobility', act:'Activation', str:'Strength', plyo:'Plyometrics', skills:'Skills', field:'On-field', cond:'Conditioning', cool:'Cooldown', assess:'Assessment' };
+  var LOAD_COLOR = { low:'#16A34A', moderate:'#F59E0B', high:'#DC2626' };
+  var LOAD_EN = { low:'Low', moderate:'Moderate', high:'High' };
+  var FOCUS_EN = { 'strength':'Strength','power':'Power','return-to-perform':'Return to perform','prevention':'Prevention','custom':'Custom' };
+  var STATUS_EN = { draft:'Draft', active:'Active', completed:'Completed', archived:'Archived' };
+
+  var root = document.getElementById('ps-root');
+  function initials(n){ return String(n||'—').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || '—'; }
+
+  function stateMsg(icon, title, body){
+    root.innerHTML = '<div class="ps-state"><i class="ti '+icon+'"></i><div class="t">'+esc(title)+'</div><div>'+esc(body)+'</div></div>';
+  }
+
+  function renderSets(sets){
+    if (!Array.isArray(sets) || !sets.length) return '';
+    var chips = sets.map(function(s, i){
+      var parts = [];
+      if (s.reps)  parts.push(esc(s.reps) + ' ' + tt('plan_share.reps','reps'));
+      if (s.load)  parts.push(esc(s.load));
+      if (s.rest)  parts.push(tt('plan_share.rest','rest') + ' ' + esc(s.rest));
+      var inner = parts.length ? parts.join(' · ') : (tt('plan_share.set','Set') + ' ' + (i+1));
+      return '<span class="ps-set">'+inner+'</span>';
+    }).join('');
+    return '<div class="ps-ex-sets">'+chips+'</div>';
+  }
+
+  function renderExercise(ex){
+    var thumb;
+    if (ex.thumb){
+      thumb = '<span class="ps-ex-thumb"><img src="'+esc(ex.thumb)+'" alt="" loading="lazy">'+(ex.videoUrl?'<span class="play"><i class="ti ti-player-play-filled"></i></span>':'')+'</span>';
+    } else {
+      thumb = '<span class="ps-ex-thumb">'+initials(ex.name)+'</span>';
+    }
+    var extra = [];
+    if (ex.side) extra.push(esc(ex.side));
+    if (ex.flag) extra.push(esc(ex.flag));
+    var watch = ex.videoUrl ? '<a class="ps-watch" href="'+esc(ex.videoUrl)+'" target="_blank" rel="noopener"><i class="ti ti-brand-youtube"></i> '+tt('plan_share.watch_demo','Watch demo')+'</a>' : '';
+    return '<div class="ps-ex">'+thumb+
+      '<div class="ps-ex-body">'+
+        '<div class="ps-ex-name">'+esc(ex.name||'—')+'</div>'+
+        renderSets(ex.sets)+
+        (extra.length?'<div class="ps-ex-extra">'+extra.join(' · ')+'</div>':'')+
+        watch+
+      '</div></div>';
+  }
+
+  function renderBlock(b){
+    var color = TYPE_COLOR[b.type] || 'var(--cm-fg-faint)';
+    var typeLabel = tt('individual_planner.type_'+b.type, TYPE_LABEL_EN[b.type] || (b.type||''));
+    var list = Array.isArray(b.exList) ? b.exList : (Array.isArray(b.exercises) ? b.exercises : []);
+    var exHtml = list.map(renderExercise).join('');
+    return '<div class="ps-block">'+
+      '<div class="ps-block-h" style="border-left-color:'+color+'">'+
+        '<span class="bn">'+esc(b.name||'—')+'</span>'+
+        (b.dur?'<span class="bt">'+esc(b.dur)+"'</span>":'')+
+        (typeLabel?'<span class="bt">'+esc(typeLabel)+'</span>':'')+
+      '</div>'+
+      (b.goal?'<div class="ps-block-goal"><i class="ti ti-target"></i> '+esc(b.goal)+'</div>':'')+
+      (b.notes?'<div class="ps-block-notes">'+esc(b.notes)+'</div>':'')+
+      exHtml+
+    '</div>';
+  }
+
+  function renderDay(day){
+    var blocks = Array.isArray(day.blocks) ? day.blocks : [];
+    var inner;
+    if (day.rest || !blocks.length){
+      if (day.rest) inner = '<div class="ps-rest"><i class="ti ti-bed"></i> '+tt('plan_share.rest_day','Rest day')+'</div>';
+      else return '';   // skip empty non-rest days
+    } else {
+      inner = blocks.map(renderBlock).join('');
+    }
+    return '<div class="ps-day"><div class="ps-day-h"><span class="dow">'+esc(day.dow||'')+'</span><span class="dom">'+esc(day.dom!=null?day.dom:'')+'</span></div>'+inner+'</div>';
+  }
+
+  function render(data){
+    var plan = data.plan || {};
+    var p = plan.player || {};
+    var pname = ((p.first_name||'')+' '+(p.last_name||'')).trim() || plan.name || '—';
+    var num = p.number ? ('#'+p.number) : '';
+    var focus = plan.focus ? tt('individual_planner.focus_'+String(plan.focus).replace(/-/g,'_'), FOCUS_EN[plan.focus]||plan.focus) : '';
+    var status = plan.status || 'draft';
+    var statusLabel = tt('individual_planner.status_'+status, STATUS_EN[status]||status);
+    var wk = tt('plan_share.week_of', 'Week {x} of {y}', { x: plan.programme_week||1, y: plan.programme_total_weeks||1 });
+
+    var html = '';
+    // Header card
+    html += '<div class="ps-card ps-head">'+
+      '<div class="who"><div class="av">'+initials(pname)+'</div>'+
+        '<div><div class="name">'+esc(pname)+(num?' <span style="color:var(--cm-fg-muted);font-weight:500">'+esc(num)+'</span>':'')+'</div>'+
+        '<div class="sub">'+tt('plan_share.individual_sc','Individual S&C')+'</div></div></div>'+
+      '<div class="plan">'+esc(plan.name||'—')+'</div>'+
+      '<div class="ps-meta">'+
+        (focus?'<span class="ps-chip">'+esc(focus)+'</span>':'')+
+        '<span class="ps-chip">'+esc(wk)+'</span>'+
+        '<span class="ps-chip is-status '+esc(status)+'">'+esc(statusLabel)+'</span>'+
+      '</div>'+
+      (plan.goal?'<div class="ps-block-goal" style="padding-left:0"><i class="ti ti-target"></i> '+esc(plan.goal)+'</div>':'')+
+    '</div>';
+
+    // Phases
+    var phases = Array.isArray(data.phases) ? data.phases : [];
+    if (phases.length){
+      html += '<div class="ps-card"><div class="ps-phases">'+phases.map(function(ph){
+        var col = LOAD_COLOR[ph.load_level] || ph.color || 'var(--cm-accent)';
+        var wr = 'W'+(ph.week_start||1)+((ph.week_end&&ph.week_end!==ph.week_start)?'–'+ph.week_end:'');
+        var load = ph.load_level ? tt('individual_planner.load_'+ph.load_level, LOAD_EN[ph.load_level]) : '';
+        return '<div class="ps-phase" style="border-left-color:'+esc(col)+'">'+
+          '<div class="pn">'+esc(ph.name||'')+'</div>'+
+          '<div class="pw">'+esc(wr)+(load?' · '+esc(load):'')+'</div>'+
+          (ph.objective?'<div class="po">'+esc(ph.objective)+'</div>':'')+
+        '</div>';
+      }).join('')+'</div></div>';
+    }
+
+    // Programme days
+    var content = plan.content || {};
+    var days = Array.isArray(content) ? content : (Array.isArray(content.days) ? content.days : []);
+    var dayHtml = days.map(renderDay).join('');
+    html += '<div class="ps-sec-h">'+tt('plan_share.programme','Programme')+'</div>';
+    html += '<div class="ps-card">'+(dayHtml.trim() ? dayHtml : '<div class="ps-rest">'+tt('plan_share.no_sessions','No sessions planned yet.')+'</div>')+'</div>';
+
+    root.innerHTML = html;
+  }
+
+  function showUnavailable(){
+    stateMsg('ti-link-off', tt('plan_share.unavailable_title','This link is unavailable'), tt('plan_share.unavailable_body','The plan may have been unshared or the link is incorrect.'));
+  }
+
+  async function load(){
+    if (window.CM_I18N && CM_I18N.ready){ try { await CM_I18N.ready; } catch(_){} }
+    var token = new URLSearchParams(location.search).get('token');
+    if (!token){ showUnavailable(); return; }
+    try {
+      var res = await fetch(SB_URL+'/functions/v1/share-individual-plan?token='+encodeURIComponent(token), {
+        method:'GET', headers:{ 'apikey': SB_KEY, 'Authorization': 'Bearer '+SB_KEY }
+      });
+      var data = await res.json();
+      if (!data || !data.found){ showUnavailable(); return; }
+      render(data);
+    } catch (err){
+      console.error('[plan-share] load failed', err);
+      showUnavailable();
+    }
+  }
+
+  // Re-render on language change (labels come from i18n)
+  var _last = null;
+  document.addEventListener('cm:langchanged', function(){ if (_last) render(_last); });
+  var _origRender = render;
+  render = function(d){ _last = d; _origRender(d); };
+
+  if (document.readyState !== 'loading') load(); else document.addEventListener('DOMContentLoaded', load);
+})();
+</script>
+</body>
+</html>
