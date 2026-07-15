@@ -37,8 +37,6 @@ Para uma leitura médica de todo o elenco — quem está apto, modificado, lesio
 
 **Como abro o arquivo completo de um jogador?** Clique na linha dele para abrir sua [Ficha Clínica](/support/clinical-record) individual.
 
-> TODO — detalhe de controle de acesso a confirmar: a página carrega uma nota implicando que **funções não médicas (coach / S&C) veem uma visão reduzida** (apenas status, disponibilidade & RTP), mas o código do índice **não** oculta colunas por função de fato — a proteção real é o **bloqueio do módulo** clínico mais a **regra de acesso médico do banco de dados** (campos somente médicos, como a data de revisão, retornam vazios para funções não médicas, e alcançar a página depende das concessões de módulo do clube). Confirme o que uma função não médica realmente consegue abrir e ver aqui, já que a coluna "questão ativa" expõe um destaque de lesão.
-
 ## Relacionados
 
 - [Ficha Clínica](/support/clinical-record) — o arquivo individual do jogador que este índice abre.

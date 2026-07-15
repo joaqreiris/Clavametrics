@@ -38,7 +38,7 @@ Las pestañas se cargan al hacer clic por primera vez. La página es de solo lec
 
 **Benchmarking.** En los tests físicos, el resultado de un jugador se sitúa frente al **cohorte del equipo** — pero solo cuando hay suficientes pares (al menos cuatro) para que la comparación sea significativa; de lo contrario, el perfil lo indica. Es la misma regla de cohorte que usa la página de [Evaluaciones](/support/evaluations).
 
-**Lo que NO muestra.** El perfil es un resumen, así que varias cosas están en otro lugar: **métricas de GPS** detalladas (distancia, velocidad, aceleraciones — aquí solo obtienes ACWR; el detalle completo está en [Análisis GPS](/support/gps-analysis)); detalle de **sesión/microciclo** ([Historial de sesiones](/support/sessions-history), [Calendario](/support/calendar)); **estadísticas de eventos de partido** (goles, asistencias); **nutrición** y **vídeo**; y el **expediente** médico completo (aquí solo aparecen estadísticas de resumen). El campo "Incorporación" muestra actualmente un marcador de posición.
+**Lo que NO muestra.** El perfil es un resumen, así que varias cosas están en otro lugar: **métricas de GPS** detalladas (distancia, velocidad, aceleraciones — aquí solo obtienes ACWR; el detalle completo está en [Análisis GPS](/support/gps-analysis)); detalle de **sesión/microciclo** ([Historial de sesiones](/support/sessions-history), [Calendario](/support/calendar)); **estadísticas de eventos de partido** (goles, asistencias); **nutrición** y **vídeo**; y el **expediente** médico completo (aquí solo aparecen estadísticas de resumen).
 
 ## FAQ
 
@@ -49,8 +49,6 @@ Las pestañas se cargan al hacer clic por primera vez. La página es de solo lec
 **¿Dónde está el desglose completo de GPS?** Aquí no — el perfil muestra solo ACWR. Abre [Análisis GPS](/support/gps-analysis) para distancia, velocidad y aceleraciones.
 
 **¿Cómo llego al perfil de un jugador?** Desde la [Plantilla](/support/squad), abre al jugador (el perfil es por jugador, indexado por el jugador).
-
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) el campo **"Incorporación"** renderiza un marcador de posición ("—") — todavía no está conectado a una fecha. (2) Las acciones de **editar jugador / exportar expediente / imprimir** se mencionan pero no parecen estar conectadas a esta página (la navegación se limita a las pestañas y a la miga de pan de vuelta a la Plantilla).
 
 ## Relacionado
 

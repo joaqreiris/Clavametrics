@@ -17,7 +17,7 @@ Atualize-a como parte da rotina diária — antes de cada sessão ou jogo — pa
 
 ## Como funciona
 
-**Escolha uma visão.** Um controle segmentado alterna entre **Matriz** (a grade padrão de jogadores × dias), **Hoje** e **Estatísticas** (uma linha de tendência, mapa de calor no calendário, ranking de jogadores e uma divisão por equipe).
+**Escolha uma visão.** Um controle segmentado alterna entre **Matriz** (a grade padrão de jogadores × dias) e **Estatísticas** (uma linha de tendência, mapa de calor no calendário, ranking de jogadores e uma divisão por equipe).
 
 **Defina a janela de datas.** O intervalo assume por padrão o microciclo ativo (ou a segunda–domingo atual) e pode ser alterado com predefinições — MC Atual, Últimos 7 / 14 / 30 dias, ou um intervalo personalizado — e avançado/retrocedido passo a passo. Cada coluna mostra seu rótulo **MD-** (por exemplo, MD-2, Jogo, Folga); o dia de hoje é destacado, os dias de jogo são marcados em vermelho, e as folgas planejadas são listradas e somente leitura.
 
@@ -64,8 +64,6 @@ Então a prioridade é: entrada manual primeiro, depois o preenchimento automát
 **Como as contagens "22 disponíveis / 3 parciais / 2 fora" em outros lugares obtêm seus números?** A partir desses status no dado dia — disponível e parcial contam como treináveis; lesionado, doente e ausente contam como fora.
 
 **Dois membros podem editar ao mesmo tempo?** Sim — as atualizações são transmitidas ao vivo, então todos veem as mudanças sem atualizar a página.
-
-> TODO — não foi possível confirmar totalmente pelo código, favor verificar: (1) a visão **Hoje** está presente mas parece marcada como "em breve". (2) Os botões **Filtros** e **Agrupar por** da barra de ferramentas parecem placeholders sem handlers ativos. (3) Atalhos de tecla única (A / P / I) são mostrados na legenda mas podem não estar totalmente conectados. (4) O status **Ausente** só aparece no contexto de minutos de jogo (0 minutos) — seu uso mais amplo (por exemplo, não jogou) não está claro.
 
 ## Relacionados
 

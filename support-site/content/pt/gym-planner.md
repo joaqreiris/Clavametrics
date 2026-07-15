@@ -60,8 +60,6 @@ Você o abre a partir do [Calendário](/support/calendar) clicando em uma sessã
 
 **Por que alguns campos estão bloqueados?** Os campos herdados do Calendário (microciclo, dia de jogo, horário, duração, RPE) são editados lá para permanecerem sincronizados em todo o app.
 
-> TODO — não foi possível confirmar pelo código, favor verificar: (1) não há interface visível para agrupar exercícios como **super-séries/circuitos** — cada linha é autônoma. (2) A **reordenação de linhas** (arrastar para reordenar) não foi encontrada. (3) Após um **rascunho de IA**, fechar a aba antes de salvar parece perdê-lo (nenhuma persistência de rascunho separada encontrada). (4) Os **modelos** salvam as linhas de aquecimento/pliometria/principal mas aparentemente não as adaptações individuais.
-
 ## Relacionados
 
 - [Calendário](/support/calendar) — onde a sessão de academia é agendada e seu contexto de MD- é definido.

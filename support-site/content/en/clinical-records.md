@@ -37,8 +37,6 @@ For a whole-squad medical read — who's fit, modified, injured or unavailable, 
 
 **How do I open a player's full file?** Click their row to open their individual [Clinical Record](/support/clinical-record).
 
-> TODO — access-control detail to confirm: the page carries a note implying **non-medical roles (coach / S&C) see a reduced view** (status, availability & RTP only), but the index code does **not** actually hide columns by role — the real protection is the clinical **module gate** plus the **database medical-access rule** (medical-only fields like the review date come back empty for non-medical roles, and reaching the page depends on the club's module grants). Confirm what a non-medical role can actually open and see here, since the "active issue" column exposes an injury headline.
-
 ## Related
 
 - [Clinical Record](/support/clinical-record) — the individual player file this index opens.

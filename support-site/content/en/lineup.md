@@ -29,7 +29,7 @@ Before a match — you reach it from the [Calendar](/support/calendar) match (or
 
 **Tied to the match.** A lineup belongs to a specific match on the calendar — **one lineup per match**. Opening the builder finds the upcoming match and loads (or creates) that match's lineup, so the XI you build is bound to that fixture. Starters and substitutes are stored with their slot and captain flag.
 
-**Publishing.** A lineup has a status — draft, then **official** when you publish (which stamps who published it and when). Publishing is offered as "Send to #match-day", alongside a PNG download and a copy-link. Exactly how a published lineup reaches players (a chat channel and/or a viewable link) wasn't fully confirmed from the code — see the TODO.
+**Publishing.** A lineup has a status — draft, then **official** when you publish (which stamps who published it and when). Publishing is offered as "Send to #match-day", alongside a PNG download and a copy-link.
 
 ## FAQ
 
@@ -40,8 +40,6 @@ Before a match — you reach it from the [Calendar](/support/calendar) match (or
 **How do I share the lineup?** Publish it as official, download the PNG, or copy its link — from the Share dialog.
 
 **Can I export it as an image?** Yes — Download PNG renders the poster to an image; you can also print it.
-
-> TODO — could not confirm from the code, please verify: (1) whether **"Send to #match-day"** actually posts to a chat channel and whether the **copy-link** (`?lineup=…`) is viewable by **players** — no public/player-facing view was confirmed. (2) When the **"locked"** status is used (versus draft/official). (3) The **Templates** and **Reset** buttons are present but their handlers weren't found — confirm they work.
 
 ## Related
 

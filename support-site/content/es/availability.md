@@ -17,7 +17,7 @@ Actualízala como parte de la rutina diaria — antes de cada sesión o partido 
 
 ## Cómo funciona
 
-**Elegir una vista.** Un control segmentado alterna entre **Matriz** (la cuadrícula por defecto de jugadores × días), **Hoy** y **Estadísticas** (una línea de tendencia, un mapa de calor de calendario, un ranking de jugadores y un desglose por equipo).
+**Elegir una vista.** Un control segmentado alterna entre **Matriz** (la cuadrícula por defecto de jugadores × días) y **Estadísticas** (una línea de tendencia, un mapa de calor de calendario, un ranking de jugadores y un desglose por equipo).
 
 **Definir la ventana de fechas.** El rango por defecto es el microciclo activo (o el lunes–domingo actual) y puede cambiarse con preajustes — MC actual, Últimos 7 / 14 / 30 días, o un rango personalizado — y avanzarse/retroceder paso a paso. Cada columna muestra su etiqueta **MD-** (p. ej. MD-2, Partido, Descanso); hoy se resalta, los días de partido se marcan en rojo, y los días de descanso planificados se rayan y son de solo lectura.
 
@@ -64,8 +64,6 @@ Así que la prioridad es: entrada manual primero, luego el relleno automático p
 **¿Cómo obtienen sus números los recuentos "22 disponibles / 3 parciales / 2 fuera" de otras partes?** De estos estados en el día dado — disponible y parcial cuentan como entrenables; lesionado, enfermo y ausente cuentan como fuera.
 
 **¿Pueden dos miembros del personal editar a la vez?** Sí — las actualizaciones se difunden en vivo, así que todos ven los cambios sin refrescar.
-
-> TODO — no se pudo confirmar del todo desde el código, por favor verificar: (1) la vista **Hoy** está presente pero parece marcada como "próximamente". (2) Los botones de la barra de herramientas **Filtros** y **Agrupar por** parecen marcadores de posición sin manejadores activos. (3) Los atajos de una sola tecla (A / P / I) se muestran en la leyenda pero puede que no estén del todo cableados. (4) El estado **Ausente** solo aparece en el contexto de minutos de partido (0 minutos) — su uso más amplio (p. ej. no jugó) no está claro.
 
 ## Relacionado
 

@@ -31,7 +31,7 @@ Para supervisionar quem está em reabilitação e quem está em um programa prev
 
 **Relação com o plano individual.** Os planos de reabilitação e preventivos e o plano de treino individual do jogador **compartilham a mesma biblioteca de exercícios e sistema de blocos**, mas são gerenciados como **planos separados** — o aplicativo não copia automaticamente um plano de reabilitação para um plano individual (nenhum vínculo automático foi encontrado no código). Na prática, a equipe os mantém em paralelo; um foco de retorno ao jogo existe no lado do plano individual, mas os dois não são sincronizados automaticamente.
 
-**Retorno à disponibilidade — o que faz e o que não faz.** Concluir um plano de reabilitação é **apenas acompanhamento**: marcar um plano como **liberado** o remove das listas ativas e o arquiva no histórico. Isso, por si só, **não** altera o status da lesão vinculada nem a disponibilidade do jogador. Retornar o jogador à disponibilidade é feito na página [Injuries](/support/injuries) (alta) e refletido em [Availability](/support/availability) — o plano de reabilitação e essas etapas são separados. (Veja o TODO.)
+**Retorno à disponibilidade — o que faz e o que não faz.** Concluir um plano de reabilitação é **apenas acompanhamento**: marcar um plano como **liberado** o remove das listas ativas e o arquiva no histórico. Isso, por si só, **não** altera o status da lesão vinculada nem a disponibilidade do jogador. Retornar o jogador à disponibilidade é feito na página [Injuries](/support/injuries) (alta) e refletido em [Availability](/support/availability) — o plano de reabilitação e essas etapas são separados.
 
 **De onde vêm os planos.** Um plano pode ser criado a partir de uma lesão ativa, de um achado de avaliação, de um alerta de carga/assimetria de GPS, ou manualmente — a origem é registrada no plano.
 
@@ -44,8 +44,6 @@ Para supervisionar quem está em reabilitação e quem está em um programa prev
 **Quem é responsável por um plano?** Cada plano tem um ou mais responsáveis com uma função — fisioterapeuta, S&C ou treinador.
 
 **Como inicio um plano a partir de uma lesão?** Crie um plano do tipo Reabilitação e vincule a lesão ativa; a partir daí você monta suas fases e sessões.
-
-> TODO — por favor confirme (comportamento e acesso): (1) liberar um plano de reabilitação **não** cascateia para o status da lesão ou da disponibilidade — isso é uma etapa manual nas páginas Injuries/Availability; confirme se isso é intencional. (2) Não há **vínculo automático** entre um plano de reabilitação e o plano de treino individual (apenas biblioteca compartilhada) — confirme se um auto-preenchimento é esperado. (3) O acesso é via o controle geral do módulo + escopo por equipe + RLS do clube; ao contrário do Clinical Record, **nenhum controle explícito exclusivo para médicos** foi confirmado nesta página, e os planos de reabilitação têm escopo por equipe (não restritos a funções médicas) — confirme a visibilidade pretendida.
 
 ## Relacionados
 

@@ -66,8 +66,6 @@ Navigate with the **Today** button, the previous/next arrows (step by week in Mi
 
 **Where do I actually build the session content?** The Calendar schedules sessions; open one and use **Open in Daily Planning** (field) or **Open in Gym Planner** (gym) to design the drills and blocks.
 
-> TODO — confirm before relying on these: sessions can carry a **Tasks** checklist (a Tasks section appears in the event popover), and **PDF export** produces a printable week/month sheet. Both are present in the page but their exact behavior was not fully verified while writing this. An alternate season-timeline ribbon also exists in the page but appears to be hidden/not yet active.
-
 ## Related
 
 - [Load Monitor](/support/load-monitor) — the load you plan here feeds the acute:chronic ratios there.

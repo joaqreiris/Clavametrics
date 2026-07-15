@@ -56,8 +56,6 @@ Sempre que estiver planejando um treino: encontre um exercício existente por su
 
 **Posso restringir um exercício a uma categoria?** Sim — a dimensão Equipe controla quais categorias podem ver um exercício; deixá-la vazia o mostra para todos.
 
-> TODO — favor observar e confirmar: o brief esperava uma taxonomia de **8 dimensões**, mas a página expõe **6** dimensões de filtro (Orientação, Intensidade, Dia de Jogo, Tipo de jogo, Foco, Equipe). Documentei as 6 que o código de fato implementa — se houver dimensões extras (ex.: princípio / sub-princípio / conceito tático) elas não são expostas como filtros aqui; confirme se existem em outro lugar (ex.: dentro do Designer de Exercícios).
-
 ## Relacionados
 
 - [Designer de Exercícios](/support/drill-designer) — onde esses exercícios são projetados e editados.

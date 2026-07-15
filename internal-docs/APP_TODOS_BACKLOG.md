@@ -226,3 +226,35 @@ Formato por item: **qué** · dónde · evidencia · estado · acción.
 - **10.2 Morphocycle / Tactical Periodization (Frade)** — nombrada como metodología; **sin cita primaria verificada**. → definir fuente citable (libros de Frade/Tamarit, o revisiones).
 - **10.3 ATR (Issurin) y Verheijen** — nombradas como modelos de periodización; **sin cita primaria verificada** en el glosario. → agregar fuentes cuando se confirmen (p.ej. Issurin, *Block Periodization*).
 - Nota: correcciones aplicadas vs. la lista original — Impellizzeri "Part 2" es **2020** (no 2021); Impellizzeri IJSPP 2020 autores = Tenan/Kempton/Novak/Coutts (no Woodcock); Windt & Gabbett 2019 título real "Is it all for naught?…". Literatura nueva citada: Qin 2025 (meta-análisis), Carbone 2022 (Bayesian), Soligard 2016 (consenso IOC).
+
+---
+
+## 11. Bugs de comportamiento confirmados en la limpieza final de /support (batch B-bug)
+
+> Al resolver los bloques `> TODO` de las páginas públicas se confirmaron **contra el código**
+> cuatro comportamientos rotos/limitantes. NO se documentan en la web pública (se sacaron del
+> `.md`); quedan acá para el backlog de la app. Consolidan/actualizan los items previos citados.
+
+### 11.1 Availability — atajos A/P/I anunciados pero sin cablear  ·  prioridad media
+- **Qué:** la leyenda del Matrix muestra atajos de teclado `A` (available) / `P` (partial) / `I` (injury), pero no existe handler de teclado para esas teclas.
+- **Dónde:** `Availability.html` — leyenda del Matrix; los únicos listeners de teclado son Enter (~línea 1310) y Escape (~línea 1320).
+- **Evidencia:** grep de `e.key` en la página → solo Enter/Escape; ninguna rama para A/P/I.
+- **Acción:** cablear los atajos o quitarlos de la leyenda para no anunciar teclas muertas. (Consolida [2.7].)
+
+### 11.2 Dossier — el color de acento no persiste entre sesiones  ·  prioridad media
+- **Qué:** el acento elegido no se guarda; vuelve al valor por defecto al recargar.
+- **Dónde:** `Dossier.html` — `--accent` hardcodeado (~línea 28), sin `localStorage`/persistencia ni columna en DB.
+- **Evidencia:** no hay lectura/escritura de storage para el acento; el valor es fijo en CSS inline.
+- **Acción:** persistir el acento (perfil o storage) o quitar el selector. (Consolida [9.11].)
+
+### 11.3 Gym Planner — el draft de IA se pierde si se cierra antes de guardar  ·  **PRIORIDAD ALTA (riesgo de pérdida de datos)**
+- **Qué:** "Generate draft" **sobrescribe la sesión actual** con el borrador de IA en memoria; no hay persistencia separada del draft. Si el coach cierra la pestaña antes de **Guardar**, el contenido generado se pierde (y puede haber pisado la sesión previa sin guardar).
+- **Dónde:** `Gym Planner.html` — confirmación "Replace the current session with the AI draft?" (~línea 786); `gpCollectContent()`/save sin capa de draft.
+- **Evidencia:** no se encontró autosave ni almacén de draft; el draft vive solo en el estado de la página hasta el save explícito.
+- **Acción (alta):** persistir el draft (autosave a borrador o guardar antes de reemplazar) y/o pedir confirmación al cerrar con cambios sin guardar. (Eleva la prioridad de [4.6].)
+
+### 11.4 Glossary — huecos bibliográficos (decisión editorial)  ·  prioridad baja
+- **Qué:** varias metodologías citadas por nombre sin fuente primaria peer-reviewed verificada (Seirul·lo "Microciclo Estructurado", morfociclo/Tactical Periodization de Frade, ATR de Issurin, Verheijen).
+- **Dónde:** `support-site/content/*/glossary.md`.
+- **Evidencia:** ver detalle y proxies en la sección [10] de este backlog.
+- **Acción:** decidir fuentes citables antes de afirmar respaldo bibliográfico. (Consolida [10.1]–[10.3].)

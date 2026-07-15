@@ -66,8 +66,6 @@ Navega con el botón **Hoy**, las flechas anterior/siguiente (avanza por semana 
 
 **¿Dónde construyo realmente el contenido de la sesión?** El Calendario programa las sesiones; abre una y usa **Abrir en Planificación Diaria** (campo) o **Abrir en Planificador de Gimnasio** (gimnasio) para diseñar los ejercicios y bloques.
 
-> TODO — confirmar antes de confiar en esto: las sesiones pueden llevar una lista de tareas de **Tareas** (aparece una sección de Tareas en el popover del evento), y la **exportación a PDF** produce una hoja imprimible de semana/mes. Ambas están presentes en la página pero su comportamiento exacto no se verificó del todo al escribir esto. También existe una cinta alternativa de línea de tiempo de temporada en la página pero parece estar oculta/aún no activa.
-
 ## Relacionado
 
 - [Monitor de Carga](/support/load-monitor) — la carga que planificas aquí alimenta las ratios aguda:crónica de allí.

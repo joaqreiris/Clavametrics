@@ -49,8 +49,6 @@ To look back — audit what was actually done, review load progression across a 
 
 **Can I compare sessions?** Yes — **Compare sessions** shows two or three side by side.
 
-> TODO — could not confirm from the code, please verify: a **Compliance** KPI (planned vs delivered load) appears in this view but renders as "—%", so it looks incomplete/unwired. Confirm whether it's implemented.
-
 ## Related
 
 - [Daily Planning](/support/daily-planning) — where sessions are built and edited.

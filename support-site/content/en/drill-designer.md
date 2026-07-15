@@ -63,8 +63,6 @@ These are the same tags you later filter on in the [Exercises Library](/support/
 
 **Where does the drill go after I save it?** Into the [Exercises Library](/support/exercises-library), from where it can be reused in sessions and mapped to GPS data.
 
-> TODO — please note and confirm: the brief expected an **8-dimension** taxonomy, but the Drill Designer implements **4** tag dimensions (Orientation, Intensity, Focus, Game type) alongside the match-day and format fields — not principle / sub-principle / tactical-concept dimensions. I documented what the editor actually has. Also, the **share-to-chat** and **custom object upload** features are present but their full behavior lives in external modules I couldn't fully confirm here.
-
 ## Related
 
 - [Exercises Library](/support/exercises-library) — where saved drills are catalogued and filtered.

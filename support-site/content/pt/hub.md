@@ -36,19 +36,15 @@ Todos os dias, logo no início — é a página de destino após o login. Use-a 
 - O "sessões pendentes" do cartão de **GPS** conta as sessões recentes que ainda não têm uma importação de GPS.
 - O cartão de **RPE** mostra quantos RPE foram **enviados hoje** — é uma contagem de *enviados*, não uma contagem de quem ainda está faltando. (A ideia de "sessões aguardando RPE" fica nas visões de [RPE](/support/rpe) e de planejamento, não na Central.)
 
-Ver o TODO sobre como o brief enquadrou isso versus o que a página realmente mostra.
-
 ## FAQ
 
-**Posso escolher quais KPIs aparecem?** Sim — personalize a faixa de KPIs (até quatro), e a escolha fica salva no seu perfil. Reordenar/ocultar os cartões de módulo, no entanto, não parece estar implementado ainda (ver TODO).
+**Posso escolher quais KPIs aparecem?** Sim — personalize a faixa de KPIs (até quatro), e a escolha fica salva no seu perfil.
 
-**O feed de atividade mostra as importações de GPS uma por sessão?** Ele registra uma atividade "Dados de GPS importados" referenciando uma sessão; ver o TODO sobre se as importações em massa são agrupadas.
+**O feed de atividade mostra as importações de GPS uma por sessão?** Cada importação registra uma atividade "Dados de GPS importados" referenciando sua sessão; no feed de atividade recente, as importações do mesmo dia são agrupadas em uma única linha.
 
 **O número de RPE na Central são os jogadores que ainda devem um RPE?** Não — é quantos foram enviados hoje, não quem está faltando.
 
 **De onde vem o ACWR médio?** É a média do elenco dos ACWRs dos jogadores usando o modelo configurado do clube — o mesmo motor do [Monitor de Carga](/support/load-monitor).
-
-> TODO — brief vs. código, favor confirmar: (1) o brief descreveu a atividade de GPS como **agrupada**, mas o feed parece registrar um **evento gps.imported por importação** (com o título da sessão anexado), não um item agregado de "N sessões" — confirme se uma importação em massa colapsa em uma única linha. (2) O brief se referiu a **"RPE pendente"** na Central; o cartão de RPE na verdade mostra uma contagem de **enviados-hoje** (o cartão de GPS é o que mostra "pendente"). (3) O botão **"Personalizar"** dos cartões de módulo está presente mas não tem handler conectado — reordenar/ocultar módulos pode não estar implementado ainda.
 
 ## Relacionados
 

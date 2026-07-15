@@ -62,8 +62,6 @@ A player has a **primary** position (used for grouping and the colored badge) an
 
 **Where do I see a player's full history?** Open **View profile** for the player page, or **Export dossier** for the printable summary.
 
-> TODO — could not confirm from the code, please verify: (1) the **Joined** column is present but currently renders "—" for everyone, so it may not be wired to a date yet. (2) The **"modified"** player status appears in the form but is disabled there — its exact meaning and how it's set isn't clear from the page alone.
-
 ## Related
 
 - [Availability](/support/availability) — day-by-day fitness-to-train for these players.

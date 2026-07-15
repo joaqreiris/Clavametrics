@@ -25,11 +25,11 @@ Depois de trabalhar com um jogador lesionado ou em risco: registre a sessão e, 
 
 ## Conceitos-chave
 
-**O que é uma adaptação de treino.** Uma adaptação é uma instrução do fisioterapeuta para modificar o próximo treino de um jogador (por exemplo, uma restrição ou uma redução de carga). Tecnicamente, é um tratamento salvo com **Notificar comissão técnica** ativado e as observações de adaptação preenchidas: isso gera uma notificação à comissão técnica e exibe a adaptação no cartão de **adaptações de fisioterapia** em [Daily Planning](/support/daily-planning) (e no bloco de adaptações individuais no [Gym Planner](/support/gym-planner)), para que a sessão do dia a respeite. O aplicativo registra quando a adaptação foi **enviada**, mas veja a limitação abaixo sobre a ação "Aplicado" do treinador.
+**O que é uma adaptação de treino.** Uma adaptação é uma instrução do fisioterapeuta para modificar o próximo treino de um jogador (por exemplo, uma restrição ou uma redução de carga). Tecnicamente, é um tratamento salvo com **Notificar comissão técnica** ativado e as observações de adaptação preenchidas: isso gera uma notificação à comissão técnica e exibe a adaptação no cartão de **adaptações de fisioterapia** em [Daily Planning](/support/daily-planning) (e no bloco de adaptações individuais no [Gym Planner](/support/gym-planner)), para que a sessão do dia a respeite. O aplicativo registra quando a adaptação foi **enviada** e, separadamente, quando um treinador a marca como **aplicada** no Planejamento Diário.
 
 **Reabilitação vs. preventivo.** Um tratamento de reabilitação se vincula a uma lesão ativa e acompanha sua recuperação; um tratamento preventivo é redução de risco sem vínculo com lesão. Ambos são registrados da mesma forma.
 
-**Quem pode ver.** Os **tratamentos de fisioterapia têm escopo por equipe**, não restritos a funções médicas no nível do banco de dados — que é precisamente por que uma adaptação pode chegar ao plano de um treinador (não médico). Isso é diferente do arquivo clínico profundo (histórico médico, medicações, documentos), que é exclusivamente médico — veja [Clinical Record](/support/clinical-record). Veja o TODO sobre o controle de função da própria página.
+**Quem pode ver.** Os **tratamentos de fisioterapia têm escopo por equipe**, não restritos a funções médicas no nível do banco de dados — que é precisamente por que uma adaptação pode chegar ao plano de um treinador (não médico). Isso é diferente do arquivo clínico profundo (histórico médico, medicações, documentos), que é exclusivamente médico — veja [Clinical Record](/support/clinical-record).
 
 ## FAQ
 
@@ -38,8 +38,6 @@ Depois de trabalhar com um jogador lesionado ou em risco: registre a sessão e, 
 **Qual é a diferença entre um tratamento de reabilitação e um preventivo?** A reabilitação se vincula a uma lesão ativa e acompanha sua recuperação; o preventivo é redução de risco sem lesão anexada e traz um motivo em seu lugar.
 
 **O que fazer liberar um jogador faz aqui?** Marca as lesões ativas do jogador como liberadas (com a data de retorno de hoje) e notifica a equipe — o mesmo conceito de liberação da página [Injuries](/support/injuries).
-
-> TODO — limitação conhecida, confirmada no código: quando um treinador clica em **"✓ Aplicado"** em uma adaptação no Daily Planning, esse estado **não é persistido** — não há campo "aplicado/reconhecido" no tratamento (apenas `adaptation_sent_at`, que registra quando a notificação foi enviada, não se houve ação sobre ela). Então "Aplicado" é atualmente uma dispensa apenas visual. Além disso — **TODO de controle de acesso**: a página Clinical Record redireciona funções não médicas, mas não foi confirmado que a própria página Physio tenha um controle equivalente exclusivo para médicos, e os registros de tratamento (incluindo observações clínicas) têm escopo por equipe no nível do banco — confirme se a equipe não médica deve ver as observações de tratamento de fisioterapia, não apenas a adaptação.
 
 ## Relacionados
 

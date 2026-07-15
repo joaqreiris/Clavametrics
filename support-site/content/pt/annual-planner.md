@@ -60,8 +60,6 @@ Na configuração da pré-temporada e ao longo do ano para o planejamento estrat
 
 **Qual é a diferença entre uma fase e um mesociclo?** Uma fase é um segmento amplo da temporada (por exemplo, pré-temporada) com uma flag de disponibilidade; um mesociclo é um bloco de periodização (apenas modelos de blocos) que agrupa semanas e define o modelo de carga delas.
 
-> TODO — não foi possível confirmar totalmente pelo código, favor verificar: (1) a lista de **tipos de fase** é carregada de uma tabela separada — os tipos de fase predefinidos exatos (e se a comissão técnica pode gerenciá-los) não estão visíveis nesta página. (2) Um microciclo pode carregar seu **próprio jogo incorporado** independente dos eventos do Calendário — a de-duplicação exata entre os dois não foi totalmente confirmada. (3) Se o **horário do jogo** de um microciclo definido aqui é usado posteriormente ou é apenas referência.
-
 ## Relacionados
 
 - [Calendário](/support/calendar) — detalhe a semana de um microciclo; jogos e rótulos MD- são compartilhados.

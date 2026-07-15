@@ -23,7 +23,7 @@ Aterrizas aquí desde el [Calendario](/support/calendar) abriendo una sesión de
 
 **Definir el plantel del día.** La tarjeta de plantel agrupa a los jugadores por posición y te permite filtrar por estado con píldoras — **Todos, Disponible, Parcial, No disponible, Lesionado, Enfermo, Ausente** — cada una mostrando un recuento en vivo. Haz clic en un jugador para cambiar su estado para esa fecha (se guarda en disponibilidad). Los jugadores no disponibles, lesionados y enfermos se listan por separado con su motivo. **Imprimir Roster** abre una lista de jugadores imprimible.
 
-**Revisar las adaptaciones de fisioterapia.** Una tarjeta muestra los jugadores que tienen una adaptación activa para hoy (traída de Fisioterapia) — la nota y las modalidades de tratamiento — para que la sesión respete los límites de rehabilitación y preventivos.
+**Revisar las adaptaciones de fisioterapia.** Una tarjeta muestra los jugadores que tienen una adaptación activa para hoy (traída de Fisioterapia) — la nota y las modalidades de tratamiento — para que la sesión respete los límites de rehabilitación y preventivos. Una vez que la tuviste en cuenta, podés marcar una adaptación como **aplicada**, y esa confirmación queda guardada.
 
 **Construir las dos fases.** Los ejercicios viven en dos cuadrículas:
 
@@ -57,8 +57,6 @@ En cada una, añade un ejercicio **desde la Biblioteca de Ejercicios** (ejercici
 **¿Cómo se calcula la cifra de AU planificados?** RPE esperado (1–10) × duración total de la sesión en minutos. Define el RPE esperado en el encabezado de la sesión.
 
 **¿Cómo defino el estado de un jugador para el día?** Haz clic en el jugador en la tarjeta de plantel y elige un estado; se guarda en disponibilidad para esa fecha y actualiza los recuentos del plantel.
-
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) el botón **"Cargar plantilla"** en el encabezado de la sesión no tiene un manejador visible — no está claro si las plantillas de sesión son una función operativa. (2) La acción **"✓ Aplicado"** en una adaptación de fisioterapia solo atenúa la tarjeta en la UI sin persistencia encontrada — no está claro si registra algo o es solo un acuse visual.
 
 ## Relacionado
 

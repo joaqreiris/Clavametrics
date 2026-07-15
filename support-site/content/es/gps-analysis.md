@@ -31,7 +31,7 @@ Análisis GPS es el espacio de trabajo para los datos de carga externa. Conviert
 
 **Personaliza el dashboard.** Cada vista es un conjunto de tarjetas que puedes redimensionar (S / M / L / Full), reordenar, agregar y quitar. **Agregar tarjeta** abre una galería de plantillas basadas en evidencia (ACWR, monotonía/strain, CTL/ATL/TSB, zonas de velocidad, valores atípicos…) o un constructor de gráficos personalizado. **Guardar diseño** y **Vistas guardadas** persisten las disposiciones por vista.
 
-**Exporta.** Exporta la tabla de la vista actual a CSV. (Un informe en PDF y la sincronización directa con el proveedor aparecen en la UI pero aún no están activos —ver el TODO más abajo.)
+**Exporta.** Exporta la tabla de la vista actual a CSV.
 
 ## Conceptos clave
 
@@ -55,13 +55,11 @@ Análisis GPS es el espacio de trabajo para los datos de carga externa. Conviert
 
 **¿Cómo ingreso datos?** Sube un `.csv`, `.xlsx` o `.tsv` —un archivo por sesión o una exportación de temporada. Las columnas se automapean a los jugadores; usa la plantilla descargable si quieres el formato exacto esperado.
 
-**¿Se conecta directamente a Catapult / StatSports?** La sincronización directa con el proveedor se presenta en la UI como un elemento de roadmap —ver el TODO más abajo. Hoy la vía confiable es la importación de archivos.
+**¿Se conecta directamente a Catapult / StatSports?** No con una sincronización en vivo — la vía admitida es la importación de archivos: exportá la sesión desde tu proveedor e importá ese archivo en ClavaMetrics.
 
 **¿Cuál es la diferencia con el Monitor de Carga?** Comparten el mismo motor de ACWR. El Monitor de Carga es el tablero de riesgo a nivel de plantel; Análisis GPS es el análisis profundo —por métrica, por jugador, por sesión, con líneas base y el modelo de fitness-fatiga.
 
 **¿Puedo comparar dos semanas?** Sí —la vista Comparar Microciclos contrasta una semana actual contra una semana de referencia, con deltas por jugador, forma de la carga, monotonía/strain y los mayores cambios.
-
-> TODO — verificar antes de documentar como implementado. El agente de GPS marcó estos como **stubs o "próximamente"** en la página actual: **exportación en PDF**, **sincronización con proveedor** (Catapult / StatSports / Polar / WIMU / GPSports), un panel dedicado de **configuración de GPS**, el cambio de tipo de gráfico, y varias tarjetas del catálogo (asimetría de acel/desacel, tendencia de línea base personal, box plot posicional, readiness del plantel, caída entre tiempos, nosotros-vs-rival). Además, los **umbrales exactos de zonas de velocidad** (cortes de HSR / VHSR / sprint en m·s⁻¹) no se exponen en la página y parecen configurados por el club —confirmar los valores reales antes de publicarlos.
 
 ## Relacionado
 

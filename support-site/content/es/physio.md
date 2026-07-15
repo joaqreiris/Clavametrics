@@ -25,11 +25,11 @@ Después de trabajar con un jugador lesionado o en riesgo: registra la sesión y
 
 ## Conceptos clave
 
-**Qué es una adaptación del entrenamiento.** Una adaptación es una instrucción del fisioterapeuta para modificar el siguiente entrenamiento de un jugador (por ejemplo, una restricción o una reducción de carga). Técnicamente es un tratamiento guardado con **Notificar a los entrenadores** activado y las notas de adaptación rellenadas: eso genera una notificación al cuerpo técnico y muestra la adaptación en la tarjeta de **adaptaciones de fisioterapia** en [Planificación diaria](/support/daily-planning) (y en el bloque de adaptaciones individuales del [Planificador de gimnasio](/support/gym-planner)), de modo que la sesión del día la respete. La app registra cuándo se **envió** la adaptación, pero ver la limitación más abajo sobre la acción "Aplicado" del entrenador.
+**Qué es una adaptación del entrenamiento.** Una adaptación es una instrucción del fisioterapeuta para modificar el siguiente entrenamiento de un jugador (por ejemplo, una restricción o una reducción de carga). Técnicamente es un tratamiento guardado con **Notificar a los entrenadores** activado y las notas de adaptación rellenadas: eso genera una notificación al cuerpo técnico y muestra la adaptación en la tarjeta de **adaptaciones de fisioterapia** en [Planificación diaria](/support/daily-planning) (y en el bloque de adaptaciones individuales del [Planificador de gimnasio](/support/gym-planner)), de modo que la sesión del día la respete. La app registra cuándo se **envió** la adaptación y, por separado, cuándo un entrenador la marca como **aplicada** en Planificación diaria.
 
 **Rehabilitación vs preventivo.** Un tratamiento de rehabilitación se asocia a una lesión activa y sigue su recuperación; un tratamiento preventivo es reducción de riesgo sin vínculo a lesión. Ambos se registran de la misma forma.
 
-**Quién puede verlo.** Los **tratamientos de fisioterapia se delimitan por equipo**, no se restringen a los roles médicos a nivel de base de datos — que es precisamente por lo que una adaptación puede llegar al plan de un entrenador (no médico). Esto es distinto del expediente clínico profundo (historial médico, medicaciones, documentos), que es solo para personal médico — ver [Historia clínica](/support/clinical-record). Ver el TODO sobre el control de acceso de la propia página.
+**Quién puede verlo.** Los **tratamientos de fisioterapia se delimitan por equipo**, no se restringen a los roles médicos a nivel de base de datos — que es precisamente por lo que una adaptación puede llegar al plan de un entrenador (no médico). Esto es distinto del expediente clínico profundo (historial médico, medicaciones, documentos), que es solo para personal médico — ver [Historia clínica](/support/clinical-record).
 
 ## FAQ
 
@@ -38,8 +38,6 @@ Después de trabajar con un jugador lesionado o en riesgo: registra la sesión y
 **¿Cuál es la diferencia entre un tratamiento de rehabilitación y uno preventivo?** El de rehabilitación se vincula a una lesión activa y sigue su recuperación; el preventivo es reducción de riesgo sin lesión asociada y lleva un motivo en su lugar.
 
 **¿Qué hace dar de alta a un jugador aquí?** Marca las lesiones activas del jugador como dadas de alta (con la fecha de retorno de hoy) y notifica al cuerpo técnico — el mismo concepto de alta que en la página de [Lesiones](/support/injuries).
-
-> TODO — limitación conocida, confirmada en el código: cuando un entrenador hace clic en **"✓ Aplicado"** sobre una adaptación en Planificación diaria, ese estado **no se persiste** — no existe un campo "aplicado/confirmado" en el tratamiento (solo `adaptation_sent_at`, que registra cuándo se envió la notificación, no si se actuó sobre ella). Así que "Aplicado" es actualmente un descarte solo visual. Además — **TODO de control de acceso**: la página de Historia clínica redirige a los roles no médicos, pero no se confirmó que la página de Fisioterapia tenga una restricción equivalente solo para personal médico, y los registros de tratamiento (incluidas las notas clínicas) están delimitados por equipo a nivel de BD — confirmar si el personal no médico debería ver las notas de tratamiento de fisioterapia, no solo la adaptación.
 
 ## Relacionado
 

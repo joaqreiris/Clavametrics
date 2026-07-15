@@ -23,7 +23,7 @@ Você chega aqui a partir do [Calendário](/support/calendar) ao abrir uma sess�
 
 **Defina o elenco do dia.** O card de elenco agrupa os jogadores por posição e permite filtrar por status com pílulas — **Todos, Disponível, Parcial, Indisponível, Lesionado, Doente, Ausente** — cada uma mostrando uma contagem ao vivo. Clique em um jogador para alterar seu status para aquela data (isso salva na disponibilidade). Jogadores indisponíveis, lesionados e doentes são listados separadamente com o motivo. **Imprimir Plantel** abre uma lista de jogadores imprimível.
 
-**Revise as adaptações de fisioterapia.** Um card exibe jogadores que têm uma adaptação ativa para hoje (puxada da Fisioterapia) — a nota e as modalidades de tratamento — para que a sessão respeite os limites de reabilitação e prevenção.
+**Revise as adaptações de fisioterapia.** Um card exibe jogadores que têm uma adaptação ativa para hoje (puxada da Fisioterapia) — a nota e as modalidades de tratamento — para que a sessão respeite os limites de reabilitação e prevenção. Depois de considerar uma adaptação, você pode marcá-la como **aplicada**, e essa confirmação fica salva.
 
 **Monte as duas fases.** Os exercícios ficam em duas grades:
 
@@ -57,8 +57,6 @@ Em cada uma, adicione um exercício **da Biblioteca de Exercícios** (exercício
 **Como o valor de AU planejadas é calculado?** RPE esperado (1–10) × duração total da sessão em minutos. Defina o RPE esperado no cabeçalho da sessão.
 
 **Como defino o status de um jogador para o dia?** Clique no jogador no card de elenco e escolha um status; ele salva na disponibilidade para aquela data e atualiza as contagens do elenco.
-
-> TODO — não foi possível confirmar pelo código, favor verificar: (1) o botão **"Carregar template"** no cabeçalho da sessão não tem handler visível — não está claro se os templates de sessão são um recurso funcional. (2) A ação **"✓ Aplicado"** em uma adaptação de fisioterapia apenas esmaece o card na UI, sem persistência encontrada — não está claro se registra algo ou é só um reconhecimento visual.
 
 ## Relacionados
 

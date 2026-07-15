@@ -51,8 +51,6 @@ Logo após uma sessão. Os jogadores enviam seu RPE de um celular (sem necessida
 
 **Por que um RPE completo importa?** Porque o Load Monitor constrói o ACWR a partir desses valores de s-RPE — respostas faltantes deixam lacunas no histórico de carga de um jogador.
 
-> TODO — não foi possível confirmar pelo código, por favor verifique: (1) um controle de **tendência / histórico de carga** por jogador aparece no cartão, mas está rotulado como em-breve. (2) Nenhum botão de **exportação** dedicado foi encontrado nesta página (coleta e revisão são o foco; totais semanais e ACWR ficam no Load Monitor).
-
 ## Relacionados
 
 - [Load Monitor](/support/load-monitor) — transforma esses valores de s-RPE em ACWR.

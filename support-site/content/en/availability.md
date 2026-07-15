@@ -17,7 +17,7 @@ Update it as part of the daily routine — before each session or match — so t
 
 ## How it works
 
-**Choose a view.** A segmented control switches between **Matrix** (the default players × days grid), **Today**, and **Stats** (a trend line, calendar heatmap, player ranking and a team breakdown).
+**Choose a view.** A segmented control switches between **Matrix** (the default players × days grid) and **Stats** (a trend line, calendar heatmap, player ranking and a team breakdown).
 
 **Set the date window.** The range defaults to the active microcycle (or the current Monday–Sunday) and can be changed with presets — Current MC, Last 7 / 14 / 30 days, or a custom range — and stepped forward/back. Each column shows its **MD-** label (e.g. MD-2, Match, Off); today is highlighted, match days are marked in red, and planned days off are striped and read-only.
 
@@ -64,8 +64,6 @@ So the priority is: manual entry first, then the injury auto-fill, then today's 
 **How do the "22 available / 3 partial / 2 out" counts elsewhere get their numbers?** From these statuses on the given day — available and partial count as trainable; injured, ill and away count as out.
 
 **Can two staff edit at once?** Yes — updates broadcast live, so everyone sees changes without refreshing.
-
-> TODO — could not fully confirm from the code, please verify: (1) the **Today** view is present but appears marked "coming soon". (2) The toolbar **Filters** and **Group by** buttons look like placeholders without active handlers. (3) Single-key shortcuts (A / P / I) are shown in the legend but may not be fully wired. (4) The **Absent** status only appears in the match-minutes context (0 minutes) — its broader use (e.g. did-not-play) isn't clear.
 
 ## Related
 

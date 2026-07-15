@@ -51,8 +51,6 @@ Right after a session. Players submit their RPE from a phone (no login needed) w
 
 **Why does complete RPE matter?** Because the Load Monitor builds ACWR from these s-RPE values — missing responses leave gaps in a player's load history.
 
-> TODO — could not confirm from the code, please verify: (1) a per-player **load trend / history** control appears on the card but is labeled coming-soon. (2) No dedicated **export** button was found on this page (collection and review are the focus; weekly totals and ACWR live in the Load Monitor).
-
 ## Related
 
 - [Load Monitor](/support/load-monitor) — turns these s-RPE values into ACWR.

@@ -31,7 +31,7 @@ When you need a shareable snapshot of a player — for a review, a scouting note
 
 **Saved templates.** A dossier configuration — which blocks, which tests, which trends — can be **saved as a template** (club-wide) and reloaded, so you can keep, say, a "Physical dossier" and a "Scouting dossier" preset and apply either in one click.
 
-**The scouting summary.** The scouting block is free text you edit inline; it prints with whatever you write and is only stored to the player when you explicitly save it (see the TODO).
+**The scouting summary.** The scouting block is free text you edit inline; it prints with whatever you write and is only stored to the player when you explicitly save it.
 
 ## FAQ
 
@@ -42,8 +42,6 @@ When you need a shareable snapshot of a player — for a review, a scouting note
 **Can I reuse a configuration?** Yes — save it as a template and apply it to any player.
 
 **How do I export it?** Print or Export PDF; the output is a branded one-page sheet.
-
-> TODO — minor, please verify: the **scouting summary** saves to the player only when you click save (it prints with whatever you type, but isn't auto-saved), and the exported **PDF filename** is whatever the browser's print dialog assigns (no fixed filename set in the page). The chosen **accent color** also appears not to persist between sessions.
 
 ## Related
 

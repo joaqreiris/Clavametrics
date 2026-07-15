@@ -27,9 +27,9 @@ Después de un partido, para registrar el resultado e introducir (o importar) la
 
 **Qué captura un informe de partido.** Dos capas: el **resultado del partido** (marcador, rival, competición, sede, local/visitante, formación, posesión, notas) y las **estadísticas por jugador** (minutos, valoración, goles, asistencias, tarjetas, posición), con las métricas de GPS superpuestas desde la sesión.
 
-**Vínculo con el partido del calendario.** Un informe está vinculado a una **sesión de partido** del calendario — un informe por sesión de partido, indexado por esa sesión. Al seleccionar la sesión se rellena automáticamente su fecha. Ten en cuenta que el rival y la competición se introducen en el informe (no se extraen automáticamente del partido — ver el TODO).
+**Vínculo con el partido del calendario.** Un informe está vinculado a una **sesión de partido** del calendario — un informe por sesión de partido, indexado por esa sesión. Al seleccionar la sesión se rellena automáticamente su fecha. Ten en cuenta que el rival y la competición se introducen en el informe (no se extraen automáticamente del partido).
 
-**Minutos y valoraciones.** Los minutos y las valoraciones se introducen o importan en el informe. Las valoraciones se muestran en una escala de color (a grandes rasgos: verde para altas, neutro en el medio, rojo para bajas). Ver el TODO sobre si los minutos/valoraciones fluyen hacia la disponibilidad o el perfil de temporada del jugador.
+**Minutos y valoraciones.** Los minutos y las valoraciones se introducen o importan en el informe. Las valoraciones se muestran en una escala de color (a grandes rasgos: verde para altas, neutro en el medio, rojo para bajas). Se almacenan en el informe; no alimentan automáticamente los minutos de disponibilidad ni el perfil de temporada del jugador.
 
 ## FAQ
 
@@ -38,8 +38,6 @@ Después de un partido, para registrar el resultado e introducir (o importar) la
 **¿Puedo importar estadísticas en lugar de escribirlas?** Sí — importa una exportación CSV/Excel, mapea las columnas y empareja las filas con los jugadores por nombre o número.
 
 **¿De dónde vienen los datos de GPS del informe?** De los datos de GPS de la sesión, mostrados por jugador junto a las estadísticas del partido (el análisis completo está en [Análisis GPS](/support/gps-analysis)).
-
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) si los **minutos** de un jugador alimentan los "minutos jugados" de la disponibilidad (match:N) o el perfil de temporada, y si las **valoraciones** persisten en el perfil — ninguna de las dos transferencias era visible aquí. (2) Cómo se usan los **informes independientes** (sin sesión vinculada). (3) No se encontró ninguna función de **compartir en el chat** un informe. (4) Un campo de GPS de **carga del jugador** seleccionado no se renderiza, y algunas vistas más ricas (mapa de tiros, mapa de calor, línea temporal) parecen ser futuras/ausentes.
 
 ## Relacionado
 

@@ -27,9 +27,9 @@ Após um jogo, para registrar o resultado e inserir (ou importar) as estatístic
 
 **O que um relatório de jogo captura.** Duas camadas: o **resultado da partida** (placar, adversário, competição, local, casa/fora, formação, posse de bola, observações) e as **estatísticas por jogador** (minutos, nota, gols, assistências, cartões, posição), com métricas de GPS sobrepostas a partir da sessão.
 
-**Vínculo com a partida do calendário.** Um relatório é vinculado a uma **sessão de jogo** no calendário — um relatório por sessão de jogo, indexado por essa sessão. Selecionar a sessão preenche automaticamente sua data. Observe que o adversário e a competição são inseridos no relatório (não são puxados automaticamente da partida — veja o TODO).
+**Vínculo com a partida do calendário.** Um relatório é vinculado a uma **sessão de jogo** no calendário — um relatório por sessão de jogo, indexado por essa sessão. Selecionar a sessão preenche automaticamente sua data. Observe que o adversário e a competição são inseridos no relatório (não são puxados automaticamente da partida).
 
-**Minutos e notas.** Minutos e notas são inseridos ou importados no relatório. As notas são exibidas em uma escala de cores (aproximadamente: verde para alto, neutro no meio, vermelho para baixo). Veja o TODO sobre se minutos/notas fluem adiante para a disponibilidade ou para o perfil de temporada do jogador.
+**Minutos e notas.** Minutos e notas são inseridos ou importados no relatório. As notas são exibidas em uma escala de cores (aproximadamente: verde para alto, neutro no meio, vermelho para baixo). Ficam armazenados no relatório; não alimentam automaticamente os minutos de disponibilidade nem o perfil de temporada do jogador.
 
 ## FAQ
 
@@ -38,8 +38,6 @@ Após um jogo, para registrar o resultado e inserir (ou importar) as estatístic
 **Posso importar as estatísticas em vez de digitá-las?** Sim — importe uma exportação CSV/Excel, mapeie as colunas e corresponda as linhas aos jogadores por nome ou número.
 
 **De onde vem o GPS no relatório?** Dos dados de GPS da sessão, exibidos por jogador ao lado das estatísticas do jogo (a análise completa fica em [GPS Analysis](/support/gps-analysis)).
-
-> TODO — não foi possível confirmar pelo código, por favor verifique: (1) se os **minutos** de um jogador alimentam os "minutos jogados" da disponibilidade (match:N) ou o perfil de temporada, e se as **notas** persistem no perfil — nenhuma dessas passagens foi visível aqui. (2) Como os **relatórios independentes** (sem sessão vinculada) são usados. (3) Não foi encontrado nenhum **compartilhamento-no-chat** de um relatório. (4) Um campo de GPS de **carga do jogador** selecionado não é renderizado, e algumas visualizações mais ricas (mapa de chutes, mapa de calor, linha do tempo) parecem ser futuras/ausentes.
 
 ## Relacionados
 

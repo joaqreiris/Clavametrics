@@ -51,8 +51,6 @@ Justo después de una sesión. Los jugadores envían su RPE desde el móvil (sin
 
 **¿Por qué importa un RPE completo?** Porque el Monitor de carga construye el ACWR a partir de estos valores de s-RPE — las respuestas que faltan dejan huecos en el historial de carga de un jugador.
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) un control de **tendencia / historial de carga** por jugador aparece en la tarjeta pero está etiquetado como próximamente. (2) No se encontró un botón de **exportación** dedicado en esta página (la recogida y la revisión son el foco; los totales semanales y el ACWR están en el Monitor de carga).
-
 ## Relacionado
 
 - [Monitor de carga](/support/load-monitor) — convierte estos valores de s-RPE en ACWR.

@@ -56,8 +56,6 @@ Whenever you're planning training: find an existing drill by its orientation, in
 
 **Can I restrict a drill to one category?** Yes — the Team dimension controls which categories a drill is visible to; leaving it empty shows it to all.
 
-> TODO — please note and confirm: the brief expected an **8-dimension** taxonomy, but the page exposes **6** filter dimensions (Orientation, Intensity, Match Day, Game type, Focus, Team). I documented the 6 that the code actually implements — if there are extra dimensions (e.g. principle / sub-principle / tactical concept) they aren't surfaced as filters here; confirm whether they exist elsewhere (e.g. inside the Drill Designer).
-
 ## Related
 
 - [Drill Designer](/support/drill-designer) — where these drills are designed and edited.

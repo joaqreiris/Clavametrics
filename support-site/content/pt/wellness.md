@@ -55,8 +55,6 @@ Para os quatro itens Hooper, **maior é pior**. O humor é exibido, mas não é 
 
 **Uma pontuação ruim de bem-estar significa tirar o jogador?** Não por si só — leia-a junto com a carga do jogador e o quadro médico. É um alerta para olhar mais de perto, não uma instrução.
 
-> TODO — não foi possível confirmar pelo código, por favor verifique: (1) não há caminho visível para a **equipe enviar em nome de um jogador** (o envio é do lado do jogador via o link). (2) Uma visualização de **histórico de 7 dias** aparece como "em breve". (3) Nenhuma **exportação** foi encontrada nesta página. (4) Uma ação de **reconhecer** para alertas de bem-estar existe no backend, mas não parece conectada à interface desta página.
-
 ## Relacionados
 
 - [Load Monitor](/support/load-monitor) — leia o bem-estar junto com a carga aguda:crônica.

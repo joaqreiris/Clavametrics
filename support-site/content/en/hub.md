@@ -36,19 +36,15 @@ Every day, first thing — it's the landing page after sign-in. Use it to read t
 - The **GPS** card's "sessions pending" counts recent sessions that don't yet have a GPS import.
 - The **RPE** card shows how many RPE were **submitted today** — it's a *submitted* count, not a count of who's still missing. (The "sessions awaiting RPE" idea lives in the [RPE](/support/rpe) and planning views, not on the Hub.)
 
-See the TODO on how the brief framed these versus what the page actually shows.
-
 ## FAQ
 
-**Can I choose which KPIs show?** Yes — customize the KPI strip (up to four), and the choice sticks to your profile. Reordering/hiding the module cards, however, doesn't appear to be wired yet (see TODO).
+**Can I choose which KPIs show?** Yes — customize the KPI strip (up to four), and the choice sticks to your profile.
 
-**Does the activity feed show GPS imports one per session?** It logs a "GPS data imported" activity referencing a session; see the TODO on whether bulk imports are grouped.
+**Does the activity feed show GPS imports one per session?** Each import logs a "GPS data imported" activity referencing its session; in the recent-activity feed, imports on the same day are grouped into one row.
 
 **Is the RPE number on the Hub the players who still owe an RPE?** No — it's how many were submitted today, not who's missing.
 
 **Where does Avg ACWR come from?** It's the squad mean of players' ACWR using the club's configured model — the same engine as the [Load Monitor](/support/load-monitor).
-
-> TODO — brief vs. code, please confirm: (1) the brief described GPS activity as **grouped**, but the feed appears to log a **gps.imported event per import** (with the session title appended), not an aggregated "N sessions" item — confirm whether a bulk import collapses to one row. (2) The brief referred to **"pending RPE"** on the Hub; the RPE card actually shows a **submitted-today** count (the GPS card is the one that shows "pending"). (3) The **module-cards "Customize"** button is present but has no handler wired — reordering/hiding modules may not be implemented yet.
 
 ## Related
 

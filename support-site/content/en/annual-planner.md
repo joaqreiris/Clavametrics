@@ -60,8 +60,6 @@ At pre-season setup and throughout the year for strategic planning: define the s
 
 **What's the difference between a phase and a mesocycle?** A phase is a broad season segment (e.g. pre-season) with an availability flag; a mesocycle is a periodization block (block models only) that groups weeks and sets their load model.
 
-> TODO — could not fully confirm from the code, please verify: (1) the **phase types** list is loaded from a separate table — the exact preset phase types (and whether staff can manage them) isn't visible on this page. (2) A microcycle can carry its **own embedded match** independent of the Calendar events — the exact de-duplication between the two wasn't fully confirmed. (3) Whether a microcycle's **match time** set here is used downstream or is reference-only.
-
 ## Related
 
 - [Calendar](/support/calendar) — detail a microcycle's week; matches and MD- labels are shared.

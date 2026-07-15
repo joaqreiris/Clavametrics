@@ -56,8 +56,6 @@ Siempre que estás planificando entrenamiento: encuentra una tarea existente por
 
 **¿Puedo restringir una tarea a una sola categoría?** Sí —la dimensión Equipo controla a qué categorías es visible una tarea; dejarla vacía la muestra a todas.
 
-> TODO — por favor notar y confirmar: el brief esperaba una taxonomía de **8 dimensiones**, pero la página expone **6** dimensiones de filtro (Orientación, Intensidad, Día de partido, Tipo de juego, Foco, Equipo). Documenté las 6 que el código realmente implementa —si hay dimensiones adicionales (p. ej. principio / subprincipio / concepto táctico) no aparecen como filtros aquí; confirmar si existen en otro lugar (p. ej. dentro del Diseñador de Tareas).
-
 ## Relacionado
 
 - [Diseñador de Tareas](/support/drill-designer) — donde estas tareas se diseñan y editan.

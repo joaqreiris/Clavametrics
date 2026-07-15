@@ -29,7 +29,7 @@ Para mantener el material de partidos y entrenamientos organizado y en contexto 
 
 **Una videoteca de enlaces, no un host.** El modelo central es que ClavaMetrics guarda un **enlace** a cada vídeo más su contexto, no el archivo de vídeo. El acceso al material real se rige por la compartición de tu Google Drive / Dropbox; ClavaMetrics gestiona la organización a su alrededor.
 
-**Vinculación de contexto.** La verdadera capacidad organizadora es vincular un vídeo a una o más **sesiones, jugadores y partidos**. Como los vínculos son bidireccionales, el mismo clip aparece dondequiera que sea relevante — en la sesión, en el jugador, en el partido — sin duplicar nada.
+**Vinculación de contexto.** La verdadera capacidad organizadora es vincular un vídeo a una o más **sesiones, jugadores y partidos**. Como los vínculos son bidireccionales, el mismo vídeo aparece dondequiera que sea relevante — en la sesión, en el jugador, en el partido — sin duplicar nada.
 
 ## FAQ
 
@@ -39,10 +39,8 @@ Para mantener el material de partidos y entrenamientos organizado y en contexto 
 
 **¿Cómo encuentro los vídeos de un jugador?** Vincula vídeos al jugador; aparecen entonces en el contexto de ese jugador. También puedes filtrar la videoteca por tipo de vínculo.
 
-> TODO — importante, resumen vs. código: el módulo se describió como **"clips · etiquetado · compartir"**, pero la página **no** implementa extracción de clips, etiquetado con marca de tiempo ni marcadores de eventos dentro de un vídeo — solo hace vinculación **a nivel de vídeo** con sesiones/jugadores/partidos. Tampoco hay **compartir en el chat** ni un flujo de enlace de compartición interno (solo copiar la URL de Drive/Dropbox o abrir en el proveedor). Confirmar si los clips/etiquetado y la compartición en chat son funciones planificadas, y reformular cualquier texto de "clips/etiquetado" en la app que dé a entender que existen hoy.
-
 ## Relacionado
 
 - [Perfil del jugador](/support/player) — donde aparecen los vídeos vinculados de un jugador.
 - [Informes de partido](/support/match-reports) — el partido al que puede vincularse un vídeo.
-- [Chat y tareas](/support/chat-tasks) — chat del equipo (la compartición de vídeo en el chat aún no está conectada — ver TODO).
+- [Chat y tareas](/support/chat-tasks) — chat del equipo.

@@ -52,8 +52,6 @@ Así, un salto ingresado a mano es un valor de evaluación; el mismo salto captu
 
 **¿Dónde aparecen los resultados de los tests en otras partes?** En el [Perfil del Jugador](/support/player) (instantánea y evolución más recientes) y como base para los grupos de carga del [Gym Planner](/support/gym-planner).
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) no hay un campo explícito de **récord personal** —solo se siguen el último valor y la media personal. (2) No se encontró en la UI la opción de **editar/eliminar** un resultado existente. (3) No está confirmado el formato/alcance exacto del botón **Exportar informe**. (4) No se confirmaron del todo desde esta página los umbrales de color exactos de **asimetría** ni el traspaso preciso al **grupo de carga del Gym Planner**.
-
 ## Relacionado
 
 - [Perfil del Jugador](/support/player) — donde los tests de un jugador aparecen como instantánea y evolución.

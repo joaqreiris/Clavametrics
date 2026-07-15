@@ -51,8 +51,6 @@ Cuando un jugador se lesiona (regístralo), a medida que su rehabilitación prog
 
 **¿Qué pasa con las fases de rehabilitación cuando doy el alta?** Se marcan todas como hechas, y la lesión pasa a la pestaña Resueltas.
 
-> TODO — no se pudo confirmar desde el propio código de la página, por favor verificar: la página de Lesiones **no tiene un control de rol del lado del cliente** más allá del guard general del módulo; el acceso se aplica mediante la base de datos (la tabla de lesiones es legible por el cuerpo técnico acotado al equipo del jugador, no restringido a roles médicos). Confirmar que esto coincide con la política prevista para la visibilidad de notas/diagnóstico de lesiones.
-
 ## Relacionado
 
 - [Disponibilidad](/support/availability) — donde una lesión aparece como lesionado/parcial/disponible.

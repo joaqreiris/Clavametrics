@@ -38,7 +38,7 @@ Tabs load on first click. The page is read-only — you switch tabs, change the 
 
 **Benchmarking.** In the physical tests, a player's result is placed against the **team cohort** — but only when there are enough peers (at least four) to make the comparison meaningful; otherwise the profile says so. This is the same cohort rule the [Evaluations](/support/evaluations) page uses.
 
-**What it does NOT show.** The profile is a summary, so several things live elsewhere: detailed **GPS metrics** (distance, speed, accelerations — here you only get ACWR; the full detail is in [GPS Analysis](/support/gps-analysis)); **session/microcycle** detail ([Sessions History](/support/sessions-history), [Calendar](/support/calendar)); **match event stats** (goals, assists); **nutrition** and **video**; and the full medical **dossier** (only summary stats appear here). The "Joined" field currently shows a placeholder.
+**What it does NOT show.** The profile is a summary, so several things live elsewhere: detailed **GPS metrics** (distance, speed, accelerations — here you only get ACWR; the full detail is in [GPS Analysis](/support/gps-analysis)); **session/microcycle** detail ([Sessions History](/support/sessions-history), [Calendar](/support/calendar)); **match event stats** (goals, assists); **nutrition** and **video**; and the full medical **dossier** (only summary stats appear here).
 
 ## FAQ
 
@@ -49,8 +49,6 @@ Tabs load on first click. The page is read-only — you switch tabs, change the 
 **Where's the full GPS breakdown?** Not here — the profile shows ACWR only. Open [GPS Analysis](/support/gps-analysis) for distance, speed and accelerations.
 
 **How do I reach a player's profile?** From the [Squad](/support/squad), open the player (the profile is per-player, keyed by the player).
-
-> TODO — could not confirm from the code, please verify: (1) the **"Joined"** field renders a placeholder ("—") — not yet wired to a date. (2) **Edit player / export dossier / print** actions are referenced but don't appear wired into this page (navigation is limited to tabs and the breadcrumb back to Squad).
 
 ## Related
 

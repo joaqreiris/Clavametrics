@@ -49,8 +49,6 @@ Para olhar para trás — auditar o que foi realmente feito, revisar a progress�
 
 **Posso comparar sessões?** Sim — **Comparar sessões** mostra duas ou três lado a lado.
 
-> TODO — não foi possível confirmar pelo código, por favor verifique: um KPI de **Conformidade** (carga planejada vs. entregue) aparece nesta visualização, mas renderiza como "—%", então parece incompleto/não conectado. Confirme se está implementado.
-
 ## Relacionados
 
 - [Daily Planning](/support/daily-planning) — onde as sessões são montadas e editadas.

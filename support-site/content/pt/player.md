@@ -38,7 +38,7 @@ As abas carregam no primeiro clique. A página é somente-leitura — você alte
 
 **Benchmarking.** Nos testes físicos, o resultado de um jogador é comparado ao **cohort da equipe** — mas apenas quando há pares suficientes (pelo menos quatro) para tornar a comparação significativa; caso contrário, o perfil informa isso. Essa é a mesma regra de cohort que a página [Evaluations](/support/evaluations) usa.
 
-**O que ele NÃO mostra.** O perfil é um resumo, então várias coisas ficam em outro lugar: **métricas de GPS** detalhadas (distância, velocidade, acelerações — aqui você só obtém o ACWR; o detalhe completo está em [GPS Analysis](/support/gps-analysis)); detalhe de **sessão/microciclo** ([Sessions History](/support/sessions-history), [Calendar](/support/calendar)); **estatísticas de eventos de jogo** (gols, assistências); **nutrição** e **vídeo**; e o **dossiê** médico completo (aqui aparecem apenas estatísticas de resumo). O campo "Ingressou" atualmente mostra um marcador de posição.
+**O que ele NÃO mostra.** O perfil é um resumo, então várias coisas ficam em outro lugar: **métricas de GPS** detalhadas (distância, velocidade, acelerações — aqui você só obtém o ACWR; o detalhe completo está em [GPS Analysis](/support/gps-analysis)); detalhe de **sessão/microciclo** ([Sessions History](/support/sessions-history), [Calendar](/support/calendar)); **estatísticas de eventos de jogo** (gols, assistências); **nutrição** e **vídeo**; e o **dossiê** médico completo (aqui aparecem apenas estatísticas de resumo).
 
 ## FAQ
 
@@ -49,8 +49,6 @@ As abas carregam no primeiro clique. A página é somente-leitura — você alte
 **Onde está o detalhamento completo de GPS?** Não aqui — o perfil mostra apenas o ACWR. Abra [GPS Analysis](/support/gps-analysis) para distância, velocidade e acelerações.
 
 **Como chego ao perfil de um jogador?** A partir do [Squad](/support/squad), abra o jogador (o perfil é por jogador, indexado pelo jogador).
-
-> TODO — não foi possível confirmar pelo código, por favor verifique: (1) o campo **"Ingressou"** renderiza um marcador de posição ("—") — ainda não conectado a uma data. (2) As ações de **Editar jogador / exportar dossiê / imprimir** são referenciadas, mas não parecem conectadas a esta página (a navegação se limita às abas e à trilha de retorno ao Squad).
 
 ## Relacionados
 

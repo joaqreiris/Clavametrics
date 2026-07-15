@@ -25,11 +25,11 @@ After working with an injured or at-risk player: record the session, and, when t
 
 ## Key concepts
 
-**What a training adaptation is.** An adaptation is a physio's instruction to modify the next training for a player (for example, a restriction or a load reduction). Technically it's a treatment saved with **Notify coaches** on and adaptation notes filled in: that raises a notification to the coaching staff and surfaces the adaptation on the **physio adaptations** card in [Daily Planning](/support/daily-planning) (and the individual-adaptations block in the [Gym Planner](/support/gym-planner)), so the day's session respects it. The app records when the adaptation was **sent**, but see the limitation below on the coach's "Applied" action.
+**What a training adaptation is.** An adaptation is a physio's instruction to modify the next training for a player (for example, a restriction or a load reduction). Technically it's a treatment saved with **Notify coaches** on and adaptation notes filled in: that raises a notification to the coaching staff and surfaces the adaptation on the **physio adaptations** card in [Daily Planning](/support/daily-planning) (and the individual-adaptations block in the [Gym Planner](/support/gym-planner)), so the day's session respects it. The app records when the adaptation was **sent** and, separately, when a coach marks it **applied** in Daily Planning.
 
 **Rehab vs preventive.** A rehab treatment attaches to an active injury and tracks its recovery; a preventive treatment is risk-reduction with no injury link. Both are logged the same way.
 
-**Who can see it.** Physio **treatments are scoped by team**, not restricted to medical roles at the database level — which is precisely why an adaptation can reach a (non-medical) coach's plan. This is different from the deep clinical file (medical history, medications, documents), which is medical-only — see [Clinical Record](/support/clinical-record). See the TODO on the page's own role gate.
+**Who can see it.** Physio **treatments are scoped by team**, not restricted to medical roles at the database level — which is precisely why an adaptation can reach a (non-medical) coach's plan. This is different from the deep clinical file (medical history, medications, documents), which is medical-only — see [Clinical Record](/support/clinical-record).
 
 ## FAQ
 
@@ -38,8 +38,6 @@ After working with an injured or at-risk player: record the session, and, when t
 **What's the difference between a rehab and a preventive treatment?** Rehab links to an active injury and tracks its recovery; preventive is risk-reduction with no injury attached and carries a reason instead.
 
 **What does clearing a player do here?** It marks the player's active injuries as cleared (with today's return date) and notifies the staff — the same clearance concept as on the [Injuries](/support/injuries) page.
-
-> TODO — known limitation, confirmed in code: when a coach clicks **"✓ Applied"** on an adaptation in Daily Planning, that state is **not persisted** — there is no "applied/acknowledged" field on the treatment (only `adaptation_sent_at`, which records when the notification was sent, not whether it was acted on). So "Applied" is currently a visual-only dismissal. Also — **access control TODO**: the Clinical Record page redirects non-medical roles, but the Physio page itself was not confirmed to have an equivalent medical-only gate, and treatment records (including clinical notes) are team-scoped at the DB level — confirm whether non-medical staff should see physio treatment notes, not just the adaptation.
 
 ## Related
 

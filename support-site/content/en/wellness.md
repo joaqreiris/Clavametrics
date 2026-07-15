@@ -55,8 +55,6 @@ For the four Hooper items, **higher is worse**. Mood is shown but not added into
 
 **Does a bad wellness score mean pull the player?** Not by itself — read it alongside the player's load and the medical picture. It's a flag to look closer, not an instruction.
 
-> TODO — could not confirm from the code, please verify: (1) there's no visible path for **staff to submit on a player's behalf** (submission is player-side via the link). (2) A **7-day history** view appears as "coming soon". (3) No **export** was found on this page. (4) An **acknowledge** action for wellness flags exists in the backend but doesn't appear wired into this page's UI.
-
 ## Related
 
 - [Load Monitor](/support/load-monitor) — read wellness alongside the acute:chronic load.

@@ -31,7 +31,7 @@ To oversee who's in rehab and who's on a preventive program — monitor progress
 
 **Relation to the individual plan.** Rehab and preventive plans and the player's individual training plan **share the same exercise library and block system**, but they are managed as **separate plans** — the app does not automatically copy a rehab plan into an individual plan (no automatic link was found in the code). In practice, staff maintain them in parallel; a return-to-play focus exists on the individual-plan side, but the two aren't auto-synced.
 
-**Return to availability — what it does and doesn't do.** Completing a rehab plan is **tracking only**: marking a plan **cleared** removes it from the active lists and files it in history. It does **not** by itself change the linked injury's status or the player's availability. Returning the player to availability is done on the [Injuries](/support/injuries) page (discharge) and reflected in [Availability](/support/availability) — the rehab plan and those steps are separate. (See the TODO.)
+**Return to availability — what it does and doesn't do.** Completing a rehab plan is **tracking only**: marking a plan **cleared** removes it from the active lists and files it in history. It does **not** by itself change the linked injury's status or the player's availability. Returning the player to availability is done on the [Injuries](/support/injuries) page (discharge) and reflected in [Availability](/support/availability) — the rehab plan and those steps are separate.
 
 **Where plans come from.** A plan can be created from an active injury, from an evaluation finding, from a GPS load/asymmetry flag, or manually — the source is recorded on the plan.
 
@@ -44,8 +44,6 @@ To oversee who's in rehab and who's on a preventive program — monitor progress
 **Who owns a plan?** Each plan has one or more owners with a role — physio, S&C or coach.
 
 **How do I start a plan from an injury?** Create a plan of kind Rehab and link the active injury; from there you build its phases and sessions.
-
-> TODO — please confirm (behavior and access): (1) clearing a rehab plan does **not** cascade to the injury or availability status — that's a manual step on the Injuries/Availability pages; confirm this is intended. (2) There's **no automatic link** between a rehab plan and the individual training plan (shared library only) — confirm whether an auto-populate is expected. (3) Access is via the general module guard + team scope + club RLS; unlike the Clinical Record, **no explicit medical-only gate** was confirmed on this page, and rehab plans are team-scoped (not restricted to medical roles) — confirm the intended visibility.
 
 ## Related
 

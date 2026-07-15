@@ -29,7 +29,7 @@ Para manter as filmagens de jogos e treinos organizadas e em contexto — adicio
 
 **Uma biblioteca de links, não um host.** O modelo central é que o ClavaMetrics mantém um **link** para cada vídeo mais seu contexto, não o arquivo de vídeo. O acesso à filmagem real é governado pelo compartilhamento do seu Google Drive / Dropbox; o ClavaMetrics gerencia a organização em torno dele.
 
-**Vinculação de contexto.** O verdadeiro poder de organização é vincular um vídeo a uma ou mais **sessões, jogadores e jogos**. Como os vínculos são bidirecionais, o mesmo clipe aparece onde quer que seja relevante — na sessão, no jogador, no jogo — sem duplicar nada.
+**Vinculação de contexto.** O verdadeiro poder de organização é vincular um vídeo a uma ou mais **sessões, jogadores e jogos**. Como os vínculos são bidirecionais, o mesmo vídeo aparece onde quer que seja relevante — na sessão, no jogador, no jogo — sem duplicar nada.
 
 ## FAQ
 
@@ -39,10 +39,8 @@ Para manter as filmagens de jogos e treinos organizadas e em contexto — adicio
 
 **Como encontro os vídeos de um jogador?** Vincule vídeos ao jogador; eles então aparecem no contexto desse jogador. Você também pode filtrar a biblioteca por tipo de vínculo.
 
-> TODO — importante, resumo vs. código: o módulo foi descrito como **"clipes · marcação · compartilhar"**, mas a página **não** implementa extração de clipes, marcação com carimbo de tempo, ou marcadores de evento dentro de um vídeo — ela faz vinculação **no nível do vídeo** a sessões/jogadores/jogos apenas. Também **não** há compartilhamento-no-chat ou fluxo interno de link de compartilhamento (apenas copiar a URL do Drive/Dropbox ou abrir no provedor). Confirme se clipe/marcação e compartilhamento-no-chat são recursos planejados, e reformule qualquer texto de "clipes/marcação" no aplicativo que sugira que eles existem hoje.
-
 ## Relacionados
 
 - [Player Profile](/support/player) — onde os vídeos vinculados de um jogador aparecem.
 - [Match Reports](/support/match-reports) — o jogo ao qual um vídeo pode ser vinculado.
-- [Chat & Tasks](/support/chat-tasks) — chat da equipe (o compartilhamento de vídeo no chat ainda não está conectado — veja o TODO).
+- [Chat & Tasks](/support/chat-tasks) — chat da equipe.

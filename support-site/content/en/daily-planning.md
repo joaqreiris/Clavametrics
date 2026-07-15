@@ -23,7 +23,7 @@ You land here from the [Calendar](/support/calendar) by opening a training sessi
 
 **Set the day's squad.** The squad card groups players by position and lets you filter by status with pills — **All, Available, Partial, Unavailable, Injured, Sick, Away** — each showing a live count. Click a player to change their status for that date (it saves to availability). Unavailable, injured and sick players are listed separately with their reason. **Print Roster** opens a printable player list.
 
-**Review physio adaptations.** A card surfaces players who have an active adaptation for today (pulled from Physio) — the note and the treatment modalities — so the session respects rehab and preventive limits.
+**Review physio adaptations.** A card surfaces players who have an active adaptation for today (pulled from Physio) — the note and the treatment modalities — so the session respects rehab and preventive limits. Once you've accounted for an adaptation you can mark it **applied**, and that acknowledgement is saved.
 
 **Build the two phases.** Drills live in two grids:
 
@@ -57,8 +57,6 @@ In each, add a drill **from the Exercises Library** (drills built in the planner
 **How is the Planned AU figure calculated?** Expected RPE (1–10) × total session duration in minutes. Set the expected RPE in the session header.
 
 **How do I set a player's status for the day?** Click the player in the squad card and choose a status; it saves to availability for that date and updates the squad counts.
-
-> TODO — could not confirm from the code, please verify: (1) the **"Load template"** button in the session header has no visible handler — unclear whether session templates are a working feature. (2) The **"✓ Applied"** action on a physio adaptation only dims the card in the UI with no persistence found — unclear whether it records anything or is just a visual acknowledgement.
 
 ## Related
 

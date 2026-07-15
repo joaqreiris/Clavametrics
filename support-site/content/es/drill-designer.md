@@ -63,8 +63,6 @@ Estas son las mismas etiquetas por las que luego filtras en la [Biblioteca de Ej
 
 **¿A dónde va el ejercicio después de guardarlo?** A la [Biblioteca de Ejercicios](/support/exercises-library), desde donde puede reutilizarse en sesiones y mapearse a datos GPS.
 
-> TODO — por favor tener en cuenta y confirmar: el brief esperaba una taxonomía de **8 dimensiones**, pero el Diseñador de Ejercicios implementa **4** dimensiones de etiquetado (Orientación, Intensidad, Enfoque, Tipo de juego) junto con los campos de día de partido y formato — no dimensiones de principio / sub-principio / concepto táctico. Documenté lo que el editor realmente tiene. Además, las funciones de **compartir al chat** y **subida de objeto personalizado** están presentes pero su comportamiento completo vive en módulos externos que no pude confirmar del todo aquí.
-
 ## Relacionado
 
 - [Biblioteca de Ejercicios](/support/exercises-library) — donde los ejercicios guardados se catalogan y filtran.

@@ -36,19 +36,15 @@ Todos los días, lo primero —es la página de aterrizaje tras iniciar sesión.
 - El "sesiones pendientes" de la tarjeta de **GPS** cuenta las sesiones recientes que aún no tienen una importación de GPS.
 - La tarjeta de **RPE** muestra cuántos RPE se **enviaron hoy** —es un conteo de *enviados*, no un conteo de quién todavía falta. (La idea de "sesiones esperando RPE" vive en las vistas de [RPE](/support/rpe) y de planificación, no en el Hub.)
 
-Ver el TODO sobre cómo el brief planteó esto versus lo que la página realmente muestra.
-
 ## Preguntas frecuentes
 
-**¿Puedo elegir qué KPIs se muestran?** Sí —personaliza la franja de KPIs (hasta cuatro), y la elección se mantiene en tu perfil. Reordenar/ocultar las tarjetas de módulo, sin embargo, no parece estar conectado aún (ver TODO).
+**¿Puedo elegir qué KPIs se muestran?** Sí —personaliza la franja de KPIs (hasta cuatro), y la elección se mantiene en tu perfil.
 
-**¿El feed de actividad muestra las importaciones de GPS una por sesión?** Registra una actividad "Datos GPS importados" que referencia una sesión; ver el TODO sobre si las importaciones masivas se agrupan.
+**¿El feed de actividad muestra las importaciones de GPS una por sesión?** Cada importación registra una actividad "Datos GPS importados" que referencia su sesión; en el feed de actividad reciente, las importaciones del mismo día se agrupan en una sola fila.
 
 **¿El número de RPE en el Hub son los jugadores que todavía deben un RPE?** No —es cuántos se enviaron hoy, no quién falta.
 
 **¿De dónde viene el ACWR promedio?** Es la media del plantel de los ACWR de los jugadores usando el modelo configurado del club —el mismo motor que el [Monitor de Carga](/support/load-monitor).
-
-> TODO — brief vs. código, por favor confirmar: (1) el brief describió la actividad de GPS como **agrupada**, pero el feed parece registrar un **evento gps.imported por importación** (con el título de la sesión anexado), no un elemento agregado de "N sesiones" —confirmar si una importación masiva se colapsa en una sola fila. (2) El brief se refirió a **"RPE pendiente"** en el Hub; la tarjeta de RPE en realidad muestra un conteo de **enviados-hoy** (la tarjeta de GPS es la que muestra "pendiente"). (3) El botón **"Personalizar"** de las tarjetas de módulo está presente pero no tiene un handler conectado —reordenar/ocultar módulos puede no estar implementado aún.
 
 ## Relacionado
 

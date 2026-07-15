@@ -17,7 +17,7 @@ En la configuración inicial y cada vez que el club cambia: invitar o quitar per
 
 ## Cómo funciona
 
-**Moverse entre secciones.** Las pestañas cubren **Miembros**, **Roles**, **Secciones**, **Suscripción**, **Notificaciones**, **Integraciones**, **Seguridad y SSO** y **Registro de auditoría**. (Secciones y Seguridad y SSO están marcadas como próximamente.)
+**Moverse entre secciones.** Las pestañas cubren **Miembros**, **Roles**, **Suscripción**, **Notificaciones**, **Integraciones** y **Registro de auditoría**.
 
 **Gestionar miembros.** La tabla de Miembros lista al personal con su rol, secciones otorgadas, última actividad y estado. Desde la fila de un miembro puedes **cambiar su rol**, **editar sus secciones** (otorgar/revocar módulos), asignarlo a **equipos** o copiar su correo. **Invita** a un nuevo miembro por correo con un rol (y equipos opcionales); recibe una invitación y, al aceptarla, se le aplican los permisos por defecto de su rol.
 
@@ -43,7 +43,7 @@ Los módulos otorgados a un miembro se almacenan como filas indexadas por módul
 **Integraciones GPS — pull vs push.** Los dos proveedores se conectan de forma diferente:
 
 - **Catapult** es una integración **pull**: pegas un **token de API del club** (de OpenField) y eliges una región; ClavaMetrics entonces extrae tus actividades bajo demanda o en una sincronización. El token se almacena como secreto (nunca se muestra de vuelta), y mapeas los atletas y parámetros de Catapult a tus jugadores y métricas.
-- **StatSports** es una integración **push**: coordinas con tu **gestor de cuenta de StatSports** para habilitar la API de terceros, e ingresas la clave; los datos se entregan a ClavaMetrics en lugar de extraerse. (Ver el TODO sobre el cableado exacto del push.)
+- **StatSports** es una integración **push**: coordinas con tu **gestor de cuenta de StatSports** para habilitar la API de terceros, e ingresas la clave; los datos se entregan a ClavaMetrics en lugar de extraerse.
 
 **Alcance de club.** Todo aquí está acotado a tu club (miembros, permisos, integraciones). Los superadministradores de plataforma (una lista separada de administradores de plataforma) pueden operar entre clubes.
 
@@ -56,8 +56,6 @@ Los módulos otorgados a un miembro se almacenan como filas indexadas por módul
 **¿Cuál es la diferencia entre una plantilla de rol y las secciones de un miembro?** La plantilla es el valor por defecto para todos los que tienen ese rol; las secciones de un miembro son sus concesiones individuales, que pueden anular la plantilla.
 
 **¿En qué se diferencia Catapult de StatSports?** Catapult se extrae con un token de API del club que ingresas; StatSports se envía (push) a ClavaMetrics después de que tu gestor de cuenta de StatSports habilite la API.
-
-> TODO — no se pudo confirmar del todo desde el código, por favor verificar: (1) si **cambiar el rol de un miembro** re-aplica automáticamente la plantilla de módulos de ese rol, o si la plantilla debe re-aplicarse manualmente. (2) El **cableado exacto del push de StatSports** del lado de ClavaMetrics (webhook/endpoint) — la página de Administración muestra la configuración con el gestor de cuenta y un estado de "verificación pendiente", pero el mecanismo receptor no era visible aquí. (3) Las pestañas **Secciones** y **Seguridad y SSO** están marcadas como próximamente, y el webhook de **facturación de Stripe** que rellena los datos de la suscripción se indica como pendiente.
 
 ## Relacionado
 

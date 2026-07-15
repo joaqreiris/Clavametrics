@@ -60,8 +60,6 @@ Lo abres desde el [Calendario](/support/calendar) haciendo clic en una sesión d
 
 **¿Por qué algunos campos están bloqueados?** Los campos heredados del Calendario (microciclo, día de partido, hora, duración, RPE) se editan allí para mantenerse sincronizados en toda la app.
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) no hay una UI visible para agrupar ejercicios como **superseries/circuitos** —cada fila es independiente. (2) No se encontró el **reordenamiento de filas** (arrastrar para reordenar). (3) Tras un **borrador con IA**, cerrar la pestaña antes de guardar parece perderlo (no se encontró persistencia de borrador separada). (4) Las **plantillas** guardan las filas de calentamiento/pliometría/principal pero aparentemente no las adaptaciones individuales.
-
 ## Relacionado
 
 - [Calendario](/support/calendar) — donde se programa la sesión de gimnasio y se establece su contexto de MD-.

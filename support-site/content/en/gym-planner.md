@@ -60,8 +60,6 @@ You open it from the [Calendar](/support/calendar) by clicking a gym session for
 
 **Why are some fields locked?** Fields inherited from the Calendar (microcycle, match day, time, duration, RPE) are edited there to stay in sync across the app.
 
-> TODO — could not confirm from the code, please verify: (1) there's no visible UI to group exercises as **supersets/circuits** — each row is standalone. (2) **Row reordering** (drag to reorder) wasn't found. (3) After an **AI draft**, closing the tab before saving appears to lose it (no separate draft persistence found). (4) **Templates** save the warm-up/plyo/main rows but apparently not the individual adaptations.
-
 ## Related
 
 - [Calendar](/support/calendar) — where the gym session is scheduled and its MD- context set.

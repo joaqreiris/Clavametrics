@@ -29,7 +29,7 @@ Antes de un partido —lo alcanzas desde el partido del [Calendario](/support/ca
 
 **Ligada al partido.** Una alineación pertenece a un partido específico en el calendario —**una alineación por partido**. Al abrir el constructor se encuentra el próximo partido y se carga (o crea) la alineación de ese partido, de modo que el XI que construyes queda ligado a ese encuentro. Los titulares y suplentes se almacenan con su espacio y su marca de capitán.
 
-**Publicación.** Una alineación tiene un estado —borrador, luego **oficial** cuando la publicas (lo que sella quién la publicó y cuándo). La publicación se ofrece como "Enviar a #match-day", junto con una descarga en PNG y una copia de enlace. Exactamente cómo llega una alineación publicada a los jugadores (un canal de chat y/o un enlace visualizable) no se confirmó del todo desde el código —ver el TODO.
+**Publicación.** Una alineación tiene un estado —borrador, luego **oficial** cuando la publicas (lo que sella quién la publicó y cuándo). La publicación se ofrece como "Enviar a #match-day", junto con una descarga en PNG y una copia de enlace.
 
 ## Preguntas frecuentes
 
@@ -40,8 +40,6 @@ Antes de un partido —lo alcanzas desde el partido del [Calendario](/support/ca
 **¿Cómo comparto la alineación?** Publícala como oficial, descarga el PNG, o copia su enlace —desde el diálogo Compartir.
 
 **¿Puedo exportarla como imagen?** Sí —Descargar PNG renderiza el póster a una imagen; también puedes imprimirla.
-
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) si **"Enviar a #match-day"** realmente publica en un canal de chat y si el **enlace copiado** (`?lineup=…`) es visualizable por los **jugadores** —no se confirmó ninguna vista pública/de cara al jugador. (2) Cuándo se usa el estado **"bloqueado"** (versus borrador/oficial). (3) Los botones **Plantillas** y **Restablecer** están presentes pero sus handlers no se encontraron —confirmar que funcionan.
 
 ## Relacionado
 

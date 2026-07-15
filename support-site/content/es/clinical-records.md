@@ -37,8 +37,6 @@ Para una lectura médica de todo el plantel — quién está apto, modificado, l
 
 **¿Cómo abro el archivo completo de un jugador?** Haz clic en su fila para abrir su [Registro Clínico](/support/clinical-record) individual.
 
-> TODO — detalle de control de acceso a confirmar: la página lleva una nota que da a entender que **los roles no médicos (entrenador / S&C) ven una vista reducida** (solo estado, disponibilidad y RTP), pero el código del índice **no** oculta realmente columnas por rol — la protección real es la **puerta del módulo** clínico más la **regla de acceso médico de la base de datos** (los campos solo médicos como la fecha de revisión vuelven vacíos para roles no médicos, y llegar a la página depende de las concesiones de módulo del club). Confirmar qué puede realmente abrir y ver aquí un rol no médico, ya que la columna "problema activo" expone un titular de lesión.
-
 ## Relacionado
 
 - [Registro Clínico](/support/clinical-record) — el archivo individual del jugador que este índice abre.

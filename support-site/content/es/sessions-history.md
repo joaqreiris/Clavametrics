@@ -49,8 +49,6 @@ Para mirar atrás — auditar lo que realmente se hizo, revisar la progresión d
 
 **¿Puedo comparar sesiones?** Sí — **Comparar sesiones** muestra dos o tres lado a lado.
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: un KPI de **Cumplimiento** (carga planificada vs entregada) aparece en esta vista pero se renderiza como "—%", así que parece incompleto/sin conectar. Confirmar si está implementado.
-
 ## Relacionado
 
 - [Planificación diaria](/support/daily-planning) — donde se construyen y editan las sesiones.

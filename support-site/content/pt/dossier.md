@@ -31,7 +31,7 @@ Quando você precisa de um instantâneo compartilhável de um jogador — para u
 
 **Templates salvos.** Uma configuração de dossiê — quais blocos, quais testes, quais tendências — pode ser **salva como um template** (para todo o clube) e recarregada, para que você possa manter, digamos, uma predefinição de "Dossiê físico" e uma de "Dossiê de scouting" e aplicar qualquer uma com um clique.
 
-**O resumo de scouting.** O bloco de scouting é texto livre que você edita inline; ele é impresso com o que você escrever e só é armazenado no jogador quando você o salva explicitamente (veja o TODO).
+**O resumo de scouting.** O bloco de scouting é texto livre que você edita inline; ele é impresso com o que você escrever e só é armazenado no jogador quando você o salva explicitamente.
 
 ## FAQ
 
@@ -42,8 +42,6 @@ Quando você precisa de um instantâneo compartilhável de um jogador — para u
 **Posso reutilizar uma configuração?** Sim — salve-a como um template e aplique-a a qualquer jogador.
 
 **Como o exporto?** Imprimir ou Exportar PDF; a saída é uma folha de uma página com a marca do clube.
-
-> TODO — menor, favor verificar: o **resumo de scouting** salva no jogador apenas quando você clica em salvar (ele é impresso com o que você digitar, mas não é salvo automaticamente), e o **nome do arquivo PDF** exportado é o que o diálogo de impressão do navegador atribui (nenhum nome de arquivo fixo definido na página). A **cor de destaque** escolhida também parece não persistir entre sessões.
 
 ## Relacionados
 

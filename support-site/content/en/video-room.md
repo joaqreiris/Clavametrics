@@ -29,7 +29,7 @@ To keep match and training footage organized and in context — add a Drive/Drop
 
 **A link library, not a host.** The core model is that ClavaMetrics keeps a **link** to each video plus its context, not the video file. Access to the actual footage is governed by your Google Drive / Dropbox sharing; ClavaMetrics manages the organization around it.
 
-**Context linking.** The real organizing power is linking a video to one or more **sessions, players and matches**. Because the links are bidirectional, the same clip surfaces wherever it's relevant — on the session, on the player, on the match — without duplicating anything.
+**Context linking.** The real organizing power is linking a video to one or more **sessions, players and matches**. Because the links are bidirectional, the same video surfaces wherever it's relevant — on the session, on the player, on the match — without duplicating anything.
 
 ## FAQ
 
@@ -39,10 +39,8 @@ To keep match and training footage organized and in context — add a Drive/Drop
 
 **How do I find a player's videos?** Link videos to the player; they then appear in that player's context. You can also filter the library by link type.
 
-> TODO — important, brief vs. code: the module was described as **"clips · tagging · share"**, but the page does **not** implement clip extraction, timestamped tagging, or event markers within a video — it does **video-level** linking to sessions/players/matches only. There is also **no share-into-chat** or internal share-link flow (only copy the Drive/Dropbox URL or open in provider). Confirm whether clip/tagging and chat-sharing are planned features, and reword any "clips/tagging" wording in the app that implies they exist today.
-
 ## Related
 
 - [Player Profile](/support/player) — where a player's linked videos surface.
 - [Match Reports](/support/match-reports) — the match a video can be linked to.
-- [Chat & Tasks](/support/chat-tasks) — team chat (video sharing into chat isn't wired yet — see TODO).
+- [Chat & Tasks](/support/chat-tasks) — team chat.

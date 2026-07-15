@@ -51,8 +51,6 @@ When a player gets injured (log it), as their rehab progresses (advance the phas
 
 **What happens to the rehab phases when I discharge?** They're all marked done, and the injury moves to the Resolved tab.
 
-> TODO — could not confirm from the page's own code, please verify: the Injuries page has **no client-side role gate** beyond the general module guard; access is enforced by the database (the injuries table is readable by staff scoped to the player's team, not gated to medical roles). Confirm this matches the intended policy for injury notes/diagnosis visibility.
-
 ## Related
 
 - [Availability](/support/availability) — where an injury shows as injured/partial/available.

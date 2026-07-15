@@ -52,8 +52,6 @@ So a jump entered by hand is one evaluation value; the same jump captured on a f
 
 **Where do test results show up elsewhere?** On the [Player Profile](/support/player) (latest snapshot and evolution) and as the basis for the [Gym Planner](/support/gym-planner)'s load groups.
 
-> TODO — could not confirm from the code, please verify: (1) there's no explicit **personal-best** field — only latest value and personal average are tracked. (2) **Edit/delete** of an existing result wasn't found in the UI. (3) The **Export report** button's exact format/scope isn't confirmed. (4) The exact **asymmetry** color thresholds and the precise **Gym Planner load-group** hand-off weren't fully confirmed from this page.
-
 ## Related
 
 - [Player Profile](/support/player) — where a player's tests appear as a snapshot and evolution.

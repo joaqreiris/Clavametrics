@@ -52,8 +52,6 @@ Então um salto inserido manualmente é um valor de avaliação; o mesmo salto c
 
 **Onde os resultados dos testes aparecem em outros lugares?** No [Perfil do Jogador](/support/player) (instantâneo mais recente e evolução) e como base para os grupos de carga do [Planejador de Academia](/support/gym-planner).
 
-> TODO — não foi possível confirmar pelo código, favor verificar: (1) não há um campo explícito de **recorde pessoal** — apenas o valor mais recente e a média pessoal são acompanhados. (2) A **edição/exclusão** de um resultado existente não foi encontrada na interface. (3) O formato/escopo exato do botão **Exportar relatório** não está confirmado. (4) Os limites de cor exatos de **assimetria** e a exata **transferência para o grupo de carga do Planejador de Academia** não foram totalmente confirmados a partir desta página.
-
 ## Relacionados
 
 - [Perfil do Jogador](/support/player) — onde os testes de um jogador aparecem como instantâneo e evolução.

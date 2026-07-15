@@ -106,8 +106,6 @@ All references below were checked against PubMed / the journal of record; the ex
 11. Foster C. Monitoring training in athletes with reference to overtraining syndrome. *Medicine & Science in Sports & Exercise.* 1998;30(7):1164–1168. [doi:10.1097/00005768-199807000-00023](https://doi.org/10.1097/00005768-199807000-00023) — monotony and strain.
 12. Martín-García A, Gómez Díaz A, Bradley PS, Morera F, Casamichana D. Quantification of a Professional Football Team's External Load Using a Microcycle Structure. *Journal of Strength and Conditioning Research.* 2018;32(12):3511–3518. [doi:10.1519/JSC.0000000000002816](https://doi.org/10.1519/JSC.0000000000002816) — an empirical operationalization of the structured-microcycle approach.
 
-> TODO — bibliographic gaps to review: (1) **Seirul·lo's "Microciclo Estructurado"** has **no peer-reviewed primary source** we could verify; reference 12 (Martín-García et al. 2018) is used as a citable proxy, and the methodology itself is documented in Spanish-language books (cite as a book, not a paper). (2) The **morphocycle / Tactical Periodization** (Frade), **ATR** (Issurin) and **Verheijen** methodologies are named in the app but are **not backed here by a verified peer-reviewed primary citation** — they're described as methodologies only. Confirm preferred sources before adding citations for them.
-
 ## Related
 
 - [Load Monitor](/support/load-monitor) — ACWR in practice at squad level.

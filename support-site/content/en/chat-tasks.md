@@ -30,7 +30,7 @@ For day-to-day coordination: message the staff, share a file, and track who need
 
 Role-based assignment is what lets you delegate a job to "the medical staff" or "the coaches" without naming individuals — the app resolves the role to the current members.
 
-**Reminders / alarms.** A task can carry one or more reminders — presets like a day or an hour before, on the due date, or a custom time. Each reminder is stored with its fire time and a sent marker; delivery is handled by a scheduled process (see the TODO on the exact delivery channel).
+**Reminders / alarms.** A task can carry one or more reminders — presets like a day or an hour before, on the due date, or a custom time. Each reminder is stored with its fire time and a sent marker; delivery is handled by a scheduled process.
 
 **Status and notifications.** Tasks move Backlog → In Progress → Blocked/Review → Done. The transition to Done raises a notification to the creator and the assignees. Notifications from other modules (like a physio adaptation) also flow through this system.
 
@@ -41,8 +41,6 @@ Role-based assignment is what lets you delegate a job to "the medical staff" or 
 **How do reminders fire?** You set reminder times on the task; a scheduled process sends them (the exact channel — push/email/in-app — wasn't confirmed from this page).
 
 **Can I attach files in chat?** Yes — attachments and inline link previews are supported, and documents can be pinned to a channel.
-
-> TODO — could not confirm from the code, please verify: (1) message types **`task_ref`**, **`report_share`** and **`system`** are declared but don't appear wired into the UI (only text and file are clearly used). (2) The **reminder delivery mechanism** (which channel actually sends them) runs outside this page and wasn't confirmed. (3) A task's link to a specific **player/session/injury** isn't an explicit field here (category infers context). (4) A **share-into-chat** action (e.g. sharing a report or video into a message) wasn't found wired up.
 
 ## Related
 

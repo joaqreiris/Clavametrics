@@ -29,7 +29,7 @@ Antes de uma partida — você o acessa a partir da partida no [Calendário](/su
 
 **Vinculada à partida.** Uma escalação pertence a uma partida específica no calendário — **uma escalação por partida**. Abrir o construtor encontra a próxima partida e carrega (ou cria) a escalação daquela partida, de modo que o XI que você constrói fica vinculado àquele confronto. Titulares e substitutos são armazenados com sua vaga e o sinalizador de capitão.
 
-**Publicação.** Uma escalação tem um status — rascunho, e depois **oficial** quando você a publica (o que carimba quem a publicou e quando). A publicação é oferecida como "Enviar para #match-day", ao lado de um download de PNG e uma cópia de link. Exatamente como uma escalação publicada chega aos jogadores (um canal de chat e/ou um link visualizável) não foi totalmente confirmado pelo código — ver o TODO.
+**Publicação.** Uma escalação tem um status — rascunho, e depois **oficial** quando você a publica (o que carimba quem a publicou e quando). A publicação é oferecida como "Enviar para #match-day", ao lado de um download de PNG e uma cópia de link.
 
 ## FAQ
 
@@ -40,8 +40,6 @@ Antes de uma partida — você o acessa a partir da partida no [Calendário](/su
 **Como compartilho a escalação?** Publique-a como oficial, baixe o PNG, ou copie seu link — a partir da caixa de diálogo Compartilhar.
 
 **Posso exportá-la como imagem?** Sim — Baixar PNG renderiza o pôster para uma imagem; você também pode imprimi-la.
-
-> TODO — não foi possível confirmar pelo código, favor verificar: (1) se **"Enviar para #match-day"** realmente publica em um canal de chat e se o **link copiado** (`?lineup=…`) é visualizável pelos **jogadores** — nenhuma visão pública/voltada ao jogador foi confirmada. (2) Quando o status **"bloqueado"** é usado (versus rascunho/oficial). (3) Os botões **Modelos** e **Redefinir** estão presentes mas seus handlers não foram encontrados — confirme se funcionam.
 
 ## Relacionados
 

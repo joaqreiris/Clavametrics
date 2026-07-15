@@ -17,7 +17,7 @@ At setup and whenever the club changes: invite or remove staff, change a member'
 
 ## How it works
 
-**Move between sections.** Tabs cover **Members**, **Roles**, **Sections**, **Subscription**, **Notifications**, **Integrations**, **Security & SSO**, and **Audit log**. (Sections and Security & SSO are marked coming-soon.)
+**Move between sections.** Tabs cover **Members**, **Roles**, **Subscription**, **Notifications**, **Integrations**, and **Audit log**.
 
 **Manage members.** The Members table lists staff with their role, granted sections, last activity and status. From a member's row you **change their role**, **edit their sections** (grant/revoke modules), assign them to **teams**, or copy their email. **Invite** a new member by email with a role (and optional teams) — they get an invitation and, on acceptance, their role's default permissions are applied.
 
@@ -43,7 +43,7 @@ A member's granted modules are stored as rows keyed by module. A special **`__ma
 **GPS integrations — pull vs push.** The two providers connect differently:
 
 - **Catapult** is a **pull** integration: you paste a **club API token** (from OpenField) and pick a region; ClavaMetrics then pulls your activities on demand or on a sync. The token is stored as a secret (never shown back), and you map Catapult's athletes and parameters to your players and metrics.
-- **StatSports** is a **push** integration: you arrange with your **StatSports account manager** to enable the third-party API, and enter the key; data is delivered to ClavaMetrics rather than pulled. (See the TODO on the exact push wiring.)
+- **StatSports** is a **push** integration: you arrange with your **StatSports account manager** to enable the third-party API, and enter the key; data is delivered to ClavaMetrics rather than pulled.
 
 **Club-scoped.** Everything here is scoped to your club (members, permissions, integrations). Platform super-admins (a separate platform-admin list) can operate across clubs.
 
@@ -56,8 +56,6 @@ A member's granted modules are stored as rows keyed by module. A special **`__ma
 **What's the difference between a role template and a member's sections?** The template is the default for everyone with that role; a member's sections are their individual grants, which can override the template.
 
 **How is Catapult different from StatSports?** Catapult is pulled with a club API token you enter; StatSports is pushed to ClavaMetrics after your StatSports account manager enables the API.
-
-> TODO — could not fully confirm from the code, please verify: (1) whether **changing a member's role** automatically re-applies that role's module template, or if the template must be re-applied manually. (2) The exact **StatSports push wiring** on ClavaMetrics' side (webhook/endpoint) — the Admin page shows the account-manager setup and a "verification pending" state, but the receiving mechanism wasn't visible here. (3) The **Sections** and **Security & SSO** tabs are marked coming-soon, and the **Stripe billing** webhook that fills subscription data is noted as pending.
 
 ## Related
 

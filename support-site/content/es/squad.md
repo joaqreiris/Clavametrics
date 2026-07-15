@@ -62,8 +62,6 @@ Un jugador tiene una posición **primaria** (usada para la agrupación y la insi
 
 **¿Dónde veo el historial completo de un jugador?** Abre **Ver perfil** para la página del jugador, o **Exportar expediente** para el resumen imprimible.
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) la columna **Incorporación** está presente pero actualmente renderiza "—" para todos, así que puede que aún no esté conectada a una fecha. (2) El estado de jugador **"modificado"** aparece en el formulario pero está deshabilitado ahí — su significado exacto y cómo se establece no queda claro solo desde la página.
-
 ## Relacionado
 
 - [Disponibilidad](/support/availability) — la aptitud para entrenar día a día de estos jugadores.

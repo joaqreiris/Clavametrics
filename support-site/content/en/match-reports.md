@@ -27,9 +27,9 @@ After a match, to record the result and enter (or import) the players' stats, an
 
 **What a match report captures.** Two layers: the **match result** (score, opponent, competition, venue, home/away, formation, possession, notes) and the **per-player stats** (minutes, rating, goals, assists, cards, position), with GPS metrics overlaid from the session.
 
-**Link to the calendar fixture.** A report is tied to a **match session** on the calendar — one report per match session, keyed by that session. Selecting the session auto-fills its date. Note that the opponent and competition are entered on the report (they aren't auto-pulled from the fixture — see the TODO).
+**Link to the calendar fixture.** A report is tied to a **match session** on the calendar — one report per match session, keyed by that session. Selecting the session auto-fills its date. Note that the opponent and competition are entered on the report (they aren't auto-pulled from the fixture).
 
-**Minutes and ratings.** Minutes and ratings are entered or imported into the report. Ratings display on a color scale (roughly: green for high, neutral in the middle, red for low). See the TODO on whether minutes/ratings flow onward into availability or the player's season profile.
+**Minutes and ratings.** Minutes and ratings are entered or imported into the report. Ratings display on a color scale (roughly: green for high, neutral in the middle, red for low). These are stored on the report; they don't automatically feed the availability minutes or the player's season profile.
 
 ## FAQ
 
@@ -38,8 +38,6 @@ After a match, to record the result and enter (or import) the players' stats, an
 **Can I import stats instead of typing them?** Yes — import a CSV/Excel export, map the columns, and match rows to players by name or number.
 
 **Where does the GPS in the report come from?** From the session's GPS data, shown per player alongside the match stats (the full analysis lives in [GPS Analysis](/support/gps-analysis)).
-
-> TODO — could not confirm from the code, please verify: (1) whether a player's **minutes** feed the availability "minutes played" (match:N) or the season profile, and whether **ratings** persist to the profile — neither hand-off was visible here. (2) How **standalone reports** (with no linked session) are used. (3) There's **no share-into-chat** of a report found. (4) A selected **player-load** GPS field isn't rendered, and some richer views (shot map, heatmap, timeline) appear to be future/absent.
 
 ## Related
 

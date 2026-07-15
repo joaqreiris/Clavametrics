@@ -66,8 +66,6 @@ Navegue com o botão **Hoje**, as setas anterior/próximo (avança por semana na
 
 **Onde eu realmente monto o conteúdo da sessão?** O Calendário agenda as sessões; abra uma e use **Abrir no Planejamento Diário** (campo) ou **Abrir no Planejador de Academia** (academia) para desenhar os exercícios e blocos.
 
-> TODO — confirme antes de depender disto: as sessões podem carregar uma checklist de **Tarefas** (uma seção de Tarefas aparece no popover do evento), e a **exportação em PDF** produz uma folha imprimível de semana/mês. Ambas estão presentes na página mas seu comportamento exato não foi totalmente verificado durante a escrita. Uma faixa alternativa de linha do tempo da temporada também existe na página mas parece estar oculta/ainda não ativa.
-
 ## Relacionados
 
 - [Monitor de Carga](/support/load-monitor) — a carga que você planeja aqui alimenta as razões aguda:crônica lá.

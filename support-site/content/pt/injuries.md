@@ -51,8 +51,6 @@ Quando um jogador se lesiona (registre), conforme a reabilitação progride (ava
 
 **O que acontece com as fases de reabilitação quando eu dou alta?** Todas são marcadas como concluídas, e a lesão move-se para a aba Resolvidas.
 
-> TODO — não foi possível confirmar pelo código da própria página, favor verificar: a página de Lesões **não tem controle de função no lado do cliente** além da proteção geral do módulo; o acesso é imposto pelo banco de dados (a tabela de lesões é legível pela comissão delimitada à equipe do jogador, não restrita a funções médicas). Confirme se isso corresponde à política pretendida para a visibilidade de notas/diagnóstico de lesão.
-
 ## Relacionados
 
 - [Disponibilidade](/support/availability) — onde uma lesão aparece como lesionado/parcial/disponível.

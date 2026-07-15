@@ -62,8 +62,6 @@ Um jogador tem uma posição **primária** (usada para agrupamento e o distintiv
 
 **Onde vejo o histórico completo de um jogador?** Abra **Ver perfil** para a página do jogador, ou **Exportar dossiê** para o resumo imprimível.
 
-> TODO — não foi possível confirmar pelo código, por favor verifique: (1) a coluna **Ingressou** está presente, mas atualmente renderiza "—" para todos, então pode ainda não estar conectada a uma data. (2) O status de jogador **"modificado"** aparece no formulário, mas está desabilitado ali — seu significado exato e como é definido não fica claro apenas pela página.
-
 ## Relacionados
 
 - [Availability](/support/availability) — aptidão diária para treinar desses jogadores.

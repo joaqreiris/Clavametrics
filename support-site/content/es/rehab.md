@@ -31,7 +31,7 @@ Para supervisar quién está en rehabilitación y quién en un programa preventi
 
 **Relación con el plan individual.** Los planes de rehabilitación y preventivos y el plan de entrenamiento individual del jugador **comparten la misma biblioteca de ejercicios y sistema de bloques**, pero se gestionan como **planes separados** — la app no copia automáticamente un plan de rehabilitación en un plan individual (no se encontró vínculo automático en el código). En la práctica, el cuerpo técnico los mantiene en paralelo; existe un enfoque de retorno al juego en el lado del plan individual, pero los dos no se sincronizan automáticamente.
 
-**Retorno a la disponibilidad — qué hace y qué no hace.** Completar un plan de rehabilitación es **solo seguimiento**: marcar un plan como **alta** lo retira de las listas activas y lo archiva en el historial. **No** cambia por sí mismo el estado de la lesión vinculada ni la disponibilidad del jugador. Devolver al jugador a la disponibilidad se hace en la página de [Lesiones](/support/injuries) (alta médica) y se refleja en [Disponibilidad](/support/availability) — el plan de rehabilitación y esos pasos son independientes. (Ver el TODO.)
+**Retorno a la disponibilidad — qué hace y qué no hace.** Completar un plan de rehabilitación es **solo seguimiento**: marcar un plan como **alta** lo retira de las listas activas y lo archiva en el historial. **No** cambia por sí mismo el estado de la lesión vinculada ni la disponibilidad del jugador. Devolver al jugador a la disponibilidad se hace en la página de [Lesiones](/support/injuries) (alta médica) y se refleja en [Disponibilidad](/support/availability) — el plan de rehabilitación y esos pasos son independientes.
 
 **De dónde vienen los planes.** Un plan puede crearse a partir de una lesión activa, de un hallazgo de evaluación, de una alerta de carga/asimetría de GPS, o manualmente — la fuente se registra en el plan.
 
@@ -44,8 +44,6 @@ Para supervisar quién está en rehabilitación y quién en un programa preventi
 **¿Quién es responsable de un plan?** Cada plan tiene uno o más responsables con un rol — fisioterapeuta, preparador físico o entrenador.
 
 **¿Cómo inicio un plan a partir de una lesión?** Crea un plan de tipo Rehabilitación y vincula la lesión activa; a partir de ahí construyes sus fases y sesiones.
-
-> TODO — por favor confirmar (comportamiento y acceso): (1) dar de alta un plan de rehabilitación **no** se propaga a la lesión ni al estado de disponibilidad — eso es un paso manual en las páginas de Lesiones/Disponibilidad; confirmar que es intencionado. (2) **No hay vínculo automático** entre un plan de rehabilitación y el plan de entrenamiento individual (solo biblioteca compartida) — confirmar si se espera un autorrelleno. (3) El acceso es a través del guard general del módulo + alcance por equipo + RLS del club; a diferencia de la Historia clínica, **no se confirmó una restricción explícita solo para personal médico** en esta página, y los planes de rehabilitación están delimitados por equipo (no restringidos a roles médicos) — confirmar la visibilidad prevista.
 
 ## Relacionado
 

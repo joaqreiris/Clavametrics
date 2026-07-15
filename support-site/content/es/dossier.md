@@ -31,7 +31,7 @@ Cuando necesitas una instantánea compartible de un jugador — para una revisi�
 
 **Plantillas guardadas.** Una configuración de dossier — qué bloques, qué tests, qué tendencias — puede **guardarse como plantilla** (a nivel de club) y recargarse, para que puedas mantener, digamos, un preajuste "Dossier físico" y un "Dossier de scouting" y aplicar cualquiera con un clic.
 
-**El resumen de scouting.** El bloque de scouting es texto libre que editas en línea; se imprime con lo que escribas y solo se almacena en el jugador cuando lo guardas explícitamente (ver el TODO).
+**El resumen de scouting.** El bloque de scouting es texto libre que editas en línea; se imprime con lo que escribas y solo se almacena en el jugador cuando lo guardas explícitamente.
 
 ## FAQ
 
@@ -42,8 +42,6 @@ Cuando necesitas una instantánea compartible de un jugador — para una revisi�
 **¿Puedo reutilizar una configuración?** Sí — guárdala como plantilla y aplícala a cualquier jugador.
 
 **¿Cómo lo exporto?** Imprimir o Exportar PDF; la salida es una hoja de una página con la marca del club.
-
-> TODO — menor, por favor verificar: el **resumen de scouting** se guarda en el jugador solo cuando haces clic en guardar (se imprime con lo que escribas, pero no se guarda automáticamente), y el **nombre de archivo del PDF** exportado es el que asigne el diálogo de impresión del navegador (no hay un nombre de archivo fijo definido en la página). El **color de acento** elegido también parece no persistir entre sesiones.
 
 ## Relacionado
 

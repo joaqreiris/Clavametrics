@@ -31,7 +31,7 @@ Use it after each session or match to review what athletes actually did, and acr
 
 **Customize the dashboard.** Each view is a set of cards you can resize (S / M / L / Full), reorder, add and remove. **Add card** opens a gallery of evidence-based templates (ACWR, monotony/strain, CTL/ATL/TSB, speed zones, outliers…) or a custom chart builder. **Save layout** and **Saved views** persist arrangements per view.
 
-**Export.** Export the current view's table to CSV. (A PDF report and direct provider sync are surfaced in the UI but not yet active — see the TODO below.)
+**Export.** Export the current view's table to CSV.
 
 ## Key concepts
 
@@ -55,13 +55,11 @@ Use it after each session or match to review what athletes actually did, and acr
 
 **How do I get data in?** Upload a `.csv`, `.xlsx` or `.tsv` — one file per session or a season export. Columns auto-map to players; use the downloadable template if you want the exact expected format.
 
-**Does it connect directly to Catapult / StatSports?** Direct provider sync is presented in the UI as a roadmap item — see the TODO below. Today the reliable path is file import.
+**Does it connect directly to Catapult / StatSports?** Not with a live sync — the supported path is file import: export the session from your provider and import that file into ClavaMetrics.
 
 **What's the difference from the Load Monitor?** They share the same ACWR engine. The Load Monitor is the squad-level risk board; GPS Analysis is the deep dive — per metric, per player, per session, with baselines and the fitness-fatigue model.
 
 **Can I compare two weeks?** Yes — the Microcycle Compare view diffs a current week against a reference week, with per-player deltas, load shape, monotony/strain and the biggest movers.
-
-> TODO — verify before documenting as shipped. The GPS agent flagged these as **stubs or "coming soon"** in the current page: **PDF export**, **provider sync** (Catapult / StatSports / Polar / WIMU / GPSports), a dedicated **GPS settings** panel, chart-type switching, and several catalog cards (accel/decel asymmetry, personal-baseline trend, position box plot, squad readiness, halves drop-off, us-vs-opponent). Also, exact **speed-zone thresholds** (HSR / VHSR / sprint m·s⁻¹ cut-offs) are not exposed in the page and appear to be club-configured — confirm the real values before publishing them.
 
 ## Related
 

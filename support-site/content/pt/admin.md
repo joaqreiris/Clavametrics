@@ -17,7 +17,7 @@ Na configuração inicial e sempre que o clube mudar: convidar ou remover membro
 
 ## Como funciona
 
-**Navegue entre as seções.** As abas cobrem **Membros**, **Funções**, **Seções**, **Assinatura**, **Notificações**, **Integrações**, **Segurança & SSO** e **Registro de auditoria**. (Seções e Segurança & SSO estão marcadas como em breve.)
+**Navegue entre as seções.** As abas cobrem **Membros**, **Funções**, **Assinatura**, **Notificações**, **Integrações** e **Registro de auditoria**.
 
 **Gerencie membros.** A tabela de Membros lista a comissão técnica com sua função, seções concedidas, última atividade e status. A partir da linha de um membro você **altera a função dele**, **edita suas seções** (concede/revoga módulos), o atribui a **equipes** ou copia o e-mail dele. **Convide** um novo membro por e-mail com uma função (e equipes opcionais) — ele recebe um convite e, ao aceitar, as permissões padrão da função são aplicadas.
 
@@ -43,7 +43,7 @@ Os módulos concedidos a um membro são armazenados como linhas indexadas por m�
 **Integrações de GPS — pull vs push.** Os dois provedores se conectam de formas diferentes:
 
 - O **Catapult** é uma integração de **pull**: você cola um **token de API do clube** (do OpenField) e escolhe uma região; o ClavaMetrics então puxa suas atividades sob demanda ou em uma sincronização. O token é armazenado como um segredo (nunca exibido de volta), e você mapeia os atletas e parâmetros do Catapult aos seus jogadores e métricas.
-- O **StatSports** é uma integração de **push**: você combina com o seu **gerente de conta StatSports** para habilitar a API de terceiros e insere a chave; os dados são entregues ao ClavaMetrics em vez de puxados. (Veja o TODO sobre a conexão exata de push.)
+- O **StatSports** é uma integração de **push**: você combina com o seu **gerente de conta StatSports** para habilitar a API de terceiros e insere a chave; os dados são entregues ao ClavaMetrics em vez de puxados.
 
 **Escopo do clube.** Tudo aqui tem escopo do seu clube (membros, permissões, integrações). Os super-admins de plataforma (uma lista separada de admins de plataforma) podem operar entre clubes.
 
@@ -56,8 +56,6 @@ Os módulos concedidos a um membro são armazenados como linhas indexadas por m�
 **Qual é a diferença entre um template de função e as seções de um membro?** O template é o padrão para todos com aquela função; as seções de um membro são suas concessões individuais, que podem sobrescrever o template.
 
 **Como o Catapult é diferente do StatSports?** O Catapult é puxado com um token de API do clube que você insere; o StatSports é enviado (push) ao ClavaMetrics depois que o seu gerente de conta StatSports habilita a API.
-
-> TODO — não foi possível confirmar totalmente pelo código, favor verificar: (1) se **alterar a função de um membro** reaplica automaticamente o template de módulos daquela função, ou se o template precisa ser reaplicado manualmente. (2) A **conexão exata de push do StatSports** no lado do ClavaMetrics (webhook/endpoint) — a página de Admin mostra a configuração pelo gerente de conta e um estado de "verificação pendente", mas o mecanismo de recebimento não estava visível aqui. (3) As abas **Seções** e **Segurança & SSO** estão marcadas como em breve, e o webhook de **cobrança do Stripe** que preenche os dados da assinatura está anotado como pendente.
 
 ## Relacionados
 

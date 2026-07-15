@@ -63,8 +63,6 @@ Essas são as mesmas tags que você filtra depois na [Biblioteca de Exercícios]
 
 **Para onde vai o exercício depois que eu o salvo?** Para a [Biblioteca de Exercícios](/support/exercises-library), de onde ele pode ser reutilizado em sessões e mapeado a dados de GPS.
 
-> TODO — favor observar e confirmar: o briefing esperava uma taxonomia de **8 dimensões**, mas o Drill Designer implementa **4** dimensões de tag (Orientação, Intensidade, Foco, Tipo de jogo) ao lado dos campos de match-day e formato — não dimensões de princípio / subprincípio / conceito tático. Documentei o que o editor realmente tem. Além disso, os recursos de **compartilhar no chat** e **upload de objeto personalizado** estão presentes mas seu comportamento completo vive em módulos externos que não pude confirmar totalmente aqui.
-
 ## Relacionados
 
 - [Biblioteca de Exercícios](/support/exercises-library) — onde os exercícios salvos são catalogados e filtrados.

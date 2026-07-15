@@ -55,8 +55,6 @@ Para los cuatro ítems Hooper, **más alto es peor**. El ánimo se muestra pero 
 
 **¿Una mala puntuación de bienestar significa retirar al jugador?** No por sí sola — léela junto a la carga del jugador y el cuadro médico. Es una señal para mirar más de cerca, no una instrucción.
 
-> TODO — no se pudo confirmar desde el código, por favor verificar: (1) no hay una vía visible para que el **cuerpo técnico envíe en nombre de un jugador** (el envío es del lado del jugador vía el enlace). (2) Una vista de **historial de 7 días** aparece como "próximamente". (3) No se encontró ninguna **exportación** en esta página. (4) Una acción de **confirmar** para las alertas de bienestar existe en el backend pero no parece estar conectada a la interfaz de esta página.
-
 ## Relacionado
 
 - [Monitor de carga](/support/load-monitor) — lee el bienestar junto a la carga aguda:crónica.
