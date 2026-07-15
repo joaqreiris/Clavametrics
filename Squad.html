@@ -1132,6 +1132,10 @@
         <input type="checkbox" id="sqImportSkipExisting" checked>
         <span data-i18n="squad.import_skip_existing">Skip rows whose number is already in the squad</span>
       </label>
+      <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);margin:2px 0;cursor:pointer">
+        <input type="checkbox" id="sqImportSkipExistingName">
+        <span data-i18n="squad.import_skip_existing_name">Skip rows whose name already exists in the squad</span>
+      </label>
       <div style="overflow-x:auto;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);max-height:320px;overflow-y:auto">
         <table style="width:100%;border-collapse:collapse;font:var(--cm-body-sm)">
           <thead id="sqImportThead" style="background:var(--cm-bg-soft);position:sticky;top:0"></thead>
@@ -2523,8 +2527,27 @@ async function reloadPlayers() {
     };
   }
 
-  // Human-readable reason for a note/skip code.
-  function _impReason(code){
+  // Accent/case-insensitive "first|last" key for matching names.
+  function _impNameKey(first, last){
+    const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+    const f = norm(first), l = norm(last);
+    return (f||l) ? f+'|'+l : '';
+  }
+  // Effective row state combining field validation + dedup outcome.
+  function _impState(r){
+    if (r.status === 'error') return 'error';
+    if (r.dedup && r.dedup.skip) return 'skip';
+    if (r.status === 'warning' || (r.dedup && r.dedup.notes.length)) return 'warning';
+    return 'ok';
+  }
+
+  // Human-readable reason for a note/skip code (row-aware for name matches).
+  function _impReasonFor(r, code){
+    if (code === 'name_exists'){
+      const name = ((r.values.first_name||'')+' '+(r.values.last_name||'')).trim();
+      const num  = (r.dedup && r.dedup.existingNumber!=null) ? ` (#${r.dedup.existingNumber})` : '';
+      return tt('squad.imp_name_exists', `A player named "${name}" already exists in the squad${num}`, { name, num });
+    }
     const M = {
       no_name:            tt('squad.imp_no_name','Missing name'),
       bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
@@ -2534,28 +2557,56 @@ async function reloadPlayers() {
       weight_range:       tt('squad.imp_weight_range','Weight out of plausible range'),
       unknown_position:   tt('squad.imp_unknown_position','Unrecognized position — kept as typed'),
       unknown_foot:       tt('squad.imp_unknown_foot','Unrecognized foot — left blank'),
-      dup_file:           tt('squad.imp_dup_file','Duplicate row in the file'),
-      num_exists:         tt('squad.imp_num_exists','Number already in the squad'),
+      num_exists:         tt('squad.imp_num_exists','Jersey number already in the squad'),
+      num_dup_file:       tt('squad.imp_num_dup_file','Jersey number repeated in the file'),
+      name_dup_file:      tt('squad.imp_name_dup_file','Same name appears earlier in the file'),
+      dup_exact:          tt('squad.imp_dup_exact','Exact duplicate (same name and number) in the file'),
     };
     return M[code] || code;
   }
 
-  // Mark duplicates (within the file) and, if the checkbox is on, rows whose number
-  // already exists in the squad. Recomputed whenever the checkbox toggles.
+  // Flag jersey/name conflicts. Number clashes are hard (two players can't share a
+  // number) → skippable via checkbox (default ON). Name clashes are soft warnings
+  // (two players may share a name) → imported by default, skippable via a second
+  // checkbox (default OFF). An exact in-file duplicate (same name AND number) is a
+  // real duplicate → always skipped. Recomputed whenever a checkbox toggles.
   function _impApplyDedup(){
-    const skipExisting = document.getElementById('sqImportSkipExisting')?.checked;
+    const skipNum  = document.getElementById('sqImportSkipExisting')?.checked;
+    const skipName = document.getElementById('sqImportSkipExistingName')?.checked;
     const existingNums = new Set(_allPlayers.map(p => String(p.number)));
-    const seenNum = new Set(), seenName = new Set();
+    const existingByName = new Map();
+    _allPlayers.forEach(p => { const k = _impNameKey(p.first_name, p.last_name); if (k && !existingByName.has(k)) existingByName.set(k, p); });
+    const seenNum = new Set(), seenName = new Set(), seenExact = new Set();
     _importRows.forEach(r => {
-      r.skip = false; r.skipReason = null;
+      r.dedup = { notes:[], skip:false, skipReason:null, existingNumber:null };
       if (r.status === 'error') return;                     // errors never import (handled separately)
       const numKey  = r.values.number!=null ? String(r.values.number) : null;
-      const nameKey = ((r.values.first_name||'')+'|'+(r.values.last_name||'')).toLowerCase().trim();
-      if (numKey && seenNum.has(numKey)) { r.skip=true; r.skipReason='dup_file'; return; }
-      if (nameKey!=='|' && seenName.has(nameKey)) { r.skip=true; r.skipReason='dup_file'; return; }
-      if (skipExisting && numKey && existingNums.has(numKey)) { r.skip=true; r.skipReason='num_exists'; return; }
+      const nameKey = _impNameKey(r.values.first_name, r.values.last_name);
+      const exactKey = (nameKey && numKey) ? nameKey+'#'+numKey : null;
+
+      if (exactKey && seenExact.has(exactKey)) {
+        r.dedup.skip = true; r.dedup.skipReason = 'dup_exact';   // real duplicate → skip
+      } else {
+        // Jersey number: repeated in file OR already in the squad.
+        const numInFile  = numKey && seenNum.has(numKey);
+        const numInSquad = numKey && existingNums.has(numKey);
+        if (numInFile || numInSquad) {
+          const code = numInFile ? 'num_dup_file' : 'num_exists';
+          r.dedup.notes.push(code);
+          if (skipNum) { r.dedup.skip = true; r.dedup.skipReason = code; }
+        }
+        // Name already in the squad → soft warning (+ existing number if any).
+        if (nameKey && existingByName.has(nameKey)) {
+          r.dedup.notes.push('name_exists');
+          r.dedup.existingNumber = existingByName.get(nameKey).number ?? null;
+          if (skipName && !r.dedup.skip) { r.dedup.skip = true; r.dedup.skipReason = 'name_exists'; }
+        }
+        // Same name earlier in this file (not an exact dup) → soft warning.
+        if (nameKey && seenName.has(nameKey)) r.dedup.notes.push('name_dup_file');
+      }
       if (numKey) seenNum.add(numKey);
-      if (nameKey!=='|') seenName.add(nameKey);
+      if (nameKey) seenName.add(nameKey);
+      if (exactKey) seenExact.add(exactKey);
     });
   }
 
@@ -2572,9 +2623,9 @@ async function reloadPlayers() {
     _impApplyDedup();
     const rows = _importRows;
     const total   = rows.length;
-    const ready   = rows.filter(r => r.status==='ok' && !r.skip).length;
-    const warn    = rows.filter(r => r.status==='warning' && !r.skip).length;
-    const skipped = rows.filter(r => r.status==='error' || r.skip).length;
+    const ready   = rows.filter(r => _impState(r)==='ok').length;
+    const warn    = rows.filter(r => _impState(r)==='warning').length;
+    const skipped = rows.filter(r => { const s=_impState(r); return s==='error' || s==='skip'; }).length;
     const importable = ready + warn;
 
     document.getElementById('sqImportInfo').textContent =
@@ -2602,17 +2653,22 @@ async function reloadPlayers() {
 
     const LIMIT = 30;
     document.getElementById('sqImportTbody').innerHTML = rows.slice(0, LIMIT).map(r => {
-      const isSkip = r.skip || r.status==='error';
-      const color  = r.status==='error' ? 'var(--cm-danger)' : (r.status==='warning' ? 'var(--cm-warning)' : 'var(--cm-success, #16A34A)');
-      const icon   = r.status==='error' ? 'ti-alert-circle' : (r.status==='warning' ? 'ti-alert-triangle' : 'ti-check');
-      const codes  = [...r.notes]; if (r.skipReason) codes.push(r.skipReason);
-      const tip    = codes.map(_impReason).join(' · ');
+      const state  = _impState(r);
+      const isSkip = state==='skip' || state==='error';
+      const color  = state==='error' ? 'var(--cm-danger)' : (state==='warning' ? 'var(--cm-warning)' : (state==='skip' ? 'var(--cm-danger)' : 'var(--cm-success, #16A34A)'));
+      const icon   = state==='error' ? 'ti-alert-circle' : (state==='warning' ? 'ti-alert-triangle' : (state==='skip' ? 'ti-ban' : 'ti-check'));
+      // Reasons: field notes + dedup notes + skip reason (deduped).
+      const codes  = [...r.notes, ...((r.dedup&&r.dedup.notes)||[])];
+      if (r.dedup && r.dedup.skipReason && !codes.includes(r.dedup.skipReason)) codes.push(r.dedup.skipReason);
+      const reasons = [...new Set(codes)].map(c => _impReasonFor(r, c));
+      const tip    = reasons.join(' · ');
       const tag    = isSkip ? ` <span style="font:600 10px/1 var(--cm-font-sans);text-transform:uppercase">${tt('squad.import_skipped_tag','skip')}</span>` : '';
-      return `<tr style="${isSkip?'opacity:0.5':''}" title="${_impEsc(tip)}">`+
-        `<td style="${_IMP_TD};white-space:nowrap;color:${color}"><i class="ti ${icon}"></i>${tag}</td>`+
+      const reasonHtml = reasons.length ? `<div style="font:500 11px/1.35 var(--cm-font-sans);margin-top:3px;white-space:normal">${_impEsc(reasons.join(' · '))}</div>` : '';
+      return `<tr style="${isSkip?'opacity:0.6':''}" title="${_impEsc(tip)}">`+
+        `<td style="${_IMP_TD};color:${color};min-width:150px;max-width:230px;vertical-align:top"><i class="ti ${icon}"></i>${tag}${reasonHtml}</td>`+
         displayCols.map(c => {
           const v = r.display[c];
-          return `<td style="${_IMP_TD};color:${(v!==''&&v!=null)?'var(--cm-fg)':'var(--cm-fg-faint)'}">${(v!==''&&v!=null)?_impEsc(v):'—'}</td>`;
+          return `<td style="${_IMP_TD};vertical-align:top;color:${(v!==''&&v!=null)?'var(--cm-fg)':'var(--cm-fg-faint)'}">${(v!==''&&v!=null)?_impEsc(v):'—'}</td>`;
         }).join('')+
       `</tr>`;
     }).join('');
@@ -2638,8 +2694,8 @@ async function reloadPlayers() {
   }
 
   async function confirmImport() {
-    // Only OK + WARNING rows that aren't skipped (duplicates / existing numbers). Never ERROR.
-    const importable = _importRows.filter(r => r.status !== 'error' && !r.skip);
+    // Only OK + WARNING rows that aren't skipped (duplicates / conflicts). Never ERROR.
+    const importable = _importRows.filter(r => r.status !== 'error' && !(r.dedup && r.dedup.skip));
     if (!importable.length) return;
     const saving = document.getElementById('sqImportSaving');
     const btn = document.getElementById('sqImportConfirm');
@@ -2698,6 +2754,7 @@ async function reloadPlayers() {
     });
   });
   document.getElementById('sqImportSkipExisting')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });
+  document.getElementById('sqImportSkipExistingName')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });
   document.getElementById('sqImportClose')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportCancel')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportConfirm')?.addEventListener('click', confirmImport);
