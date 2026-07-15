@@ -783,9 +783,15 @@ create table if not exists public.individual_plans (
   name text not null,
   description text,
   focus text,
+  goal text,
   start_date date,
   end_date date,
   status text default 'draft'::text,
+  programme_week integer default 1,
+  programme_total_weeks integer default 1,
+  content jsonb not null default '{}'::jsonb,
+  share_token uuid default gen_random_uuid(),
+  shared boolean not null default false,
   created_by uuid,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
@@ -796,6 +802,25 @@ create table if not exists public.individual_plans (
 CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (club_id);
 CREATE INDEX idx_individual_plans_player ON public.individual_plans USING btree (player_id);
 CREATE INDEX idx_individual_plans_status ON public.individual_plans USING btree (status);
+CREATE UNIQUE INDEX idx_individual_plans_share_token ON public.individual_plans USING btree (share_token);
+
+create table if not exists public.individual_plan_phases (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  plan_id uuid not null,
+  name text not null,
+  week_start integer not null default 1,
+  week_end integer not null default 1,
+  color text,
+  objective text,
+  load_level text,
+  phase_order integer not null default 0,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  constraint individual_plan_phases_pkey primary key (id)
+);
+CREATE INDEX idx_ip_phases_club ON public.individual_plan_phases USING btree (club_id);
+CREATE INDEX idx_ip_phases_plan ON public.individual_plan_phases USING btree (plan_id);
 
 create table if not exists public.injuries (
   id uuid default gen_random_uuid() not null,
@@ -2249,6 +2274,8 @@ alter table public.gym_session_templates add constraint gym_session_templates_cl
 alter table public.individual_block_completions add constraint individual_block_completions_block_id_fkey FOREIGN KEY (block_id) REFERENCES individual_plan_blocks(id) ON DELETE CASCADE;
 alter table public.individual_block_completions add constraint individual_block_completions_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.individual_plan_blocks add constraint individual_plan_blocks_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES individual_plans(id) ON DELETE CASCADE;
+alter table public.individual_plan_phases add constraint individual_plan_phases_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.individual_plan_phases add constraint individual_plan_phases_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES individual_plans(id) ON DELETE CASCADE;
 alter table public.individual_plans add constraint individual_plans_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.individual_plans add constraint individual_plans_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.individual_plans add constraint individual_plans_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
@@ -4330,6 +4357,7 @@ CREATE TRIGGER trg_gps_period_reports_updated BEFORE UPDATE ON public.gps_period
 CREATE TRIGGER act_gps AFTER INSERT ON public.gps_reports FOR EACH ROW EXECUTE FUNCTION trg_act_gps();
 CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER individual_plan_phases_updated_at BEFORE UPDATE ON public.individual_plan_phases FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
 CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
 CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
@@ -4773,6 +4801,24 @@ create policy "individual_plan_blocks_all" on public.individual_plan_blocks as p
   WHERE (individual_plans.club_id IN ( SELECT profiles.club_id
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
+
+alter table public.individual_plan_phases enable row level security;
+create policy "ipp_select" on public.individual_plan_phases as permissive for select to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ipp_insert" on public.individual_plan_phases as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ipp_update" on public.individual_plan_phases as permissive for update to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ipp_delete" on public.individual_plan_phases as permissive for delete to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
 
 alter table public.individual_plans enable row level security;
 create policy "individual_plans_all" on public.individual_plans as permissive for all to authenticated
