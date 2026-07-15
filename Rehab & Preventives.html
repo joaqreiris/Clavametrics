@@ -16,6 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/rehab-create.js"></script>
 </head>
 <body class="cm">
 <div class="hub-shell">
@@ -477,7 +478,7 @@ function tt(key, fallbackEN, vars) {
   // ── New plan: pick type + player → INSERT rehab_plans → open the planner (?plan=<id>) ──
   (function(){
     const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
-    let _players = null, _ov = null, _kind = 'rehab';
+    let _players = null, _ov = null, _kind = 'rehab', _injuries = [];
     async function loadPlayers(){
       if (_players) return _players;
       let q = window.sb.from('players').select('id,first_name,last_name,position,number,team_id')
@@ -485,20 +486,50 @@ function tt(key, fallbackEN, vars) {
       if (team) q = q.eq('team_id', team);
       const { data } = await q; _players = data || []; return _players;
     }
-    function setKind(k){ _kind = k; _ov.querySelectorAll('[data-kind]').forEach(b => { b.className = 'cm-btn is-sm ' + (b.dataset.kind === k ? 'is-primary' : 'is-ghost'); }); }
+    // Populate the injury select with the selected player's active injuries (rehab only).
+    async function loadInjuriesFor(playerId){
+      const sel = _ov.querySelector('#rpv-np-injury');
+      const note = _ov.querySelector('#rpv-np-inj-note');
+      if (!sel) return;
+      _injuries = [];
+      if (!playerId){ sel.innerHTML = `<option value="">${tt('rehab_planner.np_select_player_first','Select a player first')}</option>`; if (note) note.style.display = 'none'; return; }
+      sel.innerHTML = `<option value="">…</option>`;
+      _injuries = await window.RehabCreate.loadActiveInjuries(playerId, clubId);
+      sel.innerHTML = '';
+      if (!_injuries.length){
+        sel.appendChild(new Option(tt('rehab_planner.np_no_active_injuries','No active injuries'), ''));
+        if (note) note.style.display = '';
+        return;
+      }
+      if (note) note.style.display = 'none';
+      sel.appendChild(new Option(tt('rehab_planner.np_select_injury','Select injury…'), ''));
+      _injuries.forEach(inj => sel.appendChild(new Option(window.RehabCreate.injuryLabel(inj), inj.id)));
+    }
+    function setKind(k){
+      _kind = k;
+      _ov.querySelectorAll('[data-kind]').forEach(b => { b.className = 'cm-btn is-sm ' + (b.dataset.kind === k ? 'is-primary' : 'is-ghost'); });
+      const injRow = _ov.querySelector('#rpv-np-injury-row');
+      if (injRow) injRow.style.display = (k === 'rehab') ? '' : 'none';
+      if (k === 'rehab') loadInjuriesFor(_ov.querySelector('#rpv-np-player').value);
+    }
     async function create(){
       const player_id = _ov.querySelector('#rpv-np-player').value;
       const name = _ov.querySelector('#rpv-np-name').value.trim() || null;
       const weeks = parseInt(_ov.querySelector('#rpv-np-weeks').value, 10) || 1;
       if (!player_id){ alert(tt('rehab_planner.np_err_player', 'Pick a player first')); return; }
+      let injury_id = null;
+      if (_kind === 'rehab'){
+        injury_id = _ov.querySelector('#rpv-np-injury').value || null;
+        if (!injury_id){ alert(tt('rehab_planner.np_err_injury', 'A rehab plan needs an active injury — pick one, or register one in the Injuries module first.')); return; }
+      }
       const btn = _ov.querySelector('#rpv-np-create'); btn.disabled = true;
       const today = new Date().toISOString().slice(0, 10);
-      const { data, error } = await window.sb.from('rehab_plans').insert({
-        club_id: clubId, player_id, kind: _kind, name, status: 'on_track',
-        programme_week: 1, programme_total_weeks: weeks, start_date: today
-      }).select('id').single();
-      btn.disabled = false;
-      if (error || !data){ console.error('[rehab] create plan failed:', error); alert(tt('rehab_planner.np_err_create', 'Could not create plan') + (error ? ': ' + (error.message || error.code || '') : '')); return; }
+      const payload = { club_id: clubId, player_id, kind: _kind, name, status: 'on_track', programme_week: 1, programme_total_weeks: weeks, start_date: today };
+      if (injury_id) payload.injury_id = injury_id;
+      const { data, error } = await window.sb.from('rehab_plans').insert(payload).select('id').single();
+      if (error || !data){ btn.disabled = false; console.error('[rehab] create plan failed:', error); alert(tt('rehab_planner.np_err_create', 'Could not create plan') + (error ? ': ' + (error.message || error.code || '') : '')); return; }
+      // Copy the injury's phases into the plan's editable programme_phases (rehab only).
+      if (injury_id) await window.RehabCreate.seedProgrammePhasesFromInjury(data.id, injury_id, clubId, today);
       location.href = 'Rehab Planner.html?plan=' + data.id;
     }
     function build(){
@@ -525,6 +556,14 @@ function tt(key, fallbackEN, vars) {
               <label style="${lbl}">${tt('rehab_planner.np_player','Player')}</label>
               <select class="cm-select" id="rpv-np-player"></select>
             </div>
+            <div style="${row}" id="rpv-np-injury-row">
+              <label style="${lbl}">${tt('rehab_planner.np_injury','Injury')}</label>
+              <select class="cm-select" id="rpv-np-injury"></select>
+              <div id="rpv-np-inj-note" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);display:none">
+                ${tt('rehab_planner.np_no_injuries','No active injuries for this player.')}
+                <a href="Injuries.html" style="color:var(--cm-accent);text-decoration:underline;text-underline-offset:2px">${tt('rehab_planner.np_register_injury','Register one')}</a>
+              </div>
+            </div>
             <div style="${row}">
               <label style="${lbl}">${tt('rehab_planner.np_name','Plan name')}</label>
               <input class="cm-input" id="rpv-np-name" type="text" placeholder="${tt('rehab_planner.np_name_ph','e.g. ACL return-to-play')}">
@@ -542,6 +581,7 @@ function tt(key, fallbackEN, vars) {
       document.body.appendChild(_ov);
       _ov.addEventListener('click', (e) => { if (e.target === _ov || e.target.closest('[data-close]')) _ov.style.display = 'none'; });
       _ov.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => setKind(b.dataset.kind)));
+      _ov.querySelector('#rpv-np-player').addEventListener('change', (e) => { if (_kind === 'rehab') loadInjuriesFor(e.target.value); });
       _ov.querySelector('#rpv-np-create').addEventListener('click', create);
       return _ov;
     }

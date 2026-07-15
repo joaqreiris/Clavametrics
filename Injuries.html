@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/rehab-create.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
@@ -2037,6 +2038,7 @@ function injCard(inj) {
   const dischargeBtn = canDischarge
     ? `<button class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>${tt('injuries.discharge','Discharge')}</button>`
     : '';
+  const rehabBtn = `<button class="cm-btn is-outline is-sm" onclick="createRehabPlan('${inj.id}')" title="${tt('injuries.create_rehab_plan','Create rehab plan')}"><i class="ti ti-activity-heartbeat" style="font-size:14px"></i>${tt('injuries.create_rehab_plan','Create rehab plan')}</button>`;
 
   // Context menu SVG icons
   const svgPencil  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>`;
@@ -2062,6 +2064,7 @@ function injCard(inj) {
         <span><span class="inj-severity ${sevClass}"><span class="d"></span>${sevLabel}</span></span>
       </div>
       <div class="inj-row-actions">
+        ${rehabBtn}
         ${dischargeBtn}
         <div class="inj-ctx-wrap">
           <button class="cm-icon-btn inj-ctx-btn" data-id="${inj.id}" title="${tt('injuries.options','Options')}"><i class="ti ti-dots"></i></button>
@@ -2481,6 +2484,19 @@ async function saveInjury() {
   renderTypeBreakdown();
   renderRecentlyResolved();
   renderBodyRegionFilter();
+}
+
+// ═══════════════ CREATE REHAB PLAN (Entry B) ═══════════════
+// Open the injury's rehab plan if it exists, else create + copy phases, then open the planner.
+async function createRehabPlan(id) {
+  const inj = _allInjuries.find(i => i.id === id);
+  if (!inj) { alert(tt('injuries.injury_not_found', 'Injury not found — reload and retry.')); return; }
+  if (!window.RehabCreate) { console.error('[injuries] RehabCreate helper not loaded'); return; }
+  const btn = document.querySelector(`.inj-row[data-inj-id="${id}"] .inj-row-actions button`);
+  if (btn) btn.disabled = true;
+  try { await window.RehabCreate.openOrCreateForInjury(inj, _clubId); }
+  catch (e) { console.error('[injuries] create rehab plan failed:', e); alert(tt('rehab_planner.np_err_create', 'Could not create plan')); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 // ═══════════════ DISCHARGE ═══════════════
