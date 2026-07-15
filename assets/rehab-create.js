@@ -14,9 +14,11 @@
 
   const WEEK_MS = 7 * 86400000;
 
-  function tt(key, en) {
-    if (window.CM_I18N && CM_I18N.t) { const v = CM_I18N.t(key); if (v && v !== key) return v; }
-    return en;
+  function tt(key, en, vars) {
+    if (window.CM_I18N && CM_I18N.t) { const v = CM_I18N.t(key, vars); if (v && v !== key) return v; }
+    let s = en;
+    if (vars) s = String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : '{' + k + '}'));
+    return s;
   }
   function fmtDate(d) {
     if (!d) return '';
@@ -147,16 +149,92 @@
     return { zones, injuries };
   }
 
-  // Render the risk-context block (zone chips on top, injury detail below).
+  // ── Mobility / screening alerts (preventive) ───────────────────────────────
+  // Punctual red-flag signals from evaluations (latest value per test), NOT the
+  // full evaluations table. Conservative, evidence-based thresholds; tune here.
+  // NOTE: evaluations stores one value per test (no side column), so ankle is the
+  // worst-side WBLT cm and asymmetry alerts only fire when the value itself is a %.
+  const MOBILITY_CFG = {
+    fms:   { match: 'FMS',                 composite_max: 14   },  // score /21 · Kiesel et al. 2007
+    ankle: { match: 'Ankle dorsiflexion',  min_cm: 7           },  // worst-side WBLT · Searle et al.
+    hq:    { match: 'Isokinetic',          min_ratio: 0.55     },  // conventional H:Q ratio
+    hip:   { match: 'Hip ER/IR',           asym_pct: 15        },  // only if the stored value is a %
+    asym_pct: 15
+  };
+  const _round1 = x => Math.round(x * 10) / 10;
+  const _isPct  = u => /%|percent|asym/i.test(String(u || ''));
+
+  async function buildMobilityAlerts(playerId, clubId) {
+    if (!playerId || !clubId) return [];
+    const { data, error } = await window.sb.from('evaluations')
+      .select('evaluation_type, test_date, value, unit')
+      .eq('club_id', clubId).eq('player_id', playerId)
+      .order('test_date', { ascending: false });
+    if (error) { console.error('[rehab-create] mobility alerts fetch failed:', error); return []; }
+    const rows = data || [];
+    if (!rows.length) return [];
+    // latest value for a test (rows are newest-first → first substring match wins)
+    const latest = (match) => {
+      const m = String(match).toLowerCase();
+      const r = rows.find(x => String(x.evaluation_type || '').toLowerCase().includes(m) && x.value != null);
+      return r ? { value: Number(r.value), unit: r.unit } : null;
+    };
+    const alerts = [];
+
+    const fms = latest(MOBILITY_CFG.fms.match);
+    if (fms && isFinite(fms.value) && fms.value < MOBILITY_CFG.fms.composite_max) {
+      alerts.push({ test: 'fms', severity: 'high',
+        message: tt('preventive.alert_fms', 'FMS {v}/21 — elevated injury risk', { v: fms.value }) });
+    }
+    const ank = latest(MOBILITY_CFG.ankle.match);
+    if (ank && isFinite(ank.value)) {
+      if (_isPct(ank.unit)) {
+        if (ank.value >= MOBILITY_CFG.asym_pct) alerts.push({ test: 'ankle', severity: 'moderate',
+          message: tt('preventive.alert_ankle_asym', 'Ankle dorsiflexion: {v}% L/R asymmetry', { v: Math.round(ank.value) }) });
+      } else if (ank.value < MOBILITY_CFG.ankle.min_cm) {
+        alerts.push({ test: 'ankle', severity: 'moderate',
+          message: tt('preventive.alert_ankle_low', 'Ankle dorsiflexion {v} cm — limited (worth attention)', { v: _round1(ank.value) }) });
+      }
+    }
+    const hq = latest(MOBILITY_CFG.hq.match);
+    if (hq && isFinite(hq.value)) {
+      let ratio = hq.value; if (ratio > 2) ratio = ratio / 100;   // stored as a percentage
+      if (ratio > 0 && ratio < MOBILITY_CFG.hq.min_ratio) alerts.push({ test: 'hq', severity: 'moderate',
+        message: tt('preventive.alert_hq', 'H:Q ratio {v} — low (worth attention)', { v: ratio.toFixed(2) }) });
+    }
+    const hip = latest(MOBILITY_CFG.hip.match);
+    if (hip && isFinite(hip.value) && _isPct(hip.unit) && hip.value >= MOBILITY_CFG.hip.asym_pct) {
+      alerts.push({ test: 'hip', severity: 'moderate',
+        message: tt('preventive.alert_hip_asym', 'Hip ER/IR: {v}% L/R asymmetry', { v: Math.round(hip.value) }) });
+    }
+    return alerts;
+  }
+
+  const _ALERT_COLOR = { high: 'var(--cm-danger,#DC2626)', moderate: '#B45309', low: 'var(--cm-fg-muted)' };
+  function mobilityAlertsHTML(alerts) {
+    if (!alerts || !alerts.length) return '';
+    const items = alerts.map(a => {
+      const col = _ALERT_COLOR[a.severity] || _ALERT_COLOR.moderate;
+      return '<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;font:var(--cm-body-sm);color:var(--cm-fg)">'
+        + '<span style="color:' + col + ';flex:none;font-weight:700">⚠</span><span>' + _esc(a.message) + '</span></div>';
+    }).join('');
+    return '<div style="margin:2px 0 12px">'
+      + '<div style="font:600 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:5px">'
+      + _esc(tt('preventive.screening_alerts', 'Screening alerts')) + '</div>' + items + '</div>';
+  }
+
+  // Render the risk-context block (zone chips on top, screening alerts, injury detail below).
   // Returns an HTML string; caller injects it into its own container.
-  function injuryRiskHTML(ctx) {
+  function injuryRiskHTML(ctx, alerts) {
     const zones = (ctx && ctx.zones) || [];
     const injuries = (ctx && ctx.injuries) || [];
+    const alertsBlock = mobilityAlertsHTML(alerts);
     const title = _esc(tt('preventive.risk_history', 'Risk history'));
     const head = '<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:2px">' + title + '</div>';
     if (!injuries.length) {
-      return head + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">'
-        + _esc(tt('preventive.no_injury_history', 'No injury history — general prevention.')) + '</div>';
+      return head + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:' + (alertsBlock ? '10px' : '0') + '">'
+        + _esc(tt('preventive.no_injury_history', 'No injury history — general prevention.')) + '</div>'
+        + alertsBlock;
     }
     const chips = zones.map(z => {
       const col = _SEV_COLOR[z.maxSeverity] || 'var(--cm-fg-muted)';
@@ -179,8 +257,9 @@
     return head
       + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:8px">' + _esc(tt('preventive.where_to_focus', 'Where to focus — most frequent injury zones')) + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + chips + '</div>'
+      + alertsBlock
       + '<div>' + list + '</div>';
   }
 
-  window.RehabCreate = { injuryLabel, loadActiveInjuries, seedProgrammePhasesFromInjury, openOrCreateForInjury, buildInjuryRiskContext, injuryRiskHTML };
+  window.RehabCreate = { injuryLabel, loadActiveInjuries, seedProgrammePhasesFromInjury, openOrCreateForInjury, buildInjuryRiskContext, buildMobilityAlerts, injuryRiskHTML };
 })();

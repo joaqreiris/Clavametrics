@@ -536,8 +536,11 @@ function tt(key, fallbackEN, vars) {
       box.style.display = '';
       box.innerHTML = `<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">…</div>`;
       try {
-        const ctx = await window.RehabCreate.buildInjuryRiskContext(playerId, clubId);
-        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx);
+        const [ctx, alerts] = await Promise.all([
+          window.RehabCreate.buildInjuryRiskContext(playerId, clubId),
+          window.RehabCreate.buildMobilityAlerts(playerId, clubId)
+        ]);
+        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx, alerts);
       } catch(e){
         console.error('[rehab] preventive risk context failed:', e);
         box.innerHTML = `<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">${tt('preventive.no_injury_history','No injury history — general prevention.')}</div>`;

@@ -594,8 +594,11 @@ function tt(key, fallbackEN, vars) {
       const box = document.getElementById('rp-risk-context');
       if (!box || !(window.RehabCreate && window.RehabCreate.buildInjuryRiskContext)) return;
       try {
-        const ctx = await window.RehabCreate.buildInjuryRiskContext(plan.player_id, clubId);
-        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx);
+        const [ctx, alerts] = await Promise.all([
+          window.RehabCreate.buildInjuryRiskContext(plan.player_id, clubId),
+          window.RehabCreate.buildMobilityAlerts(plan.player_id, clubId)
+        ]);
+        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx, alerts);
         box.classList.remove('rp-hidden');
         // Feed the block-drawer library picker: prioritize exercises for these risk zones (preventive only).
         window.__rpRiskZones = ctx.zones || [];
