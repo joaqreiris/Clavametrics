@@ -1127,6 +1127,7 @@
     <div class="sq-modal-body">
       <p id="sqImportInfo" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0"></p>
       <p id="sqImportSummary" style="font:600 var(--cm-body-sm);margin:6px 0 0;display:none"></p>
+      <p id="sqImportHeaderNote" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:4px 0 0;display:none"></p>
       <div id="sqImportConflicts" style="display:none;padding:8px 12px;background:var(--cm-warning-bg);border:1px solid var(--cm-warning-bd);border-radius:var(--cm-r-3);font:var(--cm-body-sm);color:var(--cm-warning)"></div>
       <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);margin:2px 0;cursor:pointer">
         <input type="checkbox" id="sqImportSkipExisting" checked>
@@ -2418,6 +2419,7 @@ async function reloadPlayers() {
   }
 
   let _importRows = [];       // normalized rows: { status, notes, display, values, skip, skipReason }
+  let _importSkippedHeaderRows = 0;   // title/metadata rows skipped above the real header
 
   function _impPad(n){ return String(n).padStart(2,'0'); }
   function _impEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -2638,6 +2640,14 @@ async function reloadPlayers() {
       `${total} rows · ${ready} ready · ${warn} with warnings · ${skipped} skipped`,
       { total, ready, warn, skipped });
 
+    const hdrNoteEl = document.getElementById('sqImportHeaderNote');
+    if (_importSkippedHeaderRows > 0){
+      hdrNoteEl.style.display = '';
+      hdrNoteEl.textContent = tt('squad.import_skipped_header',
+        `Skipped ${_importSkippedHeaderRows} header/title row${_importSkippedHeaderRows!==1?'s':''} above the data.`,
+        { count: _importSkippedHeaderRows });
+    } else hdrNoteEl.style.display = 'none';
+
     // Kept: jersey numbers already present in the squad (informational).
     const existingNums = new Set(_allPlayers.map(p => String(p.number)));
     const conflicts = [...new Set(rows.filter(r => r.values.number!=null && existingNums.has(String(r.values.number))).map(r => `#${r.values.number}`))];
@@ -2690,7 +2700,9 @@ async function reloadPlayers() {
     document.getElementById('sqImportBackdrop').classList.remove('is-open');
     document.getElementById('sqImportFile').value = '';
     _importRows = [];
+    _importSkippedHeaderRows = 0;
     document.getElementById('sqImportSummary').style.display = 'none';
+    document.getElementById('sqImportHeaderNote').style.display = 'none';
     document.getElementById('sqImportShowing').style.display = 'none';
     document.getElementById('sqImportConflicts').style.display = 'none';
   }
@@ -2734,33 +2746,45 @@ async function reloadPlayers() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!window.Papa) { showToast(tt('squad.papaparse_not_loaded','CSV parser not loaded — reload the page and try again.')); e.target.value=''; return; }
-    // Papa reads the File directly: strips BOM, auto-detects delimiter ( , ; \t | ).
+    // Parse WITHOUT header first so we can locate the real header row. Excel/Sheets exports
+    // often carry a title/metadata/blank row above the actual column headers. Papa still
+    // strips the BOM and auto-detects the delimiter ( , ; \t | ) reading the File directly.
     window.Papa.parse(file, {
-      header: true, skipEmptyLines: 'greedy', delimiter: '', transformHeader: _impHeader,
+      header: false, skipEmptyLines: 'greedy', delimiter: '',
       complete: (res) => {
-        const fields = (res.meta && res.meta.fields) || [];
-        const mappedCols = [...new Set(fields.map(h => IMPORT_HEADER_ALIASES[h]).filter(Boolean))];
-        const rawRows = (res.data || []).map(obj => {
+        const matrix = (res.data || []).filter(row => Array.isArray(row) && row.some(c => String(c||'').trim()));
+        if (!matrix.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
+
+        // Header row = first row where ≥2 cells map to a known column (or alias).
+        let hdrIdx = -1;
+        for (let i = 0; i < matrix.length; i++){
+          const mapped = new Set(matrix[i].map(c => IMPORT_HEADER_ALIASES[_impHeader(c)]).filter(Boolean));
+          if (mapped.size >= 2){ hdrIdx = i; break; }
+        }
+        if (hdrIdx === -1){
+          // Nothing recognizable → surface the first non-empty row's cells as "found headers".
+          const found = (matrix[0] || []).map(c => String(c||'').trim()).filter(Boolean).join(', ');
+          if (found) showToast(tt('squad.csv_no_columns', `No columns matched. Found headers: ${found}. Expected: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot (aliases like Name, DOB, Shirt, Pos, Foot, Country, cm, kg also work).`, { found }));
+          else showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).'));
+          e.target.value=''; return;
+        }
+
+        const headers  = matrix[hdrIdx].map(_impHeader);
+        const dataRows = matrix.slice(hdrIdx + 1);
+        const rawRows = dataRows.map(cells => {
           const canon = {};
-          Object.keys(obj).forEach(h => {
+          headers.forEach((h, i) => {
             const key = IMPORT_HEADER_ALIASES[h];
             if (!key) return;
-            const val = obj[h];
+            const val = cells[i];
             if (key === 'name') canon.name = (canon.name ? canon.name + ' ' : '') + (val || '');
             else if (canon[key] == null || canon[key] === '') canon[key] = val;
           });
           return canon;
         }).filter(o => Object.values(o).some(v => String(v||'').trim()));
-        if (!rawRows.length) {
-          if (!mappedCols.length && fields.filter(Boolean).length) {
-            // Headers were read but none matched → show them so the user can fix/rename.
-            const found = fields.filter(Boolean).join(', ');
-            showToast(tt('squad.csv_no_columns', `No columns matched. Found headers: ${found}. Expected: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot (aliases like Name, DOB, Shirt, Pos, Foot, Country, cm, kg also work).`, { found }));
-          } else {
-            showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).'));
-          }
-          e.target.value=''; return;
-        }
+
+        if (!rawRows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
+        _importSkippedHeaderRows = hdrIdx;   // title/metadata rows above the real header
         openImportModal(rawRows);
       },
       error: () => showToast(tt('squad.csv_parse_error','Could not read the CSV file.')),
