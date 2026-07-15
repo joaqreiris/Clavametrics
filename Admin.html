@@ -2262,16 +2262,27 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     msg(prov,tt('admin.gps_loading_params','Loading parameters…'));
     let params, mappings, defs;
     try{
+      // Guard against a silently-expired session BEFORE loading: with auth.uid() null,
+      // RLS returns 0 rows (no error), so mappings would look "empty" and the next Save
+      // would overwrite the real ones with __ignore__. Refuse to open the modal instead.
+      const { data:{ user:_u } }=await window.sb.auth.getUser();
+      if(!_u){ msg(prov,tt('admin.gps_session_expired','Session expired — please refresh the page.'),true); return; }
       const { data, error }=await window.sb.functions.invoke('gps-parameters',{ body:{ integration_id:intId } });
       if(error) throw error;
       if(!data?.ok){ msg(prov, data?.message || (data?.http_status?tt('admin.gps_provider_error_http','Provider error (HTTP {n})',{ n:data.http_status }):tt('admin.gps_could_not_load_params','Could not load parameters')), true); return; }
       params=data.parameters||[];
-      const [mRes,dRes]=await Promise.all([
-        window.sb.from('gps_column_mappings').select('source_column_name,target_metric,unit_conversion').eq('source_label','catapult'),
-        window.sb.from('gps_metric_definitions').select('key,label,is_core'),
+      // CRITICAL: page through ALL rows with cmFetchAll — a plain .select() is truncated to
+      // ~1000 rows by PostgREST, so with 1647 params the tail loaded as "unmapped" and Save
+      // then overwrote those saved mappings with __ignore__/seed ("mappings disconnected on
+      // their own"). orderBy makes the ranges stable across pages (source_column_name is
+      // unique per club+source_label; key is unique for metric defs).
+      [mappings, defs]=await Promise.all([
+        window.cmFetchAll(()=>window.sb.from('gps_column_mappings')
+          .select('source_column_name,target_metric,unit_conversion').eq('source_label','catapult'),
+          { orderBy:'source_column_name', label:'catapult_mappings' }),
+        window.cmFetchAll(()=>window.sb.from('gps_metric_definitions')
+          .select('key,label,is_core'), { orderBy:'key', label:'gps_metric_defs' }),
       ]);
-      if(mRes.error) throw mRes.error; if(dRes.error) throw dRes.error;
-      mappings=mRes.data||[]; defs=dRes.data||[];
     }catch(e){ msg(prov,tt('admin.gps_failed_x','Failed: {msg}',{ msg:(e.message||e) }),true); return; }
     msg(prov,'');
     if(!params.length){ msg(prov,tt('admin.gps_no_params','No parameters returned by the Catapult account.')); return; }
@@ -2365,7 +2376,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       listEl.innerHTML=rows.map((r,i)=>`
         <div data-search-row="${_esc(((r.p.name||'')+' '+(r.p.slug||'')).toLowerCase())}" style="display:grid;grid-template-columns:1.5fr 1.6fr 90px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--cm-border)${r.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
           <div><div style="font:600 12px var(--cm-font-sans);color:var(--cm-fg)">${_esc(r.p.name||r.p.slug)}</div>
-            <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${_esc(r.p.slug)}${r.mapped?'':' · '+tt('admin.gps_unmapped','unmapped')}</div></div>
+            <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${_esc(r.p.slug)}<span data-unmapped-tag style="display:${r.mapped?'none':''}"> · ${tt('admin.gps_unmapped','unmapped')}</span></div></div>
           <select data-t="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${targetOptions(r.target)}</select>
           <input data-c="${i}" type="number" step="any" value="${r.conv}" title="unit conversion" style="padding:7px 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
         </div>`).join('');
@@ -2373,6 +2384,14 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         const i=+s.dataset.t;
         if(s.value==='__new__'){ s.value=rows[i].target; _showNewMetric(i); return; }
         rows[i].target=s.value;
+        // Keep the per-row status live: r.mapped was set once at build time, so the
+        // "· unmapped" tag + amber background went stale when a target was picked.
+        rows[i].mapped=(s.value!=='');
+        const rowEl=s.closest('[data-search-row]');
+        if(rowEl){
+          rowEl.style.background=rows[i].mapped?'':'var(--cm-warning-bg,rgba(245,158,11,.06))';
+          const tag=rowEl.querySelector('[data-unmapped-tag]'); if(tag) tag.style.display=rows[i].mapped?'none':'';
+        }
         _applyFilter();   // status may have changed → re-filter + refresh counts
       }));
       listEl.querySelectorAll('[data-c]').forEach(inp=>inp.addEventListener('input',()=>{ rows[+inp.dataset.c].conv=inp.value; }));
