@@ -608,7 +608,7 @@ create table if not exists public.gps_sync_jobs (
   finished_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   constraint gps_sync_jobs_pkey primary key (id),
-  constraint gps_sync_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'error'::text])))
+  constraint gps_sync_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'error'::text, 'cancelled'::text])))
 );
 CREATE INDEX gps_sync_jobs_club_idx ON public.gps_sync_jobs USING btree (club_id, created_at DESC);
 -- LOCK: at most ONE active (queued|running) job per integration — a 2nd concurrent enqueue

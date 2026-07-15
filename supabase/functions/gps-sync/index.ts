@@ -599,6 +599,51 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, done: true }, 200);
     }
 
+    // ══ CANCEL MODE (client) ══════════════════════════════════════════════
+    // A club admin/owner stops an in-progress sync (JWT — user action, not service role).
+    // Cooperative: we only flip status→'cancelled'; the running worker sees status!='running'
+    // at its next chunk check (processChunk) and stops chaining. The in-flight chunk finishes
+    // (idempotent). 'cancelled' also leaves the (queued|running) partial-unique index → LOCK
+    // FREED, so a new 'start' can immediately create a fresh job. Idempotent: no active job → ok.
+    if (body.mode === 'cancel') {
+      const userClient = createClient(
+        Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: 'Not authenticated' }, 401);
+      const jobId = body.job_id as string | undefined;
+      const integrationId = body.integration_id as string | undefined;
+      if (!jobId && !integrationId) return json({ error: 'job_id or integration_id is required' }, 400);
+
+      const { data: callerClub } = await userClient.rpc('get_user_club_id');
+      const { data: isSuper } = await userClient.rpc('is_super_admin');
+      if (!callerClub && !isSuper) return json({ error: 'No club found for caller' }, 403);
+
+      const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+      // Role gate: only admin/owner of the club (or a platform super-admin) may cancel.
+      const { data: prof } = await adminClient.from('profiles').select('role, club_role').eq('id', user.id).single();
+      const role = String(prof?.role || '').toLowerCase(), clubRole = String(prof?.club_role || '').toLowerCase();
+      const isAdminOwner = ['admin', 'owner'].includes(role) || ['admin', 'owner'].includes(clubRole);
+      if (!isAdminOwner && !isSuper) return json({ error: 'Forbidden' }, 403);
+
+      // Find the ACTIVE (queued|running) job — by id, else the latest for the integration.
+      let q = adminClient.from('gps_sync_jobs').select('id, club_id, status').in('status', ['queued', 'running']);
+      q = jobId ? q.eq('id', jobId) : q.eq('integration_id', integrationId!).order('created_at', { ascending: false }).limit(1);
+      const { data: job } = await q.maybeSingle();
+      if (!job) return json({ ok: true, cancelled: false, message: 'no active job' }, 200);   // idempotent
+      if (job.club_id !== callerClub && !isSuper) return json({ error: 'Forbidden' }, 403);
+
+      // Guard status in the UPDATE so we never overwrite a job that just finished on its own.
+      const { data: updated } = await adminClient.from('gps_sync_jobs')
+        .update({ status: 'cancelled', error: 'cancelled by user', heartbeat_at: nowISO(), finished_at: nowISO() })
+        .eq('id', job.id).in('status', ['queued', 'running'])
+        .select('id').maybeSingle();
+      console.log('[gps-sync] cancel', { jobId: job.id, cancelled: !!updated });
+      return json({ ok: true, cancelled: !!updated, job_id: job.id, status: 'cancelled' }, 200);
+    }
+
     // ══ START MODE (client) ═══════════════════════════════════════════════
     // Auth: resolve caller's club from JWT.
     const userClient = createClient(
