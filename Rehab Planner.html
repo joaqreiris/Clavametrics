@@ -413,8 +413,92 @@ function tt(key, fallbackEN, vars) {
   if (!ok) return;
   const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme?.()]);
 
+  // ── New-plan flow: picking a type opens a player picker → inserts rehab_plans → opens ?plan=<id> ──
+  // (replaces the demo applyMode/mock; real plan then loads empty days + real header)
+  let _npPlayers = null, _npOv = null, _npMode = 'rehab';
+  async function _npLoadPlayers(){
+    if (_npPlayers) return _npPlayers;
+    const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
+    let q = window.sb.from('players').select('id,first_name,last_name,position,number,team_id')
+      .eq('club_id', clubId).is('archived_at', null).order('last_name', { ascending:true });
+    if (team) q = q.eq('team_id', team);
+    const { data } = await q;
+    _npPlayers = data || [];
+    return _npPlayers;
+  }
+  function _npBuild(){
+    if (_npOv) return _npOv;
+    _npOv = document.createElement('div');
+    _npOv.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9500;display:none;align-items:flex-start;justify-content:center;padding:8vh 16px;overflow:auto';
+    _npOv.innerHTML = `
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;width:460px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px;border-bottom:1px solid var(--cm-border)">
+          <h3 id="rp-np-title" style="margin:0;font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">—</h3>
+          <button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button>
+        </div>
+        <div style="padding:18px">
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:13px">
+            <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('rehab_planner.np_player','Player')}</label>
+            <select class="cm-select" id="rp-np-player"></select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:13px">
+            <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('rehab_planner.np_name','Plan name')}</label>
+            <input class="cm-input" id="rp-np-name" type="text" placeholder="${tt('rehab_planner.np_name_ph','e.g. ACL return-to-play')}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('rehab_planner.np_weeks','Total weeks')}</label>
+            <input class="cm-input" id="rp-np-weeks" type="number" min="1" max="52" value="8">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border)">
+          <button class="cm-btn is-ghost" data-close>${tt('common.cancel','Cancel')}</button>
+          <button class="cm-btn is-primary" id="rp-np-create"><i class="ti ti-plus"></i> ${tt('rehab_planner.np_create','Create plan')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(_npOv);
+    _npOv.addEventListener('click', (e) => { if (e.target === _npOv || e.target.closest('[data-close]')) _npOv.style.display = 'none'; });
+    _npOv.querySelector('#rp-np-create').addEventListener('click', _npCreate);
+    return _npOv;
+  }
+  async function _npCreate(){
+    const ov = _npOv;
+    const player_id = ov.querySelector('#rp-np-player').value;
+    const name = ov.querySelector('#rp-np-name').value.trim() || null;
+    const weeks = parseInt(ov.querySelector('#rp-np-weeks').value, 10) || 1;
+    if (!player_id){ alert(tt('rehab_planner.np_err_player', 'Pick a player first')); return; }
+    const btn = ov.querySelector('#rp-np-create'); btn.disabled = true;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const { data, error } = await window.sb.from('rehab_plans').insert({
+      club_id: clubId, player_id, kind: _npMode, name,
+      programme_week: 1, programme_total_weeks: weeks, start_date: todayIso
+    }).select('id').single();
+    btn.disabled = false;
+    if (error || !data){ console.error('[planner] create plan failed:', error); alert(tt('rehab_planner.np_err_create', 'Could not create plan') + (error ? ': ' + (error.message || error.code || '') : '')); return; }
+    location.href = 'Rehab Planner.html?plan=' + data.id;
+  }
+  async function openNewPlan(mode){
+    _npMode = (mode === 'prev') ? 'preventive' : 'rehab';
+    const ov = _npBuild();
+    ov.querySelector('#rp-np-title').textContent = _npMode === 'preventive'
+      ? tt('rehab_planner.np_title_prev', 'New preventive plan')
+      : tt('rehab_planner.np_title_rehab', 'New rehab plan');
+    const sel = ov.querySelector('#rp-np-player');
+    sel.innerHTML = `<option value="">${tt('rehab_planner.np_select_player', 'Select player…')}</option>`;
+    const players = await _npLoadPlayers();
+    players.forEach(p => {
+      const nm = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = `${nm}${p.number ? ' · #' + p.number : ''}${p.position ? ' · ' + p.position : ''}`;
+      sel.appendChild(o);
+    });
+    ov.querySelector('#rp-np-name').value = '';
+    ov.style.display = 'flex';
+  }
+  window.__rpOnPickType = (mode) => openNewPlan(mode);
+
   const planId = new URLSearchParams(location.search).get('plan');
-  if (!planId) return; // no plan param → stay on picker
+  if (!planId) return; // no plan param → stay on picker (type buttons now open the new-plan flow)
 
   const { data: plan, error } = await window.sb
     .from('rehab_plans')

@@ -530,22 +530,21 @@
     if (libNewTop) libNewTop.addEventListener('click', goGymLib);
     if (libNewFoot) libNewFoot.addEventListener('click', goGymLib);
 
-    // picker → planner
+    // picker → planner. If the host page provides __rpOnPickType (real create flow:
+    // pick player → insert rehab_plans → open ?plan=<id>), route to it; else demo mode.
+    const pickType = (mode) => {
+      if (typeof window.__rpOnPickType === 'function') { window.__rpOnPickType(mode); return; }
+      applyMode(mode);
+      showPlanner();
+    };
     $$('.rp-type').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.mode;
-        applyMode(mode);
-        showPlanner();
-      });
+      btn.addEventListener('click', () => pickType(btn.dataset.mode));
     });
     // keyboard shortcuts for picker (1/2)
     document.addEventListener('keydown', (e) => {
       if ($('#view-picker').classList.contains('rp-hidden')) return;
       if (e.key === '1' || e.key === '2') {
-        const map = { '1': 'prev', '2': 'rehab' };
-        const mode = map[e.key];
-        applyMode(mode);
-        showPlanner();
+        pickType({ '1': 'prev', '2': 'rehab' }[e.key]);
       } else if (e.key === 'Escape') {
         // no-op: cancel target could route back to Hub
       }
