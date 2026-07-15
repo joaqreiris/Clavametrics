@@ -1364,33 +1364,34 @@ const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers','Forward
 
 // Normalize a free-text position (CSV import, etc.) to a code POS_CFG understands.
 const _POS_ALIASES = {
-  GOALKEEPER:'GK', PORTERO:'GK', ARQUERO:'GK', GUARDAMETA:'GK', GOLERO:'GK',
-  DEFENDER:'CB', DEF:'CB', DEFENSA:'CB', DEFENSOR:'CB', 'CENTRE BACK':'CB', 'CENTER BACK':'CB', 'CENTRE-BACK':'CB', CENTRAL:'CB', ZAGUERO:'CB',
-  'LEFT BACK':'LB', 'LEFT-BACK':'LB', 'LATERAL IZQUIERDO':'LB', 'LATERAL IZQ':'LB',
-  'RIGHT BACK':'RB', 'RIGHT-BACK':'RB', 'LATERAL DERECHO':'RB', 'LATERAL DER':'RB',
-  FULLBACK:'FB', 'FULL BACK':'FB', LATERAL:'FB',
+  GOALKEEPER:'GK', PORTERO:'GK', ARQUERO:'GK', GUARDAMETA:'GK', GOLERO:'GK', POR:'GK', GUARDAVALLAS:'GK', PORTEIRO:'GK', GOLEIRO:'GK', KEEPER:'GK',
+  DEFENDER:'CB', DEF:'CB', DF:'CB', DEFENSA:'CB', DEFENSOR:'CB', ZAGA:'CB', 'CENTRE BACK':'CB', 'CENTER BACK':'CB', 'CENTRE-BACK':'CB', 'CENTER-BACK':'CB', CENTRAL:'CB', 'DEFENSA CENTRAL':'CB', DC:'CB', ZAGUERO:'CB', ZAGUEIRO:'CB',
+  'LEFT BACK':'LB', 'LEFT-BACK':'LB', 'LATERAL IZQUIERDO':'LB', 'LATERAL IZQ':'LB', LI:'LB',
+  'RIGHT BACK':'RB', 'RIGHT-BACK':'RB', 'LATERAL DERECHO':'RB', 'LATERAL DER':'RB', LD:'RB',
+  FULLBACK:'FB', 'FULL BACK':'FB', 'FULL-BACK':'FB', BACK:'FB', LATERAL:'FB', LATERAIS:'FB',
   'WING BACK':'WB', WINGBACK:'WB', CARRILERO:'WB',
   'LEFT WING BACK':'LWB', 'RIGHT WING BACK':'RWB',
-  'DEFENSIVE MIDFIELDER':'CDM', 'DEFENSIVE MID':'CDM', DM:'CDM', PIVOTE:'CDM', 'MEDIOCENTRO DEFENSIVO':'CDM', 'VOLANTE DEFENSIVO':'CDM',
-  'CENTRAL MIDFIELDER':'CM', 'CENTRAL MID':'CM', MEDIOCENTRO:'CM', VOLANTE:'CM',
-  'ATTACKING MIDFIELDER':'CAM', 'ATTACKING MID':'CAM', AM:'CAM', MEDIAPUNTA:'CAM', ENGANCHE:'CAM',
-  MIDFIELDER:'CM', MID:'CM', MF:'CM', MEDIO:'CM', MEDIOCAMPO:'CM', MEDIOCAMPISTA:'CM',
+  'DEFENSIVE MIDFIELDER':'CDM', 'DEFENSIVE MID':'CDM', DM:'CDM', MCD:'CDM', PIVOTE:'CDM', PIVOT:'CDM', 'MEDIOCENTRO DEFENSIVO':'CDM', 'VOLANTE DEFENSIVO':'CDM',
+  'CENTRAL MIDFIELDER':'CM', 'CENTRAL MID':'CM', MEDIOCENTRO:'CM', MC:'CM', VOLANTE:'CM', MEIA:'CM',
+  'ATTACKING MIDFIELDER':'CAM', 'ATTACKING MID':'CAM', AM:'CAM', MCO:'CAM', MEDIAPUNTA:'CAM', ENGANCHE:'CAM',
+  MIDFIELDER:'CM', MID:'CM', MF:'CM', MEDIO:'CM', MEDIOCAMPO:'CM', MEDIOCAMPISTA:'CM', MEIOCAMPISTA:'CM',
   'LEFT MIDFIELDER':'LM', 'LEFT MID':'LM', 'RIGHT MIDFIELDER':'RM', 'RIGHT MID':'RM',
-  WINGER:'WG', EXTREMO:'WG',
-  'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW',
-  'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW',
-  STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST',
+  WINGER:'WG', WING:'WG', EXTREMO:'WG', PONTA:'WG',
+  'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW', EI:'LW',
+  'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW', ED:'RW',
+  STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST', DEL:'ST', DELANTEROS:'ST', ATACANTES:'ST', ATACANTE_CENTRAL:'ST',
   'CENTRE FORWARD':'CF', 'CENTER FORWARD':'CF', 'DELANTERO CENTRO':'CF',
   'SECOND STRIKER':'SS', 'SEGUNDA PUNTA':'SS', 'SEGUNDO DELANTERO':'SS',
-  FORWARD:'ST', FW:'ST',
+  FORWARD:'ST', FW:'ST', ATACANTE_FW:'ST',
 };
 function normalizePosition(raw) {
   if (raw == null) return null;
-  const k = String(raw).trim().toUpperCase().replace(/\s+/g, ' ');
+  // Strip accents, upper-case and collapse spaces so matching is lenient (Posición, Zagüero…).
+  const k = String(raw).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase().replace(/\s+/g, ' ');
   if (!k) return null;
   if (POS_CFG[k]) return k;               // already a valid code
   if (_POS_ALIASES[k]) return _POS_ALIASES[k];
-  return k;                                // unknown: keep cleaned value (don't lose data)
+  return k;                                // unknown: caller decides (importer imports without a position)
 }
 
 // Multi-position chips for the player modal (PR2). positions[] = full set incl. primary.
@@ -2519,10 +2520,16 @@ async function reloadPlayers() {
       else { if (w<30 || w>150) add('warn','weight_range'); weight = w; }
     }
 
-    // Position: normalize; unknown code → warn (kept as typed).
-    let position = null;
+    // Position: map synonyms to an internal code. If still unrecognized, import WITHOUT a
+    // position (null) — never store raw text like "DF"/"XYZ" that no filter would match,
+    // which would leave the player orphaned in the list.
+    let position = null, posRaw = '';
     const pRaw = (src.position||'').trim();
-    if (pRaw){ position = normalizePosition(pRaw); if (!POS_CFG[position]) add('warn','unknown_position'); }
+    if (pRaw){
+      const code = normalizePosition(pRaw);
+      if (code && POS_CFG[code]) position = code;
+      else { add('warn','position_unknown'); posRaw = pRaw; }
+    }
 
     // Dominant foot.
     const fr = _impFoot(src.dominant_foot);
@@ -2531,9 +2538,9 @@ async function reloadPlayers() {
 
     const nationality = (src.nationality||'').trim();
     return {
-      status, notes, skip:false, skipReason:null,
+      status, notes, skip:false, skipReason:null, posRaw,
       display: {
-        first_name:first, last_name:last, number: number!=null?number:numRaw, position:pRaw,
+        first_name:first, last_name:last, number: number!=null?number:numRaw, position: position || pRaw,
         date_of_birth: dob || (String(src.date_of_birth||'').trim()), nationality,
         height: height!=null?height:String(src.height||'').trim(), weight: weight!=null?weight:String(src.weight||'').trim(),
         dominant_foot: foot || String(src.dominant_foot||'').trim(),
@@ -2571,13 +2578,16 @@ async function reloadPlayers() {
       const numPart = (r.dedup && r.dedup.similarNumber!=null) ? ` (#${r.dedup.similarNumber})` : '';
       return tt('squad.similar_name', `Similar to existing player "${sName}"${numPart} — possible duplicate/typo. Review before importing.`, { name: sName, numPart });
     }
+    if (code === 'position_unknown'){
+      const raw = r.posRaw || '';
+      return tt('squad.position_unknown', `Position "${raw}" not recognized — imported without position. Set it later.`, { raw });
+    }
     const M = {
       no_name:            tt('squad.imp_no_name','Missing name'),
       bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
       bad_date:           tt('squad.imp_bad_date','Date not in the selected format — left blank'),
       height_range:       tt('squad.imp_height_range','Height out of plausible range'),
       weight_range:       tt('squad.imp_weight_range','Weight out of plausible range'),
-      unknown_position:   tt('squad.imp_unknown_position','Unrecognized position — kept as typed'),
       unknown_foot:       tt('squad.imp_unknown_foot','Unrecognized foot — left blank'),
       num_exists:         tt('squad.imp_num_exists','Jersey number already in the squad'),
       num_dup_file:       tt('squad.imp_num_dup_file','Jersey number repeated in the file'),
