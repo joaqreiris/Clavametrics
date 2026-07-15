@@ -667,7 +667,7 @@
   let _players = null;
   async function loadPlayers(){
     if (_players) return _players;
-    let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id').eq('club_id', clubId).order('last_name', { ascending:true });
+    let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id').eq('club_id', clubId).neq('status','inactive').order('last_name', { ascending:true });
     if (team) pq = pq.eq('team_id', team);
     const { data } = await pq;
     _players = data || [];
@@ -755,10 +755,10 @@
     const uid = (await window.sb.auth.getUser())?.data?.user?.id || null;
     const { data, error } = await window.sb.from('individual_plans').insert({
       club_id: clubId, player_id, name, goal, focus, start_date,
-      programme_total_weeks: weeks, status: 'draft', content: {}, created_by: uid
+      programme_total_weeks: parseInt(weeks, 10) || 1, status: 'draft', content: {}, created_by: uid
     }).select('*, players!inner(first_name,last_name,position,number,team_id)').single();
     btn.disabled = false;
-    if (error){ console.error('[individual-sc] create plan failed:', error); ipToast(tt('individual_planner.create_failed','Could not create plan'), true); return; }
+    if (error){ console.error('[individual-sc] create plan failed:', error); ipToast(tt('individual_planner.create_failed','Could not create plan') + ': ' + (error.message || error.code || 'unknown'), 'error'); return; }
     ov.classList.remove('is-open');
     plans.unshift(data);
     renderPicker();
