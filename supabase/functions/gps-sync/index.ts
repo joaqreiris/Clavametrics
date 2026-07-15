@@ -331,11 +331,20 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0;
   const errors: string[] = [];
 
-  for (const act of activities) {
+  // Per-activity worker: returns its OWN counters (no shared-counter mutation under concurrency)
+  // and appends to the shared unmappedParams Set (Set.add is safe on the single-threaded event
+  // loop). NEVER throws — errors are collected in .errs — so one bad activity can't reject the
+  // whole batch. Idempotent per activity: each writes only its OWN session's rows (delete/insert
+  // scoped by session_id; upsert by unique key), so two activities in flight never touch the same
+  // row. Within an activity the flow stays SEQUENTIAL (unchanged) to preserve the "no recs → skip
+  // periods" semantics; the win comes from running SEVERAL activities at once.
+  type ActRes = { act: number; rows: number; per: number; skip: number; flagged: number; errs: string[] };
+  async function processActivity(act: Record<string, unknown>): Promise<ActRes> {
+    const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, errs: [] };
     const activityId = String(act.id ?? act.activity_id ?? '');
-    if (!activityId) continue;
+    if (!activityId) return r;
     const date = toDate(act.start_time ?? act.startTime ?? act.start);
-    if (!date) { errors.push(`activity ${activityId}: unparseable start_time`); continue; }
+    if (!date) { r.errs.push(`activity ${activityId}: unparseable start_time`); return r; }
 
     try {
       // ── 2. Find-or-create the training_session for this activity ────────
@@ -357,7 +366,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
             ...(teamId ? { team_id: teamId } : {}),
           })
           .select('id').single();
-        if (sErr || !newSess) { errors.push(`session ${date}: ${sErr?.message || 'insert failed'}`); continue; }
+        if (sErr || !newSess) { r.errs.push(`session ${date}: ${sErr?.message || 'insert failed'}`); return r; }
         sessionId = newSess.id as string;
       }
 
@@ -371,7 +380,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
           group_by: ['athlete'],
         }),
       });
-      if (!statsRes.ok) { errors.push(`stats ${activityId}: HTTP ${statsRes.status}`); continue; }
+      if (!statsRes.ok) { r.errs.push(`stats ${activityId}: HTTP ${statsRes.status}`); return r; }
       const statRows = (await statsRes.json().catch(() => [])) as Record<string, unknown>[];
 
       // ── 4. Normalize → gps_reports recs + non-core EAV ──────────────────
@@ -380,7 +389,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       for (const row of (Array.isArray(statRows) ? statRows : [])) {
         const ext = String(row.athlete_id ?? (row.athlete as Record<string, unknown>)?.id ?? row.id ?? '');
         const playerId = ext ? playerByExt.get(ext) : undefined;
-        if (!playerId) { skippedUnmapped++; continue; }
+        if (!playerId) { r.skip++; continue; }
 
         const { core, extras } = normalizeMetrics(row, resolveMap, mappedSlugs, unmappedParams);
         // Outlier defense (same contract as the CSV importer): total_distance in
@@ -391,30 +400,29 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         if (extras.length) extrasByPlayer.set(playerId, extras);
       }
 
-      if (!recs.length) { syncedActivities++; continue; }
+      if (!recs.length) { r.act = 1; return r; }
 
-      // ── 5. Idempotent replace: drop this batch's rows for the session, ──
-      //       then insert fresh. Session is API-owned (external_activity_id),
-      //       so replacing its reports is safe. Cascade clears old EAV rows.
-      const batchPlayerIds = recs.map(r => r.player_id as string);
+      // ── 5. Idempotent replace: drop this session's rows, then insert fresh. ──
+      // Session is API-owned (external_activity_id), so replacing its reports is safe.
+      const batchPlayerIds = recs.map(rec => rec.player_id as string);
       await adminClient.from('gps_reports')
         .delete().eq('club_id', clubId).eq('session_id', sessionId).in('player_id', batchPlayerIds);
 
       const { data: inserted, error: insErr } = await adminClient
         .from('gps_reports').insert(recs).select('id, player_id');
-      if (insErr) { errors.push(`reports ${activityId}: ${insErr.message}`); continue; }
-      syncedRows += (inserted || []).length;
+      if (insErr) { r.errs.push(`reports ${activityId}: ${insErr.message}`); return r; }
+      r.rows += (inserted || []).length;
 
       // ── 6. Non-core metrics → gps_report_metrics ────────────────────────
       const metricRows: Record<string, unknown>[] = [];
-      for (const r of (inserted || [])) {
-        const extras = extrasByPlayer.get(r.player_id as string);
+      for (const ins of (inserted || [])) {
+        const extras = extrasByPlayer.get(ins.player_id as string);
         if (!extras?.length) continue;
-        for (const ex of extras) metricRows.push({ report_id: r.id, club_id: clubId, metric_key: ex.metric_key, value: ex.value });
+        for (const ex of extras) metricRows.push({ report_id: ins.id, club_id: clubId, metric_key: ex.metric_key, value: ex.value });
       }
       if (metricRows.length) {
         const { error: mErr } = await adminClient.from('gps_report_metrics').insert(metricRows);
-        if (mErr) errors.push(`metrics ${activityId}: ${mErr.message}`);
+        if (mErr) r.errs.push(`metrics ${activityId}: ${mErr.message}`);
       }
 
       // ── 7. PERIOD-level stats (Ladrillo 2b-ii) ──────────────────────────
@@ -431,14 +439,14 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
           }),
         });
         if (!perRes.ok) {
-          errors.push(`periods ${activityId}: HTTP ${perRes.status}`);   // unsupported / no breakdown → skip
+          r.errs.push(`periods ${activityId}: HTTP ${perRes.status}`);   // unsupported / no breakdown → skip
         } else {
           const perRows = (await perRes.json().catch(() => [])) as Record<string, unknown>[];
           const periodRecs: Record<string, unknown>[] = [];
           for (const row of (Array.isArray(perRows) ? perRows : [])) {
             const ext = String(row.athlete_id ?? (row.athlete as Record<string, unknown>)?.id ?? row.id ?? '');
             const playerId = ext ? playerByExt.get(ext) : undefined;
-            if (!playerId) { skippedUnmapped++; continue; }
+            if (!playerId) { r.skip++; continue; }
 
             const periodId = String(row.period_id ?? '');
             if (!periodId) continue;   // can't form the unique key without it
@@ -457,7 +465,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
             const _td  = typeof core.total_distance === 'number' ? core.total_distance : null;
             const _mps = (_td != null && durationSeconds != null && durationSeconds > 0) ? _td / durationSeconds : null;
             const isSpeedOutlier = _mps != null && _mps > 13;
-            if (isSpeedOutlier) flaggedPeriods++;
+            if (isSpeedOutlier) r.flagged++;
 
             periodRecs.push({
               club_id: clubId, session_id: sessionId, player_id: playerId,
@@ -471,21 +479,39 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
           if (periodRecs.length) {
             const { error: pErr } = await adminClient.from('gps_period_reports')
               .upsert(periodRecs, { onConflict: 'club_id,session_id,period_id,player_id' });
-            if (pErr) errors.push(`periods ${activityId}: ${pErr.message}`);
-            else syncedPeriods += periodRecs.length;
+            if (pErr) r.errs.push(`periods ${activityId}: ${pErr.message}`);
+            else r.per += periodRecs.length;
           }
         }
       } catch (pe) {
-        errors.push(`periods ${activityId}: ${String((pe as Error)?.message || pe)}`);
+        r.errs.push(`periods ${activityId}: ${String((pe as Error)?.message || pe)}`);
       }
 
-      syncedActivities++;
+      r.act = 1;
+      return r;
     } catch (e) {
-      errors.push(`activity ${activityId}: ${String((e as Error)?.message || e)}`);
+      r.errs.push(`activity ${activityId}: ${String((e as Error)?.message || e)}`);
+      return r;
     }
   }
 
-  console.log(`[gps-sync] chunk ${from}..${to}: flagged ${flaggedPeriods} periods speed_outlier`);
+  // ── Process activities in BOUNDED PARALLEL batches ──────────────────────
+  // BATCH_SIZE activities run concurrently (each ≈ 2 Catapult round-trips + writes); the old
+  // fully-serial loop was ~70% of the wall-clock. Bounded (NOT all-at-once) to respect Catapult
+  // rate limits — any 429 that still slips through self-heals via fetchCatapult's backoff (L1).
+  // One batch fully settles before the next starts → max BATCH_SIZE requests in flight.
+  const BATCH_SIZE = 5;
+  const _t0 = Date.now();
+  for (let i = 0; i < activities.length; i += BATCH_SIZE) {
+    const results = await Promise.all(activities.slice(i, i + BATCH_SIZE).map(processActivity));
+    for (const rr of results) {
+      syncedActivities += rr.act; syncedRows += rr.rows; syncedPeriods += rr.per;
+      skippedUnmapped += rr.skip; flaggedPeriods += rr.flagged;
+      if (rr.errs.length) errors.push(...rr.errs);
+    }
+  }
+
+  console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods`);
   return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, errs: errors, unmapped: [...unmappedParams] };
 }
 
