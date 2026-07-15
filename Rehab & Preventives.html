@@ -13,6 +13,11 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <link rel="stylesheet" href="rehab-planner.css">
 <link rel="stylesheet" href="plans-overview.css">
+<style>
+  .rpv-del{border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;padding:4px 6px;border-radius:6px;margin-right:2px;vertical-align:middle}
+  .rpv-del:hover{color:var(--cm-danger,#DC2626);background:var(--cm-bg-soft)}
+  .rpv-del .ti{font-size:15px}
+</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
@@ -166,6 +171,24 @@ function tt(key, fallbackEN, vars) {
   if (!(await window.guardModule())) return;
   const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme()]);
   await rpvInitTeamSwitch(clubId);
+
+  // ── Delete a rehab/preventive plan (cascades to programme_phases + rehab_sessions + owners; injury_phases belong to the injury and are untouched) ──
+  function rpvToast(msg, isErr){
+    let t = document.getElementById('rpvToast');
+    if (!t){ t = document.createElement('div'); t.id = 'rpvToast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:12000;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;max-width:80vw;text-align:center';
+      document.body.appendChild(t); }
+    t.textContent = msg; t.style.background = isErr ? '#B91C1C' : '#15181D'; t.style.opacity = '1';
+    clearTimeout(t._t); t._t = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+  }
+  window.rpvDeletePlan = async function(planId, btnEl){
+    if (!confirm(tt('rehab_planner.delete_plan_confirm', 'Delete this plan? This cannot be undone.'))) return;
+    if (btnEl) btnEl.disabled = true;
+    const { error } = await window.sb.from('rehab_plans').delete().eq('id', planId).eq('club_id', clubId);
+    if (error){ if (btnEl) btnEl.disabled = false; console.error('[rehab] delete plan failed:', error); rpvToast(tt('rehab_planner.delete_failed', 'Could not delete plan') + ': ' + (error.message || error.code || ''), true); return; }
+    btnEl?.closest('tr')?.remove();
+    rpvToast(tt('rehab_planner.deleted', 'Plan deleted'));
+  };
   // Si la categoría no tiene jugadores, no hay planes
   if (_rpvTeamId && _rpvPlayerIds && _rpvPlayerIds.length === 0) {
     const EMPTY_ROW = `<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">${tt('rehab.no_active_plans','No active plans')}</td></tr>`;
@@ -237,7 +260,7 @@ function tt(key, fallbackEN, vars) {
       <td><div class="po-owners">${ownersHtml(p.rehab_plan_owners)}</div></td>
       <td><div class="po-next"><div class="name">—</div><div class="meta">${tt('rehab.no_session','No session')}</div></div></td>
       <td>${statusHtml(p.status)}</td>
-      <td><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
+      <td style="white-space:nowrap;text-align:right"><button class="rpv-del" title="${tt('rehab_planner.delete_plan','Delete plan')}" onclick="event.stopPropagation();rpvDeletePlan('${p.id}',this)"><i class="ti ti-trash"></i></button><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
   }).join('');
 
   // ── render preventive ──
@@ -255,7 +278,7 @@ function tt(key, fallbackEN, vars) {
       <td><div class="po-owners">${ownersHtml(p.rehab_plan_owners)}</div></td>
       <td><div class="po-next"><div class="name">—</div><div class="meta">${tt('rehab.no_session','No session')}</div></div></td>
       <td>${statusHtml(p.status)}</td>
-      <td><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
+      <td style="white-space:nowrap;text-align:right"><button class="rpv-del" title="${tt('rehab_planner.delete_plan','Delete plan')}" onclick="event.stopPropagation();rpvDeletePlan('${p.id}',this)"><i class="ti ti-trash"></i></button><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
   }).join('');
 
   const tbodies = document.querySelectorAll('.po-tbl tbody');

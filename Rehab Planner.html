@@ -39,6 +39,7 @@
       </div>
       <div class="actions">
         <button class="cm-btn is-ghost" id="back-to-picker" style="display:none"><i class="ti ti-arrow-left"></i> <span data-i18n="rehab_planner.change_plan_type">Change plan type</span></button>
+        <button class="cm-btn is-ghost" id="btn-delete-plan" style="color:var(--cm-danger,#DC2626)"><i class="ti ti-trash"></i> <span data-i18n="rehab_planner.delete_plan">Delete plan</span></button>
         <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
         <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> <span data-i18n="rehab_planner.save_plan">Save plan</span></button>
       </div>
@@ -841,6 +842,15 @@ function tt(key, fallbackEN, vars) {
       await rpReloadWeek();
     });
   }
+
+  // ── Delete plan button (cascades to programme_phases + rehab_sessions + owners; injury_phases belong to the injury and are untouched) ──
+  document.getElementById('btn-delete-plan')?.addEventListener('click', async (e) => {
+    if (!confirm(tt('rehab_planner.delete_plan_confirm', 'Delete this plan? This cannot be undone.'))) return;
+    const btn = e.currentTarget; btn.disabled = true;
+    const { error } = await window.sb.from('rehab_plans').delete().eq('id', planId).eq('club_id', clubId);
+    if (error) { btn.disabled = false; console.error('[rehab] delete plan failed:', error); alert(tt('rehab_planner.delete_failed', 'Could not delete plan') + ': ' + (error.message || error.code || '')); return; }
+    location.href = 'Rehab & Preventives.html';
+  });
 
   // ── Save plan button ──
   const saveBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
