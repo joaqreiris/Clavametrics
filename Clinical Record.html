@@ -222,10 +222,10 @@
   .cr-table-head { padding: 15px 20px 13px; display: flex; align-items: center; justify-content: space-between; }
   .cr-table-head h2 { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
   .cr-table-head .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
-  .cr-table { width: 100%; border-collapse: collapse; }
-  .cr-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 9px 16px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); white-space: nowrap; }
+  .cr-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .cr-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 9px 16px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); overflow-wrap: anywhere; }
   .cr-table th.num, .cr-table td.num { text-align: right; }
-  .cr-table tbody td { padding: 11px 16px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; }
+  .cr-table tbody td { padding: 11px 16px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; overflow-wrap: anywhere; }
   .cr-table tbody tr:last-child td { border-bottom: 0; }
   .cr-table tbody tr:hover { background: var(--cm-bg-soft); }
   .cr-table .c-date { font: 500 12.5px/1 var(--cm-font-mono); color: var(--cm-fg); white-space: nowrap; }
@@ -250,6 +250,8 @@
 
   /* injuries layout */
   .cr-inj-cols { display: grid; grid-template-columns: 1fr 252px; gap: 14px; align-items: start; }
+  /* Let the 1fr grid child shrink so its fixed-layout table fits instead of forcing width. */
+  .cr-inj-cols > .cm-card { min-width: 0; }
 
   /* concussion */
   .cr-conc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -543,10 +545,6 @@
                     <button class="is-active" data-view="front" data-i18n="clinical_record.front">Front</button>
                     <button data-view="back" data-i18n="clinical_record.back">Back</button>
                   </div>
-                  <div class="bm-toggle" id="cr-sexToggle">
-                    <button data-sex="male" data-i18n="clinical_record.male">Male</button>
-                    <button data-sex="female" data-i18n="clinical_record.female">Female</button>
-                  </div>
                 </div>
                 <div class="bm-stage">
                   <div class="body-stage">
@@ -601,8 +599,12 @@
                 <div class="cr-table-head" style="border-top:1px solid var(--cm-border);">
                   <h2 data-i18n="clinical_record.injury_history">Injury history</h2><span class="count" id="inj-count"></span>
                 </div>
-                <div style="overflow-x:auto;">
+                <div style="min-width:0;">
                 <table class="cr-table">
+                  <colgroup>
+                    <col style="width:10%"><col style="width:9%"><col style="width:10%"><col style="width:19%">
+                    <col style="width:16%"><col style="width:10%"><col style="width:6%"><col style="width:9%"><col style="width:11%">
+                  </colgroup>
                   <thead>
                     <tr>
                       <th data-i18n="common.date">Date</th><th data-i18n="clinical_record.zone">Zone</th><th data-i18n="clinical_record.tissue">Tissue</th><th data-i18n="clinical_record.diagnosis">Diagnosis</th>
@@ -638,6 +640,7 @@
             <div class="cm-card">
               <div class="cr-table-head"><h2 data-i18n="clinical_record.illness_non_injury">Illness &amp; non-injury episodes</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="ill-count">3 episodes</span><button class="cm-btn is-sm" id="cr-ep-add"><i class="ti ti-plus"></i><span data-i18n="clinical_record.add_episode">Add episode</span></button></div></div>
               <table class="cr-table">
+                <colgroup><col style="width:12%"><col style="width:16%"><col style="width:34%"><col style="width:12%"><col style="width:16%"><col style="width:10%"></colgroup>
                 <thead><tr><th data-i18n="common.date">Date</th><th data-i18n="clinical_record.system">System</th><th data-i18n="clinical_record.diagnosis">Diagnosis</th><th class="num" data-i18n="clinical_record.days_lost">Days lost</th><th data-i18n="clinical_record.status">Status</th><th></th></tr></thead>
                 <tbody id="ill-tbody"></tbody>
               </table>
@@ -652,8 +655,9 @@
           <div class="cr-panel" id="panel-surgical">
             <div class="cm-card">
               <div class="cr-table-head"><h2 data-i18n="clinical_record.surgical_history">Surgical history</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="surg-count">1 procedure</span><button class="cm-btn is-sm" id="cr-surg-add"><i class="ti ti-plus"></i><span data-i18n="clinical_record.add_procedure">Add procedure</span></button></div></div>
-              <div style="overflow-x:auto;">
+              <div style="min-width:0;">
               <table class="cr-table">
+                <colgroup><col style="width:10%"><col style="width:20%"><col style="width:20%"><col style="width:15%"><col style="width:16%"><col style="width:13%"><col style="width:6%"></colgroup>
                 <thead><tr><th data-i18n="common.date">Date</th><th data-i18n="clinical_record.procedure">Procedure</th><th data-i18n="clinical_record.surgeon_clinic">Surgeon / clinic</th><th data-i18n="clinical_record.implants">Implants</th><th data-i18n="clinical_record.outcome">Outcome</th><th data-i18n="clinical_record.related_injury">Related injury</th><th></th></tr></thead>
                 <tbody id="surg-tbody"></tbody>
               </table>
@@ -665,8 +669,9 @@
           <div class="cr-panel" id="panel-treatments">
             <div class="cm-card">
               <div class="cr-table-head"><h2 data-i18n="clinical_record.treatment_log">Treatment log</h2><span class="count" id="tx-count">current rehab block</span></div>
-              <div style="overflow-x:auto;">
+              <div style="min-width:0;">
               <table class="cr-table">
+                <colgroup><col style="width:11%"><col style="width:13%"><col style="width:26%"><col style="width:14%"><col style="width:19%"><col style="width:17%"></colgroup>
                 <thead><tr><th data-i18n="common.date">Date</th><th data-i18n="clinical_record.type">Type</th><th data-i18n="clinical_record.modalities">Modalities</th><th class="num" data-i18n="clinical_record.pain_pre_post">Pain pre→post</th><th data-i18n="clinical_record.performed_by">Performed by</th><th data-i18n="clinical_record.response">Response</th></tr></thead>
                 <tbody id="tx-tbody"></tbody>
               </table>
