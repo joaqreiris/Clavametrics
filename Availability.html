@@ -404,7 +404,6 @@
         <div class="meta">
           <div class="av-segs">
             <button class="av-seg is-on" data-view="matrix" onclick="avSwitchView('matrix')"><i class="ti ti-table"></i><span data-i18n="availability.viewMatrix">Matrix</span></button>
-            <button class="av-seg" data-view="today" onclick="avSwitchView('today')"><i class="ti ti-calendar-event"></i><span data-i18n="availability.viewToday">Today</span></button>
             <button class="av-seg" data-view="stats" onclick="avSwitchView('stats')"><i class="ti ti-chart-bar"></i><span data-i18n="availability.viewStats">Stats</span></button>
           </div>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="availability.exportCsv">Export CSV</span></button>
@@ -479,8 +478,6 @@
         <button class="av-pill-filter" data-pos="wg"><span class="dot" style="background:#B45309"></span>WG<span class="ct" id="avPillWG">—</span></button>
         <button class="av-pill-filter" data-pos="st"><span class="dot" style="background:#B91C1C"></span>ST<span class="ct" id="avPillST">—</span></button>
         <div class="grow"></div>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i><span data-i18n="common.filters">Filters</span></button>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-layout-rows" style="font-size:14px"></i><span data-i18n="availability.groupBy">Group by</span></button>
         <button class="cm-btn is-primary is-sm"><i class="ti ti-pencil" style="font-size:14px"></i><span data-i18n="availability.editMode">Edit mode</span></button>
       </div>
 
@@ -538,10 +535,6 @@
         </div>
       </div>
       </div><!-- /viewMatrix -->
-
-      <div id="viewToday" style="display:none">
-        <div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)" data-i18n="availability.todayComingSoon">Today view — coming soon.</div>
-      </div>
 
       <div id="viewStats" style="display:none"></div>
 
@@ -1498,7 +1491,6 @@
   window.avSwitchView = function(view) {
     document.querySelectorAll('.av-seg').forEach(b => b.classList.toggle('is-on', b.dataset.view === view));
     document.getElementById('viewMatrix').style.display = view === 'matrix' ? '' : 'none';
-    document.getElementById('viewToday').style.display  = view === 'today'  ? '' : 'none';
     document.getElementById('viewStats').style.display  = view === 'stats'  ? '' : 'none';
     // Los KPIs de arriba: ocultarlos en Stats (Stats tiene sus propios KPIs)
     const kpis = document.querySelector('.av-kpis');
