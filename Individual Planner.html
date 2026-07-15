@@ -23,7 +23,7 @@
   .ip-picker-loading,.ip-picker-empty{grid-column:1/-1;padding:40px 16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
   .ip-picker-empty i{display:block;font-size:34px;margin-bottom:10px;color:var(--cm-fg-faint)}
   .ip-picker-empty .t{font:var(--cm-body);color:var(--cm-fg);margin-bottom:4px}
-  .ip-plan-card{text-align:left;cursor:pointer;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:16px;display:flex;flex-direction:column;gap:12px;transition:border-color .12s,box-shadow .12s}
+  .ip-plan-card{position:relative;text-align:left;cursor:pointer;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:16px;display:flex;flex-direction:column;gap:12px;transition:border-color .12s,box-shadow .12s}
   .ip-plan-card:hover{border-color:var(--cm-accent);box-shadow:0 2px 10px rgba(0,0,0,.06)}
   .ip-plan-card .top{display:flex;align-items:center;gap:11px}
   .ip-plan-card .av{width:40px;height:40px;flex:none;border-radius:50%;background:var(--cm-bg-soft);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--cm-font-sans)}
@@ -33,6 +33,10 @@
   .ip-plan-card .plan strong{color:var(--cm-fg-strong)}
   .ip-plan-card .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .ip-plan-card .chip{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-radius:var(--cm-r-2);background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .ip-card-del{position:absolute;top:8px;right:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--cm-fg-faint);background:transparent;cursor:pointer;opacity:0;transition:opacity .12s,color .12s,background .12s}
+  .ip-plan-card:hover .ip-card-del{opacity:1}
+  .ip-card-del:hover{color:var(--cm-danger,#DC2626);background:var(--cm-bg-soft)}
+  .ip-card-del .ti{font-size:14px}
   .ip-plan-card .chip.status-active{background:rgba(21,128,61,.12);color:#15803D}
   .ip-plan-card .chip.status-draft{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
   /* Modals (New plan / Phases) */
@@ -144,6 +148,7 @@
           <select class="cm-select is-sm" id="ip-status" title="Plan status" data-i18n-attr="title:individual_planner.plan_status"></select>
           <button class="cm-btn is-outline is-sm" id="ip-share-btn"><i class="ti ti-share" style="font-size:14px"></i> <span data-i18n="individual_planner.share_with_player">Share with player</span></button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i> <span data-i18n="common.export">Export</span></button>
+          <button class="cm-btn is-outline is-sm" id="ip-del-plan" style="color:var(--cm-danger,#DC2626)"><i class="ti ti-trash" style="font-size:14px"></i> <span data-i18n="individual_planner.delete_plan">Delete plan</span></button>
           <span class="ip-save-state" id="ip-save-state"></span>
         </div>
       </div>
@@ -541,6 +546,7 @@
       const wk   = tt('individual_planner.week_x_of_y', `Week <strong>${pl.programme_week||1}</strong> / ${pl.programme_total_weeks||1}`, { x: pl.programme_week||1, y: pl.programme_total_weeks||1 });
       const st   = pl.status === 'draft' ? tt('individual_planner.status_draft','Draft') : tt('individual_planner.status_active','Active');
       return `<button class="ip-plan-card" data-i="${i}">
+        <span class="ip-card-del" data-del="${pl.id}" title="${tt('individual_planner.delete_plan','Delete plan')}"><i class="ti ti-trash"></i></span>
         <div class="top">
           <div class="av">${initials(name)}</div>
           <div class="who"><div class="name">${name}</div><div class="pos">${[num,pos].filter(Boolean).join(' · ')}</div></div>
@@ -556,6 +562,24 @@
     gridEl.querySelectorAll('.ip-plan-card').forEach(card => {
       card.addEventListener('click', () => openPlan(plans[+card.dataset.i]));
     });
+    gridEl.querySelectorAll('.ip-card-del').forEach(el => {
+      el.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (await deletePlanById(el.dataset.del)) renderPicker();
+      });
+    });
+  }
+
+  // Delete a plan (cascades to individual_plan_phases). Returns true on success.
+  async function deletePlanById(planId){
+    if (!planId) return false;
+    if (!confirm(tt('individual_planner.delete_confirm', 'Delete this plan? This cannot be undone.'))) return false;
+    const { error } = await window.sb.from('individual_plans').delete().eq('id', planId).eq('club_id', clubId);
+    if (error){ console.error('[individual-sc] delete plan failed:', error); ipToast(tt('individual_planner.delete_failed', 'Could not delete plan') + ': ' + (error.message || error.code || ''), true); return false; }
+    const idx = plans.findIndex(p => p.id === planId);
+    if (idx >= 0) plans.splice(idx, 1);
+    ipToast(tt('individual_planner.deleted', 'Plan deleted'));
+    return true;
   }
 
   async function openPlan(plan, opts){
@@ -844,6 +868,17 @@
     _shOv.classList.add('is-open');
   }
   document.getElementById('ip-share-btn')?.addEventListener('click', openShare);
+
+  // ── Delete plan from the open-plan header → back to picker ──
+  document.getElementById('ip-del-plan')?.addEventListener('click', async () => {
+    if (!currentRow || !currentRow.id){ ipToast(tt('individual_planner.open_plan_first', 'Open a plan first'), true); return; }
+    if (await deletePlanById(currentRow.id)){
+      currentRow = null;
+      window.__ipApi?.loadPlan?.(null, []);   // clear the engine
+      renderPicker();
+      showPicker();
+    }
+  });
 
   await mountTeamSelect();
   await loadPlans();
