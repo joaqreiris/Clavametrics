@@ -796,7 +796,6 @@ create table if not exists public.individual_plans (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint individual_plans_pkey primary key (id),
-  constraint individual_plans_focus_check CHECK ((focus = ANY (ARRAY['strength'::text, 'power'::text, 'speed'::text, 'endurance'::text, 'mobility'::text, 'return_to_play'::text, 'general'::text]))),
   constraint individual_plans_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'paused'::text, 'completed'::text, 'archived'::text])))
 );
 CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (club_id);

@@ -88,6 +88,52 @@
     return (days && days.length) ? days : EMPTY_WEEK;
   }
 
+  // Materialize plan.content.days from the scaffold on first edit, so mutations persist.
+  function ensureDays() {
+    const plan = window.__ipData && window.__ipData.plan;
+    if (!plan) return null;
+    let c = plan.content;
+    if (!c || typeof c !== 'object') c = {};
+    if (Array.isArray(c)) c = { days: c };
+    if (!Array.isArray(c.days) || !c.days.length) {
+      c.days = EMPTY_WEEK.map(d => ({ dow: d.dow, dom: d.dom, today: !!d.today, mode: [], blocks: [] }));
+    }
+    plan.content = c;
+    return c.days;
+  }
+
+  // ─── Edit/persistence plumbing ───
+  let _contentChangeCbs = [];
+  let _editingRef = null;   // { di, bi } while editing an existing block via block-drawer
+  function _fireContentChange() {
+    _contentChangeCbs.forEach(cb => { try { cb(); } catch (e) { console.error('[individual-sc] onContentChange cb', e); } });
+  }
+
+  // block-drawer save payload → stored block (renderer shape; exList keeps full exercises for round-trip)
+  function payloadToBlock(p) {
+    return {
+      type: p.type,
+      name: p.name,
+      dur: p.duration || 0,
+      au: p.au || 0,
+      resp: p.owner || 'sc',
+      rpe: p.rpe,
+      exercises: (p.exercises || []).length,
+      exList: p.exercises || [],
+      goal: p.ctxField || undefined,
+      notes: p.notes || undefined
+    };
+  }
+  // stored block → block-drawer `existing` (free-text round-trip of the exercise list)
+  function blockToExisting(b, dayLabel, di) {
+    return {
+      type: b.type, name: b.name, duration: b.dur, rpe: b.rpe, owner: b.resp,
+      notes: b.notes || '', ctxField: b.goal || '',
+      exercises: b.exList || [],
+      day: dayLabel, dayDate: String(di)
+    };
+  }
+
   const TYPE_LABEL_EN = {
     warmup: 'Warm-up', myo: 'Myofascial', mob: 'Mobility', act: 'Activation',
     str: 'Strength', plyo: 'Plyometrics', skills: 'Skills', field: 'On-field',
@@ -117,6 +163,7 @@
     weekData().forEach((day, di) => {
       const card = document.createElement('div');
       card.className = 'rp-day' + (day.rest ? ' is-rest' : '') + (day.today ? ' is-today' : '');
+      card.dataset.date = String(di);   // block-drawer reads dataset.date → routes new blocks to this day
       const head = document.createElement('div');
       head.className = 'rp-day-h';
       head.innerHTML = `
@@ -142,6 +189,7 @@
         totalAu += b.au || 0; totalDur += b.dur || 0;
         const block = document.createElement('div');
         block.className = 'rp-block t-' + b.type + (b.selected ? ' is-selected' : '');
+        block.dataset.di = String(di); block.dataset.bi = String(bi);
         const gpsHtml = (b.gps && b.gps.length)
           ? `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill"><span class="l">${g.l}</span><span class="v">${g.v}</span></span>`).join('')}</div>`
           : '';
@@ -247,7 +295,78 @@
     $('#view-timeline').classList.toggle('rp-hidden', view !== 'timeline');
   }
 
-  function renderAll() { renderKanban(); renderTable(); renderTimeline(); }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+  // Repaint the programme phase bar from __ipData.phases (mirror of rehab's trainbar).
+  function renderPhasebar() {
+    const track = $('.rp-trainbar .rp-train-track');
+    if (!track) return;
+    const phases = (window.__ipData && window.__ipData.phases) || [];
+    const plan = window.__ipData && window.__ipData.plan;
+    // Summary line
+    const summary = $('.rp-trainbar-h .summary');
+    if (summary) {
+      const total = (plan && plan.programme_total_weeks) || 1;
+      const cur = (plan && plan.programme_week) || 1;
+      const goal = plan && plan.goal ? plan.goal : (plan && plan.focus ? plan.focus : '');
+      let html = tt('individual_planner.programme_summary_dyn', `<strong>${total}</strong>-week programme · Week <strong>${cur}</strong> of ${total}`, { total, cur });
+      if (goal) html += ' · ' + tt('individual_planner.goal_label', 'goal') + ': <strong>' + esc(goal) + '</strong>';
+      summary.innerHTML = html;
+    }
+    if (!phases.length) {
+      track.style.gridTemplateColumns = '1fr';
+      track.innerHTML = `<div class="rp-train-seg"><span class="dot"></span><span>${tt('individual_planner.no_phases_yet', 'No phases yet — use "Edit phases" to add them.')}</span></div>`;
+      return;
+    }
+    const cur = Number(plan && plan.programme_week) || 0;
+    const spans = phases.map(p => Math.max(1, (Number(p.week_end) || 1) - (Number(p.week_start) || 1) + 1));
+    track.style.gridTemplateColumns = spans.map(s => s + 'fr').join(' ');
+    track.innerHTML = phases.map(p => {
+      const ws = Number(p.week_start) || 1, we = Number(p.week_end) || ws;
+      const status = (we < cur) ? 'is-done' : (cur >= ws && cur <= we) ? 'is-current' : '';
+      const wk = ws === we ? `W${ws}` : `W${ws}–${we}`;
+      const nowTag = status === 'is-current' ? ' · ' + tt('individual_planner.now_tag', 'NOW') : '';
+      const dotSty = p.color ? ` style="background:${esc(p.color)}"` : '';
+      const tip = p.objective ? ` title="${esc(p.objective)}"` : '';
+      return `<div class="rp-train-seg ${status}"${tip}><span class="dot"${dotSty}></span>${esc(p.name)}<span class="wk">${wk}${nowTag}</span></div>`;
+    }).join('');
+  }
+
+  function renderAll() { renderKanban(); renderTable(); renderTimeline(); renderPhasebar(); }
+
+  // ─── Route block-drawer saves into __ipData.plan.content (create/edit) ───
+  window.addEventListener('blockdrawer:save', (e) => {
+    if (!(window.__ipData && window.__ipData.plan)) return;   // only when a plan is loaded in this engine
+    const p = e.detail || {};
+    const days = ensureDays();
+    if (!days) return;
+    const block = payloadToBlock(p);
+    if (p.mode === 'edit') {
+      if (!_editingRef) return;                                // e.g. demo side-panel button — ignore
+      const { di, bi } = _editingRef;
+      if (days[di] && Array.isArray(days[di].blocks) && days[di].blocks[bi] != null) days[di].blocks[bi] = block;
+      _editingRef = null;
+    } else {
+      const di = parseInt(p.dayDate, 10);
+      _editingRef = null;
+      if (isNaN(di) || !days[di]) return;
+      if (!Array.isArray(days[di].blocks)) days[di].blocks = [];
+      days[di].blocks.push(block);
+    }
+    renderAll();
+    _fireContentChange();
+  });
+  window.addEventListener('blockdrawer:delete', () => {
+    if (!(window.__ipData && window.__ipData.plan) || !_editingRef) return;
+    const days = ensureDays();
+    const { di, bi } = _editingRef;
+    _editingRef = null;
+    if (days && days[di] && Array.isArray(days[di].blocks)) days[di].blocks.splice(bi, 1);
+    renderAll();
+    _fireContentChange();
+  });
+  // A fresh "Add block" click is always a create — clear any stale edit ref.
+  document.addEventListener('click', (e) => { if (e.target.closest('.rp-add-block')) _editingRef = null; });
 
   document.addEventListener('cm:langchanged', renderAll);
 
@@ -259,18 +378,34 @@
     });
 
     document.addEventListener('click', (e) => {
-      const block = e.target.closest('.rp-block');
-      if (!block) return;
+      const blockEl = e.target.closest('.rp-block');
+      if (!blockEl) return;
       $$('.rp-block.is-selected').forEach(b => b.classList.remove('is-selected'));
-      block.classList.add('is-selected');
+      blockEl.classList.add('is-selected');
+      // Open the block drawer in edit mode for this block
+      const di = parseInt(blockEl.dataset.di, 10), bi = parseInt(blockEl.dataset.bi, 10);
+      if (isNaN(di) || isNaN(bi) || !window.openBlockDrawer) return;
+      const days = weekData();
+      const b = days[di] && Array.isArray(days[di].blocks) ? days[di].blocks[bi] : null;
+      if (!b) return;
+      _editingRef = { di, bi };
+      window.openBlockDrawer({ context: 'ip', existing: blockToExisting(b, days[di].dow || '', di) });
     });
 
     window.__ipApi = {
       showView,
       loadPlan: (plan, phases) => {
         window.__ipData = { plan: plan || null, phases: phases || [] };
+        _editingRef = null;
         renderAll();
       },
+      setPhases: (phases) => {
+        if (window.__ipData) window.__ipData.phases = phases || [];
+        renderPhasebar();
+      },
+      getContent: () => (window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null),
+      getPlan: () => (window.__ipData ? window.__ipData.plan : null),
+      onContentChange: (cb) => { if (typeof cb === 'function') _contentChangeCbs.push(cb); },
       setShowKpis: (on) => { document.querySelector('.ip-kpis').style.display = on ? '' : 'none'; },
       setShowTrainbar: (on) => { document.querySelector('.rp-trainbar').style.display = on ? '' : 'none'; },
       setShowSidePanel: (on) => {

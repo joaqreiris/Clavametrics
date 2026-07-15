@@ -35,6 +35,25 @@
   .ip-plan-card .chip{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-radius:var(--cm-r-2);background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
   .ip-plan-card .chip.status-active{background:rgba(21,128,61,.12);color:#15803D}
   .ip-plan-card .chip.status-draft{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  /* Modals (New plan / Phases) */
+  .ip-modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9000;display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
+  .ip-modal-ov.is-open{display:flex}
+  .ip-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;width:520px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+  .ip-modal.is-wide{width:640px}
+  .ip-modal-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)}
+  .ip-modal-h h3{margin:0;font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ip-modal-b{padding:18px}
+  .ip-modal-f{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border)}
+  .ip-form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
+  .ip-form-row>label{font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .ip-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .ip-save-state{font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:60px;display:inline-flex;align-items:center;gap:5px}
+  .ip-save-state.is-err{color:var(--cm-danger,#DC2626)}
+  /* Phase editor rows */
+  .ip-phase-row{display:grid;grid-template-columns:1.4fr .5fr .5fr 1fr 40px auto;gap:8px;align-items:end;margin-bottom:10px}
+  .ip-phase-row .rm{border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;height:38px}
+  .ip-phase-row .rm:hover{color:var(--cm-danger,#DC2626)}
+  .ip-phase-empty{padding:12px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -64,8 +83,9 @@
       </div>
       <div class="actions">
         <a class="cm-btn is-ghost js-ip-back" href="#"><i class="ti ti-users"></i> <span data-i18n="individual_planner.switch_athlete">Switch athlete</span></a>
+        <select class="cm-select" id="ip-status" title="Plan status" data-i18n-attr="title:individual_planner.plan_status" style="width:auto;height:36px"></select>
         <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
-        <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> <span data-i18n="individual_planner.save_plan">Save plan</span></button>
+        <span class="ip-save-state" id="ip-save-state"></span>
       </div>
     </header>
 
@@ -134,9 +154,9 @@
       <div class="rp-trainbar" style="display:block">
         <div class="rp-trainbar-h">
           <span class="l" data-i18n="individual_planner.programme">Programme</span>
-          <span class="summary" data-i18n-html="individual_planner.programme_summary">12-week individual block · <strong>Week 4 of 12</strong> · goal: <strong>aerobic capacity + force expression</strong></span>
+          <span class="summary"></span>
           <div class="right">
-            <button class="cm-btn is-ghost" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> <span data-i18n="individual_planner.edit_phases">Edit phases</span></button>
+            <button class="cm-btn is-ghost" id="ip-edit-phases" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> <span data-i18n="individual_planner.edit_phases">Edit phases</span></button>
           </div>
         </div>
         <div class="rp-train-track" style="grid-template-columns:0.7fr 1.3fr 1fr 1.5fr">
@@ -504,6 +524,68 @@
 
   const initials = (name) => (name || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
 
+  // ── Small helpers: toast + save-state ─────────────────────
+  function ipToast(msg, isErr){
+    let t = document.getElementById('ipToast');
+    if (!t){ t = document.createElement('div'); t.id = 'ipToast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:12000;background:#15181D;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;max-width:80vw;text-align:center';
+      document.body.appendChild(t); }
+    t.textContent = msg; t.style.background = isErr ? '#B91C1C' : '#15181D'; t.style.opacity = '1';
+    clearTimeout(t._timer); t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3200);
+  }
+  function setSaveState(s){
+    const el = document.getElementById('ip-save-state'); if (!el) return;
+    el.classList.toggle('is-err', s === 'error');
+    if (s === 'saving')      el.innerHTML = '<i class="ti ti-loader-2"></i> ' + tt('individual_planner.saving','Saving…');
+    else if (s === 'saved')  el.innerHTML = '<i class="ti ti-check"></i> ' + tt('individual_planner.saved','Saved');
+    else if (s === 'error')  el.innerHTML = '<i class="ti ti-alert-triangle"></i> ' + tt('individual_planner.save_error','Save failed');
+    else el.innerHTML = '';
+  }
+
+  let currentRow = null;   // the plan currently open in the engine
+
+  // ── Autosave (debounced 800ms, flushed on hide) ───────────
+  let _saveTimer = null, _dirty = false;
+  function scheduleSave(){ if (!currentRow || !currentRow.id) return; _dirty = true; setSaveState('pending'); clearTimeout(_saveTimer); _saveTimer = setTimeout(doSave, 800); }
+  async function doSave(){
+    if (!currentRow || !currentRow.id){ _dirty = false; return; }
+    const content = window.__ipApi?.getContent?.() ?? {};
+    setSaveState('saving');
+    const { error } = await window.sb.from('individual_plans')
+      .update({ content, updated_at: new Date().toISOString() }).eq('id', currentRow.id);
+    if (error){ console.error('[individual-sc] autosave failed:', error); _dirty = true; setSaveState('error'); ipToast(tt('individual_planner.save_failed','Could not save changes'), true); return; }
+    _dirty = false; setSaveState('saved');
+  }
+  async function flushSave(){ clearTimeout(_saveTimer); if (_dirty){ try { await doSave(); } catch(_){} } }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+  window.addEventListener('pagehide', flushSave);
+  window.addEventListener('beforeunload', () => { clearTimeout(_saveTimer); if (_dirty){ try { doSave(); } catch(_){} } });
+  // Register the content-change hook once the engine API is ready
+  (function whenApi(){ if (window.__ipApi?.onContentChange){ window.__ipApi.onContentChange(scheduleSave); } else setTimeout(whenApi, 50); })();
+
+  // ── Plan status control ───────────────────────────────────
+  const STATUSES = ['draft','active','completed','archived'];
+  const STATUS_EN = { draft:'Draft', active:'Active', completed:'Completed', archived:'Archived' };
+  const statusLabel = (s) => tt('individual_planner.status_' + s, STATUS_EN[s] || s);
+  function fillStatusSelect(cur){
+    const sel = document.getElementById('ip-status'); if (!sel) return;
+    sel.innerHTML = STATUSES.map(s => `<option value="${s}">${statusLabel(s)}</option>`).join('');
+    sel.value = cur || 'draft';
+  }
+  document.getElementById('ip-status')?.addEventListener('change', async (e) => {
+    if (!currentRow || !currentRow.id) return;
+    const st = e.target.value;
+    const { error } = await window.sb.from('individual_plans').update({ status: st, updated_at: new Date().toISOString() }).eq('id', currentRow.id);
+    if (error){ console.error('[individual-sc] status update failed:', error); ipToast(tt('individual_planner.save_failed','Could not save changes'), true); return; }
+    currentRow.status = st; ipToast(tt('individual_planner.status_updated','Status updated'));
+  });
+
+  function reflectAthlete(pname, planName){
+    const av = document.querySelector('.rp-athlete-av'); if (av) av.textContent = initials(pname);
+    const nameEl = document.querySelector('.rp-athlete-id .name'); if (nameEl && nameEl.childNodes[0]) nameEl.childNodes[0].nodeValue = pname + ' ';
+    const crumb = document.getElementById('ip-crumb-now'); if (crumb) crumb.textContent = pname + (planName ? ' · ' + planName : '');
+  }
+
   // ── Fetch the club's active/draft individual plans ──────────
   const team = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
   let q = window.sb.from('individual_plans')
@@ -511,8 +593,9 @@
     .eq('club_id', clubId).in('status', ['active','draft'])
     .order('created_at', { ascending:false });
   if (team) q = q.eq('players.team_id', team);
-  const { data: plans, error } = await q;
+  let { data: plans, error } = await q;
   if (error) console.warn('[individual-sc] plans fetch', error);
+  plans = plans || [];
 
   function renderPicker(){
     if (!plans || !plans.length){
@@ -548,28 +631,224 @@
     });
   }
 
-  async function openPlan(plan){
+  async function openPlan(plan, opts){
+    opts = opts || {};
     // Fetch the full row (incl. content) + its phases
     const [{ data: full }, { data: phases }] = await Promise.all([
       window.sb.from('individual_plans').select('*').eq('id', plan.id).single(),
       window.sb.from('individual_plan_phases').select('*').eq('plan_id', plan.id).order('phase_order', { ascending:true })
     ]);
     const row = full || plan;
-    // Reflect athlete in the topbar/strip (light touch; engine renders the week from content)
-    const p = plan.players || {};
+    currentRow = row;
+    const p = plan.players || opts.players || {};
     const pname = `${p.first_name || ''} ${p.last_name || ''}`.trim() || row.name || '—';
-    const av = document.querySelector('.rp-athlete-av'); if (av) av.textContent = initials(pname);
-    const nameEl = document.querySelector('.rp-athlete-id .name'); if (nameEl) nameEl.childNodes[0].nodeValue = pname + ' ';
-    const crumb = document.getElementById('ip-crumb-now'); if (crumb) crumb.textContent = pname + (row.name ? ' · ' + row.name : '');
+    reflectAthlete(pname, row.name);
+    fillStatusSelect(row.status);
+    setSaveState('');
     showPlanner();
     window.__ipApi?.loadPlan?.(row, phases || []);
   }
 
-  document.getElementById('ip-new-plan')?.addEventListener('click', () => {
-    // Phase 2b wires the create flow. For now: open an empty plan scaffold.
+  // ════════════════════ NEW PLAN modal ════════════════════
+  const FOCI = ['strength','power','return-to-perform','prevention','custom'];
+  const FOCUS_EN = { 'strength':'Strength', 'power':'Power', 'return-to-perform':'Return to perform', 'prevention':'Prevention', 'custom':'Custom' };
+  let _players = null;
+  async function loadPlayers(){
+    if (_players) return _players;
+    let pq = window.sb.from('players').select('id,first_name,last_name,position,number,team_id').eq('club_id', clubId).order('last_name', { ascending:true });
+    if (team) pq = pq.eq('team_id', team);
+    const { data } = await pq;
+    _players = data || [];
+    return _players;
+  }
+
+  let _npOv = null;
+  function buildNewPlanModal(){
+    if (_npOv) return _npOv;
+    _npOv = document.createElement('div');
+    _npOv.className = 'ip-modal-ov';
+    _npOv.innerHTML = `
+      <div class="ip-modal" role="dialog" aria-modal="true">
+        <div class="ip-modal-h">
+          <h3>${tt('individual_planner.new_plan_title','New individual plan')}</h3>
+          <button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button>
+        </div>
+        <div class="ip-modal-b">
+          <div class="ip-form-row">
+            <label>${tt('individual_planner.field_player','Player')}</label>
+            <select class="cm-select" id="np-player"></select>
+          </div>
+          <div class="ip-form-row">
+            <label>${tt('individual_planner.field_name','Plan name')}</label>
+            <input class="cm-input" id="np-name" type="text" placeholder="${tt('individual_planner.name_ph','e.g. Capacity block')}">
+          </div>
+          <div class="ip-form-grid">
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_focus','Focus')}</label>
+              <select class="cm-select" id="np-focus">${FOCI.map(f => `<option value="${f}">${tt('individual_planner.focus_' + f.replace(/-/g,'_'), FOCUS_EN[f])}</option>`).join('')}</select>
+            </div>
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_weeks','Total weeks')}</label>
+              <input class="cm-input" id="np-weeks" type="number" min="1" max="52" value="12">
+            </div>
+          </div>
+          <div class="ip-form-grid">
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_start','Start date')}</label>
+              <input class="cm-input" id="np-start" type="date">
+            </div>
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_goal','Goal (optional)')}</label>
+              <input class="cm-input" id="np-goal" type="text" placeholder="${tt('individual_planner.goal_ph','e.g. aerobic capacity')}">
+            </div>
+          </div>
+        </div>
+        <div class="ip-modal-f">
+          <button class="cm-btn is-ghost" data-close>${tt('common.cancel','Cancel')}</button>
+          <button class="cm-btn is-primary" id="np-create"><i class="ti ti-plus"></i> ${tt('individual_planner.create_plan','Create plan')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(_npOv);
+    _npOv.addEventListener('click', (e) => { if (e.target === _npOv || e.target.closest('[data-close]')) _npOv.classList.remove('is-open'); });
+    _npOv.querySelector('#np-create').addEventListener('click', createPlan);
+    return _npOv;
+  }
+  async function openNewPlan(){
+    const ov = buildNewPlanModal();
+    const sel = ov.querySelector('#np-player');
+    sel.innerHTML = `<option value="">${tt('individual_planner.select_player','Select player…')}</option>`;
+    const players = await loadPlayers();
+    players.forEach(pl => {
+      const nm = `${pl.first_name || ''} ${pl.last_name || ''}`.trim();
+      const opt = document.createElement('option');
+      opt.value = pl.id;
+      opt.textContent = `${nm}${pl.number ? ' · #' + pl.number : ''}${pl.position ? ' · ' + pl.position : ''}`;
+      sel.appendChild(opt);
+    });
+    ov.querySelector('#np-name').value = '';
+    ov.querySelector('#np-goal').value = '';
+    ov.classList.add('is-open');
+  }
+  async function createPlan(){
+    const ov = _npOv;
+    const player_id = ov.querySelector('#np-player').value;
+    const name = ov.querySelector('#np-name').value.trim();
+    const focus = ov.querySelector('#np-focus').value;
+    const goal = ov.querySelector('#np-goal').value.trim() || null;
+    const start_date = ov.querySelector('#np-start').value || null;
+    const weeks = parseInt(ov.querySelector('#np-weeks').value, 10) || 1;
+    if (!player_id){ ipToast(tt('individual_planner.err_pick_player','Pick a player first'), true); return; }
+    if (!name){ ipToast(tt('individual_planner.err_need_name','Enter a plan name'), true); return; }
+    const btn = ov.querySelector('#np-create'); btn.disabled = true;
+    const uid = (await window.sb.auth.getUser())?.data?.user?.id || null;
+    const { data, error } = await window.sb.from('individual_plans').insert({
+      club_id: clubId, player_id, name, goal, focus, start_date,
+      programme_total_weeks: weeks, status: 'draft', content: {}, created_by: uid
+    }).select('*, players!inner(first_name,last_name,position,number,team_id)').single();
+    btn.disabled = false;
+    if (error){ console.error('[individual-sc] create plan failed:', error); ipToast(tt('individual_planner.create_failed','Could not create plan'), true); return; }
+    ov.classList.remove('is-open');
+    plans.unshift(data);
+    renderPicker();
+    // Open it in the engine
+    currentRow = data;
+    const p = data.players || {};
+    reflectAthlete(`${p.first_name || ''} ${p.last_name || ''}`.trim() || data.name, data.name);
+    fillStatusSelect(data.status);
+    setSaveState('');
     showPlanner();
-    window.__ipApi?.loadPlan?.({ name: tt('individual_planner.new_plan','New plan'), content: {} }, []);
-  });
+    window.__ipApi?.loadPlan?.(data, []);
+    ipToast(tt('individual_planner.plan_created','Plan created'));
+  }
+  document.getElementById('ip-new-plan')?.addEventListener('click', openNewPlan);
+
+  // ════════════════════ PHASES modal ════════════════════
+  const LOAD_LEVELS = ['low','moderate','high'];
+  const LOAD_EN = { low:'Low', moderate:'Moderate', high:'High' };
+  let _phOv = null, _phState = [];
+  function buildPhasesModal(){
+    if (_phOv) return _phOv;
+    _phOv = document.createElement('div');
+    _phOv.className = 'ip-modal-ov';
+    _phOv.innerHTML = `
+      <div class="ip-modal is-wide" role="dialog" aria-modal="true">
+        <div class="ip-modal-h">
+          <h3>${tt('individual_planner.phases_title','Programme phases')}</h3>
+          <button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button>
+        </div>
+        <div class="ip-modal-b" id="ph-rows"></div>
+        <div class="ip-modal-f">
+          <button class="cm-btn is-ghost" id="ph-add"><i class="ti ti-plus"></i> ${tt('individual_planner.add_phase','Add phase')}</button>
+          <div style="flex:1"></div>
+          <button class="cm-btn is-ghost" data-close>${tt('common.cancel','Cancel')}</button>
+          <button class="cm-btn is-primary" id="ph-save"><i class="ti ti-check"></i> ${tt('individual_planner.save_phases','Save phases')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(_phOv);
+    _phOv.addEventListener('click', (e) => { if (e.target === _phOv || e.target.closest('[data-close]')) _phOv.classList.remove('is-open'); });
+    _phOv.querySelector('#ph-add').addEventListener('click', () => { _phState.push({ name:'', week_start:1, week_end:1, load_level:'moderate', objective:'', color:'#16A34A' }); renderPhaseRows(); });
+    _phOv.querySelector('#ph-save').addEventListener('click', savePhases);
+    return _phOv;
+  }
+  function renderPhaseRows(){
+    const root = _phOv.querySelector('#ph-rows');
+    if (!_phState.length){ root.innerHTML = `<div class="ip-phase-empty">${tt('individual_planner.no_phases_empty','No phases yet. Add one to map the programme.')}</div>`; return; }
+    root.innerHTML = _phState.map((p, i) => `
+      <div class="ip-phase-row" data-i="${i}">
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_name','Name')}</label><input class="cm-input" data-k="name" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_from','From wk')}</label><input class="cm-input" data-k="week_start" type="number" min="1" value="${p.week_start||1}"></div>
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_to','To wk')}</label><input class="cm-input" data-k="week_end" type="number" min="1" value="${p.week_end||1}"></div>
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_load','Load')}</label><select class="cm-select" data-k="load_level">${LOAD_LEVELS.map(l => `<option value="${l}"${p.load_level===l?' selected':''}>${tt('individual_planner.load_'+l, LOAD_EN[l])}</option>`).join('')}</select></div>
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_color','Color')}</label><input class="cm-input" data-k="color" type="color" value="${p.color||'#16A34A'}" style="padding:2px;height:38px"></div>
+        <button class="rm" title="${tt('individual_planner.ph_remove','Remove')}"><i class="ti ti-trash"></i></button>
+      </div>`).join('');
+    root.querySelectorAll('.ip-phase-row').forEach(rowEl => {
+      const i = +rowEl.dataset.i;
+      rowEl.querySelectorAll('[data-k]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const k = inp.dataset.k;
+          _phState[i][k] = (k === 'week_start' || k === 'week_end') ? (parseInt(inp.value, 10) || 1) : inp.value;
+        });
+      });
+      rowEl.querySelector('.rm').addEventListener('click', () => { _phState.splice(i, 1); renderPhaseRows(); });
+    });
+  }
+  async function openPhases(){
+    if (!currentRow || !currentRow.id){ ipToast(tt('individual_planner.open_plan_first','Open a plan first'), true); return; }
+    const ov = buildPhasesModal();
+    const { data } = await window.sb.from('individual_plan_phases').select('name,week_start,week_end,load_level,objective,color,phase_order').eq('plan_id', currentRow.id).order('phase_order', { ascending:true });
+    _phState = (data || []).map(p => ({ ...p }));
+    renderPhaseRows();
+    ov.classList.add('is-open');
+  }
+  async function savePhases(){
+    const rows = _phState.filter(p => (p.name || '').trim());
+    for (const p of rows){
+      if (Number(p.week_start) > Number(p.week_end)){ ipToast(tt('individual_planner.ph_err_range','Start week must be ≤ end week'), true); return; }
+    }
+    const btn = _phOv.querySelector('#ph-save'); btn.disabled = true;
+    try {
+      await window.sb.from('individual_plan_phases').delete().eq('plan_id', currentRow.id);
+      if (rows.length){
+        const payload = rows.map((p, idx) => ({
+          club_id: clubId, plan_id: currentRow.id, name: p.name.trim(),
+          week_start: Number(p.week_start) || 1, week_end: Number(p.week_end) || 1,
+          load_level: p.load_level || null, objective: (p.objective || '').trim() || null,
+          color: p.color || null, phase_order: idx
+        }));
+        const { error } = await window.sb.from('individual_plan_phases').insert(payload);
+        if (error) throw error;
+      }
+      const { data: fresh } = await window.sb.from('individual_plan_phases').select('*').eq('plan_id', currentRow.id).order('phase_order', { ascending:true });
+      window.__ipApi?.setPhases?.(fresh || []);
+      _phOv.classList.remove('is-open');
+      ipToast(tt('individual_planner.phases_saved','Phases saved'));
+    } catch (err){
+      console.error('[individual-sc] save phases failed:', err);
+      ipToast(tt('individual_planner.phases_failed','Could not save phases'), true);
+    } finally { btn.disabled = false; }
+  }
+  document.getElementById('ip-edit-phases')?.addEventListener('click', openPhases);
 
   renderPicker();
   document.addEventListener('cm:langchanged', renderPicker);
