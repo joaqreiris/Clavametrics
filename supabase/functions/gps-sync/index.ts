@@ -262,6 +262,50 @@ interface ChunkResult {
 
 // ── Core sync for ONE [from,to] chunk. This is the SAME logic the function used to run
 //    for the whole request; it just returns counters instead of an HTTP body. ──────────
+// ── Catapult API call with rate-limit resilience ────────────────────────────
+// Catapult is rate-limited. Wrap EVERY Catapult request with retry + exponential backoff
+// (honoring Retry-After) on 429 and transient 5xx, so a rate-limit blip recovers instead of
+// dropping the activity. PRE-REQ for parallelizing activities (L2): once several stats/period
+// calls fly at once, 429s are expected and must self-heal. Non-retryable non-ok (400/401/404)
+// is handed back to the caller unchanged (existing `!res.ok` handling stays intact). After the
+// retries are exhausted it THROWS → the worker fails the job (never a silent hang).
+const CATAPULT_MAX_RETRIES = 5;
+const CATAPULT_RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Exponential backoff with jitter: ~500ms, 1s, 2s, 4s, 8s (+ up to 250ms random so parallel
+// retries don't re-synchronize into a new burst).
+const _backoffMs = (attempt: number) => 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 250);
+// Retry-After may be a seconds count or an HTTP date → ms, or null if unparseable.
+function _retryAfterMs(h: string | null): number | null {
+  if (!h) return null;
+  const secs = Number(h);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(h);
+  return isNaN(at) ? null : Math.max(0, at - Date.now());
+}
+async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response> {
+  for (let attempt = 0; attempt <= CATAPULT_MAX_RETRIES; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, opts);
+    } catch (e) {
+      // Network/transport error → treat as transient and retry.
+      if (attempt === CATAPULT_MAX_RETRIES) throw e;
+      const wait = _backoffMs(attempt);
+      console.log(`[gps-sync] fetch error, retrying in ${wait}ms (attempt ${attempt + 1}/${CATAPULT_MAX_RETRIES})`, String((e as Error)?.message || e));
+      await _sleep(wait);
+      continue;
+    }
+    if (res.ok || !CATAPULT_RETRY_STATUS.has(res.status)) return res;   // ok, or non-retryable → caller handles
+    if (attempt === CATAPULT_MAX_RETRIES) throw new Error(`Catapult ${res.status} after ${CATAPULT_MAX_RETRIES} retries`);
+    const wait = _retryAfterMs(res.headers.get('retry-after')) ?? _backoffMs(attempt);
+    console.log(`[gps-sync] ${res.status}, retrying in ${wait}ms (attempt ${attempt + 1}/${CATAPULT_MAX_RETRIES})`);
+    try { await res.arrayBuffer(); } catch (_) { /* drain body so the connection frees */ }
+    await _sleep(wait);
+  }
+  throw new Error('Catapult request failed');   // unreachable (loop returns/throws), keeps TS happy
+}
+
 async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string): Promise<ChunkResult> {
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs } = ctx;
   const unmappedParams = new Set<string>();
@@ -271,7 +315,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   const fromMsRange = toMs(from);
 
   // ── 1. Fetch activities and filter to the range by start_time ───────────
-  const actRes = await fetch(`${baseUrl}/activities`, { headers: authH });
+  const actRes = await fetchCatapult(`${baseUrl}/activities`, { headers: authH });
   if (!actRes.ok) {
     // Bad credential/connection → also reflect it on the integration (as before).
     await adminClient.from('gps_integrations')
@@ -318,7 +362,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       }
 
       // ── 3. Per-athlete stats for this activity ──────────────────────────
-      const statsRes = await fetch(`${baseUrl}/stats`, {
+      const statsRes = await fetchCatapult(`${baseUrl}/stats`, {
         method: 'POST',
         headers: { ...authH, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -377,7 +421,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       // Second /stats for the same activity, broken down by period. Failure
       // here must NOT break the session-level result already written above.
       try {
-        const perRes = await fetch(`${baseUrl}/stats`, {
+        const perRes = await fetchCatapult(`${baseUrl}/stats`, {
           method: 'POST',
           headers: { ...authH, 'Content-Type': 'application/json' },
           body: JSON.stringify({
