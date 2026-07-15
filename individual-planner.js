@@ -546,5 +546,41 @@
       },
       setDensity: (d) => { document.body.dataset.ipDensity = d; }
     };
+
+    // ─── Shared block copy/paste/duplicate/drag (block-actions.js) ───
+    if (window.BlockActions) {
+      window.BlockActions.install({
+        root: document.getElementById('kanban'),
+        blockSelector: '.rp-block',
+        daySelector: '.rp-day',
+        getIds: (el) => {
+          const d = parseInt(el.dataset.di, 10), b = parseInt(el.dataset.bi, 10);
+          return (isNaN(d) || isNaN(b)) ? null : { day: d, block: b };
+        },
+        getDayIndex: (el) => { const d = parseInt(el.dataset.date, 10); return isNaN(d) ? null : d; },
+        getBlock: (day, block) => {
+          const days = ensureDays();
+          const b = (days && days[day] && Array.isArray(days[day].blocks)) ? days[day].blocks[block] : null;
+          return b ? JSON.parse(JSON.stringify(b)) : null;
+        },
+        insertBlock: (day, data) => {
+          const days = ensureDays();
+          if (!days || !days[day] || !data) return;
+          if (!Array.isArray(days[day].blocks)) days[day].blocks = [];
+          days[day].blocks.push(data);
+          renderAll();
+        },
+        moveBlock: (from, fromBlock, to) => {
+          const days = ensureDays();
+          if (!days || !days[from] || !days[to] || !Array.isArray(days[from].blocks)) return;
+          const [b] = days[from].blocks.splice(fromBlock, 1);
+          if (!b) return;
+          if (!Array.isArray(days[to].blocks)) days[to].blocks = [];
+          days[to].blocks.push(b);
+          renderAll();
+        },
+        onChange: () => _fireContentChange()
+      });
+    }
   });
 })();

@@ -407,6 +407,7 @@
 
 <div id="tweaks-root"></div>
 
+<script src="block-actions.js"></script>
 <script src="rehab-planner.js"></script>
 <script src="block-drawer.js"></script>
 <script defer src="rehab-planner-tweaks.js"></script>
@@ -675,6 +676,43 @@ function tt(key, fallbackEN, vars) {
     }
     await rpReloadWeek();
   });
+
+  // ─── Shared block copy/paste/duplicate/drag (block-actions.js) ───
+  // Persistence is DB-backed here (rehab_sessions): insert a new row / update the date, then reload.
+  // Works for both rehab and preventive plans (same engine + same table).
+  if (window.BlockActions) {
+    const SESS_FIELDS = ['name','color','duration_min','block_count','block_type','owner','rpe_target','volume_sets','au','notes','context_note','exercises'];
+    window.BlockActions.install({
+      root: document.getElementById('kanban'),
+      blockSelector: '.rp-block',
+      daySelector: '.rp-day',
+      getIds: (el) => {
+        const day = el.closest('.rp-day')?.dataset.date || null;
+        const block = el.dataset.sessionId || '';
+        return (day && block) ? { day, block } : null;
+      },
+      getDayIndex: (el) => el.dataset.date || null,
+      getBlock: (day, sessionId) => {
+        const s = window._rpSessionsMap && window._rpSessionsMap[sessionId];
+        if (!s) return null;
+        const out = {};
+        SESS_FIELDS.forEach(k => { out[k] = (s[k] != null ? s[k] : null); });
+        return out;
+      },
+      insertBlock: async (dayIso, data) => {
+        if (!dayIso || !data) return;
+        const { error } = await window.sb.from('rehab_sessions').insert({ plan_id: planId, club_id: clubId, date: dayIso, ...data });
+        if (error) { console.warn('[block-actions] rehab insert', error); return; }
+        await rpReloadWeek();
+      },
+      moveBlock: async (fromIso, sessionId, toIso) => {
+        if (!sessionId || !toIso) return;
+        const { error } = await window.sb.from('rehab_sessions').update({ date: toIso }).eq('id', sessionId);
+        if (error) { console.warn('[block-actions] rehab move', error); return; }
+        await rpReloadWeek();
+      }
+    });
+  }
 
   // ── Block click → side panel ──
   const TYPE_LABEL_MAP = {
