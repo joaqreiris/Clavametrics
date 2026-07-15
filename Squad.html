@@ -1137,6 +1137,16 @@
         <input type="checkbox" id="sqImportSkipExistingName">
         <span data-i18n="squad.import_skip_existing_name">Skip rows whose name already exists in the squad</span>
       </label>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font:var(--cm-body-sm);color:var(--cm-fg)">
+        <label for="sqImportDateFmt" data-i18n="squad.import_date_format">Date format</label>
+        <select id="sqImportDateFmt" style="padding:5px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:var(--cm-body-sm)">
+          <option value="auto" data-i18n="squad.import_date_auto">Auto-detect</option>
+          <option value="dmy" data-i18n="squad.import_date_dmy">DD/MM/YYYY (day first)</option>
+          <option value="mdy" data-i18n="squad.import_date_mdy">MM/DD/YYYY (month first)</option>
+          <option value="iso" data-i18n="squad.import_date_iso">YYYY-MM-DD (ISO)</option>
+        </select>
+      </div>
+      <p id="sqImportDateNote" style="font:var(--cm-body-sm);color:var(--cm-warning);margin:2px 0 0;display:none"></p>
       <div style="overflow-x:auto;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);max-height:320px;overflow-y:auto">
         <table style="width:100%;border-collapse:collapse;font:var(--cm-body-sm)">
           <thead id="sqImportThead" style="background:var(--cm-bg-soft);position:sticky;top:0"></thead>
@@ -1146,7 +1156,7 @@
       <p id="sqImportShowing" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:6px 0 0;display:none"></p>
       <details style="margin-top:8px">
         <summary style="font:var(--cm-body-sm);color:var(--cm-fg-muted);cursor:pointer" data-i18n="squad.import_help_summary">Accepted columns &amp; header aliases</summary>
-        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:6px 0 0;line-height:1.5" data-i18n="squad.import_help">Columns: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot. Header aliases accepted: Name/Full name (split into first/last by the last space), DOB/Birthdate → date of birth, Shirt/Jersey/No/# → number, Pos → position, Foot → dominant foot, Country → nationality, cm → height, kg → weight. Dates read as YYYY-MM-DD, DD/MM/YYYY or MM/DD/YYYY; ambiguous dates are read as DD/MM/YYYY.</p>
+        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:6px 0 0;line-height:1.5" data-i18n="squad.import_help">Columns: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot. Header aliases accepted: Name/Full name (split into first/last by the last space), DOB/Birthdate → date of birth, Shirt/Jersey/No/# → number, Pos → position, Foot → dominant foot, Country → nationality, cm → height, kg → weight. Dates read as YYYY-MM-DD, DD/MM/YYYY or MM/DD/YYYY — pick the order with the date-format selector above the table.</p>
       </details>
     </div>
     <div class="sq-modal-foot">
@@ -2419,6 +2429,9 @@ async function reloadPlayers() {
   }
 
   let _importRows = [];       // normalized rows: { status, notes, display, values, skip, skipReason }
+  let _importRaw = [];        // raw canonical rows (re-normalized when the date format changes)
+  let _importDateFmt = 'auto';        // 'auto' | 'dmy' | 'mdy' | 'iso'
+  let _importDateAmbiguous = false;   // auto + all dates ambiguous → single top notice
   let _importSkippedHeaderRows = 0;   // title/metadata rows skipped above the real header
 
   function _impPad(n){ return String(n).padStart(2,'0'); }
@@ -2428,23 +2441,22 @@ async function reloadPlayers() {
     const dt = new Date(y, m-1, d);
     return dt.getFullYear()===y && dt.getMonth()===m-1 && dt.getDate()===d;
   }
-  // → { value:'YYYY-MM-DD', ambiguous? } | { error:true } | { value:null } (empty is allowed)
-  function _impParseDate(s){
+  // Parse a date with an EXPLICIT format ('dmy' | 'mdy' | 'iso'). Auto-detect resolves to
+  // dmy/mdy at the file level before calling here, so there is no per-row guessing.
+  // → { value:'YYYY-MM-DD' } | { error:true } | { value:null } (empty is allowed)
+  function _impParseDate(s, fmt){
     s = String(s||'').trim();
     if (!s) return { value:null };
-    let m = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);          // ISO YYYY-MM-DD
+    let m = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);          // ISO YYYY-MM-DD (always accepted)
     if (m){ const y=+m[1],mo=+m[2],d=+m[3]; return _impValidYMD(y,mo,d)?{value:`${y}-${_impPad(mo)}-${_impPad(d)}`}:{error:true}; }
-    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);            // D/M/Y or M/D/Y
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);            // slash date
     if (m){
+      if (fmt === 'iso') return { error:true };        // slash date but ISO was chosen
       let a=+m[1], b=+m[2], y=+m[3];
       if (y<100) y += (y>=30?1900:2000);
-      let d,mo,ambiguous=false;
-      if (a>12 && b<=12){ d=a; mo=b; }                 // clearly DD/MM
-      else if (b>12 && a<=12){ mo=a; d=b; }            // clearly MM/DD
-      else { d=a; mo=b; ambiguous=(a<=12 && b<=12); }  // ambiguous → assume DD/MM (soft warn)
-      if (_impValidYMD(y,mo,d)) return { value:`${y}-${_impPad(mo)}-${_impPad(d)}`, ambiguous };
-      if (_impValidYMD(y,d,mo)) return { value:`${y}-${_impPad(d)}-${_impPad(mo)}` };
-      return { error:true };
+      const d  = (fmt === 'mdy') ? b : a;              // month-first vs day-first
+      const mo = (fmt === 'mdy') ? a : b;
+      return _impValidYMD(y,mo,d) ? { value:`${y}-${_impPad(mo)}-${_impPad(d)}` } : { error:true };
     }
     return { error:true };
   }
@@ -2458,7 +2470,8 @@ async function reloadPlayers() {
   }
 
   // PapaParse row (canonical-keyed) → normalized, validated row with a status.
-  function _impNormalize(src){
+  // `fmt` is the resolved date format ('dmy' | 'mdy' | 'iso').
+  function _impNormalize(src, fmt){
     const notes = [];
     let status = 'ok';
     const add = (level, code) => { notes.push(code); if (level==='error') status='error'; else if (status!=='error') status='warning'; };
@@ -2481,11 +2494,12 @@ async function reloadPlayers() {
       else add('error','bad_number');
     }
 
-    // Date of birth → YYYY-MM-DD.
+    // Date of birth → always normalized to YYYY-MM-DD. A date that doesn't fit the chosen
+    // format (or is garbage) is a soft warning on THIS row only and imported as null.
     let dob = null;
-    const dr = _impParseDate(src.date_of_birth);
-    if (dr.error) add('error','bad_date');
-    else { dob = dr.value; if (dr.ambiguous) add('warn','ambiguous_date'); }
+    const dr = _impParseDate(src.date_of_birth, fmt);
+    if (dr.error) add('warn','bad_date');
+    else dob = dr.value;
 
     // Height: cm; metres (<3) → ×100; plausible 120–230.
     let height = null;
@@ -2555,8 +2569,7 @@ async function reloadPlayers() {
     const M = {
       no_name:            tt('squad.imp_no_name','Missing name'),
       bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
-      bad_date:           tt('squad.imp_bad_date','Unrecognized date'),
-      ambiguous_date:     tt('squad.imp_ambiguous_date','Ambiguous date — read as DD/MM/YYYY'),
+      bad_date:           tt('squad.imp_bad_date','Date not in the selected format — left blank'),
       height_range:       tt('squad.imp_height_range','Height out of plausible range'),
       weight_range:       tt('squad.imp_weight_range','Weight out of plausible range'),
       unknown_position:   tt('squad.imp_unknown_position','Unrecognized position — kept as typed'),
@@ -2614,9 +2627,43 @@ async function reloadPlayers() {
     });
   }
 
-  function openImportModal(rawRows) {
-    _importRows = rawRows.map(_impNormalize);
+  // Resolve the effective date format. Explicit choice wins; 'auto' infers ONE format for the
+  // whole file: a component >12 anywhere disambiguates it; otherwise default day-first (DMY).
+  function _impResolveDateFmt(){
+    if (_importDateFmt !== 'auto') return _importDateFmt;
+    let firstGt12 = false, secondGt12 = false;
+    _importRaw.forEach(src => {
+      const m = String(src.date_of_birth||'').trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+      if (!m) return;
+      const a = +m[1], b = +m[2];
+      if (a>12 && b<=12) firstGt12 = true;
+      else if (b>12 && a<=12) secondGt12 = true;
+    });
+    return (secondGt12 && !firstGt12) ? 'mdy' : 'dmy';
+  }
+
+  // Re-normalize every row with the current date format and refresh the preview.
+  function _impRebuild(){
+    const fmt = _impResolveDateFmt();
+    if (_importDateFmt === 'auto'){
+      let sawSlash = false, disambiguated = false;
+      _importRaw.forEach(src => {
+        const m = String(src.date_of_birth||'').trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+        if (!m) return;
+        sawSlash = true;
+        if (+m[1] > 12 || +m[2] > 12) disambiguated = true;
+      });
+      _importDateAmbiguous = sawSlash && !disambiguated;   // nothing disambiguates → assumed DMY
+    } else _importDateAmbiguous = false;
+    _importRows = _importRaw.map(src => _impNormalize(src, fmt));
     renderImportPreview();
+  }
+
+  function openImportModal(rawRows) {
+    _importRaw = rawRows;
+    _importDateFmt = 'auto';
+    const sel = document.getElementById('sqImportDateFmt'); if (sel) sel.value = 'auto';
+    _impRebuild();
     document.getElementById('sqImportBackdrop').classList.add('is-open');
   }
 
@@ -2647,6 +2694,12 @@ async function reloadPlayers() {
         `Skipped ${_importSkippedHeaderRows} header/title row${_importSkippedHeaderRows!==1?'s':''} above the data.`,
         { count: _importSkippedHeaderRows });
     } else hdrNoteEl.style.display = 'none';
+
+    const dateNoteEl = document.getElementById('sqImportDateNote');
+    if (_importDateAmbiguous){
+      dateNoteEl.style.display = '';
+      dateNoteEl.textContent = tt('squad.import_date_ambiguous', "Dates are ambiguous — importing as DD/MM/YYYY. Change the format above if that's wrong.");
+    } else dateNoteEl.style.display = 'none';
 
     // Kept: jersey numbers already present in the squad (informational).
     const existingNums = new Set(_allPlayers.map(p => String(p.number)));
@@ -2700,9 +2753,14 @@ async function reloadPlayers() {
     document.getElementById('sqImportBackdrop').classList.remove('is-open');
     document.getElementById('sqImportFile').value = '';
     _importRows = [];
+    _importRaw = [];
+    _importDateFmt = 'auto';
+    _importDateAmbiguous = false;
     _importSkippedHeaderRows = 0;
+    const sel = document.getElementById('sqImportDateFmt'); if (sel) sel.value = 'auto';
     document.getElementById('sqImportSummary').style.display = 'none';
     document.getElementById('sqImportHeaderNote').style.display = 'none';
+    document.getElementById('sqImportDateNote').style.display = 'none';
     document.getElementById('sqImportShowing').style.display = 'none';
     document.getElementById('sqImportConflicts').style.display = 'none';
   }
@@ -2792,6 +2850,7 @@ async function reloadPlayers() {
   });
   document.getElementById('sqImportSkipExisting')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });
   document.getElementById('sqImportSkipExistingName')?.addEventListener('change', () => { if (_importRows.length) renderImportPreview(); });
+  document.getElementById('sqImportDateFmt')?.addEventListener('change', e => { _importDateFmt = e.target.value; if (_importRaw.length) _impRebuild(); });
   document.getElementById('sqImportClose')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportCancel')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportConfirm')?.addEventListener('click', confirmImport);
