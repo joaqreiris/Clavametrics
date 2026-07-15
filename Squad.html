@@ -2566,6 +2566,11 @@ async function reloadPlayers() {
       const num  = (r.dedup && r.dedup.existingNumber!=null) ? ` (#${r.dedup.existingNumber})` : '';
       return tt('squad.imp_name_exists', `A player named "${name}" already exists in the squad${num}`, { name, num });
     }
+    if (code === 'name_similar'){
+      const sName   = (r.dedup && r.dedup.similarName) || '';
+      const numPart = (r.dedup && r.dedup.similarNumber!=null) ? ` (#${r.dedup.similarNumber})` : '';
+      return tt('squad.similar_name', `Similar to existing player "${sName}"${numPart} — possible duplicate/typo. Review before importing.`, { name: sName, numPart });
+    }
     const M = {
       no_name:            tt('squad.imp_no_name','Missing name'),
       bad_number:         tt('squad.imp_bad_number','Invalid number (must be 1–99)'),
@@ -2582,20 +2587,48 @@ async function reloadPlayers() {
     return M[code] || code;
   }
 
+  // Fuzzy name matching — suggests possible typos/duplicates (e.g. "Choeung" vs "Chhoeung").
+  const SIMILAR_NAME_THRESHOLD = 0.82;   // similarity ≥ this → suggest as a possible duplicate
+  function _impNormName(first, last){
+    return String((first||'')+' '+(last||'')).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  }
+  function _impLev(a, b){
+    const la = a.length, lb = b.length;
+    if (!la) return lb; if (!lb) return la;
+    let prev = new Array(lb + 1);
+    for (let j = 0; j <= lb; j++) prev[j] = j;
+    for (let i = 1; i <= la; i++){
+      const cur = [i]; const ca = a.charCodeAt(i - 1);
+      for (let j = 1; j <= lb; j++){
+        const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      }
+      prev = cur;
+    }
+    return prev[lb];
+  }
+  function _impSimilarity(a, b){
+    const max = Math.max(a.length, b.length);
+    return max ? 1 - _impLev(a, b) / max : 1;
+  }
+
   // Flag jersey/name conflicts. Number clashes are hard (two players can't share a
-  // number) → skippable via checkbox (default ON). Name clashes are soft warnings
-  // (two players may share a name) → imported by default, skippable via a second
-  // checkbox (default OFF). An exact in-file duplicate (same name AND number) is a
-  // real duplicate → always skipped. Recomputed whenever a checkbox toggles.
+  // number) → skippable via checkbox (default ON). Name clashes (exact OR fuzzy-similar)
+  // are soft suggestions → imported by default, skippable via a second checkbox (default
+  // OFF). An exact in-file duplicate (same name AND number) is a real duplicate → always
+  // skipped. Recomputed whenever a checkbox toggles.
   function _impApplyDedup(){
     const skipNum  = document.getElementById('sqImportSkipExisting')?.checked;
     const skipName = document.getElementById('sqImportSkipExistingName')?.checked;
     const existingNums = new Set(_allPlayers.map(p => String(p.number)));
     const existingByName = new Map();
     _allPlayers.forEach(p => { const k = _impNameKey(p.first_name, p.last_name); if (k && !existingByName.has(k)) existingByName.set(k, p); });
+    // Pre-normalize squad names once for the O(n×m) fuzzy pass.
+    const existingNames = _allPlayers.map(p => ({ n: _impNormName(p.first_name, p.last_name), p })).filter(x => x.n);
+    const maxDiffRatio = 1 - SIMILAR_NAME_THRESHOLD;   // length-difference early-exit bound
     const seenNum = new Set(), seenName = new Set(), seenExact = new Set();
     _importRows.forEach(r => {
-      r.dedup = { notes:[], skip:false, skipReason:null, existingNumber:null };
+      r.dedup = { notes:[], skip:false, skipReason:null, existingNumber:null, similarName:null, similarNumber:null, similarStrong:false };
       if (r.status === 'error') return;                     // errors never import (handled separately)
       const numKey  = r.values.number!=null ? String(r.values.number) : null;
       const nameKey = _impNameKey(r.values.first_name, r.values.last_name);
@@ -2612,11 +2645,28 @@ async function reloadPlayers() {
           r.dedup.notes.push(code);
           if (skipNum) { r.dedup.skip = true; r.dedup.skipReason = code; }
         }
-        // Name already in the squad → soft warning (+ existing number if any).
         if (nameKey && existingByName.has(nameKey)) {
+          // Exact name already in the squad → soft warning (takes priority over similarity).
           r.dedup.notes.push('name_exists');
           r.dedup.existingNumber = existingByName.get(nameKey).number ?? null;
           if (skipName && !r.dedup.skip) { r.dedup.skip = true; r.dedup.skipReason = 'name_exists'; }
+        } else if (nameKey) {
+          // Fuzzy: nearest existing name above the similarity threshold → suggestion only.
+          const rn = _impNormName(r.values.first_name, r.values.last_name);
+          let best = null, bestSim = 0;
+          for (const ex of existingNames){
+            const max = Math.max(rn.length, ex.n.length);
+            if (Math.abs(rn.length - ex.n.length) > max * maxDiffRatio) continue;   // can't reach threshold
+            const sim = _impSimilarity(rn, ex.n);
+            if (sim >= SIMILAR_NAME_THRESHOLD && sim > bestSim){ bestSim = sim; best = ex.p; }
+          }
+          if (best){
+            r.dedup.notes.push('name_similar');
+            r.dedup.similarName = ((best.first_name||'')+' '+(best.last_name||'')).trim();
+            r.dedup.similarNumber = best.number ?? null;
+            r.dedup.similarStrong = (numKey!=null && best.number!=null && String(best.number) === numKey);
+            if (skipName && !r.dedup.skip) { r.dedup.skip = true; r.dedup.skipReason = 'name_similar'; }
+          }
         }
         // Same name earlier in this file (not an exact dup) → soft warning.
         if (nameKey && seenName.has(nameKey)) r.dedup.notes.push('name_dup_file');
@@ -2722,8 +2772,10 @@ async function reloadPlayers() {
       const isSkip = state==='skip' || state==='error';
       const color  = state==='error' ? 'var(--cm-danger)' : (state==='warning' ? 'var(--cm-warning)' : (state==='skip' ? 'var(--cm-danger)' : 'var(--cm-success, #16A34A)'));
       const icon   = state==='error' ? 'ti-alert-circle' : (state==='warning' ? 'ti-alert-triangle' : (state==='skip' ? 'ti-ban' : 'ti-check'));
-      // Reasons: field notes + dedup notes + skip reason (deduped).
-      const codes  = [...r.notes, ...((r.dedup&&r.dedup.notes)||[])];
+      // Reasons: field notes + dedup notes + skip reason (deduped). A strong similarity
+      // match (same jersey number) is almost certainly the same player → list it first.
+      const dedupNotes = (r.dedup&&r.dedup.notes) || [];
+      const codes  = (r.dedup&&r.dedup.similarStrong) ? [...dedupNotes, ...r.notes] : [...r.notes, ...dedupNotes];
       if (r.dedup && r.dedup.skipReason && !codes.includes(r.dedup.skipReason)) codes.push(r.dedup.skipReason);
       const reasons = [...new Set(codes)].map(c => _impReasonFor(r, c));
       const tip    = reasons.join(' · ');
