@@ -332,7 +332,20 @@
   .gps-int-form input{padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit}
   .gps-int-btn{padding:8px 14px;border-radius:8px;border:0;background:var(--cm-accent);color:var(--cm-fg-on-accent);font:600 13px var(--cm-font-sans);cursor:pointer}
   .gps-int-btn.ghost{background:none;border:1px solid var(--cm-border);color:var(--cm-fg)}
+  .gps-int-btn:disabled{opacity:.55;cursor:default}
   .gps-int-msg{font-size:12px;margin-top:6px;min-height:16px}
+  /* GPS sync progress (server-side chained worker → live via realtime on gps_sync_jobs) */
+  .gps-sync-bar{margin-top:10px}
+  .gps-sync-row{display:flex;align-items:center;gap:8px}
+  .gps-sync-track{flex:1;height:6px;border-radius:999px;background:var(--cm-bg-soft);overflow:hidden}
+  .gps-sync-fill{height:100%;border-radius:999px;background:var(--cm-accent);transition:width .4s ease}
+  .gps-sync-fill.s-error{background:var(--cm-danger)}
+  .gps-sync-fill.is-anim{background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:gpsSyncShimmer 1.2s linear infinite}
+  @keyframes gpsSyncShimmer{0%{background-position:-40% 0}100%{background-position:140% 0}}
+  .gps-sync-pct{font:600 11px var(--cm-font-mono);color:var(--cm-fg-muted);min-width:34px;text-align:right}
+  .gps-sync-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--cm-fg-muted);margin-top:5px}
+  .gps-sync-meta.is-err{color:var(--cm-danger)}
+  .gps-sync-retry{padding:4px 10px!important;font-size:11.5px!important}
 </style>
 </head>
 <body class="cm">
@@ -2143,6 +2156,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       INTS = {}; (data||[]).forEach(r => INTS[r.provider] = r);
     } catch(e){ INTS = {}; }
     render();
+    _hydrateSyncJobs();   // resume the progress bar if a sync is running / recently finished
   }
   function msg(prov,t,err){ const el=document.querySelector(`[data-msg="${prov}"]`); if(el){ el.textContent=t; el.style.color=err?'var(--cm-danger)':'var(--cm-fg-muted)'; } }
   function render(){
@@ -2171,7 +2185,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
                    <span style="font-size:11.5px;color:var(--cm-fg-muted)">${tt('admin.gps_range','Range')}</span>
                    <span data-daterange data-prov="${p.slug}"></span>
                    <button class="gps-int-btn" data-act="sync" data-prov="${p.slug}">${tt('admin.gps_sync_now','Sync now')}</button>
-                 </div>` : ''}
+                 </div>
+                 <div class="gps-sync-bar" data-syncbar="${p.slug}" style="display:none"></div>` : ''}
                </div>` })() : ''}
              <button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">${tt('admin.gps_disconnect','Disconnect')}</button>
              ${p.slug==='catapult' ? '' : `<div style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px">${tt('admin.gps_creds_saved','Credentials saved · verification pending')}</div>`}`
@@ -2199,6 +2214,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         _dr[el.dataset.prov]=window.CMDateRange.mount(el,{ from:isoD(_ago30), to:isoD(_today), presets:true, clubId:cid });
       });
     });
+    _paintAllSync();   // repaint any known sync-job progress into the freshly rendered cards
   }
   let _dr={};
   async function setRegion(prov,region){
@@ -2453,55 +2469,143 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     paint();
   }
 
-  // ── Sync now (Catapult activities → gps_reports, last 30 days) ────────────
-  // Split [from,to] into ~monthly [from,to] chunks (inclusive). Keeps each
-  // gps-sync call's activity volume small to respect Catapult rate limits.
-  function _monthlyChunks(from,to){
-    const out=[]; let s=new Date(from+'T00:00:00Z'); const end=new Date(to+'T00:00:00Z');
-    if(isNaN(s)||isNaN(end)||s>end) return [[from,to]];
-    while(s<=end){
-      let e=new Date(Date.UTC(s.getUTCFullYear(),s.getUTCMonth()+1,0)); // last day of s's month
-      if(e>end) e=end;
-      out.push([s.toISOString().slice(0,10), e.toISOString().slice(0,10)]);
-      s=new Date(Date.UTC(e.getUTCFullYear(),e.getUTCMonth(),e.getUTCDate()+1)); // next day
-    }
-    return out;
+  // ── Sync now (server-side chained worker) ─────────────────────────────────
+  // The CLIENT no longer loops chunks. It fires gps-sync in "start" mode ONCE; the
+  // server creates a gps_sync_jobs row, chains the worker chunk-by-chunk, and we watch
+  // progress LIVE via Realtime on gps_sync_jobs. Navigating away no longer stops the sync.
+  const _SYNC_STALE_MS = 5*60*1000;
+  const _syncJobs = {};      // integration_id → latest gps_sync_jobs row (client cache)
+  const _hideTimers = {};    // job_id → timeout that auto-hides a completed bar
+  let _syncRT = null;        // shared Realtime channel (one per club)
+
+  function _provForInt(intId){ return Object.keys(INTS).find(s=>INTS[s]?.id===intId); }
+  function _paintByInt(intId){ const prov=_provForInt(intId); if(prov) _paintSyncBar(prov); }
+  function _paintAllSync(){ Object.keys(INTS).forEach(_paintSyncBar); }
+  function _syncBtn(prov){ return document.querySelector(`[data-act="sync"][data-prov="${prov}"]`); }
+  function _setSyncBtn(prov, busy){
+    const b=_syncBtn(prov); if(!b) return;
+    b.disabled=!!busy; b.textContent = busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now');
   }
+
+  // Fire "start"; supabase-js flags a 409 (already-running lock) as an error whose JSON
+  // body lives in error.context — parse it so we can still latch onto the existing job.
+  async function _invokeStart(intId, from, to){
+    const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ mode:'start', integration_id:intId, from, to } });
+    if(!error) return data;
+    try{ const p=await error.context?.json?.(); if(p) return p; }catch(_){}
+    throw error;
+  }
+
   async function syncNow(prov){
     const intId=INTS[prov]?.id; if(!intId) return;
     const r=_dr[prov]?.getRange?.()||{};
-    // "All" (unbounded) → cover all-time; gps-sync filters activities by date.
+    // "All" (unbounded) → cover all-time; the server filters activities by date + chunks.
     const from=r.from || '2010-01-01';
     const to  =r.to   || new Date().toISOString().slice(0,10);
     if(from>to){ msg(prov,tt('admin.gps_from_before_to','"From" must be before "To".'),true); return; }
-    // For large ranges (> ~6 months) split into monthly chunks to avoid rate limits.
-    const SIX_MONTHS=183*86400*1000;
-    const big=(new Date(to+'T00:00:00Z') - new Date(from+'T00:00:00Z'))>SIX_MONTHS;
-    const chunks=big?_monthlyChunks(from,to):[[from,to]];
-    const tot={ act:0, rows:0, per:0, skip:0, errs:0 }; const unmapped=new Set();
+    msg(prov,''); _setSyncBtn(prov, true);
     try{
-      for(let i=0;i<chunks.length;i++){
-        const [cf,ct]=chunks[i];
-        msg(prov, chunks.length>1?tt('admin.gps_syncing_chunk','Syncing {from} → {to} ({i}/{n})…',{ from:cf, to:ct, i:i+1, n:chunks.length }):tt('admin.gps_syncing','Syncing {from} → {to}…',{ from:cf, to:ct }));
-        const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ integration_id:intId, from:cf, to:ct } });
-        if(error) throw error;
-        if(!data?.ok){ msg(prov, data?.message || (data?.http_status?tt('admin.gps_provider_error_http','Provider error (HTTP {n})',{ n:data.http_status }):tt('admin.gps_sync_failed','Sync failed')), true); return; }
-        tot.act+=data.synced_activities||0; tot.rows+=data.synced_rows||0; tot.per+=data.synced_periods||0;
-        tot.skip+=data.skipped_unmapped||0; tot.errs+=(data.errors||[]).length;
-        (data.unmapped_params||[]).forEach(u=>unmapped.add(u));
-      }
-      const unm=unmapped.size;
-      const _seg = [
-        tt('admin.gps_synced_sessions','Synced {n} session|Synced {n} sessions',{ n:tot.act, count:tot.act }),
-        tt('admin.gps_synced_reports','{n} report|{n} reports',{ n:tot.rows, count:tot.rows }),
-        tt('admin.gps_synced_periods','{n} period|{n} periods',{ n:tot.per, count:tot.per }),
-        tt('admin.gps_synced_unmapped_ath','{n} unmapped athlete|{n} unmapped athletes',{ n:tot.skip, count:tot.skip })
-      ];
-      if(unm) _seg.push(tt('admin.gps_synced_unmapped_metric','{n} unmapped metric (use Map metrics)|{n} unmapped metrics (use Map metrics)',{ n:unm, count:unm }));
-      if(tot.errs) _seg.push(tt('admin.gps_synced_errors','{n} error|{n} errors',{ n:tot.errs, count:tot.errs }));
-      msg(prov, _seg.join(' · ') + '.', (tot.errs>0||unm>0));
-      await load();
-    }catch(e){ msg(prov,tt('admin.gps_failed_x','Failed: {msg}',{ msg:(e.message||e) }),true); }
+      const p=await _invokeStart(intId, from, to);
+      if(p?.already_running) msg(prov, tt('admin.gps_sync_already_running','A sync is already in progress.'));
+      if(p?.job_id){ await _trackJob(intId, p.job_id); }
+      else if(p && p.ok===false){ msg(prov, p.message || tt('admin.gps_sync_failed','Sync failed'), true); _setSyncBtn(prov, false); }
+      else { _setSyncBtn(prov, false); }
+    }catch(e){
+      msg(prov, tt('admin.gps_failed_x','Failed: {msg}',{ msg:(e.message||e) }), true);
+      _setSyncBtn(prov, false);
+    }
+  }
+
+  // Fetch a job row, cache it, paint it, and make sure Realtime is listening.
+  async function _trackJob(intId, jobId){
+    try{
+      const { data }=await window.sb.from('gps_sync_jobs').select('*').eq('id', jobId).maybeSingle();
+      if(data){ _syncJobs[intId]=data; _paintByInt(intId); }
+    }catch(_){}
+    _ensureRealtime();
+  }
+
+  // On mount / reload: resume the bar from the most-recent job per integration.
+  async function _hydrateSyncJobs(){
+    const cid=await getClubId(); if(!cid) return;
+    const intIds=Object.values(INTS).map(r=>r.id).filter(Boolean);
+    if(!intIds.length) return;
+    try{
+      const { data }=await window.sb.from('gps_sync_jobs').select('*')
+        .eq('club_id',cid).in('integration_id',intIds).order('created_at',{ ascending:false });
+      const seen=new Set();
+      (data||[]).forEach(j=>{ if(seen.has(j.integration_id)) return; seen.add(j.integration_id); _syncJobs[j.integration_id]=j; });
+      _paintAllSync();
+      if((data||[]).some(j=>j.status==='running'||j.status==='queued')) _ensureRealtime();
+    }catch(_){}
+  }
+
+  // One shared channel per club (same pattern as Availability/Hub). Progress UPDATEs
+  // stream in and repaint the matching provider's bar.
+  async function _ensureRealtime(){
+    if(_syncRT) return;
+    const cid=await getClubId(); if(!cid) return;
+    _syncRT = window.sb.channel('admin-gps-sync-'+cid)
+      .on('postgres_changes',{ event:'*', schema:'public', table:'gps_sync_jobs', filter:`club_id=eq.${cid}` }, ({ new:nw })=>{
+        if(!nw || !nw.integration_id) return;
+        const cur=_syncJobs[nw.integration_id];
+        // keep the latest job per integration (same row, or a newer one)
+        if(!cur || nw.id===cur.id || new Date(nw.created_at)>=new Date(cur.created_at)){
+          _syncJobs[nw.integration_id]=nw; _paintByInt(nw.integration_id);
+        }
+      })
+      .subscribe();
+  }
+
+  function _scheduleHide(prov, jobId){
+    if(_hideTimers[jobId]) return;
+    _hideTimers[jobId]=setTimeout(()=>{
+      const intId=INTS[prov]?.id;
+      if(intId && _syncJobs[intId]?.id===jobId && _syncJobs[intId].status==='done'){ delete _syncJobs[intId]; _paintSyncBar(prov); }
+      delete _hideTimers[jobId];
+    }, 10000);
+  }
+
+  // Render the progress bar for a provider from its cached job + toggle its Sync button.
+  function _paintSyncBar(prov){
+    const bar=document.querySelector(`[data-syncbar="${prov}"]`); if(!bar) return;
+    const intId=INTS[prov]?.id;
+    const job=intId?_syncJobs[intId]:null;
+    const btn=_syncBtn(prov);
+    if(!job){ bar.style.display='none'; bar.innerHTML=''; if(btn){ btn.disabled=false; btn.textContent=tt('admin.gps_sync_now','Sync now'); } return; }
+
+    const total=job.chunks_total||0, done=job.chunks_done||0;
+    const pct = total>0 ? Math.min(100, Math.round(done/total*100)) : (job.status==='done'?100:0);
+    const t=job.totals||{};
+    const running=(job.status==='running'||job.status==='queued');
+    const stale = running && job.heartbeat_at && (Date.now()-new Date(job.heartbeat_at).getTime()>_SYNC_STALE_MS);
+
+    let label, cls='', animated=false, retry=false;
+    if(running && stale){ label=tt('admin.gps_sync_stalled','Sync stalled — the worker stopped responding.'); cls='s-error'; retry=true; }
+    else if(running){ label=tt('admin.gps_syncing_progress','Syncing… {done}/{total} ({pct}%)',{ done, total, pct }); animated=true; }
+    else if(job.status==='done'){ label=tt('admin.gps_sync_complete','Sync complete'); }
+    else if(job.status==='error'){ label=tt('admin.gps_sync_failed_x','Sync failed: {msg}',{ msg: job.error||'unknown' }); cls='s-error'; retry=true; }
+
+    const sum = (t.activities!=null)
+      ? tt('admin.gps_sync_totals','{a} sessions · {r} reports · {p} periods',{ a:t.activities||0, r:t.rows||0, p:t.periods||0 })
+      : '';
+    const fillPct = running ? Math.max(pct, 6) : pct;   // show a sliver while starting
+
+    bar.style.display='';
+    bar.innerHTML=`
+      <div class="gps-sync-row">
+        <div class="gps-sync-track"><div class="gps-sync-fill ${cls} ${animated?'is-anim':''}" style="width:${fillPct}%"></div></div>
+        <span class="gps-sync-pct">${running?pct+'%':''}</span>
+      </div>
+      <div class="gps-sync-meta ${cls==='s-error'?'is-err':''}">
+        <span>${_esc(label)}</span>
+        ${sum?`<span>· ${_esc(sum)}</span>`:''}
+        ${retry?`<button class="gps-int-btn ghost gps-sync-retry" data-syncretry="${prov}">${tt('admin.gps_retry','Retry')}</button>`:''}
+      </div>`;
+    const rb=bar.querySelector('[data-syncretry]'); if(rb) rb.addEventListener('click',()=>syncNow(prov));
+
+    if(btn){ const busy=running && !stale; btn.disabled=busy; btn.textContent = busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now'); }
+    if(job.status==='done') _scheduleHide(prov, job.id);
   }
 
   // ── Map athletes (Catapult → players.external_gps_id) ─────────────────────
@@ -2667,7 +2771,9 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   let loaded=false;
   if(tab) tab.addEventListener('click',()=>{ if(!loaded){ loaded=true; load(); } });
   // Re-render the integrations cards on language change (only if already loaded).
-  document.addEventListener('cm:langchanged', ()=>{ if(loaded) render(); });
+  document.addEventListener('cm:langchanged', ()=>{ if(loaded){ render(); _paintAllSync(); } });
+  // Drop the sync Realtime channel on unload (same hygiene as Availability/Hub).
+  window.addEventListener('beforeunload', ()=>{ if(_syncRT){ try{ window.sb.removeChannel(_syncRT); }catch(_){} } });
 })();
 </script>
 </body>
