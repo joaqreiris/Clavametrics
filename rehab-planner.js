@@ -290,6 +290,7 @@
           totalDur += b.dur || 0;
           const block = document.createElement('div');
           block.className = 'rp-block t-' + b.type + (b.selected ? ' is-selected' : '');
+          block.draggable = true;   // render-proof drag (block-actions)
           block.dataset.dayIdx   = di;
           block.dataset.blockIdx = bi;
           block.dataset.sessionId  = b._id || '';

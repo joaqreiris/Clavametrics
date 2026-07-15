@@ -166,6 +166,7 @@
       const card = document.createElement('div');
       card.className = 'rp-day' + (day.rest ? ' is-rest' : '') + (day.today ? ' is-today' : '');
       card.dataset.date = String(di);   // block-drawer reads dataset.date → routes new blocks to this day
+      card.dataset.di = String(di);     // numeric day index for block-actions getDayIndex
       const head = document.createElement('div');
       head.className = 'rp-day-h';
       head.innerHTML = `
@@ -192,6 +193,7 @@
         const block = document.createElement('div');
         block.className = 'rp-block t-' + b.type + (b.selected ? ' is-selected' : '');
         block.dataset.di = String(di); block.dataset.bi = String(bi);
+        block.draggable = true;   // render-proof drag (block-actions)
         const gpsHtml = (b.gps && b.gps.length)
           ? `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill"><span class="l">${g.l}</span><span class="v">${g.v}</span></span>`).join('')}</div>`
           : '';
@@ -557,7 +559,7 @@
           const d = parseInt(el.dataset.di, 10), b = parseInt(el.dataset.bi, 10);
           return (isNaN(d) || isNaN(b)) ? null : { day: d, block: b };
         },
-        getDayIndex: (el) => { const d = parseInt(el.dataset.date, 10); return isNaN(d) ? null : d; },
+        getDayIndex: (el) => { const d = parseInt(el.dataset.di, 10); return isNaN(d) ? null : d; },
         getBlock: (day, block) => {
           const days = ensureDays();
           const b = (days && days[day] && Array.isArray(days[day].blocks)) ? days[day].blocks[block] : null;
