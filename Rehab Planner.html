@@ -147,6 +147,9 @@
         </div>
       </div>
 
+      <!-- Injury-history risk context (Preventive mode only) -->
+      <div class="rp-risk-context rp-hidden" id="rp-risk-context" style="margin:0 0 14px;padding:14px 16px;border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-surface)"></div>
+
       <!-- Phase timeline (Rehab mode only) -->
       <div class="rp-phasebar" id="phasebar">
         <div class="rp-phasebar-head">
@@ -402,6 +405,7 @@
 <script src="block-actions.js"></script>
 <script src="rehab-planner.js"></script>
 <script src="block-drawer.js"></script>
+<script src="assets/rehab-create.js"></script>
 <script defer src="rehab-planner-tweaks.js"></script>
 
 <script>
@@ -585,6 +589,16 @@ function tt(key, fallbackEN, vars) {
   if (plan.kind === 'preventive') {
     rpBuildTrainbar(plan);
     document.getElementById('btn-edit-phases')?.addEventListener('click', () => openPhaseEditor(plan));
+    // Risk-history context: the player's injuries inform a preventive plan (read-only).
+    (async () => {
+      const box = document.getElementById('rp-risk-context');
+      if (!box || !(window.RehabCreate && window.RehabCreate.buildInjuryRiskContext)) return;
+      try {
+        const ctx = await window.RehabCreate.buildInjuryRiskContext(plan.player_id, clubId);
+        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx);
+        box.classList.remove('rp-hidden');
+      } catch (e) { console.error('[rehab-planner] risk context failed:', e); }
+    })();
   }
 
   // ── Week navigation ──

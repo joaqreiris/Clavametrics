@@ -112,5 +112,75 @@
     location.href = 'Rehab Planner.html?plan=' + data.id;
   }
 
-  window.RehabCreate = { injuryLabel, loadActiveInjuries, seedProgrammePhasesFromInjury, openOrCreateForInjury };
+  // ── Injury-history risk context (preventive plans) ─────────────────────────
+  // Shared by the create modal (Rehab & Preventives.html) and the planner
+  // (Rehab Planner.html): fetch a player's injuries (all statuses, club-scoped),
+  // group by body_area into a frequency-sorted zone summary, and keep the full
+  // list (most recent first) for the detail. Read-only; never throws.
+  const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const _cap = s => { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
+  const _SEV_RANK  = { minor: 1, moderate: 2, severe: 3 };
+  const _SEV_COLOR = { minor: '#EA580C', moderate: 'var(--cm-warning)', severe: 'var(--cm-danger)' };
+
+  async function buildInjuryRiskContext(playerId, clubId) {
+    const empty = { zones: [], injuries: [] };
+    if (!playerId || !clubId) return empty;
+    const { data, error } = await window.sb.from('injuries')
+      .select('injury_type, body_area, severity, status, start_date')
+      .eq('club_id', clubId).eq('player_id', playerId)
+      .order('start_date', { ascending: false });
+    if (error) { console.error('[rehab-create] injury risk fetch failed:', error); return empty; }
+    const injuries = data || [];
+    const byZone = {};
+    injuries.forEach(inj => {
+      const zone = (inj.body_area || '').trim();
+      if (!zone) return;
+      const key = zone.toLowerCase();
+      const g = byZone[key] || (byZone[key] = { zone, count: 0, lastDate: null, maxSeverity: null });
+      g.count++;
+      if (inj.start_date && (!g.lastDate || inj.start_date > g.lastDate)) g.lastDate = inj.start_date;
+      const sev = (inj.severity || '').toLowerCase();
+      if (_SEV_RANK[sev] && (!g.maxSeverity || _SEV_RANK[sev] > _SEV_RANK[g.maxSeverity])) g.maxSeverity = sev;
+    });
+    const zones = Object.values(byZone).sort((a, b) =>
+      b.count - a.count || String(b.lastDate || '').localeCompare(String(a.lastDate || '')));
+    return { zones, injuries };
+  }
+
+  // Render the risk-context block (zone chips on top, injury detail below).
+  // Returns an HTML string; caller injects it into its own container.
+  function injuryRiskHTML(ctx) {
+    const zones = (ctx && ctx.zones) || [];
+    const injuries = (ctx && ctx.injuries) || [];
+    const title = _esc(tt('preventive.risk_history', 'Risk history'));
+    const head = '<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:2px">' + title + '</div>';
+    if (!injuries.length) {
+      return head + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">'
+        + _esc(tt('preventive.no_injury_history', 'No injury history — general prevention.')) + '</div>';
+    }
+    const chips = zones.map(z => {
+      const col = _SEV_COLOR[z.maxSeverity] || 'var(--cm-fg-muted)';
+      return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;'
+        + 'background:color-mix(in srgb,' + col + ' 14%,transparent);color:' + col + ';'
+        + 'border:1px solid color-mix(in srgb,' + col + ' 40%,transparent);font:600 11.5px/1 var(--cm-font-sans)">'
+        + _esc(_cap(z.zone)) + ' ×' + z.count + '</span>';
+    }).join('');
+    const sepDot = '<span style="color:var(--cm-fg-faint)">·</span>';
+    const list = injuries.map(inj => {
+      const sev = (inj.severity || '').toLowerCase();
+      const col = _SEV_COLOR[sev] || 'var(--cm-fg-muted)';
+      const parts = [];
+      if (inj.start_date) parts.push('<span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + _esc(fmtDate(inj.start_date)) + '</span>');
+      if (inj.injury_type) parts.push('<span style="color:var(--cm-fg-strong)">' + _esc(inj.injury_type) + '</span>');
+      if (inj.body_area)   parts.push('<span style="color:var(--cm-fg-muted)">' + _esc(_cap(inj.body_area)) + '</span>');
+      if (sev)             parts.push('<span style="color:' + col + ';font-weight:600">' + _esc(tt('rehab_planner.sev_' + sev, _cap(sev))) + '</span>');
+      return '<div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;padding:6px 0;border-top:1px solid var(--cm-border-soft);font:var(--cm-body-sm)">' + parts.join(sepDot) + '</div>';
+    }).join('');
+    return head
+      + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:8px">' + _esc(tt('preventive.where_to_focus', 'Where to focus — most frequent injury zones')) + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + chips + '</div>'
+      + '<div>' + list + '</div>';
+  }
+
+  window.RehabCreate = { injuryLabel, loadActiveInjuries, seedProgrammePhasesFromInjury, openOrCreateForInjury, buildInjuryRiskContext, injuryRiskHTML };
 })();

@@ -528,12 +528,29 @@ function tt(key, fallbackEN, vars) {
       sel.appendChild(new Option(tt('rehab_planner.np_select_injury','Select injury…'), ''));
       _injuries.forEach(inj => sel.appendChild(new Option(window.RehabCreate.injuryLabel(inj), inj.id)));
     }
+    // Preventive: show the player's injury-history risk context (informational — no injury_id).
+    async function loadRiskFor(playerId){
+      const box = _ov.querySelector('#rpv-np-risk');
+      if (!box) return;
+      if (!playerId){ box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.style.display = '';
+      box.innerHTML = `<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">…</div>`;
+      try {
+        const ctx = await window.RehabCreate.buildInjuryRiskContext(playerId, clubId);
+        box.innerHTML = window.RehabCreate.injuryRiskHTML(ctx);
+      } catch(e){
+        console.error('[rehab] preventive risk context failed:', e);
+        box.innerHTML = `<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">${tt('preventive.no_injury_history','No injury history — general prevention.')}</div>`;
+      }
+    }
     function setKind(k){
       _kind = k;
       _ov.querySelectorAll('[data-kind]').forEach(b => { b.className = 'cm-btn is-sm ' + (b.dataset.kind === k ? 'is-primary' : 'is-ghost'); });
       const injRow = _ov.querySelector('#rpv-np-injury-row');
       if (injRow) injRow.style.display = (k === 'rehab') ? '' : 'none';
-      if (k === 'rehab') loadInjuriesFor(_ov.querySelector('#rpv-np-player').value);
+      const playerId = _ov.querySelector('#rpv-np-player').value;
+      if (k === 'rehab'){ loadInjuriesFor(playerId); const box = _ov.querySelector('#rpv-np-risk'); if (box){ box.style.display = 'none'; box.innerHTML = ''; } }
+      else { loadRiskFor(playerId); }
     }
     async function create(){
       const player_id = _ov.querySelector('#rpv-np-player').value;
@@ -587,6 +604,7 @@ function tt(key, fallbackEN, vars) {
                 <a href="Injuries.html" style="color:var(--cm-accent);text-decoration:underline;text-underline-offset:2px">${tt('rehab_planner.np_register_injury','Register one')}</a>
               </div>
             </div>
+            <div id="rpv-np-risk" style="display:none;margin-bottom:13px;padding:12px;border:1px solid var(--cm-border);border-radius:10px;background:var(--cm-bg-soft)"></div>
             <div style="${row}">
               <label style="${lbl}">${tt('rehab_planner.np_name','Plan name')}</label>
               <input class="cm-input" id="rpv-np-name" type="text" placeholder="${tt('rehab_planner.np_name_ph','e.g. ACL return-to-play')}">
@@ -604,7 +622,7 @@ function tt(key, fallbackEN, vars) {
       document.body.appendChild(_ov);
       _ov.addEventListener('click', (e) => { if (e.target === _ov || e.target.closest('[data-close]')) _ov.style.display = 'none'; });
       _ov.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => setKind(b.dataset.kind)));
-      _ov.querySelector('#rpv-np-player').addEventListener('change', (e) => { if (_kind === 'rehab') loadInjuriesFor(e.target.value); });
+      _ov.querySelector('#rpv-np-player').addEventListener('change', (e) => { if (_kind === 'rehab') loadInjuriesFor(e.target.value); else loadRiskFor(e.target.value); });
       _ov.querySelector('#rpv-np-create').addEventListener('click', create);
       return _ov;
     }
