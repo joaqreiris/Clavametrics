@@ -597,7 +597,8 @@
                   </div>
                 </div>
                 <div class="cr-table-head" style="border-top:1px solid var(--cm-border);">
-                  <h2 data-i18n="clinical_record.injury_history">Injury history</h2><span class="count" id="inj-count"></span>
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0"><h2 data-i18n="clinical_record.injury_history">Injury history</h2><span class="count" id="inj-count"></span></div>
+                  <button class="cm-btn is-outline is-sm" id="cr-pastinj-add" type="button"><i class="ti ti-plus"></i><span data-i18n="clinical_record.add_past_injury">Add past injury</span></button>
                 </div>
                 <div style="min-width:0;">
                 <table class="cr-table">
@@ -1068,6 +1069,160 @@
     </div>
   </div>
 </div>
+
+<!-- ══ MODAL · PAST / HISTORICAL INJURY (anamnesis — resolved, no plan/phases) ══ -->
+<div class="cr-modal-ov" id="modalPastInjury">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3 data-i18n="clinical_record.add_past_injury">Add past injury</h3>
+      <button type="button" id="pi-close" aria-label="Close" data-i18n-attr="aria-label:common.close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="clinical_record.past_injury_hint">A historical injury for the player's record. Saved as resolved — no rehab plan or phases are created.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field"><label class="cm-label" for="pi-start" data-i18n="clinical_record.start_date_req">Start date *</label><input id="pi-start" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="pi-end" data-i18n="clinical_record.end_date">End date</label><input id="pi-end" type="date" class="cm-input"></div>
+      </div>
+      <div class="cm-field">
+        <label class="cm-label" for="pi-days" data-i18n="clinical_record.days_lost">Days lost</label>
+        <input id="pi-days" type="number" min="0" step="1" class="cm-input" placeholder="auto from dates if empty" data-i18n-ph="clinical_record.auto_from_dates">
+        <div class="cm-hint" data-i18n="clinical_record.past_injury_days_hint">Enter days lost or an end date — either one sets the recovery date.</div>
+      </div>
+      <div class="cm-field">
+        <label class="cm-label" for="pi-zone" data-i18n="clinical_record.body_zone_req">Body zone *</label>
+        <select id="pi-zone" class="cm-select">
+          <option value="" data-i18n="clinical_record.select_zone">Select a zone…</option>
+          <option value="head">Head</option>
+          <option value="neck">Neck</option>
+          <option value="shoulder">Shoulder</option>
+          <option value="arm">Arm</option>
+          <option value="elbow">Elbow</option>
+          <option value="wrist">Wrist</option>
+          <option value="chest">Chest</option>
+          <option value="upper back">Upper back</option>
+          <option value="lower back">Lower back</option>
+          <option value="abdomen">Abdomen</option>
+          <option value="groin">Groin</option>
+          <option value="hip">Hip</option>
+          <option value="glute">Glute</option>
+          <option value="thigh">Thigh (quad)</option>
+          <option value="adductor">Adductor</option>
+          <option value="hamstring">Hamstring</option>
+          <option value="knee">Knee</option>
+          <option value="calf">Calf</option>
+          <option value="shin">Shin</option>
+          <option value="achilles">Achilles</option>
+          <option value="ankle">Ankle</option>
+          <option value="foot">Foot</option>
+        </select>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="pi-diagnosis" data-i18n="clinical_record.diagnosis_req">Diagnosis *</label><input id="pi-diagnosis" class="cm-input"></div>
+      <div class="cm-field">
+        <label class="cm-label" for="pi-severity" data-i18n="clinical_record.severity_req">Severity *</label>
+        <select id="pi-severity" class="cm-select">
+          <option value="" data-i18n="clinical_record.select_severity">Select…</option>
+          <option value="minor" data-i18n="clinical_record.sev_minor">Minor</option>
+          <option value="moderate" data-i18n="clinical_record.sev_moderate">Moderate</option>
+          <option value="severe" data-i18n="clinical_record.sev_severe">Severe</option>
+        </select>
+      </div>
+      <div id="pi-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="pi-cancel" data-i18n="common.cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="pi-save" data-i18n="common.save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Add past / historical injury (anamnesis) — Clinical Record › Injury history.
+   clinical-record.js is a sealed IIFE, so this reads context the same way it does
+   (URL ?player, window.getClubId, window.getProfile, window.sb) and reloads on success to
+   let the module re-render the table, count, KPIs and heatmap. Saves a RESOLVED record as
+   status:'cleared' (the injuries enum; the table renders 'cleared' as the green "Resolved"
+   pill) with NO injury_phases / rehab plan. Never throws. */
+(function () {
+  'use strict';
+  function tt(key, fb, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fb!=null?fb:key); }
+  const $ = id => document.getElementById(id);
+  const ov = $('modalPastInjury'), btn = $('cr-pastinj-add');
+  if (!ov || !btn) return;
+
+  const showErr = m => { const e=$('pi-error'); if(e){ e.textContent=m; e.style.display=''; } };
+  const hideErr = () => { const e=$('pi-error'); if(e) e.style.display='none'; };
+  const pad = n => (n<10?'0':'')+n;
+  const todayISO = () => { const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+  const addDays = (iso, d) => { const dt=new Date(iso+'T00:00:00'); if(isNaN(dt)) return null; dt.setDate(dt.getDate()+d); return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate()); };
+  const val = id => (($(id)||{}).value || '');
+
+  function open(){ ['pi-start','pi-end','pi-days','pi-diagnosis'].forEach(id=>{ const e=$(id); if(e) e.value=''; }); const z=$('pi-zone'); if(z) z.value=''; const s=$('pi-severity'); if(s) s.value=''; hideErr(); ov.classList.add('is-open'); const f=$('pi-start'); if(f) f.focus(); }
+  function close(){ ov.classList.remove('is-open'); }
+
+  btn.addEventListener('click', open);
+  $('pi-close') && $('pi-close').addEventListener('click', close);
+  $('pi-cancel') && $('pi-cancel').addEventListener('click', close);
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+
+  const saveBtn = $('pi-save');
+  saveBtn && saveBtn.addEventListener('click', async () => {
+    hideErr();
+    const start = val('pi-start'), end = val('pi-end'), daysRaw = val('pi-days');
+    const zone = val('pi-zone'), diagnosis = val('pi-diagnosis').trim(), severity = val('pi-severity');
+    const today = todayISO();
+
+    if (!start) return showErr(tt('clinical_record.err_start_required','Start date is required.'));
+    if (start > today) return showErr(tt('clinical_record.err_dates_past','Dates must be in the past.'));
+    if (!zone) return showErr(tt('clinical_record.err_zone_required','Select a body zone.'));
+    if (!diagnosis) return showErr(tt('clinical_record.err_diagnosis_required','Diagnosis is required.'));
+    if (!severity) return showErr(tt('clinical_record.err_severity_required','Select a severity.'));
+
+    const days = daysRaw === '' ? null : parseInt(daysRaw, 10);
+    if (days != null && (!isFinite(days) || days < 0)) return showErr(tt('clinical_record.err_days_invalid','Days lost must be 0 or more.'));
+
+    let returned = null;
+    if (end) {
+      if (end > today) return showErr(tt('clinical_record.err_dates_past','Dates must be in the past.'));
+      if (end < start) return showErr(tt('clinical_record.err_end_before_start','End date is before the start date.'));
+      returned = end;
+    } else if (days != null) {
+      returned = addDays(start, days);
+    } else {
+      return showErr(tt('clinical_record.err_end_or_days','Enter an end date or days lost.'));
+    }
+
+    saveBtn.disabled = true;
+    try {
+      let clubId = null; try { clubId = window.getClubId ? await window.getClubId() : null; } catch(_) {}
+      const playerId = new URLSearchParams(location.search).get('player');
+      if (!clubId || !playerId) { saveBtn.disabled = false; return showErr(tt('clinical_record.err_context','Missing club or player context.')); }
+      let createdBy = null; try { const prof = window.getProfile ? await window.getProfile() : null; createdBy = (prof && prof.id) || null; } catch(_) {}
+
+      const payload = { player_id: playerId, club_id: clubId, injury_type: diagnosis, body_area: zone, severity, start_date: start, returned_date: returned, status: 'cleared', created_by: createdBy };
+      const res = await window.sb.from('injuries').insert(payload);
+      if (res && res.error) { saveBtn.disabled = false; console.error('[ClinicalRecord] add past injury failed:', res.error); return showErr(tt('clinical_record.err_save','Could not save: {msg}', { msg: res.error.message || 'error' })); }
+      try { sessionStorage.setItem('cr_pastinj_ok','1'); } catch(_) {}
+      location.reload();   // let clinical-record.js re-fetch and re-render table + count + KPIs + heatmap
+    } catch (err) {
+      saveBtn.disabled = false; console.error('[ClinicalRecord] add past injury exception:', err);
+      showErr(tt('clinical_record.err_save','Could not save: {msg}', { msg: (err && err.message) || 'error' }));
+    }
+  });
+
+  // Success toast after the reload.
+  try {
+    if (sessionStorage.getItem('cr_pastinj_ok')) {
+      sessionStorage.removeItem('cr_pastinj_ok');
+      const t = document.createElement('div');
+      t.textContent = tt('clinical_record.past_injury_saved','Past injury added to the record.');
+      t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:1200;background:#15181D;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s';
+      document.body.appendChild(t);
+      requestAnimationFrame(() => { t.style.opacity = '1'; });
+      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2600);
+    }
+  } catch(_) {}
+})();
+</script>
 
 <script src="clinical-record.js"></script>
 
