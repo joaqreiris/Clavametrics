@@ -1879,7 +1879,11 @@ async function saveLayout(viewKey, overrideDid) {
         return Number.isFinite(v) ? v : NaN;
       };
       const x = _coord('x'), y = _coord('y'), w = _coord('w'), h = _coord('h');
-      if ([x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
+      // Persist coords ONLY for cards with a REAL placement. A card still on provisional auto-flow
+      // (dataset.autoFlow, set by gp-canvas when it invented the position) must stay COORDLESS in
+      // the DB (x/y null) so it remains order-driven and immune to the early-pass scramble — we
+      // never freeze an invented position. Its order is still captured via `position` above.
+      if (el.dataset.autoFlow !== '1' && [x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
       return item;
     });
     const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
@@ -4147,6 +4151,11 @@ async function _detectSmartDefault(clubId, userId) {
     if (banner) banner.classList.add('is-on');
   }
 
+  // GATE: mark the layout as NOT ready for the whole load. While false, gp-canvas won't autosave
+  // (persist/compact) and won't cement provisional auto-flow coords. Flipped true in the finally
+  // once every view's saved layout is loaded, reordered and the cards are mounted — then the
+  // authoritative renderAll() places everything in the saved order.
+  window._gpLayoutReady = false;
   try {
     await Promise.all([
       applyDefaultLayoutGeneric('ind', _IND_DEFAULTS),
@@ -4174,6 +4183,10 @@ async function _detectSmartDefault(clubId, userId) {
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
+    // Layout is now fully resolved (all views loaded + reordered + cards mounted). Flip the gate
+    // ON, THEN run the single authoritative placement pass: coordless cards auto-flow in the saved
+    // ORDER (the DOM is already reordered), real coords are honoured, and autosave is unblocked.
+    window._gpLayoutReady = true;
     // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
     // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
     window.gpCanvas?.renderAll?.();

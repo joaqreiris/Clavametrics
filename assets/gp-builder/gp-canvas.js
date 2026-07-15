@@ -40,7 +40,10 @@
       const w = Math.min(COLS, spanOf(item));
       const h = rowsOf(item);
       if (cx + w > COLS) { cx = 0; cy += (rowH || h); rowH = 0; }
-      const placed = { ...item, x: cx, y: cy, w, h };
+      // _autoFlow: these coords are INVENTED by this pass (the item had none). They must be
+      // re-derivable — a later authoritative pass (once the saved layout is loaded/reordered)
+      // has to be free to re-flow them in the CURRENT order instead of treating them as final.
+      const placed = { ...item, x: cx, y: cy, w, h, _autoFlow: true };
       cx += w; rowH = Math.max(rowH, h);
       return placed;
     });
@@ -55,6 +58,11 @@
   // ── coords I/O ───────────────────────────────────────────────────────────
   function applyCoords(card, item) {
     if (!card) return;
+    // A write through applyCoords is a REAL placement (user drag/resize/compact, a paste, or a
+    // restored saved layout) → drop any provisional mark. placeCards RE-SETS dataset.autoFlow
+    // right after, but only for the items IT auto-invented (item._autoFlow), so invented coords
+    // stay flagged and real ones don't.
+    delete card.dataset.autoFlow;
     card.dataset.x = item.x; card.dataset.y = item.y;
     card.dataset.w = item.w; card.dataset.h = item.h;
     card.style.setProperty('--gp-x', item.x);
@@ -169,6 +177,7 @@
       }
       it.y = ny; placed.push(it); applyCoords(it.el, it);
     }
+    if (window._gpLayoutReady === false) return;   // don't cement positions mid-load (same as persist)
     const view = grid.closest('.gp-view') && grid.closest('.gp-view').dataset.view;
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
@@ -335,6 +344,11 @@
   }
 
   function persist(card) {
+    // Never autosave while a load is still resolving the saved layout: cards may still hold
+    // provisional auto-flow coords, and saving now would cement a scrambled state. The host page
+    // sets window._gpLayoutReady=false during load and true once the authoritative pass ran.
+    // (=== false only — undefined means "no host gating" → persist normally.)
+    if (window._gpLayoutReady === false) return;
     const view = card.closest('.gp-view') && card.closest('.gp-view').dataset.view;
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
@@ -360,12 +374,17 @@
                  : (parseInt(el.dataset.span, 10) || (el.classList.contains('gp-add') ? 4 : 6));
       const it = { _el: el, position: idx, span, size: el.dataset.size || 'md' };
       const c = { x: +el.dataset.x, y: +el.dataset.y, w: +el.dataset.w, h: +el.dataset.h };
-      if (hasCoords(c)) Object.assign(it, c);
+      // Only REAL coords freeze a card's position. Provisional auto-flow coords (dataset.autoFlow),
+      // written by an EARLY pass before the saved layout loaded, are treated as "no coords" so this
+      // pass re-derives them in the current DOM order → a late saved layout / reorder wins instead
+      // of the frozen raw-HTML order. This is the 3rd scramble trigger (beyond reset + mount race).
+      if (hasCoords(c) && el.dataset.autoFlow !== '1') Object.assign(it, c);
       return it;
     });
     const placed = toCanvasLayout(items);
     placed.forEach(it => {
-      applyCoords(it._el, it);
+      applyCoords(it._el, it);                       // clears dataset.autoFlow
+      if (it._autoFlow) it._el.dataset.autoFlow = '1';  // …re-flag only the ones we just invented
       if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
     });
     grid.classList.add('is-canvas');
