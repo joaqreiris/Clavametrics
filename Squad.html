@@ -2398,20 +2398,22 @@ async function reloadPlayers() {
   // Map sanitized CSV headers → canonical column. Accepts common export aliases so we
   // don't depend on exact header names (Excel exports, ES/PT headers, "Shirt #", etc.).
   const IMPORT_HEADER_ALIASES = {
-    first_name:'first_name', firstname:'first_name', first:'first_name', given_name:'first_name', givenname:'first_name', nombre:'first_name', primer_nombre:'first_name',
-    last_name:'last_name', lastname:'last_name', last:'last_name', surname:'last_name', family_name:'last_name', apellido:'last_name', apellidos:'last_name', sobrenome:'last_name',
-    name:'name', full_name:'name', fullname:'name', player:'name', jugador:'name', jogador:'name',
-    number:'number', num:'number', no:'number', shirt:'number', shirt_number:'number', shirt_no:'number', jersey:'number', jersey_number:'number', jersey_no:'number', dorsal:'number', numero:'number',
-    position:'position', pos:'position', role:'position', posicion:'position', posicao:'position',
-    date_of_birth:'date_of_birth', dob:'date_of_birth', birthdate:'date_of_birth', birth_date:'date_of_birth', born:'date_of_birth', nacimiento:'date_of_birth', fecha_nacimiento:'date_of_birth', nascimento:'date_of_birth',
-    nationality:'nationality', country:'nationality', nation:'nationality', nacionalidad:'nationality', pais:'nationality',
-    height:'height', height_cm:'height', cm:'height', altura:'height', estatura:'height',
-    weight:'weight', weight_kg:'weight', kg:'weight', peso:'weight',
-    dominant_foot:'dominant_foot', foot:'dominant_foot', preferred_foot:'dominant_foot', strong_foot:'dominant_foot', pie:'dominant_foot', pie_habil:'dominant_foot', pe:'dominant_foot',
+    first_name:'first_name', firstname:'first_name', first:'first_name', given_name:'first_name', givenname:'first_name', given:'first_name', nombre:'first_name', nombres:'first_name', primer_nombre:'first_name', nome:'first_name', prenom:'first_name',
+    last_name:'last_name', lastname:'last_name', last:'last_name', surname:'last_name', family_name:'last_name', familyname:'last_name', apellido:'last_name', apellidos:'last_name', sobrenome:'last_name', apelido:'last_name',
+    name:'name', full_name:'name', fullname:'name', player_name:'name', playername:'name', player:'name', jugador:'name', jogador:'name', nombre_completo:'name', nome_completo:'name',
+    number:'number', number_:'number', num:'number', nro:'number', no:'number', n:'number', shirt:'number', shirt_number:'number', shirt_no:'number', jersey:'number', jersey_number:'number', jersey_no:'number', dorsal:'number', numero:'number', numero_camiseta:'number', camiseta:'number', camisa:'number',
+    position:'position', positions:'position', pos:'position', role:'position', posicion:'position', posicao:'position',
+    date_of_birth:'date_of_birth', dateofbirth:'date_of_birth', dob:'date_of_birth', birthdate:'date_of_birth', birth_date:'date_of_birth', birthday:'date_of_birth', born:'date_of_birth', nacimiento:'date_of_birth', fecha_nacimiento:'date_of_birth', fecha_de_nacimiento:'date_of_birth', nascimento:'date_of_birth', data_nascimento:'date_of_birth',
+    nationality:'nationality', country:'nationality', nation:'nationality', nacionalidad:'nationality', pais:'nationality', nacionalidade:'nationality',
+    height:'height', height_cm:'height', cm:'height', altura:'height', estatura:'height', altura_cm:'height',
+    weight:'weight', weight_kg:'weight', kg:'weight', peso:'weight', peso_kg:'weight',
+    dominant_foot:'dominant_foot', dominantfoot:'dominant_foot', foot:'dominant_foot', preferred_foot:'dominant_foot', strong_foot:'dominant_foot', pie:'dominant_foot', pie_habil:'dominant_foot', pierna:'dominant_foot', pe:'dominant_foot', pe_dominante:'dominant_foot', pied:'dominant_foot',
   };
-  // Sanitize a header. '#' would be stripped, so turn it into 'no' first → maps to number.
+  // Sanitize a header: strip BOM, transliterate accents (Número→numero, Posición→posicion),
+  // turn '#' into 'no', collapse spaces/dashes to '_'. Then look up in the alias map.
   function _impHeader(h){
-    return String(h||'').replace(/﻿/g,'').trim().toLowerCase()
+    return String(h||'').replace(/﻿/g,'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .trim().toLowerCase()
       .replace(/#/g,'no').replace(/[\s\-.]+/g,'_').replace(/[^a-z_]/g,'').replace(/^_+|_+$/g,'');
   }
 
@@ -2736,6 +2738,8 @@ async function reloadPlayers() {
     window.Papa.parse(file, {
       header: true, skipEmptyLines: 'greedy', delimiter: '', transformHeader: _impHeader,
       complete: (res) => {
+        const fields = (res.meta && res.meta.fields) || [];
+        const mappedCols = [...new Set(fields.map(h => IMPORT_HEADER_ALIASES[h]).filter(Boolean))];
         const rawRows = (res.data || []).map(obj => {
           const canon = {};
           Object.keys(obj).forEach(h => {
@@ -2747,7 +2751,16 @@ async function reloadPlayers() {
           });
           return canon;
         }).filter(o => Object.values(o).some(v => String(v||'').trim()));
-        if (!rawRows.length) { showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).')); e.target.value=''; return; }
+        if (!rawRows.length) {
+          if (!mappedCols.length && fields.filter(Boolean).length) {
+            // Headers were read but none matched → show them so the user can fix/rename.
+            const found = fields.filter(Boolean).join(', ');
+            showToast(tt('squad.csv_no_columns', `No columns matched. Found headers: ${found}. Expected: first_name, last_name, number, position, date_of_birth, nationality, height, weight, dominant_foot (aliases like Name, DOB, Shirt, Pos, Foot, Country, cm, kg also work).`, { found }));
+          } else {
+            showToast(tt('squad.csv_empty','CSV empty or no matching columns (expected: first_name, last_name, number…).'));
+          }
+          e.target.value=''; return;
+        }
         openImportModal(rawRows);
       },
       error: () => showToast(tt('squad.csv_parse_error','Could not read the CSV file.')),
