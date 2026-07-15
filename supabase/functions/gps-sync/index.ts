@@ -518,7 +518,8 @@ async function invokeWorker(jobId: string) {
 // Process ONE chunk of a job, then chain the next (or finalize). Runs in the background.
 async function processChunk(adminClient: Admin, jobId: string) {
   const { data: job, error } = await adminClient.from('gps_sync_jobs').select('*').eq('id', jobId).single();
-  if (error || !job) { console.warn('[gps-sync] processChunk: job not found', jobId); return; }
+  if (error || !job) { console.warn('[gps-sync] processChunk: job not found', jobId, error?.message || ''); return; }
+  console.log('[gps-sync] processChunk start', { jobId, status: job.status, chunksDone: job.chunks_done, chunksTotal: job.chunks_total });
   if (job.status !== 'running') return;   // cancelled / errored / done → stop the chain
 
   // Claim: bump heartbeat at pickup so the stale-reaper won't reclaim a chunk in flight.
@@ -539,6 +540,7 @@ async function processChunk(adminClient: Admin, jobId: string) {
     return;
   }
 
+  console.log('[gps-sync] processing chunk', { jobId, idx, chunk });
   let partial: ChunkResult;
   try { partial = await syncRange(adminClient, ctx, chunk[0], chunk[1]); }
   catch (e) { await failJob(adminClient, jobId, `chunk ${chunk[0]}..${chunk[1]}: ${String((e as Error)?.message || e)}`); return; }
@@ -552,7 +554,11 @@ async function processChunk(adminClient: Admin, jobId: string) {
       chunks_done: chunksDone, cursor_from: next[0], cursor_to: next[1],
       totals, heartbeat_at: nowISO(),
     }).eq('id', jobId);
-    await invokeWorker(jobId);   // chain the next chunk as a fresh invocation
+    console.log('[gps-sync] chunk done, chaining next', { jobId, chunksDone, next });
+    // Fire-and-forget the NEXT chunk's worker (fresh isolate). NOT awaited: awaiting would make
+    // this worker block until the WHOLE remaining chain finished (cascading wall-clock). waitUntil
+    // just holds this isolate long enough to deliver the trigger fetch to the next worker.
+    background(invokeWorker(jobId));
   } else {
     await adminClient.from('gps_sync_jobs').update({
       chunks_done: chunksDone, cursor_from: null, cursor_to: null,
@@ -560,6 +566,7 @@ async function processChunk(adminClient: Admin, jobId: string) {
     }).eq('id', jobId);
     // Mirror the old success side-effect: stamp last_sync_at on the integration.
     await adminClient.from('gps_integrations').update({ last_sync_at: nowISO(), last_error: null }).eq('id', job.integration_id);
+    console.log('[gps-sync] job complete', { jobId, chunksDone, totals });
   }
 }
 
@@ -582,8 +589,14 @@ Deno.serve(async (req: Request) => {
       const jobId = body.job_id as string | undefined;
       if (!jobId) return json({ error: 'job_id is required' }, 400);
       const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, svc);
-      background(processChunk(adminClient, jobId));
-      return json({ ok: true, accepted: true }, 202);
+      console.log('[gps-sync] worker mode invoked', { jobId });
+      // SYNCHRONOUS: awaiting keeps THIS isolate alive for the entire chunk. The previous
+      // design ran processChunk as post-response background (EdgeRuntime.waitUntil) and the
+      // isolate was torn down on the 202 before any work ran → job stuck at chunks_done=0.
+      // Now the heavy work runs inside a live request; processChunk fire-and-forgets the
+      // NEXT chunk's worker itself (so chunks still chain across fresh isolates).
+      await processChunk(adminClient, jobId);
+      return json({ ok: true, done: true }, 200);
     }
 
     // ══ START MODE (client) ═══════════════════════════════════════════════
@@ -642,7 +655,8 @@ Deno.serve(async (req: Request) => {
         .eq('id', active.id).lt('heartbeat_at', staleISO)
         .select('id').maybeSingle();
       if (!claimed) return json({ ok: true, already_running: true, job_id: active.id }, 409);
-      background(processChunk(adminClient, active.id as string));
+      console.log('[gps-sync] start: resuming stale job, dispatching worker', { jobId: active.id });
+      background(invokeWorker(active.id as string));
       return json({ ok: true, job_id: active.id, resumed: true }, 202);
     }
 
@@ -667,9 +681,11 @@ Deno.serve(async (req: Request) => {
       throw jErr;
     }
 
-    // Kick the first chunk in the background; the client gets 202 immediately and watches
-    // gps_sync_jobs via Realtime. Navigating away no longer stops the sync.
-    background(processChunk(adminClient, job.id as string));
+    // Dispatch the FIRST chunk to a SEPARATE worker invocation (its own isolate + full request
+    // budget), then return 202 at once. We do NOT process in this isolate — it dies on response.
+    // waitUntil only has to keep THIS isolate alive long enough to deliver the trigger fetch.
+    console.log('[gps-sync] start: job created, dispatching worker', { jobId: job.id, chunksTotal: chunks.length });
+    background(invokeWorker(job.id as string));
     return json({ ok: true, job_id: job.id, chunks_total: chunks.length }, 202);
 
   } catch (err) {
