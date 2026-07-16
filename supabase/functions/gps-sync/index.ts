@@ -328,22 +328,23 @@ async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response>
 async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string): Promise<ChunkResult> {
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs } = ctx;
   const unmappedParams = new Set<string>();
+  let _statsCalls = 0;   // TEMP: count /stats requests this chunk (logged at chunk end; remove after)
 
-  // Catapult /stats silently DROPS parameters when too many are requested in one call. Since the
-  // mappings are fetched .order(source_column_name), the alphabetically-last velocity_band* fell
-  // outside that cap → HSR/VHSR/Sprint came back ABSENT (= 0), even though the data exists (a
-  // request for JUST the velocity slugs returns them fine). Fix: request the parameters in SMALL
-  // batches and MERGE the rows per group key, so every mapped parameter is returned.
-  const STATS_PARAM_BATCH = 5;   // proven-safe under Catapult's per-request parameter cap
+  // ONE /stats request per grain: ask for ALL mapped parameters at once. The earlier 5-param
+  // batching was added on a WRONG diagnosis (that Catapult drops params over a cap). There is NO
+  // such cap in the API or the evidence: a single request with all mapped slugs returns them all,
+  // and Catapult even returns the whole velocity family when any one member is requested. (The real
+  // HSR/VHSR/Sprint = 0 bug was the truncated mappings read, fixed in loadContext.) We keep the
+  // split+merge as a ZERO-COST SAFETY NET behind a LARGE batch: for any realistic club (a handful of
+  // mapped slugs) this is exactly ONE request per grain; only a pathological >100-slug mapping splits.
+  const STATS_PARAM_BATCH = 100;
   const _athKey = (rw: Record<string, unknown>) => String(rw.athlete_id ?? (rw.athlete as Record<string, unknown>)?.id ?? rw.id ?? '');
   async function fetchStats(activityId: string, extra: string[], groupBy: string[], keyOf: (rw: Record<string, unknown>) => string): Promise<Record<string, unknown>[]> {
     const params = [...mappedSlugs, ...extra];
     const batches: string[][] = [];
     for (let i = 0; i < params.length; i += STATS_PARAM_BATCH) batches.push(params.slice(i, i + STATS_PARAM_BATCH));
-    // Run the parameter batches in PARALLEL (not serial): serial batching made each activity ~4×
-    // more round-trips end-to-end and the chunk overran the ~150s Edge wall-clock (job stuck at 0/1).
-    // Parallel → wall-clock ≈ the slowest single batch, not their sum. 429s still self-heal (L1 backoff).
     const results = await Promise.all(batches.map(async (batch) => {
+      _statsCalls++;   // TEMP: measure the call reduction
       const res = await fetchCatapult(`${baseUrl}/stats`, {
         method: 'POST', headers: { ...authH, 'Content-Type': 'application/json' },
         body: JSON.stringify({ filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }], parameters: batch, group_by: groupBy }),
@@ -424,7 +425,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         sessionId = newSess.id as string;
       }
 
-      // ── 3. Per-athlete stats (batched — see fetchStats: dodges Catapult's per-request param cap) ──
+      // ── 3. Per-athlete stats (one /stats call, all mapped params — see fetchStats) ──
       let statRows: Record<string, unknown>[];
       try { statRows = await fetchStats(activityId, [], ['athlete'], _athKey); }
       catch (e) { r.errs.push(`stats ${activityId}: ${String((e as Error)?.message || e)}`); return r; }
@@ -476,7 +477,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       // Second /stats for the same activity, broken down by period. Failure
       // here must NOT break the session-level result already written above.
       try {
-        // Batched (same param-cap workaround). Merge per athlete+period so every metric + start/end come back.
+        // One /stats call (all mapped params + start/end); merge is a no-op unless a >100-slug set splits.
         const perRows = await fetchStats(activityId, ['start_time', 'end_time'], ['period', 'athlete'],
           (rw) => _athKey(rw) + '|' + String(rw.period_id ?? ''));
         {
@@ -549,7 +550,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
     }
   }
 
-  console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods`);
+  console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, ${_statsCalls} /stats calls, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods`);
   return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, errs: errors, unmapped: [...unmappedParams] };
 }
 
