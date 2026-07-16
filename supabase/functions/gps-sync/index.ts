@@ -230,14 +230,25 @@ async function loadContext(adminClient: Admin, integrationId: string): Promise<C
   const playerByExt = new Map<string, string>();
   for (const p of (players || [])) if (p.external_gps_id) playerByExt.set(String(p.external_gps_id), p.id as string);
 
-  // Data-driven resolveMap: slug → { target_metric, unit_conversion } (same table as the CSV).
-  const { data: mappings } = await adminClient
-    .from('gps_column_mappings')
-    .select('source_column_name, target_metric, unit_conversion')
-    .eq('club_id', clubId).eq('source_label', 'catapult')
-    .order('source_column_name', { ascending: true });   // deterministic collision resolution
+  // Data-driven resolveMap: slug → { target_metric, unit_conversion }. PAGINATE: a club can have
+  // >1000 rows in gps_column_mappings (every Catapult parameter gets a row), and a plain .select()
+  // is truncated to ~1000 by PostgREST. With .order(source_column_name) the alphabetically-LAST
+  // slugs (e.g. velocity_band*) fell past the cap → not loaded → the sync treated them as UNMAPPED
+  // → HSR/VHSR/Sprint stayed 0 even though they were mapped. Page through .range() to get them all.
+  const mappings: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await adminClient
+      .from('gps_column_mappings')
+      .select('source_column_name, target_metric, unit_conversion')
+      .eq('club_id', clubId).eq('source_label', 'catapult')
+      .order('source_column_name', { ascending: true })   // deterministic collision resolution
+      .range(from, from + 999);
+    if (error || !data || !data.length) break;
+    mappings.push(...data);
+    if (data.length < 1000) break;   // short page → last page
+  }
   const resolveMap = new Map<string, { target: string; conv: number }>();
-  for (const m of (mappings || [])) {
+  for (const m of mappings) {
     resolveMap.set(String(m.source_column_name), {
       target: String(m.target_metric),
       conv: m.unit_conversion == null ? 1 : Number(m.unit_conversion),
