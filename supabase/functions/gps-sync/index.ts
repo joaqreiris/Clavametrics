@@ -318,6 +318,34 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs } = ctx;
   const unmappedParams = new Set<string>();
 
+  // Catapult /stats silently DROPS parameters when too many are requested in one call. Since the
+  // mappings are fetched .order(source_column_name), the alphabetically-last velocity_band* fell
+  // outside that cap → HSR/VHSR/Sprint came back ABSENT (= 0), even though the data exists (a
+  // request for JUST the velocity slugs returns them fine). Fix: request the parameters in SMALL
+  // batches and MERGE the rows per group key, so every mapped parameter is returned.
+  const STATS_PARAM_BATCH = 5;   // proven-safe under Catapult's per-request parameter cap
+  const _athKey = (rw: Record<string, unknown>) => String(rw.athlete_id ?? (rw.athlete as Record<string, unknown>)?.id ?? rw.id ?? '');
+  async function fetchStats(activityId: string, extra: string[], groupBy: string[], keyOf: (rw: Record<string, unknown>) => string): Promise<Record<string, unknown>[]> {
+    const params = [...mappedSlugs, ...extra];
+    const merged = new Map<string, Record<string, unknown>>();
+    for (let i = 0; i < params.length; i += STATS_PARAM_BATCH) {
+      const res = await fetchCatapult(`${baseUrl}/stats`, {
+        method: 'POST', headers: { ...authH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }], parameters: params.slice(i, i + STATS_PARAM_BATCH), group_by: groupBy }),
+      });
+      if (!res.ok) throw new Error(`stats HTTP ${res.status}`);
+      const rows = (await res.json().catch(() => [])) as Record<string, unknown>[];
+      for (const rw of (Array.isArray(rows) ? rows : [])) {
+        const k = keyOf(rw);
+        if (!k) continue;
+        const m = merged.get(k) || {};
+        Object.assign(m, rw);   // combine each batch's params into one row per group key
+        merged.set(k, m);
+      }
+    }
+    return [...merged.values()];
+  }
+
   // Range in ms (identical semantics to the previous per-request implementation).
   const toMsRange   = toMs(to);
   const fromMsRange = toMs(from);
@@ -378,18 +406,10 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         sessionId = newSess.id as string;
       }
 
-      // ── 3. Per-athlete stats for this activity ──────────────────────────
-      const statsRes = await fetchCatapult(`${baseUrl}/stats`, {
-        method: 'POST',
-        headers: { ...authH, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }],
-          parameters: mappedSlugs,
-          group_by: ['athlete'],
-        }),
-      });
-      if (!statsRes.ok) { r.errs.push(`stats ${activityId}: HTTP ${statsRes.status}`); return r; }
-      const statRows = (await statsRes.json().catch(() => [])) as Record<string, unknown>[];
+      // ── 3. Per-athlete stats (batched — see fetchStats: dodges Catapult's per-request param cap) ──
+      let statRows: Record<string, unknown>[];
+      try { statRows = await fetchStats(activityId, [], ['athlete'], _athKey); }
+      catch (e) { r.errs.push(`stats ${activityId}: ${String((e as Error)?.message || e)}`); return r; }
 
       // ── 4. Normalize → gps_reports recs + non-core EAV ──────────────────
       const recs: Record<string, unknown>[] = [];
@@ -400,6 +420,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         if (!playerId) { r.skip++; continue; }
 
         const { core, extras } = normalizeMetrics(row, resolveMap, mappedSlugs, unmappedParams);
+
         // Outlier defense (same contract as the CSV importer): total_distance in
         // canonical metres above the physical session max = noise. Insert but flag.
         const OUTLIER_MAX_M = 25000; // keep in sync with assets/gps-units.js
@@ -437,19 +458,10 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       // Second /stats for the same activity, broken down by period. Failure
       // here must NOT break the session-level result already written above.
       try {
-        const perRes = await fetchCatapult(`${baseUrl}/stats`, {
-          method: 'POST',
-          headers: { ...authH, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }],
-            parameters: [...mappedSlugs, 'start_time', 'end_time'],
-            group_by: ['period', 'athlete'],
-          }),
-        });
-        if (!perRes.ok) {
-          r.errs.push(`periods ${activityId}: HTTP ${perRes.status}`);   // unsupported / no breakdown → skip
-        } else {
-          const perRows = (await perRes.json().catch(() => [])) as Record<string, unknown>[];
+        // Batched (same param-cap workaround). Merge per athlete+period so every metric + start/end come back.
+        const perRows = await fetchStats(activityId, ['start_time', 'end_time'], ['period', 'athlete'],
+          (rw) => _athKey(rw) + '|' + String(rw.period_id ?? ''));
+        {
           const periodRecs: Record<string, unknown>[] = [];
           for (const row of (Array.isArray(perRows) ? perRows : [])) {
             const ext = String(row.athlete_id ?? (row.athlete as Record<string, unknown>)?.id ?? row.id ?? '');
