@@ -40,6 +40,7 @@
       <div class="actions">
         <button class="cm-btn is-ghost" id="back-to-picker" style="display:none"><i class="ti ti-arrow-left"></i> <span data-i18n="rehab_planner.change_plan_type">Change plan type</span></button>
         <button class="cm-btn is-ghost" id="btn-delete-plan" style="color:var(--cm-danger,#DC2626)"><i class="ti ti-trash"></i> <span data-i18n="rehab_planner.delete_plan">Delete plan</span></button>
+        <button class="cm-btn is-outline is-sm" id="btn-suggest-plan" style="display:none"><i class="ti ti-wand"></i> <span data-i18n="preventive.suggest_plan">Suggest plan</span></button>
         <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
         <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> <span data-i18n="rehab_planner.save_plan">Save plan</span></button>
       </div>
@@ -603,6 +604,132 @@ function tt(key, fallbackEN, vars) {
         // Feed the block-drawer library picker: prioritize exercises for these risk zones (preventive only).
         window.__rpRiskZones = ctx.zones || [];
       } catch (e) { console.error('[rehab-planner] risk context failed:', e); }
+    })();
+
+    // ── Suggested preventive plan (optional draft; coach edits after) ──────────
+    (function () {
+      const sugBtn = document.getElementById('btn-suggest-plan');
+      if (!sugBtn) return;
+      sugBtn.style.display = '';
+
+      const _norm     = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+      const _normZone = s => String(s || '').toLowerCase().replace(/^(left|right)\s+/, '').replace(/[^a-z]/g, '');
+      const _cap      = s => { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
+      const _esc      = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+      const _SEV = { minor: 1, moderate: 2, severe: 3 };
+      // Phase-1 zone→muscle map (normalized muscle keys); local copy (block-drawer's is module-private).
+      const ZONE_MUSCLES = {
+        hamstring: ['hamstrings'], adductor: ['adductors'], groin: ['adductors', 'hipflexors'],
+        calf: ['calves', 'soleus'], shin: ['tibialisanterior'], knee: ['quadriceps', 'hamstrings'],
+        thigh: ['quadriceps', 'hamstrings'], hip: ['hipflexors', 'glutes', 'glutemed'], glute: ['glutes', 'glutemed'],
+        ankle: ['calves', 'soleus', 'tibialisanterior'], achilles: ['calves', 'soleus'],
+        chest: ['chest'], shoulder: ['shoulders', 'rotatorcuff'], arm: ['biceps', 'triceps'],
+        lowerback: ['spinalerectors', 'erectors', 'ql', 'core'], upperback: ['upperback', 'lats'], abdomen: ['core', 'obliques']
+      };
+      const ALERT_ZONE = { ankle: 'ankle', hip: 'hip', hq: 'hamstring' };  // fms → general (no zone)
+      const MOBILITY_ZONES = new Set(['ankle', 'hip', 'shin', 'achilles']);
+      const ZONE_DISPLAY = { hamstring:'Hamstring', glute:'Glute', ankle:'Ankle', hip:'Hip', calf:'Calf', adductor:'Adductor', quadriceps:'Quadriceps', knee:'Knee', groin:'Groin', shoulder:'Shoulder', chest:'Chest', lowerback:'Lower back', upperback:'Upper back', abdomen:'Core', thigh:'Thigh', shin:'Shin', achilles:'Achilles', arm:'Arm' };
+      const zoneType    = zk => MOBILITY_ZONES.has(zk) ? 'mob' : 'str';
+      const zoneDisplay = zk => ZONE_DISPLAY[zk] || _cap(zk);
+
+      async function buildSuggestedPreventivePlan() {
+        const [ctx, alerts] = await Promise.all([
+          window.RehabCreate.buildInjuryRiskContext(plan.player_id, clubId),
+          window.RehabCreate.buildMobilityAlerts(plan.player_id, clubId)
+        ]);
+        // Focus zones: risk zones (weighted) + zones implied by screening alerts.
+        const focus = [], seen = new Set();
+        const addFocus = (zk, label, w) => { if (!zk || !ZONE_MUSCLES[zk] || seen.has(zk)) return; seen.add(zk); focus.push({ zk, label: label || zoneDisplay(zk), w }); };
+        (ctx.zones || []).forEach(z => addFocus(_normZone(z.zone), z.zone, (z.count || 1) * 10 + (_SEV[String(z.maxSeverity || '').toLowerCase()] || 0)));
+        (alerts || []).forEach(a => { const zk = ALERT_ZONE[a.test]; if (zk) addFocus(zk, null, 5); });
+        focus.sort((a, b) => b.w - a.w);
+        let picks = focus.slice(0, 3), generic = false;
+        if (!picks.length) { generic = true; picks = [{ zk: 'hamstring', label: null }, { zk: 'glute', label: null }, { zk: 'ankle', label: null }].map(p => ({ zk: p.zk, label: zoneDisplay(p.zk) })); }
+
+        // Preventive-usable exercises (club-scoped), grouped by normalized muscle_group.
+        const { data: lib } = await window.sb.from('gym_exercises')
+          .select('id,name,muscle_group').eq('club_id', clubId).contains('usable_in', ['preventive']).order('name');
+        const byMuscle = {};
+        (lib || []).forEach(e => { const k = _norm(e.muscle_group); (byMuscle[k] = byMuscle[k] || []).push(e); });
+        const pickExercises = zk => {
+          const out = [], used = new Set();
+          (ZONE_MUSCLES[zk] || []).forEach(mk => {
+            Object.keys(byMuscle).forEach(k => { if (k === mk || k.includes(mk)) byMuscle[k].forEach(e => { if (!used.has(e.id)) { used.add(e.id); out.push(e.name); } }); });
+          });
+          return out.slice(0, 4);
+        };
+        const genericFallback = () => (lib || []).slice(0, 3).map(e => e.name);
+        const mkSets = () => [
+          { reps: '10', load: '', tempo: '', rest: '60s' },
+          { reps: '10', load: '', tempo: '', rest: '60s' },
+          { reps: '10', load: '', tempo: '', rest: '60s' }
+        ];
+        const days = [0, 2, 4].map(n => new Date(currentWeekStart.getTime() + n * DAY).toISOString().slice(0, 10));
+        const sessions = picks.map((p, i) => {
+          let names = pickExercises(p.zk);
+          if (!names.length) names = genericFallback();
+          const exercises = names.map(nm => ({ name: nm, sets: mkSets() }));
+          return {
+            date: days[i % days.length],
+            block: { name: tt('preventive.block_name', '{zone} prevention', { zone: _cap(p.label) }), type: zoneType(p.zk), duration: 18, rpe: 6, exercises }
+          };
+        });
+        return { generic, sessions };
+      }
+
+      let _sugOv = null;
+      function showSuggestPreview(draft) {
+        if (!draft.sessions.length) { alert(tt('preventive.suggest_empty', 'No exercises available — check your preventive library.')); return; }
+        if (!_sugOv) {
+          _sugOv = document.createElement('div');
+          _sugOv.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9600;display:none;align-items:flex-start;justify-content:center;padding:7vh 16px;overflow:auto';
+          _sugOv.addEventListener('click', e => { if (e.target === _sugOv || e.target.closest('[data-close]')) _sugOv.style.display = 'none'; });
+          document.body.appendChild(_sugOv);
+        }
+        const fmt = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString((window.CM_I18N && CM_I18N.current) || 'en', { weekday: 'short', month: 'short', day: 'numeric' }); } catch (_) { return d; } };
+        const note = draft.generic ? tt('preventive.suggest_generic_note', 'No injury/screening data — generic prevention template. Edit freely after adding.')
+                                   : tt('preventive.suggest_note', 'Draft based on injury history + screening — edit freely after adding.');
+        const body = draft.sessions.map(s => {
+          const ex = s.block.exercises.map(e => '<li style="color:var(--cm-fg-muted)">' + _esc(e.name) + '</li>').join('');
+          return '<div style="border:1px solid var(--cm-border);border-radius:9px;padding:11px 13px;margin-bottom:9px">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">'
+            + '<strong style="font:600 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">' + _esc(s.block.name) + '</strong>'
+            + '<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + _esc(fmt(s.date)) + ' · ' + s.block.duration + "' · RPE " + s.block.rpe + '</span></div>'
+            + (ex ? '<ul style="margin:0;padding-left:18px;font:var(--cm-body-sm)">' + ex + '</ul>' : '') + '</div>';
+        }).join('');
+        _sugOv.innerHTML = '<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;width:520px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px;border-bottom:1px solid var(--cm-border)">'
+          + '<h3 style="margin:0;font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">' + _esc(tt('preventive.suggest_title', 'Suggested preventive draft')) + '</h3>'
+          + '<button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button></div>'
+          + '<div style="padding:16px 18px">'
+          + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:12px"><i class="ti ti-info-circle"></i> ' + _esc(note) + '</div>'
+          + body + '</div>'
+          + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border)">'
+          + '<button class="cm-btn is-ghost" data-close>' + _esc(tt('common.cancel', 'Cancel')) + '</button>'
+          + '<button class="cm-btn is-primary" id="sug-add"><i class="ti ti-plus"></i> ' + _esc(tt('preventive.add_to_week', 'Add to week')) + '</button></div></div>';
+        _sugOv.style.display = 'flex';
+        _sugOv.querySelector('#sug-add').addEventListener('click', async (e) => {
+          const btn = e.currentTarget; btn.disabled = true;
+          const rows = draft.sessions.map(s => ({
+            plan_id: planId, club_id: clubId, date: s.date,
+            name: s.block.name, color: TYPE_COLOR_MAP[s.block.type] || '#64748B',
+            duration_min: s.block.duration, block_count: s.block.exercises.length,
+            block_type: s.block.type, owner: 'sc', rpe_target: s.block.rpe,
+            exercises: s.block.exercises.length ? s.block.exercises : null
+          }));
+          const { error } = await window.sb.from('rehab_sessions').insert(rows);
+          if (error) { btn.disabled = false; console.error('[preventive] suggested insert failed:', error); alert(tt('preventive.suggest_failed', 'Could not add the draft') + ': ' + (error.message || error.code || '')); return; }
+          _sugOv.style.display = 'none';
+          await rpReloadWeek();
+        });
+      }
+
+      sugBtn.addEventListener('click', async () => {
+        sugBtn.disabled = true;
+        try { const draft = await buildSuggestedPreventivePlan(); showSuggestPreview(draft); }
+        catch (e) { console.error('[preventive] suggest plan failed:', e); alert(tt('preventive.suggest_failed', 'Could not build the draft')); }
+        finally { sugBtn.disabled = false; }
+      });
     })();
   }
 
