@@ -1850,6 +1850,23 @@ const _DASHBOARD_IDS = {
   mind: 'match_performance', mgrp: 'load_monitoring', mc: 'microcycle_compare',
 };
 
+// Static card ownership, captured ONCE from the PRISTINE HTML at parse time (this script runs after
+// the .gp-view markup, and before applyLayout/paste can move anything). Maps each static card's
+// data-card-id → its owning view. saveLayout uses it to NEVER persist a static card under a dashboard
+// it doesn't belong to (the cross-dashboard contamination: cards pasted/leaked into the wrong grid,
+// then cemented under the wrong dashboard_id, compounding "peor cada vez"). Builder cards (UUIDs) have
+// no static owner here → they pass through (their real dashboard can't be read from the DOM — see note).
+const _STATIC_CARD_OWNER = (() => {
+  const m = new Map();
+  document.querySelectorAll('.gp-view[data-view]').forEach(v => {
+    const view = v.dataset.view;
+    v.querySelectorAll('.gp-grid .gp-c[data-card-id]').forEach(c => {
+      if (c.dataset.cardId) m.set(c.dataset.cardId, view);
+    });
+  });
+  return m;
+})();
+
 async function saveLayout(viewKey, overrideDid) {
   const did = overrideDid || _DASHBOARD_IDS[viewKey];
   if (!did) { console.warn(`saveLayout(${viewKey}): unknown viewKey`); return; }
@@ -1860,7 +1877,17 @@ async function saveLayout(viewKey, overrideDid) {
     if (!uid || !cid) { console.warn(`saveLayout(${viewKey}): uid=${uid} cid=${cid} — skipping`); return; }
     const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
     if (!grid) { console.warn(`saveLayout(${viewKey}): grid not found`); return; }
-    const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => {
+    // OWNERSHIP FILTER (root-cause fix): never persist a card that belongs to ANOTHER dashboard.
+    // A static card whose HTML-fixed owner (_STATIC_CARD_OWNER) is a DIFFERENT view leaked into this
+    // grid (paste/contaminated mount) → drop it, don't cement it under this dashboard_id. This is
+    // DEFENSIVE: even if a foreign card is in the grid, saveLayout stops the compounding corruption.
+    // (Builder UUIDs have no static owner → kept; their true dashboard isn't readable from the DOM.)
+    const _kept = [...grid.querySelectorAll('.gp-c')].filter(el => {
+      const owner = _STATIC_CARD_OWNER.get(el.dataset.cardId);
+      if (owner && owner !== viewKey) { console.warn(`saveLayout(${viewKey}): dropping foreign card "${el.dataset.cardId}" (owner=${owner})`); return false; }
+      return true;
+    });
+    const layout = _kept.map((el, idx) => {
       const item = {
         card_id: _deriveCardId(el, idx),
         size: el.dataset.size || 'md',
