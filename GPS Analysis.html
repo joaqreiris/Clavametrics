@@ -1930,17 +1930,28 @@ const _layoutStrictCache = new Map();   // viewKey → layout (array | null), la
 async function _loadLayoutStrict(viewKey) {
   const did = _DASHBOARD_IDS[viewKey];
   if (!did || !window.sb) return { loaded: false, layout: null };
-  try {
-    const uid = await gpsGetUserId();
-    const cid = await window.getClubId?.();
-    if (!uid || !cid) return { loaded: false, layout: null };   // not ready → don't touch the layout
-    const { data, error } = await window.sb.from('gps_dashboard_layouts')
-      .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
-    if (error) { console.warn(`_loadLayoutStrict(${viewKey}): DB error — NOT touching layout:`, error.message); return { loaded: false, layout: null }; }
-    const layout = (data?.layout && data.layout.length) ? data.layout : null;
-    _layoutStrictCache.set(viewKey, layout);   // cache the confirmed result for the reorder pass
-    return { loaded: true, layout };
-  } catch (err) { console.warn(`_loadLayoutStrict(${viewKey}): load failed — NOT touching layout:`, err); return { loaded: false, layout: null }; }
+  // RETRY transient failures (uid/cid not ready yet, or a slow/contended DB — e.g. while a GPS sync
+  // is writing) before giving up. A loaded:false makes callers SKIP the reorder → cards reveal in raw
+  // dashboard_cards order = the post-sync scramble. Retrying (short backoff) keeps that from happening.
+  // Only a loaded:true (with layout array OR a genuine null = no saved layout) is authoritative.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const uid = await gpsGetUserId();
+      const cid = await window.getClubId?.();
+      if (uid && cid) {
+        const { data, error } = await window.sb.from('gps_dashboard_layouts')
+          .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
+        if (!error) {
+          const layout = (data?.layout && data.layout.length) ? data.layout : null;
+          _layoutStrictCache.set(viewKey, layout);   // confirmed result (array or genuine null)
+          return { loaded: true, layout };
+        }
+        console.warn(`_loadLayoutStrict(${viewKey}): DB error (attempt ${attempt + 1}/3):`, error.message);
+      }
+    } catch (err) { console.warn(`_loadLayoutStrict(${viewKey}): load failed (attempt ${attempt + 1}/3):`, err); }
+    if (attempt < 2) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));   // backoff, then retry
+  }
+  return { loaded: false, layout: null };   // persistent failure → callers must NOT reorder in raw order
 }
 
 // ── Restore helpers (size + order) ─────────────────────────────
@@ -3726,7 +3737,10 @@ async function _mountSavedBuilderCards(clubId) {
     let _coordsById = null;
     let _lay = null;
     try {
-      _lay = _layoutStrictCache.has(view) ? _layoutStrictCache.get(view) : await loadLayout(view);
+      // Use the retried strict load (same source applyDefault* cached) — NOT a bare loadLayout(),
+      // whose single transient null would skip the reorder below → raw-order scramble. A genuine
+      // "no saved layout" returns null too, but then there is nothing to reorder to (defaults apply).
+      _lay = _layoutStrictCache.has(view) ? _layoutStrictCache.get(view) : (await _loadLayoutStrict(view)).layout;
       _coordsById = new Map((_lay || [])
         .filter(c => [c.x, c.y, c.w, c.h].every(Number.isFinite))
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
@@ -4175,9 +4189,15 @@ async function _detectSmartDefault(clubId, userId) {
     // timeout is a SAFETY NET only (a hung fetch can't blank the dashboard forever) — the normal
     // flow resolves on the real mount, well before it fires.
     if (window.loadCardsForView && window.sb) {
+      // AWAIT the real mount (incl. its final _reorderGrid) so the reveal in the finally NEVER shows a
+      // pre-reorder (raw dashboard_cards) order. The timeout is an EMERGENCY net only (a hung fetch
+      // can't blank the dashboard forever) — raised WELL ABOVE any slow-but-real load (e.g. a DB
+      // contended by a running GPS sync), so the normal flow always resolves on the actual mount, not
+      // the timeout. If the DB makes the mount take 12s, we wait 12s and reveal ordered — never
+      // scrambled at 9s. Only a genuine >30s hang falls back to revealing without the reorder.
       await Promise.race([
         _mountSavedBuilderCards(clubId).catch(e => console.warn('_mountSavedBuilderCards:', e)),
-        new Promise(r => setTimeout(r, 9000)),   // safety net only — normal flow awaits the real mount
+        new Promise(r => setTimeout(r, 30000)),   // emergency net only
       ]);
     }
   } catch (e) {
