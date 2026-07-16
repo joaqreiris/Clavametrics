@@ -327,14 +327,21 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   const _athKey = (rw: Record<string, unknown>) => String(rw.athlete_id ?? (rw.athlete as Record<string, unknown>)?.id ?? rw.id ?? '');
   async function fetchStats(activityId: string, extra: string[], groupBy: string[], keyOf: (rw: Record<string, unknown>) => string): Promise<Record<string, unknown>[]> {
     const params = [...mappedSlugs, ...extra];
-    const merged = new Map<string, Record<string, unknown>>();
-    for (let i = 0; i < params.length; i += STATS_PARAM_BATCH) {
+    const batches: string[][] = [];
+    for (let i = 0; i < params.length; i += STATS_PARAM_BATCH) batches.push(params.slice(i, i + STATS_PARAM_BATCH));
+    // Run the parameter batches in PARALLEL (not serial): serial batching made each activity ~4×
+    // more round-trips end-to-end and the chunk overran the ~150s Edge wall-clock (job stuck at 0/1).
+    // Parallel → wall-clock ≈ the slowest single batch, not their sum. 429s still self-heal (L1 backoff).
+    const results = await Promise.all(batches.map(async (batch) => {
       const res = await fetchCatapult(`${baseUrl}/stats`, {
         method: 'POST', headers: { ...authH, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }], parameters: params.slice(i, i + STATS_PARAM_BATCH), group_by: groupBy }),
+        body: JSON.stringify({ filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }], parameters: batch, group_by: groupBy }),
       });
       if (!res.ok) throw new Error(`stats HTTP ${res.status}`);
-      const rows = (await res.json().catch(() => [])) as Record<string, unknown>[];
+      return (await res.json().catch(() => [])) as Record<string, unknown>[];
+    }));
+    const merged = new Map<string, Record<string, unknown>>();
+    for (const rows of results) {
       for (const rw of (Array.isArray(rows) ? rows : [])) {
         const k = keyOf(rw);
         if (!k) continue;
@@ -516,11 +523,11 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   }
 
   // ── Process activities in BOUNDED PARALLEL batches ──────────────────────
-  // BATCH_SIZE activities run concurrently (each ≈ 2 Catapult round-trips + writes); the old
-  // fully-serial loop was ~70% of the wall-clock. Bounded (NOT all-at-once) to respect Catapult
-  // rate limits — any 429 that still slips through self-heals via fetchCatapult's backoff (L1).
-  // One batch fully settles before the next starts → max BATCH_SIZE requests in flight.
-  const BATCH_SIZE = 5;
+  // BATCH_SIZE activities run concurrently; each now fans out its /stats into several PARALLEL
+  // parameter batches (see fetchStats), so peak in-flight ≈ BATCH_SIZE × (#param batches). Kept
+  // low (3) to bound that against Catapult rate limits — any 429 that slips through self-heals via
+  // fetchCatapult's backoff (L1). One activity-batch settles before the next starts.
+  const BATCH_SIZE = 3;
   const _t0 = Date.now();
   for (let i = 0; i < activities.length; i += BATCH_SIZE) {
     const results = await Promise.all(activities.slice(i, i + BATCH_SIZE).map(processActivity));
