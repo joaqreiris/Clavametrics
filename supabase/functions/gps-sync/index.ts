@@ -153,11 +153,9 @@ function normalizeMetrics(
 ) {
   // GENERIC seed slug. "Generic" = a key of SLUG_MAP (the auto-seed vocabulary, e.g.
   // acceleration_count); anything else is a club-specific slug (e.g. gen2_acceleration_band…).
-  // Ties within the same tier resolve to the FIRST slug in the deterministic .order() fetch
-  // → the winner never depends on Postgres row order. Non-core (EAV) keep append semantics.
   const isGenericSeed = (slug: string) => Object.prototype.hasOwnProperty.call(SLUG_MAP, slug);
   const core: Record<string, number> = {};
-  const corePrio: Record<string, number> = {};   // target → specificity of the slug that set it
+  const coreScore: Record<string, number> = {};   // target → collision score of the slug that set it
   const extras: { metric_key: string; value: number }[] = [];
   const slugs = new Set<string>([...mappedSlugs, ...Object.keys(row)]);
   for (const slug of slugs) {
@@ -168,15 +166,25 @@ function normalizeMetrics(
       continue;
     }
     const raw = readParam(row, slug);
-    if (raw == null) continue;
+    if (raw == null) continue;   // slug ABSENT from the response (or unparseable) → never competes
     const num = raw * map.conv;
     if (!isFinite(num)) continue;
     if (GPS_REPORT_COLS.has(map.target)) {
       const val = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
-      const prio = isGenericSeed(slug) ? 0 : 1;   // 1 = club-specific → beats the generic seed
-      if (corePrio[map.target] === undefined || prio > corePrio[map.target]) {
+      // TARGET COLLISION (several slugs → same core column). A slug absent from the API response
+      // never reaches here (readParam returned null above), so it can NEVER overwrite a slug that
+      // IS present. Among PRESENT slugs the winner is picked by SCORE, not by name/order:
+      //   • club-specific slug beats the generic seed (specificity is primary), THEN
+      //   • within the same tier, a present NON-ZERO reading beats a present ZERO — so a slug that
+      //     returns 0 can no longer block a slug carrying the real value (the HSR/VHSR/Sprint bug
+      //     from a2b39b8, where velocity_band* sorted last and lost to a 0-valued competitor), THEN
+      //   • final ties keep the FIRST slug in the deterministic .order(source_column_name) fetch.
+      // A legitimate 0 (e.g. a keeper with 0 sprint distance) is still written when its slug wins
+      // (no collision, or every competing slug is 0).
+      const score = (isGenericSeed(slug) ? 0 : 2) + (val !== 0 ? 1 : 0);
+      if (coreScore[map.target] === undefined || score > coreScore[map.target]) {
         core[map.target] = val;
-        corePrio[map.target] = prio;
+        coreScore[map.target] = score;
       }
     } else {
       extras.push({ metric_key: map.target, value: +num.toFixed(4) });
