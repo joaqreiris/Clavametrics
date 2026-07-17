@@ -2059,6 +2059,16 @@ async function _reconcileLayoutWithGrid(viewKey) {
   const hasDead    = [...layoutIds].some(id => !gridIds.has(id));   // layout entry with no card in the grid
   const hasMissing = [...gridIds].some(id => !layoutIds.has(id));   // grid card absent from the layout
   if (!hasDead && !hasMissing) return;             // already in sync → don't touch
+  console.log('[RECONCILE PROBE]', {
+    view: viewKey,
+    layoutFromDb: layout,
+    gridCards: [...grid.querySelectorAll('[data-card-id]')].map(el => ({
+      id: el.dataset.cardId,
+      x: el.dataset.x, y: el.dataset.y, w: el.dataset.w, h: el.dataset.h
+    })),
+    dead: hasDead,
+    missing: hasMissing
+  });
   console.warn(`_reconcileLayoutWithGrid(${viewKey}): healing stale layout (dead=${hasDead}, missing=${hasMissing})`);
   // Re-persist from the CURRENT grid: saveLayout serializes the present .gp-c (auto-pruning dead ids —
   // they're not in the DOM — and adding current ones), keyed by the real card_id (_deriveCardId).
