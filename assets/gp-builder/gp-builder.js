@@ -745,6 +745,7 @@
         const fresh = delBtn.cloneNode(true);
         const cardRef = card;
         fresh.addEventListener('click', () => {
+          if (!window.confirm(window.tt ? window.tt('gp.card.deleteConfirm', 'Delete this card? This cannot be undone.') : 'Delete this card? This cannot be undone.')) return;
           const view = cardRef.closest('.gp-view')?.dataset.view;
           cardRef.remove();
           if (window.deleteDashboardCard && _isUuid(cardRef.dataset.cardId)) {
@@ -824,6 +825,7 @@
         const freshE = delBtnE.cloneNode(true);
         const cardRefE = targetCard;
         freshE.addEventListener('click', () => {
+          if (!window.confirm(window.tt ? window.tt('gp.card.deleteConfirm', 'Delete this card? This cannot be undone.') : 'Delete this card? This cannot be undone.')) return;
           const host = cardRefE.closest('.gp-view');
           const view = host?.dataset.view;
           const cardId = cardRefE.dataset.cardId;
@@ -902,6 +904,7 @@
       const fresh = delBtn.cloneNode(true);
       delBtn.replaceWith(fresh);
       fresh.addEventListener('click', () => {
+        if (!window.confirm(window.tt ? window.tt('gp.card.deleteConfirm', 'Delete this card? This cannot be undone.') : 'Delete this card? This cannot be undone.')) return;
         const host = savedCard.closest('.gp-view');
         const view = host?.dataset.view;
         const cardId = savedCard.dataset.cardId;

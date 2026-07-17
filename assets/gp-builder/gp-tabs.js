@@ -509,6 +509,7 @@
     });
 
     el.querySelector('[data-del]')?.addEventListener('click', () => {
+      if (!window.confirm(window.tt ? window.tt('gp.card.deleteConfirm', 'Delete this card? This cannot be undone.') : 'Delete this card? This cannot be undone.')) return;
       const host = el.closest('.gp-view');
       el.remove();
       syncEmptyState(host);
