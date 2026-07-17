@@ -354,9 +354,14 @@
     // provisional auto-flow coords, and saving now would cement a scrambled state. The host page
     // sets window._gpLayoutReady=false during load and true once the authoritative pass ran.
     // (=== false only — undefined means "no host gating" → persist normally.)
-    if (window._gpLayoutReady === false) return;
+    if (window._gpLayoutReady === false) { window.showToast?.('⚠︎ autosave OFF (layout no listo)'); return; }
     const view = card.closest('.gp-view') && card.closest('.gp-view').dataset.view;
-    if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
+    if (!view) { window.showToast?.('⚠︎ autosave: sin view'); return; }
+    if (typeof window.saveLayout !== 'function') { window.showToast?.('⚠︎ autosave: saveLayout ausente'); return; }
+    // TEMP DIAGNOSTIC (visible): confirm the drag/resize drop actually fires a save.
+    Promise.resolve(window.saveLayout(view))
+      .then(() => window.showToast?.('✓ autoguardado (' + view + ')'))
+      .catch(e => window.showToast?.('✗ autosave error: ' + (e?.message || e), true));
   }
 
   // ── render ───────────────────────────────────────────────────────────────
