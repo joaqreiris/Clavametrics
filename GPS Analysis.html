@@ -2011,6 +2011,46 @@ function _reorderGrid(grid, layout) {
   if (addBtn) grid.appendChild(addBtn);
 }
 
+// ── Self-heal: reconcile the saved layout with the ACTUAL cards in the grid ──────
+// STRUCTURAL FIX for the scramble. The whole restore pipeline (reorder + coords) keys off card_id.
+// If the saved layout holds ids that no longer exist in the grid (the dashboard's cards changed but
+// the layout kept the OLD ids = STALE), every card_id lookup misses → cards fall to position 9999 /
+// coordless auto-flow = scramble. Until now sync happened only on create/delete (8edac09), never on
+// LOAD, so a layout that went stale by any other path stayed broken forever.
+//
+// This runs AFTER all cards are mounted (static + builder) and BEFORE the reveal: it prunes dead ids
+// and adds cards missing from the layout, then RE-PERSISTS so the DB is healed and the NEXT load is
+// stable. Safeguards, so it composes with the existing 6 fixes instead of replacing them:
+//   • Only touches a view whose layout LOADED successfully (cache present). A transient failure
+//     (retry×3 exhausted → not cached) is skipped → never rewrites the layout on a failed load.
+//   • Foreign cards (another dashboard's, per _STATIC_CARD_OWNER — 6b0b1d5) are EXCLUDED from the
+//     grid set, so reconciliation never pulls a leaked card into this dashboard.
+//   • Re-persist reuses saveLayout → same ownership filter + same real-vs-invented coord rule
+//     (5efc269): cards that already carry real coords (set by applyDefault*/mount) keep them; new/
+//     stale cards stay coordless = deterministic auto-flow. No coords are ever lost on a healthy view
+//     (a healthy view is already in sync → no rewrite fires at all).
+async function _reconcileLayoutWithGrid(viewKey) {
+  if (!_layoutStrictCache.has(viewKey)) return;   // load failed / not ready → never rewrite
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+  // Grid card_ids that saveLayout WOULD keep (same ownership filter as 6b0b1d5 — skip foreign).
+  const gridIds = new Set();
+  [...grid.querySelectorAll('.gp-c')].forEach((el, i) => {
+    const owner = _STATIC_CARD_OWNER.get(el.dataset.cardId);
+    if (owner && owner !== viewKey) return;        // foreign card → not this dashboard's
+    gridIds.add(_deriveCardId(el, i));
+  });
+  const layout    = _layoutStrictCache.get(viewKey) || [];
+  const layoutIds = new Set(layout.map(c => String(c.card_id)));
+  const hasDead    = [...layoutIds].some(id => !gridIds.has(id));   // layout entry with no card in the grid
+  const hasMissing = [...gridIds].some(id => !layoutIds.has(id));   // grid card absent from the layout
+  if (!hasDead && !hasMissing) return;             // already in sync → don't touch
+  console.warn(`_reconcileLayoutWithGrid(${viewKey}): healing stale layout (dead=${hasDead}, missing=${hasMissing})`);
+  // Re-persist from the CURRENT grid: saveLayout serializes the present .gp-c (auto-pruning dead ids —
+  // they're not in the DOM — and adding current ones), keyed by the real card_id (_deriveCardId).
+  await saveLayout(viewKey).catch(e => console.warn(`_reconcileLayoutWithGrid(${viewKey}) save:`, e));
+}
+
 // ── Apply saved layout to a view (metric_key per card) ─────────
 async function applyLayoutToView(viewKey) {
   const layout = await loadLayout(viewKey);
@@ -4227,6 +4267,16 @@ async function _detectSmartDefault(clubId, userId) {
         new Promise(r => setTimeout(r, 30000)),   // emergency net only
       ]);
     }
+    // SELF-HEAL (structural fix): now that every card is mounted (static + builder), reconcile each
+    // view's saved layout with the cards actually in its grid — prune dead ids, add missing cards,
+    // re-persist. Without this, a STALE layout (ids that no longer match the grid) makes the whole
+    // reorder/coords pipeline miss → auto-flow scramble. Runs BEFORE the reveal so the DB is healed
+    // for the next load; this load already shows a deterministic order. Composes with the existing
+    // fixes (respects the load-success cache + the ownership filter) — see _reconcileLayoutWithGrid.
+    await Promise.all(
+      ['ind', 'grp', 'mind', 'mgrp', 'mc'].map(v =>
+        _reconcileLayoutWithGrid(v).catch(e => console.warn('_reconcileLayoutWithGrid:', v, e)))
+    );
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
