@@ -3840,10 +3840,10 @@ async function _mountSavedBuilderCards(clubId) {
     const _mp = [];   // TEMP probe
     for (const card of builderCards) {
       const config = card.config;
-      if (!config || config.schema !== 'gp.card/v1') continue;
+      if (!config || config.schema !== 'gp.card/v1') { _mp.push(String(card.id).slice(0,8)+':SKIP-schema='+((config&&config.schema)||'none')); continue; }   // TEMP probe
 
       // Si ya hay un elemento para esta card.id en la grilla, no crear otro (evita duplicado).
-      if (grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`)) continue;
+      if (grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`)) { _mp.push(String(card.id).slice(0,8)+':SKIP-dedup'); continue; }   // TEMP probe
 
       const el = window.gpBuildBuilderCardEl(config, card.id);
       el.dataset.size = card.size || config.style?.size || 'md';
