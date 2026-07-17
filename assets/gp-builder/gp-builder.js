@@ -21,7 +21,7 @@
   // dimMax = how many DIMENSIONS (grouping/axis fields) this viz accepts.
   // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
-    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 8,  dimMax: 0 },
+    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     // `roles`: ordered encoding table (data-driven role resolver — resolveEncodings()). Only
@@ -3512,11 +3512,8 @@
   function mountKpiCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
     const d = kpiCardData(config, series, opts);
-    if (!d.single) {                                  // multi-metric → row of KPIs, no sparkline
-      body.innerHTML = kpiMultiHtml(d.items);
-      if (opts.example) _appendExampleBadge(body);
-      return;
-    }
+    // KPI is single-metric now. An OLD saved card may still carry >1 metric → render only the
+    // FIRST (config/DB untouched; editing it collapses to 1 via VIZ_TYPES.kpi.max=1). No multi-tile row.
     const item = d.items[0] || { value: 0, unit: '', name: '', aggName: '', scope: config.scope?.level || '', icon: VIZ_TYPES.kpi.icon, cmpName: '', delta: null };
     const spark = Array.isArray(opts.sparkSeries) && opts.sparkSeries.length >= 2;
     body.innerHTML = kpiHtml(item, spark);

@@ -381,6 +381,18 @@
     display:inline-flex; align-items:center; justify-content:center;
   }
   .gp-kpi-actions > button:hover { color:var(--cm-fg-strong); border-color:var(--cm-border); background:var(--cm-bg-soft); }
+  /* ── KPI card (Chart Builder): fixed compact 2×3 tile, single number centered ─────────
+     NOT resizable (handles hidden) but still movable. Content = label + big number + unit,
+     centered; the comparison/subtitle (.t) and the sparkline are hidden to keep the small tile
+     clean. Size is forced via CSS vars (KPI-only, !important) — no engine/span/persistence change
+     and position (x/y) is untouched. Independent of the ≥168px @container block (never fires here). */
+  .gp-grid.is-canvas .gp-c:has(> .gp-c-b.gp-kpi) { --gp-w:2 !important; --gp-h:3 !important; }
+  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rh { display:none !important; pointer-events:none !important; }
+  .gp-grid.is-canvas .gp-c-b.gp-kpi { justify-content:center; align-items:center; text-align:center; padding:8px 10px; }
+  .gp-grid.is-canvas .gp-c-b.gp-kpi .l { justify-content:center; margin-bottom:4px; white-space:nowrap; max-width:100%; overflow:hidden; }
+  .gp-grid.is-canvas .gp-c-b.gp-kpi .v { font-size:clamp(18px, min(32cqh, 26cqw), 42px); white-space:nowrap; max-width:100%; }
+  .gp-grid.is-canvas .gp-c-b.gp-kpi .t,
+  .gp-grid.is-canvas .gp-c-b.gp-kpi .gp-kpi-spark { display:none; }
   .gp-kpi-actions > button .ti { font-size:13px; }
 
   .gp-zwrap { overflow:auto; min-width:0; max-width:100%; max-height:100%; }   /* sole scroller → sticky header works */
