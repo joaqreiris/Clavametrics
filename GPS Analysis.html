@@ -3841,6 +3841,10 @@ async function _mountSavedBuilderCards(clubId) {
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
+      console.log('[COORD PROBE]', view, 'card.id=', card.id,
+        '_lay.len=', _lay?.length,
+        'coordKeys=', _coordsById ? [..._coordsById.keys()] : null,
+        '_co=', _co);
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
