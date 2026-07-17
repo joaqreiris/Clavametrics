@@ -230,6 +230,11 @@
   .gp-c.gp-c-selected,
   .gp-grid.is-canvas .gp-c.gp-c-selected,
   .gp-grid.is-canvas.is-edit .gp-c.gp-c-selected:hover { border-color:var(--cm-accent); box-shadow:0 0 0 2px var(--cm-focus-ring, color-mix(in srgb, var(--cm-accent) 38%, transparent)), var(--cm-shadow-2); outline:none; }
+  /* Multi-select (2+ cards): accent ring; live marquee highlight; group-drag lift; rubber-band box. */
+  .gp-c.is-multi-selected,
+  .gp-c.is-marquee-hit { border-color:var(--cm-accent); box-shadow:0 0 0 2px var(--cm-focus-ring, color-mix(in srgb, var(--cm-accent) 34%, transparent)); outline:none; }
+  .gp-c.is-multi-dragging { z-index:2000; opacity:.96; box-shadow:var(--cm-shadow-3); }
+  .gp-marquee { position:fixed; z-index:9999; pointer-events:none; border:1.5px solid var(--cm-accent); background:color-mix(in srgb, var(--cm-accent) 12%, transparent); border-radius:3px; }
   .gp-grid.is-canvas .gp-c.gp-mv-active { box-shadow:var(--cm-shadow-3); transform:scale(1.02) rotate(-1deg); }
   /* header chrome: drag cursor + reveal action buttons on hover/active */
   .gp-grid.is-canvas.is-edit .gp-c .gp-c-h { cursor:grab; }
@@ -2915,7 +2920,7 @@ async function openChangeMetricModal(card) {
 // interrupted — the pointer stream is hijacked, capture is lost, or a handler throws
 // mid-gesture — leaving a card stuck. Sweep these off ALL cards on every gesture-end
 // path so nothing stays "pegado".
-const _GP_STUCK = ['gp-mv-active', 'gp-rh-active', 'is-dragging', 'gpt-dragging', 'gpt-drag-over'];
+const _GP_STUCK = ['gp-mv-active', 'gp-rh-active', 'is-dragging', 'gpt-dragging', 'gpt-drag-over', 'is-multi-dragging'];
 function _gpClearDragArtifacts() {
   // Clear the stuck edit classes AND the inline z-index lift the canvas engine sets
   // while moving/resizing (card.style.zIndex = 2000+…), so a card never stays faded
@@ -3347,6 +3352,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
 function _gpCardAnchor(card) { return card.querySelector('.gp-c-h .right > button') || card; }
 window.gpOpenCardEditor = function (card) {
   if (!card || card.classList.contains('gp-add')) return;
+  if (window._gpSelection && window._gpSelection.size > 1) return;   // multi-selection → no editor
   // 1) Builder / chart cards (gp.card/v1) → the chart builder.
   if (card.dataset.card === 'chart' || card.__config) { window.GpBuilder?.openForEdit?.(card); return; }
   // 2) Science cards with a dedicated editor → open it directly (what the pencil used to do).
@@ -3370,18 +3376,46 @@ window.gpOpenCardEditor = function (card) {
 // is selected at a time. Selection drives Cmd+C/X/V/D. Held in a live element ref (pasted
 // cards may lack an id attribute), mirrored to window.__gpSelectedCardId for compatibility.
 let _gpSelectedCard = null;
+// MULTI-SELECT: the selection is a SET of card elements. size===1 is the classic single-select
+// (keeps .gp-c-selected + _gpSelectedCard so the editor + Cmd+C/X/V/D keep working); size>=2 marks
+// .is-multi-selected and clears _gpSelectedCard (editor/clipboard act on a single card only).
+window._gpSelection = window._gpSelection || new Set();
+let _gpMarquee = null;    // rubber-band state (declared here so the empty-canvas handler below can use it)
+let _gpGroupDrag = null;  // group-drag state
+function _gpSyncSelection() {
+  const arr = [...window._gpSelection].filter(el => el && el.isConnected && !el.classList.contains('gp-add'));
+  window._gpSelection = new Set(arr);
+  document.querySelectorAll('.gp-c-selected, .gp-c.is-multi-selected')
+    .forEach(c => c.classList.remove('gp-c-selected', 'is-multi-selected'));
+  if (arr.length === 1) {
+    arr[0].classList.add('gp-c-selected');
+    _gpSelectedCard = arr[0];
+    window.__gpSelectedCardId = arr[0].id || arr[0].dataset.cardId || null;
+  } else {
+    arr.forEach(el => el.classList.add('is-multi-selected'));
+    _gpSelectedCard = null;
+    window.__gpSelectedCardId = null;
+  }
+}
 window.gpSelectCard = function (card) {
   if (!card || card.classList.contains('gp-add')) return;
-  document.querySelectorAll('.gp-c-selected').forEach(c => { if (c !== card) c.classList.remove('gp-c-selected'); });
-  card.classList.add('gp-c-selected');
-  _gpSelectedCard = card;
-  window.__gpSelectedCardId = card.id || card.dataset.cardId || null;
+  window._gpSelection = new Set([card]);
+  _gpSyncSelection();
 };
 window.gpDeselectCards = function () {
-  document.querySelectorAll('.gp-c-selected').forEach(c => c.classList.remove('gp-c-selected'));
-  _gpSelectedCard = null;
-  window.__gpSelectedCardId = null;
+  window._gpSelection = new Set();
+  _gpSyncSelection();
 };
+// Grid metrics (px per column/row) — same formula as gp-canvas.gridMetrics, recomputed here so the
+// group drag snaps to the SAME grid without touching the engine.
+function _gpGridMetrics(grid) {
+  const COLS = window.gpCanvas?.COLS || 12, ROW_PX = window.gpCanvas?.ROW_PX || 36;
+  const cs = getComputedStyle(grid);
+  const colGap = parseFloat(cs.columnGap || cs.gap) || 14;
+  const rowGap = parseFloat(cs.rowGap || cs.gap) || 14;
+  const colW = (grid.clientWidth - colGap * (COLS - 1)) / COLS;
+  return { colStep: colW + colGap, rowStep: ROW_PX + rowGap, COLS };
+}
 // Double-click → open the editor (no need to select first). Same exclusions as drag/select
 // so internal controls keep their own behavior.
 document.addEventListener('dblclick', e => {
@@ -3392,13 +3426,15 @@ document.addEventListener('dblclick', e => {
   window.gpSelectCard(card);
   window.gpOpenCardEditor(card);
 });
-// Click on empty dashboard area (not a card / control / panel / toolbar) → deselect.
+// Pointerdown on empty dashboard area (not a card / control / panel / toolbar) → start a rubber-band
+// MARQUEE. A plain click (no drag) deselects on pointerup (previous behaviour); a drag selects the
+// intersected cards (Shift adds to the current selection).
 document.addEventListener('pointerdown', e => {
   const t = e.target;
-  if (!t.closest) return;
-  if (t.closest('.gp-c')) return;                                                    // a card → selection handled on pointerup
+  if (e.button !== 0 || !t.closest) return;
+  if (t.closest('.gp-c')) return;                                                    // a card → handled by the card pointerdown below
   if (t.closest('#gpbPanel, .gp-modal-overlay, .gp-popover, .gp-src-drawer, .gp-dash-bar, .hub-topbar, .hub-sidebar')) return;
-  window.gpDeselectCards();
+  _gpMarquee = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, additive: e.shiftKey, moved: false, overlay: null };
 }, true);
 // ESC → deselect; close transient card editors (popovers + the topmost modal). The builder
 // panel owns its own ESC / click-outside (gp-builder.js).
@@ -3409,6 +3445,98 @@ document.addEventListener('keydown', e => {
   const ov = [...document.querySelectorAll('.gp-modal-overlay')].pop();
   if (ov) ov.remove();
 });
+
+// ── 4b·3. MULTI-SELECT: Cmd/Ctrl-click toggle + group drag (marquee finishes below) ──────────────
+// Additive to the single-select engine: reuses window.gpCanvas.applyCoords (move) + saveLayout
+// (persist, which already freezes ALL cards' coords). Does NOT touch gp-canvas.js and never
+// reintroduces `span`. We only PRE-EMPT gp-canvas (stopPropagation) in the two multi cases below;
+// every other press falls through untouched to the existing single-card path.
+const _GP_CTRL_SEL = 'button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-c-picks, .gp-rh, .gp-kpi-actions';
+document.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !e.target.closest) return;
+  const card = e.target.closest('.gp-c');
+  if (!card || card.classList.contains('gp-add') || e.target.closest(_GP_CTRL_SEL)) return;
+  // Cmd/Ctrl-click → toggle membership; no editor, no single-select.
+  if (e.metaKey || e.ctrlKey) {
+    e.stopPropagation();
+    if (window._gpSelection.has(card)) window._gpSelection.delete(card); else window._gpSelection.add(card);
+    _gpSyncSelection();
+    return;
+  }
+  // Press on a card that's part of a 2+ selection → drag the WHOLE group.
+  if (window._gpSelection.has(card) && window._gpSelection.size >= 2) {
+    const grid = card.closest('.gp-grid');
+    if (!grid || !grid.classList.contains('is-canvas') || window.innerWidth <= 1000) return;   // match gp-canvas canInteract
+    e.stopPropagation();
+    const { colStep, rowStep, COLS } = _gpGridMetrics(grid);
+    const cards = [...window._gpSelection]
+      .filter(el => el.isConnected && el.closest('.gp-grid') === grid)
+      .map(el => ({ el, x: +el.dataset.x || 0, y: +el.dataset.y || 0, w: +el.dataset.w || 2, h: +el.dataset.h || 3 }));
+    _gpGroupDrag = { pointerId: e.pointerId, startPX: e.clientX, startPY: e.clientY, colStep, rowStep, COLS,
+                     view: grid.closest('.gp-view')?.dataset.view, anchor: card, cards, moved: false };
+    cards.forEach(c => c.el.classList.add('is-multi-dragging'));
+    try { card.setPointerCapture(e.pointerId); } catch (_) {}
+    return;
+  }
+  // Press on a card OUTSIDE an active multi-selection → collapse to just this card, then let
+  // gp-canvas drag/select it as usual. Scoped to size>=2 so single-card use is byte-for-byte unchanged.
+  if (window._gpSelection.size >= 2) window.gpSelectCard(card);   // no stopPropagation → engine handles the drag/click
+}, true);
+
+document.addEventListener('pointermove', e => {
+  if (_gpGroupDrag && e.pointerId === _gpGroupDrag.pointerId) {
+    const g = _gpGroupDrag;
+    const dCol = Math.round((e.clientX - g.startPX) / g.colStep);
+    const dRow = Math.round((e.clientY - g.startPY) / g.rowStep);
+    if (dCol || dRow) g.moved = true;
+    g.cards.forEach(c => {                                     // per-card clamp — each stays in-grid; overlaps allowed (as single-card today)
+      const nx = Math.max(0, Math.min(c.x + dCol, g.COLS - c.w));
+      const ny = Math.max(0, c.y + dRow);
+      window.gpCanvas?.applyCoords?.(c.el, { x: nx, y: ny, w: c.w, h: c.h });
+    });
+    return;
+  }
+  if (_gpMarquee && e.pointerId === _gpMarquee.pointerId) {
+    const m = _gpMarquee;
+    if (Math.abs(e.clientX - m.startX) > 4 || Math.abs(e.clientY - m.startY) > 4) m.moved = true;
+    if (!m.moved) return;
+    if (!m.overlay) { m.overlay = document.createElement('div'); m.overlay.className = 'gp-marquee'; document.body.appendChild(m.overlay); }
+    const x = Math.min(e.clientX, m.startX), y = Math.min(e.clientY, m.startY);
+    const w = Math.abs(e.clientX - m.startX), h = Math.abs(e.clientY - m.startY);
+    m.overlay.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+    const grid = document.querySelector('.gp-view.is-on .gp-grid');
+    if (grid) grid.querySelectorAll('.gp-c:not(.gp-add)').forEach(cardEl => {
+      const r = cardEl.getBoundingClientRect();
+      cardEl.classList.toggle('is-marquee-hit', !(r.right < x || r.left > x + w || r.bottom < y || r.top > y + h));
+    });
+  }
+});
+
+function _gpMultiPointerUp(e) {
+  if (_gpGroupDrag && (e.pointerId == null || e.pointerId === _gpGroupDrag.pointerId)) {
+    const g = _gpGroupDrag; _gpGroupDrag = null;
+    g.cards.forEach(c => c.el.classList.remove('is-multi-dragging'));
+    if (g.moved && g.view && typeof window.saveLayout === 'function') window.saveLayout(g.view).catch(() => {});
+    else if (!g.moved) window.gpSelectCard(g.anchor);          // click (no drag) on a grouped card → collapse to single
+  }
+  if (_gpMarquee && (e.pointerId == null || e.pointerId === _gpMarquee.pointerId)) {
+    const m = _gpMarquee; _gpMarquee = null;
+    if (m.overlay) m.overlay.remove();
+    const grid = document.querySelector('.gp-view.is-on .gp-grid');
+    if (m.moved && grid) {
+      const hits = [...grid.querySelectorAll('.gp-c.is-marquee-hit')];
+      grid.querySelectorAll('.is-marquee-hit').forEach(c => c.classList.remove('is-marquee-hit'));
+      if (!m.additive) window._gpSelection = new Set();
+      hits.forEach(c => window._gpSelection.add(c));
+      _gpSyncSelection();
+    } else {
+      window.gpDeselectCards();                                // plain click on empty canvas → deselect (previous behaviour)
+    }
+  }
+}
+document.addEventListener('pointerup', _gpMultiPointerUp, true);
+document.addEventListener('pointercancel', _gpMultiPointerUp, true);
+document.addEventListener('lostpointercapture', _gpMultiPointerUp, true);
 
 // ── 4c. Copy / cut / paste builder cards (Cmd/Ctrl + C / X / V) ───────────────
 // Operates on the gp.card/v1 CONFIG (the source of truth), not the DOM node. Internal
