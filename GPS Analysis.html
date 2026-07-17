@@ -3841,14 +3841,17 @@ async function _mountSavedBuilderCards(clubId) {
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
-      console.log('[COORD PROBE]', view, 'card.id=', card.id,
-        '_lay.len=', _lay?.length,
-        'coordKeys=', _coordsById ? [..._coordsById.keys()] : null,
-        '_co=', _co);
+      console.log('[COORD PROBE]', { view, cardId: String(card.id),
+        layLen: (_lay||[]).length,
+        coordKeys: _coordsById ? [..._coordsById.keys()] : null,
+        hit: !!_co, co: _co });
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
+        console.log('[COORD PROBE] IF → aplicado', String(card.id),
+          { x: el.dataset.x, y: el.dataset.y, w: el.dataset.w, h: el.dataset.h });
       } else {
+        console.log('[COORD PROBE] ELSE → auto-flow', String(card.id));
         // No saved coords: these cards mount AFTER the grid is visible (layout-ready), so a
         // card would paint once at the CSS default (span 6 / row 11 = huge) before gp-canvas
         // assigns it a slot → the visual "explosion". Seed the SIZE from its bucket (same
