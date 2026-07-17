@@ -1900,7 +1900,9 @@ async function saveLayout(viewKey, overrideDid) {
       const item = {
         card_id: _deriveCardId(el, idx),
         size: el.dataset.size || 'md',
-        span: window.gpSpanOf ? window.gpSpanOf(el) : (parseInt(el.dataset.span, 10) || undefined),
+        // `span` is NO LONGER persisted as an independent width source — it used to contradict the
+        // coord `w` (stale span:6 vs w:12) and win at mount, painting cards half-width (auto-flow look).
+        // Width is driven solely by w/x/y/h below; legacy readers derive span from w (see gpSpanOf).
         position: idx,
         config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
       };
@@ -2059,16 +2061,6 @@ async function _reconcileLayoutWithGrid(viewKey) {
   const hasDead    = [...layoutIds].some(id => !gridIds.has(id));   // layout entry with no card in the grid
   const hasMissing = [...gridIds].some(id => !layoutIds.has(id));   // grid card absent from the layout
   if (!hasDead && !hasMissing) return;             // already in sync → don't touch
-  console.log('[RECONCILE PROBE]', {
-    view: viewKey,
-    layoutFromDb: layout,
-    gridCards: [...grid.querySelectorAll('[data-card-id]')].map(el => ({
-      id: el.dataset.cardId,
-      x: el.dataset.x, y: el.dataset.y, w: el.dataset.w, h: el.dataset.h
-    })),
-    dead: hasDead,
-    missing: hasMissing
-  });
   console.warn(`_reconcileLayoutWithGrid(${viewKey}): healing stale layout (dead=${hasDead}, missing=${hasMissing})`);
   // Re-persist from the CURRENT grid: saveLayout serializes the present .gp-c (auto-pruning dead ids —
   // they're not in the DOM — and adding current ones), keyed by the real card_id (_deriveCardId).
@@ -3851,25 +3843,22 @@ async function _mountSavedBuilderCards(clubId) {
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
-      console.log('[COORD PROBE]', { view, cardId: String(card.id),
-        layLen: (_lay||[]).length,
-        coordKeys: _coordsById ? [..._coordsById.keys()] : null,
-        hit: !!_co, co: _co });
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
-        console.log('[COORD PROBE] IF → aplicado', String(card.id),
-          { x: el.dataset.x, y: el.dataset.y, w: el.dataset.w, h: el.dataset.h });
       } else {
-        console.log('[COORD PROBE] ELSE → auto-flow', String(card.id));
-        // No saved coords: these cards mount AFTER the grid is visible (layout-ready), so a
-        // card would paint once at the CSS default (span 6 / row 11 = huge) before gp-canvas
-        // assigns it a slot → the visual "explosion". Seed the SIZE from its bucket (same
-        // width cols + row heights gp-canvas uses) so it's born at its real size; gp-canvas
-        // then only sets x/y. NB: we never hide the card — it's always visible.
+        // No saved coords: seed the SIZE bucket so the card is born at its real WIDTH; gp-canvas only
+        // auto-flows x/y. Write dataset.w/h (not just the CSS vars) so placeCards reads real numbers
+        // instead of NaN, and mirror --gp-span to w so the legacy CSS width path agrees. x/y stay
+        // unset on purpose (no saved position → deterministic auto-flow places it).
         const _sz = el.dataset.size || 'md';
-        el.style.setProperty('--gp-w', { sm:4, md:6, lg:8, full:12 }[_sz] || 6);
-        el.style.setProperty('--gp-h', { sm:5, md:7, lg:10, full:13 }[_sz] || 7);
+        const _w = { sm:4, md:6, lg:8, full:12 }[_sz] || 6;
+        const _h = { sm:5, md:7, lg:10, full:13 }[_sz] || 7;
+        el.dataset.w = _w; el.dataset.h = _h;
+        el.dataset.span = String(_w);
+        el.style.setProperty('--gp-w', _w);
+        el.style.setProperty('--gp-h', _h);
+        el.style.setProperty('--gp-span', _w);
       }
 
       grid.appendChild(el);

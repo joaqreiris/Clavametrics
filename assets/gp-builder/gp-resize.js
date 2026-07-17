@@ -31,6 +31,11 @@
 
   // ── public: read the current span of a card ──────────────────────
   function gpSpanOf(card) {
+    // Width is canonical from the coord w (dataset.w): derive span FROM w whenever it exists so span
+    // is never an independent source that can contradict the real width. Fall back to the stored span
+    // / size bucket only for coordless (auto-flow) cards.
+    const w = parseInt(card.dataset.w, 10);
+    if (w >= 1 && w <= COLS) return w;
     const s = parseInt(card.dataset.span, 10);
     if (s >= 1 && s <= COLS) return s;
     return spanFromSize(card.dataset.size || 'md', card.classList.contains('is-table'));
@@ -58,7 +63,13 @@
   // ── init a card: seed --gp-span from span/size (NO handle here) ────
   function initCard(card) {
     if (!card || card.classList.contains('gp-add')) return;
-    if (!card.dataset.span) {
+    // Prefer the canonical coord width (dataset.w): seed span FROM w so the legacy --gp-span path
+    // agrees with the real width. This observer can fire AFTER the coords are applied; without this it
+    // would clobber --gp-span back to the size bucket (6) and re-break a full-width (w:12) card.
+    const w = parseInt(card.dataset.w, 10);
+    if (w >= 1 && w <= COLS) {
+      card.dataset.span = String(w);
+    } else if (!card.dataset.span) {
       card.dataset.span = String(spanFromSize(card.dataset.size || 'md', card.classList.contains('is-table')));
     }
     card.style.setProperty('--gp-span', card.dataset.span);

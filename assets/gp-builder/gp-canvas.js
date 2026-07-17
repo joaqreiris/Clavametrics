@@ -69,6 +69,12 @@
     card.style.setProperty('--gp-y', item.y);
     card.style.setProperty('--gp-w', item.w);
     card.style.setProperty('--gp-h', item.h);
+    // UNIFIED WIDTH MODEL: width is driven by w (coords). Mirror the legacy span vars to w so the
+    // non-canvas CSS path (grid-column: span var(--gp-span,6)) can never contradict the real width —
+    // a stale span:6 next to w:12 used to win at mount and paint the card half-width (auto-flow look).
+    const _span = Math.max(1, Math.min(COLS, item.w));
+    card.dataset.span = String(_span);
+    card.style.setProperty('--gp-span', _span);
   }
   function readCoords(card) {
     return { x: +card.dataset.x || 0, y: +card.dataset.y || 0,
