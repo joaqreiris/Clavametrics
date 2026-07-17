@@ -3807,10 +3807,12 @@ async function _mountSavedBuilderCards(clubId) {
       cards = await window.loadCardsForView(clubId, REPORT_TYPES[view], window.sb);
     } catch (e) { console.warn('_mountSavedBuilderCards:', view, e); continue; }
 
-    if (!cards?.length) continue;
+    if (!cards?.length) { if (view === 'ind') window.__mp = 'ind: 0 cards de loadCardsForView'; continue; }
 
     // filter to only 'builder' source cards (catalog defaults shown via old HTML)
     const builderCards = cards.filter(c => c.source === 'builder');
+    if (view === 'ind') window.__mp =   // TEMP probe (toasted in the finally, where toasts are visible)
+      `ind: cards=${cards.length} builder=${builderCards.length} src=[${cards.map(c => c.source).join(',')}]`;
     if (!builderCards.length) continue;
 
     // Free-canvas coords for these builder cards from the saved layout. They mount HERE,
@@ -3879,8 +3881,8 @@ async function _mountSavedBuilderCards(clubId) {
     // (applyDefaultLayoutGeneric, before these existed), so without re-applying it here the builder
     // cards keep dashboard_cards append order — and late mounts (after the 1500ms reveal race) land
     // scrambled. Re-sort the full grid by the user's saved gps_dashboard_layouts order.
-    if (view === 'ind' && _mp.length) window.showToast?.(   // TEMP probe
-      `MOUNT ind: keys=${_coordsById?.size ?? 'null'} lay=${(_lay||[]).length} | ${_mp.join('  ')}`);
+    if (view === 'ind' && _mp.length) window.__mp = (window.__mp || '') +   // TEMP probe
+      ` || keys=${_coordsById?.size ?? 'null'} lay=${(_lay||[]).length} | ${_mp.join('  ')}`;
     if (_lay?.length) _reorderGrid(grid, _lay);
   }
   } finally {
@@ -4317,6 +4319,7 @@ async function _detectSmartDefault(clubId, userId) {
     // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
     // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
     window.gpCanvas?.renderAll?.();
+    window.showToast?.('MOUNT ' + (window.__mp || 'ind: NUNCA LLEGÓ (mount no procesó ind)'));   // TEMP probe
     // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
     document.querySelectorAll('.gp-c-b').forEach(b => {
       if (b.children.length || b.textContent.trim()) return;
