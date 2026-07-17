@@ -3807,12 +3807,10 @@ async function _mountSavedBuilderCards(clubId) {
       cards = await window.loadCardsForView(clubId, REPORT_TYPES[view], window.sb);
     } catch (e) { console.warn('_mountSavedBuilderCards:', view, e); continue; }
 
-    if (!cards?.length) { if (view === 'ind') window.__mp = 'ind: 0 cards de loadCardsForView'; continue; }
+    if (!cards?.length) continue;
 
     // filter to only 'builder' source cards (catalog defaults shown via old HTML)
     const builderCards = cards.filter(c => c.source === 'builder');
-    if (view === 'ind') window.__mp =   // TEMP probe (toasted in the finally, where toasts are visible)
-      `ind: cards=${cards.length} builder=${builderCards.length} src=[${cards.map(c => c.source).join(',')}]`;
     if (!builderCards.length) continue;
 
     // Free-canvas coords for these builder cards from the saved layout. They mount HERE,
@@ -3837,13 +3835,20 @@ async function _mountSavedBuilderCards(clubId) {
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
     } catch (e) { /* no layout → cards flow to defaults, still functional */ }
 
-    const _mp = [];   // TEMP probe
     for (const card of builderCards) {
       const config = card.config;
-      if (!config || config.schema !== 'gp.card/v1') { _mp.push(String(card.id).slice(0,8)+':SKIP-schema='+((config&&config.schema)||'none')); continue; }   // TEMP probe
+      if (!config || config.schema !== 'gp.card/v1') continue;
 
-      // Si ya hay un elemento para esta card.id en la grilla, no crear otro (evita duplicado).
-      if (grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`)) { _mp.push(String(card.id).slice(0,8)+':SKIP-dedup'); continue; }   // TEMP probe
+      // Already mounted? gp-tabs.js appends builder cards during TAB RENDER (before this runs) WITHOUT
+      // applying the saved layout coords — so the card can already be in the grid here. Don't re-create
+      // it, but DO apply its saved coords to the existing element; otherwise it keeps the default size
+      // (size:full → width 12) and the user's saved w/x/y/h never loads (the "reverts to 12" bug).
+      const _existing = grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`);
+      if (_existing) {
+        const _coEx = _coordsById?.get(String(card.id));
+        if (_coEx && window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(_existing, _coEx);
+        continue;
+      }
 
       const el = window.gpBuildBuilderCardEl(config, card.id);
       el.dataset.size = card.size || config.style?.size || 'md';
@@ -3852,7 +3857,6 @@ async function _mountSavedBuilderCards(clubId) {
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
-      _mp.push(String(card.id).slice(0,8) + (_co ? ('·co.w=' + _co.w) : '·NO-CO'));   // TEMP probe
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
@@ -3881,8 +3885,6 @@ async function _mountSavedBuilderCards(clubId) {
     // (applyDefaultLayoutGeneric, before these existed), so without re-applying it here the builder
     // cards keep dashboard_cards append order — and late mounts (after the 1500ms reveal race) land
     // scrambled. Re-sort the full grid by the user's saved gps_dashboard_layouts order.
-    if (view === 'ind' && _mp.length) window.__mp = (window.__mp || '') +   // TEMP probe
-      ` || keys=${_coordsById?.size ?? 'null'} lay=${(_lay||[]).length} | ${_mp.join('  ')}`;
     if (_lay?.length) _reorderGrid(grid, _lay);
   }
   } finally {
@@ -4319,7 +4321,6 @@ async function _detectSmartDefault(clubId, userId) {
     // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
     // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
     window.gpCanvas?.renderAll?.();
-    window.showToast?.('MOUNT ' + (window.__mp || 'ind: NUNCA LLEGÓ (mount no procesó ind)'));   // TEMP probe
     // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
     document.querySelectorAll('.gp-c-b').forEach(b => {
       if (b.children.length || b.textContent.trim()) return;
