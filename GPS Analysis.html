@@ -4307,6 +4307,17 @@ async function _detectSmartDefault(clubId, userId) {
     // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
     // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
     window.gpCanvas?.renderAll?.();
+    // TEMP DIAGNOSTIC (visible): report what the READ resolved for the active dashboard, so we can
+    // tell "read found no saved coords" from "read found them but they weren't applied/overwritten".
+    try {
+      const _il = _layoutStrictCache.get('ind');
+      const _grid = document.querySelector('.gp-view[data-view="ind"] .gp-grid');
+      const _gc = _grid ? [..._grid.querySelectorAll('.gp-c[data-card-id]')].map(c =>
+        `${(c.dataset.cardId||'?').slice(0,6)}:w${c.dataset.w||'-'}`) : [];
+      window.showToast?.(
+        `READ ind: ${_il == null ? 'NO ROW' : _il.length + ' cards / ' + _il.filter(c => Number.isFinite(c.w)).length + ' con coords'} · grid[${_gc.join(' ')}]`
+      );
+    } catch (e) { window.showToast?.('READ ind probe error: ' + (e?.message || e), true); }
     // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
     document.querySelectorAll('.gp-c-b').forEach(b => {
       if (b.children.length || b.textContent.trim()) return;
