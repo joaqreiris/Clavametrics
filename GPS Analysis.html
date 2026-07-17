@@ -1917,11 +1917,17 @@ async function saveLayout(viewKey, overrideDid) {
         return Number.isFinite(v) ? v : NaN;
       };
       const x = _coord('x'), y = _coord('y'), w = _coord('w'), h = _coord('h');
-      // Persist coords ONLY for cards with a REAL placement. A card still on provisional auto-flow
-      // (dataset.autoFlow, set by gp-canvas when it invented the position) must stay COORDLESS in
-      // the DB (x/y null) so it remains order-driven and immune to the early-pass scramble — we
-      // never freeze an invented position. Its order is still captured via `position` above.
-      if (el.dataset.autoFlow !== '1' && [x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
+      // Persist the on-screen coords of EVERY card. The auto-flow flag (dataset.autoFlow, set by
+      // gp-canvas for an invented position) only matters DURING load — there we must NOT freeze a
+      // provisional pre-saved-layout order (gate=false → keep those cards coordless so they re-flow).
+      // But once the layout is READY (gate=true = a USER-driven save: drag/resize drop or Save button),
+      // the auto-flowed position IS the intended layout, so freeze it too. Without this, a card the
+      // user never dragged stayed coordless and re-flowed on reload → only the dragged card persisted
+      // ("2 cards / 1 con coords") and the arrangement wasn't reproduced.
+      const _committed = window._gpLayoutReady !== false;   // true after load = a real user save
+      if ((_committed || el.dataset.autoFlow !== '1') && [x, y, w, h].every(Number.isFinite)) {
+        Object.assign(item, { x, y, w, h });
+      }
       return item;
     });
     const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
@@ -4307,17 +4313,6 @@ async function _detectSmartDefault(clubId, userId) {
     // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
     // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
     window.gpCanvas?.renderAll?.();
-    // TEMP DIAGNOSTIC (visible): report what the READ resolved for the active dashboard, so we can
-    // tell "read found no saved coords" from "read found them but they weren't applied/overwritten".
-    try {
-      const _il = _layoutStrictCache.get('ind');
-      const _grid = document.querySelector('.gp-view[data-view="ind"] .gp-grid');
-      const _gc = _grid ? [..._grid.querySelectorAll('.gp-c[data-card-id]')].map(c =>
-        `${(c.dataset.cardId||'?').slice(0,6)}:w${c.dataset.w||'-'}`) : [];
-      window.showToast?.(
-        `READ ind: ${_il == null ? 'NO ROW' : _il.length + ' cards / ' + _il.filter(c => Number.isFinite(c.w)).length + ' con coords'} · grid[${_gc.join(' ')}]`
-      );
-    } catch (e) { window.showToast?.('READ ind probe error: ' + (e?.message || e), true); }
     // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
     document.querySelectorAll('.gp-c-b').forEach(b => {
       if (b.children.length || b.textContent.trim()) return;
