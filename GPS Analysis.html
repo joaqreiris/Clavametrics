@@ -1969,8 +1969,13 @@ async function _loadLayoutStrict(viewKey) {
         const { data, error } = await window.sb.from('gps_dashboard_layouts')
           .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
         if (!error) {
-          const layout = (data?.layout && data.layout.length) ? data.layout : null;
-          _layoutStrictCache.set(viewKey, layout);   // confirmed result (array or genuine null)
+          // Distinguish an EMPTY layout [] (the user CLEARED the dashboard → respect it, show nothing)
+          // from a genuinely absent row/column (first-time → seed defaults). Collapsing []→null made
+          // "delete every card" look identical to first-time and re-injected the default cards. Keep []
+          // as a valid empty layout; return null ONLY when there is no row / no layout column at all.
+          const raw = data?.layout;
+          const layout = Array.isArray(raw) ? raw : null;
+          _layoutStrictCache.set(viewKey, layout);   // [] empty · array w/ data · null = no saved row
           return { loaded: true, layout };
         }
         console.warn(`_loadLayoutStrict(${viewKey}): DB error (attempt ${attempt + 1}/3):`, error.message);
@@ -2104,7 +2109,7 @@ async function applyGrpDefaultLayout() {
     const { loaded, layout } = await _loadLayoutStrict('grp');
     if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
 
-    if (!layout) {
+    if (layout == null) {   // null = no saved row (first-time). [] = user cleared it → fall through, seed NOTHING.
       // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (_GRP_DEFAULTS.has(def.id)) continue;
@@ -2151,7 +2156,7 @@ async function applyMcDefaultLayout() {
     const { loaded, layout } = await _loadLayoutStrict('mc');
     if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
 
-    if (!layout) {
+    if (layout == null) {   // null = no saved row (first-time). [] = user cleared it → fall through, seed NOTHING.
       // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (_MC_DEFAULTS.has(def.id)) continue;
@@ -2191,7 +2196,7 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
   try {
     const { loaded, layout } = await _loadLayoutStrict(viewKey);
     if (!loaded) return;   // load failed / not ready → never overwrite the saved layout with defaults
-    if (!layout) {
+    if (layout == null) {   // null = no saved row (first-time). [] = user cleared it → fall through, seed NOTHING.
       // Confirmed no saved layout → genuine first-time: apply the minimal default + persist it once.
       for (const def of defs) {
         if (defaultsSet.has(def.id)) continue;
