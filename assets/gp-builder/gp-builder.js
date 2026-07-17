@@ -745,11 +745,14 @@
         const fresh = delBtn.cloneNode(true);
         const cardRef = card;
         fresh.addEventListener('click', () => {
+          const view = cardRef.closest('.gp-view')?.dataset.view;
           cardRef.remove();
           if (window.deleteDashboardCard && _isUuid(cardRef.dataset.cardId)) {
             window.deleteDashboardCard(cardRef.dataset.cardId, window.sb)
               .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
           }
+          // Prune the deleted card from the layout so gps_dashboard_layouts stays in sync.
+          window.saveLayout?.(view)?.catch?.(() => {});
         });
         delBtn.replaceWith(fresh);
       }
@@ -822,6 +825,7 @@
         const cardRefE = targetCard;
         freshE.addEventListener('click', () => {
           const host = cardRefE.closest('.gp-view');
+          const view = host?.dataset.view;
           const cardId = cardRefE.dataset.cardId;
           cardRefE.remove();
           window.gptSyncEmptyState?.(host);   // re-show empty-state + drop tab count
@@ -829,6 +833,8 @@
             window.deleteDashboardCard(cardId, window.sb)
               .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
           }
+          // Prune the deleted card from the layout so gps_dashboard_layouts stays in sync.
+          window.saveLayout?.(view)?.catch?.(() => {});
         });
         delBtnE.replaceWith(freshE);
       }
@@ -897,6 +903,7 @@
       delBtn.replaceWith(fresh);
       fresh.addEventListener('click', () => {
         const host = savedCard.closest('.gp-view');
+        const view = host?.dataset.view;
         const cardId = savedCard.dataset.cardId;
         savedCard.remove();
         window.gptSyncEmptyState?.(host);   // re-show empty-state + drop tab count
@@ -904,6 +911,8 @@
           window.deleteDashboardCard(cardId, window.sb)
             .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
         }
+        // Prune the deleted card from the layout so gps_dashboard_layouts stays in sync.
+        window.saveLayout?.(view)?.catch?.(() => {});
       });
       const editBtn = document.createElement('button');
       editBtn.title = 'Edit card';
@@ -927,14 +936,22 @@
     if (_PREDEFINED.has(viewKey)) {
       if (_clubId && typeof window.saveDashboardCard === 'function') {
         window.saveDashboardCard(config, _clubId, viewKey, _userId, window.sb)
-          .then(cardId => { savedCard.dataset.cardId = cardId; })
+          .then(cardId => {
+            savedCard.dataset.cardId = cardId;
+            // Sync the layout with the new card (with its real UUID) so gps_dashboard_layouts
+            // never goes stale vs dashboard_cards → prevents the card scramble on reload.
+            window.saveLayout?.(viewKey)?.catch?.(() => {});
+          })
           .catch(e => console.warn('gpb: saveDashboardCard failed:', e));
       }
     } else if (viewKey.startsWith('db-')) {
       const dashId = viewKey.slice(3);
       if (typeof window.insertCardIntoDashboard === 'function') {
         window.insertCardIntoDashboard(config, dashId, _userId, window.sb)
-          .then(cardId => { savedCard.dataset.cardId = cardId; })
+          .then(cardId => {
+            savedCard.dataset.cardId = cardId;
+            window.saveLayout?.(viewKey)?.catch?.(() => {});   // sync layout with the new card
+          })
           .catch(e => console.warn('gpb: insertCardIntoDashboard failed:', e));
       }
     }
