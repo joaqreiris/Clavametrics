@@ -1592,17 +1592,26 @@ const _cardStash = new Map(); // cardId → HTMLElement
 // with the defaults. A destructive migration must never depend on volatile localStorage. The
 // migration is long done; the persisted layout (gps_dashboard_layouts) is the single source of truth.
 
-// Stash every catalog card for viewKey whose data-card-id is NOT in activeIds.
+// Stash every card in the grid whose data-card-id is NOT in activeIds.
+// GRID-SCOPED (not catalog-scoped): iterates the ACTUAL .gp-c in the view's grid instead of only the
+// GP_CARD_DEFS catalog. A static card hardcoded in the HTML but ABSENT from GP_CARD_DEFS (e.g.
+// card-gen-week-kpi) was unreachable by the old catalog loop → it survived an empty layout, leaving
+// the dashboard non-empty after the user cleared it. Grid-scoped makes the saved layout the single
+// source of truth: activeIds empty → every card is absent → grid emptied.
+// TIMING: every load-flow caller (applyDefault*/applyLayoutToView) runs this BEFORE
+// _mountSavedBuilderCards, so at this point the grid holds ONLY static cards → builder cards are
+// never stashed by mistake here. (The one after-mount caller is _svLoad, where stashing builder
+// cards absent from the loaded snapshot is the intended saved-views semantics.)
 function _stashAbsentCards(viewKey, activeIds) {
-  const defs = (GP_CARD_DEFS[viewKey] || []).filter(d => d.id && !d.stub);
-  for (const def of defs) {
-    const card = document.getElementById(def.id);
-    if (!card) continue;
-    if (!activeIds.has(card.dataset.cardId || '')) {
-      _cardStash.set(def.id, card);
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+  grid.querySelectorAll('.gp-c[data-card-id]').forEach(card => {
+    const cid = card.dataset.cardId || '';
+    if (!activeIds.has(cid)) {
+      _cardStash.set(card.id || cid, card);   // key = element id (catalog cards) so _unstashToGrid finds them
       card.remove();
     }
-  }
+  });
 }
 
 // Bring cards from stash into grid for every card_id present in activeIds.
