@@ -412,6 +412,15 @@
   /* numeric cells: right-aligned tabular mono → scan down a column at a glance */
   .gp-zt td { padding:var(--cm-tbl-pad-y) var(--cm-tbl-pad-x); border-bottom:1px solid var(--cm-border-soft); text-align:right; font:600 var(--cm-tbl-fs)/1 var(--cm-font-mono); font-variant-numeric:tabular-nums; color:var(--cm-fg-strong); }
   .gp-zt td:has(.gp-zc) { padding:0; text-align:center; }                       /* coloured-chip cells keep their badge layout */
+  /* Narrow-card overflow guard: cell text must NEVER overlap the neighbour when the card is
+     shrunk. Text columns (name/date/rival) truncate with … ; numeric heat/bar chips stay contained
+     in their own cell; the whole table scrolls horizontally inside .gp-zwrap when it doesn't fit
+     (no data is lost — you scroll instead of overlapping). Purely visual; order/heatmap untouched. */
+  .gp-zwrap { overflow-x:auto; }
+  .gp-zt td.pc, .gp-zt th.pc { overflow:hidden; text-overflow:ellipsis; max-width:200px; }
+  .gp-zt td.dc, .gp-zt th.dc { overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+  .gp-zt td.tf { white-space:nowrap; }
+  .gp-zt td.tf .tf-c { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
   .gp-zc { display:inline-flex; align-items:center; justify-content:center; width:48px; height:24px; margin:2px; border-radius:5px; font:600 11px/1 var(--cm-font-mono); font-variant-numeric:tabular-nums; border:1px solid transparent; }
   .gp-zc.high   { background:rgba(220,38,38,0.18); color:#B91C1C; }
   .gp-zc.mhigh  { background:rgba(248,113,113,0.18); color:#9F1239; }
