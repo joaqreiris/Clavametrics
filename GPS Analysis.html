@@ -3835,6 +3835,7 @@ async function _mountSavedBuilderCards(clubId) {
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
     } catch (e) { /* no layout → cards flow to defaults, still functional */ }
 
+    const _mp = [];   // TEMP probe
     for (const card of builderCards) {
       const config = card.config;
       if (!config || config.schema !== 'gp.card/v1') continue;
@@ -3849,6 +3850,7 @@ async function _mountSavedBuilderCards(clubId) {
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
+      _mp.push(String(card.id).slice(0,8) + (_co ? ('·co.w=' + _co.w) : '·NO-CO'));   // TEMP probe
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
@@ -3877,6 +3879,8 @@ async function _mountSavedBuilderCards(clubId) {
     // (applyDefaultLayoutGeneric, before these existed), so without re-applying it here the builder
     // cards keep dashboard_cards append order — and late mounts (after the 1500ms reveal race) land
     // scrambled. Re-sort the full grid by the user's saved gps_dashboard_layouts order.
+    if (view === 'ind' && _mp.length) window.showToast?.(   // TEMP probe
+      `MOUNT ind: keys=${_coordsById?.size ?? 'null'} lay=${(_lay||[]).length} | ${_mp.join('  ')}`);
     if (_lay?.length) _reorderGrid(grid, _lay);
   }
   } finally {
