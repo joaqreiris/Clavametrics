@@ -492,8 +492,8 @@
   .legend-swatch--today { background: var(--cm-accent); width: 4px; border-radius: 2px; }
 
   /* === Main grid: daily plan (flex) + fixed right rail === */
-  .cal-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:14px; }
-  @media (max-width:1200px){ .cal-grid { grid-template-columns:1fr; } .cal-kpis { grid-template-columns:repeat(2,1fr); } }
+  .cal-grid { display:grid; grid-template-columns:1fr; gap:14px; }
+  @media (max-width:1200px){ .cal-kpis { grid-template-columns:repeat(2,1fr); } }
 
   .cal-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
   .cal-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
@@ -504,7 +504,7 @@
   /* === MC daily strip (7-14 day grid) === */
   .mc-days {
     display: grid;
-    grid-template-columns: repeat(7, 160px);
+    grid-template-columns: repeat(7, minmax(140px, 1fr));
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--cm-border) transparent;
@@ -513,9 +513,7 @@
   .mc-days::-webkit-scrollbar-track { background: transparent; }
   .mc-days::-webkit-scrollbar-thumb { background: var(--cm-border); border-radius: 3px; }
   .mc-day {
-    width: 160px;
-    min-width: 160px;
-    max-width: 160px;
+    min-width: 0;
     border-right: 1px solid var(--cm-border-soft);
     border-top: 1px solid var(--cm-border-soft);
     padding: 10px 12px 12px;
@@ -644,7 +642,8 @@
   .mc-evt.scouting .ti { color:#64748B; }
 
   /* === Right rail cards === */
-  .cal-rail { display:flex; flex-direction:column; gap:14px; width:280px; min-width:280px; max-width:280px; flex-shrink:0; }
+  /* Rail relocated BELOW the weekly plan as a wrapping row of cards (was a fixed 280px side column). */
+  .cal-rail { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; width:auto; min-width:0; max-width:none; align-items:start; }
 
   /* Upcoming events list */
   .upcoming-row { display:grid; grid-template-columns:36px 1fr auto; gap:10px; padding:11px 16px; border-bottom:1px solid var(--cm-border-soft); align-items:center; cursor:pointer; }
@@ -2418,6 +2417,7 @@ async function loadSessions() {
 
   renderGrid();
   renderWorkload();
+  renderUpcoming();   // re-anchor "Upcoming" to the now-viewed microcycle
 }
 
 // ── Planned Workload widget ────────────────────────────────────
@@ -4194,6 +4194,8 @@ async function renderMonthView() {
       });
     });
   });
+
+  renderUpcoming();   // re-anchor "Upcoming" to the now-viewed month
 }
 
 function handleMonthEvtClick(sid) {
@@ -4820,8 +4822,21 @@ async function renderUpcoming() {
   const container = document.getElementById('calUpcomingList');
   if (!container) return;
 
-  const in14d = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-  const { data: sessions } = await fetchAllEvents(TODAY, in14d);
+  // Anchor the forward window to the period being VIEWED (not the real today), so e.g. a
+  // preseason month/microcycle shows its events instead of "none". From = start of the
+  // visible range; To = +14 days from that or the visible range end, whichever is later.
+  let from = TODAY, rangeEnd = null;
+  if (_calView === 'month') {
+    from = `${_monthY}-${String(_monthM + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(_monthY, _monthM + 1, 0).getDate();
+    rangeEnd = `${_monthY}-${String(_monthM + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else {
+    const mc = _allMCs[_mcIdx];
+    if (mc && mc.start_date) { from = mc.start_date; rangeEnd = mc.end_date || null; }
+  }
+  const plus14 = new Date(new Date(from + 'T00:00:00').getTime() + 14 * 86400000).toISOString().split('T')[0];
+  const to = (rangeEnd && rangeEnd > plus14) ? rangeEnd : plus14;
+  const { data: sessions } = await fetchAllEvents(from, to);
 
   _upcomingAllItems = [];
   (sessions || []).forEach(s => {
