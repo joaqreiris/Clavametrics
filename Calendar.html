@@ -580,6 +580,8 @@
   .mc-day.is-dayoff { background: var(--cm-bg-sunk); }
   .mc-day.is-dayoff .mc-day-num { color: var(--cm-fg-muted); }
   .mc-day.is-dayoff .mc-day-md  { background: var(--cm-bg-sunk); color: var(--cm-fg-muted); border-color: var(--cm-border); }
+  /* Transient highlight when arriving from the month-view day summary */
+  .mc-day.is-focus-day { outline: 2px solid var(--cm-accent); outline-offset: -2px; box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--cm-accent) 8%, transparent); transition: box-shadow .3s ease, outline-color .3s ease; }
   .mc-day-events { display:flex; flex-direction:column; gap:4px; }
   .mc-evt {
     display:flex; align-items:flex-start; gap:6px;
@@ -4322,12 +4324,21 @@ function closeDaySummary(){
   if (ov) ov.classList.remove('is-open');
   document.removeEventListener('keydown', _calDayPopEsc);
 }
-function goToMicrocycleForDate(dateStr){
+async function goToMicrocycleForDate(dateStr){
   const idx = _allMCs.findIndex(mc => mc.start_date <= dateStr && mc.end_date >= dateStr);
   document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.dataset.view === 'microcycle'));
   if (idx >= 0) { _mcIdx = idx; _weekOffset = 0; }
   switchView('microcycle');
-  if (idx >= 0) loadSessions();   // fetch + render the target microcycle
+  if (idx < 0) return;
+  await loadSessions();   // fetch + render the target microcycle
+  // Land ON the clicked day: scroll the day strip to it and highlight it briefly.
+  const grid = document.getElementById('calDaysGrid');
+  const cell = grid && grid.querySelector(`.mc-day[data-date="${dateStr}"]`);
+  if (cell) {
+    try { cell.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) { cell.scrollIntoView(); }
+    cell.classList.add('is-focus-day');
+    setTimeout(() => cell.classList.remove('is-focus-day'), 2400);
+  }
 }
 function openDaySummary(dateStr){
   if (!dateStr) return;
