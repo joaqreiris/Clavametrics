@@ -3081,6 +3081,10 @@
   // cut the plot into quadrants. Same renderer for builder preview + saved card.
   const _SCATTER_SIZE_H = { sm: 180, md: 240, lg: 300, full: 340 };
 
+  // Phase 2 shape encoding — FILLED Chart.js pointStyles only (cross/crossRot/line/dash are
+  // stroke-only → invisible with a white border), cycled per colour category.
+  const _SCATTER_SHAPES = ['circle', 'triangle', 'rectRot', 'rect', 'star', 'rectRounded'];
+
   /** Per-category colors: 1→accent, 2+→categorical palette (honors style.palette). */
   function scatterColors(config, n) {
     const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
@@ -3241,6 +3245,10 @@
         backgroundColor: col + 'CC',                 // ~80% fill so overlaps read
         borderColor: '#fff',
         borderWidth: 1.2,
+        // Phase 2 — SHAPE encoding: each colour category also gets a distinct filled shape,
+        // so categories stay distinguishable even when colours are close (or in print). Only
+        // when there's a colour dimension; rival crests override this later in mountScatterChart.
+        pointStyle: hasCat ? _SCATTER_SHAPES[i % _SCATTER_SHAPES.length] : 'circle',
         // Per-point radius from the Size metric (area scale). No Size → fixed radius (as today).
         pointRadius:      hasSize ? (ctx => radiusFor(ctx.raw?.size))     : 5.5,
         pointHoverRadius: hasSize ? (ctx => radiusFor(ctx.raw?.size) + 2) : 7.5,
@@ -3378,12 +3386,15 @@
           plugins: {
             legend: {
               display: d.showLeg, position: 'bottom',
-              labels: { boxWidth: 10, boxHeight: 10, padding: 14, usePointStyle: true, pointStyle: 'circle',
+              labels: { boxWidth: 10, boxHeight: 10, padding: 14, usePointStyle: true,
                         font: { size: 11 },
+                        // Mirror each dataset's actual mark in the legend: the Phase-2 shape,
+                        // or the Phase-1 rival crest (Image pointStyle) once it's loaded.
                         generateLabels: ch => ch.data.datasets.map((ds, i) => ({
                           text: ds.label,
                           fillStyle: ds.pointHoverBackgroundColor || ds.backgroundColor,
                           strokeStyle: ds.pointHoverBackgroundColor || ds.backgroundColor, lineWidth: 0,
+                          pointStyle: ds.pointStyle || 'circle',
                           hidden: !ch.isDatasetVisible(i), datasetIndex: i,
                         })) },
               onClick: (e, item, legend) => {
