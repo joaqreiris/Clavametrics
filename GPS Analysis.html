@@ -235,6 +235,9 @@
   .gp-c.is-marquee-hit { border-color:var(--cm-accent); box-shadow:0 0 0 2px var(--cm-focus-ring, color-mix(in srgb, var(--cm-accent) 34%, transparent)); outline:none; }
   .gp-c.is-multi-dragging { z-index:2000; opacity:.96; box-shadow:var(--cm-shadow-3); }
   .gp-marquee { position:fixed; z-index:9999; pointer-events:none; border:1.5px solid var(--cm-accent); background:color-mix(in srgb, var(--cm-accent) 12%, transparent); border-radius:3px; }
+  /* While a marquee / group move / group resize is in progress, suppress native text selection
+     (the browser would otherwise highlight cell text as you drag). Only active during the gesture. */
+  body.gp-selecting, body.gp-selecting * { -webkit-user-select:none !important; user-select:none !important; }
   .gp-grid.is-canvas .gp-c.gp-mv-active { box-shadow:var(--cm-shadow-3); transform:scale(1.02) rotate(-1deg); }
   /* header chrome: drag cursor + reveal action buttons on hover/active */
   .gp-grid.is-canvas.is-edit .gp-c .gp-c-h { cursor:grab; }
@@ -3436,6 +3439,7 @@ document.addEventListener('pointerdown', e => {
   if (t.closest('.gp-c')) return;                                                    // a card → handled by the card pointerdown below
   if (t.closest('#gpbPanel, .gp-modal-overlay, .gp-popover, .gp-src-drawer, .gp-dash-bar, .hub-topbar, .hub-sidebar')) return;
   _gpMarquee = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, additive: e.shiftKey, moved: false, overlay: null };
+  document.body.classList.add('gp-selecting'); try { window.getSelection().removeAllRanges(); } catch (_) {}
 }, true);
 // ESC → deselect; close transient card editors (popovers + the topmost modal). The builder
 // panel owns its own ESC / click-outside (gp-builder.js).
@@ -3477,6 +3481,7 @@ document.addEventListener('pointerdown', e => {
                              dir: _rh.dataset.dir || 'se', aStartW: anchor.w, aStartH: anchor.h,
                              view: grid.closest('.gp-view')?.dataset.view, cards, moved: false };
           cards.forEach(c => c.el.classList.add('is-multi-dragging'));
+          document.body.classList.add('gp-selecting'); try { window.getSelection().removeAllRanges(); } catch (_) {}
           try { _rh.setPointerCapture?.(e.pointerId); } catch (_) {}
         }
       }
@@ -3503,6 +3508,7 @@ document.addEventListener('pointerdown', e => {
     _gpGroupDrag = { pointerId: e.pointerId, startPX: e.clientX, startPY: e.clientY, colStep, rowStep, COLS,
                      view: grid.closest('.gp-view')?.dataset.view, anchor: card, cards, moved: false };
     cards.forEach(c => c.el.classList.add('is-multi-dragging'));
+    document.body.classList.add('gp-selecting'); try { window.getSelection().removeAllRanges(); } catch (_) {}
     try { card.setPointerCapture(e.pointerId); } catch (_) {}
     return;
   }
@@ -3557,6 +3563,7 @@ document.addEventListener('pointermove', e => {
 });
 
 function _gpMultiPointerUp(e) {
+  document.body.classList.remove('gp-selecting');   // re-enable text selection after any gesture ends
   if (_gpGroupResize && (e.pointerId == null || e.pointerId === _gpGroupResize.pointerId)) {
     const g = _gpGroupResize; _gpGroupResize = null;
     g.cards.forEach(c => c.el.classList.remove('is-multi-dragging'));
