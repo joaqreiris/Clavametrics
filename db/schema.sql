@@ -4900,6 +4900,8 @@ create policy "injuries_scoped_select" on public.injuries as permissive for sele
 create policy "injuries_scoped_update" on public.injuries as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "injuries_scoped_delete" on public.injuries as permissive for delete to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
 alter table public.injury_phases enable row level security;
 create policy "injury_phases_delete" on public.injury_phases as permissive for delete to public

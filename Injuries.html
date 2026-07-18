@@ -2723,8 +2723,10 @@ async function deleteInjury(id) {
   const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
   const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || tt('injuries.this_injury','this injury');
   if (!confirm(tt('injuries.delete_confirm', `Delete injury for ${name}? This cannot be undone.`, { name }))) return;
-  const { error } = await window.sb.from('injuries').delete().eq('id', id);
+  // .select() so a 0-row delete (e.g. blocked by RLS) surfaces instead of faking success.
+  const { data: deleted, error } = await window.sb.from('injuries').delete().eq('id', id).select('id');
   if (error) { alert(tt('injuries.err_generic', `Error: ${error.message}`, { msg: error.message })); return; }
+  if (!deleted || !deleted.length) { alert(tt('injuries.delete_blocked', 'Could not delete this injury — you may not have permission.')); return; }
   // Clear the 'injured' availability rows this injury auto-filled, so Availability updates.
   // Safe: Availability re-creates 'injured' for any STILL-active injury on its next load.
   if (inj?.player_id) {
