@@ -1785,12 +1785,13 @@
       const _effRange = _fbEffectiveRange(FBcard, config.range);
       let sessionIds = await getSessionIds(_effRange, ctx, sb);
       if (stale()) return;
-      if ((FBcard?.mdCodes?.length || FBcard?.rivals?.length) && sessionIds.length) {
-        // MD and Rival are both session_attributes → one fetch, AND-filter sessions.
-        const wantMd = FB?.mdCodes?.length ? new Set(FB.mdCodes.map(String)) : null;
-        const wantRv = FB?.rivals?.length  ? new Set(FB.rivals)              : null;
+      if ((FBcard?.mdCodes?.length || FBcard?.rivals?.length || FBcard?.sessionTypes?.length) && sessionIds.length) {
+        // MD, Rival (session_attributes) and session_type (column) → one fetch, AND-filter sessions.
+        const wantMd = FB?.mdCodes?.length      ? new Set(FB.mdCodes.map(String)) : null;
+        const wantRv = FB?.rivals?.length       ? new Set(FB.rivals)              : null;
+        const wantSt = FB?.sessionTypes?.length ? new Set(FB.sessionTypes)        : null;
         const { data: ts } = await sb.from('training_sessions')
-          .select('id,session_attributes').in('id', sessionIds);
+          .select('id,session_attributes,session_type').in('id', sessionIds);
         if (stale()) return;
         sessionIds = (ts || []).filter(s => {
           const a = s.session_attributes || {};
@@ -1799,6 +1800,7 @@
           // (opponent_id-backed when available). We always store the rival text alongside
           // opponent_id, so the normalized text reproduces the same key here.
           if (wantRv && !wantRv.has((a.rival || a.opponent || '').trim().toLowerCase())) return false;
+          if (wantSt && !wantSt.has(s.session_type)) return false;
           return true;
         }).map(s => s.id);
       }

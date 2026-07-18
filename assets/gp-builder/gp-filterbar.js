@@ -23,13 +23,30 @@
     { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'All positions',   multi: true },
     { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'All microcycles', multi: true },
     { key: 'rival',      icon: 'ti-ball-football',   placeholder: 'All rivals',      multi: true },
+    { key: 'session_type', icon: 'ti-run',           placeholder: 'All types',       multi: true },
   ];
 
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
   const FILTER_LABELS = {
     md_code: 'Matchday', date: 'Date', player: 'Players',
-    position: 'Positions', microcycle: 'Microcycle', rival: 'Rival',
+    position: 'Positions', microcycle: 'Microcycle', rival: 'Rival', session_type: 'Session type',
   };
+
+  // Session-type value → i18n label (training_sessions.session_type). Raw value stays the
+  // filter key (what the resolver matches); only the display label is translated.
+  const _ST_LABELS = {
+    match:'filterbar.type_match', training:'filterbar.type_training', rehab:'filterbar.type_rehab',
+    conditioning:'filterbar.type_conditioning', recovery:'filterbar.type_recovery',
+    tactical:'filterbar.type_tactical', gym:'filterbar.type_gym', other:'filterbar.type_other',
+  };
+  const _ST_EN = { match:'Match', training:'Training', rehab:'Rehab', conditioning:'Conditioning',
+                   recovery:'Recovery', tactical:'Tactical', gym:'Gym', other:'Other' };
+  function _stLabel(v) {
+    const en = _ST_EN[v] || v, k = _ST_LABELS[v];
+    if (!k) return en;
+    const t = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(k) : null;
+    return (t && t !== k) ? t : en;
+  }
 
   const DATE_PRESETS = [
     { id: '7',     label: 'Last 7 days',  days: 7   },
@@ -42,7 +59,7 @@
   // ── i18n: solo LABELS de UI (los key/id/valores de lógica quedan en inglés) ──
   const _FB_I18N = {
     'All MD':'filterbar.all_md','All time':'filterbar.all_time','All players':'filterbar.all_players',
-    'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals',
+    'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals','All types':'filterbar.all_types',
     'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
     'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
     'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
@@ -60,6 +77,7 @@
     position:   [],                            // posiciones
     microcycle: [],                            // ids de microciclo
     rival:      [],                            // nombres de rival (session_attributes.rival)
+    session_type: [],                          // training_sessions.session_type (match/training/rehab/…)
     // date: preset (Last 7/30/…) XOR days (specific real dates, multi-select) XOR a manual
     // from/to custom range. `days` is the primary picker; from/to are also set to the
     // days' min/max as a compat bound for consumers that only read from/to.
@@ -68,7 +86,7 @@
   };
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], date: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], date: [] };
 
   // 'YYYY-MM-DD' → '25 Apr 2026' (consistent, human-readable date label).
   const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -83,11 +101,12 @@
   // las sesiones reales (no cálculos derivados tipo getISOWeek).
   let _rows = [];            // [{ d, md, mc, p, pos }]
   let _validCache = null;    // { md_code:Set, microcycle:Set, player:Set, position:Set } | null (sin filtros)
-  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos', rival: 'rv' };
+  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos', rival: 'rv', session_type: 'st' };
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
-      || state.rival.length || state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
+      || state.rival.length || state.session_type.length
+      || state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
   }
   // Keep from/to = min/max of the selected days, so consumers that only read from/to get
   // a correct bounding window (exact-day narrowing happens downstream in the resolver).
@@ -125,10 +144,11 @@
     if (exceptKey !== 'player'     && state.player.length     && !state.player.includes(r.p))      return false;
     if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.pos))  return false;
     if (exceptKey !== 'rival'      && state.rival.length      && !state.rival.includes(r.rv))      return false;
+    if (exceptKey !== 'session_type' && state.session_type.length && !state.session_type.includes(r.st)) return false;
     return true;
   }
   function _computeValidSets() {
-    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set(), date: new Set() };
+    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set(), session_type: new Set(), date: new Set() };
     for (const r of _rows) {
       for (const key in _FIELD) if (_rowMatches(r, key)) out[key].add(r[_FIELD[key]]);
       // Date valid-set: the dates possible under the OTHER active filters → prunes the
@@ -186,6 +206,7 @@
       positions:     state.position.slice(),
       microcycleIds: state.microcycle.slice(),
       rivals:        state.rival.slice(),
+      sessionTypes:  state.session_type.slice(),
       date:          { ...state.date },
       activeCount: activeCount(),
     };
@@ -219,13 +240,13 @@
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
-        microcycle: state.microcycle, date: state.date,
+        microcycle: state.microcycle, rival: state.rival, session_type: state.session_type, date: state.date,
         visibleFilters: state.visibleFilters,
       }));
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
-    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = [];
+    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = [];
     state.date = { preset: null, from: null, to: null, days: [] };
     state.visibleFilters = DROPS.map(d => d.key);
   }
@@ -240,6 +261,8 @@
         state.player     = Array.isArray(s.player)     ? s.player     : [];
         state.position   = Array.isArray(s.position)   ? s.position   : [];
         state.microcycle = Array.isArray(s.microcycle) ? s.microcycle : [];
+        state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
+        state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
         state.date     = (s.date && typeof s.date === 'object')
           ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [] }
           : { preset: null, from: null, to: null, days: [] };
@@ -788,7 +811,7 @@
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
       window.cmFetchAll(() => window.sb.from('gps_reports')
-        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id), players!inner(id, first_name, last_name, number, position)')
+        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
       _obQ,
     ]);
@@ -870,8 +893,14 @@
         p:   r.player_id,
         pos: r.players?.position || '',
         rv:  _rivalEntity(ts.session_attributes)?.key || '',
+        st:  ts.session_type || '',
       };
     }).filter(x => x.d);
+
+    // Session types reales (distintos, no vacíos) — value = raw type, label = traducido.
+    options.session_type = [...new Set(_rows.map(r => r.st))].filter(Boolean)
+      .sort((a, b) => _stLabel(a).localeCompare(_stLabel(b)))
+      .map(v => ({ value: v, label: _stLabel(v) }));
 
     // Real dates with data → the date filter's list (distinct, newest first).
     options.date = [...new Set(_rows.map(r => r.d))].filter(Boolean)
@@ -939,8 +968,10 @@
     // re-traducir labels de UI al cambiar idioma (sin re-fetch; preserva estado/selección)
     document.addEventListener('cm:langchanged', () => {
       try {
+        options.session_type = options.session_type.map(o => ({ value: o.value, label: _stLabel(o.value) }));
         DROPS.forEach(d => updateTrigger(d.key));
         updateGlobal();
+        if (openKey === 'session_type') renderList('session_type');
         const ab = root.querySelector('.fb-addfilter span'); if (ab) ab.textContent = T('Add filter');
         const ca = root.querySelector('.fb-clear-all'); if (ca && ca.lastChild) ca.lastChild.textContent = T('Clear');
         root.querySelectorAll('.fb-clear').forEach(c => c.title = T('Clear'));
