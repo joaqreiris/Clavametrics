@@ -3380,8 +3380,9 @@ let _gpSelectedCard = null;
 // (keeps .gp-c-selected + _gpSelectedCard so the editor + Cmd+C/X/V/D keep working); size>=2 marks
 // .is-multi-selected and clears _gpSelectedCard (editor/clipboard act on a single card only).
 window._gpSelection = window._gpSelection || new Set();
-let _gpMarquee = null;    // rubber-band state (declared here so the empty-canvas handler below can use it)
-let _gpGroupDrag = null;  // group-drag state
+let _gpMarquee = null;     // rubber-band state (declared here so the empty-canvas handler below can use it)
+let _gpGroupDrag = null;   // group-drag state
+let _gpGroupResize = null; // group-resize state (scale all selected cards from one card's handle)
 function _gpSyncSelection() {
   const arr = [...window._gpSelection].filter(el => el && el.isConnected && !el.classList.contains('gp-add'));
   window._gpSelection = new Set(arr);
@@ -3455,7 +3456,34 @@ const _GP_CTRL_SEL = 'button, a, select, input, textarea, [role=button], .gp-c-p
 document.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !e.target.closest) return;
   const card = e.target.closest('.gp-c');
-  if (!card || card.classList.contains('gp-add') || e.target.closest(_GP_CTRL_SEL)) return;
+  if (!card || card.classList.contains('gp-add')) return;
+  // Group RESIZE: grab a resize handle of a card in a 2+ selection → SCALE the whole group (each card
+  // by the SAME factor, anchored at its own top-left, snapped + clamped). KPI cards (fixed size,
+  // handles hidden) never participate. Any other handle press falls through to gp-canvas single-resize.
+  const _rh = e.target.closest('.gp-rh');
+  if (_rh) {
+    if (window._gpSelection.has(card) && window._gpSelection.size >= 2) {
+      const grid = card.closest('.gp-grid');
+      if (grid && grid.classList.contains('is-canvas') && window.innerWidth > 1000) {
+        const { colStep, rowStep, COLS } = _gpGridMetrics(grid);
+        const cards = [...window._gpSelection]
+          .filter(el => el.isConnected && el.closest('.gp-grid') === grid && !el.querySelector(':scope > .gp-c-b.gp-kpi'))
+          .map(el => ({ el, x: +el.dataset.x || 0, y: +el.dataset.y || 0, w: +el.dataset.w || 2, h: +el.dataset.h || 3 }));
+        const anchor = cards.find(c => c.el === card);
+        if (anchor && cards.length >= 2) {
+          e.stopPropagation();
+          _gpGroupResize = { pointerId: e.pointerId, startPX: e.clientX, startPY: e.clientY, colStep, rowStep, COLS,
+                             MINW: window.gpCanvas?.MINW || 2, MINH: window.gpCanvas?.MINH || 3,
+                             dir: _rh.dataset.dir || 'se', aStartW: anchor.w, aStartH: anchor.h,
+                             view: grid.closest('.gp-view')?.dataset.view, cards, moved: false };
+          cards.forEach(c => c.el.classList.add('is-multi-dragging'));
+          try { _rh.setPointerCapture?.(e.pointerId); } catch (_) {}
+        }
+      }
+    }
+    return;   // handle press: handled as group, or left to gp-canvas's single resize
+  }
+  if (e.target.closest(_GP_CTRL_SEL)) return;   // other controls → engine / native behaviour
   // Cmd/Ctrl-click → toggle membership; no editor, no single-select.
   if (e.metaKey || e.ctrlKey) {
     e.stopPropagation();
@@ -3484,6 +3512,22 @@ document.addEventListener('pointerdown', e => {
 }, true);
 
 document.addEventListener('pointermove', e => {
+  if (_gpGroupResize && e.pointerId === _gpGroupResize.pointerId) {
+    const g = _gpGroupResize;
+    const dCol = Math.round((e.clientX - g.startPX) / g.colStep);
+    const dRow = Math.round((e.clientY - g.startPY) / g.rowStep);
+    const dW = g.dir.includes('e') ? dCol : g.dir.includes('w') ? -dCol : 0;   // top-left anchored: size only
+    const dH = g.dir.includes('s') ? dRow : g.dir.includes('n') ? -dRow : 0;
+    const scaleW = Math.max(g.MINW, g.aStartW + dW) / g.aStartW;   // factor from the grabbed card
+    const scaleH = Math.max(g.MINH, g.aStartH + dH) / g.aStartH;
+    if (dW || dH) g.moved = true;
+    g.cards.forEach(c => {
+      const nw = Math.max(g.MINW, Math.min(Math.round(c.w * scaleW), g.COLS - c.x));   // each clamped to its own min / grid
+      const nh = Math.max(g.MINH, Math.round(c.h * scaleH));
+      window.gpCanvas?.applyCoords?.(c.el, { x: c.x, y: c.y, w: nw, h: nh });
+    });
+    return;
+  }
   if (_gpGroupDrag && e.pointerId === _gpGroupDrag.pointerId) {
     const g = _gpGroupDrag;
     const dCol = Math.round((e.clientX - g.startPX) / g.colStep);
@@ -3513,6 +3557,11 @@ document.addEventListener('pointermove', e => {
 });
 
 function _gpMultiPointerUp(e) {
+  if (_gpGroupResize && (e.pointerId == null || e.pointerId === _gpGroupResize.pointerId)) {
+    const g = _gpGroupResize; _gpGroupResize = null;
+    g.cards.forEach(c => c.el.classList.remove('is-multi-dragging'));
+    if (g.moved && g.view && typeof window.saveLayout === 'function') window.saveLayout(g.view).catch(() => {});
+  }
   if (_gpGroupDrag && (e.pointerId == null || e.pointerId === _gpGroupDrag.pointerId)) {
     const g = _gpGroupDrag; _gpGroupDrag = null;
     g.cards.forEach(c => c.el.classList.remove('is-multi-dragging'));
