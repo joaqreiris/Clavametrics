@@ -365,7 +365,8 @@
     addMenu.addEventListener('click', e => e.stopPropagation());
     addWrap.appendChild(addBtn);
     addWrap.appendChild(addMenu);
-    drops.appendChild(addWrap);
+    // NOTE: addWrap lives OUTSIDE .gp-fbar-drops (appended to the bar below) so the
+    // "+ Add filter" button stays visible instead of scrolling off with the pills.
 
     // reordenar por drag: mover el drop arrastrado según la posición horizontal del cursor
     drops.addEventListener('dragover', e => {
@@ -388,6 +389,7 @@
     right.appendChild(clearAll);
 
     bar.appendChild(drops);
+    bar.appendChild(addWrap);   // between the scrolling pills and the right-side controls
     bar.appendChild(right);
     return bar;
   }
