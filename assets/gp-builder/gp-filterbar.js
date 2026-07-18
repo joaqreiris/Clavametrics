@@ -738,8 +738,8 @@
     if (!clubId || !window.sb) return;
 
     const _gpTeam = window._gpTeamId || null;
-    const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions')
-      .eq('club_id', clubId).neq('status', 'inactive');
+    const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions,archived_at')
+      .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
     const _seQ = window.sb.from('training_sessions').select('session_attributes')
       .eq('club_id', clubId).limit(3000);
     const _mcQ = window.sb.from('microcycles').select('id,name,start_date')
@@ -787,14 +787,14 @@
     // (imported/old data). No active team → club-wide (fallback).
     const _teamOk = (tid) => !_gpTeam || tid == null || String(tid) === String(_gpTeam);
 
-    // Jugadores seleccionables = roster ACTUAL ∪ cualquiera con datos GPS en sesiones
-    // de este equipo (incl. históricos que ya no están en el plantel). Sin esto no
-    // podrías ni elegir a un jugador de temporada pasada. Dedup por id.
+    // Jugadores seleccionables = SOLO los que tienen datos GPS (aparecen en gps_reports) y NO están
+    // archivados. (Antes era todo el roster ∪ con-datos → aparecían jugadores del plantel sin datos
+    // y jugadores archivados.) Dedup por id.
+    const _activeIds = new Set((players || []).map(p => p.id));   // non-archived roster (from _plQ above)
     const _pMap = new Map();
-    (players || []).forEach(p => _pMap.set(p.id, p));
     (reports || []).forEach(r => {
       const pl = r.players, tid = r.training_sessions?.team_id;
-      if (pl && _teamOk(tid) && !_pMap.has(pl.id)) _pMap.set(pl.id, pl);
+      if (pl && _teamOk(tid) && _activeIds.has(pl.id) && !_pMap.has(pl.id)) _pMap.set(pl.id, pl);
     });
     options.player = [..._pMap.values()]
       .sort((a, b) => (a.last_name || '').localeCompare(b.last_name || ''))
