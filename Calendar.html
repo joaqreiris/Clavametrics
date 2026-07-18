@@ -645,6 +645,23 @@
   /* Rail relocated BELOW the weekly plan as a wrapping row of cards (was a fixed 280px side column). */
   .cal-rail { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; width:auto; min-width:0; max-width:none; align-items:start; }
 
+  /* === Month view · day summary popover === */
+  .cal-daypop-ov { position:fixed; inset:0; background:rgba(15,23,42,.45); backdrop-filter:blur(2px); z-index:9600; display:none; align-items:center; justify-content:center; padding:24px; }
+  .cal-daypop-ov.is-open { display:flex; }
+  .cal-daypop { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:14px; width:420px; max-width:100%; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 50px rgba(0,0,0,.28); }
+  .cal-daypop-h { display:flex; align-items:flex-start; gap:10px; padding:15px 18px 12px; border-bottom:1px solid var(--cm-border-soft); }
+  .cal-daypop-h h3 { margin:0; font:600 15px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); text-transform:capitalize; }
+  .cal-daypop-h .sub { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .cal-daypop-x { border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; font-size:16px; padding:2px; line-height:1; flex-shrink:0; }
+  .cal-daypop-x:hover { color:var(--cm-fg-strong); }
+  .cal-daypop-body { padding:12px 18px; overflow-y:auto; display:flex; flex-direction:column; gap:7px; }
+  .cal-daypop-evt { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--cm-border-soft); border-radius:9px; cursor:pointer; background:var(--cm-surface); }
+  .cal-daypop-evt:hover { background:var(--cm-bg-soft); }
+  .cal-daypop-evt .t { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); width:38px; flex-shrink:0; }
+  .cal-daypop-evt .nm { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-daypop-empty { padding:18px 4px; text-align:center; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .cal-daypop-foot { padding:12px 18px; border-top:1px solid var(--cm-border-soft); display:flex; justify-content:flex-end; gap:8px; }
+
   /* Upcoming events list */
   .upcoming-row { display:grid; grid-template-columns:36px 1fr auto; gap:10px; padding:11px 16px; border-bottom:1px solid var(--cm-border-soft); align-items:center; cursor:pointer; }
   .upcoming-row:last-child { border-bottom:0; }
@@ -4244,22 +4261,27 @@ async function renderMonthView() {
       const pillLbl  = (isCont ? '← ' : '') + (dayMc.name || 'MC ' + dayMc.id) + (isCont ? ' ' + tt('calendar.mc_cont','cont.') : '');
       mcPillHtml = `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:0.05em;text-transform:uppercase;padding:2px 5px;border-radius:3px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:${mcPal.pillBg};color:${mcPal.pillClr}">${_esc(pillLbl)}</div>`;
     }
-    html += `<div style="min-width:0;min-height:80px;padding:6px 8px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${bgClr}"${mcAttr}>
+    html += `<div data-date="${dateStr}" style="min-width:0;min-height:80px;padding:6px 8px;cursor:pointer;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${bgClr}"${mcAttr}>
       <div style="font:600 14px/1 var(--cm-font-sans);color:${isToday?'var(--cm-accent)':'var(--cm-fg-strong)'};margin-bottom:4px">${day}</div>
       ${mcPillHtml}
       ${daySess.map(s => {
         const cat = focusToClass(s.session_type);
         const bg2 = EVT_BG[cat]  || EVT_BG.training;
         const cl2 = EVT_CLR[cat] || EVT_CLR.training;
-        return `<div onclick="handleMonthEvtClick('${s.id}')" title="${_esc(s.title||s.session_type)}" style="min-width:0;cursor:pointer;margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.title||s.session_type)}</div>`;
+        return `<div title="${_esc(s.title||s.session_type)}" style="min-width:0;pointer-events:none;margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.title||s.session_type)}</div>`;
       }).join('')}
     </div>`;
   }
   html += '</div>';
   document.getElementById('calMonthGrid').innerHTML = html;
 
-  // MC hover-highlight: mousing over any day highlights all days of the same MC
+  // Day click → in-place day summary popover (stays in month view).
   const monthGrid = document.getElementById('calMonthGrid');
+  monthGrid.querySelectorAll('[data-date]').forEach(cell => {
+    cell.addEventListener('click', () => openDaySummary(cell.dataset.date));
+  });
+
+  // MC hover-highlight: mousing over any day highlights all days of the same MC
   monthGrid.querySelectorAll('[data-mc-id]').forEach(cell => {
     const mcId = cell.dataset.mcId;
     const pal  = mcPalMap[mcId];
@@ -4289,6 +4311,79 @@ function handleMonthEvtClick(sid) {
   }
   if (s._mc) { openMcModal(s._mc); return; }
   openEvtModal(s);
+}
+
+// ── Month view · day summary popover ──────────────────────────
+// Clicking a day in month view opens an in-place summary (stays in month view) listing
+// that day's events, with a button to jump to that day's microcycle.
+function _calDayPopEsc(e){ if (e.key === 'Escape') closeDaySummary(); }
+function closeDaySummary(){
+  const ov = document.getElementById('calDayPop');
+  if (ov) ov.classList.remove('is-open');
+  document.removeEventListener('keydown', _calDayPopEsc);
+}
+function goToMicrocycleForDate(dateStr){
+  const idx = _allMCs.findIndex(mc => mc.start_date <= dateStr && mc.end_date >= dateStr);
+  document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.dataset.view === 'microcycle'));
+  if (idx >= 0) { _mcIdx = idx; _weekOffset = 0; }
+  switchView('microcycle');
+  if (idx >= 0) loadSessions();   // fetch + render the target microcycle
+}
+function openDaySummary(dateStr){
+  if (!dateStr) return;
+  const evts = (_monthEvts || [])
+    .filter(e => (e.session_date || '').split('T')[0] === dateStr)
+    .sort((a, b) => String(a.start_time || '').localeCompare(String(b.start_time || '')));
+  const mc = _allMCs.find(m => m.start_date <= dateStr && m.end_date >= dateStr) || null;
+
+  let ov = document.getElementById('calDayPop');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'calDayPop';
+    ov.className = 'cal-daypop-ov';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) closeDaySummary(); });
+  }
+
+  const dObj      = new Date(dateStr + 'T12:00:00');
+  const dateLabel = dObj.toLocaleDateString(ttLocale(), { weekday: 'long', day: 'numeric', month: 'long' });
+  const mcLabel   = mc ? (mc.name || ('MC ' + mc.id)) : null;
+
+  const rows = evts.length ? evts.map(s => {
+    const cat  = focusToClass(s.session_type);
+    const bg   = EVT_BG[cat]  || EVT_BG.training;
+    const cl   = EVT_CLR[cat] || EVT_CLR.training;
+    const time = s.start_time ? s.start_time.slice(0, 5) : '—';
+    const label = upcomingTypeLabel(s.session_type);
+    return `<div class="cal-daypop-evt" data-evt="${_esc(s.id)}">
+      <span class="t">${_esc(time)}</span>
+      <span class="nm">${_esc(s.title || s.session_type)}</span>
+      <span style="flex-shrink:0;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:0.04em;padding:3px 7px;border-radius:999px;background:${bg};color:${cl}">${_esc(label)}</span>
+    </div>`;
+  }).join('') : `<div class="cal-daypop-empty">${_esc(tt('calendar.day_no_events','No events this day'))}</div>`;
+
+  ov.innerHTML = `
+    <div class="cal-daypop" role="dialog" aria-modal="true">
+      <div class="cal-daypop-h">
+        <div style="flex:1;min-width:0">
+          <h3>${_esc(dateLabel)}</h3>
+          ${mcLabel ? `<div class="sub">${_esc(mcLabel)}</div>` : ''}
+        </div>
+        <button class="cal-daypop-x" data-close aria-label="${_esc(tt('common.close','Close'))}"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="cal-daypop-body">${rows}</div>
+      <div class="cal-daypop-foot">
+        <button class="cm-btn is-ghost is-sm" data-close>${_esc(tt('common.close','Close'))}</button>
+        <button class="cm-btn is-primary is-sm" data-goto-mc><i class="ti ti-calendar-stats"></i> ${_esc(tt('calendar.go_to_microcycle','Go to microcycle'))}</button>
+      </div>
+    </div>`;
+
+  ov.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeDaySummary));
+  ov.querySelector('[data-goto-mc]')?.addEventListener('click', () => { closeDaySummary(); goToMicrocycleForDate(dateStr); });
+  ov.querySelectorAll('.cal-daypop-evt').forEach(row => row.addEventListener('click', () => { const id = row.dataset.evt; closeDaySummary(); handleMonthEvtClick(id); }));
+
+  ov.classList.add('is-open');
+  document.addEventListener('keydown', _calDayPopEsc);
 }
 
 document.getElementById('calMonthPrev').addEventListener('click', () => {
