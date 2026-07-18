@@ -6,9 +6,9 @@
    sutil, sin sombra y borde suave, para que se lea como una barra de filtros. */
 .gp-fbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;   /* keep the pills row + the status/clear on a SINGLE row (right no longer wraps below) */
   background: var(--cm-bg-soft);
   border: 1px solid var(--cm-border-soft);
   border-radius: var(--cm-r-3);
@@ -376,6 +376,7 @@
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
+  .gp-fbar { flex-wrap: wrap; }   /* narrow screens: allow the status/clear to drop to its own row again */
   .gp-fbar-right { margin-left: 0; flex-basis: 100%; justify-content: space-between; }
   .fb-trigger { max-width: 100%; }
 }
