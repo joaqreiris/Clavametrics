@@ -2666,14 +2666,16 @@ function _calOppMenuHtml(input) {
   const q = (input.value || '').trim(), ql = q.toLowerCase();
   const list = (_calOppCatalog || []).filter(o => !ql || o.name.toLowerCase().includes(ql));
   const exact = (_calOppCatalog || []).some(o => o.name.toLowerCase() === ql);
-  let html = list.map(o => {
+  // "New rival" row ALWAYS on top (shows "Create '<typed>'" once you type a name that isn't an exact match).
+  const createLbl = (q && !exact) ? `${tt('calendar.create_rival','Create')} "${calEsc(q)}"` : tt('calendar.new_rival','New rival…');
+  let html = `<button type="button" class="cal-opp-item cal-opp-new" data-new="1"><i class="ti ti-plus" style="font-size:14px"></i><span>${createLbl}</span></button>`;
+  if (list.length) html += `<div style="height:1px;background:var(--cm-border-soft);margin:4px 2px"></div>`;
+  html += list.map(o => {
     const ic = o.crest
       ? `<img src="${calEsc(o.crest)}" alt="" style="width:20px;height:20px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.visibility='hidden'">`
       : `<span style="width:20px;height:20px;border-radius:50%;background:var(--cm-bg-soft);display:inline-flex;align-items:center;justify-content:center;font:700 9px/1 var(--cm-font-sans);color:var(--cm-fg-faint);flex-shrink:0">${calEsc(window.rivalInitials ? window.rivalInitials(o.name) : ((o.name||'?')[0]||'?'))}</span>`;
     return `<button type="button" class="cal-opp-item" data-name="${calEsc(o.name)}" data-crest="${o.crest ? calEsc(o.crest) : ''}">${ic}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${calEsc(o.name)}</span></button>`;
   }).join('');
-  if (q && !exact) html += `<button type="button" class="cal-opp-item cal-opp-new" data-new="1"><i class="ti ti-plus" style="font-size:14px"></i><span>${tt('calendar.create_rival','Create')} "${calEsc(q)}"</span></button>`;
-  if (!html) html = `<div style="padding:9px 12px;font:var(--cm-meta);color:var(--cm-fg-faint)">${tt('calendar.no_rivals','Type a rival name to create it')}</div>`;
   return html;
 }
 function _calWireOpponentPicker() {
@@ -2699,7 +2701,11 @@ function _calWireOpponentPicker() {
     const it = e.target.closest('.cal-opp-item'); if (!it) return;
     e.preventDefault();
     menu.style.display = 'none';
-    if (it.dataset.new) return;                       // keep the typed text → new rival (created on save)
+    if (it.dataset.new) {                             // "New rival…": keep the typed name; show its initials in the crest preview (upload a crest below if you want)
+      calCrestSetInitials(input.value.trim());
+      calCrestShowImg(null);
+      return;
+    }
     input.value = it.dataset.name;
     calCrestSetInitials(it.dataset.name);
     const crest = it.dataset.crest || null;
