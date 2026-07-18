@@ -3285,9 +3285,11 @@
     return _crestCache;
   }
   const _crestImgCache = new Map();   // url → HTMLImageElement (no crossOrigin: we never read pixels back)
+  const _CREST_PX = 26;               // drawn size; Chart.js draws pointStyle images at img.width/height, NOT radius
   function _crestImage(url) {
     if (_crestImgCache.has(url)) return _crestImgCache.get(url);
     const img = new Image();
+    img.width = _CREST_PX; img.height = _CREST_PX;   // pin size — else Chart.js draws at natural (huge) resolution
     img.src = url;
     _crestImgCache.set(url, img);
     return img;
