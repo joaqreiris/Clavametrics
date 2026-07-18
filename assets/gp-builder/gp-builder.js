@@ -3262,6 +3262,57 @@
     };
   }
 
+  // ── Rival crest marks (scatter encoding, Phase 1) ───────────────────────────
+  // When the colour dimension is "rival", draw each point as the opponent's crest
+  // instead of a coloured dot. Crests come from opponent_branding (name → url),
+  // cached per club. Images load lazily and apply via chart.update once ready; a
+  // missing crest silently keeps the coloured dot (graceful fallback).
+  let _crestCache = null, _crestCacheClub = null;   // Promise<Map lc-name → url>
+  function _loadScatterCrests() {
+    if (!window.sb || !_clubId) return Promise.resolve(new Map());
+    if (_crestCache && _crestCacheClub === _clubId) return _crestCache;
+    _crestCacheClub = _clubId;
+    _crestCache = window.sb.from('opponent_branding')
+      .select('opponent_name, crest_url').eq('club_id', _clubId)
+      .then(({ data }) => {
+        const m = new Map();
+        (data || []).forEach(o => {
+          const k = (o.opponent_name || '').trim().toLowerCase();
+          if (k && o.crest_url) m.set(k, o.crest_url);
+        });
+        return m;
+      }, () => new Map());
+    return _crestCache;
+  }
+  const _crestImgCache = new Map();   // url → HTMLImageElement (no crossOrigin: we never read pixels back)
+  function _crestImage(url) {
+    if (_crestImgCache.has(url)) return _crestImgCache.get(url);
+    const img = new Image();
+    img.src = url;
+    _crestImgCache.set(url, img);
+    return img;
+  }
+  /** Swap coloured dots for opponent crests on a mounted scatter chart. Token-guarded. */
+  async function _applyRivalCrests(body, token) {
+    const chart = body.__chart;
+    if (!chart || !chart.data) return;
+    const crests = await _loadScatterCrests();
+    if (!crests.size || body.__scatterToken !== token || !body.__chart) return;
+    chart.data.datasets.forEach(ds => {
+      const url = crests.get((ds.label || '').trim().toLowerCase());
+      if (!url) return;                                     // no crest → keep coloured dot
+      const img = _crestImage(url);
+      const apply = () => {
+        if (body.__scatterToken !== token || !body.__chart) return;
+        ds.pointStyle = img;
+        if (typeof ds.pointRadius !== 'function') { ds.pointRadius = 11; ds.pointHoverRadius = 13; }  // size-driven radius kept as-is
+        try { chart.update('none'); } catch (_) {}
+      };
+      if (img.complete && img.naturalWidth) apply();
+      else img.addEventListener('load', apply, { once: true });
+    });
+  }
+
   /** Mounts (or re-mounts) a Chart.js scatter into `body`. Same renderer for preview + saved card. */
   function mountScatterChart(body, config, series) {
     const d = scatterChartData(config, series);
@@ -3371,6 +3422,8 @@
           },
         },
       });
+      // Phase 1: rival crest marks — when colouring by rival, replace dots with opponent crests.
+      if ((config.dimensions || [])[0]?.id === 'rival') _applyRivalCrests(body, token);
     };
     mount();
   }
