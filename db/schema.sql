@@ -4668,6 +4668,8 @@ create policy "evaluations_scoped_select" on public.evaluations as permissive fo
 create policy "evaluations_scoped_update" on public.evaluations as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "evaluations_scoped_delete" on public.evaluations as permissive for delete to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
 alter table public.exercise_drills enable row level security;
 create policy "Club members can manage exercise_drills" on public.exercise_drills as permissive for all to public
@@ -4759,6 +4761,8 @@ create policy "Users read own layouts" on public.gps_dashboard_layouts as permis
 create policy "Users update own layouts" on public.gps_dashboard_layouts as permissive for update to public
   using (((user_id = auth.uid()) AND (club_id = get_user_club_id())))
   with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
+create policy "Users delete own layouts" on public.gps_dashboard_layouts as permissive for delete to public
+  using (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
 
 alter table public.gps_drill_map enable row level security;
 create policy "gps_drill_map_select" on public.gps_drill_map as permissive for select to authenticated
