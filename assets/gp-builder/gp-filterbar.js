@@ -336,7 +336,8 @@
       const willOpen = !addMenu.classList.contains('is-open');
       closePanel();
       addMenu.classList.toggle('is-open', willOpen);
-      if (willOpen) refreshAddMenu();
+      if (willOpen) { refreshAddMenu(); _positionFloat(addBtn, addMenu); }
+      else _clearFloat(addMenu);
     });
     addMenu.addEventListener('click', e => e.stopPropagation());
     addWrap.appendChild(addBtn);
@@ -627,6 +628,34 @@
   // ── Apertura / cierre de paneles ────────────────────────────────────────
   function togglePanel(key) { (openKey === key) ? closePanel() : openPanel(key); }
 
+  // Floating panels escape the horizontal-scroll clip: `.gp-fbar-drops` has overflow-x:auto,
+  // which forces overflow-y:auto and would clip an absolutely-positioned dropdown. So we pin
+  // the panel with position:fixed under its trigger, clamped to the viewport, and reposition
+  // on scroll/resize (see mount()). Inline styles are cleared on close to restore the CSS.
+  function _positionFloat(anchor, floatEl) {
+    if (!anchor || !floatEl) return;
+    const r  = anchor.getBoundingClientRect();
+    const pw = floatEl.offsetWidth || 248;
+    const vw = document.documentElement.clientWidth;
+    let left = r.left;
+    if (left + pw > vw - 8) left = Math.max(8, vw - 8 - pw);
+    floatEl.style.position = 'fixed';
+    floatEl.style.top  = Math.round(r.bottom + 6) + 'px';
+    floatEl.style.left = Math.round(left) + 'px';
+  }
+  function _clearFloat(floatEl) {
+    if (!floatEl) return;
+    floatEl.style.position = ''; floatEl.style.top = ''; floatEl.style.left = '';
+  }
+  function _repositionFloats() {
+    if (openKey) {
+      const drop = root?.querySelector(`.fb-drop[data-key="${openKey}"]`);
+      if (drop) _positionFloat(drop.querySelector('.fb-trigger'), drop.querySelector('.fb-panel'));
+    }
+    const am = root?.querySelector('.fb-addmenu.is-open');
+    if (am) _positionFloat(am.closest('.fb-addwrap')?.querySelector('.fb-addfilter'), am);
+  }
+
   function openPanel(key) {
     closePanel();
     openKey = key;
@@ -636,15 +665,18 @@
     // arranca el draft desde el estado actual
     if (key !== 'date') drafts[key] = new Set(state[key]);
     renderListOrDate(key);
+    _positionFloat(drop.querySelector('.fb-trigger'), drop.querySelector('.fb-panel'));
     const focusable = drop.querySelector('.fb-search input, .fb-preset');
     if (focusable) setTimeout(() => focusable.focus(), 0);
   }
   function closePanel() {
-    root?.querySelector('.fb-addmenu.is-open')?.classList.remove('is-open');
+    const am = root?.querySelector('.fb-addmenu.is-open');
+    if (am) { am.classList.remove('is-open'); _clearFloat(am); }
     if (!openKey) return;
     const drop = root.querySelector(`.fb-drop[data-key="${openKey}"]`);
     if (drop) {
       drop.classList.remove('is-open');
+      _clearFloat(drop.querySelector('.fb-panel'));
       const s = drop.querySelector('.fb-search input');
       if (s) { s.value = ''; filterList(openKey, ''); }
     }
@@ -895,6 +927,9 @@
     // cerrar al click fuera / Escape
     document.addEventListener('click', e => { if (root && !root.contains(e.target)) closePanel(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+    // keep fixed-positioned panels glued to their trigger while the bar scrolls or the window resizes
+    window.addEventListener('resize', _repositionFloats);
+    window.addEventListener('scroll', _repositionFloats, true);   // capture: catches the .gp-fbar-drops scroll too
 
     // cambiar de dashboard (tab) → cargar los filtros guardados de ese dashboard
     document.getElementById('sections')?.addEventListener('click', e => {
