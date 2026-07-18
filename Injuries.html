@@ -430,7 +430,7 @@
             <div style="padding:0 16px 14px;display:flex;align-items:center;gap:14px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap">
               <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span><span data-i18n="injuries.legend_active">Active</span></span>
               <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span><span data-i18n="injuries.legend_history">History</span></span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:16px;border-radius:50%;background:var(--cm-danger);display:inline-flex;align-items:center;justify-content:center;font:600 8px/1 var(--cm-font-mono);color:#fff">3</span><span data-i18n="injuries.legend_count">Count</span></span>
+              <span id="injLegendCountItem" style="display:none;align-items:center;gap:5px"><span id="injLegendCountN" style="width:16px;height:16px;border-radius:50%;background:var(--cm-danger);display:inline-flex;align-items:center;justify-content:center;font:600 8px/1 var(--cm-font-mono);color:#fff">3</span><span data-i18n="injuries.legend_count">Count</span></span>
             </div>
           </div>
 
@@ -2181,6 +2181,14 @@ function renderBodyMap() {
   document.getElementById('svgPost').innerHTML = postHtml;
   const activeCount = _allInjuries.filter(i => i.status !== 'cleared' && i.status !== 'resolved').length;
   document.getElementById('bodyMapSub').textContent = tt('injuries.bodymap_sub', `${activeCount} active · season`, { count: activeCount });
+
+  // "Count" legend: only meaningful when a zone shows a numbered badge (≥2 injuries).
+  // Reflects the real max per-zone count; hidden entirely when there's nothing to count.
+  const maxZoneN = Object.values(areaMap).reduce((mx, g) => Math.max(mx, g.total), 0);
+  const legItem = document.getElementById('injLegendCountItem');
+  const legN    = document.getElementById('injLegendCountN');
+  if (legItem) legItem.style.display = maxZoneN >= 2 ? 'inline-flex' : 'none';
+  if (legN && maxZoneN >= 2) legN.textContent = maxZoneN > 9 ? '9+' : maxZoneN;
 }
 
 // ═══════════════ BODY MAP POPOVER ═══════════════
@@ -2717,6 +2725,17 @@ async function deleteInjury(id) {
   if (!confirm(tt('injuries.delete_confirm', `Delete injury for ${name}? This cannot be undone.`, { name }))) return;
   const { error } = await window.sb.from('injuries').delete().eq('id', id);
   if (error) { alert(tt('injuries.err_generic', `Error: ${error.message}`, { msg: error.message })); return; }
+  // Clear the 'injured' availability rows this injury auto-filled, so Availability updates.
+  // Safe: Availability re-creates 'injured' for any STILL-active injury on its next load.
+  if (inj?.player_id) {
+    try {
+      let aq = window.sb.from('availability').delete()
+        .eq('player_id', inj.player_id).eq('club_id', _clubId).eq('status', 'injured');
+      if (inj.start_date)      aq = aq.gte('date', inj.start_date);
+      if (inj.expected_return) aq = aq.lte('date', inj.expected_return);
+      await aq;
+    } catch (e) { console.warn('[Injuries] availability cleanup on delete failed:', e.message); }
+  }
   _allInjuries = _allInjuries.filter(i => i.id !== id);
   delete _phasesMap[id];
   updateKPIs();

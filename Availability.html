@@ -1169,6 +1169,14 @@
 
   init();
 
+  // Self-heal when returning to this tab: an injury deleted elsewhere clears its
+  // auto-filled 'injured' rows, but this page's injuredIds/avMap were captured at load.
+  // Re-running init re-fetches injuries + availability and re-renders (it also tears down
+  // and re-creates its realtime channel, so no duplicate subscriptions).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') init();
+  });
+
   // ── Cell interactions ──
   const matrix = document.getElementById('avMatrix');
   const bulk   = document.getElementById('bulkBar');
