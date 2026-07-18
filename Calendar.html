@@ -2649,6 +2649,66 @@ function calCrestSetInitials(name) {
   if (el) el.textContent = window.rivalInitials ? window.rivalInitials(name) : ((name || '?').split(/\s+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('') || '?');
 }
 
+// ── Rival picker: choose an existing opponent (opponent_branding, with crest) or type a new one.
+// UI-only over the free-text #calEvtF_opponent — the save/read path is unchanged, so downstream
+// (Hub "next match", Lineup, planner…) that reads calendar_events.opponent + rival_crest_url is intact.
+let _calOppCatalog = null;   // [{ name, crest }] — club opponent catalog, reloaded on each modal open
+async function _calLoadOpponents() {
+  if (_calOppCatalog) return _calOppCatalog;
+  try {
+    const { data } = await window.sb.from('opponent_branding')
+      .select('opponent_name, crest_url').eq('club_id', _clubId).order('opponent_name');
+    _calOppCatalog = (data || []).map(o => ({ name: o.opponent_name, crest: o.crest_url || null }));
+  } catch (e) { _calOppCatalog = []; }
+  return _calOppCatalog;
+}
+function _calOppMenuHtml(input) {
+  const q = (input.value || '').trim(), ql = q.toLowerCase();
+  const list = (_calOppCatalog || []).filter(o => !ql || o.name.toLowerCase().includes(ql));
+  const exact = (_calOppCatalog || []).some(o => o.name.toLowerCase() === ql);
+  let html = list.map(o => {
+    const ic = o.crest
+      ? `<img src="${calEsc(o.crest)}" alt="" style="width:20px;height:20px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.visibility='hidden'">`
+      : `<span style="width:20px;height:20px;border-radius:50%;background:var(--cm-bg-soft);display:inline-flex;align-items:center;justify-content:center;font:700 9px/1 var(--cm-font-sans);color:var(--cm-fg-faint);flex-shrink:0">${calEsc(window.rivalInitials ? window.rivalInitials(o.name) : ((o.name||'?')[0]||'?'))}</span>`;
+    return `<button type="button" class="cal-opp-item" data-name="${calEsc(o.name)}" data-crest="${o.crest ? calEsc(o.crest) : ''}">${ic}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${calEsc(o.name)}</span></button>`;
+  }).join('');
+  if (q && !exact) html += `<button type="button" class="cal-opp-item cal-opp-new" data-new="1"><i class="ti ti-plus" style="font-size:14px"></i><span>${tt('calendar.create_rival','Create')} "${calEsc(q)}"</span></button>`;
+  if (!html) html = `<div style="padding:9px 12px;font:var(--cm-meta);color:var(--cm-fg-faint)">${tt('calendar.no_rivals','Type a rival name to create it')}</div>`;
+  return html;
+}
+function _calWireOpponentPicker() {
+  const input = document.getElementById('calEvtF_opponent');
+  if (!input || input._calWired) return;
+  input._calWired = true;
+  if (!document.getElementById('cal-opp-style')) {
+    const st = document.createElement('style'); st.id = 'cal-opp-style';
+    st.textContent = '.cal-opp-menu{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:60;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);box-shadow:var(--cm-shadow-3);max-height:240px;overflow-y:auto;padding:4px}'
+      + '.cal-opp-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 8px;border:0;background:none;border-radius:6px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)}'
+      + '.cal-opp-item:hover{background:var(--cm-bg-soft)}.cal-opp-new{color:var(--cm-accent);font-weight:600}';
+    document.head.appendChild(st);
+  }
+  const field = input.closest('.sq-modal-field') || input.parentElement;
+  field.style.position = 'relative';
+  const menu = document.createElement('div');
+  menu.className = 'cal-opp-menu'; menu.style.display = 'none';
+  field.appendChild(menu);
+  const show = async () => { await _calLoadOpponents(); menu.innerHTML = _calOppMenuHtml(input); menu.style.display = 'block'; };
+  input.addEventListener('focus', show);
+  input.addEventListener('input', () => { if (_calOppCatalog) { menu.innerHTML = _calOppMenuHtml(input); menu.style.display = 'block'; } else show(); });
+  menu.addEventListener('mousedown', e => {           // mousedown fires BEFORE blur → the pick registers
+    const it = e.target.closest('.cal-opp-item'); if (!it) return;
+    e.preventDefault();
+    menu.style.display = 'none';
+    if (it.dataset.new) return;                       // keep the typed text → new rival (created on save)
+    input.value = it.dataset.name;
+    calCrestSetInitials(it.dataset.name);
+    const crest = it.dataset.crest || null;
+    _pendingCrestUrl = crest;                          // event gets this crest; save's find-or-create won't dup
+    calCrestShowImg(crest);
+  });
+  input.addEventListener('blur', () => setTimeout(() => { menu.style.display = 'none'; }, 150));
+}
+
 function openEvtModal(session, defaultDate, focusTasks) {
   if (!session && _sessions.some(s => s.session_date === defaultDate && s.session_type === 'day_off')) {
     showCalToast(tt('calendar.day_marked_off','This day is marked OFF. Remove the day off to add events.'));
@@ -2699,6 +2759,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
 
   // Match extra fields
   document.getElementById('calEvtF_opponent').value    = session?.opponent    || '';
+  _calOppCatalog = null; _calWireOpponentPicker();     // rival picker (existing opponents + create-new); reload catalog per open
   document.getElementById('calEvtF_homeaway').value    = session?.home_away   || '';
   const compSel = document.getElementById('calEvtF_competition');
   compSel.innerHTML = `<option value="">${tt('calendar.no_competition','— No competition')}</option>` +
@@ -3622,15 +3683,29 @@ async function saveEvt() {
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
 
-  // Persist crest to opponent_branding (unless match-only toggle is checked)
-  if (_pendingCrestUrl && type === 'match') {
+  // Ensure the rival is in the club's opponent catalog (opponent_branding). Case-insensitive lookup +
+  // preserve the REAL casing, so it never duplicates the GPS-imported (proper-case) entries. Runs for
+  // EVERY match rival (not only when a crest was uploaded) so a newly-typed rival becomes selectable
+  // next time. "Use for this match only" skips the catalog write. Downstream is untouched — the event
+  // already saved calendar_events.opponent (text) + rival_crest_url above.
+  if (type === 'match') {
     const _matchOnly = document.getElementById('calEvtCrestMatchOnly')?.checked;
     const _opponent  = document.getElementById('calEvtF_opponent').value.trim();
+    const _crest     = _pendingCrestUrl;
     if (!_matchOnly && _opponent && clubId) {
-      window.sb.from('opponent_branding').upsert(
-        { club_id: clubId, opponent_name: _opponent.toLowerCase().trim(), crest_url: _pendingCrestUrl },
-        { onConflict: 'club_id,opponent_name' }
-      ); // fire-and-forget
+      (async () => {
+        try {
+          const { data: _ex } = await window.sb.from('opponent_branding')
+            .select('id, crest_url').eq('club_id', clubId).ilike('opponent_name', _opponent).maybeSingle();
+          if (_ex) {
+            if (_crest && _crest !== _ex.crest_url)
+              await window.sb.from('opponent_branding').update({ crest_url: _crest }).eq('id', _ex.id);
+          } else {
+            await window.sb.from('opponent_branding')
+              .insert({ club_id: clubId, opponent_name: _opponent, crest_url: _crest || null });
+          }
+        } catch (e) { console.warn('opponent_branding catalog upsert:', e); }
+      })();
     }
     if (window.invalidateCrestCache) window.invalidateCrestCache(clubId, _opponent, _editEvtId);
     _pendingCrestUrl = null;
