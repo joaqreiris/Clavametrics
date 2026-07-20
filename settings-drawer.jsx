@@ -169,6 +169,29 @@ const BillingPanel = () => {
   </>;
 };
 
+/* Presentational shells — MUST live at module scope. Defined inside SettingsDrawer they
+   got a new component identity on every render, so React unmounted/remounted the whole
+   subtree on each keystroke: text inputs lost focus and the avatar <img> reloaded (flicker). */
+const Section = ({ label, children, hint }) => (
+  <div className="sd-section">
+    <div className="sd-section-h">
+      <div className="sd-section-l">{label}</div>
+      {hint ? <div className="sd-section-hint">{hint}</div> : null}
+    </div>
+    <div className="sd-section-body">{children}</div>
+  </div>
+);
+
+const Row = ({ label, sub, children }) => (
+  <div className="sd-row">
+    <div className="sd-row-l">
+      <div className="sd-row-label">{label}</div>
+      {sub ? <div className="sd-row-sub">{sub}</div> : null}
+    </div>
+    <div className="sd-row-c">{children}</div>
+  </div>
+);
+
 const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSettings, onSettingsChange }) => {
   const [s, setS]       = React.useState(initSettings);
   const [tab, setTab]   = React.useState("appearance");
@@ -240,6 +263,12 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
         });
       }, () => {});
   }, [open, userId]);
+
+  // Stable avatar src across renders — resolving it inline re-ran on every keystroke.
+  const pfAvaUrl = React.useMemo(
+    () => pfPreview || (pf && window.cmAvatarUrl ? window.cmAvatarUrl(pf) : null),
+    [pfPreview, pf && pf.avatar_url]
+  );
 
   const setPfField = (k, v) => setPf(p => ({ ...(p || {}), [k]: v }));
   const onPfPhoto = (e) => {
@@ -319,26 +348,6 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
   const themeBorder = (t) => t === "dark" ? "rgba(255,255,255,0.10)" : "#E5E7EB";
 
   const swatchesForTheme = Object.entries(_ACCENT[s.theme]);
-
-  const Section = ({ label, children, hint }) => (
-    <div className="sd-section">
-      <div className="sd-section-h">
-        <div className="sd-section-l">{label}</div>
-        {hint ? <div className="sd-section-hint">{hint}</div> : null}
-      </div>
-      <div className="sd-section-body">{children}</div>
-    </div>
-  );
-
-  const Row = ({ label, sub, children }) => (
-    <div className="sd-row">
-      <div className="sd-row-l">
-        <div className="sd-row-label">{label}</div>
-        {sub ? <div className="sd-row-sub">{sub}</div> : null}
-      </div>
-      <div className="sd-row-c">{children}</div>
-    </div>
-  );
 
   return (
     <>
@@ -536,8 +545,8 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
               {!pf ? <div className="sd-row-sub">{_t("settings.profile.loading","Loading…")}</div> : <div className="sd-pf">
                 <div className="sd-pf-photo">
                   <div className="sd-pf-ava">
-                    {(pfPreview || (window.cmAvatarUrl && window.cmAvatarUrl(pf)))
-                      ? <img src={pfPreview || window.cmAvatarUrl(pf)} alt="" />
+                    {pfAvaUrl
+                      ? <img src={pfAvaUrl} alt="" />
                       : <span>{window.cmInitials ? window.cmInitials(((pf.first_name || '') + ' ' + (pf.last_name || '')).trim() || (profile && profile.email) || '?') : '?'}</span>}
                   </div>
                   <label className="sd-pf-photobtn">
