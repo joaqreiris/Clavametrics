@@ -1796,6 +1796,8 @@
         mcId:     window._gpMcId || window.gpState?.mcId || null,
         teamId:   window._gpTeamId || null,
         teamPlayerIds: _teamPids,
+        // Vacío cuando el ajuste "incluir archivados" está ON → el resolver no excluye nada.
+        archivedPlayerIds: Array.isArray(window._gpArchivedPlayerIds) ? window._gpArchivedPlayerIds : [],
         asOf:     new Date().toISOString().slice(0, 10),
       };
 

@@ -207,6 +207,7 @@ create table if not exists public.club_gps_settings (
   updated_at timestamp with time zone default now(),
   gps_builder_enabled boolean default true not null,
   acwr_model text default 'ewma'::text not null,
+  include_archived boolean default false not null,
   constraint club_gps_settings_pkey primary key (club_id),
   constraint club_gps_settings_baseline_n_check CHECK (((baseline_n >= 3) AND (baseline_n <= 10))),
   constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text]))),
