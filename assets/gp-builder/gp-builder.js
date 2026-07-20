@@ -340,7 +340,7 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name' },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
     };
@@ -558,6 +558,15 @@
                 <span class="tx"><span class="t">Data labels</span><span class="s">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
+              <div class="es-toggle" data-only="scatter">
+                <span class="tx"><span class="t">Label content</span><span class="s">Text beside each point</span></span>
+                <div class="es-seg" id="gpbScatterLabel">
+                  <button data-slabel="name" class="is-on">Name</button>
+                  <button data-slabel="x">X</button>
+                  <button data-slabel="y">Y</button>
+                  <button data-slabel="xy">X·Y</button>
+                </div>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t">Points</span><span class="s">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -673,7 +682,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
-             points:true, area:false, horizontal:false, stacked:false, sort:null };
+             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name' };
   }
 
   function startBuild() {
@@ -1039,6 +1048,7 @@
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
+      S.scatterLabel = cfg.scatterLabel || 'name';
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
       S.horizontal = !!cfg.horizontal;
@@ -1063,6 +1073,7 @@
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
+      S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
@@ -1301,6 +1312,16 @@
       };
     });
 
+    // scatter label-content segmented control (Phase 3)
+    document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        if (!S) return;
+        document.getElementById('gpbScatterLabel').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
+        S.scatterLabel = b.dataset.slabel;
+        renderCard();
+      };
+    });
+
     // (Classic title / add-metric / range / compare / metric-well bindings removed — the D&D
     //  Config provides #gpbDDTitle, the fields pantry, and data-ddpop range/compare/bars.)
 
@@ -1458,6 +1479,9 @@
     );
     panelEl.querySelectorAll('[data-toggle]').forEach(b =>
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
+    );
+    document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
     // viz-specific style options (data-only="line" / "bars") hidden for other types
     panelEl.querySelectorAll('[data-only]').forEach(el =>
@@ -3112,8 +3136,8 @@
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
         meta.data.forEach((pt, i) => {
-          const nm = ds.data[i]?.name;
-          if (nm) ctx.fillText(String(nm), pt.x + 8, pt.y);
+          const nm = ds.data[i]?.lbl ?? ds.data[i]?.name;   // Phase 3: configurable label content
+          if (nm != null && nm !== '') ctx.fillText(String(nm), pt.x + 8, pt.y);
         });
       });
       ctx.restore();
@@ -3182,7 +3206,8 @@
   function scatterChartData(config, series) {
     const size     = config.style?.size || 'md';
     const showAxes = config.style?.axes   !== false;
-    const showLbl  = !!config.style?.dataLabels;     // point name labels — OFF by default
+    const showLbl  = !!config.style?.dataLabels;     // point labels — OFF by default
+    const lblMode  = config.style?.scatterLabel || 'name';   // Phase 3: name | x | y | xy
     // Roles → ids via the data-driven resolver (positional fallback keeps existing scatters
     // identical), then match each role to its series by metric id (series.label === metric.id)
     // — NOT by array position. size/color are resolved too but not yet consumed by the render.
@@ -3236,9 +3261,14 @@
     const colors = scatterColors(config, cats.length);
     const datasets = cats.map((c, i) => {
       const col = colors[i];
+      const _lf = v => fmt(Math.round((v ?? 0) * 10) / 10);   // Phase 3 value formatter for on-canvas labels
       const pts = paired
         .filter(p => (hasCat ? (p.cat ?? '—') : null) === c)
-        .map(p => ({ x: p.x, y: p.y, name: p.name, size: p.size }));
+        .map(p => ({ x: p.x, y: p.y, name: p.name, size: p.size,
+          lbl: lblMode === 'x'  ? _lf(p.x)
+             : lblMode === 'y'  ? _lf(p.y)
+             : lblMode === 'xy' ? `${_lf(p.x)} · ${_lf(p.y)}`
+             : p.name }));
       return {
         label: c ?? (sX.name + ' vs ' + sY.name),
         data: pts,
@@ -3474,7 +3504,7 @@
     const cfg = {
       viz: 'scatter',
       dimensions: S.dimensions,
-      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, scatterLabel: S.scatterLabel || 'name' },
       __example: true,
     };
     mountScatterChart(body, cfg, series);
