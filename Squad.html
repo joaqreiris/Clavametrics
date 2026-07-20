@@ -2116,8 +2116,19 @@ async function reloadPlayers() {
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
     };
 
-    // Teams / Categories: el set elegido en el multi-select.
-    const selectedTeamIds = getSelectedTeamIds();
+    // Teams / Categories: el set elegido en el multi-select. La RLS de `players` (para roles
+    // no-admin) exige que el jugador pertenezca a UNO DE SUS equipos → si no se tildó ninguno,
+    // caemos al equipo activo para que un coach pueda crear sin romper la policy (team_id null
+    // fallaba el WITH CHECK). Si no hay ningún equipo, avisamos claro en vez del error crudo.
+    let selectedTeamIds = getSelectedTeamIds();
+    if (!selectedTeamIds.length && _currentTeamId && _currentTeamId !== '__archived__') {
+      selectedTeamIds = [_currentTeamId];
+    }
+    if (!selectedTeamIds.length && !_fullAccess) {
+      showToast(tt('squad.team_required','Assign the player to one of your teams first.'));
+      saving.style.display = 'none'; saveBtn.disabled = false;
+      return;
+    }
     // PRIMARIO = el actual si sigue elegido; si no, el primero seleccionado (orden de la lista).
     const curPrimary = _editingId ? (_allPlayers.find(p => p.id === _editingId)?.team_id || null) : null;
     const primaryTeamId = (curPrimary && selectedTeamIds.includes(curPrimary))
@@ -2175,8 +2186,10 @@ async function reloadPlayers() {
       }
     }
 
-    // Sincronizar membresías player_teams (solo admin/owner/super — RLS lo refuerza igual).
-    if (!error && savedPlayerId && _fullAccess) {
+    // Sincronizar membresías player_teams. Se corre para cualquiera con equipos seleccionados;
+    // la RLS de player_teams refuerza que un no-admin solo pueda tocar SUS equipos (así el
+    // jugador que crea un coach aparece en su roster, que filtra por player_teams).
+    if (!error && savedPlayerId && selectedTeamIds.length) {
       const syncErr = await syncPlayerTeams(savedPlayerId, savedClubId, selectedTeamIds, primaryTeamId);
       if (syncErr) console.error('[Squad] player_teams sync error:', syncErr);
     }

@@ -5338,6 +5338,9 @@ create policy "player_teams_write" on public.player_teams as permissive for all 
 create policy "player_teams_super_all" on public.player_teams as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
+create policy "player_teams_member_write" on public.player_teams as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))
+  with check (((club_id = get_user_club_id()) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))));
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public
