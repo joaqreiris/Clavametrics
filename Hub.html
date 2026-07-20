@@ -1497,14 +1497,14 @@ async function renderActivity() {
 
   const [playersRes, actorsRes, sessRes] = await Promise.all([
     playerIds.length ? window.sb.from('players').select('id, first_name, last_name').in('id', playerIds) : Promise.resolve({ data: [] }),
-    actorIds.length  ? window.sb.from('profiles').select('id, full_name, role').in('id', actorIds)        : Promise.resolve({ data: [] }),
+    actorIds.length  ? window.sb.from('profiles').select('id, full_name, first_name, last_name, role, avatar_url').in('id', actorIds) : Promise.resolve({ data: [] }),
     sessIds.length   ? window.sb.from('training_sessions').select('id, title').in('id', sessIds)           : Promise.resolve({ data: [] }),
   ]);
 
   const playerMap = {};
   (playersRes.data || []).forEach(p => { playerMap[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim() || tt('common.player','Player'); });
   const actorMap = {};
-  (actorsRes.data || []).forEach(a => { actorMap[a.id] = { name: a.full_name || tt('hub.staff','Staff'), role: a.role || tt('hub.staff','Staff') }; });
+  (actorsRes.data || []).forEach(a => { actorMap[a.id] = { name: window.cmDisplayName(a) || tt('hub.staff','Staff'), role: a.role || tt('hub.staff','Staff'), profile: a }; });
   const sessMap = {};
   (sessRes.data || []).forEach(s => { sessMap[s.id] = s.title; });
 
@@ -1650,17 +1650,17 @@ async function renderActivity() {
         return;
     }
 
-    _appendActRow({ icon, color, who, role, what, when: r.created_at });
+    _appendActRow({ icon, color, who, role, what, when: r.created_at, whoProfile: actor?.profile || null });
     _shown++;
   });
 
-  function _appendActRow({ icon, color, who, role, what, when }) {
-    const initials = (who || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  function _appendActRow({ icon, color, who, role, what, when, whoProfile }) {
+    const avHTML = window.cmAvatarHtml(whoProfile || { full_name: who }, 24);
     const row = document.createElement('div');
     row.className = 'activity-row'; row.setAttribute('role', 'row');
     row.innerHTML =
       `<div class="ind" role="cell"><i class="ti ${icon}"${color ? ` style="color:${color}"` : ''} aria-hidden="true"></i></div>` +
-      `<div class="who" role="cell"><div class="av" aria-hidden="true">${initials}</div><div><div class="name">${who}</div><div class="cm-meta">${role}</div></div></div>` +
+      `<div class="who" role="cell">${avHTML}<div><div class="name">${who}</div><div class="cm-meta">${role}</div></div></div>` +
       `<div class="what" role="cell">${what}</div>` +
       `<div class="when" role="cell" style="text-align:right">${formatAgo(when)}</div>`;
     feed.appendChild(row);
@@ -1857,7 +1857,7 @@ function renderTasks(tasks, view = 'my') {
   // Populate sidebar user
   function _renderGreetMsg() {
     if (!profile) return;
-    const name = profile.full_name || tt('hub.user','User');
+    const name = window.cmDisplayName(profile) || tt('hub.user','User');
     const parts = name.trim().split(/\s+/);
     const h = new Date().getHours();
     const g = h < 12 ? tt('hub.good_morning','Good morning') : h < 18 ? tt('hub.good_afternoon','Good afternoon') : tt('hub.good_evening','Good evening');
@@ -1869,7 +1869,7 @@ function renderTasks(tasks, view = 'my') {
   window._hubRenderGreetMsg = _renderGreetMsg;
 
   if (club) await window.applyClubTheme();
-  window._hubProfileName = profile?.full_name || null;
+  window._hubProfileName = (profile ? window.cmDisplayName(profile) : null) || null;
   const _myRole = (profile?.role || profile?.club_role || '').toLowerCase();
   window._hubProfileRole = _myRole;
 

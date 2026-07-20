@@ -517,11 +517,16 @@ html.cm-rail .hub-nav-grip{display:none}
     const markEl = document.querySelector('.hub-brand .mark');
     if (markEl) applyLogoToMark(markEl, club?.logo_url);
     if (profile) {
-      const full     = profile.full_name || '';
-      const initials = full.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '–';
-      if (initialsEl) initialsEl.textContent = initials;
-      if (userNameEl) userNameEl.textContent = full || '–';
-      if (userRoleEl) userRoleEl.textContent = [profile.role, profile.club_role].filter(Boolean).join(' · ') || 'Staff';
+      // Shared display helpers: real name (never the raw email) + photo when available.
+      // Keep the sidebar's own .av styling (dark theme) — inject an <img> or the initials.
+      const dispName = (window.cmDisplayName ? window.cmDisplayName(profile) : (profile.full_name || '')) || '–';
+      const avUrl    = window.cmAvatarUrl ? window.cmAvatarUrl(profile) : null;
+      if (initialsEl) {
+        if (avUrl) initialsEl.innerHTML = `<img src="${String(avUrl).replace(/"/g, '&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+        else initialsEl.textContent = window.cmInitials ? window.cmInitials(dispName) : (dispName[0] || '–');
+      }
+      if (userNameEl) userNameEl.textContent = dispName;
+      if (userRoleEl) userRoleEl.textContent = [profile.job_title || profile.role, profile.club_role].filter(Boolean).join(' · ') || 'Staff';
     }
 
     const _role = (profile?.role || '').toLowerCase();

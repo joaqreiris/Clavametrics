@@ -882,7 +882,7 @@ async function boot() {
 
   currentUser = {
     id:     session.user.id,
-    name:   profile?.full_name || session.user.email.split('@')[0],
+    name:   window.cmDisplayName({ ...(profile || {}), email: profile?.email || session.user.email }),
     role:   profile?.role || '',
     clubId: profile?.club_id,
     teamId: null
@@ -904,7 +904,7 @@ async function boot() {
 // ── MEMBERS ──
 async function loadMembers() {
   const { data: allProfiles } = await window.sb.from('profiles')
-    .select('id, full_name, role, avatar_url')
+    .select('id, full_name, first_name, last_name, job_title, email, role, avatar_url')
     .eq('club_id', currentUser.clubId);
   let list = allProfiles || [];
 
@@ -933,11 +933,27 @@ async function loadMembers() {
 }
 
 // ── MESSAGES ──
+// Resolve the active team from the same source of truth as the rest of the app:
+// the value set by ctInitTeamSwitch, else the team switcher, else the shared
+// sessionStorage key. Keeps currentUser.teamId in sync so it's set before sending.
+function ctResolveTeamId() {
+  if (currentUser && currentUser.teamId) return currentUser.teamId;
+  const sel = document.getElementById('ctTeamSelect');
+  const fromSel = sel && sel.value ? sel.value : null;
+  let saved = null; try { saved = sessionStorage.getItem('cal_active_team'); } catch (_) {}
+  const resolved = fromSel || saved || null;
+  if (resolved && currentUser) currentUser.teamId = resolved;   // keep in sync
+  return resolved;
+}
+
 async function loadMessages() {
   let q = window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview').eq('club_id', currentUser.clubId);
   if (activeConv === 'group') {
     q = q.is('recipient_id', null);
-    if (currentUser.teamId) q = q.eq('team_id', currentUser.teamId);
+    // Per-team channel, but also include legacy/edge null-team messages for this club so
+    // none are lost: recipient_id IS NULL AND (team_id = active team OR team_id IS NULL).
+    const teamId = ctResolveTeamId();
+    if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
   } else {
     q = q.or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${activeConv}),and(sender_id.eq.${activeConv},recipient_id.eq.${currentUser.id})`);
   }
@@ -986,16 +1002,20 @@ function renderMessages() {
 
 function renderMsgHTML(msg) {
   const isMe   = msg.sender_id === currentUser.id;
-  const av     = initials(msg.sender_name || '?');
+  // Prefer the live member profile (name + photo); fall back to the stored sender_name for
+  // legacy messages whose author is no longer in the member list.
+  const author = members.find(x => x.id === msg.sender_id) || null;
+  const authorName = author ? window.cmDisplayName(author) : (msg.sender_name || '?');
+  const avHTML = window.cmAvatarHtml(author || { full_name: msg.sender_name }, 30);
   const time   = formatTime(msg.created_at);
   const content = esc(msg.content || '').replace(/\n/g, '<br>');
   const attHTML = msg.attachment_url ? renderAttHTML(msg) : '';
   const lpHTML  = msg.link_preview   ? renderLpHTML(msg.link_preview) : '';
   return `<div class="msg${isMe ? ' me' : ''}" data-msg-id="${msg.id}">
-    <div class="mav">${av}</div>
+    ${avHTML}
     <div class="msg-body">
       <div class="bubble">
-        ${!isMe ? `<div class="who">${esc(msg.sender_name)}</div>` : ''}
+        ${!isMe ? `<div class="who">${esc(authorName)}</div>` : ''}
         ${content ? `<div class="text">${content}</div>` : ''}
         ${attHTML}${lpHTML}
         <div class="time">${time}${isMe ? ' <i class="ti ti-checks"></i>' : ''}</div>
@@ -1065,6 +1085,18 @@ async function sendMessage() {
   const content = (inp.value || '').trim();
   if (!content && !pendingAttachment) return;
 
+  // Team channel needs a resolved team — never save a group message with a null team_id
+  // (that would hide it from everyone's team view). Checked BEFORE upload so the composer
+  // content is preserved. DMs are unaffected (they route by recipient_id).
+  let groupTeamId = null;
+  if (activeConv === 'group') {
+    groupTeamId = ctResolveTeamId();
+    if (!groupTeamId) {
+      alert(tt('chat_tasks.select_team_before_posting', 'Select a team before posting to the team channel.'));
+      return;   // keep the typed text + pending attachment
+    }
+  }
+
   let attData = {};
   if (pendingAttachment) {
     const sendBtn = document.querySelector('.chat-send');
@@ -1090,7 +1122,7 @@ async function sendMessage() {
     content:      content || null,
     message_type: Object.keys(attData).length ? 'file' : 'text',
     recipient_id: activeConv === 'group' ? null : activeConv,
-    team_id: activeConv === 'group' ? (currentUser.teamId || null) : null,
+    team_id: activeConv === 'group' ? groupTeamId : null,
     ...attData,
     ...lpData
   }).select().single();
@@ -1135,7 +1167,7 @@ function renderConvList() {
     </div>`;
 
   for (const m of others) {
-    const name    = m.full_name || '?';
+    const name    = window.cmDisplayName(m);
     const isActive = activeConv === m.id;
     const last    = dmLastMsg[m.id];
     let preview   = tt('chat_tasks.no_messages_conv', 'No messages yet');
@@ -1147,7 +1179,7 @@ function renderConvList() {
     }
     const unread = dmUnread[m.id] || 0;
     html += `<div class="conv${isActive ? ' is-on' : ''}" onclick="selectConv('${m.id}')">
-      <div class="av">${initials(name)}</div>
+      ${window.cmAvatarHtml(m, 34)}
       <div class="body">
         <div class="name-row"><span class="name">${esc(name)}</span></div>
         <div class="preview">${esc(preview)}</div>
@@ -1195,12 +1227,12 @@ function updateChatHeader() {
       </div>`;
   } else {
     const m = members.find(x => x.id === activeConv);
-    const name = m ? (m.full_name || '?') : tt('chat_tasks.user_fallback', 'User');
+    const name = m ? window.cmDisplayName(m) : tt('chat_tasks.user_fallback', 'User');
     el.innerHTML = `
-      <div class="av">${initials(name)}</div>
+      ${m ? window.cmAvatarHtml(m, 36) : `<div class="av">${initials(name)}</div>`}
       <div class="info">
         <div class="name">${esc(name)}</div>
-        <div class="meta">${esc(m?.role || tt('chat_tasks.direct_message', 'Direct message'))}</div>
+        <div class="meta">${esc((m && m.job_title) || m?.role || tt('chat_tasks.direct_message', 'Direct message'))}</div>
       </div>
       <div class="right">
         <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
@@ -1216,10 +1248,10 @@ function renderChatRightMembers() {
   const show = members.slice(0, 5);
   document.getElementById('chatRightMembersTitle').textContent = tt('chat_tasks.members_count', `Members · ${members.length}`, { n: members.length });
   el.innerHTML = show.map(m => {
-    const name = m.full_name || '?';
+    const name = window.cmDisplayName(m);
     return `<div class="cr-member">
-      <div class="av">${initials(name)}</div>
-      <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.role || '')}</div></div>
+      ${window.cmAvatarHtml(m, 26)}
+      <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.job_title || m.role || '')}</div></div>
     </div>`;
   }).join('') + (members.length > 5 ? `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:3px 0 0">${esc(tt('chat_tasks.n_more', `+ ${members.length - 5} more`, { n: members.length - 5 }))}</div>` : '');
 }
@@ -1258,13 +1290,13 @@ function renderDmPicker() {
   const q      = (document.getElementById('dmPickerSearch').value || '').toLowerCase();
   const list   = document.getElementById('dmPickerList');
   const others = members.filter(m => m.id !== currentUser.id);
-  const fil    = q ? others.filter(m => (m.full_name || '').toLowerCase().includes(q)) : others;
+  const fil    = q ? others.filter(m => window.cmDisplayName(m).toLowerCase().includes(q)) : others;
   if (!fil.length) { list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font-size:13px">${esc(tt('chat_tasks.no_members', 'No members'))}</div>`; return; }
   list.innerHTML = fil.map(m => {
-    const name = m.full_name || '?';
+    const name = window.cmDisplayName(m);
     return `<div class="conv" style="margin:2px 0" onclick="pickDm('${m.id}')">
-      <div class="av">${initials(name)}</div>
-      <div class="body"><div class="name-row"><span class="name">${esc(name)}</span></div><div class="preview">${esc(m.role || '')}</div></div>
+      ${window.cmAvatarHtml(m, 34)}
+      <div class="body"><div class="name-row"><span class="name">${esc(name)}</span></div><div class="preview">${esc(m.job_title || m.role || '')}</div></div>
     </div>`;
   }).join('');
 }
@@ -1787,7 +1819,7 @@ function populateAssigneeSelects() {
     members.forEach(m => {
       const o = document.createElement('option');
       o.value = m.id;
-      o.textContent = m.full_name || '?';
+      o.textContent = window.cmDisplayName(m) || '?';
       sel.appendChild(o);
     });
   });
@@ -2159,10 +2191,10 @@ function _openMentionPop() {
   if (!pop) return;
   pop.innerHTML = members.length
     ? members.map((m, i) => {
-        const name = m.full_name || '?';
+        const name = window.cmDisplayName(m);
         return `<div class="cmp-m-item" data-mi="${i}">
-          <div class="av">${initials(name)}</div>
-          <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.role || '')}</div></div>
+          ${window.cmAvatarHtml(m, 26)}
+          <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.job_title || m.role || '')}</div></div>
         </div>`;
       }).join('')
     : `<div class="cmp-m-empty">${esc(tt('chat_tasks.no_members', 'No members'))}</div>`;
@@ -2183,7 +2215,7 @@ function _openMentionPop() {
             try { inp.setSelectionRange(tokenStart, tokenStart); } catch (_) {}
           }
         }
-        _composerInsertAtCursor('@' + (m.full_name || '') + ' ');
+        _composerInsertAtCursor('@' + (window.cmDisplayName(m) || '') + ' ');
       }
       _composerCloseAllPops();
     });

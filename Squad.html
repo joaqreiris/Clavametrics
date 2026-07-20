@@ -3752,7 +3752,7 @@ async function reloadPlayers() {
       const { error } = await window.sb.from('messages').insert({
         club_id:      _currentClubId,
         sender_id:    authUser?.id,
-        sender_name:  profile?.full_name || profile?.email || tt('squad.squad','Squad'),
+        sender_name:  (window.cmDisplayName ? window.cmDisplayName(profile) : profile?.full_name) || tt('squad.squad','Squad'),
         content,
         message_type: 'lineup',
         recipient_id: _lShareRecipient === 'group' ? null : _lShareRecipient,

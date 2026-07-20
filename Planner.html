@@ -2535,7 +2535,7 @@
     const { error } = await window.sb.from('messages').insert({
       club_id:      clubId,
       sender_id:    authUser.id,
-      sender_name:  profile?.full_name || profile?.email || 'Planner',
+      sender_name:  (window.cmDisplayName ? window.cmDisplayName(profile) : profile?.full_name) || 'Planner',
       content,
       message_type: 'exercise',
       recipient_id: null

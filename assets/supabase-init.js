@@ -98,14 +98,14 @@
         // Cargar tu profile REAL (tu id), independiente del club override
         if (!_profile) {
           const { data: realProf } = await window.sb.from('profiles')
-            .select('club_id, role, full_name').eq('id', user.id).single();
+            .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded').eq('id', user.id).single();
           if (realProf) { _profile = realProf; window.__cm_profile = realProf; }
         }
         _clubId = _ov;
         return _clubId;
       }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
-        .select('club_id, role, full_name')
+        .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded')
         .eq('id', user.id)
         .single();
       if (profileErr) console.warn('[supabase-init] profile fetch error:', profileErr.message);
@@ -141,6 +141,72 @@
     if (_profilePromise) return _profilePromise;
     _profilePromise = window.getClubId().then(() => _profile);
     return _profilePromise;
+  };
+
+  // ── Shared display helpers (names + avatars) ─────────────────────────────────
+  // One place decides how a person is shown across the app: never the raw email as a
+  // name, photos when available (private 'profile-avatars' bucket, signed URLs cached),
+  // initials otherwise. All are null-safe and never throw.
+  function _cmEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+  // Best display name: full_name → "first last" → local part of the email (never the full email).
+  window.cmDisplayName = function (p) {
+    try {
+      if (!p || typeof p !== 'object') return typeof p === 'string' ? p : '';
+      let cand = (p.full_name || '').trim();
+      if (!cand) cand = ((p.first_name || '').trim() + ' ' + (p.last_name || '').trim()).trim();
+      if (!cand) cand = (p.email || '').trim();
+      // Never surface a raw full email as a display name — even if full_name itself IS an
+      // email (some legacy signups stored the email as full_name). Fall back to its local part.
+      if (cand.includes('@')) cand = cand.split('@')[0];
+      return cand;
+    } catch (_e) { return ''; }
+  };
+  // 1–2 letter initials from a display name or a profile-like object.
+  window.cmInitials = function (x) {
+    try {
+      const name = (typeof x === 'string' ? x : window.cmDisplayName(x || {}) || '').trim();
+      if (!name) return '?';
+      const parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    } catch (_e) { return '?'; }
+  };
+  // Resolve a usable avatar URL. Full URL → as-is. Storage path → signed URL from
+  // 'profile-avatars' (cached ~55 min; async — returns cached/null now, fills for next render).
+  const _cmSignedCache = new Map();   // path → { url, exp }
+  window.cmAvatarUrl = function (p) {
+    try {
+      if (!p || typeof p !== 'object') return null;
+      const a = (p.avatar_url || '').trim();
+      if (!a) return null;
+      if (/^(https?:|data:|blob:)/i.test(a)) return a;         // already a full/usable URL
+      const c = _cmSignedCache.get(a);
+      if (c && c.exp > Date.now()) return c.url;
+      if (window.sb && window.sb.storage) {                    // fire-and-forget resolve for next render
+        window.sb.storage.from('profile-avatars').createSignedUrl(a, 3600)
+          .then(({ data }) => { if (data && data.signedUrl) _cmSignedCache.set(a, { url: data.signedUrl, exp: Date.now() + 55 * 60 * 1000 }); })
+          .catch(() => {});
+      }
+      return (c && c.url) || null;
+    } catch (_e) { return null; }
+  };
+  // Self-contained avatar chip (inline-styled → renders correctly on any page): <img> when a
+  // photo exists, else an initials circle. Class hooks: .cm-ava / .cm-ava-img / .cm-ava-ini.
+  window.cmAvatarHtml = function (p, size) {
+    try {
+      const s = Math.max(16, parseInt(size, 10) || 32);
+      const url = window.cmAvatarUrl(p);
+      const name = window.cmDisplayName(p || {});
+      const box = `display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:${s}px;height:${s}px;border-radius:50%;overflow:hidden;vertical-align:middle`;
+      if (url) {
+        return `<span class="cm-ava cm-ava-img" title="${_cmEsc(name)}" style="${box};border:1px solid var(--cm-border)">`
+          + `<img src="${_cmEsc(url)}" alt="${_cmEsc(name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.classList.add('cm-ava-broken');this.remove()"></span>`;
+      }
+      const fs = Math.max(9, Math.round(s * 0.42));
+      return `<span class="cm-ava cm-ava-ini" title="${_cmEsc(name)}" style="${box};background:var(--cm-bg-sunk);border:1px solid var(--cm-border);color:var(--cm-fg);font:600 ${fs}px/1 var(--cm-font-sans,sans-serif)">${_cmEsc(window.cmInitials(name || p || {}))}</span>`;
+    } catch (_e) { return ''; }
   };
 
   let _superAdmin = null;
