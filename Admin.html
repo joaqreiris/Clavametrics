@@ -2266,7 +2266,12 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   const GPS_REPORT_COLS=['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','accelerations','decelerations','max_speed','player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute'];
   const METRIC_CATS=['distance','speed','acceleration','load','time','count','custom'];
   // Same auto-seed defaults as gps-sync SLUG_MAP — to pre-fill before first sync.
-  const CM_SLUG_SEED={ total_distance:['total_distance',1/1000], total_high_speed_distance:['high_speed_distance',1],
+  // ⚠️ ESPEJO EXACTO de SLUG_MAP en supabase/functions/gps-sync/index.ts. Si divergen,
+  // este modal PISA la DB al guardar (upsert de todas las filas) y rompe la ingesta.
+  // Pasó con total_distance: el Edge Function se corrigió a conv 1 (metros, la unidad
+  // canónica de gps-units.js) y esta semilla quedó en 1/1000 → sembraba km y todo club
+  // que abriera "Mapear métricas" nacía con la distancia total dividida por 1000.
+  const CM_SLUG_SEED={ total_distance:['total_distance',1], total_high_speed_distance:['high_speed_distance',1],
     total_very_high_speed_distance:['very_high_speed_distance',1], total_sprint_distance:['sprint_distance',1],
     total_high_metabolic_load_distance:['hmld',1], meterage_per_minute:['distance_per_minute',1],
     total_player_load:['player_load',1], max_velocity:['max_speed',3.6], mean_velocity:['avg_speed',3.6],

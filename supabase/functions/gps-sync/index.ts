@@ -99,6 +99,9 @@ const METADATA_KEYS = new Set([
 // sync these 13 rows are seeded into gps_column_mappings so the core columns work
 // with zero setup; afterwards the club owns the mapping via "Map metrics".
 // ⚠️ Slugs VARY across OpenField versions — VERIFY against GET /parameters.
+// ⚠️ ESPEJADO en CM_SLUG_SEED (Admin.html, modal "Mapear métricas"). Cualquier cambio
+// acá va TAMBIÉN allá: ese modal hace upsert de todas las filas al guardar, así que una
+// semilla desincronizada reescribe la conversión en la DB y rompe la ingesta.
 const SLUG_MAP: Record<string, { col: string; conv: number }> = {
   // distances
   // Catapult returns SI (metres) for total_distance, same as every other distance.
