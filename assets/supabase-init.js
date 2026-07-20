@@ -116,6 +116,14 @@
       }
       return _clubId;
     })();
+    // Un null NO se cachea: si la sesión todavía no estaba restaurada (getUser sin user) o el
+    // fetch del profile falló, la promesa cacheada dejaría el club en null para toda la vida de
+    // la página (→ páginas sin equipos, inserts con team_id null que RLS rechaza). Al resolver
+    // null soltamos la promesa para que el próximo getClubId() reintente de verdad.
+    _clubIdPromise = _clubIdPromise.then(
+      id => { if (!id) _clubIdPromise = null; return id; },
+      err => { _clubIdPromise = null; throw err; }
+    );
     return _clubIdPromise;
   };
 
