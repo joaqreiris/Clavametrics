@@ -3944,9 +3944,10 @@ CREATE OR REPLACE FUNCTION public.trg_act_availability()
 AS $function$
 begin
   if TG_OP = 'UPDATE' and OLD.status is distinct from NEW.status then
-    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
     values (NEW.club_id,
             public.activity_team_for_player(NEW.player_id::uuid),
+            auth.uid(),
             'availability.changed', 'availability', null, NEW.player_id::uuid,
             jsonb_build_object('date', NEW.date, 'from', OLD.status, 'to', NEW.status));
   end if;
@@ -3961,9 +3962,10 @@ CREATE OR REPLACE FUNCTION public.trg_act_evaluation()
  SET search_path TO 'public'
 AS $function$
 begin
-  insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+  insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
   values (NEW.club_id,
           public.activity_team_for_player(NEW.player_id),
+          auth.uid(),
           'evaluation.recorded', TG_TABLE_NAME, NEW.id, NEW.player_id,
           jsonb_build_object('test_date', NEW.test_date, 'kind', TG_TABLE_NAME));
   return NEW;
@@ -4035,8 +4037,8 @@ CREATE OR REPLACE FUNCTION public.trg_act_match_report()
  SET search_path TO 'public'
 AS $function$
 begin
-  insert into public.activity_log (club_id, action, entity_table, entity_id, summary)
-  values (NEW.club_id, 'match_report.created', 'match_reports', NEW.id,
+  insert into public.activity_log (club_id, actor_id, action, entity_table, entity_id, summary)
+  values (NEW.club_id, auth.uid(), 'match_report.created', 'match_reports', NEW.id,
           jsonb_build_object('match_date', NEW.match_date));
   return NEW;
 end $function$
@@ -4049,9 +4051,10 @@ CREATE OR REPLACE FUNCTION public.trg_act_medical_episode()
  SET search_path TO 'public'
 AS $function$
 begin
-  insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
+  insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
   values (NEW.club_id,
           public.activity_team_for_player(NEW.player_id),
+          auth.uid(),
           'medical.episode', 'medical_episodes', NEW.id, NEW.player_id,
           jsonb_build_object('start_date', NEW.start_date, 'status', NEW.status));
   return NEW;
@@ -4083,12 +4086,12 @@ CREATE OR REPLACE FUNCTION public.trg_act_player()
 AS $function$
 begin
   if TG_OP = 'INSERT' then
-    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
-    values (NEW.club_id, NEW.team_id, 'player.added', 'players', NEW.id, NEW.id,
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
+    values (NEW.club_id, NEW.team_id, auth.uid(), 'player.added', 'players', NEW.id, NEW.id,
             jsonb_build_object('name', coalesce(NEW.first_name,'') || ' ' || coalesce(NEW.last_name,'')));
   elsif TG_OP = 'UPDATE' and OLD.archived_at is null and NEW.archived_at is not null then
-    insert into public.activity_log (club_id, team_id, action, entity_table, entity_id, player_id, summary)
-    values (NEW.club_id, NEW.team_id, 'player.archived', 'players', NEW.id, NEW.id,
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
+    values (NEW.club_id, NEW.team_id, auth.uid(), 'player.archived', 'players', NEW.id, NEW.id,
             jsonb_build_object('name', coalesce(NEW.first_name,'') || ' ' || coalesce(NEW.last_name,'')));
   end if;
   return NEW;
