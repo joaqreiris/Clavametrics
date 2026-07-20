@@ -169,10 +169,16 @@ const BillingPanel = () => {
   </>;
 };
 
-const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsChange }) => {
+const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSettings, onSettingsChange }) => {
   const [s, setS]       = React.useState(initSettings);
   const [tab, setTab]   = React.useState("appearance");
   const [resetConfirm, setResetConfirm] = React.useState(false);
+  // My profile (editable Account form)
+  const [pf, setPf]           = React.useState(null);   // form fields; null until loaded
+  const [pfPhoto, setPfPhoto] = React.useState(null);   // pending File
+  const [pfPreview, setPfPreview] = React.useState(null);
+  const [pfState, setPfState] = React.useState("idle"); // idle | saving | saved
+  const [pfErr, setPfErr]     = React.useState(null);
   // Language (wired to CM_I18N; "Auto" = no explicit choice → runtime detection)
   const [curLang, setCurLang]           = React.useState(() => (window.CM_I18N ? window.CM_I18N.current : "en"));
   const [langExplicit, setLangExplicit] = React.useState(() => { try { return !!localStorage.getItem("cm_lang"); } catch { return false; } });
@@ -214,6 +220,80 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
     document.addEventListener("cm:langchanged", h);
     return () => document.removeEventListener("cm:langchanged", h);
   }, []);
+
+  // Load the editable profile fields on open (getProfile omits phone/birth_date/preferred_lang).
+  React.useEffect(() => {
+    if (!open || pf || !userId || !window.sb) return;
+    window.sb.from('profiles')
+      .select('first_name,last_name,phone,birth_date,job_title,preferred_lang,avatar_url,full_name')
+      .eq('id', userId).single()
+      .then(({ data }) => {
+        const d = data || {};
+        setPf({
+          first_name: d.first_name || '',
+          last_name:  d.last_name  || '',
+          phone:      d.phone      || '',
+          birth_date: d.birth_date || '',
+          job_title:  d.job_title  || '',
+          preferred_lang: d.preferred_lang || (window.CM_I18N && window.CM_I18N.current) || 'en',
+          avatar_url: d.avatar_url || (profile && profile.avatar_url) || null,
+        });
+      }, () => {});
+  }, [open, userId]);
+
+  const setPfField = (k, v) => setPf(p => ({ ...(p || {}), [k]: v }));
+  const onPfPhoto = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setPfPhoto(f);
+    try { setPfPreview(URL.createObjectURL(f)); } catch {}
+  };
+  async function saveProfile() {
+    if (!pf) return;
+    const first = (pf.first_name || '').trim(), last = (pf.last_name || '').trim();
+    if (!first || !last) { setPfErr(_t('settings.profile.name_required', 'Please enter your first and last name.')); return; }
+    setPfErr(null); setPfState('saving');
+    try {
+      const uid = userId || (profile && profile.id);
+      if (!uid || !window.sb) throw new Error('no session');
+      let avatarUrl = pf.avatar_url || null;
+      if (pfPhoto) {
+        const ext = ((pfPhoto.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
+        const path = uid + '/avatar.' + ext;
+        const { error: upErr } = await window.sb.storage.from('profile-avatars')
+          .upload(path, pfPhoto, { upsert: true, contentType: pfPhoto.type || 'image/jpeg' });
+        if (upErr) throw upErr;
+        const { data: signed } = await window.sb.storage.from('profile-avatars').createSignedUrl(path, 315360000);
+        avatarUrl = (signed && signed.signedUrl) || avatarUrl;
+      }
+      const fullName = (first + ' ' + last).trim();
+      const patch = {
+        first_name: first, last_name: last, phone: pf.phone || null, birth_date: pf.birth_date || null,
+        job_title: pf.job_title || null, preferred_lang: pf.preferred_lang, full_name: fullName,
+      };
+      if (avatarUrl) patch.avatar_url = avatarUrl;
+      const { error } = await window.sb.from('profiles').update(patch).eq('id', uid);
+      if (error) throw error;
+      // Switch the whole app to the chosen language if it changed.
+      if (pf.preferred_lang && pf.preferred_lang !== curLang) {
+        if (window.CM_I18N && window.CM_I18N.setLang) { try { window.CM_I18N.setLang(pf.preferred_lang); } catch {} }
+        try { localStorage.setItem('cm_lang', pf.preferred_lang); } catch {}
+        setCurLang(pf.preferred_lang); setLangExplicit(true);
+      }
+      // Reflect immediately: drawer header / "Signed in as" + global cache + listeners (Hub greeting).
+      const updated = { ...(profile || {}), ...patch };
+      if (avatarUrl) updated.avatar_url = avatarUrl;
+      try { window.__cm_profile = { ...(window.__cm_profile || {}), ...updated }; } catch {}
+      setProfile && setProfile(updated);
+      setPf(p => ({ ...(p || {}), avatar_url: avatarUrl }));
+      setPfPhoto(null); setPfPreview(null);
+      try { document.dispatchEvent(new CustomEvent('cm:profileupdated', { detail: { profile: updated } })); } catch {}
+      setPfState('saved'); setTimeout(() => setPfState('idle'), 2000);
+    } catch (e) {
+      setPfErr((e && e.message) || _t('settings.profile.save_error', "Couldn't save your profile."));
+      setPfState('idle');
+    }
+  }
 
   const set = (patch) => setS((p) => ({ ...p, ...patch }));
   const setNotif = (key, val) => set({ notif: { ...s.notif, [key]: val } });
@@ -452,6 +532,45 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
 
           {/* ── ACCOUNT TAB ── */}
           {tab === "account" && <>
+            <Section label={_t("settings.profile.title","My profile")}>
+              {!pf ? <div className="sd-row-sub">{_t("settings.profile.loading","Loading…")}</div> : <div className="sd-pf">
+                <div className="sd-pf-photo">
+                  <div className="sd-pf-ava">
+                    {(pfPreview || (window.cmAvatarUrl && window.cmAvatarUrl(pf)))
+                      ? <img src={pfPreview || window.cmAvatarUrl(pf)} alt="" />
+                      : <span>{window.cmInitials ? window.cmInitials(((pf.first_name || '') + ' ' + (pf.last_name || '')).trim() || (profile && profile.email) || '?') : '?'}</span>}
+                  </div>
+                  <label className="sd-pf-photobtn">
+                    <i className="ti ti-camera"></i>{_t("settings.profile.change_photo","Change photo")}
+                    <input type="file" accept="image/*" onChange={onPfPhoto} style={{display:'none'}} />
+                  </label>
+                </div>
+                <div className="sd-pf-grid">
+                  <label className="sd-pf-f"><span>{_t("settings.profile.first_name","First name")}</span>
+                    <input value={pf.first_name} onChange={e=>setPfField('first_name', e.target.value)} /></label>
+                  <label className="sd-pf-f"><span>{_t("settings.profile.last_name","Last name")}</span>
+                    <input value={pf.last_name} onChange={e=>setPfField('last_name', e.target.value)} /></label>
+                  <label className="sd-pf-f"><span>{_t("settings.profile.phone","Phone")}</span>
+                    <input type="tel" value={pf.phone} onChange={e=>setPfField('phone', e.target.value)} /></label>
+                  <label className="sd-pf-f"><span>{_t("settings.profile.birth_date","Birth date")}</span>
+                    <input type="date" value={pf.birth_date || ''} onChange={e=>setPfField('birth_date', e.target.value)} /></label>
+                  <label className="sd-pf-f sd-pf-wide"><span>{_t("settings.profile.job_title","Job title")}</span>
+                    <input value={pf.job_title} onChange={e=>setPfField('job_title', e.target.value)} /></label>
+                  <label className="sd-pf-f sd-pf-wide"><span>{_t("settings.profile.language","Language")}</span>
+                    <select value={pf.preferred_lang} onChange={e=>setPfField('preferred_lang', e.target.value)}>
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                      <option value="pt">Português</option>
+                    </select></label>
+                </div>
+                {pfErr ? <div className="sd-pf-err">{pfErr}</div> : null}
+                <div className="sd-pf-actions">
+                  <button className="sd-pf-save" disabled={pfState === 'saving'} onClick={saveProfile}>
+                    {pfState === 'saving' ? _t("settings.profile.saving","Saving…") : pfState === 'saved' ? _t("settings.profile.saved","Saved") : _t("settings.profile.save","Save")}
+                  </button>
+                </div>
+              </div>}
+            </Section>
             <Section label={_t("settings.signed_in_as","Signed in as")}>
               <div className="sd-account-row">
                 <div className="sd-account-avatar">{profile ? (profile.full_name || profile.email || '?')[0].toUpperCase() : '?'}</div>
@@ -636,6 +755,25 @@ const SD_CSS = `
   .sd-account-row { display:flex; align-items:center; gap:12px; padding:6px 0; }
   .sd-account-avatar { width:38px; height:38px; border-radius:50%; background:var(--cm-accent); color:var(--cm-fg-on-accent,#fff); font:600 16px/38px var(--cm-font-sans); text-align:center; flex-shrink:0; }
   .sd-signout { color:var(--cm-danger,#DC2626); }
+  /* My profile (editable) */
+  .sd-pf { display:flex; flex-direction:column; gap:12px; }
+  .sd-pf-photo { display:flex; align-items:center; gap:12px; }
+  .sd-pf-ava { width:56px; height:56px; border-radius:50%; overflow:hidden; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 18px/1 var(--cm-font-sans); color:var(--cm-fg-muted); flex-shrink:0; }
+  .sd-pf-ava img { width:100%; height:100%; object-fit:cover; }
+  .sd-pf-photobtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border:1px solid var(--cm-border); border-radius:8px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .sd-pf-photobtn:hover { border-color:var(--cm-accent); }
+  .sd-pf-photobtn .ti { font-size:15px; }
+  .sd-pf-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .sd-pf-f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .sd-pf-f.sd-pf-wide { grid-column:1 / -1; }
+  .sd-pf-f > span { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .sd-pf-f input, .sd-pf-f select { height:36px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; box-sizing:border-box; width:100%; }
+  .sd-pf-f input:focus, .sd-pf-f select:focus { border-color:var(--cm-accent); }
+  .sd-pf-err { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-danger,#DC2626); background:var(--cm-danger-bg,#FEF2F2); border-radius:8px; padding:8px 10px; }
+  .sd-pf-actions { display:flex; justify-content:flex-end; }
+  .sd-pf-save { height:34px; padding:0 16px; border:0; border-radius:8px; background:var(--cm-accent); color:var(--cm-fg-on-accent,#fff); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .sd-pf-save:disabled { opacity:.6; cursor:default; }
+  .sd-pf-save:hover:not(:disabled) { background:var(--cm-accent-hover,var(--cm-accent)); }
 
   /* Reset confirmation */
   .sd-reset-confirm { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -809,6 +947,8 @@ function SettingsHost() {
       open={open}
       onClose={() => setOpen(false)}
       profile={profile}
+      userId={userId}
+      setProfile={setProfile}
       supabaseSettings={supabaseSettings}
       onSettingsChange={handleSettingsChange}
     />
