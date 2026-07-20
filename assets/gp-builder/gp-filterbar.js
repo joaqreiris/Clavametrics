@@ -65,7 +65,10 @@
     'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
     'Search…':'filterbar.search','Search date…':'filterbar.search_date','No club data yet.':'filterbar.no_club_data',
     'No dates with data yet.':'filterbar.no_dates_data','No dates for the current filters.':'filterbar.no_dates_filter',
-    'No options for the current filters.':'filterbar.no_options'
+    'No options for the current filters.':'filterbar.no_options',
+    'Detail':'filterbar.detail','Detailed':'filterbar.detailed','Basic':'filterbar.basic','Group':'filterbar.group',
+    'Goalkeepers':'filterbar.pos_goalkeepers','Defenders':'filterbar.pos_defenders','Midfielders':'filterbar.pos_midfielders',
+    'Wingers':'filterbar.pos_wingers','Forwards':'filterbar.pos_forwards'
   };
   function T(en){ const k=_FB_I18N[en]; if(!k) return en; const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(k):null; return (v&&v!==k)?v:en; }
   function _fbActive(n){ if(window.CM_I18N&&CM_I18N.t){ const v=CM_I18N.t('filterbar.active_filters',{count:n}); if(v&&v!=='filterbar.active_filters') return v; } return n===1?'1 active filter':`${n} active filters`; }
@@ -78,6 +81,7 @@
     microcycle: [],                            // ids de microciclo
     rival:      [],                            // nombres de rival (session_attributes.rival)
     session_type: [],                          // training_sessions.session_type (match/training/rehab/…)
+    posGranularity: 'detailed',                // 'detailed' | 'basic' | 'group' — analysis roll-up
     // date: preset (Last 7/30/…) XOR days (specific real dates, multi-select) XOR a manual
     // from/to custom range. `days` is the primary picker; from/to are also set to the
     // days' min/max as a compat bound for consumers that only read from/to.
@@ -101,7 +105,37 @@
   // las sesiones reales (no cálculos derivados tipo getISOWeek).
   let _rows = [];            // [{ d, md, mc, p, pos }]
   let _validCache = null;    // { md_code:Set, microcycle:Set, player:Set, position:Set } | null (sin filtros)
-  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos', rival: 'rv', session_type: 'st' };
+  // position points at `posv` — the position already PROJECTED onto the active granularity —
+  // so matching, the cascade and the valid-sets all work unchanged, with zero special-casing.
+  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'posv', rival: 'rv', session_type: 'st' };
+
+  let _posRaw = [];   // every distinct raw position seen (primary + secondary), pre-projection
+  function _posAt(raw) {
+    return window.cmPositionAt ? window.cmPositionAt(raw, state.posGranularity) : (raw || null);
+  }
+  /** Re-project every row + rebuild the Position options for the active granularity. */
+  function _applyPosGranularity() {
+    _rows.forEach(r => { r.posv = _posAt(r.pos) || ''; });
+    const set = new Set();
+    (_posRaw || []).forEach(raw => { const v = _posAt(raw); if (v) set.add(v); });
+    options.position = [...set].sort().map(v => ({ value: v, label: T(v) }));
+    try { window.cmPosGranularity = state.posGranularity; } catch (_e) {}
+  }
+  /** Switch granularity. The selected values mean something different per level, so the
+   *  position selection is cleared rather than silently mismatching. */
+  function setPosGranularity(g) {
+    if (!g || g === state.posGranularity) return;
+    state.posGranularity = g;
+    state.position = [];
+    _applyPosGranularity();
+    _syncGranButtons();
+    renderList('position');
+    _afterChange();
+  }
+  function _syncGranButtons() {
+    root?.querySelectorAll('.fb-drop[data-key="position"] [data-gran]').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.gran === state.posGranularity));
+  }
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
@@ -207,6 +241,7 @@
       microcycleIds: state.microcycle.slice(),
       rivals:        state.rival.slice(),
       sessionTypes:  state.session_type.slice(),
+      posGranularity: state.posGranularity,
       date:          { ...state.date },
       activeCount: activeCount(),
     };
@@ -241,6 +276,7 @@
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
         microcycle: state.microcycle, rival: state.rival, session_type: state.session_type, date: state.date,
+        posGranularity: state.posGranularity,
         visibleFilters: state.visibleFilters,
       }));
     } catch (e) { /* storage no disponible */ }
@@ -248,6 +284,7 @@
   function resetStateSilent() {
     state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = [];
     state.date = { preset: null, from: null, to: null, days: [] };
+    state.posGranularity = 'detailed';
     state.visibleFilters = DROPS.map(d => d.key);
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
@@ -263,6 +300,7 @@
         state.microcycle = Array.isArray(s.microcycle) ? s.microcycle : [];
         state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
+        state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
         state.date     = (s.date && typeof s.date === 'object')
           ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [] }
           : { preset: null, from: null, to: null, days: [] };
@@ -398,8 +436,21 @@
     // Sin botón "Aplicar": cada check/uncheck (y Seleccionar todo / Limpiar) aplica
     // al instante. El panel queda abierto para seguir tildando varias opciones.
     const panel = el('div', 'fb-panel');
+    // Position gets an extra granularity switch: the SAME stored detailed code can be analysed
+    // as-is, rolled up to the basic 6, or to broad groups — so baselines have a real sample
+    // (a 25-man squad over ~20 detailed positions leaves ~1 player per position).
+    const granHtml = cfg.key !== 'position' ? '' :
+      `<div class="fb-gran">` +
+        `<span class="fb-gran-l">${T('Detail')}</span>` +
+        `<div class="fb-gran-seg">` +
+          `<button type="button" data-gran="detailed">${T('Detailed')}</button>` +
+          `<button type="button" data-gran="basic">${T('Basic')}</button>` +
+          `<button type="button" data-gran="group">${T('Group')}</button>` +
+        `</div>` +
+      `</div>`;
     panel.innerHTML =
       `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="${T('Search…')}"></div>` +
+      granHtml +
       `<div class="fb-actions-top">` +
         `<button class="fb-link" type="button" data-act="all">Select all</button>` +
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
@@ -407,6 +458,11 @@
       `<div class="fb-list"><div class="fb-empty">Loading…</div></div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
+    if (cfg.key === 'position') {
+      panel.querySelectorAll('[data-gran]').forEach(b => {
+        b.addEventListener('click', () => setPosGranularity(b.dataset.gran));
+      });
+    }
     panel.querySelector('.fb-search input').addEventListener('input', e => filterList(cfg.key, e.target.value));
     panel.querySelector('[data-act="all"]').addEventListener('click', () => selectAll(cfg.key, true));
     panel.querySelector('[data-act="none"]').addEventListener('click', () => selectAll(cfg.key, false));
@@ -690,6 +746,7 @@
     // arranca el draft desde el estado actual
     if (key !== 'date') drafts[key] = new Set(state[key]);
     renderListOrDate(key);
+    if (key === 'position') _syncGranButtons();
     _positionFloat(drop.querySelector('.fb-trigger'), drop.querySelector('.fb-panel'));
     const focusable = drop.querySelector('.fb-search input, .fb-preset');
     if (focusable) setTimeout(() => focusable.focus(), 0);
@@ -861,13 +918,14 @@
                 || p.id,
       }));
 
-    // Posiciones reales (distintas, no vacías)
+    // Posiciones reales (distintas, no vacías). Se guardan CRUDAS; las opciones se derivan
+    // en _applyPosGranularity() según el nivel de detalle activo.
     const posSet = new Set();
     (players || []).forEach(p => {
       if (p.position) posSet.add(p.position);
       if (Array.isArray(p.positions)) p.positions.forEach(x => x && posSet.add(x));
     });
-    options.position = Array.from(posSet).sort().map(v => ({ value: v, label: v }));
+    _posRaw = Array.from(posSet);
 
     // MD codes reales desde session_attributes.md_code
     const mdSet = new Set();
@@ -898,6 +956,7 @@
         st:  ts.session_type || '',
       };
     }).filter(x => x.d);
+    _applyPosGranularity();   // fills row.posv + options.position for the active level
 
     // Session types reales (distintos, no vacíos) — value = raw type, label = traducido.
     options.session_type = [...new Set(_rows.map(r => r.st))].filter(Boolean)

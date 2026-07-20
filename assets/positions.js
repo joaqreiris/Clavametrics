@@ -120,7 +120,22 @@
     return (c && CFG[c] && CFG[c].group) || 'Other';
   }
 
-  window.CM_POSITIONS = { CFG: CFG, ALIASES: ALIASES, SELECTABLE: SELECTABLE, BASIC: BASIC, GROUPS: GROUPS };
+  /** Project a stored position onto the ACTIVE analysis granularity.
+   *  'detailed' → canonical code, or the RAW value when we don't know it (so a club's
+   *               custom position never disappears from a filter that showed it before);
+   *  'basic'    → one of the 6;  'group' → broad group. Unknown → null in those two,
+   *  because there's nothing sound to roll an unrecognised value up to. */
+  function at(code, granularity) {
+    if (code == null || code === '') return null;
+    if (granularity === 'basic') return basic(code);
+    if (granularity === 'group') { var g = group(code); return g === 'Other' ? null : g; }
+    return normalize(code) || String(code).trim() || null;
+  }
+
+  var GRANULARITIES = ['detailed', 'basic', 'group'];
+
+  window.CM_POSITIONS = { CFG: CFG, ALIASES: ALIASES, SELECTABLE: SELECTABLE, BASIC: BASIC, GROUPS: GROUPS, GRANULARITIES: GRANULARITIES };
+  window.cmPositionAt = at;
   window.cmNormalizePosition = normalize;
   window.cmPositionBasic     = basic;
   window.cmPositionGroup     = group;

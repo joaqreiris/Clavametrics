@@ -2220,11 +2220,15 @@
     if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }  // player_id is flat in both
     if (FB.positions?.length) {
       const s = new Set(FB.positions);
+      // The bar emits values at the ACTIVE granularity (detailed / basic 6 / group), so the
+      // row's stored position has to be projected the same way before comparing.
+      const gran = FB.posGranularity || 'detailed';
+      const _at  = v => (window.cmPositionAt ? window.cmPositionAt(v, gran) : v);
       out = out.filter(r => {
         const pos = isTask ? r.position : r.players?.position;     // flat (task) OR nested (session)
-        if (pos && s.has(pos)) return true;
+        if (pos && s.has(_at(pos))) return true;
         const arr = r.players?.positions;                          // multi-position only on session rows
-        return Array.isArray(arr) && arr.some(x => s.has(x));
+        return Array.isArray(arr) && arr.some(x => s.has(_at(x)));
       });
     }
     // microcycle_id isn't exposed by the task view → skip (microcycle isn't a task filter yet,
