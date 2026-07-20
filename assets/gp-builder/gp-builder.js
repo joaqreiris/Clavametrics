@@ -178,7 +178,7 @@
     if (win?.type === 'lastN') return win.days === 90 ? 'last90' : 'last28';
     return 'season';
   }
-  function _winLabel(win) { return CMP_WINDOWS.find(w => w.id === _winId(win))?.name || 'Season'; }
+  function _winLabel(win) { return _winName(_winId(win)); }
   /** Internal canonical baseline: legacy 'role' AND new 'position' share the SAME logic
    *  (position-group baseline). Every computation read normalizes through this so the
    *  existing role pipeline keeps working while the model/UI use 'position'. */
@@ -230,7 +230,7 @@
   function cmpBadge(S) {
     if (!S || S.compare === 'none') return '';
     if (S.compare === 'mc') return ` · vs ${mcLabel(S.refMcId)}`;
-    const ref = COMPARES.find(c => c.id === S.compare)?.name || S.compare;
+    const ref = _cmpName(S.compare);
     const parts = [ref];
     if (S.compare === 'match') parts.push(`top ${S.compareOpts?.topN ?? 5}`);
     if (S.compare === 'md')    parts.push(`last ${S.compareOpts?.mdLookback ?? 4}`);
@@ -305,11 +305,11 @@
 
   function autoTitle(S) {
     if (S.title) return S.title;
-    if (!S.metrics.length) return VIZ_FULLNAME[S.type];
+    if (!S.metrics.length) return _vizFull(S.type);
     const m0 = catalogMap.get(S.metrics[0].id);
-    if (!m0) return VIZ_FULLNAME[S.type];
+    if (!m0) return _vizFull(S.type);
     if (S.type === 'kpi')     return m0.name;
-    if (S.type === 'ranking') return 'Ranking · ' + m0.name;
+    if (S.type === 'ranking') return _tt('gps_analysis.builder_ranking_prefix', 'Ranking · ') + m0.name;
     if (S.type === 'scatter' && S.metrics[1]) return m0.name + ' vs ' + (catalogMap.get(S.metrics[1].id)?.name || '?');
     return m0.name + (S.metrics.length > 1 ? ` +${S.metrics.length - 1}` : '');
   }
@@ -515,13 +515,13 @@
           <div class="es-p-sel">
             <span class="ic" id="gpbSelIcon"><i class="ti ti-chart-bar"></i></span>
             <span class="tx">
-              <span class="t" id="gpbSelName">New chart</span>
+              <span class="t" id="gpbSelName" data-i18n="gps_analysis.builder_new_chart">New chart</span>
               <span class="s" id="gpbSelKind">bars · draft</span>
             </span>
           </div>
           <div class="es-tabs" id="gpbTabs">
-            <button class="is-on" data-tab="setup"><i class="ti ti-settings-2"></i>Setup</button>
-            <button data-tab="style"><i class="ti ti-palette"></i>Style</button>
+            <button class="is-on" data-tab="setup"><i class="ti ti-settings-2"></i><span data-i18n="gps_analysis.builder_tab_setup">Setup</span></button>
+            <button data-tab="style"><i class="ti ti-palette"></i><span data-i18n="gps_analysis.builder_tab_style">Style</span></button>
           </div>
         </div>
         <div class="es-p-b" id="gpbPaneBody">
@@ -529,50 +529,50 @@
                The "Setup" tab routes to it; the "Style" tab reuses the pane below. -->
           <div class="pane" data-pane="style">
             <div class="es-sec">
-              <div class="lab">Accent color</div>
+              <div class="lab" data-i18n="gps_analysis.builder_accent_color">Accent color</div>
               <div class="es-swatches" id="gpbColors"></div>
             </div>
             <div class="es-sec">
-              <div class="lab">Chart palette</div>
+              <div class="lab" data-i18n="gps_analysis.builder_chart_palette">Chart palette</div>
               <div class="es-swatches" id="gpbPalettes"></div>
             </div>
             <div class="es-sec">
-              <div class="lab">Card size</div>
+              <div class="lab" data-i18n="gps_analysis.builder_card_size">Card size</div>
               <div class="es-seg" id="gpbSize">
                 <button data-size="sm">S</button>
                 <button class="is-on" data-size="md">M</button>
                 <button data-size="lg">L</button>
-                <button data-size="full">Full</button>
+                <button data-size="full" data-i18n="gps_analysis.builder_size_full">Full</button>
               </div>
             </div>
             <div class="es-sec">
               <div class="es-toggle">
-                <span class="tx"><span class="t">Axes</span><span class="s">Show axis lines &amp; labels</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_axes">Axes</span><span class="s" data-i18n="gps_analysis.builder_axes_sub">Show axis lines &amp; labels</span></span>
                 <button class="es-sw-t is-on" data-toggle="axes"></button>
               </div>
               <div class="es-toggle">
-                <span class="tx"><span class="t">Legend</span><span class="s">Show metric legend</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_legend">Legend</span><span class="s" data-i18n="gps_analysis.builder_legend_sub">Show metric legend</span></span>
                 <button class="es-sw-t is-on" data-toggle="legend"></button>
               </div>
               <div class="es-toggle">
-                <span class="tx"><span class="t">Data labels</span><span class="s">Show values on chart</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_data_labels">Data labels</span><span class="s" data-i18n="gps_analysis.builder_data_labels_sub">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
               <div class="es-toggle" data-only="scatter">
-                <span class="tx"><span class="t">Label content</span><span class="s">Text beside each point</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_label_content">Label content</span><span class="s" data-i18n="gps_analysis.builder_label_content_sub">Text beside each point</span></span>
                 <div class="es-seg" id="gpbScatterLabel">
-                  <button data-slabel="name" class="is-on">Name</button>
+                  <button data-slabel="name" class="is-on" data-i18n="gps_analysis.builder_label_name">Name</button>
                   <button data-slabel="x">X</button>
                   <button data-slabel="y">Y</button>
                   <button data-slabel="xy">X·Y</button>
                 </div>
               </div>
               <div class="es-toggle" data-only="line">
-                <span class="tx"><span class="t">Points</span><span class="s">Mark each vertex (line)</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
               </div>
               <div class="es-toggle" data-only="line">
-                <span class="tx"><span class="t">Area fill</span><span class="s">Soft fill under the line</span></span>
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_area_fill">Area fill</span><span class="s" data-i18n="gps_analysis.builder_area_fill_sub">Soft fill under the line</span></span>
                 <button class="es-sw-t" data-toggle="area"></button>
               </div>
             </div>
@@ -580,23 +580,23 @@
           <div class="pane" data-pane="dd"><div class="bdd-wrap" id="gpbDDPane"></div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft);flex-shrink:0">
-          <button class="cm-btn is-ghost is-sm" id="gpbConfigBtn"><i class="ti ti-braces" style="font-size:13px"></i>Config</button>
+          <button class="cm-btn is-ghost is-sm" id="gpbConfigBtn"><i class="ti ti-braces" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_config">Config</span></button>
           <div style="flex:1"></div>
-          <span id="gpbSaveHint" style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:none">← add a metric first</span>
-          <button class="cm-btn is-outline is-sm" id="gpbCancel">Cancel</button>
-          <button class="cm-btn is-primary is-sm" id="gpbSave" disabled title="Add at least one metric to enable">Add card</button>
+          <span id="gpbSaveHint" style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:none" data-i18n="gps_analysis.builder_add_metric_first">← add a metric first</span>
+          <button class="cm-btn is-outline is-sm" id="gpbCancel" data-i18n="gps_analysis.builder_cancel">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="gpbSave" disabled title="Add at least one metric to enable" data-i18n="gps_analysis.builder_add_card" data-i18n-attr="title:gps_analysis.builder_add_card_title_disabled">Add card</button>
         </div>
       </div>
 
       <!-- fields flyout -->
       <div id="gpbFly" class="es-fly">
         <div class="es-fly-h">
-          <div class="row"><span class="t">Add metric</span>
+          <div class="row"><span class="t" data-i18n="gps_analysis.builder_add_metric">Add metric</span>
             <button class="x" id="gpbFlyClose"><i class="ti ti-x"></i></button>
           </div>
           <div class="es-fly-search">
             <i class="ti ti-search"></i>
-            <input id="gpbFlySearch" placeholder="Search metrics…">
+            <input id="gpbFlySearch" placeholder="Search metrics…" data-i18n-ph="gps_analysis.builder_search_metrics">
           </div>
         </div>
         <div class="es-fly-b" id="gpbFlyBody"></div>
@@ -613,22 +613,22 @@
         <div class="cfg-h">
           <span class="ic">{ }</span>
           <span class="tx">
-            <span class="t">Card config</span>
-            <span class="s">Copy to use in seeds or AI</span>
+            <span class="t" data-i18n="gps_analysis.builder_card_config">Card config</span>
+            <span class="s" data-i18n="gps_analysis.builder_card_config_sub">Copy to use in seeds or AI</span>
           </span>
           <button class="x" id="gpbCfgClose"><i class="ti ti-x"></i></button>
         </div>
         <div class="cfg-contract">
           <i class="ti ti-shield-check"></i>
-          <span>This object is the <b>single contract</b> shared by the builder, the AI generator and the resolver. Validate with Ajv before saving.</span>
+          <span data-i18n-html="gps_analysis.builder_config_contract_html">This object is the <b>single contract</b> shared by the builder, the AI generator and the resolver. Validate with Ajv before saving.</span>
         </div>
         <div class="cfg-body">
           <pre class="cfg-json" id="gpbCfgJson"></pre>
         </div>
         <div class="cfg-foot">
           <span class="sp"></span>
-          <button class="cm-btn is-ghost is-sm" id="gpbCfgCopy"><i class="ti ti-copy" style="font-size:13px"></i>Copy</button>
-          <button class="cm-btn is-primary is-sm" id="gpbCfgSave">Add card</button>
+          <button class="cm-btn is-ghost is-sm" id="gpbCfgCopy"><i class="ti ti-copy" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_copy">Copy</span></button>
+          <button class="cm-btn is-primary is-sm" id="gpbCfgSave" data-i18n="gps_analysis.builder_add_card">Add card</button>
         </div>
       </div>
 
@@ -639,9 +639,10 @@
           <span class="t" id="gpbToastTitle"></span>
           <span class="s" id="gpbToastSub"></span>
         </span>
-        <button class="act" id="gpbToastAct">Done</button>
+        <button class="act" id="gpbToastAct" data-i18n="gps_analysis.builder_done">Done</button>
       </div>
     `);
+    try { window.CM_I18N && window.CM_I18N.applyTo(document.body); } catch(e){}
   }
 
   function wireDOMRefs() {
@@ -663,7 +664,7 @@
     const btn = document.createElement('button');
     btn.id = 'gpbOpenBtn';
     btn.className = 'cm-btn is-primary is-sm';
-    btn.innerHTML = '<i class="ti ti-layout-grid-add" style="font-size:14px"></i>Chart builder';
+    btn.innerHTML = '<i class="ti ti-layout-grid-add" style="font-size:14px"></i>' + _tt('gps_analysis.builder_chart_builder', 'Chart builder');
     btn.style.cssText = 'margin-left:4px';
     btn.onclick = startBuild;
     rightBar.appendChild(btn);
@@ -707,7 +708,7 @@
           <div class="size-toggle" id="gpbDraftSizeToggle">
             <button>S</button><button class="is-on">M</button><button>L</button><button style="width:30px">FULL</button>
           </div>
-          <button data-del title="Remove card"><i class="ti ti-x"></i></button>
+          <button data-del title="${_tt('gps_analysis.builder_remove_card', 'Remove card')}"><i class="ti ti-x"></i></button>
         </div>
       </div>
       <div class="gp-c-b" id="gpbDraftBody"></div>`;
@@ -790,7 +791,7 @@
     S = null;
     closePanel();
     const saveBtn = document.getElementById('gpbSave');
-    if (saveBtn) saveBtn.textContent = 'Add card';
+    if (saveBtn) saveBtn.textContent = _tt('gps_analysis.builder_add_card', 'Add card');
   }
 
   async function saveCard() {
@@ -817,7 +818,7 @@
       if (titleElE) titleElE.textContent = autoTitle(S);
       if (subElE) {
         const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-        subElE.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+        subElE.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
       }
       const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
       targetCard.querySelectorAll('.size-toggle button').forEach(b =>
@@ -860,7 +861,7 @@
       _editCardOrigAccent = '#15803D';
 
       const saveBtnE = document.getElementById('gpbSave');
-      if (saveBtnE) saveBtnE.textContent = 'Add card';
+      if (saveBtnE) saveBtnE.textContent = _tt('gps_analysis.builder_add_card', 'Add card');
       S = null;
       closePanel();
 
@@ -878,7 +879,7 @@
           .catch(e => console.warn('gpb: saveDashboardCard (in-place) failed:', e));
       }
       resolveAndRenderCard(targetCard, config);
-      showToast(cardId ? 'Card updated' : 'Card saved', 'Real data loading…', 'Done');
+      showToast(cardId ? _tt('gps_analysis.builder_card_updated', 'Card updated') : _tt('gps_analysis.builder_card_saved', 'Card saved'), _tt('gps_analysis.builder_real_data_loading', 'Real data loading…'), _tt('gps_analysis.builder_done', 'Done'));
       return;
     }
 
@@ -899,7 +900,7 @@
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+      subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
 
     const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
@@ -927,7 +928,7 @@
         window.saveLayout?.(view)?.catch?.(() => {});
       });
       const editBtn = document.createElement('button');
-      editBtn.title = 'Edit card';
+      editBtn.title = _tt('gps_analysis.builder_edit_card', 'Edit card');
       editBtn.dataset.edit = '';
       editBtn.innerHTML = '<i class="ti ti-pencil"></i>';
       editBtn.style.cssText = 'background:none;border:none;cursor:pointer;padding:4px 6px;color:var(--cm-fg-muted)';
@@ -969,7 +970,7 @@
     }
 
     resolveAndRenderCard(savedCard, config);
-    showToast('Chart added', 'Real data loading…', 'Done');
+    showToast(_tt('gps_analysis.builder_chart_added', 'Chart added'), _tt('gps_analysis.builder_real_data_loading', 'Real data loading…'), _tt('gps_analysis.builder_done', 'Done'));
   }
 
   // ── Edit existing card ────────────────────────────────────
@@ -1100,7 +1101,7 @@
     if (S.dimensions.length > (_vt.dimMax || 0)) S.dimensions = S.dimensions.slice(0, _vt.dimMax || 0);
 
     const saveBtn = document.getElementById('gpbSave');
-    if (saveBtn) saveBtn.textContent = 'Update card';
+    if (saveBtn) saveBtn.textContent = _tt('gps_analysis.builder_save_changes', 'Update card');
 
     // Title seeds into the D&D input via ddConfigHTML(S.title) on renderDDPane — no classic input.
     pulseNext = true;
@@ -1348,7 +1349,7 @@
       const txt = JSON.stringify(buildConfig(S), null, 2);
       navigator.clipboard?.writeText(txt).catch(()=>{});
       const b = document.getElementById('gpbCfgCopy');
-      const o = b.innerHTML; b.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>Copied';
+      const o = b.innerHTML; b.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>' + _tt('gps_analysis.builder_copied', 'Copied');
       setTimeout(()=>b.innerHTML=o, 1400);
     };
     document.getElementById('gpbCfgSave').onclick = () => { closeCfg(); saveCard(); };
@@ -1433,7 +1434,7 @@
     document.getElementById('gpbTypes')?.querySelectorAll('[data-type]').forEach(b =>
       b.classList.toggle('is-on', b.dataset.type === S.type)
     );
-    const hint = document.getElementById('gpbMetHint'); if (hint) hint.textContent = VIZ_REQ_LBL[S.type];
+    const hint = document.getElementById('gpbMetHint'); if (hint) hint.textContent = _reqLbl(S.type);
     document.getElementById('gpbScope')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.scope === S.scope)
     );
@@ -1444,9 +1445,9 @@
 
   function syncSelects() {
     if (!S) return;
-    const rangeName = RANGES.find(r=>r.id===S.range)?.name || S.range;
+    const rangeName = _rangeName(S.range);
     const cmpName   = (S.compare === 'mc') ? `vs ${mcLabel(S.refMcId)}`
-      : (COMPARES.find(c=>c.id===S.compare)?.name || S.compare);
+      : _cmpName(S.compare);
     const _rn = document.getElementById('gpbRangeName');   if (_rn) _rn.textContent = rangeName;   // classic Setup (may be removed)
     const _cn = document.getElementById('gpbCompareName'); if (_cn) _cn.textContent = cmpName;
     // D&D compact config mirrors the SAME S. Update the labels IN PLACE (don't rebuild the
@@ -1495,7 +1496,7 @@
     const t = VIZ_TYPES[S.type];
     document.getElementById('gpbSelIcon').innerHTML = `<i class="ti ${t.icon}"></i>`;
     document.getElementById('gpbSelName').textContent = autoTitle(S);
-    document.getElementById('gpbSelKind').textContent = VIZ_FULLNAME[S.type].toLowerCase() + ' · draft';
+    document.getElementById('gpbSelKind').textContent = _vizFull(S.type).toLowerCase() + ' · ' + _tt('gps_analysis.builder_draft', 'draft');
   }
 
   function syncSizeToggle() {
@@ -1637,11 +1638,11 @@
     body.className = 'gp-c-b';
     const t = VIZ_TYPES[S.type];
     if (kind === 'await') {
-      body.innerHTML = `<div class="cb2-await"><div class="ic"><i class="ti ${t.icon}"></i></div><div class="t">${VIZ_FULLNAME[S.type]} — ${VIZ_REQ_LBL[S.type]}</div><div class="d">Add metrics from the Setup panel.</div></div>`;
+      body.innerHTML = `<div class="cb2-await"><div class="ic"><i class="ti ${t.icon}"></i></div><div class="t">${_vizFull(S.type)} — ${_reqLbl(S.type)}</div><div class="d">${_tt('gps_analysis.builder_add_metrics_hint', 'Add metrics from the Setup panel.')}</div></div>`;
     } else if (kind === 'load') {
-      body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Querying GPS data…</div><div class="d">${esc(autoTitle(S))} · ${RANGES.find(r=>r.id===S.range)?.name||S.range}</div></div>`;
+      body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">${_tt('gps_analysis.builder_querying', 'Querying GPS data…')}</div><div class="d">${esc(autoTitle(S))} · ${_rangeName(S.range)}</div></div>`;
     } else if (kind === 'nodata') {
-      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div><button class="cm-btn is-outline is-sm" id="gpbFixScope" style="margin-top:4px"><i class="ti ti-user" style="font-size:14px"></i>Switch to Player</button></div>`;
+      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">${_tt('gps_analysis.builder_no_data', 'No data for this selection')}</div><div class="d">${esc(msg)}</div><button class="cm-btn is-outline is-sm" id="gpbFixScope" style="margin-top:4px"><i class="ti ti-user" style="font-size:14px"></i>${_tt('gps_analysis.builder_switch_to_player', 'Switch to Player')}</button></div>`;
       document.getElementById('gpbFixScope')?.addEventListener('click', () => {
         S.scope = 'player'; S.scopeTouched = true;
         ddSyncFromS();   // reflect in the D&D Config scope + re-render the card (no classic pane)
@@ -1656,7 +1657,7 @@
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
+      subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
   }
 
@@ -1750,7 +1751,7 @@
     // Show loading spinner
     destroyBodyChart(body);
     body.className = 'gp-c-b';
-    body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Loading GPS data…</div></div>`;
+    body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">${_tt('gps_analysis.builder_loading', 'Loading GPS data…')}</div></div>`;
 
     try {
       // Context readiness (TIMING): a card can be rendered during dashboard boot —
@@ -1841,7 +1842,7 @@
       if (!sessionIds.length) {
         if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: 0, rawRowsCount: '(n/a — died at getSessionIds)', rowsAfterFbFilter: '(n/a)' });
         _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', pinned: _isPinned, effectiveRange: _effRange, sessionIds: 0 });
-        _showCardState(cardEl, body, 'nodata', 'No sessions match the active filters.', config);
+        _showCardState(cardEl, body, 'nodata', _tt('gps_analysis.builder_no_sessions_match', 'No sessions match the active filters.'), config);
         return;
       }
 
@@ -1905,7 +1906,7 @@
         if (_isPinned) console.log('[PIN DEBUG] died at hasData (series has no points)', { seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
         _gpbDiag(config, FB, ctx, { stage: 'NO HASDATA', sessionIds: sessionIds.length, rows: rows.length,
           seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
-        _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
+        _showCardState(cardEl, body, 'nodata', _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.'), config);
         return;
       }
 
@@ -2237,9 +2238,9 @@
     body.className = 'gp-c-b';
     const vizIcon = VIZ_TYPES[config.viz]?.icon || 'ti-chart-bar';
     if (kind === 'nodata') {
-      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div></div>`;
+      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">${_tt('gps_analysis.builder_no_data', 'No data for this selection')}</div><div class="d">${esc(msg)}</div></div>`;
     } else if (kind === 'err') {
-      body.innerHTML = `<div class="cb2-state err"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">Couldn't load this card</div><div class="d">${esc(msg)}</div></div>`;
+      body.innerHTML = `<div class="cb2-state err"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">${_tt('gps_analysis.builder_couldnt_load', "Couldn't load this card")}</div><div class="d">${esc(msg)}</div></div>`;
     }
   }
 
@@ -2286,7 +2287,7 @@
     return chart;
   }
   function showEmptyBody(body, msg) {
-    body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div></div>`;
+    body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">${_tt('gps_analysis.builder_no_data', 'No data for this selection')}</div><div class="d">${esc(msg)}</div></div>`;
   }
 
   /** Draws the REAL value (e.g. "5.2 km") over each player point. No plugin dep. */
@@ -2329,7 +2330,7 @@
     const baselineInfo = hasBaseline ? BASELINE_LABELS[_cmpBase(config)] : null;
     const baselineName = baselineInfo
       ? baselineInfo.ring
-      : (hasBaseline ? (COMPARES.find(c => c.id === config.comparison.baseline)?.name || 'Baseline') : null);
+      : (hasBaseline ? _cmpName(config.comparison.baseline) : null);
     const baselineOf   = baselineInfo ? baselineInfo.of : 'del baseline';
 
     const ms        = (series || []).filter(s => s.points && s.points.length);
@@ -2386,11 +2387,11 @@
       console.log('[PIN DEBUG] radar guard dropped all axes', {
         cap: UNRELIABLE_CAP, axes: ms.map((s, i) => ({ id: s.label, real: realVals[i], baseline: rawRef[i] })) });
     }
-    const _MISS_NOTE = { match: 'No match baseline yet — need more matches',
-      role: 'No position baseline yet', position: 'No position baseline yet',
-      md: 'No MD baseline yet', self: 'No self baseline yet' };
+    const _MISS_NOTE = { match: _tt('gps_analysis.builder_miss_match', 'No match baseline yet — need more matches'),
+      role: _tt('gps_analysis.builder_miss_position', 'No position baseline yet'), position: _tt('gps_analysis.builder_miss_position', 'No position baseline yet'),
+      md: _tt('gps_analysis.builder_miss_md', 'No MD baseline yet'), self: _tt('gps_analysis.builder_miss_self', 'No self baseline yet') };
     const baselineMissingNote = (hasBaseline && !hasRealBaseline)
-      ? (_MISS_NOTE[config.comparison.baseline] || 'No baseline data yet') : null;
+      ? (_MISS_NOTE[config.comparison.baseline] || _tt('gps_analysis.builder_miss_default', 'No baseline data yet')) : null;
 
     return { labels, pct, pctReal, clamped, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
   }
@@ -2399,7 +2400,7 @@
   function mountRadarChart(body, config, series, baselineMap) {
     const d = radarChartData(config, series, baselineMap);
     const axisLabels = d.grouped ? d.axes : d.labels;
-    if (!axisLabels.length || (d.grouped && !d.groups.length)) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (!axisLabels.length || (d.grouped && !d.groups.length)) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
     // Token cancels any earlier pending mount. The builder preview re-renders on
@@ -2734,7 +2735,7 @@
   /** Mounts (or re-mounts) a Chart.js bar chart into `body`. Same renderer for preview + saved card. */
   function mountBarsChart(body, config, series, mcNames) {
     const d = barsChartData(config, series, mcNames);
-    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
     const token = (body.__barsToken = (body.__barsToken || 0) + 1);
@@ -2967,7 +2968,7 @@
   /** Mounts (or re-mounts) a Chart.js line chart into `body`. Same renderer for preview + saved card. */
   function mountLineChart(body, config, series) {
     const d = lineChartData(config, series);
-    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
     const token = (body.__lineToken = (body.__lineToken || 0) + 1);
@@ -3358,7 +3359,7 @@
   /** Mounts (or re-mounts) a Chart.js scatter into `body`. Same renderer for preview + saved card. */
   function mountScatterChart(body, config, series) {
     const d = scatterChartData(config, series);
-    if (!d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'Scatter needs two measures with overlapping entities.'); return; }
+    if (!d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_scatter_needs_two', 'Scatter needs two measures with overlapping entities.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
     const token = (body.__scatterToken = (body.__scatterToken || 0) + 1);
@@ -3537,7 +3538,7 @@
     const cmpId   = config.comparison?.baseline || null;
     const cmpName = cmpId === 'mc'
       ? (opts.mcRefName ? `vs ${opts.mcRefName}` : '')          // empty if ref MC had no data (degraded)
-      : (cmpId ? (COMPARES.find(c => c.id === cmpId)?.name || '') : '');
+      : (cmpId ? _cmpName(cmpId) : '');
     const scope   = config.scope?.level || '';
 
     const items = (series || []).map((s, i) => {
@@ -3546,7 +3547,7 @@
       const value   = (p.cur != null ? p.cur : p.y) ?? 0;
       const unit    = s?.unit || '';
       const name    = s?.name || m.id || '';
-      const aggName = AGG[m.agg]?.name || '';
+      const aggName = m.agg ? _aggName(m.agg) : '';
       const cat     = catalogMap.get(m.id);
       const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
       let delta = null, refVal = null;
@@ -3688,7 +3689,7 @@
   function mountRankingCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
     const d = rankingCardData(config, series);
-    if (!d.rows.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (!d.rows.length) { body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     body.innerHTML = rankingHtml(d);
     if (opts.example) _appendExampleBadge(body);
   }
@@ -3938,7 +3939,7 @@
     destroyBodyChart(body);
     const editable = !!opts.editable;
     const rowPts = series?.[0]?.points || [];
-    if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
 
     const accent  = config.style?.color || _cssVar('--cm-accent', '#15803D');
     const dimCols = (config.dimensions || []).map(d => DIM_MAP.get(d.id)?.name || d.id);
@@ -3963,14 +3964,14 @@
       const sid  = _dimSortId(config, j);
       // Column-options chip only when this header maps to a real dimension (not the legacy
       // single-identity fallback) so the pane has something to edit.
-      const chip = (editable && dims[j]) ? `<span class="tf-fbtn" data-di="${j}" title="Column options"><i class="ti ti-adjustments"></i></span>` : '';
+      const chip = (editable && dims[j]) ? `<span class="tf-fbtn" data-di="${j}" title="${_tt('gps_analysis.builder_column_options', 'Column options')}"><i class="ti ti-adjustments"></i></span>` : '';
       return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
       const sid  = 'met:' + (config.metrics?.[i]?.id || i);
       const lbl  = c.f.label || c.s.name;                          // FULL name (no word-splitting); custom rename wins
       const al   = c.f.align || 'right';
-      const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Column options & format"><i class="ti ti-adjustments"></i></span>` : '';
+      const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="${_tt('gps_analysis.builder_column_options_format', 'Column options & format')}"><i class="ti ti-adjustments"></i></span>` : '';
       return `<th class="tf-sortable tf-al-${al}${editable ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const head = `<tr>${dimHead}${metHead}</tr>`;
@@ -4116,8 +4117,8 @@
     const decRow = `<div class="tf-row"><span class="lab">Decimales</span><input type="number" min="0" max="3" data-dec value="${f.dec ?? 0}"></div>`;
     // Rename + alignment apply to any table column (persisted in the metric's format).
     const alignSeg = seg('align', [{ v: 'left', l: 'left' }, { v: 'center', l: 'center' }, { v: 'right', l: 'right' }], f.align || 'right');
-    const labelRow = `<div class="tf-row"><span class="lab">Label</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(f.label || '')}"></div>`;
-    const alignRow = `<div class="tf-row"><span class="lab">Align</span>${alignSeg}</div>`;
+    const labelRow = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_label', 'Label')}</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(f.label || '')}"></div>`;
+    const alignRow = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_align', 'Align')}</span>${alignSeg}</div>`;
     return `<div class="tf-hd"><span class="t">${esc(cat.name || 'Columna')}</span><button class="x"><i class="ti ti-x"></i></button></div>
       ${labelRow}${alignRow}
       <div class="tf-row"><span class="lab">Formato</span>${modeSeg}</div>${cond}${decRow}`;
@@ -4167,8 +4168,8 @@
     const seg = (attr, opts, cur) => `<div class="tf-seg">${opts.map(o => `<button data-${attr}="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${o.l}</button>`).join('')}</div>`;
     const alignSeg = seg('align', [{ v: 'left', l: 'left' }, { v: 'center', l: 'center' }, { v: 'right', l: 'right' }], d.align || 'left');
     _tfPane.innerHTML = `<div class="tf-hd"><span class="t">${esc(cat.name || 'Column')}</span><button class="x"><i class="ti ti-x"></i></button></div>
-      <div class="tf-row"><span class="lab">Label</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(d.label || '')}"></div>
-      <div class="tf-row"><span class="lab">Align</span>${alignSeg}</div>`;
+      <div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_label', 'Label')}</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(d.label || '')}"></div>
+      <div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_align', 'Align')}</span>${alignSeg}</div>`;
     _tfPane.querySelector('.x').onclick = closeTfPane;
     const lab = _tfPane.querySelector('[data-label]');
     if (lab) lab.oninput = () => { const v = lab.value.trim(); if (v) d.label = v; else delete d.label; _rerenderDraftTable(); };
@@ -4225,8 +4226,8 @@
       case 'kpi': {
         const val  = s0?.points[0]?.y ?? 0;
         const unit = s0?.unit || '';
-        const aggName = AGG[config.metrics[0]?.agg]?.name || '';
-        const rangeName = RANGES.find(r => r.id === config.range?.type)?.name || '';
+        const aggName = config.metrics[0]?.agg ? _aggName(config.metrics[0].agg) : '';
+        const rangeName = config.range?.type ? _rangeName(config.range.type) : '';
         return `<div class="l"><i class="ti ${VIZ_TYPES.kpi.icon}"></i>${aggName} · ${rangeName}</div>
           <div class="v">${fmtY(val)} <sub>${esc(unit)}</sub></div>
           <div class="t">${esc(s0?.name || '')}</div>`;
@@ -4266,7 +4267,7 @@
 
       case 'line': {
         const pts = s0?.points || [];
-        if (!pts.length) return '<div style="padding:20px;color:var(--cm-fg-muted)">No data</div>';
+        if (!pts.length) return `<div style="padding:20px;color:var(--cm-fg-muted)">${_tt('gps_analysis.builder_no_data_short', 'No data')}</div>`;
         const maxY = Math.max(...pts.map(p => p.y), 1);
         const W = 380, H = 180, pad = 28;
         const xStep = pts.length > 1 ? (W - pad * 2) / (pts.length - 1) : 0;
@@ -4307,7 +4308,7 @@
         // Radar is rendered via Chart.js (mountRadarChart) straight into the body,
         // with per-axis baseline normalization — never the old global-max SVG and
         // never a mock fallback. If reached here, show an empty state.
-        return `<div class="cb2-state empty"><div class="ic"><i class="ti ti-chart-radar"></i></div><div class="t">Radar needs ≥3 metrics</div></div>`;
+        return `<div class="cb2-state empty"><div class="ic"><i class="ti ti-chart-radar"></i></div><div class="t">${_tt('gps_analysis.builder_radar_needs_3', 'Radar needs ≥3 metrics')}</div></div>`;
 
       case 'table': {
         // one column per chosen dimension (in order) + one per measure
@@ -4403,9 +4404,9 @@
     const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
     const color = S.color || '#15803D';
     const axes = S.axes !== false, legend = S.legend !== false, labels = !!S.labels;
-    const rangeName = RANGES.find(r=>r.id===S.range)?.name || S.range;
+    const rangeName = _rangeName(S.range);
     const cmp = S.compare === 'none' ? ''
-      : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : (COMPARES.find(c=>c.id===S.compare)?.name || ''));
+      : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : _cmpName(S.compare));
     const m0 = ms[0];
     const s0 = m0 ? metSample(m0) : 100;
 
@@ -4414,7 +4415,7 @@
         const agg = AGG[S.metrics[0].agg];
         return `<div class="l"><i class="ti ${metIcon(m0)}"></i>${cmp || ((agg?.short||'') + ' · ' + rangeName)}</div>
           <div class="v">${fmt(s0)} <sub>${esc(m0.unit)}</sub></div>
-          ${cmp ? `<div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+8%</span> · z = +0.6</div>` : `<div class="t">${agg?.name||''} · ${rangeName}</div>`}`;
+          ${cmp ? `<div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+8%</span> · z = +0.6</div>` : `<div class="t">${agg ? _aggName(S.metrics[0].agg) : ''} · ${rangeName}</div>`}`;
       }
       case 'ranking': {
         const rl = dimMockLabels(S);
@@ -4522,7 +4523,7 @@
       const cur  = kind === 'range' ? S.range : S.compare;
       const rows = list.map(c => `<button class="rb-opt ${cur===c.id?'is-on':''}" data-pick="${esc(c.id)}">
         <span class="ic"><i class="ti ${c.icon}"></i></span>
-        <span class="tx"><span class="t">${esc(c.name)}</span><span class="d">${esc(c.d)}</span></span>
+        <span class="tx"><span class="t">${esc(kind==='range' ? _rangeName(c.id) : _cmpName(c.id))}</span><span class="d">${esc(kind==='range' ? _rangeDesc(c.id) : _cmpDesc(c.id))}</span></span>
         <i class="ti ti-check ck"></i></button>`).join('');
       // Compare sub-panel: mc → reference-MC list; any other reference → Method + the
       // type-specific options (Match top-N / MD lookback / Position·Self reference window).
@@ -4535,48 +4536,48 @@
               const lbl = m.name || (m.start_date ? `MC ${String(m.start_date).slice(0,10)}` : m.id);
               return `<button class="rb-opt ${String(S.refMcId)===String(m.id)?'is-on':''} ${isCur?'is-disabled':''}" data-mc="${esc(m.id)}">
                 <span class="ic"><i class="ti ti-calendar-week"></i></span>
-                <span class="tx"><span class="t">${esc(lbl)}</span>${isCur?'<span class="d">current microcycle</span>':''}</span>
-                ${isCur?'<span class="tag no">current</span>':'<i class="ti ti-check ck"></i>'}</button>`;
+                <span class="tx"><span class="t">${esc(lbl)}</span>${isCur?`<span class="d">${_tt('gps_analysis.builder_current_microcycle', 'current microcycle')}</span>`:''}</span>
+                ${isCur?`<span class="tag no">${_tt('gps_analysis.builder_current_tag', 'current')}</span>`:'<i class="ti ti-check ck"></i>'}</button>`;
             }).join('')
-          : `<div class="rb-note"><i class="ti ti-info-circle"></i>No microcycles loaded.</div>`;
-        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Reference microcycle</div></div><div class="rb-pop-b">${mcRows}</div>`;
+          : `<div class="rb-note"><i class="ti ti-info-circle"></i>${_tt('gps_analysis.builder_no_microcycles', 'No microcycles loaded.')}</div>`;
+        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_microcycle', 'Reference microcycle')}</div></div><div class="rb-pop-b">${mcRows}</div>`;
       } else if (kind === 'compare' && S.compare !== 'none') {
         const numStyle = 'width:72px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box';
         const methodRows = CMP_METHODS.map(m => `<button class="rb-opt ${(S.compareMethod||'avg')===m.id?'is-on':''}" data-method="${esc(m.id)}">
           <span class="ic"><i class="ti ti-adjustments"></i></span>
-          <span class="tx"><span class="t">${esc(m.name)}</span><span class="d">${esc(m.d)}</span></span>
+          <span class="tx"><span class="t">${esc(_methodName(m.id))}</span><span class="d">${esc(_methodDesc(m.id))}</span></span>
           <i class="ti ti-check ck"></i></button>`).join('');
         let opts = '';
         if (S.compare === 'match') {
-          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Best matches (top N)</div></div>
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_best_matches_topn', 'Best matches (top N)')}</div></div>
             <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.topN ?? 5}" data-opt="topN" style="${numStyle}"></div>`;
         } else if (S.compare === 'md') {
-          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Lookback (last N same MD)</div></div>
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_lookback_md', 'Lookback (last N same MD)')}</div></div>
             <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.mdLookback ?? 4}" data-opt="mdLookback" style="${numStyle}"></div>`;
         } else if (S.compare === 'position' || S.compare === 'self') {
           const winId = _winId(S.refWindow);
           const winRows = CMP_WINDOWS.map(w => `<button class="rb-opt ${winId===w.id?'is-on':''}" data-win="${esc(w.id)}">
             <span class="ic"><i class="ti ti-calendar"></i></span>
-            <span class="tx"><span class="t">${esc(w.name)}</span><span class="d">${esc(w.d)}</span></span>
+            <span class="tx"><span class="t">${esc(_winName(w.id))}</span><span class="d">${esc(_winDesc(w.id))}</span></span>
             <i class="ti ti-check ck"></i></button>`).join('');
-          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Reference window (fixed)</div></div><div class="rb-pop-b">${winRows}</div>`;
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_window_fixed', 'Reference window (fixed)')}</div></div><div class="rb-pop-b">${winRows}</div>`;
         }
-        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Method</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
+        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_method', 'Method')}</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
       }
-      return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
+      return `<div class="rb-pop-h"><div class="t">${kind==='range' ? _tt('gps_analysis.builder_time_range', 'Time range') : _tt('gps_analysis.builder_comparison_baseline', 'Comparison / baseline')}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
     }
     if (kind === 'bars') {
-      return `<div class="rb-pop-h"><div class="t">Bar options</div></div>
+      return `<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_bar_options', 'Bar options')}</div></div>
         <div class="rb-pop-b" style="gap:12px;padding:11px 13px">
           <div>
-            <div style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Orientation</div>
+            <div style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">${_tt('gps_analysis.builder_orientation', 'Orientation')}</div>
             <div class="es-seg">
-              <button data-orient="vertical" class="${S.horizontal?'':'is-on'}"><i class="ti ti-chart-bar"></i>Vertical</button>
-              <button data-orient="horizontal" class="${S.horizontal?'is-on':''}"><i class="ti ti-chart-bar" style="transform:rotate(90deg)"></i>Horizontal</button>
+              <button data-orient="vertical" class="${S.horizontal?'':'is-on'}"><i class="ti ti-chart-bar"></i>${_tt('gps_analysis.builder_vertical', 'Vertical')}</button>
+              <button data-orient="horizontal" class="${S.horizontal?'is-on':''}"><i class="ti ti-chart-bar" style="transform:rotate(90deg)"></i>${_tt('gps_analysis.builder_horizontal', 'Horizontal')}</button>
             </div>
           </div>
           <div class="es-toggle" style="padding:0">
-            <span class="tx"><span class="t">Stacked</span><span class="s">Sum series into one bar</span></span>
+            <span class="tx"><span class="t">${_tt('gps_analysis.builder_stacked', 'Stacked')}</span><span class="s">${_tt('gps_analysis.builder_sum_series_one_bar', 'Sum series into one bar')}</span></span>
             <button class="es-sw-t ${S.stacked?'is-on':''}" data-bars-stack></button>
           </div>
         </div>`;
@@ -4590,12 +4591,13 @@
         const dis = peak && !a.peakOk;
         return `<button class="rb-opt ${field.agg===a.id?'is-on':''} ${dis?'is-disabled':''}" data-agg="${esc(a.id)}">
           <span class="ic"><i class="ti ${a.icon}"></i></span>
-          <span class="tx"><span class="t">${esc(a.name)}</span>${dis?'<span class="d">invalid for peak metric</span>':''}</span>
+          <span class="tx"><span class="t">${esc(_aggName(a.id))}</span>${dis?`<span class="d">${_tt('gps_analysis.builder_invalid_peak_metric', 'invalid for peak metric')}</span>`:''}</span>
           ${dis?'<span class="tag no">N/A</span>':'<i class="ti ti-check ck"></i>'}
         </button>`;
       }).join('');
-      const note = peak ? `<div class="rb-note"><i class="ti ti-info-circle"></i><b>${esc(cat.name)}</b> is a <b>peak</b> metric — only avg / max / min apply.</div>` : '';
-      return `<div class="rb-pop-h"><div class="t">Aggregate ${cat?esc(cat.name):''}</div></div><div class="rb-pop-b">${rows}</div>${note}`;
+      const noteTxt = _tt('gps_analysis.builder_peak_note', '<b>{metric}</b> is a <b>peak</b> metric — only avg / max / min apply.').replace('{metric}', esc(cat.name));
+      const note = peak ? `<div class="rb-note"><i class="ti ti-info-circle"></i>${noteTxt}</div>` : '';
+      return `<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_aggregate', 'Aggregate')} ${cat?esc(cat.name):''}</div></div><div class="rb-pop-b">${rows}</div>${note}`;
     }
     return '';
   }
@@ -4805,7 +4807,7 @@
   function showToast(title, sub, label) {
     document.getElementById('gpbToastTitle').textContent = title;
     document.getElementById('gpbToastSub').textContent   = sub;
-    document.getElementById('gpbToastAct').textContent   = label || 'Done';
+    document.getElementById('gpbToastAct').textContent   = label || _tt('gps_analysis.builder_done', 'Done');
     toastEl.classList.add('is-on');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove('is-on'), 4800);
@@ -4891,7 +4893,14 @@
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
 
-  function _ddAxes()    { return DD_TYPES[S && S.type] || DD_TYPES.bars; }
+  function _ddAxes()    {
+    const type = (S && S.type && DD_TYPES[S.type]) ? S.type : 'bars';
+    const d = DD_TYPES[type];
+    return Object.assign({}, d, {
+      dimAx: _tt('gps_analysis.builder_ddax_' + type + '_dim', d.dimAx),
+      metAx: _tt('gps_analysis.builder_ddax_' + type + '_met', d.metAx),
+    });
+  }
   function _dimPlaced(id){ return !!(S && (S.dimensions || []).some(d => d.id === id)); }
   function _metPlaced(id){ return !!(S && (S.metrics    || []).some(m => m.id === id)); }
 
@@ -4914,15 +4923,15 @@
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
     const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
     const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
-    const none = '<div class="bdd-grp-h"><span class="hint">No matches</span></div>';
-    const addCalc = '<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Calculated metric</button>';
+    const none = `<div class="bdd-grp-h"><span class="hint">${_tt('gps_analysis.builder_no_matches', 'No matches')}</span></div>`;
+    const addCalc = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>${_tt('gps_analysis.builder_calculated_metric', 'Calculated metric')}</button>`;
     return `
-      <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">Fields</span><span class="ct">${total}</span></div>
-      <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="Search field…" value="${esc(_ddQuery)}"></div>
+      <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">${_tt('gps_analysis.builder_fields', 'Fields')}</span><span class="ct">${total}</span></div>
+      <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="${esc(_tt('gps_analysis.builder_search_field', 'Search field…'))}" value="${esc(_ddQuery)}"></div>
       <div class="bdd-fields" id="gpbDDFields">
-        <div class="bdd-grp-h"><span class="k">Dimensions</span><span class="ln"></span><span class="hint">how rows group</span></div>
+        <div class="bdd-grp-h"><span class="k">${_tt('gps_analysis.builder_zone_dimensions', 'Dimensions')}</span><span class="ln"></span><span class="hint">${_tt('gps_analysis.builder_hint_rows_group', 'how rows group')}</span></div>
         ${dimRows.join('') || none}
-        <div class="bdd-grp-h"><span class="k">Metrics</span><span class="ln"></span><span class="hint">what to measure</span></div>
+        <div class="bdd-grp-h"><span class="k">${_tt('gps_analysis.builder_zone_metrics', 'Metrics')}</span><span class="ln"></span><span class="hint">${_tt('gps_analysis.builder_hint_what_measure', 'what to measure')}</span></div>
         ${metRows.join('') || none}
         ${addCalc}
       </div>`;
@@ -4937,7 +4946,7 @@
       <span class="ic is-calc"><i class="ti ti-math-function"></i></span>
       <span class="nm">${esc(m.name)}</span>
       <span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span>
-      <span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Edit formula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Delete"><i class="ti ti-trash"></i></button></span>
+      <span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="${_tt('gps_analysis.builder_edit_formula', 'Edit formula')}"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="${_tt('gps_analysis.builder_delete', 'Delete')}"><i class="ti ti-trash"></i></button></span>
     </div>`;
   }
 
@@ -4976,10 +4985,10 @@
   // Titles/icons for the per-ROLE zones (scatter, …). Metric roles tint green, dim roles blue
   // via the existing [data-accept] CSS — no CSS change needed.
   const _ROLE_ZONE = {
-    x:     { title:'X axis', badge:'ti-arrow-right' },
-    y:     { title:'Y axis', badge:'ti-arrow-up' },
-    size:  { title:'Size',   badge:'ti-circle' },
-    color: { title:'Color',  badge:'ti-palette' },
+    x:     { title:'X axis', i18n:'gps_analysis.builder_role_x',    badge:'ti-arrow-right' },
+    y:     { title:'Y axis', i18n:'gps_analysis.builder_role_y',    badge:'ti-arrow-up' },
+    size:  { title:'Size',   i18n:'gps_analysis.builder_role_size', badge:'ti-circle' },
+    color: { title:'Color',  i18n:'gps_analysis.builder_role_color',badge:'ti-palette' },
   };
 
   // Make every placed field of a role-based type carry an explicit .role, so the drawer zones
@@ -5014,8 +5023,8 @@
         return {
           role:   r.role,
           accept: r.kind,                                       // 'metric' | 'dim' — drag kind must match
-          title:  meta.title || r.role,
-          axLbl:  (r.kind === 'dim' ? 'dimension' : 'metric') + (r.min === 0 ? ' · optional' : ''),
+          title:  meta.i18n ? _tt(meta.i18n, meta.title || r.role) : (meta.title || r.role),
+          axLbl:  _tt(r.kind === 'dim' ? 'gps_analysis.builder_ax_dimension' : 'gps_analysis.builder_ax_metric', r.kind === 'dim' ? 'dimension' : 'metric') + (r.min === 0 ? _tt('gps_analysis.builder_ax_optional_suffix', ' · optional') : ''),
           badge:  meta.badge || (r.kind === 'dim' ? 'ti-category-2' : 'ti-ruler-measure'),
           what:   r.kind === 'dim' ? 'a dimension' : 'a metric',
           items:  src.filter(it => it.role === r.role),
@@ -5024,15 +5033,17 @@
     }
     // Default: the two generic zones (unchanged).
     return [
-      { accept:'dim',    title:'Dimensions', axLbl:ax.dimAx, badge:'ti-category-2',    what:'dimensions', items:(S && S.dimensions) || [] },
-      { accept:'metric', title:'Metrics',    axLbl:ax.metAx, badge:'ti-ruler-measure', what:'metrics',    items:(S && S.metrics)    || [] },
+      { accept:'dim',    title:_tt('gps_analysis.builder_zone_dimensions', 'Dimensions'), axLbl:ax.dimAx, badge:'ti-category-2',    what:'dimensions', items:(S && S.dimensions) || [] },
+      { accept:'metric', title:_tt('gps_analysis.builder_zone_metrics', 'Metrics'),       axLbl:ax.metAx, badge:'ti-ruler-measure', what:'metrics',    items:(S && S.metrics)    || [] },
     ];
   }
   function ddZoneHTML(z) {
     const isDim = z.accept === 'dim';
+    const _DRAG_KEY = { 'a metric':'builder_drag_metric_here', 'a dimension':'builder_drag_dimension_here', 'metrics':'builder_drag_metrics_here', 'dimensions':'builder_drag_dimensions_here' };
+    const emptyTxt = _tt('gps_analysis.' + (_DRAG_KEY[z.what] || 'builder_drag_metrics_here'), `drag ${z.what} here`);
     const body  = z.items.length
       ? (isDim ? z.items.map(d => ddDimChip(d.id)).join('') : z.items.map(m => ddMetChip(m)).join(''))
-      : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">drag ${z.what} here</span></div>`;
+      : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">${emptyTxt}</span></div>`;
     const roleAttr = z.role ? ` data-role="${z.role}"` : '';
     return `<div class="bdd-zone" data-accept="${z.accept}"${roleAttr}>
       <div class="bdd-zone-h"><span class="badge"><i class="ti ${z.badge}"></i></span><span class="t">${z.title}</span><span class="ax">${z.axLbl}</span><span class="ct">${z.items.length}</span></div>
@@ -5049,14 +5060,33 @@
   // is otherwise English-only; new labels go through this so they can be translated (en/es/pt).
   const _tt = (key, en) => (typeof window !== 'undefined' && window.tt) ? window.tt(key, en) : en;
 
+  // i18n getters for module-load literals (VIZ_FULLNAME / DD_TYPES / VIZ_REQ_LBL) — the objects are
+  // built before _tt exists, so translate at the USE site. English fallbacks stay exact.
+  const _VIZFULL_KEY = { kpi:'builder_type_kpi', bars:'builder_vizfull_bars', line:'builder_vizfull_line', scatter:'builder_type_scatter', radar:'builder_type_radar', ranking:'builder_type_ranking', table:'builder_type_table', heatmap:'builder_type_heatmap' };
+  const _REQ_KEY     = { kpi:'builder_req_pick1', ranking:'builder_req_pick1', scatter:'builder_req_pick2xy', bars:'builder_req_pick12', line:'builder_req_pick1plus', table:'builder_req_pick1plus', heatmap:'builder_req_pick1plus', radar:'builder_req_pick3plus' };
+  const _vizFull  = t => _tt('gps_analysis.' + (_VIZFULL_KEY[t] || ('builder_type_' + t)), VIZ_FULLNAME[t] || t);
+  const _typeName = t => _tt('gps_analysis.builder_type_' + t, (DD_TYPES[t] && DD_TYPES[t].name) || t);
+  const _reqLbl   = t => _tt('gps_analysis.' + (_REQ_KEY[t] || 'builder_req_pick1'), VIZ_REQ_LBL[t] || t);
+
+  // Same pattern for the range/compare/method/window data arrays (RANGES/COMPARES/CMP_METHODS/
+  // CMP_WINDOWS, L141–169). id→key; English fallback read from the array entry.
+  const _rangeName  = id => { const x = RANGES.find(r=>r.id===id);      return _tt('gps_analysis.builder_range_'  + String(id).toLowerCase() + '_name', x ? x.name : String(id||'')); };
+  const _rangeDesc  = id => { const x = RANGES.find(r=>r.id===id);      return _tt('gps_analysis.builder_range_'  + String(id).toLowerCase() + '_desc', x ? x.d    : ''); };
+  const _cmpName    = id => { if (id === 'none') return _tt('gps_analysis.builder_no_comparison', 'No comparison'); const x = COMPARES.find(c=>c.id===id); return _tt('gps_analysis.builder_compare_' + id + '_name', x ? x.name : String(id||'')); };
+  const _cmpDesc    = id => { if (id === 'none') return _tt('gps_analysis.builder_compare_none_desc', 'Raw values only'); const x = COMPARES.find(c=>c.id===id); return _tt('gps_analysis.builder_compare_' + id + '_desc', x ? x.d : ''); };
+  const _methodName = id => { const x = CMP_METHODS.find(m=>m.id===id); return _tt('gps_analysis.builder_method_' + id + '_name', x ? x.name : String(id||'')); };
+  const _methodDesc = id => { const x = CMP_METHODS.find(m=>m.id===id); return _tt('gps_analysis.builder_method_' + id + '_desc', x ? x.d    : ''); };
+  const _winName    = id => { const x = CMP_WINDOWS.find(w=>w.id===id); return _tt('gps_analysis.builder_window_' + id + '_name', x ? x.name : String(id||'')); };
+  const _winDesc    = id => { const x = CMP_WINDOWS.find(w=>w.id===id); return _tt('gps_analysis.builder_window_' + id + '_desc', x ? x.d    : ''); };
+  const _aggName    = id => { const x = AGG[id]; return _tt('gps_analysis.builder_agg_' + id + '_name', x ? x.name : String(id||'')); };
+
   function ddConfigHTML() {
     if (!S) return '';
-    const rangeName = RANGES.find(r => r.id === S.range)?.name || S.range;
-    const cmpName = S.compare === 'none' ? 'No comparison'
-      : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : (COMPARES.find(c => c.id === S.compare)?.name || 'Comparison'));
+    const rangeName = _rangeName(S.range);
+    const cmpName = (S.compare === 'mc') ? `vs ${mcLabel(S.refMcId)}` : _cmpName(S.compare);
     const src = S.source || 'session';
     return `<div class="bdd-config">
-      <div class="bdd-config-h"><i class="ti ti-adjustments-horizontal"></i><span class="t">Configuration</span><span class="s">Set, don't drag</span></div>
+      <div class="bdd-config-h"><i class="ti ti-adjustments-horizontal"></i><span class="t">${_tt('gps_analysis.builder_configuration', 'Configuration')}</span><span class="s">${_tt('gps_analysis.builder_set_dont_drag', "Set, don't drag")}</span></div>
       <div class="bdd-cfg-grid">
         <div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_analyze_by', 'Analyze by')}</span>
@@ -5070,18 +5100,18 @@
           <input class="es-input bdd-cfg-input" id="gpbDDTitle" type="text" placeholder="${esc(_tt('gps_analysis.builder_title_placeholder', 'Chart title'))}" value="${esc(S.title || '')}">
         </div>
         <div class="bdd-cfg-f">
-          <span class="k">Scope</span>
+          <span class="k">${_tt('gps_analysis.builder_scope', 'Scope')}</span>
           <div class="es-seg" id="gpbDDScope">
-            <button data-scope="player" class="${S.scope==='player'?'is-on':''}"><i class="ti ti-user"></i>Player</button>
-            <button data-scope="squad" class="${S.scope==='squad'?'is-on':''}"><i class="ti ti-users"></i>Squad</button>
+            <button data-scope="player" class="${S.scope==='player'?'is-on':''}"><i class="ti ti-user"></i>${_tt('gps_analysis.builder_scope_player', 'Player')}</button>
+            <button data-scope="squad" class="${S.scope==='squad'?'is-on':''}"><i class="ti ti-users"></i>${_tt('gps_analysis.builder_scope_squad', 'Squad')}</button>
           </div>
         </div>
         <div class="bdd-cfg-f">
-          <span class="k">Time range</span>
+          <span class="k">${_tt('gps_analysis.builder_time_range', 'Time range')}</span>
           <button class="es-select bdd-cfg-sel" data-ddpop="range"><i class="ti ti-calendar-week"></i><span class="v" id="gpbDDRangeName">${esc(rangeName)}</span><i class="ti ti-chevron-down cv"></i></button>
         </div>
         <div class="bdd-cfg-f">
-          <span class="k">Comparison</span>
+          <span class="k">${_tt('gps_analysis.builder_comparison', 'Comparison')}</span>
           <button class="es-select bdd-cfg-sel" data-ddpop="compare"><i class="ti ti-target"></i><span class="v" id="gpbDDCompareName">${esc(cmpName)}</span><i class="ti ti-chevron-down cv"></i></button>
         </div>
         ${S.type === 'bars' ? `<div class="bdd-cfg-f">
@@ -5096,9 +5126,9 @@
   function ddToolbarHTML() {
     const cur = S && S.type;
     return `<div class="bdd-bar">
-      <span class="lbl">Tipo</span>
+      <span class="lbl">${_tt('gps_analysis.builder_type_label', 'Type')}</span>
       <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).map(k =>
-        `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${DD_TYPES[k].name}</button>`).join('')}</div>
+        `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${_typeName(k)}</button>`).join('')}</div>
     </div>`;
   }
 
