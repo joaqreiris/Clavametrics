@@ -890,7 +890,11 @@ async function boot() {
   await ctInitTeamSwitch();
 
   if (club) await window.applyClubTheme();
-  await Promise.all([loadMembers(), loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
+  // Members FIRST: renderMsgHTML resolves each message's author (name + photo) from `members`.
+  // Loading them in parallel raced — messages rendered against an empty list, fell back to the
+  // stored sender_name (the pre-onboarding email handle) and cached that via renderedIds.
+  await loadMembers();
+  await Promise.all([loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
   await loadDmPreviews();
   // Abrir conversación específica si viene de ?conv= (del panel de notificaciones)
   const _convParam = new URLSearchParams(location.search).get('conv');
