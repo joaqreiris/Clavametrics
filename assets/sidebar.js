@@ -22,6 +22,11 @@
   function _applyI18n(root) {
     if (window.CM_I18N) window.CM_I18N.applyTo(root || document);
   }
+  // Translated string for text built in JS (data-i18n only works on rendered elements).
+  function _ttx(k, fb) {
+    try { const v = (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k) : null; return (v && v !== k) ? v : fb; }
+    catch (_e) { return fb; }
+  }
 
   // ── CSS ──────────────────────────────────────────────────────
   if (!document.getElementById('cm-sidebar-css')) {
@@ -833,15 +838,19 @@ html.cm-rail .hub-nav-grip{display:none}
     if (recentToShow.length) {
       html += `<div class="cm-cp-sect-lbl" data-i18n="shell.recent">Recent</div>`;
       for (const r of recentToShow) {
+        // For a thread I started, the stored sender_name is MINE — don't use it as the peer's
+        // fallback name; the key already points at the other person.
+        const fb = r.mine ? '' : r.senderName;
         const av = r.isGroup
           ? `<div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>`
-          : _chatAvHtml(r.key, r.senderName);
-        const name = r.isGroup ? '# team' : _chatName(r.key, r.senderName);
+          : _chatAvHtml(r.key, fb);
+        const name   = r.isGroup ? '# team' : _chatName(r.key, fb);
+        const prefix = r.mine ? _ttx('shell.you_prefix', 'You: ') : '';
         html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(r.key)}">
           ${av}
           <div class="cm-ci-body">
             <div class="cm-ci-name"><span>${_escHtml(name)}</span><span class="time">${_relTime(r.lastAt)}</span></div>
-            <div class="cm-ci-preview">${_escHtml((r.lastMsg || '').slice(0,40))}</div>
+            <div class="cm-ci-preview">${_escHtml(prefix)}${_escHtml((r.lastMsg || '').slice(0,40))}</div>
           </div>
         </button>`;
       }
@@ -921,8 +930,10 @@ html.cm-rail .hub-nav-grip{display:none}
     // Initial unread counts — bail silently if either table doesn't exist yet
     const [readsRes, msgsRes, profsRes] = await Promise.all([
       window.sb.from('channel_reads').select('channel_key,last_read_at').eq('user_id', user.id).eq('club_id', clubId),
+      // NOTE: own messages are included on purpose — a DM you started must show up in
+      // "Recent" even if nobody replied yet. The unread loop below skips them explicitly.
       window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name')
-        .eq('club_id', clubId).neq('sender_id', user.id)
+        .eq('club_id', clubId)
         .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
         .order('created_at', { ascending: false }).limit(200),
       // Real names + photos for the panel (the stored sender_name is the old email handle).
@@ -937,6 +948,7 @@ html.cm-rail .hub-nav-grip{display:none}
     const readMap = {};
     (reads || []).forEach(r => { readMap[r.channel_key] = r.last_read_at; });
     for (const msg of (recentMsgs || [])) {
+      if (msg.sender_id === user.id) continue;          // never unread from yourself
       const isGroup = !msg.recipient_id;
       if (!isGroup && msg.recipient_id !== user.id) continue;
       const key = isGroup ? 'group' : msg.sender_id;
@@ -955,11 +967,15 @@ html.cm-rail .hub-nav-grip{display:none}
     _chatRecent = {};
     for (const msg of (recentMsgs || [])) {
       const isGroup = !msg.recipient_id;
-      if (!isGroup && msg.recipient_id !== user.id) continue;
-      const key = isGroup ? 'group' : msg.sender_id;
+      const mine    = msg.sender_id === user.id;
+      // DMs: keep the ones involving me in EITHER direction (so a thread I started shows up).
+      if (!isGroup && !mine && msg.recipient_id !== user.id) continue;
+      // Conversation key = the OTHER person (for a DM I sent, that's the recipient).
+      const key = isGroup ? 'group' : (mine ? msg.recipient_id : msg.sender_id);
+      if (!key) continue;
       if (!_chatRecent[key] || msg.created_at > _chatRecent[key].lastAt) {
         _chatRecent[key] = {
-          key, isGroup,
+          key, isGroup, mine,
           lastMsg: msg.content || '',
           lastAt: msg.created_at,
           senderName: msg.sender_name || '',
@@ -975,8 +991,22 @@ html.cm-rail .hub-nav-grip{display:none}
     window.sb.channel(`cm-chat-notif-${clubId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${clubId}` }, payload => {
         const msg = payload.new;
-        if (!msg || msg.sender_id === user.id) return;
+        if (!msg) return;
         const isGroup = !msg.recipient_id;
+        if (msg.sender_id === user.id) {
+          // My own message: never unread, but the thread must show up in "Recent" right away
+          // (a DM I just started, before any reply).
+          const own = isGroup ? 'group' : msg.recipient_id;
+          if (own) {
+            _chatRecent[own] = {
+              key: own, isGroup, mine: true,
+              lastMsg: msg.content || '', lastAt: msg.created_at,
+              senderName: msg.sender_name || '', senderId: msg.sender_id || null
+            };
+            _renderChatPanel();
+          }
+          return;
+        }
         if (!isGroup && msg.recipient_id !== user.id) return;
         const key = isGroup ? 'group' : msg.sender_id;
         if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
