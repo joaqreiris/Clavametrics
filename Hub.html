@@ -586,11 +586,10 @@
           <h1 id="greetMsg">Good morning, Joaquín <span class="accent">— here's what needs you today.</span></h1>
           <p id="greetSub">Microcycle 14 · MD-3 · Training session today @ 17:00 at Centro de Entrenamiento.</p>
         </div>
-        <div class="meta">
-          <span class="cm-pill is-success"><span class="cm-dot"></span>22 <span data-i18n="hub.available_suffix">available</span></span>
-          <span class="cm-pill is-warning"><span class="cm-dot"></span>3 <span data-i18n="hub.partial_suffix">partial</span></span>
-          <span class="cm-pill is-danger"><span class="cm-dot"></span>2 <span data-i18n="hub.out_suffix">out</span></span>
-        </div>
+        <!-- Vacío a propósito: lo llena renderAvailabilityPills() con el dato real. Tenía
+             22/3/2 hardcodeado de la maqueta y, como la función salía por early-return
+             cuando no había registros, esos números falsos quedaban en pantalla. -->
+        <div class="meta"></div>
       </header>
 
       <!-- KPI strip -->
@@ -1669,7 +1668,11 @@ async function renderActivity() {
 
 function renderAvailabilityPills(records) {
   const meta = document.querySelector('.hub-greet .meta');
-  if (!meta || !records.length) return;
+  if (!meta) return;
+  // Sin registros → VACIAR, no salir. El early-return dejaba en pantalla lo que hubiera
+  // en el DOM: el placeholder de la maqueta en la primera carga, o —al cambiar de equipo—
+  // las píldoras del equipo anterior.
+  if (!records.length) { meta.innerHTML = ''; return; }
   let avail = 0, partial = 0, out = 0;
   records.forEach(({ status }) => {
     const s = (status || '').toLowerCase();
