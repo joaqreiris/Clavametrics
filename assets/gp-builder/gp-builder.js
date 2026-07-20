@@ -318,6 +318,10 @@
     return {
       schema: 'gp.card/v1',
       title:  autoTitle(S) || null,
+      // Marca SOLO lo que el usuario tipeó: autoTitle() rellena `title` con el nombre de la
+      // métrica, así que sin este flag no se distingue "escrito" de "auto-rellenado". Se omite
+      // cuando es false → los configs sin título custom quedan idénticos a los ya guardados.
+      ...(S.titleCustom ? { titleCustom: true } : {}),
       viz:    S.type,
       source: S.source || 'session',
       scope:  { level: S.scope },
@@ -686,7 +690,7 @@
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
-             size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
+             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false };
   }
 
@@ -1061,6 +1065,7 @@
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
       S.title   = cfg.title || '';
+      S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
       S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) }));
     } else if (rawConfig?.schema === 'gp.card/v1') {
@@ -1087,6 +1092,7 @@
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
       S.title   = rawConfig.title || '';
+      S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
       S.metrics = (rawConfig.metrics || [])
         .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }))
         .filter(m => catalogMap.has(m.id))
@@ -1199,7 +1205,9 @@
         // D&D Title input → same as the classic #gpbTitle: write S.title, re-render only the card
         // preview (NOT the D&D pane — that would rebuild the input and drop focus mid-typing).
         const t = e.target.closest('#gpbDDTitle');
-        if (t) { if (!S) return; S.title = t.value; renderCard(); }
+        // .trim(): al reabrir una card el input viene seedeado con el título AUTO; si el
+        // usuario lo borra, el flag vuelve a false y la card cae al auto-generado.
+        if (t) { if (!S) return; S.title = t.value; S.titleCustom = !!t.value.trim(); renderCard(); }
       });
 
       // inicio del arrastre (campo del panel o chip ya colocado)
@@ -3599,6 +3607,9 @@
       ? (opts.mcRefName ? `vs ${opts.mcRefName}` : '')          // empty if ref MC had no data (degraded)
       : (cmpId ? _cmpName(cmpId) : '');
     const scope   = config.scope?.level || '';
+    // Título del usuario SOLO si viene marcado como custom (ver buildConfig). Vale aunque
+    // coincida con el nombre de la métrica: si lo escribió, es su título.
+    const userTitle = config.titleCustom && config.title ? String(config.title).trim() : '';
 
     const items = (series || []).map((s, i) => {
       const m       = config.metrics?.[i] || {};
@@ -3621,14 +3632,17 @@
           refVal = bv;                                             // the baseline absolute value
         }
       }
-      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal };
+      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle };
     });
     return { items, single: items.length <= 1 };
   }
 
   /** Single-KPI markup (1 metric). `spark` adds an empty sparkline canvas. */
   function kpiHtml(d, spark) {
-    const lLabel = [d.aggName, d.scope].filter(Boolean).join(' · ');
+    const autoLbl = [d.aggName, d.scope].filter(Boolean).join(' · ');
+    const lLabel  = d.title || autoLbl;              // custom arriba; si no, el auto de siempre
+    // Subtítulo solo con título custom: sin él, .sb duplicaría literalmente a .l.
+    const subHtml = d.title && autoLbl ? `<div class="sb">${esc(autoLbl)}</div>` : '';
     let tLine = '';
     if (d.delta) {
       const sign = d.delta.dir === 'up' ? '+' : '−';
@@ -3642,6 +3656,7 @@
     }
     const sparkHtml = spark ? `<div class="gp-kpi-spark" style="height:32px;position:relative;width:100%"><canvas></canvas></div>` : '';
     return `<div class="l"><i class="ti ${d.icon}"></i>${esc(lLabel)}</div>
+      ${subHtml}
       <div class="v">${fmt(Math.round(d.value * 10) / 10)}${d.unit ? ` <sub>${esc(d.unit)}</sub>` : ''}</div>
       ${tLine}${sparkHtml}`;
   }
@@ -3672,7 +3687,7 @@
     const d = kpiCardData(config, series, opts);
     // KPI is single-metric now. An OLD saved card may still carry >1 metric → render only the
     // FIRST (config/DB untouched; editing it collapses to 1 via VIZ_TYPES.kpi.max=1). No multi-tile row.
-    const item = d.items[0] || { value: 0, unit: '', name: '', aggName: '', scope: config.scope?.level || '', icon: VIZ_TYPES.kpi.icon, cmpName: '', delta: null };
+    const item = d.items[0] || { value: 0, unit: '', name: '', aggName: '', scope: config.scope?.level || '', icon: VIZ_TYPES.kpi.icon, cmpName: '', delta: null, title: '' };
     const spark = Array.isArray(opts.sparkSeries) && opts.sparkSeries.length >= 2;
     body.innerHTML = kpiHtml(item, spark);
     if (opts.example) _appendExampleBadge(body);
@@ -3771,6 +3786,7 @@
     });
     const config = {
       viz: 'kpi', metrics: S.metrics, scope: { level: S.scope },
+      title: S.title, ...(S.titleCustom ? { titleCustom: true } : {}),
       comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
       __example: true,
@@ -5810,6 +5826,7 @@
     S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
     S.title   = config.title || '';
+    S.titleCustom = !!config.titleCustom;      // ausente en cards viejas → false → título auto
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }));
 
     // keep only metrics that exist in catalog; fix invalid peak aggs
