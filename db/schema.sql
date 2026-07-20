@@ -1718,8 +1718,16 @@ create table if not exists public.profiles (
   last_seen_at timestamp with time zone,
   settings jsonb default '{}'::jsonb,
   notification_settings jsonb default '{}'::jsonb,
+  first_name text,
+  last_name text,
+  phone text,
+  birth_date date,
+  job_title text,
+  preferred_lang text,
+  onboarded boolean default false not null,
   constraint profiles_pkey primary key (id),
-  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
+  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text]))),
+  constraint profiles_preferred_lang_check CHECK ((preferred_lang is null or preferred_lang = ANY (ARRAY['en'::text, 'es'::text, 'pt'::text])))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
 CREATE INDEX profiles_email_idx ON public.profiles USING btree (email);
