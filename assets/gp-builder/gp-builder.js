@@ -3655,9 +3655,15 @@
       tLine = `<div class="t">${esc(d.name)}</div>`;
     }
     const sparkHtml = spark ? `<div class="gp-kpi-spark" style="height:32px;position:relative;width:100%"><canvas></canvas></div>` : '';
+    // --ch = largo del número YA formateado (+ unidad). El CSS escala la fuente por
+    // ancho-de-card Y por cantidad de caracteres: sin esto un valor largo
+    // ("1,194,235 m") se renderiza a 42px y .gp-c-b (overflow:hidden) lo corta,
+    // dejando "1,194..." — que se lee como km cuando en realidad son metros.
+    const vTxt = fmt(Math.round(d.value * 10) / 10);
+    const vCh  = vTxt.length + (d.unit ? d.unit.length + 1 : 0);
     return `<div class="l"><i class="ti ${d.icon}"></i>${esc(lLabel)}</div>
       ${subHtml}
-      <div class="v">${fmt(Math.round(d.value * 10) / 10)}${d.unit ? ` <sub>${esc(d.unit)}</sub>` : ''}</div>
+      <div class="v" style="--ch:${vCh}">${vTxt}${d.unit ? ` <sub>${esc(d.unit)}</sub>` : ''}</div>
       ${tLine}${sparkHtml}`;
   }
 
