@@ -340,7 +340,7 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name' },
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
     };
@@ -567,6 +567,10 @@
                   <button data-slabel="xy">X·Y</button>
                 </div>
               </div>
+              <div class="es-toggle" data-only="scatter">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_player_photos">Player photos</span><span class="s" data-i18n="gps_analysis.builder_player_photos_sub">Draw each point as the player's photo</span></span>
+                <button class="es-sw-t" data-toggle="scatterAvatars"></button>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -683,7 +687,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
-             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name' };
+             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false };
   }
 
   function startBuild() {
@@ -1050,6 +1054,7 @@
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
       S.scatterLabel = cfg.scatterLabel || 'name';
+      S.scatterAvatars = !!cfg.scatterAvatars;
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
       S.horizontal = !!cfg.horizontal;
@@ -1075,6 +1080,7 @@
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
       S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
+      S.scatterAvatars = !!rawConfig.style?.scatterAvatars;
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
@@ -3235,7 +3241,7 @@
       const px = sX.points[i], py = sY.points[i];
       const psz = sSize ? sSize.points[i] : null;       // Size metric value for the SAME entity/index
       const sizeVal = psz ? psz.y : null;
-      paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null, size: sizeVal });   // px.y = X-axis value, py.y = Y-axis value
+      paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null, size: sizeVal, pid: px.pid ?? null });   // px.y = X-axis value, py.y = Y-axis value
     }
     if (!paired.length) return empty;
 
@@ -3265,7 +3271,7 @@
       const _lf = v => fmt(Math.round((v ?? 0) * 10) / 10);   // Phase 3 value formatter for on-canvas labels
       const pts = paired
         .filter(p => (hasCat ? (p.cat ?? '—') : null) === c)
-        .map(p => ({ x: p.x, y: p.y, name: p.name, size: p.size,
+        .map(p => ({ x: p.x, y: p.y, name: p.name, size: p.size, pid: p.pid,
           lbl: lblMode === 'x'  ? _lf(p.x)
              : lblMode === 'y'  ? _lf(p.y)
              : lblMode === 'xy' ? `${_lf(p.x)} · ${_lf(p.y)}`
@@ -3335,6 +3341,57 @@
     _crestImgCache.set(url, img);
     return img;
   }
+  // ── Player avatar marks (scatter encoding, Phase 4) ─────────────────────────
+  // When enabled and the scatter plots one point per PLAYER, draw each point as the
+  // player's photo (players.photo_url), cached per club. Per-POINT pointStyle array
+  // (each point = a different player) — unlike crests which are per-dataset. A player
+  // with no photo keeps the Phase-2 shape (graceful fallback).
+  let _avatarCache = null, _avatarCacheClub = null;   // Promise<Map pid → url>
+  function _loadScatterAvatars() {
+    if (!window.sb || !_clubId) return Promise.resolve(new Map());
+    if (_avatarCache && _avatarCacheClub === _clubId) return _avatarCache;
+    _avatarCacheClub = _clubId;
+    _avatarCache = window.cmFetchAll(() => window.sb.from('players')
+      .select('id, photo_url').eq('club_id', _clubId).not('photo_url', 'is', null), { label: 'scatter.avatars' })
+      .then(rows => {
+        const m = new Map();
+        (rows || []).forEach(p => { if (p.id && p.photo_url) m.set(p.id, p.photo_url); });
+        return m;
+      }, () => new Map());
+    return _avatarCache;
+  }
+  const _AVATAR_PX = 28;
+  function _avatarImage(url) {
+    if (_crestImgCache.has(url)) return _crestImgCache.get(url);   // share the image cache
+    const img = new Image();
+    img.width = _AVATAR_PX; img.height = _AVATAR_PX;
+    img.src = url;
+    _crestImgCache.set(url, img);
+    return img;
+  }
+  /** Draw each per-player point as the player's photo. Per-point pointStyle array. Token-guarded. */
+  async function _applyPlayerAvatars(body, token) {
+    const chart = body.__chart;
+    if (!chart || !chart.data) return;
+    const avatars = await _loadScatterAvatars();
+    if (!avatars.size || body.__scatterToken !== token || !body.__chart) return;
+    let pending = 0, done = false;
+    const flush = () => { if (body.__scatterToken === token && body.__chart) { try { chart.update('none'); } catch (_) {} } };
+    chart.data.datasets.forEach(ds => {
+      const base = ds.pointStyle;                          // Phase-2 shape string (per-dataset fallback)
+      const styles = ds.data.map(pt => {
+        const url = pt && pt.pid ? avatars.get(pt.pid) : null;
+        if (!url) return base;                             // no photo → keep the shape
+        const img = _avatarImage(url);
+        if (!(img.complete && img.naturalWidth)) { pending++; img.addEventListener('load', () => { if (--pending <= 0 && done) flush(); }, { once: true }); }
+        return img;
+      });
+      ds.pointStyle = styles;                              // ARRAY → per-point marks
+    });
+    done = true;
+    flush();                                               // draw what's already loaded; late loads flush again
+  }
+
   /** Swap coloured dots for opponent crests on a mounted scatter chart. Token-guarded. */
   async function _applyRivalCrests(body, token) {
     const chart = body.__chart;
@@ -3425,7 +3482,7 @@
                           text: ds.label,
                           fillStyle: ds.pointHoverBackgroundColor || ds.backgroundColor,
                           strokeStyle: ds.pointHoverBackgroundColor || ds.backgroundColor, lineWidth: 0,
-                          pointStyle: ds.pointStyle || 'circle',
+                          pointStyle: Array.isArray(ds.pointStyle) ? 'circle' : (ds.pointStyle || 'circle'),
                           hidden: !ch.isDatasetVisible(i), datasetIndex: i,
                         })) },
               onClick: (e, item, legend) => {
@@ -3469,7 +3526,9 @@
         },
       });
       // Phase 1: rival crest marks — when colouring by rival, replace dots with opponent crests.
+      // Phase 4: else, if enabled, draw each per-player point as the player's photo.
       if ((config.dimensions || [])[0]?.id === 'rival') _applyRivalCrests(body, token);
+      else if (config.style?.scatterAvatars) _applyPlayerAvatars(body, token);
     };
     mount();
   }
@@ -3505,7 +3564,7 @@
     const cfg = {
       viz: 'scatter',
       dimensions: S.dimensions,
-      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, scatterLabel: S.scatterLabel || 'name' },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars },
       __example: true,
     };
     mountScatterChart(body, cfg, series);
