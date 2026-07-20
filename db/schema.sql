@@ -5361,21 +5361,28 @@ create policy "players_scoped_insert" on public.players as permissive for insert
   with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
   WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+-- SELECT/UPDATE incluyen la rama `team_id IN my_team_ids()` (equipo primario denormalizado)
+-- ADEMÁS del EXISTS sobre player_teams, para quedar alineadas con players_scoped_insert.
+-- Sin esa rama, un coach no puede ver la fila que ACABA de insertar: PostgREST pide
+-- `returning=representation` y Postgres aplica las policies de SELECT al RETURNING, pero la
+-- fila de player_teams se crea recién después del insert → toda la operación abortaba con
+-- "new row violates row-level security policy". Idem el update de photo_url posterior.
+-- Bonus: jugadores sin fila en player_teams dejan de ser invisibles en el roster del coach.
 create policy "players_scoped_select" on public.players as permissive for select to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (EXISTS ( SELECT 1
    FROM player_teams pt
   WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))));
 create policy "players_scoped_update" on public.players as permissive for update to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (EXISTS ( SELECT 1
    FROM player_teams pt
   WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))))
   with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (EXISTS ( SELECT 1
    FROM player_teams pt
   WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))));
 create policy "players_super_select" on public.players as permissive for select to public
