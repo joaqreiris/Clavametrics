@@ -6395,7 +6395,10 @@ window.renderView = async function () {
       // heuristic only applies to total_distance (a session is thousands of m);
       // other distances (HSR/sprint…) are naturally small in metres, so default m.
       const _kind = window.GpsUnits && match.confidence !== 'saved' ? window.GpsUnits.kindOf(match.metric) : null;
-      if (match.metric === 'total_distance') {
+      // El guard de 'saved' va TAMBIÉN acá: sin él este if pisaba la conversión que el
+      // usuario ya había confirmado en un import anterior (es un if, corre siempre), y
+      // total_distance quedaba como la única columna que el wizard re-adivinaba sola.
+      if (match.confidence !== 'saved' && match.metric === 'total_distance') {
         conversion = window.GpsUnits.factorFor('distance', window.GpsUnits.suggestDistanceUnit(_wizColStat(i, 'median')));
       } else if (_kind === 'speed') {
         conversion = window.GpsUnits.factorFor('speed', window.GpsUnits.suggestSpeedUnit(_wizColStat(i, 'max')));
