@@ -760,6 +760,23 @@ html.cm-rail .hub-nav-grip{display:none}
   // ── CHAT NOTIFICATIONS ────────────────────────────────────────
   let _chatUnread = {};
   let _chatRecent = {};
+  let _chatProfiles = {};   // profile id → profile row, so the panel can show real names + photos
+
+  // Resolve a conversation peer by their profile id (DM keys ARE the sender's profile id).
+  // Falls back to the message's stored sender_name (pre-onboarding email handle) when unknown.
+  function _chatName(id, fallbackName) {
+    const p = (id && _chatProfiles[id]) || null;
+    if (p && window.cmDisplayName) { const n = window.cmDisplayName(p); if (n) return n; }
+    return fallbackName || 'Unknown';
+  }
+  function _chatAvHtml(id, fallbackName) {
+    const p = (id && _chatProfiles[id]) || null;
+    const url = (p && window.cmAvatarUrl) ? window.cmAvatarUrl(p) : null;
+    if (url) return `<div class="cm-ci-av" style="overflow:hidden"><img src="${_escHtml(url)}" alt="" style="width:100%;height:100%;object-fit:cover"></div>`;
+    const nm = _chatName(id, fallbackName);
+    const ini = window.cmInitials ? window.cmInitials(nm) : (nm || '?').slice(0, 2).toUpperCase();
+    return `<div class="cm-ci-av">${_escHtml(ini)}</div>`;
+  }
 
   function _escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -785,11 +802,10 @@ html.cm-rail .hub-nav-grip{display:none}
       html += `<div class="cm-cp-sect-lbl">Direct messages</div>`;
       for (const [_k, d] of dmEntries) {
         d._key = _k;
-        const ini = (d.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
         html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(d._key || '')}">
-          <div class="cm-ci-av">${_escHtml(ini)}</div>
+          ${_chatAvHtml(_k, d.senderName)}
           <div class="cm-ci-body">
-            <div class="cm-ci-name"><span>${_escHtml(d.senderName || 'Unknown')}</span><span class="time">${_relTime(d.lastAt)}</span></div>
+            <div class="cm-ci-name"><span>${_escHtml(_chatName(_k, d.senderName))}</span><span class="time">${_relTime(d.lastAt)}</span></div>
             <div class="cm-ci-preview">${_escHtml((d.lastMsg || '').slice(0,40))}</div>
           </div>
           <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
@@ -803,7 +819,7 @@ html.cm-rail .hub-nav-grip{display:none}
         <div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
         <div class="cm-ci-body">
           <div class="cm-ci-name"><span># team</span><span class="time">${_relTime(d.lastAt)}</span></div>
-          <div class="cm-ci-preview">${d.senderName ? _escHtml(d.senderName)+': ' : ''}${_escHtml((d.lastMsg||'').slice(0,40))}</div>
+          <div class="cm-ci-preview">${(d.senderId || d.senderName) ? _escHtml(_chatName(d.senderId, d.senderName))+': ' : ''}${_escHtml((d.lastMsg||'').slice(0,40))}</div>
         </div>
         <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
       </button>`;
@@ -817,11 +833,10 @@ html.cm-rail .hub-nav-grip{display:none}
     if (recentToShow.length) {
       html += `<div class="cm-cp-sect-lbl" data-i18n="shell.recent">Recent</div>`;
       for (const r of recentToShow) {
-        const ini = r.isGroup ? '' : (r.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
         const av = r.isGroup
           ? `<div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>`
-          : `<div class="cm-ci-av">${_escHtml(ini)}</div>`;
-        const name = r.isGroup ? '# team' : (r.senderName || 'Unknown');
+          : _chatAvHtml(r.key, r.senderName);
+        const name = r.isGroup ? '# team' : _chatName(r.key, r.senderName);
         html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(r.key)}">
           ${av}
           <div class="cm-ci-body">
@@ -904,14 +919,19 @@ html.cm-rail .hub-nav-grip{display:none}
     };
 
     // Initial unread counts — bail silently if either table doesn't exist yet
-    const [readsRes, msgsRes] = await Promise.all([
+    const [readsRes, msgsRes, profsRes] = await Promise.all([
       window.sb.from('channel_reads').select('channel_key,last_read_at').eq('user_id', user.id).eq('club_id', clubId),
       window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name')
         .eq('club_id', clubId).neq('sender_id', user.id)
         .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
-        .order('created_at', { ascending: false }).limit(200)
+        .order('created_at', { ascending: false }).limit(200),
+      // Real names + photos for the panel (the stored sender_name is the old email handle).
+      window.sb.from('profiles').select('id, full_name, first_name, last_name, email, avatar_url')
+        .eq('club_id', clubId)
     ]);
     if (readsRes.error || msgsRes.error) return;
+    _chatProfiles = {};
+    (profsRes && profsRes.data || []).forEach(p => { _chatProfiles[p.id] = p; });
     const reads = readsRes.data;
     const recentMsgs = msgsRes.data;
     const readMap = {};
@@ -922,12 +942,13 @@ html.cm-rail .hub-nav-grip{display:none}
       const key = isGroup ? 'group' : msg.sender_id;
       const lr = readMap[key];
       if (lr && msg.created_at <= lr) continue;
-      if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '' };
+      if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
       _chatUnread[key].count += 1;
       if (!_chatUnread[key].lastAt || msg.created_at > _chatUnread[key].lastAt) {
         _chatUnread[key].lastMsg    = msg.content || '';
         _chatUnread[key].lastAt     = msg.created_at;
         _chatUnread[key].senderName = msg.sender_name || '';
+        _chatUnread[key].senderId   = msg.sender_id || null;
       }
     }
     // Historial: agrupar por conversación (reusa recentMsgs ya cargado)
@@ -941,7 +962,8 @@ html.cm-rail .hub-nav-grip{display:none}
           key, isGroup,
           lastMsg: msg.content || '',
           lastAt: msg.created_at,
-          senderName: msg.sender_name || ''
+          senderName: msg.sender_name || '',
+          senderId: msg.sender_id || null
         };
       }
     }
@@ -957,14 +979,15 @@ html.cm-rail .hub-nav-grip{display:none}
         const isGroup = !msg.recipient_id;
         if (!isGroup && msg.recipient_id !== user.id) return;
         const key = isGroup ? 'group' : msg.sender_id;
-        if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '' };
+        if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
         _chatUnread[key].count += 1;
         _chatUnread[key].lastMsg    = msg.content || '';
         _chatUnread[key].lastAt     = msg.created_at;
         _chatUnread[key].senderName = msg.sender_name || '';
+        _chatUnread[key].senderId   = msg.sender_id || null;
         _updateChatBadge();
         _renderChatPanel();
-        _showChatToast(msg, msg.sender_name || 'Unknown');
+        _showChatToast(msg, _chatName(msg.sender_id, msg.sender_name));
       })
       .subscribe();
 
