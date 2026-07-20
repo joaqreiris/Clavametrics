@@ -1841,6 +1841,19 @@ function renderTasks(tasks, view = 'my') {
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 
+  // Mandatory personal onboarding: a user who hasn't completed first-login onboarding
+  // (profiles.onboarded === false) is bounced to the onboarding page before the Hub renders.
+  // getProfile() doesn't select `onboarded`, so we fetch it directly here. Fail-open on any
+  // error (never lock an existing user out over a transient failure); redirect ONLY on an
+  // explicit false.
+  try {
+    const { data: { user: _obUser } } = await window.sb.auth.getUser();
+    if (_obUser) {
+      const { data: _obRow } = await window.sb.from('profiles').select('onboarded').eq('id', _obUser.id).single();
+      if (_obRow && _obRow.onboarded === false) { window.location.replace('profile-onboarding.html'); return; }
+    }
+  } catch (_e) { /* fail-open — don't block the Hub on a transient error */ }
+
   // Populate sidebar user
   function _renderGreetMsg() {
     if (!profile) return;

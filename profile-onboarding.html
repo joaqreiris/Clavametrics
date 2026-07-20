@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="profile_onboarding.pageTitle">Complete your profile — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="assets/i18n.js" defer></script>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#15803D">
+  <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  .po-shell { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--cm-bg); padding:24px; }
+  .po-card { width:100%; max-width:440px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:16px; padding:32px; box-shadow:0 24px 80px rgba(0,0,0,.12); }
+  .po-mark { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
+  .po-mark .name { font:600 14px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .po-mark .meta { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .po-card h2 { font:600 20px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0 0 6px; letter-spacing:-0.01em; }
+  .po-card .sub { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0 0 22px; }
+  .po-photo { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+  .po-ava { width:64px; height:64px; border-radius:50%; object-fit:cover; background:var(--cm-bg-soft); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); flex-shrink:0; overflow:hidden; }
+  .po-ava .ti { font-size:26px; }
+  .po-photo-tx { min-width:0; }
+  .po-photo-tx .po-hint { font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; }
+  .po-filebtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .po-filebtn:hover { border-color:var(--cm-accent); }
+  .po-row { display:flex; gap:12px; }
+  .po-row > .po-field { flex:1; min-width:0; }
+  .po-field { margin-bottom:14px; }
+  .po-label { display:block; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:6px; }
+  .po-label .req { color:var(--cm-danger,#DC2626); }
+  .po-label .opt { color:var(--cm-fg-faint,#9CA3AF); font-weight:400; }
+  .po-input, .po-select { width:100%; height:40px; padding:0 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; box-sizing:border-box; }
+  .po-input:focus, .po-select:focus { border-color:var(--cm-accent); }
+  .po-alert { font:500 12.5px/1.4 var(--cm-font-sans); border-radius:8px; padding:10px 12px; margin:4px 0 14px; display:none; background:var(--cm-danger-bg,#FEF2F2); color:var(--cm-danger,#DC2626); }
+</style>
+</head>
+<body>
+  <div class="po-shell">
+    <div class="po-card">
+      <div class="po-mark">
+        <span class="cm-logo-mark"></span>
+        <div>
+          <div class="name">ClavaMetrics</div>
+          <div class="meta" data-i18n="login.performanceOsForSport">Performance OS for sport</div>
+        </div>
+      </div>
+      <h2 data-i18n="profile_onboarding.title">Complete your profile</h2>
+      <p class="sub" data-i18n="profile_onboarding.sub">Tell us a bit about you so your teammates know who you are.</p>
+
+      <div class="po-photo">
+        <div class="po-ava" id="poAva"><i class="ti ti-user"></i></div>
+        <div class="po-photo-tx">
+          <button type="button" class="po-filebtn" id="poFileBtn"><i class="ti ti-camera" style="font-size:15px"></i><span data-i18n="profile_onboarding.uploadPhoto">Upload photo</span></button>
+          <div class="po-hint" data-i18n="profile_onboarding.photoHint">Optional — JPG or PNG.</div>
+          <input id="poPhoto" type="file" accept="image/*" style="display:none">
+        </div>
+      </div>
+
+      <div class="po-row">
+        <div class="po-field">
+          <label class="po-label" for="poFirst"><span data-i18n="profile_onboarding.firstName">First name</span> <span class="req">*</span></label>
+          <input id="poFirst" class="po-input" type="text" autocomplete="given-name">
+        </div>
+        <div class="po-field">
+          <label class="po-label" for="poLast"><span data-i18n="profile_onboarding.lastName">Last name</span> <span class="req">*</span></label>
+          <input id="poLast" class="po-input" type="text" autocomplete="family-name">
+        </div>
+      </div>
+
+      <div class="po-row">
+        <div class="po-field">
+          <label class="po-label" for="poPhone"><span data-i18n="profile_onboarding.phone">Phone</span> <span class="opt" data-i18n="profile_onboarding.optional">(optional)</span></label>
+          <input id="poPhone" class="po-input" type="tel" autocomplete="tel">
+        </div>
+        <div class="po-field">
+          <label class="po-label" for="poBirth"><span data-i18n="profile_onboarding.birthDate">Birth date</span> <span class="opt" data-i18n="profile_onboarding.optional">(optional)</span></label>
+          <input id="poBirth" class="po-input" type="date">
+        </div>
+      </div>
+
+      <div class="po-field">
+        <label class="po-label" for="poJob"><span data-i18n="profile_onboarding.jobTitle">Role / title</span> <span class="opt" data-i18n="profile_onboarding.optional">(optional)</span></label>
+        <input id="poJob" class="po-input" type="text" data-i18n-ph="profile_onboarding.jobTitlePh" placeholder="e.g. Head of Performance">
+      </div>
+
+      <div class="po-field">
+        <label class="po-label" for="poLang" data-i18n="profile_onboarding.language">Preferred language</label>
+        <select id="poLang" class="po-select">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="pt">Português</option>
+        </select>
+      </div>
+
+      <div class="po-alert" id="poErr"></div>
+
+      <button class="cm-btn is-primary is-lg is-block" id="poBtn">
+        <span data-i18n="profile_onboarding.submit">Save &amp; continue</span>
+        <i class="ti ti-arrow-right" style="font-size:16px"></i>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const tt = (key, fallbackEN, vars) => { const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null; return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key); };
+    const errEl = document.getElementById('poErr');
+    const btn   = document.getElementById('poBtn');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = 'block'; };
+    const clearErr = () => { errEl.style.display = 'none'; };
+
+    // Must have an authenticated session (arrived via set-password / login).
+    const { data: { session } } = await window.sb.auth.getSession();
+    if (!session) { window.location.replace('Login.html'); return; }
+    const uid = session.user.id;
+
+    // Already onboarded? Skip straight to the Hub (prevents a redirect loop with the Hub guard).
+    try {
+      const { data: prof } = await window.sb.from('profiles')
+        .select('onboarded, first_name, last_name, avatar_url').eq('id', uid).single();
+      if (prof && prof.onboarded === true) { window.location.replace('Hub.html'); return; }
+      // Prefill from anything already stored (a partial retry).
+      if (prof) {
+        if (prof.first_name) document.getElementById('poFirst').value = prof.first_name;
+        if (prof.last_name)  document.getElementById('poLast').value  = prof.last_name;
+      }
+    } catch (_e) { /* fail-open: let them onboard even if the read hiccups */ }
+
+    // Default language from current cm_lang / i18n / browser (constrained to en|es|pt).
+    (function initLang() {
+      const supported = ['en', 'es', 'pt'];
+      let lang = null;
+      try { lang = localStorage.getItem('cm_lang'); } catch (_e) {}
+      if (!supported.includes(lang) && window.CM_I18N && CM_I18N.current) lang = CM_I18N.current;
+      if (!supported.includes(lang)) {
+        const nav = (navigator.language || 'en').slice(0, 2).toLowerCase();
+        lang = supported.includes(nav) ? nav : 'en';
+      }
+      document.getElementById('poLang').value = lang;
+    })();
+
+    // Live language preview when they change the select (nice-to-have; harmless if unavailable).
+    document.getElementById('poLang').addEventListener('change', e => {
+      const l = e.target.value;
+      if (window.CM_I18N && CM_I18N.setLang) { try { CM_I18N.setLang(l); } catch (_e) {} }
+    });
+
+    // Photo picker + preview (upload happens on submit).
+    let _photoFile = null;
+    const fileInput = document.getElementById('poPhoto');
+    const ava = document.getElementById('poAva');
+    document.getElementById('poFileBtn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      _photoFile = f;
+      try {
+        const url = URL.createObjectURL(f);
+        ava.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = url; img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        ava.appendChild(img);
+      } catch (_e) {}
+    });
+
+    async function submit() {
+      clearErr();
+      const first = document.getElementById('poFirst').value.trim();
+      const last  = document.getElementById('poLast').value.trim();
+      const phone = document.getElementById('poPhone').value.trim();
+      const birth = document.getElementById('poBirth').value;            // 'YYYY-MM-DD' or ''
+      const job   = document.getElementById('poJob').value.trim();
+      const lang  = document.getElementById('poLang').value;
+
+      if (!first || !last) { showErr(tt('profile_onboarding.nameRequired', 'Please enter your first and last name.')); return; }
+
+      btn.disabled = true; btn.style.opacity = '0.6';
+      try {
+        // Optional photo → private 'profile-avatars' bucket, under the uid folder (matches RLS).
+        let avatarUrl = null;
+        if (_photoFile) {
+          try {
+            const ext = ((_photoFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
+            const path = uid + '/avatar.' + ext;
+            const { error: upErr } = await window.sb.storage.from('profile-avatars')
+              .upload(path, _photoFile, { upsert: true, contentType: _photoFile.type || 'image/jpeg' });
+            if (upErr) throw upErr;
+            // Private bucket → a long-lived signed URL is what actually renders in <img>.
+            const { data: signed } = await window.sb.storage.from('profile-avatars')
+              .createSignedUrl(path, 315360000);   // ~10 years
+            avatarUrl = (signed && signed.signedUrl) || null;
+          } catch (photoErr) {
+            showErr(tt('profile_onboarding.uploadError', "Couldn't upload your photo. Try a smaller image or skip it."));
+            btn.disabled = false; btn.style.opacity = '1';
+            return;   // keep content; let them retry or remove the photo
+          }
+        }
+
+        const fullName = (first + ' ' + last).trim();
+        const patch = {
+          first_name: first,
+          last_name:  last,
+          phone:      phone || null,
+          birth_date: birth || null,
+          job_title:  job || null,
+          preferred_lang: lang,
+          full_name:  fullName,
+          onboarded:  true,
+        };
+        if (avatarUrl) patch.avatar_url = avatarUrl;
+
+        const { error } = await window.sb.from('profiles').update(patch).eq('id', uid);
+        if (error) {
+          showErr(error.message || tt('profile_onboarding.saveError', "Couldn't save your profile. Please try again."));
+          btn.disabled = false; btn.style.opacity = '1';
+          return;
+        }
+
+        // Persist chosen language so the whole app switches to it.
+        try { localStorage.setItem('cm_lang', lang); } catch (_e) {}
+
+        window.location.replace('Hub.html');
+      } catch (e) {
+        showErr(tt('profile_onboarding.saveError', "Couldn't save your profile. Please try again."));
+        btn.disabled = false; btn.style.opacity = '1';
+      }
+    }
+
+    btn.addEventListener('click', submit);
+    document.getElementById('poJob').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  })();
+  </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
