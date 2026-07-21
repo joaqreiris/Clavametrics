@@ -1523,7 +1523,7 @@
   }
 
   function dimBadge() {
-    if (S.type === 'scatter') return 'color';
+    if (S.type === 'scatter') return _tt('gps_analysis.builder_role_color', 'Category');
     if (S.type === 'table')   return 'row';
     return 'X';   // bars / line / ranking / heatmap → category axis
   }
@@ -3131,14 +3131,20 @@
   const _SCATTER_SHAPES = ['circle', 'triangle', 'rectRot', 'rect', 'star', 'rectRounded'];
 
   /** Per-category colors: 1→accent, 2+→categorical palette (honors style.palette). */
-  function scatterColors(config, n) {
+  // Categorical palette base. Widened to 10 distinct hues (was 6) so more categories get a
+  // unique colour before any cycling. scatterColors() cycles it; the caller also uses its
+  // LENGTH to decouple the shape cycle (shape advances once per full colour cycle → colour×
+  // shape unique combinations, instead of colour and shape repeating in lockstep).
+  function _scatterPalette(config) {
     const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
-    if (n <= 1) return [accent];
     const pal = PALETTES.find(p => p.id === config.style?.palette);
-    const base = (pal && pal.id !== 'pitch')
-      ? [accent, ...pal.cols]                               // honor a non-default style.palette
-      : [accent, _cssVar('--cm-info', '#2563EB'), _cssVar('--cm-violet', '#7C3AED'),
-         _cssVar('--cm-warning', '#D97706'), _cssVar('--cm-rose', '#E11D48'), _cssVar('--cm-fg-muted', '#64748B')];
+    if (pal && pal.id !== 'pitch') return [accent, ...pal.cols];   // honor a non-default style.palette
+    return [accent, '#2563EB', '#7C3AED', '#D97706', '#E11D48',
+            '#0891B2', '#EA580C', '#DB2777', '#0D9488', '#4F46E5'];
+  }
+  function scatterColors(config, n) {
+    const base = _scatterPalette(config);
+    if (n <= 1) return [config.style?.color || _cssVar('--cm-accent', '#15803D')];
     return Array.from({ length: n }, (_, i) => base[i % base.length]);
   }
 
@@ -3279,9 +3285,14 @@
 
     const hasCat = paired.some(p => p.cat != null);
     const cats   = hasCat ? [...new Set(paired.map(p => p.cat ?? '—'))] : [null];
+    const _palette = _scatterPalette(config);
+    const _palLen  = _palette.length;
     const colors = scatterColors(config, cats.length);
     const datasets = cats.map((c, i) => {
       const col = colors[i];
+      // Shape advances once per FULL colour cycle so (colour, shape) pairs stay unique up to
+      // palette×shapes categories — instead of colour and shape repeating together.
+      const shape = hasCat ? _SCATTER_SHAPES[Math.floor(i / _palLen) % _SCATTER_SHAPES.length] : 'circle';
       const _lf = v => fmt(Math.round((v ?? 0) * 10) / 10);   // Phase 3 value formatter for on-canvas labels
       const pts = paired
         .filter(p => (hasCat ? (p.cat ?? '—') : null) === c)
@@ -3299,7 +3310,7 @@
         // Phase 2 — SHAPE encoding: each colour category also gets a distinct filled shape,
         // so categories stay distinguishable even when colours are close (or in print). Only
         // when there's a colour dimension; rival crests override this later in mountScatterChart.
-        pointStyle: hasCat ? _SCATTER_SHAPES[i % _SCATTER_SHAPES.length] : 'circle',
+        pointStyle: shape,
         // Per-point radius from the Size metric (area scale). No Size → fixed radius (as today).
         pointRadius:      hasSize ? (ctx => radiusFor(ctx.raw?.size))     : 5.5,
         pointHoverRadius: hasSize ? (ctx => radiusFor(ctx.raw?.size) + 2) : 7.5,
