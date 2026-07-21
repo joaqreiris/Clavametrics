@@ -347,6 +347,9 @@
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
+      // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
+      // conditionally (same pattern as `sort`) so a card without lines stays byte-identical to today.
+      ...(S.referenceLines?.length ? { referenceLines: S.referenceLines.map(r => ({ ...r })) } : {}),
     };
   }
 
@@ -584,6 +587,13 @@
                 <button class="es-sw-t" data-toggle="area"></button>
               </div>
             </div>
+            <div class="es-sec" data-only="bars">
+              <div class="lab" data-i18n="gps_analysis.builder_reference_lines">Reference lines</div>
+              <div id="gpbRefLines"></div>
+              <button class="cm-btn is-outline is-sm" id="gpbAddRefLine" style="width:100%;justify-content:center;margin-top:2px">
+                <i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_add_reference_line">Add line</span>
+              </button>
+            </div>
           </div>
           <div class="pane" data-pane="dd"><div class="bdd-wrap" id="gpbDDPane"></div></div>
         </div>
@@ -691,7 +701,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false,
-             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false };
+             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[] };
   }
 
   function startBuild() {
@@ -1337,6 +1347,44 @@
       };
     });
 
+    // reference lines (bars) — add / edit / remove. Live preview via renderCard(); the list is
+    // only rebuilt on add/delete (renderRefLines), never on value/label typing, so input focus
+    // is preserved while editing.
+    document.getElementById('gpbAddRefLine')?.addEventListener('click', () => {
+      if (!S) return;
+      if (!Array.isArray(S.referenceLines)) S.referenceLines = [];
+      S.referenceLines.push({ id: _refLineId(), value: null, label: '', color: '#DC2626', style: 'solid', opacity: 1 });
+      renderRefLines();
+      renderCard();
+    });
+    const rlHost = document.getElementById('gpbRefLines');
+    if (rlHost) {
+      rlHost.addEventListener('input', e => {
+        if (!S) return;
+        const row = e.target.closest('[data-rl-idx]'); if (!row) return;
+        const ln = S.referenceLines?.[+row.dataset.rlIdx]; if (!ln) return;
+        if      (e.target.matches('[data-rl-value]'))   { const v = e.target.value.trim(); ln.value = v === '' ? null : Number(v); }
+        else if (e.target.matches('[data-rl-label]'))     ln.label   = e.target.value;
+        else if (e.target.matches('[data-rl-color]'))     ln.color   = e.target.value;
+        else if (e.target.matches('[data-rl-opacity]'))   ln.opacity = Number(e.target.value);
+        else return;
+        renderCard();   // live preview; do NOT rebuild the list (keeps input focus)
+      });
+      rlHost.addEventListener('click', e => {
+        if (!S) return;
+        const row = e.target.closest('[data-rl-idx]'); if (!row) return;
+        const idx = +row.dataset.rlIdx;
+        if (e.target.closest('[data-rl-del]')) { S.referenceLines.splice(idx, 1); renderRefLines(); renderCard(); return; }
+        const styBtn = e.target.closest('[data-rl-style]');
+        if (styBtn) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.style = styBtn.dataset.rlStyle;
+          row.querySelectorAll('[data-rl-style]').forEach(b => b.classList.toggle('is-on', b === styBtn));
+          renderCard();
+        }
+      });
+    }
+
     // (Classic title / add-metric / range / compare / metric-well bindings removed — the D&D
     //  Config provides #gpbDDTitle, the fields pantry, and data-ddpop range/compare/bars.)
 
@@ -1439,7 +1487,7 @@
 
   // ── Sync functions ────────────────────────────────────────
 
-  function syncAll() { syncTypes(); renderMetrics(); syncSelects(); syncStyle(); syncHeader(); syncSizeToggle(); renderCard(); }
+  function syncAll() { syncTypes(); renderMetrics(); syncSelects(); syncStyle(); syncHeader(); syncSizeToggle(); renderRefLines(); renderCard(); }
 
   function syncTypes() {
     if (!S) return;
@@ -1503,6 +1551,32 @@
       el.style.display = el.dataset.only.split(',').includes(S.type) ? '' : 'none'
     );
     if (draftCard) draftCard.style.setProperty('--cm-accent', S.color);
+  }
+
+  // ── Reference lines sub-editor (bars only) ────────────────────────────
+  // Rebuilds the #gpbRefLines rows from S.referenceLines. Called from syncAll (open / structural
+  // change) and after add/delete — NOT on every keystroke (input handlers mutate S + renderCard()
+  // only, so the focused input is never rebuilt mid-typing). Styles are inline to keep the change
+  // inside gp-builder.js (no CSS file touched).
+  let _rlSeq = 0;
+  function _refLineId() { return 'rl_' + (++_rlSeq) + '_' + Math.random().toString(36).slice(2, 7); }
+  function renderRefLines() {
+    const host = document.getElementById('gpbRefLines');
+    if (!host) return;
+    const lines = (S && Array.isArray(S.referenceLines)) ? S.referenceLines : [];
+    const inputCss = 'height:26px;min-width:0;padding:0 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)';
+    host.innerHTML = lines.map((ln, i) => `
+      <div data-rl-idx="${i}" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <input type="color" data-rl-color value="${esc(ln.color || '#DC2626')}" title="${esc(_tt('gps_analysis.builder_ref_line_color', 'Line color'))}" style="width:26px;height:26px;flex:0 0 auto;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer">
+        <input type="number" data-rl-value value="${ln.value != null ? esc(String(ln.value)) : ''}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_value', 'Value'))}" style="width:62px;flex:0 0 auto;${inputCss}">
+        <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 auto;${inputCss}">
+        <div class="es-seg" style="flex:0 0 auto">
+          <button type="button" data-rl-style="solid"  class="${ln.style !== 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_solid', 'Solid'))}"><i class="ti ti-minus"></i></button>
+          <button type="button" data-rl-style="dashed" class="${ln.style === 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_dashed', 'Dashed'))}"><i class="ti ti-line-dashed"></i></button>
+        </div>
+        <input type="range" data-rl-opacity min="0" max="1" step="0.05" value="${ln.opacity != null ? ln.opacity : 1}" title="${esc(_tt('gps_analysis.builder_ref_line_opacity', 'Opacity'))}" style="width:52px;flex:0 0 auto;cursor:pointer">
+        <button type="button" data-rl-del title="${esc(_tt('gps_analysis.builder_ref_line_remove', 'Remove line'))}" style="width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--cm-fg-muted);cursor:pointer;border-radius:6px"><i class="ti ti-x"></i></button>
+      </div>`).join('');
   }
 
   function syncHeader() {
@@ -2641,6 +2715,67 @@
     },
   };
 
+  /**
+   * Reference lines (bars): draws each config.referenceLines entry as a straight rule on the
+   * VALUE axis — horizontal for vertical bars, vertical for horizontal bars — at its manual value,
+   * with the chosen colour / solid|dashed / opacity. The value-axis max is grown to include the
+   * line values (barsChartData, option B), so a line above the tallest bar still lands inside the
+   * plot. The optional label is drawn full-opacity with a white halo so it stays legible over the
+   * bars, tucked at the plot edge so it doesn't cover them. Cloned from _scatterAvgPlugin. Additive:
+   * a card with no referenceLines draws nothing (identical to before).
+   */
+  const _barRefLinesPlugin = {
+    id: 'gpbRefLines',
+    afterDatasetsDraw(chart, _args, opts) {
+      const lines = opts && Array.isArray(opts.lines) ? opts.lines : null;
+      if (!lines || !lines.length) return;
+      const { ctx, chartArea, scales } = chart;
+      const horizontal = !!opts.horizontal;
+      const scale = horizontal ? scales.x : scales.y;      // value axis follows orientation
+      if (!scale) return;
+      ctx.save();
+      for (const ln of lines) {
+        const val = Number(ln.value);
+        if (!Number.isFinite(val)) continue;
+        const p = scale.getPixelForValue(val);
+        // the rule itself
+        ctx.globalAlpha = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
+        ctx.strokeStyle = ln.color || '#DC2626';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
+        if (!horizontal) {
+          if (p < chartArea.top || p > chartArea.bottom) continue;
+          ctx.beginPath(); ctx.moveTo(chartArea.left, p); ctx.lineTo(chartArea.right, p); ctx.stroke();
+        } else {
+          if (p < chartArea.left || p > chartArea.right) continue;
+          ctx.beginPath(); ctx.moveTo(p, chartArea.top); ctx.lineTo(p, chartArea.bottom); ctx.stroke();
+        }
+        // label — full opacity + white halo so it reads over any bar; at the plot edge (no cover)
+        const txt = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+        if (!txt) continue;
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.font = '600 10px Geist, Inter, sans-serif';
+        let lx, ly;
+        if (!horizontal) {
+          ctx.textAlign = 'right';
+          lx = chartArea.right - 4;
+          if (p - 14 < chartArea.top) { ctx.textBaseline = 'top';    ly = p + 3; }
+          else                        { ctx.textBaseline = 'bottom'; ly = p - 3; }
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          lx = Math.max(chartArea.left + 14, Math.min(chartArea.right - 14, p));
+          ly = chartArea.top + 3;
+        }
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.strokeText(txt, lx, ly);
+        ctx.fillStyle = ln.color || '#DC2626';
+        ctx.fillText(txt, lx, ly);
+      }
+      ctx.restore();
+    },
+  };
+
   const _BAR_SIZE_H = { sm: 150, md: 210, lg: 270, full: 320 };
 
   /** Per-series colors: 1→accent, 2→accent+grey(prev), 3+→categorical palette. */
@@ -2736,9 +2871,19 @@
 
     const barDs  = datasets.filter(d => !d._isLine);
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
-    const maxVal = stacked
+    // Reference lines: sanitize the card's manual rules once (used by the draw plugin). Option B —
+    // fold their values into the value-axis max so a line above the tallest bar still lands inside
+    // the plot. Absent/empty on every existing card → refMax = 0 → maxVal unchanged (retrocompat).
+    const refLines = (config.referenceLines || [])
+      .filter(r => r && Number.isFinite(Number(r.value)))
+      .map(r => ({ value: Number(r.value), label: r.label || '', color: r.color || '#DC2626',
+                   style: r.style === 'dashed' ? 'dashed' : 'solid',
+                   opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) }));
+    const refMax  = refLines.length ? Math.max(0, ...refLines.map(r => r.value)) : 0;
+    const dataMax = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
       : Math.max(0, ...allBarVals);
+    const maxVal = Math.max(dataMax, refMax);
     const { max, step } = niceScale(maxVal, ticks);
 
     const baseH  = _BAR_SIZE_H[size] || 210;
@@ -2748,7 +2893,7 @@
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
-             horizontal, stacked, hasLine, max1, step1,
+             horizontal, stacked, hasLine, max1, step1, referenceLines: refLines,
              height, color: accent };
   }
 
@@ -2805,7 +2950,7 @@
       body.__chart = _newChart(body, canvas, {
         type: 'bar',
         data: { labels: d.cats, datasets: d.datasets },
-        plugins: [_barLabelPlugin, _mcDiffLabelPlugin],
+        plugins: [_barLabelPlugin, _mcDiffLabelPlugin, _barRefLinesPlugin],
         options: {
           indexAxis: d.horizontal ? 'y' : 'x',
           responsive: true, maintainAspectRatio: false,
@@ -2847,6 +2992,7 @@
             },
             gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
             gpbMcDiff: { show: d.isMcGrouped, diffs: d.mcDiffs, horizontal: d.horizontal, upCol: d.mcUpCol, dnCol: d.mcDnCol, withValues: d.showLbl },
+            gpbRefLines: { lines: d.referenceLines, horizontal: d.horizontal },
           },
           scales,
         },
@@ -2878,6 +3024,7 @@
       comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
+      ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
     mountBarsChart(body, cfg, series);
   }
@@ -5848,6 +5995,7 @@
     S.horizontal = config.style?.orientation === 'horizontal';
     S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
+    S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.title   = config.title || '';
     S.titleCustom = !!config.titleCustom;      // ausente en cards viejas → false → título auto
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }));
