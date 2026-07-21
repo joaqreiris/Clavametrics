@@ -1363,7 +1363,8 @@
         if (!S) return;
         const row = e.target.closest('[data-rl-idx]'); if (!row) return;
         const ln = S.referenceLines?.[+row.dataset.rlIdx]; if (!ln) return;
-        if      (e.target.matches('[data-rl-value]'))   { const v = e.target.value.trim(); ln.value = v === '' ? null : Number(v); }
+        if      (e.target.matches('[data-rl-value]'))   { const v = e.target.value.trim(); ln.value  = v === '' ? null : Number(v); }
+        else if (e.target.matches('[data-rl-value2]'))  { const v = e.target.value.trim(); ln.value2 = v === '' ? null : Number(v); }
         else if (e.target.matches('[data-rl-label]'))     ln.label   = e.target.value;
         else if (e.target.matches('[data-rl-color]'))     ln.color   = e.target.value;
         else if (e.target.matches('[data-rl-opacity]'))   ln.opacity = Number(e.target.value);
@@ -1375,11 +1376,27 @@
         const row = e.target.closest('[data-rl-idx]'); if (!row) return;
         const idx = +row.dataset.rlIdx;
         if (e.target.closest('[data-rl-del]')) { S.referenceLines.splice(idx, 1); renderRefLines(); renderCard(); return; }
+        // line ↔ band: changes which controls the row shows (value2 / fill) → rebuild the list.
+        const typeBtn = e.target.closest('[data-rl-type]');
+        if (typeBtn) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.type = typeBtn.dataset.rlType === 'band' ? 'band' : 'line';
+          if (ln.type === 'band' && ln.fill == null) ln.fill = 'solid';
+          renderRefLines(); renderCard(); return;
+        }
         const styBtn = e.target.closest('[data-rl-style]');
         if (styBtn) {
           const ln = S.referenceLines?.[idx]; if (!ln) return;
           ln.style = styBtn.dataset.rlStyle;
           row.querySelectorAll('[data-rl-style]').forEach(b => b.classList.toggle('is-on', b === styBtn));
+          renderCard(); return;
+        }
+        // band aspect: fill only ↔ fill + borders (in-place toggle, no rebuild)
+        const fillBtn = e.target.closest('[data-rl-fill]');
+        if (fillBtn) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.fill = fillBtn.dataset.rlFill === 'bordered' ? 'bordered' : 'solid';
+          row.querySelectorAll('[data-rl-fill]').forEach(b => b.classList.toggle('is-on', b === fillBtn));
           renderCard();
         }
       });
@@ -1565,18 +1582,30 @@
     if (!host) return;
     const lines = (S && Array.isArray(S.referenceLines)) ? S.referenceLines : [];
     const inputCss = 'height:26px;min-width:0;padding:0 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)';
-    host.innerHTML = lines.map((ln, i) => `
-      <div data-rl-idx="${i}" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+    host.innerHTML = lines.map((ln, i) => {
+      const band = ln.type === 'band';
+      return `
+      <div data-rl-idx="${i}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.18)">
         <input type="color" data-rl-color value="${esc(ln.color || '#DC2626')}" title="${esc(_tt('gps_analysis.builder_ref_line_color', 'Line color'))}" style="width:26px;height:26px;flex:0 0 auto;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer">
-        <input type="number" data-rl-value value="${ln.value != null ? esc(String(ln.value)) : ''}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_value', 'Value'))}" style="width:62px;flex:0 0 auto;${inputCss}">
-        <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 auto;${inputCss}">
+        <div class="es-seg" style="flex:0 0 auto">
+          <button type="button" data-rl-type="line" class="${!band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_line', 'Line'))}"><i class="ti ti-minus"></i></button>
+          <button type="button" data-rl-type="band" class="${band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_band', 'Band'))}"><i class="ti ti-columns"></i></button>
+        </div>
+        <input type="number" data-rl-value value="${ln.value != null ? esc(String(ln.value)) : ''}" placeholder="${esc(band ? _tt('gps_analysis.builder_ref_band_from', 'From') : _tt('gps_analysis.builder_ref_line_value', 'Value'))}" style="width:56px;flex:0 0 auto;${inputCss}">
+        ${band ? `<input type="number" data-rl-value2 value="${ln.value2 != null ? esc(String(ln.value2)) : ''}" placeholder="${esc(_tt('gps_analysis.builder_ref_band_to', 'To'))}" style="width:56px;flex:0 0 auto;${inputCss}">` : ''}
+        <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 88px;${inputCss}">
         <div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-style="solid"  class="${ln.style !== 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_solid', 'Solid'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-style="dashed" class="${ln.style === 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_dashed', 'Dashed'))}"><i class="ti ti-line-dashed"></i></button>
         </div>
-        <input type="range" data-rl-opacity min="0" max="1" step="0.05" value="${ln.opacity != null ? ln.opacity : 1}" title="${esc(_tt('gps_analysis.builder_ref_line_opacity', 'Opacity'))}" style="width:52px;flex:0 0 auto;cursor:pointer">
+        ${band ? `<div class="es-seg" style="flex:0 0 auto">
+          <button type="button" data-rl-fill="solid"    class="${ln.fill !== 'bordered' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_fill_solid', 'Fill only'))}"><i class="ti ti-square-rounded"></i></button>
+          <button type="button" data-rl-fill="bordered" class="${ln.fill === 'bordered' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_fill_bordered', 'Fill + borders'))}"><i class="ti ti-border-outer"></i></button>
+        </div>` : ''}
+        <input type="range" data-rl-opacity min="0" max="1" step="0.05" value="${ln.opacity != null ? ln.opacity : 1}" title="${esc(_tt('gps_analysis.builder_ref_line_opacity', 'Opacity'))}" style="width:48px;flex:0 0 auto;cursor:pointer">
         <button type="button" data-rl-del title="${esc(_tt('gps_analysis.builder_ref_line_remove', 'Remove line'))}" style="width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--cm-fg-muted);cursor:pointer;border-radius:6px"><i class="ti ti-x"></i></button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   function syncHeader() {
@@ -2716,13 +2745,15 @@
   };
 
   /**
-   * Reference lines (bars): draws each config.referenceLines entry as a straight rule on the
-   * VALUE axis — horizontal for vertical bars, vertical for horizontal bars — at its manual value,
-   * with the chosen colour / solid|dashed / opacity. The value-axis max is grown to include the
-   * line values (barsChartData, option B), so a line above the tallest bar still lands inside the
-   * plot. The optional label is drawn full-opacity with a white halo so it stays legible over the
-   * bars, tucked at the plot edge so it doesn't cover them. Cloned from _scatterAvgPlugin. Additive:
-   * a card with no referenceLines draws nothing (identical to before).
+   * Reference lines / bands (bars): draws each config.referenceLines entry on the VALUE axis —
+   * horizontal for vertical bars, vertical for horizontal bars. A LINE (type 'line' / no type) is a
+   * straight rule at `value`. A BAND (type 'band') is a translucent rectangle between `value` and
+   * `value2`; with fill 'bordered' the two edges are also marked as rules. Colour / solid|dashed /
+   * opacity are shared. The value-axis max is grown to include value AND value2 (barsChartData,
+   * option B) so a high line/band still lands inside the plot. The optional label is drawn
+   * full-opacity with a white halo so it stays legible over the bars, tucked at the plot edge so it
+   * doesn't cover them. Cloned from _scatterAvgPlugin. Additive: a card with no referenceLines draws
+   * nothing, and a Paso-1 item (no type) renders exactly as before.
    */
   const _barRefLinesPlugin = {
     id: 'gpbRefLines',
@@ -2733,44 +2764,71 @@
       const horizontal = !!opts.horizontal;
       const scale = horizontal ? scales.x : scales.y;      // value axis follows orientation
       if (!scale) return;
+      const { top: A_T, bottom: A_B, left: A_L, right: A_R } = chartArea;
+      const clampVal = p => horizontal ? Math.max(A_L, Math.min(A_R, p)) : Math.max(A_T, Math.min(A_B, p));
+      const inPlot   = p => horizontal ? (p >= A_L && p <= A_R) : (p >= A_T && p <= A_B);
+      // one straight rule at value-axis pixel p (stroke style already set by the caller)
+      const drawRule = p => {
+        if (!horizontal) { ctx.beginPath(); ctx.moveTo(A_L, p); ctx.lineTo(A_R, p); ctx.stroke(); }
+        else             { ctx.beginPath(); ctx.moveTo(p, A_T); ctx.lineTo(p, A_B); ctx.stroke(); }
+      };
+      // label near value-axis pixel p — full opacity + white halo, tucked at the plot edge (no cover)
+      const drawLabel = (p, txt, color) => {
+        if (!txt) return;
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+        ctx.font = '600 10px Geist, Inter, sans-serif';
+        let lx, ly;
+        if (!horizontal) {
+          ctx.textAlign = 'right'; lx = A_R - 4;
+          if (p - 14 < A_T) { ctx.textBaseline = 'top';    ly = p + 3; }
+          else              { ctx.textBaseline = 'bottom'; ly = p - 3; }
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          lx = Math.max(A_L + 14, Math.min(A_R - 14, p)); ly = A_T + 3;
+        }
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.strokeText(txt, lx, ly);
+        ctx.fillStyle = color; ctx.fillText(txt, lx, ly);
+      };
+
       ctx.save();
       for (const ln of lines) {
         const val = Number(ln.value);
         if (!Number.isFinite(val)) continue;
-        const p = scale.getPixelForValue(val);
-        // the rule itself
-        ctx.globalAlpha = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
-        ctx.strokeStyle = ln.color || '#DC2626';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
-        if (!horizontal) {
-          if (p < chartArea.top || p > chartArea.bottom) continue;
-          ctx.beginPath(); ctx.moveTo(chartArea.left, p); ctx.lineTo(chartArea.right, p); ctx.stroke();
+        const color = ln.color || '#DC2626';
+        const op    = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
+        const txt   = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+        const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
+
+        if (isBand) {
+          const p1 = scale.getPixelForValue(val);
+          const p2 = scale.getPixelForValue(Number(ln.value2));
+          // translucent fill across the category axis, clamped to the plot
+          ctx.globalAlpha = op; ctx.fillStyle = color; ctx.setLineDash([]);
+          if (!horizontal) {
+            const yA = clampVal(Math.min(p1, p2)), yB = clampVal(Math.max(p1, p2));
+            if (yB - yA > 0.5) ctx.fillRect(A_L, yA, A_R - A_L, yB - yA);
+          } else {
+            const xA = clampVal(Math.min(p1, p2)), xB = clampVal(Math.max(p1, p2));
+            if (xB - xA > 0.5) ctx.fillRect(xA, A_T, xB - xA, A_B - A_T);
+          }
+          // bordered → mark both edges as rules (a touch stronger than the fill)
+          if (ln.fill === 'bordered') {
+            ctx.globalAlpha = Math.min(1, op + 0.25); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+            ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
+            if (inPlot(p1)) drawRule(p1);
+            if (inPlot(p2)) drawRule(p2);
+          }
+          // label at the top edge of the band (higher value for vertical, rightmost for horizontal)
+          drawLabel(clampVal(!horizontal ? Math.min(p1, p2) : Math.max(p1, p2)), txt, color);
         } else {
-          if (p < chartArea.left || p > chartArea.right) continue;
-          ctx.beginPath(); ctx.moveTo(p, chartArea.top); ctx.lineTo(p, chartArea.bottom); ctx.stroke();
+          const p = scale.getPixelForValue(val);
+          if (!inPlot(p)) continue;
+          ctx.globalAlpha = op; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+          ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
+          drawRule(p);
+          drawLabel(p, txt, color);
         }
-        // label — full opacity + white halo so it reads over any bar; at the plot edge (no cover)
-        const txt = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
-        if (!txt) continue;
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
-        ctx.font = '600 10px Geist, Inter, sans-serif';
-        let lx, ly;
-        if (!horizontal) {
-          ctx.textAlign = 'right';
-          lx = chartArea.right - 4;
-          if (p - 14 < chartArea.top) { ctx.textBaseline = 'top';    ly = p + 3; }
-          else                        { ctx.textBaseline = 'bottom'; ly = p - 3; }
-        } else {
-          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          lx = Math.max(chartArea.left + 14, Math.min(chartArea.right - 14, p));
-          ly = chartArea.top + 3;
-        }
-        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-        ctx.strokeText(txt, lx, ly);
-        ctx.fillStyle = ln.color || '#DC2626';
-        ctx.fillText(txt, lx, ly);
       }
       ctx.restore();
     },
@@ -2871,15 +2929,26 @@
 
     const barDs  = datasets.filter(d => !d._isLine);
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
-    // Reference lines: sanitize the card's manual rules once (used by the draw plugin). Option B —
-    // fold their values into the value-axis max so a line above the tallest bar still lands inside
-    // the plot. Absent/empty on every existing card → refMax = 0 → maxVal unchanged (retrocompat).
+    // Reference lines: sanitize the card's manual rules once (used by the draw plugin). Each item is
+    // a LINE (Paso 1) or a BAND between value..value2 (Paso 2a). Missing `type` → 'line' (retrocompat
+    // with cards saved in Paso 1). Option B — fold value AND value2 into the value-axis max so a line
+    // or a band above the tallest bar still lands inside the plot. Absent/empty on every existing card
+    // → refMax = 0 → maxVal unchanged (retrocompat).
     const refLines = (config.referenceLines || [])
       .filter(r => r && Number.isFinite(Number(r.value)))
-      .map(r => ({ value: Number(r.value), label: r.label || '', color: r.color || '#DC2626',
-                   style: r.style === 'dashed' ? 'dashed' : 'solid',
-                   opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) }));
-    const refMax  = refLines.length ? Math.max(0, ...refLines.map(r => r.value)) : 0;
+      .map(r => {
+        const type = r.type === 'band' ? 'band' : 'line';
+        const v2 = Number(r.value2);
+        return { type, value: Number(r.value),
+                 value2: (type === 'band' && Number.isFinite(v2)) ? v2 : null,
+                 fill: r.fill === 'bordered' ? 'bordered' : 'solid',
+                 label: r.label || '', color: r.color || '#DC2626',
+                 style: r.style === 'dashed' ? 'dashed' : 'solid',
+                 opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) };
+      });
+    const refMax  = refLines.length
+      ? Math.max(0, ...refLines.flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v))))
+      : 0;
     const dataMax = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
       : Math.max(0, ...allBarVals);
