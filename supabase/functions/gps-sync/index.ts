@@ -483,30 +483,6 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         // One /stats call (all mapped params + start/end); merge is a no-op unless a >100-slug set splits.
         const perRows = await fetchStats(activityId, ['start_time', 'end_time'], ['period', 'athlete'],
           (rw) => _athKey(rw) + '|' + String(rw.period_id ?? ''));
-        // ── TEMP DIAGNOSTIC (period velocity bands) — remove after confirming ──
-        // Does Catapult return velocity_band3/4/5 broken down by period? Dump the first
-        // period row's keys + the band values so the function logs tell us API vs parsing.
-        try {
-          if (!(globalThis as Record<string, unknown>).__periodDiag) {   // log once per invocation
-          (globalThis as Record<string, unknown>).__periodDiag = true;
-          const _sample = (Array.isArray(perRows) ? perRows : [])[0];
-          if (_sample) {
-            const _p = (_sample.parameters && typeof _sample.parameters === 'object') ? _sample.parameters as Record<string, unknown> : null;
-            console.log('[PERIOD-DIAG]', activityId, JSON.stringify({
-              topKeys:   Object.keys(_sample).sort(),
-              paramKeys: _p ? Object.keys(_p).sort() : null,
-              // via readParam (same path the writer uses): tells API-limitation vs parsing
-              rp_band3: readParam(_sample, 'velocity_band3_total_distance'),
-              rp_band4: readParam(_sample, 'velocity_band4_total_distance'),
-              rp_band5: readParam(_sample, 'velocity_band5_total_distance'),
-              rp_total_distance: readParam(_sample, 'total_distance'),
-              period_id: _sample['period_id'], period_name: _sample['period_name'],
-            }));
-          } else {
-            console.log('[PERIOD-DIAG]', activityId, 'no period rows returned');
-          }
-          }
-        } catch (_e) { console.log('[PERIOD-DIAG] log failed:', String(_e)); }
         {
           const periodRecs: Record<string, unknown>[] = [];
           for (const row of (Array.isArray(perRows) ? perRows : [])) {
