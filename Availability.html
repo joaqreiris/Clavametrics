@@ -575,6 +575,11 @@
   function dayCountable(date) {
     return PLANNED_DATES.has(date) && !NON_COUNTING_DATES.has(date) && !DAYOFF_DATES.has(date);
   }
+  // Futuro = fecha estrictamente posterior a hoy. Se compara por fecha (no por índice en la
+  // ventana): navegando el rango hacia adelante, hoy NO está en MC_DATES → todayIdx = -1, y la
+  // guarda vieja `todayIdx >= 0 && i > todayIdx` no disparaba → días futuros caían en 'available'
+  // (todo verde). Con comparación de fecha, un rango enteramente futuro queda en blanco como debe.
+  function isFutureDate(date) { return !!todayStr && date > todayStr; }
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
   let players           = [];   // current club players
   let injuredIds        = new Set(); // player IDs with active injury
@@ -612,7 +617,7 @@
   }
 
   function cellHTML(status, dayIdx, pid, date) {
-    const isFuture = todayIdx >= 0 && dayIdx > todayIdx;
+    const isFuture = isFutureDate(date);
     let cls = 'cell';
     if (isFuture) cls += ' is-future';
     const data = pid ? ` data-pid="${pid}" data-date="${date}"` : '';
@@ -674,7 +679,7 @@
     const statuses = MC_DATES.map((date, i) => {
       const e = avMap[playerId + '|' + date];
       if (!e) {
-        if (todayIdx >= 0 && i > todayIdx) return null;   // future: blank
+        if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
         return injuredIds.has(playerId) ? 'unavailable' : 'available';
       }
@@ -753,7 +758,7 @@
         const statuses = MC_DATES.map((date, i) => {
           const e = avMap[p.id + '|' + date];
           if (!e) {
-            if (todayIdx >= 0 && i > todayIdx) return null; // future: blank, no assumed status
+            if (isFutureDate(date)) return null;            // future: blank, no assumed status
             if (!dayCountable(date)) return null;           // not planned → neutral/blank
             return injuredIds.has(p.id) ? 'unavailable' : 'available';
           }
@@ -1202,7 +1207,7 @@
     const statuses = MC_DATES.map((date, i) => {
       const ent = avMap[pid + '|' + date];
       if (!ent) {
-        if (todayIdx >= 0 && i > todayIdx) return null;   // future: blank
+        if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
         return injuredIds.has(pid) ? 'unavailable' : 'available';
       }
