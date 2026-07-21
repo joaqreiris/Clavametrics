@@ -4290,7 +4290,13 @@ create or replace view public.v_exercise_gps_profile as
     avg(r.hmld) AS hmld_avg
    FROM gps_period_reports r
      JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
-  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric)
+  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric
+    AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric)
+    -- Drop internally-inconsistent rows: high-speed distance is a SUBSET of total distance,
+    -- so HSR > total_distance means the row is corrupt (e.g. a partial sync that populated the
+    -- velocity bands but not total_distance). Keeps the projection from averaging garbage into
+    -- an impossible profile (TD < HSR). Rows missing either value are left as-is.
+    AND (r.total_distance IS NULL OR r.high_speed_distance IS NULL OR r.total_distance >= r.high_speed_distance)
   GROUP BY r.club_id, m.exercise_id;
 
 create or replace view public.v_gps_period_names as
