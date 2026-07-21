@@ -274,7 +274,7 @@
     let win = null;
     try {
       let q = window.sb.from('seasons')
-        .select('start_date, end_date, team_id')
+        .select('id, start_date, end_date, team_id')
         .eq('club_id', _clubId).eq('status', 'active')
         .order('start_date', { ascending: false });
       // Temporada del equipo O del club (team_id null = aplica a todo el club).
@@ -287,7 +287,7 @@
       const today = new Date().toISOString().slice(0, 10);
       win = pool.find(s => s.start_date <= today && s.end_date >= today) || pool[0] || null;
     } catch (_) {}
-    _seasonWindowCache = win ? { start: win.start_date, end: win.end_date } : null;
+    _seasonWindowCache = win ? { start: win.start_date, end: win.end_date, id: win.id } : null;
     return _seasonWindowCache;
   }
 
@@ -352,12 +352,23 @@
     const availByPlayer = {};
     try {
       const win = await seasonWindow();
+      // Fases que NO cuentan para disponibilidad (pretemporada/receso/vacaciones): sus días se
+      // ignoran en el %, igual que en Availability (dayCountable / counts_availability=false).
+      let nonCounting = [];
+      if (win) {
+        try {
+          const { data: ph } = await window.sb.from('season_phases')
+            .select('start_date, end_date').eq('season_id', win.id).eq('counts_availability', false);
+          nonCounting = ph || [];
+        } catch (_) {}
+      }
+      const inNonCounting = (d) => nonCounting.some(p => d >= p.start_date && d <= p.end_date);
       // Sin temporada vigente → no medimos disponibilidad (todos quedan en "—").
       const { data: av } = win ? (await window.sb.from('availability')
         .select('player_id, status, date').eq('club_id', _clubId).in('player_id', ids)
         .gte('date', win.start).lte('date', win.end)) : { data: [] };
       const agg = {};
-      (av || []).forEach(r => { const a = agg[r.player_id] || (agg[r.player_id] = { t: 0, ok: 0 }); a.t++; if (r.status === 'available') a.ok++; });
+      (av || []).forEach(r => { if (inNonCounting(r.date)) return; const a = agg[r.player_id] || (agg[r.player_id] = { t: 0, ok: 0 }); a.t++; if (r.status === 'available') a.ok++; });
       Object.keys(agg).forEach(pid => { availByPlayer[pid] = agg[pid].t ? Math.round(agg[pid].ok / agg[pid].t * 100) : null; });
     } catch (_) {}
 
