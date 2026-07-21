@@ -1462,11 +1462,16 @@ function initSizeToggles(root) {
 
 // ── Popover ───────────────────────────────────────────────────
 let _pop = null;
+let _popAnchor = null;
 
-function closePop() { _pop?.remove(); _pop = null; }
+function closePop() { _pop?.remove(); _pop = null; _popAnchor = null; }
 
 document.addEventListener('click', e => {
-  if (_pop && !_pop.contains(e.target)) closePop();
+  // Close on any outside click — but NOT on the popover's own anchor, so the anchor's own
+  // handler owns the toggle (capture runs before the anchor's click handler, and closing here
+  // first would let an async handler reopen it → the "can't close / can't reopen" glitch).
+  if (_pop && !_pop.contains(e.target)
+      && e.target !== _popAnchor && !(_popAnchor && _popAnchor.contains(e.target))) closePop();
 }, true);
 
 function _posPopover(pop, anchor) {
@@ -1475,6 +1480,7 @@ function _posPopover(pop, anchor) {
   pop.style.left = r.left + 'px';
   document.body.appendChild(pop);
   _pop = pop;
+  _popAnchor = anchor;
   requestAnimationFrame(() => {
     const pr = pop.getBoundingClientRect();
     if (pr.right > innerWidth - 8) pop.style.left = (innerWidth - pr.width - 8) + 'px';
@@ -2972,10 +2978,12 @@ document.querySelectorAll('.gp-view').forEach(view => {
 // ── 0. Settings (⚙) menu — consolidates the setup actions (data sources, GPS settings,
 //       metrics catalog). Items delegate to the hidden buttons so handlers stay intact.
 const gpGearBtn = document.getElementById('gpGearBtn');
-gpGearBtn?.addEventListener('click', async e => {
+gpGearBtn?.addEventListener('click', e => {
   e.stopPropagation();
+  if (_pop && _popAnchor === gpGearBtn) { closePop(); return; }   // toggle: second click closes
   const n  = window._gpSessionCount;
-  const fc = await _gpFlaggedCount();   // periods awaiting review
+  const fc = window._gpFlaggedCount || 0;   // cached — open the menu NOW; don't block on a DB count
+  Promise.resolve(_gpFlaggedCount()).catch(() => {});   // refresh the count in the background for next open
   makePopover(gpGearBtn, [
     { label: tt('gps_analysis.data_sources','Data sources') + (Number.isFinite(n) ? ` · ${tt('gps_analysis.n_gps_sessions','{n} GPS sessions',{n})}` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
     { label: tt('gps_analysis.gps_settings','GPS settings'),    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
