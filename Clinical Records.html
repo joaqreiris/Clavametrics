@@ -264,11 +264,31 @@
     return p.replace(/[^a-z]/g, '').slice(0, 2).toUpperCase() || 'NA';
   }
 
-  // Football season window (Aug 1 → Jul 31). TODO: switch to Mundo Seasons when it lands.
-  function seasonWindow() {
-    const now = new Date(), y = now.getFullYear();
-    const startY = now.getMonth() >= 7 ? y : y - 1; // month index 7 = Aug
-    return { start: startY + '-08-01', end: (startY + 1) + '-07-31' };
+  // Ventana de temporada REAL: la temporada activa definida en Annual Planner (tabla `seasons`),
+  // no un rango fijo agosto→julio. Si la temporada todavía no arrancó (start_date futuro) o no
+  // hay ninguna definida, devolvemos null → ningún día registrado cae dentro → disponibilidad
+  // vacía ("—") para todos, que es lo correcto: aún no hay temporada que medir.
+  let _seasonWindowCache;
+  async function seasonWindow() {
+    if (_seasonWindowCache !== undefined) return _seasonWindowCache;
+    let win = null;
+    try {
+      let q = window.sb.from('seasons')
+        .select('start_date, end_date, team_id')
+        .eq('club_id', _clubId).eq('status', 'active')
+        .order('start_date', { ascending: false });
+      // Temporada del equipo O del club (team_id null = aplica a todo el club).
+      q = _teamId ? q.or('team_id.eq.' + _teamId + ',team_id.is.null') : q.is('team_id', null);
+      const { data: seasons } = await q;
+      const list = seasons || [];
+      // La específica del equipo pisa a la del club; entre varias, la que contiene hoy, si no la más reciente.
+      const scoped = list.filter(s => s.team_id === _teamId);
+      const pool = scoped.length ? scoped : list;
+      const today = new Date().toISOString().slice(0, 10);
+      win = pool.find(s => s.start_date <= today && s.end_date >= today) || pool[0] || null;
+    } catch (_) {}
+    _seasonWindowCache = win ? { start: win.start_date, end: win.end_date } : null;
+    return _seasonWindowCache;
   }
 
   // ── state ────────────────────────────────────────────────────────────────
@@ -331,10 +351,11 @@
     // availability % over the season window
     const availByPlayer = {};
     try {
-      const { start, end } = seasonWindow();
-      const { data: av } = await window.sb.from('availability')
+      const win = await seasonWindow();
+      // Sin temporada vigente → no medimos disponibilidad (todos quedan en "—").
+      const { data: av } = win ? (await window.sb.from('availability')
         .select('player_id, status, date').eq('club_id', _clubId).in('player_id', ids)
-        .gte('date', start).lte('date', end);
+        .gte('date', win.start).lte('date', win.end)) : { data: [] };
       const agg = {};
       (av || []).forEach(r => { const a = agg[r.player_id] || (agg[r.player_id] = { t: 0, ok: 0 }); a.t++; if (r.status === 'available') a.ok++; });
       Object.keys(agg).forEach(pid => { availByPlayer[pid] = agg[pid].t ? Math.round(agg[pid].ok / agg[pid].t * 100) : null; });
