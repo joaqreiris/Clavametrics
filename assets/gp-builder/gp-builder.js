@@ -1074,6 +1074,7 @@
       S.horizontal = !!cfg.horizontal;
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
+      S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
       S.title   = cfg.title || '';
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
@@ -1101,6 +1102,7 @@
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
+      S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
       S.title   = rawConfig.title || '';
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
       S.metrics = (rawConfig.metrics || [])
@@ -2509,15 +2511,15 @@
     //   ring → gray legend label ("Pico de partido (100%)")
     //   of   → tooltip suffix ("78% del pico")
     const BASELINE_LABELS = {
-      role:  { ring: 'Media del puesto (100%)', of: 'de la media' },
-      match: { ring: 'Pico de partido (100%)',  of: 'del pico' },
-      md:    { ring: 'Mismo MD (100%)',          of: 'del MD' },
+      role:  { ring: _tt('gps_analysis.radar_ring_role',  'Position avg (100%)'), of: _tt('gps_analysis.radar_of_role',  'of avg') },
+      match: { ring: _tt('gps_analysis.radar_ring_match', 'Match peak (100%)'),   of: _tt('gps_analysis.radar_of_match', 'of peak') },
+      md:    { ring: _tt('gps_analysis.radar_ring_md',    'Same MD (100%)'),       of: _tt('gps_analysis.radar_of_md',    'of MD') },
     };
     const baselineInfo = hasBaseline ? BASELINE_LABELS[_cmpBase(config)] : null;
     const baselineName = baselineInfo
       ? baselineInfo.ring
       : (hasBaseline ? _cmpName(config.comparison.baseline) : null);
-    const baselineOf   = baselineInfo ? baselineInfo.of : 'del baseline';
+    const baselineOf   = baselineInfo ? baselineInfo.of : _tt('gps_analysis.radar_of_baseline', 'of baseline');
 
     const ms        = (series || []).filter(s => s.points && s.points.length);
 
@@ -2616,7 +2618,7 @@
             pointBackgroundColor: d.colors[gi], pointBorderColor: '#fff', pointBorderWidth: 1.2,
           }))
         : [{
-        label: 'Jugador',
+        label: _tt('gps_analysis.radar_player', 'Player'),
         data: d.pct,
         borderColor: d.color,
         backgroundColor: d.color + '26',

@@ -1440,6 +1440,9 @@ window.addEventListener('cm:langchanged', () => {
   if (window._gpLastCounts) {
     _updateGpSub(window._gpLastCounts.playerCount, window._gpLastCounts.sessionCount);
   }
+  // Chart.js draws labels onto a canvas, so data-i18n can't reach them — re-render the
+  // active dashboard's cards so radar/bar/etc. legends + tooltips pick up the new language.
+  try { window.GpBuilder?.rerenderActiveCards?.(); } catch(_) {}
 });
 
 // ── Helpers ───────────────────────────────────────────────────
