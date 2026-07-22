@@ -22,6 +22,7 @@
   // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
     kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
+    gauge:   { name: 'Gauge',   icon: 'ti-gauge',        min: 1, max: 6,  dimMax: 0 },
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     // `roles`: ordered encoding table (data-driven role resolver — resolveEncodings()). Only
@@ -114,8 +115,8 @@
     const ids = dimList(S);
     return Array.from({ length: n }, (_, r) => ids.map(id => { const a = DIM_MOCK[id] || DIM_MOCK.player_name; return a[r % a.length]; }));
   }
-  const VIZ_FULLNAME  = { kpi:'KPI', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap' };
-  const VIZ_REQ_LBL   = { kpi:'pick 1', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
+  const VIZ_FULLNAME  = { kpi:'KPI', gauge:'Gauge', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap' };
+  const VIZ_REQ_LBL   = { kpi:'pick 1', gauge:'pick 1+', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
 
   const AGGS = [
     { id:'avg',    name:'Average',             short:'AVG',  icon:'ti-divide',     peakOk:true  },
@@ -344,7 +345,7 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars },
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value' },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
       // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
@@ -578,6 +579,13 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_player_photos">Player photos</span><span class="s" data-i18n="gps_analysis.builder_player_photos_sub">Draw each point as the player's photo</span></span>
                 <button class="es-sw-t" data-toggle="scatterAvatars"></button>
               </div>
+              <div class="es-toggle" data-only="gauge">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
+                <div class="es-seg" id="gpbGaugeMode">
+                  <button data-gmode="value" class="is-on" data-i18n="gps_analysis.gauge_mode_value">Value</button>
+                  <button data-gmode="acwr" data-i18n="gps_analysis.gauge_mode_acwr">ACWR</button>
+                </div>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -700,7 +708,7 @@
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
-             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false,
+             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value',
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[] };
   }
 
@@ -1067,6 +1075,7 @@
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
+      S.gaugeMode = cfg.gaugeMode || 'value';
       S.scatterLabel = cfg.scatterLabel || 'name';
       S.scatterAvatars = !!cfg.scatterAvatars;
       S.points  = cfg.points !== false;
@@ -1095,6 +1104,7 @@
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
+      S.gaugeMode = rawConfig.style?.gaugeMode || 'value';
       S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
       S.scatterAvatars = !!rawConfig.style?.scatterAvatars;
       S.points  = rawConfig.style?.points !== false;
@@ -1349,6 +1359,16 @@
       };
     });
 
+    // gauge mode segmented control (value vs baseline / ACWR ratio)
+    document.getElementById('gpbGaugeMode')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        if (!S) return;
+        document.getElementById('gpbGaugeMode').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
+        S.gaugeMode = b.dataset.gmode;
+        renderCard();
+      };
+    });
+
     // reference lines (bars) — add / edit / remove. Live preview via renderCard(); the list is
     // only rebuilt on add/delete (renderRefLines), never on value/label typing, so input focus
     // is preserved while editing.
@@ -1586,6 +1606,9 @@
     document.getElementById('gpbScatterLabel')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.slabel === (S.scatterLabel || 'name'))
     );
+    document.getElementById('gpbGaugeMode')?.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.gmode === (S.gaugeMode || 'value'))
+    );
     // viz-specific style options (data-only="line" / "bars") hidden for other types
     panelEl.querySelectorAll('[data-only]').forEach(el =>
       el.style.display = el.dataset.only.split(',').includes(S.type) ? '' : 'none'
@@ -1757,6 +1780,7 @@
 
   function bodyClass(type) {
     if (type === 'kpi')     return 'gp-c-b gp-kpi';
+    if (type === 'gauge')   return 'gp-c-b gp-gauge';
     if (type === 'radar')   return 'gp-c-b gp-radar';
     if (type === 'scatter') return 'gp-c-b gp-scatter';
     if (type === 'line')    return 'gp-c-b gp-ts';
@@ -1797,6 +1821,7 @@
     else if (S.type === 'line') mountLinePreview(body, S);
     else if (S.type === 'scatter') mountScatterPreview(body, S);
     else if (S.type === 'kpi') mountKpiPreview(body, S);
+    else if (S.type === 'gauge') mountGaugePreview(body, S);
     else if (S.type === 'ranking') mountRankingPreview(body, S);
     else if (S.type === 'table') mountTablePreview(body, S);
     else body.innerHTML = renderType(S);
@@ -1850,8 +1875,8 @@
   function _renderCardInto(container, config, series, opts = {}) {
     // Apply the body viz-class without clobbering host classes (add base + swap modifier).
     container.classList.add('gp-c-b');
-    container.classList.remove('gp-kpi', 'gp-radar', 'gp-scatter', 'gp-ts');
-    const mod = config.viz === 'kpi' ? 'gp-kpi' : config.viz === 'radar' ? 'gp-radar'
+    container.classList.remove('gp-kpi', 'gp-gauge', 'gp-radar', 'gp-scatter', 'gp-ts');
+    const mod = config.viz === 'kpi' ? 'gp-kpi' : config.viz === 'gauge' ? 'gp-gauge' : config.viz === 'radar' ? 'gp-radar'
               : config.viz === 'scatter' ? 'gp-scatter' : config.viz === 'line' ? 'gp-ts' : null;
     if (mod) container.classList.add(mod);
 
@@ -1861,6 +1886,7 @@
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
       case 'scatter': mountScatterChart(container, config, series); break;
       case 'kpi':     mountKpiCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
+      case 'gauge':   mountGaugeCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, acwrMap: opts.acwrMap || null, example: opts.example }); break;
       case 'ranking': mountRankingCard(container, config, series); break;
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
@@ -1935,7 +1961,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -2200,6 +2226,12 @@
             // A null baseline here (count<3 / derived metric with no stored value) is the
             // usual reason the "vs Match" ring doesn't draw — NOT a key mismatch (s.label IS m.id).
             if (_isPinned) console.log('[PIN DEBUG] match baseline per-metric', { playerId: ctx.playerId, metrics: _mDiag });
+          } else if (cmp === 'md' && fetchMdBaseline) {
+            // vs MD code — per-metric baseline = the player's own avg on same-MD sessions.
+            try {
+              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb && rb.size) drawOpts.baselineMap = rb;
+            } catch (e) { console.warn('gpb md baseline:', e); }
           } else if (fetchRoleBaseline) {
             // vs Position (role) — also the default radial scale for any player radar.
             try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
@@ -2235,10 +2267,13 @@
         // mc's ref name (for the "vs MC ref" caption) comes from Step 5a.
         const cmp = _cmpBase(config);
         drawOpts.mcRefName = mcNamesForDraw?.ref || null;
-        if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
           const bmap = new Map();
           try {
-            if (cmp === 'role' && fetchRoleBaseline) {
+            if (cmp === 'md' && fetchMdBaseline) {
+              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
+            } else if (cmp === 'role' && fetchRoleBaseline) {
               const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
               if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
@@ -2262,15 +2297,62 @@
             }
           } catch (e) { /* sparkline is optional — never break the KPI */ }
         }
+      } else if (config.viz === 'gauge') {
+        // value mode → per-metric baseline (role / match / md) for the 0–150% "vs baseline" gauge;
+        // same source as the KPI. Always built so the gauge can draw the ring if a comparison is set.
+        const cmp = _cmpBase(config);
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
+          const bmap = new Map();
+          try {
+            if (cmp === 'md' && fetchMdBaseline) {
+              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
+            } else if (cmp === 'role' && fetchRoleBaseline) {
+              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
+            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
+              for (const m of config.metrics) {
+                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
+                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
+              }
+            }
+          } catch (e) { console.warn('gpb gauge baseline:', e); }
+          if (bmap.size) drawOpts.baselineMap = bmap;
+        }
+        if (stale()) return;
+        // acwr mode → per-metric acute:chronic ratio via the shared ACWR engine (window.gpsACWR).
+        // player scope → that player's ratios; squad → mean of each metric across returned players
+        // (mirrors GPS Analysis lmLoad's teamAcwr). On failure leave acwrMap null → dash gauges.
+        if (config.style?.gaugeMode === 'acwr' && window.gpsACWR?.calculatePlayerACWR) {
+          try {
+            const refDate    = window.gpFilterBar?.getState?.()?.date?.to || null;
+            const playerAcwr = await window.gpsACWR.calculatePlayerACWR({ clubId: _clubId, refDate });
+            const amap = new Map();
+            if (config.scope.level === 'player' && ctx.playerId) {
+              const pa = playerAcwr?.[ctx.playerId] || {};
+              for (const m of config.metrics) { const v = pa[m.id]; if (v != null && isFinite(v)) amap.set(m.id, v); }
+            } else {
+              for (const m of config.metrics) {
+                const vals = Object.values(playerAcwr || {}).map(p => p?.[m.id]).filter(v => v != null && isFinite(v));
+                if (vals.length) amap.set(m.id, +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2));
+              }
+            }
+            drawOpts.acwrMap = amap;
+          } catch (e) { console.warn('gpb gauge acwr:', e); }
+        }
+        if (stale()) return;
       } else if (config.viz === 'heatmap') {
         // Heatmap colours each cell by diff% when a comparison is set. mc already
         // enriched the points (.diff) in Step 5a; role/match need a per-metric
         // baseline map — same source as the KPI — handed to the renderer via opts.
         const cmp = _cmpBase(config);
-        if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
+        if ((cmp === 'role' || cmp === 'match' || cmp === 'md') && config.metrics?.length) {
           const bmap = new Map();
           try {
-            if (cmp === 'role' && fetchRoleBaseline) {
+            if (cmp === 'md' && fetchMdBaseline) {
+              const rb = await fetchMdBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
+            } else if (cmp === 'role' && fetchRoleBaseline) {
               const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
               if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
@@ -2415,6 +2497,7 @@
 
   function _bodyClassFromViz(viz) {
     if (viz === 'kpi')     return 'gp-c-b gp-kpi';
+    if (viz === 'gauge')   return 'gp-c-b gp-gauge';
     if (viz === 'radar')   return 'gp-c-b gp-radar';
     if (viz === 'scatter') return 'gp-c-b gp-scatter';
     if (viz === 'line')    return 'gp-c-b gp-ts';
@@ -4181,6 +4264,180 @@
     mount();
   }
 
+  // ── Gauge viz ─────────────────────────────────────────────────────────
+  // Half-circle gauge(s), one per metric. Two modes (config.style.gaugeMode):
+  //   · value → raw value on a nice-ceiling scale, OR (if a comparison baseline
+  //             exists for the metric) a 0–150% "vs baseline" gauge with zones.
+  //   · acwr  → the metric's acute:chronic ratio on a 0–2.0 ACWR-zone gauge.
+  // Mirrors the KPI card pattern (kpiCardData / mountKpiCard).
+
+  /** Generalized half-circle gauge SVG (200×110 viewBox). value 0→max maps to angle π→0.
+   *  `zones` = [{from,to,color}] colored arcs; a needle points at `value` (omitted when value
+   *  is null → "no data" dash gauge). Text uses theme CSS vars. Based on GPS Analysis _gaugeSVG. */
+  function _gaugeSvg({ value, max, zones, valueText, zoneLabel, axisLabel, minLabel, maxLabel }) {
+    const cx = 100, cy = 92, r = 68, sw = 12;
+    const M  = (max > 0 && isFinite(max)) ? max : 1;
+    const pt = v => {
+      const a = Math.PI * (1 - Math.min(Math.max(v, 0), M) / M);
+      return [+(cx + r * Math.cos(a)).toFixed(1), +(cy - r * Math.sin(a)).toFixed(1)];
+    };
+    const arc = (v1, v2, color) => {
+      const [x1, y1] = pt(v1), [x2, y2] = pt(Math.min(v2, M));
+      const span  = (Math.min(v2, M) - v1) / M;
+      const large = span > 0.5 ? 1 : 0;
+      return `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt"/>`;
+    };
+    const hasVal = value != null && isFinite(value);
+    const v = hasVal ? Math.min(M, Math.max(0, value)) : 0;
+    const [nx, ny] = pt(v);
+    const zoneArcs = (zones || []).map(z => arc(z.from, z.to, z.color)).join('');
+    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:170px;display:block;margin:0 auto">
+      ${zoneArcs}
+      ${hasVal ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
+      <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
+      <text x="${cx}" y="${cy - 22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${esc(valueText || '')}</text>
+      <text x="${cx}" y="${cy - 7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(zoneLabel || '')}</text>
+      <text x="${cx}" y="${cy + 9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(axisLabel || '')}</text>
+      <text x="22" y="106" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">${esc(minLabel || '0')}</text>
+      <text x="178" y="106" text-anchor="end" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">${esc(maxLabel || '')}</text>
+    </svg>`;
+  }
+
+  /** Round ceiling ≈1.25× a value → a clean gauge top (1/2/2.5/5 × 10ⁿ). */
+  function _niceMax(v) {
+    const x = Math.abs(v) * 1.25;
+    if (!(x > 0) || !isFinite(x)) return 1;
+    const mag  = Math.pow(10, Math.floor(Math.log10(x)));
+    const n    = x / mag;
+    const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+    return step * mag;
+  }
+
+  /** ACWR band (0–2.0): colour + i18n zone label. Mirrors gpsACWR zone thresholds. */
+  function _acwrBand(v) {
+    if (v == null || !isFinite(v)) return null;
+    if (v < 0.8)  return { color: 'rgba(139,92,246,.4)', key: 'gauge_zone_underloaded', en: 'Underloaded' };
+    if (v <= 1.3) return { color: 'rgba(74,222,128,.5)', key: 'gauge_zone_sweet',       en: 'Sweet spot' };
+    if (v <= 1.5) return { color: 'rgba(251,191,36,.6)', key: 'gauge_zone_overreach',   en: 'Overreach' };
+    return         { color: 'rgba(248,113,113,.5)', key: 'gauge_zone_risk',        en: 'High risk' };
+  }
+
+  /** vs-baseline % band (below / at / above baseline). Reuses the ACWR zone i18n labels. */
+  function _pctBand(pct) {
+    if (pct == null || !isFinite(pct)) return null;
+    if (pct < 90)   return { key: 'gauge_zone_underloaded', en: 'Underloaded' };
+    if (pct <= 110) return { key: 'gauge_zone_sweet',       en: 'Sweet spot' };
+    return           { key: 'gauge_zone_overreach',   en: 'Overreach' };
+  }
+
+  /** Pure: (config, series, opts) → { items } — one gauge descriptor per metric. */
+  function gaugeCardData(config, series, opts = {}) {
+    const mode        = config.style?.gaugeMode || 'value';
+    const baselineMap = opts.baselineMap || null;
+    const acwrMap     = opts.acwrMap || null;
+    const accent      = config.style?.color || _cssVar('--cm-accent', '#15803D');
+
+    const items = (series || []).map((s, i) => {
+      const m        = config.metrics?.[i] || {};
+      const metricId = s?.label || m.id || '';
+      const name     = s?.name || m.id || '';
+      const unit     = s?.unit || '';
+      const p        = s?.points?.[0] || {};
+      const value    = (p.cur != null ? p.cur : p.y) ?? 0;
+
+      if (mode === 'acwr') {
+        const ratio = acwrMap ? acwrMap.get(metricId) : null;
+        const has   = ratio != null && isFinite(ratio);
+        const band  = _acwrBand(ratio);
+        return {
+          value: has ? ratio : null, max: 2.0, axisLabel: name,
+          zones: [
+            { from: 0,   to: 0.8, color: 'rgba(139,92,246,.4)' },
+            { from: 0.8, to: 1.3, color: 'rgba(74,222,128,.5)' },
+            { from: 1.3, to: 1.5, color: 'rgba(251,191,36,.6)' },
+            { from: 1.5, to: 2.0, color: 'rgba(248,113,113,.5)' },
+          ],
+          valueText: has ? ratio.toFixed(2) : '—',
+          zoneLabel: (has && band) ? _tt('gps_analysis.' + band.key, band.en) : '',
+          minLabel: '0', maxLabel: '2.0',
+        };
+      }
+
+      // value mode — vs baseline (0–150%) when a comparison baseline exists, else raw value.
+      const bv = baselineMap ? baselineMap.get(metricId) : null;
+      if (bv != null && bv > 0 && isFinite(value)) {
+        const pct  = value / bv * 100;
+        const band = _pctBand(pct);
+        return {
+          value: pct, max: 150, axisLabel: name,
+          zones: [
+            { from: 0,   to: 90,  color: 'rgba(139,92,246,.4)' },
+            { from: 90,  to: 110, color: 'rgba(74,222,128,.5)' },
+            { from: 110, to: 150, color: 'rgba(251,191,36,.6)' },
+          ],
+          valueText: pct.toFixed(0) + '%',
+          zoneLabel: band ? _tt('gps_analysis.' + band.key, band.en) : '',
+          minLabel: '0%', maxLabel: '150%',
+        };
+      }
+      // raw value on a nice-ceiling scale, single accent-coloured arc.
+      const mx = _niceMax(value);
+      return {
+        value, max: mx, axisLabel: name,
+        zones: [{ from: 0, to: mx, color: accent }],
+        valueText: fmt(Math.round(value * 10) / 10) + (unit ? ' ' + unit : ''),
+        zoneLabel: '',
+        minLabel: '0', maxLabel: fmt(mx),
+      };
+    });
+    return { items };
+  }
+
+  /** Mounts a gauge card — a flex row of half-circle gauges (one per metric).
+   *  opts: { baselineMap, acwrMap, mcRefName, example }. */
+  function mountGaugeCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const d = gaugeCardData(config, series, opts);
+    if (!d.items.length) { body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
+    body.innerHTML = `<div class="gp-gauges-row">${
+      d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}</div>`).join('')
+    }</div>`;
+    if (opts.example) _appendExampleBadge(body);
+  }
+
+  /** Builder preview gauge — real data when a backend is present, else a badged mock. */
+  function mountGaugePreview(body, S) {
+    const m0 = catalogMap.get(S.metrics[0]?.id);
+    if (!m0) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountGaugeMockPreview(body, S);
+  }
+
+  function mountGaugeMockPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // One mock series per metric so the multi-gauge row shows without a backend.
+    const series = S.metrics.map(m => {
+      const cat = catalogMap.get(m.id), base = metSample(cat);
+      return { label: m.id, name: cat.name, unit: cat.unit, points: [{ x: 'all', y: Math.round(base * 1.04) }] };
+    });
+    const config = {
+      viz: 'gauge', metrics: S.metrics, scope: { level: S.scope },
+      title: S.title, ...(S.titleCustom ? { titleCustom: true } : {}),
+      comparison: cmpConfig(S),
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, gaugeMode: S.gaugeMode || 'value' },
+      __example: true,
+    };
+    let baselineMap = null, acwrMap = null;
+    if ((S.gaugeMode || 'value') === 'acwr') {
+      // mock ACWR ratios near the sweet spot so the needle sits mid-gauge.
+      acwrMap = new Map(S.metrics.map((m, i) => [m.id, +(0.85 + 0.35 * Math.abs(Math.sin(i * 1.7 + 1))).toFixed(2)]));
+    } else if (S.compare !== 'none') {                       // mock → ~+4% vs baseline per metric
+      baselineMap = new Map(S.metrics.map(m => [m.id, Math.round(metSample(catalogMap.get(m.id)))]));
+    }
+    mountGaugeCard(body, config, series, { baselineMap, acwrMap, example: true });
+  }
+
   /** Pure: (config, series) → ranking view model (sorted rows + bar widths). */
   function rankingCardData(config, series) {
     const size    = config.style?.size || 'md';
@@ -5420,6 +5677,7 @@
   // dim…). _ddAxes() still falls back to bars for any future type not listed here.
   const DD_TYPES = {
     kpi:     { name:'KPI',     icon:'ti-number-123',   dimAx:'(no dimension)',        metAx:'value(s)' },
+    gauge:   { name:'Gauge',   icon:'ti-gauge',        dimAx:'(no dimension)',        metAx:'value(s)' },
     bars:    { name:'Bars',    icon:'ti-chart-bar',    dimAx:'X axis · categories',   metAx:'Y axis · values' },
     line:    { name:'Line',    icon:'ti-chart-line',   dimAx:'X axis · time / dim.',  metAx:'series · values' },
     scatter: { name:'Scatter', icon:'ti-chart-dots',   dimAx:'point / colour (dim)',  metAx:'X axis, Y axis (2 metrics)' },
@@ -5601,7 +5859,7 @@
   // i18n getters for module-load literals (VIZ_FULLNAME / DD_TYPES / VIZ_REQ_LBL) — the objects are
   // built before _tt exists, so translate at the USE site. English fallbacks stay exact.
   const _VIZFULL_KEY = { kpi:'builder_type_kpi', bars:'builder_vizfull_bars', line:'builder_vizfull_line', scatter:'builder_type_scatter', radar:'builder_type_radar', ranking:'builder_type_ranking', table:'builder_type_table', heatmap:'builder_type_heatmap' };
-  const _REQ_KEY     = { kpi:'builder_req_pick1', ranking:'builder_req_pick1', scatter:'builder_req_pick2xy', bars:'builder_req_pick12', line:'builder_req_pick1plus', table:'builder_req_pick1plus', heatmap:'builder_req_pick1plus', radar:'builder_req_pick3plus' };
+  const _REQ_KEY     = { kpi:'builder_req_pick1', gauge:'builder_req_pick1plus', ranking:'builder_req_pick1', scatter:'builder_req_pick2xy', bars:'builder_req_pick12', line:'builder_req_pick1plus', table:'builder_req_pick1plus', heatmap:'builder_req_pick1plus', radar:'builder_req_pick3plus' };
   const _vizFull  = t => _tt('gps_analysis.' + (_VIZFULL_KEY[t] || ('builder_type_' + t)), VIZ_FULLNAME[t] || t);
   const _typeName = t => _tt('gps_analysis.builder_type_' + t, (DD_TYPES[t] && DD_TYPES[t].name) || t);
   const _reqLbl   = t => _tt('gps_analysis.' + (_REQ_KEY[t] || 'builder_req_pick1'), VIZ_REQ_LBL[t] || t);
