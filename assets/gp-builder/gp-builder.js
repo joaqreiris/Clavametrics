@@ -2088,7 +2088,8 @@
     const body = cardEl.querySelector('.gp-c-b');
     if (!body) return;
     // KPI cards drop the full card header (it duplicates the tile's own .l label).
-    if (config?.viz === 'kpi') window.gpbStripKpiHeader?.(cardEl);
+    // KPI and single-value gauges get the same headerless compact tile.
+    if (config?.viz === 'kpi' || (config?.viz === 'gauge' && (config.metrics || []).length === 1)) window.gpbStripKpiHeader?.(cardEl);
     // Per-card player picker for player-scope cards (mixed dashboards).
     window._gpEnsureCardPlayerPicker?.(cardEl, config);
     _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
@@ -4499,6 +4500,10 @@
     const baselineMap = opts.baselineMap || null;
     const acwrMap     = opts.acwrMap || null;
     const accent      = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    // Single-value gauge = KPI-style tile: the RAW value on the gradient gauge + a comparison
+    // delta line (not the 0–150% gauge, which would double up with the delta text).
+    const single      = (series || []).length === 1;
+    const cmpName     = config.comparison?.baseline ? _cmpName(config.comparison.baseline) : '';
 
     const items = (series || []).map((s, i) => {
       const m        = config.metrics?.[i] || {};
@@ -4526,9 +4531,9 @@
         };
       }
 
-      // value mode — vs baseline (0–150%) when a comparison baseline exists, else raw value.
+      // value mode. MULTI-metric with a baseline → 0–150% "vs baseline" gauge (per axis).
       const bv = baselineMap ? baselineMap.get(metricId) : null;
-      if (bv != null && bv > 0 && isFinite(value)) {
+      if (!single && bv != null && bv > 0 && isFinite(value)) {
         const pct  = value / bv * 100;
         const band = _pctBand(pct);
         return {
@@ -4543,8 +4548,15 @@
           minLabel: '0%', maxLabel: '150%',
         };
       }
-      // raw value on a nice-ceiling scale, green→amber→red gradient track (speedometer look).
+      // Raw value on a nice-ceiling scale, green→amber→red gradient track. Single-value gauges
+      // also carry the KPI-style delta (value vs its baseline) rendered as a line below.
       const mx = _niceMax(value);
+      let delta = null, refVal = null;
+      if (single && bv != null && bv > 0 && isFinite(value)) {
+        const diff = value - bv;
+        delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
+        refVal = bv;
+      }
       return {
         value, max: mx, axisLabel: name,
         gradient: true,
@@ -4552,9 +4564,10 @@
         valueText: fmt(Math.round(value * 10) / 10) + (unit ? ' ' + unit : ''),
         zoneLabel: '',
         minLabel: '0', maxLabel: fmt(mx),
+        delta, refVal, unit, cmpName,
       };
     });
-    return { items };
+    return { items, single };
   }
 
   /** Mounts a gauge card — a flex row of half-circle gauges (one per metric).
@@ -4563,10 +4576,25 @@
     destroyBodyChart(body);
     const d = gaugeCardData(config, series, opts);
     if (!d.items.length) { body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
+    // Single-value gauge → KPI-style compact tile (CSS keys off .gp-gauge-single) with a
+    // comparison delta line under the arc; multi-metric → a row of gauges.
+    body.classList.toggle('gp-gauge-single', !!d.single);
     body.innerHTML = `<div class="gp-gauges-row">${
-      d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}</div>`).join('')
+      d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}${d.single ? _gaugeDeltaLine(it) : ''}</div>`).join('')
     }</div>`;
     if (opts.example) _appendExampleBadge(body);
+  }
+
+  /** KPI-style delta line under a single-value gauge (value vs its comparison baseline). */
+  function _gaugeDeltaLine(it) {
+    if (!it || !it.delta) return '';
+    const sign   = it.delta.dir === 'up' ? '+' : '−';
+    const col    = it.delta.dir === 'up' ? 'var(--cm-success,#16A34A)' : 'var(--cm-danger,#DC2626)';
+    const refTxt = it.refVal != null
+      ? ` <span style="opacity:.6;font-weight:500">(ref: ${esc(fmt(Math.round(it.refVal * 10) / 10))}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
+    return `<div style="font:500 11.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px;text-align:center">`
+      + `<span style="color:${col};font-weight:600"><i class="ti ti-arrow-${it.delta.dir}-right" style="font-size:11px;vertical-align:-1px"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>`
+      + `${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
   }
 
   /** Builder preview gauge — real data when a backend is present, else a badged mock. */
