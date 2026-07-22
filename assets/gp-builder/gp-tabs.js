@@ -504,6 +504,10 @@
     // size is changed by dragging the corner handle (gp-resize.js seeds it
     // via the MutationObserver on the grid once this element is attached)
 
+    // Title/subtitle format (Paso 3a). Constants-based scaling in gpApplyHeaderFormat means it's
+    // safe to call here even though `el` is still detached from the DOM.
+    window.gpApplyHeaderFormat?.(el, config.style);
+
     el.querySelector('[data-edit]')?.addEventListener('click', () => {
       if (window.GpBuilder?.openForEdit) window.GpBuilder.openForEdit(el);
     });

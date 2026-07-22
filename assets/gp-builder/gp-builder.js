@@ -345,7 +345,11 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value' },
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value',
+               // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
+               // unset → cards without formatting stay byte-identical to today.
+               ...(_normFmt(S.titleFormat)    ? { titleFormat:    _normFmt(S.titleFormat) }    : {}),
+               ...(_normFmt(S.subtitleFormat) ? { subtitleFormat: _normFmt(S.subtitleFormat) } : {}) },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
       // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
@@ -602,6 +606,14 @@
                 <i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_add_reference_line">Add line</span>
               </button>
             </div>
+            <!-- Title/subtitle format (Paso 3a). data-only is a HARDCODED non-KPI list: if you add a
+                 new viz type, add it here too (KPI is excluded on purpose — its header is stripped
+                 from the DOM by gpbStripKpiHeader, handled separately in Paso 3b). -->
+            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap">
+              <div class="lab" data-i18n="gps_analysis.builder_header_format">Title &amp; subtitle</div>
+              ${_fmtBlockHTML('title', 'builder_header_title', 'Title')}
+              ${_fmtBlockHTML('sub',   'builder_header_subtitle', 'Subtitle')}
+            </div>
           </div>
           <div class="pane" data-pane="dd"><div class="bdd-wrap" id="gpbDDPane"></div></div>
         </div>
@@ -709,7 +721,8 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value',
-             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[] };
+             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[],
+             titleFormat:{}, subtitleFormat:{} };
   }
 
   function startBuild() {
@@ -774,6 +787,8 @@
       const subEl = card.querySelector('.sub');
       if (ttlEl) ttlEl.textContent = _editCardOrigTtl;
       if (subEl) subEl.textContent = _editCardOrigSub;
+      // Editing live-mutated the header's inline styles (updateDraftHeader); restore the SAVED format.
+      gpApplyHeaderFormat(card, card.__config?.style);
 
       // Restore X → delete, show pencil
       const delBtn = card.querySelector('[data-del]');
@@ -846,6 +861,7 @@
         const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
         subElE.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
       }
+      gpApplyHeaderFormat(targetCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
       const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
       targetCard.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', mapSz[b.textContent.trim()] === S.size)
@@ -928,6 +944,7 @@
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
+    gpApplyHeaderFormat(savedCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
 
     const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
     savedCard.querySelectorAll('.size-toggle button').forEach(b =>
@@ -1075,6 +1092,8 @@
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
+      S.titleFormat    = cfg.titleFormat    ? { ...cfg.titleFormat }    : {};
+      S.subtitleFormat = cfg.subtitleFormat ? { ...cfg.subtitleFormat } : {};
       S.gaugeMode = cfg.gaugeMode || 'value';
       S.scatterLabel = cfg.scatterLabel || 'name';
       S.scatterAvatars = !!cfg.scatterAvatars;
@@ -1104,6 +1123,8 @@
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
+      S.titleFormat    = rawConfig.style?.titleFormat    ? { ...rawConfig.style.titleFormat }    : {};
+      S.subtitleFormat = rawConfig.style?.subtitleFormat ? { ...rawConfig.style.subtitleFormat } : {};
       S.gaugeMode = rawConfig.style?.gaugeMode || 'value';
       S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
       S.scatterAvatars = !!rawConfig.style?.scatterAvatars;
@@ -1369,6 +1390,33 @@
       };
     });
 
+    // title/subtitle format controls (Paso 3a) — delegated per block. Mutate S.titleFormat /
+    // S.subtitleFormat, then reflect state + live-preview the header via updateDraftHeader().
+    panelEl.querySelectorAll('[data-fmt]').forEach(block => {
+      const key = block.dataset.fmt === 'sub' ? 'subtitleFormat' : 'titleFormat';
+      block.addEventListener('click', e => {
+        if (!S) return;
+        const f = (S[key] || (S[key] = {}));
+        const tog = e.target.closest('[data-fmt-tog]');
+        const sz  = e.target.closest('[data-fmt-size]');
+        const ft  = e.target.closest('[data-fmt-font]');
+        const co  = e.target.closest('[data-fmt-color]');
+        if      (tog) f[tog.dataset.fmtTog] = !f[tog.dataset.fmtTog];
+        else if (sz)  f.size  = sz.dataset.fmtSize;
+        else if (ft)  f.font  = ft.dataset.fmtFont;
+        else if (co)  f.color = co.dataset.fmtColor;
+        else return;
+        _syncFmtControls(); updateDraftHeader();
+      });
+      block.addEventListener('input', e => {
+        if (!S) return;
+        const custom = e.target.closest('[data-fmt-color-custom]');
+        if (!custom) return;
+        (S[key] || (S[key] = {})).color = custom.value;   // hex → fixed colour (ignores theme)
+        _syncFmtControls(); updateDraftHeader();
+      });
+    });
+
     // reference lines (bars) — add / edit / remove. Live preview via renderCard(); the list is
     // only rebuilt on add/delete (renderRefLines), never on value/label typing, so input focus
     // is preserved while editing.
@@ -1609,6 +1657,7 @@
     document.getElementById('gpbGaugeMode')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.gmode === (S.gaugeMode || 'value'))
     );
+    _syncFmtControls();   // title/subtitle format controls reflect S.titleFormat / S.subtitleFormat
     // viz-specific style options (data-only="line" / "bars") hidden for other types
     panelEl.querySelectorAll('[data-only]').forEach(el =>
       el.style.display = el.dataset.only.split(',').includes(S.type) ? '' : 'none'
@@ -1844,6 +1893,111 @@
     }
   }
 
+  // ── Card header format (title / subtitle) — Paso 3a ───────────────────────
+  // Base font sizes MUST track GPS Analysis.html `.gp-c-h .ttl` (13.5px) / `.sub` (11.5px).
+  // We use CONSTANTS, not getComputedStyle: in gp-tabs.js _buildCardElement the card is still
+  // DETACHED from the DOM when it's formatted, and getComputedStyle is unreliable on detached
+  // nodes — so size scaling would break exactly on saved-card reload. Constants work at every
+  // call site regardless of attachment.
+  const _HDR_TITLE_BASE_PX = 13.5, _HDR_SUB_BASE_PX = 11.5;
+  const _HDR_COLOR_TOKENS = {
+    strong: 'var(--cm-fg-strong)', body: 'var(--cm-fg)', muted: 'var(--cm-fg-muted)',
+    faint: 'var(--cm-fg-faint)', accent: 'var(--cm-accent)',
+  };
+  const _HDR_FONTS = { sans: 'var(--cm-font-sans)', mono: 'var(--cm-font-mono)' };
+
+  // Compact a format object for persistence: keep only non-default props (empty → null, so a card
+  // without formatting stays byte-identical to today).
+  function _normFmt(f) {
+    if (!f || typeof f !== 'object') return null;
+    const o = {};
+    if (f.bold) o.bold = true;
+    if (f.italic) o.italic = true;
+    if (f.uppercase) o.uppercase = true;
+    if (f.size && f.size !== 'md') o.size = f.size;
+    if (f.font && f.font !== 'default') o.font = f.font;
+    if (f.color && f.color !== 'default') o.color = f.color;
+    return Object.keys(o).length ? o : null;
+  }
+
+  // Apply one format object to one header span. Idempotent: resets the props we manage to '' (back
+  // to the base CSS) first, so re-renders/edits never accumulate. basePx = the span's CSS base size.
+  // Colour tokens are theme-aware (var(--cm-*)); a hex is a fixed colour that ignores the theme.
+  function _applyHdrFmt(el, fmt, basePx) {
+    if (!el) return;
+    el.style.fontWeight = ''; el.style.fontStyle = ''; el.style.textTransform = '';
+    el.style.color = ''; el.style.fontSize = ''; el.style.fontFamily = '';
+    if (!fmt || typeof fmt !== 'object') return;
+    if (fmt.bold)      el.style.fontWeight = '700';
+    if (fmt.italic)    el.style.fontStyle = 'italic';
+    if (fmt.uppercase) el.style.textTransform = 'uppercase';
+    if (fmt.color && fmt.color !== 'default') el.style.color = _HDR_COLOR_TOKENS[fmt.color] || fmt.color;
+    if (fmt.size === 'sm')      el.style.fontSize = (basePx * 0.85).toFixed(2) + 'px';
+    else if (fmt.size === 'lg') el.style.fontSize = (basePx * 1.2).toFixed(2) + 'px';
+    if (fmt.font && _HDR_FONTS[fmt.font]) el.style.fontFamily = _HDR_FONTS[fmt.font];
+  }
+
+  // Shared across every header call site (draft preview, save, and gp-tabs saved-card build).
+  // Reads style.titleFormat / style.subtitleFormat and formats the card's .ttl / .sub spans.
+  function gpApplyHeaderFormat(cardEl, style) {
+    if (!cardEl) return;
+    _applyHdrFmt(cardEl.querySelector('.ttl'), style && style.titleFormat,    _HDR_TITLE_BASE_PX);
+    _applyHdrFmt(cardEl.querySelector('.sub'), style && style.subtitleFormat, _HDR_SUB_BASE_PX);
+  }
+  window.gpApplyHeaderFormat = gpApplyHeaderFormat;
+
+  // One editor block (title or subtitle) of the format sub-editor. Static controls carrying
+  // data-fmt-* attributes; state is reflected by _syncFmtControls and mutated by the delegated
+  // handlers in buildStaticPanel. Live preview via updateDraftHeader().
+  function _fmtBlockHTML(fmt, labelKey, labelEn) {
+    const segCss = 'flex:0 0 auto';
+    const swCss  = 'width:20px;height:20px;border-radius:5px;cursor:pointer';
+    return `
+      <div data-fmt="${fmt}" style="${fmt === 'title' ? 'margin-bottom:10px' : ''}">
+        <div style="font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="gps_analysis.${labelKey}">${labelEn}</div>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+          <div class="es-seg" style="${segCss}">
+            <button type="button" data-fmt-tog="bold" style="font:700 12px/1 var(--cm-font-sans)" data-i18n-attr="title:gps_analysis.builder_fmt_bold" title="Bold">B</button>
+            <button type="button" data-fmt-tog="italic" style="font:italic 600 12px/1 var(--cm-font-sans)" data-i18n-attr="title:gps_analysis.builder_fmt_italic" title="Italic">I</button>
+            <button type="button" data-fmt-tog="uppercase" style="font:600 11px/1 var(--cm-font-sans)" data-i18n-attr="title:gps_analysis.builder_fmt_uppercase" title="Uppercase">TT</button>
+          </div>
+          <div class="es-seg" style="${segCss}">
+            <button type="button" data-fmt-size="sm">S</button>
+            <button type="button" data-fmt-size="md">M</button>
+            <button type="button" data-fmt-size="lg">L</button>
+          </div>
+          <div class="es-seg" style="${segCss}">
+            <button type="button" data-fmt-font="default" data-i18n-attr="title:gps_analysis.builder_fmt_font" title="Default" style="font:600 12px/1 var(--cm-font-sans)">Aa</button>
+            <button type="button" data-fmt-font="sans" title="Sans" style="font:600 12px/1 var(--cm-font-sans)">Aa</button>
+            <button type="button" data-fmt-font="mono" title="Mono" style="font:600 11px/1 var(--cm-font-mono)">Aa</button>
+          </div>
+          <div style="${segCss};display:inline-flex;align-items:center;gap:4px">
+            <button type="button" data-fmt-color="default" data-i18n-attr="title:gps_analysis.builder_fmt_color_default" title="Default" style="${swCss};border:1px solid var(--cm-border);background:linear-gradient(135deg,transparent 44%,var(--cm-fg-faint) 44%,var(--cm-fg-faint) 56%,transparent 56%)"></button>
+            <button type="button" data-fmt-color="strong" title="Strong" style="${swCss};border:1px solid var(--cm-border);background:var(--cm-fg-strong)"></button>
+            <button type="button" data-fmt-color="muted"  title="Muted"  style="${swCss};border:1px solid var(--cm-border);background:var(--cm-fg-muted)"></button>
+            <button type="button" data-fmt-color="faint"  title="Faint"  style="${swCss};border:1px solid var(--cm-border);background:var(--cm-fg-faint)"></button>
+            <button type="button" data-fmt-color="accent" title="Accent" style="${swCss};border:1px solid var(--cm-border);background:var(--cm-accent)"></button>
+            <input type="color" data-fmt-color-custom data-i18n-attr="title:gps_analysis.builder_fmt_color_custom" title="Custom" style="width:22px;height:22px;padding:0;border:1px solid var(--cm-border);border-radius:5px;background:none;cursor:pointer">
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Reflect S.titleFormat / S.subtitleFormat onto the format controls' is-on states.
+  function _syncFmtControls() {
+    if (!S || !panelEl) return;
+    panelEl.querySelectorAll('[data-fmt]').forEach(block => {
+      const key = block.dataset.fmt === 'sub' ? 'subtitleFormat' : 'titleFormat';
+      const f = (S[key] || (S[key] = {}));
+      block.querySelectorAll('[data-fmt-tog]').forEach(b => b.classList.toggle('is-on', !!f[b.dataset.fmtTog]));
+      block.querySelectorAll('[data-fmt-size]').forEach(b => b.classList.toggle('is-on', b.dataset.fmtSize === (f.size || 'md')));
+      block.querySelectorAll('[data-fmt-font]').forEach(b => b.classList.toggle('is-on', b.dataset.fmtFont === (f.font || 'default')));
+      block.querySelectorAll('[data-fmt-color]').forEach(b => b.classList.toggle('is-on', b.dataset.fmtColor === (f.color || 'default')));
+      const custom = block.querySelector('[data-fmt-color-custom]');
+      if (custom && typeof f.color === 'string' && f.color[0] === '#') custom.value = f.color;
+    });
+  }
+
   function updateDraftHeader() {
     if (!draftCard || !S) return;
     const titleEl = document.getElementById('gpbDraftTitle') || draftCard.querySelector('.ttl');
@@ -1853,6 +2007,8 @@
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
+    // Live format preview (draftCard IS the real card in edit mode). Idempotent.
+    gpApplyHeaderFormat(draftCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
   }
 
   // ── Current view helper ──────────────────────────────────────
@@ -6547,6 +6703,8 @@
     S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
+    S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
+    S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
     S.title   = config.title || '';
     S.titleCustom = !!config.titleCustom;      // ausente en cards viejas → false → título auto
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }));
