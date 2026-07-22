@@ -587,7 +587,7 @@
                 <button class="es-sw-t" data-toggle="area"></button>
               </div>
             </div>
-            <div class="es-sec" data-only="bars">
+            <div class="es-sec" data-only="bars,scatter">
               <div class="lab" data-i18n="gps_analysis.builder_reference_lines">Reference lines</div>
               <div id="gpbRefLines"></div>
               <button class="cm-btn is-outline is-sm" id="gpbAddRefLine" style="width:100%;justify-content:center;margin-top:2px">
@@ -1391,6 +1391,14 @@
           row.querySelectorAll('[data-rl-style]').forEach(b => b.classList.toggle('is-on', b === styBtn));
           renderCard(); return;
         }
+        // scatter axis: X ↔ Y (in-place toggle, no rebuild — doesn't change the row's controls)
+        const axisBtn = e.target.closest('[data-rl-axis]');
+        if (axisBtn) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.axis = axisBtn.dataset.rlAxis === 'x' ? 'x' : 'y';
+          row.querySelectorAll('[data-rl-axis]').forEach(b => b.classList.toggle('is-on', b === axisBtn));
+          renderCard(); return;
+        }
         // band aspect: fill only ↔ fill + borders (in-place toggle, no rebuild)
         const fillBtn = e.target.closest('[data-rl-fill]');
         if (fillBtn) {
@@ -1582,11 +1590,17 @@
     if (!host) return;
     const lines = (S && Array.isArray(S.referenceLines)) ? S.referenceLines : [];
     const inputCss = 'height:26px;min-width:0;padding:0 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)';
+    const isScatter = !!(S && S.type === 'scatter');
     host.innerHTML = lines.map((ln, i) => {
       const band = ln.type === 'band';
+      const onX  = ln.axis === 'x';
       return `
       <div data-rl-idx="${i}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.18)">
         <input type="color" data-rl-color value="${esc(ln.color || '#DC2626')}" title="${esc(_tt('gps_analysis.builder_ref_line_color', 'Line color'))}" style="width:26px;height:26px;flex:0 0 auto;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer">
+        ${isScatter ? `<div class="es-seg" style="flex:0 0 auto">
+          <button type="button" data-rl-axis="y" class="${!onX ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_axis_y', 'Y axis'))}">Y</button>
+          <button type="button" data-rl-axis="x" class="${onX ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_axis_x', 'X axis'))}">X</button>
+        </div>` : ''}
         <div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-type="line" class="${!band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_line', 'Line'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-type="band" class="${band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_band', 'Band'))}"><i class="ti ti-columns"></i></button>
@@ -2130,7 +2144,20 @@
               }
               catch (e) { console.warn('gpb match baseline:', e); if (_isPinned) _mDiag.push({ id: m.id, error: e?.message || String(e) }); }
             }
-            if (bmap.size) drawOpts.baselineMap = bmap;
+            if (bmap.size) {
+              drawOpts.baselineMap = bmap;
+              // The match baseline is a PER-MATCH value (avg of the top-N matches). The card's
+              // own agg is usually SUM over the range, so realVals = the whole-range total —
+              // comparing a season total to one match makes the ratio explode (e.g. 806,916 vs
+              // 4,992 → 16,000%) and the UNRELIABLE guard drops every axis → false "need more
+              // matches" note. Re-aggregate the real values as PER-SESSION AVG so they sit on
+              // the same scale as the match peak. Radar-only, match-only; other vizzes untouched.
+              try {
+                const _avgCfg = { ...config, metrics: config.metrics.map(m => ({ ...m, agg: 'avg' })) };
+                const _avg = aggregateSeries(rows, eavMap, _avgCfg, catalogMap);
+                if (_avg && _avg.length) series = _avg;
+              } catch (_e) { /* keep original series if re-aggregation fails */ }
+            }
             // Diagnostics: WHY the map is (n)empty — per-metric baseline value/count/source.
             // A null baseline here (count<3 / derived metric with no stored value) is the
             // usual reason the "vs Match" ring doesn't draw — NOT a key mismatch (s.label IS m.id).
@@ -2744,6 +2771,24 @@
     },
   };
 
+  // Shared sanitizer for referenceLines (bars + scatter). Each item → a normalized LINE or BAND.
+  // `axis` ('x'|'y', default 'y') only matters for scatter (two value axes); bars ignore it, so
+  // carrying it is harmless and keeps bars byte-identical. Missing `type` → 'line' (Paso-1 retrocompat).
+  function _sanitizeRefItems(list) {
+    return (list || [])
+      .filter(r => r && Number.isFinite(Number(r.value)))
+      .map(r => {
+        const type = r.type === 'band' ? 'band' : 'line';
+        const v2 = Number(r.value2);
+        return { type, axis: r.axis === 'x' ? 'x' : 'y', value: Number(r.value),
+                 value2: (type === 'band' && Number.isFinite(v2)) ? v2 : null,
+                 fill: r.fill === 'bordered' ? 'bordered' : 'solid',
+                 label: r.label || '', color: r.color || '#DC2626',
+                 style: r.style === 'dashed' ? 'dashed' : 'solid',
+                 opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) };
+      });
+  }
+
   /**
    * Reference lines / bands (bars): draws each config.referenceLines entry on the VALUE axis —
    * horizontal for vertical bars, vertical for horizontal bars. A LINE (type 'line' / no type) is a
@@ -2929,23 +2974,11 @@
 
     const barDs  = datasets.filter(d => !d._isLine);
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
-    // Reference lines: sanitize the card's manual rules once (used by the draw plugin). Each item is
-    // a LINE (Paso 1) or a BAND between value..value2 (Paso 2a). Missing `type` → 'line' (retrocompat
-    // with cards saved in Paso 1). Option B — fold value AND value2 into the value-axis max so a line
-    // or a band above the tallest bar still lands inside the plot. Absent/empty on every existing card
-    // → refMax = 0 → maxVal unchanged (retrocompat).
-    const refLines = (config.referenceLines || [])
-      .filter(r => r && Number.isFinite(Number(r.value)))
-      .map(r => {
-        const type = r.type === 'band' ? 'band' : 'line';
-        const v2 = Number(r.value2);
-        return { type, value: Number(r.value),
-                 value2: (type === 'band' && Number.isFinite(v2)) ? v2 : null,
-                 fill: r.fill === 'bordered' ? 'bordered' : 'solid',
-                 label: r.label || '', color: r.color || '#DC2626',
-                 style: r.style === 'dashed' ? 'dashed' : 'solid',
-                 opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) };
-      });
+    // Reference lines/bands: sanitize once (shared with scatter). Bars ignore item.axis and always
+    // draw on their single value axis, so it's harmless here. Option B — fold value AND value2 into
+    // the value-axis max so a high line/band still lands inside the plot. Absent/empty on every
+    // existing card → refMax = 0 → maxVal unchanged (retrocompat).
+    const refLines = _sanitizeRefItems(config.referenceLines);
     const refMax  = refLines.length
       ? Math.max(0, ...refLines.flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v))))
       : 0;
@@ -3409,6 +3442,81 @@
     },
   };
 
+  /**
+   * Reference lines / bands (scatter): same items as bars, but each declares `axis` ('x'|'y',
+   * default 'y'). axis 'y' → a horizontal rule/band positioned via scales.y; axis 'x' → a vertical
+   * one via scales.x. Line vs band (fill 'solid'|'bordered') and colour/style/opacity/label are the
+   * same as the bar plugin. Combining an X line with a Y line yields quadrants. The value-axis grows
+   * per axis (scatterChartData → suggestedMin/Max). Additive: no referenceLines → draws nothing.
+   */
+  const _scatterRefLinesPlugin = {
+    id: 'gpbScatterRefLines',
+    afterDatasetsDraw(chart, _args, opts) {
+      const lines = opts && Array.isArray(opts.lines) ? opts.lines : null;
+      if (!lines || !lines.length) return;
+      const { ctx, chartArea, scales } = chart;
+      const { top: A_T, bottom: A_B, left: A_L, right: A_R } = chartArea;
+      const clampY = p => Math.max(A_T, Math.min(A_B, p));
+      const clampX = p => Math.max(A_L, Math.min(A_R, p));
+      const ruleY  = p => { ctx.beginPath(); ctx.moveTo(A_L, p); ctx.lineTo(A_R, p); ctx.stroke(); };  // horizontal (axis y)
+      const ruleX  = p => { ctx.beginPath(); ctx.moveTo(p, A_T); ctx.lineTo(p, A_B); ctx.stroke(); };  // vertical (axis x)
+      // label near value-axis pixel p — full opacity + white halo, tucked at the plot edge (no cover)
+      const drawLabel = (onY, p, txt, color) => {
+        if (!txt) return;
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+        ctx.font = '600 10px Geist, Inter, sans-serif';
+        let lx, ly;
+        if (onY) {                                   // horizontal rule → label at the right edge
+          ctx.textAlign = 'right'; lx = A_R - 4;
+          if (p - 14 < A_T) { ctx.textBaseline = 'top';    ly = p + 3; }
+          else              { ctx.textBaseline = 'bottom'; ly = p - 3; }
+        } else {                                     // vertical rule → label at the top
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          lx = Math.max(A_L + 14, Math.min(A_R - 14, p)); ly = A_T + 3;
+        }
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.strokeText(txt, lx, ly);
+        ctx.fillStyle = color; ctx.fillText(txt, lx, ly);
+      };
+
+      ctx.save();
+      for (const ln of lines) {
+        const val = Number(ln.value);
+        if (!Number.isFinite(val)) continue;
+        const onY   = ln.axis !== 'x';               // default 'y'
+        const scale = onY ? scales.y : scales.x;
+        if (!scale) continue;
+        const color = ln.color || '#DC2626';
+        const op    = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
+        const txt   = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+        const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
+        const inY = p => p >= A_T && p <= A_B, inX = p => p >= A_L && p <= A_R;
+
+        if (isBand) {
+          const p1 = scale.getPixelForValue(val), p2 = scale.getPixelForValue(Number(ln.value2));
+          ctx.globalAlpha = op; ctx.fillStyle = color; ctx.setLineDash([]);
+          if (onY) { const a = clampY(Math.min(p1, p2)), b = clampY(Math.max(p1, p2)); if (b - a > 0.5) ctx.fillRect(A_L, a, A_R - A_L, b - a); }
+          else     { const a = clampX(Math.min(p1, p2)), b = clampX(Math.max(p1, p2)); if (b - a > 0.5) ctx.fillRect(a, A_T, b - a, A_B - A_T); }
+          if (ln.fill === 'bordered') {
+            ctx.globalAlpha = Math.min(1, op + 0.25); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+            ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
+            if (onY) { if (inY(p1)) ruleY(p1); if (inY(p2)) ruleY(p2); }
+            else     { if (inX(p1)) ruleX(p1); if (inX(p2)) ruleX(p2); }
+          }
+          drawLabel(onY, onY ? clampY(Math.min(p1, p2)) : clampX(Math.max(p1, p2)), txt, color);
+        } else {
+          const p = scale.getPixelForValue(val);
+          if (onY ? !inY(p) : !inX(p)) continue;
+          ctx.globalAlpha = op; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+          ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
+          onY ? ruleY(p) : ruleX(p);
+          drawLabel(onY, p, txt, color);
+        }
+      }
+      ctx.restore();
+    },
+  };
+
   // Generic, data-driven role/encoding resolver. Reads VIZ_TYPES[type].roles (an ordered
   // table of { role, kind:'metric'|'dim', min, max }) and maps the card's metrics + dimensions
   // onto those roles → { role: [fieldId, …] }. Items carrying an explicit `item.role` (that
@@ -3539,6 +3647,16 @@
     const avgY = paired.reduce((a, p) => a + p.y, 0) / paired.length;
     const xUnit = sX.unit || '', yUnit = sY.unit || '';
 
+    // Reference lines/bands (scatter): each item declares axis 'x'|'y'. Option B PER AXIS — the ref
+    // values on each axis extend that axis's range (suggestedMin/Max in mountScatterChart), so a high
+    // X line stretches X and a high Y line stretches Y. Absent → no refLines → axes unchanged.
+    const refLines = _sanitizeRefItems(config.referenceLines);
+    const axisRange = which => {
+      const vals = refLines.filter(r => (r.axis === 'x') === (which === 'x'))
+        .flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v)));
+      return vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : null;
+    };
+
     return {
       datasets, avgX, avgY, showAxes, showLbl,
       showLeg: hasCat && config.style?.legend !== false,
@@ -3546,6 +3664,7 @@
       xName: sX.name, yName: sY.name, xUnit, yUnit,
       xTitle: sX.name + (xUnit ? ` (${xUnit})` : ''),
       yTitle: sY.name + (yUnit ? ` (${yUnit})` : ''),
+      referenceLines: refLines, xRef: axisRange('x'), yRef: axisRange('y'),
       height: _SCATTER_SIZE_H[size] || 240,
     };
   }
@@ -3707,7 +3826,7 @@
       body.__chart = _newChart(body, canvas, {
         type: 'scatter',
         data: { datasets: d.datasets },
-        plugins: [_scatterAvgPlugin, _scatterLabelPlugin],
+        plugins: [_scatterAvgPlugin, _scatterLabelPlugin, _scatterRefLinesPlugin],
         options: {
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
@@ -3745,12 +3864,15 @@
                 },
               },
             },
-            gpbScatterAvg:    { avgX: d.avgX, avgY: d.avgY },
-            gpbScatterLabels: { show: d.showLbl },
+            gpbScatterAvg:      { avgX: d.avgX, avgY: d.avgY },
+            gpbScatterLabels:   { show: d.showLbl },
+            gpbScatterRefLines: { lines: d.referenceLines },
           },
           scales: {
             x: {
               display: d.showAxes, grace: '6%',
+              // Option B (X axis): a reference line/band on X extends the X range so it stays in view.
+              ...(d.xRef ? { suggestedMin: d.xRef.min, suggestedMax: d.xRef.max } : {}),
               title: { display: d.showAxes && !!d.xTitle, text: d.xTitle, font: { size: 11, weight: '600' }, color: '#6B7280', padding: { top: 4 } },
               grid: { display: d.showAxes, color: gridCol, drawTicks: false },
               ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
@@ -3758,6 +3880,8 @@
             },
             y: {
               display: d.showAxes, grace: '6%',
+              // Option B (Y axis): a reference line/band on Y extends the Y range so it stays in view.
+              ...(d.yRef ? { suggestedMin: d.yRef.min, suggestedMax: d.yRef.max } : {}),
               title: { display: d.showAxes && !!d.yTitle, text: d.yTitle, font: { size: 11, weight: '600' }, color: '#6B7280' },
               grid: { display: d.showAxes, color: gridCol, drawTicks: false },
               ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
@@ -3806,6 +3930,7 @@
       viz: 'scatter',
       dimensions: S.dimensions,
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars },
+      ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
       __example: true,
     };
     mountScatterChart(body, cfg, series);
