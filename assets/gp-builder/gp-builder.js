@@ -4455,13 +4455,13 @@
         + `<stop offset="0%" stop-color="#22c55e"/><stop offset="55%" stop-color="#eab308"/><stop offset="100%" stop-color="#ef4444"/>`
         + `</linearGradient></defs>${arc(0, M, `url(#${gid})`)}`
       : (zones || []).map(z => arc(z.from, z.to, z.color)).join('');
-    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:170px;display:block;margin:0 auto">
+    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:180px;display:block;margin:0 auto">
       ${track}
       ${hasVal ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
       <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
-      <text x="${cx}" y="${cy - 22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${esc(valueText || '')}</text>
-      <text x="${cx}" y="${cy - 7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(zoneLabel || '')}</text>
-      <text x="${cx}" y="${cy + 9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(axisLabel || '')}</text>
+      <text x="${cx}" y="${cy - 21}" text-anchor="middle" font-size="25" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${esc(valueText || '')}</text>
+      <text x="${cx}" y="${cy - 6}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(zoneLabel || '')}</text>
+      <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(axisLabel || '')}</text>
       <text x="22" y="106" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">${esc(minLabel || '0')}</text>
       <text x="178" y="106" text-anchor="end" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">${esc(maxLabel || '')}</text>
     </svg>`;
