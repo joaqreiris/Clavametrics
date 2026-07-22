@@ -1152,18 +1152,6 @@
 
         <div class="gp-grid is-edit">
 
-          <!-- NEW: Risk alerts -->
-          <div class="gp-c" data-size="full" id="card-lm-alerts">
-            <div class="gp-c-h">
-              <span class="ttl" data-i18n="gps_analysis.card_risk_alerts">Risk alerts</span>
-              <span class="sub" id="lm-alerts-sub">automatic detection · Gabbett 2016</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
-            </div>
-            <div class="gp-c-b" id="lm-alerts-body" style="padding:0">
-              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px" data-i18n="gps_analysis.click_refresh_acwr">Click Refresh to calculate ACWR.</div>
-            </div>
-          </div>
-
           <!-- NEW: ACWR gauges row (team) -->
           <div class="gp-c" data-size="full" id="card-lm-gauges">
             <div class="gp-c-h">
@@ -1173,53 +1161,6 @@
             </div>
             <div class="gp-c-b" id="lm-gauges-body" style="padding:10px 14px">
               <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px" data-i18n="gps_analysis.click_refresh_acwr">Click Refresh to calculate ACWR.</div>
-            </div>
-          </div>
-
-          <!-- NEW: ACWR by player table -->
-          <div class="gp-c" data-size="full" id="card-lm-table">
-            <div class="gp-c-h">
-              <span class="ttl" data-i18n="gps_analysis.card_acwr_by_player">ACWR by player</span>
-              <span class="sub" data-i18n="gps_analysis.card_acwr_by_player_sub">zone coloring: under · sweet · caution · risk</span>
-              <div class="right">
-                <select class="sc-sel" id="lm-zone-filter" style="height:24px;font-size:11px">
-                  <option value="all" data-i18n="gps_analysis.filter_all_players">All players</option>
-                  <option value="risk" data-i18n="gps_analysis.filter_risk_only">Risk only</option>
-                  <option value="caution" data-i18n="gps_analysis.filter_caution_plus">Caution+</option>
-                </select>
-                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
-                <button><i class="ti ti-dots"></i></button>
-              </div>
-            </div>
-            <div class="gp-c-b" id="lm-table-body" style="overflow-x:auto;padding:0">
-              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px" data-i18n="gps_analysis.click_refresh_acwr">Click Refresh to calculate ACWR.</div>
-            </div>
-          </div>
-
-          <!-- Genérica de ejemplo (builder · gp.card/v1) -->
-          <div class="gp-c" data-size="full" id="card-gen-weekly-load" data-card-id="gen-weekly-load" data-card="chart">
-            <div class="gp-c-h">
-              <span class="ttl" data-i18n="gps_analysis.card_weekly_load">Weekly load</span>
-              <span class="sub" data-i18n="gps_analysis.card_weekly_load_sub">bars · squad · editable example</span>
-              <div class="right">
-                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
-                                <button data-del title="Remove card" data-i18n-attr="title:gps_analysis.remove_card"><i class="ti ti-x"></i></button>
-              </div>
-            </div>
-            <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
-              <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t" data-i18n="common.loading">Loading…</div></div>
-            </div>
-          </div>
-
-          <!-- Match demands vs training delivered -->
-          <div class="gp-c" data-size="full" id="card-match-vs-train">
-            <div class="gp-c-h">
-              <span class="ttl" data-i18n="gps_analysis.card_match_vs_train">Match demands vs training delivered</span>
-              <span class="sub" data-i18n="gps_analysis.card_match_vs_train_sub">last MD vs MC avg · squad means</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
-            </div>
-            <div class="gp-c-b" style="position:relative;min-height:200px">
-              <canvas id="canvasMatchVsTrain"></canvas>
             </div>
           </div>
 
@@ -1618,10 +1559,6 @@ const GP_CARD_DEFS = {
   mgrp: [
     // ── Default-visible card (científica de ejemplo) ──
     { name: 'ACWR gauges',                    id: 'card-lm-gauges',      stub: false },
-    // ── Bespoke stasheadas (recuperables vía Add card) ──
-    { name: 'Risk alerts',                    id: 'card-lm-alerts',      stub: false },
-    { name: 'ACWR by player',                 id: 'card-lm-table',       stub: false },
-    { name: 'Match demands vs training',      id: 'card-match-vs-train', stub: false },
     // ── Not yet implemented ──
     { name: 'Us vs opponent',                 id: null, stub: true },
   ],
@@ -2256,7 +2193,7 @@ async function applyMcDefaultLayout() {
 // Same first-load minimization as grp/mc, parametrized by a defaults Set.
 // On first load: stash every catalog card whose id is not in defaultsSet.
 const _IND_DEFAULTS  = new Set(['card-acwr', 'card-gen-week-kpi']);
-const _MGRP_DEFAULTS = new Set(['card-lm-gauges', 'card-gen-weekly-load']);
+const _MGRP_DEFAULTS = new Set(['card-lm-gauges']);
 const _MIND_DEFAULTS = new Set(['card-mp-td', 'card-mp-hi']);
 
 async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
@@ -11725,11 +11662,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // lm-info) eliminados: la barra de desplegables (gpFilterBar) es la ÚNICA fuente de
   // filtrado. lmInfo queda como sink detached para no romper los mensajes de estado.
   const lmInfo      = document.getElementById('lm-info') || document.createElement('span');
-  const alertsBody  = document.getElementById('lm-alerts-body');
+  // Risk-alerts and ACWR-by-player cards were removed; keep detached sinks so the shared
+  // lmLoad() (which still drives the ACWR gauges) can write to them harmlessly.
+  const alertsBody  = document.getElementById('lm-alerts-body') || document.createElement('div');
   const gaugesBody  = document.getElementById('lm-gauges-body');
-  const tableBody   = document.getElementById('lm-table-body');
+  const tableBody   = document.getElementById('lm-table-body') || document.createElement('div');
   const zoneFilter  = document.getElementById('lm-zone-filter');
-  if (!document.querySelector('.gp-view[data-view="mgrp"] .gp-grid')) return;
+  if (!gaugesBody) return;   // gauges card gone too → nothing to drive here
 
   let _playerAcwrData = null;
   let _playerMap      = {};
@@ -11772,8 +11711,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       lmInfo.textContent = `Ref: ${refDate || 'today'} · ${Object.keys(_playerAcwrData).length} players`;
 
       _renderGauges(teamAcwr);
-      _renderAlerts(metricKey);
-      _renderTable();
+      // Risk-alerts and ACWR-by-player cards were removed — only the gauges remain here.
     } catch (e) { console.error('lmLoad:', e); lmInfo.textContent = tt('gps_analysis.error_calc_acwr','Error calculating ACWR.'); }
   }
 
