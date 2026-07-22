@@ -1363,8 +1363,15 @@
         if (!S) return;
         const row = e.target.closest('[data-rl-idx]'); if (!row) return;
         const ln = S.referenceLines?.[+row.dataset.rlIdx]; if (!ln) return;
+        // Manual/auto mode dropdown → changes which controls the slot shows → rebuild the list.
+        if (e.target.matches('[data-rl-valmode]') || e.target.matches('[data-rl-val2mode]')) {
+          _applyRefMode(ln, e.target.matches('[data-rl-val2mode]'), e.target.value);
+          renderRefLines(); renderCard(); return;
+        }
         if      (e.target.matches('[data-rl-value]'))   { const v = e.target.value.trim(); ln.value  = v === '' ? null : Number(v); }
         else if (e.target.matches('[data-rl-value2]'))  { const v = e.target.value.trim(); ln.value2 = v === '' ? null : Number(v); }
+        else if (e.target.matches('[data-rl-sdn]'))       ln.sdN  = Number(e.target.value);
+        else if (e.target.matches('[data-rl-sdn2]'))      ln.sdN2 = Number(e.target.value);
         else if (e.target.matches('[data-rl-label]'))     ln.label   = e.target.value;
         else if (e.target.matches('[data-rl-color]'))     ln.color   = e.target.value;
         else if (e.target.matches('[data-rl-opacity]'))   ln.opacity = Number(e.target.value);
@@ -1376,6 +1383,12 @@
         const row = e.target.closest('[data-rl-idx]'); if (!row) return;
         const idx = +row.dataset.rlIdx;
         if (e.target.closest('[data-rl-del]')) { S.referenceLines.splice(idx, 1); renderRefLines(); renderCard(); return; }
+        // "show value in label" toggle (per line)
+        if (e.target.closest('[data-rl-showval]')) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.showValue = !ln.showValue;
+          renderRefLines(); renderCard(); return;
+        }
         // line ↔ band: changes which controls the row shows (value2 / fill) → rebuild the list.
         const typeBtn = e.target.closest('[data-rl-type]');
         if (typeBtn) {
@@ -1590,10 +1603,32 @@
     if (!host) return;
     const lines = (S && Array.isArray(S.referenceLines)) ? S.referenceLines : [];
     const inputCss = 'height:26px;min-width:0;padding:0 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)';
+    const selCss   = 'height:26px;min-width:0;padding:0 4px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans);cursor:pointer';
     const isScatter = !!(S && S.type === 'scatter');
+    // Value slot: a Manual/auto dropdown; Manual shows a number input, Mean±SD shows an n selector.
+    const MODES = [
+      ['manual', _tt('gps_analysis.builder_ref_mode_manual', 'Manual')],
+      ['mean',   _tt('gps_analysis.builder_ref_auto_mean', 'Average')],
+      ['median', _tt('gps_analysis.builder_ref_auto_median', 'Median')],
+      ['sd+',    _tt('gps_analysis.builder_ref_auto_sd_plus', 'Mean + SD')],
+      ['sd-',    _tt('gps_analysis.builder_ref_auto_sd_minus', 'Mean − SD')],
+      ['max',    _tt('gps_analysis.builder_ref_auto_max', 'Maximum')],
+      ['min',    _tt('gps_analysis.builder_ref_auto_min', 'Minimum')],
+    ];
+    const slot = (raw, sdN, sdDir, mKey, vKey, sKey, ph) => {
+      const tok  = _isRefToken(raw);
+      const mode = !tok ? 'manual' : (raw === 'sd' ? (sdDir === '-' ? 'sd-' : 'sd+') : raw);
+      const sel  = `<select data-${mKey} style="${selCss}">${MODES.map(([k, l]) => `<option value="${k}" ${k === mode ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      const num  = mode === 'manual'
+        ? `<input type="number" data-${vKey} value="${(raw != null && !tok) ? esc(String(raw)) : ''}" placeholder="${esc(ph)}" style="width:54px;flex:0 0 auto;${inputCss}">` : '';
+      const sd   = (mode === 'sd+' || mode === 'sd-')
+        ? `<select data-${sKey} style="${selCss}">${[1, 1.5, 2, 2.5].map(n => `<option value="${n}" ${Number(sdN || 1) === n ? 'selected' : ''}>${n}·SD</option>`).join('')}</select>` : '';
+      return sel + num + sd;
+    };
     host.innerHTML = lines.map((ln, i) => {
       const band = ln.type === 'band';
       const onX  = ln.axis === 'x';
+      const fromPh = band ? _tt('gps_analysis.builder_ref_band_from', 'From') : _tt('gps_analysis.builder_ref_line_value', 'Value');
       return `
       <div data-rl-idx="${i}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.18)">
         <input type="color" data-rl-color value="${esc(ln.color || '#DC2626')}" title="${esc(_tt('gps_analysis.builder_ref_line_color', 'Line color'))}" style="width:26px;height:26px;flex:0 0 auto;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer">
@@ -1605,9 +1640,10 @@
           <button type="button" data-rl-type="line" class="${!band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_line', 'Line'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-type="band" class="${band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_band', 'Band'))}"><i class="ti ti-columns"></i></button>
         </div>
-        <input type="number" data-rl-value value="${ln.value != null ? esc(String(ln.value)) : ''}" placeholder="${esc(band ? _tt('gps_analysis.builder_ref_band_from', 'From') : _tt('gps_analysis.builder_ref_line_value', 'Value'))}" style="width:56px;flex:0 0 auto;${inputCss}">
-        ${band ? `<input type="number" data-rl-value2 value="${ln.value2 != null ? esc(String(ln.value2)) : ''}" placeholder="${esc(_tt('gps_analysis.builder_ref_band_to', 'To'))}" style="width:56px;flex:0 0 auto;${inputCss}">` : ''}
+        ${slot(ln.value, ln.sdN, ln.sdDir, 'rl-valmode', 'rl-value', 'rl-sdn', fromPh)}
+        ${band ? slot(ln.value2, ln.sdN2, ln.sdDir2, 'rl-val2mode', 'rl-value2', 'rl-sdn2', _tt('gps_analysis.builder_ref_band_to', 'To')) : ''}
         <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 88px;${inputCss}">
+        <button type="button" data-rl-showval title="${esc(_tt('gps_analysis.builder_ref_show_value', 'Show value in label'))}" style="flex:0 0 auto;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:700 11px/1 var(--cm-font-sans);background:${ln.showValue ? 'var(--cm-accent,#15803D)' : 'var(--cm-bg)'};color:${ln.showValue ? '#fff' : 'var(--cm-fg-muted)'}">#</button>
         <div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-style="solid"  class="${ln.style !== 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_solid', 'Solid'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-style="dashed" class="${ln.style === 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_dashed', 'Dashed'))}"><i class="ti ti-line-dashed"></i></button>
@@ -2771,22 +2807,77 @@
     },
   };
 
-  // Shared sanitizer for referenceLines (bars + scatter). Each item → a normalized LINE or BAND.
-  // `axis` ('x'|'y', default 'y') only matters for scatter (two value axes); bars ignore it, so
-  // carrying it is harmless and keeps bars byte-identical. Missing `type` → 'line' (Paso-1 retrocompat).
-  function _sanitizeRefItems(list) {
-    return (list || [])
-      .filter(r => r && Number.isFinite(Number(r.value)))
-      .map(r => {
-        const type = r.type === 'band' ? 'band' : 'line';
-        const v2 = Number(r.value2);
-        return { type, axis: r.axis === 'x' ? 'x' : 'y', value: Number(r.value),
-                 value2: (type === 'band' && Number.isFinite(v2)) ? v2 : null,
-                 fill: r.fill === 'bordered' ? 'bordered' : 'solid',
-                 label: r.label || '', color: r.color || '#DC2626',
-                 style: r.style === 'dashed' ? 'dashed' : 'solid',
-                 opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))) };
-      });
+  // ── Reference lines/bands: auto (computed) values ─────────────────────────
+  // A value can be a fixed number (as before) or an auto TOKEN computed from the data the card is
+  // currently showing. The token is what's persisted; the number is recomputed on every render, so
+  // the line moves when filters/data change.
+  const _REF_TOKENS = new Set(['mean', 'median', 'sd', 'max', 'min']);
+  const _isRefToken = v => typeof v === 'string' && _REF_TOKENS.has(v);
+
+  // Compute a token over `vals` (the visible data). 'sd' → mean + dir·n·SD (POPULATION SD), which
+  // also expresses z-scores (z=+2 ⇒ mean+2·SD). Returns null on empty data (line simply isn't drawn).
+  function _refStat(token, vals, sdN, sdDir) {
+    const xs = (vals || []).map(Number).filter(v => Number.isFinite(v));
+    if (!xs.length) return null;
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    if (token === 'mean') return mean;
+    if (token === 'max')  return Math.max(...xs);
+    if (token === 'min')  return Math.min(...xs);
+    if (token === 'median') {
+      const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+    if (token === 'sd') {
+      const variance = xs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / xs.length;
+      const k = Number(sdN) || 1, dir = sdDir === '-' ? -1 : 1;
+      return mean + dir * k * Math.sqrt(variance);
+    }
+    return null;
+  }
+
+  // Shared sanitizer for referenceLines (bars + scatter). Each item → a normalized LINE or BAND with
+  // RESOLVED numeric value/value2: a fixed number stays as-is; an auto token is computed here over the
+  // VISIBLE data via valuesFor(item) — so option B (axis max) sees the computed value and the line
+  // moves with the data. `axis` ('x'|'y', default 'y') only matters for scatter; bars ignore it.
+  // Missing `type` → 'line' (Paso-1 retrocompat); a plain numeric item behaves exactly as before.
+  function _sanitizeRefItems(list, valuesFor) {
+    const keep = (list || []).filter(r => r && (Number.isFinite(Number(r.value)) || _isRefToken(r.value)));
+    return keep.map(r => {
+      const type = r.type === 'band' ? 'band' : 'line';
+      const arr  = typeof valuesFor === 'function' ? valuesFor({ axis: r.axis === 'x' ? 'x' : 'y' }) : null;
+      const resolve = (raw, sdN, sdDir) => _isRefToken(raw)
+        ? _refStat(raw, arr, sdN, sdDir)
+        : (Number.isFinite(Number(raw)) ? Number(raw) : null);
+      return {
+        type, axis: r.axis === 'x' ? 'x' : 'y',
+        value:  resolve(r.value,  r.sdN,  r.sdDir),
+        value2: type === 'band' ? resolve(r.value2, r.sdN2, r.sdDir2) : null,
+        fill: r.fill === 'bordered' ? 'bordered' : 'solid',
+        label: r.label || '', color: r.color || '#DC2626',
+        style: r.style === 'dashed' ? 'dashed' : 'solid',
+        opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))),
+        showValue: !!r.showValue,
+      };
+    });
+  }
+
+  // Label text for a sanitized ref item: the user's text, plus the computed number(s) when the
+  // per-line "show value" toggle is on ("Average (847)", or "110–130" for a band).
+  function _refLabelText(ln) {
+    const base = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+    if (!ln.showValue) return base;
+    const r1 = v => fmt(Math.round(Number(v) * 10) / 10);
+    const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
+    const num = isBand ? `${r1(ln.value)}–${r1(ln.value2)}` : (Number.isFinite(Number(ln.value)) ? r1(ln.value) : '');
+    return num ? (base ? `${base} (${num})` : num) : base;
+  }
+
+  // Editor: apply an auto-mode dropdown choice to a raw S item (value or value2 slot).
+  function _applyRefMode(ln, slot2, mode) {
+    const vKey = slot2 ? 'value2' : 'value', nKey = slot2 ? 'sdN2' : 'sdN', dKey = slot2 ? 'sdDir2' : 'sdDir';
+    if (mode === 'sd+' || mode === 'sd-') { ln[vKey] = 'sd'; ln[dKey] = mode === 'sd-' ? '-' : '+'; if (ln[nKey] == null) ln[nKey] = 1; }
+    else if (mode === 'manual')           { ln[vKey] = null; ln[dKey] = null; }
+    else                                  { ln[vKey] = mode; ln[dKey] = null; }   // mean/median/max/min
   }
 
   /**
@@ -2842,7 +2933,7 @@
         if (!Number.isFinite(val)) continue;
         const color = ln.color || '#DC2626';
         const op    = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
-        const txt   = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+        const txt   = _refLabelText(ln);
         const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
 
         if (isBand) {
@@ -2975,10 +3066,13 @@
     const barDs  = datasets.filter(d => !d._isLine);
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
     // Reference lines/bands: sanitize once (shared with scatter). Bars ignore item.axis and always
-    // draw on their single value axis, so it's harmless here. Option B — fold value AND value2 into
-    // the value-axis max so a high line/band still lands inside the plot. Absent/empty on every
-    // existing card → refMax = 0 → maxVal unchanged (retrocompat).
-    const refLines = _sanitizeRefItems(config.referenceLines);
+    // draw on their single value axis, so it's harmless here. Auto tokens (mean/median/sd/max/min) are
+    // computed over the PRIMARY metric — the first bar dataset (excludes the combo line and the grey MC
+    // reference bar). Option B — fold value AND value2 (resolved) into the value-axis max so a high
+    // line/band still lands inside the plot. Absent/empty on every existing card → refMax = 0 →
+    // maxVal unchanged (retrocompat).
+    const _refPrimaryVals = (barDs[0]?.data || []).filter(v => v != null).map(Number);
+    const refLines = _sanitizeRefItems(config.referenceLines, () => _refPrimaryVals);
     const refMax  = refLines.length
       ? Math.max(0, ...refLines.flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v))))
       : 0;
@@ -3488,7 +3582,7 @@
         if (!scale) continue;
         const color = ln.color || '#DC2626';
         const op    = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
-        const txt   = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
+        const txt   = _refLabelText(ln);
         const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
         const inY = p => p >= A_T && p <= A_B, inX = p => p >= A_L && p <= A_R;
 
@@ -3647,10 +3741,13 @@
     const avgY = paired.reduce((a, p) => a + p.y, 0) / paired.length;
     const xUnit = sX.unit || '', yUnit = sY.unit || '';
 
-    // Reference lines/bands (scatter): each item declares axis 'x'|'y'. Option B PER AXIS — the ref
-    // values on each axis extend that axis's range (suggestedMin/Max in mountScatterChart), so a high
-    // X line stretches X and a high Y line stretches Y. Absent → no refLines → axes unchanged.
-    const refLines = _sanitizeRefItems(config.referenceLines);
+    // Reference lines/bands (scatter): each item declares axis 'x'|'y'. Auto tokens are computed over
+    // the SAME axis (axis 'x' → X values, axis 'y' → Y values), reusing the paired data the avg cross
+    // is built from. Option B PER AXIS — the resolved ref values on each axis extend that axis's range
+    // (suggestedMin/Max in mountScatterChart), so a high X line stretches X and a high Y line stretches
+    // Y. Absent → no refLines → axes unchanged.
+    const _refXs = paired.map(p => p.x), _refYs = paired.map(p => p.y);
+    const refLines = _sanitizeRefItems(config.referenceLines, item => item.axis === 'x' ? _refXs : _refYs);
     const axisRange = which => {
       const vals = refLines.filter(r => (r.axis === 'x') === (which === 'x'))
         .flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v)));
