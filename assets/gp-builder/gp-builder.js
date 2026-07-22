@@ -4430,25 +4430,32 @@
   /** Generalized half-circle gauge SVG (200×110 viewBox). value 0→max maps to angle π→0.
    *  `zones` = [{from,to,color}] colored arcs; a needle points at `value` (omitted when value
    *  is null → "no data" dash gauge). Text uses theme CSS vars. Based on GPS Analysis _gaugeSVG. */
-  function _gaugeSvg({ value, max, zones, valueText, zoneLabel, axisLabel, minLabel, maxLabel }) {
+  function _gaugeSvg({ value, max, zones, valueText, zoneLabel, axisLabel, minLabel, maxLabel, gradient }) {
     const cx = 100, cy = 92, r = 68, sw = 12;
     const M  = (max > 0 && isFinite(max)) ? max : 1;
+    // Unique gradient id per gauge — the semicircle's X is monotonic with the value
+    // (left=0 → centre=mid → right=max), so a horizontal green→amber→red gradient maps 1:1.
+    const gid = 'gg-' + (_gaugeSvg._seq = (_gaugeSvg._seq || 0) + 1);
     const pt = v => {
       const a = Math.PI * (1 - Math.min(Math.max(v, 0), M) / M);
       return [+(cx + r * Math.cos(a)).toFixed(1), +(cy - r * Math.sin(a)).toFixed(1)];
     };
-    const arc = (v1, v2, color) => {
+    const arc = (v1, v2, stroke) => {
       const [x1, y1] = pt(v1), [x2, y2] = pt(Math.min(v2, M));
       const span  = (Math.min(v2, M) - v1) / M;
       const large = span > 0.5 ? 1 : 0;
-      return `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt"/>`;
+      return `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>`;
     };
     const hasVal = value != null && isFinite(value);
     const v = hasVal ? Math.min(M, Math.max(0, value)) : 0;
     const [nx, ny] = pt(v);
-    const zoneArcs = (zones || []).map(z => arc(z.from, z.to, z.color)).join('');
+    const track = gradient
+      ? `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">`
+        + `<stop offset="0%" stop-color="#22c55e"/><stop offset="55%" stop-color="#eab308"/><stop offset="100%" stop-color="#ef4444"/>`
+        + `</linearGradient></defs>${arc(0, M, `url(#${gid})`)}`
+      : (zones || []).map(z => arc(z.from, z.to, z.color)).join('');
     return `<svg viewBox="0 0 200 110" style="width:100%;max-width:170px;display:block;margin:0 auto">
-      ${zoneArcs}
+      ${track}
       ${hasVal ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
       <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
       <text x="${cx}" y="${cy - 22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${esc(valueText || '')}</text>
@@ -4536,11 +4543,12 @@
           minLabel: '0%', maxLabel: '150%',
         };
       }
-      // raw value on a nice-ceiling scale, single accent-coloured arc.
+      // raw value on a nice-ceiling scale, green→amber→red gradient track (speedometer look).
       const mx = _niceMax(value);
       return {
         value, max: mx, axisLabel: name,
-        zones: [{ from: 0, to: mx, color: accent }],
+        gradient: true,
+        zones: [{ from: 0, to: mx, color: accent }],   // fallback if gradient unsupported
         valueText: fmt(Math.round(value * 10) / 10) + (unit ? ' ' + unit : ''),
         zoneLabel: '',
         minLabel: '0', maxLabel: fmt(mx),
