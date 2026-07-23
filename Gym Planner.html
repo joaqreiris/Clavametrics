@@ -970,13 +970,13 @@ function gpApplyRowMode(tr, mode) {
 function gpVelZone(v) {
   const LO = 0.3, HI = 1.5;
   const pos = Math.max(0, Math.min(100, (v - LO) / (HI - LO) * 100));
-  let label;
-  if      (v < 0.5) label = tt('gym_planner.vz_max_strength',   'Max strength');
-  else if (v < 0.75) label = tt('gym_planner.vz_strength_speed', 'Strength-speed');
-  else if (v < 1.0) label = tt('gym_planner.vz_power',          'Power');
-  else if (v < 1.3) label = tt('gym_planner.vz_speed_strength', 'Speed-strength');
-  else              label = tt('gym_planner.vz_speed',           'Speed');
-  return { pos, label };
+  let label, color;
+  if      (v < 0.5) { label = tt('gym_planner.vz_max_strength',   'Max strength');   color = '#DC2626'; }
+  else if (v < 0.75) { label = tt('gym_planner.vz_strength_speed', 'Strength-speed'); color = '#D97706'; }
+  else if (v < 1.0) { label = tt('gym_planner.vz_power',          'Power');          color = '#CA8A04'; }
+  else if (v < 1.3) { label = tt('gym_planner.vz_speed_strength', 'Speed-strength'); color = '#16A34A'; }
+  else              { label = tt('gym_planner.vz_speed',           'Speed');          color = '#2563EB'; }
+  return { pos, label, color };
 }
 // Position the marker on the velocity-zone bar from the row's target-velocity input.
 function gpUpdateVZone(tr) {
@@ -987,13 +987,16 @@ function gpUpdateVZone(tr) {
   const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
   const v = parseFloat((inputs[2]?.value || '').replace(',', '.'));
   const mk = vz.querySelector('.mk');
+  const lbl = tr.querySelector('.gp-vzone-lbl');
   if (!isFinite(v) || v <= 0) {
     if (mk) mk.style.display = 'none';
+    if (lbl) lbl.style.display = 'none';
     vz.title = tt('gym_planner.vel_zone_hint', 'Velocity zone');
     return;
   }
   const z = gpVelZone(v);
   if (mk) { mk.style.display = ''; mk.style.left = z.pos + '%'; }
+  if (lbl) { lbl.style.display = ''; lbl.textContent = z.label; lbl.style.color = z.color; }
   vz.title = z.label + ' · ' + v.toFixed(2) + ' m/s';
 }
 
@@ -1005,7 +1008,7 @@ function gpAddMainRow() {
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
-    <td><div class="gp-load-cell"><input class="num-input" placeholder="—"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div></div></td>
+    <td><div class="gp-load-cell"><input class="num-input" placeholder="—"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div><span class="gp-vzone-lbl" style="display:none;font:600 9.5px/1 var(--cm-font-sans);white-space:nowrap"></span></div></td>
     <td><span class="pct">—</span><input class="gp-vbt-loss num-input" placeholder="${tt('gym_planner.vloss_ph','VL %')}" title="${tt('gym_planner.vel_loss','Vel loss')} %" style="display:none;width:56px" oninput="gpScheduleSave()"></td>
     <td><input placeholder="2 min"></td>
     <td><input placeholder="2-0-1"></td>
