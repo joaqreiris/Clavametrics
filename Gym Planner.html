@@ -130,7 +130,7 @@
   #gpPrintSheet{ display:none; }
   @media print {
     @page { size:A4; margin:0; }
-    .hub-shell, #hub-side-root, .hub-topbar, main, .no-print, .cm-sidebar-overlay, .cm-sidebar-toggle { display:none !important; }
+    .hub-shell, #hub-side-root, .hub-topbar, main, .no-print, .cm-sidebar-overlay, .cm-sidebar-toggle, #gpGrpOv { display:none !important; }
     #gpPrintSheet{ display:block !important; }
     .gsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -397,6 +397,14 @@ function gpRecalcTotals() {
       const srVal   = cells[3]?.querySelector('input')?.value || '';
       const loadVal = (cells[4]?.querySelector('input')?.value || '').trim();
 
+      // VBT rows: reps are open (velocity-based) → count sets only, no tonnage/%1RM.
+      const isVbt = tr.querySelector('.gp-mode button.is-on')?.textContent.trim() === 'VBT';
+      if (isVbt) {
+        const sm = srVal.match(/^(\d+)/);
+        if (sm) mainSets += parseInt(sm[1]);
+        return;
+      }
+
       // Parse "4 × 5", "3 × 8/leg", "4 × 3" — leading digit is sets
       const srM = srVal.match(/^(\d+)\s*[×x]\s*(\d+)(\/leg)?/i);
       if (srM) {
@@ -502,11 +510,13 @@ function gpDeleteRow(btn) {
 // ── Persistencia del contenido (warmup/plyo/main) ──
 function gpCollectRows(tbodyId, withMode) {
   return [...document.getElementById(tbodyId).querySelectorAll('tr')].map(tr => {
-    const v = [...tr.querySelectorAll('input')].map(i => i.value);
+    // Exclude the VBT velocity-loss input so the core `v` array stays index-stable.
+    const v = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss')).map(i => i.value);
     const exId = tr.dataset.exId || null;
     if (withMode) {
       const on = tr.querySelector('.gp-mode button.is-on');
-      return { v, exId, mode: on ? on.textContent.trim() : 'SR' };
+      const vloss = tr.querySelector('.gp-vbt-loss')?.value || '';
+      return { v, exId, mode: on ? on.textContent.trim() : 'SR', vloss };
     }
     return { v, exId };
   });
@@ -525,8 +535,10 @@ function gpCollectContent() {
 const gpRowVals = r => Array.isArray(r) ? r : (r?.v || []);
 const gpRowEx   = r => Array.isArray(r) ? null : (r?.exId || null);
 const gpRowMode = r => Array.isArray(r) ? null : (r?.mode || null);
+const gpRowVloss = r => Array.isArray(r) ? '' : (r?.vloss || '');
 function gpFillRow(tr, vals, exId) {
-  const inputs = tr.querySelectorAll('input');
+  // Fill only the core inputs (exclude the VBT loss input) so indices align with `v`.
+  const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
   (vals || []).forEach((val, i) => { if (inputs[i]) inputs[i].value = val; });
   if (exId) tr.dataset.exId = exId;
 }
@@ -542,8 +554,8 @@ function gpApplyContent(content) {
   const mb = document.getElementById('gpMainBody'); mb.innerHTML = '';
   (content.main?.rows || []).forEach(r => {
     gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, gpRowVals(r), gpRowEx(r));
-    const mode = gpRowMode(r);
-    if (mode) tr.querySelectorAll('.gp-mode button').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === mode));
+    const lossEl = tr.querySelector('.gp-vbt-loss'); if (lossEl) lossEl.value = gpRowVloss(r);
+    gpApplyRowMode(tr, gpRowMode(r) || 'SR');
   });
   setMin('gpMainMin', content.main?.min);
   gpRecalcTotals();
@@ -924,6 +936,28 @@ function gpAddPlyoRow() {
   gpRecalcTotals();
 }
 
+// Reconfigure a main-work row for SR (sets×reps) or VBT (velocity-based) WITHOUT
+// changing the cell/input structure — keeps save/restore/totals/print by-index intact.
+// SR:  Sets×Reps · Load (kg) · %1RM span
+// VBT: Sets (open reps) · Target velocity (m/s) · Velocity-loss % (set-stop)
+function gpApplyRowMode(tr, mode) {
+  const isVbt = mode === 'VBT';
+  tr.querySelectorAll('.gp-mode button').forEach(b =>
+    b.classList.toggle('is-on', b.textContent.trim() === (isVbt ? 'VBT' : 'SR')));
+  const inputs    = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
+  const srInput   = inputs[1];   // sets×reps  → sets
+  const loadInput = inputs[2];   // load (kg)  → target velocity (m/s)
+  const unitEl    = tr.querySelector('.gp-unit');
+  const pctEl     = tr.querySelector('.pct');
+  const lossEl    = tr.querySelector('.gp-vbt-loss');
+  if (srInput)   srInput.placeholder   = isVbt ? tt('gym_planner.sets_ph', 'sets') : '3 × 8';
+  if (loadInput) loadInput.placeholder = isVbt ? '0.75' : '—';
+  if (unitEl)    unitEl.textContent    = isVbt ? 'm/s' : 'kg';
+  if (pctEl)     pctEl.style.display   = isVbt ? 'none' : '';
+  if (lossEl)    lossEl.style.display  = isVbt ? '' : 'none';
+  tr.classList.toggle('is-vbt', isVbt);
+}
+
 function gpAddMainRow() {
   const tbody = document.getElementById('gpMainBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
@@ -932,8 +966,8 @@ function gpAddMainRow() {
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
-    <td><input class="num-input" placeholder="—"> <span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span></td>
-    <td><span class="pct">—</span></td>
+    <td><input class="num-input" placeholder="—"> <span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span></td>
+    <td><span class="pct">—</span><input class="gp-vbt-loss num-input" placeholder="${tt('gym_planner.vloss_ph','VL %')}" title="${tt('gym_planner.vel_loss','Vel loss')} %" style="display:none;width:56px" oninput="gpScheduleSave()"></td>
     <td><input placeholder="2 min"></td>
     <td><input placeholder="2-0-1"></td>
     <td><input class="num-input" placeholder="—"></td>
@@ -942,8 +976,8 @@ function gpAddMainRow() {
   // Wire SR/VBT toggle for the new row
   const modeEl = tr.querySelector('.gp-mode');
   modeEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    modeEl.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
+    gpApplyRowMode(tr, b.textContent.trim());
+    gpRecalcTotals();
     gpScheduleSave();
   }));
   tr.querySelector('input').focus();
@@ -1527,7 +1561,8 @@ function gpRenderPrintSheet() {
       return [...tb.querySelectorAll('tr')].map(tr => {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
-        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '' };
+        const mode = (tr.querySelector('.gp-mode button.is-on')?.textContent || '').trim();
+        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '', mode };
       });
     };
 
@@ -1641,9 +1676,17 @@ function gpRenderPrintSheet() {
     const mainBlock = mainRows.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${mainRows.map(r=>{
-        const params=[]; if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
+        const isVbt = r.mode === 'VBT';
+        const params=[];
+        if (isVbt) {
+          if(r.c3)params.push({l:tt('gym_planner.sets_label','Sets'),v:r.c3});
+          if(r.c4)params.push({l:tt('gym_planner.target_vel','Target vel'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' m/s'});
+          if(r.c5 && r.c5!=='—')params.push({l:tt('gym_planner.vel_loss','Vel loss'),v:/%/.test(r.c5)?r.c5:r.c5+'%'});
+        } else {
+          if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
+        }
         const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
-        return exCard({name:r.name, params, note, tag:'STR', tagColor:'#B91C1C', exId:r.exId});
+        return exCard({name:r.name, params, note, tag:isVbt?'VBT':'STR', tagColor:isVbt?'#2563EB':'#B91C1C', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
 
