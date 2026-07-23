@@ -355,7 +355,7 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
                ...(_normFmt(S.titleFormat)    ? { titleFormat:    _normFmt(S.titleFormat) }    : {}),
@@ -595,6 +595,10 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_player_photos">Player photos</span><span class="s" data-i18n="gps_analysis.builder_player_photos_sub">Draw each point as the player's photo</span></span>
                 <button class="es-sw-t" data-toggle="scatterAvatars"></button>
               </div>
+              <div class="es-toggle" data-only="scatter">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_rich_tooltip">Rich tooltip</span><span class="s" data-i18n="gps_analysis.builder_rich_tooltip_sub">Show a mini trend on hover</span></span>
+                <button class="es-sw-t is-on" data-toggle="richTooltip"></button>
+              </div>
               <div class="es-toggle is-stack" data-only="gauge">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
                 <div class="es-seg" id="gpbGaugeMode">
@@ -737,7 +741,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[],
+             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1114,6 +1118,7 @@
       S.showSub = cfg.showSub !== false;
       S.scatterLabel = cfg.scatterLabel || 'name';
       S.scatterAvatars = !!cfg.scatterAvatars;
+      S.richTooltip    = cfg.richTooltip !== false;   // ausente (cards viejas) → true (default ON)
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
       S.horizontal = !!cfg.horizontal;
@@ -1146,6 +1151,7 @@
       S.showSub = rawConfig.style?.showSub !== false;
       S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
       S.scatterAvatars = !!rawConfig.style?.scatterAvatars;
+      S.richTooltip    = rawConfig.style?.richTooltip !== false;   // ausente (cards viejas) → true (default ON)
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
@@ -2081,7 +2087,7 @@
       case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null); break;
       case 'bars':    mountBarsChart(container, config, series, opts.mcNames || null); break;
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
-      case 'scatter': mountScatterChart(container, config, series); break;
+      case 'scatter': mountScatterChart(container, config, series, { scatterSparks: opts.scatterSparks || null }); break;
       case 'kpi':     mountKpiCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
       case 'gauge':   mountGaugeCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, acwrMap: opts.acwrMap || null, example: opts.example }); break;
       case 'ranking': mountRankingCard(container, config, series); break;
@@ -2457,6 +2463,16 @@
         // (color, area, points) instantly, without hitting Supabase again.
         cardEl.__previewCache = { sig: _dataSig(config), series: lineSeries };
         drawOpts.lineSeries = lineSeries;
+      } else if (config.viz === 'scatter') {
+        // Rich tooltip: mapa pid→[{d,v}] (evolución en X) desde las MISMAS `rows` en memoria.
+        // Cero queries, cero resolver. Solo si el toggle está ON (default). Se reconstruye en
+        // cada resolve → un cambio de filtro trae rows nuevas ⇒ mapa nuevo (nunca queda viejo).
+        if (config.style?.richTooltip !== false) {
+          try {
+            const _xId = resolveEncodings('scatter', config.metrics, config.dimensions).x?.[0] ?? null;
+            drawOpts.scatterSparks = _buildScatterSparks(rows, eavMap, _xId, CORE_COLS);
+          } catch (e) { /* sparkline opcional — nunca romper la card */ }
+        }
       } else if (config.viz === 'kpi') {
         // Per-metric delta from the EXISTING comparison block:
         //  · mc    → already on the series points (.diff), enriched by Step 5a above.
@@ -2724,6 +2740,10 @@
     // Tear down the resize observer BEFORE destroying the chart (no dangling observer, no leak).
     if (body && body.__chartRO) { try { body.__chartRO.disconnect(); } catch (e) {} body.__chartRO = null; }
     if (body && body.__chart) { try { body.__chart.destroy(); } catch (e) {} body.__chart = null; }
+    // Scatter rich-tooltip div (lives INSIDE the card body): remove + null the ref so a
+    // re-mount never leaves two divs, and a deleted card leaves no orphan. Called before every
+    // re-render; card DELETION removes the whole subtree (the div goes with it) — this is belt+braces.
+    if (body && body.__ttEl) { try { body.__ttEl.remove(); } catch (e) {} body.__ttEl = null; }
   }
 
   // Live-redraw a chart when its container (the .gp-c-b `body`) resizes — e.g. dragging the
@@ -4153,8 +4173,98 @@
     });
   }
 
+  // ── Rich scatter tooltip: sparkline SVG + helpers ────────────────────────────
+  // _miniSpark: PURE fn (string SVG), portada de dossierSpark (Dossier.html). Sin canvas
+  // ni Chart.js → barata de generar e inyectar. Trazo = color de la card; textos en
+  // currentColor (los hereda el div del tooltip → theme-aware light/dark).
+  function _miniSpark(series, color) {
+    if (!series || series.length < 2) return '';
+    const W = 176, H = 44, L = 3, R = 3, T = 7, B = 11;
+    const vs = series.map(p => p.v), minV = Math.min(...vs), maxV = Math.max(...vs), span = (maxV - minV) || 1;
+    const x = i => L + (i / (series.length - 1)) * (W - L - R);
+    const y = v => T + (1 - (v - minV) / span) * (H - T - B);
+    const pts = series.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const l = series[series.length - 1], stroke = color || '#15803D';
+    const sd = iso => String(iso || '').slice(5);   // 'MM-DD'
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;margin-top:6px;overflow:visible">`
+      + `<polyline points="${pts}" fill="none" stroke="${esc(stroke)}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`
+      + `<circle cx="${x(series.length - 1).toFixed(1)}" cy="${y(l.v).toFixed(1)}" r="2.4" fill="${esc(stroke)}"/>`
+      + `<text x="${L}" y="${H - 2}" font-size="7.5" fill="currentColor" opacity="0.55" font-family="ui-monospace,monospace">${esc(sd(series[0].d))}</text>`
+      + `<text x="${W - R}" y="${H - 2}" font-size="7.5" fill="currentColor" opacity="0.55" text-anchor="end" font-family="ui-monospace,monospace">${esc(sd(l.d))}</text>`
+      + `</svg>`;
+  }
+
+  // Construye pid → [{d,v}] (evolución por sesión de la métrica X) desde las MISMAS `rows`
+  // ya en memoria — cero queries, cero resolver. Un valor por jugador/fecha (avg si hubiera
+  // duplicados, ej. periods). Devuelve null si nada tiene ≥2 puntos. Se reconstruye en cada
+  // resolve (cambio de filtro ⇒ nuevas rows ⇒ nuevo mapa) → el sparkline nunca queda viejo.
+  function _buildScatterSparks(rows, eavMap, xId, coreCols) {
+    if (!xId || !Array.isArray(rows) || !rows.length) return null;
+    const isCore = coreCols && coreCols.has(xId);
+    const byPid = new Map();
+    for (const r of rows) {
+      const pid = r.player_id; if (pid == null) continue;
+      const dt = r.training_sessions?.session_date || r.session_date; if (!dt) continue;
+      const raw = isCore ? Number(r[xId]) : Number(eavMap?.get?.(r.id)?.[xId]);
+      if (raw == null || isNaN(raw)) continue;
+      let m = byPid.get(pid); if (!m) { m = new Map(); byPid.set(pid, m); }
+      const cur = m.get(dt) || { s: 0, n: 0 }; cur.s += raw; cur.n += 1; m.set(dt, cur);
+    }
+    const out = new Map();
+    for (const [pid, m] of byPid) {
+      const s = [...m.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([dt, v]) => ({ d: dt, v: v.s / v.n }));
+      if (s.length >= 2) out.set(pid, s);
+    }
+    return out.size ? out : null;
+  }
+
+  // Idempotente: reusa body.__ttEl si sigue conectado; si no (primer hover o post-re-mount,
+  // donde innerHTML='' lo borró), crea uno nuevo DENTRO de `wrap` (hijo del card body → una
+  // card borrada se lo lleva, sin huérfanos). Nunca crea dos para la misma card.
+  function _scatterTtEl(body, wrap) {
+    let el = body.__ttEl;
+    if (el && el.isConnected) return el;
+    el = document.createElement('div');
+    el.className = 'gp-scatter-tt';
+    el.style.cssText = 'position:absolute;z-index:20;pointer-events:none;opacity:0;transition:opacity .12s;'
+      + 'width:196px;padding:9px 11px;border-radius:9px;'
+      + 'background:var(--cm-surface,#fff);border:1px solid var(--cm-border,#e5e7eb);'
+      + 'box-shadow:var(--cm-shadow-2,0 6px 20px rgba(0,0,0,0.14));'
+      + 'font:500 11px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg,#374151)';
+    wrap.appendChild(el);
+    body.__ttEl = el;
+    return el;
+  }
+
+  // HTML de texto del tooltip (mismo contenido que el tooltip nativo de hoy).
+  function _scatterTtText(raw, d) {
+    const x = Math.round((raw.x ?? 0) * 10) / 10, y = Math.round((raw.y ?? 0) * 10) / 10;
+    let h = `<div style="font-weight:600;color:var(--cm-fg-strong,#111);margin-bottom:4px">${esc(raw.name || '')}</div>`;
+    h += `<div style="color:var(--cm-fg-muted,#6B7280)">${esc(d.xName)}: <b style="color:var(--cm-fg,#374151)">${fmt(x)}${d.xUnit ? ' ' + esc(d.xUnit) : ''}</b></div>`;
+    h += `<div style="color:var(--cm-fg-muted,#6B7280)">${esc(d.yName)}: <b style="color:var(--cm-fg,#374151)">${fmt(y)}${d.yUnit ? ' ' + esc(d.yUnit) : ''}</b></div>`;
+    if (d.hasSize && raw.size != null) {
+      const s = Math.round(raw.size * 10) / 10;
+      h += `<div style="color:var(--cm-fg-muted,#6B7280)">${esc(d.sizeName)}: <b style="color:var(--cm-fg,#374151)">${fmt(s)}${d.sizeUnit ? ' ' + esc(d.sizeUnit) : ''}</b></div>`;
+    }
+    return h;
+  }
+
+  // "vs prom ±%": ÚLTIMA sesión vs el promedio de la MISMA serie. Ambos en escala por-sesión
+  // → self-consistente. (NO usar el valor X del punto: ese es el agregado del rango —con
+  //  agg=total sería una suma vs una media, un +% absurdo. Este bug ya nos mordió antes.)
+  function _scatterVsAvg(series) {
+    if (!series || series.length < 2) return '';
+    const avg = series.reduce((a, b) => a + b.v, 0) / series.length;
+    if (!(avg > 0)) return '';
+    const last = series[series.length - 1].v;
+    const pct = Math.round((last - avg) / avg * 100), up = pct >= 0;
+    const col = up ? 'var(--cm-success,#16a34a)' : 'var(--cm-danger,#dc2626)';
+    const lbl = _tt('gps_analysis.tooltip_vs_avg', 'vs avg');
+    return `<div style="margin-top:5px;font:600 10.5px/1 var(--cm-font-mono,monospace);color:${col}">${esc(lbl)} ${up ? '+' : ''}${pct}%</div>`;
+  }
+
   /** Mounts (or re-mounts) a Chart.js scatter into `body`. Same renderer for preview + saved card. */
-  function mountScatterChart(body, config, series) {
+  function mountScatterChart(body, config, series, opts = {}) {
     const d = scatterChartData(config, series);
     if (!d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_scatter_needs_two', 'Scatter needs two measures with overlapping entities.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
@@ -4166,6 +4276,33 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
+      // Rich tooltip setup (por mount → cache fresca por render; cambio de filtro re-monta →
+      // sparkCache nueva, nunca datos viejos). `sparks` = mapa pid→serie construido en el resolve.
+      const rich       = config.style?.richTooltip !== false;   // undefined (cards viejas) → true
+      const sparks     = opts.scatterSparks || null;
+      const sparkCache = new Map();                             // pid → HTML del sparkline (por render)
+      const _extTooltip = (context) => {
+        const el = _scatterTtEl(body, wrap);                   // idempotente (reusa o crea 1)
+        const tt = context.tooltip;
+        if (!tt || tt.opacity === 0) { el.style.opacity = '0'; return; }
+        const dp = tt.dataPoints && tt.dataPoints[0]; if (!dp) { el.style.opacity = '0'; return; }
+        const raw = dp.raw || {}, pid = raw.pid;
+        let extra = '';
+        if (sparks && pid != null) {
+          if (sparkCache.has(pid)) extra = sparkCache.get(pid);
+          else {
+            const s = sparks.get(pid);
+            extra = s ? _scatterVsAvg(s) + _miniSpark(s, config.style?.color) : '';
+            sparkCache.set(pid, extra);                        // re-hover mismo jugador → sin recomputar
+          }
+        }
+        el.innerHTML = _scatterTtText(raw, d) + extra;
+        // Posición relativa a `wrap` (== canvas): caretX/Y son coords del canvas. Flip si pega al borde.
+        const cw = context.chart.width || wrap.clientWidth, TTW = 196, pad = 12;
+        let left = tt.caretX + pad; if (left + TTW > cw) left = tt.caretX - TTW - pad; if (left < 0) left = pad;
+        let top = tt.caretY + pad; if (top < 0) top = pad;
+        el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.opacity = '1';
+      };
       // Fill the card body in canvas mode so the chart tracks the card height — but via an
       // ABSOLUTELY positioned wrap, which contributes ZERO to the card's size. So filling can
       // never push the card past its saved grid slot (--gp-h) → the layout never shifts. Grid /
@@ -4229,7 +4366,9 @@
                 const ci = legend.chart; ci.setDatasetVisibility(item.datasetIndex, !ci.isDatasetVisible(item.datasetIndex)); ci.update();
               },
             },
-            tooltip: {
+            // Rich tooltip (default ON): external HTML div con sparkline. Toggle OFF → tooltip
+            // nativo de siempre (texto). `undefined` en cards viejas → rich (≠ false).
+            tooltip: rich ? { enabled: false, external: _extTooltip } : {
               callbacks: {
                 title: items => (items.length && items[0].raw?.name) ? String(items[0].raw.name) : '',
                 label: ctx => {
