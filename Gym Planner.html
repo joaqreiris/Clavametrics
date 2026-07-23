@@ -1336,6 +1336,35 @@ function gpRenderGroups() {
   body.innerHTML = html;
 }
 
+// Pure computation of the configured load groups (mirrors gpRenderGroups' math) —
+// reused by the print sheet. Returns {ok:false} when nothing is configured/available,
+// so the print's 2nd page stays optional. Reads the same module state as the modal.
+function gpComputeGroups() {
+  try {
+    const squadIds = new Set((_gpPlayers || []).map(p => p.id));
+    if (!squadIds.size || !_gpGrpVariant || !Array.isArray(_gpGrpRows) || !_gpGrpRows.length) return { ok:false };
+    const latest = {}; let unit = '';
+    _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && squadIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
+    const nameOf = id => { const p = (_gpPlayers || []).find(x => x.id === id); return p ? ((`${p.first_name||''} ${p.last_name||''}`).trim().split(' ').pop() + (p.number?` #${p.number}`:'')) : '—'; };
+    const entries = Object.entries(latest).map(([pid, value]) => ({ pid, value }));
+    if (!entries.length) return { ok:false };
+    const noData = [...squadIds].filter(id => !(id in latest)).map(nameOf);
+    let k = _gpGrpK === 'auto' ? gpAutoKJenks(entries) : parseInt(_gpGrpK);
+    k = Math.max(1, Math.min(k, entries.length));
+    const groupsRaw = gpJenksGroups(entries, k);
+    const isRM = _gpGrpMode === 'rm';
+    const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
+    const groups = groupsRaw.map((g, i) => {
+      const vals = g.map(e => isRM ? e.value * _gpGrpPct/100 : e.value);
+      const lo = fmt(Math.min(...vals)), hi = fmt(Math.max(...vals));
+      const range = isRM ? `${lo}–${hi} kg @ ${_gpGrpPct}%` : `${lo}–${hi}${unit?` ${unit}`:''}`;
+      const items = g.map(e => ({ name: nameOf(e.pid), load: isRM ? fmt(e.value*_gpGrpPct/100)+' kg' : fmt(e.value)+(unit?` ${unit}`:'') }));
+      return { letter: String.fromCharCode(65 + i), range, items };
+    });
+    return { ok:true, mode:_gpGrpMode, variant:_gpGrpVariant, pct:_gpGrpPct, k:groups.length, unit, players:entries.length, groups, noData };
+  } catch(_) { return { ok:false }; }
+}
+
 async function gpLoadAthletes(dateStr) {
   const [availRes, treatRes] = await Promise.all([
     window.sb.from('availability')
@@ -1698,9 +1727,52 @@ function gpRenderPrintSheet() {
       <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
     </div>`;
 
+    // 8) OPTIONAL 2nd page — Load groups (only when configured/available). Same visual language.
+    let groupsPage = '';
+    try {
+      const gd = gpComputeGroups();
+      if (gd && gd.ok && gd.groups.length) {
+        const GCOLORS = ['#3B82F6','#10B981','#F59E0B','#A855F7','#EF4444'];
+        const modeLabel = gd.mode === 'vbt' ? 'VBT' : '%RM';
+        const metaBits = [esc(gd.variant), modeLabel, tt('gym_planner.n_groups_count', `${gd.k} groups`, { count:gd.k })];
+        if (gd.mode === 'rm') metaBits.push(tt('gym_planner.target_pct_rm', `target ${gd.pct}% RM`, { pct:gd.pct }));
+        metaBits.push(tt('gym_planner.n_players_count', `${gd.players} players`, { count:gd.players }));
+        const head2 = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+          <div style="display:flex;align-items:center;gap:12px">${crest}
+            <div><div style="font:700 17px ${FONT};color:#15181D">${esc(clubName)}</div>
+            ${teamName?`<div style="font:500 11px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-top:2px">${esc(teamName)}</div>`:''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font:800 13px ${FONT};letter-spacing:.1em;text-transform:uppercase;color:var(--club-accent)">${esc(tt('gym_planner.load_groups','Load groups'))}</div>
+            <div style="font:500 12px ${MONO};color:#5B6470;margin-top:3px">${esc(dateLabel)}</div>
+          </div>
+        </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
+        const groupCards = gd.groups.map((grp, i) => {
+          const chipsHtml = grp.items.map(it => `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 10px;font:600 11px ${FONT};color:#15181D"><span style="font:600 9.5px ${MONO};color:#9CA3AF">${esc(it.load)}</span>${esc(it.name)}</span>`).join('');
+          return `<div style="border:1px solid #E7E7E4;border-radius:10px;padding:11px 13px;margin-bottom:10px;break-inside:avoid">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+              <span style="width:9px;height:9px;border-radius:50%;background:${GCOLORS[i%GCOLORS.length]}"></span>
+              <span style="font:700 13px ${FONT};color:#15181D">${esc(tt('gym_planner.group_label', `Group ${grp.letter}`, { letter:grp.letter }))}</span>
+              <span style="font:500 11px ${MONO};color:#9CA3AF">${grp.items.length} · ${esc(grp.range)}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">${chipsHtml}</div>
+          </div>`;
+        }).join('');
+        const noDataLine = gd.noData.length ? `<div style="margin-top:4px;font:500 10.5px ${MONO};color:#9CA3AF">${esc(tt('gym_planner.no_test_data', `No test data (${gd.noData.length})`, { count:gd.noData.length }))}: ${esc(gd.noData.join(', '))}</div>` : '';
+        groupsPage = `<div class="gsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto; page-break-before:always">
+          ${head2}
+          <div style="font:500 12px ${FONT};color:#5B6470;margin-bottom:12px">${metaBits.join(' · ')}</div>
+          ${sectionTitle(tt('gym_planner.load_groups','Load groups'))}
+          <div>${groupCards}</div>
+          ${noDataLine}
+          ${footer}
+        </div>`;
+      }
+    } catch (e) { console.warn('gpRenderPrintSheet groups failed', e); }
+
     host.innerHTML = `<div class="gsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
       ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${footer}
-    </div>`;
+    </div>${groupsPage}`;
   } catch (e) {
     console.warn('gpRenderPrintSheet failed', e);
   }
@@ -1716,17 +1788,23 @@ async function gpExportPDF() {
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
     gpRenderPrintSheet();
     if (host) host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
-    const el = document.querySelector('#gpPrintSheet .gsp-sheet') || host;
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    const imgData = canvas.toDataURL('image/png');
+    // One PDF page per print sheet (page 1 = session, optional page 2 = load groups).
+    const sheets = [...document.querySelectorAll('#gpPrintSheet .gsp-sheet')];
+    const targets = sheets.length ? sheets : [host];
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = (canvas.height * pdfW) / canvas.width;
-    let y = 0, pageH = pdf.internal.pageSize.getHeight();
-    while (y < pdfH) {
-      if (y > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, -y, pdfW, pdfH);
-      y += pageH;
+    const pageH = pdf.internal.pageSize.getHeight();
+    let started = false;
+    for (const el of targets) {
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdfH = (canvas.height * pdfW) / canvas.width;
+      let y = 0;
+      while (y < pdfH) {
+        if (started) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, -y, pdfW, pdfH);
+        y += pageH; started = true;
+      }
     }
     pdf.save(`${_gpCurrentDate}_gym-plan.pdf`);
   } catch(e) {
