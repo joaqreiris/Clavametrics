@@ -8974,9 +8974,13 @@ async function openGpsMetricsCatalog() {
         if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Add metric'; return; }
         catalog = [...catalog, ins];
       } else {
-        const { error: e } = await window.sb.from('gps_metric_definitions')
-          .update({ label, unit, category, decimals }).eq('id', def.id).eq('club_id', clubId);
+        const { data: upd, error: e } = await window.sb.from('gps_metric_definitions')
+          .update({ label, unit, category, decimals }).eq('id', def.id).eq('club_id', clubId).select();
         if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Save changes'; return; }
+        if (!upd || !upd.length) {   // 0 rows: RLS/permission — surface it instead of a silent no-op
+          errDiv.textContent = 'No se pudo guardar (0 filas). Puede ser un permiso: el club activo no coincide con tu perfil.';
+          errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Save changes'; return;
+        }
         catalog = catalog.map(d => d.key === def.key ? { ...d, label, unit, category, decimals } : d);
       }
       _sync();

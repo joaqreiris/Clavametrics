@@ -4369,9 +4369,11 @@
   /** Single-KPI markup (1 metric). `spark` adds an empty sparkline canvas. */
   function kpiHtml(d, spark) {
     const autoLbl = [d.aggName, d.scope].filter(Boolean).join(' · ');
-    const lLabel  = d.title || autoLbl;              // custom arriba; si no, el auto de siempre
-    // Subtítulo solo con título custom: sin él, .sb duplicaría literalmente a .l.
-    const subHtml = d.title && autoLbl ? `<div class="sb">${esc(autoLbl)}</div>` : '';
+    // Metric identity ALWAYS on top: custom title > metric name > agg·scope.
+    // agg·scope drops to the subtitle. This keeps every KPI consistent (a card with a
+    // custom title and one without both show a name on top), which is what users expect.
+    const lLabel  = d.title || d.name || autoLbl;
+    const subHtml = autoLbl && autoLbl !== lLabel ? `<div class="sb">${esc(autoLbl)}</div>` : '';
     let tLine = '';
     if (d.delta) {
       const sign = d.delta.dir === 'up' ? '+' : '−';
@@ -4380,8 +4382,6 @@
       tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}${refTxt}</div>`;
     } else if (d.cmpName) {
       tLine = `<div class="t">${esc(d.cmpName)}</div>`;
-    } else if (d.name) {
-      tLine = `<div class="t">${esc(d.name)}</div>`;
     }
     const sparkHtml = spark ? `<div class="gp-kpi-spark" style="height:32px;position:relative;width:100%"><canvas></canvas></div>` : '';
     // --ch = largo del número YA formateado (+ unidad). El CSS escala la fuente por
