@@ -260,6 +260,7 @@
   .inj-olddate-hint { display:flex; align-items:flex-start; gap:8px; margin-top:-4px; padding:8px 10px; background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); border-radius:8px; font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
   .inj-olddate-hint i { color:var(--cm-warning); flex:none; margin-top:1px; }
   .inj-olddate-btn { margin-left:auto; flex:none; border:0; background:var(--cm-warning); color:#fff; padding:5px 10px; border-radius:6px; font:600 11px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
+  .inj-scope-sel { font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:8px; padding:6px 8px; cursor:pointer; }
 
   #tweaks-root { position:fixed; bottom:16px; right:16px; z-index:1000; }
   @media (max-width:768px) {
@@ -413,6 +414,11 @@
               <h3 data-i18n="injuries.squad_body_map">Squad body map</h3>
               <span class="sub" id="bodyMapSub">active injuries</span>
               <div class="right">
+                <select id="bodyScopeSel" class="inj-scope-sel" onchange="setBodyScope(this.value)" title="Time scope" data-i18n-attr="title:injuries.scope_title">
+                  <option value="season" data-i18n="injuries.scope_season">This season</option>
+                  <option value="last" data-i18n="injuries.scope_last">Last season</option>
+                  <option value="all" data-i18n="injuries.scope_all">All time</option>
+                </select>
                 <div class="body-sex-toggle" id="bodySex">
                   <button data-sex="male" class="is-on"><i class="ti ti-gender-male"></i><span data-i18n="injuries.male">Male</span></button>
                   <button data-sex="female"><i class="ti ti-gender-female"></i><span data-i18n="injuries.female">Female</span></button>
@@ -924,6 +930,47 @@ function checkOldDate() {
 let _phaseModalPhaseId = null, _phaseModalInjId = null;
 let _returnManuallyEdited = false;
 let _clubId = null, _profile = null;
+let _seasonStart = null, _seasonEnd = null, _bodyScope = 'season'; // time scope for body map + type breakdown
+
+async function resolveInjSeason() {
+  try {
+    const { data } = await window.sb.from('club_settings')
+      .select('season_start,season_end').eq('club_id', _clubId).eq('module_key','season').maybeSingle();
+    if (data && data.season_start && data.season_end) { _seasonStart = data.season_start; _seasonEnd = data.season_end; return; }
+  } catch(_) { /* fall through to rolling 12-month window */ }
+  const today = new Date(); const past = new Date(today); past.setDate(past.getDate() - 365);
+  _seasonStart = past.toISOString().split('T')[0];
+  _seasonEnd   = today.toISOString().split('T')[0];
+}
+
+function scopeWindow() {
+  if (_bodyScope === 'all' || !_seasonStart || !_seasonEnd) return null;
+  if (_bodyScope === 'last') {
+    const s = new Date(_seasonStart); s.setFullYear(s.getFullYear() - 1);
+    const e = new Date(_seasonEnd);   e.setFullYear(e.getFullYear() - 1);
+    return { start: s.toISOString().split('T')[0], end: e.toISOString().split('T')[0] };
+  }
+  return { start: _seasonStart, end: _seasonEnd };
+}
+
+function injInScope(inj) {
+  const w = scopeWindow();
+  if (!w) return true;               // 'all time' or unresolved season → no filter
+  const d = inj.start_date;
+  return !!d && d >= w.start && d <= w.end;
+}
+
+function scopeLabel() {
+  if (_bodyScope === 'all')  return tt('injuries.scope_all','All time');
+  if (_bodyScope === 'last') return tt('injuries.scope_last','Last season');
+  return tt('injuries.scope_season','This season');
+}
+
+function setBodyScope(v) {
+  _bodyScope = v || 'season';
+  renderBodyMap();
+  renderTypeBreakdown();
+}
 
 // ═══════════════ BODY AREA COORDINATES (for squad map) ═══════════════
 const BODY_COORDS = {
@@ -1671,6 +1718,7 @@ async function savePhaseStatus(status) {
   _playersMap = Object.fromEntries(_players.map(p => [p.id, p]));
   populatePlayerSelect('logPlayer');
 
+  await resolveInjSeason();
   await loadAll();
 
   // ── Event wiring ──
@@ -2256,9 +2304,10 @@ function injCard(inj) {
 
 // ═══════════════ BODY MAP ═══════════════
 function renderBodyMap() {
-  // Group ALL injuries (active + resolved) by body_area
+  // Group scoped injuries (active + resolved) by body_area
+  const scoped = _allInjuries.filter(injInScope);
   const areaMap = {};
-  _allInjuries.forEach(inj => {
+  scoped.forEach(inj => {
     if (!inj.body_area) return;
     const k = inj.body_area.toLowerCase().trim();
     if (!areaMap[k]) areaMap[k] = { area: inj.body_area, total: 0, active: 0 };
@@ -2295,8 +2344,8 @@ function renderBodyMap() {
 
   document.getElementById('svgAnt').innerHTML  = antHtml;
   document.getElementById('svgPost').innerHTML = postHtml;
-  const activeCount = _allInjuries.filter(i => i.status !== 'cleared' && i.status !== 'resolved').length;
-  document.getElementById('bodyMapSub').textContent = tt('injuries.bodymap_sub', `${activeCount} active · season`, { count: activeCount });
+  const activeCount = scoped.filter(i => i.status !== 'cleared' && i.status !== 'resolved').length;
+  document.getElementById('bodyMapSub').textContent = tt('injuries.bodymap_scope_sub', `${activeCount} active · ${scopeLabel()}`, { count: activeCount, scope: scopeLabel() });
 
   // "Count" legend: only meaningful when a zone shows a numbered badge (≥2 injuries).
   // Reflects the real max per-zone count; hidden entirely when there's nothing to count.
@@ -2311,6 +2360,7 @@ function renderBodyMap() {
 function showBodyAreaPopover(areaKey, clientX, clientY) {
   const key = (areaKey || '').toLowerCase().trim();
   const injuries = _allInjuries
+    .filter(injInScope)
     .filter(i => (i.body_area || '').toLowerCase().trim() === key)
     .sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
   if (!injuries.length) return;
@@ -2393,12 +2443,13 @@ function filterByArea(areaKey) {
 function renderTypeBreakdown() {
   const el = document.getElementById('injTypeBreakdown');
   if (!el) return;
+  const scoped = _allInjuries.filter(injInScope);
   const counts = {};
-  _allInjuries.forEach(i => { const t = i.injury_type || 'Other'; counts[t] = (counts[t]||0)+1; });
+  scoped.forEach(i => { const t = i.injury_type || 'Other'; counts[t] = (counts[t]||0)+1; });
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
   const maxC   = sorted[0]?.[1] || 1;
   const COLORS = ['var(--cm-danger)','#EA580C','var(--cm-warning)','var(--cm-info)','var(--cm-neutral)'];
-  document.getElementById('typeBreakSub').textContent = tt('injuries.type_break_sub', `${_allInjuries.length} total · all time`, { count: _allInjuries.length });
+  document.getElementById('typeBreakSub').textContent = tt('injuries.type_break_scope_sub', `${scoped.length} total · ${scopeLabel()}`, { count: scoped.length, scope: scopeLabel() });
   el.innerHTML = `<div class="type-bars">${sorted.map(([t,c],i) =>
     `<div class="type-row"><span class="l">${t}</span><span class="b"><span class="bf" style="width:${Math.round(c/maxC*80)+20}%;background:${COLORS[i]||'var(--cm-neutral)'}"></span></span><span class="v">${c}</span></div>`
   ).join('')}</div>`;
