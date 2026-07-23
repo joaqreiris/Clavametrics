@@ -4557,11 +4557,14 @@
         delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
         refVal = bv;
       }
+      // Respect the metric's configured decimals (distance = 0 → no noisy ".3 m").
+      const _dec = catalogMap.get(metricId)?.decimals ?? 0;
+      const _rv  = _dec > 0 ? Math.round(value * Math.pow(10, _dec)) / Math.pow(10, _dec) : Math.round(value);
       return {
         value, max: mx, axisLabel: name,
         gradient: true,
         zones: [{ from: 0, to: mx, color: accent }],   // fallback if gradient unsupported
-        valueText: fmt(Math.round(value * 10) / 10) + (unit ? ' ' + unit : ''),
+        valueText: fmt(_rv) + (unit ? ' ' + unit : ''),
         zoneLabel: '',
         minLabel: '0', maxLabel: fmt(mx),
         delta, refVal, unit, cmpName,
