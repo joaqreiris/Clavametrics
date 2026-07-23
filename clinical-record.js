@@ -26,6 +26,8 @@
   const EMPTY = () => '<span style="font:var(--cm-body-sm);color:var(--cm-fg-faint)">' + esc(tt('clinical_record.none_recorded', 'None recorded')) + '</span>';
   const DASH = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-faint)">—</span>';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  // Display-only: stored body areas read "Thigh" but surface as "Quadriceps" (more technical).
+  const bodyAreaLabel = a => String(a ?? '').replace(/thigh/gi, m => m[0] === 'T' ? 'Quadriceps' : 'quadriceps');
   const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
   const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
@@ -149,7 +151,7 @@ function getBodyCoords(area) {
     arr(_injuries).forEach(i => {
       if (!i || !i.id) return;
       const label = (i.sub_classification || i.injury_type || tt('clinical_record.injury', 'Injury')) +
-        (i.body_area ? ' · ' + i.body_area : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
+        (i.body_area ? ' · ' + bodyAreaLabel(i.body_area) : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
       opts.push('<option value="' + esc(i.id) + '"' + (String(selected) === String(i.id) ? ' selected' : '') + '>' + esc(label) + '</option>');
     });
     sel.innerHTML = opts.join('');
@@ -203,7 +205,7 @@ function getBodyCoords(area) {
       const color = SEV_COLOR[g.worst] || '#EA580C';
       const r = g.total >= 3 ? 5.5 : 4;
       const pulseCls = g.active ? ' pulse' : '';
-      const tip = g.area + ' · ' + tt('clinical_record.injury_count', g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries'), { count: g.total }) +
+      const tip = bodyAreaLabel(g.area) + ' · ' + tt('clinical_record.injury_count', g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries'), { count: g.total }) +
         ' · ' + tt('clinical_record.worst', 'worst') + ': ' + tSevLabel(g.worst);
       const cx = pt[0], cy = pt[1];
       html += '<circle data-area="' + esc(g.area) + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color +
@@ -328,7 +330,7 @@ function getBodyCoords(area) {
       const diagnosis = inj.sub_classification || inj.injury_type || '—';
       return '<tr>' +
         '<td class="c-date">' + esc(fmtDate(inj.start_date) || '—') + '</td>' +
-        '<td class="cr-zone">' + esc(inj.body_area || '—') + '</td>' +
+        '<td class="cr-zone">' + esc(bodyAreaLabel(inj.body_area) || '—') + '</td>' +
         '<td>' + esc(tissueDisplay(inj) || '—') + '</td>' +
         '<td class="c-dx">' + esc(diagnosis) + '</td>' +
         '<td class="c-muted">' + esc(mechLabel(inj)) + '</td>' +
@@ -365,7 +367,7 @@ function getBodyCoords(area) {
       let rel = '—';
       if (s.related_injury_id && byId[s.related_injury_id]) {
         const inj = byId[s.related_injury_id];
-        rel = esc((inj.sub_classification || inj.injury_type || '—') + ' · ' + (inj.body_area || '—'));
+        rel = esc((inj.sub_classification || inj.injury_type || '—') + ' · ' + (bodyAreaLabel(inj.body_area) || '—'));
       }
       return '<tr>' +
         '<td class="c-date">' + esc(fmtDate(s.surgery_date) || '—') + '</td>' +
@@ -1233,7 +1235,7 @@ function getBodyCoords(area) {
         const left = ((mi + 0.5) / 12 * 100).toFixed(2);
         const cls = TL_SEV[String(i.severity || 'minor').toLowerCase()] || 'mild';
         const tip = (i.sub_classification || i.injury_type || tt('clinical_record.injury', 'Injury')) +
-          (i.body_area ? ' · ' + i.body_area : '') + ' · ' + (fmtDate(i.start_date) || '');
+          (i.body_area ? ' · ' + bodyAreaLabel(i.body_area) : '') + ' · ' + (fmtDate(i.start_date) || '');
         html += '<button class="tl-mark ' + cls + '" style="left:' + left + '%" title="' + esc(tip) + '"><span class="tl-mark-dot"></span></button>';
       });
       html += '</div>';

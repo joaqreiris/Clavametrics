@@ -415,7 +415,7 @@
         <div class="pp-istat"><div class="l">Spells this season</div><div class="v">${spells}</div></div>
         <div class="pp-istat"><div class="l">Days out (season)</div><div class="v">${daysOut}</div></div>
         <div class="pp-istat"><div class="l">Days since last injury</div><div class="v">${daysSince == null ? '—' : daysSince}</div></div>
-        <div class="pp-istat"><div class="l">Most affected area</div><div class="v">${topArea ? esc(topArea) : '—'}</div></div>
+        <div class="pp-istat"><div class="l">Most affected area</div><div class="v">${topArea ? esc(topArea.replace(/thigh/gi, m => m[0] === 'T' ? 'Quadriceps' : 'quadriceps')) : '—'}</div></div>
       </div>`;
     } catch (_) {
       headBadgeEl.innerHTML = injuryBadge(false, null);
