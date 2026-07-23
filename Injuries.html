@@ -15,6 +15,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/rehab-create.js"></script>
+<script src="assets/cm-daterange.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
@@ -260,7 +261,9 @@
   .inj-olddate-hint { display:flex; align-items:flex-start; gap:8px; margin-top:-4px; padding:8px 10px; background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); border-radius:8px; font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
   .inj-olddate-hint i { color:var(--cm-warning); flex:none; margin-top:1px; }
   .inj-olddate-btn { margin-left:auto; flex:none; border:0; background:var(--cm-warning); color:#fff; padding:5px 10px; border-radius:6px; font:600 11px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
-  .inj-scope-sel { font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:8px; padding:6px 8px; cursor:pointer; }
+  .inj-scope-dr { font:600 11.5px/1 var(--cm-font-sans); }
+  .inj-scope-dr [data-trigger] { padding:6px 9px !important; }
+  #bodyMapCard .inj-card-h { flex-wrap:wrap; row-gap:8px; }
   .inj-historical-note { display:flex; align-items:center; gap:7px; margin-top:10px; padding:8px 11px; background:var(--cm-bg-soft); border:1px dashed var(--cm-border); border-radius:8px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .inj-historical-note i { color:var(--cm-fg-faint); flex:none; }
 
@@ -416,11 +419,7 @@
               <h3 data-i18n="injuries.squad_body_map">Squad body map</h3>
               <span class="sub" id="bodyMapSub">active injuries</span>
               <div class="right">
-                <select id="bodyScopeSel" class="inj-scope-sel" onchange="setBodyScope(this.value)" title="Time scope" data-i18n-attr="title:injuries.scope_title">
-                  <option value="season" data-i18n="injuries.scope_season">This season</option>
-                  <option value="last" data-i18n="injuries.scope_last">Last season</option>
-                  <option value="all" data-i18n="injuries.scope_all">All time</option>
-                </select>
+                <div id="bodyScopeDr" class="inj-scope-dr"></div>
                 <div class="body-sex-toggle" id="bodySex">
                   <button data-sex="male" class="is-on"><i class="ti ti-gender-male"></i><span data-i18n="injuries.male">Male</span></button>
                   <button data-sex="female"><i class="ti ti-gender-female"></i><span data-i18n="injuries.female">Female</span></button>
@@ -932,52 +931,71 @@ function checkOldDate() {
 let _phaseModalPhaseId = null, _phaseModalInjId = null;
 let _returnManuallyEdited = false;
 let _clubId = null, _profile = null;
-let _seasonStart = null, _seasonEnd = null, _bodyScope = 'season'; // time scope for body map + type breakdown
+// Time scope for body map + type breakdown — an ISO [_scopeFrom, _scopeTo] window
+// (either bound may be null = unbounded). Driven by the CMDateRange picker.
+let _scopeFrom = null, _scopeTo = null, _seasonsList = [];
 
-async function resolveInjSeason() {
+// Load seasons registered in the Annual Planner (seasons table) and default the
+// scope window to the current one (today-in-range → nearest upcoming → most recent).
+async function resolveInjSeasons() {
+  _seasonsList = [];
   try {
-    const { data } = await window.sb.from('club_settings')
-      .select('season_start,season_end').eq('club_id', _clubId).eq('module_key','season').maybeSingle();
-    if (data && data.season_start && data.season_end) { _seasonStart = data.season_start; _seasonEnd = data.season_end; return; }
-  } catch(_) { /* fall through to rolling 12-month window */ }
-  const today = new Date(); const past = new Date(today); past.setDate(past.getDate() - 365);
-  _seasonStart = past.toISOString().split('T')[0];
-  _seasonEnd   = today.toISOString().split('T')[0];
+    let q = window.sb.from('seasons').select('name,start_date,end_date,status').eq('club_id', _clubId);
+    if (_injTeamId) q = q.eq('team_id', _injTeamId);
+    const { data } = await q.order('start_date', { ascending: false });
+    _seasonsList = (data || []).filter(s => s.start_date && s.end_date);
+  } catch(_) { /* no seasons → scope defaults to all time */ }
+
+  const today = new Date().toISOString().slice(0, 10);
+  let cur = _seasonsList.find(s => s.start_date <= today && s.end_date >= today);
+  if (!cur) {
+    const upcoming = _seasonsList.filter(s => s.start_date > today).sort((a,b) => a.start_date.localeCompare(b.start_date))[0];
+    cur = upcoming || _seasonsList.slice().sort((a,b) => b.end_date.localeCompare(a.end_date))[0];
+  }
+  _scopeFrom = cur ? cur.start_date : null;
+  _scopeTo   = cur ? cur.end_date   : null;
 }
 
-function scopeWindow() {
-  if (_bodyScope === 'all' || !_seasonStart || !_seasonEnd) return null;
-  if (_bodyScope === 'last') {
-    const s = new Date(_seasonStart); s.setFullYear(s.getFullYear() - 1);
-    const e = new Date(_seasonEnd);   e.setFullYear(e.getFullYear() - 1);
-    return { start: s.toISOString().split('T')[0], end: e.toISOString().split('T')[0] };
-  }
-  return { start: _seasonStart, end: _seasonEnd };
+// Mount the shared date-range picker (same component as GPS "Sync now"): presets
+// (Last 30 / real seasons / All) + custom calendar range.
+function mountBodyScope() {
+  const el = document.getElementById('bodyScopeDr');
+  if (!el || !window.CMDateRange) return;
+  window.CMDateRange.mount(el, {
+    from: _scopeFrom, to: _scopeTo, presets: true,
+    allLabel: tt('injuries.scope_all','All time'),
+    clubId: _clubId, teamId: _injTeamId || undefined,
+    seasons: _seasonsList,
+    onChange: ({ from, to }) => {
+      _scopeFrom = from || null;
+      _scopeTo   = to   || null;
+      renderBodyMap();
+      renderTypeBreakdown();
+    },
+  });
 }
 
 function injInScope(inj) {
-  const w = scopeWindow();
-  if (!w) return true;               // 'all time' or unresolved season → no filter
+  if (!_scopeFrom && !_scopeTo) return true;   // unbounded → no filter
   const d = inj.start_date;
-  return !!d && d >= w.start && d <= w.end;
+  if (!d) return false;
+  if (_scopeFrom && d < _scopeFrom) return false;
+  if (_scopeTo   && d > _scopeTo)   return false;
+  return true;
+}
+
+function scopeLabel() {
+  if (!_scopeFrom && !_scopeTo) return tt('injuries.scope_all','All time');
+  const s = _seasonsList.find(s => s.start_date === _scopeFrom && s.end_date === _scopeTo);
+  if (s) return s.name || tt('injuries.scope_season','Season');
+  if (_scopeFrom && _scopeTo) return `${_scopeFrom} → ${_scopeTo}`;
+  return _scopeFrom || _scopeTo;
 }
 
 // Display-only relabelling of stored body_area values (kept in English for coords/keys).
 // "Thigh" reads as "Quadriceps" (more technical) on cards and popovers.
 function bodyAreaLabel(area) {
   return (area || '').replace(/Thigh/g, 'Quadriceps');
-}
-
-function scopeLabel() {
-  if (_bodyScope === 'all')  return tt('injuries.scope_all','All time');
-  if (_bodyScope === 'last') return tt('injuries.scope_last','Last season');
-  return tt('injuries.scope_season','This season');
-}
-
-function setBodyScope(v) {
-  _bodyScope = v || 'season';
-  renderBodyMap();
-  renderTypeBreakdown();
 }
 
 // ═══════════════ BODY AREA COORDINATES (for squad map) ═══════════════
@@ -1726,7 +1744,8 @@ async function savePhaseStatus(status) {
   _playersMap = Object.fromEntries(_players.map(p => [p.id, p]));
   populatePlayerSelect('logPlayer');
 
-  await resolveInjSeason();
+  await resolveInjSeasons();
+  mountBodyScope();
   await loadAll();
 
   // ── Event wiring ──
