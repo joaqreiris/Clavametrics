@@ -261,6 +261,8 @@
   .inj-olddate-hint i { color:var(--cm-warning); flex:none; margin-top:1px; }
   .inj-olddate-btn { margin-left:auto; flex:none; border:0; background:var(--cm-warning); color:#fff; padding:5px 10px; border-radius:6px; font:600 11px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
   .inj-scope-sel { font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:8px; padding:6px 8px; cursor:pointer; }
+  .inj-historical-note { display:flex; align-items:center; gap:7px; margin-top:10px; padding:8px 11px; background:var(--cm-bg-soft); border:1px dashed var(--cm-border); border-radius:8px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .inj-historical-note i { color:var(--cm-fg-faint); flex:none; }
 
   #tweaks-root { position:fixed; bottom:16px; right:16px; z-index:1000; }
   @media (max-width:768px) {
@@ -1005,12 +1007,12 @@ const BODY_COORDS = {
   'right glute':      { ant:null,     post:[38,100] },
   'left glute':       { ant:null,     post:[62,100] },
   'glute':            { ant:null,     post:[50,100] },
-  'right thigh':      { ant:[39,113], post:null      },
-  'left thigh':       { ant:[61,113], post:null      },
-  'thigh':            { ant:[50,113], post:null      },
-  'right adductor':   { ant:[42,110], post:null      },
-  'left adductor':    { ant:[58,110], post:null      },
-  'adductor':         { ant:[50,110], post:null      },
+  'right thigh':      { ant:[36,117], post:null      },
+  'left thigh':       { ant:[64,117], post:null      },
+  'thigh':            { ant:[50,117], post:null      },
+  'right adductor':   { ant:[45,105], post:null      },
+  'left adductor':    { ant:[55,105], post:null      },
+  'adductor':         { ant:[50,105], post:null      },
   'right hamstring':  { ant:null,     post:[39,118] },
   'left hamstring':   { ant:null,     post:[61,118] },
   'hamstring':        { ant:null,     post:[50,118] },
@@ -2140,6 +2142,14 @@ function injCard(inj) {
   const daysLeft = expected ? Math.max(0, Math.round((expected - today) / 86400000)) : null;
   const fmtDate  = d => ttFmtDate(d);
 
+  const returned   = inj.returned_date ? new Date(inj.returned_date) : null; if (returned) returned.setHours(0,0,0,0);
+  const isResolved = inj.status === 'cleared' || inj.status === 'resolved';
+  // Days the injury lasted: for resolved use start→return; otherwise elapsed since start
+  const durationDays = (isResolved && returned) ? Math.max(0, Math.round((returned - start) / 86400000)) : elapsed;
+  // Historical record = a past, resolved injury that never went through the in-club rehab process (no phases).
+  // Phase timeline / RTP / protocol are meaningless for it — show info only.
+  const isHistorical = isResolved && !(_phasesMap[inj.id]?.length);
+
   // severity value stays canonical (data-sev / DB); only the visible label is translated
   const sevClass = { minor:'minor', moderate:'moderate', severe:'severe' }[inj.severity] || 'moderate';
   const sevLabel = inj.severity ? tt('injuries.sev_' + inj.severity, inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1)) : '—';
@@ -2173,7 +2183,7 @@ function injCard(inj) {
         ${crTxt ? `<div class="cr">${crTxt}</div>` : ''}
       </div>`;
     }).join('');
-  } else {
+  } else if (!isHistorical) {
     // Derived phases using protocol for this injury type
     const proto = getProtocol(inj.injury_type);
     tlHtml = proto.phases.map((ph, idx) => {
@@ -2248,13 +2258,15 @@ function injCard(inj) {
     const catTxt = inj.injury_category ? catLabel(inj.injury_category) : (prior.injury_type || inj.injury_type || tt('injuries.injury_word','injury'));
     return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>${tt('injuries.reinjury_badge', `Re-injury risk — previous ${catTxt} injury ${days}d ago. Extended protocol and load monitoring recommended.`, { cat: catTxt, days })}</span></div>`;
   })()}
-    <div class="inj-timeline">${tlHtml}</div>
+    ${isHistorical
+      ? `<div class="inj-historical-note"><i class="ti ti-history" style="font-size:13px"></i>${tt('injuries.historical_note','Historical record — no in-club rehab protocol. Reference only.')}</div>`
+      : `<div class="inj-timeline">${tlHtml}</div>
 
     <div class="inj-progress-row">
       <span class="inj-progress-l">${tt('injuries.rtp_progress','RTP progress')}</span>
       <span class="inj-progress-bar"><span class="inj-progress-fill ${fillCls}" style="width:${phasesDB ? donePct : pct}%"></span></span>
       <span class="inj-progress-r">${phasesDB ? donePct : pct}%${daysToRTP != null ? ` · <span style="font-size:10.5px;color:var(--cm-fg-muted)">~${daysToRTP}d</span>` : ''}</span>
-    </div>
+    </div>`}
 
     <div class="inj-rtp">
       <div class="b">
@@ -2262,12 +2274,15 @@ function injCard(inj) {
         <div><div class="l">${tt('injuries.injury_date','Injury date')}</div><div class="v">${fmtDate(inj.start_date)}</div></div>
       </div>
       <div class="b">
-        <div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-target"></i></div>
-        <div><div class="l">${tt('injuries.est_return','Est. return')}</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft != null ? ' · ' + daysLeft + 'd' : '') : '—'}</div></div>
+        ${isResolved && returned
+          ? `<div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-flag-check"></i></div>
+        <div><div class="l">${tt('injuries.returned','Returned')}</div><div class="v good">${fmtDate(returned)}</div></div>`
+          : `<div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-target"></i></div>
+        <div><div class="l">${tt('injuries.est_return','Est. return')}</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft != null ? ' · ' + daysLeft + 'd' : '') : '—'}</div></div>`}
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-clock"></i></div>
-        <div><div class="l">${tt('injuries.days_injured','Days injured')}</div><div class="v">${elapsed}</div></div>
+        <div><div class="l">${tt('injuries.days_injured','Days injured')}</div><div class="v">${durationDays}</div></div>
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-notes"></i></div>
@@ -2275,6 +2290,7 @@ function injCard(inj) {
       </div>
     </div>
     ${(() => {
+      if (isHistorical) return '';
       const cat   = inj.injury_category || (()=>{ const t=(inj.injury_type||'').toLowerCase(); if(/acl|cruciate/.test(t)) return 'acl'; if(/muscle|strain|tear|hamstring|quad|calf|adductor|groin/.test(t)) return 'muscular'; if(/ligament|sprain|ankle/.test(t)) return 'ligament'; if(/tendon|tendinop|achilles/.test(t)) return 'tendon'; if(/bone|fracture/.test(t)) return 'bone'; return null; })();
       const refs  = cat ? (PROTOCOL_REFS[cat === 'muscular' ? 'muscle' : cat] || []) : [];
       const proto = getProtocol(inj.injury_type, inj.injury_category, inj.sub_classification);
