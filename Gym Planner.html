@@ -1008,7 +1008,7 @@ function gpAddMainRow() {
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
-    <td><div class="gp-load-cell"><input class="num-input" placeholder="—"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div><span class="gp-vzone-lbl" style="display:none;font:600 9.5px/1 var(--cm-font-sans);white-space:nowrap"></span></div></td>
+    <td><div class="gp-load-cell"><input class="num-input" placeholder="—" oninput="gpUpdateVZone(this.closest('tr'))"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div><span class="gp-vzone-lbl" style="display:none;font:600 9.5px/1 var(--cm-font-sans);white-space:nowrap"></span></div></td>
     <td><span class="pct">—</span><input class="gp-vbt-loss num-input" placeholder="${tt('gym_planner.vloss_ph','VL %')}" title="${tt('gym_planner.vel_loss','Vel loss')} %" style="display:none;width:56px" oninput="gpScheduleSave()"></td>
     <td><input placeholder="2 min"></td>
     <td><input placeholder="2-0-1"></td>
@@ -1896,11 +1896,6 @@ async function gpExportPDF() {
   // Recalc totals when any table input changes
   ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
-  });
-  // Live-update the VBT velocity-zone marker as the target velocity is typed
-  document.getElementById('gpMainBody').addEventListener('input', e => {
-    const tr = e.target.closest && e.target.closest('tr');
-    if (tr && tr.querySelector('.gp-vzone')) gpUpdateVZone(tr);
   });
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
