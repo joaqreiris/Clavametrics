@@ -104,6 +104,10 @@
   .gp-tbl .btn-x:hover{background:var(--cm-danger-bg);color:var(--cm-danger)}
   .gp-tbl .btn-x .ti{font-size:13px}
   .gp-tbl .num-input{max-width:60px;text-align:center}
+  .gp-tbl .gp-load-cell{display:flex;flex-direction:column;align-items:center;gap:3px}
+  /* VBT velocity-zone gradient bar (general training zones; not exercise-specific) */
+  .gp-vzone{position:relative;width:58px;height:6px;border-radius:3px;background:linear-gradient(to right,#EF4444 0%,#F59E0B 22%,#EAB308 42%,#22C55E 66%,#3B82F6 100%)}
+  .gp-vzone .mk{position:absolute;top:-2px;width:2px;height:10px;background:var(--cm-fg-strong);border-radius:1px;transform:translateX(-1px);box-shadow:0 0 0 1.5px var(--cm-surface)}
   .gp-tbl .pct{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
   .gp-tbl .vel{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:rgba(168,85,247,0.14);color:#7C3AED;font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
 
@@ -955,7 +959,42 @@ function gpApplyRowMode(tr, mode) {
   if (unitEl)    unitEl.textContent    = isVbt ? 'm/s' : 'kg';
   if (pctEl)     pctEl.style.display   = isVbt ? 'none' : '';
   if (lossEl)    lossEl.style.display  = isVbt ? '' : 'none';
+  const vzoneEl = tr.querySelector('.gp-vzone');
+  if (vzoneEl)   vzoneEl.style.display = isVbt ? '' : 'none';
   tr.classList.toggle('is-vbt', isVbt);
+  if (isVbt) gpUpdateVZone(tr);
+}
+
+// General VBT velocity training zones (mean concentric velocity, m/s). These are a
+// widely-used cross-exercise guide, NOT an exercise-specific load-velocity profile.
+function gpVelZone(v) {
+  const LO = 0.3, HI = 1.5;
+  const pos = Math.max(0, Math.min(100, (v - LO) / (HI - LO) * 100));
+  let label;
+  if      (v < 0.5) label = tt('gym_planner.vz_max_strength',   'Max strength');
+  else if (v < 0.75) label = tt('gym_planner.vz_strength_speed', 'Strength-speed');
+  else if (v < 1.0) label = tt('gym_planner.vz_power',          'Power');
+  else if (v < 1.3) label = tt('gym_planner.vz_speed_strength', 'Speed-strength');
+  else              label = tt('gym_planner.vz_speed',           'Speed');
+  return { pos, label };
+}
+// Position the marker on the velocity-zone bar from the row's target-velocity input.
+function gpUpdateVZone(tr) {
+  const vz = tr.querySelector('.gp-vzone'); if (!vz) return;
+  const isVbt = tr.querySelector('.gp-mode button.is-on')?.textContent.trim() === 'VBT';
+  if (!isVbt) { vz.style.display = 'none'; return; }
+  vz.style.display = '';
+  const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
+  const v = parseFloat((inputs[2]?.value || '').replace(',', '.'));
+  const mk = vz.querySelector('.mk');
+  if (!isFinite(v) || v <= 0) {
+    if (mk) mk.style.display = 'none';
+    vz.title = tt('gym_planner.vel_zone_hint', 'Velocity zone');
+    return;
+  }
+  const z = gpVelZone(v);
+  if (mk) { mk.style.display = ''; mk.style.left = z.pos + '%'; }
+  vz.title = z.label + ' · ' + v.toFixed(2) + ' m/s';
 }
 
 function gpAddMainRow() {
@@ -966,7 +1005,7 @@ function gpAddMainRow() {
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
-    <td><input class="num-input" placeholder="—"> <span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span></td>
+    <td><div class="gp-load-cell"><input class="num-input" placeholder="—"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div></div></td>
     <td><span class="pct">—</span><input class="gp-vbt-loss num-input" placeholder="${tt('gym_planner.vloss_ph','VL %')}" title="${tt('gym_planner.vel_loss','Vel loss')} %" style="display:none;width:56px" oninput="gpScheduleSave()"></td>
     <td><input placeholder="2 min"></td>
     <td><input placeholder="2-0-1"></td>
@@ -1854,6 +1893,11 @@ async function gpExportPDF() {
   // Recalc totals when any table input changes
   ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
+  });
+  // Live-update the VBT velocity-zone marker as the target velocity is typed
+  document.getElementById('gpMainBody').addEventListener('input', e => {
+    const tr = e.target.closest && e.target.closest('tr');
+    if (tr && tr.querySelector('.gp-vzone')) gpUpdateVZone(tr);
   });
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
