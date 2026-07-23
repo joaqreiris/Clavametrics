@@ -59,6 +59,16 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .es-seg button .ti { font-size: 14px; }
 .es-seg button.is-on { background: var(--cm-surface); color: var(--cm-fg-strong); box-shadow: var(--cm-shadow-1); }
 
+/* Collapsible title/subtitle format editors — compact by default, expand on click. */
+.es-fmt { border: 1px solid var(--cm-border-soft); border-radius: var(--cm-r-3); margin-bottom: 6px; background: var(--cm-bg-soft); }
+.es-fmt > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 8px 10px; font: 600 11px/1 var(--cm-font-sans); color: var(--cm-fg); user-select: none; }
+.es-fmt > summary::-webkit-details-marker { display: none; }
+.es-fmt .es-fmt-chev { font-size: 14px; color: var(--cm-fg-muted); transition: transform var(--cm-dur-1, .15s); }
+.es-fmt[open] .es-fmt-chev { transform: rotate(90deg); }
+.es-fmt .es-fmt-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cm-accent); margin-left: auto; opacity: 0; transition: opacity var(--cm-dur-1, .15s); }
+.es-fmt.has-fmt .es-fmt-dot { opacity: 1; }
+.es-fmt .es-fmt-body { padding: 0 10px 10px; }
+
 /* style pane */
 .es-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .es-sw { width: 30px; height: 30px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
@@ -68,6 +78,9 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .es-pal.is-on { border-color: var(--cm-fg-strong); }
 .es-pal i { width: 18px; height: 24px; border-radius: 4px; }
 .es-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+/* Rows whose control is a full-width segmented picker stack the label above it so the
+   100%-wide .es-seg never overlaps the label. */
+.es-toggle.is-stack { flex-direction: column; align-items: stretch; gap: 6px; }
 .es-toggle + .es-toggle { border-top: 1px solid var(--cm-border-soft); }
 .es-toggle .tx { flex: 1; min-width: 0; }
 .es-toggle .tx .t { font: 600 12.5px/1.2 var(--cm-font-sans); color: var(--cm-fg); }

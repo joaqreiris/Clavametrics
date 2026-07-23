@@ -582,7 +582,7 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_data_labels">Data labels</span><span class="s" data-i18n="gps_analysis.builder_data_labels_sub">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
-              <div class="es-toggle" data-only="scatter">
+              <div class="es-toggle is-stack" data-only="scatter">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_label_content">Label content</span><span class="s" data-i18n="gps_analysis.builder_label_content_sub">Text beside each point</span></span>
                 <div class="es-seg" id="gpbScatterLabel">
                   <button data-slabel="name" class="is-on" data-i18n="gps_analysis.builder_label_name">Name</button>
@@ -595,7 +595,7 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_player_photos">Player photos</span><span class="s" data-i18n="gps_analysis.builder_player_photos_sub">Draw each point as the player's photo</span></span>
                 <button class="es-sw-t" data-toggle="scatterAvatars"></button>
               </div>
-              <div class="es-toggle" data-only="gauge">
+              <div class="es-toggle is-stack" data-only="gauge">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
                 <div class="es-seg" id="gpbGaugeMode">
                   <button data-gmode="value" class="is-on" data-i18n="gps_analysis.gauge_mode_value">Value</button>
@@ -623,10 +623,9 @@
               </button>
             </div>
             <!-- Title/subtitle format (Paso 3a + 3b). data-only is a HARDCODED type list: if you add a
-                 new viz type that shows a title/subtitle, add it here too. KPI (3b) formats its body
-                 .l/.sb via mountKpiCard. NOT included: single-metric GAUGE also strips its header but
-                 has no header-format wiring yet — leave it out until it's given the same treatment. -->
-            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi">
+                 new viz type that shows a title/subtitle, add it here too. KPI and single GAUGE format
+                 their body .l/.sb via gpApplyHeaderFormat; the rest format the .gp-c-h header spans. -->
+            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi,gauge">
               <div class="lab" data-i18n="gps_analysis.builder_header_format">Title &amp; subtitle</div>
               ${_fmtBlockHTML('title', 'builder_header_title', 'Title')}
               ${_fmtBlockHTML('sub',   'builder_header_subtitle', 'Subtitle')}
@@ -1973,7 +1972,9 @@
   function gpApplyHeaderFormat(cardEl, style, viz) {
     if (!cardEl) return;
     const tf = style && style.titleFormat, sf = style && style.subtitleFormat;
-    if (viz === 'kpi') {
+    if (viz === 'kpi' || viz === 'gauge') {
+      // KPI and single-value gauge both keep title/subtitle in the body as .l/.sb
+      // (header stripped). Multi-gauge has no .l/.sb → null → no-op.
       _applyHdrFmt(cardEl.querySelector('.l'),  tf, _KPI_TITLE_BASE_PX, _KPI_SCALE);
       _applyHdrFmt(cardEl.querySelector('.sb'), sf, _KPI_SUB_BASE_PX,   _KPI_SCALE);
       return;
@@ -1990,9 +1991,9 @@
     const segCss = 'flex:0 0 auto';
     const swCss  = 'width:20px;height:20px;border-radius:5px;cursor:pointer';
     return `
-      <div data-fmt="${fmt}" style="${fmt === 'title' ? 'margin-bottom:10px' : ''}">
-        <div style="font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="gps_analysis.${labelKey}">${labelEn}</div>
-        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+      <details class="es-fmt" data-fmt="${fmt}">
+        <summary><i class="ti ti-chevron-right es-fmt-chev"></i><span data-i18n="gps_analysis.${labelKey}">${labelEn}</span><span class="es-fmt-dot" title="Formato aplicado"></span></summary>
+        <div class="es-fmt-body" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
           <div class="es-seg" style="${segCss}">
             <button type="button" data-fmt-tog="bold" style="font:700 12px/1 var(--cm-font-sans)" data-i18n-attr="title:gps_analysis.builder_fmt_bold" title="Bold">B</button>
             <button type="button" data-fmt-tog="italic" style="font:italic 600 12px/1 var(--cm-font-sans)" data-i18n-attr="title:gps_analysis.builder_fmt_italic" title="Italic">I</button>
@@ -2017,7 +2018,7 @@
             <input type="color" data-fmt-color-custom data-i18n-attr="title:gps_analysis.builder_fmt_color_custom" title="Custom" style="width:22px;height:22px;padding:0;border:1px solid var(--cm-border);border-radius:5px;background:none;cursor:pointer">
           </div>
         </div>
-      </div>`;
+      </details>`;
   }
 
   // Reflect S.titleFormat / S.subtitleFormat onto the format controls' is-on states.
@@ -2032,6 +2033,8 @@
       block.querySelectorAll('[data-fmt-color]').forEach(b => b.classList.toggle('is-on', b.dataset.fmtColor === (f.color || 'default')));
       const custom = block.querySelector('[data-fmt-color-custom]');
       if (custom && typeof f.color === 'string' && f.color[0] === '#') custom.value = f.color;
+      // Dot on the collapsed summary when this title/subtitle carries non-default formatting.
+      block.classList.toggle('has-fmt', !!_normFmt(f));
     });
   }
 
@@ -4641,6 +4644,8 @@
     body.innerHTML = header + `<div class="gp-gauges-row">${
       d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}${d.single ? _gaugeDeltaLine(it) : ''}</div>`).join('')
     }</div>`;
+    // Single gauge title/subtitle format (bold/size/font/color) — same wiring as the KPI.
+    gpApplyHeaderFormat(body, config.style, 'gauge');
     if (opts.example) _appendExampleBadge(body);
   }
 
