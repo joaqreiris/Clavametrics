@@ -962,6 +962,12 @@ function injInScope(inj) {
   return !!d && d >= w.start && d <= w.end;
 }
 
+// Display-only relabelling of stored body_area values (kept in English for coords/keys).
+// "Thigh" reads as "Quadriceps" (more technical) on cards and popovers.
+function bodyAreaLabel(area) {
+  return (area || '').replace(/Thigh/g, 'Quadriceps');
+}
+
 function scopeLabel() {
   if (_bodyScope === 'all')  return tt('injuries.scope_all','All time');
   if (_bodyScope === 'last') return tt('injuries.scope_last','Last season');
@@ -2231,7 +2237,7 @@ function injCard(inj) {
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">${tt('injuries.diagnosis','Diagnosis')}</span>
-        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${inj.body_area || ''}</small>${inj.injury_category ? `<span class="inj-cat-chip">${catLabel(inj.injury_category)}</span>` : ''}</span>
+        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${bodyAreaLabel(inj.body_area)}</small>${inj.injury_category ? `<span class="inj-cat-chip">${catLabel(inj.injury_category)}</span>` : ''}</span>
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">${tt('injuries.severity','Severity')}</span>
@@ -2386,7 +2392,7 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
   const statusColor = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? 'var(--cm-success)' : getInjuryTab(inj) === 'returning' ? '#EA580C' : 'var(--cm-danger)';
   const statusLabel = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? tt('injuries.tab_resolved','Resolved') : getInjuryTab(inj) === 'returning' ? tt('injuries.tab_returning','Returning') : tt('injuries.tab_active','Active');
 
-  document.getElementById('bmpAreaTitle').textContent = injuries[0].body_area || areaKey;
+  document.getElementById('bmpAreaTitle').textContent = bodyAreaLabel(injuries[0].body_area || areaKey);
 
   const top3  = injuries.slice(0, 3);
   const extra = injuries.length - 3;
