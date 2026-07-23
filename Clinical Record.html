@@ -223,9 +223,17 @@
   .cr-table-head h2 { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
   .cr-table-head .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
   .cr-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .cr-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 9px 16px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); overflow-wrap: anywhere; }
+  /* Horizontal scroll wrapper so columns keep a comfortable width instead of squishing */
+  .cr-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cr-table.is-wide { min-width: 940px; }
+  .cr-table.is-wide thead th { white-space: nowrap; }
+  .cr-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 9px 16px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); }
   .cr-table th.num, .cr-table td.num { text-align: right; }
-  .cr-table tbody td { padding: 11px 16px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; overflow-wrap: anywhere; }
+  .cr-table tbody td { padding: 11px 16px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; }
+  .cr-table .c-rtp { white-space: nowrap; }
+  .cr-table td.cr-actions { text-align: right; white-space: nowrap; }
+  .cr-inj-edit { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--cm-border); border-radius: 7px; background: var(--cm-bg); color: var(--cm-fg-muted); cursor: pointer; }
+  .cr-inj-edit:hover { background: var(--cm-bg-soft); color: var(--cm-fg-strong); }
   .cr-table tbody tr:last-child td { border-bottom: 0; }
   .cr-table tbody tr:hover { background: var(--cm-bg-soft); }
   .cr-table .c-date { font: 500 12.5px/1 var(--cm-font-mono); color: var(--cm-fg); white-space: nowrap; }
@@ -250,6 +258,8 @@
 
   /* injuries layout */
   .cr-inj-cols { display: grid; grid-template-columns: 1fr 252px; gap: 14px; align-items: start; }
+  /* Let the 1fr card shrink so its table scrolls horizontally instead of widening the page */
+  .cr-inj-cols > .cm-card { min-width: 0; }
   /* Let the 1fr grid child shrink so its fixed-layout table fits instead of forcing width. */
   .cr-inj-cols > .cm-card { min-width: 0; }
 
@@ -600,16 +610,16 @@
                   <div style="display:flex;align-items:center;gap:8px;min-width:0"><h2 data-i18n="clinical_record.injury_history">Injury history</h2><span class="count" id="inj-count"></span></div>
                   <button class="cm-btn is-outline is-sm" id="cr-pastinj-add" type="button"><i class="ti ti-plus"></i><span data-i18n="clinical_record.add_past_injury">Add past injury</span></button>
                 </div>
-                <div style="min-width:0;">
-                <table class="cr-table">
+                <div class="cr-table-scroll">
+                <table class="cr-table is-wide">
                   <colgroup>
-                    <col style="width:10%"><col style="width:9%"><col style="width:10%"><col style="width:19%">
-                    <col style="width:16%"><col style="width:10%"><col style="width:6%"><col style="width:9%"><col style="width:11%">
+                    <col style="width:8%"><col style="width:10%"><col style="width:9%"><col style="width:19%">
+                    <col style="width:12%"><col style="width:10%"><col style="width:6%"><col style="width:9%"><col style="width:10%"><col style="width:7%">
                   </colgroup>
                   <thead>
                     <tr>
                       <th data-i18n="common.date">Date</th><th data-i18n="clinical_record.zone">Zone</th><th data-i18n="clinical_record.tissue">Tissue</th><th data-i18n="clinical_record.diagnosis">Diagnosis</th>
-                      <th data-i18n="clinical_record.mechanism">Mechanism</th><th data-i18n="clinical_record.severity">Severity</th><th class="num" data-i18n="clinical_record.days">Days</th><th data-i18n="clinical_record.rtp">RTP</th><th data-i18n="clinical_record.status">Status</th>
+                      <th data-i18n="clinical_record.mechanism">Mechanism</th><th data-i18n="clinical_record.severity">Severity</th><th class="num" data-i18n="clinical_record.days">Days</th><th data-i18n="clinical_record.rtp">RTP</th><th data-i18n="clinical_record.status">Status</th><th aria-label="Actions"></th>
                     </tr>
                   </thead>
                   <tbody id="inj-tbody"></tbody>
@@ -1074,11 +1084,11 @@
 <div class="cr-modal-ov" id="modalPastInjury">
   <div class="cr-modal-box">
     <div class="cr-modal-h">
-      <h3 data-i18n="clinical_record.add_past_injury">Add past injury</h3>
+      <h3 id="pi-title" data-i18n="clinical_record.add_past_injury">Add past injury</h3>
       <button type="button" id="pi-close" aria-label="Close" data-i18n-attr="aria-label:common.close"><i class="ti ti-x"></i></button>
     </div>
     <div class="cr-modal-body">
-      <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="clinical_record.past_injury_hint">A historical injury for the player's record. Saved as resolved — no rehab plan or phases are created.</div>
+      <div id="pi-hint" style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="clinical_record.past_injury_hint">A historical injury for the player's record. Saved as resolved — no rehab plan or phases are created.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
         <div class="cm-field"><label class="cm-label" for="pi-start" data-i18n="clinical_record.start_date_req">Start date *</label><input id="pi-start" type="date" class="cm-input"></div>
         <div class="cm-field"><label class="cm-label" for="pi-end" data-i18n="clinical_record.end_date">End date</label><input id="pi-end" type="date" class="cm-input"></div>
@@ -1156,10 +1166,57 @@
   const addDays = (iso, d) => { const dt=new Date(iso+'T00:00:00'); if(isNaN(dt)) return null; dt.setDate(dt.getDate()+d); return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate()); };
   const val = id => (($(id)||{}).value || '');
 
-  function open(){ ['pi-start','pi-end','pi-days','pi-diagnosis'].forEach(id=>{ const e=$(id); if(e) e.value=''; }); const z=$('pi-zone'); if(z) z.value=''; const s=$('pi-severity'); if(s) s.value=''; hideErr(); ov.classList.add('is-open'); const f=$('pi-start'); if(f) f.focus(); }
+  let editId = null;   // null → add mode; injury id → edit mode
+  let editReturned = null, editStatus = null;   // original values preserved on edit
+
+  // Keep the stored body_area exactly (e.g. "Right Adductor") even if it isn't one
+  // of the generic zone options, by injecting a temporary matching option.
+  function setZone(value){
+    const z=$('pi-zone'); if(!z) return;
+    z.querySelectorAll('option[data-injected]').forEach(o=>o.remove());
+    const v=value||'';
+    if(v && !Array.prototype.some.call(z.options, o=>o.value===v)){
+      const o=document.createElement('option'); o.value=v; o.textContent=v; o.setAttribute('data-injected','1');
+      z.insertBefore(o, z.options[1] || null);
+    }
+    z.value=v;
+  }
+
+  function setMode(edit){
+    editId = edit || null;
+    const title=$('pi-title'), hint=$('pi-hint');
+    if(title){ const k=editId?'clinical_record.edit_injury':'clinical_record.add_past_injury'; title.setAttribute('data-i18n',k); title.textContent=tt(k, editId?'Edit injury':'Add past injury'); }
+    if(hint) hint.style.display = editId ? 'none' : '';
+  }
+
+  function open(){ ['pi-start','pi-end','pi-days','pi-diagnosis'].forEach(id=>{ const e=$(id); if(e) e.value=''; }); setZone(''); const s=$('pi-severity'); if(s) s.value=''; setMode(null); hideErr(); ov.classList.add('is-open'); const f=$('pi-start'); if(f) f.focus(); }
   function close(){ ov.classList.remove('is-open'); }
 
+  async function openEdit(id){
+    hideErr();
+    let inj=null;
+    try { const r=await window.sb.from('injuries').select('*').eq('id',id).single(); inj=r&&r.data; } catch(_) {}
+    if(!inj){ return; }
+    setMode(id);
+    editReturned = inj.returned_date || null;
+    editStatus   = inj.status || null;
+    $('pi-start').value = inj.start_date || '';
+    $('pi-end').value   = inj.returned_date || '';
+    $('pi-days').value  = '';
+    setZone(inj.body_area || '');
+    $('pi-diagnosis').value = inj.injury_type || '';
+    $('pi-severity').value  = inj.severity || '';
+    ov.classList.add('is-open');
+    const f=$('pi-start'); if(f) f.focus();
+  }
+
   btn.addEventListener('click', open);
+  // Edit buttons are rendered by clinical-record.js into #inj-tbody → delegate.
+  const injBody = $('inj-tbody');
+  injBody && injBody.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('.cr-inj-edit');
+    if (b && b.dataset.id) { e.preventDefault(); openEdit(b.dataset.id); }
+  });
   $('pi-close') && $('pi-close').addEventListener('click', close);
   $('pi-cancel') && $('pi-cancel').addEventListener('click', close);
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
@@ -1187,6 +1244,8 @@
       returned = end;
     } else if (days != null) {
       returned = addDays(start, days);
+    } else if (editId) {
+      returned = editReturned;   // editing: keep the existing recovery date if none entered
     } else {
       return showErr(tt('clinical_record.err_end_or_days','Enter an end date or days lost.'));
     }
@@ -1196,12 +1255,19 @@
       let clubId = null; try { clubId = window.getClubId ? await window.getClubId() : null; } catch(_) {}
       const playerId = new URLSearchParams(location.search).get('player');
       if (!clubId || !playerId) { saveBtn.disabled = false; return showErr(tt('clinical_record.err_context','Missing club or player context.')); }
-      let createdBy = null; try { const prof = window.getProfile ? await window.getProfile() : null; createdBy = (prof && prof.id) || null; } catch(_) {}
 
-      const payload = { player_id: playerId, club_id: clubId, injury_type: diagnosis, body_area: zone, severity, start_date: start, returned_date: returned, status: 'cleared', created_by: createdBy };
-      const res = await window.sb.from('injuries').insert(payload);
-      if (res && res.error) { saveBtn.disabled = false; console.error('[ClinicalRecord] add past injury failed:', res.error); return showErr(tt('clinical_record.err_save','Could not save: {msg}', { msg: res.error.message || 'error' })); }
-      try { sessionStorage.setItem('cr_pastinj_ok','1'); } catch(_) {}
+      let res;
+      if (editId) {
+        // Update core fields; preserve status (don't force-resolve an active injury).
+        const upd = { injury_type: diagnosis, body_area: zone, severity, start_date: start, returned_date: returned };
+        res = await window.sb.from('injuries').update(upd).eq('id', editId);
+      } else {
+        let createdBy = null; try { const prof = window.getProfile ? await window.getProfile() : null; createdBy = (prof && prof.id) || null; } catch(_) {}
+        const payload = { player_id: playerId, club_id: clubId, injury_type: diagnosis, body_area: zone, severity, start_date: start, returned_date: returned, status: 'cleared', created_by: createdBy };
+        res = await window.sb.from('injuries').insert(payload);
+      }
+      if (res && res.error) { saveBtn.disabled = false; console.error('[ClinicalRecord] save injury failed:', res.error); return showErr(tt('clinical_record.err_save','Could not save: {msg}', { msg: res.error.message || 'error' })); }
+      try { sessionStorage.setItem(editId ? 'cr_injedit_ok' : 'cr_pastinj_ok','1'); } catch(_) {}
       location.reload();   // let clinical-record.js re-fetch and re-render table + count + KPIs + heatmap
     } catch (err) {
       saveBtn.disabled = false; console.error('[ClinicalRecord] add past injury exception:', err);
@@ -1211,10 +1277,15 @@
 
   // Success toast after the reload.
   try {
-    if (sessionStorage.getItem('cr_pastinj_ok')) {
+    const okAdd = sessionStorage.getItem('cr_pastinj_ok');
+    const okEdit = sessionStorage.getItem('cr_injedit_ok');
+    if (okAdd || okEdit) {
       sessionStorage.removeItem('cr_pastinj_ok');
+      sessionStorage.removeItem('cr_injedit_ok');
       const t = document.createElement('div');
-      t.textContent = tt('clinical_record.past_injury_saved','Past injury added to the record.');
+      t.textContent = okEdit
+        ? tt('clinical_record.injury_updated','Injury updated.')
+        : tt('clinical_record.past_injury_saved','Past injury added to the record.');
       t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:1200;background:#15181D;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s';
       document.body.appendChild(t);
       requestAnimationFrame(() => { t.style.opacity = '1'; });

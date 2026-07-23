@@ -314,9 +314,10 @@ function getBodyCoords(area) {
       .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')));
     setText('inj-count', tt('clinical_record.injury_count', rows.length + ' ' + (rows.length === 1 ? 'injury' : 'injuries'), { count: rows.length }));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="cr-empty">' + esc(tt('clinical_record.no_injuries', 'No injuries recorded')) + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="cr-empty">' + esc(tt('clinical_record.no_injuries', 'No injuries recorded')) + '</td></tr>';
       return;
     }
+    const editTitle = tt('clinical_record.edit_injury', 'Edit injury');
     tbody.innerHTML = rows.map(inj => {
       const sev = String(inj.severity || 'minor').toLowerCase();
       const sevPill = '<span class="cm-pill ' + (SEV_PILL[sev] || '') + '"><span class="cm-dot"></span>' + esc(tSevLabel(sev)) + '</span>';
@@ -333,8 +334,9 @@ function getBodyCoords(area) {
         '<td class="c-muted">' + esc(mechLabel(inj)) + '</td>' +
         '<td>' + sevPill + '</td>' +
         '<td class="num">' + daysOut(inj) + '</td>' +
-        '<td>' + rtp + '</td>' +
+        '<td class="c-rtp">' + rtp + '</td>' +
         '<td>' + statusPill + '</td>' +
+        '<td class="cr-actions"><button type="button" class="cr-inj-edit" data-id="' + esc(inj.id) + '" title="' + esc(editTitle) + '" aria-label="' + esc(editTitle) + '"><i class="ti ti-pencil"></i></button></td>' +
         '</tr>';
     }).join('');
   }
