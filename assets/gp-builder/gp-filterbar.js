@@ -72,6 +72,8 @@
   };
   function T(en){ const k=_FB_I18N[en]; if(!k) return en; const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(k):null; return (v&&v!==k)?v:en; }
   function _fbActive(n){ if(window.CM_I18N&&CM_I18N.t){ const v=CM_I18N.t('filterbar.active_filters',{count:n}); if(v&&v!=='filterbar.active_filters') return v; } return n===1?'1 active filter':`${n} active filters`; }
+  // Pista discreta al pie del panel: cuántas opciones ocultó la cascada de filtros.
+  function _fbHiddenHint(n){ if(window.CM_I18N&&CM_I18N.t){ const v=CM_I18N.t('filterbar.hidden_by_filters',{count:n}); if(v&&v!=='filterbar.hidden_by_filters') return v; } return n===1?'1 hidden by active filters':`${n} hidden by active filters`; }
 
   // ── Estado (en memoria) ─────────────────────────────────────────────────
   const state = {
@@ -455,7 +457,8 @@
         `<button class="fb-link" type="button" data-act="all">Select all</button>` +
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
       `</div>` +
-      `<div class="fb-list"><div class="fb-empty">Loading…</div></div>`;
+      `<div class="fb-list"><div class="fb-empty">Loading…</div></div>` +
+      `<div class="fb-hidden-hint"></div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
     if (cfg.key === 'position') {
@@ -482,6 +485,7 @@
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
       `</div>` +
       `<div class="fb-list fb-date-list"><div class="fb-empty">Loading…</div></div>` +
+      `<div class="fb-hidden-hint"></div>` +
       `<details class="fb-custom">` +
         `<summary>Custom range</summary>` +
         `<div class="fb-range">` +
@@ -527,6 +531,7 @@
     const draft = drafts.date || (drafts.date = new Set());
     const valid = _validCache && _validCache.date;    // dates possible under the OTHER filters
     const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
+    _setHiddenHint('date', valid ? opts.filter(o => !valid.has(o.value) && !draft.has(o.value)).length : 0);
     if (!shown.length) { list.innerHTML = `<div class="fb-empty">${T('No dates for the current filters.')}</div>`; return; }
     list.innerHTML = shown.map(o =>
       `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
@@ -558,6 +563,13 @@
   }
 
   // ── Render de la lista de checkboxes desde datos reales ─────────────────
+  // Escribe (o limpia) la pista de "N ocultas" al pie del panel de `key`. n=0 → vacío
+  // → la regla .fb-hidden-hint:empty lo colapsa, sin ocupar espacio.
+  function _setHiddenHint(key, n) {
+    const hint = root?.querySelector(`.fb-drop[data-key="${key}"] .fb-hidden-hint`);
+    if (hint) hint.textContent = n > 0 ? _fbHiddenHint(n) : '';
+  }
+
   function renderList(key) {
     const list = root.querySelector(`.fb-drop[data-key="${key}"] .fb-list`);
     if (!list) return;
@@ -568,6 +580,9 @@
     // Mostrar SOLO lo elegible: las opciones imposibles no se renderizan (las ya elegidas
     // se mantienen). Se recuperan al limpiar o quitar la selección que acota.
     const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
+    // Ocultas por la cascada: excluidas por _validCache y NO ya elegidas (una selección que
+    // se volvió imposible sigue visible/tildada → no cuenta). La búsqueda de texto NO suma acá.
+    _setHiddenHint(key, valid ? opts.filter(o => !valid.has(o.value) && !draft.has(o.value)).length : 0);
     if (!shown.length) { list.innerHTML = `<div class="fb-empty">${T('No options for the current filters.')}</div>`; return; }
     list.innerHTML = shown.map(o =>
       `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
