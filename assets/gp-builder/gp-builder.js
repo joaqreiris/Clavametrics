@@ -299,6 +299,16 @@
 
   function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
   function fmt(n) { return n >= 1000 ? n.toLocaleString('en-US') : (Number.isInteger(n) ? n : n.toFixed(1)); }
+  // Decimal-aware value formatter. `dec` = the metric's configured decimals (catalog).
+  // dec == null → legacy behaviour (integer, or one decimal for non-integers < 1000).
+  function fmtVal(v, dec) {
+    if (v == null || !isFinite(+v)) return '—';
+    if (dec == null) return fmt(Math.round(+v * 10) / 10);
+    const d = Math.max(0, dec | 0);
+    return (+v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  // Metric's configured decimals (or null if unknown). Single source of truth for all viz.
+  function decOfMetric(id) { const d = catalogMap.get(id)?.decimals; return Number.isFinite(d) ? d : null; }
   function defaultAgg(kind) { return (kind === 'peak' || kind === 'calculated' || kind === 'avg') ? 'avg' : 'total'; }
   function isAggOk(agg, kind) { return kind !== 'peak' || (AGG[agg] && AGG[agg].peakOk); }
   function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
@@ -477,7 +487,9 @@
     for (const row of rows) {
       const m = {
         id:          row.key,
-        name:        row.label,
+        // Empty/blank catalog label → humanize the key so the metric name (and any card
+        // title auto-set from it) never renders blank. e.g. 'total_distance' → 'Total distance'.
+        name:        (row.label && row.label.trim()) || String(row.key || '').replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase()),
         unit:        row.unit || '',
         kind:        row.kind || 'accum',
         group_name:  row.category || 'custom',
@@ -4349,7 +4361,7 @@
           refVal = bv;                                             // the baseline absolute value
         }
       }
-      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle };
+      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle, dec: decOfMetric(m.id) };
     });
     return { items, single: items.length <= 1 };
   }
@@ -4364,7 +4376,7 @@
     if (d.delta) {
       const sign = d.delta.dir === 'up' ? '+' : '−';
       // % + the reference ABSOLUTE, so the delta never floats without a magnitude.
-      const refTxt = d.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmt(Math.round(d.refVal * 10) / 10)}${d.unit ? ' ' + esc(d.unit) : ''})</span>` : '';
+      const refTxt = d.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmtVal(d.refVal, d.dec)}${d.unit ? ' ' + esc(d.unit) : ''})</span>` : '';
       tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}${refTxt}</div>`;
     } else if (d.cmpName) {
       tLine = `<div class="t">${esc(d.cmpName)}</div>`;
@@ -4376,7 +4388,7 @@
     // ancho-de-card Y por cantidad de caracteres: sin esto un valor largo
     // ("1,194,235 m") se renderiza a 42px y .gp-c-b (overflow:hidden) lo corta,
     // dejando "1,194..." — que se lee como km cuando en realidad son metros.
-    const vTxt = fmt(Math.round(d.value * 10) / 10);
+    const vTxt = fmtVal(d.value, d.dec);
     const vCh  = vTxt.length + (d.unit ? d.unit.length + 1 : 0);
     return `<div class="l"><i class="ti ${d.icon}"></i>${esc(lLabel)}</div>
       ${subHtml}
@@ -4391,14 +4403,14 @@
       let t = '';
       if (it.delta) {
         const sign = it.delta.dir === 'up' ? '+' : '−';
-        const refTxt = it.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmt(Math.round(it.refVal * 10) / 10)}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
+        const refTxt = it.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmtVal(it.refVal, it.dec)}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
         t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
       } else if (it.cmpName) {
         t = `<div class="kt">${esc(it.cmpName)}</div>`;
       }
       return `<div class="gp-kpi-tile">
         <div class="kl"><i class="ti ${it.icon}"></i>${esc(lab)}</div>
-        <div class="kv">${fmt(Math.round(it.value * 10) / 10)}${it.unit ? ` <sub>${esc(it.unit)}</sub>` : ''}</div>
+        <div class="kv">${fmtVal(it.value, it.dec)}${it.unit ? ` <sub>${esc(it.unit)}</sub>` : ''}</div>
         ${t}</div>`;
     }).join('')}</div>`;
   }
@@ -5233,7 +5245,8 @@
     const s0    = series[0];
     const s1    = series[1];
 
-    function fmtY(y) { return fmt(Math.round(y * 10) / 10); }
+    // Series-aware: respect the metric's configured decimals (s.label = metric id).
+    function fmtY(y, s) { return fmtVal(y, s ? decOfMetric(s.label) : null); }
 
     switch (viz) {
       case 'kpi': {
@@ -5242,7 +5255,7 @@
         const aggName = config.metrics[0]?.agg ? _aggName(config.metrics[0].agg) : '';
         const rangeName = config.range?.type ? _rangeName(config.range.type) : '';
         return `<div class="l"><i class="ti ${VIZ_TYPES.kpi.icon}"></i>${aggName} · ${rangeName}</div>
-          <div class="v">${fmtY(val)} <sub>${esc(unit)}</sub></div>
+          <div class="v">${fmtY(val, s0)} <sub>${esc(unit)}</sub></div>
           <div class="t">${esc(s0?.name || '')}</div>`;
       }
 
@@ -5255,7 +5268,7 @@
             <span class="gp-rank-bar">
               <span class="gp-rank-fill ${i < 1?'':i<3?'med':'low'}" style="width:${Math.round(p.y/max*100)}%">${esc(p.x)}</span>
             </span>
-            <span style="text-align:right;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${labels ? fmtY(p.y) : ''}</span>
+            <span style="text-align:right;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${labels ? fmtY(p.y, s0) : ''}</span>
           </div>`).join('')}</div>`;
       }
 
@@ -5333,7 +5346,7 @@
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
         </tr></thead><tbody>${rowPts.map(p => `<tr>
           ${(() => { const dv = (p.dims || [p.x]).slice(0, dimCols.length); while (dv.length < dimCols.length) dv.push('—'); return dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join(''); })()}
-          ${series.map(s => { const pt = s.points.find(q => q.x === p.x); return `<td>${pt ? fmtY(pt.y) : '—'}</td>`; }).join('')}
+          ${series.map(s => { const pt = s.points.find(q => q.x === p.x); return `<td>${pt ? fmtY(pt.y, s) : '—'}</td>`; }).join('')}
         </tr>`).join('')}</tbody></table></div>`;
       }
 
@@ -5388,17 +5401,17 @@
             } else if (useDiff) {
               const d = diffOf(s, pt);
               if (d == null) {
-                bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = fmtY(val);
-                tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} (sin referencia)`;
+                bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = fmtY(val, s);
+                tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} (sin referencia)`;
               } else {
                 bg = _heatDiff(d / m.maxAbs); fg = _textOn(bg);
                 lbl = (d >= 0 ? '+' : '') + d.toFixed(d >= 10 || d <= -10 ? 0 : 1) + '%';
-                tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
+                tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
               }
             } else {
               bg = _heatVal((val - m.min) / m.span); fg = _textOn(bg);
-              lbl = fmtY(val);
-              tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)}`;
+              lbl = fmtY(val, s);
+              tip = `${x} · ${s.name}: ${fmtY(val, s)}${unitOf(s)}`;
             }
             return `<td><span class="gp-zc" style="background:${bg};color:${fg};width:auto;min-width:46px;padding:0 8px" title="${esc(tip)}">${esc(lbl)}</span></td>`;
           }).join('')}
