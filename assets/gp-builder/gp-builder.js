@@ -4348,6 +4348,12 @@
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
           layout: { padding: { top: 6, right: 12 } },
+          // Cross-filter affordance: cursor pointer solo cuando el hover pega en un punto
+          // (los puntos son clickeables → filtran por jugador en la barra compartida).
+          onHover: (evt, els) => {
+            const c = evt && evt.native && evt.native.target;
+            if (c && c.style) c.style.cursor = (els && els.length) ? 'pointer' : 'default';
+          },
           plugins: {
             legend: {
               display: d.showLeg, position: 'bottom',

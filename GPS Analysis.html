@@ -3493,6 +3493,54 @@ document.addEventListener('pointerdown', e => {
   if (window._gpSelection.size >= 2) window.gpSelectCard(card);   // no stopPropagation → engine handles the drag/click
 }, true);
 
+// ── 4b·4. CROSS-FILTER: click en un DATO de una card → setea el filtro en la BARRA ───────────────
+// Mismo patrón que el bloque de arriba: capture-phase, y solo PRE-EMPTAMOS gp-canvas
+// (stopPropagation) en el caso que nos toca — press que pega en un elemento de datos. Como
+// gp-canvas escucha en BUBBLE, detener la propagación en capture evita que arme mvPending →
+// ese click no selecciona ni arrastra la card. Cualquier press que NO pegue en un dato cae
+// intacto al engine (drag / select / marquee / group). gp-canvas.js NO se toca.
+// v1: solo scatter → filtro `player` (el punto ya lleva `pid`). additive:false → cada click
+// REEMPLAZA (la card fuente también se filtra, así que no quedan otros puntos que sumar).
+let _gpXFilter = null;
+const _gpXClear = () => { _gpXFilter = null; };
+document.addEventListener('pointerdown', e => {
+  _gpXFilter = null;
+  if (e.button !== 0 || !e.target.closest) return;
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // modificadores → multi-select / marquee
+  const canvas = e.target.closest('canvas'); if (!canvas) return;
+  const card = canvas.closest('.gp-c'); if (!card || card.classList.contains('gp-add')) return;
+  const chart = window.Chart && window.Chart.getChart ? window.Chart.getChart(canvas) : null;
+  if (!chart) return;
+  // Chart.js 4.x: getRelativePosition lee offsetX/offsetY del evento y un PointerEvent los trae
+  // → getElementsAtEventForMode funciona con pointerdown sin convertir nada.
+  let hit = null;
+  try { hit = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false)[0] || null; }
+  catch (_) { return; }
+  if (!hit) return;                    // área vacía del chart → engine de siempre (drag/select)
+  // Elegibilidad COMPLETA acá, ANTES de pre-emptar: si no vamos a filtrar de verdad, no hay
+  // que robarle el evento al engine. (Si no, un click en una barra/línea quedaría en un hueco
+  // muerto: pre-emptado ⇒ no selecciona la card, y sin pid ⇒ tampoco filtra.)
+  if (card.__config && card.__config.viz !== 'scatter') return;   // v1: solo scatter
+  const _ds  = chart.data && chart.data.datasets && chart.data.datasets[hit.datasetIndex];
+  const _raw = _ds && _ds.data && _ds.data[hit.index];
+  if (!_raw || !_raw.pid) return;      // sin jugador en el punto → v1 no cross-filtra
+  e.stopPropagation();                 // pre-empt gp-canvas (bubble): sin mvPending → sin select/drag
+  _gpXFilter = { pointerId: e.pointerId, pid: _raw.pid, startX: e.clientX, startY: e.clientY };
+}, true);
+// Filtrar en pointerup y SOLO si fue un click real (<5px). Si el usuario arrastró desde el punto,
+// el gesto muere acá sin filtrar (y sin mover: ya pre-emptamos). No usamos setPointerCapture, así
+// que no hay captura que liberar; el único estado es _gpXFilter y se limpia en TODOS los caminos.
+document.addEventListener('pointerup', e => {
+  const g = _gpXFilter; _gpXFilter = null;
+  if (!g || e.pointerId !== g.pointerId) return;
+  const dx = e.clientX - g.startX, dy = e.clientY - g.startY;
+  if (dx * dx + dy * dy > 25) return;                       // >5px → gesto abortado, no filtra
+  window.gpFilterBar && window.gpFilterBar.setValue &&
+    window.gpFilterBar.setValue('player', g.pid, { additive: false, toggle: true });
+}, true);
+document.addEventListener('pointercancel', _gpXClear, true);
+document.addEventListener('lostpointercapture', _gpXClear, true);
+
 document.addEventListener('pointermove', e => {
   if (_gpGroupResize && e.pointerId === _gpGroupResize.pointerId) {
     const g = _gpGroupResize;

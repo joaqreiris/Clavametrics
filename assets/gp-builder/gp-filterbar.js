@@ -628,6 +628,29 @@
     state[key] = Array.from(drafts[key] || []);
     _afterChange();   // recalcula opciones válidas del resto + poda imposibles
   }
+  // Set PROGRAMÁTICO de un filtro — MISMO pipeline que tildar un checkbox del panel:
+  // drafts → state → _afterChange (cascada de dependientes + triggers/chips + fire + rerender).
+  // Lo usa el cross-filter (click en un dato de una card). NUNCA mutar `state` desde afuera:
+  // saltearía drafts (el panel quedaría desincronizado), la cascada y el fire.
+  //   additive:false (default) → REEMPLAZA la selección por [value]
+  //   additive:true            → suma/quita sobre la selección actual
+  //   toggle:true    (default) → si ya estaba filtrado por ese valor, lo limpia (undo)
+  // 'date' no se soporta: su commit es especial (preset XOR days XOR rango) → commitDate.
+  function setValue(key, value, opts = {}) {
+    if (key === 'date' || value == null || !Array.isArray(state[key])) return false;
+    const v = String(value);
+    const additive = opts.additive === true;
+    const toggle   = opts.toggle !== false;
+    const cur = new Set((state[key] || []).map(String));
+    const has = cur.has(v);
+    let next;
+    if (additive) { next = new Set(cur); if (toggle && has) next.delete(v); else next.add(v); }
+    else          { next = (toggle && has && cur.size === 1) ? new Set() : new Set([v]); }
+    drafts[key] = next;
+    state[key]  = [...next];
+    _afterChange();
+    return true;
+  }
   function commitDate(panel) {
     const presetBtn = panel.querySelector('.fb-preset.is-on');
     const days = Array.from(drafts.date || []).sort((a, b) => b.localeCompare(a));   // newest first
@@ -1084,6 +1107,7 @@
     // data in this team's sessions). Reused by the per-card player picker.
     getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
     clearAll: clearAll_,
     async reload() { try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); } },
     _state: state,
