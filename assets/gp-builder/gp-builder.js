@@ -4594,18 +4594,29 @@
       }
       // Respect the metric's configured decimals (distance = 0 → no noisy ".3 m").
       const _dec = catalogMap.get(metricId)?.decimals ?? 0;
-      const _rv  = _dec > 0 ? Math.round(value * Math.pow(10, _dec)) / Math.pow(10, _dec) : Math.round(value);
       return {
         value, max: mx, axisLabel: name,
         gradient: true,
         zones: [{ from: 0, to: mx, color: accent }],   // fallback if gradient unsupported
-        valueText: fmt(_rv) + (unit ? ' ' + unit : ''),
+        valueText: fmtVal(value, _dec) + (unit ? ' ' + unit : ''),
         zoneLabel: '',
         minLabel: '0', maxLabel: fmt(mx),
-        delta, refVal, unit, cmpName,
+        delta, refVal, unit, cmpName, dec: _dec,
       };
     });
-    return { items, single };
+
+    // Single-value gauge = KPI-style tile → carry the same header the KPI shows:
+    // metric identity on top (custom title > metric name), agg·scope as subtitle.
+    let head = '', subtitle = '';
+    if (single && items.length) {
+      const userTitle = config.titleCustom && config.title ? String(config.title).trim() : '';
+      head = userTitle || items[0].axisLabel || '';
+      const aggName = config.metrics?.[0]?.agg ? _aggName(config.metrics[0].agg) : '';
+      const autoLbl = [aggName, config.scope?.level || ''].filter(Boolean).join(' · ');
+      subtitle = autoLbl && autoLbl !== head ? autoLbl : '';
+      items[0].axisLabel = '';   // shown as the title on top instead of duplicated inside the arc
+    }
+    return { items, single, head, subtitle };
   }
 
   /** Mounts a gauge card — a flex row of half-circle gauges (one per metric).
@@ -4617,7 +4628,10 @@
     // Single-value gauge → KPI-style compact tile (CSS keys off .gp-gauge-single) with a
     // comparison delta line under the arc; multi-metric → a row of gauges.
     body.classList.toggle('gp-gauge-single', !!d.single);
-    body.innerHTML = `<div class="gp-gauges-row">${
+    const header = (d.single && d.head)
+      ? `<div class="l"><i class="ti ti-gauge"></i>${esc(d.head)}</div>${d.subtitle ? `<div class="sb">${esc(d.subtitle)}</div>` : ''}`
+      : '';
+    body.innerHTML = header + `<div class="gp-gauges-row">${
       d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}${d.single ? _gaugeDeltaLine(it) : ''}</div>`).join('')
     }</div>`;
     if (opts.example) _appendExampleBadge(body);
@@ -4629,7 +4643,7 @@
     const sign   = it.delta.dir === 'up' ? '+' : '−';
     const col    = it.delta.dir === 'up' ? 'var(--cm-success,#16A34A)' : 'var(--cm-danger,#DC2626)';
     const refTxt = it.refVal != null
-      ? ` <span style="opacity:.6;font-weight:500">(ref: ${esc(fmt(Math.round(it.refVal * 10) / 10))}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
+      ? ` <span style="opacity:.6;font-weight:500">(ref: ${esc(fmtVal(it.refVal, it.dec))}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
     return `<div style="font:500 11.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px;text-align:center">`
       + `<span style="color:${col};font-weight:600"><i class="ti ti-arrow-${it.delta.dir}-right" style="font-size:11px;vertical-align:-1px"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>`
       + `${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
