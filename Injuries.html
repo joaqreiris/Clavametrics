@@ -252,6 +252,14 @@
   .inj-modal-foot { padding:14px 20px; border-top:1px solid var(--cm-border-soft); display:flex; gap:8px; justify-content:flex-end; }
   .inj-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .inj-3col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  /* Registration mode toggle (Active vs Historical) */
+  .inj-logmode { display:inline-flex; gap:4px; padding:4px; background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:10px; }
+  .inj-logmode-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border:0; background:transparent; border-radius:7px; cursor:pointer; font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); transition:background .12s,color .12s; }
+  .inj-logmode-btn.is-active { background:var(--cm-surface); color:var(--cm-fg); box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .inj-logmode-desc { margin:-4px 0 0; font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .inj-olddate-hint { display:flex; align-items:flex-start; gap:8px; margin-top:-4px; padding:8px 10px; background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); border-radius:8px; font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
+  .inj-olddate-hint i { color:var(--cm-warning); flex:none; margin-top:1px; }
+  .inj-olddate-btn { margin-left:auto; flex:none; border:0; background:var(--cm-warning); color:#fff; padding:5px 10px; border-radius:6px; font:600 11px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; }
 
   #tweaks-root { position:fixed; bottom:16px; right:16px; z-index:1000; }
   @media (max-width:768px) {
@@ -470,6 +478,11 @@
       <button onclick="closeLogModal()" title="Close" data-i18n-attr="title:common.close"><i class="ti ti-x"></i></button>
     </div>
     <div class="inj-modal-body">
+      <div class="inj-logmode" id="logModeWrap">
+        <button type="button" class="inj-logmode-btn is-active" data-mode="active" onclick="setLogMode('active')"><i class="ti ti-activity-heartbeat" style="font-size:14px"></i><span data-i18n="injuries.mode_active">Active injury</span></button>
+        <button type="button" class="inj-logmode-btn" data-mode="historical" onclick="setLogMode('historical')"><i class="ti ti-history" style="font-size:14px"></i><span data-i18n="injuries.mode_historical">Historical record</span></button>
+      </div>
+      <p class="inj-logmode-desc" id="logModeDesc" data-i18n="injuries.mode_active_desc">Creates a case with an automatic rehab protocol and phase timeline.</p>
       <div class="inj-2col">
         <div class="cm-field"><label class="cm-label" for="logPlayer" data-i18n="injuries.player_req">Player *</label><select id="logPlayer" class="cm-input"><option value="" data-i18n="injuries.select_player">Select player…</option></select></div>
         <div class="cm-field"><label class="cm-label" for="logType" data-i18n="injuries.diagnosis_req">Diagnosis *</label><input id="logType" class="cm-input" placeholder="e.g. Distensión isquiotibial derecha" data-i18n-ph="injuries.diagnosis_ph"></div>
@@ -499,6 +512,11 @@
         <div class="cm-field"><label class="cm-label" for="logStart" data-i18n="injuries.start_date_req">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
         <div class="cm-field"><label class="cm-label" for="logReturn" data-i18n="injuries.est_return">Est. return</label><input id="logReturn" type="date" class="cm-input"><div id="logReturnHint" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-accent)"></div></div>
       </div>
+      <div id="logOldDateHint" class="inj-olddate-hint" style="display:none">
+        <i class="ti ti-alert-triangle" style="font-size:15px"></i>
+        <span data-i18n="injuries.old_date_hint">This start date is over a month ago. If the player has already recovered, register it as a historical record for the medical history.</span>
+        <button type="button" class="inj-olddate-btn" onclick="setLogMode('historical')" data-i18n="injuries.old_date_switch">Register as historical</button>
+      </div>
       <div class="inj-2col">
         <div class="cm-field"><label class="cm-label" for="logMechanism" data-i18n="injuries.mechanism">Mechanism</label>
           <select id="logMechanism" class="cm-input">
@@ -514,13 +532,65 @@
           <label class="cm-label" for="logAreaSel" data-i18n="injuries.body_area">Body area</label>
           <select id="logAreaSel" class="cm-input">
             <option value="" data-i18n="injuries.select_area">Select area…</option>
-            <optgroup label="Head &amp; Neck"><option>Head</option><option>Neck</option></optgroup>
-            <optgroup label="Upper body"><option>Right Shoulder</option><option>Left Shoulder</option><option>Right Arm</option><option>Left Arm</option><option>Right Elbow</option><option>Left Elbow</option><option>Right Wrist</option><option>Left Wrist</option><option>Chest</option><option>Upper Back</option><option>Abdomen</option><option>Lower Back</option></optgroup>
-            <optgroup label="Hip &amp; Groin"><option>Groin</option><option>Right Hip</option><option>Left Hip</option><option>Right Glute</option><option>Left Glute</option></optgroup>
-            <optgroup label="Thigh"><option>Right Thigh</option><option>Left Thigh</option><option>Right Adductor</option><option>Left Adductor</option><option>Right Hamstring</option><option>Left Hamstring</option></optgroup>
-            <optgroup label="Knee"><option>Right Knee</option><option>Left Knee</option></optgroup>
-            <optgroup label="Lower leg"><option>Right Shin</option><option>Left Shin</option><option>Right Calf</option><option>Left Calf</option><option>Right Achilles</option><option>Left Achilles</option></optgroup>
-            <optgroup label="Ankle &amp; Foot"><option>Right Ankle</option><option>Left Ankle</option><option>Right Foot</option><option>Left Foot</option></optgroup>
+            <optgroup label="Head &amp; Neck" data-i18n-attr="label:injuries.grp_head_neck">
+              <option value="Head" data-i18n="injuries.area_head">Head</option>
+              <option value="Neck" data-i18n="injuries.area_neck">Neck</option>
+            </optgroup>
+            <optgroup label="Upper body" data-i18n-attr="label:injuries.grp_upper">
+              <option value="Right Shoulder" data-i18n="injuries.area_right_shoulder">Right Shoulder</option>
+              <option value="Left Shoulder" data-i18n="injuries.area_left_shoulder">Left Shoulder</option>
+              <option value="Right Arm" data-i18n="injuries.area_right_arm">Right Arm</option>
+              <option value="Left Arm" data-i18n="injuries.area_left_arm">Left Arm</option>
+              <option value="Right Forearm" data-i18n="injuries.area_right_forearm">Right Forearm</option>
+              <option value="Left Forearm" data-i18n="injuries.area_left_forearm">Left Forearm</option>
+              <option value="Right Elbow" data-i18n="injuries.area_right_elbow">Right Elbow</option>
+              <option value="Left Elbow" data-i18n="injuries.area_left_elbow">Left Elbow</option>
+              <option value="Right Wrist" data-i18n="injuries.area_right_wrist">Right Wrist</option>
+              <option value="Left Wrist" data-i18n="injuries.area_left_wrist">Left Wrist</option>
+              <option value="Right Hand" data-i18n="injuries.area_right_hand">Right Hand</option>
+              <option value="Left Hand" data-i18n="injuries.area_left_hand">Left Hand</option>
+              <option value="Right Fingers" data-i18n="injuries.area_right_fingers">Right Fingers</option>
+              <option value="Left Fingers" data-i18n="injuries.area_left_fingers">Left Fingers</option>
+              <option value="Chest" data-i18n="injuries.area_chest">Chest</option>
+              <option value="Upper Back" data-i18n="injuries.area_upper_back">Upper Back</option>
+              <option value="Abdomen" data-i18n="injuries.area_abdomen">Abdomen</option>
+              <option value="Lower Back" data-i18n="injuries.area_lower_back">Lower Back</option>
+            </optgroup>
+            <optgroup label="Hip &amp; Groin" data-i18n-attr="label:injuries.grp_hip_groin">
+              <option value="Groin" data-i18n="injuries.area_groin">Groin</option>
+              <option value="Right Hip" data-i18n="injuries.area_right_hip">Right Hip</option>
+              <option value="Left Hip" data-i18n="injuries.area_left_hip">Left Hip</option>
+              <option value="Right Glute" data-i18n="injuries.area_right_glute">Right Glute</option>
+              <option value="Left Glute" data-i18n="injuries.area_left_glute">Left Glute</option>
+            </optgroup>
+            <optgroup label="Thigh" data-i18n-attr="label:injuries.grp_thigh">
+              <option value="Right Thigh" data-i18n="injuries.area_right_thigh">Right Thigh</option>
+              <option value="Left Thigh" data-i18n="injuries.area_left_thigh">Left Thigh</option>
+              <option value="Right Adductor" data-i18n="injuries.area_right_adductor">Right Adductor</option>
+              <option value="Left Adductor" data-i18n="injuries.area_left_adductor">Left Adductor</option>
+              <option value="Right Hamstring" data-i18n="injuries.area_right_hamstring">Right Hamstring</option>
+              <option value="Left Hamstring" data-i18n="injuries.area_left_hamstring">Left Hamstring</option>
+            </optgroup>
+            <optgroup label="Knee" data-i18n-attr="label:injuries.grp_knee">
+              <option value="Right Knee" data-i18n="injuries.area_right_knee">Right Knee</option>
+              <option value="Left Knee" data-i18n="injuries.area_left_knee">Left Knee</option>
+            </optgroup>
+            <optgroup label="Lower leg" data-i18n-attr="label:injuries.grp_lower_leg">
+              <option value="Right Shin" data-i18n="injuries.area_right_shin">Right Shin</option>
+              <option value="Left Shin" data-i18n="injuries.area_left_shin">Left Shin</option>
+              <option value="Right Calf" data-i18n="injuries.area_right_calf">Right Calf</option>
+              <option value="Left Calf" data-i18n="injuries.area_left_calf">Left Calf</option>
+              <option value="Right Achilles" data-i18n="injuries.area_right_achilles">Right Achilles</option>
+              <option value="Left Achilles" data-i18n="injuries.area_left_achilles">Left Achilles</option>
+            </optgroup>
+            <optgroup label="Ankle &amp; Foot" data-i18n-attr="label:injuries.grp_ankle_foot">
+              <option value="Right Ankle" data-i18n="injuries.area_right_ankle">Right Ankle</option>
+              <option value="Left Ankle" data-i18n="injuries.area_left_ankle">Left Ankle</option>
+              <option value="Right Foot" data-i18n="injuries.area_right_foot">Right Foot</option>
+              <option value="Left Foot" data-i18n="injuries.area_left_foot">Left Foot</option>
+              <option value="Right Toes" data-i18n="injuries.area_right_toes">Right Toes</option>
+              <option value="Left Toes" data-i18n="injuries.area_left_toes">Left Toes</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -818,6 +888,39 @@ function ttFmtDate(dateStr, opts) {
 let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
 let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
 let _editingInjuryId = null, _dischargeId = null;
+let _logMode = 'active'; // 'active' = with rehab protocol | 'historical' = past resolved injury
+
+function setLogMode(mode) {
+  _logMode = mode;
+  document.querySelectorAll('#logModeWrap .inj-logmode-btn').forEach(b =>
+    b.classList.toggle('is-active', b.dataset.mode === mode));
+  const desc     = document.getElementById('logModeDesc');
+  const retLabel = document.querySelector('label[for="logReturn"]');
+  if (mode === 'historical') {
+    if (desc) { desc.setAttribute('data-i18n','injuries.mode_historical_desc'); desc.textContent = tt('injuries.mode_historical_desc','Logs a past, already-resolved injury for the medical history. No rehab protocol is created.'); }
+    if (retLabel) { retLabel.setAttribute('data-i18n','injuries.return_date_req'); retLabel.textContent = tt('injuries.return_date_req','Return date *'); }
+    document.getElementById('logOldDateHint').style.display = 'none';
+    document.getElementById('logReturnHint').style.display  = 'none';
+    _returnManuallyEdited = true; // it's an actual date, not an estimate — don't auto-fill
+  } else {
+    if (desc) { desc.setAttribute('data-i18n','injuries.mode_active_desc'); desc.textContent = tt('injuries.mode_active_desc','Creates a case with an automatic rehab protocol and phase timeline.'); }
+    if (retLabel) { retLabel.setAttribute('data-i18n','injuries.est_return'); retLabel.textContent = tt('injuries.est_return','Est. return'); }
+    _returnManuallyEdited = false;
+    checkOldDate();
+  }
+}
+
+function checkOldDate() {
+  const el = document.getElementById('logOldDateHint');
+  if (!el) return;
+  if (_logMode !== 'active' || _editingInjuryId) { el.style.display = 'none'; return; }
+  const v = document.getElementById('logStart')?.value;
+  if (!v) { el.style.display = 'none'; return; }
+  const start = new Date(v);      start.setHours(0,0,0,0);
+  const today = new Date();       today.setHours(0,0,0,0);
+  const days  = Math.floor((today - start) / 86400000);
+  el.style.display = days > 28 ? 'flex' : 'none';
+}
 let _phaseModalPhaseId = null, _phaseModalInjId = null;
 let _returnManuallyEdited = false;
 let _clubId = null, _profile = null;
@@ -840,6 +943,15 @@ const BODY_COORDS = {
   'left elbow':       { ant:[76,63],  post:[24,63]  },
   'right wrist':      { ant:[22,73],  post:[78,73]  },
   'left wrist':       { ant:[78,73],  post:[22,73]  },
+  'right forearm':    { ant:[23,68],  post:[77,68]  },
+  'left forearm':     { ant:[77,68],  post:[23,68]  },
+  'forearm':          { ant:[23,68],  post:[77,68]  },
+  'right hand':       { ant:[21,80],  post:[79,80]  },
+  'left hand':        { ant:[79,80],  post:[21,80]  },
+  'hand':             { ant:[21,80],  post:[79,80]  },
+  'right fingers':    { ant:[20,84],  post:[80,84]  },
+  'left fingers':     { ant:[80,84],  post:[20,84]  },
+  'fingers':          { ant:[20,84],  post:[80,84]  },
   'right hip':        { ant:[37,90],  post:[63,90]  },
   'left hip':         { ant:[63,90],  post:[37,90]  },
   'hip':              { ant:[50,90],  post:[50,90]  },
@@ -873,6 +985,9 @@ const BODY_COORDS = {
   'right foot':       { ant:[39,193], post:[39,193] },
   'left foot':        { ant:[61,193], post:[61,193] },
   'foot':             { ant:[50,193], post:[50,193] },
+  'right toes':       { ant:[39,197], post:[39,197] },
+  'left toes':        { ant:[61,197], post:[61,197] },
+  'toes':             { ant:[50,197], post:[50,197] },
 };
 
 function getBodyCoords(area) {
@@ -1727,6 +1842,7 @@ async function savePhaseStatus(status) {
     }
   }
   document.getElementById('logStart')?.addEventListener('change', autoFillReturn);
+  document.getElementById('logStart')?.addEventListener('change', checkOldDate);
   document.getElementById('logType')?.addEventListener('input', autoFillReturn);
   document.getElementById('logCategory')?.addEventListener('change', autoFillReturn);
   document.getElementById('logReturn')?.addEventListener('input', () => {
@@ -2383,6 +2499,9 @@ function openLogModal() {
   _hideAllSubClsSections();
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = false;
+  document.getElementById('logModeWrap').style.display = '';
+  document.getElementById('logModeDesc').style.display = '';
+  setLogMode('active');
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => z.classList.remove('is-sel'));
   document.getElementById('modalLogInj').classList.add('is-open');
 }
@@ -2423,6 +2542,13 @@ function openEditInjury(id) {
   }
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = !!(inj.expected_return);
+  // Historical/active toggle is only for new records — hide when editing
+  _logMode = 'active';
+  document.getElementById('logModeWrap').style.display = 'none';
+  document.getElementById('logModeDesc').style.display = 'none';
+  document.getElementById('logOldDateHint').style.display = 'none';
+  const _retLbl = document.querySelector('label[for="logReturn"]');
+  if (_retLbl) { _retLbl.setAttribute('data-i18n','injuries.est_return'); _retLbl.textContent = tt('injuries.est_return','Est. return'); }
   // Highlight on map
   const area = inj.body_area || '';
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
@@ -2469,17 +2595,26 @@ async function saveInjury() {
     const idx = _allInjuries.findIndex(i => i.id === _editingInjuryId);
     if (idx >= 0) Object.assign(_allInjuries[idx], payload);
   } else {
+    const isHistorical = _logMode === 'historical';
+    if (isHistorical && !expected_return) {
+      alert(tt('injuries.validation_return_req','For a historical record, please set the Return date.'));
+      return;
+    }
+    const status        = isHistorical ? 'cleared' : 'active';
+    const returned_date = isHistorical ? expected_return : null;
     const { data: newInj, error } = await window.sb.from('injuries')
-      .insert({ ...payload, club_id: _clubId, status: 'active', created_by: _profile?.id || null })
+      .insert({ ...payload, club_id: _clubId, status, returned_date, created_by: _profile?.id || null })
       .select('*, players:player_id(first_name,last_name,number,position)').single();
     if (error) { alert(tt('injuries.err_saving', `Error saving: ${error.message}`, { msg: error.message })); return; }
 
-    // Auto-create phases
-    try {
-      const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification);
-      const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
-      if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
-    } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
+    // Auto-create phases (active protocol only — historical records skip the rehab timeline)
+    if (!isHistorical) {
+      try {
+        const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification);
+        const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
+        if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
+      } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
+    }
 
     _allInjuries.unshift(newInj);
   }
