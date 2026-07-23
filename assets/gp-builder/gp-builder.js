@@ -355,7 +355,7 @@
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
-               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value',
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
                ...(_normFmt(S.titleFormat)    ? { titleFormat:    _normFmt(S.titleFormat) }    : {}),
@@ -602,6 +602,10 @@
                   <button data-gmode="acwr" data-i18n="gps_analysis.gauge_mode_acwr">ACWR</button>
                 </div>
               </div>
+              <div class="es-toggle" data-only="kpi,gauge">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_subtitle">Subtitle</span><span class="s" data-i18n="gps_analysis.builder_subtitle_sub">Show the agg · scope line</span></span>
+                <button class="es-sw-t is-on" data-toggle="showSub"></button>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -733,7 +737,7 @@
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
-             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value',
+             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
@@ -1108,6 +1112,7 @@
       S.titleFormat    = cfg.titleFormat    ? { ...cfg.titleFormat }    : {};
       S.subtitleFormat = cfg.subtitleFormat ? { ...cfg.subtitleFormat } : {};
       S.gaugeMode = cfg.gaugeMode || 'value';
+      S.showSub = cfg.showSub !== false;
       S.scatterLabel = cfg.scatterLabel || 'name';
       S.scatterAvatars = !!cfg.scatterAvatars;
       S.points  = cfg.points !== false;
@@ -1139,6 +1144,7 @@
       S.titleFormat    = rawConfig.style?.titleFormat    ? { ...rawConfig.style.titleFormat }    : {};
       S.subtitleFormat = rawConfig.style?.subtitleFormat ? { ...rawConfig.style.subtitleFormat } : {};
       S.gaugeMode = rawConfig.style?.gaugeMode || 'value';
+      S.showSub = rawConfig.style?.showSub !== false;
       S.scatterLabel = rawConfig.style?.scatterLabel || 'name';
       S.scatterAvatars = !!rawConfig.style?.scatterAvatars;
       S.points  = rawConfig.style?.points !== false;
@@ -4361,7 +4367,7 @@
           refVal = bv;                                             // the baseline absolute value
         }
       }
-      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle, dec: decOfMetric(m.id) };
+      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle, dec: decOfMetric(m.id), showSub: config.style?.showSub !== false };
     });
     return { items, single: items.length <= 1 };
   }
@@ -4373,7 +4379,7 @@
     // agg·scope drops to the subtitle. This keeps every KPI consistent (a card with a
     // custom title and one without both show a name on top), which is what users expect.
     const lLabel  = d.title || d.name || autoLbl;
-    const subHtml = autoLbl && autoLbl !== lLabel ? `<div class="sb">${esc(autoLbl)}</div>` : '';
+    const subHtml = (d.showSub !== false && autoLbl && autoLbl !== lLabel) ? `<div class="sb">${esc(autoLbl)}</div>` : '';
     let tLine = '';
     if (d.delta) {
       const sign = d.delta.dir === 'up' ? '+' : '−';
@@ -4490,7 +4496,7 @@
         + `<stop offset="0%" stop-color="#22c55e"/><stop offset="55%" stop-color="#eab308"/><stop offset="100%" stop-color="#ef4444"/>`
         + `</linearGradient></defs>${arc(0, M, `url(#${gid})`)}`
       : (zones || []).map(z => arc(z.from, z.to, z.color)).join('');
-    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:180px;display:block;margin:0 auto">
+    return `<svg viewBox="0 14 200 96" style="width:100%;max-width:180px;display:block;margin:0 auto">
       ${track}
       ${hasVal ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
       <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
@@ -4628,8 +4634,9 @@
     // Single-value gauge → KPI-style compact tile (CSS keys off .gp-gauge-single) with a
     // comparison delta line under the arc; multi-metric → a row of gauges.
     body.classList.toggle('gp-gauge-single', !!d.single);
+    const showSub = config.style?.showSub !== false;
     const header = (d.single && d.head)
-      ? `<div class="l"><i class="ti ti-gauge"></i>${esc(d.head)}</div>${d.subtitle ? `<div class="sb">${esc(d.subtitle)}</div>` : ''}`
+      ? `<div class="l"><i class="ti ti-gauge"></i>${esc(d.head)}</div>${(showSub && d.subtitle) ? `<div class="sb">${esc(d.subtitle)}</div>` : ''}`
       : '';
     body.innerHTML = header + `<div class="gp-gauges-row">${
       d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}${d.single ? _gaugeDeltaLine(it) : ''}</div>`).join('')
