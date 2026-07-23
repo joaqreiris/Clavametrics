@@ -504,9 +504,10 @@
     // size is changed by dragging the corner handle (gp-resize.js seeds it
     // via the MutationObserver on the grid once this element is attached)
 
-    // Title/subtitle format (Paso 3a). Constants-based scaling in gpApplyHeaderFormat means it's
-    // safe to call here even though `el` is still detached from the DOM.
-    window.gpApplyHeaderFormat?.(el, config.style);
+    // Title/subtitle format (Paso 3a/3b). Constants-based scaling means it's safe even though `el`
+    // is still detached from the DOM. For KPI (viz='kpi') the header here is a no-op (its .l/.sb
+    // aren't rendered yet + this header gets stripped) — mountKpiCard formats the KPI body instead.
+    window.gpApplyHeaderFormat?.(el, config.style, config.viz);
 
     el.querySelector('[data-edit]')?.addEventListener('click', () => {
       if (window.GpBuilder?.openForEdit) window.GpBuilder.openForEdit(el);

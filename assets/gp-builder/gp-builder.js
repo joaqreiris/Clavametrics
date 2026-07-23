@@ -606,10 +606,11 @@
                 <i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gps_analysis.builder_add_reference_line">Add line</span>
               </button>
             </div>
-            <!-- Title/subtitle format (Paso 3a). data-only is a HARDCODED non-KPI list: if you add a
-                 new viz type, add it here too (KPI is excluded on purpose — its header is stripped
-                 from the DOM by gpbStripKpiHeader, handled separately in Paso 3b). -->
-            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap">
+            <!-- Title/subtitle format (Paso 3a + 3b). data-only is a HARDCODED type list: if you add a
+                 new viz type that shows a title/subtitle, add it here too. KPI (3b) formats its body
+                 .l/.sb via mountKpiCard. NOT included: single-metric GAUGE also strips its header but
+                 has no header-format wiring yet — leave it out until it's given the same treatment. -->
+            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi">
               <div class="lab" data-i18n="gps_analysis.builder_header_format">Title &amp; subtitle</div>
               ${_fmtBlockHTML('title', 'builder_header_title', 'Title')}
               ${_fmtBlockHTML('sub',   'builder_header_subtitle', 'Subtitle')}
@@ -788,7 +789,7 @@
       if (ttlEl) ttlEl.textContent = _editCardOrigTtl;
       if (subEl) subEl.textContent = _editCardOrigSub;
       // Editing live-mutated the header's inline styles (updateDraftHeader); restore the SAVED format.
-      gpApplyHeaderFormat(card, card.__config?.style);
+      gpApplyHeaderFormat(card, card.__config?.style, card.__config?.viz);
 
       // Restore X → delete, show pencil
       const delBtn = card.querySelector('[data-del]');
@@ -861,7 +862,7 @@
         const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
         subElE.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
       }
-      gpApplyHeaderFormat(targetCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
+      gpApplyHeaderFormat(targetCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
       const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
       targetCard.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', mapSz[b.textContent.trim()] === S.size)
@@ -944,7 +945,7 @@
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
-    gpApplyHeaderFormat(savedCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
+    gpApplyHeaderFormat(savedCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
 
     const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
     savedCard.querySelectorAll('.size-toggle button').forEach(b =>
@@ -1921,28 +1922,46 @@
   }
 
   // Apply one format object to one header span. Idempotent: resets the props we manage to '' (back
-  // to the base CSS) first, so re-renders/edits never accumulate. basePx = the span's CSS base size.
-  // Colour tokens are theme-aware (var(--cm-*)); a hex is a fixed colour that ignores the theme.
-  function _applyHdrFmt(el, fmt, basePx) {
+  // to the base CSS) first, so re-renders/edits never accumulate — and NULL-safe (no target → no-op).
+  // basePx = the span's CSS base size. `scale` = the sm/lg font-size multipliers (KPI passes a gentler
+  // pair because its card is small). md leaves fontSize unset → the base CSS (incl. any responsive
+  // clamp) is preserved. Colour tokens are theme-aware (var(--cm-*)); a hex is a fixed colour.
+  function _applyHdrFmt(el, fmt, basePx, scale) {
     if (!el) return;
     el.style.fontWeight = ''; el.style.fontStyle = ''; el.style.textTransform = '';
     el.style.color = ''; el.style.fontSize = ''; el.style.fontFamily = '';
     if (!fmt || typeof fmt !== 'object') return;
+    const sc = scale || { sm: 0.85, lg: 1.2 };
     if (fmt.bold)      el.style.fontWeight = '700';
     if (fmt.italic)    el.style.fontStyle = 'italic';
     if (fmt.uppercase) el.style.textTransform = 'uppercase';
     if (fmt.color && fmt.color !== 'default') el.style.color = _HDR_COLOR_TOKENS[fmt.color] || fmt.color;
-    if (fmt.size === 'sm')      el.style.fontSize = (basePx * 0.85).toFixed(2) + 'px';
-    else if (fmt.size === 'lg') el.style.fontSize = (basePx * 1.2).toFixed(2) + 'px';
+    if (fmt.size === 'sm')      el.style.fontSize = (basePx * sc.sm).toFixed(2) + 'px';
+    else if (fmt.size === 'lg') el.style.fontSize = (basePx * sc.lg).toFixed(2) + 'px';
     if (fmt.font && _HDR_FONTS[fmt.font]) el.style.fontFamily = _HDR_FONTS[fmt.font];
   }
 
-  // Shared across every header call site (draft preview, save, and gp-tabs saved-card build).
-  // Reads style.titleFormat / style.subtitleFormat and formats the card's .ttl / .sub spans.
-  function gpApplyHeaderFormat(cardEl, style) {
+  // KPI title/subtitle live in the BODY as .l / .sb (the header is stripped by gpbStripKpiHeader),
+  // with smaller base sizes and a gentler size clamp (the KPI card is small — 2×3 — so a "large"
+  // title must not grow into the number; the body's overflow:hidden clips any excess).
+  const _KPI_TITLE_BASE_PX = 11, _KPI_SUB_BASE_PX = 10;
+  const _KPI_SCALE = { sm: 0.9, lg: 1.1 };
+
+  // Shared across every header call site (draft preview, save, gp-tabs saved-card build, KPI mount).
+  // `viz` selects the target EXPLICITLY (not by absence of .ttl/.sub, which would misfire on other
+  // header-stripped types like a single-metric gauge): only 'kpi' targets the body .l/.sb; every
+  // other viz targets the real .gp-c-h header spans (scoped, so a stripped-header card → null → no-op,
+  // never touching a KPI/gauge body). All lookups are null-safe via _applyHdrFmt.
+  function gpApplyHeaderFormat(cardEl, style, viz) {
     if (!cardEl) return;
-    _applyHdrFmt(cardEl.querySelector('.ttl'), style && style.titleFormat,    _HDR_TITLE_BASE_PX);
-    _applyHdrFmt(cardEl.querySelector('.sub'), style && style.subtitleFormat, _HDR_SUB_BASE_PX);
+    const tf = style && style.titleFormat, sf = style && style.subtitleFormat;
+    if (viz === 'kpi') {
+      _applyHdrFmt(cardEl.querySelector('.l'),  tf, _KPI_TITLE_BASE_PX, _KPI_SCALE);
+      _applyHdrFmt(cardEl.querySelector('.sb'), sf, _KPI_SUB_BASE_PX,   _KPI_SCALE);
+      return;
+    }
+    _applyHdrFmt(cardEl.querySelector('.gp-c-h .ttl'), tf, _HDR_TITLE_BASE_PX);
+    _applyHdrFmt(cardEl.querySelector('.gp-c-h .sub'), sf, _HDR_SUB_BASE_PX);
   }
   window.gpApplyHeaderFormat = gpApplyHeaderFormat;
 
@@ -2007,8 +2026,9 @@
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
-    // Live format preview (draftCard IS the real card in edit mode). Idempotent.
-    gpApplyHeaderFormat(draftCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat });
+    // Live format preview (draftCard IS the real card in edit mode). Idempotent. viz=S.type so a KPI
+    // draft (header stripped) formats its body .l/.sb instead of the missing header spans.
+    gpApplyHeaderFormat(draftCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
   }
 
   // ── Current view helper ──────────────────────────────────────
@@ -4393,6 +4413,9 @@
     const item = d.items[0] || { value: 0, unit: '', name: '', aggName: '', scope: config.scope?.level || '', icon: VIZ_TYPES.kpi.icon, cmpName: '', delta: null, title: '' };
     const spark = Array.isArray(opts.sparkSeries) && opts.sparkSeries.length >= 2;
     body.innerHTML = kpiHtml(item, spark);
+    // Title/subtitle format (Paso 3b). KPI title=.l, subtitle=.sb in THIS body. One call site covers
+    // the saved card, reload and live preview — they all re-render the body through mountKpiCard.
+    gpApplyHeaderFormat(body, config.style, 'kpi');
     if (opts.example) _appendExampleBadge(body);
     if (!spark || typeof Chart === 'undefined') return;
 
