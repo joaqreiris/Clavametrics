@@ -2931,7 +2931,7 @@ gpGearBtn?.addEventListener('click', e => {
   e.stopPropagation();
   if (_pop && _popAnchor === gpGearBtn) { closePop(); return; }   // toggle: second click closes
   const n  = window._gpSessionCount;
-  const fc = window._gpFlaggedCount || 0;   // cached — open the menu NOW; don't block on a DB count
+  const fc = window._gpFlaggedN || 0;   // cached — open the menu NOW; don't block on a DB count
   Promise.resolve(_gpFlaggedCount()).catch(() => {});   // refresh the count in the background for next open
   makePopover(gpGearBtn, [
     { label: tt('gps_analysis.data_sources','Data sources') + (Number.isFinite(n) ? ` · ${tt('gps_analysis.n_gps_sessions','{n} GPS sessions',{n})}` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
@@ -2951,15 +2951,15 @@ gpGearBtn?.addEventListener('click', e => {
 // Periods the importer marked is_flagged (speed_outlier) are EXCLUDED from analysis
 // (v_gps_task_analysis) but kept in the table. Here the user reviews each one and either
 // Deletes it (confirmed noise) or Keeps it (un-flag → back into analysis).
-window._gpFlaggedCount = window._gpFlaggedCount || 0;
+window._gpFlaggedN = window._gpFlaggedN || 0;
 async function _gpFlaggedCount() {
   const clubId = window._gpClubId || await window.getClubId?.();
   if (!clubId || !window.sb) return 0;
   const { count } = await window.sb.from('gps_period_reports')
     .select('id', { count: 'exact', head: true })
     .eq('club_id', clubId).eq('is_flagged', true);
-  window._gpFlaggedCount = count || 0;
-  return window._gpFlaggedCount;
+  window._gpFlaggedN = count || 0;
+  return window._gpFlaggedN;
 }
 async function _gpOpenFlaggedPanel() {
   const clubId = window._gpClubId || await window.getClubId?.();
@@ -2976,9 +2976,9 @@ async function _gpRenderFlagged(clubId, body, ov) {
   } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
   if (!rows.length) {
     body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">No flagged periods. 🎉</div>';
-    window._gpFlaggedCount = 0; return;
+    window._gpFlaggedN = 0; return;
   }
-  window._gpFlaggedCount = rows.length;
+  window._gpFlaggedN = rows.length;
   const mps = r => (r.total_distance != null && r.duration_seconds) ? (r.total_distance / r.duration_seconds).toFixed(1) : '—';
   const num = 'text-align:right;font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums';
   body.innerHTML = `
