@@ -518,16 +518,31 @@
    STYLE A — Editorial dark (default)
    Moody dark backdrop, pitch-green accent, monospaced mata.
    ============================================================= */
+/* Sheet colour is user-set (--pst-bg, default a neutral off-white). Fallback first for
+   engines without color-mix(); the second declaration adds a faint accent wash on top. */
 .lu-poster.is-editorial {
-  /* Fallback for engines without color-mix() — a flat near-black read as "broken". */
-  background: linear-gradient(180deg, #16202C 0%, #0C131C 100%);
-  /* Themed: the club accent tints the whole sheet so it never looks like plain black. */
+  background: var(--pst-bg, #F2F2EF);
   background:
-    radial-gradient(ellipse 120% 65% at 50% -15%, color-mix(in srgb, var(--pst-accent) 34%, transparent) 0%, transparent 62%),
-    radial-gradient(ellipse 90% 50% at 50% 118%, color-mix(in srgb, var(--pst-accent) 18%, transparent) 0%, transparent 60%),
-    linear-gradient(180deg, color-mix(in srgb, var(--pst-accent) 13%, #121A24) 0%, color-mix(in srgb, var(--pst-accent) 6%, #0A0F16) 100%);
-  --pst-line: rgba(255,255,255,0.12);
+    radial-gradient(ellipse 120% 60% at 50% -12%, color-mix(in srgb, var(--pst-accent) 13%, transparent) 0%, transparent 62%),
+    var(--pst-bg, #F2F2EF);
 }
+
+/* Light sheet → dark type, set from the background's measured luminance in applyColors(). */
+.lu-poster.is-light {
+  --pst-fg: #14161A;
+  --pst-fg-muted: rgba(20,22,26,0.62);
+  --pst-fg-faint: rgba(20,22,26,0.40);
+  --pst-line: rgba(20,22,26,0.14);
+}
+.lu-poster.is-light .pst-pitch {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--pst-accent) 17%, #FFFFFF) 0%, color-mix(in srgb, var(--pst-accent) 9%, #F3F5F3) 100%);
+  --pf-line: rgba(20,22,26,0.34);
+}
+.lu-poster.is-light .pst-pitch::before { background: none; }
+.lu-poster.is-light .pst-spot .badge { background: rgba(255,255,255,0.90); border-color: #14161A; color: #14161A; }
+.lu-poster.is-light .pst-spot .name { color: #14161A; text-shadow: none; }
+.lu-poster.is-light .pst-foot { background: linear-gradient(180deg, transparent 0%, rgba(20,22,26,0.05) 100%); }
 .lu-poster.is-editorial .pst-banner .ttl { font-weight: 700; }
 
 

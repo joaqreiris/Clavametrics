@@ -114,6 +114,7 @@
     language: 'en',
     titleColor: null,
     accentColor: null,
+    bgColor: null,
   };
 
   // ── Module-level lineup context (set in init)
@@ -402,6 +403,19 @@
   };
 
   // ── Poster color overrides (title + accent CSS vars)
+  // Default sheet: a neutral off-white — readable, prints well, and is slightly distinct
+  // from pure white so the poster edge still reads on paper. Never pure black.
+  const POSTER_BG_DEFAULT = '#F2F2EF';
+
+  // Perceived luminance (sRGB) → decides whether the sheet needs dark or light type.
+  function _isLightHex (hex) {
+    const h = String(hex || '').replace('#', '');
+    if (h.length !== 6) return true;
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+    const lin = c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    return (0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)) > 0.4;
+  }
+
   function applyColors () {
     const poster = document.querySelector('.lu-poster');
     if (!poster) return;
@@ -409,6 +423,11 @@
     else poster.style.removeProperty('--pst-title-color');
     if (state.accentColor) poster.style.setProperty('--pst-em-color', state.accentColor);
     else poster.style.removeProperty('--pst-em-color');
+    // Background is user-configurable like the type colours; the sheet flips its whole
+    // type/line palette to stay legible on whatever they pick.
+    const bg = state.bgColor || POSTER_BG_DEFAULT;
+    poster.style.setProperty('--pst-bg', bg);
+    poster.classList.toggle('is-light', _isLightHex(bg));
   }
 
   // Resolved --cm-accent as a #rrggbb hex (or null). <input type="color"> only accepts hex.
@@ -436,6 +455,13 @@
     });
     accentPicker?.addEventListener('input', e => {
       state.accentColor = e.target.value;
+      applyColors();
+      scheduleSave();
+    });
+    const bgPicker = document.getElementById('luBgColor');
+    if (bgPicker) bgPicker.value = state.bgColor || POSTER_BG_DEFAULT;
+    bgPicker?.addEventListener('input', e => {
+      state.bgColor = e.target.value;
       applyColors();
       scheduleSave();
     });
@@ -468,16 +494,19 @@
           const accent = state.accentColor || _clubAccentHex() || '#4ADE80';
           const hx = accent.replace('#','');
           const r = parseInt(hx.slice(0,2),16), g = parseInt(hx.slice(2,4),16), b = parseInt(hx.slice(4,6),16);
+          // html2canvas can't resolve color-mix(), so compute the SAME blends numerically.
+          const mix = (pct, base) => 'rgb(' + base
+            .map((c, i) => Math.round([r, g, b][i] * pct + c * (1 - pct)))
+            .join(',') + ')';
+          const light = doc.querySelector('.lu-poster')?.classList.contains('is-light');
+          const sheet = doc.querySelector('.lu-poster');
+          if (sheet) sheet.style.background = state.bgColor || POSTER_BG_DEFAULT;
           const p = doc.querySelector('.pst-pitch');
           if (p) {
-            // html2canvas can't resolve color-mix(), so compute the SAME blend numerically
-            // instead of falling back to a hardcoded green.
-            const mix = (pct, base) => 'rgb(' + base
-              .map((c, i) => Math.round([r, g, b][i] * pct + c * (1 - pct)))
-              .join(',') + ')';
-            p.style.background =
-              'linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%),'
-              + `linear-gradient(180deg,${mix(0.22, [10, 31, 18])} 0%,${mix(0.08, [6, 19, 8])} 100%)`;
+            p.style.background = light
+              ? `linear-gradient(180deg,${mix(0.17, [255, 255, 255])} 0%,${mix(0.09, [243, 245, 243])} 100%)`
+              : 'linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%),'
+                + `linear-gradient(180deg,${mix(0.26, [11, 26, 20])} 0%,${mix(0.10, [6, 14, 10])} 100%)`;
           }
           doc.querySelectorAll('.pst-spot.is-captain .badge').forEach(el => {
             el.style.boxShadow = `0 0 0 2px rgba(${r},${g},${b},0.30)`;
@@ -867,6 +896,7 @@
       const styleConfig = {};
       if (state.titleColor)  styleConfig.title_color  = state.titleColor;
       if (state.accentColor) styleConfig.accent_color = state.accentColor;
+      if (state.bgColor)     styleConfig.bg_color     = state.bgColor;
       const { error } = await window.sb.from('lineups').update({
         formation:    state.formation,
         poster_style: state.style,
@@ -1196,6 +1226,11 @@
           state.accentColor = lineup.style_config.accent_color;
           const p = document.getElementById('luAccentColor');
           if (p) p.value = state.accentColor;
+        }
+        if (lineup.style_config?.bg_color) {
+          state.bgColor = lineup.style_config.bg_color;
+          const p = document.getElementById('luBgColor');
+          if (p) p.value = state.bgColor;
         }
         applyColors();
 
