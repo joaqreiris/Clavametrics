@@ -5194,7 +5194,12 @@
       // header y body nunca se desincronicen.
       const _dv = (p.dims || [p.x]).slice(0, dimCols.length);
       while (_dv.length < dimCols.length) _dv.push('—');
-      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'} tf-al-${(dims[i]?.align) || 'left'}">${esc(v)}</td>`).join('');
+      // Cross-filter: SOLO la 1ª celda (la de la dimensión) es clickeable, y sólo si el punto
+      // trae `fid` (aditivo del resolver; null en dimensión compuesta ⇒ no cross-filtrable).
+      // Las celdas de VALOR quedan sin marcar → el press cae al engine y la card se sigue
+      // arrastrando agarrando el cuerpo, como hoy.
+      const _fidAttr = (p.fid != null) ? ` data-fid="${esc(String(p.fid))}"` : '';
+      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'} tf-al-${(dims[i]?.align) || 'left'}"${i === 0 ? _fidAttr : ''}>${esc(v)}</td>`).join('');
       const valCells = cols.map(c => {
         const pt = c.s.points.find(q => q.x === p.x);
         return `<td class="tf tf-al-${c.f.align || 'right'}">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;

@@ -455,6 +455,10 @@
   .gp-zt thead th { position:sticky; top:0; z-index:3; }                       /* keep column names on vertical scroll */
   .gp-zt th.pc, .gp-zt td.pc { text-align:left; position:sticky; left:0; background:var(--cm-surface); border-right:1px solid var(--cm-border-soft); min-width:132px; padding-left:12px; z-index:2; }
   .gp-zt thead th.pc { background:var(--cm-bg-soft); z-index:4; }
+  /* Cross-filter: sólo la celda de dimensión con data-fid es clickeable (la escribe
+     mountTableCard únicamente cuando la card es cross-filtrable). Las celdas de valor
+     no la llevan → cursor normal y el press cae al engine (drag de la card). */
+  .gp-zt td[data-fid] { cursor:pointer; }
   .gp-zt th.dc, .gp-zt td.dc { text-align:left; padding:var(--cm-tbl-pad-y) 12px; white-space:nowrap; font:500 var(--cm-tbl-fs)/1 var(--cm-font-sans); color:var(--cm-fg); }
   .gp-zt thead th.dc { font:600 var(--cm-tbl-head-fs)/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
   /* numeric cells: right-aligned tabular mono → scan down a column at a glance */
@@ -3507,8 +3511,10 @@ document.addEventListener('pointerdown', e => {
 //     compuesta ("Def · MC3") no mapea a un valor único → fid null ⇒ excluida.
 const _GP_DIM2FILTER = { player_name:'player', position:'position', md_code:'md_code',
                          microcycle:'microcycle', rival:'rival' };   // session_date → fuera de v2
-// Dimensión efectiva de una card de barras: sin dimensiones el resolver agrupa por jugador.
-function _gpBarsFilterKey(config) {
+// v2b: tabla → sólo la celda de la DIMENSIÓN (lleva data-fid) es clickeable; las celdas de
+//      valor no pre-emptan, así la card table se sigue arrastrando por el cuerpo.
+// Dimensión efectiva de una card (barras/tabla): sin dimensiones el resolver agrupa por jugador.
+function _gpCardFilterKey(config) {
   const dims = (config && config.dimensions) || [];
   if (dims.length === 0) return 'player';
   if (dims.length !== 1) return null;                 // compuesta → no cross-filtrable
@@ -3520,6 +3526,19 @@ document.addEventListener('pointerdown', e => {
   _gpXFilter = null;
   if (e.button !== 0 || !e.target.closest) return;
   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // modificadores → multi-select / marquee
+  // TABLA: sólo la celda de dimensión (data-fid, escrita por mountTableCard). Un press en una
+  // celda de valor / header / chip NO matchea → return → engine intacto (drag, sort, selección
+  // de texto, scroll). Elegibilidad completa ANTES de pre-emptar, igual que en los charts.
+  const cell = e.target.closest('td[data-fid]');
+  if (cell) {
+    const tCard = cell.closest('.gp-c'); if (!tCard) return;
+    const tKey = _gpCardFilterKey(tCard.__config);
+    const tVal = cell.getAttribute('data-fid');
+    if (!tKey || !tVal) return;        // no cross-filtrable → engine de siempre
+    e.stopPropagation();               // pre-empt gp-canvas SOLO en esta celda
+    _gpXFilter = { pointerId: e.pointerId, fkey: tKey, fval: tVal, startX: e.clientX, startY: e.clientY };
+    return;
+  }
   const canvas = e.target.closest('canvas'); if (!canvas) return;
   const card = canvas.closest('.gp-c'); if (!card || card.classList.contains('gp-add')) return;
   const chart = window.Chart && window.Chart.getChart ? window.Chart.getChart(canvas) : null;
@@ -3541,7 +3560,7 @@ document.addEventListener('pointerdown', e => {
     const _raw = _ds && _ds.data && _ds.data[hit.index];
     if (_raw && _raw.pid) { fkey = 'player'; fval = _raw.pid; }
   } else {                             // bars: hit.index = índice de CATEGORÍA
-    const k = _gpBarsFilterKey(card.__config);
+    const k = _gpCardFilterKey(card.__config);
     const f = chart.$gpCatFids && chart.$gpCatFids[hit.index];
     if (k && f != null) { fkey = k; fval = f; }
   }
