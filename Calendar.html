@@ -662,6 +662,10 @@
   .cal-daypop-evt:hover { background:var(--cm-bg-soft); }
   .cal-daypop-evt .t { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); width:38px; flex-shrink:0; }
   .cal-daypop-evt .nm { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Planned indicator: filled clipboard when the session has exercises, faint when it's a shell. */
+  .cal-daypop-plan { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; color:var(--cm-fg-faint); }
+  .cal-daypop-plan .ti { font-size:15px; }
+  .cal-daypop-plan.is-on { color:var(--cm-success,#16A34A); }
   /* Delete-plan button: only reveals on row hover so it never competes with the event label. */
   .cal-daypop-del { flex-shrink:0; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; border-radius:6px; background:none; color:var(--cm-fg-faint); cursor:pointer; opacity:0; transition:opacity .12s, color .12s, background .12s; }
   .cal-daypop-del .ti { font-size:14px; }
@@ -1713,6 +1717,9 @@ const RIBBON_ZOOM = [10, 13, 16, 20, 25];  // px por día
 const RIBBON_GUTTER = 28;         // padding lateral del track, px
 const RIBBON_GAP = 5;             // separación entre chips, px
 let _monthEvts = []; // full session objects for month view click handlers
+// training_sessions ids that already carry a plan (have exercises) → "planned" badge, so an
+// empty session shell is distinguishable from a real planned one at a glance.
+let _plannedIds = new Set();
 let _pendingCrestUrl = null; // staged crest URL after Storage upload, written to DB on save
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
 let _activeShareLink = null; // active share_link row for current MC (players scope)
@@ -2842,7 +2849,9 @@ function openEvtModal(session, defaultDate, focusTasks) {
       planLabel.textContent = tt('calendar.open_in_gym_planner','Open in Gym Planner');
       planLink.style.display = 'inline-flex';
     } else if (!CAL_EVT_TYPES.includes(session.session_type)) {
-      planLink.href = `Daily Planning.html?date=${date}`;
+      // Pass the session id: a day can hold more than one training session and the planner
+      // must open THIS one (otherwise it falls back to the oldest of the day).
+      planLink.href = `Daily Planning.html?date=${date}${session.source === 'session' && session.id ? `&session=${session.id}` : ''}`;
       planLabel.textContent = tt('calendar.open_in_daily_planning','Open in Daily Planning');
       planLink.style.display = 'inline-flex';
     } else {
@@ -2984,7 +2993,7 @@ function showEvtPopover(anchor, session) {
     if (cat === 'gym' && date) {
       planBtn = `<a class="cm-btn is-ghost is-sm" href="Gym Planner.html?date=${date}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-barbell" style="font-size:11px"></i>${tt('calendar.gym_planner','Gym Planner')}</a>`;
     } else if (cat === 'training' && date) {
-      planBtn = `<a class="cm-btn is-ghost is-sm" href="Daily Planning.html?date=${date}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-clipboard-list" style="font-size:11px"></i>${tt('calendar.daily_planning','Daily Planning')}</a>`;
+      planBtn = `<a class="cm-btn is-ghost is-sm" href="Daily Planning.html?date=${date}${session.source === 'session' && session.id ? `&session=${session.id}` : ''}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-clipboard-list" style="font-size:11px"></i>${tt('calendar.daily_planning','Daily Planning')}</a>`;
     } else if (cat === 'match' && isCalEvt) {
       planBtn = `<a class="cm-btn is-ghost is-sm" href="Lineup.html?match=${session.id}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-users" style="font-size:11px"></i>${tt('calendar.lineup','Lineup')}</a>`;
     }
@@ -4231,6 +4240,14 @@ async function renderMonthView() {
     _monthEvts.push(s);
   });
 
+  // One extra query per month: which of this month's sessions actually have a plan.
+  _plannedIds = new Set();
+  const _sessIds = _monthEvts.filter(s => s.source === 'session').map(s => s.id);
+  if (_sessIds.length) {
+    const { data: _ex } = await window.sb.from('session_exercises').select('session_id').in('session_id', _sessIds);
+    (_ex || []).forEach(r => _plannedIds.add(r.session_id));
+  }
+
   const firstDay = new Date(y, m, 1).getDay();
   const DOW = [0,1,2,3,4,5,6].map(dayShort);
   let html = `<div style="display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--cm-border-soft)">`;
@@ -4277,7 +4294,12 @@ async function renderMonthView() {
         const cat = focusToClass(s.session_type);
         const bg2 = EVT_BG[cat]  || EVT_BG.training;
         const cl2 = EVT_CLR[cat] || EVT_CLR.training;
-        return `<div title="${_esc(s.title||s.session_type)}" style="min-width:0;pointer-events:none;margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(s.title||s.session_type)}</div>`;
+        // Filled dot = this training session already has a plan; hollow = empty shell.
+        const dot = s.source === 'session'
+          ? `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:4px;vertical-align:1px;${_plannedIds.has(s.id) ? `background:${cl2}` : `background:transparent;border:1px solid ${cl2};opacity:.6`}"></span>`
+          : '';
+        const tip = _esc(s.title||s.session_type) + (s.source === 'session' ? ' · ' + _esc(_plannedIds.has(s.id) ? tt('calendar.planned','Planned') : tt('calendar.not_planned','No plan yet')) : '');
+        return `<div title="${tip}" style="min-width:0;pointer-events:none;margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dot}${_esc(s.title||s.session_type)}</div>`;
       }).join('')}
     </div>`;
   }
@@ -4316,7 +4338,7 @@ function handleMonthEvtClick(sid) {
   const cls = focusToClass(s.session_type);
   if (cls === 'gym') { window.location.href = `Gym Planner.html?date=${s.session_date}`; return; }
   if (cls !== 'match' && cls !== 'recovery' && cls !== 'travel' && cls !== 'meeting' && cls !== 'evaluation' && cls !== 'video') {
-    window.location.href = `Daily Planning.html?date=${s.session_date}`; return;
+    window.location.href = `Daily Planning.html?date=${s.session_date}${s.source === 'session' && s.id ? `&session=${s.id}` : ''}`; return;
   }
   if (s._mc) { openMcModal(s._mc); return; }
   openEvtModal(s);
@@ -4373,6 +4395,11 @@ function openDaySummary(dateStr){
     const cl   = EVT_CLR[cat] || EVT_CLR.training;
     const time = s.start_time ? s.start_time.slice(0, 5) : '—';
     const label = upcomingTypeLabel(s.session_type);
+    // Planned vs empty shell — only meaningful for training_sessions.
+    const planTag = s.source !== 'session' ? ''
+      : _plannedIds.has(s.id)
+        ? `<span class="cal-daypop-plan is-on" title="${_esc(tt('calendar.planned','Planned'))}"><i class="ti ti-clipboard-check"></i></span>`
+        : `<span class="cal-daypop-plan" title="${_esc(tt('calendar.not_planned','No plan yet'))}"><i class="ti ti-clipboard"></i></span>`;
     // Only training_sessions carry a plan; calendar_events have nothing to delete here.
     const del = s.source === 'session'
       ? `<button class="cal-daypop-del" data-del-plan="${_esc(s.id)}" title="${_esc(tt('plan_delete.cta','Delete plan'))}" aria-label="${_esc(tt('plan_delete.cta','Delete plan'))}"><i class="ti ti-trash"></i></button>`
@@ -4381,6 +4408,7 @@ function openDaySummary(dateStr){
       <span class="t">${_esc(time)}</span>
       <span class="nm">${_esc(s.title || s.session_type)}</span>
       <span style="flex-shrink:0;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:0.04em;padding:3px 7px;border-radius:999px;background:${bg};color:${cl}">${_esc(label)}</span>
+      ${planTag}
       ${del}
     </div>`;
   }).join('') : `<div class="cal-daypop-empty">${_esc(tt('calendar.day_no_events','No events this day'))}</div>`;

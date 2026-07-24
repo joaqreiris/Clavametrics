@@ -44,6 +44,13 @@
   .dp-card-h h3{font:600 13px/1 var(--cm-font-sans);letter-spacing:0.04em;text-transform:uppercase;color:var(--cm-fg-strong)}
   .dp-card-h .ct{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)}
   .dp-card-h .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+  /* Double-session switcher: only rendered when the day has 2+ training sessions. */
+  .dp-sess-switch{margin-left:auto;display:inline-flex;gap:2px;padding:2px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft);max-width:60%;overflow-x:auto}
+  .dp-sess-tab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap}
+  .dp-sess-tab .tm{font:600 10.5px/1 var(--cm-font-mono);opacity:.75}
+  .dp-sess-tab .nm{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  .dp-sess-tab:hover{color:var(--cm-fg)}
+  .dp-sess-tab.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
   .dp-card-b{padding:14px 16px}
 
   /* Form grid */
@@ -244,6 +251,8 @@
       <div class="dp-card dp-session-card">
         <div class="dp-card-h">
           <h3 data-i18n="daily_planning.session_info">Session info</h3>
+          <!-- Shown only when the day holds more than one training session (e.g. double session). -->
+          <div id="dpSessionSwitch" class="dp-sess-switch" style="display:none"></div>
         </div>
         <div class="dp-card-b">
           <div class="dp-fg">
@@ -434,6 +443,10 @@
 
 <script>
 let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+// A day can hold more than one training session (double session). We load them ALL and let the
+// user switch; _dpPreferredSessionId is the one to open (from ?session= or the switcher).
+// It self-corrects on date change: an id that isn't in the new day falls back to the first.
+let _dpDaySessions = [], _dpPreferredSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
@@ -638,11 +651,15 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
-  const sess = sessResult.data?.[0] || null;
+  _dpDaySessions = sessResult.data || [];
+  // Honour the requested session (?session= / switcher); fall back to the day's first.
+  const sess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || _dpDaySessions[0] || null;
+  _dpPreferredSessionId = sess?.id || null;
   _dpCurrentSessionId = sess?.id || null;
+  _dpRenderSessionSwitch();   // after _dpCurrentSessionId, which marks the active tab
   _dpPublished = sess?.published || false;
   _dpGpsTargets = (sess && sess.gps_targets && typeof sess.gps_targets === 'object') ? sess.gps_targets : {};
   const titleInput = document.getElementById('dpSessionTitle');
@@ -1765,6 +1782,38 @@ function _dpUpdatePublishBtn() {
   if (del) del.style.display = _dpCurrentSessionId ? '' : 'none';
 }
 
+// ── Multi-session day switcher ──
+// Before this, loadDay used .limit(1) and always opened the OLDEST session of the day, so a
+// second session (double session) was visible in the calendar but impossible to plan.
+function _dpRenderSessionSwitch() {
+  const host = document.getElementById('dpSessionSwitch');
+  if (!host) return;
+  if (!_dpDaySessions || _dpDaySessions.length < 2) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = '';
+  host.innerHTML = _dpDaySessions.map((s, i) => {
+    const time = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    const name = s.title || tt('daily_planning.session_n', 'Session {n}', { n: i + 1 });
+    const on   = s.id === _dpCurrentSessionId ? ' is-on' : '';
+    return `<button type="button" class="dp-sess-tab${on}" data-sess="${_dpEsc(s.id)}" title="${_dpEsc(name)}">`
+      + (time ? `<span class="tm">${_dpEsc(time)}</span>` : '')
+      + `<span class="nm">${_dpEsc(name)}</span></button>`;
+  }).join('');
+  host.querySelectorAll('[data-sess]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.sess;
+    if (id === _dpCurrentSessionId) return;
+    _dpPreferredSessionId = id;
+    // Keep the URL shareable/reloadable on the session you're actually looking at.
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set('date', _dpCurrentDate);
+      u.searchParams.set('session', id);
+      history.replaceState(null, '', u);
+    } catch (_) {}
+    loadDay(_dpCurrentDate);
+  }));
+}
+function _dpEsc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
 // ── Delete plan ──
 // Delegates to the shared flow (assets/plan-delete.js): it confirms, and never destroys the
 // session's own GPS / RPE / video records — those are independent of the plan sheet.
@@ -1881,9 +1930,13 @@ async function dpExportPDF() {
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
-  const urlDate = new URLSearchParams(window.location.search).get('date');
+  const _dpQS   = new URLSearchParams(window.location.search);
+  const urlDate = _dpQS.get('date');
   const today   = new Date().toISOString().split('T')[0];
   const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
+  // ?session=<id> → open exactly that session (the calendar links carry it, so clicking the
+  // second training of a double session lands on THAT one, not the day's first).
+  _dpPreferredSessionId = _dpQS.get('session') || null;
 
   const yesterday7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const yesterday  = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
