@@ -23,7 +23,9 @@
   const VIZ_TYPES = {
     kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
     gauge:   { name: 'Gauge',   icon: 'ti-gauge',        min: 1, max: 6,  dimMax: 0 },
-    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
+    // dimMax 2 → eje jerárquico (Fase A): nivel 1 agrupa, nivel 2 subdivide. El orden de
+    // S.dimensions ES la jerarquía (reordenable por drag en el panel D&D).
+    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 2 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     // `roles`: ordered encoding table (data-driven role resolver — resolveEncodings()). Only
     // scatter declares it for now; other types keep their current path (no `roles`). min/max/
@@ -3310,8 +3312,16 @@
     // resolver): player_id para jugador, id de MC, clave normalizada de rival, o el propio
     // valor para posición/MD. null ⇒ esa categoría no es cross-filtrable (p. ej. dim compuesta).
     const catFids = [];
+    // catDims[i] = valores por NIVEL de cats[i] (el array `dims` que ya emite el resolver:
+    // ['MC 3','12 May']). Con 1 dimensión es [valor] y nadie lo usa → retrocompat total.
+    // Con 2, el eje jerárquico (Fase A · commit 2) dibuja el piso superior desde dims[0].
+    const catDims = [];
     ss.forEach(s => s.points.forEach(p => {
-      if (!cats.includes(p.x)) { cats.push(p.x); catFids.push(p.fid != null ? p.fid : null); }
+      if (!cats.includes(p.x)) {
+        cats.push(p.x);
+        catFids.push(p.fid != null ? p.fid : null);
+        catDims.push(Array.isArray(p.dims) ? p.dims : [p.x]);
+      }
     }));
 
     // "vs microciclo": the resolver enriches each point with { cur, ref, diff }. When the
@@ -3394,7 +3404,12 @@
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
 
-    return { cats, catFids, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+    // nDims = niveles REALMENTE disponibles: 2 sólo si el config pide 2 Y todas las categorías
+    // traen los 2 valores. El preview mock arma puntos sin `dims`, así que sin esta condición
+    // quedaría nDims:2 con catDims de un solo nivel → el plugin del commit 2 leería undefined.
+    const nDims = ((config.dimensions || []).length >= 2 && catDims.length && catDims.every(a => a.length >= 2))
+      ? 2 : 1;
+    return { cats, catFids, catDims, nDims, datasets, max, step, ticks, showAxes, showLeg, showLbl,
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
@@ -3512,6 +3527,10 @@
       // Cross-filter: el handler (GPS Analysis.html) lee esto desde la instancia del chart.
       // Índice de categoría (hit.index) → id de filtro. Se re-escribe en cada mount.
       body.__chart.$gpCatFids = d.catFids || null;
+      // Eje jerárquico (Fase A): valores por nivel de cada categoría + cuántos niveles hay.
+      // El commit 2 (plugin del piso superior) los consume; acá sólo se exponen.
+      body.__chart.$gpCatDims = d.catDims || null;
+      body.__chart.$gpNDims   = d.nDims || 1;
     };
     mount();
   }
@@ -6170,12 +6189,18 @@
   }
 
   // Chips colocados (reflejan S). Arrastrables para reordenar dentro de la zona.
-  function ddDimChip(id) {
+  // lvl = índice jerárquico (0-based) cuando hay 2+ dimensiones: el orden de S.dimensions ES
+  // la jerarquía, y arrastrando los chips se reordena. Con una sola dimensión NO se muestra
+  // (no hay jerarquía que explicar) → el caso de siempre queda visualmente idéntico.
+  function ddDimChip(id, lvl) {
     const d = DIM_MAP.get(id) || { name: id, icon: 'ti-category-2' };
+    const lvlBadge = (lvl != null)
+      ? `<span class="lvl" title="${esc(_tt('gps_analysis.builder_dim_level_hint', 'Drag to reorder — level 1 groups, level 2 subdivides'))}">${_tt('gps_analysis.builder_dim_level', 'Level')} ${lvl + 1}</span>`
+      : '';
     return `<div class="bdd-chip" data-kind="dim" data-id="${esc(id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(d.icon || 'ti-category-2')}"></i></span>
-      <span class="nm">${esc(d.name)}</span>
+      <span class="nm">${esc(d.name)}</span>${lvlBadge}
       <button class="x" data-rmdim="${esc(id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
   }
@@ -6261,7 +6286,8 @@
     const _DRAG_KEY = { 'a metric':'builder_drag_metric_here', 'a dimension':'builder_drag_dimension_here', 'metrics':'builder_drag_metrics_here', 'dimensions':'builder_drag_dimensions_here' };
     const emptyTxt = _tt('gps_analysis.' + (_DRAG_KEY[z.what] || 'builder_drag_metrics_here'), `drag ${z.what} here`);
     const body  = z.items.length
-      ? (isDim ? z.items.map(d => ddDimChip(d.id)).join('') : z.items.map(m => ddMetChip(m)).join(''))
+      ? (isDim ? z.items.map((d, i) => ddDimChip(d.id, z.items.length > 1 ? i : null)).join('')
+               : z.items.map(m => ddMetChip(m)).join(''))
       : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">${emptyTxt}</span></div>`;
     const roleAttr = z.role ? ` data-role="${z.role}"` : '';
     return `<div class="bdd-zone" data-accept="${z.accept}"${roleAttr}>
