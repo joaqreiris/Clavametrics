@@ -231,6 +231,7 @@
           <div class="meta">${p.role}</div>
         </div>
         <span class="role-tag ${p.role.toLowerCase()}">${p.role}</span>
+        <button type="button" class="lu-row-x" title="${tt('lineup.remove_player','Remove player')}" aria-label="${tt('lineup.remove_player','Remove player')}"><i class="ti ti-x"></i></button>
       </div>`;
 
     const emptyRow = (posHint, idx, kind) => `
@@ -328,35 +329,17 @@
     renderPitch();
   }
 
-  // ── Pitch SVG lines (drawn once)
+  // ── Pitch markings (drawn once) — the SAME engine the exercise planner uses.
+  // The old hand-rolled SVG used viewBox "0 0 100 100" with preserveAspectRatio="none",
+  // which STRETCHED a square drawing into the pitch box: the centre circle became an
+  // ellipse and the boxes had invented proportions. CMField draws a real 105×68 pitch;
+  // .pst-pitch carries the matching aspect-ratio so it fills the host exactly and the
+  // formation's (x%, y%) coordinates still land where they should.
   function injectPitchLines () {
     const stage = document.querySelector('.pst-pitch');
-    if (!stage || stage.querySelector('.pst-pitch-lines')) return;
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('class', 'pst-pitch-lines');
-    svg.setAttribute('viewBox', '0 0 100 100');
-    svg.setAttribute('preserveAspectRatio', 'none');
-    svg.innerHTML = `
-      <!-- Outer touchlines -->
-      <rect x="3" y="3" width="94" height="94" rx="0"/>
-      <!-- Halfway line -->
-      <line x1="3" y1="50" x2="97" y2="50"/>
-      <!-- Centre circle -->
-      <circle cx="50" cy="50" r="9"/>
-      <circle cx="50" cy="50" r="0.6" fill="currentColor" stroke="none"/>
-      <!-- Top penalty area (opponent) -->
-      <rect x="22" y="3" width="56" height="14"/>
-      <rect x="36" y="3" width="28" height="6"/>
-      <!-- Top penalty spot -->
-      <circle cx="50" cy="13" r="0.6" fill="currentColor" stroke="none"/>
-      <!-- Bottom penalty area (us) -->
-      <rect x="22" y="83" width="56" height="14"/>
-      <rect x="36" y="91" width="28" height="6"/>
-      <!-- Bottom penalty spot -->
-      <circle cx="50" cy="87" r="0.6" fill="currentColor" stroke="none"/>
-    `;
-    stage.appendChild(svg);
+    if (!stage || stage.querySelector('.pf-lines')) return;
+    if (!window.CMField) { console.warn('[lineup] CMField not loaded — pitch markings skipped'); return; }
+    window.CMField.renderField(stage, 'football', 'full', 'v');
   }
 
   // ── Match countdown (days until match_date)
@@ -428,9 +411,24 @@
     else poster.style.removeProperty('--pst-em-color');
   }
 
+  // Resolved --cm-accent as a #rrggbb hex (or null). <input type="color"> only accepts hex.
+  function _clubAccentHex () {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim();
+    if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
+    const m = raw.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (!m) return null;
+    return '#' + [1, 2, 3].map(i => (+m[i]).toString(16).padStart(2, '0')).join('');
+  }
+
   function wireColorPickers () {
     const titlePicker  = document.getElementById('luTitleColor');
     const accentPicker = document.getElementById('luAccentColor');
+    // With no explicit override the poster inherits the club accent (--cm-accent), so the
+    // swatch must show THAT, not the old hardcoded green.
+    if (accentPicker && !state.accentColor) {
+      const themed = _clubAccentHex();
+      if (themed) accentPicker.value = themed;
+    }
     titlePicker?.addEventListener('input', e => {
       state.titleColor = e.target.value;
       applyColors();
@@ -467,19 +465,20 @@
         useCORS: true,
         allowTaint: true,
         onclone: (doc) => {
-          const p = doc.querySelector('.pst-pitch');
-          if (p) {
-            const pitchBg = {
-              editorial: 'linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%),linear-gradient(180deg,#18492a 0%,#0b2312 100%)',
-              stadium:   'linear-gradient(180deg,rgba(0,0,0,0.30) 0%,rgba(0,0,0,0.55) 100%),repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 calc(100%/16),rgba(0,0,0,0.04) calc(100%/16) calc(100%/8))',
-              magazine:  'linear-gradient(180deg,#E6DFCF 0%,#DCD3BD 100%)',
-              ticket:    '#ECE3CC',
-            }[state.style] || 'linear-gradient(180deg,#18492a 0%,#0b2312 100%)';
-            p.style.background = pitchBg;
-          }
-          const accent = state.accentColor || '#4ADE80';
+          const accent = state.accentColor || _clubAccentHex() || '#4ADE80';
           const hx = accent.replace('#','');
           const r = parseInt(hx.slice(0,2),16), g = parseInt(hx.slice(2,4),16), b = parseInt(hx.slice(4,6),16);
+          const p = doc.querySelector('.pst-pitch');
+          if (p) {
+            // html2canvas can't resolve color-mix(), so compute the SAME blend numerically
+            // instead of falling back to a hardcoded green.
+            const mix = (pct, base) => 'rgb(' + base
+              .map((c, i) => Math.round([r, g, b][i] * pct + c * (1 - pct)))
+              .join(',') + ')';
+            p.style.background =
+              'linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%),'
+              + `linear-gradient(180deg,${mix(0.22, [10, 31, 18])} 0%,${mix(0.08, [6, 19, 8])} 100%)`;
+          }
           doc.querySelectorAll('.pst-spot.is-captain .badge').forEach(el => {
             el.style.boxShadow = `0 0 0 2px rgba(${r},${g},${b},0.30)`;
           });
@@ -592,11 +591,13 @@
     panel.style.left = rect.left + 'px';
     panel.style.width = Math.max(rect.width, 260) + 'px';
 
+    const isFilled = kind === 'xi' ? !!state.starters[slotIdx] : !!state.subs[slotIdx];
     panel.innerHTML = `
       <div class="lu-picker-search">
         <i class="ti ti-search"></i>
         <input class="lu-picker-input" placeholder="${tt('lineup.search_player', 'Search player…')}">
       </div>
+      ${isFilled ? `<button type="button" class="lu-picker-clear"><i class="ti ti-user-minus"></i>${tt('lineup.remove_player','Remove player')}</button>` : ''}
       <div class="lu-picker-list"></div>`;
 
     document.body.appendChild(panel);
@@ -604,6 +605,11 @@
 
     const input = panel.querySelector('.lu-picker-input');
     const list  = panel.querySelector('.lu-picker-list');
+    panel.querySelector('.lu-picker-clear')?.addEventListener('mousedown', e => {
+      e.preventDefault();
+      clearSlot(slotIdx, kind);
+      closePicker();
+    });
 
     // Exclude players already assigned to other slots
     const currentSlotId = kind === 'xi' ? state.starters[slotIdx]?.id : state.subs[slotIdx]?.id;
@@ -673,6 +679,12 @@
       container.addEventListener('click', e => {
         const row = e.target.closest('.lu-row');
         if (!row) return;
+        // The × clears the slot; it must not fall through to "open picker".
+        if (e.target.closest('.lu-row-x')) {
+          e.stopPropagation();
+          clearSlot(+row.dataset.idx, row.dataset.kind);
+          return;
+        }
         openPicker(+row.dataset.idx, row.dataset.kind, row);
       });
     });
@@ -715,6 +727,26 @@
     // Persist in background — never blocks the UI
     persistSlot(slotIdx, kind, squadPlayer.id)
       .catch(err => showToast(tt('lineup.save_error', 'Save error: {msg}', { msg: err.message })));
+  }
+
+  // Empty a slot. Previously a player could only be swapped, never removed.
+  function clearSlot (slotIdx, kind) {
+    if (kind === 'xi') { if (state.starters[slotIdx]) state.starters[slotIdx] = null; }
+    else               { if (state.subs[slotIdx])     state.subs[slotIdx]     = null; }
+    renderComposer();
+    renderPitch();
+    renderSubsBand();
+    unpersistSlot(slotIdx, kind)
+      .catch(err => showToast(tt('lineup.save_error', 'Save error: {msg}', { msg: err.message })));
+  }
+
+  async function unpersistSlot (slotIdx, kind) {
+    if (!_lineupId) return;
+    const role = kind === 'xi' ? 'starter' : 'substitute';
+    const { error } = await window.sb.from('lineup_players')
+      .delete()
+      .eq('lineup_id', _lineupId).eq('role', role).eq('slot_index', slotIdx);
+    if (error) throw error;
   }
 
   async function persistSlot (slotIdx, kind, playerId) {
@@ -1094,10 +1126,11 @@
 
   // ── Init
   document.addEventListener('DOMContentLoaded', async () => {
+    // The page shipped hardcoded green because it never applied the club's accent.
+    try { await window.applyClubTheme?.(); } catch (_) {}
     injectPitchLines();
     wireTabs();
     wireFormations();
-    wireStyles();
     wireExport();
     wireColorPickers();
     wireComposerDelegation();
