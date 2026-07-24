@@ -55,7 +55,9 @@
   function _confirmModal(info, dateLabel) {
     return new Promise(function (resolve) {
       var ov = document.createElement('div');
-      ov.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px';
+      // Above EVERY overlay in the app (calendar day popover 9600, modals 9999/10000,
+      // top layer 99999) — this is a nested confirmation, it must never be buried.
+      ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px';
 
       var removes = [];
       removes.push(_li('ti-list-check', info.exercises
@@ -107,11 +109,17 @@
         + '</div></div>';
 
       function close(val) {
-        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('keydown', onKey, true);
         ov.remove();
         resolve(val);
       }
-      function onKey(e) { if (e.key === 'Escape') close(false); }
+      // Capture phase + stopImmediatePropagation: the host page's own Escape handler (e.g. the
+      // calendar day popover) is registered first, so without this Escape would close both.
+      function onKey(e) {
+        if (e.key !== 'Escape') return;
+        e.stopImmediatePropagation();
+        close(false);
+      }
 
       ov.addEventListener('click', function (e) { if (e.target === ov) close(false); });
       ov.querySelector('[data-cancel]').addEventListener('click', function () { close(false); });
@@ -121,7 +129,7 @@
         b.textContent = _tt('plan_delete.deleting', 'Deleting…');
         close(true);
       });
-      document.addEventListener('keydown', onKey);
+      document.addEventListener('keydown', onKey, true);
       document.body.appendChild(ov);
     });
   }
