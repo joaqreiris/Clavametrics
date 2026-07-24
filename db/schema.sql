@@ -4000,13 +4000,13 @@ AS $function$
 begin
   if TG_OP = 'INSERT' then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
-    values (NEW.club_id, public.activity_team_for_player(NEW.player_id), NEW.created_by,
+    values (NEW.club_id, public.activity_team_for_player(NEW.player_id), coalesce(NEW.created_by, auth.uid()),
             'injury.logged', 'injuries', NEW.id, NEW.player_id,
             jsonb_build_object('body_area', NEW.body_area, 'injury_type', NEW.injury_type, 'severity', NEW.severity));
   elsif TG_OP = 'UPDATE'
         and NEW.status = 'cleared' and OLD.status is distinct from 'cleared' then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
-    values (NEW.club_id, public.activity_team_for_player(NEW.player_id), NEW.created_by,
+    values (NEW.club_id, public.activity_team_for_player(NEW.player_id), coalesce(NEW.created_by, auth.uid()),
             'injury.cleared', 'injuries', NEW.id, NEW.player_id,
             jsonb_build_object('body_area', NEW.body_area, 'returned_date', NEW.returned_date));
   end if;
@@ -4024,7 +4024,7 @@ begin
   if NEW.published_at is not null
      and (TG_OP = 'INSERT' or OLD.published_at is distinct from NEW.published_at) then
     insert into public.activity_log (club_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.published_by, 'lineup.published', 'lineups', NEW.id,
+    values (NEW.club_id, coalesce(NEW.published_by, auth.uid()), 'lineup.published', 'lineups', NEW.id,
             jsonb_build_object('match_id', NEW.match_id));
   end if;
   return NEW;
@@ -4072,7 +4072,7 @@ begin
   if NEW.published_at is not null
      and (TG_OP = 'INSERT' or OLD.published_at is distinct from NEW.published_at) then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, NEW.published_by, 'microcycle.published', 'microcycles', NEW.id,
+    values (NEW.club_id, NEW.team_id, coalesce(NEW.published_by, auth.uid()), 'microcycle.published', 'microcycles', NEW.id,
             jsonb_build_object('name', NEW.name, 'start_date', NEW.start_date));
   end if;
   return NEW;
@@ -4125,7 +4125,7 @@ begin
   if NEW.published is true
      and (TG_OP = 'INSERT' or OLD.published is distinct from NEW.published) then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, NEW.coach_id, 'session.published', 'training_sessions', NEW.id,
+    values (NEW.club_id, NEW.team_id, coalesce(NEW.coach_id, auth.uid()), 'session.published', 'training_sessions', NEW.id,
             jsonb_build_object('title', NEW.title, 'session_type', NEW.session_type));
   end if;
   return NEW;
@@ -4145,7 +4145,7 @@ begin
           or OLD.duration is distinct from NEW.duration
           or OLD.session_time is distinct from NEW.session_time) then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, NEW.coach_id, 'session.modified', 'training_sessions', NEW.id,
+    values (NEW.club_id, NEW.team_id, coalesce(NEW.coach_id, auth.uid()), 'session.modified', 'training_sessions', NEW.id,
             jsonb_build_object('title', NEW.title, 'session_type', NEW.session_type));
   end if;
   return NEW;
@@ -4175,7 +4175,7 @@ begin
   if v_fire then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
     values (NEW.club_id, public.activity_team_for_player(NEW.player_id),
-            coalesce(NEW.physio_id, NEW.performed_by),
+            coalesce(NEW.physio_id, NEW.performed_by, auth.uid()),
             'treatment.adaptation', 'treatments', NEW.id, NEW.player_id,
             jsonb_build_object('adaptation', left(coalesce(NEW.adaptation, NEW.adaptation_notes, ''), 140)));
   end if;
