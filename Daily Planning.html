@@ -15,6 +15,7 @@
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
+<script src="assets/plan-delete.js"></script>
 <style>
   body.cm{background:var(--cm-bg)}
 
@@ -234,6 +235,7 @@
           <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>…</span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
           <button class="cm-btn is-outline is-sm" onclick="dpPrint()"><i class="ti ti-printer" style="font-size:14px"></i><span data-i18n="common.print">Print</span></button>
           <button class="cm-btn is-outline is-sm" onclick="dpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="daily_planning.export_pdf">Export PDF</span></button>
+          <button class="cm-btn is-outline is-sm" id="dpDeleteBtn" onclick="dpDeletePlan()" style="display:none;color:var(--cm-danger,#DC2626);border-color:var(--cm-border)"><i class="ti ti-trash" style="font-size:14px"></i><span data-i18n="plan_delete.cta">Delete plan</span></button>
           <button class="cm-btn is-primary is-sm" id="dpPublishBtn" onclick="dpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i><span data-i18n="daily_planning.publish">Publish</span></button>
         </div>
       </header>
@@ -1757,6 +1759,29 @@ function _dpUpdatePublishBtn() {
   } else {
     btn.innerHTML = `<i class="ti ti-share-2" style="font-size:14px"></i><span data-i18n="daily_planning.publish">${tt('daily_planning.publish','Publish')}</span>`;
     btn.classList.remove('is-success'); btn.classList.add('is-primary');
+  }
+  // Delete only makes sense once a session row exists for this date.
+  const del = document.getElementById('dpDeleteBtn');
+  if (del) del.style.display = _dpCurrentSessionId ? '' : 'none';
+}
+
+// ── Delete plan ──
+// Delegates to the shared flow (assets/plan-delete.js): it confirms, and never destroys the
+// session's own GPS / RPE / video records — those are independent of the plan sheet.
+async function dpDeletePlan() {
+  if (!_dpCurrentSessionId) return;
+  const dateLabel = (() => {
+    try { return new Date(_dpCurrentDate + 'T12:00:00').toLocaleDateString(
+      (window.CM_I18N && CM_I18N.current) || 'en', { weekday: 'long', day: 'numeric', month: 'long' }); }
+    catch (_) { return _dpCurrentDate; }
+  })();
+  try {
+    const done = await window.cmDeletePlan({ sessionId: _dpCurrentSessionId, clubId: _dpClubId, dateLabel });
+    if (!done) return;
+    // Reload the day: the session is either gone or now an empty shell.
+    await loadDay(_dpCurrentDate);
+  } catch (err) {
+    alert(tt('plan_delete.error', 'Could not delete: {msg}', { msg: err.message }));
   }
 }
 

@@ -15,6 +15,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
+<script src="assets/plan-delete.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -661,6 +662,12 @@
   .cal-daypop-evt:hover { background:var(--cm-bg-soft); }
   .cal-daypop-evt .t { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); width:38px; flex-shrink:0; }
   .cal-daypop-evt .nm { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Delete-plan button: only reveals on row hover so it never competes with the event label. */
+  .cal-daypop-del { flex-shrink:0; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; border:1px solid transparent; border-radius:6px; background:none; color:var(--cm-fg-faint); cursor:pointer; opacity:0; transition:opacity .12s, color .12s, background .12s; }
+  .cal-daypop-del .ti { font-size:14px; }
+  .cal-daypop-evt:hover .cal-daypop-del { opacity:1; }
+  .cal-daypop-del:hover { color:var(--cm-danger,#DC2626); background:var(--cm-danger-soft,rgba(220,38,38,.1)); border-color:var(--cm-danger,#DC2626); }
+  .cal-daypop-del:focus-visible { opacity:1; outline:2px solid var(--cm-danger,#DC2626); outline-offset:1px; }
   .cal-daypop-empty { padding:18px 4px; text-align:center; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
   .cal-daypop-foot { padding:12px 18px; border-top:1px solid var(--cm-border-soft); display:flex; justify-content:flex-end; gap:8px; }
 
@@ -4366,10 +4373,15 @@ function openDaySummary(dateStr){
     const cl   = EVT_CLR[cat] || EVT_CLR.training;
     const time = s.start_time ? s.start_time.slice(0, 5) : '—';
     const label = upcomingTypeLabel(s.session_type);
+    // Only training_sessions carry a plan; calendar_events have nothing to delete here.
+    const del = s.source === 'session'
+      ? `<button class="cal-daypop-del" data-del-plan="${_esc(s.id)}" title="${_esc(tt('plan_delete.cta','Delete plan'))}" aria-label="${_esc(tt('plan_delete.cta','Delete plan'))}"><i class="ti ti-trash"></i></button>`
+      : '';
     return `<div class="cal-daypop-evt" data-evt="${_esc(s.id)}">
       <span class="t">${_esc(time)}</span>
       <span class="nm">${_esc(s.title || s.session_type)}</span>
       <span style="flex-shrink:0;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:0.04em;padding:3px 7px;border-radius:999px;background:${bg};color:${cl}">${_esc(label)}</span>
+      ${del}
     </div>`;
   }).join('') : `<div class="cal-daypop-empty">${_esc(tt('calendar.day_no_events','No events this day'))}</div>`;
 
@@ -4392,6 +4404,19 @@ function openDaySummary(dateStr){
   ov.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeDaySummary));
   ov.querySelector('[data-goto-mc]')?.addEventListener('click', () => { closeDaySummary(); goToMicrocycleForDate(dateStr); });
   ov.querySelectorAll('.cal-daypop-evt').forEach(row => row.addEventListener('click', () => { const id = row.dataset.evt; closeDaySummary(); handleMonthEvtClick(id); }));
+  // Delete plan — stopPropagation so it never falls through to the row's "open planner" click.
+  ov.querySelectorAll('[data-del-plan]').forEach(btn => btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    try {
+      const done = await window.cmDeletePlan({ sessionId: btn.dataset.delPlan, clubId: _clubId, dateLabel });
+      if (!done) return;
+      closeDaySummary();
+      showCalToast(tt('plan_delete.done', 'Plan deleted'));
+      await renderMonthView();   // refetches via fetchAllEvents; no need to touch microcycle state
+    } catch (err) {
+      showCalToast(tt('plan_delete.error', 'Could not delete: {msg}', { msg: err.message }));
+    }
+  }));
 
   ov.classList.add('is-open');
   document.addEventListener('keydown', _calDayPopEsc);
