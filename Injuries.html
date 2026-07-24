@@ -2245,7 +2245,12 @@ function injCard(inj) {
   const dischargeBtn = canDischarge
     ? `<button class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>${tt('injuries.discharge','Discharge')}</button>`
     : '';
-  const rehabBtn = `<button class="cm-btn is-outline is-sm" onclick="createRehabPlan('${inj.id}')" title="${tt('injuries.create_rehab_plan','Create rehab plan')}"><i class="ti ti-activity-heartbeat" style="font-size:14px"></i>${tt('injuries.create_rehab_plan','Create rehab plan')}</button>`;
+  // A historical record is a past injury that never went through the in-club rehab process, so a
+  // rehab plan is meaningless for it. What DOES apply is a PREVENTIVE plan for that body area —
+  // send the user to Rehab & preventives with the player preselected.
+  const rehabBtn = isHistorical
+    ? `<button class="cm-btn is-outline is-sm" onclick="createPreventivePlan('${inj.id}')" title="${tt('injuries.create_preventive_plan','Create preventive plan')}"><i class="ti ti-shield-half-filled" style="font-size:14px"></i>${tt('injuries.create_preventive_plan','Create preventive plan')}</button>`
+    : `<button class="cm-btn is-outline is-sm" onclick="createRehabPlan('${inj.id}')" title="${tt('injuries.create_rehab_plan','Create rehab plan')}"><i class="ti ti-activity-heartbeat" style="font-size:14px"></i>${tt('injuries.create_rehab_plan','Create rehab plan')}</button>`;
 
   // Context menu SVG icons
   const svgPencil  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>`;
@@ -2740,6 +2745,15 @@ async function createRehabPlan(id) {
   try { await window.RehabCreate.openOrCreateForInjury(inj, _clubId); }
   catch (e) { console.error('[injuries] create rehab plan failed:', e); alert(tt('rehab_planner.np_err_create', 'Could not create plan')); }
   finally { if (btn) btn.disabled = false; }
+}
+
+// Historical injury → preventive plan. Opens Rehab & preventives' "New plan" modal already set
+// to Preventive with this player selected, so its injury-history risk panel loads that player's
+// affected zones (which is exactly the context a preventive plan needs).
+function createPreventivePlan(id) {
+  const inj = _allInjuries.find(i => i.id === id);
+  if (!inj || !inj.player_id) { alert(tt('injuries.injury_not_found', 'Injury not found — reload and retry.')); return; }
+  location.href = 'Rehab & Preventives.html?newPlan=preventive&player=' + encodeURIComponent(inj.player_id);
 }
 
 // ═══════════════ DISCHARGE ═══════════════

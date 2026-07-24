@@ -629,9 +629,10 @@ function tt(key, fallbackEN, vars) {
       _ov.querySelector('#rpv-np-create').addEventListener('click', create);
       return _ov;
     }
-    async function openNewPlan(){
+    /** @param {{kind?:'rehab'|'preventive', playerId?:string}} [opts] */
+    async function openNewPlan(opts){
+      opts = opts || {};
       const ov = build();
-      setKind('rehab');
       const sel = ov.querySelector('#rpv-np-player');
       sel.innerHTML = `<option value="">${tt('rehab_planner.np_select_player','Select player…')}</option>`;
       (await loadPlayers()).forEach(p => {
@@ -641,10 +642,24 @@ function tt(key, fallbackEN, vars) {
         o.textContent = `${nm}${p.number ? ' · #' + p.number : ''}${p.position ? ' · ' + p.position : ''}`;
         sel.appendChild(o);
       });
+      // Select the player BEFORE setKind: setKind reads the current player and loads the
+      // matching panel (active injuries for rehab, injury-history risk for preventive).
+      if (opts.playerId) sel.value = opts.playerId;
+      setKind(opts.kind === 'preventive' ? 'preventive' : 'rehab');
       ov.querySelector('#rpv-np-name').value = '';
       ov.style.display = 'flex';
     }
-    document.getElementById('rpv-new-plan')?.addEventListener('click', openNewPlan);
+    document.getElementById('rpv-new-plan')?.addEventListener('click', () => openNewPlan());
+
+    // Deep link: Injuries sends historical records here as
+    // ?newPlan=preventive&player=<id> (a rehab plan makes no sense for a past injury).
+    try {
+      const _qs = new URLSearchParams(location.search);
+      const _np = _qs.get('newPlan');
+      if (_np === 'preventive' || _np === 'rehab') {
+        openNewPlan({ kind: _np, playerId: _qs.get('player') || null });
+      }
+    } catch (_) {}
   })();
 
   // Initial sort
