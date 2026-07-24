@@ -3470,11 +3470,33 @@
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
 
-    // nDims = niveles REALMENTE disponibles: 2 sólo si el config pide 2 Y todas las categorías
-    // traen los 2 valores. El preview mock arma puntos sin `dims`, así que sin esta condición
-    // quedaría nDims:2 con catDims de un solo nivel → el plugin del commit 2 leería undefined.
-    const nDims = ((config.dimensions || []).length >= 2 && catDims.length && catDims.every(a => a.length >= 2))
-      ? 2 : 1;
+    // 2 niveles DISPONIBLES: el config pide 2 Y todas las categorías traen ambos valores.
+    // (El preview mock arma puntos sin `dims`; sin esta condición el plugin leería undefined.)
+    const _twoLevels = (config.dimensions || []).length >= 2 && catDims.length && catDims.every(a => a.length >= 2);
+    // …pero además tiene que haber jerarquía REAL: algún valor de nivel-1 que cubra 2+
+    // categorías. Si cada grupo es de UNA barra (ej. un rival por fecha) el piso superior
+    // sería puro ruido: corchetes de una barra con el nombre truncado ("Boeu…"). En ese caso
+    // volvemos a 1 nivel → label concatenado, que conserva la info de ambos niveles.
+    // El conteo es independiente del orden, así que se puede evaluar ANTES de ordenar.
+    let nDims = 1;
+    if (_twoLevels) {
+      const _c0 = new Map();
+      catDims.forEach(a => { const k = String(a[0]); _c0.set(k, (_c0.get(k) || 0) + 1); });
+      if ([..._c0.values()].some(n => n >= 2)) nDims = 2;
+    }
+    if (nDims >= 2) {
+      // Los corchetes agrupan índices CONSECUTIVOS (dos períodos separados NO deben fusionarse),
+      // así que las categorías del mismo nivel-1 tienen que quedar juntas. Ordenamos por
+      // (nivel1, nivel2) y permutamos TODO lo alineado por índice. Sólo ocurre con jerarquía
+      // real → una card de 1 dimensión nunca cambia de orden.
+      const order = cats.map((_, i) => i).sort((a, b) =>
+        String(catDims[a][0]).localeCompare(String(catDims[b][0])) ||
+        String(catDims[a][1]).localeCompare(String(catDims[b][1])));
+      const _snap = order.map(i => ({ c: cats[i], f: catFids[i], d: catDims[i] }));
+      _snap.forEach((o, i) => { cats[i] = o.c; catFids[i] = o.f; catDims[i] = o.d; });
+      datasets.forEach(ds => { if (Array.isArray(ds.data)) ds.data = order.map(i => ds.data[i]); });
+      if (mcDiffs) { const _md = mcDiffs; mcDiffs = order.map(i => _md[i]); }
+    }
     // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
     // arriba. Es puramente de DISPLAY: los datasets ya están alineados por índice con `cats`.
     const catLabels = nDims >= 2 ? catDims.map(a => a[1]) : cats;
