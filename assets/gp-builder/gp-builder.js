@@ -3039,6 +3039,72 @@
     const step = nice * mag;
     return { max: step * ticks, step };
   }
+  // Alto reservado para el piso superior del eje jerárquico (línea + texto).
+  const _BAR_TIER_H = 26;
+  /** Trunca `txt` con «…» para que entre en maxW px con la fuente actual de ctx. */
+  function _ellipsize(ctx, txt, maxW) {
+    const s = String(txt == null ? '' : txt);
+    if (maxW <= 0) return '';
+    if (ctx.measureText(s).width <= maxW) return s;
+    let lo = 0, hi = s.length;                       // binaria: mayor prefijo que entra con «…»
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (ctx.measureText(s.slice(0, mid) + '…').width <= maxW) lo = mid; else hi = mid - 1;
+    }
+    return lo > 0 ? s.slice(0, lo) + '…' : '';
+  }
+
+  // ── Eje jerárquico (2 dimensiones, SOLO vertical) ────────────────────────────
+  // Dibuja el PISO SUPERIOR: el valor de dims[0] agrupando categorías consecutivas, con un
+  // corchete que abarca sus barras. El piso inferior (dims[1]) lo dibuja el propio eje.
+  //
+  // ⚠️ autoSkip NO desalinea esto: NO leemos chart.scales.x.ticks (que autoSkip FILTRA),
+  // sino getPixelForValue(i) por ÍNDICE DE CATEGORÍA — definido para TODAS las categorías,
+  // se dibuje o no su tick. autoSkip sólo omite LABELS, nunca barras ni escala. Así el
+  // corchete cae siempre sobre las barras reales: no puede "verse prolijo y mentir".
+  const _barGroupAxisPlugin = {
+    id: 'gpbBarGroupAxis',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || !opts.show) return;                       // sólo 2 dims + vertical + ejes visibles
+      const dims = opts.dims;
+      if (!Array.isArray(dims) || dims.length < 2) return;
+      const sx = chart.scales && chart.scales.x;
+      if (!sx || !chart.chartArea) return;
+      const { ctx, chartArea } = chart;
+      const n = dims.length;
+      // Agrupar índices CONSECUTIVOS por el valor de nivel 1.
+      const groups = [];
+      for (let i = 0; i < n; i++) {
+        const g = (dims[i] && dims[i][0] != null) ? String(dims[i][0]) : '';
+        const last = groups[groups.length - 1];
+        if (last && last.label === g) last.end = i;
+        else groups.push({ label: g, start: i, end: i });
+      }
+      const px = i => sx.getPixelForValue(i);
+      const step = n > 1 ? Math.abs(px(1) - px(0)) : (chartArea.right - chartArea.left);
+      const half = (step || 0) / 2;
+      const yLine = sx.bottom - _BAR_TIER_H + 9;
+      const yText = sx.bottom - 5;
+      ctx.save();
+      ctx.font = '600 10px Geist, Inter, sans-serif';
+      ctx.textBaseline = 'alphabetic';
+      for (const g of groups) {
+        const L = Math.max(chartArea.left,  px(g.start) - half + 2);
+        const R = Math.min(chartArea.right, px(g.end)   + half - 2);
+        if (!(R > L)) continue;
+        ctx.strokeStyle = 'rgba(148,163,184,0.55)'; ctx.lineWidth = 1;
+        ctx.beginPath();                                     // corchete: patita ┌ línea ┐ patita
+        ctx.moveTo(L, yLine + 4); ctx.lineTo(L, yLine); ctx.lineTo(R, yLine); ctx.lineTo(R, yLine + 4);
+        ctx.stroke();
+        const maxW = R - L - 6;                              // labels largos → ellipsis, sin pisar al vecino
+        if (maxW < 12) continue;
+        ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
+        ctx.fillText(_ellipsize(ctx, g.label, maxW), (L + R) / 2, yText);
+      }
+      ctx.restore();
+    },
+  };
+
   /** Draws fmt(value) above each bar. No plugin dependency. */
   const _barLabelPlugin = {
     id: 'gpbBarLabels',
@@ -3409,7 +3475,10 @@
     // quedaría nDims:2 con catDims de un solo nivel → el plugin del commit 2 leería undefined.
     const nDims = ((config.dimensions || []).length >= 2 && catDims.length && catDims.every(a => a.length >= 2))
       ? 2 : 1;
-    return { cats, catFids, catDims, nDims, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+    // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
+    // arriba. Es puramente de DISPLAY: los datasets ya están alineados por índice con `cats`.
+    const catLabels = nDims >= 2 ? catDims.map(a => a[1]) : cats;
+    return { cats, catFids, catDims, nDims, catLabels, datasets, max, step, ticks, showAxes, showLeg, showLbl,
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
@@ -3452,11 +3521,20 @@
         border: { display: false },
         ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
       };
+      // Eje jerárquico: SÓLO con 2 niveles reales, vertical y ejes visibles. Horizontal queda
+      // fuera de alcance → cae al comportamiento de siempre (label concatenado), sin romperse.
+      const _nested = d.nDims >= 2 && !d.horizontal && d.showAxes;
       const catScale = {
         display: d.showAxes, stacked: d.stacked,
         grid: { display: false, drawTicks: false },
         ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
         border: { display: d.showAxes },
+        // Reservamos el alto DENTRO de la escala (no en layout.padding.bottom): la leyenda
+        // vive en position:'bottom', o sea DEBAJO del eje, y el padding del canvas dejaría el
+        // hueco por debajo de ella → el piso superior se solaparía con la leyenda. Creciendo
+        // la escala, la leyenda se corre sola y queda espacio limpio bajo los ticks. Además
+        // no toca el cálculo de layout.padding → una card sin anidar queda idéntica.
+        ...(_nested ? { afterFit: sc => { sc.height += _BAR_TIER_H; } } : {}),
       };
       const scales = {};
       scales[d.horizontal ? 'x' : 'y'] = valueScale;     // value axis follows orientation
@@ -3469,8 +3547,8 @@
 
       body.__chart = _newChart(body, canvas, {
         type: 'bar',
-        data: { labels: d.cats, datasets: d.datasets },
-        plugins: [_barLabelPlugin, _mcDiffLabelPlugin, _barRefLinesPlugin],
+        data: { labels: d.catLabels || d.cats, datasets: d.datasets },
+        plugins: [_barLabelPlugin, _mcDiffLabelPlugin, _barRefLinesPlugin, _barGroupAxisPlugin],
         options: {
           indexAxis: d.horizontal ? 'y' : 'x',
           responsive: true, maintainAspectRatio: false,
@@ -3505,6 +3583,9 @@
             },
             tooltip: {
               callbacks: {
+                // Anidado: el eje ya sólo muestra el detalle, así que el título recupera el
+                // contexto completo ("MC 3 · 12"). Sin anidar, el título por defecto de siempre.
+                ...(_nested ? { title: items => (items.length ? String(d.cats[items[0].dataIndex] ?? '') : '') } : {}),
                 label: ctx => {
                   const v = d.horizontal ? ctx.parsed.x : ctx.parsed.y;
                   const base = `${ctx.dataset.label}: ${fmt(Math.round(v * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
@@ -3520,6 +3601,7 @@
             gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
             gpbMcDiff: { show: d.isMcGrouped, diffs: d.mcDiffs, horizontal: d.horizontal, upCol: d.mcUpCol, dnCol: d.mcDnCol, withValues: d.showLbl },
             gpbRefLines: { lines: d.referenceLines, horizontal: d.horizontal },
+            gpbBarGroupAxis: { show: _nested, dims: d.catDims },
           },
           scales,
         },
