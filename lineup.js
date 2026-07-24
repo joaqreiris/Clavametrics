@@ -1126,8 +1126,6 @@
 
   // ── Init
   document.addEventListener('DOMContentLoaded', async () => {
-    // The page shipped hardcoded green because it never applied the club's accent.
-    try { await window.applyClubTheme?.(); } catch (_) {}
     injectPitchLines();
     wireTabs();
     wireFormations();
@@ -1152,6 +1150,14 @@
 
     if (!(await window.guardModule())) return;
     _clubId = await window.getClubId();
+    // Must run AFTER the club is resolved: applyClubTheme() reads getClub() and bails out
+    // silently when there's no club yet, which left the page on the default green.
+    try { await window.applyClubTheme?.(); } catch (_) {}
+    const _accentPicker = document.getElementById('luAccentColor');
+    if (_accentPicker && !state.accentColor) {
+      const themed = _clubAccentHex();
+      if (themed) _accentPicker.value = themed;
+    }
     await luInitTeamSwitch(_clubId);
 
     // Load squad, club info, coach, and staff in parallel
