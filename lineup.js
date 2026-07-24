@@ -91,17 +91,57 @@
     ],
   };
 
-  // ── Flag colors (kept in sync w/ squad's CSS classes)
-  const FLAG_CSS = {
-    ar: 'linear-gradient(180deg,#74acdf 33%,#fff 33% 66%,#74acdf 66%)',
-    br: '#22A040',
-    uy: 'linear-gradient(180deg,#fff 50%, #0038A8 50%)',
-    cl: 'linear-gradient(180deg,#fff 50%, #D52B1E 50%)',
-    es: 'linear-gradient(180deg,#AA151B 25%,#F1BF00 25% 75%,#AA151B 75%)',
-    fr: 'linear-gradient(90deg,#002395 33%,#fff 33% 66%,#ED2939 66%)',
-    co: 'linear-gradient(180deg,#FCD116 50%,#003893 50% 75%,#CE1126 75%)',
-    pe: 'linear-gradient(90deg,#D91023 33%,#fff 33% 66%,#D91023 66%)',
+  // ── Country flags ────────────────────────────────────────────
+  // `players.nationality` is FREE TEXT ("Brazil", "Brasil", "Camboya"…). The old code took the
+  // first two letters and matched them against 8 hand-drawn CSS gradients — so Brazil rendered
+  // as a flat green block, Uruguay ("ur") never matched 'uy', and everyone else got nothing.
+  // Instead: resolve the text to an ISO-3166 alpha-2 code and render the flag emoji.
+  // The name→code index is built from Intl.DisplayNames over every possible code in en/es/pt,
+  // so every country is covered without shipping a lookup table.
+  const _normCountry = s => String(s || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '');
+
+  // Informal names Intl doesn't know, plus split-nation cases.
+  const COUNTRY_ALIASES = {
+    usa: 'US', eeuu: 'US', 'estados unidos': 'US', uk: 'GB', inglaterra: 'GB', england: 'GB',
+    scotland: 'GB', wales: 'GB', holanda: 'NL', holland: 'NL', 'corea del sur': 'KR',
+    'south korea': 'KR', 'costa de marfil': 'CI', 'ivory coast': 'CI', 'cabo verde': 'CV',
+    'republica checa': 'CZ', 'czech republic': 'CZ', rusia: 'RU', turquia: 'TR',
   };
+
+  let _isoIndex = null;
+  function _countryIso2 (raw) {
+    const key = _normCountry(raw);
+    if (!key) return null;
+    if (COUNTRY_ALIASES[key]) return COUNTRY_ALIASES[key];
+    // Already an ISO-2 code?
+    if (/^[a-z]{2}$/.test(key)) return key.toUpperCase();
+    if (!_isoIndex) {
+      _isoIndex = new Map();
+      const dns = ['en', 'es', 'pt'].map(l => {
+        try { return new Intl.DisplayNames([l], { type: 'region' }); } catch (_) { return null; }
+      }).filter(Boolean);
+      for (let i = 0; i < 26; i++) {
+        for (let j = 0; j < 26; j++) {
+          const code = String.fromCharCode(65 + i) + String.fromCharCode(65 + j);
+          dns.forEach(d => {
+            let name; try { name = d.of(code); } catch (_) { return; }
+            if (!name || name === code) return;          // unassigned code
+            const k = _normCountry(name);
+            if (k && !_isoIndex.has(k)) _isoIndex.set(k, code);
+          });
+        }
+      }
+    }
+    return _isoIndex.get(key) || null;
+  }
+
+  // ISO-2 → regional-indicator pair. Platforms without flag glyphs (Windows) show the
+  // two letters instead, which still reads as the country.
+  function flagEmoji (iso2) {
+    if (!iso2 || iso2.length !== 2) return '';
+    return String.fromCodePoint(...[...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+  }
 
   // ── State (players populated async from Supabase)
   let state = {
@@ -221,14 +261,16 @@
     const sub = document.querySelector('[data-list="subs"]');
     if (!xi || !sub) return;
 
-    const flagBg = code => FLAG_CSS[code] ? `style="background:${FLAG_CSS[code]}"` : '';
+    const flagHtml = p => p.flag
+      ? `<span class="flag" title="${(p.nat || '').replace(/"/g, '&quot;')}">${flagEmoji(p.flag)}</span>`
+      : '';
 
     const filledRow = (p, idx, kind) => `
       <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click to change">
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
         <span class="num">${p.num}</span>
         <div class="body">
-          <div class="name">${p.last}, ${p.first}<span class="flag" ${flagBg(p.flag)}></span>${p.captain ? '<span class="role-tag" style="background:rgba(217,119,6,0.12);color:#B45309">CAP</span>' : ''}${p.vice ? '<span class="role-tag" style="background:rgba(37,99,235,0.12);color:#1D4ED8">VC</span>' : ''}</div>
+          <div class="name">${p.last}, ${p.first}${flagHtml(p)}${p.captain ? '<span class="role-tag" style="background:rgba(217,119,6,0.12);color:#B45309">CAP</span>' : ''}${p.vice ? '<span class="role-tag" style="background:rgba(37,99,235,0.12);color:#1D4ED8">VC</span>' : ''}</div>
           <div class="meta">${p.role}</div>
         </div>
         <span class="role-tag ${p.role.toLowerCase()}">${p.role}</span>
@@ -728,7 +770,7 @@
   }
 
   function selectPlayer (squadPlayer, slotIdx, kind) {
-    const nat = (squadPlayer.nationality || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+    const nat = squadPlayer.nationality || '';
     const p = {
       id:      squadPlayer.id,
       num:     squadPlayer.number || '?',
@@ -737,7 +779,8 @@
       role:    mapPosition(squadPlayer.position),
       captain: false,
       vice:    false,
-      flag:    FLAG_CSS[nat] ? nat : null,
+      nat,
+      flag:    _countryIso2(nat),
     };
 
     if (kind === 'xi') {
@@ -874,7 +917,7 @@
       .order('slot_index');
     return (data || []).map(lp => {
       const p = lp.players || {};
-      const nat = (p.nationality || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+      const nat = p.nationality || '';
       return {
         id:      p.id,
         num:     p.number || '?',
@@ -883,7 +926,8 @@
         role:    mapPosition(p.position),
         captain: lp.is_captain || false,
         vice:    lp.is_vice_captain || false,
-        flag:    FLAG_CSS[nat] ? nat : null,
+        nat,
+        flag:    _countryIso2(nat),
       };
     });
   }
