@@ -3306,7 +3306,13 @@
 
     // categories = the dimension values (x), in first-series order
     const cats = [];
-    ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
+    // catFids[i] = id de filtro de cats[i] (cross-filter). Viene del punto (`fid`, aditivo del
+    // resolver): player_id para jugador, id de MC, clave normalizada de rival, o el propio
+    // valor para posición/MD. null ⇒ esa categoría no es cross-filtrable (p. ej. dim compuesta).
+    const catFids = [];
+    ss.forEach(s => s.points.forEach(p => {
+      if (!cats.includes(p.x)) { cats.push(p.x); catFids.push(p.fid != null ? p.fid : null); }
+    }));
 
     // "vs microciclo": the resolver enriches each point with { cur, ref, diff }. When the
     // card asks for an MC comparison (and the points carry both values) we draw TWO bars
@@ -3388,7 +3394,7 @@
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
 
-    return { cats, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+    return { cats, catFids, datasets, max, step, ticks, showAxes, showLeg, showLbl,
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
@@ -3454,6 +3460,13 @@
           indexAxis: d.horizontal ? 'y' : 'x',
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
+          // Cross-filter affordance: pointer sólo sobre una barra cross-filtrable.
+          onHover: (evt, els) => {
+            const c = evt && evt.native && evt.native.target;
+            if (!c || !c.style) return;
+            const i = els && els.length ? els[0].index : -1;
+            c.style.cursor = (i >= 0 && d.catFids && d.catFids[i] != null) ? 'pointer' : 'default';
+          },
           layout: { padding: {
             top:   !d.horizontal ? (d.isMcGrouped ? 28 : (d.showLbl ? 14 : 6)) : 6,
             right:  d.horizontal ? (d.isMcGrouped ? 46 : (d.showLbl ? 30 : 8)) : 8,
@@ -3496,6 +3509,9 @@
           scales,
         },
       });
+      // Cross-filter: el handler (GPS Analysis.html) lee esto desde la instancia del chart.
+      // Índice de categoría (hit.index) → id de filtro. Se re-escribe en cada mount.
+      body.__chart.$gpCatFids = d.catFids || null;
     };
     mount();
   }
