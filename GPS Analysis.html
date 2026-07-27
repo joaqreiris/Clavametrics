@@ -302,6 +302,18 @@
      container query. Tables are the exception — they can exceed the card, so their
      body keeps vertical scroll. */
   .gp-c-b { padding:10px; flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; min-width:0; }
+  /* Zoom chip (barras anidadas · Fase B): salida VISIBLE del zoom. Sólo existe mientras la
+     card está zoomeada; se posiciona sobre el área del chart (el body es su contenedor). */
+  .gp-c-b:has(> .gp-zoom-chip) { position:relative; }
+  .gp-zoom-chip { position:absolute; top:4px; left:4px; z-index:6; display:inline-flex; align-items:center; gap:5px;
+    padding:3px 4px 3px 8px; border-radius:999px; background:var(--cm-accent-soft,#e7f3ec); color:var(--cm-accent,#15803D);
+    border:1px solid color-mix(in srgb, var(--cm-accent,#15803D) 30%, transparent);
+    font:600 10.5px/1 var(--cm-font-sans); max-width:80%; }
+  .gp-zoom-chip .g { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gp-zoom-chip .ti { font-size:12px; flex-shrink:0; }
+  .gp-zoom-chip .x { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; padding:0;
+    border:0; border-radius:50%; background:transparent; color:inherit; cursor:pointer; flex-shrink:0; }
+  .gp-zoom-chip .x:hover { background:color-mix(in srgb, var(--cm-accent,#15803D) 18%, transparent); }
   .gp-c.is-table > .gp-c-b,
   .gp-c-b:has(.gp-zt),
   .gp-c-b:has(.gp-zwrap) { overflow-y:auto; }
@@ -3545,6 +3557,18 @@ document.addEventListener('pointerdown', e => {
   if (!chart) return;
   const viz = card.__config && card.__config.viz;
   if (viz !== 'scatter' && viz !== 'bars') return;    // resto de vizzes: sin cross-filter
+  // ZOOM AL GRUPO (Fase B): en barras anidadas, un press sobre el CORCHETE del piso superior
+  // NO es cross-filter, es zoom LOCAL de la card (no toca la barra compartida). Se testea
+  // ANTES de la barra: el corchete vive fuera del chartArea, así que getElementsAtEventForMode
+  // no lo devolvería. offsetX/Y del canvas == espacio en que el plugin registró las regiones.
+  if (viz === 'bars' && chart.$gpNested) {
+    const brk = window.gpBarBracketAt && window.gpBarBracketAt(chart, e.offsetX, e.offsetY);
+    if (brk != null) {
+      e.stopPropagation();             // pre-empt gp-canvas: no selecciona ni arrastra la card
+      _gpXFilter = { pointerId: e.pointerId, kind: 'zoom', card, group: brk, startX: e.clientX, startY: e.clientY };
+      return;
+    }
+  }
   // Chart.js 4.x: getRelativePosition lee offsetX/offsetY del evento y un PointerEvent los trae
   // → getElementsAtEventForMode funciona con pointerdown sin convertir nada.
   let hit = null;
@@ -3576,6 +3600,14 @@ document.addEventListener('pointerup', e => {
   if (!g || e.pointerId !== g.pointerId) return;
   const dx = e.clientX - g.startX, dy = e.clientY - g.startY;
   if (dx * dx + dy * dy > 25) return;                       // >5px → gesto abortado, no filtra
+  if (g.kind === 'zoom') {
+    // Toggle LOCAL de la card (no toca la barra). Re-click en el grupo ya zoomeado → salir.
+    const card = g.card; if (!card || !card.__config) return;
+    card.__zoomGroup = (String(card.__zoomGroup) === String(g.group)) ? null : g.group;
+    window.GpBuilder && window.GpBuilder.resolveAndRenderCard &&
+      window.GpBuilder.resolveAndRenderCard(card, card.__config);
+    return;
+  }
   window.gpFilterBar && window.gpFilterBar.setValue &&
     window.gpFilterBar.setValue(g.fkey, g.fval, { additive: false, toggle: true });
 }, true);

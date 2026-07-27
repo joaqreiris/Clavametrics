@@ -3054,6 +3054,15 @@
     return lo > 0 ? s.slice(0, lo) + '…' : '';
   }
 
+  // Devuelve el label del corchete (piso superior) bajo (x,y) en píxeles-canvas, o null.
+  // Comparte espacio de coords con offsetX/offsetY del PointerEvent → sin conversión.
+  function _gpBarBracketAt(chart, x, y) {
+    const hits = chart && chart.$gpGroupHits;
+    if (!Array.isArray(hits) || x == null || y == null) return null;
+    for (const h of hits) if (x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1) return h.label;
+    return null;
+  }
+
   // ── Eje jerárquico (2 dimensiones, SOLO vertical) ────────────────────────────
   // Dibuja el PISO SUPERIOR: el valor de dims[0] agrupando categorías consecutivas, con un
   // corchete que abarca sus barras. El piso inferior (dims[1]) lo dibuja el propio eje.
@@ -3065,6 +3074,11 @@
   const _barGroupAxisPlugin = {
     id: 'gpbBarGroupAxis',
     afterDatasetsDraw(chart, _args, opts) {
+      // Regiones clickeables del piso superior (Fase B · zoom). Se RECONSTRUYEN en cada draw
+      // —resize, cambio de filtro, re-mount, animación— así que siempre corresponden al último
+      // frame: no hay invalidación manual posible de olvidar, ni región vieja apuntando a un
+      // grupo que ya no está. Vacío ⇒ no hay corchetes ⇒ el listener no pre-empta nada.
+      chart.$gpGroupHits = [];
       if (!opts || !opts.show) return;                       // sólo 2 dims + vertical + ejes visibles
       const dims = opts.dims;
       if (!Array.isArray(dims) || dims.length < 2) return;
@@ -3096,6 +3110,11 @@
         ctx.beginPath();                                     // corchete: patita ┌ línea ┐ patita
         ctx.moveTo(L, yLine + 4); ctx.lineTo(L, yLine); ctx.lineTo(R, yLine); ctx.lineTo(R, yLine + 4);
         ctx.stroke();
+        // Región clickeable: el alto del piso superior, en píxeles CSS — el MISMO espacio que
+        // e.offsetX/offsetY de un PointerEvent, así que se comparan sin conversión. Vive DEBAJO
+        // del chartArea (alto reservado por afterFit) → nunca se solapa con las barras, o sea
+        // que un click en una barra no puede confundirse con uno en un corchete.
+        chart.$gpGroupHits.push({ x0: L, x1: R, y0: yLine - 2, y1: sx.bottom, label: g.label });
         const maxW = R - L - 6;                              // labels largos → ellipsis, sin pisar al vecino
         if (maxW < 12) continue;
         ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
@@ -3363,7 +3382,7 @@
    *   combo: a series flagged `line` (or config.metrics[i].line) is drawn as a LINE
    *          on a secondary value axis (y1) over the bars.
    */
-  function barsChartData(config, series, mcNames) {
+  function barsChartData(config, series, mcNames, zoomGroup) {
     const size       = config.style?.size || 'md';
     const showAxes   = config.style?.axes   !== false;
     const showLeg    = config.style?.legend !== false;
@@ -3389,6 +3408,25 @@
         catDims.push(Array.isArray(p.dims) ? p.dims : [p.x]);
       }
     }));
+
+    // ── ZOOM AL GRUPO (Fase B) ────────────────────────────────────────────────
+    // Se aplica ACÁ, antes de construir datasets, a propósito: todo lo que se deriva
+    // después —incluidas las LÍNEAS DE REFERENCIA AUTO (mean/median/SD, que salen de
+    // barDs[0].data más abajo)— se recalcula sobre el grupo zoomeado en el MISMO render.
+    // Filtrar después dejaría el promedio de la vista completa dibujado sobre un subconjunto:
+    // se vería prolijo y estaría mintiendo.
+    // AUTO-SANADO: si el grupo ya no existe (p. ej. un filtro lo excluyó), zoomApplied queda
+    // false y el llamador limpia el estado → vista completa, nunca una card vacía colgada.
+    let zoomApplied = false;
+    if (zoomGroup != null) {
+      const keep = cats.map((_, i) => String(catDims[i][0]) === String(zoomGroup));
+      if (keep.some(Boolean)) {
+        for (let i = cats.length - 1; i >= 0; i--) {
+          if (!keep[i]) { cats.splice(i, 1); catFids.splice(i, 1); catDims.splice(i, 1); }
+        }
+        zoomApplied = true;
+      }
+    }
 
     // "vs microciclo": the resolver enriches each point with { cur, ref, diff }. When the
     // card asks for an MC comparison (and the points carry both values) we draw TWO bars
@@ -3500,7 +3538,8 @@
     // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
     // arriba. Es puramente de DISPLAY: los datasets ya están alineados por índice con `cats`.
     const catLabels = nDims >= 2 ? catDims.map(a => a[1]) : cats;
-    return { cats, catFids, catDims, nDims, catLabels, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+    return { cats, catFids, catDims, nDims, catLabels, zoomApplied, zoomGroup: zoomApplied ? String(zoomGroup) : null,
+             datasets, max, step, ticks, showAxes, showLeg, showLbl,
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
@@ -3509,8 +3548,37 @@
   }
 
   /** Mounts (or re-mounts) a Chart.js bar chart into `body`. Same renderer for preview + saved card. */
+  // Chip "⌕ GRUPO ×" mientras la card está zoomeada. OBLIGATORIO: el toggle en el corchete
+  // no se descubre solo; sin salida visible la feature es una trampa. Idempotente y vive
+  // DENTRO del body (se lo lleva el re-render / borrado de la card). group=null → lo saca.
+  function _renderZoomChip(body, group) {
+    let chip = body.querySelector(':scope > .gp-zoom-chip');
+    if (group == null) { if (chip) chip.remove(); return; }
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'gp-zoom-chip';
+      body.appendChild(chip);
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        const card = body.closest('.gp-c'); if (!card) return;
+        card.__zoomGroup = null;                       // salir del zoom → re-render vista completa
+        if (card.__config) resolveAndRenderCard(card, card.__config);
+      });
+    }
+    chip.innerHTML = `<i class="ti ti-zoom-in-area"></i><span class="g"></span>`
+      + `<button class="x" title="${esc(_tt('gps_analysis.builder_zoom_exit', 'Exit zoom'))}" aria-label="${esc(_tt('gps_analysis.builder_zoom_exit', 'Exit zoom'))}"><i class="ti ti-x"></i></button>`;
+    chip.querySelector('.g').textContent = String(group);
+  }
+
   function mountBarsChart(body, config, series, mcNames) {
-    const d = barsChartData(config, series, mcNames);
+    // Zoom al grupo (Fase B): estado EFÍMERO en el elemento de la card (no en el config →
+    // no persiste; sobrevive re-renders del body porque el elemento no se recrea).
+    const cardEl = body.closest ? body.closest('.gp-c') : null;
+    const _zoom = cardEl && cardEl.__zoomGroup != null ? cardEl.__zoomGroup : null;
+    const d = barsChartData(config, series, mcNames, _zoom);
+    // AUTO-SANADO: pedimos zoom pero el grupo ya no existe (un filtro lo excluyó) → barsChartData
+    // no lo aplicó. Limpiamos el estado colgado; d ya trae la vista completa, no re-render.
+    if (cardEl && _zoom != null && !d.zoomApplied) cardEl.__zoomGroup = null;
     if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
@@ -3579,6 +3647,10 @@
           onHover: (evt, els) => {
             const c = evt && evt.native && evt.native.target;
             if (!c || !c.style) return;
+            // Corchete del piso superior (zoom) → pointer. Se testea con offsetX/Y contra las
+            // regiones que el plugin registró; tiene prioridad porque vive fuera del chartArea.
+            const ne = evt.native;
+            if (_gpBarBracketAt(body.__chart, ne && ne.offsetX, ne && ne.offsetY)) { c.style.cursor = 'pointer'; return; }
             const i = els && els.length ? els[0].index : -1;
             c.style.cursor = (i >= 0 && d.catFids && d.catFids[i] != null) ? 'pointer' : 'default';
           },
@@ -3635,6 +3707,9 @@
       // El commit 2 (plugin del piso superior) los consume; acá sólo se exponen.
       body.__chart.$gpCatDims = d.catDims || null;
       body.__chart.$gpNDims   = d.nDims || 1;
+      // Zoom (Fase B): el handler lo lee para saber si esta card zoomea, y con qué grupo.
+      body.__chart.$gpNested  = !!_nested;
+      _renderZoomChip(body, d.zoomGroup);
     };
     mount();
   }
@@ -7148,6 +7223,10 @@
     evaluateFormula,           // (src, resolve?) → { ok, value } | { ok:false, error } — parser controlado
     get calcMetrics() { return calcMetrics; },
   };
+
+  // Hit-test del corchete del eje jerárquico (Fase B · zoom). Lo usa el listener de
+  // GPS Analysis.html y el onHover de barras. (x,y) en píxeles-canvas (offsetX/offsetY).
+  window.gpBarBracketAt = _gpBarBracketAt;
 
   // Shared render engine for OTHER dashboards (e.g. Match Performance pilot). Draw-only:
   //   GpRender.renderCard(container, config /* gp.card/v1 */, series, opts?)
