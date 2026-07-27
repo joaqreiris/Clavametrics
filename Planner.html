@@ -716,17 +716,24 @@
     flex-direction:column; gap:0;
   }
   .pl-drop-menu.is-open { display:flex; }
+  /* Fixed 22px icon column + text column: every row's label starts at the SAME x,
+     whatever the icon is (Tabler glyph or an SVG of any aspect ratio). The explicit
+     grid also neutralises justify-content:center leaking in from .pl-dock-btn on the
+     rows that carry both classes (Ball/Cone/… , Crests). */
   .pl-drop-opt {
-    display:flex; align-items:center; gap:12px;
-    width:100%; height:40px; padding:0 16px; border:0; box-sizing:border-box;
+    display:grid; grid-template-columns:22px 1fr; align-items:center; gap:10px;
+    width:100%; min-height:38px; padding:0 14px; border:0; box-sizing:border-box;
     border-radius:6px; background:none; cursor:pointer;
-    font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted);
     text-align:left; white-space:nowrap; transition:background 80ms, color 80ms;
   }
   .pl-drop-opt:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .pl-drop-opt.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); }
-  .pl-drop-opt .ti { font-size:18px; flex-shrink:0; }
-  .pl-drop-opt svg { width:18px !important; height:18px !important; flex-shrink:0; }
+  /* Icon always the first grid cell, centred within its 22px column. */
+  .pl-drop-opt > .ti, .pl-drop-opt > svg { grid-column:1; justify-self:center; flex-shrink:0; }
+  .pl-drop-opt .ti { font-size:18px; }
+  .pl-drop-opt svg { width:18px !important; height:18px !important; }
+  .pl-drop-opt > span { grid-column:2; overflow:hidden; text-overflow:ellipsis; }
   .pl-drop-team-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; transition:background 80ms; }
   .pl-drop-team-row:hover { background:var(--cm-bg-soft); cursor:pointer; }
   .pl-drop-team-row.is-active-team { background:var(--cm-accent-soft); box-shadow:inset 2px 0 0 var(--cm-accent); }
@@ -1124,8 +1131,8 @@
                 <input type="color" class="pl-team-swatch" id="plTeamColor4" value="#E5E7EB" data-i18n-attr="title:planner.team_d_color" title="Team D color">
               </div>
               <div class="pl-drop-sep"></div>
-              <button id="plAddNumberedBtn" class="pl-drop-opt" style="justify-content:center"><i class="ti ti-circle-plus"></i><span data-i18n="planner.add_numbered_player">Add numbered player</span></button>
-              <button id="plAddTeamBtn" class="pl-drop-opt" style="justify-content:center">
+              <button id="plAddNumberedBtn" class="pl-drop-opt"><i class="ti ti-circle-plus"></i><span data-i18n="planner.add_numbered_player">Add numbered player</span></button>
+              <button id="plAddTeamBtn" class="pl-drop-opt">
                 <i class="ti ti-plus"></i><span data-i18n="planner.add_team">Add team</span>
               </button>
             </div>
