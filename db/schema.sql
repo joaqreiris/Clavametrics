@@ -4,8 +4,8 @@
 -- (proyecto xesrumijvdmqjrufgeka / Kime-app, PostgreSQL 17.6).
 -- Generado: 2026-07-05.  NO editar a mano: regenerar desde la DB.
 --
--- 112 tablas | 238 FKs | 5 vistas | 71 funciones
--- | 39 triggers | 227 politicas RLS
+-- 118 tablas | 247 FKs | 5 vistas | 75 funciones
+-- | 39 triggers | 273 politicas RLS
 -- Incluye: tablas, tipos, PK/UNIQUE/CHECK, FK (con ON DELETE), indices,
 --          vistas, funciones (cuerpos reales), triggers, RLS + politicas.
 -- No incluye: GRANTs por rol, datos/seeds, objetos de schemas auth/storage.
@@ -44,6 +44,56 @@ create table if not exists public.ai_card_generations (
   constraint ai_card_generations_pkey primary key (id)
 );
 
+create table if not exists public.assessment_column_maps (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  source_label text default 'screening'::text not null,
+  source_column_name text not null,
+  test_key text not null,
+  side text,
+  updated_at timestamp with time zone default now() not null,
+  constraint assessment_column_maps_pkey primary key (id),
+  constraint assessment_column_maps_club_id_source_label_source_column_n_key UNIQUE (club_id, source_label, source_column_name),
+  constraint assessment_column_maps_side_check CHECK ((side = ANY (ARRAY['L'::text, 'R'::text])))
+);
+CREATE INDEX idx_assessment_col_map_club ON public.assessment_column_maps USING btree (club_id);
+
+create table if not exists public.assessment_test_defs (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid,
+  family text not null,
+  key text not null,
+  test_type text not null,
+  label text not null,
+  i18n_key text,
+  metric_key text default 'peak_force'::text not null,
+  unit text default 'N'::text not null,
+  value_type text default 'numeric'::text not null,
+  bilateral boolean default true not null,
+  higher_is_better boolean default true not null,
+  min_value numeric,
+  max_value numeric,
+  thresholds jsonb default '{}'::jsonb not null,
+  asym_watch_pct numeric,
+  asym_alert_pct numeric,
+  reference text,
+  reference_url text,
+  evidence_level text,
+  aliases text[] default '{}'::text[] not null,
+  sort_order integer default 100 not null,
+  active boolean default true not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint assessment_test_defs_pkey primary key (id),
+  constraint assessment_test_defs_family_check CHECK ((family = ANY (ARRAY['isometric'::text, 'mobility'::text]))),
+  constraint assessment_test_defs_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
+  constraint assessment_test_defs_value_type_check CHECK ((value_type = ANY (ARRAY['numeric'::text, 'binary'::text, 'score'::text]))),
+  constraint assessment_test_defs_evidence_level_check CHECK ((evidence_level = ANY (ARRAY['strong'::text, 'moderate'::text, 'practice'::text])))
+);
+CREATE UNIQUE INDEX assessment_test_defs_global_key_uidx ON public.assessment_test_defs USING btree (key) WHERE (club_id IS NULL);
+CREATE UNIQUE INDEX assessment_test_defs_club_key_uidx ON public.assessment_test_defs USING btree (club_id, key) WHERE (club_id IS NOT NULL);
+CREATE INDEX assessment_test_defs_family_idx ON public.assessment_test_defs USING btree (family, sort_order);
+
 create table if not exists public.audit_log (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -81,7 +131,6 @@ create table if not exists public.body_composition (
   notes text,
   created_by uuid,
   created_at timestamp with time zone default now(),
-  -- Raw skinfolds (mm)
   sf_triceps numeric,
   sf_subscapular numeric,
   sf_biceps numeric,
@@ -92,17 +141,14 @@ create table if not exists public.body_composition (
   sf_calf numeric,
   sf_chest numeric,
   sf_midaxillary numeric,
-  -- Girths / breadths for Heath-Carter (cm)
   girth_arm_flexed numeric,
   girth_calf numeric,
   breadth_humerus numeric,
   breadth_femur numeric,
   waist_cm numeric,
   height_cm numeric,
-  -- Context for the equations
   age_years numeric,
   sex text,
-  -- Derived values (computed by the app)
   sf_formula text,
   sum_skinfolds numeric,
   bmi numeric,
@@ -112,7 +158,7 @@ create table if not exists public.body_composition (
   soma_ecto numeric,
   constraint body_composition_pkey primary key (id),
   constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text]))),
-  constraint body_composition_sex_check CHECK ((sex is null or sex = ANY (ARRAY['male'::text, 'female'::text])))
+  constraint body_composition_sex_check CHECK (((sex IS NULL) OR (sex = ANY (ARRAY['male'::text, 'female'::text]))))
 );
 CREATE INDEX idx_body_composition_club ON public.body_composition USING btree (club_id);
 CREATE INDEX idx_body_composition_player_date ON public.body_composition USING btree (player_id, measured_date DESC);
@@ -585,42 +631,6 @@ create table if not exists public.gps_integrations (
 );
 CREATE INDEX idx_gps_integrations_club ON public.gps_integrations USING btree (club_id);
 
--- One row per GPS sync JOB (server-side orchestration + progress). Kept SEPARATE from
--- gps_integrations.status (that is CONNECTION state; a running sync is a job, not a connection
--- state). The worker (service role) advances chunks_done/cursor/heartbeat_at; the client only
--- reads it (Realtime) to show live progress and survives navigation. Sync is idempotent
--- (delete+insert/upsert by external_activity_id) so cursor_* makes a killed job resumable.
-create table if not exists public.gps_sync_jobs (
-  id uuid default gen_random_uuid() not null,
-  club_id uuid not null,
-  integration_id uuid not null,
-  status text default 'queued'::text not null,
-  range_from date not null,
-  range_to date not null,
-  cursor_from date,                 -- start of the chunk currently being processed (resume point)
-  cursor_to date,
-  chunks_total integer default 0 not null,
-  chunks_done integer default 0 not null,
-  totals jsonb default '{}'::jsonb not null,   -- running accumulator (activities, rows, periods, skipped, errors)
-  error text,
-  created_by uuid,
-  started_at timestamp with time zone,
-  heartbeat_at timestamp with time zone,       -- worker bumps it each chunk → stale ⇒ job died (reap on next enqueue)
-  finished_at timestamp with time zone,
-  created_at timestamp with time zone default now() not null,
-  constraint gps_sync_jobs_pkey primary key (id),
-  constraint gps_sync_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'error'::text, 'cancelled'::text])))
-);
-CREATE INDEX gps_sync_jobs_club_idx ON public.gps_sync_jobs USING btree (club_id, created_at DESC);
--- LOCK: at most ONE active (queued|running) job per integration — a 2nd concurrent enqueue
--- (double-click / other tab / other device) fails the insert atomically. A dead 'running' job
--- (stale heartbeat_at) is reaped to 'error' by the worker before enqueuing, releasing the lock.
-CREATE UNIQUE INDEX gps_sync_jobs_one_active ON public.gps_sync_jobs USING btree (integration_id)
-  WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
--- Realtime UPDATE events must carry club_id so the client's `filter: club_id=eq.X` matches on
--- UPDATE (default replica identity is the PK only → club_id absent from the change record).
-ALTER TABLE public.gps_sync_jobs REPLICA IDENTITY FULL;
-
 create table if not exists public.gps_metric_definitions (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -724,6 +734,30 @@ CREATE INDEX gps_reports_created_idx ON public.gps_reports USING btree (created_
 CREATE INDEX idx_gps_reports_club_session ON public.gps_reports USING btree (club_id, session_id);
 CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_id, player_id);
 
+create table if not exists public.gps_sync_jobs (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  integration_id uuid not null,
+  status text default 'queued'::text not null,
+  range_from date not null,
+  range_to date not null,
+  cursor_from date,
+  cursor_to date,
+  chunks_total integer default 0 not null,
+  chunks_done integer default 0 not null,
+  totals jsonb default '{}'::jsonb not null,
+  error text,
+  created_by uuid,
+  started_at timestamp with time zone,
+  heartbeat_at timestamp with time zone,
+  finished_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint gps_sync_jobs_pkey primary key (id),
+  constraint gps_sync_jobs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'error'::text, 'cancelled'::text])))
+);
+CREATE INDEX gps_sync_jobs_club_idx ON public.gps_sync_jobs USING btree (club_id, created_at DESC);
+CREATE UNIQUE INDEX gps_sync_jobs_one_active ON public.gps_sync_jobs USING btree (integration_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
+
 create table if not exists public.gym_exercises (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -813,6 +847,24 @@ create table if not exists public.individual_plan_blocks (
 CREATE INDEX idx_ipb_plan ON public.individual_plan_blocks USING btree (plan_id);
 CREATE INDEX idx_ipb_plan_week ON public.individual_plan_blocks USING btree (plan_id, week_index, day_of_week, sort_order);
 
+create table if not exists public.individual_plan_phases (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  plan_id uuid not null,
+  name text not null,
+  week_start integer default 1 not null,
+  week_end integer default 1 not null,
+  color text,
+  objective text,
+  load_level text,
+  phase_order integer default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint individual_plan_phases_pkey primary key (id)
+);
+CREATE INDEX idx_ip_phases_club ON public.individual_plan_phases USING btree (club_id);
+CREATE INDEX idx_ip_phases_plan ON public.individual_plan_phases USING btree (plan_id);
+
 create table if not exists public.individual_plans (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -820,18 +872,18 @@ create table if not exists public.individual_plans (
   name text not null,
   description text,
   focus text,
-  goal text,
   start_date date,
   end_date date,
   status text default 'draft'::text,
-  programme_week integer default 1,
-  programme_total_weeks integer default 1,
-  content jsonb not null default '{}'::jsonb,
-  share_token uuid default gen_random_uuid(),
-  shared boolean not null default false,
   created_by uuid,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
+  goal text,
+  programme_week integer default 1,
+  programme_total_weeks integer default 1,
+  content jsonb default '{}'::jsonb not null,
+  share_token uuid default gen_random_uuid(),
+  shared boolean default false not null,
   constraint individual_plans_pkey primary key (id),
   constraint individual_plans_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'paused'::text, 'completed'::text, 'archived'::text])))
 );
@@ -839,24 +891,6 @@ CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (c
 CREATE INDEX idx_individual_plans_player ON public.individual_plans USING btree (player_id);
 CREATE INDEX idx_individual_plans_status ON public.individual_plans USING btree (status);
 CREATE UNIQUE INDEX idx_individual_plans_share_token ON public.individual_plans USING btree (share_token);
-
-create table if not exists public.individual_plan_phases (
-  id uuid default gen_random_uuid() not null,
-  club_id uuid not null,
-  plan_id uuid not null,
-  name text not null,
-  week_start integer not null default 1,
-  week_end integer not null default 1,
-  color text,
-  objective text,
-  load_level text,
-  phase_order integer not null default 0,
-  created_at timestamp with time zone default now(),
-  updated_at timestamp with time zone default now(),
-  constraint individual_plan_phases_pkey primary key (id)
-);
-CREATE INDEX idx_ip_phases_club ON public.individual_plan_phases USING btree (club_id);
-CREATE INDEX idx_ip_phases_plan ON public.individual_plan_phases USING btree (plan_id);
 
 create table if not exists public.injuries (
   id uuid default gen_random_uuid() not null,
@@ -1267,19 +1301,13 @@ create table if not exists public.member_modules (
   constraint member_modules_pkey primary key (profile_id, module_key)
 );
 
-create table if not exists public.role_default_modules (
-  club_id uuid not null,
-  role text not null,
-  module_key text not null,
-  constraint role_default_modules_pkey primary key (club_id, role, module_key)
-);
-
 create table if not exists public.member_teams (
   profile_id uuid not null,
   team_id uuid not null,
   club_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint member_teams_pkey primary key (profile_id, team_id)
+  constraint member_teams_pkey primary key (profile_id, team_id),
+  constraint member_teams_profile_team_uniq UNIQUE (profile_id, team_id)
 );
 CREATE INDEX idx_member_teams_profile ON public.member_teams USING btree (profile_id);
 CREATE INDEX idx_member_teams_team ON public.member_teams USING btree (team_id);
@@ -1655,7 +1683,6 @@ create table if not exists public.players (
   last_name text not null,
   position text,
   date_of_birth date,
-  joined_date date,
   nationality text,
   height numeric(5,2),
   weight numeric(5,2),
@@ -1672,6 +1699,7 @@ create table if not exists public.players (
   scouting_summary text,
   positions text[],
   archived_at timestamp with time zone,
+  joined_date date,
   constraint players_pkey primary key (id),
   constraint players_dominant_foot_check CHECK ((dominant_foot = ANY (ARRAY['left'::text, 'right'::text, 'both'::text, NULL::text]))),
   constraint players_status_check CHECK ((status = ANY (ARRAY['available'::text, 'injured'::text, 'modified'::text, 'unavailable'::text])))
@@ -1728,7 +1756,7 @@ create table if not exists public.profiles (
   onboarded boolean default false not null,
   constraint profiles_pkey primary key (id),
   constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text]))),
-  constraint profiles_preferred_lang_check CHECK ((preferred_lang is null or preferred_lang = ANY (ARRAY['en'::text, 'es'::text, 'pt'::text])))
+  constraint profiles_preferred_lang_check CHECK (((preferred_lang IS NULL) OR (preferred_lang = ANY (ARRAY['en'::text, 'es'::text, 'pt'::text]))))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
 CREATE INDEX profiles_email_idx ON public.profiles USING btree (email);
@@ -1861,6 +1889,13 @@ create table if not exists public.rehab_sessions (
 );
 CREATE INDEX idx_rehab_sessions_plan_date ON public.rehab_sessions USING btree (plan_id, date);
 CREATE INDEX idx_rehab_sessions_club_date ON public.rehab_sessions USING btree (club_id, date);
+
+create table if not exists public.role_default_modules (
+  club_id uuid not null,
+  role text not null,
+  module_key text not null,
+  constraint role_default_modules_pkey primary key (club_id, role, module_key)
+);
 
 create table if not exists public.rpe (
   id uuid default gen_random_uuid() not null,
@@ -2010,6 +2045,18 @@ create table if not exists public.surgeries (
 CREATE INDEX idx_surg_club ON public.surgeries USING btree (club_id);
 CREATE INDEX idx_surg_player ON public.surgeries USING btree (player_id, surgery_date DESC);
 
+create table if not exists public.task_reminders (
+  id uuid default gen_random_uuid() not null,
+  task_id uuid not null,
+  club_id uuid not null,
+  remind_at timestamp with time zone not null,
+  sent_at timestamp with time zone,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint task_reminders_pkey primary key (id)
+);
+CREATE INDEX task_reminders_due_idx ON public.task_reminders USING btree (remind_at) WHERE (sent_at IS NULL);
+
 create table if not exists public.tasks (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2040,18 +2087,6 @@ CREATE INDEX tasks_status_idx ON public.tasks USING btree (club_id, status);
 CREATE INDEX tasks_due_idx ON public.tasks USING btree (due_date);
 CREATE INDEX tasks_event_id_idx ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
 CREATE INDEX tasks_club_event_idx ON public.tasks USING btree (club_id, event_id) WHERE (event_id IS NOT NULL);
-
-create table if not exists public.task_reminders (
-  id uuid default gen_random_uuid() primary key,
-  task_id uuid not null references public.tasks(id) on delete cascade,
-  club_id uuid not null,
-  remind_at timestamptz not null,   -- absolute fire time
-  sent_at timestamptz,               -- null = pending; set = already notified (idempotency)
-  created_by uuid,
-  created_at timestamptz default now() not null
-);
-create index if not exists task_reminders_due_idx on public.task_reminders (remind_at) where sent_at is null;
--- Reminder engine: pg_cron job 'task-reminders' runs public.process_due_reminders() every minute.
 CREATE INDEX idx_tasks_event_id ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
 CREATE INDEX idx_tasks_club_status ON public.tasks USING btree (club_id, status) WHERE (status = 'pending'::text);
 CREATE INDEX idx_tasks_team ON public.tasks USING btree (team_id);
@@ -2163,6 +2198,8 @@ create table if not exists public.treatments (
   adaptation_notes text,
   adaptation_sent_at timestamp with time zone,
   notify_coaches boolean default false,
+  adaptation_applied_at timestamp with time zone,
+  adaptation_applied_by uuid,
   constraint treatments_pkey primary key (id),
   constraint treatments_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
   constraint treatments_pain_pre_check CHECK (((pain_pre >= 0) AND (pain_pre <= 10))),
@@ -2252,6 +2289,8 @@ CREATE INDEX wellness_date_idx ON public.wellness USING btree (club_id, submitte
 
 alter table public.ai_card_generations add constraint ai_card_generations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
 alter table public.ai_card_generations add constraint ai_card_generations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.assessment_column_maps add constraint assessment_column_maps_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.assessment_test_defs add constraint assessment_test_defs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.audit_log add constraint audit_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.audit_log add constraint audit_log_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.body_composition add constraint body_composition_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -2305,8 +2344,6 @@ alter table public.gps_drill_map add constraint gps_drill_map_club_id_fkey FOREI
 alter table public.gps_drill_map add constraint gps_drill_map_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
 alter table public.gps_integration_secrets add constraint gps_integration_secrets_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
 alter table public.gps_integrations add constraint gps_integrations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
-alter table public.gps_sync_jobs add constraint gps_sync_jobs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
-alter table public.gps_sync_jobs add constraint gps_sync_jobs_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
 alter table public.gps_metric_definitions add constraint gps_metric_definitions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.gps_metric_definitions add constraint gps_metric_definitions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.gps_period_reports add constraint gps_period_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -2317,6 +2354,8 @@ alter table public.gps_report_metrics add constraint gps_report_metrics_report_i
 alter table public.gps_reports add constraint gps_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.gps_reports add constraint gps_reports_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.gps_reports add constraint gps_reports_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.gps_sync_jobs add constraint gps_sync_jobs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_sync_jobs add constraint gps_sync_jobs_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
 alter table public.gym_exercises add constraint gym_exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.gym_session_templates add constraint gym_session_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.individual_block_completions add constraint individual_block_completions_block_id_fkey FOREIGN KEY (block_id) REFERENCES individual_plan_blocks(id) ON DELETE CASCADE;
@@ -2378,7 +2417,6 @@ alter table public.member_modules add constraint member_modules_profile_id_fkey 
 alter table public.member_teams add constraint member_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.member_teams add constraint member_teams_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.member_teams add constraint member_teams_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
-alter table public.role_default_modules add constraint role_default_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.mesocycles add constraint mesocycles_macrocycle_id_fkey FOREIGN KEY (macrocycle_id) REFERENCES macrocycles(id) ON DELETE CASCADE;
 alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
@@ -2441,6 +2479,7 @@ alter table public.rehab_protocols add constraint rehab_protocols_club_id_fkey F
 alter table public.rehab_protocols add constraint rehab_protocols_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.rehab_protocols add constraint rehab_protocols_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE CASCADE;
 alter table public.rehab_sessions add constraint rehab_sessions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES rehab_plans(id) ON DELETE CASCADE;
+alter table public.role_default_modules add constraint role_default_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.rpe add constraint rpe_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.rpe add constraint rpe_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.rpe add constraint rpe_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
@@ -2464,6 +2503,7 @@ alter table public.subscriptions add constraint subscriptions_team_id_fkey FOREI
 alter table public.surgeries add constraint surgeries_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.surgeries add constraint surgeries_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.surgeries add constraint surgeries_related_injury_id_fkey FOREIGN KEY (related_injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
+alter table public.task_reminders add constraint task_reminders_task_id_fkey FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE;
 alter table public.tasks add constraint tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.tasks add constraint tasks_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.tasks add constraint tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
@@ -2476,6 +2516,7 @@ alter table public.training_sessions add constraint training_sessions_microcycle
 alter table public.training_sessions add constraint training_sessions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.treatment_templates add constraint treatment_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.treatment_templates add constraint treatment_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_adaptation_applied_by_fkey FOREIGN KEY (adaptation_applied_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.treatments add constraint treatments_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.treatments add constraint treatments_indicated_by_fkey FOREIGN KEY (indicated_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.treatments add constraint treatments_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
@@ -2565,80 +2606,6 @@ begin
 end; $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.apply_role_template(p_club uuid, p_profile uuid, p_role text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-begin
-  -- Copy the club's per-role default modules into the member's own rows.
-  -- If the role has no template, nothing is written: 0 rows = fail-open = full
-  -- access (today's behaviour is preserved). The '__managed__' sentinel is only
-  -- copied when the admin included it in the saved template.
-  insert into public.member_modules (club_id, profile_id, module_key)
-  select p_club, p_profile, module_key
-  from public.role_default_modules
-  where club_id = p_club and role = p_role
-  on conflict (profile_id, module_key) do nothing;
-exception when others then null;
-end; $function$
-;
-
--- Reminder engine: run by the pg_cron job 'task-reminders' every minute.
--- Resolves recipients server-side (no auth.uid()) and inserts in-app notifications.
-CREATE OR REPLACE FUNCTION public.process_due_reminders()
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-declare
-  r record;
-begin
-  for r in
-    select tr.id as reminder_id, tr.club_id,
-           t.team_id, t.assigned_to, t.assigned_roles, t.title, t.created_by, t.status
-    from public.task_reminders tr
-    join public.tasks t on t.id = tr.task_id
-    where tr.sent_at is null and tr.remind_at <= now()
-  loop
-    -- Per-reminder isolation: one failure must not abort the rest of the batch.
-    begin
-      -- Skip closed tasks, but still stamp sent so they aren't re-evaluated forever.
-      if r.status not in ('done', 'cancelled') then
-        insert into public.notifications (user_id, club_id, type, title, body, link)
-        select uid, r.club_id, 'task_reminder',
-               'Reminder: ' || r.title, 'This task is due soon.', '/Chat & Tasks.html'
-        from (
-          -- assigned_to (individual)
-          select r.assigned_to as uid where r.assigned_to is not null
-          union
-          -- creator (covers "For me"/self-assigned tasks)
-          select r.created_by where r.created_by is not null
-          union
-          -- assigned_roles: club members with a matching role, team-scoped when set
-          select p.id
-          from public.profiles p
-          where r.assigned_roles is not null
-            and p.club_id = r.club_id
-            and lower(coalesce(p.role, '')) = any (r.assigned_roles)
-            and ( r.team_id is null
-                  or p.id in (select mt.profile_id from public.member_teams mt
-                              where mt.team_id = r.team_id) )
-        ) recips
-        where uid is not null;
-      end if;
-
-      update public.task_reminders set sent_at = now() where id = r.reminder_id;
-    exception when others then
-      -- Leave sent_at null so the next run retries this reminder.
-      null;
-    end;
-  end loop;
-end; $function$
-;
-
 CREATE OR REPLACE FUNCTION public.acknowledge_wellness(p_wellness_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -2660,6 +2627,22 @@ CREATE OR REPLACE FUNCTION public.activity_team_for_player(p_player uuid)
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$ select team_id from public.players where id = p_player $function$
+;
+
+CREATE OR REPLACE FUNCTION public.apply_role_template(p_club uuid, p_profile uuid, p_role text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.member_modules (club_id, profile_id, module_key)
+  select p_club, p_profile, module_key
+  from public.role_default_modules
+  where club_id = p_club and role = p_role
+  on conflict (profile_id, module_key) do nothing;
+exception when others then null;
+end; $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.assign_rpe_session(p_rpe_id uuid, p_session_id uuid)
@@ -3167,16 +3150,6 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.my_role()
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  SELECT role FROM public.profiles WHERE id = auth.uid() LIMIT 1;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.gps_session_agg(p_club_id uuid, p_session_ids uuid[], p_player_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS TABLE(session_id uuid, n_players integer, total_distance_avg numeric, high_speed_distance_avg numeric, very_high_speed_distance_avg numeric, sprint_distance_avg numeric, sprint_count_avg numeric, max_speed_avg numeric, max_speed_max numeric, avg_speed_avg numeric, accelerations_avg numeric, decelerations_avg numeric, player_load_avg numeric, hmld_avg numeric, time_played_avg numeric, distance_per_minute_avg numeric)
  LANGUAGE sql
@@ -3458,6 +3431,14 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.my_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$ select role from public.profiles where id = auth.uid() limit 1; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.my_team_ids()
  RETURNS SETOF uuid
  LANGUAGE sql
@@ -3479,6 +3460,54 @@ AS $function$
   order by is_primary desc, created_at asc
   limit 1;
 $function$
+;
+
+CREATE OR REPLACE FUNCTION public.process_due_reminders()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  r record;
+begin
+  for r in
+    select tr.id as reminder_id, tr.club_id,
+           t.team_id, t.assigned_to, t.assigned_roles, t.title, t.created_by, t.status
+    from public.task_reminders tr
+    join public.tasks t on t.id = tr.task_id
+    where tr.sent_at is null and tr.remind_at <= now()
+  loop
+    -- Per-reminder isolation: one failure must not abort the rest of the batch.
+    begin
+      -- Skip closed tasks, but still stamp sent so they aren't re-evaluated forever.
+      if r.status not in ('done', 'cancelled') then
+        insert into public.notifications (user_id, club_id, type, title, body, link)
+        select uid, r.club_id, 'task_reminder',
+               'Reminder: ' || r.title, 'This task is due soon.', '/Chat & Tasks.html'
+        from (
+          select r.assigned_to as uid where r.assigned_to is not null
+          union
+          select r.created_by where r.created_by is not null
+          union
+          select p.id
+          from public.profiles p
+          where r.assigned_roles is not null
+            and p.club_id = r.club_id
+            and lower(coalesce(p.role, '')) = any (r.assigned_roles)
+            and ( r.team_id is null
+                  or p.id in (select mt.profile_id from public.member_teams mt
+                              where mt.team_id = r.team_id) )
+        ) recips
+        where uid is not null;
+      end if;
+
+      update public.task_reminders set sent_at = now() where id = r.reminder_id;
+    exception when others then
+      null;  -- leave sent_at null → next run retries this reminder
+    end;
+  end loop;
+end; $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5)
@@ -3618,7 +3647,7 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.session_rpe_status(p_session_id uuid)
- RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric)
+ RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric, note text, body_areas text[], duration integer, load numeric, submitted_at timestamp with time zone)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -3632,13 +3661,19 @@ begin
   where id = p_session_id;
 
   return query
-    select q.player_id, q.player_name, q.responded, q.rpe
+    select q.player_id, q.player_name, q.responded, q.rpe,
+           q.note, q.body_areas, q.duration, q.load, q.submitted_at
     from (
       select distinct on (p.id)
         p.id as player_id,
         coalesce(nullif(trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')),''),'Player') as player_name,
         (r.id is not null) as responded,
-        r.rpe as rpe,
+        r.rpe        as rpe,
+        r.note       as note,
+        r.body_areas as body_areas,
+        r.duration   as duration,
+        r.load       as load,
+        r.created_at as submitted_at,
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.rpe r
@@ -3712,7 +3747,8 @@ begin
   if target_club is null then raise exception 'Target not found'; end if;
   if not caller_super and target_club <> caller_club then raise exception 'Target not in your club'; end if;
 
-  if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff','sc_coach','fitness_coach','gk_coach','assistant_coach') then
+  if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff',
+                      'sc_coach','fitness_coach','gk_coach','assistant_coach') then
     raise exception 'Invalid role';
   end if;
   if new_role = 'owner' and not (caller_is_owner or caller_super) then
@@ -3937,6 +3973,30 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.toggle_adaptation_applied(p_treatment_id uuid)
+ RETURNS TABLE(applied_at timestamp with time zone, applied_by uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE v_club uuid;
+BEGIN
+  SELECT club_id INTO v_club FROM public.treatments WHERE id = p_treatment_id;
+  IF v_club IS NULL OR v_club <> public.get_user_club_id() THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  UPDATE public.treatments t
+     SET adaptation_applied_at = CASE WHEN t.adaptation_applied_at IS NULL THEN now() ELSE NULL END,
+         adaptation_applied_by = CASE WHEN t.adaptation_applied_at IS NULL THEN auth.uid() ELSE NULL END
+   WHERE t.id = p_treatment_id
+  RETURNING t.adaptation_applied_at, t.adaptation_applied_by
+  INTO applied_at, applied_by;
+
+  RETURN NEXT;
+END $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_act_availability()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3946,9 +4006,7 @@ AS $function$
 begin
   if TG_OP = 'UPDATE' and OLD.status is distinct from NEW.status then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
-    values (NEW.club_id,
-            public.activity_team_for_player(NEW.player_id::uuid),
-            auth.uid(),
+    values (NEW.club_id, public.activity_team_for_player(NEW.player_id::uuid), auth.uid(),
             'availability.changed', 'availability', null, NEW.player_id::uuid,
             jsonb_build_object('date', NEW.date, 'from', OLD.status, 'to', NEW.status));
   end if;
@@ -3964,9 +4022,7 @@ CREATE OR REPLACE FUNCTION public.trg_act_evaluation()
 AS $function$
 begin
   insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
-  values (NEW.club_id,
-          public.activity_team_for_player(NEW.player_id),
-          auth.uid(),
+  values (NEW.club_id, public.activity_team_for_player(NEW.player_id), auth.uid(),
           'evaluation.recorded', TG_TABLE_NAME, NEW.id, NEW.player_id,
           jsonb_build_object('test_date', NEW.test_date, 'kind', TG_TABLE_NAME));
   return NEW;
@@ -4053,9 +4109,7 @@ CREATE OR REPLACE FUNCTION public.trg_act_medical_episode()
 AS $function$
 begin
   insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, player_id, summary)
-  values (NEW.club_id,
-          public.activity_team_for_player(NEW.player_id),
-          auth.uid(),
+  values (NEW.club_id, public.activity_team_for_player(NEW.player_id), auth.uid(),
           'medical.episode', 'medical_episodes', NEW.id, NEW.player_id,
           jsonb_build_object('start_date', NEW.start_date, 'status', NEW.status));
   return NEW;
@@ -4152,6 +4206,34 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trg_act_task()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'INSERT' then
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, NEW.created_by, 'task.created', 'tasks', NEW.id,
+            jsonb_build_object(
+              'title', NEW.title,
+              'mode', case when NEW.assigned_roles is not null and cardinality(NEW.assigned_roles) > 0
+                           then 'role' else 'individual' end,
+              'assigned_roles', NEW.assigned_roles,
+              'assigned_to_name', NEW.assigned_to_name
+            ));
+  elsif TG_OP = 'UPDATE'
+        and NEW.status = 'done' and OLD.status is distinct from 'done' then
+    -- actor = quien completó (auth.uid()); si es null (proceso sin usuario), queda null y el insert va igual.
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, auth.uid(), 'task.completed', 'tasks', NEW.id,
+            jsonb_build_object('title', NEW.title));
+  end if;
+  return NEW;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_act_treatment()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4198,43 +4280,8 @@ begin
 end $function$
 ;
 
--- Feed de actividad para tasks (crear / completar). Se hace por TRIGGER, no por insert JS,
--- por consistencia con el resto del feed: activity_log solo se escribe vía triggers SECURITY
--- DEFINER (no hay policy de INSERT para usuarios). Espeja el estilo de trg_act_session:
--- inserta solo en la transición relevante. team_id = NEW.team_id directo (la task ya lo tiene;
--- NO se usa activity_team_for_player, que es para eventos ligados a un player). El trigger nunca
--- debe hacer fallar el INSERT/UPDATE de la task.
-CREATE OR REPLACE FUNCTION public.trg_act_task()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-begin
-  if TG_OP = 'INSERT' then
-    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, NEW.created_by, 'task.created', 'tasks', NEW.id,
-            jsonb_build_object(
-              'title', NEW.title,
-              'mode', case when NEW.assigned_roles is not null and cardinality(NEW.assigned_roles) > 0
-                           then 'role' else 'individual' end,
-              'assigned_roles', NEW.assigned_roles,
-              'assigned_to_name', NEW.assigned_to_name
-            ));
-  elsif TG_OP = 'UPDATE'
-        and NEW.status = 'done' and OLD.status is distinct from 'done' then
-    -- actor = quien completó (usuario logueado). Si auth.uid() es null (proceso sin usuario),
-    -- queda actor_id null y el insert va igual; nunca rompe el UPDATE de la task.
-    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, auth.uid(), 'task.completed', 'tasks', NEW.id,
-            jsonb_build_object('title', NEW.title));
-  end if;
-  return NEW;
-end $function$
-;
-
 CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE)
- RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric)
+ RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric, sleep_quality numeric, fatigue numeric, stress numeric, soreness numeric, mood numeric, note text, body_areas text[], submitted_at timestamp with time zone)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -4242,14 +4289,24 @@ AS $function$
 declare v_date date := coalesce(p_date, current_date);
 begin
   return query
-    select q.player_id, q.player_name, q.responded, q.readiness, q.hooper_index
+    select q.player_id, q.player_name, q.responded, q.readiness, q.hooper_index,
+           q.sleep_quality, q.fatigue, q.stress, q.soreness, q.mood,
+           q.note, q.body_areas, q.submitted_at
     from (
       select distinct on (p.id)
         p.id as player_id,
         coalesce(nullif(trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')),''),'Player') as player_name,
         (w.id is not null) as responded,
-        w.readiness as readiness,
-        w.hooper_index as hooper_index,
+        w.readiness      as readiness,
+        w.hooper_index   as hooper_index,
+        w.sleep_quality  as sleep_quality,
+        w.fatigue        as fatigue,
+        w.stress         as stress,
+        w.soreness       as soreness,
+        w.mood           as mood,
+        w.note           as note,
+        w.body_areas     as body_areas,
+        w.submitted_at   as submitted_at,
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.wellness w
@@ -4290,13 +4347,7 @@ create or replace view public.v_exercise_gps_profile as
     avg(r.hmld) AS hmld_avg
    FROM gps_period_reports r
      JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
-  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric
-    AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric)
-    -- Drop internally-inconsistent rows: high-speed distance is a SUBSET of total distance,
-    -- so HSR > total_distance means the row is corrupt (e.g. a partial sync that populated the
-    -- velocity bands but not total_distance). Keeps the projection from averaging garbage into
-    -- an impossible profile (TD < HSR). Rows missing either value are left as-is.
-    AND (r.total_distance IS NULL OR r.high_speed_distance IS NULL OR r.total_distance >= r.high_speed_distance)
+  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric) AND (r.total_distance IS NULL OR r.high_speed_distance IS NULL OR r.total_distance >= r.high_speed_distance)
   GROUP BY r.club_id, m.exercise_id;
 
 create or replace view public.v_gps_period_names as
@@ -4414,7 +4465,6 @@ CREATE TRIGGER trg_gps_period_reports_updated BEFORE UPDATE ON public.gps_period
 CREATE TRIGGER act_gps AFTER INSERT ON public.gps_reports FOR EACH ROW EXECUTE FUNCTION trg_act_gps();
 CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER individual_plan_phases_updated_at BEFORE UPDATE ON public.individual_plan_phases FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
 CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
 CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
@@ -4434,12 +4484,12 @@ CREATE TRIGGER act_rpe AFTER INSERT ON public.rpe FOR EACH ROW EXECUTE FUNCTION 
 CREATE TRIGGER rpe_calculate_load_trigger BEFORE INSERT OR UPDATE ON public.rpe FOR EACH ROW EXECUTE FUNCTION calculate_rpe_load();
 CREATE TRIGGER seasons_updated_at BEFORE UPDATE ON public.seasons FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER subscriptions_updated_at BEFORE UPDATE ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_task AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION trg_act_task();
 CREATE TRIGGER trg_single_primary BEFORE INSERT OR UPDATE OF is_primary ON public.teams FOR EACH ROW WHEN (new.is_primary) EXECUTE FUNCTION enforce_single_primary_team();
 CREATE TRIGGER act_session AFTER INSERT OR UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session();
 CREATE TRIGGER act_session_mod AFTER UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session_mod();
 CREATE TRIGGER act_treatment AFTER INSERT OR UPDATE ON public.treatments FOR EACH ROW EXECUTE FUNCTION trg_act_treatment();
 CREATE TRIGGER act_wellness AFTER INSERT ON public.wellness FOR EACH ROW EXECUTE FUNCTION trg_act_wellness();
-CREATE TRIGGER act_task AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION trg_act_task();
 
 -- ===================== RLS Y POLITICAS =====================
 
@@ -4457,6 +4507,34 @@ create policy "club members manage ai generations" on public.ai_card_generations
    FROM profiles
   WHERE (profiles.id = auth.uid()))))
   with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.assessment_column_maps enable row level security;
+create policy "assessment_col_map club" on public.assessment_column_maps as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "assessment_col_map super admin" on public.assessment_column_maps as permissive for all to public
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.assessment_test_defs enable row level security;
+create policy "assessment_test_defs select" on public.assessment_test_defs as permissive for select to public
+  using (((club_id IS NULL) OR (club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+create policy "assessment_test_defs super admin" on public.assessment_test_defs as permissive for all to public
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "assessment_test_defs write club" on public.assessment_test_defs as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 
@@ -4485,6 +4563,9 @@ create policy "body_composition_rw" on public.body_composition as permissive for
   with check ((club_id = get_user_club_id()));
 
 alter table public.calendar_events enable row level security;
+create policy "calendar_events_super_all" on public.calendar_events as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 create policy "ce_scoped_cud" on public.calendar_events as permissive for all to public
   using (((club_id = ( SELECT profiles.club_id
    FROM profiles
@@ -4496,9 +4577,6 @@ create policy "ce_scoped_select" on public.calendar_events as permissive for sel
   using (((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
-
-create policy "calendar_events_super_all" on public.calendar_events as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.card_accumulations enable row level security;
 create policy "club_card_accumulations" on public.card_accumulations as permissive for all to public
@@ -4599,9 +4677,9 @@ create policy "competitions_all" on public.competitions as permissive for all to
   WHERE (seasons.club_id IN ( SELECT profiles.club_id
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
-
 create policy "competitions_super_all" on public.competitions as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.dashboard_cards enable row level security;
 create policy "club members manage dashboard cards" on public.dashboard_cards as permissive for all to authenticated
@@ -4649,13 +4727,13 @@ create policy "dossier_templates_select" on public.dossier_templates as permissi
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+create policy "dossier_templates_super_all" on public.dossier_templates as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 create policy "dossier_templates_update" on public.dossier_templates as permissive for update to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
-create policy "dossier_templates_super_all" on public.dossier_templates as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.drills enable row level security;
 create policy "drills_delete" on public.drills as permissive for delete to public
@@ -4670,15 +4748,17 @@ create policy "drills_select" on public.drills as permissive for select to publi
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+create policy "drills_super_all" on public.drills as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 create policy "drills_update" on public.drills as permissive for update to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 
-create policy "drills_super_all" on public.drills as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
-
 alter table public.evaluations enable row level security;
+create policy "evaluations_scoped_delete" on public.evaluations as permissive for delete to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "evaluations_scoped_insert" on public.evaluations as permissive for insert to authenticated
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "evaluations_scoped_select" on public.evaluations as permissive for select to public
@@ -4686,8 +4766,6 @@ create policy "evaluations_scoped_select" on public.evaluations as permissive fo
 create policy "evaluations_scoped_update" on public.evaluations as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
-create policy "evaluations_scoped_delete" on public.evaluations as permissive for delete to authenticated
-  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
 alter table public.exercise_drills enable row level security;
 create policy "Club members can manage exercise_drills" on public.exercise_drills as permissive for all to public
@@ -4707,9 +4785,9 @@ create policy "exercises_scoped_select" on public.exercises as permissive for se
   using (((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (visible_teams IS NULL) OR (cardinality(visible_teams) = 0) OR (visible_teams && ( SELECT ARRAY( SELECT my_team_ids() AS my_team_ids) AS "array")))));
-
 create policy "exercises_super_all" on public.exercises as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.foods enable row level security;
 create policy "foods_read" on public.foods as permissive for select to authenticated
@@ -4761,9 +4839,9 @@ create policy "force_tests write club" on public.force_tests as permissive for a
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "force_tests_super_all" on public.force_tests as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.gps_column_mappings enable row level security;
 create policy "club members can manage their column mappings" on public.gps_column_mappings as permissive for all to public
@@ -4772,6 +4850,8 @@ create policy "club members can manage their column mappings" on public.gps_colu
   WHERE (profiles.id = auth.uid()))));
 
 alter table public.gps_dashboard_layouts enable row level security;
+create policy "Users delete own layouts" on public.gps_dashboard_layouts as permissive for delete to public
+  using (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
 create policy "Users insert own layouts" on public.gps_dashboard_layouts as permissive for insert to public
   with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
 create policy "Users read own layouts" on public.gps_dashboard_layouts as permissive for select to public
@@ -4779,8 +4859,6 @@ create policy "Users read own layouts" on public.gps_dashboard_layouts as permis
 create policy "Users update own layouts" on public.gps_dashboard_layouts as permissive for update to public
   using (((user_id = auth.uid()) AND (club_id = get_user_club_id())))
   with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
-create policy "Users delete own layouts" on public.gps_dashboard_layouts as permissive for delete to public
-  using (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
 
 alter table public.gps_drill_map enable row level security;
 create policy "gps_drill_map_select" on public.gps_drill_map as permissive for select to authenticated
@@ -4809,33 +4887,9 @@ alter table public.gps_period_reports enable row level security;
 create policy "gps_period_reports_club_all" on public.gps_period_reports as permissive for all to public
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
-
 create policy "gps_period_reports_super_all" on public.gps_period_reports as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
-
-alter table public.gps_sync_jobs enable row level security;
--- SELECT: any member of the club can watch its sync progress (Realtime/polling).
-create policy "gps_sync_jobs_club_select" on public.gps_sync_jobs as permissive for select to public
-  using ((club_id = get_user_club_id()));
--- INSERT: only admin/owner of the club may ENQUEUE a sync from the client. The worker runs
--- with the service role (bypasses RLS) for all its UPDATEs — clients never update the job.
-create policy "gps_sync_jobs_admin_insert" on public.gps_sync_jobs as permissive for insert to authenticated
-  with check ((club_id IN ( SELECT profiles.club_id
-   FROM profiles
-  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
--- Super admins: full manage (consistency with the other *_super_all policies).
-create policy "gps_sync_jobs_super_all" on public.gps_sync_jobs as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
--- Realtime: emit row changes so Admin can subscribe to progress (postgres_changes, club_id filter).
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'gps_sync_jobs'
-  ) then
-    alter publication supabase_realtime add table public.gps_sync_jobs;
-  end if;
-end $$;
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.gps_report_metrics enable row level security;
 create policy "gps_report_metrics_del" on public.gps_report_metrics as permissive for delete to authenticated
@@ -4858,13 +4912,24 @@ create policy "gps_reports_scoped_update" on public.gps_reports as permissive fo
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
+alter table public.gps_sync_jobs enable row level security;
+create policy "gps_sync_jobs_admin_insert" on public.gps_sync_jobs as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+create policy "gps_sync_jobs_club_select" on public.gps_sync_jobs as permissive for select to public
+  using ((club_id = get_user_club_id()));
+create policy "gps_sync_jobs_super_all" on public.gps_sync_jobs as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
 alter table public.gym_exercises enable row level security;
 create policy "Club members can manage gym_exercises" on public.gym_exercises as permissive for all to public
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
-
 create policy "gym_exercises_super_all" on public.gym_exercises as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.gym_session_templates enable row level security;
 create policy "gym_session_templates_rw" on public.gym_session_templates as permissive for all to authenticated
@@ -4888,19 +4953,19 @@ create policy "individual_plan_blocks_all" on public.individual_plan_blocks as p
           WHERE (profiles.id = auth.uid()))))));
 
 alter table public.individual_plan_phases enable row level security;
-create policy "ipp_select" on public.individual_plan_phases as permissive for select to authenticated
+create policy "ipp_delete" on public.individual_plan_phases as permissive for delete to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-create policy "ipp_insert" on public.individual_plan_phases as permissive for insert to authenticated
+create policy "ipp_insert" on public.individual_plan_phases as permissive for insert to public
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-create policy "ipp_update" on public.individual_plan_phases as permissive for update to authenticated
+create policy "ipp_select" on public.individual_plan_phases as permissive for select to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-create policy "ipp_delete" on public.individual_plan_phases as permissive for delete to authenticated
+create policy "ipp_update" on public.individual_plan_phases as permissive for update to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
@@ -4910,11 +4975,29 @@ create policy "individual_plans_all" on public.individual_plans as permissive fo
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "individual_plans_super_all" on public.individual_plans as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "ip_delete" on public.individual_plans as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ip_insert" on public.individual_plans as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ip_select" on public.individual_plans as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "ip_update" on public.individual_plans as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
 
 alter table public.injuries enable row level security;
+create policy "injuries_scoped_delete" on public.injuries as permissive for delete to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "injuries_scoped_insert" on public.injuries as permissive for insert to authenticated
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "injuries_scoped_select" on public.injuries as permissive for select to public
@@ -4922,8 +5005,6 @@ create policy "injuries_scoped_select" on public.injuries as permissive for sele
 create policy "injuries_scoped_update" on public.injuries as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
-create policy "injuries_scoped_delete" on public.injuries as permissive for delete to authenticated
-  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
 alter table public.injury_phases enable row level security;
 create policy "injury_phases_delete" on public.injury_phases as permissive for delete to public
@@ -5142,22 +5223,6 @@ create policy "member_modules_write" on public.member_modules as permissive for 
    FROM profiles
   WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
 
-alter table public.role_default_modules enable row level security;
-create policy "role_default_modules_select" on public.role_default_modules as permissive for select to public
-  using ((club_id IN ( SELECT profiles.club_id
-   FROM profiles
-  WHERE (profiles.id = auth.uid()))));
-create policy "role_default_modules_super_all" on public.role_default_modules as permissive for all to authenticated
-  using (is_super_admin())
-  with check (is_super_admin());
-create policy "role_default_modules_write" on public.role_default_modules as permissive for all to public
-  using ((club_id IN ( SELECT profiles.club_id
-   FROM profiles
-  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
-  with check ((club_id IN ( SELECT profiles.club_id
-   FROM profiles
-  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
-
 alter table public.member_teams enable row level security;
 create policy "member_teams_member_all" on public.member_teams as permissive for all to authenticated
   using ((club_id = ( SELECT profiles.club_id
@@ -5178,9 +5243,9 @@ create policy "mesocycles_all" on public.mesocycles as permissive for all to aut
   WHERE (s.club_id IN ( SELECT profiles.club_id
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
-
 create policy "mesocycles_super_all" on public.mesocycles as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.messages enable row level security;
 create policy "messages_insert" on public.messages as permissive for insert to public
@@ -5200,9 +5265,9 @@ create policy "mc_scoped_cud" on public.microcycles as permissive for all to pub
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "mc_scoped_select" on public.microcycles as permissive for select to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
-
 create policy "microcycles_super_all" on public.microcycles as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.notification_settings enable row level security;
 create policy "notif_settings_staff" on public.notification_settings as permissive for all to public
@@ -5217,8 +5282,10 @@ create policy "notif_settings_super" on public.notification_settings as permissi
   with check (is_super_admin());
 
 alter table public.notifications enable row level security;
-create policy "notifications_insert_service" on public.notifications as permissive for insert to public
-  with check (true);
+create policy "notifications_insert_club" on public.notifications as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = notifications.user_id) AND (p.club_id = get_user_club_id())))));
 create policy "notifications_select_own" on public.notifications as permissive for select to public
   using ((user_id = auth.uid()));
 create policy "notifications_update_own" on public.notifications as permissive for update to public
@@ -5348,17 +5415,17 @@ create policy "player_preventive_assignments_all" on public.player_preventive_as
           WHERE (profiles.id = auth.uid()))))));
 
 alter table public.player_teams enable row level security;
-create policy "player_teams_select" on public.player_teams as permissive for select to authenticated
-  using ((club_id = get_user_club_id()));
-create policy "player_teams_write" on public.player_teams as permissive for all to authenticated
-  using (((club_id = get_user_club_id()) AND has_full_planning_access()))
-  with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
-create policy "player_teams_super_all" on public.player_teams as permissive for all to authenticated
-  using (is_super_admin())
-  with check (is_super_admin());
 create policy "player_teams_member_write" on public.player_teams as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))
   with check (((club_id = get_user_club_id()) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))));
+create policy "player_teams_select" on public.player_teams as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+create policy "player_teams_super_all" on public.player_teams as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "player_teams_write" on public.player_teams as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_full_planning_access()))
+  with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public
@@ -5371,13 +5438,6 @@ create policy "players_scoped_insert" on public.players as permissive for insert
   with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
   WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
--- SELECT/UPDATE incluyen la rama `team_id IN my_team_ids()` (equipo primario denormalizado)
--- ADEMÁS del EXISTS sobre player_teams, para quedar alineadas con players_scoped_insert.
--- Sin esa rama, un coach no puede ver la fila que ACABA de insertar: PostgREST pide
--- `returning=representation` y Postgres aplica las policies de SELECT al RETURNING, pero la
--- fila de player_teams se crea recién después del insert → toda la operación abortaba con
--- "new row violates row-level security policy". Idem el update de photo_url posterior.
--- Bonus: jugadores sin fila en player_teams dejan de ser invisibles en el roster del coach.
 create policy "players_scoped_select" on public.players as permissive for select to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
@@ -5491,6 +5551,22 @@ create policy "rehab_sessions_rw" on public.rehab_sessions as permissive for all
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 
+alter table public.role_default_modules enable row level security;
+create policy "role_default_modules_select" on public.role_default_modules as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "role_default_modules_super_all" on public.role_default_modules as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "role_default_modules_write" on public.role_default_modules as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+
 alter table public.rpe enable row level security;
 create policy "rpe_scoped_insert" on public.rpe as permissive for insert to authenticated
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
@@ -5504,18 +5580,18 @@ create policy "season_phases_all" on public.season_phases as permissive for all 
   WHERE (seasons.club_id IN ( SELECT profiles.club_id
            FROM profiles
           WHERE (profiles.id = auth.uid()))))));
-
 create policy "season_phases_super_all" on public.season_phases as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.seasons enable row level security;
 create policy "seasons_all" on public.seasons as permissive for all to authenticated
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "seasons_super_all" on public.seasons as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.session_exercises enable row level security;
 create policy "club_members_manage_session_exercises" on public.session_exercises as permissive for all to public
@@ -5525,9 +5601,9 @@ create policy "club_members_manage_session_exercises" on public.session_exercise
   with check ((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "session_exercises_super_all" on public.session_exercises as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.share_links enable row level security;
 create policy "share_links_anon_read" on public.share_links as permissive for select to anon
@@ -5553,6 +5629,16 @@ create policy "surg_write" on public.surgeries as permissive for all to authenti
   using (((club_id = get_user_club_id()) AND has_medical_access()))
   with check (((club_id = get_user_club_id()) AND has_medical_access()));
 
+alter table public.task_reminders enable row level security;
+create policy "Club members can delete task_reminders" on public.task_reminders as permissive for delete to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can insert task_reminders" on public.task_reminders as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can update task_reminders" on public.task_reminders as permissive for update to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can view task_reminders" on public.task_reminders as permissive for select to public
+  using ((club_id = get_user_club_id()));
+
 alter table public.tasks enable row level security;
 create policy "Club members can create tasks" on public.tasks as permissive for insert to authenticated
   with check ((club_id IN ( SELECT profiles.club_id
@@ -5572,19 +5658,9 @@ create policy "Team-scoped task visibility" on public.tasks as permissive for se
   using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()) OR ((assigned_roles IS NOT NULL) AND (my_role() = ANY (assigned_roles)) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))));
-
 create policy "tasks_super_all" on public.tasks as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
-
-alter table public.task_reminders enable row level security;
-create policy "Club members can view task_reminders" on public.task_reminders as permissive for select to public
-  using ((club_id = get_user_club_id()));
-create policy "Club members can insert task_reminders" on public.task_reminders as permissive for insert to public
-  with check ((club_id = get_user_club_id()));
-create policy "Club members can update task_reminders" on public.task_reminders as permissive for update to public
-  using ((club_id = get_user_club_id()));
-create policy "Club members can delete task_reminders" on public.task_reminders as permissive for delete to public
-  using ((club_id = get_user_club_id()));
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.taxonomy_aliases enable row level security;
 create policy "Anyone authenticated can read taxonomy_aliases" on public.taxonomy_aliases as permissive for select to authenticated
@@ -5604,14 +5680,14 @@ create policy "teams_super_all" on public.teams as permissive for all to authent
   with check (is_super_admin());
 
 alter table public.training_sessions enable row level security;
+create policy "training_sessions_super_all" on public.training_sessions as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 create policy "ts_scoped_cud" on public.training_sessions as permissive for all to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "ts_scoped_select" on public.training_sessions as permissive for select to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
-
-create policy "training_sessions_super_all" on public.training_sessions as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
 
 alter table public.treatment_templates enable row level security;
 create policy "treatment_templates_club_delete" on public.treatment_templates as permissive for delete to public
@@ -5626,9 +5702,9 @@ create policy "treatment_templates_club_select" on public.treatment_templates as
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "treatment_templates_super_all" on public.treatment_templates as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.treatments enable row level security;
 create policy "treatments_cud" on public.treatments as permissive for all to authenticated
@@ -5684,9 +5760,9 @@ create policy "videos update club" on public.videos as permissive for update to 
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-
 create policy "videos_super_all" on public.videos as permissive for all to authenticated
-  using (is_super_admin()) with check (is_super_admin());
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.wellness enable row level security;
 create policy "wellness_scoped_insert" on public.wellness as permissive for insert to authenticated
