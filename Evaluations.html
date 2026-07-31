@@ -586,6 +586,7 @@
             <div>
               <h2 id="evTestName">Test name</h2>
               <div class="sub" id="evTestSub">Measured test · detail view (skeleton)</div>
+              <div id="evDefMeta"></div>
             </div>
           </div>
 
@@ -1412,21 +1413,104 @@
 
   // flat lookup by key
   var TEST_BY_KEY = {};
-  CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){ t._cat = cat; TEST_BY_KEY[t.key] = t; }); });
+  function rebuildTestIndex(){
+    TEST_BY_KEY = {};
+    CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){ t._cat = cat; TEST_BY_KEY[t.key] = t; }); });
+  }
+  rebuildTestIndex();
+
+  // ════════════════════════════════════════════════════════════════════
+  //  DB-DRIVEN ASSESSMENT CATALOG  — isometric strength + mobility from
+  //  assessment_test_defs, merged into CATALOG. Degrades silently to [] if
+  //  the table doesn't exist yet (migration 126 not applied), same defensive
+  //  pattern as loadForceCatalog().
+  // ════════════════════════════════════════════════════════════════════
+  var _assessDefs = [], _assessMerged = false;
+  var ASSESS_ICON = {
+    iso_post_chain_30:'ti-stretching-2', iso_knee_ext_90:'ti-walk', iso_hip_add_0:'ti-arrows-minimize',
+    iso_hip_abd_0:'ti-arrows-maximize', iso_shoulder_er:'ti-rotate-clockwise', iso_shoulder_ir:'ti-rotate-2',
+    mob_ankle_df:'ti-angle', mob_hip_ir:'ti-rotate-2', mob_hip_er:'ti-rotate-clockwise',
+    mob_aslr:'ti-arrow-up', mob_thomas:'ti-yoga', mob_hypermobility:'ti-body-scan'
+  };
+  // existing hardcoded mobility cards already cover these defs → enrich, don't duplicate
+  var _LEGACY_MOB_DEFKEYS = ['mob_ankle_df','mob_hip_ir','mob_hip_er'];
+
+  function _assessSub(def){ return (def.unit || '') + (def.bilateral ? ' · L/R' : ''); }
+  function _defToTest(def){
+    return { key:def.key, label:def.label, sub:_assessSub(def),
+      icon: ASSESS_ICON[def.key] || (def.family === 'isometric' ? 'ti-barbell' : 'ti-stretching'),
+      src:{ from:'force_tests', testType:def.test_type }, _def:def };
+  }
+
+  async function loadAssessmentDefs(){
+    try {
+      if (!_clubId && window.getClubId){ try { _clubId = await window.getClubId(); } catch(e){} }
+      var q = window.sb.from('assessment_test_defs').select('*').eq('active', true);
+      q = _clubId ? q.or('club_id.is.null,club_id.eq.' + _clubId) : q.is('club_id', null);
+      var res = await q;
+      _assessDefs = res.data || [];
+    } catch(e){ _assessDefs = []; /* table missing → silent degrade */ }
+    mergeAssessmentCatalog();
+  }
+
+  function mergeAssessmentCatalog(){
+    if (_assessMerged) return;
+    var iso = _assessDefs.filter(function(d){ return d.family === 'isometric'; }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    var mob = _assessDefs.filter(function(d){ return d.family === 'mobility';  }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    if (!iso.length && !mob.length) return;   // migration unapplied → leave CATALOG untouched
+
+    // 1) Isometric strength category. Move Nordic + Isokinetic H:Q out of Strength/VBT (clinical continuity).
+    if (iso.length){
+      var moved = [];
+      CATALOG.forEach(function(cat){
+        cat.tests = cat.tests.filter(function(t){
+          if (t.key === 'nordic' || t.key === 'hq'){ moved.push(t); return false; }
+          return true;
+        });
+      });
+      var isoCat = { name:'Isometric strength', icon:'ti-dumbbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C',
+        tests: iso.map(_defToTest).concat(moved) };
+      var mi = CATALOG.findIndex(function(c){ return c.name === 'Mobility & screening'; });
+      CATALOG.splice(mi < 0 ? CATALOG.length : mi, 0, isoCat);
+    }
+
+    // 2) Mobility defs → append to 'Mobility & screening' the ones not already present (ankle, hip rot).
+    if (mob.length){
+      var mcat = CATALOG.find(function(c){ return c.name === 'Mobility & screening'; });
+      if (mcat) mob.forEach(function(d){
+        if (_LEGACY_MOB_DEFKEYS.indexOf(d.key) >= 0) return;
+        mcat.tests.push(_defToTest(d));
+      });
+    }
+
+    rebuildTestIndex();
+
+    // 3) Enrich legacy mobility cards (Ankle dorsiflexion, Hip ER/IR) with their def for chip/reference.
+    var byKey = {}; _assessDefs.forEach(function(d){ byKey[d.key] = d; });
+    if (TEST_BY_KEY['ankle']  && byKey.mob_ankle_df) TEST_BY_KEY['ankle']._def  = byKey.mob_ankle_df;
+    if (TEST_BY_KEY['hiprot'] && (byKey.mob_hip_ir || byKey.mob_hip_er)) TEST_BY_KEY['hiprot']._def = byKey.mob_hip_ir || byKey.mob_hip_er;
+
+    _assessMerged = true;
+  }
 
   // category display name → i18n (labels/subs of individual tests are technical
   // names/acronyms and stay as data). English name is the canonical fallback.
   var CAT_I18N = {
     'Jumps & power':'evaluations.cat_jumps_power', 'Speed & agility':'evaluations.cat_speed_agility',
     'Endurance / VO₂max':'evaluations.cat_endurance', 'Strength / VBT':'evaluations.cat_strength_vbt',
-    'Mobility & screening':'evaluations.cat_mobility', 'Anthropometrics':'evaluations.cat_anthropometrics'
+    'Mobility & screening':'evaluations.cat_mobility', 'Anthropometrics':'evaluations.cat_anthropometrics',
+    'Isometric strength':'evaluations.cat_isometric'
   };
   function catName(cat){ return tt(CAT_I18N[cat.name] || '', cat.name); }
   // Localized display name for a test (falls back to the English catalog label).
   var TEST_I18N = {
     'Body composition':'evaluations.test_bodycomp', 'Somatotype':'evaluations.test_somato', 'BMI / RFM':'evaluations.test_bmirfm'
   };
-  function testLabel(t){ return tt(TEST_I18N[t.label] || '', t.label); }
+  // DB-driven assessment tests carry their own i18n key on _def; prefer it.
+  function testLabel(t){
+    if (t._def && t._def.i18n_key) return tt(t._def.i18n_key, t._def.label || t.label);
+    return tt(TEST_I18N[t.label] || '', t.label);
+  }
 
   var catalog = document.getElementById('catalogView');
   var detail  = document.getElementById('testDetailView');
@@ -1649,10 +1733,34 @@
   var _openTest = null;
 
   // open a test from the catalog → detail view, in force or evaluations mode
+  // unit chip + evidence/reference popover for DB-driven tests (t._def). Scientific
+  // reference text is NOT translated; only the "Evidence: …" label is.
+  function renderDefMeta(t){
+    var el = document.getElementById('evDefMeta'); if (!el) return;
+    var d = t && t._def;
+    if (!d){ el.innerHTML = ''; return; }
+    var evTxt = d.evidence_level ? tt('evaluations.evidence_' + d.evidence_level, d.evidence_level) : '';
+    var chip = '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;background:var(--cm-bg-sunk);color:var(--cm-fg-muted);font-size:12px;font-weight:600">'
+      + esc(d.unit || '') + (d.bilateral ? ' · L/R' : '') + '</span>';
+    var info = d.reference ? '<button type="button" id="evDefInfoBtn" title="' + esc(tt('evaluations.evidence','Evidence'))
+      + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer"><i class="ti ti-info-circle"></i></button>' : '';
+    var pop = d.reference ? '<div id="evDefPop" style="display:none;position:absolute;top:100%;left:0;z-index:40;margin-top:6px;max-width:340px;padding:10px 12px;border-radius:10px;background:var(--cm-bg-elev,#fff);border:1px solid var(--cm-border,rgba(0,0,0,.12));box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:12px;line-height:1.45;color:var(--cm-fg);white-space:normal;text-align:left">'
+      + (evTxt ? '<div style="font-weight:700;margin-bottom:4px">' + esc(tt('evaluations.evidence','Evidence')) + ': ' + esc(evTxt) + '</div>' : '')
+      + '<div style="color:var(--cm-fg-muted)">' + esc(d.reference) + '</div></div>' : '';
+    el.innerHTML = '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;margin-top:6px">' + chip + info + pop + '</div>';
+    var ib = document.getElementById('evDefInfoBtn');
+    if (ib) ib.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var p = document.getElementById('evDefPop'); if (!p) return;
+      p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+    });
+  }
+
   function openTestDetail(t){
     _openTest = t;
     document.getElementById('evTestName').textContent = testLabel(t);
     document.getElementById('evTestSub').textContent  = catName(t._cat) + ' · ' + t.sub;
+    renderDefMeta(t);
     catalog.classList.remove('is-on');
     detail.classList.add('is-on');
 
@@ -6802,6 +6910,7 @@
         var t = _openTest;
         document.getElementById('evTestName').textContent = testLabel(t);
         document.getElementById('evTestSub').textContent = catName(t._cat) + ' · ' + t.sub;
+        renderDefMeta(t);
         if (t.src && t.src.from === 'force_tests'){ renderForceTeam(); renderForceIndiv(); }
         else { renderEvalTeam(); renderEvalIndiv(); }
       }
@@ -6813,6 +6922,7 @@
   // ── boot ──
   (async () => {
     if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
+    await loadAssessmentDefs();   // merge DB-driven isometric/mobility tests into CATALOG before first render
     renderCatalog();
     loadStatuses();
   })();
