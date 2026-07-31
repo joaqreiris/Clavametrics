@@ -459,7 +459,6 @@ let _dpGpsTargets = {};        // metric_key → session target (display units),
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
-let _dpCalEventId = null;   // calendar_events.id backing this day (start-time write-back target)
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
 const _dpDescCache = {};  // planner_exercise_id -> { objective, description } from the Drill Designer exercise (null when absent)
@@ -692,20 +691,22 @@ async function loadDay(dateStr) {
     const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = '';
   }
 
-  // Calendar is the source of truth: authoritatively overlay micro/MD/time/RPE after the session fill.
-  _dpCalEventId = null;
+  // Calendar overlays: microcycle / match-day / RPE only. Start time comes from the
+  // session itself (see note below) — never from an ancillary calendar_events row.
   try {
     const ctx = await window.cmResolveDayContext(dateStr, _dpTeamId, _dpClubId);
     _dpCalFields = new Set();
-    _dpCalEventId = ctx.hasEvent ? (ctx.event_id || null) : null;   // event whose time this page edits
     const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
     const mcSelN = document.getElementById('dpMicrocycle');
     if (ctx.microcycle && mcSelN && [...mcSelN.options].some(o => o.value === String(ctx.microcycle.id))) { mcSelN.value = String(ctx.microcycle.id); _dpCalFields.add('dpMicrocycle'); }
     const mdSel = document.getElementById('dpMatchDay');
     const mdVal = ctx.md ? mdMap(ctx.md) : '';
     if (mdVal && mdSel && [...mdSel.options].some(o => o.value === mdVal)) { mdSel.value = mdVal; _dpCalFields.add('dpMatchDay'); }
+    // NOTE: start time is NOT overlaid from calendar_events. The training block on
+    // the Calendar IS this training_sessions row (source='session'), so session_time
+    // is the single source of truth for both — overlaying an unrelated ancillary
+    // event's time (a meal/recovery/medical row) would wrongly clobber it.
     if (ctx.hasEvent) {
-      const st = document.getElementById('dpStartTime'); if (ctx.start_time && st) { st.value = String(ctx.start_time).slice(0,5); _dpCalFields.add('dpStartTime'); }
       const sr = document.getElementById('dpEstRpe');   if (ctx.estimated_rpe && sr) { sr.value = ctx.estimated_rpe; _dpCalFields.add('dpEstRpe'); }
     }
     dpMarkCalFields();
@@ -803,15 +804,9 @@ function dpMarkCalFields() {
   ['dpMicrocycle','dpMatchDay','dpStartTime','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
     el.classList.toggle('is-cal-sourced', _dpCalFields.has(id));
-    // Start time now writes back to the Calendar event (dpSyncCalendarTime), so it
-    // gets a reassuring toast instead of the "change it in the Calendar" warning.
     if (_dpCalFields.has(id) && !el.dataset.calWarn) {
       el.dataset.calWarn = '1';
-      el.addEventListener('change', () => {
-        if (!_dpCalFields.has(id)) return;
-        if (id === 'dpStartTime') dpToast(tt('daily_planning.cal_time_synced','Start time updated on the Calendar too.'));
-        else dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.'));
-      });
+      el.addEventListener('change', () => { if (_dpCalFields.has(id)) dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.')); });
     }
   });
 }
@@ -1762,20 +1757,8 @@ async function dpAutoSaveSession() {
   }
   if (dotEl)  dotEl.style.background = 'var(--cm-success)';
   if (statEl) { const _sv = tt('daily_planning.saved_just_now','Saved · just now'); statEl.textContent = _sv; setTimeout(() => { if (statEl.textContent === _sv) statEl.textContent = tt('daily_planning.autosaved','Autosaved'); }, 3000); }
-  // Push the start time back onto the Calendar event so the two stay in sync.
-  dpSyncCalendarTime(startVal, endVal, duration);
-}
-
-// Write the session's start/end/duration onto the backing Calendar event (if any),
-// so editing the start time here also moves the event's time on the Calendar.
-async function dpSyncCalendarTime(startVal, endVal, duration){
-  if (!_dpCalEventId) return;                 // no linked calendar event → nothing to sync
-  const patch = { start_time: startVal || null, updated_at: new Date().toISOString() };
-  if (endVal) patch.end_time = endVal;
-  if (duration) patch.duration_minutes = duration;
-  const { error } = await window.sb.from('calendar_events')
-    .update(patch).eq('id', _dpCalEventId).eq('club_id', _dpClubId);
-  if (error) console.warn('[dp-cal-sync] failed:', error.message);
+  // No separate calendar write needed: the Calendar training block IS this
+  // training_sessions row, so saving session_time already moves it there.
 }
 
 function dpQueueSave() {
