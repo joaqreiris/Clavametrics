@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clava-v3';
+const CACHE_VERSION = 'clava-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 // Solo assets inmutables. NUNCA cachear HTML ni llamadas a Supabase.
@@ -41,8 +41,9 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 2b) JS/CSS del mismo origen: network-first (evita scripts pegados a una versión vieja en dev)
-  const isCode = url.origin === self.location.origin && /\.(js|css)$/i.test(url.pathname);
+  // 2b) JS/CSS/JSON del mismo origen: network-first (evita scripts y traducciones
+  //     pegados a una versión vieja — locales/*.json DEBE ser siempre el último).
+  const isCode = url.origin === self.location.origin && /\.(js|css|json)$/i.test(url.pathname);
   if (isCode) {
     e.respondWith(
       fetch(e.request).then(resp => {
