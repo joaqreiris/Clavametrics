@@ -4070,6 +4070,36 @@ begin
 end $function$
 ;
 
+-- Mirror an ACTIVE injury into availability as 'injured' rows, so a logged injury shows up
+-- everywhere that reads availability (Availability grid, Daily Planning day squad, Hub…) without
+-- anyone opening the Availability page. One row per day in [start_date, end], where end =
+-- returned_date ?? expected_return ?? current_date (open-ended → filled up to today; the
+-- Availability client tops it up forward as days pass). ON CONFLICT DO NOTHING so it never
+-- overwrites a manual edit or an existing row. availability.player_id is text → cast.
+CREATE OR REPLACE FUNCTION public.trg_injury_fill_availability()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_end date;
+begin
+  if NEW.status <> 'active' then
+    return NEW;   -- only an active injury blocks availability; cleared/returning don't auto-fill
+  end if;
+  v_end := coalesce(NEW.returned_date, NEW.expected_return, current_date);
+  if v_end < NEW.start_date then
+    return NEW;
+  end if;
+  insert into public.availability (player_id, date, status, minutes, club_id)
+  select NEW.player_id::text, d::date, 'injured', 0, NEW.club_id
+  from generate_series(NEW.start_date, v_end, interval '1 day') as d
+  on conflict (player_id, date) do nothing;
+  return NEW;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_act_lineup_pub()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4466,6 +4496,7 @@ CREATE TRIGGER act_gps AFTER INSERT ON public.gps_reports FOR EACH ROW EXECUTE F
 CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
+CREATE TRIGGER injury_fill_availability AFTER INSERT OR UPDATE OF status, start_date, expected_return, returned_date ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_injury_fill_availability();
 CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
 CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
 CREATE TRIGGER load_templates_updated_at BEFORE UPDATE ON public.load_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();

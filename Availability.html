@@ -900,12 +900,18 @@
   }
 
   // ── Auto-fill: fill 'injured' for MC dates within each active injury's expected_return ──
+  // Safety net for the DB trigger (trg_injury_fill_availability): the trigger fills injured
+  // rows at injury-write time, but an OPEN-ENDED injury (no return date) can only be filled up
+  // to the day it was written — so as days pass we top it up to today here, on each load.
+  // ignoreDuplicates / the avMap guard means nothing manual (or already filled) is overwritten.
   async function autofillInjuryRange(injuries, avMap, todayStr) {
     const rows = [];
     injuries.forEach(inj => {
-      if (!inj.expected_return || inj.expected_return < todayStr) return;
+      if (!inj.start_date) return;
+      // Injury window: start → known return, else expected return, else today (open-ended).
+      const end = inj.returned_date || inj.expected_return || todayStr;
       MC_DATES.forEach(date => {
-        if (date < todayStr || date > inj.expected_return) return;
+        if (date < inj.start_date || date > end) return;
         if (avMap[inj.player_id + '|' + date]) return; // don't overwrite manual edits
         rows.push({ player_id: inj.player_id, date, status: 'injured', minutes: 0, club_id: CLUB_ID });
       });
@@ -978,7 +984,7 @@
         } catch (e) { return null; }
       })(),
       window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name'),
-      window.sb.from('injuries').select('player_id, expected_return')
+      window.sb.from('injuries').select('player_id, start_date, expected_return, returned_date')
         .eq('club_id', CLUB_ID).eq('status', 'active'),
     ]);
     const playersData = playersRes.data, playersErr = playersRes.error;
