@@ -988,6 +988,7 @@
                   <p data-i18n="evaluations.import_force_platform_hint">Upload a CSV exported from your force platform (VALD ForceDecks &amp; others). Identity columns are detected automatically; every other column is treated as a metric.</p>
                   <button class="cm-btn is-primary is-sm" id="evForceImportBtn" style="margin-top:14px"><i class="ti ti-file-import" style="font-size:14px"></i><span data-i18n="evaluations.import_csv">Import CSV</span></button>
                   <button class="cm-btn is-outline is-sm" id="asAddResultBtn" style="margin-top:14px;margin-left:8px;display:none" onclick="openAssessmentEntry()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.add_result">Add result</span></button>
+                  <button class="cm-btn is-outline is-sm" id="asImpOpenBtn" style="margin-top:14px;margin-left:8px;display:none" onclick="openAssessmentImport()"><i class="ti ti-table-import" style="font-size:14px"></i><span data-i18n="evaluations.asimport_title">Import screening</span></button>
                 </div>
               </div>
             </div>
@@ -1255,6 +1256,53 @@
         <button class="cm-btn is-outline" onclick="resetForceImport()" data-i18n="evaluations.reset">Reset</button>
       </div>
       <div id="ftSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ── Screening importer (WIDE format: each metric column IS a (test, side)) ── -->
+<div class="pt-imp-overlay" id="asImpOverlay"></div>
+<aside class="pt-imp-drawer" id="asImpDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-table-import" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3 data-i18n="evaluations.asimport_title">Import screening</h3><div class="sub" data-i18n="evaluations.asimport_sub">Wide CSV / paste from Excel · one column per test &amp; side</div></div>
+    <button class="pt-imp-x" id="asImpClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="ev-frow" style="margin-bottom:12px"><label class="ev-fl"><span data-i18n="evaluations.asimport_test_date">Test date</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)" data-i18n="evaluations.asimport_date_hint">(used when the file has no date column)</span></label>
+      <input id="asImpDate" type="date" class="ev-finput" style="height:34px"></div>
+
+    <div class="pt-drop" id="asImpDrop" onclick="document.getElementById('asImpFile').click()">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4 data-i18n="evaluations.drop_csv_here">Drop CSV here or click to browse</h4><p data-i18n="evaluations.asimport_cols_hint">Identity columns (name, number, position, DOB…) are detected. Every other column is a test — mapped to a test &amp; side.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">.tsv</span></div>
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('asImpFile').click()"><i class="ti ti-upload" style="font-size:14px"></i><span data-i18n="evaluations.browse_files">Browse files</span></button>
+      </div>
+    </div>
+    <input type="file" id="asImpFile" accept=".csv,.tsv,.txt" style="display:none">
+
+    <div style="margin:12px 0">
+      <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="evaluations.paste_from_excel">Paste from Excel / Numbers</div>
+      <textarea id="asImpPaste" class="ev-finput" rows="3" style="resize:vertical;font-family:var(--cm-font-mono);font-size:11px" data-i18n-ph="evaluations.asimport_paste_ph" placeholder="Paste tab-separated rows (with a header row)…"></textarea>
+      <button class="cm-btn is-outline is-sm" style="margin-top:6px" onclick="asImpParsePaste()"><i class="ti ti-clipboard-check" style="font-size:14px"></i><span data-i18n="evaluations.asimport_parse_paste">Parse pasted data</span></button>
+    </div>
+
+    <div id="asImpResult" style="display:none">
+      <div class="pt-imp-section-l" data-i18n="evaluations.player_match">Player match</div>
+      <div id="asImpMatchSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="asImpUnmatched" style="margin-bottom:14px"></div>
+
+      <div class="pt-imp-section-l"><span data-i18n="evaluations.map_to_test">Map columns to test &amp; side</span> <span id="asImpMapCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="asImpMapRows" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+
+      <div class="pt-imp-section-l"><span data-i18n="evaluations.preview">Preview</span> <span id="asImpPreviewCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="asImpPreview" style="overflow-x:auto;max-height:280px;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-primary" id="asImpSaveBtn" onclick="saveAssessmentImport()" style="flex:1"><i class="ti ti-database-import" style="font-size:14px"></i><span data-i18n="evaluations.import_to_database">Import to database</span></button>
+        <button class="cm-btn is-outline" onclick="resetAssessmentImport()" data-i18n="evaluations.reset">Reset</button>
+      </div>
+      <div id="asImpSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
     </div>
   </div>
 </aside>
@@ -1829,6 +1877,8 @@
     // manual individual entry is available for DB-driven assessment tests (they carry a _def)
     var asBtn = document.getElementById('asAddResultBtn');
     if (asBtn) asBtn.style.display = (isForce && t._def) ? '' : 'none';
+    var asImpBtn = document.getElementById('asImpOpenBtn');
+    if (asImpBtn) asImpBtn.style.display = (isForce && t._def) ? '' : 'none';
     activateMini('uploadMode', 'manual');
 
     var entrySeg = detail.querySelector('[data-mini="entryMode"]');
@@ -6550,6 +6600,357 @@
     }, 2000);
   }
   window.saveForceImport = saveForceImport;
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SCREENING IMPORTER (#asImpDrawer) — WIDE format. Each metric column IS
+  //  a (test, side). Clones the force-importer pipeline (classify → match →
+  //  auto-map → preview → save) but maps columns to (test_key, side) and
+  //  persists memory in assessment_column_maps. Writes force_tests + metrics.
+  // ════════════════════════════════════════════════════════════════════
+  var _asState = null;   // { rows, headers, fields, metrics, byId, byName, manual, colMap, savedMap }
+  var _asTargets = [];   // [{ key, test_type, metric_key, unit, family, label, bilateral, value_type, aliases }]
+  var _asTargetsByKey = {};
+
+  // identity columns for a wide screening export (name split, external id, real test date)
+  var _AS_ID = [
+    { role:'externalId', match:h => /\b(external\s*id|externalid|profile\s*id|athlete\s*id|athleteid)\b/.test(h) },
+    { role:'name',       match:h => /\b(name|player|athlete|jugador)\b/.test(h) },
+    { role:'date',       match:h => /\b(date|recorded|fecha)\b/.test(h) && !/time|birth|nac|dob/.test(h) },
+  ];
+
+  function _asBuildTargets(){
+    var out = [];
+    _assessDefs.forEach(function(d){
+      out.push({ key:d.key, test_type:d.test_type, metric_key:d.metric_key, unit:d.unit, family:d.family,
+                 label:d.label, bilateral:d.bilateral, value_type:d.value_type, aliases:(d.aliases||[]) });
+    });
+    // jump / other force_tests catalog entries (CMJ, SJ, DJ, SL-CMJ) so their columns still import
+    var jumpAliases = { cmj:['CMJ'], sj:['SJ','SQUAT JUMP'], dj:['DJ','DROP JUMP'], slcmj:['SLJ','SLCMJ','SL CMJ','SL-CMJ'] };
+    CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){
+      if (!t.src || t.src.from !== 'force_tests' || t._def) return;
+      out.push({ key:'cat_'+t.key, test_type:t.src.testType, metric_key:'jump_height', unit:'cm', family:'jump',
+                 label:t.label, bilateral:(t.key==='slcmj'), value_type:'numeric', aliases:(jumpAliases[t.key]||[t.label]) });
+    }); });
+    _asTargets = out;
+    _asTargetsByKey = {}; out.forEach(function(t){ _asTargetsByKey[t.key] = t; });
+  }
+
+  // strip a trailing side token (R|L|RIGHT|LEFT|D|I) from a header → { side, base }
+  function _asParseSide(header){
+    var h = ' ' + String(header||'').trim().toUpperCase().replace(/[_\-]+/g,' ').replace(/\s+/g,' ') + ' ';
+    var m = h.match(/\s(RIGHT|LEFT|R|L|D|I)\s*$/);
+    if (m){
+      var tok = m[1];
+      var side = (tok==='R'||tok==='RIGHT'||tok==='D') ? 'R' : 'L';
+      return { side:side, base:h.slice(0, h.length - (m[0].length)).trim() };
+    }
+    return { side:null, base:String(header||'').trim() };
+  }
+
+  function _asClassify(headers){
+    var fields = { _ignore:[] }, used = new Set();
+    // 1) name split + ignored identity (number/position/DOB) — BEFORE the generic date match
+    headers.forEach(function(h){ var n=_ftNorm(h);
+      if (used.has(h)) return;
+      if (/\b(first\s*name|firstname|nombre|given\s*name)\b/.test(n)){ fields.firstName=h; used.add(h); }
+      else if (/\b(last\s*name|lastname|surname|apellido|family\s*name)\b/.test(n)){ fields.lastName=h; used.add(h); }
+      else if (/\b(number|dorsal|jersey|shirt|num)\b/.test(n) || n==='no' || n==='n'){ fields._ignore.push(h); used.add(h); }
+      else if (/\b(position|pos|posicion|posición)\b/.test(n)){ fields._ignore.push(h); used.add(h); }
+      else if (/\b(date\s*of\s*birth|dob|birth\s*date|nacimiento|fecha\s*nac)\b/.test(n) || /\bbirth\b/.test(n)){ fields._ignore.push(h); used.add(h); }
+    });
+    // 2) external id / full name / real test date
+    _AS_ID.forEach(function(def){
+      var hit = headers.find(function(h){ return !used.has(h) && def.match(_ftNorm(h)); });
+      if (hit){ fields[def.role]=hit; used.add(hit); }
+    });
+    var metrics = headers.filter(function(h){ return !used.has(h); });
+    return { fields:fields, metrics:metrics };
+  }
+
+  function _asFullName(row){
+    var f=_asState.fields;
+    if (f.name) return String(row[f.name]||'').trim();
+    if (f.firstName || f.lastName) return ((f.firstName?row[f.firstName]:'')+' '+(f.lastName?row[f.lastName]:'')).replace(/\s+/g,' ').trim();
+    return '';
+  }
+  function _asMatchRow(row){
+    var f=_asState.fields, byId=_asState.byId, byName=_asState.byName, manual=_asState.manual;
+    var ext = f.externalId ? String(row[f.externalId]||'').trim() : '';
+    if (ext && byId.has(ext)) return { playerId:byId.get(ext), how:'id' };
+    var nn = _ftNorm(_asFullName(row));
+    if (nn){
+      if (byName.has(nn)) return { playerId:byName.get(nn), how:'name' };
+      var parts = nn.split(' ');
+      if (parts.length===2){ var sw=parts[1]+' '+parts[0]; if (byName.has(sw)) return { playerId:byName.get(sw), how:'name' }; }
+      if (manual.has(nn)) return { playerId:manual.get(nn), how:'manual' };
+    }
+    return { playerId:null, how:null };
+  }
+
+  function _asAutoMap(){
+    var cols=_asState.metrics, saved=_asState.savedMap;
+    var aliasIdx=[];   // { norm, key }
+    _asTargets.forEach(function(t){
+      (t.aliases||[]).forEach(function(a){ var nz=_ftMetricNorm(a); if (nz) aliasIdx.push({ norm:nz, key:t.key }); });
+      var nl=_ftMetricNorm(t.label);     if (nl) aliasIdx.push({ norm:nl, key:t.key });
+      var nt=_ftMetricNorm(t.test_type); if (nt) aliasIdx.push({ norm:nt, key:t.key });
+    });
+    var map={};
+    cols.forEach(function(col){
+      if (saved[col]){ map[col] = { test_key:saved[col].test_key, side:saved[col].side||null }; return; }
+      var ps=_asParseSide(col), cn=_ftMetricNorm(ps.base), key=null, bestLen=0;
+      for (var i=0;i<aliasIdx.length;i++){ if (aliasIdx[i].norm===cn){ key=aliasIdx[i].key; break; } }
+      if (!key){ for (var j=0;j<aliasIdx.length;j++){ var a=aliasIdx[j];
+        if (a.norm.length>=3 && (cn.indexOf(a.norm)>=0 || a.norm.indexOf(cn)>=0) && a.norm.length>bestLen){ bestLen=a.norm.length; key=a.key; } } }
+      map[col] = { test_key:key, side:ps.side };
+    });
+    _asState.colMap = map;
+  }
+
+  function _asTargetOptions(selKey){
+    var groups={}; _asTargets.forEach(function(t){ (groups[t.family]=groups[t.family]||[]).push(t); });
+    var famLabel={ isometric:tt('evaluations.cat_isometric','Isometric strength'), mobility:tt('evaluations.cat_mobility','Mobility & screening'), jump:tt('evaluations.cat_jumps_power','Jumps & power') };
+    var html='<option value="">'+esc(tt('evaluations.dont_import',"— don't import —"))+'</option>';
+    ['isometric','mobility','jump'].forEach(function(fam){
+      var arr=groups[fam]; if (!arr||!arr.length) return;
+      html+='<optgroup label="'+esc(famLabel[fam]||fam)+'">';
+      arr.forEach(function(t){ html+='<option value="'+esc(t.key)+'"'+(t.key===selKey?' selected':'')+'>'+esc(t.label)+(t.unit?' · '+esc(t.unit):'')+'</option>'; });
+      html+='</optgroup>';
+    });
+    return html;
+  }
+  function _asSideOptions(sel){
+    return ['','L','R'].map(function(s){
+      var lbl = s===''? tt('evaluations.side_none','—') : (s==='L'? tt('evaluations.side_left','Left') : tt('evaluations.side_right','Right'));
+      return '<option value="'+s+'"'+(s===(sel||'')?' selected':'')+'>'+esc(lbl)+'</option>';
+    }).join('');
+  }
+
+  function _asTargetValueType(target){ return target ? (target.value_type||'numeric') : 'numeric'; }
+  function _asParseValue(raw, target){
+    var s=String(raw==null?'':raw).trim();
+    if (s==='') return null;
+    if (_asTargetValueType(target)==='binary'){
+      var low=s.toLowerCase();
+      if (['+','yes','si','sí','y','1','true','pos','positive'].indexOf(low)>=0) return 1;
+      if (['-','—','no','n','0','false','neg','negative'].indexOf(low)>=0) return 0;
+      var nb=parseFloat(s.replace(',','.')); return isFinite(nb)?(nb?1:0):null;
+    }
+    if (s==='-'||s==='—') return null;   // empty marker in a numeric column (NOT zero)
+    var n=parseFloat(s.replace(',','.'));
+    return isFinite(n)?n:null;
+  }
+
+  function openAssessmentImport(){
+    _asBuildTargets();
+    var d=document.getElementById('asImpDate'); if (d && !d.value) d.value = evToday();
+    document.getElementById('asImpDrawer').classList.add('is-open');
+    document.getElementById('asImpOverlay').classList.add('is-open');
+  }
+  function closeAssessmentImport(){
+    document.getElementById('asImpDrawer').classList.remove('is-open');
+    document.getElementById('asImpOverlay').classList.remove('is-open');
+  }
+  function resetAssessmentImport(){
+    _asState=null;
+    var fi=document.getElementById('asImpFile'); if (fi) fi.value='';
+    var pt=document.getElementById('asImpPaste'); if (pt) pt.value='';
+    document.getElementById('asImpResult').style.display='none';
+    document.getElementById('asImpDrop').style.display='';
+    document.getElementById('asImpSaveResult').textContent='';
+  }
+
+  async function _asIngest(rows, headers){
+    if (!rows.length){ alert(tt('evaluations.empty_file','Empty file.')); return; }
+    var cls=_asClassify(headers);
+    var roster=await loadForceRoster();
+    var byId=new Map(), byName=new Map();
+    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); byName.set(_ftNorm(p.first_name+' '+p.last_name), p.id); });
+    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, manual:new Map(), savedMap:{}, colMap:{} };
+    // saved column mappings (screening)
+    try {
+      var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side').eq('club_id',_clubId).eq('source_label','screening');
+      var map={}; (sm.data||[]).forEach(function(r){ map[r.source_column_name]={ test_key:r.test_key, side:r.side||null }; });
+      _asState.savedMap=map;
+    } catch(e){ _asState.savedMap={}; }
+    _asAutoMap();
+    document.getElementById('asImpDrop').style.display='none';
+    document.getElementById('asImpResult').style.display='';
+    document.getElementById('asImpSaveResult').textContent='';
+    renderAssessmentMatch();
+    renderAssessmentMapping();
+    renderAssessmentPreview();
+  }
+
+  function parseAssessmentCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      _asIngest(res.data||[], res.meta.fields||[]);
+    }, error:function(err){ alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); } });
+  }
+  function asImpParsePaste(){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    var txt=(document.getElementById('asImpPaste').value||'').trim();
+    if (!txt){ alert(tt('evaluations.empty_file','Empty file.')); return; }
+    var res=Papa.parse(txt, { header:true, skipEmptyLines:true, delimiter:'' });   // '' → auto-detect (TSV from Numbers/Excel)
+    _asIngest(res.data||[], (res.meta && res.meta.fields)||[]);
+  }
+
+  function renderAssessmentMatch(){
+    var matched=0, unmatched=[];
+    _asState.rows.forEach(function(row){ var m=_asMatchRow(row); if (m.playerId) matched++; else { var nm=_asFullName(row); if (nm) unmatched.push(nm); } });
+    var mappedCols=_asState.metrics.filter(function(c){ return _asState.colMap[c] && _asState.colMap[c].test_key; }).length;
+    var chip=function(txt,col){ return '<span style="font:600 11px/1 var(--cm-font-sans);padding:5px 9px;border-radius:20px;background:'+col+'">'+esc(txt)+'</span>'; };
+    document.getElementById('asImpMatchSummary').innerHTML =
+      chip(tt('evaluations.n_players',matched+' players',{count:matched}), 'var(--cm-success-bg,rgba(34,197,94,.12))')
+      + chip(tt('evaluations.n_columns',mappedCols+' mapped columns',{count:mappedCols}), 'var(--cm-bg-sunk)')
+      + (unmatched.length? chip(tt('evaluations.n_unmatched',unmatched.length+' unmatched',{count:unmatched.length}), 'var(--cm-danger-bg,rgba(220,38,38,.12))') : '');
+    document.getElementById('asImpUnmatched').innerHTML = unmatched.length
+      ? '<div style="font:500 11px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">'+esc(tt('evaluations.unmatched_rows','Unmatched (skipped): '))+esc(unmatched.slice(0,12).join(', '))+(unmatched.length>12?'…':'')+'</div>' : '';
+  }
+
+  function renderAssessmentMapping(){
+    var cols=_asState.metrics, colMap=_asState.colMap;
+    var mapped=cols.filter(function(c){ return colMap[c] && colMap[c].test_key; }).length;
+    document.getElementById('asImpMapCount').textContent = tt('evaluations.n_m_mapped','('+mapped+'/'+cols.length+' mapped)',{mapped:mapped,total:cols.length});
+    document.getElementById('asImpMapRows').innerHTML = cols.length ? cols.map(function(col,i){
+      var cm=colMap[col]||{};
+      return '<div style="display:grid;grid-template-columns:1fr 190px 90px;gap:8px;align-items:center">'
+        + '<span style="font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(col)+'">'+esc(col)+'</span>'
+        + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="test" onchange="onAsColMapChange(this)">'+_asTargetOptions(cm.test_key)+'</select>'
+        + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="side" onchange="onAsColMapChange(this)">'+_asSideOptions(cm.side)+'</select>'
+        + '</div>';
+    }).join('') : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.no_metric_cols_detected','No metric columns detected.'))+'</div>';
+  }
+  function onAsColMapChange(sel){
+    var col=_asState.metrics[+sel.dataset.i]; if (!col) return;
+    var cm=_asState.colMap[col]||(_asState.colMap[col]={ test_key:null, side:null });
+    if (sel.dataset.role==='test') cm.test_key = sel.value||null;
+    else cm.side = sel.value||null;
+    renderAssessmentMapping();
+    renderAssessmentPreview();
+  }
+  window.onAsColMapChange = onAsColMapChange;
+
+  function renderAssessmentPreview(){
+    var cols=_asState.metrics.filter(function(c){ return _asState.colMap[c] && _asState.colMap[c].test_key; });
+    var rowsHtml='', shown=0, values=0;
+    for (var r=0; r<_asState.rows.length && shown<20; r++){
+      var row=_asState.rows[r], m=_asMatchRow(row);
+      var name=_asFullName(row);
+      var cells=cols.map(function(col){
+        var cm=_asState.colMap[col], target=_asTargetsByKey[cm.test_key];
+        var v=_asParseValue(row[col], target);
+        if (v!=null) values++;
+        return '<td style="padding:4px 8px;white-space:nowrap;color:'+(v==null?'var(--cm-fg-faint)':'var(--cm-fg)')+'">'+(v==null?'—':esc(fmtVal(v))+(cm.side?' '+esc(cm.side):''))+'</td>';
+      }).join('');
+      rowsHtml += '<tr style="border-top:1px solid var(--cm-border-soft)"><td style="padding:4px 8px;white-space:nowrap;color:'+(m.playerId?'var(--cm-fg)':'var(--cm-danger)')+'">'+esc(name||'—')+'</td>'+cells+'</tr>';
+      shown++;
+    }
+    // count all values (not just shown) for the counter
+    var allValues=0;
+    _asState.rows.forEach(function(row){ if (!_asMatchRow(row).playerId) return; cols.forEach(function(col){ if (_asParseValue(row[col], _asTargetsByKey[_asState.colMap[col].test_key])!=null) allValues++; }); });
+    var head='<th style="text-align:left;padding:5px 8px;position:sticky;top:0;background:var(--cm-surface)">'+esc(tt('evaluations.player','Player'))+'</th>'
+      + cols.map(function(col){ var cm=_asState.colMap[col]; var t=_asTargetsByKey[cm.test_key]; return '<th style="text-align:left;padding:5px 8px;position:sticky;top:0;background:var(--cm-surface);font:600 11px/1.2 var(--cm-font-sans)">'+esc(t?t.label:col)+(cm.side?' '+esc(cm.side):'')+'</th>'; }).join('');
+    document.getElementById('asImpPreview').innerHTML = cols.length
+      ? '<table style="width:100%;border-collapse:collapse;font:500 12px/1.3 var(--cm-font-mono)"><thead><tr>'+head+'</tr></thead><tbody>'+rowsHtml+'</tbody></table>'
+      : '<div style="padding:16px;font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.map_columns_to_preview','Map at least one column to preview.'))+'</div>';
+    document.getElementById('asImpPreviewCount').textContent = tt('evaluations.n_values',allValues+' values',{count:allValues});
+  }
+
+  async function saveAssessmentImport(){
+    if (!_asState || !_clubId) return;
+    var btn=document.getElementById('asImpSaveBtn'), resEl=document.getElementById('asImpSaveResult');
+    var colMap=_asState.colMap;
+    var mappedCols=_asState.metrics.filter(function(c){ return colMap[c] && colMap[c].test_key; });
+    var drawerDate = (document.getElementById('asImpDate').value || evToday());
+
+    var uid=null, uname=null;
+    try { var u=await window.sb.auth.getUser(); uid=u.data&&u.data.user?u.data.user.id:null; } catch(e){}
+    try { var prof=await window.getProfile(); uname=prof&&prof.full_name||null; } catch(e){}
+
+    var btnHtml=btn.innerHTML; btn.disabled=true;
+    btn.innerHTML='<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    resEl.style.color='var(--cm-fg-muted)'; resEl.textContent=tt('evaluations.saving','Saving…');
+
+    var natOf=function(pid,type,date){ return pid+'|'+type+'|'+String(date).slice(0,10); };
+    var testsCount=0, metricsCount=0, skipped=0, noData=0;
+    try {
+      // build plan: group by (player, test_type, date) → rec + metrics[]
+      var planMap=new Map();
+      _asState.rows.forEach(function(row){
+        var m=_asMatchRow(row);
+        if (!m.playerId){ skipped++; return; }
+        var date = _asState.fields.date ? (parseForceDate(row[_asState.fields.date]).date) : drawerDate;
+        var any=false;
+        mappedCols.forEach(function(col){
+          var cm=colMap[col], target=_asTargetsByKey[cm.test_key]; if (!target) return;
+          var v=_asParseValue(row[col], target); if (v==null) return;
+          any=true;
+          var nk=natOf(m.playerId, target.test_type, date);
+          var entry=planMap.get(nk);
+          if (!entry){ entry={ rec:{ club_id:_clubId, team_id:_teamId||null, player_id:m.playerId, test_type:target.test_type, test_date:date, source:'csv', uploaded_by:uid, uploaded_by_name:uname }, metrics:[] }; planMap.set(nk, entry); }
+          entry.metrics.push({ metric_key:target.metric_key, value:v, side:(cm.side||null), unit:target.unit });
+        });
+        if (!any) noData++;
+      });
+      var plan=[...planMap.entries()].map(function(e){ return { natKey:e[0], rec:e[1].rec, metrics:e[1].metrics }; });
+
+      if (plan.length){
+        var pids=[...new Set(plan.map(function(p){ return p.rec.player_id; }))];
+        var exQ=window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id',_clubId).in('player_id',pids);
+        if (_teamId) exQ=exQ.eq('team_id',_teamId);
+        var ex=await exQ; if (ex.error) throw ex.error;
+        var planKeys=new Set(plan.map(function(p){ return p.natKey; }));
+        var delIds=(ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id,e.test_type,e.test_date)); }).map(function(e){ return e.id; });
+        if (delIds.length){ var de=(await window.sb.from('force_tests').delete().in('id',delIds)).error; if (de) throw de; }
+
+        var ins=await window.sb.from('force_tests').insert(plan.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
+        if (ins.error) throw ins.error;
+        var idByKey=new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id,t.test_type,t.test_date), t.id); });
+        testsCount=(ins.data||[]).length;
+
+        var allMetrics=[];
+        plan.forEach(function(p){ var tid=idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(mr){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:mr.metric_key, value:mr.value, side:mr.side, unit:mr.unit }); }); });
+        var CHUNK=500;
+        for (var i=0;i<allMetrics.length;i+=CHUNK){ var me=(await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
+        metricsCount=allMetrics.length;
+      }
+
+      // persist mapping memory in assessment_column_maps
+      if (mappedCols.length){
+        var mapRows=mappedCols.map(function(col){ return { club_id:_clubId, source_label:'screening', source_column_name:col, test_key:colMap[col].test_key, side:colMap[col].side||null }; });
+        try { await window.sb.from('assessment_column_maps').upsert(mapRows, { onConflict:'club_id,source_label,source_column_name' }); } catch(e){}
+      }
+    } catch(e){
+      btn.disabled=false; btn.innerHTML=btnHtml;
+      resEl.style.color='var(--cm-danger)';
+      resEl.textContent=tt('evaluations.import_failed','Import failed: '+(e.message||e),{msg:(e.message||e)});
+      return;
+    }
+
+    btn.disabled=false; btn.innerHTML=btnHtml;
+    resEl.style.color='var(--cm-success)';
+    resEl.textContent=[tt('evaluations.imported_n_tests','Imported '+testsCount+' tests',{count:testsCount}), tt('evaluations.n_metric_values',metricsCount+' metric values',{count:metricsCount}), tt('evaluations.n_rows_skipped_unmatched',skipped+' rows skipped (unmatched)',{count:skipped})].join(' · ');
+    setTimeout(function(){ closeAssessmentImport(); resetAssessmentImport(); if (typeof reloadEvalViews==='function') reloadEvalViews(); if (typeof loadStatuses==='function') loadStatuses(); }, 2000);
+  }
+
+  // wiring: file drop / browse / close for the screening drawer
+  (function(){
+    var drop=document.getElementById('asImpDrop');
+    var fi=document.getElementById('asImpFile');
+    var ovl=document.getElementById('asImpOverlay');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseAssessmentCsv(e.target.files[0]); });
+    document.getElementById('asImpClose') && document.getElementById('asImpClose').addEventListener('click', closeAssessmentImport);
+    if (ovl) ovl.addEventListener('click', closeAssessmentImport);
+    if (drop){
+      drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('is-drag'); });
+      drop.addEventListener('dragleave', function(){ drop.classList.remove('is-drag'); });
+      drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('is-drag'); if (e.dataTransfer.files[0]) parseAssessmentCsv(e.dataTransfer.files[0]); });
+    }
+  })();
+
+  Object.assign(window, { openAssessmentImport, closeAssessmentImport, resetAssessmentImport, saveAssessmentImport, asImpParsePaste, onAsColMapChange });
 
   function renderForceClassification() {
     const { fields, metrics } = _ftState;
