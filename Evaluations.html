@@ -1307,6 +1307,30 @@
   </div>
 </aside>
 
+<!-- ── Battery entry (team × tests × side grid) ── -->
+<div class="pt-imp-overlay" id="asBatteryOverlay"></div>
+<aside class="pt-imp-drawer" id="asBatteryDrawer" style="width:min(920px,96vw)">
+  <header class="pt-imp-h">
+    <i class="ti ti-table" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3 data-i18n="evaluations.battery_entry">Battery entry</h3><div class="sub" id="asBatterySub"></div></div>
+    <button class="pt-imp-x" id="asBatteryClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+      <div class="ev-frow" style="margin:0"><label class="ev-fl" data-i18n="evaluations.battery_date">Test date</label>
+        <input id="asBatteryDate" type="date" class="ev-finput" style="height:34px"></div>
+    </div>
+    <div class="pt-imp-section-l" data-i18n="evaluations.battery_tests">Tests</div>
+    <div id="asBatteryChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+    <div id="asBatteryGrid" style="overflow-x:auto;max-height:52vh;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="asBatteryCount" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1"></span>
+      <button class="cm-btn is-primary" id="asBatterySaveBtn" onclick="saveBatteryEntry()"><i class="ti ti-device-floppy" style="font-size:14px"></i><span data-i18n="evaluations.battery_save_all">Save all</span></button>
+    </div>
+    <div id="asBatteryResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
+  </div>
+</aside>
+
 <!-- VBT bulk · Import drawer (read + map + group + calc + preview only — no save yet) -->
 <div class="pt-imp-overlay" id="vbtBulkOverlay"></div>
 <aside class="pt-imp-drawer" id="vbtBulkDrawer">
@@ -1627,10 +1651,15 @@
           + '<div class="b-status" data-status="'+t.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
           + '</button>';
       }).join('');
+      var batFam = cat.name === 'Isometric strength' ? 'isometric' : (cat.name === 'Mobility & screening' ? 'mobility' : null);
+      var batBtn = (batFam && _assessDefs.some(function(d){ return d.family === batFam; }))
+        ? '<button class="cm-btn is-outline is-sm" style="margin-left:auto" onclick="event.stopPropagation();openBatteryEntry(\''+batFam+'\')"><i class="ti ti-table" style="font-size:14px"></i><span data-i18n="evaluations.battery_entry">Battery entry</span></button>'
+        : '';
       return '<div class="ev-cat'+(i===0?'':' is-collapsed')+'">'
         + '<div class="ev-cat-h" data-cat-toggle>'
         +   '<span class="ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+cat.icon+'"></i></span>'
         +   '<h4>'+esc(catName(cat))+'</h4><span class="ct">'+esc(tt('evaluations.tests_count',cat.tests.length+' tests',{count:cat.tests.length}))+'</span>'
+        +   batBtn
         +   '<span class="chev"><i class="ti ti-chevron-down"></i></span>'
         + '</div>'
         + '<div class="ev-cat-body">'+cards+'</div>'
@@ -6951,6 +6980,229 @@
   })();
 
   Object.assign(window, { openAssessmentImport, closeAssessmentImport, resetAssessmentImport, saveAssessmentImport, asImpParsePaste, onAsColMapChange });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  BATTERY ENTRY (#asBatteryDrawer) — team × (test × side) editable grid.
+  //  A whole testing day by hand: 25 players. Keyboard nav (Tab + ↑/↓).
+  //  Live status via assessNorms. Saves force_tests + metrics (same dedup).
+  // ════════════════════════════════════════════════════════════════════
+  var _asBattery = null;   // { family, defs, selected:Set, players }
+
+  function _batStatusTint(status){
+    return status === 'alert' ? 'rgba(220,38,38,0.16)'
+         : status === 'watch' ? 'rgba(180,83,9,0.16)'
+         : status === 'ok'    ? 'rgba(34,197,94,0.14)' : '';
+  }
+
+  function openBatteryEntry(family){
+    var defs = _assessDefs.filter(function(d){ return d.family === family; }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    if (!defs.length){ alert(tt('evaluations.no_tests_for_family','No tests available for this family.')); return; }
+    if (!_ftPlayers || !_ftPlayers.length){ alert(tt('evaluations.no_players','No players in the active team.')); return; }
+    _asBattery = { family: family, defs: defs, selected: new Set(defs.map(function(d){ return d.key; })), players: _ftPlayers };
+    var d = document.getElementById('asBatteryDate'); if (d) d.value = evToday();
+    document.getElementById('asBatterySub').textContent =
+      (family === 'isometric' ? tt('evaluations.cat_isometric','Isometric strength') : tt('evaluations.cat_mobility','Mobility & screening'))
+      + ' · ' + tt('evaluations.n_players', _ftPlayers.length + ' players', { count: _ftPlayers.length });
+    renderBatteryChips();
+    renderBatteryGrid();
+    document.getElementById('asBatteryResult').textContent = '';
+    document.getElementById('asBatteryDrawer').classList.add('is-open');
+    document.getElementById('asBatteryOverlay').classList.add('is-open');
+  }
+  function closeBatteryEntry(){
+    document.getElementById('asBatteryDrawer').classList.remove('is-open');
+    document.getElementById('asBatteryOverlay').classList.remove('is-open');
+  }
+
+  function renderBatteryChips(){
+    document.getElementById('asBatteryChips').innerHTML = _asBattery.defs.map(function(def){
+      var on = _asBattery.selected.has(def.key);
+      return '<button type="button" class="cm-btn is-sm '+(on?'is-primary':'is-outline')+'" onclick="toggleBatteryTest(\''+def.key+'\')">'
+        + esc(tt(def.i18n_key, def.label)) + '</button>';
+    }).join('');
+  }
+  function toggleBatteryTest(key){
+    if (_asBattery.selected.has(key)) _asBattery.selected.delete(key); else _asBattery.selected.add(key);
+    renderBatteryChips();
+    renderBatteryGrid();
+  }
+
+  function renderBatteryGrid(){
+    var defs = _asBattery.defs.filter(function(d){ return _asBattery.selected.has(d.key); });
+    var players = _asBattery.players;
+    // header
+    var th = function(txt, extra){ return '<th style="text-align:'+(extra||'left')+';padding:6px 8px;position:sticky;top:0;background:var(--cm-surface);z-index:1;font:600 11px/1.2 var(--cm-font-sans);white-space:nowrap">'+esc(txt)+'</th>'; };
+    var head = th(tt('evaluations.player','Player')) + th('kg','right');
+    defs.forEach(function(def){
+      var sides = def.bilateral ? ['L','R'] : ['NA'];
+      sides.forEach(function(s){
+        var lbl = esc(tt(def.i18n_key, def.label)) + (def.bilateral ? ' '+esc(s) : '');
+        head += th(lbl, 'right');
+      });
+    });
+    // rows
+    var colCount = 1 + defs.reduce(function(a,d){ return a + (d.bilateral?2:1); }, 0);   // kg + side cells (col index 0 = kg)
+    var body = players.map(function(p, ri){
+      var cells = '<td style="padding:4px 8px;white-space:nowrap;position:sticky;left:0;background:var(--cm-surface);font:500 12px/1.3 var(--cm-font-sans)">'+esc(p.first_name+' '+p.last_name)+'</td>';
+      var ci = 0;
+      cells += '<td style="padding:2px 4px"><input class="bat-inp ev-finput" data-pid="'+p.id+'" data-role="kg" data-row="'+ri+'" data-col="'+(ci++)+'" type="number" step="0.1" style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)"></td>';
+      defs.forEach(function(def){
+        var sides = def.bilateral ? ['L','R'] : ['NA'];
+        sides.forEach(function(s){
+          var idc = 'data-pid="'+p.id+'" data-def="'+def.key+'" data-side="'+s+'" data-row="'+ri+'" data-col="'+(ci++)+'"';
+          var input;
+          if (def.value_type === 'binary'){
+            input = '<select class="bat-inp ev-finput" '+idc+' style="height:28px;width:56px" onchange="onBatteryCell(this)"><option value="">—</option><option value="1">+</option><option value="0">−</option></select>';
+          } else {
+            input = '<input class="bat-inp ev-finput" '+idc+' type="number" step="'+(def.value_type==='score'?'1':'0.1')+'"'
+              + (def.min_value!=null?' min="'+def.min_value+'"':'') + (def.max_value!=null?' max="'+def.max_value+'"':'')
+              + ' style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)">';
+          }
+          cells += '<td style="padding:2px 4px" data-cell="'+p.id+'_'+def.key+'_'+s+'">'+input+'</td>';
+        });
+      });
+      return '<tr style="border-top:1px solid var(--cm-border-soft)">'+cells+'</tr>';
+    }).join('');
+    document.getElementById('asBatteryGrid').innerHTML =
+      '<table style="border-collapse:collapse;font:500 12px/1.3 var(--cm-font-mono)"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+    updateBatteryCount();
+  }
+
+  function _batDefByKey(key){ return _asBattery.defs.find(function(d){ return d.key === key; }); }
+  function _batReadCell(pid, defKey, side){
+    var el = document.querySelector('.bat-inp[data-pid="'+pid+'"][data-def="'+defKey+'"][data-side="'+side+'"]');
+    if (!el) return null;
+    var raw = el.value;
+    if (raw === '' || raw == null) return null;
+    var n = parseFloat(String(raw).replace(',','.'));
+    return isFinite(n) ? n : null;
+  }
+
+  function onBatteryCell(el){
+    var pid = el.dataset.pid;
+    if (el.dataset.role === 'kg'){ updateBatteryCount(); return; }
+    var def = _batDefByKey(el.dataset.def); if (!def || !window.assessNorms) { updateBatteryCount(); return; }
+    var sides = def.bilateral ? ['L','R'] : ['NA'];
+    var vals = {};
+    sides.forEach(function(s){ vals[s] = _batReadCell(pid, def.key, s); });
+    sides.forEach(function(s){
+      var cell = document.querySelector('[data-cell="'+pid+'_'+def.key+'_'+s+'"]');
+      if (!cell) return;
+      var status = 'none';
+      if (vals[s] != null){
+        var res = window.assessNorms.statusFor(def, { value: vals[s] });
+        status = res.status;
+        // if no absolute signal but both sides present, tint by asymmetry
+        if ((status === 'none' || status === 'ok') && def.bilateral && vals.L != null && vals.R != null){
+          var asy = window.assessNorms.asymStatus(def, vals.L, vals.R);
+          if (asy.status !== 'none') status = asy.status;
+          cell.title = window.assessNorms.explain(asy);
+        } else {
+          cell.title = window.assessNorms.explain(res);
+        }
+      } else { cell.title = ''; }
+      cell.style.background = _batStatusTint(status);
+    });
+    updateBatteryCount();
+  }
+
+  function updateBatteryCount(){
+    var n = 0;
+    document.querySelectorAll('#asBatteryGrid .bat-inp').forEach(function(el){
+      if (el.dataset.role === 'kg') return;
+      if (el.value !== '' && el.value != null) n++;
+    });
+    document.getElementById('asBatteryCount').textContent = tt('evaluations.n_values_loaded', n + ' values loaded', { count: n });
+  }
+
+  // Tab is native; ↑/↓ move within the same column.
+  (function(){
+    var grid = document.getElementById('asBatteryGrid');
+    if (!grid) return;
+    grid.addEventListener('keydown', function(e){
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      var el = e.target; if (!el.classList || !el.classList.contains('bat-inp')) return;
+      var col = el.dataset.col, row = parseInt(el.dataset.row, 10);
+      var next = row + (e.key === 'ArrowDown' ? 1 : -1);
+      var target = grid.querySelector('.bat-inp[data-col="'+col+'"][data-row="'+next+'"]');
+      if (target){ e.preventDefault(); target.focus(); if (target.select) target.select(); }
+    });
+  })();
+
+  async function saveBatteryEntry(){
+    if (!_asBattery || !_clubId) return;
+    var btn = document.getElementById('asBatterySaveBtn'), resEl = document.getElementById('asBatteryResult');
+    var date = document.getElementById('asBatteryDate').value || evToday();
+    var defs = _asBattery.defs.filter(function(d){ return _asBattery.selected.has(d.key); });
+
+    var uid = null, uname = null;
+    try { var u = await window.sb.auth.getUser(); uid = u.data && u.data.user ? u.data.user.id : null; } catch(e){}
+    try { var prof = await window.getProfile(); uname = prof && prof.full_name || null; } catch(e){}
+
+    var natOf = function(pid, type){ return pid+'|'+type+'|'+String(date).slice(0,10); };
+    var plan = [], noData = 0;
+    _asBattery.players.forEach(function(p){
+      var kgEl = document.querySelector('.bat-inp[data-pid="'+p.id+'"][data-role="kg"]');
+      var kg = kgEl && kgEl.value ? parseFloat(kgEl.value) : null;
+      var anyForPlayer = false;
+      defs.forEach(function(def){
+        var sides = def.bilateral ? ['L','R'] : ['NA'];
+        var metrics = [];
+        sides.forEach(function(s){
+          var v = _batReadCell(p.id, def.key, s);
+          if (v == null) return;
+          metrics.push({ metric_key: def.metric_key, value: v, side: (s==='NA'?null:s), unit: def.unit });
+        });
+        if (!metrics.length) return;
+        anyForPlayer = true;
+        plan.push({ natKey: natOf(p.id, def.test_type), rec: { club_id:_clubId, team_id:_teamId||null, player_id:p.id, test_type:def.test_type, test_date:date, bodyweight_kg:kg, source:'manual', uploaded_by:uid, uploaded_by_name:uname }, metrics: metrics });
+      });
+      if (!anyForPlayer) noData++;
+    });
+
+    if (!plan.length){ resEl.style.color='var(--cm-danger)'; resEl.textContent = tt('evaluations.no_values_to_save','No values to save.'); return; }
+
+    var btnHtml = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    resEl.style.color = 'var(--cm-fg-muted)'; resEl.textContent = tt('evaluations.saving','Saving…');
+
+    var testsCount = 0, metricsCount = 0;
+    try {
+      var pids = [...new Set(plan.map(function(p){ return p.rec.player_id; }))];
+      var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id',_clubId).in('player_id',pids).eq('test_date',date);
+      if (_teamId) exQ = exQ.eq('team_id',_teamId);
+      var ex = await exQ; if (ex.error) throw ex.error;
+      var planKeys = new Set(plan.map(function(p){ return p.natKey; }));
+      var delIds = (ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type)); }).map(function(e){ return e.id; });
+      if (delIds.length){ var de = (await window.sb.from('force_tests').delete().in('id', delIds)).error; if (de) throw de; }
+
+      var ins = await window.sb.from('force_tests').insert(plan.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
+      if (ins.error) throw ins.error;
+      var idByKey = new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id, t.test_type), t.id); });
+      testsCount = (ins.data||[]).length;
+
+      var allMetrics = [];
+      plan.forEach(function(p){ var tid = idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(m){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:m.metric_key, value:m.value, side:m.side, unit:m.unit }); }); });
+      var CHUNK = 500;
+      for (var i=0;i<allMetrics.length;i+=CHUNK){ var me = (await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
+      metricsCount = allMetrics.length;
+    } catch(e){
+      btn.disabled=false; btn.innerHTML=btnHtml;
+      resEl.style.color='var(--cm-danger)';
+      resEl.textContent = tt('evaluations.save_failed','Save failed') + ': ' + (e.message||e);
+      return;
+    }
+
+    btn.disabled=false; btn.innerHTML=btnHtml;
+    resEl.style.color='var(--cm-success)';
+    resEl.textContent = [tt('evaluations.imported_n_tests','Imported '+testsCount+' tests',{count:testsCount}), tt('evaluations.n_metric_values',metricsCount+' metric values',{count:metricsCount}), tt('evaluations.n_players_no_data',noData+' players without data',{count:noData})].join(' · ');
+    setTimeout(function(){ closeBatteryEntry(); if (typeof reloadEvalViews==='function') reloadEvalViews(); if (typeof loadStatuses==='function') loadStatuses(); }, 1800);
+  }
+
+  document.getElementById('asBatteryClose') && document.getElementById('asBatteryClose').addEventListener('click', closeBatteryEntry);
+  document.getElementById('asBatteryOverlay') && document.getElementById('asBatteryOverlay').addEventListener('click', closeBatteryEntry);
+
+  Object.assign(window, { openBatteryEntry, closeBatteryEntry, toggleBatteryTest, onBatteryCell, saveBatteryEntry });
 
   function renderForceClassification() {
     const { fields, metrics } = _ftState;
