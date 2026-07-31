@@ -210,7 +210,9 @@
   /* ===== PRINT — dedicated Daily Session Plan sheet (#dpPrintSheet) ===== */
   #dpPrintSheet{ display:none; }
   @media print {
-    @page { size:A4; margin:0; }
+    /* Vertical page margins repeat on every sheet, so page 2+ gets a top gap
+       instead of gluing content to the paper edge. Left/right stay full-bleed. */
+    @page { size:A4; margin:11mm 0; }
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
     .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
@@ -1542,7 +1544,7 @@ async function dpRenderPrintSheet() {
       <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
     </div>`;
 
-    host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
+    host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1040px; background:#fff; padding:16px 42px 16px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
       ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
     </div>`;
   } catch (e) {
@@ -2014,15 +2016,23 @@ async function dpExportPDF() {
     if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
     const el = document.querySelector('#dpPrintSheet .dsp-sheet') || host;
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = (canvas.height * pdfW) / canvas.width;
-    let y = 0, pageH = pdf.internal.pageSize.getHeight();
-    while (y < pdfH) {
-      if (y > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, -y, pdfW, pdfH);
-      y += pageH;
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    // Slice the sheet into per-page chunks and inset each by a top/bottom margin so
+    // page 2+ isn't glued to the paper edge (mirrors the @page margin on native print).
+    const MARGIN = 8;                                  // mm, top + bottom
+    const pxPerMm = canvas.width / pageW;              // image px per printed mm (full-bleed width)
+    const sliceHpx = Math.max(1, Math.floor((pageH - MARGIN * 2) * pxPerMm));
+    let sy = 0, page = 0;
+    while (sy < canvas.height) {
+      if (page > 0) pdf.addPage();
+      const h = Math.min(sliceHpx, canvas.height - sy);
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = h;
+      slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, MARGIN, pageW, h / pxPerMm);
+      sy += sliceHpx; page++;
     }
     pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
   } catch (e) {
