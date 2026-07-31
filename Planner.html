@@ -869,18 +869,30 @@
 
           <div style="height:1px;background:var(--cm-border-soft);margin-bottom:14px"></div>
 
-          <div class="pl-form-row cols-2" style="margin-bottom:10px">
+          <!-- Prescription mode: intervals (series × work/rest), reps (series × reps) or plain minutes -->
+          <div class="pl-form-row" style="margin-bottom:10px">
             <div class="pl-form-field">
-              <label class="pl-form-label" data-i18n="planner.duration_min">Duration (min)</label>
-              <input type="number" class="pl-form-input" id="plExDuration" placeholder="auto" min="1" max="180" readonly data-i18n-attr="title:planner.duration_auto_tip" title="Auto = series × (work + rest)">
-            </div>
-            <div class="pl-form-field">
-              <label class="pl-form-label" data-i18n="planner.series">Series</label>
-              <input type="number" class="pl-form-input" id="plExSeries" placeholder="4" min="1" max="20">
+              <label class="pl-form-label" data-i18n="planner.dose_mode">Prescription</label>
+              <select class="pl-form-input" id="plExDoseMode">
+                <option value="interval" data-i18n="planner.dose_interval">Series × work/rest</option>
+                <option value="reps" data-i18n="planner.dose_reps">Series × reps</option>
+                <option value="minutes" data-i18n="planner.dose_minutes">Minutes only</option>
+              </select>
             </div>
           </div>
 
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
+            <div class="pl-form-field" id="plExSeriesField">
+              <label class="pl-form-label" data-i18n="planner.series">Series</label>
+              <input type="number" class="pl-form-input" id="plExSeries" placeholder="4" min="1" max="20">
+            </div>
+            <div class="pl-form-field" id="plExDurationField">
+              <label class="pl-form-label" data-i18n="planner.duration_min">Duration (min)</label>
+              <input type="number" class="pl-form-input" id="plExDuration" placeholder="auto" min="1" max="180" readonly data-i18n-attr="title:planner.duration_auto_tip" title="Auto = series × (work + rest)">
+            </div>
+          </div>
+
+          <div class="pl-form-row cols-2" style="margin-bottom:10px" id="plExIntervalRow">
             <div class="pl-form-field">
               <label class="pl-form-label" data-i18n="planner.work_time">Work time (mm:ss)</label>
               <input type="text" class="pl-form-input" id="plExWorkTime" placeholder="3:00">
@@ -888,6 +900,13 @@
             <div class="pl-form-field">
               <label class="pl-form-label" data-i18n="planner.rest_time">Rest time (mm:ss)</label>
               <input type="text" class="pl-form-input" id="plExRestTime" placeholder="1:30">
+            </div>
+          </div>
+
+          <div class="pl-form-row" style="margin-bottom:10px;display:none" id="plExRepsRow">
+            <div class="pl-form-field">
+              <label class="pl-form-label" data-i18n="planner.reps_per_series">Reps per series</label>
+              <input type="number" class="pl-form-input" id="plExReps" placeholder="10" min="1" max="200">
             </div>
           </div>
 
@@ -1201,6 +1220,15 @@
                 <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
                 <span data-i18n="planner.line_dashed_curve">Dashed curve</span>
               </button>
+              <div class="pl-drop-sep"></div>
+              <button class="pl-dock-btn pl-drop-opt" title="LineSolid">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span data-i18n="planner.line_solid_nohead">Line (no arrow)</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="LineDashed">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
+                <span data-i18n="planner.line_dashed_nohead">Dashed line (no arrow)</span>
+              </button>
             </div>
           </div>
 
@@ -1451,7 +1479,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowNoHead','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1504,10 +1532,14 @@
     }
     currentTool = tool;
     fc.isDrawingMode = (tool === 'draw');
-    fc.selection = (tool !== 'free_polygon');
+    // While drawing arrows or a free polygon, clicks must place points on the
+    // pitch — not grab/move whatever object happens to sit under the cursor.
+    const drawingTool = (tool === 'free_polygon' || tool === 'arrow');
+    fc.selection = !drawingTool;
+    fc.skipTargetFind = drawingTool;
     fc.getObjects().forEach(o => {
       if (o._type === '_preview') return;
-      o.selectable = (tool !== 'free_polygon'); o.evented = true;
+      o.selectable = !drawingTool; o.evented = true;
     });
     fc.defaultCursor = (tool === 'arrow' || tool === 'free_polygon') ? 'crosshair' : 'default';
     fc.hoverCursor   = (tool === 'arrow' || tool === 'free_polygon') ? 'crosshair' : 'move';
@@ -1794,32 +1826,35 @@
   }
 
   // ── Arrow drawing ────────────────────────────────────────────────
-  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false;
+  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false, currentArrowNoHead=false;
 
   function _clearPreview() {
     if (_previewLine) { fc.remove(_previewLine); _previewLine=null; }
   }
 
   function _buildArrowGroup(d) {
-    const { x1,y1,cx,cy,x2,y2,color,dashed,curved } = d;
+    const { x1,y1,cx,cy,x2,y2,color,dashed,curved,noHead } = d;
     const lineD = curved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
-    const tx=curved?(x2-cx):(x2-x1), ty=curved?(y2-cy):(y2-y1);
-    const ang=Math.atan2(ty,tx), hL=13, hW=7;
-    const headD=`M ${x2+Math.cos(ang)*2} ${y2+Math.sin(ang)*2} `+
-      `L ${x2-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW} `+
-      `L ${x2-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW} Z`;
     const linePath = new fabric.Path(lineD, {
       stroke:color, strokeWidth:dashed?2:2.5, fill:'', strokeLineCap:'round',
       strokeDashArray:dashed?[8,5]:null, strokeUniform:true, selectable:false, evented:false
     });
-    const headPath = new fabric.Path(headD, {
-      stroke:color, strokeWidth:0.5, fill:color, strokeUniform:true, selectable:false, evented:false
-    });
-    return new fabric.Group([linePath, headPath], {
+    const parts = [linePath];
+    if (!noHead) {
+      const tx=curved?(x2-cx):(x2-x1), ty=curved?(y2-cy):(y2-y1);
+      const ang=Math.atan2(ty,tx), hL=13, hW=7;
+      const headD=`M ${x2+Math.cos(ang)*2} ${y2+Math.sin(ang)*2} `+
+        `L ${x2-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW} `+
+        `L ${x2-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW} Z`;
+      parts.push(new fabric.Path(headD, {
+        stroke:color, strokeWidth:0.5, fill:color, strokeUniform:true, selectable:false, evented:false
+      }));
+    }
+    return new fabric.Group(parts, {
       selectable:true, evented:true, hasControls:false, hasBorders:false,
       perPixelTargetFind:true, _type:'arrow', _arrowId:d.id,
       _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2,
-      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved
+      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved, _arrowNoHead:!!d.noHead
     });
   }
 
@@ -1898,6 +1933,7 @@
         id:grp._arrowId||(++_nextArrowId),
         x1:grp._x1,y1:grp._y1,cx:grp._cx,cy:grp._cy,x2:grp._x2,y2:grp._y2,
         color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,
+        noHead:!!grp._arrowNoHead,
         grp,handles:[]
       };
       if (d.id>_nextArrowId) _nextArrowId=d.id;
@@ -1907,12 +1943,12 @@
     });
   }
 
-  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved) {
+  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved,noHead) {
     const len=Math.sqrt((x2-x1)**2+(y2-y1)**2); if (len<5) return;
     const offset=curved?len*0.20:0;
     const cx=(x1+x2)/2-(y2-y1)*offset/len, cy=(y1+y2)/2+(x2-x1)*offset/len;
     const id=++_nextArrowId;
-    const d={id,x1,y1,cx,cy,x2,y2,color,dashed,curved,grp:null,handles:[]};
+    const d={id,x1,y1,cx,cy,x2,y2,color,dashed,curved,noHead:!!noHead,grp:null,handles:[]};
     d.grp=_buildArrowGroup(d);
     _arrowData.set(id,d);
     _attachGroupHandlers(d);
@@ -1920,6 +1956,21 @@
     setTool('select');
     document.querySelectorAll('.pl-dock-btn').forEach(b=>b.classList.remove('is-on'));
     document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(b=>b.classList.remove('is-on'));
+  }
+
+  // A pasted arrow group carries its original _x1.._y2 (canvas coords) via ARROW_PROPS,
+  // but no _arrowData entry and no handlers. Shift its coords by the paste offset,
+  // give it a FRESH id (so it never collides with the source arrow) and register it.
+  function _registerPastedArrow(grp, dx, dy) {
+    if (!grp || grp._x1 == null) return;
+    grp._x1 += dx; grp._y1 += dy; grp._cx += dx; grp._cy += dy; grp._x2 += dx; grp._y2 += dy;
+    grp.set({ _x1:grp._x1, _y1:grp._y1, _cx:grp._cx, _cy:grp._cy, _x2:grp._x2, _y2:grp._y2 });
+    const id = ++_nextArrowId; grp._arrowId = id;
+    const d = { id, x1:grp._x1, y1:grp._y1, cx:grp._cx, cy:grp._cy, x2:grp._x2, y2:grp._y2,
+      color:grp._arrowColor||'#FBBF24', dashed:!!grp._arrowDash, curved:!!grp._arrowCurved,
+      noHead:!!grp._arrowNoHead, grp, handles:[] };
+    _arrowData.set(id, d);
+    _attachGroupHandlers(d);
   }
 
   fc.on('mouse:down', e => {
@@ -1933,7 +1984,7 @@
     const p = fc.getPointer(e.e);
     _clearPreview();
     if (!_arrowP1) { _arrowP1 = { x:p.x, y:p.y }; }
-    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,currentArrowColor,currentArrowDash,currentArrowCurved); _arrowP1=null; }
+    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,currentArrowColor,currentArrowDash,currentArrowCurved,currentArrowNoHead); _arrowP1=null; }
   });
   fc.on('mouse:move', e => {
     if (currentTool==='free_polygon'&&_polyPoints.length>0) {
@@ -2055,7 +2106,7 @@
     const nc=_propArrowColor.value;
     d.color=nc; d.grp._arrowColor=nc;
     const [lp,hp]=d.grp.getObjects();
-    lp.set({stroke:nc}); hp.set({stroke:nc,fill:nc});
+    lp.set({stroke:nc}); if (hp) hp.set({stroke:nc,fill:nc});   // hp absent on head-less lines
     d.handles.forEach(h=>h.set({stroke:nc}));
     fc.renderAll();
   });
@@ -2175,29 +2226,50 @@
       if (prev) fc.loadFromJSON(prev, ()=>{ _rebuildArrowDataFromCanvas(); fc.renderAll(); });
       return;
     }
+    // Clipboard — clone with the FULL custom-prop list (ARROW_PROPS) so colours,
+    // types, teams and arrow geometry survive the round-trip. Every branch is
+    // wrapped so a single bad clone can never wedge the editor.
     if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
-      const active=fc.getActiveObject(); if (active) active.clone(c=>{_clipboard=c;}, ['_type','_team']); return;
+      const active=fc.getActiveObject();
+      if (active) { try { active.clone(c=>{_clipboard=c;}, ARROW_PROPS); } catch(err){ console.error('[copy] failed', err); } }
+      return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
       const active=fc.getActiveObject(); if (!active) return;
-      active.clone(c=>{_clipboard=c;}, ['_type','_team']);
-      fc.remove(active); fc.discardActiveObject(); fc.renderAll(); return;
+      try {
+        active.clone(c=>{_clipboard=c;}, ARROW_PROPS);
+        if (active.type==='activeSelection') active.getObjects().forEach(o=>fc.remove(o));
+        else fc.remove(active);
+        fc.discardActiveObject(); fc.renderAll();
+      } catch(err){ console.error('[cut] failed', err); }
+      return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
       if (!_clipboard) return;
-      _clipboard.clone(cloned=>{
-        fc.discardActiveObject();
-        cloned.set({ left:(cloned.left||0)+20, top:(cloned.top||0)+20, evented:true });
-        if (cloned.type==='activeSelection') {
-          cloned.canvas = fc;
-          cloned.forEachObject(o=>fc.add(o));
-          cloned.setCoords();
-        } else {
-          fc.add(cloned);
-        }
-        _clipboard.left=(_clipboard.left||0)+20; _clipboard.top=(_clipboard.top||0)+20;
-        fc.setActiveObject(cloned); fc.requestRenderAll();
-      }, ['_type','_team']);
+      const OFF = 20;
+      try {
+        _clipboard.clone(cloned=>{
+          try {
+            fc.discardActiveObject();
+            cloned.set({ left:(cloned.left||0)+OFF, top:(cloned.top||0)+OFF, evented:true });
+            const pasted = [];
+            if (cloned.type==='activeSelection') {
+              cloned.canvas = fc;
+              cloned.forEachObject(o=>{ o.set({evented:true}); fc.add(o); pasted.push(o); });
+              cloned.setCoords();
+            } else {
+              fc.add(cloned); pasted.push(cloned);
+            }
+            // Re-register any pasted arrows (fresh id + shifted geometry) so they
+            // stay editable and never share an id with the source arrow.
+            pasted.forEach(o=>{ if (o._type==='arrow') _registerPastedArrow(o, OFF, OFF); });
+            // advance the source offset so repeated pastes cascade
+            _clipboard.left=(_clipboard.left||0)+OFF; _clipboard.top=(_clipboard.top||0)+OFF;
+            fc.setActiveObject(cloned); fc.requestRenderAll();
+          } catch(err){ console.error('[paste] apply failed', err); fc.discardActiveObject(); fc.requestRenderAll(); }
+        }, ARROW_PROPS);
+      } catch(err){ console.error('[paste] clone failed', err); }
+      return;
     }
   });
 
@@ -2247,10 +2319,12 @@
     'Team3':() => addPlayer('t3'), 'Team4':() => addPlayer('t4'),
     'Ball':()=>addBall(), 'Cone':()=>addCone(), 'Pole':()=>addPole(),
     'Barrier':()=>addBarrier(), 'Goal':()=>addGoal(), 'GoalPost':()=>addGoalPost(), 'Mannequin':()=>addMannequin(),
-    'Pass':   ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;setTool('arrow');},
-    'Run':    ()=>{currentArrowColor='#FBBF24';currentArrowDash=false;currentArrowCurved=true; setTool('arrow');},
-    'Dribble':()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;setTool('arrow');},
-    'Curve':  ()=>{currentArrowColor='#22D3EE';currentArrowDash=true; currentArrowCurved=true; setTool('arrow');},
+    'Pass':   ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;currentArrowNoHead=false;setTool('arrow');},
+    'Run':    ()=>{currentArrowColor='#FBBF24';currentArrowDash=false;currentArrowCurved=true; currentArrowNoHead=false;setTool('arrow');},
+    'Dribble':()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;currentArrowNoHead=false;setTool('arrow');},
+    'Curve':  ()=>{currentArrowColor='#22D3EE';currentArrowDash=true; currentArrowCurved=true; currentArrowNoHead=false;setTool('arrow');},
+    'LineSolid':  ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;currentArrowNoHead=true;setTool('arrow');},
+    'LineDashed': ()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;currentArrowNoHead=true;setTool('arrow');},
     'Rectangle':()=>addZoneRect(), 'Circle':()=>addZoneCircle(),
     'Label':  ()=>{const t=new fabric.IText(tt('planner.text_default', 'Label'),{fill:'#fff',fontSize:14,fontFamily:'sans-serif'});finishAdd(t,'text');t.enterEditing();},
     'Number': ()=>{const t=new fabric.IText('1',{fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace'});finishAdd(t,'text');}
@@ -2501,7 +2575,8 @@
     if (!_editingPlayer) return;
     const newLabel = _playerNumInput.value.trim();
     _playerNumInput.style.display = 'none';
-    if (newLabel) _editPlayerLabel(_editingPlayer, newLabel);
+    // Always apply — an empty value clears the number so the token can stay blank.
+    _editPlayerLabel(_editingPlayer, newLabel);
     _editingPlayer = null;
   }
   _playerNumInput?.addEventListener('keydown', e => {
@@ -2837,21 +2912,38 @@
     const n = Number(s); if (!isFinite(n)) return 0;
     return n >= 20 ? n/60 : n;
   }
+  function plDoseMode(){ return document.getElementById('plExDoseMode')?.value || 'interval'; }
   function plRecalcDuration(){
+    if (plDoseMode() !== 'interval') return;   // reps/minutes: Duration is entered by hand
     const series = parseInt(document.getElementById('plExSeries')?.value) || 0;
     const wMin = plWorkMin(document.getElementById('plExWorkTime')?.value);
     const rMin = plWorkMin(document.getElementById('plExRestTime')?.value);
     const durEl = document.getElementById('plExDuration');
     if (durEl && series && wMin) { durEl.value = Math.round(series * (wMin + rMin)); updateSpaceOrientation?.(); }
   }
-  // Recompute the read-only Duration when series/work/rest change.
+  // Show/hide dose fields for the active mode and set Duration editability.
+  function plApplyDoseMode(){
+    const mode = plDoseMode();
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('plExSeriesField', mode !== 'minutes');
+    show('plExIntervalRow', mode === 'interval');
+    show('plExRepsRow',     mode === 'reps');
+    const durEl = document.getElementById('plExDuration');
+    if (durEl) {
+      durEl.readOnly = (mode === 'interval');
+      durEl.placeholder = (mode === 'interval') ? tt('planner.duration_auto','auto') : tt('planner.min_ph','min');
+    }
+    if (mode === 'interval') plRecalcDuration();
+  }
+  document.getElementById('plExDoseMode')?.addEventListener('change', plApplyDoseMode);
+  // Recompute the auto Duration (interval mode only) when series/work/rest change.
   ['plExSeries','plExWorkTime','plExRestTime'].forEach(id =>
     document.getElementById(id)?.addEventListener('input', plRecalcDuration));
 
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -2986,7 +3078,10 @@
     document.getElementById('plExSeries').value    = ex.series        || '';
     document.getElementById('plExWorkTime').value  = ex.work_time     || '';
     document.getElementById('plExRestTime').value  = ex.rest_time     || '';
-    plRecalcDuration();   // read-only Duration = series × (work + rest)
+    document.getElementById('plExReps').value      = ex.reps          || '';
+    const _dm = document.getElementById('plExDoseMode');
+    if (_dm) _dm.value = ex.dose_mode || (ex.reps ? 'reps' : (ex.series && ex.work_time) ? 'interval' : (ex.duration ? 'minutes' : 'interval'));
+    plApplyDoseMode();    // show the right fields; interval mode re-derives Duration
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
@@ -3275,10 +3370,14 @@
       players_count:     players,
       field_width:       w || null,
       field_height:      h || null,
+      // Dose mode gates which fields persist so a mode switch never leaves stale
+      // interval/reps data behind (which would mis-drive the Daily Planning display).
+      dose_mode:         plDoseMode(),
       duration:          parseInt(document.getElementById('plExDuration')?.value) || null,
-      series:            parseInt(document.getElementById('plExSeries')?.value)   || null,
-      work_time:         document.getElementById('plExWorkTime')?.value?.trim()   || null,
-      rest_time:         document.getElementById('plExRestTime')?.value?.trim()   || null,
+      series:            (plDoseMode() !== 'minutes') ? (parseInt(document.getElementById('plExSeries')?.value) || null) : null,
+      work_time:         (plDoseMode() === 'interval') ? (document.getElementById('plExWorkTime')?.value?.trim() || null) : null,
+      rest_time:         (plDoseMode() === 'interval') ? (document.getElementById('plExRestTime')?.value?.trim() || null) : null,
+      reps:              (plDoseMode() === 'reps') ? (parseInt(document.getElementById('plExReps')?.value) || null) : null,
       orientation:       currentManualOrient || null,
       match_day:         mdRaw !== '' && mdRaw != null ? parseInt(mdRaw) : null,
       intensity:         currentIntensity || null,

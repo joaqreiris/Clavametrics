@@ -450,6 +450,8 @@ create table if not exists public.exercises (
   series integer default 1,
   work_time text default '3:00'::text,
   rest_time text default '1:30'::text,
+  dose_mode text default 'interval'::text,
+  reps integer,
   orientation text,
   objects_json jsonb,
   created_by uuid,
@@ -470,7 +472,8 @@ create table if not exists public.exercises (
   constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),
   constraint exercises_game_type_check CHECK ((game_type = ANY (ARRAY['SSG'::text, 'MSG'::text, 'LSG'::text]))),
-  constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text])))
+  constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text]))),
+  constraint exercises_dose_mode_check CHECK ((dose_mode = ANY (ARRAY['interval'::text, 'reps'::text, 'minutes'::text])))
 );
 
 create table if not exists public.foods (
@@ -1972,6 +1975,8 @@ create table if not exists public.session_exercises (
   series integer,
   work_time text,
   rest_time text,
+  dose_mode text,
+  reps integer,
   constraint session_exercises_pkey primary key (id),
   constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text])))
 );

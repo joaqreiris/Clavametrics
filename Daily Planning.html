@@ -159,6 +159,11 @@
   .dp-ex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:14px 16px}
   .dp-ex{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
   .dp-ex:hover{border-color:var(--cm-border-strong)}
+  /* Drag-to-reorder: thumbnail is the grab affordance; body stays editable */
+  .dp-ex[draggable="true"] .dp-ex-thumb{cursor:grab}
+  .dp-ex.dp-dragging{opacity:.4}
+  .dp-ex.dp-drop-before{box-shadow:-3px 0 0 0 var(--cm-accent)}
+  .dp-ex.dp-drop-after{box-shadow:3px 0 0 0 var(--cm-accent)}
   .dp-ex-thumb{position:relative;aspect-ratio:16/9;background:url(assets/field.jpg) center/cover no-repeat;border-bottom:1px solid var(--cm-border-soft)}
   .dp-ex-thumb.has-img{ position:relative; background:#2f7d4c; aspect-ratio:auto; height:auto; padding:0; border-bottom:1px solid var(--cm-border-soft); }
   .dp-ex-thumb.is-loading{ background:#234d33; }
@@ -452,6 +457,7 @@ let _dpGpsTargets = {};        // metric_key → session target (display units),
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
+let _dpCalEventId = null;   // calendar_events.id backing this day (start-time write-back target)
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
 const _dpDescCache = {};  // planner_exercise_id -> { objective, description } from the Drill Designer exercise (null when absent)
@@ -685,9 +691,11 @@ async function loadDay(dateStr) {
   }
 
   // Calendar is the source of truth: authoritatively overlay micro/MD/time/RPE after the session fill.
+  _dpCalEventId = null;
   try {
     const ctx = await window.cmResolveDayContext(dateStr, _dpTeamId, _dpClubId);
     _dpCalFields = new Set();
+    _dpCalEventId = ctx.hasEvent ? (ctx.event_id || null) : null;   // event whose time this page edits
     const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
     const mcSelN = document.getElementById('dpMicrocycle');
     if (ctx.microcycle && mcSelN && [...mcSelN.options].some(o => o.value === String(ctx.microcycle.id))) { mcSelN.value = String(ctx.microcycle.id); _dpCalFields.add('dpMicrocycle'); }
@@ -793,9 +801,15 @@ function dpMarkCalFields() {
   ['dpMicrocycle','dpMatchDay','dpStartTime','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
     el.classList.toggle('is-cal-sourced', _dpCalFields.has(id));
+    // Start time now writes back to the Calendar event (dpSyncCalendarTime), so it
+    // gets a reassuring toast instead of the "change it in the Calendar" warning.
     if (_dpCalFields.has(id) && !el.dataset.calWarn) {
       el.dataset.calWarn = '1';
-      el.addEventListener('change', () => { if (_dpCalFields.has(id)) dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.')); });
+      el.addEventListener('change', () => {
+        if (!_dpCalFields.has(id)) return;
+        if (id === 'dpStartTime') dpToast(tt('daily_planning.cal_time_synced','Start time updated on the Calendar too.'));
+        else dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.'));
+      });
     }
   });
 }
@@ -832,7 +846,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -866,6 +880,70 @@ function renderExerciseList(exercises) {
   const totalMin = Math.round(exercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
   if (ct) ct.textContent = `${exercises.length} · ${tt('daily_planning.min_count', `${totalMin} min`, {count: totalMin})}`;
   grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button>`;
+  dpInitReorder();
+}
+
+// Next position = end of the list (max existing position + 1) so new cards always
+// append to the right, never land mid-list when positions aren't contiguous.
+function dpNextPosition(phase){
+  const list = phase === 'activation' ? (window._dpActItems || []) : _dpFieldExercises;
+  const ps = list.map((x, i) => (x.position != null ? x.position : i));
+  return (ps.length ? Math.max(...ps) : -1) + 1;
+}
+
+// ── Drag-and-drop reorder of field/main exercise cards ──────────────────────
+let _dpDragSeid = null;
+function dpInitReorder(){
+  const grid = document.getElementById('dpExGrid');
+  if (!grid || grid._reorderWired) return;   // delegation survives innerHTML repaints
+  grid._reorderWired = true;
+  const clearMarks = () => grid.querySelectorAll('.dp-drop-before,.dp-drop-after')
+    .forEach(el => el.classList.remove('dp-drop-before','dp-drop-after'));
+  const dropAfter = (card, e) => { const r = card.getBoundingClientRect(); return (e.clientX - r.left) > r.width/2; };
+  grid.addEventListener('dragstart', e => {
+    const card = e.target.closest('.dp-ex'); if (!card) return;
+    // Never hijack text editing / control interaction inside a card.
+    if (e.target.closest('input,textarea,select,button,a')) { e.preventDefault(); return; }
+    _dpDragSeid = card.dataset.seid;
+    card.classList.add('dp-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', _dpDragSeid); } catch(_){}
+  });
+  grid.addEventListener('dragend', () => {
+    grid.querySelectorAll('.dp-dragging').forEach(el => el.classList.remove('dp-dragging'));
+    clearMarks(); _dpDragSeid = null;
+  });
+  grid.addEventListener('dragover', e => {
+    if (!_dpDragSeid) return;
+    const card = e.target.closest('.dp-ex'); if (!card || card.dataset.seid === _dpDragSeid) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    clearMarks();
+    card.classList.add(dropAfter(card, e) ? 'dp-drop-after' : 'dp-drop-before');
+  });
+  grid.addEventListener('drop', e => {
+    if (!_dpDragSeid) return;
+    const card = e.target.closest('.dp-ex'); if (!card || card.dataset.seid === _dpDragSeid) return;
+    e.preventDefault();
+    const seid = _dpDragSeid, after = dropAfter(card, e);
+    clearMarks(); _dpDragSeid = null;
+    dpReorderExercise(seid, card.dataset.seid, after);
+  });
+}
+async function dpReorderExercise(dragSeid, targetSeid, after){
+  const arr = _dpFieldExercises;
+  const from = arr.findIndex(x => x.id === dragSeid);
+  if (from < 0) return;
+  const [moved] = arr.splice(from, 1);
+  let to = arr.findIndex(x => x.id === targetSeid);
+  if (to < 0) { arr.splice(from, 0, moved); return; }   // target vanished — undo
+  arr.splice(after ? to + 1 : to, 0, moved);
+  arr.forEach((x, i) => { x.position = i; });
+  renderExerciseList(arr);   // optimistic repaint from the new order
+  // Persist every row's position (list is small); log but don't block on errors.
+  const results = await Promise.all(arr.map(x =>
+    window.sb.from('session_exercises').update({ position: x.position }).eq('id', x.id).eq('club_id', _dpClubId)));
+  const failed = results.find(r => r.error);
+  if (failed) { console.warn('[dp-reorder] save failed:', failed.error.message); dpToast(tt('daily_planning.reorder_failed','Could not save the new order.')); }
 }
 
 function dpExerciseCardHTML(e) {
@@ -883,7 +961,7 @@ function dpExerciseCardHTML(e) {
       const fieldStr = (w && h) ? `${w}×${h}m` : null;
       const _resolved = (e.planner_exercise_id in _dpPngCache);     // preview lookup finished (may be null)
       const _loading  = !!e.planner_exercise_id && !_resolved && !e._previewPng;
-      return `<div class="dp-ex" data-seid="${e.id}">
+      return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
         ${e._previewPng ? `<div class="dp-ex-thumb has-img">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
@@ -909,19 +987,30 @@ function dpExerciseCardHTML(e) {
           ${(() => {
             if (e.phase !== 'main') return '';   // editor only for field tasks (live in _dpFieldExercises)
             const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
-            const seriesMode = !!(e.series && e.work_time);   // structure decides, not absence of a legacy duration
-            return `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">${
-              seriesMode
-                ? `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
+            const seriesMode = !!(e.series && e.work_time);   // interval — structure decides, not absence of a legacy duration
+            const repsMode   = !seriesMode && (e.dose_mode === 'reps' || (!!e.series && e.reps != null && e.reps !== ''));
+            let inner;
+            if (seriesMode) {
+              inner = `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
                    <span>×</span>
                    <input type="text" value="${e.work_time ?? ''}" placeholder="3:00" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}" style="${EI};width:52px">
                    <span>${tt('daily_planning.work','work')}</span>
                    <span>+</span>
                    <input type="text" value="${e.rest_time ?? ''}" placeholder="1:30" oninput="dpEditRest('${e.id}',this.value)" title="${tt('daily_planning.rest_time_mmss','Rest time (mm:ss)')}" style="${EI};width:52px">
                    <span>${tt('daily_planning.rest','rest')}</span>
-                   <span data-eff="${e.id}" title="${tt('daily_planning.total_series_work_rest','Total = series × (work + rest)')}" style="margin-left:auto;font-weight:600;color:var(--cm-fg-strong)">= ${Math.round(dpBlockMins(e).total_min)}′ ${tt('daily_planning.total_suffix','total')}</span>`
-                : `<input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>`
-            }</div>`;
+                   <span data-eff="${e.id}" title="${tt('daily_planning.total_series_work_rest','Total = series × (work + rest)')}" style="margin-left:auto;font-weight:600;color:var(--cm-fg-strong)">= ${Math.round(dpBlockMins(e).total_min)}′ ${tt('daily_planning.total_suffix','total')}</span>`;
+            } else if (repsMode) {
+              inner = `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
+                   <span>×</span>
+                   <input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}" style="${EI};width:46px">
+                   <span>${tt('daily_planning.reps_short','reps')}</span>
+                   <span>·</span>
+                   <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>
+                   <span data-eff="${e.id}" style="margin-left:auto;font-weight:600;color:var(--cm-fg-strong)">= ${Math.round(dpBlockMins(e).total_min)}′ ${tt('daily_planning.total_suffix','total')}</span>`;
+            } else {
+              inner = `<input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>`;
+            }
+            return `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">${inner}</div>`;
           })()}
           ${(() => {
             const dn = _dpDescCache[e.planner_exercise_id] || null;
@@ -949,7 +1038,7 @@ function dpExerciseCardHTML(e) {
       const lbl = dpCatLabel(cat);
       const desc      = e.gym_exercises?.description || e.notes || '';
       const intensity = e.intensity || '';
-      return `<div class="dp-ex" data-seid="${e.id}">
+      return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
         <div class="dp-ex-thumb">
           <span class="dp-ex-tag ${cls}">${lbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
@@ -1022,13 +1111,19 @@ function _dpFindTask(seid){
 }
 function _dpEffLabel(seid){
   const e = _dpFieldExercises.find(x => x.id === seid);
+  if (!e) return;
+  const mins = Math.round(dpBlockMins(e).total_min);
   const el = document.querySelector(`[data-eff="${seid}"]`);
-  if (e && el) el.textContent = '= ' + Math.round(dpBlockMins(e).total_min) + '′';
+  if (el) el.textContent = '= ' + mins + '′';
+  // Keep the card's top-right clock badge in sync with manual time edits.
+  const badge = document.querySelector(`.dp-ex[data-seid="${seid}"] .dp-ex-dur`);
+  if (badge) badge.innerHTML = `<i class="ti ti-clock"></i>${mins ? mins + '′' : '—'}`;
 }
 function dpEditDur(seid, val){
   const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
   e.duration = val === '' ? null : (parseInt(val) || 0);
-  recalcTotals();                       // live totals + GPS projection
+  _dpEffLabel(seid);                    // per-card badge + inline total
+  recalcTotals();                       // live day totals + GPS projection
   _dpEditSave(seid, { duration: e.duration });
 }
 function dpEditSeries(seid, val){
@@ -1036,6 +1131,11 @@ function dpEditSeries(seid, val){
   e.series = val === '' ? null : (parseInt(val) || null);
   _dpEffLabel(seid); recalcTotals();
   _dpEditSave(seid, { series: e.series });
+}
+function dpEditReps(seid, val){
+  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  e.reps = val === '' ? null : (parseInt(val) || null);
+  _dpEditSave(seid, { reps: e.reps });   // reps don't change session minutes (duration drives the total)
 }
 function dpEditWork(seid, val){
   const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
@@ -1070,6 +1170,9 @@ function recalcTotals() {
   const elSD = document.getElementById('dpTotSession');    if (elSD) elSD.innerHTML = total    ? `${total}${_minSub}`   : `—${_minSub}`;
   const elSN = document.getElementById('dpTotSessionNote');
   if (elSN) elSN.textContent = (actMin && fieldMin) ? tt('daily_planning.activation_field_split', `${actMin}′ activation + ${fieldMin}′ field`, {act: actMin, field: fieldMin}) : '';
+  // Exercises header count "N · X min" — keep live with manual per-card time edits.
+  const elCt = document.getElementById('dpExCt');
+  if (elCt && fieldCt) elCt.textContent = `${fieldCt} · ${tt('daily_planning.min_count', `${fieldMin} min`, {count: fieldMin})}`;
   dpUpdateAu();
   renderGpsProjection();   // live: re-project whenever blocks/durations change
 }
@@ -1462,7 +1565,7 @@ async function openLibModal(mode) {
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps')
     .eq('club_id', _dpClubId).order('name');
   const { data, error } = await q;
   if (error?.code === '42P01') {
@@ -1519,10 +1622,10 @@ function filterLib() {
 async function addPlannerExercise(exerciseId) {
   if (!await dpEnsureSession()) return;
   const ex  = _libExercises.find(e => e.id === exerciseId);
-  const pos = document.querySelectorAll('#dpExGrid .dp-ex').length;
+  const phase = _libMode === 'activation' ? 'activation' : 'main';
+  const pos = dpNextPosition(phase);   // always append to the end of its own phase
   const area = (ex?.field_width && ex?.field_height) ? ex.field_width * ex.field_height : null;
   const m2   = (area && ex?.players_count > 0) ? Math.round(area / ex.players_count) : null;
-  const phase = _libMode === 'activation' ? 'activation' : 'main';
   const { error } = await window.sb.from('session_exercises').insert({
     club_id:             _dpClubId,
     session_id:          _dpCurrentSessionId,
@@ -1533,6 +1636,8 @@ async function addPlannerExercise(exerciseId) {
     series:              ex?.series      || null,
     work_time:           ex?.work_time   || null,
     rest_time:           ex?.rest_time   || null,
+    dose_mode:           ex?.dose_mode   || null,
+    reps:                ex?.reps        || null,
     position:            pos,
     field_width:         ex?.field_width  || null,
     field_height:        ex?.field_height || null,
@@ -1563,7 +1668,7 @@ function closeManualExModal() { document.getElementById('manualExBackdrop').styl
 async function saveManualExercise() {
   const name = document.getElementById('manExName').value.trim();
   if (!name) { document.getElementById('manExName').focus(); return; }
-  const pos = document.querySelectorAll('#dpExGrid .dp-ex').length;
+  const pos = dpNextPosition();   // always append to the end
   const { error } = await window.sb.from('session_exercises').insert({
     club_id: _dpClubId, session_id: _dpCurrentSessionId,
     name, phase: 'main',
@@ -1655,6 +1760,20 @@ async function dpAutoSaveSession() {
   }
   if (dotEl)  dotEl.style.background = 'var(--cm-success)';
   if (statEl) { const _sv = tt('daily_planning.saved_just_now','Saved · just now'); statEl.textContent = _sv; setTimeout(() => { if (statEl.textContent === _sv) statEl.textContent = tt('daily_planning.autosaved','Autosaved'); }, 3000); }
+  // Push the start time back onto the Calendar event so the two stay in sync.
+  dpSyncCalendarTime(startVal, endVal, duration);
+}
+
+// Write the session's start/end/duration onto the backing Calendar event (if any),
+// so editing the start time here also moves the event's time on the Calendar.
+async function dpSyncCalendarTime(startVal, endVal, duration){
+  if (!_dpCalEventId) return;                 // no linked calendar event → nothing to sync
+  const patch = { start_time: startVal || null, updated_at: new Date().toISOString() };
+  if (endVal) patch.end_time = endVal;
+  if (duration) patch.duration_minutes = duration;
+  const { error } = await window.sb.from('calendar_events')
+    .update(patch).eq('id', _dpCalEventId).eq('club_id', _dpClubId);
+  if (error) console.warn('[dp-cal-sync] failed:', error.message);
 }
 
 function dpQueueSave() {
