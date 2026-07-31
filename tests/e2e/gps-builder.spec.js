@@ -2,6 +2,21 @@
 import { test, expect } from '@playwright/test';
 import { SB, PROFILE, CLUB, MICROCYCLE, injectSession, mockBase } from './_shared.js';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// QUARANTINED (test.fixme): the "Add metric → flyout → save" flow these cover was
+// removed when the builder was redesigned into a drag-and-drop pantry. The classic
+// #gpbAddMetric button and #gpbFly flyout are gone (see gp-builder.js:6089-6091 —
+// "the D&D fields pantry replaces it"); metrics are now dragged from .bdd-field into
+// a .bdd-zone inside #gpbDDPane. These tests target removed UI and fail on the current
+// build. They are skipped (not deleted) so they document intent and flag the debt.
+//
+// Rewriting them faithfully is non-trivial: the pantry's metric fields load from the
+// builder's internal catalogMap (not the mocked catalog), and Playwright's native
+// dragTo crashes the page here — so a reliable rewrite needs a synthetic-DnD harness.
+// Best done by whoever owns the pantry redesign, alongside it. Not blocking: the GPS
+// Analysis render safety net lives in gps-smoke.spec.js and is green.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
 const GPS_SETTINGS = {
@@ -164,7 +179,7 @@ test.describe('GPS Builder — Panel', () => {
     await expect(page.locator('#gpbSaveHint').first()).toBeVisible();
   });
 
-  test('Add metric button pulses when no metrics selected', async ({ page }) => {
+  test.fixme('Add metric button pulses when no metrics selected', async ({ page }) => {  // stale: #gpbAddMetric removed (pantry redesign)
     await gotoGpsBuilder(page);
     await clickFirst(page, '#gpbOpenBtn');
     await expect(page.locator('#gpbAddMetric').first()).toHaveClass(/gpb-pulse/);
@@ -180,7 +195,7 @@ test.describe('GPS Builder — Panel', () => {
 
 // ── 3. Flyout + metric selection ──────────────────────────────────────────────
 
-test.describe('GPS Builder — Metrics flyout', () => {
+test.describe.fixme('GPS Builder — Metrics flyout', () => {  // stale: flyout replaced by D&D pantry
   test('flyout opens on Add metric click', async ({ page }) => {
     await gotoGpsBuilder(page);
     await clickFirst(page, '#gpbOpenBtn');
@@ -235,7 +250,7 @@ test.describe('GPS Builder — Metrics flyout', () => {
 
 // ── 4. Save card ──────────────────────────────────────────────────────────────
 
-test.describe('GPS Builder — Save card', () => {
+test.describe.fixme('GPS Builder — Save card', () => {  // stale: depends on the removed flyout add-metric flow
   async function openAndAddMetric(page) {
     await gotoGpsBuilder(page);
     await clickFirst(page, '#gpbOpenBtn');
@@ -267,7 +282,7 @@ test.describe('GPS Builder — Save card', () => {
 
 // ── 5. Config drawer ──────────────────────────────────────────────────────────
 
-test.describe('GPS Builder — Config drawer', () => {
+test.describe.fixme('GPS Builder — Config drawer', () => {  // stale: depends on the removed flyout add-metric flow
   test('config drawer shows gp.card/v1 JSON', async ({ page }) => {
     await gotoGpsBuilder(page);
     await clickFirst(page, '#gpbOpenBtn');
@@ -304,7 +319,7 @@ test.describe('GPS Builder — AI modal', () => {
     expect(value.length).toBeGreaterThan(0);
   });
 
-  test('Generate opens the builder panel with a config (heuristic)', async ({ page }) => {
+  test.fixme('Generate opens the builder panel with a config (heuristic)', async ({ page }) => {  // stale: asserts #gpbMetrics well (removed by pantry redesign)
     await gotoGpsBuilder(page);
     await clickFirst(page, '#gpaiOpenBtn');
     await page.fill('#gpaiPrompt', 'top sprinters this microcycle');
