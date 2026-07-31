@@ -93,37 +93,37 @@ values
   (null,'isometric','iso_post_chain_30','ISO · Posterior chain 30°','ISO · Posterior chain 30°',
    'evaluations.test_iso_post_chain_30','peak_force','N','numeric',true,true,
    '{}'::jsonb,10,15,
-   'Asimetría >10-15% como bandera; sin corte absoluto validado para IPC 30°. Leer junto a delta vs baseline propio.',
+   'Asymmetry >10-15% as a flag; no validated absolute cut-off for IPC 30°. Read alongside change vs their own baseline.',
    'practice','{POST CH,POSTERIOR CHAIN,IPC,PC}',10),
 
   (null,'isometric','iso_knee_ext_90','ISO · Knee extension 90°','ISO · Knee extension 90°',
    'evaluations.test_iso_knee_ext_90','peak_force','N','numeric',true,true,
    '{"lsi_alert_below":90}'::jsonb,10,15,
-   'Grindem et al. BJSM 2016; Kyritsis et al. BJSM 2016 — LSI <90% en criterios de RTS.',
+   'Grindem et al. BJSM 2016; Kyritsis et al. BJSM 2016 — LSI <90% in RTS criteria.',
    'strong','{QUAD,QUADS,KNEE EXT}',20),
 
   (null,'isometric','iso_hip_add_0','ISO · Hip adduction 0°','ISO · Hip adduction 0°',
    'evaluations.test_iso_hip_add_0','peak_force','N','numeric',true,true,
    '{}'::jsonb,10,15,
-   'Thorborg et al. AJSM 2010 — ratio add:abd ipsilateral >0,90 como referencia de recuperación; grupo con dolor inguinal 0,80 ± 0,14.',
+   'Thorborg et al. AJSM 2010 — ipsilateral add:abd ratio >0.90 as a recovery reference; groin-pain group 0.80 ± 0.14.',
    'strong','{ADD,ADDUCTION,SQUEEZE}',30),
 
   (null,'isometric','iso_hip_abd_0','ISO · Hip abduction 0°','ISO · Hip abduction 0°',
    'evaluations.test_iso_hip_abd_0','peak_force','N','numeric',true,true,
    '{}'::jsonb,10,15,
-   'Thorborg et al. AJSM 2010 — ratio add:abd ipsilateral >0,90 como referencia de recuperación; grupo con dolor inguinal 0,80 ± 0,14.',
+   'Thorborg et al. AJSM 2010 — ipsilateral add:abd ratio >0.90 as a recovery reference; groin-pain group 0.80 ± 0.14.',
    'strong','{ABD,ABDUCTION}',40),
 
   (null,'isometric','iso_shoulder_er','ISO · Shoulder ER','ISO · Shoulder ER',
    'evaluations.test_iso_shoulder_er','peak_force','N','numeric',true,true,
    '{}'::jsonb,10,15,
-   'Ellenbecker & Davies, J Athl Train 2000 — ratio ER:IR 0,66-0,75.',
+   'Ellenbecker & Davies, J Athl Train 2000 — ER:IR ratio 0.66-0.75.',
    'moderate','{SH EXT,SHOULDER ER,ER}',50),
 
   (null,'isometric','iso_shoulder_ir','ISO · Shoulder IR','ISO · Shoulder IR',
    'evaluations.test_iso_shoulder_ir','peak_force','N','numeric',true,true,
    '{}'::jsonb,10,15,
-   'Ellenbecker & Davies, J Athl Train 2000 — ratio ER:IR 0,66-0,75.',
+   'Ellenbecker & Davies, J Athl Train 2000 — ER:IR ratio 0.66-0.75.',
    'moderate','{SH INT,SHOULDER IR,IR}',60)
 on conflict (key) where club_id is null do nothing;
 
@@ -136,37 +136,37 @@ values
   (null,'mobility','mob_ankle_df','MOB · Ankle dorsiflexion','MOB · Ankle dorsiflexion',
    'evaluations.test_mob_ankle_df','rom','°','numeric',true,true,null,null,
    '{"alert_below":34,"watch_below":38}'::jsonb,10,15,
-   'Hoch & McKeon 2011 (asimetría normal 0,1 ± 1,5 cm); ~34° asociado a mayor riesgo de lesión. Si el club mide en cm: alert <10 cm, watch <11 cm.',
+   'Hoch & McKeon 2011 (normal asymmetry 0.1 ± 1.5 cm); ~34° associated with higher injury risk. If measuring in cm: alert <10 cm, watch <11 cm.',
    'moderate','{ANKLE,ANKLE DF,WBLT,LUNGE}',10),
 
   (null,'mobility','mob_hip_ir','MOB · Hip internal rotation','MOB · Hip internal rotation',
    'evaluations.test_mob_hip_ir','rom','°','numeric',true,true,null,null,
    '{}'::jsonb,null,null,
-   'Regla combinada IR+ER <80° total → revisar movilidad de cadera.',
+   'Combined rule IR+ER <80° total → review hip mobility.',
    'practice','{INT ROT,HIP IR,IR CADERA}',20),
 
   (null,'mobility','mob_hip_er','MOB · Hip external rotation','MOB · Hip external rotation',
    'evaluations.test_mob_hip_er','rom','°','numeric',true,true,null,null,
    '{}'::jsonb,null,null,
-   'Regla combinada IR+ER <80° total → revisar movilidad de cadera.',
+   'Combined rule IR+ER <80° total → review hip mobility.',
    'practice','{EXT ROT,HIP ER}',30),
 
   (null,'mobility','mob_aslr','MOB · ASLR','MOB · ASLR',
    'evaluations.test_mob_aslr','rom','°','numeric',true,true,null,null,
    '{"alert_below":70,"watch_below":80}'::jsonb,null,null,
-   'Basado en práctica clínica; sin corte prospectivo fuerte en fútbol.',
+   'Based on clinical practice; no strong prospective cut-off in football.',
    'practice','{ASLR,SLR,LEG RAISE}',40),
 
   (null,'mobility','mob_thomas','MOB · Thomas test','MOB · Thomas test',
    'evaluations.test_mob_thomas','score','+/-','binary',true,false,null,null,
    '{}'::jsonb,null,null,
-   'Thomas test — positivo = restricción de flexores de cadera.',
+   'Thomas test — positive = hip flexor restriction.',
    'practice','{THOMAS,THPOMAS}',50),
 
   (null,'mobility','mob_hypermobility','MOB · Beighton','MOB · Beighton',
    'evaluations.test_mob_hypermobility','score','score','score',true,false,0,9,
    '{"watch_above":4}'::jsonb,null,null,
-   'Beighton et al. 1973; criterios Malfait et al. 2017 — ≥5/9 = hiperlaxitud generalizada.',
+   'Beighton et al. 1973; Malfait et al. 2017 criteria — ≥5/9 = generalised hypermobility.',
    'strong','{HYPERLAX,BEIGHTON,GJH}',60)
 on conflict (key) where club_id is null do nothing;
 

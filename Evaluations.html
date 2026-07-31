@@ -1543,7 +1543,7 @@
   function _defToTest(def){
     return { key:def.key, label:def.label, sub:_assessSub(def),
       icon: ASSESS_ICON[def.key] || (def.family === 'isometric' ? 'ti-barbell' : 'ti-stretching'),
-      src:{ from:'force_tests', testType:def.test_type }, _def:def };
+      src:{ from:'force_tests', testType:def.test_type }, _def:def, _defLabel:true };
   }
 
   async function loadAssessmentDefs(){
@@ -1610,9 +1610,10 @@
   var TEST_I18N = {
     'Body composition':'evaluations.test_bodycomp', 'Somatotype':'evaluations.test_somato', 'BMI / RFM':'evaluations.test_bmirfm'
   };
-  // DB-driven assessment tests carry their own i18n key on _def; prefer it.
+  // DB-driven assessment CARDS (built from a def) use the def's i18n key. Legacy cards
+  // that were merely enriched with a _def (for the chip/reference) keep their own label.
   function testLabel(t){
-    if (t._def && t._def.i18n_key) return tt(t._def.i18n_key, t._def.label || t.label);
+    if (t._defLabel && t._def && t._def.i18n_key) return tt(t._def.i18n_key, t._def.label || t.label);
     return tt(TEST_I18N[t.label] || '', t.label);
   }
 
@@ -4226,8 +4227,10 @@
       + '<div class="ev-f2">'
       +   '<div class="ev-frow"><label class="ev-fl">'+esc(tt('common.date','Date'))+'</label>'
       +     '<input id="asDate" type="date" class="ev-finput" value="'+evToday()+'" onchange="onAsPlayerChange()" required></div>'
-      +   '<div class="ev-frow"><label class="ev-fl">'+esc(tt('evaluations.bodyweight_kg','Bodyweight'))+' <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(kg · '+esc(tt('common.optional','optional'))+')</span></label>'
-      +     '<input id="asBw" type="number" step="0.1" min="20" max="200" class="ev-finput" placeholder="—"></div>'
+      +   (def.family === 'isometric'
+        ? '<div class="ev-frow"><label class="ev-fl">'+esc(tt('evaluations.bodyweight_kg','Bodyweight'))+' <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(kg · '+esc(tt('common.optional','optional'))+')</span></label>'
+          + '<input id="asBw" type="number" step="0.1" min="20" max="200" class="ev-finput" placeholder="—"></div>'
+        : '')
       + '</div>';
 
     var body = '';
@@ -7030,9 +7033,10 @@
   function renderBatteryGrid(){
     var defs = _asBattery.defs.filter(function(d){ return _asBattery.selected.has(d.key); });
     var players = _asBattery.players;
+    var showKg = _asBattery.family === 'isometric';   // bodyweight only matters for N/kg (isometric)
     // header
     var th = function(txt, extra){ return '<th style="text-align:'+(extra||'left')+';padding:6px 8px;position:sticky;top:0;background:var(--cm-surface);z-index:1;font:600 11px/1.2 var(--cm-font-sans);white-space:nowrap">'+esc(txt)+'</th>'; };
-    var head = th(tt('evaluations.player','Player')) + th('kg','right');
+    var head = th(tt('evaluations.player','Player')) + (showKg ? th('kg','right') : '');
     defs.forEach(function(def){
       var sides = def.bilateral ? ['L','R'] : ['NA'];
       sides.forEach(function(s){
@@ -7045,7 +7049,7 @@
     var body = players.map(function(p, ri){
       var cells = '<td style="padding:4px 8px;white-space:nowrap;position:sticky;left:0;background:var(--cm-surface);font:500 12px/1.3 var(--cm-font-sans)">'+esc(p.first_name+' '+p.last_name)+'</td>';
       var ci = 0;
-      cells += '<td style="padding:2px 4px"><input class="bat-inp ev-finput" data-pid="'+p.id+'" data-role="kg" data-row="'+ri+'" data-col="'+(ci++)+'" type="number" step="0.1" style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)"></td>';
+      if (showKg) cells += '<td style="padding:2px 4px"><input class="bat-inp ev-finput" data-pid="'+p.id+'" data-role="kg" data-row="'+ri+'" data-col="'+(ci++)+'" type="number" step="0.1" style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)"></td>';
       defs.forEach(function(def){
         var sides = def.bilateral ? ['L','R'] : ['NA'];
         sides.forEach(function(s){
