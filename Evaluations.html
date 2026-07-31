@@ -4135,7 +4135,7 @@
     '1RM':              { key:'orm',       label:'%1RM Estimation',          sub:'Epley + Brzycki averaged · full load prescription table', exercise:'Bench Press' },
     'FMS':              { key:'fms',       label:'FMS — Functional Movement Screen', sub:'Cook (2010) · 7 tests · score /21 · riesgo lesión · Kiesel et al. 2007' },
     'Ankle dorsiflexion':{ key:'ankle',    label:'Ankle Dorsiflexion',       sub:'Weight-bearing lunge test · L/R · Searle et al.' },
-    'Hip ER/IR':        { key:'hiprot',    label:'Hip ER/IR — Rotación de cadera', sub:'Lerebours et al. (2016) · IR/ER bilateral · alertas BIBE/FAI' },
+    'Hip ER/IR':        { key:'hiprot',    label:'Hip ER/IR — Hip rotation', sub:'Lerebours et al. (2016) · IR/ER bilateral · BIBE/FAI alerts' },
     'Body composition': { key:'skinfold',  label:'Composición corporal — Pliegues', sub:'JP3 · JP7 · DW4 · Siri (1956) · %BF · masa grasa y magra' },
     'F-V Profile · jumps':{ key:'fvprofile', label:'F-V Profile · jumps',     sub:'Samozino & Morin (2012–2016) · loaded jumps · F₀ V₀ Pmax · FVimb' },
     'Sprint H-FVP':     { key:'hfvp',      label:'Sprint H-FVP — Horizontal F-V profile', sub:'Samozino et al. (2016) · sprint splits · F₀ V₀ Pmax · RFmax · DRF' },
@@ -4559,28 +4559,28 @@
 
     } else if (cfg.key === 'ankle') {
       specificFields = `
-        <div class="pa-section" style="margin-top:14px">Distancia pie-pared (cm)</div>
+        <div class="pa-section" style="margin-top:14px">Wall-to-toe distance (cm)</div>
         <div class="ev-f2">
-          <div class="ev-frow"><label class="ev-fl">Izquierda</label>
+          <div class="ev-frow"><label class="ev-fl">Left</label>
             <div class="pt-field"><div class="input-wrap"><input id="paAnkleL" type="number" step="0.5" min="0" max="30" class="ev-finput" placeholder="cm" oninput="calcAnkle()"><span class="unit">cm</span></div></div></div>
-          <div class="ev-frow"><label class="ev-fl">Derecha</label>
+          <div class="ev-frow"><label class="ev-fl">Right</label>
             <div class="pt-field"><div class="input-wrap"><input id="paAnkleR" type="number" step="0.5" min="0" max="30" class="ev-finput" placeholder="cm" oninput="calcAnkle()"><span class="unit">cm</span></div></div></div>
         </div>`;
 
     } else if (cfg.key === 'hiprot') {
       specificFields = `
-        <div class="pa-section" style="margin-top:14px">Grados · Rotación Interna (IR)</div>
+        <div class="pa-section" style="margin-top:14px">Degrees · Internal rotation (IR)</div>
         <div class="ev-f2">
-          <div class="ev-frow"><label class="ev-fl">IR — Izquierda</label>
+          <div class="ev-frow"><label class="ev-fl">IR — Left</label>
             <div class="pt-field"><div class="input-wrap"><input id="paHipIRL" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
-          <div class="ev-frow"><label class="ev-fl">IR — Derecha</label>
+          <div class="ev-frow"><label class="ev-fl">IR — Right</label>
             <div class="pt-field"><div class="input-wrap"><input id="paHipIRR" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
         </div>
-        <div class="pa-section">Grados · Rotación Externa (ER)</div>
+        <div class="pa-section">Degrees · External rotation (ER)</div>
         <div class="ev-f2">
-          <div class="ev-frow"><label class="ev-fl">ER — Izquierda</label>
+          <div class="ev-frow"><label class="ev-fl">ER — Left</label>
             <div class="pt-field"><div class="input-wrap"><input id="paHipERL" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
-          <div class="ev-frow"><label class="ev-fl">ER — Derecha</label>
+          <div class="ev-frow"><label class="ev-fl">ER — Right</label>
             <div class="pt-field"><div class="input-wrap"><input id="paHipERR" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
         </div>`;
 
@@ -5292,10 +5292,10 @@
     }
     const classify=cm=>{
       if (!has(cm)) return {label:'—',color:'var(--cm-fg-muted)'};
-      if (cm>12) return {label:'Hipermóvil',color:'#1D4ED8'};
+      if (cm>12) return {label:'Hypermobile',color:'#1D4ED8'};
       if (cm>=10) return {label:'Normal',color:'#15803D'};
-      if (cm>=7)  return {label:'Limitación leve',color:'#B45309'};
-      return {label:'Limitación severa',color:'#B91C1C'};
+      if (cm>=7)  return {label:'Mild restriction',color:'#B45309'};
+      return {label:'Severe restriction',color:'#B91C1C'};
     };
     const clL=classify(lCm), clR=classify(rCm);
     const asymAlert=has(lCm)&&has(rCm)&&Math.abs(lCm-rCm)>2;
@@ -5307,28 +5307,28 @@
       <div style="margin-top:6px;display:inline-flex;height:20px;padding:0 8px;border-radius:4px;background:${cl.color}18;color:${cl.color};border:1px solid ${cl.color}40;font:600 10.5px/20px var(--cm-font-mono)">${cl.label}</div>
     </div>`;
     resEl.innerHTML=`<div class="pa-result-hero">
-      <div style="display:flex;gap:10px;margin-bottom:10px">${card(lCm,clL,'Izquierda')}${card(rCm,clR,'Derecha')}</div>
-      ${hasSevere?`<div style="padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">🔴 Dorsiflexión severamente limitada — riesgo ACL/rodilla</div>`:''}
-      ${hasLight?`<div style="padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">🟡 Dorsiflexión limitada — evaluar cadena posterior</div>`:''}
-      ${asymAlert?`<div style="margin-top:5px;padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">🟡 Asimetría bilateral detectada (${Math.abs(lCm-rCm).toFixed(1)} cm)</div>`:''}
+      <div style="display:flex;gap:10px;margin-bottom:10px">${card(lCm,clL,'Left')}${card(rCm,clR,'Right')}</div>
+      ${hasSevere?`<div style="padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">🔴 Severely limited dorsiflexion — ACL/knee risk</div>`:''}
+      ${hasLight?`<div style="padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">🟡 Limited dorsiflexion — assess posterior chain</div>`:''}
+      ${asymAlert?`<div style="margin-top:5px;padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">🟡 Bilateral asymmetry detected (${Math.abs(lCm-rCm).toFixed(1)} cm)</div>`:''}
     </div>`;
     zoneEl.innerHTML=`
       <div class="pa-section" style="margin-top:0">Ranges · Weight-Bearing Lunge Test</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
-        <table class="pa-zone-table"><thead><tr><th>Clasificación</th><th class="r">Distancia</th><th class="r">Tibial</th></tr></thead>
+        <table class="pa-zone-table"><thead><tr><th>Classification</th><th class="r">Distance</th><th class="r">Tibial</th></tr></thead>
         <tbody>
-          <tr><td style="color:#1D4ED8"><strong>Hipermóvil</strong></td><td class="r">> 12 cm</td><td class="r">> 38°</td></tr>
+          <tr><td style="color:#1D4ED8"><strong>Hypermobile</strong></td><td class="r">> 12 cm</td><td class="r">> 38°</td></tr>
           <tr><td style="color:#15803D"><strong>Normal</strong></td><td class="r">10–12 cm</td><td class="r">30–38°</td></tr>
-          <tr><td style="color:#B45309"><strong>Limitación leve</strong></td><td class="r">7–9 cm</td><td class="r">20–29°</td></tr>
-          <tr><td style="color:#B91C1C"><strong>Limitación severa</strong></td><td class="r">< 7 cm</td><td class="r">< 20°</td></tr>
+          <tr><td style="color:#B45309"><strong>Mild restriction</strong></td><td class="r">7–9 cm</td><td class="r">20–29°</td></tr>
+          <tr><td style="color:#B91C1C"><strong>Severe restriction</strong></td><td class="r">< 7 cm</td><td class="r">< 20°</td></tr>
         </tbody></table>
       </div>
       <div class="pt-formula" style="font-size:11px;margin-top:12px">
-        Asimetría > 2 cm → alerta bilateral<br>< 7 cm → riesgo ACL, rodilla, cadena posterior<br>
+        Asymmetry > 2 cm → bilateral alert<br>< 7 cm → ACL, knee, posterior-chain risk<br>
         <span class="cit">Searle et al. · Weight-Bearing Lunge Test</span>
       </div>`;
     const worst=has(lCm)&&has(rCm)?Math.min(lCm,rCm):has(lCm)?lCm:rCm;
-    document.getElementById('paFootInfo').textContent=`Ankle dorsiflexion L:${has(lCm)?lCm+' cm':'—'} R:${has(rCm)?rCm+' cm':'—'}${asymAlert?' · Asimetría bilateral':''}`;
+    document.getElementById('paFootInfo').textContent=`Ankle dorsiflexion L:${has(lCm)?lCm+' cm':'—'} R:${has(rCm)?rCm+' cm':'—'}${asymAlert?' · Bilateral asymmetry':''}`;
   }
 
   // ─── Calc: Hip ER/IR (Lerebours et al. 2016) ───
@@ -5345,12 +5345,12 @@
     const alerts=[];
     [{side:'L',ir:irL,er:erL},{side:'R',ir:irR,er:erR}].forEach(({side,ir,er})=>{
       if (!has(ir)) return;
-      if (ir<20) alerts.push({lv:'red',msg:`🔴 IR ${side} = ${ir}° — Rotación interna severamente limitada (riesgo cadera/ingle)`});
-      else if (has(er)&&ir<25&&er>65) alerts.push({lv:'red',msg:`🔴 BIBE ${side}: IR=${ir}° + ER=${er}° — Déficit rotación interna — evaluar FAI`});
-      else if (ir<30) alerts.push({lv:'warn',msg:`🟡 IR ${side} = ${ir}° — Rotación interna reducida — monitorear`});
+      if (ir<20) alerts.push({lv:'red',msg:`🔴 IR ${side} = ${ir}° — Severely limited internal rotation (hip/groin risk)`});
+      else if (has(er)&&ir<25&&er>65) alerts.push({lv:'red',msg:`🔴 BIBE ${side}: IR=${ir}° + ER=${er}° — Internal rotation deficit — assess FAI`});
+      else if (ir<30) alerts.push({lv:'warn',msg:`🟡 IR ${side} = ${ir}° — Reduced internal rotation — monitor`});
       if (has(er)&&(ir+er)<80) alerts.push({lv:'warn',msg:`🟡 Total range ${side} = ${ir+er}° — Review hip mobility`});
     });
-    if (has(irL)&&has(irR)&&Math.abs(irL-irR)>15) alerts.push({lv:'warn',msg:`🟡 Asimetría bilateral IR: L=${irL}° R=${irR}° (dif. ${Math.abs(irL-irR)}°)`});
+    if (has(irL)&&has(irR)&&Math.abs(irL-irR)>15) alerts.push({lv:'warn',msg:`🟡 Bilateral IR asymmetry: L=${irL}° R=${irR}° (diff. ${Math.abs(irL-irR)}°)`});
     const sideCard=(ir,er,label)=>(!has(ir)&&!has(er))?'':
       `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px 12px;flex:1">
         <div style="font:600 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">${label}</div>
@@ -5359,22 +5359,22 @@
         ${has(ir)&&has(er)?`<div style="display:flex;justify-content:space-between;border-top:1px solid var(--cm-border-soft);padding-top:4px;margin-top:4px"><span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Total IR+ER</span><span style="font:700 14px/1 var(--cm-font-mono);color:${(ir+er)<80?'#B45309':'#15803D'}">${ir+er}°</span></div>`:''}
       </div>`;
     resEl.innerHTML=`<div class="pa-result-hero">
-      <div style="display:flex;gap:10px;margin-bottom:10px">${sideCard(irL,erL,'Izquierda')}${sideCard(irR,erR,'Derecha')}</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px">${sideCard(irL,erL,'Left')}${sideCard(irR,erR,'Right')}</div>
       ${alerts.map(a=>`<div style="margin-top:5px;padding:7px 10px;border-radius:6px;border:1px solid ${a.lv==='red'?'rgba(220,38,38,0.25)':'rgba(217,119,6,0.25)'};background:${a.lv==='red'?'rgba(220,38,38,0.1)':'rgba(217,119,6,0.1)'};font:500 12px/1.4 var(--cm-font-sans);color:${a.lv==='red'?'#B91C1C':'#B45309'}">${a.msg}</div>`).join('')}
     </div>`;
     zoneEl.innerHTML=`
       <div class="pa-section" style="margin-top:0">Normal athlete ranges · Lerebours et al. (2016)</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
-        <table class="pa-zone-table"><thead><tr><th>Movimiento</th><th class="r">Normal</th><th class="r">Alerta</th></tr></thead>
+        <table class="pa-zone-table"><thead><tr><th>Movement</th><th class="r">Normal</th><th class="r">Alert</th></tr></thead>
         <tbody>
-          <tr><td>IR (interna)</td><td class="r">30–50°</td><td class="r">< 30° monitorear · < 20° crítico</td></tr>
-          <tr><td>ER (externa)</td><td class="r">40–60°</td><td class="r">—</td></tr>
-          <tr><td>IR+ER total</td><td class="r">80–100°</td><td class="r">< 80° → revisión</td></tr>
-          <tr><td>Asimetría IR</td><td class="r">< 15°</td><td class="r">> 15° → alerta</td></tr>
-          <tr><td>Síndrome BIBE</td><td class="r">—</td><td class="r">IR < 25° + ER > 65°</td></tr>
+          <tr><td>IR (internal)</td><td class="r">30–50°</td><td class="r">< 30° monitor · < 20° critical</td></tr>
+          <tr><td>ER (external)</td><td class="r">40–60°</td><td class="r">—</td></tr>
+          <tr><td>IR+ER total</td><td class="r">80–100°</td><td class="r">< 80° → review</td></tr>
+          <tr><td>IR asymmetry</td><td class="r">< 15°</td><td class="r">> 15° → alert</td></tr>
+          <tr><td>BIBE syndrome</td><td class="r">—</td><td class="r">IR < 25° + ER > 65°</td></tr>
         </tbody></table>
       </div>`;
-    document.getElementById('paFootInfo').textContent=`Hip Rot IR: L=${has(irL)?irL+'°':'—'} R=${has(irR)?irR+'°':'—'} · ER: L=${has(erL)?erL+'°':'—'} R=${has(erR)?erR+'°':'—'}${alerts.length?' · '+alerts.length+' alerta(s)':''}`;
+    document.getElementById('paFootInfo').textContent=`Hip Rot IR: L=${has(irL)?irL+'°':'—'} R=${has(irR)?irR+'°':'—'} · ER: L=${has(erL)?erL+'°':'—'} R=${has(erR)?erR+'°':'—'}${alerts.length?' · '+alerts.length+' alert(s)':''}`;
   }
 
   // ─── Skinfold helper: show/hide fold inputs by method ───
