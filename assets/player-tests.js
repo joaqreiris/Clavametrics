@@ -241,7 +241,10 @@
     }
 
     if (!rows.length) {
-      mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`;
+      // No legacy evaluations — DB-driven assessment blocks may still exist.
+      mount.innerHTML = '';
+      const had = await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
+      if (!had) mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`;
       return;
     }
 
@@ -313,6 +316,247 @@
     });
 
     paint();
+
+    // DB-driven isometric strength + mobility blocks, appended below the legacy content.
+    await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Isometric strength + Mobility blocks (force_tests + force_test_metrics +
+  //  assessment_test_defs). Resilient: any failure → block skipped, never throws.
+  // ══════════════════════════════════════════════════════════════════════════
+  const T = (k, f) => (window.tt ? window.tt(k, f) : f);
+  function statusColor(s){ return s==='alert'?'var(--cm-danger)':s==='watch'?'var(--cm-warning,#B45309)':s==='ok'?'var(--cm-success)':'var(--cm-fg-faint)'; }
+  function statusChip(res){
+    if (!res || res.status === 'none') return '';
+    const c = statusColor(res.status);
+    const lbl = T('evaluations.status_'+res.status, res.status);
+    const tip = window.assessNorms ? window.assessNorms.explain(res) : '';
+    return `<span class="pp-as-chip" title="${esc(tip)}" style="color:${c}"><span class="d" style="background:${c}"></span>${esc(lbl)}</span>`;
+  }
+  const _rank = { none:0, ok:1, watch:2, alert:3 };
+  function worst(list){ let b={status:'none'}; list.forEach(r=>{ if (r && (_rank[r.status]||0) > (_rank[b.status]||0)) b=r; }); return b; }
+
+  function styleInjectAssess(){
+    if (document.getElementById('pp-as-styles')) return;
+    const css = `
+    .pp-as-rows { display:flex; flex-direction:column; gap:14px; }
+    .pp-as-row { display:flex; flex-direction:column; gap:6px; padding-bottom:12px; border-bottom:1px solid var(--cm-border-soft); }
+    .pp-as-row:last-child { border-bottom:0; padding-bottom:0; }
+    .pp-as-row-h { display:flex; align-items:center; gap:8px; }
+    .pp-as-row-h .nm { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+    .pp-as-row-h .meta { margin-left:auto; display:flex; align-items:center; gap:10px; }
+    .pp-as-chip { display:inline-flex; align-items:center; gap:5px; font:600 11px/1 var(--cm-font-sans); }
+    .pp-as-chip .d { width:7px; height:7px; border-radius:50%; }
+    .pp-as-dl { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+    .pp-as-dl.dl-pos{color:var(--cm-success)} .pp-as-dl.dl-neg{color:var(--cm-danger)}
+    .pp-as-bar-row { display:grid; grid-template-columns:20px 1fr 96px; gap:8px; align-items:center; }
+    .pp-as-bar-lbl { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+    .pp-as-bar-track { height:8px; border-radius:6px; background:var(--cm-bg-sunk,rgba(0,0,0,.06)); overflow:hidden; }
+    .pp-as-bar-fill { display:block; height:100%; border-radius:6px; }
+    .pp-as-bar-val { text-align:right; font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+    .pp-as-bar-val .un { font-weight:500; color:var(--cm-fg-muted); margin-left:2px; }
+    .pp-as-sec { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+    .pp-as-ratios { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--cm-border); }
+    .pp-as-ratio { display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:8px; background:var(--cm-surface); border:1px solid var(--cm-border-soft); font:500 11.5px/1 var(--cm-font-sans); }
+    .pp-as-ratio .rv { font-family:var(--cm-font-mono); color:var(--cm-fg-strong); font-weight:600; }
+    .pp-as-hist { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:1px 5px; border:1px solid var(--cm-border-soft); border-radius:5px; }
+    `;
+    const el = document.createElement('style'); el.id = 'pp-as-styles'; el.textContent = css; document.head.appendChild(el);
+  }
+
+  function repValue(rec, def){
+    if (def.bilateral){
+      const vs = ['L','R'].map(s => rec.sides[s]).filter(v => v != null);
+      if (!vs.length) return null;
+      return vs.reduce((a,b)=>a+b,0)/vs.length;
+    }
+    return rec.sides.NA != null ? rec.sides.NA : (rec.sides.L != null ? rec.sides.L : rec.sides.R);
+  }
+
+  async function renderAssessmentBlocks({ playerId, clubId, teamId, mount }){
+    if (!mount) return false;
+    let defs = [];
+    try {
+      const { data } = await sb().from('assessment_test_defs').select('*')
+        .or(`club_id.is.null,club_id.eq.${clubId}`).eq('active', true);
+      defs = data || [];
+    } catch (_) { return false; }   // table missing → nothing to show
+    if (!defs.length) return false;
+    const defByType = {}; defs.forEach(d => { defByType[d.test_type] = d; });
+
+    // one query per table (no N+1)
+    let tests = [], metricsByTest = {};
+    try {
+      const { data: ft } = await sb().from('force_tests')
+        .select('id, test_type, test_date, bodyweight_kg')
+        .eq('club_id', clubId).eq('player_id', playerId)
+        .in('test_type', Object.keys(defByType))
+        .order('test_date', { ascending: true });
+      tests = ft || [];
+      if (tests.length){
+        const { data: mt } = await sb().from('force_test_metrics')
+          .select('test_id, metric_key, value, side, unit')
+          .in('test_id', tests.map(t => t.id));
+        (mt || []).forEach(m => { (metricsByTest[m.test_id] = metricsByTest[m.test_id] || []).push(m); });
+      }
+    } catch (_) { tests = []; metricsByTest = {}; }
+
+    // legacy evaluations fallback (Ankle dorsiflexion, Hip ER/IR) — historic only
+    let legacy = {};
+    try {
+      const { data: ev } = await sb().from('evaluations')
+        .select('evaluation_type, test_date, value, unit')
+        .eq('club_id', clubId).eq('player_id', playerId)
+        .in('evaluation_type', ['Ankle dorsiflexion', 'Hip ER/IR'])
+        .order('test_date', { ascending: true });
+      (ev || []).forEach(r => {
+        const key = r.evaluation_type === 'Ankle dorsiflexion' ? 'mob_ankle_df' : 'mob_hip_ir';
+        (legacy[key] = legacy[key] || []).push({ date: r.test_date, value: Number(r.value), unit: r.unit });
+      });
+    } catch (_) { legacy = {}; }
+
+    // build per-def series: key -> { def, records:[{date, bw, sides:{L,R,NA}}] , historic:bool }
+    const seriesByKey = {};
+    tests.forEach(t => {
+      const def = defByType[t.test_type]; if (!def) return;
+      const rec = { date: t.test_date, bw: t.bodyweight_kg, sides: {} };
+      (metricsByTest[t.id] || []).forEach(m => { if (m.metric_key === def.metric_key) rec.sides[m.side || 'NA'] = Number(m.value); });
+      if (!Object.keys(rec.sides).length) return;
+      (seriesByKey[def.key] = seriesByKey[def.key] || { def, records: [], historic: false }).records.push(rec);
+    });
+    // fill legacy for defs with no force data
+    Object.keys(legacy).forEach(key => {
+      if (seriesByKey[key]) return;
+      const def = defs.find(d => d.key === key); if (!def) return;
+      seriesByKey[key] = { def, historic: true, records: legacy[key].map(r => ({ date: r.date, bw: null, sides: { NA: r.value } })) };
+    });
+
+    if (!Object.keys(seriesByKey).length) return false;
+    styleInjectAssess();
+
+    const FAMILY = [
+      { fam: 'isometric', label: T('player.iso_strength_block', 'Isometric strength') },
+      { fam: 'mobility',  label: T('player.mobility_block', 'Mobility') },
+    ];
+    let rendered = false;
+    FAMILY.forEach(({ fam, label }) => {
+      const keys = Object.keys(seriesByKey).filter(k => seriesByKey[k].def.family === fam)
+        .sort((a,b) => (seriesByKey[a].def.sort_order||0) - (seriesByKey[b].def.sort_order||0));
+      if (!keys.length) return;
+      rendered = true;
+
+      // per-test rows (latest record)
+      const rowsHtml = keys.map(k => {
+        const s = seriesByKey[k], def = s.def;
+        const recs = s.records;
+        const rec = recs[recs.length - 1];
+        const prev = recs[recs.length - 2];
+        const unit = def.unit || '';
+        const L = rec.sides.L, R = rec.sides.R, NA = rec.sides.NA;
+        const maxV = Math.max(...[L, R, NA].filter(v => v != null), 0) || 1;
+        const AN = window.assessNorms;
+
+        let bars = '';
+        if (def.bilateral){
+          bars += bar('L', L, unit, maxV, 'var(--cm-accent)');
+          bars += bar('R', R, unit, maxV, 'var(--cm-accent)');
+        } else {
+          bars += bar('', NA, unit, maxV, 'var(--cm-accent)');
+        }
+
+        // status: worst of per-side absolute + asymmetry
+        let statuses = [];
+        if (AN){
+          [['L',L],['R',R],['NA',NA]].forEach(([sd,v]) => { if (v != null) statuses.push(AN.statusFor(def, { value: v })); });
+        }
+        let asym = null;
+        if (AN && def.bilateral && L != null && R != null){ asym = AN.asymStatus(def, L, R); statuses.push(asym); }
+        const st = worst(statuses);
+
+        // delta vs previous (representative value)
+        let dl = '', dir = 'flat';
+        if (prev){
+          const a = repValue(rec, def), b = repValue(prev, def);
+          if (a != null && b != null){
+            const d = a - b;
+            dir = window.evalDir ? window.evalDir.deltaDir(d, def.test_type, unit) : 'flat';
+            dl = (d > 0 ? '+' : d < 0 ? '−' : '') + fmtNum(Math.abs(d));
+          }
+        }
+
+        // N/kg secondary
+        let nkg = '';
+        if (AN && rec.bw){
+          const rv = repValue(rec, def);
+          const norm = AN.normalize(rv, rec.bw);
+          if (norm != null) nkg = `<div class="pp-as-sec">${fmtNum(norm)} ${esc(unit)}/kg</div>`;
+        }
+
+        const asymTxt = asym && asym.pct != null
+          ? `<span class="pp-as-chip" title="${esc(AN ? AN.explain(asym) : '')}" style="color:${statusColor(asym.status)}">${T('evaluations.asym_pct','Asym')} ${fmtNum(asym.pct)}%</span>` : '';
+
+        return `<div class="pp-as-row">
+          <div class="pp-as-row-h">
+            <span class="nm">${esc(T(def.i18n_key, def.label))}</span>
+            ${s.historic ? `<span class="pp-as-hist">${esc(T('player.historic','historic'))}</span>` : ''}
+            <span class="meta">${asymTxt}${statusChip(st)}${dl ? `<span class="pp-as-dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span>` : ''}</span>
+          </div>
+          ${bars}
+          ${nkg}
+        </div>`;
+      }).join('');
+
+      // derived ratios (latest record per def in this family)
+      let ratiosHtml = '';
+      if (window.assessNorms){
+        const byKey = {};
+        keys.forEach(k => { const r = seriesByKey[k].records; const rec = r[r.length-1]; byKey[k] = { L: rec.sides.L, R: rec.sides.R }; });
+        const rs = window.assessNorms.ratios(byKey);
+        if (rs.length){
+          ratiosHtml = `<div class="pp-as-ratios"><span class="pp-as-sec">${esc(T('player.derived_ratios','Derived ratios'))}</span>`
+            + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}"><span class="d" style="width:7px;height:7px;border-radius:50%;background:${statusColor(r.status)}"></span>${esc(r.key)}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
+            + `</div>`;
+        }
+      }
+
+      // one evolution chart (representative value) for the test with most records
+      let chartKey = keys[0];
+      keys.forEach(k => { if (seriesByKey[k].records.length > seriesByKey[chartKey].records.length) chartKey = k; });
+      const chartRows = seriesByKey[chartKey].records.map(rec => ({ test_date: rec.date, value: repValue(rec, seriesByKey[chartKey].def), unit: seriesByKey[chartKey].def.unit }));
+
+      const cardId = 'pp-as-' + fam;
+      mount.insertAdjacentHTML('beforeend', `
+        <div class="pp-ts-card" id="${cardId}">
+          <div class="pp-ts-card-head"><h3>${esc(label)}</h3><span class="sub">${keys.length} ${keys.length===1?'test':'tests'}</span></div>
+          <div class="pp-as-rows">${rowsHtml}</div>
+          ${ratiosHtml}
+          <div class="pp-ts-card-head" style="margin-top:16px;margin-bottom:8px"><h3 style="font-size:12.5px">${esc(T(seriesByKey[chartKey].def.i18n_key, seriesByKey[chartKey].def.label))}</h3><span class="sub" data-as-pills-for="${fam}"></span></div>
+          <div data-as-chart="${fam}"></div>
+        </div>`);
+
+      // pills to switch charted test + initial chart
+      const card = document.getElementById(cardId);
+      const chartEl = card.querySelector(`[data-as-chart="${fam}"]`);
+      const pillsHost = card.querySelector(`[data-as-pills-for="${fam}"]`);
+      const drawChart = (k) => { const S = seriesByKey[k]; chartEl.innerHTML = renderChart(S.records.map(rec => ({ test_date: rec.date, value: repValue(rec, S.def), unit: S.def.unit })), null); };
+      pillsHost.innerHTML = keys.map(k => `<button class="pp-tpill" style="height:24px;padding:0 9px;font-size:11px" data-k="${esc(k)}">${esc(T(seriesByKey[k].def.i18n_key, seriesByKey[k].def.label))}</button>`).join(' ');
+      pillsHost.querySelectorAll('.pp-tpill').forEach(b => b.addEventListener('click', () => {
+        pillsHost.querySelectorAll('.pp-tpill').forEach(x => x.classList.remove('is-on'));
+        b.classList.add('is-on'); drawChart(b.dataset.k);
+      }));
+      const firstPill = pillsHost.querySelector(`.pp-tpill[data-k="${chartKey}"]`); if (firstPill) firstPill.classList.add('is-on');
+      chartEl.innerHTML = renderChart(chartRows, null);
+    });
+
+    return rendered;
+  }
+
+  function bar(label, val, unit, maxV, color){
+    const w = (maxV > 0 && val != null) ? Math.max(4, Math.round(val / maxV * 100)) : 0;
+    return `<div class="pp-as-bar-row"><span class="pp-as-bar-lbl">${esc(label)}</span>
+      <span class="pp-as-bar-track"><span class="pp-as-bar-fill" style="width:${w}%;background:${color}"></span></span>
+      <span class="pp-as-bar-val">${val==null?'—':esc(fmtNum(val))}<span class="un">${esc(unit||'')}</span></span></div>`;
   }
 
   window.playerTests = { render };
