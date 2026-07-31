@@ -256,6 +256,11 @@
   .av-matrix td.cell.is-selected::after { content:""; position:absolute; inset:0; background:var(--cm-accent-soft); opacity:0.7; pointer-events:none; }
   .av-matrix td.cell.is-future { background:var(--cm-bg-soft); cursor:default; opacity:0.55; }
   .av-matrix td.cell.is-future:hover { outline:none; }
+  /* Future day that ALREADY has a session/match planned → editable pre-fill. Tinted with the
+     accent so it reads as "planned ahead", not a past record. Stays clickable (no opacity dim,
+     base .cell:hover outline applies). */
+  .av-matrix td.cell.is-future-plan { background:color-mix(in srgb, var(--cm-accent) 8%, var(--cm-surface)); cursor:pointer; }
+  .av-matrix tr:hover td.cell.is-future-plan { background:color-mix(in srgb, var(--cm-accent) 13%, var(--cm-surface)); }
   .av-matrix td.cell.is-off { background:repeating-linear-gradient(45deg, var(--cm-bg-soft) 0 4px, transparent 4px 8px); cursor:default; }
   .av-matrix td.cell.is-off::before { content:""; }
   .av-matrix td.cell.is-off:hover { outline:none; }
@@ -490,6 +495,7 @@
         <span class="it"><span class="d" style="background:var(--cm-violet)"></span><span data-i18n="availability.statusIllness">Illness</span></span>
         <span class="it"><span class="d" style="background:var(--cm-info)"></span><span data-i18n="availability.statusNatTeam">Nat. team</span></span>
         <span class="it"><span class="d" style="background:var(--cm-neutral)"></span><span data-i18n="availability.statusAbsent">Absent</span></span>
+        <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
         <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">match minutes</span></span>
         <span class="it" data-i18n="availability.matrixHint">Click cell to edit · drag to multi-select · ⌘+A all</span>
       </div>
@@ -616,10 +622,17 @@
     return '';
   }
 
+  // Base class for a cell. A FUTURE day that's already planned (dayCountable) is editable and
+  // tinted (is-future-plan, which — being a different token than is-future — isBlockedCell lets
+  // through). A future day with nothing planned stays is-future (dim, blocked).
+  function cellBaseCls(date) {
+    if (!isFutureDate(date)) return 'cell';
+    return dayCountable(date) ? 'cell is-future-plan' : 'cell is-future';
+  }
+
   function cellHTML(status, dayIdx, pid, date) {
     const isFuture = isFutureDate(date);
-    let cls = 'cell';
-    if (isFuture) cls += ' is-future';
+    let cls = cellBaseCls(date);
     const data = pid ? ` data-pid="${pid}" data-date="${date}"` : '';
     // Planned day off → crossed-out, empty, non-editable (blocked via isBlockedCell)
     if (DAYOFF_DATES.has(date)) return `<td class="${cls} is-dayoff"${data}></td>`;
@@ -1300,10 +1313,10 @@
       if (isNaN(n)) n = current;
       n = Math.max(0, Math.min(200, n));
       if (n > 0) {
-        td.className = 'cell av-cell-match';
+        td.className = cellBaseCls(date) + ' av-cell-match';
         td.innerHTML = `<span class="av-cell-match-min">${n}′</span>`;
       } else {
-        td.className = 'cell';
+        td.className = cellBaseCls(date);
         td.innerHTML = dotEl('available');
       }
       avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n };
@@ -1338,7 +1351,8 @@
     // ⌘+A / Ctrl+A — select all editable cells
     if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
       e.preventDefault();
-      matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off)').forEach(td => td.classList.add('is-selected'));
+      // Editable set = past/today countable + future-planned (is-future-plan lacks .is-future).
+      matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off):not(.is-dayoff)').forEach(td => td.classList.add('is-selected'));
       updateBulk();
     }
   });
@@ -1354,7 +1368,7 @@
         const { pid, date } = td.dataset;
         if (pid && date) {
           td.innerHTML = dotEl(fullStatus);
-          td.className = 'cell';
+          td.className = cellBaseCls(date);
           avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0 };
           updated.add(pid);
           saveAvailability(pid, date, fullStatus);
@@ -1375,7 +1389,7 @@
       const { pid, date } = td.dataset;
       if (pid && date) {
         td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
-        td.className = 'cell av-cell-match';
+        td.className = cellBaseCls(date) + ' av-cell-match';
         avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90 };
         updated.add(pid);
         saveAvailability(pid, date, 'available', 90);
@@ -1395,7 +1409,7 @@
       const { pid, date } = td.dataset;
       if (pid && date) {
         td.innerHTML = '';
-        td.className = 'cell';
+        td.className = cellBaseCls(date);
         delete avMap[pid + '|' + date];
         updated.add(pid);
         window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
@@ -1540,6 +1554,7 @@
     players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, minutes:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
+      if (r.date > todayStr) return;   // future pre-fills are planning, not events — don't count as elapsed
       s.total++;
       s.minutes += (r.minutes || 0);
       const st = (r.status||'').toLowerCase();
@@ -1571,7 +1586,9 @@
     (avail||[]).forEach(r => { evoByKey[r.player_id + '|' + r.date] = r; });
     const DB2CAT = { available:'disp', partial:'mod', limited:'mod', injured:'les', unavailable:'les', sick:'enf', illness:'enf', away:'sel', absent:'aus' };
     const matchSet = window.__avMatchDates || {};
-    const evoDays = MC_DATES.map(dStr => {
+    // Retrospective trend: stop at today. Future planned days aren't "what happened", and days
+    // with no row are counted as available — so including the future would inflate the line.
+    const evoDays = MC_DATES.filter(dStr => dStr <= todayStr).map(dStr => {
       const c = { disp:0, mod:0, les:0, enf:0, sel:0, aus:0 };
       players.forEach(p => {
         const row = evoByKey[p.id + '|' + dStr];
