@@ -3139,6 +3139,7 @@ begin
            coalesce(nullif(trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')), ''), 'Player') as name
     from public.players p
     where p.club_id = v_link.club_id
+      and p.archived_at is null
       and (v_link.team_id is null or p.team_id = v_link.team_id)
     order by p.last_name nulls last, p.first_name nulls last;
 end; $function$
