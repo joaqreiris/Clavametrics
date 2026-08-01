@@ -5465,6 +5465,15 @@ create policy "player_teams_super_all" on public.player_teams as permissive for 
 create policy "player_teams_write" on public.player_teams as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND has_full_planning_access()))
   with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
+-- Head coach (role 'coach') may assign players to ANY team in their own club, even
+-- teams they don't belong to (assistant coaches / other roles stay team-scoped).
+create policy "player_teams_headcoach_write" on public.player_teams as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((lower(COALESCE(p.role, '')) = 'coach') OR (lower(COALESCE(p.club_role, '')) = 'coach')))))))
+  with check (((club_id = get_user_club_id()) AND (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((lower(COALESCE(p.role, '')) = 'coach') OR (lower(COALESCE(p.club_role, '')) = 'coach')))))));
 
 alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public

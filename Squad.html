@@ -1459,7 +1459,9 @@ let _editingId = null;
 let _currentClubId = null;
 let _currentClubName = '';
 let _currentClubLogoUrl = '';
-let _fullAccess = false;   // admin/owner/super: única que puede editar membresías player↔team
+let _fullAccess = false;   // admin/owner/super: ve y navega todas las categorías
+let _canEditTeams = false; // + head coach (role 'coach'): puede asignar a cualquier equipo del club
+let _myTeamIds = new Set(); // equipos propios del staff (para elegir primario válido con la RLS de players)
 let _modalTeams = [];      // categorías que el rol puede asignar en el modal
 
 // ── Row actions kebab menu (shared popover; state + actions bound once) ──
@@ -1618,7 +1620,7 @@ function renderTeamCheckboxes() {
     return;
   }
   menu.innerHTML = _modalTeams.map(t =>
-    `<label class="sq-multi-opt"><input type="checkbox" value="${t.id}" ${_fullAccess ? '' : 'disabled'}><span>${t.name}</span></label>`
+    `<label class="sq-multi-opt"><input type="checkbox" value="${t.id}" ${_canEditTeams ? '' : 'disabled'}><span>${t.name}</span></label>`
   ).join('');
   menu.querySelectorAll('input[type=checkbox]').forEach(cb =>
     cb.addEventListener('change', updateTeamsBtnLabel));
@@ -1648,7 +1650,7 @@ function updateTeamsBtnLabel() {
   if (!wrap || !btn) return;
   btn.addEventListener('click', e => {
     e.stopPropagation();
-    if (!_fullAccess) return;            // read-only para no-admins
+    if (!_canEditTeams) return;          // read-only salvo admin/owner/head coach
     wrap.classList.toggle('is-open');
     btn.setAttribute('aria-expanded', wrap.classList.contains('is-open'));
   });
@@ -1740,18 +1742,24 @@ async function reloadPlayers() {
     const _bucket = (profile?.role || profile?.club_role || '').toLowerCase();
     _fullAccess = _bucket === 'admin' || _bucket === 'owner';
     if (!_fullAccess && window.isSuperAdmin) { try { _fullAccess = await window.isSuperAdmin(); } catch {} }
+    // Head coach (role 'coach') puede asignar jugadores a CUALQUIER equipo del club,
+    // aunque no pertenezca a él; el resto de no-admins solo a los suyos.
+    _canEditTeams = _fullAccess || _bucket === 'coach';
 
-    // Categorías permitidas para el MODAL (crear/editar jugador)
-    _modalTeams = _teams;
+    // Equipos donde el staff efectivamente trabaja (para navegar el roster).
+    let _myTeams = _teams;
     if (!_fullAccess) {
       let mine = [];
       try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
       const mineSet = new Set(mine);
-      _modalTeams = _teams.filter(t => mineSet.has(t.id));
+      _myTeams = _teams.filter(t => mineSet.has(t.id));
     }
 
-    // Filtro de arriba: mismas categorías permitidas que el modal (coach solo las suyas)
-    const _filterTeams = _fullAccess ? _teams : _modalTeams;
+    _myTeamIds = new Set(_myTeams.map(t => t.id));   // para validar el equipo primario en el guardado
+    // MODAL: el head coach ve todas las categorías del club para poder asignar;
+    // el filtro de arriba (navegar rosters) queda acotado a sus equipos.
+    _modalTeams = _canEditTeams ? _teams : _myTeams;
+    const _filterTeams = _fullAccess ? _teams : _myTeams;
     _filterTeams.forEach(t => {
       teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
     });
@@ -2131,9 +2139,15 @@ async function reloadPlayers() {
     }
     // PRIMARIO = el actual si sigue elegido; si no, el primero seleccionado (orden de la lista).
     const curPrimary = _editingId ? (_allPlayers.find(p => p.id === _editingId)?.team_id || null) : null;
-    const primaryTeamId = (curPrimary && selectedTeamIds.includes(curPrimary))
+    let primaryTeamId = (curPrimary && selectedTeamIds.includes(curPrimary))
       ? curPrimary
       : (selectedTeamIds[0] || null);
+    // Un head coach puede asignar a equipos ajenos, pero la RLS de `players` exige que el
+    // equipo PRIMARIO sea uno propio → si el primario elegido no es suyo, preferí uno que sí.
+    if (!_fullAccess && primaryTeamId && !_myTeamIds.has(primaryTeamId)) {
+      const own = selectedTeamIds.find(id => _myTeamIds.has(id));
+      if (own) primaryTeamId = own;
+    }
     // players.team_id queda como el equipo PRIMARIO (denormalizado, no rompe el resto de la app).
     payload.team_id = primaryTeamId;
 
