@@ -285,6 +285,9 @@
   .av-cell-dot.ab { background:var(--cm-neutral); }
   .av-cell-dot.un { background:#475569; }
   .av-cell-dot.na { background:var(--cm-info); }
+  /* 'other_team' — guest player training with their own squad (derived, view-only) */
+  .av-cell-dot.ot { background:transparent; box-shadow:inset 0 0 0 2px #6366F1, 0 0 0 2.5px var(--cm-surface); }
+  .av-matrix tr:hover .av-cell-dot.ot { box-shadow:inset 0 0 0 2px #6366F1, 0 0 0 2.5px var(--cm-bg-soft); }
   .av-cell-mins { display:inline-block; font:600 10px/1 var(--cm-font-mono); color:var(--cm-info); margin-top:2px; }
   .av-cell-match { background:rgba(34,197,94,0.06); }
   .av-cell-match-min { font:700 11px/1 var(--cm-font-mono); color:var(--cm-success); }
@@ -317,6 +320,7 @@
   .av-summary-bar .s.na { background:var(--cm-info); }
   .av-summary-bar .s.ab { background:var(--cm-neutral); }
   .av-summary-bar .s.un { background:#475569; }
+  .av-summary-bar .s.ot { background:#6366F1; }
   .av-summary-min { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); min-width:30px; text-align:right; }
   .av-summary-min sub { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:1px; }
 
@@ -598,6 +602,7 @@
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
   let players           = [];   // current club players
   let injuredIds        = new Set(); // player IDs with active injury
+  let _avGuestTeam      = new Map(); // guest player id → their primary team name (viewing another squad here)
   let todayStr          = '';   // YYYY-MM-DD, set in init()
   let yesterdayByPlayer = null; // { [player_id]: row } for delta KPI
   let _realtimeSub      = null; // Supabase realtime channel
@@ -613,8 +618,16 @@
   // Maps full DB status values → abbreviated CSS class keys (visual only)
   // 'unavailable' = the "No disponible" category (not-with-team, no clinical reason) — its own
   // slate colour, distinct from injury red. 'injured' stays red.
-  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'un', away:'na', injured:'in', sick:'si' };
+  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'un', away:'na', injured:'in', sick:'si', other_team:'ot' };
   function statusKey(s) { return STATUS_CSS[s] || s; }
+  // Status to show for a cell with NO stored record. Injury is global (shows in every
+  // team); a guest with no record defaults to 'other_team' (with their own squad);
+  // everyone else defaults to 'available'. 'other_team' is view-only — never stored.
+  function avDefaultStatus(pid) {
+    if (injuredIds.has(pid)) return 'injured';
+    if (_avGuestTeam.has(pid)) return 'other_team';
+    return 'available';
+  }
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
 
@@ -653,13 +666,18 @@
       const min = parseInt(status.split(':')[1], 10);
       return `<td class="${cls} av-cell-match"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
     }
+    if (status === 'other_team') {
+      const tn = (pid && _avGuestTeam.get(pid)) || '';
+      const title = tn ? tt('availability.trainsWithTeam', `Training with ${tn}`, { team: tn }).replace(/"/g,"'") : tt('availability.trainsWithOther','With another team');
+      return `<td class="${cls} is-otherteam"${data} title="${title}">${dotEl(status)}</td>`;
+    }
     return `<td class="${cls}"${data}>${dotEl(status)}</td>`;
   }
 
   // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
   function summary(statuses, dates) {
     const todayStr = new Date().toISOString().split('T')[0];
-    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ab:0 };
+    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
@@ -667,7 +685,7 @@
       if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
       else { const k = statusKey(s); counts[k] = (counts[k] || 0) + 1; }
     });
-    const segs = ['av','pa','in','un','si','na','ab'].filter(k => counts[k] > 0)
+    const segs = ['av','pa','in','un','si','na','ot','ab'].filter(k => counts[k] > 0)
       .map(k => `<span class="s ${k}" style="flex:${counts[k]}"></span>`).join('');
     return `<div class="av-summary"><div class="av-summary-bar">${segs}</div><div class="av-summary-min">${mins}<sub>′</sub></div></div>`;
   }
@@ -675,7 +693,7 @@
   // ── Summary tooltip HTML ──
   function summaryTooltip(statuses, dates) {
     const todayStr = new Date().toISOString().split('T')[0];
-    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ab:0 };
+    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
@@ -690,6 +708,7 @@
       [counts.un, '#475569',           'availability.tipUnavailable','unavailable'],
       [counts.si, 'var(--cm-violet)',  'availability.tipIllness',   'illness'],
       [counts.na, 'var(--cm-info)',    'availability.tipAway',      'away'],
+      [counts.ot, '#6366F1',           'availability.tipOtherTeam', 'with another team'],
       [counts.ab, 'var(--cm-neutral)', 'availability.tipAbsent',    'absent'],
     ].filter(([n]) => n > 0)
      .map(([n, c, key, en]) => `<span style="color:${c}">●</span> ${n} ${tt(key, en)}`);
@@ -706,7 +725,7 @@
       if (!e) {
         if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
-        return injuredIds.has(playerId) ? 'injured' : 'available';
+        return avDefaultStatus(playerId);
       }
       return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
     });
@@ -785,7 +804,7 @@
           if (!e) {
             if (isFutureDate(date)) return null;            // future: blank, no assumed status
             if (!dayCountable(date)) return null;           // not planned → neutral/blank
-            return injuredIds.has(p.id) ? 'injured' : 'available';
+            return avDefaultStatus(p.id);
           }
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
@@ -826,7 +845,7 @@
     const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
-      const s = e?.status || 'available';
+      const s = e ? (e.status || 'available') : avDefaultStatus(p.id);   // guests → 'other_team', not counted as available
       // "Nombre Apellido" — first name + first surname only
       const name = `${p.first_name || ''} ${(p.last_name || '').split(' ')[0]}`.trim();
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
@@ -847,7 +866,8 @@
     if (yesterdayByPlayer !== null) {
       let avYest = 0;
       players.forEach(p => {
-        const s = yesterdayByPlayer[p.id]?.status || 'available';
+        const ye = yesterdayByPlayer[p.id];
+        const s = ye ? (ye.status || 'available') : (_avGuestTeam.has(p.id) ? 'other_team' : 'available');
         if (s === 'available' || s === 'partial' || s === 'limited') avYest++;
       });
       const delta = avCount - avYest;
@@ -900,6 +920,9 @@
     const rows = [];
     players.forEach(p => {
       if (avMap[p.id + '|' + todayStr]) return;
+      // Guests stay derived ('with their own team') — don't persist an 'available' row
+      // that would silently override it. Injured guests still get filled below via injury.
+      if (_avGuestTeam.has(p.id) && !injuredIds.has(p.id)) return;
       rows.push({ player_id: p.id, date: todayStr, status: injuredIds.has(p.id) ? 'injured' : 'available', minutes: 0, club_id: CLUB_ID });
     });
     if (!rows.length) return;
@@ -1139,6 +1162,12 @@
     renderHeader(matchDates);
 
     players    = playersData || [];
+    // Guests: players whose PRIMARY team isn't the one we're viewing. They default to
+    // "training with their own squad" instead of "available" here (derived, not stored).
+    _avGuestTeam = new Map();
+    players.forEach(p => {
+      if (p.team_id && p.team_id !== _avTeamId) _avGuestTeam.set(p.id, _avTeamsById.get(p.team_id)?.name || '');
+    });
     avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
     injuredIds = new Set((injuriesData || []).map(r => r.player_id));
@@ -1246,7 +1275,7 @@
       if (!ent) {
         if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
-        return injuredIds.has(pid) ? 'injured' : 'available';
+        return avDefaultStatus(pid);
       }
       return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
     });
