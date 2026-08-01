@@ -514,10 +514,19 @@ function _dpAddDays(dateStr, n) {
   return d.toISOString().split('T')[0];
 }
 
+// Broad position buckets: GK · Defenders · Midfielders · Wingers · Strikers.
+// Every canonical Squad position (and legacy codes) maps here so nothing falls
+// through to a one-off group like CAM/CDM/LW/RW.
 const _DP_POS_GROUP = {
-  GK:{l:'GK',o:0}, CB:{l:'DEF',o:1}, LB:{l:'DEF',o:1}, RB:{l:'DEF',o:1}, FB:{l:'DEF',o:1},
-  DM:{l:'MID',o:2}, CM:{l:'MID',o:2}, MF:{l:'MID',o:2},
-  WG:{l:'ATT',o:3}, ST:{l:'ATT',o:3}, CF:{l:'ATT',o:3}
+  GK:{l:'GK',o:0},
+  // Defenders
+  CB:{l:'DEF',o:1}, LB:{l:'DEF',o:1}, RB:{l:'DEF',o:1}, LWB:{l:'DEF',o:1}, RWB:{l:'DEF',o:1}, FB:{l:'DEF',o:1}, WB:{l:'DEF',o:1}, DEF:{l:'DEF',o:1},
+  // Midfielders (defensive / central / attacking)
+  CDM:{l:'MID',o:2}, DM:{l:'MID',o:2}, CM:{l:'MID',o:2}, MF:{l:'MID',o:2}, CAM:{l:'MID',o:2}, AM:{l:'MID',o:2}, MID:{l:'MID',o:2},
+  // Wingers / wide
+  LM:{l:'WNG',o:3}, RM:{l:'WNG',o:3}, LW:{l:'WNG',o:3}, RW:{l:'WNG',o:3}, WG:{l:'WNG',o:3},
+  // Strikers / forwards
+  SS:{l:'FWD',o:4}, CF:{l:'FWD',o:4}, ST:{l:'FWD',o:4}, ATT:{l:'FWD',o:4}, FW:{l:'FWD',o:4}
 };
 const _DP_POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
 
