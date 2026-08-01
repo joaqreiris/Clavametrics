@@ -116,7 +116,7 @@ create table if not exists public.availability (
   notes text,
   constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
-  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text])))
+  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text])))
 );
 
 create table if not exists public.body_composition (

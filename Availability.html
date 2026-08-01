@@ -136,6 +136,7 @@
   .av-bulk-btn.un { background:rgba(71,85,105,0.28); color:#CBD5E1; border-color:rgba(148,163,184,0.35); }
   .av-bulk-btn.si { background:rgba(167,139,250,0.18); color:#C4B5FD; border-color:rgba(167,139,250,0.30); }
   .av-bulk-btn.na { background:rgba(96,165,250,0.18); color:#93C5FD; border-color:rgba(96,165,250,0.30); }
+  .av-bulk-btn.ot { background:rgba(99,102,241,0.18); color:#C7D2FE; border-color:rgba(99,102,241,0.32); }
   .av-bulk-btn.match { background:rgba(34,197,94,0.10); color:#86EFAC; border-color:rgba(34,197,94,0.30); }
   .av-bulk-btn.danger { background:rgba(239,68,68,0.18); color:#FCA5A5; border-color:rgba(239,68,68,0.30); margin-left:auto; }
   .av-bulk .clear { background:none; border:0; color:rgba(255,255,255,0.55); font:500 12px/1 var(--cm-font-sans); cursor:pointer; padding:0 6px; }
@@ -405,6 +406,7 @@
       <button class="av-bulk-btn un"><span class="dot" style="background:#94A3B8"></span><span data-i18n="availability.bulkUnavailable">Unavailable</span></button>
       <button class="av-bulk-btn si"><span class="dot" style="background:#C4B5FD"></span><span data-i18n="availability.statusIllness">Illness</span></button>
       <button class="av-bulk-btn na"><span class="dot" style="background:#93C5FD"></span><span data-i18n="availability.statusNatTeam">Nat. team</span></button>
+      <button class="av-bulk-btn ot"><span class="dot" style="background:#A5B4FC"></span><span data-i18n="availability.statusOtherTeam">Other team</span></button>
       <div class="sep"></div>
       <button class="av-bulk-btn match"><i class="ti ti-ball-football" style="font-size:13px"></i><span data-i18n="availability.bulkMatch">Match · 90′</span></button>
       <button class="av-bulk-btn danger"><i class="ti ti-trash" style="font-size:13px"></i><span data-i18n="availability.bulkClear">Clear</span></button>
@@ -1411,7 +1413,7 @@
   });
 
   // ── Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names ──
-  const BULK_STATUS = { av:'available', pa:'partial', in:'injured', un:'unavailable', si:'sick', na:'away' };
+  const BULK_STATUS = { av:'available', pa:'partial', in:'injured', un:'unavailable', si:'sick', na:'away', ot:'other_team' };
   Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
@@ -1420,11 +1422,23 @@
       matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
         const { pid, date } = td.dataset;
         if (pid && date) {
-          td.innerHTML = dotEl(fullStatus);
-          td.className = cellBaseCls(date);
-          avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0 };
-          updated.add(pid);
-          saveAvailability(pid, date, fullStatus);
+          // "Other team" on a GUEST: they already derive to other_team per-view, so just
+          // clear any stored record — keeps their OWN team showing the real status and
+          // avoids the global-status side effect. Non-guests store it explicitly.
+          if (fullStatus === 'other_team' && _avGuestTeam.has(pid)) {
+            td.innerHTML = dotEl('other_team');
+            td.className = cellBaseCls(date);
+            delete avMap[pid + '|' + date];
+            updated.add(pid);
+            window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
+              .then(({ error }) => { if (error) console.warn('[Availability] delete error:', error.message); });
+          } else {
+            td.innerHTML = dotEl(fullStatus);
+            td.className = cellBaseCls(date);
+            avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0 };
+            updated.add(pid);
+            saveAvailability(pid, date, fullStatus);
+          }
         }
       });
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
