@@ -69,6 +69,7 @@ begin
       left join public.wellness w
         on w.player_id = p.id and w.submitted_at::date = v_date
       where p.club_id = p_club_id
+        and p.archived_at is null
         and p.id in (select public.my_player_ids())
         and (p_team_id is null or p.team_id = p_team_id)
       order by p.id, w.submitted_at desc nulls last
@@ -121,6 +122,7 @@ begin
       left join public.rpe r
         on r.player_id = p.id and r.session_id = p_session_id
       where p.club_id = v_club
+        and p.archived_at is null
         and p.status <> 'inactive'
         and (v_team is null or p.team_id = v_team)
       order by p.id, r.created_at desc nulls last
