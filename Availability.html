@@ -234,7 +234,11 @@
   .av-pl-pos.mf { background:rgba(22,163,74,0.12); color:#15803D; }
   .av-pl-pos.wg { background:rgba(217,119,6,0.12); color:#B45309; }
   .av-pl-pos.st { background:rgba(220,38,38,0.10); color:#B91C1C; }
-  .av-pl-sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  /* Cross-team badge: player whose primary squad is another team (a guest here). */
+  .av-pl-xteam { display:inline-flex; align-items:center; gap:3px; height:16px; max-width:120px; padding:0 5px; border-radius:3px; font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.02em; background:rgba(99,102,241,0.12); color:#4338CA; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .av-pl-xteam .ti { font-size:11px; flex-shrink:0; }
+  .av-matrix tr.is-xteam td.col-player { box-shadow: inset 3px 0 0 0 rgba(99,102,241,0.55); }
+  .av-pl-name .xteam-tag { color:#4338CA; }
   .av-num { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:6px; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
 
   /* Cells -- THE matrix */
@@ -786,8 +790,14 @@
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
         const cells = statuses.map((s, i) => cellHTML(s, i, p.id, MC_DATES[i])).join('');
-        html += `<tr data-player-id="${p.id}">
-          <td class="col-player"><div class="av-pl"><div class="av-pl-av">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span></div></div></div></td>
+        // Cross-team: this player's PRIMARY team is not the one we're viewing → they
+        // belong to another squad. Flag it so the coach knows they're a guest here.
+        const xTeam = (p.team_id && p.team_id !== _avTeamId) ? (_avTeamsById.get(p.team_id)?.name || null) : null;
+        const xTeamBadge = xTeam
+          ? `<span class="av-pl-xteam" title="${tt('availability.belongsToTeam', `Belongs to ${xTeam}`, { team: xTeam }).replace(/"/g,"'")}">${xTeam}</span>`
+          : '';
+        html += `<tr data-player-id="${p.id}"${xTeam ? ' class="is-xteam"' : ''}>
+          <td class="col-player"><div class="av-pl"><div class="av-pl-av">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span>${xTeamBadge}</div></div></div></td>
           <td class="col-num"><span class="av-num">${p.number || ''}</span></td>
           ${cells}
           <td class="col-sum">${summary(statuses, MC_DATES)}</td>
@@ -983,7 +993,7 @@
           return data || null;
         } catch (e) { return null; }
       })(),
-      window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name'),
+      window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id').order('last_name'),
       window.sb.from('injuries').select('player_id, start_date, expected_return, returned_date')
         .eq('club_id', CLUB_ID).eq('status', 'active'),
     ]);
@@ -1466,10 +1476,12 @@
   })));
 
   let _avTeamId = null;
+  let _avTeamsById = new Map();   // team_id → { name } for cross-team badges
   async function avInitTeamSwitch() {
     const clubId = CLUB_ID || await window.getClubId();
     // getProfile and getTeams are independent → fetch together.
     const [prof, teamsAll] = await Promise.all([window.getProfile(), window.getTeams(clubId)]);
+    _avTeamsById = new Map((teamsAll || []).map(t => [t.id, t]));
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
     let full = bucket === 'admin' || bucket === 'owner';
     if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
@@ -1554,7 +1566,7 @@
     const from = MC_DATES[0], to = MC_DATES[MC_DATES.length - 1];
     if (!from || !to) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoRange','No range selected.')}</div>`; return; }
 
-    const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number');
+    const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id');
     const { data: players } = await pq.order('last_name');
     if (!players || !players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
     const pids = players.map(p => p.id);
