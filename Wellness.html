@@ -213,6 +213,31 @@
   </div>
 </div>
 
+<!-- ── Remind picker modal ── -->
+<div class="tr-overlay" id="wmRemindModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="remindTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-brand-whatsapp"></i></span>
+      <div>
+        <h3 id="remindTitle" data-i18n="wellness.remindPickTitle">Who to remind</h3>
+        <p data-i18n="wellness.remindPickSub">Uncheck anyone who doesn't need to check in (injured, national team…).</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 6px;font-weight:600;cursor:pointer;border-bottom:1px solid rgba(128,128,128,.18);">
+        <input type="checkbox" id="remindAll" checked style="width:16px;height:16px;cursor:pointer;">
+        <span data-i18n="wellness.remindSelectAll">Select all</span>
+      </label>
+      <div id="remindList" style="display:flex;flex-direction:column;gap:2px;max-height:46vh;overflow:auto;margin-top:8px;"></div>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="wellness.cancel">Cancel</span></button>
+      <button class="cm-btn is-wa" id="btnRemindSend"><i class="ti ti-brand-whatsapp"></i><span id="btnRemindSendTxt">Send reminder</span></button>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -526,12 +551,54 @@
     });
   }
 
-  /* ── Remind missing (bulk) — insert a wellness share_link + WhatsApp ── */
+  /* ── Remind missing — pick recipients, then insert a share_link + WhatsApp ── */
   function wireRemind() {
     const btn = document.getElementById('remindBtn');
-    btn.addEventListener('click', async () => {
+    const modal = document.getElementById('wmRemindModal');
+    const listEl = document.getElementById('remindList');
+    const allEl = document.getElementById('remindAll');
+    const sendBtn = document.getElementById('btnRemindSend');
+    const sendTxt = document.getElementById('btnRemindSendTxt');
+
+    function syncSend() {
+      const n = listEl.querySelectorAll('input[type=checkbox]:checked').length;
+      sendBtn.disabled = n === 0;
+      sendTxt.textContent = tt('wellness.remindSend', `Send reminder (${n})`, { count: n });
+    }
+
+    // Open the picker with one checked row per pending player
+    btn.addEventListener('click', () => {
       if (!state.pending.length) return;
-      btn.disabled = true;
+      listEl.innerHTML = state.pending.map((p, i) =>
+        `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:10px;cursor:pointer;">
+           <input type="checkbox" data-idx="${i}" checked style="width:16px;height:16px;cursor:pointer;">
+           <span class="cm-avatar is-sm" style="opacity:.55;">${initials(p.name)}</span>
+           <span>${T.escape(p.name)}</span>
+         </label>`).join('');
+      allEl.checked = true;
+      syncSend();
+      modal.classList.add('is-open');
+    });
+
+    // Master "select all" toggle
+    allEl.addEventListener('change', () => {
+      listEl.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = allEl.checked; });
+      syncSend();
+    });
+
+    // Keep the count + master checkbox in sync with individual rows
+    listEl.addEventListener('change', () => {
+      const boxes = [...listEl.querySelectorAll('input[type=checkbox]')];
+      allEl.checked = boxes.length > 0 && boxes.every(c => c.checked);
+      syncSend();
+    });
+
+    // Confirm → share_link + WhatsApp with only the selected names
+    sendBtn.addEventListener('click', async () => {
+      const picked = [...listEl.querySelectorAll('input[type=checkbox]:checked')]
+        .map(c => state.pending[+c.dataset.idx]).filter(Boolean);
+      if (!picked.length) return;
+      sendBtn.disabled = true;
       try {
         const teamId = document.getElementById('wmTeamSelect').value || null;
         const token = crypto.randomUUID().replace(/-/g, '');
@@ -541,13 +608,14 @@
         });
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
-        const names = state.pending.map(p => p.name).join(', ');
+        const names = picked.map(p => p.name).join(', ');
         const msg = tt('wellness.waRemindBulk', `Daily wellness check-in reminder.\nMissing: ${names}\nComplete it here: ${url}`, { names, url });
         window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+        modal.classList.remove('is-open');
       } catch (e) {
         console.warn('[Wellness] remind:', e && e.message);
         T.toast(tt('wellness.remindError', "Couldn't create reminder"), 'ti-alert-triangle');
-      } finally { btn.disabled = false; }
+      } finally { syncSend(); }
     });
   }
 
