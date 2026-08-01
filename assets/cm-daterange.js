@@ -139,6 +139,27 @@
             <button type="button" data-done style="${DONE_CSS}">Done</button>
           </div>`;
         wireCal();
+        if (open) positionPop();   // re-anchor after content height changes (month nav, presets)
+      }
+
+      // Anchor the popover as position:fixed from the trigger, flipping when it would run off
+      // an edge. Using fixed escapes any ancestor overflow:hidden (e.g. a modal card) that
+      // would otherwise clip the calendar and make dates unselectable.
+      function positionPop() {
+        const r = triggerEl.getBoundingClientRect();
+        const M = 8;
+        const popW = popEl.offsetWidth || 284;
+        const popH = popEl.offsetHeight || 320;
+        let left = r.left;
+        if (left + popW > window.innerWidth - M) left = r.right - popW;   // flip → right-align to trigger
+        left = Math.max(M, Math.min(left, window.innerWidth - popW - M));
+        let top = r.bottom + 6;
+        if (top + popH > window.innerHeight - M) top = Math.max(M, r.top - 6 - popH);   // flip above trigger
+        popEl.style.position = 'fixed';
+        popEl.style.left = left + 'px';
+        popEl.style.top = top + 'px';
+        popEl.style.right = 'auto';
+        popEl.style.bottom = 'auto';
       }
 
       function pickDay(isoStr) {
@@ -184,7 +205,16 @@
 
       function setOpen(v) {
         open = v; popEl.hidden = !v;
-        if (v) { vY = (to || from || today).getFullYear(); vM = (to || from || today).getMonth(); renderCal(); }
+        if (v) {
+          vY = (to || from || today).getFullYear(); vM = (to || from || today).getMonth();
+          renderCal();
+          positionPop();
+          window.addEventListener('scroll', positionPop, true);
+          window.addEventListener('resize', positionPop);
+        } else {
+          window.removeEventListener('scroll', positionPop, true);
+          window.removeEventListener('resize', positionPop);
+        }
       }
 
       function onDocClick(e) { if (open && !container.contains(e.target)) setOpen(false); }
@@ -199,7 +229,7 @@
         setRange(f, t) { from = parse(f); to = parse(t); refreshLabel(); if (open) renderCal(); },
         open() { setOpen(true); },
         close() { setOpen(false); },
-        destroy() { document.removeEventListener('click', onDocClick); container.innerHTML = ''; container.classList.remove('cmdr'); },
+        destroy() { document.removeEventListener('click', onDocClick); window.removeEventListener('scroll', positionPop, true); window.removeEventListener('resize', positionPop); container.innerHTML = ''; container.classList.remove('cmdr'); },
       };
       return api;
     },
