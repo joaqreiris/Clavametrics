@@ -455,6 +455,10 @@
     background:none; border:0; cursor:pointer; color:var(--cm-danger); padding:3px 5px; border-radius:4px; line-height:1; }
   .pl-ex:hover .pl-ex-del { display:block; }
   .pl-ex-del:hover { background:var(--cm-danger-bg); }
+  .pl-ex-dup { display:none; position:absolute; right:30px; top:50%; transform:translateY(-50%);
+    background:none; border:0; cursor:pointer; color:var(--cm-fg-muted); padding:3px 5px; border-radius:4px; line-height:1; }
+  .pl-ex:hover .pl-ex-dup { display:block; }
+  .pl-ex-dup:hover { background:var(--cm-bg-soft); color:var(--cm-fg-strong); }
   /* Polygon shape dropdown */
   .pl-poly-wrap { position:relative; }
   .pl-poly-menu { position:fixed;
@@ -493,6 +497,10 @@
     border-radius:50%; text-align:center; font:700 14px/1 monospace;
     border:2.5px solid rgba(255,255,255,0.9); background:rgba(0,0,0,0.65); color:white;
     outline:none; padding:0; box-sizing:border-box; }
+  #plAngleBadge { display:none; position:absolute; z-index:55; transform:translate(-50%,-50%);
+    padding:3px 8px; border-radius:6px; font:700 12px/1 monospace; letter-spacing:.02em;
+    background:rgba(17,24,29,0.9); color:#fff; border:1px solid rgba(255,255,255,0.25);
+    pointer-events:none; white-space:nowrap; }
 
   .pl-field-fab {
     position:absolute;
@@ -1122,6 +1130,7 @@
             <button id="plPolyCancelBtn" data-i18n="common.cancel">Cancel</button>
           </div>
           <input type="text" id="plPlayerNumInput" maxlength="3" autocomplete="off">
+          <div id="plAngleBadge"></div>
 
           <div class="pl-field-fab">
             <button id="plFabText"   data-i18n-attr="title:planner.add_label" title="Add label"><i class="ti ti-typography"></i></button>
@@ -1519,11 +1528,24 @@
   fc.on('object:removed',  pushHistory);
 
   // Rotation snaps to 15° (clean stops at 45/90/180/270…); hold Shift for free, precise rotation.
+  // A live badge shows the current degrees as a reference (0°, 90°, 180°…).
+  const _angleBadge = document.getElementById('plAngleBadge');
+  function _hideAngleBadge() { if (_angleBadge) _angleBadge.style.display = 'none'; }
   fc.on('object:rotating', e => {
-    if (e.e && e.e.shiftKey) return;
-    const SNAP = 15;
-    e.target.set({ angle: Math.round(e.target.angle / SNAP) * SNAP });
+    if (!(e.e && e.e.shiftKey)) {
+      const SNAP = 15;
+      e.target.set({ angle: Math.round(e.target.angle / SNAP) * SNAP });
+    }
+    if (_angleBadge) {
+      const deg = ((Math.round(e.target.angle) % 360) + 360) % 360;
+      const vpt = fc.viewportTransform;
+      _angleBadge.textContent = deg + '°';
+      _angleBadge.style.left = (e.target.left * vpt[0] + vpt[4]) + 'px';
+      _angleBadge.style.top  = (e.target.top  * vpt[3] + vpt[5] - 34) + 'px';
+      _angleBadge.style.display = 'block';
+    }
   });
+  fc.on('mouse:up', _hideAngleBadge);
 
   function pushHistory() {
     if (_suppressHistory) return;
@@ -3041,6 +3063,37 @@
     renderExerciseList();
   }
 
+  // Duplicate a drill: clone its canvas + all metadata into a new row so a variant can be
+  // edited without rebuilding it. The preview image is copied to the new row's own path.
+  async function duplicateExercise(id) {
+    const src = exercises.find(e => e.id === id);
+    if (!src) return;
+    const payload = {
+      club_id: clubId,
+      created_by: profile?.id || null,
+      name: ((src.name || tt('planner.untitled','Untitled')) + ' ' + tt('planner.copy_suffix','(copy)')).slice(0, 120),
+      players_count: src.players_count, field_width: src.field_width, field_height: src.field_height,
+      dose_mode: src.dose_mode, duration: src.duration, series: src.series,
+      work_time: src.work_time, rest_time: src.rest_time, reps: src.reps,
+      orientation: src.orientation, match_day: src.match_day, intensity: src.intensity,
+      focus: src.focus, game_type_enabled: src.game_type_enabled, game_type: src.game_type,
+      objective: src.objective, description: src.description,
+      source_type: src.source_type, objects_json: src.objects_json, preview_svg: src.preview_svg,
+      preview_png: src.preview_png || null, visible_teams: src.visible_teams
+    };
+    const { data, error } = await window.sb.from('exercises').insert(payload).select().single();
+    if (error || !data) { alert(tt('planner.duplicate_failed', 'Could not duplicate the exercise')); return; }
+    if (src.preview_path) {   // give the copy its own preview file (best-effort)
+      try {
+        const destPath = `${clubId}/${data.id}.png`;
+        const { error: cpErr } = await window.sb.storage.from('drill-previews').copy(src.preview_path, destPath);
+        if (!cpErr) await window.sb.from('exercises').update({ preview_path: destPath }).eq('id', data.id);
+      } catch(_) {}
+    }
+    await loadExercises();
+    selectExercise(data.id);
+  }
+
   async function deleteExercise(id) {
     if(!confirm(tt('planner.confirm_delete_exercise', 'Delete this exercise? This cannot be undone.'))) return;
     const {error}=await window.sb.from('exercises').delete().eq('id',id).eq('club_id',clubId);
@@ -3096,11 +3149,14 @@
             ${ex.objective ? `<div style="font:400 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px">${ex.objective}</div>` : ''}
           </div>
           <span class="pl-ex-badge ${meta ? 'o-' + meta.short.toLowerCase() : 'o-none'}">${meta ? meta.short : '—'}</span>
+          <button class="pl-ex-dup" data-dup-ex="${ex.id}" title="${tt('planner.duplicate_exercise','Duplicate')}"><i class="ti ti-copy" style="font-size:13px"></i></button>
           <button class="pl-ex-del" data-del-ex="${ex.id}" title="${tt('planner.delete_exercise','Delete exercise')}"><i class="ti ti-trash" style="font-size:13px"></i></button>
         </div>`;
     }).join('');
     list.querySelectorAll('.pl-ex').forEach(el =>
       el.addEventListener('click', () => selectExercise(el.dataset.exId)));
+    list.querySelectorAll('.pl-ex-dup').forEach(btn =>
+      btn.addEventListener('click', e => { e.stopPropagation(); duplicateExercise(btn.dataset.dupEx); }));
     list.querySelectorAll('.pl-ex-del').forEach(btn =>
       btn.addEventListener('click', e => { e.stopPropagation(); deleteExercise(btn.dataset.delEx); }));
 
