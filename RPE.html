@@ -269,7 +269,8 @@
     </div>
     <div class="tr-modal-foot">
       <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
-      <button class="cm-btn is-wa" id="btnRemindSend"><i class="ti ti-brand-whatsapp"></i><span id="btnRemindSendTxt">Send reminder</span></button>
+      <button class="cm-btn" id="btnRemindTg" style="background:#229ED9;border-color:#229ED9;color:#fff;"><i class="ti ti-brand-telegram"></i><span id="btnRemindTgTxt">Telegram</span></button>
+      <button class="cm-btn is-wa" id="btnRemindSend"><i class="ti ti-brand-whatsapp"></i><span id="btnRemindSendTxt">WhatsApp</span></button>
     </div>
   </div>
 </div>
@@ -806,11 +807,14 @@
     const allEl = document.getElementById('remindAll');
     const sendBtn = document.getElementById('btnRemindSend');
     const sendTxt = document.getElementById('btnRemindSendTxt');
+    const tgBtn = document.getElementById('btnRemindTg');
+    const tgTxt = document.getElementById('btnRemindTgTxt');
 
     function syncSend() {
       const n = listEl.querySelectorAll('input[type=checkbox]:checked').length;
-      sendBtn.disabled = n === 0;
-      sendTxt.textContent = tt('rpe.remindSend', `Send reminder (${n})`, { count: n });
+      sendBtn.disabled = tgBtn.disabled = n === 0;
+      sendTxt.textContent = tt('rpe.remindSendWa', `WhatsApp (${n})`, { count: n });
+      tgTxt.textContent = tt('rpe.remindSendTg', `Telegram (${n})`, { count: n });
     }
 
     // Open the picker with one checked row per pending player
@@ -840,12 +844,12 @@
       syncSend();
     });
 
-    // Confirm → share_link + WhatsApp with only the selected names
-    sendBtn.addEventListener('click', async () => {
+    // Confirm → share_link + open the chosen messenger with only the selected names
+    async function send(channel) {
       const picked = [...listEl.querySelectorAll('input[type=checkbox]:checked')]
         .map(c => state.pending[+c.dataset.idx]).filter(Boolean);
       if (!picked.length) return;
-      sendBtn.disabled = true;
+      sendBtn.disabled = tgBtn.disabled = true;
       try {
         const sessionId = document.getElementById('rmSessionSelect').value || null;
         const sess = sessionId ? state.sessionsById[sessionId] : null;
@@ -858,14 +862,21 @@
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
         const names = picked.map(p => p.name).join(', ');
-        const msg = tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
-        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+        if (channel === 'tg') {
+          const text = tt('rpe.tgRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it (1–10):`, { names });
+          window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text), '_blank');
+        } else {
+          const msg = tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
+          window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+        }
         modal.classList.remove('is-open');
       } catch (e) {
         console.warn('[RPE] remind:', e && e.message);
         T.toast(tt('rpe.reminderError', "Couldn't create reminder"), 'ti-alert-triangle');
       } finally { syncSend(); }
-    });
+    }
+    sendBtn.addEventListener('click', () => send('wa'));
+    tgBtn.addEventListener('click', () => send('tg'));
   }
 
   /* ── Live refresh: focus + visibility + 60s poll (each wired once) ── */
