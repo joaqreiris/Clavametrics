@@ -680,16 +680,18 @@
   async function initSessionSelect() {
     const sel = document.getElementById('rmSessionSelect');
     const activeTeam = sessionStorage.getItem('cal_active_team');
+    const todayStr = localToday();
     let q = window.sb.from('training_sessions')
       .select('id, session_date, session_time, title, session_type, team_id, created_at')
-      .eq('club_id', state.cid);
+      .eq('club_id', state.cid)
+      .lte('session_date', todayStr); // RPE is only rated for today or past — exclude future prepared sessions so they don't crowd out today
     if (activeTeam) q = q.eq('team_id', activeTeam);
     const { data, error } = await q.order('session_date', { ascending: false }).limit(8);
     const sessions = error ? [] : (data || []);
     state.sessionsList = sessions;
     state.sessionsById = {};
     sessions.forEach(s => { state.sessionsById[s.id] = s; });
-    state.todayStr = localToday();
+    state.todayStr = todayStr;
     // today's sessions, AM before PM (by session_time, then creation)
     state.todaysSessions = sessions
       .filter(s => s.session_date === state.todayStr)
