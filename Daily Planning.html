@@ -1420,7 +1420,9 @@ async function dpRenderPrintSheet() {
     </div>`;
 
     // section title helper
-    const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
+    // break-after:avoid keeps the heading from being orphaned at the foot of a page
+    // when its cards flow onto the next one.
+    const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px;break-after:avoid;page-break-after:avoid"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
 
     // Conditional load (GPS) — print-only strip: projected value + target per active metric (interactive panel stays no-print)
     const _gpsKeys = (typeof dpProjMetricKeys === 'function') ? dpProjMetricKeys() : [];
