@@ -216,13 +216,9 @@
     @page { size:A4; margin:0; }
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
-    /* Drop the full-page min-height when printing: the running <thead> already occupies
-       the top of each page, so a 1035px body would overflow page 1 and shove content
-       to page 2, leaving page 1 blank. (min-height stays on-screen for Export PDF.) */
+    /* Native print flows the sheet once; keep min-height off so a short session doesn't
+       force a blank second page. (Export PDF repeats the header per page on its own.) */
     .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; min-height:0 !important; }
-    /* Club header + squad availability repeat via <thead> on every page; hide the in-body
-       copies (kept only so html2canvas/Export PDF still captures them) to avoid dupes. */
-    .dsp-print-repeat{ display:none !important; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
@@ -1573,16 +1569,16 @@ async function dpRenderPrintSheet() {
     // page: browsers reserve their height per page, giving a top+bottom margin that
     // survives even the print dialog's "None" margins option (which zeroes @page).
     // html2canvas (Export PDF) still targets .dsp-sheet directly and adds its own inset.
-    // The club header + squad availability live in <thead> so they repeat as a running
-    // header at the top of every printed page (native print, UA table-header-group). The
-    // .dsp-print-repeat copies in <tbody> are what html2canvas captures for Export PDF
-    // (keeping the original single-page layout), and are hidden in @media print to avoid dupes.
-    const runHead = `<div style="--club-accent:${accent}; padding:8mm 42px ${squadBlock?'8px':'0'}; ${squadBlock?'border-bottom:1px solid #E7E7E4;':''}">${head}${squadBlock}</div>`;
+    // #dspRunHeader (club header + squad availability) sits once at the top of the sheet.
+    // Export PDF (the fixed, browser-independent model) captures it and repeats it atop
+    // every generated page. Native browser print just flows it once — robust, no fragile
+    // thead running-header tricks that behave differently across browsers.
+    const runHeader = `<div id="dspRunHeader" style="border-bottom:1px solid #E7E7E4;padding-bottom:8px;margin-bottom:14px">${head}${squadBlock}</div>`;
     host.innerHTML = `<table style="width:794px; border-collapse:collapse; margin:0 auto; background:#fff">
-      <thead><tr><td style="padding:0">${runHead}</td></tr></thead>
+      <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          <div class="dsp-print-repeat">${head}</div>${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}<div class="dsp-print-repeat">${squadBlock}</div>${actBlock}${fieldBlock}${footer}
+          ${runHeader}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${actBlock}${fieldBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
@@ -2044,25 +2040,40 @@ async function dpExportPDF() {
     await dpRenderPrintSheet();
     if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
     const el = document.querySelector('#dpPrintSheet .dsp-sheet') || host;
+    const headerEl = el.querySelector('#dspRunHeader');
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    // Slice the sheet into per-page chunks and inset each by a top/bottom margin so
-    // page 2+ isn't glued to the paper edge (mirrors the @page margin on native print).
     const MARGIN = 8;                                  // mm, top + bottom
     const pxPerMm = canvas.width / pageW;              // image px per printed mm (full-bleed width)
-    const sliceHpx = Math.max(1, Math.floor((pageH - MARGIN * 2) * pxPerMm));
-    let sy = 0, page = 0;
-    while (sy < canvas.height) {
-      if (page > 0) pdf.addPage();
-      const h = Math.min(sliceHpx, canvas.height - sy);
-      const slice = document.createElement('canvas');
-      slice.width = canvas.width; slice.height = h;
-      slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
-      pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, MARGIN, pageW, h / pxPerMm);
-      sy += sliceHpx; page++;
+    // Slice the club-header + squad-availability band from the top of the canvas so it can
+    // be re-drawn at the top of EVERY page — a fixed running header, identical in any browser.
+    const headerPx = headerEl ? Math.round(headerEl.offsetHeight * (canvas.width / el.offsetWidth)) : 0;
+    const headerHmm = headerPx / pxPerMm;
+    let headerImg = null;
+    if (headerPx > 0) {
+      const hc = document.createElement('canvas');
+      hc.width = canvas.width; hc.height = headerPx;
+      hc.getContext('2d').drawImage(canvas, 0, 0, canvas.width, headerPx, 0, 0, canvas.width, headerPx);
+      headerImg = hc.toDataURL('image/png');
     }
+    const GAP = 4;                                     // mm between repeated header and content
+    const contentTop = MARGIN + (headerImg ? headerHmm + GAP : 0);
+    const sliceHpx = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
+    let sy = headerPx, page = 0;                       // content starts just below the header band
+    do {
+      if (page > 0) pdf.addPage();
+      if (headerImg) pdf.addImage(headerImg, 'PNG', 0, MARGIN, pageW, headerHmm);
+      const h = Math.min(sliceHpx, canvas.height - sy);
+      if (h > 0) {
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width; slice.height = h;
+        slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, contentTop, pageW, h / pxPerMm);
+      }
+      sy += sliceHpx; page++;
+    } while (sy < canvas.height);
     pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
   } catch (e) {
     console.error('PDF error:', e);
