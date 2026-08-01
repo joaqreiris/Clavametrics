@@ -16,6 +16,9 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/plan-delete.js"></script>
+<!-- Export PDF libs — loaded as globals (same proven pattern as Squad/Planner) instead of dynamic import -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   body.cm{background:var(--cm-bg)}
 
@@ -2049,8 +2052,9 @@ async function dpExportPDF() {
   if (btn) { btn.disabled = true; btn.textContent = tt('daily_planning.generating','Generating…'); }
   const host = document.getElementById('dpPrintSheet');
   try {
-    const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
-    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+    const html2canvas = window.html2canvas;
+    const jsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!html2canvas || !jsPDF) throw new Error('PDF libraries not loaded');
     // Build + temporarily reveal the dedicated print sheet off-screen so html2canvas can capture it
     await dpRenderPrintSheet();
     if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
@@ -2097,7 +2101,7 @@ async function dpExportPDF() {
     pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
   } catch (e) {
     console.error('PDF error:', e);
-    alert(tt('daily_planning.pdf_export_failed','PDF export failed. Try using Print → Save as PDF instead.'));
+    alert(tt('daily_planning.pdf_export_failed','PDF export failed. Try using Print → Save as PDF instead.') + '\n\n[' + ((e && e.message) ? e.message : e) + ']');
   } finally {
     if (host) host.style.cssText = '';   // restore (CSS hides it again via #dpPrintSheet{display:none})
     if (btn) { btn.disabled = false; btn.innerHTML = `<i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="daily_planning.export_pdf">${tt('daily_planning.export_pdf','Export PDF')}</span>`; }
