@@ -210,9 +210,10 @@
   /* ===== PRINT — dedicated Daily Session Plan sheet (#dpPrintSheet) ===== */
   #dpPrintSheet{ display:none; }
   @media print {
-    /* Vertical page margins repeat on every sheet, so page 2+ gets a top gap
-       instead of gluing content to the paper edge. Left/right stay full-bleed. */
-    @page { size:A4; margin:11mm 0; }
+    /* @page margin stays 0 (so the browser's "None" margin option can't fight us);
+       the per-page top/bottom gap is provided by the sheet's thead/tfoot spacers,
+       which repeat on every printed page — see dpRenderPrintSheet. */
+    @page { size:A4; margin:0; }
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
     .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
@@ -1539,9 +1540,19 @@ async function dpRenderPrintSheet() {
       <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
     </div>`;
 
-    host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1040px; background:#fff; padding:16px 42px 16px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
-    </div>`;
+    // The sheet lives inside a table whose empty thead/tfoot repeat on every printed
+    // page: browsers reserve their height per page, giving a top+bottom margin that
+    // survives even the print dialog's "None" margins option (which zeroes @page).
+    // html2canvas (Export PDF) still targets .dsp-sheet directly and adds its own inset.
+    host.innerHTML = `<table style="width:794px; border-collapse:collapse; margin:0 auto; background:#fff">
+      <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
+      <tbody><tr><td style="padding:0; vertical-align:top">
+        <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
+        </div>
+      </td></tr></tbody>
+      <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
+    </table>`;
   } catch (e) {
     console.warn('dpRenderPrintSheet failed', e);
   }
