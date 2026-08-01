@@ -2062,7 +2062,8 @@ async function dpExportPDF() {
     const squadEl = el.querySelector('#dspSquadBand');
     await _dpInlineImages(el);   // convert crest + drill thumbnails to data URIs → never taints the canvas
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const JPEG_Q = 0.92;   // high-quality JPEG keeps text crisp but is ~5-10× lighter than lossless PNG
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const MARGIN = 8;                                  // mm, top + bottom
@@ -2079,8 +2080,10 @@ async function dpExportPDF() {
       squadHmm = hPx / pxPerMm;
       const sc = document.createElement('canvas');
       sc.width = canvas.width; sc.height = hPx;
-      sc.getContext('2d').drawImage(canvas, 0, topPx, canvas.width, hPx, 0, 0, canvas.width, hPx);
-      squadImg = sc.toDataURL('image/png');
+      const sctx = sc.getContext('2d');
+      sctx.fillStyle = '#ffffff'; sctx.fillRect(0, 0, sc.width, sc.height);   // JPEG has no alpha
+      sctx.drawImage(canvas, 0, topPx, canvas.width, hPx, 0, 0, canvas.width, hPx);
+      squadImg = sc.toDataURL('image/jpeg', JPEG_Q);
     }
     // Break-safe boxes (cards + atomic blocks) in canvas px, so a page never cuts through one.
     // A .dsp-brk-keep title is merged with the card row right after it, so headings never orphan.
@@ -2110,14 +2113,16 @@ async function dpExportPDF() {
       // Page 1 flows naturally (squad sits under the session data); pages 2+ repeat the squad on top.
       const repeat = page > 0 && squadImg;
       let contentTop = MARGIN;
-      if (repeat) { pdf.addImage(squadImg, 'PNG', 0, MARGIN, pageW, squadHmm); contentTop = MARGIN + squadHmm + GAP; }
+      if (repeat) { pdf.addImage(squadImg, 'JPEG', 0, MARGIN, pageW, squadHmm); contentTop = MARGIN + squadHmm + GAP; }
       const maxSlice = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
       const cut = safeCut(sy, sy + maxSlice);
       const h = Math.max(1, cut - sy);
       const slice = document.createElement('canvas');
       slice.width = canvas.width; slice.height = h;
-      slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
-      pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, contentTop, pageW, h / pxPerMm);
+      const slctx = slice.getContext('2d');
+      slctx.fillStyle = '#ffffff'; slctx.fillRect(0, 0, slice.width, slice.height);   // JPEG has no alpha
+      slctx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      pdf.addImage(slice.toDataURL('image/jpeg', JPEG_Q), 'JPEG', 0, contentTop, pageW, h / pxPerMm);
       sy += h; page++;
     }
     pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
