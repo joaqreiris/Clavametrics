@@ -217,6 +217,9 @@
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
     .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
+    /* Squad availability repeats via <thead> on every page; hide the in-body copy
+       (kept only so html2canvas/Export PDF still captures it) to avoid a page-1 dupe. */
+    .dsp-squad-body{ display:none !important; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
@@ -1480,9 +1483,11 @@ async function dpRenderPrintSheet() {
     const groups = {};
     trainees.forEach(p => { const g=_DP_POS_GROUP[(p.position||'').toUpperCase()]||{l:(p.position||'?').toUpperCase(),o:9}; (groups[g.l]=groups[g.l]||{o:g.o,list:[]}).list.push(p); });
     const posBadge = lbl => `<span style="display:inline-block;font:700 9px ${MONO};letter-spacing:.04em;color:#fff;background:var(--club-accent);border-radius:4px;padding:2px 6px;margin-right:8px;white-space:nowrap">${esc(lbl)}</span>`;
+    const _dpAdaptMap = (typeof _dpDayAdaptMap !== 'undefined') ? _dpDayAdaptMap : {};
+    const isAmber = p => statusOf(p).cls === 'partial' || !!_dpAdaptMap[p.id];
     const traineeRows = Object.entries(groups).sort((a,b)=>a[1].o-b[1].o).map(([lbl,{list}])=>
       `<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:5px;flex-wrap:wrap">${posBadge(`${lbl} · ${list.length}`)}
-        <span style="font:400 12px ${FONT};color:#15181D">${list.map(p=>`<span style="white-space:nowrap;margin-right:10px"><span style="color:#9CA3AF;font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600">${esc(lastName(p))}</b></span>`).join('')}</span>
+        <span style="font:400 12px ${FONT}">${list.map(p=>{ const amber=isAmber(p); const numClr=amber?'#8a5e12':'#9CA3AF'; const nameClr=amber?'#7C2D12':'#15181D'; return `<span style="white-space:nowrap;margin-right:10px"><span style="color:${numClr};font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600;color:${nameClr}">${esc(lastName(p))}</b>${amber?' <span style="font-size:8px;color:#b5851f">●</span>':''}</span>`;}).join('')}</span>
       </div>`).join('');
     const outRow = outs.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
       <span style="font:700 9px ${MONO};color:#C0392B;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.sheet_out', `Out · ${outs.length}`, {count: outs.length}))}</span>
@@ -1565,11 +1570,15 @@ async function dpRenderPrintSheet() {
     // page: browsers reserve their height per page, giving a top+bottom margin that
     // survives even the print dialog's "None" margins option (which zeroes @page).
     // html2canvas (Export PDF) still targets .dsp-sheet directly and adds its own inset.
+    // squadBlock lives in BOTH places: in <thead> it repeats at the top of every printed
+    // page (native print, UA table-header-group); the .dsp-squad-body copy in <tbody> is the
+    // one html2canvas captures for Export PDF, and is hidden in @media print to avoid a dupe.
+    const squadHead = squadBlock ? `<div style="--club-accent:${accent}; padding:8mm 42px 8px; border-bottom:1px solid #E7E7E4">${squadBlock}</div>` : `<div style="height:11mm"></div>`;
     host.innerHTML = `<table style="width:794px; border-collapse:collapse; margin:0 auto; background:#fff">
-      <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
+      <thead><tr><td style="padding:0">${squadHead}</td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}<div class="dsp-squad-body">${squadBlock}</div>${actBlock}${fieldBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
