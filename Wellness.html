@@ -208,7 +208,8 @@
     </div>
     <div class="tr-modal-foot">
       <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i><span data-i18n="wellness.copyLink">Copy link</span></button>
-      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i><span data-i18n="wellness.shareViaWhatsapp">Share via WhatsApp</span></button>
+      <button class="cm-btn" id="btnTg" style="background:#229ED9;border-color:#229ED9;color:#fff;" disabled><i class="ti ti-brand-telegram"></i><span data-i18n="wellness.shareViaTelegram">Telegram</span></button>
+      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i><span data-i18n="wellness.shareViaWhatsapp">WhatsApp</span></button>
     </div>
   </div>
 </div>
@@ -654,6 +655,7 @@
     const tokNote = document.getElementById('tokNote');
     const btnCopy = document.getElementById('btnCopy');
     const btnWa = document.getElementById('btnWa');
+    const btnTg = document.getElementById('btnTg');
     const shareTeam = document.getElementById('shareTeam');
     let currentUrl = '';
 
@@ -676,7 +678,7 @@
         tokNote.style.display = '';
         const label = teamId ? shareTeam.options[shareTeam.selectedIndex].text : tt('wellness.theWholeClub','the whole club');
         tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('wellness.secureLinkValid', 'Secure link · valid until revoked · ' + label, { label }));
-        btnCopy.disabled = false; btnWa.disabled = false;
+        btnCopy.disabled = false; btnWa.disabled = false; btnTg.disabled = false;
       } catch (e) {
         console.warn('[Wellness] share:', e && e.message);
         T.toast(tt('wellness.shareError', "Couldn't generate link"), 'ti-alert-triangle');
@@ -685,6 +687,7 @@
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
     btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp(tt('wellness.waShareLink', 'Daily check-in: ' + currentUrl, { url: currentUrl })); });
+    btnTg.addEventListener('click', () => { if (currentUrl) window.open('https://t.me/share/url?url=' + encodeURIComponent(currentUrl) + '&text=' + encodeURIComponent(tt('wellness.tgShareLink', 'Daily check-in')), '_blank'); });
   }
 
   /* ── Page subtitle (live date, localized) ── */
