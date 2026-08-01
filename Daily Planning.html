@@ -216,7 +216,10 @@
     @page { size:A4; margin:0; }
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
-    .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
+    /* Drop the full-page min-height when printing: the running <thead> already occupies
+       the top of each page, so a 1035px body would overflow page 1 and shove content
+       to page 2, leaving page 1 blank. (min-height stays on-screen for Export PDF.) */
+    .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; min-height:0 !important; }
     /* Club header + squad availability repeat via <thead> on every page; hide the in-body
        copies (kept only so html2canvas/Export PDF still captures them) to avoid dupes. */
     .dsp-print-repeat{ display:none !important; }
