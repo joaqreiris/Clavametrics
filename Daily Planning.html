@@ -1570,15 +1570,15 @@ async function dpRenderPrintSheet() {
     // survives even the print dialog's "None" margins option (which zeroes @page).
     // html2canvas (Export PDF) still targets .dsp-sheet directly and adds its own inset.
     // #dspRunHeader (club header + squad availability) sits once at the top of the sheet.
-    // Export PDF (the fixed, browser-independent model) captures it and repeats it atop
-    // every generated page. Native browser print just flows it once — robust, no fragile
-    // thead running-header tricks that behave differently across browsers.
-    const runHeader = `<div id="dspRunHeader" style="border-bottom:1px solid #E7E7E4;padding-bottom:8px;margin-bottom:14px">${head}${squadBlock}</div>`;
+    // Natural order on page 1: club header, session data, THEN the squad availability band.
+    // In Export PDF, #dspSquadBand is captured and re-drawn at the top of pages 2+ (before
+    // the exercises) as a repeated reference header. Native print just flows it once.
+    const squadBand = squadBlock ? `<div id="dspSquadBand">${squadBlock}</div>` : '';
     host.innerHTML = `<table style="width:794px; border-collapse:collapse; margin:0 auto; background:#fff">
       <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${runHeader}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${actBlock}${fieldBlock}${footer}
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
@@ -2040,40 +2040,44 @@ async function dpExportPDF() {
     await dpRenderPrintSheet();
     if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
     const el = document.querySelector('#dpPrintSheet .dsp-sheet') || host;
-    const headerEl = el.querySelector('#dspRunHeader');
+    const squadEl = el.querySelector('#dspSquadBand');
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const MARGIN = 8;                                  // mm, top + bottom
     const pxPerMm = canvas.width / pageW;              // image px per printed mm (full-bleed width)
-    // Slice the club-header + squad-availability band from the top of the canvas so it can
-    // be re-drawn at the top of EVERY page — a fixed running header, identical in any browser.
-    const headerPx = headerEl ? Math.round(headerEl.offsetHeight * (canvas.width / el.offsetWidth)) : 0;
-    const headerHmm = headerPx / pxPerMm;
-    let headerImg = null;
-    if (headerPx > 0) {
-      const hc = document.createElement('canvas');
-      hc.width = canvas.width; hc.height = headerPx;
-      hc.getContext('2d').drawImage(canvas, 0, 0, canvas.width, headerPx, 0, 0, canvas.width, headerPx);
-      headerImg = hc.toDataURL('image/png');
+    const scale = canvas.width / el.offsetWidth;       // css px → canvas px
+    // Capture the squad-availability band (in its natural page-1 position) so it can be
+    // re-drawn at the top of pages 2+ before the exercises — a repeated reference header.
+    let squadImg = null, squadHmm = 0;
+    if (squadEl) {
+      const sheetTop = el.getBoundingClientRect().top;
+      const r = squadEl.getBoundingClientRect();
+      const topPx = Math.max(0, Math.round((r.top - sheetTop) * scale));
+      const hPx = Math.round(r.height * scale);
+      squadHmm = hPx / pxPerMm;
+      const sc = document.createElement('canvas');
+      sc.width = canvas.width; sc.height = hPx;
+      sc.getContext('2d').drawImage(canvas, 0, topPx, canvas.width, hPx, 0, 0, canvas.width, hPx);
+      squadImg = sc.toDataURL('image/png');
     }
-    const GAP = 4;                                     // mm between repeated header and content
-    const contentTop = MARGIN + (headerImg ? headerHmm + GAP : 0);
-    const sliceHpx = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
-    let sy = headerPx, page = 0;                       // content starts just below the header band
-    do {
+    const GAP = 5;                                     // mm between repeated squad band and content
+    let sy = 0, page = 0;
+    while (sy < canvas.height) {
       if (page > 0) pdf.addPage();
-      if (headerImg) pdf.addImage(headerImg, 'PNG', 0, MARGIN, pageW, headerHmm);
+      // Page 1 flows naturally (squad sits under the session data); pages 2+ repeat the squad on top.
+      const repeat = page > 0 && squadImg;
+      let contentTop = MARGIN;
+      if (repeat) { pdf.addImage(squadImg, 'PNG', 0, MARGIN, pageW, squadHmm); contentTop = MARGIN + squadHmm + GAP; }
+      const sliceHpx = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
       const h = Math.min(sliceHpx, canvas.height - sy);
-      if (h > 0) {
-        const slice = document.createElement('canvas');
-        slice.width = canvas.width; slice.height = h;
-        slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
-        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, contentTop, pageW, h / pxPerMm);
-      }
-      sy += sliceHpx; page++;
-    } while (sy < canvas.height);
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = h;
+      slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      pdf.addImage(slice.toDataURL('image/png'), 'PNG', 0, contentTop, pageW, h / pxPerMm);
+      sy += h; page++;
+    }
     pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
   } catch (e) {
     console.error('PDF error:', e);
