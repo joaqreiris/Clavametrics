@@ -217,9 +217,9 @@
     .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
     #dpPrintSheet{ display:block !important; }
     .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
-    /* Squad availability repeats via <thead> on every page; hide the in-body copy
-       (kept only so html2canvas/Export PDF still captures it) to avoid a page-1 dupe. */
-    .dsp-squad-body{ display:none !important; }
+    /* Club header + squad availability repeat via <thead> on every page; hide the in-body
+       copies (kept only so html2canvas/Export PDF still captures them) to avoid dupes. */
+    .dsp-print-repeat{ display:none !important; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
@@ -1570,15 +1570,16 @@ async function dpRenderPrintSheet() {
     // page: browsers reserve their height per page, giving a top+bottom margin that
     // survives even the print dialog's "None" margins option (which zeroes @page).
     // html2canvas (Export PDF) still targets .dsp-sheet directly and adds its own inset.
-    // squadBlock lives in BOTH places: in <thead> it repeats at the top of every printed
-    // page (native print, UA table-header-group); the .dsp-squad-body copy in <tbody> is the
-    // one html2canvas captures for Export PDF, and is hidden in @media print to avoid a dupe.
-    const squadHead = squadBlock ? `<div style="--club-accent:${accent}; padding:8mm 42px 8px; border-bottom:1px solid #E7E7E4">${squadBlock}</div>` : `<div style="height:11mm"></div>`;
+    // The club header + squad availability live in <thead> so they repeat as a running
+    // header at the top of every printed page (native print, UA table-header-group). The
+    // .dsp-print-repeat copies in <tbody> are what html2canvas captures for Export PDF
+    // (keeping the original single-page layout), and are hidden in @media print to avoid dupes.
+    const runHead = `<div style="--club-accent:${accent}; padding:8mm 42px ${squadBlock?'8px':'0'}; ${squadBlock?'border-bottom:1px solid #E7E7E4;':''}">${head}${squadBlock}</div>`;
     host.innerHTML = `<table style="width:794px; border-collapse:collapse; margin:0 auto; background:#fff">
-      <thead><tr><td style="padding:0">${squadHead}</td></tr></thead>
+      <thead><tr><td style="padding:0">${runHead}</td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}<div class="dsp-squad-body">${squadBlock}</div>${actBlock}${fieldBlock}${footer}
+          <div class="dsp-print-repeat">${head}</div>${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}<div class="dsp-print-repeat">${squadBlock}</div>${actBlock}${fieldBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
