@@ -889,10 +889,13 @@ function dpNextPosition(phase){
   return (ps.length ? Math.max(...ps) : -1) + 1;
 }
 
-// ── Drag-and-drop reorder of field/main exercise cards ──────────────────────
+// ── Drag-and-drop reorder of exercise cards (field grid + activation strip) ──
 let _dpDragSeid = null;
 function dpInitReorder(){
-  const grid = document.getElementById('dpExGrid');
+  dpWireReorder(document.getElementById('dpExGrid'),  'field');
+  dpWireReorder(document.getElementById('dpActStrip'), 'activation');
+}
+function dpWireReorder(grid, kind){
   if (!grid || grid._reorderWired) return;   // delegation survives innerHTML repaints
   grid._reorderWired = true;
   const clearMarks = () => grid.querySelectorAll('.dp-drop-before,.dp-drop-after')
@@ -924,11 +927,18 @@ function dpInitReorder(){
     e.preventDefault();
     const seid = _dpDragSeid, after = dropAfter(card, e);
     clearMarks(); _dpDragSeid = null;
-    dpReorderExercise(seid, card.dataset.seid, after);
+    dpReorderExercise(seid, card.dataset.seid, after, kind);
   });
 }
-async function dpReorderExercise(dragSeid, targetSeid, after){
-  const arr = _dpFieldExercises;
+// Repaint the activation strip from window._dpActItems (mirrors loadActivationActivities).
+function dpPaintActStrip(){
+  const strip = document.getElementById('dpActStrip'); if (!strip) return;
+  const acts = window._dpActItems || [];
+  const addBtn = `<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
+}
+async function dpReorderExercise(dragSeid, targetSeid, after, kind){
+  const arr = kind === 'activation' ? (window._dpActItems || []) : _dpFieldExercises;
   const from = arr.findIndex(x => x.id === dragSeid);
   if (from < 0) return;
   const [moved] = arr.splice(from, 1);
@@ -936,7 +946,7 @@ async function dpReorderExercise(dragSeid, targetSeid, after){
   if (to < 0) { arr.splice(from, 0, moved); return; }   // target vanished — undo
   arr.splice(after ? to + 1 : to, 0, moved);
   arr.forEach((x, i) => { x.position = i; });
-  renderExerciseList(arr);   // optimistic repaint from the new order
+  if (kind === 'activation') dpPaintActStrip(); else renderExerciseList(arr);   // optimistic repaint
   // Persist every row's position (list is small); log but don't block on errors.
   const results = await Promise.all(arr.map(x =>
     window.sb.from('session_exercises').update({ position: x.position }).eq('id', x.id).eq('club_id', _dpClubId)));
@@ -1832,7 +1842,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase')
+    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
@@ -1845,6 +1855,7 @@ async function loadActivationActivities(sessionId) {
   if (ctEl) ctEl.textContent = total ? tt('daily_planning.min_count', `${total} min`, {count: total}) : '—';
   if (durEl) durEl.value = total || '';
   strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
+  dpInitReorder();   // wire drag-reorder on the activation strip (idempotent)
 
   // fetch ONLY the uncached previews in the background (do NOT await)
   const _reqSession = sessionId;
@@ -1861,7 +1872,7 @@ async function loadActivationActivities(sessionId) {
 
 async function dpActAdd() {
   if (!await dpEnsureSession()) return;
-  const pos = document.querySelectorAll('#dpActStrip .dp-ex').length;
+  const pos = dpNextPosition('activation');   // append to the end of the activation strip
   const { error } = await window.sb.from('session_exercises').insert({
     club_id: _dpClubId, session_id: _dpCurrentSessionId,
     name: tt('daily_planning.new_activity','New activity'), phase: 'activation', duration: 5, position: pos
