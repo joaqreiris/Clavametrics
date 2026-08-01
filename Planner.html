@@ -555,6 +555,8 @@
   }
   #plPropBar input[type=range] { width:72px; accent-color:var(--cm-accent); cursor:pointer; }
   #plPropBar .psep { width:1px; height:18px; background:var(--cm-border); }
+  .pl-pp-swatch { width:22px; height:22px; border-radius:50%; border:1.5px solid var(--cm-border); padding:0; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15); transition:transform .1s; }
+  .pl-pp-swatch:hover { transform:scale(1.15); }
 
   /* Available players section */
   #plAvailPills { display:flex; flex-wrap:wrap; gap:5px; }
@@ -1102,6 +1104,16 @@
               <span data-i18n="planner.prop_pole_color">Pole color</span>
               <input type="color" id="plPropPoleColor" value="#ef4444" data-i18n-attr="title:planner.prop_pole_color" title="Pole color">
             </div>
+            <div id="plPropPlayer" style="display:none;align-items:center;gap:7px">
+              <span data-i18n="planner.prop_color">Color</span>
+              <button class="pl-pp-swatch" type="button" data-team="t1"></button>
+              <button class="pl-pp-swatch" type="button" data-team="t2"></button>
+              <button class="pl-pp-swatch" type="button" data-team="t3"></button>
+              <button class="pl-pp-swatch" type="button" data-team="t4"></button>
+              <div class="psep"></div>
+              <input type="color" id="plPropPlayerColor" value="#1D4ED8" data-i18n-attr="title:planner.prop_custom_color" title="Custom color">
+              <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);opacity:.75" data-i18n="planner.prop_player_num_hint">2× = number</span>
+            </div>
           </div>
 
           <div id="plPolyDoneBar">
@@ -1505,6 +1517,13 @@
   });
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
+
+  // Rotation snaps to 15° (clean stops at 45/90/180/270…); hold Shift for free, precise rotation.
+  fc.on('object:rotating', e => {
+    if (e.e && e.e.shiftKey) return;
+    const SNAP = 15;
+    e.target.set({ angle: Math.round(e.target.angle / SNAP) * SNAP });
+  });
 
   function pushHistory() {
     if (_suppressHistory) return;
@@ -2062,6 +2081,19 @@
   const _propGoalPostColor  = document.getElementById('plPropGoalPostColor');
   const _propPoleDiv        = document.getElementById('plPropPole');
   const _propPoleColor      = document.getElementById('plPropPoleColor');
+  const _propPlayerDiv      = document.getElementById('plPropPlayer');
+  const _propPlayerColor    = document.getElementById('plPropPlayerColor');
+
+  // Recolor an already-placed player token (body circle fill + auto-contrast number).
+  function _recolorPlayer(grp, hex, teamKey) {
+    if (!grp || grp._type !== 'player') return;
+    const body = grp._objects?.filter(o => o.type === 'circle').sort((a,b)=>(b.radius||0)-(a.radius||0))[0];
+    if (body) body.set({ fill: hex });
+    const txt = grp._objects?.find(o => o.type === 'text');
+    if (txt) txt.set({ fill: _luma(hex) > 0.5 ? '#0A0A0A' : '#ffffff' });
+    grp._team = teamKey || null;
+    grp.dirty = true; fc.renderAll();
+  }
 
   function _rgbaToHex(c) {
     if (!c) return '#22c55e';
@@ -2085,6 +2117,7 @@
     _propArrowDiv.style.display='none'; _propZoneDiv.style.display='none';
     _propConeDiv.style.display='none';  _propBarrierDiv.style.display='none';
     _propGoalPostDiv.style.display='none'; _propPoleDiv.style.display='none';
+    if (_propPlayerDiv) _propPlayerDiv.style.display='none';
     if (obj._type==='arrow') {
       const d=_arrowData.get(obj._arrowId); if (!d) return;
       _propArrowColor.value=d.color.length===7?d.color:'#FBBF24';
@@ -2106,6 +2139,12 @@
     } else if (obj._type==='pole') {
       _propPoleColor.value = obj._poleColor || '#ef4444';
       _propPoleDiv.style.display='flex'; _propBar.style.display='flex';
+    } else if (obj._type==='player') {
+      // Reflect the live team palette on the quick swatches + the player's current colour.
+      _propPlayerDiv.querySelectorAll('.pl-pp-swatch').forEach(sw => { sw.style.background = teamColors[sw.dataset.team] || '#888'; });
+      const body = obj._objects?.filter(o => o.type === 'circle').sort((a,b)=>(b.radius||0)-(a.radius||0))[0];
+      _propPlayerColor.value = _rgbaToHex(body?.fill || teamColors[obj._team] || '#1D4ED8');
+      _propPlayerDiv.style.display='flex'; _propBar.style.display='flex';
     } else {
       _propBar.style.display='none';
     }
@@ -2164,6 +2203,22 @@
     a.dirty = true; fc.renderAll();
   });
   _propBarrierColor?.addEventListener('change', () => pushHistory());
+
+  // Player quick-recolor: team swatches (one click) + custom picker
+  _propPlayerDiv?.querySelectorAll('.pl-pp-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      const a = fc.getActiveObject(); if (!a || a._type !== 'player') return;
+      const key = sw.dataset.team;
+      _recolorPlayer(a, teamColors[key] || '#1D4ED8', key);
+      _propPlayerColor.value = _rgbaToHex(teamColors[key] || '#1D4ED8');
+      pushHistory();
+    });
+  });
+  _propPlayerColor?.addEventListener('input', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'player') return;
+    _recolorPlayer(a, _propPlayerColor.value, null);
+  });
+  _propPlayerColor?.addEventListener('change', () => pushHistory());
 
   _propGoalPostColor?.addEventListener('input', () => {
     const a = fc.getActiveObject(); if (!a || a._type !== 'goalpost') return;
@@ -2536,6 +2591,11 @@
   // Prevent color swatch clicks from closing the Teams menu
   document.querySelectorAll('.pl-drop-menu .pl-team-swatch').forEach(inp => {
     inp.addEventListener('click', e => e.stopPropagation());
+  });
+
+  // Keep the Teams menu open while stepping the quantity / adding numbered players
+  ['plAddNumberedQty', 'plAddNumberedBtn'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', e => e.stopPropagation());
   });
 
   // Per-group single-select for Objects, Lines, Zones, Text, Crests (close menu on pick)
