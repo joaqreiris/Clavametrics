@@ -146,11 +146,14 @@
   /* Per-exercise groups (multi-select) */
   .dp-ex-players{display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:7px}
   .dp-ex-players .lbl{font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint)}
-  .dp-exg{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:7px;background:var(--cm-bg-soft)}
+  .dp-exg{display:flex;flex-direction:column;gap:5px;width:100%;padding:5px 7px;border:1px solid var(--cm-border-soft);border-radius:7px;background:var(--cm-bg-soft);box-sizing:border-box}
+  .dp-exg-h{display:flex;align-items:center;gap:6px}
   .dp-exg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
-  .dp-exg-name{width:74px;flex-shrink:0;border:0;background:none;font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);outline:none;padding:2px 3px;border-radius:4px}
+  .dp-exg-name{flex:1;min-width:0;border:0;background:none;font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);outline:none;padding:2px 3px;border-radius:4px}
   .dp-exg-name:focus{background:var(--cm-surface)}
-  .dp-exg-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:0}
+  .dp-exg-ct{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);flex-shrink:0}
+  /* chips span the full width and never grow past ~3 rows (then scroll) */
+  .dp-exg-chips{display:flex;flex-wrap:wrap;gap:4px;width:100%;max-height:78px;overflow-y:auto}
   .dp-exg-empty{font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
   .dp-exg-del{width:20px;height:20px;flex-shrink:0;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer;border-radius:4px;font:400 15px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center}
   .dp-exg-del:hover{color:var(--cm-danger);background:var(--cm-danger-bg,rgba(220,38,38,.1))}
@@ -682,11 +685,14 @@ function dpExGroupsRow(e){
     const chips = (g.players||[]).map(id => { const p=_dpPlayerById(id); return p
       ? `<span class="dp-exp-chip"><span class="num">${p.number ?? '—'}</span>${_dpPlayerShort(p)}</span>` : ''; }).join('');
     return `<div class="dp-exg" data-gid="${g.id}">
-      <span class="dp-exg-dot" style="background:${g.color||'#888'}"></span>
-      <input class="dp-exg-name" value="${_dpEsc(g.name)}" placeholder="${tt('daily_planning.group','Group')}" oninput="dpExRenameGroup('${e.id}','${g.id}',this.value)">
-      <span class="dp-exg-chips">${chips || `<span class="dp-exg-empty">${tt('daily_planning.no_players_yet','no players')}</span>`}</span>
-      <button class="dp-exp-add" onclick="dpOpenExGroup('${e.id}','${g.id}',this)">${tt('daily_planning.edit_players','Edit')}</button>
-      <button class="dp-exg-del" title="${tt('daily_planning.delete_group','Delete group')}" onclick="dpExDelGroup('${e.id}','${g.id}')">×</button>
+      <div class="dp-exg-h">
+        <span class="dp-exg-dot" style="background:${g.color||'#888'}"></span>
+        <input class="dp-exg-name" value="${_dpEsc(g.name)}" placeholder="${tt('daily_planning.group','Group')}" oninput="dpExRenameGroup('${e.id}','${g.id}',this.value)">
+        <span class="dp-exg-ct">${(g.players||[]).length}</span>
+        <button class="dp-exp-add" onclick="dpOpenExGroup('${e.id}','${g.id}',this)">${tt('daily_planning.edit_players','Edit')}</button>
+        <button class="dp-exg-del" title="${tt('daily_planning.delete_group','Delete group')}" onclick="dpExDelGroup('${e.id}','${g.id}')">×</button>
+      </div>
+      <div class="dp-exg-chips">${chips || `<span class="dp-exg-empty">${tt('daily_planning.no_players_yet','no players')}</span>`}</div>
     </div>`;
   }).join('');
   return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}<button class="dp-exp-add" onclick="dpExAddGroup('${e.id}')">＋ ${tt('daily_planning.add_group','Add group')}</button></div>`;
@@ -721,7 +727,10 @@ function dpOpenExGroup(seid, gid, btn){
   _dpExgTarget = { seid, gid };
   const menu = document.getElementById('dpExPlayersMenu');
   const sel = new Set((g.players||[]).map(String));
-  const opts = _dpTrainees().map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExGroupPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
+  // Hide players already taken by ANOTHER group of this exercise (a player is in one group only).
+  const takenElsewhere = new Set(_dpExGroups(e).filter(x => x.id !== gid).flatMap(x => (x.players||[]).map(String)));
+  const opts = _dpTrainees().filter(p => !takenElsewhere.has(String(p.id)))
+    .map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExGroupPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
     || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
   menu.innerHTML = `<div class="hd"><span>${_dpEsc(g.name)}</span><button onclick="dpClearExGroup()">${tt('daily_planning.clear','Clear')}</button></div>${opts}`;
   const r = btn.getBoundingClientRect();
