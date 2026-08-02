@@ -752,6 +752,24 @@
   .pl-drop-team-name { flex:1; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .pl-drop-team-row .pl-team-swatch { width:20px; height:18px; border-radius:4px; cursor:pointer; display:block; border:1px solid rgba(0,0,0,0.15); }
   .pl-drop-sep { height:1px; background:var(--cm-border-soft); margin:3px 4px; }
+  /* ── Lines composer panel ── */
+  .pl-line-menu { width:244px; padding:9px; gap:8px; }
+  .pl-line-preview { background:#2f6d47; border-radius:7px; padding:2px; margin-bottom:2px; }
+  .pl-line-preview svg { display:block; width:100%; height:40px; }
+  .pl-line-row { display:flex; align-items:center; gap:9px; }
+  .pl-line-lbl { flex:0 0 44px; font:600 9px/1 var(--cm-font-mono); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .pl-seg { display:flex; flex:1; border:1px solid var(--cm-border); border-radius:6px; overflow:hidden; background:var(--cm-bg-soft); }
+  .pl-seg button { flex:1; height:27px; border:0; border-right:1px solid var(--cm-border); background:none; color:var(--cm-fg-muted); font:500 11px/1 var(--cm-font-sans); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 80ms, color 80ms; }
+  .pl-seg button:last-child { border-right:0; }
+  .pl-seg button:hover { background:var(--cm-surface); color:var(--cm-fg); }
+  .pl-seg button.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pl-seg-cap button svg { width:19px; height:19px; }
+  .pl-line-colors { display:flex; flex:1; align-items:center; gap:7px; }
+  .pl-line-colors button { width:20px; height:20px; padding:0; border-radius:50%; border:2px solid transparent; background:var(--c); cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.18); transition:transform 80ms; }
+  .pl-line-colors button:hover { transform:scale(1.12); }
+  .pl-line-colors button.is-on { border-color:var(--cm-accent); }
+  .pl-line-color-custom { width:22px; height:22px; border-radius:50%; overflow:hidden; border:1px dashed var(--cm-border-strong); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:auto; }
+  .pl-line-color-custom input { width:200%; height:200%; border:0; padding:0; margin:-25%; cursor:pointer; background:none; }
   .pl-myobj-head { padding:4px 16px 2px; font:600 9px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
   #plMyObjects { display:flex; flex-wrap:wrap; gap:6px; padding:4px 12px 6px; max-height:148px; overflow-y:auto; }
   #plMyObjects:empty { display:none; }
@@ -1227,32 +1245,51 @@
               <span class="pl-drop-lbl" data-i18n="planner.lines">Lines</span>
               <i class="ti ti-chevron-up pl-drop-caret"></i>
             </button>
-            <div class="pl-drop-menu" id="plDropLinesMenu">
-              <button class="pl-dock-btn pl-drop-opt" title="Pass">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span data-i18n="planner.line_solid_straight">Solid straight</span>
-              </button>
-              <button class="pl-dock-btn pl-drop-opt is-on" title="Run">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span data-i18n="planner.line_solid_curve">Solid curve</span>
-              </button>
-              <button class="pl-dock-btn pl-drop-opt" title="Dribble">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-                <span data-i18n="planner.line_dashed_straight">Dashed straight</span>
-              </button>
-              <button class="pl-dock-btn pl-drop-opt" title="Curve">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-                <span data-i18n="planner.line_dashed_curve">Dashed curve</span>
-              </button>
-              <div class="pl-drop-sep"></div>
-              <button class="pl-dock-btn pl-drop-opt" title="LineSolid">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                <span data-i18n="planner.line_solid_nohead">Line (no arrow)</span>
-              </button>
-              <button class="pl-dock-btn pl-drop-opt" title="LineDashed">
-                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-                <span data-i18n="planner.line_dashed_nohead">Dashed line (no arrow)</span>
-              </button>
+            <div class="pl-drop-menu pl-line-menu" id="plDropLinesMenu">
+              <div class="pl-line-preview"><svg id="plLinePreview" viewBox="0 0 212 44" preserveAspectRatio="xMidYMid meet"></svg></div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_shape">Shape</span>
+                <div class="pl-seg" data-line-group="shape">
+                  <button data-val="straight" class="is-on" data-i18n="planner.line_straight">Straight</button>
+                  <button data-val="curved" data-i18n="planner.line_curved">Curved</button>
+                </div>
+              </div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_style">Style</span>
+                <div class="pl-seg" data-line-group="style">
+                  <button data-val="solid" class="is-on" data-i18n="planner.line_solid">Solid</button>
+                  <button data-val="dashed" data-i18n="planner.line_dashed_word">Dashed</button>
+                </div>
+              </div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_start">Start</span>
+                <div class="pl-seg pl-seg-cap" data-line-group="start">
+                  <button data-val="none" class="is-on" data-i18n-attr="title:planner.cap_none"><svg viewBox="0 0 20 20"><line x1="4" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                  <button data-val="arrow" data-i18n-attr="title:planner.cap_arrow"><svg viewBox="0 0 20 20"><line x1="7" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 10 L9 7 L9 13 Z" fill="currentColor"/></svg></button>
+                  <button data-val="dot" data-i18n-attr="title:planner.cap_dot"><svg viewBox="0 0 20 20"><line x1="7" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="10" r="3" fill="currentColor"/></svg></button>
+                </div>
+              </div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_end">End</span>
+                <div class="pl-seg pl-seg-cap" data-line-group="end">
+                  <button data-val="none" data-i18n-attr="title:planner.cap_none"><svg viewBox="0 0 20 20"><line x1="4" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                  <button data-val="arrow" class="is-on" data-i18n-attr="title:planner.cap_arrow"><svg viewBox="0 0 20 20"><line x1="4" y1="10" x2="13" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 10 L11 7 L11 13 Z" fill="currentColor"/></svg></button>
+                  <button data-val="dot" data-i18n-attr="title:planner.cap_dot"><svg viewBox="0 0 20 20"><line x1="4" y1="10" x2="13" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15" cy="10" r="3" fill="currentColor"/></svg></button>
+                </div>
+              </div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_width">Width</span>
+                <div class="pl-seg" data-line-group="width">
+                  <button data-val="1.5" data-i18n="planner.line_thin">Thin</button>
+                  <button data-val="2.5" class="is-on" data-i18n="planner.line_normal">Normal</button>
+                  <button data-val="4" data-i18n="planner.line_bold">Bold</button>
+                </div>
+              </div>
+              <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_color">Color</span>
+                <div class="pl-line-colors" data-line-group="color">
+                  <button data-val="#FBBF24" class="is-on" style="--c:#FBBF24"></button>
+                  <button data-val="#ffffff" style="--c:#ffffff"></button>
+                  <button data-val="#22D3EE" style="--c:#22D3EE"></button>
+                  <button data-val="#EF4444" style="--c:#EF4444"></button>
+                  <button data-val="#22C55E" style="--c:#22C55E"></button>
+                  <label class="pl-line-color-custom" data-i18n-attr="title:planner.line_color_custom"><input type="color" id="plLineColorCustom" value="#FBBF24"></label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1503,7 +1540,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowNoHead','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1879,35 +1916,58 @@
   }
 
   // ── Arrow drawing ────────────────────────────────────────────────
-  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false, currentArrowNoHead=false;
+  // Composable line config (driven by the Lines composer panel).
+  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false,
+      currentArrowStartCap='none', currentArrowEndCap='arrow', currentArrowWidth=2.5;
+  function _currentArrowCfg() {
+    return { color:currentArrowColor, dashed:currentArrowDash, curved:currentArrowCurved,
+             startCap:currentArrowStartCap, endCap:currentArrowEndCap, width:currentArrowWidth };
+  }
 
   function _clearPreview() {
     if (_previewLine) { fc.remove(_previewLine); _previewLine=null; }
   }
 
+  // Arrowhead (triangle) whose tip sits at (x,y), pointing along `ang`. Scales with width.
+  function _arrowHeadPath(x, y, ang, color, w) {
+    const hL = 9 + w * 1.6, hW = 4 + w * 1.1;
+    const headD = `M ${x+Math.cos(ang)*2} ${y+Math.sin(ang)*2} `+
+      `L ${x-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW} ${y-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW} `+
+      `L ${x-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW} ${y-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW} Z`;
+    return new fabric.Path(headD, { stroke:color, strokeWidth:0.5, fill:color, strokeUniform:true, selectable:false, evented:false });
+  }
+  function _dotCap(x, y, color, w) {
+    return new fabric.Circle({ left:x, top:y, radius:2.8 + w, fill:color, originX:'center', originY:'center', strokeUniform:true, selectable:false, evented:false });
+  }
+  // Endpoint decoration for one end. dir = outward direction {dx,dy} for arrows.
+  function _capPart(kind, x, y, dx, dy, color, w) {
+    if (kind === 'arrow') return _arrowHeadPath(x, y, Math.atan2(dy, dx), color, w);
+    if (kind === 'dot')   return _dotCap(x, y, color, w);
+    return null;
+  }
   function _buildArrowGroup(d) {
-    const { x1,y1,cx,cy,x2,y2,color,dashed,curved,noHead } = d;
+    const { x1,y1,cx,cy,x2,y2,color,dashed,curved } = d;
+    const w        = d.width || 2.5;
+    const startCap = d.startCap || 'none';
+    const endCap   = d.endCap   || 'arrow';
     const lineD = curved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
     const linePath = new fabric.Path(lineD, {
-      stroke:color, strokeWidth:dashed?2:2.5, fill:'', strokeLineCap:'round',
-      strokeDashArray:dashed?[8,5]:null, strokeUniform:true, selectable:false, evented:false
+      stroke:color, strokeWidth:w, fill:'', strokeLineCap:'round',
+      strokeDashArray: dashed ? [Math.max(6, w*3), Math.max(4, w*2)] : null,
+      strokeUniform:true, selectable:false, evented:false
     });
     const parts = [linePath];
-    if (!noHead) {
-      const tx=curved?(x2-cx):(x2-x1), ty=curved?(y2-cy):(y2-y1);
-      const ang=Math.atan2(ty,tx), hL=13, hW=7;
-      const headD=`M ${x2+Math.cos(ang)*2} ${y2+Math.sin(ang)*2} `+
-        `L ${x2-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW} `+
-        `L ${x2-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW} Z`;
-      parts.push(new fabric.Path(headD, {
-        stroke:color, strokeWidth:0.5, fill:color, strokeUniform:true, selectable:false, evented:false
-      }));
-    }
+    // Outward tangents at each end (curved → toward control point; straight → toward other end).
+    const endPart   = _capPart(endCap,   x2, y2, curved?(x2-cx):(x2-x1), curved?(y2-cy):(y2-y1), color, w);
+    const startPart = _capPart(startCap, x1, y1, curved?(x1-cx):(x1-x2), curved?(y1-cy):(y1-y2), color, w);
+    if (endPart)   parts.push(endPart);
+    if (startPart) parts.push(startPart);
     return new fabric.Group(parts, {
       selectable:true, evented:true, hasControls:false, hasBorders:false,
       perPixelTargetFind:true, _type:'arrow', _arrowId:d.id,
       _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2,
-      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved, _arrowNoHead:!!d.noHead
+      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved,
+      _arrowStartCap:startCap, _arrowEndCap:endCap, _arrowWidth:w
     });
   }
 
@@ -1978,6 +2038,16 @@
     fc.requestRenderAll();
   }
 
+  // Caps/width from a saved (or pasted) group, with backward-compat for the old
+  // `_arrowNoHead` flag (noHead → no end arrow; otherwise a single end arrow).
+  function _capsFromGrp(grp) {
+    return {
+      startCap: grp._arrowStartCap || 'none',
+      endCap:   grp._arrowEndCap   || (grp._arrowNoHead ? 'none' : 'arrow'),
+      width:    grp._arrowWidth || 2.5
+    };
+  }
+
   function _rebuildArrowDataFromCanvas() {
     _arrowData.forEach(d=>_removeArrowHandles(d));
     _arrowData.clear();
@@ -1986,7 +2056,7 @@
         id:grp._arrowId||(++_nextArrowId),
         x1:grp._x1,y1:grp._y1,cx:grp._cx,cy:grp._cy,x2:grp._x2,y2:grp._y2,
         color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,
-        noHead:!!grp._arrowNoHead,
+        ..._capsFromGrp(grp),
         grp,handles:[]
       };
       if (d.id>_nextArrowId) _nextArrowId=d.id;
@@ -1996,12 +2066,14 @@
     });
   }
 
-  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved,noHead) {
+  function createBezierArrow(x1,y1,x2,y2,cfg) {
     const len=Math.sqrt((x2-x1)**2+(y2-y1)**2); if (len<5) return;
+    const curved=!!cfg.curved;
     const offset=curved?len*0.20:0;
     const cx=(x1+x2)/2-(y2-y1)*offset/len, cy=(y1+y2)/2+(x2-x1)*offset/len;
     const id=++_nextArrowId;
-    const d={id,x1,y1,cx,cy,x2,y2,color,dashed,curved,noHead:!!noHead,grp:null,handles:[]};
+    const d={id,x1,y1,cx,cy,x2,y2,color:cfg.color,dashed:!!cfg.dashed,curved,
+      startCap:cfg.startCap||'none',endCap:cfg.endCap||'arrow',width:cfg.width||2.5,grp:null,handles:[]};
     d.grp=_buildArrowGroup(d);
     _arrowData.set(id,d);
     _attachGroupHandlers(d);
@@ -2021,7 +2093,7 @@
     const id = ++_nextArrowId; grp._arrowId = id;
     const d = { id, x1:grp._x1, y1:grp._y1, cx:grp._cx, cy:grp._cy, x2:grp._x2, y2:grp._y2,
       color:grp._arrowColor||'#FBBF24', dashed:!!grp._arrowDash, curved:!!grp._arrowCurved,
-      noHead:!!grp._arrowNoHead, grp, handles:[] };
+      ..._capsFromGrp(grp), grp, handles:[] };
     _arrowData.set(id, d);
     _attachGroupHandlers(d);
   }
@@ -2037,7 +2109,7 @@
     const p = fc.getPointer(e.e);
     _clearPreview();
     if (!_arrowP1) { _arrowP1 = { x:p.x, y:p.y }; }
-    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,currentArrowColor,currentArrowDash,currentArrowCurved,currentArrowNoHead); _arrowP1=null; }
+    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,_currentArrowCfg()); _arrowP1=null; }
   });
   fc.on('mouse:move', e => {
     if (currentTool==='free_polygon'&&_polyPoints.length>0) {
@@ -2178,8 +2250,8 @@
     const d=_arrowData.get(a._arrowId); if (!d) return;
     const nc=_propArrowColor.value;
     d.color=nc; d.grp._arrowColor=nc;
-    const [lp,hp]=d.grp.getObjects();
-    lp.set({stroke:nc}); if (hp) hp.set({stroke:nc,fill:nc});   // hp absent on head-less lines
+    // First object is the line (stroke only); the rest are caps (arrowheads/dots → stroke+fill).
+    d.grp.getObjects().forEach((o, i) => i === 0 ? o.set({stroke:nc}) : o.set({stroke:nc, fill:nc}));
     d.handles.forEach(h=>h.set({stroke:nc}));
     fc.renderAll();
   });
@@ -2408,12 +2480,7 @@
     'Team3':() => addPlayer('t3'), 'Team4':() => addPlayer('t4'),
     'Ball':()=>addBall(), 'Cone':()=>addCone(), 'Pole':()=>addPole(),
     'Barrier':()=>addBarrier(), 'Goal':()=>addGoal(), 'GoalPost':()=>addGoalPost(), 'Mannequin':()=>addMannequin(),
-    'Pass':   ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;currentArrowNoHead=false;setTool('arrow');},
-    'Run':    ()=>{currentArrowColor='#FBBF24';currentArrowDash=false;currentArrowCurved=true; currentArrowNoHead=false;setTool('arrow');},
-    'Dribble':()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;currentArrowNoHead=false;setTool('arrow');},
-    'Curve':  ()=>{currentArrowColor='#22D3EE';currentArrowDash=true; currentArrowCurved=true; currentArrowNoHead=false;setTool('arrow');},
-    'LineSolid':  ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;currentArrowNoHead=true;setTool('arrow');},
-    'LineDashed': ()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;currentArrowNoHead=true;setTool('arrow');},
+    // (Line type is driven by the Lines composer panel — see wireLineComposer.)
     'Rectangle':()=>addZoneRect(), 'Circle':()=>addZoneCircle(),
     'Label':  ()=>{const t=new fabric.IText(tt('planner.text_default', 'Label'),{fill:'#fff',fontSize:14,fontFamily:'sans-serif'});finishAdd(t,'text');t.enterEditing();},
     'Number': ()=>{const t=new fabric.IText('1',{fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace'});finishAdd(t,'text');}
@@ -2422,6 +2489,56 @@
     const title=btn.getAttribute('title');
     if (dockActions[title]) btn.addEventListener('click', ()=>dockActions[title]());
   });
+
+  // ── Lines composer (shape / style / caps / width / colour) ──────
+  // Live SVG mirror of the current line config, drawn with the same maths as the canvas.
+  function _updateLinePreview() {
+    const svg = document.getElementById('plLinePreview'); if (!svg) return;
+    const col = currentArrowColor, w = currentArrowWidth;
+    const x1=18, y1=22, x2=194, y2=22, cx=106, cy = currentArrowCurved ? 5 : 22;
+    const lineD = currentArrowCurved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
+    const dash  = currentArrowDash ? ` stroke-dasharray="${Math.max(6,w*3)} ${Math.max(4,w*2)}"` : '';
+    const cap = (x,y,ox,oy,kind) => {
+      if (kind === 'none') return '';
+      if (kind === 'dot')  return `<circle cx="${x}" cy="${y}" r="${(2.8+w).toFixed(1)}" fill="${col}"/>`;
+      const ang = Math.atan2(y-oy, x-ox), hL=9+w*1.6, hW=4+w*1.1;
+      const p = (a,b)=>`${a.toFixed(1)} ${b.toFixed(1)}`;
+      return `<path d="M ${p(x+Math.cos(ang)*2, y+Math.sin(ang)*2)} `+
+        `L ${p(x-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW, y-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW)} `+
+        `L ${p(x-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW, y-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW)} Z" fill="${col}"/>`;
+    };
+    const endCap   = cap(x2, y2, currentArrowCurved?cx:x1, currentArrowCurved?cy:y1, currentArrowEndCap);
+    const startCap = cap(x1, y1, currentArrowCurved?cx:x2, currentArrowCurved?cy:y2, currentArrowStartCap);
+    svg.innerHTML = `<path d="${lineD}" stroke="${col}" stroke-width="${w}" fill="none" stroke-linecap="round"${dash}/>${endCap}${startCap}`;
+  }
+  (function wireLineComposer(){
+    const menu = document.getElementById('plDropLinesMenu'); if (!menu) return;
+    const setVar = (group, val) => {
+      if      (group==='shape') currentArrowCurved = (val==='curved');
+      else if (group==='style') currentArrowDash  = (val==='dashed');
+      else if (group==='start') currentArrowStartCap = val;
+      else if (group==='end')   currentArrowEndCap   = val;
+      else if (group==='width') currentArrowWidth = parseFloat(val) || 2.5;
+      else if (group==='color') currentArrowColor = val;
+    };
+    menu.querySelectorAll('[data-line-group]').forEach(seg => {
+      const group = seg.getAttribute('data-line-group');
+      seg.querySelectorAll('button[data-val]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          seg.querySelectorAll('button[data-val]').forEach(b => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          setVar(group, btn.getAttribute('data-val'));
+          setTool('arrow'); _updateLinePreview();
+        });
+      });
+    });
+    document.getElementById('plLineColorCustom')?.addEventListener('input', e => {
+      currentArrowColor = e.target.value;
+      menu.querySelectorAll('[data-line-group="color"] button[data-val]').forEach(b => b.classList.remove('is-on'));
+      setTool('arrow'); _updateLinePreview();
+    });
+    _updateLinePreview();
+  })();
 
   // ── Custom field objects (per-user uploads) ─────────────────────
   // Files live in storage `field-objects/{auth.uid()}/...`; RLS scopes
@@ -2600,9 +2717,13 @@
         menu.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
         menu.classList.add('is-open');
         btn.classList.add('is-open');
+        // Opening the Lines composer arms the arrow tool with the current config.
+        if (btn.dataset.menu === 'plDropLinesMenu') { setTool('arrow'); _updateLinePreview(); }
       }
     });
   });
+  // Keep the Lines composer open while adjusting its controls.
+  document.getElementById('plDropLinesMenu')?.addEventListener('click', e => e.stopPropagation());
 
   // Close all menus on outside click
   document.addEventListener('click', () => {
