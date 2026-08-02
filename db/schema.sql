@@ -3708,8 +3708,9 @@ declare
   v_club uuid;
   v_team uuid;
   v_date date;
+  v_dur  integer;
 begin
-  select club_id, team_id, session_date into v_club, v_team, v_date
+  select club_id, team_id, session_date, duration into v_club, v_team, v_date, v_dur
   from public.training_sessions
   where id = p_session_id;
 
@@ -3724,8 +3725,10 @@ begin
         r.rpe        as rpe,
         r.note       as note,
         r.body_areas as body_areas,
-        r.duration   as duration,
-        r.load       as load,
+        -- Duration/load follow the session's CURRENT effective duration (from Daily Planning),
+        -- so already-submitted RPE updates if the plan's effective time changes.
+        coalesce(v_dur, r.duration)             as duration,
+        r.rpe * coalesce(v_dur, r.duration)     as load,
         r.created_at as submitted_at,
         p.last_name as ln, p.first_name as fn
       from public.players p
