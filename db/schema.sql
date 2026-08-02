@@ -3516,6 +3516,52 @@ begin
 end; $function$
 ;
 
+-- Birthday reminders: one notification per club staff member the day BEFORE and the day OF
+-- each active player's birthday. Idempotent (guarded by same-day + same-title) so a daily
+-- cron can run it safely. Scheduled via pg_cron (see the cron.schedule setup, run once).
+CREATE OR REPLACE FUNCTION public.notify_player_birthdays()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.notifications (user_id, club_id, type, title, body, link)
+  select pr.id, pl.club_id, 'player_birthday', bd.title, bd.body, '/Squad.html'
+  from public.players pl
+  cross join lateral (
+    select case
+             when to_char(pl.date_of_birth,'MM-DD') = to_char(current_date,     'MM-DD') then 0
+             when to_char(pl.date_of_birth,'MM-DD') = to_char(current_date + 1,  'MM-DD') then 1
+           end as d
+  ) m
+  cross join lateral (
+    select nullif(trim(coalesce(pl.first_name,'')||' '||coalesce(pl.last_name,'')), '') as nm
+  ) nc
+  cross join lateral (
+    select
+      case when m.d = 0
+           then '🎂 ' || nc.nm || '''s birthday is today'
+           else '🎂 ' || nc.nm || '''s birthday is tomorrow'
+      end as title,
+      'Turns ' || (extract(year from (current_date + m.d))::int - extract(year from pl.date_of_birth)::int)
+        || ' · born ' || to_char(pl.date_of_birth, 'DD Mon YYYY') as body
+  ) bd
+  join public.profiles pr on pr.club_id = pl.club_id
+  where pl.date_of_birth is not null
+    and pl.archived_at is null
+    and m.d is not null
+    and nc.nm is not null
+    and not exists (
+      select 1 from public.notifications n
+      where n.user_id = pr.id
+        and n.type = 'player_birthday'
+        and n.created_at::date = current_date
+        and n.title = bd.title
+    );
+end; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5)
  RETURNS TABLE(id uuid, title text, session_date date, duration integer, session_type text)
  LANGUAGE plpgsql
