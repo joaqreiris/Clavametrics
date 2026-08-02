@@ -485,7 +485,11 @@
     state.loading = true; state.error = false; renderBoard();
     try {
       const teamId = document.getElementById('wmTeamSelect').value || null;
-      const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: state.cid, p_team_id: teamId, p_date: null });
+      // Query "today" in the viewer's local calendar day (p_date) + offset so the DB derives the
+      // submission day locally too — the board resets at local midnight, not UTC midnight.
+      const _now = new Date();
+      const _localDate = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+      const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: state.cid, p_team_id: teamId, p_date: _localDate, p_tz_offset: _now.getTimezoneOffset() });
       if (error) throw error;
       const rows = data || [];
       const responders = rows.filter(r => r.responded);

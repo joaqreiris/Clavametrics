@@ -3796,12 +3796,18 @@ AS $function$
 declare
   v_link record; v_ok boolean; v_read int; v_hooper int;
   v_areas text[]; v_note text; v_pname text; v_team uuid; v_rpe_id uuid; v_dur int; v_sdate date;
+  v_tz int; v_local_date date;
 begin
   select * into v_link from public.share_links
    where token = p_token and revoked = false
      and (expires_at is null or expires_at > now())
      and scope in ('wellness','rpe','survey');
   if not found then return jsonb_build_object('error','invalid_token'); end if;
+
+  -- Client's Date.getTimezoneOffset() (minutes) → derive the submitter's local "today" so the
+  -- one-per-day lock resets at local midnight, not UTC midnight.
+  v_tz := coalesce((p_payload->>'tzOffset')::int, 0);
+  v_local_date := ((now() at time zone 'UTC') - make_interval(mins => v_tz))::date;
 
   select exists (
     select 1 from public.players p
@@ -3826,23 +3832,23 @@ begin
       values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
               v_link.session_id, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), coalesce(v_sdate, current_date));
     else
-      -- Candado por día (link sin sesión): ya respondió hoy.
+      -- Candado por día (link sin sesión): ya respondió hoy (día local del jugador).
       if exists (select 1 from public.rpe
                  where club_id = v_link.club_id and player_id = p_player_id
-                   and coalesce(session_date, created_at::date) = current_date) then
+                   and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date) then
         return jsonb_build_object('ok', true, 'already', true);
       end if;
       insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_date)
-      values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas, current_date)
+      values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas, v_local_date)
       returning id into v_rpe_id;
       perform public.link_rpe_to_session(v_rpe_id);
     end if;
   else
-    -- Wellness: uno por día (sin cambios respecto a la 074).
+    -- Wellness: uno por día (día local del jugador, no UTC).
     if exists (
       select 1 from public.wellness
       where player_id = p_player_id and club_id = v_link.club_id
-        and submitted_at::date = current_date
+        and ((submitted_at at time zone 'UTC') - make_interval(mins => v_tz))::date = v_local_date
     ) then
       return jsonb_build_object('ok', true, 'already', true);
     end if;
@@ -4317,12 +4323,14 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE)
+CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE, p_tz_offset integer DEFAULT 0)
  RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric, sleep_quality numeric, fatigue numeric, stress numeric, soreness numeric, mood numeric, note text, body_areas text[], submitted_at timestamp with time zone)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+-- p_tz_offset = client's Date.getTimezoneOffset() (minutes); lets "today" follow the club's
+-- local calendar day instead of UTC, so the board resets at local midnight (not UTC midnight).
 declare v_date date := coalesce(p_date, current_date);
 begin
   return query
@@ -4347,7 +4355,8 @@ begin
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.wellness w
-        on w.player_id = p.id and w.submitted_at::date = v_date
+        on w.player_id = p.id
+       and ((w.submitted_at at time zone 'UTC') - make_interval(mins => p_tz_offset))::date = v_date
       where p.club_id = p_club_id
         and p.archived_at is null
         and p.id in (select public.my_player_ids())

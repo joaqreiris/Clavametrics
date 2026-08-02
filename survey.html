@@ -177,9 +177,10 @@ window.setScale=(k,v)=>{state[k]=v;document.getElementById('v_'+k).textContent=v
 window.toggleBody=(k,el)=>{state.body.has(k)?state.body.delete(k):state.body.add(k);el.classList.toggle('is-on');};
 window.submitForm=async()=>{
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
+  const _tz=new Date().getTimezoneOffset();   // so the one-per-day lock uses the player's local day
   const payload=scope==='rpe'
-    ?{rpe:state.rpe,body:[...state.body],note:state.note}
-    :{scale:'7',sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note};
+    ?{rpe:state.rpe,body:[...state.body],note:state.note,tzOffset:_tz}
+    :{scale:'7',sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note,tzOffset:_tz};
   const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
   const already=data?.already===true;
