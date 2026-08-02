@@ -143,12 +143,20 @@
   .dp-pl-group .l{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:34px}
   .dp-pl-group .l-line{flex:1;height:1px;background:var(--cm-border-soft)}
 
-  /* Per-exercise player picker (multi-select) */
-  .dp-ex-players{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:6px}
-  .dp-ex-players .lbl{font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);margin-right:2px}
-  .dp-exp-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:5px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg)}
+  /* Per-exercise groups (multi-select) */
+  .dp-ex-players{display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin-top:7px}
+  .dp-ex-players .lbl{font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .dp-exg{display:flex;align-items:center;gap:6px;width:100%;flex-wrap:wrap;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:7px;background:var(--cm-bg-soft)}
+  .dp-exg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+  .dp-exg-name{width:74px;flex-shrink:0;border:0;background:none;font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);outline:none;padding:2px 3px;border-radius:4px}
+  .dp-exg-name:focus{background:var(--cm-surface)}
+  .dp-exg-chips{display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:0}
+  .dp-exg-empty{font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
+  .dp-exg-del{width:20px;height:20px;flex-shrink:0;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer;border-radius:4px;font:400 15px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center}
+  .dp-exg-del:hover{color:var(--cm-danger);background:var(--cm-danger-bg,rgba(220,38,38,.1))}
+  .dp-exp-chip{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 7px;border-radius:5px;background:var(--cm-surface);border:1px solid var(--cm-border);font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg)}
   .dp-exp-chip .num{font:600 9px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .dp-exp-add{height:22px;padding:0 8px;border:1px dashed var(--cm-border-strong);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer}
+  .dp-exp-add{height:21px;padding:0 8px;flex-shrink:0;border:1px dashed var(--cm-border-strong);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer}
   .dp-exp-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
   /* Shared checklist popover */
   .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-height:320px;overflow:auto}
@@ -650,7 +658,7 @@ function dpRenderSquad(avMap) {
 }
 
 // ── Per-exercise player assignment (multi-select) ───────────────────────────
-// Which available players do each exercise — stored in session_exercises.player_ids.
+// Named groups of available players per exercise — stored in session_exercises.player_groups.
 function _dpStatusCls(p){
   const av = (window._dpAvMap||{})[p.id], inj = _dpInjMap[p.id];
   let cls = inj ? 'partial' : '';
@@ -664,54 +672,79 @@ function _dpStatusCls(p){
 function _dpTrainees(){ return _dpPlayers.filter(p => ['','partial'].includes(_dpStatusCls(p))); }
 function _dpPlayerById(id){ return _dpPlayers.find(p => String(p.id) === String(id)) || null; }
 function _dpPlayerShort(p){ return (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '—'; }
-function _dpExPlayers(e){ return Array.isArray(e?.player_ids) ? e.player_ids : []; }
+const _DP_EXG_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2'];
+function _dpExGroups(e){ return Array.isArray(e?.player_groups) ? e.player_groups : []; }
+function _dpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-// Inline players row shown inside an exercise card (chips + "add" button).
-function dpExPlayersRow(e){
-  const ids = _dpExPlayers(e);
-  const chips = ids.map(id => { const p = _dpPlayerById(id); return p
-    ? `<span class="dp-exp-chip"><span class="num">${p.number ?? '—'}</span>${_dpPlayerShort(p)}</span>` : ''; }).join('');
-  const lbl = ids.length
-    ? `<button class="dp-exp-add" onclick="dpOpenExPlayers('${e.id}',this)">${tt('daily_planning.edit_players','Edit')}</button>`
-    : `<button class="dp-exp-add" onclick="dpOpenExPlayers('${e.id}',this)">＋ ${tt('daily_planning.pick_players','Players')}</button>`;
-  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.players_label','Players')}</span>${chips}${lbl}</div>`;
+// Inline groups row inside an exercise card: several named groups, each a multi-select.
+function dpExGroupsRow(e){
+  const rows = _dpExGroups(e).map(g => {
+    const chips = (g.players||[]).map(id => { const p=_dpPlayerById(id); return p
+      ? `<span class="dp-exp-chip"><span class="num">${p.number ?? '—'}</span>${_dpPlayerShort(p)}</span>` : ''; }).join('');
+    return `<div class="dp-exg" data-gid="${g.id}">
+      <span class="dp-exg-dot" style="background:${g.color||'#888'}"></span>
+      <input class="dp-exg-name" value="${_dpEsc(g.name)}" placeholder="${tt('daily_planning.group','Group')}" oninput="dpExRenameGroup('${e.id}','${g.id}',this.value)">
+      <span class="dp-exg-chips">${chips || `<span class="dp-exg-empty">${tt('daily_planning.no_players_yet','no players')}</span>`}</span>
+      <button class="dp-exp-add" onclick="dpOpenExGroup('${e.id}','${g.id}',this)">${tt('daily_planning.edit_players','Edit')}</button>
+      <button class="dp-exg-del" title="${tt('daily_planning.delete_group','Delete group')}" onclick="dpExDelGroup('${e.id}','${g.id}')">×</button>
+    </div>`;
+  }).join('');
+  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}<button class="dp-exp-add" onclick="dpExAddGroup('${e.id}')">＋ ${tt('daily_planning.add_group','Add group')}</button></div>`;
 }
-// Refresh just one card's players row (no full re-render → keeps the popover open).
+// Refresh just one card's groups row (no full re-render → keeps the popover open).
 function dpRefreshExPlayers(seid){
   const e = _dpFindTask(seid); if (!e) return;
   const row = document.querySelector(`.dp-ex-players[data-exp="${seid}"]`);
-  if (row) row.outerHTML = dpExPlayersRow(e);
+  if (row) row.outerHTML = dpExGroupsRow(e);
 }
-
-let _dpExpTarget = null;
-function dpOpenExPlayers(seid, btn){
+function _dpExNextGid(e){ return 'g' + (_dpExGroups(e).reduce((m,g)=>Math.max(m, parseInt(String(g.id).replace(/\D/g,''))||0),0) + 1); }
+function dpExAddGroup(seid){
   const e = _dpFindTask(seid); if (!e) return;
-  _dpExpTarget = seid;
+  const gs = _dpExGroups(e).slice();
+  gs.push({ id:_dpExNextGid(e), name: tt('daily_planning.group_n', `Group ${gs.length+1}`, {n:gs.length+1}), color:_DP_EXG_COLORS[gs.length % _DP_EXG_COLORS.length], players:[] });
+  e.player_groups = gs; dpRefreshExPlayers(seid); _dpEditSave(seid, { player_groups: gs });
+}
+function dpExDelGroup(seid, gid){
+  const e = _dpFindTask(seid); if (!e) return;
+  e.player_groups = _dpExGroups(e).filter(g => g.id !== gid);
+  dpRefreshExPlayers(seid); _dpEditSave(seid, { player_groups: e.player_groups });
+}
+function dpExRenameGroup(seid, gid, name){
+  const e = _dpFindTask(seid); if (!e) return;
+  const g = _dpExGroups(e).find(x => x.id === gid); if (!g) return;
+  g.name = name; _dpEditSave(seid, { player_groups: e.player_groups });
+}
+let _dpExgTarget = null;   // { seid, gid }
+function dpOpenExGroup(seid, gid, btn){
+  const e = _dpFindTask(seid); if (!e) return;
+  const g = _dpExGroups(e).find(x => x.id === gid); if (!g) return;
+  _dpExgTarget = { seid, gid };
   const menu = document.getElementById('dpExPlayersMenu');
-  const sel = new Set(_dpExPlayers(e).map(String));
-  const opts = _dpTrainees().map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
+  const sel = new Set((g.players||[]).map(String));
+  const opts = _dpTrainees().map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExGroupPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
     || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
-  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.assign_players','Assign players')}</span><button onclick="dpClearExPlayers()">${tt('daily_planning.clear','Clear')}</button></div>${opts}`;
+  menu.innerHTML = `<div class="hd"><span>${_dpEsc(g.name)}</span><button onclick="dpClearExGroup()">${tt('daily_planning.clear','Clear')}</button></div>${opts}`;
   const r = btn.getBoundingClientRect();
   menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
   menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
   menu.classList.add('is-open');
 }
-function dpToggleExPlayer(pid, on){
-  const e = _dpFindTask(_dpExpTarget); if (!e) return;
-  let ids = _dpExPlayers(e).map(String);
-  if (on) { if (!ids.includes(String(pid))) ids.push(String(pid)); }
-  else ids = ids.filter(x => x !== String(pid));
-  e.player_ids = ids;
-  dpRefreshExPlayers(_dpExpTarget);
-  _dpEditSave(_dpExpTarget, { player_ids: ids });
+function dpToggleExGroupPlayer(pid, on){
+  if (!_dpExgTarget) return; const { seid, gid } = _dpExgTarget;
+  const e = _dpFindTask(seid); if (!e) return;
+  const gs = _dpExGroups(e);
+  if (on) gs.forEach(g => { g.players = (g.players||[]).filter(x => String(x)!==String(pid)); });  // one group per player within the exercise
+  const g = gs.find(x => x.id === gid); if (!g) return;
+  if (on) g.players.push(String(pid)); else g.players = (g.players||[]).filter(x => String(x)!==String(pid));
+  e.player_groups = gs; dpRefreshExPlayers(seid); _dpEditSave(seid, { player_groups: gs });
 }
-function dpClearExPlayers(){
-  const e = _dpFindTask(_dpExpTarget); if (!e) return;
-  e.player_ids = [];
+function dpClearExGroup(){
+  if (!_dpExgTarget) return; const { seid, gid } = _dpExgTarget;
+  const e = _dpFindTask(seid); if (!e) return;
+  const g = _dpExGroups(e).find(x => x.id === gid); if (!g) return;
+  g.players = [];
   document.querySelectorAll('#dpExPlayersMenu input[type=checkbox]').forEach(cb => cb.checked = false);
-  dpRefreshExPlayers(_dpExpTarget);
-  _dpEditSave(_dpExpTarget, { player_ids: [] });
+  dpRefreshExPlayers(seid); _dpEditSave(seid, { player_groups: e.player_groups });
 }
 document.addEventListener('click', e => {
   const menu = document.getElementById('dpExPlayersMenu');
@@ -945,7 +978,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,player_ids,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -1131,7 +1164,7 @@ function dpExerciseCardHTML(e) {
             return h;
           })()}
           <textarea class="no-print" placeholder="${tt('daily_planning.session_notes_ph','Session notes…')}" oninput="dpEditNotes('${e.id}',this.value)" title="${tt('daily_planning.notes_for_this_session_only','Notes for this session only (not saved to the Drill Designer exercise)')}" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;resize:vertical;min-height:30px">${(e.notes ?? '').replace(/</g,'&lt;')}</textarea>
-          ${dpExPlayersRow(e)}
+          ${dpExGroupsRow(e)}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${tt('daily_planning.planner','PLANNER')}</span>
             <span class="grow"></span>
@@ -1163,7 +1196,7 @@ function dpExerciseCardHTML(e) {
           ${e.phase === 'main' ? `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
             <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;width:54px"><span>${tt('daily_planning.min_short','min')}</span>
           </div>` : ''}
-          ${dpExPlayersRow(e)}
+          ${dpExGroupsRow(e)}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
             <span class="grow"></span>
@@ -1614,9 +1647,15 @@ async function dpRenderPrintSheet() {
             : tt('daily_planning.sheet_work_line', `${e.series} × ${esc(e.work_time)} work`, {series: e.series, work: esc(e.work_time)}))
         : '';
       const note = (e.notes || '').trim();
-      const players = _dpExPlayers(e).map(id => _dpPlayerById(id)).filter(Boolean);
-      const playersLine = players.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${players.map(p => `<span style="display:inline-flex;align-items:center;gap:3px;background:#F3F4F6;border:1px solid #E7E7E4;border-radius:4px;padding:1px 5px;font:500 9.5px ${FONT};color:#15181D"><b style="font:600 8px ${MONO};color:#6B7280">${p.number ?? '—'}</b> ${esc(_dpPlayerShort(p))}</span>`).join('')}</div>`
+      const grps = _dpExGroups(e).filter(g => (g.players||[]).length);
+      const playersLine = grps.length
+        ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:3px">${grps.map(g => {
+            const ps = (g.players||[]).map(id => _dpPlayerById(id)).filter(Boolean);
+            return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+              <span style="display:inline-flex;align-items:center;gap:4px;font:700 9px ${MONO};color:#15181D"><span style="width:8px;height:8px;border-radius:50%;background:${g.color||'#888'};flex-shrink:0"></span>${esc(g.name||'')}</span>
+              ${ps.map(p => `<span style="display:inline-flex;align-items:center;gap:3px;background:#F3F4F6;border:1px solid #E7E7E4;border-radius:4px;padding:1px 5px;font:500 9.5px ${FONT};color:#15181D"><b style="font:600 8px ${MONO};color:#6B7280">${p.number ?? '—'}</b> ${esc(_dpPlayerShort(p))}</span>`).join('')}
+            </div>`;
+          }).join('')}</div>`
         : '';
       const dur = totalMin ? totalMin + '′' : '';
       const src = _img(e);
@@ -1958,7 +1997,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_ids')
+    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
@@ -2381,7 +2420,7 @@ async function dpExportPDF() {
   <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span><span data-i18n="daily_planning.away">Away</span></div>
 </div>
 
-<!-- Per-exercise player picker (populated on open by dpOpenExPlayers) -->
+<!-- Per-exercise group player picker (populated on open by dpOpenExGroup) -->
 <div id="dpExPlayersMenu" class="dp-exp-menu"></div>
 
 <script>
