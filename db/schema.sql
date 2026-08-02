@@ -3710,9 +3710,11 @@ declare
   v_date date;
   v_dur  integer;
 begin
-  select club_id, team_id, session_date, duration into v_club, v_team, v_date, v_dur
-  from public.training_sessions
-  where id = p_session_id;
+  -- Qualify with the table alias: `duration`/`load` are also OUT columns of this function,
+  -- so an unqualified `duration` would be an ambiguous reference and raise at runtime.
+  select ts.club_id, ts.team_id, ts.session_date, ts.duration into v_club, v_team, v_date, v_dur
+  from public.training_sessions ts
+  where ts.id = p_session_id;
 
   return query
     select q.player_id, q.player_name, q.responded, q.rpe,
