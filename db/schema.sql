@@ -3707,8 +3707,9 @@ AS $function$
 declare
   v_club uuid;
   v_team uuid;
+  v_date date;
 begin
-  select club_id, team_id into v_club, v_team
+  select club_id, team_id, session_date into v_club, v_team, v_date
   from public.training_sessions
   where id = p_session_id;
 
@@ -3734,6 +3735,12 @@ begin
         and p.archived_at is null
         and p.status <> 'inactive'
         and (v_team is null or p.team_id = v_team)
+        -- Not expected to check in that day: sick, unavailable, or national-team (away).
+        and not exists (
+          select 1 from public.availability a
+          where a.player_id = p.id::text and a.date = v_date
+            and a.status in ('sick','unavailable','away')
+        )
       order by p.id, r.created_at desc nulls last
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
@@ -4407,6 +4414,12 @@ begin
         and p.archived_at is null
         and p.id in (select public.my_player_ids())
         and (p_team_id is null or p.team_id = p_team_id)
+        -- Not expected to check in that day: sick, unavailable, or national-team (away).
+        and not exists (
+          select 1 from public.availability a
+          where a.player_id = p.id::text and a.date = v_date
+            and a.status in ('sick','unavailable','away')
+        )
       order by p.id, w.submitted_at desc nulls last
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
