@@ -1687,13 +1687,14 @@
   }
 
   function addPlayer(team='t1', pos=null) {
-    const label = String(_nextPlayerNum(team));
     const color = teamColors[team]||'#1D4ED8', tc = teamText[team]||'#fff';
     const shadow = new fabric.Ellipse({ rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:16, originX:'center', originY:'center' });
     const circle = new fabric.Circle({ radius:16, fill:color, stroke:'rgba(255,255,255,0.9)', strokeWidth:2.5, originX:'center', originY:'center' });
     const ring   = new fabric.Circle({ radius:14, fill:'transparent', stroke:'rgba(0,0,0,0.18)', strokeWidth:1, originX:'center', originY:'center' });
-    const text   = new fabric.Text(label, { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0 });
     const _build = (extras=[]) => {
+      // Compute the number HERE (when the token is actually added), not at click time:
+      // the crest path is async, so rapid adds would otherwise all read the same count → all "1".
+      const text = new fabric.Text(String(_nextPlayerNum(team)), { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0 });
       const grp = new fabric.Group([shadow, circle, ring, ...extras, text], { ...(pos||center()), originX:'center', originY:'center', _type:'player', _team:team });
       fc.add(grp); fc.setActiveObject(grp); fc.renderAll();
     };
@@ -2179,6 +2180,12 @@
   const _propPlayerColor    = document.getElementById('plPropPlayerColor');
 
   // Recolor an already-placed player token (body circle fill + auto-contrast number).
+  // Players targeted by a recolor: every player in a multi-selection, or the single one.
+  function _selectedPlayers() {
+    const a = fc.getActiveObject(); if (!a) return [];
+    if (a.type === 'activeSelection') return a.getObjects().filter(o => o._type === 'player');
+    return a._type === 'player' ? [a] : [];
+  }
   function _recolorPlayer(grp, hex, teamKey) {
     if (!grp || grp._type !== 'player') return;
     const body = grp._objects?.filter(o => o.type === 'circle').sort((a,b)=>(b.radius||0)-(a.radius||0))[0];
@@ -2301,16 +2308,16 @@
   // Player quick-recolor: team swatches (one click) + custom picker
   _propPlayerDiv?.querySelectorAll('.pl-pp-swatch').forEach(sw => {
     sw.addEventListener('click', () => {
-      const a = fc.getActiveObject(); if (!a || a._type !== 'player') return;
-      const key = sw.dataset.team;
-      _recolorPlayer(a, teamColors[key] || '#1D4ED8', key);
-      _propPlayerColor.value = _rgbaToHex(teamColors[key] || '#1D4ED8');
+      const players = _selectedPlayers(); if (!players.length) return;
+      const key = sw.dataset.team, hex = teamColors[key] || '#1D4ED8';
+      players.forEach(p => _recolorPlayer(p, hex, key));   // applies to every selected player
+      _propPlayerColor.value = _rgbaToHex(hex);
       pushHistory();
     });
   });
   _propPlayerColor?.addEventListener('input', () => {
-    const a = fc.getActiveObject(); if (!a || a._type !== 'player') return;
-    _recolorPlayer(a, _propPlayerColor.value, null);
+    const players = _selectedPlayers(); if (!players.length) return;
+    players.forEach(p => _recolorPlayer(p, _propPlayerColor.value, null));
   });
   _propPlayerColor?.addEventListener('change', () => pushHistory());
 

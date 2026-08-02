@@ -2147,6 +2147,7 @@ create table if not exists public.training_sessions (
   gym_content jsonb,
   external_activity_id text,
   gps_targets jsonb default '{}'::jsonb not null,
+  player_groups jsonb,
   recurrence_group_id uuid,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
