@@ -1138,6 +1138,8 @@
               <button class="pl-pp-swatch" type="button" data-team="t4"></button>
               <div class="psep"></div>
               <input type="color" id="plPropPlayerColor" value="#1D4ED8" data-i18n-attr="title:planner.prop_custom_color" title="Custom color">
+              <div class="psep"></div>
+              <input type="text" id="plPropPlayerName" maxlength="14" placeholder="Name" data-i18n-attr="placeholder:planner.prop_player_name_ph;title:planner.prop_player_name_title" title="Label below the token (e.g. Coach)" style="width:96px;height:26px;padding:0 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:500 12px/1 var(--cm-font-sans);outline:none">
               <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);opacity:.75" data-i18n="planner.prop_player_num_hint">2× = number</span>
             </div>
           </div>
@@ -2178,6 +2180,7 @@
   const _propPoleColor      = document.getElementById('plPropPoleColor');
   const _propPlayerDiv      = document.getElementById('plPropPlayer');
   const _propPlayerColor    = document.getElementById('plPropPlayerColor');
+  const _propPlayerName     = document.getElementById('plPropPlayerName');
 
   // Recolor an already-placed player token (body circle fill + auto-contrast number).
   // Players targeted by a recolor: every player in a multi-selection, or the single one.
@@ -2194,6 +2197,50 @@
     if (txt) txt.set({ fill: _luma(hex) > 0.5 ? '#0A0A0A' : '#ffffff' });
     grp._team = teamKey || null;
     grp.dirty = true; fc.renderAll();
+  }
+
+  // The name text sits BELOW the number (originY 'top', top≈20); the number is centred (top≈0).
+  function _playerNameText(grp) {
+    return (grp?._objects || []).filter(o => o.type === 'text').find(o => (o.top || 0) > 10) || null;
+  }
+  function _playerNumText(grp) {
+    const texts = (grp?._objects || []).filter(o => o.type === 'text');
+    return texts.find(o => Math.abs(o.top || 0) < 10) || texts[0] || null;
+  }
+  function _playerName(grp) { return _playerNameText(grp)?.text || ''; }
+
+  // Add / edit / remove the name label under a player token. The token is rebuilt (fabric
+  // groups don't cleanly grow at runtime) preserving position, colour, number and crest.
+  function _setPlayerName(grp, name) {
+    if (!grp || grp._type !== 'player') return;
+    const nm = (name || '').trim().slice(0, 14).toUpperCase();
+    const existing = _playerNameText(grp);
+    // Label already there and staying → just change its text (no bbox change, cheap).
+    if (existing && nm) { existing.set({ text: nm }); grp.dirty = true; fc.renderAll(); pushHistory(); return; }
+    if (!existing && !nm) return;   // nothing to do
+    // Adding a label (none yet) or removing it (empty) → rebuild so the box wraps correctly,
+    // preserving position, colour, number and any crest.
+    const t = { left:grp.left, top:grp.top, angle:grp.angle||0, scaleX:grp.scaleX||1, scaleY:grp.scaleY||1, flipX:!!grp.flipX, flipY:!!grp.flipY };
+    const team = grp._team, playerId = grp._playerId;
+    const objs = grp._objects || [];
+    const circle = objs.filter(o => o.type === 'circle').sort((a,b)=>(b.radius||0)-(a.radius||0))[0];
+    const color  = circle?.fill || teamColors[team] || '#15803D';
+    const numT   = _playerNumText(grp);
+    const tc     = numT?.fill || teamText[team] || '#fff';
+    const crest  = objs.find(o => o.type === 'image') || null;
+    const shadow = new fabric.Ellipse({ rx:13, ry:3.5, fill:'rgba(0,0,0,0.22)', top:16, left:0, originX:'center', originY:'center' });
+    const c      = new fabric.Circle({ radius:16, fill:color, stroke:'rgba(255,255,255,0.9)', strokeWidth:2.5, originX:'center', originY:'center', top:0, left:0 });
+    const ring   = new fabric.Circle({ radius:14, fill:'transparent', stroke:'rgba(0,0,0,0.18)', strokeWidth:1, originX:'center', originY:'center', top:0, left:0 });
+    const numText= new fabric.Text(numT?.text || '', { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0, left:0 });
+    const kids = [shadow, c, ring];
+    if (crest) { crest.set({ left:0, top:0, originX:'center', originY:'center' }); kids.push(crest); }
+    kids.push(numText);
+    if (nm) kids.push(new fabric.Text(nm, { fontSize:9, fontWeight:'600', fontFamily:'monospace', fill:'rgba(255,255,255,0.95)', originX:'center', originY:'top', top:20, left:0, shadow:new fabric.Shadow({ color:'rgba(0,0,0,0.85)', blur:3, offsetX:0, offsetY:1 }) }));
+    const ng = new fabric.Group(kids, { ...t, originX:'center', originY:'center', _type:'player', _team:team, _playerId:playerId });
+    _suppressHistory = true; fc.remove(grp); fc.add(ng); _suppressHistory = false;
+    // Removing the old token unmarked a roster player as placed — re-mark it (same _playerId).
+    if (playerId) { _placedPlayerIds.add(playerId); renderAvailPills(); }
+    fc.setActiveObject(ng); fc.renderAll(); pushHistory();
   }
 
   function _rgbaToHex(c) {
@@ -2245,6 +2292,7 @@
       _propPlayerDiv.querySelectorAll('.pl-pp-swatch').forEach(sw => { sw.style.background = teamColors[sw.dataset.team] || '#888'; });
       const body = obj._objects?.filter(o => o.type === 'circle').sort((a,b)=>(b.radius||0)-(a.radius||0))[0];
       _propPlayerColor.value = _rgbaToHex(body?.fill || teamColors[obj._team] || '#1D4ED8');
+      if (_propPlayerName) _propPlayerName.value = _playerName(obj);
       _propPlayerDiv.style.display='flex'; _propBar.style.display='flex';
     } else {
       _propBar.style.display='none';
@@ -2320,6 +2368,14 @@
     players.forEach(p => _recolorPlayer(p, _propPlayerColor.value, null));
   });
   _propPlayerColor?.addEventListener('change', () => pushHistory());
+
+  // Player name label (below the token). Commit on change/blur (rebuild is heavier than a keystroke).
+  function _commitPlayerNameFromInput() {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'player') return;
+    _setPlayerName(a, _propPlayerName.value);
+  }
+  _propPlayerName?.addEventListener('change', _commitPlayerNameFromInput);
+  _propPlayerName?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _propPlayerName.blur(); } });
 
   _propGoalPostColor?.addEventListener('input', () => {
     const a = fc.getActiveObject(); if (!a || a._type !== 'goalpost') return;
