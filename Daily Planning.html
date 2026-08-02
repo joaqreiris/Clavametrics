@@ -159,8 +159,9 @@
   .dp-exg-del:hover{color:var(--cm-danger);background:var(--cm-danger-bg,rgba(220,38,38,.1))}
   .dp-exp-chip{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 7px;border-radius:5px;background:var(--cm-surface);border:1px solid var(--cm-border);font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg)}
   .dp-exp-chip .num{font:600 9px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .dp-exp-add{height:21px;padding:0 8px;flex-shrink:0;border:1px dashed var(--cm-border-strong);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer}
+  .dp-exp-add{height:22px;padding:0 8px;flex-shrink:0;border:1px dashed var(--cm-border-strong);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:3px}
   .dp-exp-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+  .dp-exg-actions{display:flex;flex-wrap:wrap;gap:6px}
   /* Shared checklist popover */
   .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-height:320px;overflow:auto}
   .dp-exp-menu.is-open{display:block}
@@ -695,7 +696,14 @@ function dpExGroupsRow(e){
       <div class="dp-exg-chips">${chips || `<span class="dp-exg-empty">${tt('daily_planning.no_players_yet','no players')}</span>`}</div>
     </div>`;
   }).join('');
-  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}<button class="dp-exp-add" onclick="dpExAddGroup('${e.id}')">＋ ${tt('daily_planning.add_group','Add group')}</button></div>`;
+  const canCopy = _dpTasksWithGroups(e.id).length > 0;
+  const actions = `<div class="dp-exg-actions"><button class="dp-exp-add" onclick="dpExAddGroup('${e.id}')">＋ ${tt('daily_planning.add_group','Add group')}</button>${canCopy ? `<button class="dp-exp-add" onclick="dpOpenCopyGroups('${e.id}',this)"><i class="ti ti-copy" style="font-size:12px;vertical-align:-1px"></i> ${tt('daily_planning.copy_groups','Copy from…')}</button>` : ''}</div>`;
+  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}${actions}</div>`;
+}
+// Other tasks in this session that already have at least one non-empty group.
+function _dpAllTasks(){ return [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ]; }
+function _dpTasksWithGroups(excludeSeid){
+  return _dpAllTasks().filter(x => x.id !== excludeSeid && _dpExGroups(x).some(g => (g.players||[]).length));
 }
 // Refresh just one card's groups row (no full re-render → keeps the popover open).
 function dpRefreshExPlayers(seid){
@@ -754,6 +762,29 @@ function dpClearExGroup(){
   g.players = [];
   document.querySelectorAll('#dpExPlayersMenu input[type=checkbox]').forEach(cb => cb.checked = false);
   dpRefreshExPlayers(seid); _dpEditSave(seid, { player_groups: e.player_groups });
+}
+// Copy a whole group set from another task into this one (replaces its groups).
+function dpOpenCopyGroups(seid, btn){
+  const sources = _dpTasksWithGroups(seid);
+  const menu = document.getElementById('dpExPlayersMenu');
+  const opts = sources.map(x => {
+    const ng = _dpExGroups(x).filter(g => (g.players||[]).length).length;
+    const nm = x.name || tt('daily_planning.untitled','Untitled');
+    return `<div class="dp-exp-opt" onclick="dpCopyGroupsFrom('${seid}','${x.id}')"><i class="ti ti-copy" style="font-size:15px;color:var(--cm-fg-muted)"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${_dpEsc(nm)}</span><span class="num">${tt('daily_planning.n_groups', `${ng} groups`, {count: ng})}</span></div>`;
+  }).join('') || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_groups_to_copy','No other task has groups.')}</div>`;
+  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.copy_groups_from','Copy groups from')}</span></div>${opts}`;
+  const r = btn.getBoundingClientRect();
+  menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
+  menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  menu.classList.add('is-open');
+}
+function dpCopyGroupsFrom(targetSeid, sourceSeid){
+  const t = _dpFindTask(targetSeid), s = _dpFindTask(sourceSeid); if (!t || !s) return;
+  const src = _dpExGroups(s).filter(g => (g.players||[]).length);
+  t.player_groups = src.map((g, i) => ({ id:'g'+(i+1), name:g.name, color:g.color, players:(g.players||[]).slice() }));
+  document.getElementById('dpExPlayersMenu').classList.remove('is-open');
+  dpRefreshExPlayers(targetSeid);
+  _dpEditSave(targetSeid, { player_groups: t.player_groups });
 }
 document.addEventListener('click', e => {
   const menu = document.getElementById('dpExPlayersMenu');
