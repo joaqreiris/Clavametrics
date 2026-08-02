@@ -143,26 +143,22 @@
   .dp-pl-group .l{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:34px}
   .dp-pl-group .l-line{flex:1;height:1px;background:var(--cm-border-soft)}
 
-  /* Training groups */
-  .dp-grp{border:1px solid var(--cm-border);border-radius:10px;padding:9px 11px;margin-bottom:9px;background:var(--cm-surface);transition:border-color .12s,background .12s}
-  .dp-grp.drag-over{border-color:var(--cm-accent);background:var(--cm-accent-soft)}
-  .dp-grp-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-  .dp-grp-dot{width:13px;height:13px;border-radius:50%;flex-shrink:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);position:relative;overflow:hidden}
-  .dp-grp-dot input{position:absolute;inset:-6px;width:200%;height:200%;opacity:0;cursor:pointer;border:0;padding:0}
-  .dp-grp-name{flex:1;min-width:0;border:0;background:none;font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);outline:none;padding:2px 4px;border-radius:4px}
-  .dp-grp-name:focus{background:var(--cm-bg-soft)}
-  .dp-grp-ct{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint);flex-shrink:0}
-  .dp-grp-del{width:24px;height:24px;border:0;background:none;border-radius:5px;color:var(--cm-fg-muted);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-  .dp-grp-del:hover{background:var(--cm-danger-bg,rgba(220,38,38,.1));color:var(--cm-danger)}
-  .dp-grp-players{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center}
-  .dp-grp-chip{display:inline-flex;align-items:center;gap:6px;height:25px;padding:0 3px 0 8px;border-radius:6px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)}
-  .dp-grp-chip .num{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .dp-grp-chip .x{width:16px;height:16px;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer;border-radius:4px;font:400 14px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center}
-  .dp-grp-chip .x:hover{color:var(--cm-danger)}
-  .dp-grp-empty{font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint)}
-  .dp-grp-add-sel{height:25px;padding:0 6px;border:1px dashed var(--cm-border-strong);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans);cursor:pointer;outline:none}
-  #dpGroupsBody .dp-grp-none{font:400 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;padding:8px 0}
-  .dp-player[draggable="true"]{cursor:grab}
+  /* Per-exercise player picker (multi-select) */
+  .dp-ex-players{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:6px}
+  .dp-ex-players .lbl{font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);margin-right:2px}
+  .dp-exp-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:5px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg)}
+  .dp-exp-chip .num{font:600 9px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .dp-exp-add{height:22px;padding:0 8px;border:1px dashed var(--cm-border-strong);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer}
+  .dp-exp-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+  /* Shared checklist popover */
+  .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-height:320px;overflow:auto}
+  .dp-exp-menu.is-open{display:block}
+  .dp-exp-menu .hd{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 6px;font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .dp-exp-menu .hd button{border:0;background:none;color:var(--cm-accent);font:500 11px/1 var(--cm-font-sans);cursor:pointer;padding:2px 4px}
+  .dp-exp-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg)}
+  .dp-exp-opt:hover{background:var(--cm-bg-soft)}
+  .dp-exp-opt input{width:15px;height:15px;accent-color:var(--cm-accent);cursor:pointer}
+  .dp-exp-opt .num{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:20px;text-align:right}
   .dp-squad-summary{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cm-bg-soft);border-top:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-muted)}
   .dp-squad-summary strong{color:var(--cm-fg-strong);font-weight:600}
   .dp-squad-summary .sep{width:1px;height:18px;background:var(--cm-border-soft)}
@@ -381,20 +377,6 @@
         </div>
       </div>
 
-      <!-- ===== TRAINING GROUPS ===== -->
-      <div class="dp-card" id="dpGroupsCard">
-        <div class="dp-card-h">
-          <h3 data-i18n="daily_planning.training_groups">Training groups</h3>
-          <span class="ct" id="dpGroupsCt">—</span>
-          <div class="right">
-            <button class="cm-btn is-outline is-sm" onclick="dpAddGroup()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="daily_planning.add_group">Add group</span></button>
-          </div>
-        </div>
-        <div class="dp-card-b" id="dpGroupsBody" style="padding:12px 16px">
-          <!-- Populated by dpRenderGroups() -->
-        </div>
-      </div>
-
       <!-- ===== ACTIVATION ===== -->
       <div class="dp-card">
         <div class="dp-card-h">
@@ -593,7 +575,7 @@ function dpRenderSquad(avMap) {
     const amber = (cls === 'partial' || !!adaptEntry);
     const note  = adaptEntry ? (adaptEntry.adaptation_notes || '') : '';
     const tooltip = note || reason;
-    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" draggable="true" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${lastName}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
+    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${lastName}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
       (note && isTrainee ? `<span class="dp-c-note">${note}</span>` : '');
   }
   function outChip(p) {
@@ -665,13 +647,10 @@ function dpRenderSquad(avMap) {
       el.style.display = (el.dataset.status === activeFilter) ? '' : 'none';
     });
   }
-  dpRenderGroups();   // groups depend on the roster/availability we just computed
 }
 
-// ── Training groups ─────────────────────────────────────────────────────────
-// Session-scoped groups of available players (training_sessions.player_groups jsonb).
-let _dpGroups = [];
-const _DP_GROUP_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2'];
+// ── Per-exercise player assignment (multi-select) ───────────────────────────
+// Which available players do each exercise — stored in session_exercises.player_ids.
 function _dpStatusCls(p){
   const av = (window._dpAvMap||{})[p.id], inj = _dpInjMap[p.id];
   let cls = inj ? 'partial' : '';
@@ -685,85 +664,61 @@ function _dpStatusCls(p){
 function _dpTrainees(){ return _dpPlayers.filter(p => ['','partial'].includes(_dpStatusCls(p))); }
 function _dpPlayerById(id){ return _dpPlayers.find(p => String(p.id) === String(id)) || null; }
 function _dpPlayerShort(p){ return (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '—'; }
+function _dpExPlayers(e){ return Array.isArray(e?.player_ids) ? e.player_ids : []; }
 
-function dpRenderGroups(){
-  const body = document.getElementById('dpGroupsBody'); if (!body) return;
-  const ct = document.getElementById('dpGroupsCt');
-  if (ct) ct.textContent = _dpGroups.length ? `${_dpGroups.length}` : '—';
-  // Drop stale player ids (players no longer available / removed from roster).
-  const traineeIds = new Set(_dpTrainees().map(p => String(p.id)));
-  _dpGroups.forEach(g => { g.players = (g.players||[]).filter(id => traineeIds.has(String(id))); });
-  if (!_dpGroups.length){
-    body.innerHTML = `<div class="dp-grp-none">${tt('daily_planning.no_groups','No groups yet. Add a group and drag available players into it (or use the picker).')}</div>`;
-    return;
+// Inline players row shown inside an exercise card (chips + "add" button).
+function dpExPlayersRow(e){
+  const ids = _dpExPlayers(e);
+  const chips = ids.map(id => { const p = _dpPlayerById(id); return p
+    ? `<span class="dp-exp-chip"><span class="num">${p.number ?? '—'}</span>${_dpPlayerShort(p)}</span>` : ''; }).join('');
+  const lbl = ids.length
+    ? `<button class="dp-exp-add" onclick="dpOpenExPlayers('${e.id}',this)">${tt('daily_planning.edit_players','Edit')}</button>`
+    : `<button class="dp-exp-add" onclick="dpOpenExPlayers('${e.id}',this)">＋ ${tt('daily_planning.pick_players','Players')}</button>`;
+  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.players_label','Players')}</span>${chips}${lbl}</div>`;
+}
+// Refresh just one card's players row (no full re-render → keeps the popover open).
+function dpRefreshExPlayers(seid){
+  const e = _dpFindTask(seid); if (!e) return;
+  const row = document.querySelector(`.dp-ex-players[data-exp="${seid}"]`);
+  if (row) row.outerHTML = dpExPlayersRow(e);
+}
+
+let _dpExpTarget = null;
+function dpOpenExPlayers(seid, btn){
+  const e = _dpFindTask(seid); if (!e) return;
+  _dpExpTarget = seid;
+  const menu = document.getElementById('dpExPlayersMenu');
+  const sel = new Set(_dpExPlayers(e).map(String));
+  const opts = _dpTrainees().map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
+    || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
+  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.assign_players','Assign players')}</span><button onclick="dpClearExPlayers()">${tt('daily_planning.clear','Clear')}</button></div>${opts}`;
+  const r = btn.getBoundingClientRect();
+  menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
+  menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  menu.classList.add('is-open');
+}
+function dpToggleExPlayer(pid, on){
+  const e = _dpFindTask(_dpExpTarget); if (!e) return;
+  let ids = _dpExPlayers(e).map(String);
+  if (on) { if (!ids.includes(String(pid))) ids.push(String(pid)); }
+  else ids = ids.filter(x => x !== String(pid));
+  e.player_ids = ids;
+  dpRefreshExPlayers(_dpExpTarget);
+  _dpEditSave(_dpExpTarget, { player_ids: ids });
+}
+function dpClearExPlayers(){
+  const e = _dpFindTask(_dpExpTarget); if (!e) return;
+  e.player_ids = [];
+  document.querySelectorAll('#dpExPlayersMenu input[type=checkbox]').forEach(cb => cb.checked = false);
+  dpRefreshExPlayers(_dpExpTarget);
+  _dpEditSave(_dpExpTarget, { player_ids: [] });
+}
+document.addEventListener('click', e => {
+  const menu = document.getElementById('dpExPlayersMenu');
+  if (menu && menu.classList.contains('is-open') && !menu.contains(e.target) && !e.target.closest('.dp-exp-add')) {
+    menu.classList.remove('is-open');
   }
-  const assigned = new Set(_dpGroups.flatMap(g => (g.players||[]).map(String)));
-  body.innerHTML = _dpGroups.map(g => {
-    const chips = (g.players||[]).map(id => {
-      const p = _dpPlayerById(id); if (!p) return '';
-      return `<span class="dp-grp-chip"><span class="num">${p.number ?? '—'}</span>${_dpPlayerShort(p)}<button class="x" title="${tt('daily_planning.remove','Remove')}" onclick="dpGroupRemovePlayer('${g.id}','${id}')">×</button></span>`;
-    }).join('');
-    // Picker: trainees not already in ANY group.
-    const opts = _dpTrainees().filter(p => !assigned.has(String(p.id)))
-      .map(p => `<option value="${p.id}">${p.number ?? '—'} · ${_dpPlayerShort(p)}</option>`).join('');
-    return `<div class="dp-grp" data-gid="${g.id}" ondragover="dpGroupDragOver(event)" ondragleave="dpGroupDragLeave(event)" ondrop="dpGroupDrop(event,'${g.id}')">
-      <div class="dp-grp-h">
-        <span class="dp-grp-dot" style="background:${g.color}"><input type="color" value="${g.color}" oninput="dpGroupColor('${g.id}',this.value)"></span>
-        <input class="dp-grp-name" value="${(g.name||'').replace(/"/g,'&quot;')}" placeholder="${tt('daily_planning.group','Group')}" oninput="dpRenameGroup('${g.id}',this.value)">
-        <span class="dp-grp-ct">${(g.players||[]).length} ${tt('daily_planning.pl','pl')}</span>
-        <button class="dp-grp-del" title="${tt('daily_planning.delete_group','Delete group')}" onclick="dpDeleteGroup('${g.id}')"><i class="ti ti-trash" style="font-size:14px"></i></button>
-      </div>
-      <div class="dp-grp-players">
-        ${chips || `<span class="dp-grp-empty">${tt('daily_planning.drop_players_here','Drop players here')}</span>`}
-        ${opts ? `<select class="dp-grp-add-sel" onchange="dpGroupAddPlayer('${g.id}',this.value);this.value=''"><option value="">${tt('daily_planning.add_player','+ Add player')}</option>${opts}</select>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-function _dpNextGroupId(){ return 'g' + (_dpGroups.reduce((m,g)=>Math.max(m, parseInt(String(g.id).replace(/\D/g,''))||0), 0) + 1); }
-function dpAddGroup(){
-  const i = _dpGroups.length;
-  _dpGroups.push({ id:_dpNextGroupId(), name: tt('daily_planning.group_n', `Group ${String.fromCharCode(65+i)}`, {n:String.fromCharCode(65+i)}), color:_DP_GROUP_COLORS[i % _DP_GROUP_COLORS.length], players:[] });
-  dpRenderGroups(); dpSaveGroups();
-}
-function dpDeleteGroup(gid){
-  _dpGroups = _dpGroups.filter(g => g.id !== gid);
-  dpRenderGroups(); dpSaveGroups();
-}
-function dpRenameGroup(gid, name){ const g=_dpGroups.find(x=>x.id===gid); if(g){ g.name=name; dpSaveGroups(); } }
-function dpGroupColor(gid, color){ const g=_dpGroups.find(x=>x.id===gid); if(g){ g.color=color; dpRenderGroups(); dpSaveGroups(); } }
-function dpGroupAddPlayer(gid, pid){
-  if (!pid) return;
-  _dpGroups.forEach(g => { g.players = (g.players||[]).filter(id => String(id)!==String(pid)); });  // one group per player
-  const g = _dpGroups.find(x=>x.id===gid); if (!g) return;
-  g.players.push(pid);
-  dpRenderGroups(); dpSaveGroups();
-}
-function dpGroupRemovePlayer(gid, pid){
-  const g=_dpGroups.find(x=>x.id===gid); if(!g) return;
-  g.players = (g.players||[]).filter(id => String(id)!==String(pid));
-  dpRenderGroups(); dpSaveGroups();
-}
-// Drag from the Squad chips (or between groups) into a group.
-function dpGroupDragOver(e){ e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
-function dpGroupDragLeave(e){ e.currentTarget.classList.remove('drag-over'); }
-function dpGroupDrop(e, gid){
-  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
-  const pid = e.dataTransfer.getData('text/plain'); if (pid) dpGroupAddPlayer(gid, pid);
-}
-let _dpGroupsSaveTimer = null;
-function dpSaveGroups(){
-  const ct = document.getElementById('dpGroupsCt'); if (ct) ct.textContent = _dpGroups.length || '—';
-  clearTimeout(_dpGroupsSaveTimer);
-  const sid = _dpCurrentSessionId, snap = JSON.parse(JSON.stringify(_dpGroups));
-  _dpGroupsSaveTimer = setTimeout(async () => {
-    let targetSid = sid;
-    if (!targetSid) { try { await dpEnsureSession(); } catch(_){} targetSid = _dpCurrentSessionId; }
-    if (!targetSid) return;
-    const { error } = await window.sb.from('training_sessions').update({ player_groups: snap }).eq('id', targetSid).eq('club_id', _dpClubId);
-    if (error) console.warn('[dp-groups] save failed:', error.message);
-  }, 500);
-}
+});
 
 async function dpChangeStatus(playerId, newStatus) {
   const { error } = await window.sb.from('availability').upsert({
@@ -805,7 +760,7 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,player_groups').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   _dpDaySessions = sessResult.data || [];
@@ -816,7 +771,6 @@ async function loadDay(dateStr) {
   _dpRenderSessionSwitch();   // after _dpCurrentSessionId, which marks the active tab
   _dpPublished = sess?.published || false;
   _dpGpsTargets = (sess && sess.gps_targets && typeof sess.gps_targets === 'object') ? sess.gps_targets : {};
-  _dpGroups = Array.isArray(sess?.player_groups) ? sess.player_groups.map(g => ({ ...g, players: Array.isArray(g.players) ? g.players : [] })) : [];
   const titleInput = document.getElementById('dpSessionTitle');
   if (sess) {
     if (titleInput) titleInput.value = sess.title || '';
@@ -971,12 +925,6 @@ window.addEventListener('beforeprint', dpRenderPrintSheet);
 window.addEventListener('beforeunload', () => { dpFlushEdits(); dpFlushTargets(); });
 // Flush as soon as a task input/textarea loses focus (belt-and-suspenders over the debounce).
 ['dpExGrid','dpActStrip'].forEach(id => document.getElementById(id)?.addEventListener('focusout', dpFlushEdits));
-// Drag available squad chips into a training group.
-document.getElementById('dpSquadBody')?.addEventListener('dragstart', e => {
-  const chip = e.target.closest('.dp-player[data-pid]'); if (!chip) return;
-  e.dataTransfer.effectAllowed = 'copy';
-  try { e.dataTransfer.setData('text/plain', chip.dataset.pid); } catch(_){}
-});
 
 // ── Session exercises ──
 const CAT_CLS = { physical:'fis', tactical:'tac', technical:'tec', strength:'str', mobility:'mob', other:'oth' };
@@ -997,7 +945,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,player_ids,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -1183,6 +1131,7 @@ function dpExerciseCardHTML(e) {
             return h;
           })()}
           <textarea class="no-print" placeholder="${tt('daily_planning.session_notes_ph','Session notes…')}" oninput="dpEditNotes('${e.id}',this.value)" title="${tt('daily_planning.notes_for_this_session_only','Notes for this session only (not saved to the Drill Designer exercise)')}" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;resize:vertical;min-height:30px">${(e.notes ?? '').replace(/</g,'&lt;')}</textarea>
+          ${dpExPlayersRow(e)}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${tt('daily_planning.planner','PLANNER')}</span>
             <span class="grow"></span>
@@ -1214,6 +1163,7 @@ function dpExerciseCardHTML(e) {
           ${e.phase === 'main' ? `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
             <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;width:54px"><span>${tt('daily_planning.min_short','min')}</span>
           </div>` : ''}
+          ${dpExPlayersRow(e)}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
             <span class="grow"></span>
@@ -1664,6 +1614,10 @@ async function dpRenderPrintSheet() {
             : tt('daily_planning.sheet_work_line', `${e.series} × ${esc(e.work_time)} work`, {series: e.series, work: esc(e.work_time)}))
         : '';
       const note = (e.notes || '').trim();
+      const players = _dpExPlayers(e).map(id => _dpPlayerById(id)).filter(Boolean);
+      const playersLine = players.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${players.map(p => `<span style="display:inline-flex;align-items:center;gap:3px;background:#F3F4F6;border:1px solid #E7E7E4;border-radius:4px;padding:1px 5px;font:500 9.5px ${FONT};color:#15181D"><b style="font:600 8px ${MONO};color:#6B7280">${p.number ?? '—'}</b> ${esc(_dpPlayerShort(p))}</span>`).join('')}</div>`
+        : '';
       const dur = totalMin ? totalMin + '′' : '';
       const src = _img(e);
       const thumb = src ? `<img src="${esc(src)}" crossorigin="anonymous" style="display:block;width:100%;height:auto">`
@@ -1678,6 +1632,7 @@ async function dpRenderPrintSheet() {
           ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
           ${workLine ? `<div style="font:500 10.5px ${MONO};color:#15803D;margin-top:4px">${esc(workLine)}</div>` : ''}
           ${note ? `<div style="font:400 10.5px ${FONT};color:#5B6470;margin-top:4px">${esc(note)}</div>` : ''}
+          ${playersLine}
         </div>
       </div>`;
     };
@@ -1694,22 +1649,6 @@ async function dpRenderPrintSheet() {
     const fieldBlock = fx.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_field_hdr', `Field exercises · ${fx.length} · ${fieldMin} min`, {count: fx.length, min: fieldMin}), true)}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fx.map(printExCard).join('')}</div>
-    </div>` : '';
-
-    // 6b) Training groups (only groups that actually have players)
-    const grpList = (_dpGroups||[]).filter(g => (g.players||[]).length);
-    const groupsBlock = grpList.length ? `<div style="margin-bottom:16px">
-      ${sectionTitle(tt('daily_planning.sheet_groups_hdr', `Training groups · ${grpList.length}`, {count: grpList.length}))}
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
-        ${grpList.map(g => {
-          const players = (g.players||[]).map(id => _dpPlayerById(id)).filter(Boolean);
-          const chips = players.map(p => `<span style="display:inline-flex;align-items:center;gap:4px;background:#F3F4F6;border:1px solid #E7E7E4;border-radius:5px;padding:2px 7px;font:500 10.5px ${FONT};color:#15181D"><b style="font:600 9px ${MONO};color:#6B7280">${p.number ?? '—'}</b> ${esc(_dpPlayerShort(p))}</span>`).join('');
-          return `<div style="border:1px solid #E7E7E4;border-radius:9px;padding:8px 10px;break-inside:avoid">
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px"><span style="width:10px;height:10px;border-radius:50%;background:${g.color||'#999'};flex-shrink:0"></span><span style="font:700 11.5px ${FONT};color:#15181D">${esc(g.name||'')}</span><span style="font:500 9.5px ${MONO};color:#9CA3AF;margin-left:auto">${players.length} ${tt('daily_planning.pl','pl')}</span></div>
-            <div style="display:flex;flex-wrap:wrap;gap:5px">${chips}</div>
-          </div>`;
-        }).join('')}
-      </div>
     </div>` : '';
 
     // 7) Footer
@@ -1735,7 +1674,7 @@ async function dpRenderPrintSheet() {
       <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${groupsBlock}${footer}
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
@@ -2019,7 +1958,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position')
+    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_ids')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
@@ -2441,6 +2380,9 @@ async function dpExportPDF() {
   <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="daily_planning.unavailable">Unavailable</span></div>
   <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span><span data-i18n="daily_planning.away">Away</span></div>
 </div>
+
+<!-- Per-exercise player picker (populated on open by dpOpenExPlayers) -->
+<div id="dpExPlayersMenu" class="dp-exp-menu"></div>
 
 <script>
   document.querySelectorAll('.dp-squad-pill').forEach(p => p.addEventListener('click', () => {

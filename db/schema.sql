@@ -1977,6 +1977,7 @@ create table if not exists public.session_exercises (
   rest_time text,
   dose_mode text,
   reps integer,
+  player_ids jsonb,
   constraint session_exercises_pkey primary key (id),
   constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text])))
 );
@@ -2147,7 +2148,6 @@ create table if not exists public.training_sessions (
   gym_content jsonb,
   external_activity_id text,
   gps_targets jsonb default '{}'::jsonb not null,
-  player_groups jsonb,
   recurrence_group_id uuid,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
