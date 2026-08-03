@@ -1331,7 +1331,7 @@ function gpBuildGroupsModal() {
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
           <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gym_planner.groups','Groups')}</span>
           <select id="gpGrpK" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-            <option value="auto">${tt('gym_planner.auto','Auto')}</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="auto">${tt('gym_planner.auto','Auto')}</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option>
           </select>
         </div>
       </div>
@@ -1408,7 +1408,7 @@ function gpRenderGroups() {
   let k = _gpGrpK === 'auto' ? gpAutoKJenks(entries) : parseInt(_gpGrpK);
   k = Math.max(1, Math.min(k, entries.length));
   const groups = gpJenksGroups(entries, k);
-  const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444'];
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444','#0ea5e9'];
   const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
   // Working load per entry (kg): VBT value already IS the load at Vt; %RM applies the percentage.
   const loadKg = e => isRM ? e.value * _gpGrpPct/100 : e.value;
@@ -1890,7 +1890,7 @@ function gpRenderPrintSheet() {
     try {
       const gd = gpComputeGroups();
       if (gd && gd.ok && gd.groups.length) {
-        const GCOLORS = ['#3B82F6','#10B981','#F59E0B','#A855F7','#EF4444'];
+        const GCOLORS = ['#3B82F6','#10B981','#F59E0B','#A855F7','#EF4444','#0EA5E9'];
         const modeLabel = gd.mode === 'vbt' ? 'VBT' : '%RM';
         const metaBits = [esc(gd.variant), modeLabel, tt('gym_planner.n_groups_count', `${gd.k} groups`, { count:gd.k })];
         if (gd.mode === 'rm') metaBits.push(tt('gym_planner.target_pct_rm', `target ${gd.pct}% RM`, { pct:gd.pct }));
