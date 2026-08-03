@@ -2013,7 +2013,7 @@ create table if not exists public.session_exercises (
   reps integer,
   player_groups jsonb,
   constraint session_exercises_pkey primary key (id),
-  constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text])))
+  constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text, 'goalkeepers'::text])))
 );
 CREATE INDEX idx_session_exercises_session ON public.session_exercises USING btree (session_id);
 CREATE INDEX idx_session_exercises_club ON public.session_exercises USING btree (club_id);

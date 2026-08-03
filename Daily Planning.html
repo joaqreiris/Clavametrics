@@ -423,6 +423,30 @@
         </div>
       </div>
 
+      <!-- ===== GOALKEEPER TRAINING — collapsible dropdown, shown by default, hideable per user ===== -->
+      <div class="dp-card dp-coll" id="dpGkCard">
+        <div class="dp-card-h dp-coll-h" id="dpGkHead">
+          <h3 data-i18n="daily_planning.goalkeepers">Goalkeeper training</h3>
+          <span class="ct" id="dpGkCt">—</span>
+          <div class="right" style="gap:8px" onclick="event.stopPropagation()">
+            <button class="cm-btn is-outline is-sm" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="daily_planning.add_exercise">Add exercise</span></button>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="daily_planning.duration">Duration</span>
+            <input type="number" id="dpGkDuration" min="0" max="120" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" readonly>
+            <button class="no-print" onclick="dpGkToggleHidden(true)" title="" data-i18n-attr="title:daily_planning.gk_hide" style="width:26px;height:26px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-eye-off" style="font-size:14px"></i></button>
+          </div>
+          <span class="chev"><i class="ti ti-chevron-down"></i></span>
+        </div>
+        <div class="dp-card-b dp-coll-body">
+          <div class="dp-ex-grid" id="dpGkStrip" style="padding:0">
+            <!-- Populated by loadGoalkeeperActivities() -->
+          </div>
+        </div>
+      </div>
+      <!-- Restore chip shown only when the section is hidden -->
+      <button type="button" id="dpGkRestore" class="no-print" onclick="dpGkToggleHidden(false)" style="display:none;align-items:center;gap:8px;width:100%;margin-bottom:14px;padding:10px 16px;border:1px dashed var(--cm-border);border-radius:var(--cm-r-4);background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 12px/1 var(--cm-font-sans);cursor:pointer">
+        <i class="ti ti-ball-football" style="font-size:15px"></i><span data-i18n="daily_planning.gk_show">Show goalkeeper training</span>
+      </button>
+
     </section>
   </main>
 </div>
@@ -495,7 +519,7 @@ let _dpGpsTargets = {};        // metric_key → session target (display units),
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
 let _libExercises = [], _libFolders = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
-let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
+let _dpAvMap = {}, _dpActTotalMin = 0, _dpGkTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
 const _dpDescCache = {};  // planner_exercise_id -> { objective, description } from the Drill Designer exercise (null when absent)
 
@@ -891,7 +915,7 @@ async function loadDay(dateStr) {
 
   _dpUpdatePublishBtn();
 
-  await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+  await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
   (avResult.data || []).forEach(a => { avMap[a.player_id] = a; });
@@ -1060,7 +1084,9 @@ function renderExerciseList(exercises) {
 // Next position = end of the list (max existing position + 1) so new cards always
 // append to the right, never land mid-list when positions aren't contiguous.
 function dpNextPosition(phase){
-  const list = phase === 'activation' ? (window._dpActItems || []) : _dpFieldExercises;
+  const list = phase === 'activation' ? (window._dpActItems || [])
+             : phase === 'goalkeepers' ? (window._dpGkItems || [])
+             : _dpFieldExercises;
   const ps = list.map((x, i) => (x.position != null ? x.position : i));
   return (ps.length ? Math.max(...ps) : -1) + 1;
 }
@@ -1070,6 +1096,7 @@ let _dpDragSeid = null;
 function dpInitReorder(){
   dpWireReorder(document.getElementById('dpExGrid'),  'field');
   dpWireReorder(document.getElementById('dpActStrip'), 'activation');
+  dpWireReorder(document.getElementById('dpGkStrip'), 'goalkeepers');
 }
 function dpWireReorder(grid, kind){
   if (!grid || grid._reorderWired) return;   // delegation survives innerHTML repaints
@@ -1113,8 +1140,17 @@ function dpPaintActStrip(){
   const addBtn = `<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
 }
+// Repaint the goalkeeper strip from window._dpGkItems (mirrors loadGoalkeeperActivities).
+function dpPaintGkStrip(){
+  const strip = document.getElementById('dpGkStrip'); if (!strip) return;
+  const gks = window._dpGkItems || [];
+  const addBtn = `<button class="dp-ex-add no-print" onclick="dpGkAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+}
 async function dpReorderExercise(dragSeid, targetSeid, after, kind){
-  const arr = kind === 'activation' ? (window._dpActItems || []) : _dpFieldExercises;
+  const arr = kind === 'activation' ? (window._dpActItems || [])
+            : kind === 'goalkeepers' ? (window._dpGkItems || [])
+            : _dpFieldExercises;
   const from = arr.findIndex(x => x.id === dragSeid);
   if (from < 0) return;
   const [moved] = arr.splice(from, 1);
@@ -1122,7 +1158,7 @@ async function dpReorderExercise(dragSeid, targetSeid, after, kind){
   if (to < 0) { arr.splice(from, 0, moved); return; }   // target vanished — undo
   arr.splice(after ? to + 1 : to, 0, moved);
   arr.forEach((x, i) => { x.position = i; });
-  if (kind === 'activation') dpPaintActStrip(); else renderExerciseList(arr);   // optimistic repaint
+  if (kind === 'activation') dpPaintActStrip(); else if (kind === 'goalkeepers') dpPaintGkStrip(); else renderExerciseList(arr);   // optimistic repaint
   // Persist every row's position (list is small); log but don't block on errors.
   const results = await Promise.all(arr.map(x =>
     window.sb.from('session_exercises').update({ position: x.position }).eq('id', x.id).eq('club_id', _dpClubId)));
@@ -1732,6 +1768,14 @@ async function dpRenderPrintSheet() {
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fx.map(printExCard).join('')}</div>
     </div>` : '';
 
+    // 6b) Goalkeeper training — starts on its own page (.dsp-page). Skipped when empty or hidden by the user.
+    const gks = window._dpGkItems || [];
+    const gkMin = gks.reduce((s, a) => s + (a.duration || 0), 0);
+    const gkBlock = (gks.length && !window._dpGkHidden) ? `<div class="dsp-page" style="break-before:page;page-break-before:always;margin-bottom:16px">
+      ${sectionTitle(tt('daily_planning.sheet_goalkeepers_hdr', `Goalkeeper training · ${gks.length} · ${gkMin} min`, {count: gks.length, min: gkMin}), true)}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${gks.map(printExCard).join('')}</div>
+    </div>` : '';
+
     // 7) Footer
     const midParts = [];
     if (mc?.name) midParts.push(mc.name);
@@ -1755,7 +1799,7 @@ async function dpRenderPrintSheet() {
       <thead><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></thead>
       <tbody><tr><td style="padding:0; vertical-align:top">
         <div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1035px; background:#fff; padding:0 42px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${footer}
+          ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBand}${actBlock}${fieldBlock}${gkBlock}${footer}
         </div>
       </td></tr></tbody>
       <tfoot><tr><td style="padding:0"><div style="height:11mm"></div></td></tr></tfoot>
@@ -1767,13 +1811,13 @@ async function dpRenderPrintSheet() {
 
 async function deleteExercise(seid) {
   const { error } = await window.sb.from('session_exercises').delete().eq('id', seid).eq('club_id', _dpClubId);
-  if (!error) { await loadSessionExercises(_dpCurrentSessionId); await loadActivationActivities(_dpCurrentSessionId); }
+  if (!error) { await loadSessionExercises(_dpCurrentSessionId); await loadActivationActivities(_dpCurrentSessionId); await loadGoalkeeperActivities(_dpCurrentSessionId); }
 }
 
 // ── From library (Planner exercises) ──
 async function openLibModal(mode) {
   _libMode = mode || 'main';
-  const title = _libMode === 'activation' ? tt('daily_planning.activation_exercises','Activation exercises') : tt('daily_planning.exercises_library','Exercises Library');
+  const title = _libMode === 'activation' ? tt('daily_planning.activation_exercises','Activation exercises') : _libMode === 'goalkeepers' ? tt('daily_planning.goalkeeper_exercises','Goalkeeper exercises') : tt('daily_planning.exercises_library','Exercises Library');
   document.querySelector('#libBackdrop [style*="font:600 14px"]').textContent = title;
   document.getElementById('libBackdrop').style.display = 'flex';
   document.getElementById('libSearch').value = '';
@@ -1867,7 +1911,7 @@ function filterLib() {
 async function addPlannerExercise(exerciseId) {
   if (!await dpEnsureSession()) return;
   const ex  = _libExercises.find(e => e.id === exerciseId);
-  const phase = _libMode === 'activation' ? 'activation' : 'main';
+  const phase = _libMode === 'activation' ? 'activation' : _libMode === 'goalkeepers' ? 'goalkeepers' : 'main';
   const pos = dpNextPosition(phase);   // always append to the end of its own phase
   const area = (ex?.field_width && ex?.field_height) ? ex.field_width * ex.field_height : null;
   const m2   = (area && ex?.players_count > 0) ? Math.round(area / ex.players_count) : null;
@@ -1897,6 +1941,7 @@ async function addPlannerExercise(exerciseId) {
   }
   closeLibModal();
   if (phase === 'activation') await loadActivationActivities(_dpCurrentSessionId);
+  else if (phase === 'goalkeepers') await loadGoalkeeperActivities(_dpCurrentSessionId);
   else await loadSessionExercises(_dpCurrentSessionId);
 }
 
@@ -1984,7 +2029,7 @@ async function dpAutoSaveSession() {
       const { error } = await window.sb.from('training_sessions').update(payload).eq('id', existingId).eq('club_id', _dpClubId);
       saveError = error;
       if (!error) {
-        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
         _dpUpdatePublishBtn();
       }
     } else {
@@ -1993,7 +2038,7 @@ async function dpAutoSaveSession() {
       saveError = error;
       if (!error && data?.id) {
         _dpCurrentSessionId = data.id;
-        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+        await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
         _dpUpdatePublishBtn();
       }
     }
@@ -2120,6 +2165,90 @@ async function dpActDelete(id) {
   const { error } = await window.sb.from('session_exercises').delete().eq('id', id).eq('club_id', _dpClubId);
   if (!error) await loadActivationActivities(_dpCurrentSessionId);
 }
+
+// ── Goalkeeper training (phase='goalkeepers') — mirrors the activation section ──
+async function loadGoalkeeperActivities(sessionId) {
+  const strip = document.getElementById('dpGkStrip');
+  const ctEl  = document.getElementById('dpGkCt');
+  const durEl = document.getElementById('dpGkDuration');
+  if (!strip) return;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="dpGkAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  if (!sessionId) {
+    strip.innerHTML = addBtn;
+    if (ctEl) ctEl.textContent = '—';
+    if (durEl) durEl.value = '';
+    _dpGkTotalMin = 0;
+    window._dpGkItems = [];
+    return;
+  }
+  const { data } = await window.sb.from('session_exercises')
+    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
+    .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','goalkeepers').order('position');
+  const gks = data || [];
+  window._dpGkItems = gks;
+  gks.forEach(e => {
+    e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
+  });
+  const total = gks.reduce((s, a) => s + (a.duration || 0), 0);
+  _dpGkTotalMin = total;
+  if (ctEl) ctEl.textContent = total ? tt('daily_planning.min_count', `${total} min`, {count: total}) : (gks.length ? String(gks.length) : '—');
+  if (durEl) durEl.value = total || '';
+  strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+  dpInitReorder();
+
+  const _reqSession = sessionId;
+  const need = [...new Set(gks.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
+  if (need.length) {
+    dpResolvePreviews(need).then(() => {
+      if (_dpCurrentSessionId !== _reqSession) return;
+      gks.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
+      strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+    });
+  }
+}
+
+async function dpGkAdd() {
+  if (!await dpEnsureSession()) return;
+  const pos = dpNextPosition('goalkeepers');
+  const { error } = await window.sb.from('session_exercises').insert({
+    club_id: _dpClubId, session_id: _dpCurrentSessionId,
+    name: tt('daily_planning.new_activity','New activity'), phase: 'goalkeepers', duration: 5, position: pos
+  });
+  if (error) {
+    console.error('dpGkAdd insert error:', error);
+    alert(tt('daily_planning.add_activity_failed','Add activity failed:') + '\n' + (error.message||'') + '\n' + (error.details||'') + '\n' + (error.hint||'') + '\ncode: ' + (error.code||''));
+    return;
+  }
+  await loadGoalkeeperActivities(_dpCurrentSessionId);
+}
+
+async function dpGkSave(id, name) {
+  await window.sb.from('session_exercises').update({ name }).eq('id', id).eq('club_id', _dpClubId);
+}
+
+async function dpGkDelete(id) {
+  const { error } = await window.sb.from('session_exercises').delete().eq('id', id).eq('club_id', _dpClubId);
+  if (!error) await loadGoalkeeperActivities(_dpCurrentSessionId);
+}
+
+// Collapse toggle (chevron) + per-user hide preference (localStorage), shown by default.
+document.getElementById('dpGkHead')?.addEventListener('click', () => {
+  document.getElementById('dpGkCard')?.classList.toggle('is-collapsed');
+});
+function dpGkToggleHidden(hidden) {
+  try { localStorage.setItem('dp_gk_hidden', hidden ? '1' : ''); } catch (_) {}
+  dpApplyGkHidden();
+}
+function dpApplyGkHidden() {
+  let hidden = false;
+  try { hidden = localStorage.getItem('dp_gk_hidden') === '1'; } catch (_) {}
+  window._dpGkHidden = hidden;
+  const card = document.getElementById('dpGkCard');
+  const chip = document.getElementById('dpGkRestore');
+  if (card) card.style.display = hidden ? 'none' : '';
+  if (chip) chip.style.display = hidden ? 'flex' : 'none';
+}
+dpApplyGkHidden();
 
 // ── Publish ──
 function _dpUpdatePublishBtn() {
@@ -2302,6 +2431,8 @@ async function dpExportPDF() {
       const next = boxes.filter(b => b.top >= tb.bottom - 2).sort((a, b) => a.top - b.top)[0];
       boxes.push({ top: tb.top, bottom: next ? next.bottom : tb.bottom });   // glue heading to its first row
     });
+    // Forced page breaks: any .dsp-page element starts on a fresh page (e.g. goalkeeper block).
+    const forcedBreaks = [...el.querySelectorAll('.dsp-page')].map(n => toPx(n).top).filter(y => y > 1);
     const straddles = y => boxes.some(b => y > b.top + 1 && y < b.bottom - 1);
     // Given a hard max end, pull the cut up to the nearest safe boundary that clears every box.
     const safeCut = (start, maxEnd) => {
@@ -2322,7 +2453,9 @@ async function dpExportPDF() {
       let contentTop = MARGIN;
       if (repeat) { pdf.addImage(squadImg, 'JPEG', 0, MARGIN, pageW, squadHmm); contentTop = MARGIN + squadHmm + GAP; }
       const maxSlice = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
-      const cut = safeCut(sy, sy + maxSlice);
+      // A forced break inside this slice ends the page exactly at that boundary (new page for the block).
+      const fb = forcedBreaks.filter(y => y > sy + 10 && y <= sy + maxSlice).sort((a, b) => a - b)[0];
+      const cut = fb != null ? Math.round(fb) : safeCut(sy, sy + maxSlice);
       const h = Math.max(1, cut - sy);
       const slice = document.createElement('canvas');
       slice.width = canvas.width; slice.height = h;
