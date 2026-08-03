@@ -111,6 +111,14 @@
   .gp-tbl .pct{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
   .gp-tbl .vel{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:rgba(168,85,247,0.14);color:#7C3AED;font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
 
+  /* Session switcher: jump between the day's field (Daily Planning) and gym sessions. */
+  .gp-sess-switch{margin-left:auto;display:inline-flex;gap:2px;padding:2px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft);max-width:60%;overflow-x:auto}
+  .gp-sess-tab{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap}
+  .gp-sess-tab .tm{font:600 10.5px/1 var(--cm-font-mono);opacity:.75}
+  .gp-sess-tab .nm{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  .gp-sess-tab:hover{color:var(--cm-fg)}
+  .gp-sess-tab.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
+
   /* Print-layout toggle (cards with images vs text only) */
   .gp-print-seg{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;padding:2px;gap:2px}
   .gp-print-seg button{border:0;background:transparent;width:30px;height:28px;border-radius:5px;color:var(--cm-fg-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
@@ -188,6 +196,8 @@
       <div class="gp-card">
         <div class="gp-card-h">
           <h3 data-i18n="gym_planner.session_info">Session info</h3>
+          <!-- Jump to the day's field (Daily Planning) session — shown when one exists. -->
+          <div id="gpSessionSwitch" class="gp-sess-switch no-print" style="display:none"></div>
           <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpOpenAi()"><i class="ti ti-sparkles" style="font-size:13px"></i><span data-i18n="gym_planner.generate_with_ai">Generate with AI</span></button>
     <button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i><span data-i18n="gym_planner.load_template">Load template</span></button></div>
         </div>
@@ -364,7 +374,7 @@
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpTeamId = null, _gpTeams = [];
-let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
+let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [], _gpDaySessions = [];
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
 let _gpCalFields = new Set();
 let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80, _gpGrpTargetVel = 0.80;
@@ -1504,6 +1514,31 @@ async function gpLoadAthletes(dateStr) {
   gpRenderAdaptations(treatRes.data || []);
 }
 
+// Session switcher — mirrors Daily Planning. Shows the day's sessions so the user can jump back to
+// the field (Daily Planning) session from here. Only rendered when a field session exists.
+function _gpRenderSessionSwitch(dateStr) {
+  const host = document.getElementById('gpSessionSwitch');
+  if (!host) return;
+  const sessions = _gpDaySessions || [];
+  if (!sessions.some(s => s.session_type !== 'gym')) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = '';
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]));
+  host.innerHTML = sessions.map(s => {
+    const isGym = s.session_type === 'gym';
+    const time  = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    const name  = s.title || (isGym ? tt('gym_planner.gym_session','Gym session') : tt('gym_planner.field_session','Field session'));
+    const on    = (isGym && s.id === _gpCurrentSessionId) ? ' is-on' : '';
+    return `<button type="button" class="gp-sess-tab${on}" data-sess="${esc(s.id)}" data-type="${esc(s.session_type)}" title="${esc(name)}">`
+      + (time ? `<span class="tm">${esc(time)}</span>` : '')
+      + `<span class="nm">${esc(name)}</span></button>`;
+  }).join('');
+  host.querySelectorAll('[data-sess]').forEach(b => b.addEventListener('click', async () => {
+    if (b.dataset.type === 'gym') return;                 // already in the gym planner
+    await gpFlushSave();                                  // don't lose pending gym edits
+    window.location.href = `Daily Planning.html?date=${dateStr}&session=${encodeURIComponent(b.dataset.sess)}`;
+  }));
+}
+
 function gpUpdateAu() {
   const dur = parseInt(document.getElementById('gpDuration')?.value) || 0;
   const rpe = parseInt(document.getElementById('gpEstRpe')?.value)   || 0;
@@ -1543,14 +1578,19 @@ async function gpLoadDay(dateStr) {
   const mcLabel = mc ? mc.name : '';
   document.getElementById('gpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : ''}`;
 
+  // Load ALL of the day's sessions (same set as Daily Planning) so we can offer a switcher back to
+  // the field session. The gym planner still edits the day's gym session.
   const { data: _rows } = await window.sb.from('training_sessions')
     .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content')
-    .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr)
-    .in('session_type', ['gym']).order('created_at', { ascending: false }).limit(1);
-  const sess = (_rows && _rows[0]) || null;
+    .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr).eq('is_historical', false)
+    .order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true });
+  _gpDaySessions = _rows || [];
+  const gymSessions = _gpDaySessions.filter(s => s.session_type === 'gym');
+  const sess = gymSessions[0] || null;
 
   _gpCurrentSessionId = sess?.id || null;
   _gpPublished = sess?.published || false;
+  _gpRenderSessionSwitch(dateStr);
 
   const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   setVal('gpTitle',     sess?.title || '');
