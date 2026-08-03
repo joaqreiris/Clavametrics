@@ -7037,24 +7037,8 @@
       var plan=[...planMap.entries()].map(function(e){ return { natKey:e[0], rec:e[1].rec, metrics:e[1].metrics }; });
 
       if (plan.length){
-        var pids=[...new Set(plan.map(function(p){ return p.rec.player_id; }))];
-        var exQ=window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id',_clubId).in('player_id',pids);
-        if (_teamId) exQ=exQ.eq('team_id',_teamId);
-        var ex=await exQ; if (ex.error) throw ex.error;
-        var planKeys=new Set(plan.map(function(p){ return p.natKey; }));
-        var delIds=(ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id,e.test_type,e.test_date)); }).map(function(e){ return e.id; });
-        if (delIds.length){ var de=(await window.sb.from('force_tests').delete().in('id',delIds)).error; if (de) throw de; }
-
-        var ins=await window.sb.from('force_tests').insert(plan.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
-        if (ins.error) throw ins.error;
-        var idByKey=new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id,t.test_type,t.test_date), t.id); });
-        testsCount=(ins.data||[]).length;
-
-        var allMetrics=[];
-        plan.forEach(function(p){ var tid=idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(mr){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:mr.metric_key, value:mr.value, side:mr.side, unit:mr.unit }); }); });
-        var CHUNK=500;
-        for (var i=0;i<allMetrics.length;i+=CHUNK){ var me=(await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
-        metricsCount=allMetrics.length;
+        var r = await _asBulkSaveTests(plan);
+        testsCount = r.testsCount; metricsCount = r.metricsCount;
       }
 
       // persist mapping memory in assessment_column_maps
@@ -7241,6 +7225,29 @@
     });
   })();
 
+  // ── Shared bulk-save engine for assessments (battery grid + CSV import) ──
+  // Takes plans of shape { natKey:'pid|test_type|YYYY-MM-DD', rec:<force_tests row>, metrics:[{metric_key,value,side,unit}] }.
+  // Dedups by (player, test_type, date) then bulk-inserts parents + chunked child metrics.
+  async function _asBulkSaveTests(plans){
+    var natOf = function(pid, type, date){ return pid + '|' + type + '|' + String(date).slice(0,10); };
+    if (!plans.length) return { testsCount:0, metricsCount:0 };
+    var pids = [...new Set(plans.map(function(p){ return p.rec.player_id; }))];
+    var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id', _clubId).in('player_id', pids);
+    if (_teamId) exQ = exQ.eq('team_id', _teamId);
+    var ex = await exQ; if (ex.error) throw ex.error;
+    var planKeys = new Set(plans.map(function(p){ return p.natKey; }));
+    var delIds = (ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type, e.test_date)); }).map(function(e){ return e.id; });
+    if (delIds.length){ var de = (await window.sb.from('force_tests').delete().in('id', delIds)).error; if (de) throw de; }
+    var ins = await window.sb.from('force_tests').insert(plans.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
+    if (ins.error) throw ins.error;
+    var idByKey = new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id, t.test_type, t.test_date), t.id); });
+    var allMetrics = [];
+    plans.forEach(function(p){ var tid = idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(m){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:m.metric_key, value:m.value, side:m.side, unit:m.unit }); }); });
+    var CHUNK = 500;
+    for (var i=0;i<allMetrics.length;i+=CHUNK){ var me = (await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
+    return { testsCount:(ins.data||[]).length, metricsCount: allMetrics.length };
+  }
+
   async function saveBatteryEntry(){
     if (!_asBattery || !_clubId) return;
     var btn = document.getElementById('asBatterySaveBtn'), resEl = document.getElementById('asBatteryResult');
@@ -7251,7 +7258,6 @@
     try { var u = await window.sb.auth.getUser(); uid = u.data && u.data.user ? u.data.user.id : null; } catch(e){}
     try { var prof = await window.getProfile(); uname = prof && prof.full_name || null; } catch(e){}
 
-    var natOf = function(pid, type){ return pid+'|'+type+'|'+String(date).slice(0,10); };
     var plan = [], noData = 0;
     _asBattery.players.forEach(function(p){
       var kgEl = document.querySelector('.bat-inp[data-pid="'+p.id+'"][data-role="kg"]');
@@ -7259,15 +7265,17 @@
       var anyForPlayer = false;
       defs.forEach(function(def){
         var sides = def.bilateral ? ['L','R'] : ['NA'];
+        var prim = asPrimary(def);
         var metrics = [];
         sides.forEach(function(s){
-          var v = _batReadCell(p.id, def.key, s);
+          var v = _batReadCell(p.id, def.key, s);          // grid holds the primary metric
           if (v == null) return;
-          metrics.push({ metric_key: def.metric_key, value: v, side: (s==='NA'?null:s), unit: def.unit });
+          metrics.push({ metric_key: prim.key || def.metric_key, value: v, side: (s==='NA'?null:s), unit: prim.unit || def.unit });
         });
         if (!metrics.length) return;
         anyForPlayer = true;
-        plan.push({ natKey: natOf(p.id, def.test_type), rec: { club_id:_clubId, team_id:_teamId||null, player_id:p.id, test_type:def.test_type, test_date:date, bodyweight_kg:kg, source:'manual', uploaded_by:uid, uploaded_by_name:uname }, metrics: metrics });
+        plan.push({ natKey: p.id + '|' + def.test_type + '|' + String(date).slice(0,10),
+          rec: { club_id:_clubId, team_id:_teamId||null, player_id:p.id, test_type:def.test_type, test_date:date, bodyweight_kg:kg, source:'manual', uploaded_by:uid, uploaded_by_name:uname }, metrics: metrics });
       });
       if (!anyForPlayer) noData++;
     });
@@ -7280,24 +7288,8 @@
 
     var testsCount = 0, metricsCount = 0;
     try {
-      var pids = [...new Set(plan.map(function(p){ return p.rec.player_id; }))];
-      var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id',_clubId).in('player_id',pids).eq('test_date',date);
-      if (_teamId) exQ = exQ.eq('team_id',_teamId);
-      var ex = await exQ; if (ex.error) throw ex.error;
-      var planKeys = new Set(plan.map(function(p){ return p.natKey; }));
-      var delIds = (ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type)); }).map(function(e){ return e.id; });
-      if (delIds.length){ var de = (await window.sb.from('force_tests').delete().in('id', delIds)).error; if (de) throw de; }
-
-      var ins = await window.sb.from('force_tests').insert(plan.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
-      if (ins.error) throw ins.error;
-      var idByKey = new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id, t.test_type), t.id); });
-      testsCount = (ins.data||[]).length;
-
-      var allMetrics = [];
-      plan.forEach(function(p){ var tid = idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(m){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:m.metric_key, value:m.value, side:m.side, unit:m.unit }); }); });
-      var CHUNK = 500;
-      for (var i=0;i<allMetrics.length;i+=CHUNK){ var me = (await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
-      metricsCount = allMetrics.length;
+      var r = await _asBulkSaveTests(plan);
+      testsCount = r.testsCount; metricsCount = r.metricsCount;
     } catch(e){
       btn.disabled=false; btn.innerHTML=btnHtml;
       resEl.style.color='var(--cm-danger)';
