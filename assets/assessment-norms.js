@@ -128,6 +128,17 @@
     hip_rot_total:  'ROM de cadera y lesión isquiosural (Gabbe et al. 2005)'
   };
 
+  // Angle-matched pairs — a ratio is computed per angle only when BOTH sides of the pair exist.
+  var ADD_ABD_PAIRS = [
+    { add:'iso_hip_add_0',  abd:'iso_hip_abd_0',  angle:'0°'  },
+    { add:'iso_hip_add_30', abd:'iso_hip_abd_30', angle:'30°' },
+    { add:'iso_hip_add_45', abd:'iso_hip_abd_45', angle:'45°' }
+  ];
+  var ER_IR_PAIRS = [
+    { er:'iso_shoulder_er',    ir:'iso_shoulder_ir',    angle:'0°'  },
+    { er:'iso_shoulder_er_90', ir:'iso_shoulder_ir_90', angle:'90°' }
+  ];
+
   function ratios(valuesByTestKey){
     var v = valuesByTestKey || {};
     var out = [];
@@ -135,24 +146,28 @@
 
     function side(key, s){ return v[key] ? num(v[key][s]) : null; }
 
-    // ADD : ABD  — ≥0,90 ok · 0,80–0,89 watch · <0,80 alert
-    sides.forEach(function(s){
-      var add = side('iso_hip_add_0', s), abd = side('iso_hip_abd_0', s);
-      if (add != null && abd != null && abd !== 0){
-        var ratio = add / abd;
-        var status = ratio >= 0.90 ? 'ok' : (ratio >= 0.80 ? 'watch' : 'alert');
-        out.push({ key: 'add_abd', side: s, value: ratio, status: status, reference: RATIO_CITE.add_abd });
-      }
+    // ADD : ABD  — ≥0,90 ok · 0,80–0,89 watch · <0,80 alert (per matched angle)
+    ADD_ABD_PAIRS.forEach(function(p){
+      sides.forEach(function(s){
+        var add = side(p.add, s), abd = side(p.abd, s);
+        if (add != null && abd != null && abd !== 0){
+          var ratio = add / abd;
+          var status = ratio >= 0.90 ? 'ok' : (ratio >= 0.80 ? 'watch' : 'alert');
+          out.push({ key: 'add_abd', angle: p.angle, side: s, value: ratio, status: status, reference: RATIO_CITE.add_abd });
+        }
+      });
     });
 
-    // Shoulder ER : IR — 0,66–0,75 ok · fuera de rango watch · <0,66 alert
-    sides.forEach(function(s){
-      var er = side('iso_shoulder_er', s), ir = side('iso_shoulder_ir', s);
-      if (er != null && ir != null && ir !== 0){
-        var ratio = er / ir;
-        var status = ratio < 0.66 ? 'alert' : ((ratio >= 0.66 && ratio <= 0.75) ? 'ok' : 'watch');
-        out.push({ key: 'shoulder_er_ir', side: s, value: ratio, status: status, reference: RATIO_CITE.shoulder_er_ir });
-      }
+    // Shoulder ER : IR — 0,66–0,75 ok · fuera de rango watch · <0,66 alert (per matched angle)
+    ER_IR_PAIRS.forEach(function(p){
+      sides.forEach(function(s){
+        var er = side(p.er, s), ir = side(p.ir, s);
+        if (er != null && ir != null && ir !== 0){
+          var ratio = er / ir;
+          var status = ratio < 0.66 ? 'alert' : ((ratio >= 0.66 && ratio <= 0.75) ? 'ok' : 'watch');
+          out.push({ key: 'shoulder_er_ir', angle: p.angle, side: s, value: ratio, status: status, reference: RATIO_CITE.shoulder_er_ir });
+        }
+      });
     });
 
     // Hip IR + ER total — <80° alert (regla existente en Evaluations.html)

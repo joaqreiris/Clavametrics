@@ -515,7 +515,7 @@
         const rs = window.assessNorms.ratios(byKey);
         if (rs.length){
           ratiosHtml = `<div class="pp-as-ratios"><span class="pp-as-sec">${esc(T('player.derived_ratios','Derived ratios'))}</span>`
-            + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}"><span class="d" style="width:7px;height:7px;border-radius:50%;background:${statusColor(r.status)}"></span>${esc(r.key)}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
+            + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}"><span class="d" style="width:7px;height:7px;border-radius:50%;background:${statusColor(r.status)}"></span>${esc(r.key)}${r.angle?' '+esc(r.angle):''}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
             + `</div>`;
         }
       }
