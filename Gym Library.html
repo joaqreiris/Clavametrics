@@ -151,6 +151,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/exercise-folders.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="lib/exercise-taxonomy.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -262,6 +263,13 @@
             <option value="speed" data-i18n="gym_library.type_speed">Speed</option>
             <option value="cooldown" data-i18n="gym_library.type_cooldown">Cooldown</option>
           </select>
+        </div>
+        <div class="gm-field">
+          <label data-i18n="folders.folder">Folder</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select id="gm-folder" style="flex:1"></select>
+            <button type="button" onclick="gmNewFolder()" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-folder-plus" style="font-size:15px"></i></button>
+          </div>
         </div>
         <div class="gm-field">
           <label data-i18n="gym_library.complexity">Complexity</label>
@@ -386,6 +394,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 const CPLX_CSS = { Low:'low', Medium:'med', High:'high' };
 const CATEGORY_ORDER = ['strength','power','olympic','mobility','activation','core','balance','conditioning','prehab','speed','cooldown'];
 let ALL_EXERCISES = [];
+let FOLDERS_GYM = [];
 let CLUB_ID = null;
 let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', purpose:'', pattern:'', usableIn:'', view:'grid' };
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -435,10 +444,11 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns,video_id,source')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns,video_id,source,folder_id')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
+  FOLDERS_GYM = window.CMFolders ? await window.CMFolders.load('gym') : [];
   try {
     const paths = ALL_EXERCISES.filter(e => e.media_type === 'image' && e.media_ref).map(e => e.media_ref);
     let signed = {};
@@ -583,6 +593,28 @@ function renderGrid(exercises) {
     grid.innerHTML = `<div class="gl-empty">${esc(tt('gym_library.no_match','No exercises match your filters.'))}</div>`;
     appendAddCard(grid);
     return;
+  }
+
+  // Group by folder ("No folder" first, then folders in tree order) when folders exist.
+  const _f = FOLDERS_GYM || [];
+  if (_f.length && window.CMFolders) {
+    const order = window.CMFolders.flatten(_f);
+    const known = new Set(order.map(x => x.id));
+    const buckets = new Map();
+    exercises.forEach(e => { const k = (e.folder_id && known.has(e.folder_id)) ? e.folder_id : ''; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e); });
+    const groups = [];
+    const none = buckets.get('');
+    if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
+    order.forEach(x => { const items = buckets.get(x.id); if (items && items.length) groups.push({ label: x.name, depth: x.depth || 0, items }); });
+    if (groups.length > 1) {
+      grid.innerHTML = groups.map(g =>
+        `<div class="gl-group-sep" style="padding-left:${(g.depth||0)*14}px">${esc(g.label)} <span class="ct">${g.items.length}</span></div>` + g.items.map(cardHTML).join('')
+      ).join('');
+      appendAddCard(grid);
+      attachCardListeners();
+      highlightFromURL();
+      return;
+    }
   }
 
   grid.innerHTML = exercises.map(cardHTML).join('');
@@ -759,6 +791,7 @@ function openModal(id) {
     const usable = ex.usable_in || [];
     document.querySelectorAll('.gm-usable-cb').forEach(cb => { cb.checked = usable.includes(cb.value); });
     renderAllChips(ex);
+    gmRenderFolderSelect(ex.folder_id || '');
   } else {
     titleEl.textContent = tt('gym_library.new_exercise','New exercise');
     saveBtn.textContent = tt('common.create','Create');
@@ -766,6 +799,7 @@ function openModal(id) {
     document.getElementById('gm-primary-purpose').value = '';
     setMediaPreview(null);
     renderAllChips(null);
+    gmRenderFolderSelect('');
   }
 
   document.getElementById('gl-modal').classList.add('is-open');
@@ -778,6 +812,22 @@ function closeModal() {
   _gmMediaFile = null;
   _gmMediaRemove = false;
 }
+
+// Gym folders are club-wide (team_id always null). "New folder" nests under the selected one.
+function gmRenderFolderSelect(selectedId) {
+  const sel = document.getElementById('gm-folder');
+  if (!sel || !window.CMFolders) return;
+  sel.innerHTML = window.CMFolders.optionsHtml(FOLDERS_GYM, { teamId: null, selectedId: selectedId || '' });
+}
+window.gmNewFolder = async function() {
+  if (!window.CMFolders) return;
+  const sel = document.getElementById('gm-folder');
+  const parentId = sel ? (sel.value || null) : null;
+  const row = await window.CMFolders.promptCreate({ kind: 'gym', parentId, teamId: null });
+  if (!row) return;
+  FOLDERS_GYM = await window.CMFolders.load('gym');
+  gmRenderFolderSelect(row.id);
+};
 
 async function aiTagOpenExercise() {
   const name = document.getElementById('gm-name').value.trim();
@@ -837,6 +887,7 @@ async function saveExercise() {
     club_id: CLUB_ID,
     name,
     category: document.getElementById('gm-category-type').value,
+    folder_id: document.getElementById('gm-folder').value || null,
     complexity: document.getElementById('gm-complexity').value,
     usable_in: usableIn,
     description: document.getElementById('gm-desc').value.trim() || null,
