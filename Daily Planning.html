@@ -1065,6 +1065,11 @@ async function loadSessionExercises(sessionId) {
   });
   renderExerciseList(_dpFieldExercises);
 
+  // Re-sync each card's definition from its live Planner exercise (source of truth) so an
+  // exercise edited later in the Drill Designer doesn't stay stale here. Runs in the
+  // background; does NOT await. (Session-specific dosing/notes are left untouched.)
+  dpSyncPlannerFields(_dpFieldExercises, sessionId);
+
   // fetch ONLY the uncached previews in the background (do NOT await — keeps day load fast)
   const _reqSession = sessionId;
   const need = [...new Set(_dpFieldExercises.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
@@ -1076,6 +1081,42 @@ async function loadSessionExercises(sessionId) {
     });
   }
   recalcTotals();
+}
+
+// Planner exercises own their definition. session_exercises snapshots name/players/field/area at
+// insert time, so an exercise edited afterwards in the Drill Designer would render stale here.
+// Refresh ONLY the display/identity fields from the live exercise (never the per-session dosing,
+// notes or groups the coach tunes on the card), repaint, and persist so print/PDF/GPS stay in sync.
+async function dpSyncPlannerFields(list, reqSession) {
+  const ids = [...new Set((list || []).map(e => e.planner_exercise_id).filter(Boolean))];
+  if (!ids.length) return;
+  const { data: rows } = await window.sb.from('exercises')
+    .select('id,name,field_width,field_height,players_count,orientation')
+    .eq('club_id', _dpClubId).in('id', ids);
+  if (!rows || _dpCurrentSessionId !== reqSession) return;   // navigated away — don't clobber
+  const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+  const updates = [];
+  list.forEach(e => {
+    const src = byId[e.planner_exercise_id]; if (!src) return;   // exercise deleted → keep snapshot
+    const area = (src.field_width && src.field_height) ? src.field_width * src.field_height : null;
+    const m2   = (area && src.players_count > 0) ? Math.round(area / src.players_count) : null;
+    const next = {
+      name:             src.name ?? null,
+      field_width:      src.field_width ?? null,
+      field_height:     src.field_height ?? null,
+      players_count:    src.players_count ?? null,
+      m2_per_player:    m2,
+      calc_orientation: _dpCalcOrientFromM2(m2) || src.orientation || null,
+    };
+    if (!Object.keys(next).some(k => (e[k] ?? null) !== (next[k] ?? null))) return;   // unchanged
+    Object.assign(e, next);
+    updates.push({ id: e.id, patch: next });
+  });
+  if (!updates.length) return;
+  renderExerciseList(list);   // repaint with the fresh definition
+  recalcTotals();
+  await Promise.all(updates.map(u =>
+    window.sb.from('session_exercises').update(u.patch).eq('id', u.id).eq('club_id', _dpClubId)));
 }
 
 function renderExerciseList(exercises) {
