@@ -1331,6 +1331,63 @@
   </div>
 </aside>
 
+<!-- ── Custom test builder (compose a def: movement · position · angle · method) ── -->
+<div class="ev-overlay" id="asBuilderOvl" onclick="if(event.target===this)closeAssessmentBuilder()">
+  <div class="ev-modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="ev-mh">
+      <div class="ev-mh-info">
+        <div class="ev-mh-title" data-i18n="evaluations.custom_test">Custom test</div>
+        <div class="ev-mh-sub" data-i18n="evaluations.custom_test_sub">Compose a test variant for this club</div>
+      </div>
+      <button class="cm-icon-btn" onclick="closeAssessmentBuilder()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0;padding:16px">
+      <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.test_name">Test name</label>
+        <input id="cbName" class="ev-finput" placeholder="ISO · Posterior chain 60°"></div>
+      <div class="ev-f2">
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.region">Region</label>
+          <select id="cbRegion" class="ev-finput">
+            <option value="posterior_chain">Posterior chain</option><option value="hip_groin">Hip / groin</option>
+            <option value="knee">Knee</option><option value="calf">Calf</option><option value="shoulder">Shoulder</option>
+            <option value="whole_body">Whole body</option><option value="trunk">Trunk</option><option value="mobility">Mobility</option>
+          </select></div>
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.position">Position</label>
+          <select id="cbPosition" class="ev-finput">
+            <option value="">—</option><option value="supine">Supine</option><option value="prone">Prone</option>
+            <option value="standing">Standing</option><option value="seated">Seated</option><option value="side_lying">Side-lying</option>
+          </select></div>
+      </div>
+      <div class="ev-f2">
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.joint_angle">Angle</label>
+          <input id="cbAngle" class="ev-finput" placeholder="60 · 90:20 · 0"></div>
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.method">Method</label>
+          <select id="cbMethod" class="ev-finput">
+            <option value="hhd">HHD</option><option value="force_frame">Force frame</option><option value="force_plate">Force plate</option>
+            <option value="nordbord">NordBord</option><option value="isokinetic">Isokinetic</option>
+            <option value="goniometer">Goniometer</option><option value="tape">Tape</option><option value="clinical">Clinical</option><option value="field">Field</option>
+          </select></div>
+      </div>
+      <div class="ev-f2">
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.metric_unit">Metric unit</label>
+          <input id="cbUnit" class="ev-finput" placeholder="N · deg · cm · ×BW"></div>
+        <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.reference_optional">Reference (optional)</label>
+          <input id="cbRef" class="ev-finput" placeholder="Author, Journal Year"></div>
+      </div>
+      <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.reference_url_optional">Reference URL (optional)</label>
+        <input id="cbRefUrl" class="ev-finput" placeholder="https://…"></div>
+      <div style="display:flex;gap:18px;margin-top:12px">
+        <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px var(--cm-font-sans);cursor:pointer"><input type="checkbox" id="cbBilateral" checked> <span data-i18n="evaluations.bilateral_lr">Bilateral (L/R)</span></label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font:500 12px var(--cm-font-sans);cursor:pointer"><input type="checkbox" id="cbHib" checked> <span data-i18n="evaluations.higher_is_better">Higher is better</span></label>
+      </div>
+    </div>
+    <div class="pa-foot">
+      <span class="info" id="cbInfo"></span>
+      <button class="cm-btn is-outline" onclick="closeAssessmentBuilder()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary" id="cbSaveBtn" onclick="saveAssessmentBuilder()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.create_test">Create test</span></button>
+    </div>
+  </div>
+</div>
+
 <!-- VBT bulk · Import drawer (read + map + group + calc + preview only — no save yet) -->
 <div class="pt-imp-overlay" id="vbtBulkOverlay"></div>
 <aside class="pt-imp-drawer" id="vbtBulkDrawer">
@@ -1698,14 +1755,17 @@
           + '</div>';
       }).join('');
       var batFam = cat.name === 'Isometric strength' ? 'isometric' : (cat.name === 'Mobility & screening' ? 'mobility' : null);
+      var newBtn = batFam
+        ? '<button class="cm-btn is-ghost is-sm" style="margin-left:auto" onclick="event.stopPropagation();openAssessmentBuilder(\''+batFam+'\')"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.custom_test">Custom test</span></button>'
+        : '';
       var batBtn = (batFam && _assessDefs.some(function(d){ return d.family === batFam; }))
-        ? '<button class="cm-btn is-outline is-sm" style="margin-left:auto" onclick="event.stopPropagation();openBatteryEntry(\''+batFam+'\')"><i class="ti ti-table" style="font-size:14px"></i><span data-i18n="evaluations.battery_entry">Battery entry</span></button>'
+        ? '<button class="cm-btn is-outline is-sm"'+(newBtn?'':' style="margin-left:auto"')+' onclick="event.stopPropagation();openBatteryEntry(\''+batFam+'\')"><i class="ti ti-table" style="font-size:14px"></i><span data-i18n="evaluations.battery_entry">Battery entry</span></button>'
         : '';
       return '<div class="ev-cat'+(i===0?'':' is-collapsed')+'">'
         + '<div class="ev-cat-h" data-cat-toggle>'
         +   '<span class="ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+cat.icon+'"></i></span>'
         +   '<h4>'+esc(catName(cat))+'</h4><span class="ct">'+esc(tt('evaluations.tests_count',cat.tests.length+' tests',{count:cat.tests.length}))+'</span>'
-        +   batBtn
+        +   newBtn + batBtn
         +   '<span class="chev"><i class="ti ti-chevron-down"></i></span>'
         + '</div>'
         + '<div class="ev-cat-body">'+cards+'</div>'
@@ -7247,6 +7307,65 @@
     for (var i=0;i<allMetrics.length;i+=CHUNK){ var me = (await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
     return { testsCount:(ins.data||[]).length, metricsCount: allMetrics.length };
   }
+
+  // ── Custom test builder (compose a def · saved per club) ──
+  var _cbFamily = 'isometric';
+  window.openAssessmentBuilder = function(family){
+    _cbFamily = family || 'isometric';
+    document.getElementById('cbRegion').value = (family==='mobility') ? 'mobility' : 'posterior_chain';
+    document.getElementById('cbMethod').value = (family==='mobility') ? 'goniometer' : 'hhd';
+    document.getElementById('cbUnit').value   = (family==='mobility') ? 'deg' : 'N';
+    ['cbName','cbAngle','cbRef','cbRefUrl'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+    document.getElementById('cbPosition').value = '';
+    document.getElementById('cbBilateral').checked = true;
+    document.getElementById('cbHib').checked = true;
+    var info=document.getElementById('cbInfo'); if(info){ info.textContent=''; }
+    document.getElementById('asBuilderOvl').classList.add('is-open');
+  };
+  window.closeAssessmentBuilder = function(){ document.getElementById('asBuilderOvl').classList.remove('is-open'); };
+  function _cbSlug(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'test'; }
+
+  window.saveAssessmentBuilder = async function(){
+    if (!_clubId) return;
+    var info = document.getElementById('cbInfo');
+    var name = (document.getElementById('cbName').value||'').trim();
+    if (!name){ info.textContent = tt('evaluations.name_required','Enter a test name'); info.style.color='var(--cm-danger)'; return; }
+    var angle = (document.getElementById('cbAngle').value||'').trim() || null;
+    var unit  = (document.getElementById('cbUnit').value||'').trim() || (_cbFamily==='mobility'?'deg':'N');
+    var hib   = document.getElementById('cbHib').checked;
+    var metricKey = (_cbFamily==='mobility') ? 'rom' : 'peak_force';
+    var key = ('cst_' + _cbSlug(name + (angle?('_'+angle):''))).slice(0,38) + '_' + Date.now().toString(36).slice(-4);
+    if (!/^[a-z]/.test(key)) key = 'x' + key;
+    var btn = document.getElementById('cbSaveBtn'), bh = btn.innerHTML; btn.disabled=true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    try {
+      var ins = await window.sb.from('assessment_test_defs').insert({
+        club_id:_clubId, family:_cbFamily, key:key, test_type:key.toUpperCase(), label:name,
+        metric_key:metricKey, unit:unit, value_type:'numeric',
+        bilateral:document.getElementById('cbBilateral').checked, higher_is_better:hib,
+        region:document.getElementById('cbRegion').value||null, position:document.getElementById('cbPosition').value||null,
+        joint_angle:angle, method:document.getElementById('cbMethod').value||null,
+        contraction:(_cbFamily==='mobility')?'rom':'isometric',
+        metrics:[{ key:metricKey, label:unit, unit:unit, higher_is_better:hib, primary:true }],
+        reference:(document.getElementById('cbRef').value||'').trim()||null,
+        reference_url:(document.getElementById('cbRefUrl').value||'').trim()||null,
+        sort_order:500, active:true
+      }).select('*').single();
+      if (ins.error) throw ins.error;
+      // Append the new def to its category without re-merging (merge isn't idempotent).
+      _assessDefs.push(ins.data);
+      var catName2 = (_cbFamily==='isometric') ? 'Isometric strength' : 'Mobility & screening';
+      var cat = CATALOG.find(function(c){ return c.name === catName2; });
+      if (cat) cat.tests.push(_defToTest(ins.data));
+      else { _assessMerged=false; mergeAssessmentCatalog(); }
+      rebuildTestIndex();
+      closeAssessmentBuilder();
+      renderCatalog();
+      if (typeof loadStatuses === 'function') loadStatuses();
+    } catch(e){
+      info.textContent = tt('evaluations.save_failed','Save failed') + ': ' + (e.message||e); info.style.color='var(--cm-danger)';
+    } finally { btn.disabled=false; btn.innerHTML=bh; }
+  };
 
   async function saveBatteryEntry(){
     if (!_asBattery || !_clubId) return;
