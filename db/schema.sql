@@ -479,6 +479,7 @@ create table if not exists public.exercises (
   preview_path text,
   source_type text default 'canvas'::text not null,
   folder_id uuid,
+  is_goalkeeper boolean default false not null,
   constraint exercises_pkey primary key (id),
   constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),

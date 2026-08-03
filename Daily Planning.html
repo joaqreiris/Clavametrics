@@ -464,6 +464,7 @@
       <button type="button" class="dp-lib-chip" data-orient="STRENGTH" onclick="dpLibSetOrient('STRENGTH')" data-i18n="daily_planning.type_strength">Strength</button>
       <button type="button" class="dp-lib-chip" data-orient="VELOCITY" onclick="dpLibSetOrient('VELOCITY')" data-i18n="daily_planning.type_velocity">Velocity</button>
       <button type="button" class="dp-lib-chip" data-orient="ENDURANCE" onclick="dpLibSetOrient('ENDURANCE')" data-i18n="daily_planning.type_endurance">Endurance</button>
+      <button type="button" class="dp-lib-chip" data-orient="GK" onclick="dpLibSetOrient('GK')" data-i18n="daily_planning.type_goalkeeper">Goalkeepers</button>
     </div>
     <div id="libList" style="overflow-y:auto;flex:1;padding:8px"></div>
     <div style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="libFooter" data-i18n="common.loading">Loading…</div>
@@ -1825,11 +1826,11 @@ async function openLibModal(mode) {
   document.querySelector('#libBackdrop [style*="font:600 14px"]').textContent = title;
   document.getElementById('libBackdrop').style.display = 'flex';
   document.getElementById('libSearch').value = '';
-  dpLibSetOrient('');   // reset the type filter each time the picker opens
+  dpLibSetOrient(_libMode === 'goalkeepers' ? 'GK' : '');   // default the type filter (GK section → goalkeeper exercises)
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id,is_goalkeeper')
     .eq('club_id', _dpClubId).order('name');
   const { data, error } = await q;
   _libFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
@@ -1875,7 +1876,8 @@ function filterLib() {
   let fil = q ? _libExercises.filter(e => (e.name||'').toLowerCase().includes(q)) : _libExercises.slice();
   if (fsel === '__none__') fil = fil.filter(e => !e.folder_id);
   else if (fsel) fil = fil.filter(e => e.folder_id === fsel);
-  if (_libOrient) fil = fil.filter(e => _dpLibOrient(e) === _libOrient);
+  if (_libOrient === 'GK') fil = fil.filter(e => e.is_goalkeeper);
+  else if (_libOrient) fil = fil.filter(e => _dpLibOrient(e) === _libOrient);
   const list = document.getElementById('libList');
   document.getElementById('libFooter').textContent = tt('daily_planning.n_in_library', `${fil.length} exercise${fil.length !== 1 ? 's' : ''} in library`, {count: fil.length});
   if (!fil.length) {

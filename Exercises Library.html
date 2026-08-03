@@ -263,6 +263,7 @@
         <button class="sl-pill" data-orient="STRENGTH"><span class="dot" style="background:#DC2626"></span><span data-i18n="exlib.strength">Strength</span><span class="ct" id="ctStr">—</span></button>
         <button class="sl-pill" data-orient="VELOCITY"><span class="dot" style="background:#0891B2"></span><span data-i18n="exlib.velocity">Velocity</span><span class="ct" id="ctVel">—</span></button>
         <button class="sl-pill" data-orient="ENDURANCE"><span class="dot" style="background:#16A34A"></span><span data-i18n="exlib.endurance">Endurance</span><span class="ct" id="ctEnd">—</span></button>
+        <button class="sl-pill" data-orient="GOALKEEPER"><span class="dot" style="background:#7C3AED"></span><span data-i18n="exlib.goalkeepers">Goalkeepers</span><span class="ct" id="ctGk">—</span></button>
         <div class="grow"></div>
         <button class="cm-btn is-outline is-sm" id="sortBtn"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span id="sortLabel" data-i18n="exlib.sort_recent">Recent</span></button>
       </div>
@@ -439,7 +440,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,folder_id,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -512,8 +513,9 @@
   function applyFilters() {
     return allExercises.filter(ex => {
       const orient = calcOrient(ex);
-      // Pill orientation (quick filter)
-      if (pillOrient !== 'ALL' && orient !== pillOrient) return false;
+      // Pill orientation (quick filter) — GOALKEEPER is a separate flag, not an orientation
+      if (pillOrient === 'GOALKEEPER') { if (!ex.is_goalkeeper) return false; }
+      else if (pillOrient !== 'ALL' && orient !== pillOrient) return false;
       // Search
       if (searchText && !(ex.name||'').toLowerCase().includes(searchText)) return false;
       // Orientation filter
@@ -558,10 +560,12 @@
       '-5':0, '-4':0, '-3':0, '-2':0, '-1':0, '0':0, '1':0, '2':0, '3':0,
       SSG:0, MSG:0, LSG:0, NONE_GT:0,
       Táctico:0, Individual:0, Físico:0, Sectorial:0,
+      GK:0,
     };
     allExercises.forEach(ex => {
       const o = calcOrient(ex);
       if (o && c[o] !== undefined) c[o]++;
+      if (ex.is_goalkeeper) c.GK++;
       if (ex.intensity && c[ex.intensity] !== undefined) c[ex.intensity]++;
       if (ex.match_day != null && c[String(ex.match_day)] !== undefined) c[String(ex.match_day)]++;
       const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
@@ -580,6 +584,7 @@
     set('ctStr',     c.STRENGTH    || '');
     set('ctVel',     c.VELOCITY    || '');
     set('ctEnd',     c.ENDURANCE   || '');
+    set('ctGk',      c.GK          || '');
     set('cntAct',    c.ACTIVATION  || '');
     set('cntStr',    c.STRENGTH    || '');
     set('cntVel',    c.VELOCITY    || '');
@@ -654,6 +659,7 @@
 
       // Tags
       let tags = '';
+      if (ex.is_goalkeeper) tags += `<span class="sl-tag" style="background:rgba(124,58,237,.14);color:#7C3AED">${tt('exlib.gk_short','GK')}</span>`;
       if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
       if (ex.game_type_enabled && ex.game_type) tags += `<span class="sl-tag t-game">${ex.game_type}</span>`;
       (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });

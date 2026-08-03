@@ -909,6 +909,14 @@
             <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="folders.new_nests_hint">"New folder" nests inside the folder selected above; leave it on "No folder" to create a top-level one.</div>
           </div>
 
+          <div class="pl-form-group">
+            <label style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">
+              <input type="checkbox" id="plExGk" style="width:16px;height:16px;accent-color:var(--cm-accent)">
+              <i class="ti ti-hand-stop" style="font-size:14px"></i><span data-i18n="planner.goalkeeper_exercise">Goalkeeper exercise</span>
+            </label>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="planner.goalkeeper_hint">Mark this drill as goalkeeper-specific so it can be filtered as a goalkeeper exercise.</div>
+          </div>
+
           <div style="height:1px;background:var(--cm-border-soft);margin-bottom:14px"></div>
 
           <!-- Prescription mode: intervals (series × work/rest), reps (series × reps) or plain minutes -->
@@ -3235,7 +3243,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,folder_id,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -3413,6 +3421,7 @@
     document.getElementById('plExDescription').value = ex.description || '';
     plSetVisibilityUI(ex.visible_teams);
     plRenderFolderSelect(ex.folder_id || '');
+    { const _gk = document.getElementById('plExGk'); if (_gk) _gk.checked = !!ex.is_goalkeeper; }
 
     // Suggest space/players from the name when the stored fields are empty (editable).
     _plAutofillMeasuresFromName();
@@ -3719,7 +3728,8 @@
       objects_json:      _curSourceType === 'image' ? null : _oj,
       preview_svg:       _curSourceType === 'image' ? null : _previewSvg,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null),
-      folder_id:         document.getElementById('plExFolder')?.value || null
+      folder_id:         document.getElementById('plExFolder')?.value || null,
+      is_goalkeeper:     !!document.getElementById('plExGk')?.checked
     };
 
     let error;
