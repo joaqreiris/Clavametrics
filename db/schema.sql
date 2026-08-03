@@ -1794,6 +1794,7 @@ create table if not exists public.profiles (
   onboarded boolean default false not null,
   constraint profiles_pkey primary key (id),
   constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text]))),
+  constraint profiles_club_role_check CHECK (((club_role IS NULL) OR (club_role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))),
   constraint profiles_preferred_lang_check CHECK (((preferred_lang IS NULL) OR (preferred_lang = ANY (ARRAY['en'::text, 'es'::text, 'pt'::text]))))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
@@ -3321,7 +3322,8 @@ AS $function$
   select public.is_super_admin()
       or exists (select 1 from public.profiles p
                  where p.id = auth.uid()
-                   and lower(coalesce(p.role,'')) in ('admin','owner','physio'));
+                   and (lower(coalesce(p.role,'')) in ('admin','owner','physio')
+                     or lower(coalesce(p.club_role,'')) in ('admin','owner','physio')));
 $function$
 ;
 
@@ -3857,6 +3859,37 @@ begin
   end if;
 
   update public.profiles set role = new_role where id = target_id;
+end; $function$
+;
+
+CREATE OR REPLACE FUNCTION public.set_member_secondary_role(target_id uuid, new_role text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  caller_club uuid; caller_is_admin boolean; caller_super boolean; target_club uuid; norm text;
+begin
+  select club_id,
+         (role in ('admin','owner') or club_role in ('admin','owner'))
+    into caller_club, caller_is_admin
+  from public.profiles where id = auth.uid();
+  caller_super := public.is_super_admin();
+
+  if not caller_is_admin and not caller_super then raise exception 'Not authorized'; end if;
+
+  select club_id into target_club from public.profiles where id = target_id;
+  if target_club is null then raise exception 'Target not found'; end if;
+  if not caller_super and target_club <> caller_club then raise exception 'Target not in your club'; end if;
+
+  norm := nullif(trim(coalesce(new_role,'')), '');
+  if norm is not null and norm not in ('admin','coach','physio','analyst','nutritionist','staff',
+                      'sc_coach','fitness_coach','gk_coach','assistant_coach') then
+    raise exception 'Invalid role';
+  end if;
+
+  update public.profiles set club_role = norm where id = target_id;
 end; $function$
 ;
 

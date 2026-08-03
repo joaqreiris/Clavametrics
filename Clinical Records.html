@@ -467,7 +467,7 @@
 
   async function setRole() {
     let access = false;
-    try { const prof = await window.getProfile(); const r = (prof?.role || prof?.club_role || '').toLowerCase(); access = ['admin', 'owner', 'physio'].includes(r); } catch (_) {}
+    try { const prof = await window.getProfile(); const roles = [prof?.role, prof?.club_role].map(x => (x || '').toLowerCase()); access = roles.some(r => ['admin', 'owner', 'physio'].includes(r)); } catch (_) {}
     if (!access && window.isSuperAdmin) { try { access = await window.isSuperAdmin(); } catch (_) {} }
     _access = access;
     applyRoleLabels();
