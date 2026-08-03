@@ -1033,10 +1033,10 @@ function gpAddAdaptRow() {
   if (emptyRow) emptyRow.remove();
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
-    <td><input placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
-    <td><input placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
-    <td><input placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td>`;
+    <td><input oninput="gpScheduleSave()" placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
+    <td><input oninput="gpScheduleSave()" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+    <td><input oninput="gpScheduleSave()" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
+    <td><input oninput="gpScheduleSave()" placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td>`;
   tbody.appendChild(tr);
   tr.querySelector('input').focus();
   const ct = document.getElementById('gpAdaptCt');
@@ -1049,17 +1049,17 @@ function gpAdaptRowHtml(label, affected, replacement, reason, phase, manual) {
   const e = s => String(s==null?'':s).replace(/"/g,'&quot;');
   if (manual) {
     return `<tr>
-      <td><input value="${e(label)}" placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
-      <td><input value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
-      <td><input value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
-      <td><input value="${e(reason)}" placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td></tr>`;
+      <td><input oninput="gpScheduleSave()" value="${e(label)}" placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
+      <td><input oninput="gpScheduleSave()" value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+      <td><input oninput="gpScheduleSave()" value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
+      <td><input oninput="gpScheduleSave()" value="${e(reason)}" placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td></tr>`;
   }
   return `<tr>
     <td><strong style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e(label)}</strong><br>
       <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${e(phase)}</span></td>
-    <td><input value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
-    <td><input value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
-    <td><input value="${e(reason)}" placeholder="—"></td></tr>`;
+    <td><input oninput="gpScheduleSave()" value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+    <td><input oninput="gpScheduleSave()" value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
+    <td><input oninput="gpScheduleSave()" value="${e(reason)}" placeholder="—"></td></tr>`;
 }
 function gpCollectAdapt() {
   const tbody = document.getElementById('gpAdaptBody');
@@ -1881,11 +1881,14 @@ async function gpExportPDF() {
   _gpPlayers     = (playersRes.data || []).filter(p => _seenGp.has(p.id) ? false : (_seenGp.add(p.id), true));
   _gpMicrocycles = mcRes.data || [];
 
-  await gpLoadDay(initDate);
-
-  document.getElementById('gpNavPrev').addEventListener('click', () => gpLoadDay(_gpAddDays(_gpCurrentDate, -1)));
-  document.getElementById('gpNavNext').addEventListener('click', () => gpLoadDay(_gpAddDays(_gpCurrentDate, 1)));
-  document.getElementById('gpDateInput').addEventListener('change', e => { if (e.target.value) gpLoadDay(e.target.value); });
+  // Wire autosave + navigation BEFORE the first day load. Attaching these must NOT depend on
+  // gpLoadDay() resolving: if it ever threw, the delegated listeners below would never attach and
+  // autosave would silently die — typed individual adaptations (which rely solely on the gpAdaptBody
+  // listener) would never persist, while library/template/add-row content still saved via direct calls.
+  // Flush any pending save before switching days so in-flight edits aren't dropped.
+  document.getElementById('gpNavPrev').addEventListener('click', async () => { await gpFlushSave(); gpLoadDay(_gpAddDays(_gpCurrentDate, -1)); });
+  document.getElementById('gpNavNext').addEventListener('click', async () => { await gpFlushSave(); gpLoadDay(_gpAddDays(_gpCurrentDate, 1)); });
+  document.getElementById('gpDateInput').addEventListener('change', async e => { if (e.target.value) { await gpFlushSave(); gpLoadDay(e.target.value); } });
 
   ['gpTitle','gpStartTime','gpDuration','gpLocation','gpNotes','gpEstRpe'].forEach(id => {
     const el = document.getElementById(id);
@@ -1894,12 +1897,14 @@ async function gpExportPDF() {
 
   // Recalc totals when any table input changes
   ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
+    const el = document.getElementById(id); if (el) el.addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
   });
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
   });
   document.getElementById('gpAdaptBody').addEventListener('input', gpScheduleSave);
+
+  try { await gpLoadDay(initDate); } catch (e) { console.error('gpLoadDay failed', e); }
 
   // Re-render JS-generated chrome when the language changes (static tags are
   // handled by the runtime; these are computed strings/dates).
