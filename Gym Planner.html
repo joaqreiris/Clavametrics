@@ -358,7 +358,14 @@ let _gpTeamId = null, _gpTeams = [];
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
 let _gpCalFields = new Set();
-let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80;
+let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80, _gpGrpTargetVel = 0.80;
+// For a VBT load-velocity profile v = a + b·load, the load (kg) that yields the prescribed target
+// velocity Vt: load = (Vt − a) / b. Returns null for a missing/degenerate profile.
+function gpVbtLoadAtVel(prof, vt) {
+  if (!prof || !isFinite(prof.a) || !isFinite(prof.b) || prof.b === 0) return null;
+  const load = (vt - prof.a) / prof.b;
+  return (isFinite(load) && load > 0) ? load : null;
+}
 
 const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
 
@@ -1260,7 +1267,7 @@ function gpAutoK(entries) {                     // PASO 1: heurística simple (p
 async function gpLoadGroupRows(mode) {
   const prefix = mode === 'vbt' ? 'VBT' : '1RM';
   const { data } = await window.sb.from('evaluations')
-    .select('player_id,evaluation_type,value,unit,test_date')
+    .select('player_id,evaluation_type,value,unit,test_date,notes')
     .eq('club_id', _gpClubId).ilike('evaluation_type', prefix + '%')
     .order('test_date', { ascending:false });
   return (data || []).filter(r => r.value != null && r.value !== '' && !isNaN(parseFloat(r.value)));
@@ -1294,6 +1301,11 @@ function gpBuildGroupsModal() {
           <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">%RM</span>
           <input id="gpGrpPct" type="number" min="30" max="100" value="80" style="width:58px;height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
         </div>
+        <div id="gpGrpVelWrap" style="display:none;align-items:center;gap:6px">
+          <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gym_planner.target_vel','Target vel')}</span>
+          <input id="gpGrpVel" type="number" step="0.05" min="0.1" max="2" value="0.80" style="width:64px;height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span>
+        </div>
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
           <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gym_planner.groups','Groups')}</span>
           <select id="gpGrpK" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
@@ -1309,16 +1321,19 @@ function gpBuildGroupsModal() {
     _gpGrpMode = b.dataset.m;
     ov.querySelectorAll('#gpGrpMode button').forEach(x => x.classList.toggle('is-on', x === b));
     document.getElementById('gpGrpPctWrap').style.display = _gpGrpMode === 'rm' ? 'flex' : 'none';
+    document.getElementById('gpGrpVelWrap').style.display = _gpGrpMode === 'vbt' ? 'flex' : 'none';
     _gpGrpVariant = ''; gpRefreshGroupData();
   });
   ov.querySelector('#gpGrpVariant').addEventListener('change', e => { _gpGrpVariant = e.target.value; gpRenderGroups(); });
   ov.querySelector('#gpGrpK').addEventListener('change', e => { _gpGrpK = e.target.value; gpRenderGroups(); });
   ov.querySelector('#gpGrpPct').addEventListener('input', e => { _gpGrpPct = parseFloat(e.target.value) || 80; gpRenderGroups(); });
+  ov.querySelector('#gpGrpVel').addEventListener('input', e => { _gpGrpTargetVel = parseFloat(e.target.value) || 0.80; gpRenderGroups(); });
 }
 async function gpOpenGroups() {
   gpBuildGroupsModal();
   document.getElementById('gpGrpOv').style.display = 'flex';
   document.getElementById('gpGrpPctWrap').style.display = _gpGrpMode === 'rm' ? 'flex' : 'none';
+  document.getElementById('gpGrpVelWrap').style.display = _gpGrpMode === 'vbt' ? 'flex' : 'none';
   await gpRefreshGroupData();
 }
 function gpCloseGroups() { const ov = document.getElementById('gpGrpOv'); if (ov) ov.style.display = 'none'; }
@@ -1337,12 +1352,29 @@ function gpRenderGroups() {
   const squadIds = new Set(_gpPlayers.map(p => p.id));
   if (!squadIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_players_team','No players in this team/category.')}</div>`; return; }
   if (!_gpGrpVariant) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_tests_found', `No ${_gpGrpMode==='vbt'?'VBT':'1RM'} tests found. Load tests in Evaluations first.`, { test:_gpGrpMode==='vbt'?'VBT':'1RM' })}</div>`; return; }
-  // latest value per player for the selected variant (rows already date-desc)
+  const isRM = _gpGrpMode === 'rm';
+  const Vt   = _gpGrpTargetVel;
+  // latest record per player for the selected variant (rows already date-desc). For VBT we also
+  // parse the stored load-velocity profile (notes JSON) so we can prescribe the working load.
   const latest = {}; let unit = '';
-  _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && squadIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
+  _gpGrpRows.forEach(r => {
+    if (r.evaluation_type !== _gpGrpVariant || !squadIds.has(r.player_id) || (r.player_id in latest)) return;
+    let prof = null;
+    if (!isRM && r.notes) { try { const c = JSON.parse(r.notes); if (c && c.intercept != null && c.slope != null) prof = { a:+c.intercept, b:+c.slope }; } catch(_){} }
+    latest[r.player_id] = { raw: parseFloat(r.value), prof };
+    if (!unit && r.unit) unit = r.unit;
+  });
   const nameOf = id => { const p = _gpPlayers.find(x => x.id === id); return p ? ((`${p.first_name||''} ${p.last_name||''}`).trim().split(' ').pop() + (p.number?` #${p.number}`:'')) : '—'; };
-  const entries = Object.entries(latest).map(([pid,value]) => ({ pid, value }));
-  const noData = [...squadIds].filter(id => !(id in latest));
+  // Grouping VALUE = the prescribed working load (kg): VBT = load at target velocity Vt; %RM = %RM of the test.
+  // Players without a usable VBT profile can't be prescribed a load → listed under "no test data".
+  const entries = [], noProfile = [];
+  Object.entries(latest).forEach(([pid, o]) => {
+    if (isRM) { entries.push({ pid, value: o.raw }); return; }
+    const load = gpVbtLoadAtVel(o.prof, Vt);
+    if (load == null) { noProfile.push(pid); return; }
+    entries.push({ pid, value: load });
+  });
+  const noData = [...squadIds].filter(id => !(id in latest)).concat(noProfile);
   if (!entries.length) {
     const testedInClub = new Set(_gpGrpRows.filter(r => r.evaluation_type === _gpGrpVariant).map(r => r.player_id)).size;
     const msg = testedInClub
@@ -1355,20 +1387,24 @@ function gpRenderGroups() {
   k = Math.max(1, Math.min(k, entries.length));
   const groups = gpJenksGroups(entries, k);
   const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444'];
-  const isRM = _gpGrpMode === 'rm';
   const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
+  // Working load per entry (kg): VBT value already IS the load at Vt; %RM applies the percentage.
+  const loadKg = e => isRM ? e.value * _gpGrpPct/100 : e.value;
   const _pl = tt('gym_planner.n_players_count', `${entries.length} player${entries.length>1?'s':''}`, { count:entries.length });
   const _gr = tt('gym_planner.n_groups_count', `${k} groups`, { count:k });
-  const _tgt = isRM ? ' · ' + tt('gym_planner.target_pct_rm', `target ${_gpGrpPct}% RM`, { pct:_gpGrpPct }) : '';
+  const _tgt = isRM ? ' · ' + tt('gym_planner.target_pct_rm', `target ${_gpGrpPct}% RM`, { pct:_gpGrpPct })
+                    : ' · ' + tt('gym_planner.target_vel_ms', `target ${fmt(Vt)} m/s`, { vel:fmt(Vt) });
   let html = `<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">${_pl} · ${_gr}${_tgt}</div>`;
   groups.forEach((g, i) => {
-    const vals = g.map(e => isRM ? e.value * _gpGrpPct/100 : e.value);
+    const color = COLORS[i%COLORS.length];
+    const vals = g.map(loadKg);
     const lo = fmt(Math.min(...vals)), hi = fmt(Math.max(...vals));
-    const range = isRM ? `${lo}–${hi} kg @ ${_gpGrpPct}%` : `${lo}–${hi}${unit?` ${unit}`:''}`;
-    const chips = g.map(e => { const load = isRM ? fmt(e.value*_gpGrpPct/100)+' kg' : fmt(e.value)+(unit?` ${unit}`:''); return `<span class="gp-grp-chip"><span style="color:var(--cm-fg-muted);font:500 10px/1 var(--cm-font-mono)">${load}</span>${nameOf(e.pid)}</span>`; }).join('');
+    const range = `${lo}–${hi} kg` + (isRM ? ` @ ${_gpGrpPct}%` : ` @ ${fmt(Vt)} m/s`);
+    // Prescribed load beside each player, bold + group colour so it reads at a glance.
+    const chips = g.map(e => `<span class="gp-grp-chip">${nameOf(e.pid)}<span style="margin-left:5px;font:700 11px/1 var(--cm-font-mono);color:${color}">${fmt(loadKg(e))} kg</span></span>`).join('');
     html += `<div class="gp-grp-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="width:9px;height:9px;border-radius:50%;background:${COLORS[i%COLORS.length]}"></span>
+        <span style="width:9px;height:9px;border-radius:50%;background:${color}"></span>
         <span style="font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.group_label', `Group ${String.fromCharCode(65+i)}`, { letter:String.fromCharCode(65+i) })}</span>
         <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${g.length} · ${range}</span>
       </div>
@@ -1385,25 +1421,39 @@ function gpComputeGroups() {
   try {
     const squadIds = new Set((_gpPlayers || []).map(p => p.id));
     if (!squadIds.size || !_gpGrpVariant || !Array.isArray(_gpGrpRows) || !_gpGrpRows.length) return { ok:false };
+    const isRM = _gpGrpMode === 'rm';
+    const Vt   = _gpGrpTargetVel;
     const latest = {}; let unit = '';
-    _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && squadIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
+    _gpGrpRows.forEach(r => {
+      if (r.evaluation_type !== _gpGrpVariant || !squadIds.has(r.player_id) || (r.player_id in latest)) return;
+      let prof = null;
+      if (!isRM && r.notes) { try { const c = JSON.parse(r.notes); if (c && c.intercept != null && c.slope != null) prof = { a:+c.intercept, b:+c.slope }; } catch(_){} }
+      latest[r.player_id] = { raw: parseFloat(r.value), prof };
+      if (!unit && r.unit) unit = r.unit;
+    });
     const nameOf = id => { const p = (_gpPlayers || []).find(x => x.id === id); return p ? ((`${p.first_name||''} ${p.last_name||''}`).trim().split(' ').pop() + (p.number?` #${p.number}`:'')) : '—'; };
-    const entries = Object.entries(latest).map(([pid, value]) => ({ pid, value }));
+    const entries = [], noProfile = [];
+    Object.entries(latest).forEach(([pid, o]) => {
+      if (isRM) { entries.push({ pid, value: o.raw }); return; }
+      const load = gpVbtLoadAtVel(o.prof, Vt);
+      if (load == null) { noProfile.push(pid); return; }
+      entries.push({ pid, value: load });
+    });
     if (!entries.length) return { ok:false };
-    const noData = [...squadIds].filter(id => !(id in latest)).map(nameOf);
+    const noData = [...squadIds].filter(id => !(id in latest)).concat(noProfile).map(nameOf);
     let k = _gpGrpK === 'auto' ? gpAutoKJenks(entries) : parseInt(_gpGrpK);
     k = Math.max(1, Math.min(k, entries.length));
     const groupsRaw = gpJenksGroups(entries, k);
-    const isRM = _gpGrpMode === 'rm';
     const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
+    const loadKg = e => isRM ? e.value * _gpGrpPct/100 : e.value;
     const groups = groupsRaw.map((g, i) => {
-      const vals = g.map(e => isRM ? e.value * _gpGrpPct/100 : e.value);
+      const vals = g.map(loadKg);
       const lo = fmt(Math.min(...vals)), hi = fmt(Math.max(...vals));
-      const range = isRM ? `${lo}–${hi} kg @ ${_gpGrpPct}%` : `${lo}–${hi}${unit?` ${unit}`:''}`;
-      const items = g.map(e => ({ name: nameOf(e.pid), load: isRM ? fmt(e.value*_gpGrpPct/100)+' kg' : fmt(e.value)+(unit?` ${unit}`:'') }));
+      const range = `${lo}–${hi} kg` + (isRM ? ` @ ${_gpGrpPct}%` : ` @ ${fmt(Vt)} m/s`);
+      const items = g.map(e => ({ name: nameOf(e.pid), load: fmt(loadKg(e))+' kg' }));
       return { letter: String.fromCharCode(65 + i), range, items };
     });
-    return { ok:true, mode:_gpGrpMode, variant:_gpGrpVariant, pct:_gpGrpPct, k:groups.length, unit, players:entries.length, groups, noData };
+    return { ok:true, mode:_gpGrpMode, variant:_gpGrpVariant, pct:_gpGrpPct, targetVel:Vt, k:groups.length, unit, players:entries.length, groups, noData };
   } catch(_) { return { ok:false }; }
 }
 
@@ -1777,6 +1827,7 @@ function gpRenderPrintSheet() {
         const modeLabel = gd.mode === 'vbt' ? 'VBT' : '%RM';
         const metaBits = [esc(gd.variant), modeLabel, tt('gym_planner.n_groups_count', `${gd.k} groups`, { count:gd.k })];
         if (gd.mode === 'rm') metaBits.push(tt('gym_planner.target_pct_rm', `target ${gd.pct}% RM`, { pct:gd.pct }));
+        else metaBits.push(tt('gym_planner.target_vel_ms', `target ${gd.targetVel} m/s`, { vel:gd.targetVel }));
         metaBits.push(tt('gym_planner.n_players_count', `${gd.players} players`, { count:gd.players }));
         const head2 = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
           <div style="display:flex;align-items:center;gap:12px">${crest}
@@ -1789,7 +1840,7 @@ function gpRenderPrintSheet() {
           </div>
         </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
         const groupCards = gd.groups.map((grp, i) => {
-          const chipsHtml = grp.items.map(it => `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 10px;font:600 11px ${FONT};color:#15181D"><span style="font:600 9.5px ${MONO};color:#9CA3AF">${esc(it.load)}</span>${esc(it.name)}</span>`).join('');
+          const chipsHtml = grp.items.map(it => `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 10px;font:600 11px ${FONT};color:#15181D">${esc(it.name)}<span style="font:700 10px ${MONO};color:${GCOLORS[i%GCOLORS.length]}">${esc(it.load)}</span></span>`).join('');
           return `<div style="border:1px solid #E7E7E4;border-radius:10px;padding:11px 13px;margin-bottom:10px;break-inside:avoid">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
               <span style="width:9px;height:9px;border-radius:50%;background:${GCOLORS[i%GCOLORS.length]}"></span>
