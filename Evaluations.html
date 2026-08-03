@@ -1319,6 +1319,7 @@
     <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
       <div class="ev-frow" style="margin:0"><label class="ev-fl" data-i18n="evaluations.battery_date">Test date</label>
         <input id="asBatteryDate" type="date" class="ev-finput" style="height:34px"></div>
+      <button class="cm-btn is-outline is-sm" style="height:34px" onclick="batteryToImport()"><i class="ti ti-file-upload" style="font-size:14px"></i><span data-i18n="evaluations.import_csv">Import CSV</span></button>
     </div>
     <div class="pt-imp-section-l" data-i18n="evaluations.battery_tests">Tests</div>
     <div id="asBatteryChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
@@ -7341,6 +7342,8 @@
     document.getElementById('asBuilderOvl').classList.add('is-open');
   };
   window.closeAssessmentBuilder = function(){ document.getElementById('asBuilderOvl').classList.remove('is-open'); };
+  // Battery drawer → CSV import (same unified save engine).
+  window.batteryToImport = function(){ if (typeof closeBatteryEntry==='function') closeBatteryEntry(); if (typeof openAssessmentImport==='function') openAssessmentImport(); };
   function _cbSlug(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'test'; }
 
   window.saveAssessmentBuilder = async function(){
