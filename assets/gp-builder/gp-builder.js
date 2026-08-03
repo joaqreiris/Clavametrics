@@ -5514,29 +5514,29 @@
     const modeSeg = seg('mode', [{ v: 'plain', l: 'plain' }, { v: 'bar', l: 'bar' }, { v: 'heat', l: 'heat' }, { v: 'icon', l: 'icon' }, { v: 'pct', l: 'pct' }], f.mode);
     let cond = '';
     if (f.mode === 'bar' || f.mode === 'pct') {
-      cond = `<div class="tf-row"><span class="lab">Color</span><div class="tf-sw">${COLORS.map(c => `<button data-col="${c.hex}" class="${(f.barColor || '') === c.hex ? 'is-on' : ''}" style="background:${c.hex}"></button>`).join('')}</div></div>`;
+      cond = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_color', 'Color')}</span><div class="tf-sw">${COLORS.map(c => `<button data-col="${c.hex}" class="${(f.barColor || '') === c.hex ? 'is-on' : ''}" style="background:${c.hex}"></button>`).join('')}</div></div>`;
     } else if (f.mode === 'heat') {
-      cond = `<div class="tf-row"><span class="lab">Escala</span><select data-scale>
-        <option value="gyr" ${f.heatScale === 'gyr' ? 'selected' : ''}>Verde → Rojo (alto malo)</option>
-        <option value="ryg" ${f.heatScale === 'ryg' ? 'selected' : ''}>Rojo → Verde (alto bueno)</option>
-        <option value="seq" ${f.heatScale === 'seq' ? 'selected' : ''}>Secuencial (acento)</option></select></div>`;
+      cond = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_scale', 'Scale')}</span><select data-scale>
+        <option value="gyr" ${f.heatScale === 'gyr' ? 'selected' : ''}>${_tt('gps_analysis.builder_scale_gyr', 'Green → Red (high is bad)')}</option>
+        <option value="ryg" ${f.heatScale === 'ryg' ? 'selected' : ''}>${_tt('gps_analysis.builder_scale_ryg', 'Red → Green (high is good)')}</option>
+        <option value="seq" ${f.heatScale === 'seq' ? 'selected' : ''}>${_tt('gps_analysis.builder_scale_seq', 'Sequential (accent)')}</option></select></div>`;
     } else if (f.mode === 'icon') {
       const band = (f.dir || 'high') === 'band';
-      cond = `<div class="tf-row"><span class="lab">Estilo</span>${seg('istyle', [{ v: 'dot', l: 'semáforo' }, { v: 'arrow', l: 'flecha' }], f.iconStyle || 'dot')}</div>
-        <div class="tf-row"><span class="lab">Lógica</span>${seg('dir', [{ v: 'high', l: 'alto = bueno' }, { v: 'band', l: 'banda' }], f.dir || 'high')}</div>
-        <div class="tf-row"><span class="lab">Umbrales ${band ? '(zona ok)' : ''}</span><div class="tf-thr">
-          <label>${band ? 'mín' : 'ámbar ≥'}<input type="number" step="any" data-thr="lo" value="${_round3(thr.lo)}"></label>
-          <label>${band ? 'máx' : 'verde ≥'}<input type="number" step="any" data-thr="hi" value="${_round3(thr.hi)}"></label>
+      cond = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_style', 'Style')}</span>${seg('istyle', [{ v: 'dot', l: _tt('gps_analysis.builder_style_dot', 'traffic light') }, { v: 'arrow', l: _tt('gps_analysis.builder_style_arrow', 'arrow') }], f.iconStyle || 'dot')}</div>
+        <div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_logic', 'Logic')}</span>${seg('dir', [{ v: 'high', l: _tt('gps_analysis.builder_logic_high', 'high = good') }, { v: 'band', l: _tt('gps_analysis.builder_logic_band', 'band') }], f.dir || 'high')}</div>
+        <div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_thresholds', 'Thresholds')} ${band ? _tt('gps_analysis.builder_thr_okzone', '(ok zone)') : ''}</span><div class="tf-thr">
+          <label>${band ? _tt('gps_analysis.builder_thr_min', 'min') : _tt('gps_analysis.builder_thr_amber', 'amber ≥')}<input type="number" step="any" data-thr="lo" value="${_round3(thr.lo)}"></label>
+          <label>${band ? _tt('gps_analysis.builder_thr_max', 'max') : _tt('gps_analysis.builder_thr_green', 'green ≥')}<input type="number" step="any" data-thr="hi" value="${_round3(thr.hi)}"></label>
         </div></div>`;
     }
-    const decRow = `<div class="tf-row"><span class="lab">Decimales</span><input type="number" min="0" max="3" data-dec value="${f.dec ?? 0}"></div>`;
+    const decRow = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_decimals', 'Decimals')}</span><input type="number" min="0" max="3" data-dec value="${f.dec ?? 0}"></div>`;
     // Rename + alignment apply to any table column (persisted in the metric's format).
     const alignSeg = seg('align', [{ v: 'left', l: 'left' }, { v: 'center', l: 'center' }, { v: 'right', l: 'right' }], f.align || 'right');
     const labelRow = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_label', 'Label')}</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(f.label || '')}"></div>`;
     const alignRow = `<div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_align', 'Align')}</span>${alignSeg}</div>`;
-    return `<div class="tf-hd"><span class="t">${esc(cat.name || 'Columna')}</span><button class="x"><i class="ti ti-x"></i></button></div>
+    return `<div class="tf-hd"><span class="t">${esc(cat.name || _tt('gps_analysis.builder_column', 'Column'))}</span><button class="x"><i class="ti ti-x"></i></button></div>
       ${labelRow}${alignRow}
-      <div class="tf-row"><span class="lab">Formato</span>${modeSeg}</div>${cond}${decRow}`;
+      <div class="tf-row"><span class="lab">${_tt('gps_analysis.builder_format', 'Format')}</span>${modeSeg}</div>${cond}${decRow}`;
   }
 
   function _bindTfPane(mi) {
@@ -6140,7 +6140,7 @@
         const dis = !on && full;
         const isCalc = m.calculated;
         const tail = isCalc
-          ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Editar fórmula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Borrar"><i class="ti ti-trash"></i></button></span>`
+          ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="${_tt('gps_analysis.calc_edit_formula_title', 'Edit formula')}"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="${_tt('gps_analysis.calc_delete_title', 'Delete')}"><i class="ti ti-trash"></i></button></span>`
           : `<span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>`;
         const tag = (!isCalc && m.is_custom) ? ' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>' : '';
         measuresHtml += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-mid="${esc(m.id)}" draggable="true">
@@ -6153,10 +6153,10 @@
         </div>`;
       });
     });
-    if (measuresHtml) html += `<div class="es-fly-grp meas">Medidas</div>` + measuresHtml;
+    if (measuresHtml) html += `<div class="es-fly-grp meas">${_tt('gps_analysis.calc_measures', 'Measures')}</div>` + measuresHtml;
 
     const body = document.getElementById('gpbFlyBody');
-    const addCalcBtn = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Métrica calculada</button>`;
+    const addCalcBtn = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>${_tt('gps_analysis.calc_addbtn', 'Calculated metric')}</button>`;
     body.innerHTML = (shown ? html : `<div style="padding:22px;text-align:center;color:var(--cm-fg-muted);font:500 12px/1.5 var(--cm-font-sans)">No fields match "${esc(q)}"</div>`) + addCalcBtn;
 
     // entrada "+ Métrica calculada" + editar/borrar calculadas
@@ -6482,7 +6482,7 @@
   // (keeps the buttons — and any open popover anchor — alive), mirroring the classic panel.
   // i18n helper: use the page's global tt() when present, else the English fallback. The builder
   // is otherwise English-only; new labels go through this so they can be translated (en/es/pt).
-  const _tt = (key, en) => (typeof window !== 'undefined' && window.tt) ? window.tt(key, en) : en;
+  const _tt = (key, en, vars) => (typeof window !== 'undefined' && window.tt) ? window.tt(key, en, vars) : en;
 
   // i18n getters for module-load literals (VIZ_FULLNAME / DD_TYPES / VIZ_REQ_LBL) — the objects are
   // built before _tt exists, so translate at the USE site. English fallbacks stay exact.
@@ -6732,9 +6732,9 @@
   function evaluateFormula(src, resolve) {
     resolve = resolve || _calcSampleVal;
     const toks = tokenizeFormula(src);
-    if (!toks.length) return { ok: false, error: { msg: 'La fórmula está vacía.' } };
+    if (!toks.length) return { ok: false, error: { msg: _tt('gps_analysis.calc_err_empty', 'The formula is empty.') } };
     const bad = toks.find(t => t.t === 'bad');
-    if (bad) return { ok: false, error: { msg: 'Carácter no permitido: ', code: bad.v } };
+    if (bad) return { ok: false, error: { msg: _tt('gps_analysis.calc_err_badchar', 'Character not allowed: '), code: bad.v } };
 
     let i = 0; const peek = () => toks[i], eat = () => toks[i++]; let err = null;
     const fail = (msg, code) => { if (!err) err = { msg, code }; throw 'E'; };
@@ -6746,52 +6746,52 @@
     }
     function parseTerm() {
       let v = parseFactor();
-      while (peek() && peek().t === 'op' && (peek().v === '*' || peek().v === '/')) { const op = eat().v; const r = parseFactor(); if (op === '/') { if (r === 0) fail('División por cero.'); v = v / r; } else v = v * r; }
+      while (peek() && peek().t === 'op' && (peek().v === '*' || peek().v === '/')) { const op = eat().v; const r = parseFactor(); if (op === '/') { if (r === 0) fail(_tt('gps_analysis.calc_err_divzero', 'Division by zero.')); v = v / r; } else v = v * r; }
       return v;
     }
     function parseFactor() {
       const tk = peek();
-      if (!tk) fail('Falta un operando al final.');
+      if (!tk) fail(_tt('gps_analysis.calc_err_missing_operand', 'Missing an operand at the end.'));
       if (tk.t === 'op' && tk.v === '-') { eat(); return -parseFactor(); }
       if (tk.t === 'op' && tk.v === '+') { eat(); return parseFactor(); }
       if (tk.t === 'num') { eat(); return tk.v; }
       if (tk.t === 'id') {
         eat();
-        if (!_calcKnown(tk.v)) fail('Métrica desconocida: ', tk.v);
+        if (!_calcKnown(tk.v)) fail(_tt('gps_analysis.calc_err_unknown_metric', 'Unknown metric: '), tk.v);
         const val = resolve(tk.v);
-        if (val == null || isNaN(val)) fail('Métrica faltante en la sesión: ', tk.v);   // por-fila: falta el dato
+        if (val == null || isNaN(val)) fail(_tt('gps_analysis.calc_err_missing_metric', 'Metric missing in the session: '), tk.v);   // por-fila: falta el dato
         return val;
       }
       if (tk.t === 'fn') {
         const fn = eat().v;
-        if (!peek() || peek().t !== 'lp') fail('Falta «(» después de ' + fn + '.');
+        if (!peek() || peek().t !== 'lp') fail(_tt('gps_analysis.calc_err_missing_lparen', 'Missing “(” after {fn}.', { fn }));
         eat();
         const args = [parseExpr()];
         while (peek() && peek().t === 'comma') { eat(); args.push(parseExpr()); }
-        if (!peek() || peek().t !== 'rp') fail('Paréntesis sin cerrar.');
+        if (!peek() || peek().t !== 'rp') fail(_tt('gps_analysis.calc_err_unclosed_paren', 'Unclosed parenthesis.'));
         eat();
         const [lo, hi] = CALC_FUNCS[fn];
-        if (args.length < lo || args.length > hi) fail(`${fn}() espera ${lo === hi ? lo : lo + '+'} argumento${lo > 1 ? 's' : ''}.`);
+        if (args.length < lo || args.length > hi) fail(_tt('gps_analysis.calc_err_arg_count', '{fn}() expects {n} argument(s).', { fn, n: (lo === hi ? lo : lo + '+') }));
         if (fn === 'min') return Math.min(...args);
         if (fn === 'max') return Math.max(...args);
         if (fn === 'abs') return Math.abs(args[0]);
         if (fn === 'round') return Math.round(args[0]);
       }
-      if (tk.t === 'lp') { eat(); const v = parseExpr(); if (!peek() || peek().t !== 'rp') fail('Paréntesis sin cerrar.'); eat(); return v; }
-      if (tk.t === 'rp') fail('Paréntesis «)» de más.');
-      if (tk.t === 'comma') fail('Coma inesperada.');
-      fail('Token inesperado: ', tk.raw);
+      if (tk.t === 'lp') { eat(); const v = parseExpr(); if (!peek() || peek().t !== 'rp') fail(_tt('gps_analysis.calc_err_unclosed_paren', 'Unclosed parenthesis.')); eat(); return v; }
+      if (tk.t === 'rp') fail(_tt('gps_analysis.calc_err_extra_rparen', 'Extra “)” parenthesis.'));
+      if (tk.t === 'comma') fail(_tt('gps_analysis.calc_err_unexpected_comma', 'Unexpected comma.'));
+      fail(_tt('gps_analysis.calc_err_unexpected_token', 'Unexpected token: '), tk.raw);
     }
     try {
       const v = parseExpr();
       if (i < toks.length) {
         const t = toks[i];
-        if (t.t === 'rp') return { ok: false, error: { msg: 'Paréntesis «)» de más.' } };
-        return { ok: false, error: { msg: 'Sobra algo después de la expresión: ', code: t.raw } };
+        if (t.t === 'rp') return { ok: false, error: { msg: _tt('gps_analysis.calc_err_extra_rparen', 'Extra “)” parenthesis.') } };
+        return { ok: false, error: { msg: _tt('gps_analysis.calc_err_trailing', 'Something extra after the expression: '), code: t.raw } };
       }
-      if (!isFinite(v)) return { ok: false, error: { msg: 'Resultado no finito.' } };
+      if (!isFinite(v)) return { ok: false, error: { msg: _tt('gps_analysis.calc_err_nonfinite', 'Non-finite result.') } };
       return { ok: true, value: v };
-    } catch (e) { return { ok: false, error: { msg: err ? err.msg : 'Fórmula inválida.', code: err ? err.code : '' } }; }
+    } catch (e) { return { ok: false, error: { msg: err ? err.msg : _tt('gps_analysis.calc_err_invalid', 'Invalid formula.'), code: err ? err.code : '' } }; }
   }
 
   function highlightFormula(src) {
@@ -6932,7 +6932,7 @@
     const ops = ['+', '-', '*', '/', '(', ')'], fns = ['min', 'max', 'abs', 'round'];
     return ops.map(o => `<button class="cmf-op" data-ins-op="${o}">${o}</button>`).join('') +
       fns.map(f => `<button class="cmf-op fn" data-ins-fn="${f}">${f}()</button>`).join('') +
-      `<button class="cmf-op util" data-clear="1"><i class="ti ti-backspace"></i>Limpiar</button>`;
+      `<button class="cmf-op util" data-clear="1"><i class="ti ti-backspace"></i>${_tt('gps_analysis.calc_clear', 'Clear')}</button>`;
   }
   function _calcStageHTML() {
     const editing = !!_calcEdit.id;
@@ -6940,44 +6940,44 @@
       <div class="cmf-modal">
         <div class="cmf-modal-h">
           <span class="badge"><i class="ti ti-math-function"></i></span>
-          <span class="t">${editing ? 'Editar métrica calculada' : 'Nueva métrica calculada'}<span class="sub">vive en el catálogo · reutilizable en cualquier card</span></span>
-          <button class="x" data-calc-close title="Cerrar"><i class="ti ti-x"></i></button>
+          <span class="t">${editing ? _tt('gps_analysis.calc_edit_title', 'Edit calculated metric') : _tt('gps_analysis.calc_new_title', 'New calculated metric')}<span class="sub">${_tt('gps_analysis.calc_subtitle', 'lives in the catalog · reusable on any card')}</span></span>
+          <button class="x" data-calc-close title="${_tt('gps_analysis.calc_close', 'Close')}"><i class="ti ti-x"></i></button>
         </div>
         <div class="cmf-modal-b">
           <div class="cmf-grid2">
-            <div class="cmf-row"><label class="cmf-label">Nombre</label><input class="cmf-input" id="cmfName" type="text" value="${esc(_calcEdit.name)}" placeholder="Ej. HSR por minuto"></div>
-            <div class="cmf-row"><label class="cmf-label">Unidad <span class="opt">opcional</span></label><input class="cmf-input" id="cmfUnit" type="text" value="${esc(_calcEdit.unit)}" placeholder="m/min"></div>
+            <div class="cmf-row"><label class="cmf-label">${_tt('gps_analysis.calc_name', 'Name')}</label><input class="cmf-input" id="cmfName" type="text" value="${esc(_calcEdit.name)}" placeholder="${_tt('gps_analysis.calc_name_ph', 'e.g. HSR per minute')}"></div>
+            <div class="cmf-row"><label class="cmf-label">${_tt('gps_analysis.calc_unit', 'Unit')} <span class="opt">${_tt('gps_analysis.calc_optional', 'optional')}</span></label><input class="cmf-input" id="cmfUnit" type="text" value="${esc(_calcEdit.unit)}" placeholder="m/min"></div>
           </div>
           <div class="cmf-row cmf-formula-wrap">
-            <label class="cmf-label">Fórmula</label>
+            <label class="cmf-label">${_tt('gps_analysis.calc_formula', 'Formula')}</label>
             <div class="cmf-formula" id="cmfFormula" contenteditable="true" spellcheck="false"></div>
             <div class="cmf-insert">
-              <span class="cmf-insert-lbl">Insertá una métrica (no hace falta tipear el id):</span>
+              <span class="cmf-insert-lbl">${_tt('gps_analysis.calc_insert_hint', 'Insert a metric (no need to type the id):')}</span>
               <div class="cmf-chips">${_calcChipsHTML()}</div>
             </div>
             <div class="cmf-ops">${_calcOpsHTML()}</div>
           </div>
-          <div class="cmf-valid idle" id="cmfValid"><i class="ti ti-info-circle"></i><span>Empezá a escribir o insertá una métrica.</span></div>
+          <div class="cmf-valid idle" id="cmfValid"><i class="ti ti-info-circle"></i><span>${_tt('gps_analysis.calc_valid_idle', 'Start typing or insert a metric.')}</span></div>
         </div>
         <div class="cmf-modal-f">
-          <div class="cmf-rule"><i class="ti ti-bulb"></i><span>Se calcula <b>por sesión</b> y después se agrega — nunca al revés.</span></div>
-          <button class="cmf-btn ghost" data-calc-close><i class="ti ti-x"></i>Cancelar</button>
-          <button class="cmf-btn primary" id="cmfSave" data-calc-save><i class="ti ti-check"></i>${editing ? 'Guardar cambios' : 'Crear métrica'}</button>
+          <div class="cmf-rule"><i class="ti ti-bulb"></i><span>${_tt('gps_analysis.calc_rule', 'Computed <b>per session</b> and then aggregated — never the other way around.')}</span></div>
+          <button class="cmf-btn ghost" data-calc-close><i class="ti ti-x"></i>${_tt('gps_analysis.calc_cancel', 'Cancel')}</button>
+          <button class="cmf-btn primary" id="cmfSave" data-calc-save><i class="ti ti-check"></i>${editing ? _tt('gps_analysis.calc_save_edit', 'Save changes') : _tt('gps_analysis.calc_save_new', 'Create metric')}</button>
         </div>
       </div>
       <div class="cmf-side">
         <div class="cmf-card">
-          <div class="cmf-card-h"><i class="ti ti-eye"></i><span class="t">Preview del resultado</span><span class="live"><span class="dot"></span>en vivo</span></div>
+          <div class="cmf-card-h"><i class="ti ti-eye"></i><span class="t">${_tt('gps_analysis.calc_preview_title', 'Result preview')}</span><span class="live"><span class="dot"></span>${_tt('gps_analysis.calc_live', 'live')}</span></div>
           <div class="cmf-card-b" id="cmfPreview"></div>
         </div>
         <div class="cmf-card">
-          <div class="cmf-card-h"><i class="ti ti-help-circle"></i><span class="t">Cómo se calcula</span></div>
+          <div class="cmf-card-h"><i class="ti ti-help-circle"></i><span class="t">${_tt('gps_analysis.calc_how_title', 'How it is computed')}</span></div>
           <div class="cmf-card-b">
             <div class="cmf-help">
-              <div class="step"><span class="k">1</span><span class="x">En <b>cada sesión</b> se evalúa la fórmula con los valores de esa sesión.</span></div>
-              <div class="step"><span class="k">2</span><span class="x">Después se <b>agrega</b> (promedio, suma…) según la agregación que elijas al usarla.</span></div>
+              <div class="step"><span class="k">1</span><span class="x">${_tt('gps_analysis.calc_step1', 'For <b>each session</b> the formula is evaluated with the values of that session.')}</span></div>
+              <div class="step"><span class="k">2</span><span class="x">${_tt('gps_analysis.calc_step2', 'Then it is <b>aggregated</b> (average, sum…) according to the aggregation you choose when using it.')}</span></div>
             </div>
-            <div class="cmf-allowed"><b>Permitido:</b> métricas del catálogo, <code>+ − × ÷ ( )</code> y <code>min, max, abs, round</code>. Sin filtros ni referencias entre filas. <b>La fórmula nunca se ejecuta como código</b> — es un editor controlado.</div>
+            <div class="cmf-allowed">${_tt('gps_analysis.calc_allowed', '<b>Allowed:</b> catalog metrics, <code>+ − × ÷ ( )</code> and <code>min, max, abs, round</code>. No filters or cross-row references. <b>The formula is never run as code</b> — it is a controlled editor.')}</div>
           </div>
         </div>
       </div>
@@ -7027,14 +7027,14 @@
     vEl.classList.remove('ok', 'bad', 'idle');
     if (!src) {
       vEl.classList.add('idle');
-      vEl.innerHTML = '<i class="ti ti-info-circle"></i><span>Empezá a escribir o insertá una métrica.</span>';
+      vEl.innerHTML = `<i class="ti ti-info-circle"></i><span>${_tt('gps_analysis.calc_valid_idle', 'Start typing or insert a metric.')}</span>`;
       if (save) save.disabled = true;
       _calcRenderPreview(null);
       return;
     }
     if (res.ok) {
       _calcFEl.classList.add('ok'); vEl.classList.add('ok');
-      vEl.innerHTML = '<i class="ti ti-circle-check"></i><span>Fórmula válida.</span>';
+      vEl.innerHTML = `<i class="ti ti-circle-check"></i><span>${_tt('gps_analysis.calc_valid_ok', 'Valid formula.')}</span>`;
       if (save) save.disabled = !nameOk;
       _calcRenderPreview(res.value);
       _calcSchedRealPreview(src);   // best-effort: mejora el preview con una sesión real
@@ -7054,15 +7054,15 @@
     if (!p) return;
     const unit = (document.getElementById('cmfUnit')?.value || '').trim();
     if (value == null) {
-      p.innerHTML = '<div class="cmf-preview-empty"><i class="ti ti-math-function"></i>El valor de ejemplo aparece cuando la fórmula es válida.</div>';
+      p.innerHTML = `<div class="cmf-preview-empty"><i class="ti ti-math-function"></i>${_tt('gps_analysis.calc_preview_empty', 'The sample value appears when the formula is valid.')}</div>`;
       return;
     }
     const real = !!(opts && opts.real && opts.session);
     const used = usedFormulaMetrics(_calcGetFormula());
     const valOf = real ? (id => opts.session.values[id]) : (id => _calcSampleVal(id));
-    const head = real ? `sesión real · ${esc(opts.session.date || opts.session.reportId || '')}` : 'sesión de ejemplo · 1 partido';
+    const head = real ? _tt('gps_analysis.calc_prev_head_real', 'real session · {info}', { info: esc(opts.session.date || opts.session.reportId || '') }) : _tt('gps_analysis.calc_prev_head_sample', 'sample session · 1 match');
     const subst = used.length ? `<div class="cmf-subst"><div class="ln" style="color:var(--cm-fg-faint)">${head}</div>${used.map(id => { const m = catalogMap.get(id); return `<div class="ln"><b>${esc(id)}</b> <span class="eq">=</span> ${_calcFmt(valOf(id))} ${esc(m?.unit || '')}</div>`; }).join('')}</div>` : '';
-    const cap = real ? 'valor calculado en una <b>sesión real</b> (antes de agregar)' : 'valor calculado <b>en una sesión</b> de ejemplo (antes de agregar)';
+    const cap = real ? _tt('gps_analysis.calc_prev_cap_real', 'value computed on a <b>real session</b> (before aggregating)') : _tt('gps_analysis.calc_prev_cap_sample', 'value computed <b>on a session</b> sample (before aggregating)');
     p.innerHTML = `<div class="cmf-preview-val"><span class="v">${_calcFmt(value)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}</div>
       <div class="cmf-preview-cap">${cap}</div>${subst}`;
   }
