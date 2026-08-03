@@ -868,8 +868,14 @@ async function loadDay(dateStr) {
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   _dpDaySessions = sessResult.data || [];
-  // Honour the requested session (?session= / switcher); fall back to the day's first.
-  const sess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || _dpDaySessions[0] || null;
+  const _dpIsGym = s => !!s && (s.session_type || '') === 'gym';
+  // A gym session has its own planner — never open it here in the field-planning layout.
+  // (Reached via a ?session=<gymId> link; the switcher redirects before we get here.)
+  const _reqSess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || null;
+  if (_dpIsGym(_reqSess)) { window.location.replace(`Gym Planner.html?date=${dateStr}`); return; }
+  // Default to the day's first FIELD (non-gym) training session; honour an explicit field
+  // request (?session= / switcher). A gym-only day starts empty, ready to create a field session.
+  const sess = _reqSess || _dpDaySessions.find(s => !_dpIsGym(s)) || null;
   _dpPreferredSessionId = sess?.id || null;
   _dpCurrentSessionId = sess?.id || null;
   _dpRenderSessionSwitch();   // after _dpCurrentSessionId, which marks the active tab
@@ -2307,6 +2313,9 @@ function _dpRenderSessionSwitch() {
   host.querySelectorAll('[data-sess]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.sess;
     if (id === _dpCurrentSessionId) return;
+    // Gym sessions have their own planner — jump there instead of loading in the field layout.
+    const _s = _dpDaySessions.find(x => x.id === id);
+    if (_s && (_s.session_type || '') === 'gym') { window.location.href = `Gym Planner.html?date=${_dpCurrentDate}`; return; }
     _dpPreferredSessionId = id;
     // Keep the URL shareable/reloadable on the session you're actually looking at.
     try {
