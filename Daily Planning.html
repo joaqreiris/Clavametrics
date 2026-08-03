@@ -396,7 +396,6 @@
           <h3 data-i18n="daily_planning.activation">Activation</h3>
           <span class="ct" id="dpActCt">—</span>
           <div class="right" style="gap:8px">
-            <button class="cm-btn is-outline is-sm" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="daily_planning.add_exercise">Add exercise</span></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="daily_planning.duration">Duration</span>
             <input type="number" id="dpActDuration" min="0" max="120" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—">
           </div>
@@ -413,10 +412,6 @@
         <div class="dp-card-h">
           <h3 data-i18n="daily_planning.field_exercises">Field exercises</h3>
           <span class="ct" id="dpExCt">—</span>
-          <div class="right">
-            <button class="cm-btn is-outline is-sm" onclick="openManualExModal()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="daily_planning.manual">Manual</span></button>
-            <button class="cm-btn is-primary is-sm" onclick="openLibModal()"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="daily_planning.from_library">From library</span></button>
-          </div>
         </div>
         <div class="dp-ex-grid" id="dpExGrid">
           <!-- Populated by loadSessionExercises() -->
@@ -429,7 +424,6 @@
           <h3 data-i18n="daily_planning.goalkeepers">Goalkeeper training</h3>
           <span class="ct" id="dpGkCt">—</span>
           <div class="right" style="gap:8px" onclick="event.stopPropagation()">
-            <button class="cm-btn is-outline is-sm" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="daily_planning.add_exercise">Add exercise</span></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="daily_planning.duration">Duration</span>
             <input type="number" id="dpGkDuration" min="0" max="120" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" readonly>
             <button class="no-print" onclick="dpGkToggleHidden(true)" title="" data-i18n-attr="title:daily_planning.gk_hide" style="width:26px;height:26px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-eye-off" style="font-size:14px"></i></button>
@@ -1137,14 +1131,14 @@ function dpWireReorder(grid, kind){
 function dpPaintActStrip(){
   const strip = document.getElementById('dpActStrip'); if (!strip) return;
   const acts = window._dpActItems || [];
-  const addBtn = `<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
 }
 // Repaint the goalkeeper strip from window._dpGkItems (mirrors loadGoalkeeperActivities).
 function dpPaintGkStrip(){
   const strip = document.getElementById('dpGkStrip'); if (!strip) return;
   const gks = window._dpGkItems || [];
-  const addBtn = `<button class="dp-ex-add no-print" onclick="dpGkAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
 }
 async function dpReorderExercise(dragSeid, targetSeid, after, kind){
@@ -2103,7 +2097,7 @@ async function loadActivationActivities(sessionId) {
   const strip = document.getElementById('dpActStrip');
   const ctEl  = document.getElementById('dpActCt');
   const durEl = document.getElementById('dpActDuration');
-  const addBtn = `<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   if (!sessionId) {
     strip.innerHTML = addBtn;
     if (ctEl) ctEl.textContent = '—';
@@ -2172,7 +2166,7 @@ async function loadGoalkeeperActivities(sessionId) {
   const ctEl  = document.getElementById('dpGkCt');
   const durEl = document.getElementById('dpGkDuration');
   if (!strip) return;
-  const addBtn = `<button class="dp-ex-add no-print" onclick="dpGkAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   if (!sessionId) {
     strip.innerHTML = addBtn;
     if (ctEl) ctEl.textContent = '—';
@@ -2600,7 +2594,7 @@ async function dpExportPDF() {
       renderExerciseList(_dpFieldExercises || []);
       if (window._dpActItems) {
         const strip = document.getElementById('dpActStrip');
-        const addBtn = `<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+        const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
         if (strip) strip.innerHTML = (window._dpActItems).map(dpExerciseCardHTML).join('') + addBtn;
       }
       recalcTotals();   // totals + AU + GPS projection
