@@ -6822,14 +6822,16 @@
     var out = [];
     _assessDefs.forEach(function(d){
       out.push({ key:d.key, test_type:d.test_type, metric_key:d.metric_key, unit:d.unit, family:d.family,
-                 label:d.label, bilateral:d.bilateral, value_type:d.value_type, aliases:(d.aliases||[]) });
+                 label:d.label, bilateral:d.bilateral, value_type:d.value_type, aliases:(d.aliases||[]),
+                 metrics:asMetrics(d) });   // multi-metric aware (VALD peak force + RFD + impulse…)
     });
     // jump / other force_tests catalog entries (CMJ, SJ, DJ, SL-CMJ) so their columns still import
     var jumpAliases = { cmj:['CMJ'], sj:['SJ','SQUAT JUMP'], dj:['DJ','DROP JUMP'], slcmj:['SLJ','SLCMJ','SL CMJ','SL-CMJ'] };
     CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){
       if (!t.src || t.src.from !== 'force_tests' || t._def) return;
       out.push({ key:'cat_'+t.key, test_type:t.src.testType, metric_key:'jump_height', unit:'cm', family:'jump',
-                 label:t.label, bilateral:(t.key==='slcmj'), value_type:'numeric', aliases:(jumpAliases[t.key]||[t.label]) });
+                 label:t.label, bilateral:(t.key==='slcmj'), value_type:'numeric', aliases:(jumpAliases[t.key]||[t.label]),
+                 metrics:[{ key:'jump_height', label:'cm', unit:'cm', primary:true }] });
     }); });
     _asTargets = out;
     _asTargetsByKey = {}; out.forEach(function(t){ _asTargetsByKey[t.key] = t; });
@@ -6969,8 +6971,8 @@
     _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, manual:new Map(), savedMap:{}, colMap:{} };
     // saved column mappings (screening)
     try {
-      var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side').eq('club_id',_clubId).eq('source_label','screening');
-      var map={}; (sm.data||[]).forEach(function(r){ map[r.source_column_name]={ test_key:r.test_key, side:r.side||null }; });
+      var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side,metric_key').eq('club_id',_clubId).eq('source_label','screening');
+      var map={}; (sm.data||[]).forEach(function(r){ map[r.source_column_name]={ test_key:r.test_key, side:r.side||null, metric_key:r.metric_key||null }; });
       _asState.savedMap=map;
     } catch(e){ _asState.savedMap={}; }
     _asAutoMap();
@@ -7015,17 +7017,29 @@
     document.getElementById('asImpMapCount').textContent = tt('evaluations.n_m_mapped','('+mapped+'/'+cols.length+' mapped)',{mapped:mapped,total:cols.length});
     document.getElementById('asImpMapRows').innerHTML = cols.length ? cols.map(function(col,i){
       var cm=colMap[col]||{};
-      return '<div style="display:grid;grid-template-columns:1fr 190px 90px;gap:8px;align-items:center">'
+      var tgt = cm.test_key ? _asTargetsByKey[cm.test_key] : null;
+      var mets = (tgt && tgt.metrics) ? tgt.metrics : [];
+      var metricSel = (mets.length > 1)
+        ? '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="metric" onchange="onAsColMapChange(this)">'+_asMetricOptions(mets, cm.metric_key)+'</select>'
+        : '<span></span>';
+      return '<div style="display:grid;grid-template-columns:1fr 160px 110px 78px;gap:8px;align-items:center">'
         + '<span style="font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(col)+'">'+esc(col)+'</span>'
         + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="test" onchange="onAsColMapChange(this)">'+_asTargetOptions(cm.test_key)+'</select>'
+        + metricSel
         + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="side" onchange="onAsColMapChange(this)">'+_asSideOptions(cm.side)+'</select>'
         + '</div>';
     }).join('') : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.no_metric_cols_detected','No metric columns detected.'))+'</div>';
   }
+  function _asMetricOptions(mets, selKey){
+    var def = (mets.filter(function(x){return x.primary;})[0] || mets[0] || {}).key;
+    var sel = selKey || def;
+    return mets.map(function(m){ return '<option value="'+esc(m.key)+'"'+(sel===m.key?' selected':'')+'>'+esc(m.label||m.key)+'</option>'; }).join('');
+  }
   function onAsColMapChange(sel){
     var col=_asState.metrics[+sel.dataset.i]; if (!col) return;
-    var cm=_asState.colMap[col]||(_asState.colMap[col]={ test_key:null, side:null });
-    if (sel.dataset.role==='test') cm.test_key = sel.value||null;
+    var cm=_asState.colMap[col]||(_asState.colMap[col]={ test_key:null, side:null, metric_key:null });
+    if (sel.dataset.role==='test'){ cm.test_key = sel.value||null; cm.metric_key = null; }  // reset metric → primary
+    else if (sel.dataset.role==='metric') cm.metric_key = sel.value||null;
     else cm.side = sel.value||null;
     renderAssessmentMapping();
     renderAssessmentPreview();
@@ -7090,7 +7104,10 @@
           var nk=natOf(m.playerId, target.test_type, date);
           var entry=planMap.get(nk);
           if (!entry){ entry={ rec:{ club_id:_clubId, team_id:_teamId||null, player_id:m.playerId, test_type:target.test_type, test_date:date, source:'csv', uploaded_by:uid, uploaded_by_name:uname }, metrics:[] }; planMap.set(nk, entry); }
-          entry.metrics.push({ metric_key:target.metric_key, value:v, side:(cm.side||null), unit:target.unit });
+          // multi-metric: use the column's chosen metric (VALD), else the target's primary/default.
+          var mk = cm.metric_key || target.metric_key;
+          var mdef = (target.metrics||[]).filter(function(x){ return x.key === mk; })[0];
+          entry.metrics.push({ metric_key:mk, value:v, side:(cm.side||null), unit:(mdef && mdef.unit) || target.unit });
         });
         if (!any) noData++;
       });
@@ -7103,7 +7120,7 @@
 
       // persist mapping memory in assessment_column_maps
       if (mappedCols.length){
-        var mapRows=mappedCols.map(function(col){ return { club_id:_clubId, source_label:'screening', source_column_name:col, test_key:colMap[col].test_key, side:colMap[col].side||null }; });
+        var mapRows=mappedCols.map(function(col){ return { club_id:_clubId, source_label:'screening', source_column_name:col, test_key:colMap[col].test_key, side:colMap[col].side||null, metric_key:colMap[col].metric_key||null }; });
         try { await window.sb.from('assessment_column_maps').upsert(mapRows, { onConflict:'club_id,source_label,source_column_name' }); } catch(e){}
       }
     } catch(e){
