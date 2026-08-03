@@ -1537,7 +1537,20 @@
   // existing hardcoded mobility cards already cover these defs → enrich, don't duplicate
   var _LEGACY_MOB_DEFKEYS = ['mob_ankle_df','mob_hip_ir','mob_hip_er'];
 
-  function _assessSub(def){ return (def.unit || '') + (def.bilateral ? ' · L/R' : ''); }
+  var POS_LABEL    = { supine:'Supine', prone:'Prone', standing:'Standing', seated:'Seated', side_lying:'Side-lying' };
+  var METHOD_LABEL = { hhd:'HHD', force_frame:'Force frame', force_plate:'Force plate', nordbord:'NordBord',
+                       isokinetic:'Isokinetic', goniometer:'Goniometer', tape:'Tape', clinical:'Clinical', field:'Field' };
+  function _fmtAngle(a){ return !a ? '' : (/^[0-9]+$/.test(a) ? a + '°' : a); }
+  // Card subtitle from the facets: e.g. "Supine · 90:20 · Force plate · N · L/R".
+  function _assessSub(def){
+    var bits = [];
+    if (def.position)    bits.push(POS_LABEL[def.position] || def.position);
+    if (def.joint_angle) bits.push(_fmtAngle(def.joint_angle));
+    if (def.method)      bits.push(METHOD_LABEL[def.method] || def.method);
+    if (def.unit)        bits.push(def.unit + (def.bilateral ? ' · L/R' : ''));
+    else if (def.bilateral) bits.push('L/R');
+    return bits.join(' · ') || (def.unit || '');
+  }
   function _defToTest(def){
     return { key:def.key, label:def.label, sub:_assessSub(def),
       icon: ASSESS_ICON[def.key] || (def.family === 'isometric' ? 'ti-barbell' : 'ti-stretching'),
@@ -1636,11 +1649,19 @@
   function renderCatalog(){
     var html = CATALOG.map(function(cat, i){
       var cards = cat.tests.map(function(t){
+        var _d = t._def;
+        var _evClr = { strong:'var(--cm-success)', moderate:'var(--cm-warning)', practice:'var(--cm-fg-faint)' };
+        var refLine = (_d && _d.reference)
+          ? '<div class="b-ref" title="'+esc(_d.reference)+'" style="display:flex;align-items:center;gap:5px;margin-top:4px;font:400 9px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);overflow:hidden">'
+            + (_d.evidence_level ? '<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:'+(_evClr[_d.evidence_level]||'var(--cm-fg-faint)')+'"></span>' : '')
+            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(_d.reference)+'</span></div>'
+          : '';
         return '<button class="ev-test-card" data-open-test="'+t.key+'">'
           + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t.icon+'"></i></div>'
           + '<div class="b-l">'+esc(testLabel(t))+'</div>'
           + '<div class="b-s">'+esc(t.sub)+'</div>'
           + '<div class="b-status" data-status="'+t.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
+          + refLine
           + '</button>';
       }).join('');
       var batFam = cat.name === 'Isometric strength' ? 'isometric' : (cat.name === 'Mobility & screening' ? 'mobility' : null);
@@ -1845,9 +1866,10 @@
       + esc(d.unit || '') + (d.bilateral ? ' · L/R' : '') + '</span>';
     var info = d.reference ? '<button type="button" id="evDefInfoBtn" title="' + esc(tt('evaluations.evidence','Evidence'))
       + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer"><i class="ti ti-info-circle"></i></button>' : '';
+    var refLink = d.reference_url ? '<div style="margin-top:7px"><a href="' + esc(d.reference_url) + '" target="_blank" rel="noopener" style="color:var(--cm-accent);font-weight:600;text-decoration:none">' + esc(tt('evaluations.view_source','View source')) + ' ↗</a></div>' : '';
     var pop = d.reference ? '<div id="evDefPop" style="display:none;position:absolute;top:100%;left:0;z-index:40;margin-top:6px;max-width:340px;padding:10px 12px;border-radius:10px;background:var(--cm-bg-elev,#fff);border:1px solid var(--cm-border,rgba(0,0,0,.12));box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:12px;line-height:1.45;color:var(--cm-fg);white-space:normal;text-align:left">'
       + (evTxt ? '<div style="font-weight:700;margin-bottom:4px">' + esc(tt('evaluations.evidence','Evidence')) + ': ' + esc(evTxt) + '</div>' : '')
-      + '<div style="color:var(--cm-fg-muted)">' + esc(d.reference) + '</div></div>' : '';
+      + '<div style="color:var(--cm-fg-muted)">' + esc(d.reference) + '</div>' + refLink + '</div>' : '';
     el.innerHTML = '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;margin-top:6px">' + chip + info + pop + '</div>';
     var ib = document.getElementById('evDefInfoBtn');
     if (ib) ib.addEventListener('click', function(ev){
