@@ -3537,8 +3537,29 @@
     }
     // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
     // arriba. Es puramente de DISPLAY: los datasets ya están alineados por índice con `cats`.
-    const catLabels = nDims >= 2 ? catDims.map(a => a[1]) : cats;
-    return { cats, catFids, catDims, nDims, catLabels, zoomApplied, zoomGroup: zoomApplied ? String(zoomGroup) : null,
+    // Sin anidar pero con varios niveles por categoría (p. ej. jugador · fecha: un bar por
+    // jugador y la MISMA fecha en todos): cualquier nivel CONSTANTE en todas las categorías es
+    // redundante en cada tick → lo sacamos del label y lo mostramos UNA sola vez como pie del
+    // eje (axisTail). Si nada es constante (jugador · rival, todos distintos) se conserva el
+    // label concatenado de siempre.
+    let catLabels, axisTail = null;
+    if (nDims >= 2) {
+      catLabels = catDims.map(a => a[1]);
+    } else if (catDims.length && catDims[0].length >= 2) {
+      const nLev = catDims[0].length, constL = [], varL = [];
+      for (let L = 0; L < nLev; L++) {
+        (new Set(catDims.map(a => String(a[L] ?? ''))).size <= 1 ? constL : varL).push(L);
+      }
+      if (constL.length && varL.length) {
+        catLabels = catDims.map(a => varL.map(L => a[L]).join(' · '));
+        axisTail  = constL.map(L => catDims[0][L]).join(' · ');
+      } else {
+        catLabels = cats;
+      }
+    } else {
+      catLabels = cats;
+    }
+    return { cats, catFids, catDims, nDims, catLabels, axisTail, zoomApplied, zoomGroup: zoomApplied ? String(zoomGroup) : null,
              datasets, max, step, ticks, showAxes, showLeg, showLbl,
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
@@ -3619,6 +3640,9 @@
         grid: { display: false, drawTicks: false },
         ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
         border: { display: d.showAxes },
+        // Referencia común (p. ej. la fecha compartida por todas las barras): una sola vez,
+        // bajo los ticks, en lugar de repetirla en cada label. Sólo cuando NO está anidado.
+        ...(d.axisTail && !_nested ? { title: { display: true, text: d.axisTail, color: '#9CA3AF', font: { size: 10.5, weight: '500' }, padding: { top: 6 } } } : {}),
         // Reservamos el alto DENTRO de la escala (no en layout.padding.bottom): la leyenda
         // vive en position:'bottom', o sea DEBAJO del eje, y el padding del canvas dejaría el
         // hueco por debajo de ella → el piso superior se solaparía con la leyenda. Creciendo
@@ -3679,7 +3703,7 @@
               callbacks: {
                 // Anidado: el eje ya sólo muestra el detalle, así que el título recupera el
                 // contexto completo ("MC 3 · 12"). Sin anidar, el título por defecto de siempre.
-                ...(_nested ? { title: items => (items.length ? String(d.cats[items[0].dataIndex] ?? '') : '') } : {}),
+                ...((_nested || d.axisTail) ? { title: items => (items.length ? String(d.cats[items[0].dataIndex] ?? '') : '') } : {}),
                 label: ctx => {
                   const v = d.horizontal ? ctx.parsed.x : ctx.parsed.y;
                   const base = `${ctx.dataset.label}: ${fmt(Math.round(v * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
