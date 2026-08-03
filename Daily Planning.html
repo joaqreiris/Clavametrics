@@ -229,6 +229,9 @@
 
   .dp-ex-add{background:transparent;border:1.5px dashed var(--cm-border-strong);border-radius:10px;color:var(--cm-fg-muted);cursor:pointer;font:500 13px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center;gap:5px;min-height:240px}
   .dp-ex-add:hover{border-color:var(--cm-accent);color:var(--cm-fg);background:var(--cm-accent-soft)}
+  .dp-lib-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;transition:all .12s}
+  .dp-lib-chip:hover{border-color:var(--cm-accent);color:var(--cm-fg)}
+  .dp-lib-chip.is-on{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
@@ -455,6 +458,13 @@
       <input id="libSearch" type="text" placeholder="Search exercises…" data-i18n-ph="daily_planning.search_exercises_ph" style="height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:160px" oninput="filterLib()">
       <button onclick="closeLibModal()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
     </div>
+    <div id="libTypeBar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--cm-border)">
+      <button type="button" class="dp-lib-chip is-on" data-orient="" onclick="dpLibSetOrient('')" data-i18n="common.all">All</button>
+      <button type="button" class="dp-lib-chip" data-orient="ACTIVATION" onclick="dpLibSetOrient('ACTIVATION')" data-i18n="daily_planning.type_activation">Activation</button>
+      <button type="button" class="dp-lib-chip" data-orient="STRENGTH" onclick="dpLibSetOrient('STRENGTH')" data-i18n="daily_planning.type_strength">Strength</button>
+      <button type="button" class="dp-lib-chip" data-orient="VELOCITY" onclick="dpLibSetOrient('VELOCITY')" data-i18n="daily_planning.type_velocity">Velocity</button>
+      <button type="button" class="dp-lib-chip" data-orient="ENDURANCE" onclick="dpLibSetOrient('ENDURANCE')" data-i18n="daily_planning.type_endurance">Endurance</button>
+    </div>
     <div id="libList" style="overflow-y:auto;flex:1;padding:8px"></div>
     <div style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="libFooter" data-i18n="common.loading">Loading…</div>
   </div>
@@ -511,7 +521,7 @@ let _dpDaySessions = [], _dpPreferredSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
-let _libExercises = [], _libFolders = [], _dpMicrocycles = [], _dpPublished = false;
+let _libExercises = [], _libFolders = [], _libOrient = '', _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpGkTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
@@ -1815,6 +1825,7 @@ async function openLibModal(mode) {
   document.querySelector('#libBackdrop [style*="font:600 14px"]').textContent = title;
   document.getElementById('libBackdrop').style.display = 'flex';
   document.getElementById('libSearch').value = '';
+  dpLibSetOrient('');   // reset the type filter each time the picker opens
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
@@ -1845,12 +1856,26 @@ async function openLibModal(mode) {
   filterLib();
 }
 function closeLibModal() { document.getElementById('libBackdrop').style.display = 'none'; }
+// Filter the library picker by exercise type (orientation). '' = all.
+function dpLibSetOrient(val) {
+  _libOrient = val || '';
+  document.querySelectorAll('#libTypeBar .dp-lib-chip').forEach(b =>
+    b.classList.toggle('is-on', (b.dataset.orient || '') === _libOrient));
+  filterLib();
+}
+// Effective type of a library exercise: stored orientation, else derived from m²/player (matches the card).
+function _dpLibOrient(e) {
+  const area = (e.field_width && e.field_height) ? e.field_width * e.field_height : null;
+  const m2   = (area && e.players_count > 0) ? Math.round(area / e.players_count) : null;
+  return (e.orientation || _dpCalcOrientFromM2(m2) || '').toUpperCase();
+}
 function filterLib() {
   const q   = (document.getElementById('libSearch').value || '').toLowerCase();
   const fsel = (document.getElementById('libFolder')?.value) || '';
   let fil = q ? _libExercises.filter(e => (e.name||'').toLowerCase().includes(q)) : _libExercises.slice();
   if (fsel === '__none__') fil = fil.filter(e => !e.folder_id);
   else if (fsel) fil = fil.filter(e => e.folder_id === fsel);
+  if (_libOrient) fil = fil.filter(e => _dpLibOrient(e) === _libOrient);
   const list = document.getElementById('libList');
   document.getElementById('libFooter').textContent = tt('daily_planning.n_in_library', `${fil.length} exercise${fil.length !== 1 ? 's' : ''} in library`, {count: fil.length});
   if (!fil.length) {
