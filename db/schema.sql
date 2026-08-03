@@ -82,12 +82,22 @@ create table if not exists public.assessment_test_defs (
   aliases text[] default '{}'::text[] not null,
   sort_order integer default 100 not null,
   active boolean default true not null,
+  -- Faceted model: a test = movement (region) + position + angle + method. Lets the practitioner
+  -- choose HOW to evaluate (e.g. posterior chain 90:90 on a force plate vs prone 90° with HHD).
+  region text,
+  position text,
+  joint_angle text,
+  method text,
+  contraction text,
+  -- Multiple metrics per test (e.g. a VALD import brings peak force + RFD + impulse). Array of
+  -- {key,label,unit,higher_is_better,primary}. Empty → fall back to metric_key/unit (single metric).
+  metrics jsonb default '[]'::jsonb not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   constraint assessment_test_defs_pkey primary key (id),
   constraint assessment_test_defs_family_check CHECK ((family = ANY (ARRAY['isometric'::text, 'mobility'::text]))),
   constraint assessment_test_defs_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
-  constraint assessment_test_defs_value_type_check CHECK ((value_type = ANY (ARRAY['numeric'::text, 'binary'::text, 'score'::text]))),
+  constraint assessment_test_defs_value_type_check CHECK ((value_type = ANY (ARRAY['numeric'::text, 'binary'::text, 'score'::text, 'flags'::text]))),
   constraint assessment_test_defs_evidence_level_check CHECK ((evidence_level = ANY (ARRAY['strong'::text, 'moderate'::text, 'practice'::text])))
 );
 CREATE UNIQUE INDEX assessment_test_defs_global_key_uidx ON public.assessment_test_defs USING btree (key) WHERE (club_id IS NULL);

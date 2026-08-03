@@ -1499,8 +1499,6 @@
       { key:'vbt',       label:'VBT · Load-Velocity', sub:'Velocity → %1RM',    icon:'ti-barbell',     src:{from:'evaluations', match:'VBT'} },
       { key:'orm',       label:'1RM',                 sub:'Epley + Brzycki',    icon:'ti-weight',      src:{from:'evaluations', match:'1RM'} },
       { key:'fvprofile', label:'F-V Profile · jumps', sub:'Samozino · F₀ V₀ Pmax',icon:'ti-chart-line',src:{from:'evaluations', match:'F-V Profile'} },
-      { key:'nordic',    label:'Nordic hamstring',    sub:'Reps · Bahr',        icon:'ti-stretching-2',src:{from:'evaluations', match:'Nordic'} },
-      { key:'hq',        label:'Isokinetic H:Q',      sub:'Knee balance',       icon:'ti-scale-outline',src:{from:'evaluations', match:'Isokinetic'} },
     ]},
     { name:'Mobility & screening', icon:'ti-stretching', ic:'rgba(59,130,246,0.12)', ico:'#1D4ED8', tests:[
       { key:'fms',      label:'FMS',                sub:'Functional movement screen', icon:'ti-checkbox', src:{from:'evaluations', match:'FMS'} },
@@ -1563,17 +1561,10 @@
     var mob = _assessDefs.filter(function(d){ return d.family === 'mobility';  }).sort(function(a,b){ return a.sort_order - b.sort_order; });
     if (!iso.length && !mob.length) return;   // migration unapplied → leave CATALOG untouched
 
-    // 1) Isometric strength category. Move Nordic + Isokinetic H:Q out of Strength/VBT (clinical continuity).
+    // 1) Isometric strength category — fully data-driven from assessment_test_defs.
     if (iso.length){
-      var moved = [];
-      CATALOG.forEach(function(cat){
-        cat.tests = cat.tests.filter(function(t){
-          if (t.key === 'nordic' || t.key === 'hq'){ moved.push(t); return false; }
-          return true;
-        });
-      });
       var isoCat = { name:'Isometric strength', icon:'ti-dumbbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C',
-        tests: iso.map(_defToTest).concat(moved) };
+        tests: iso.map(_defToTest) };
       var mi = CATALOG.findIndex(function(c){ return c.name === 'Mobility & screening'; });
       CATALOG.splice(mi < 0 ? CATALOG.length : mi, 0, isoCat);
     }
