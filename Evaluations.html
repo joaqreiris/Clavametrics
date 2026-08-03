@@ -5815,6 +5815,21 @@
     });
   }
 
+  // ADR / VBT encoder exports mix computed RESULT rows (V0, L0, 1RM, Vmax…) into the same sheet as
+  // the actual test loads (Carga/Load/Set N). Those results must NEVER be imported as loads — the
+  // 1RM row in particular would force the load-velocity line through the estimated point and fake a
+  // perfect fit. Detected by a result label in any non-mapped column (the "Kg"/"m/s" columns are
+  // skipped, so numeric %1RM/power values never trip it).
+  const VBT_RESULT_LABEL = /^\s*(v0|l0|f0|p0|v1rm|1\s*-?\s*rm|0\s*-?\s*rm|v\s*max|vmax|p\s*max|pmax|carga\s*0|load\s*0|set\s*0)\s*$/i;
+  function vbtIsResultRow(row, loadCol, velCol) {
+    for (const k in row) {
+      if (k === loadCol || k === velCol) continue;
+      const val = row[k];
+      if (typeof val === 'string' && VBT_RESULT_LABEL.test(val)) return true;
+    }
+    return false;
+  }
+
   function applyFVCsvImport() {
     if (!_fvCsvData) return;
     const loadCol = document.getElementById('fvCsvLoadCol')?.value;
@@ -5829,6 +5844,7 @@
       const kg = parseFloat(row[loadCol]);
       const v  = parseFloat(row[velCol]);
       if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
+      if (vbtIsResultRow(row, loadCol, velCol)) { skipped++; continue; }   // skip V0/L0/1RM… result rows
       const prev = best.get(kg);
       if (prev === undefined || v > prev) best.set(kg, v);
     }
@@ -5896,17 +5912,18 @@
     const summary = document.getElementById('vbtCsvSummary');
     if (!loadCol || !velCol) return;
 
-    // Best attempt per load: keep the highest velocity for each load
-    const best = new Map();
+    // Import EVERY actual rep row (not just the best per load) so the whole encoder set comes
+    // through, and drop the computed result rows (V0, L0, 1RM…) so they never land as loads.
+    const pairs = [];
     let skipped = 0;
     for (const row of _vbtCsvData) {
       const kg = parseFloat(row[loadCol]);
       const v  = parseFloat(row[velCol]);
       if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
-      const prev = best.get(kg);
-      if (prev === undefined || v > prev) best.set(kg, v);
+      if (vbtIsResultRow(row, loadCol, velCol)) { skipped++; continue; }   // skip V0/L0/1RM… result rows
+      pairs.push({ kg, v });
     }
-    const pairs = [...best.entries()].map(([kg, v]) => ({ kg, v })).sort((a, b) => a.kg - b.kg);
+    pairs.sort((a, b) => a.kg - b.kg);
     if (!pairs.length) {
       if (summary) summary.textContent = tt('evaluations.no_valid_lv_pairs','No valid load/velocity pairs found — check the column mapping.');
       return;
