@@ -4241,7 +4241,7 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
                   teamId: window._gpTeamId || null,
                   teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null,
                   archivedPlayerIds: Array.isArray(window._gpArchivedPlayerIds) ? window._gpArchivedPlayerIds : [],
-                  asOf: new Date().toISOString().slice(0,10) };
+                  asOf: cmToday() };
     const sessionIds = await getSessionIds(config.range, ctx, window.sb);
     if (!sessionIds.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No sessions in range</div></div>'; return; }
     const rows = await fetchReports(sessionIds, config, ctx, new Map(), window.sb);
@@ -7608,7 +7608,7 @@ window.renderView = async function () {
 
   async function renderStep4Session(body, footer) {
     const { clubId, sessionType, columnMap } = _wizState;
-    const today   = new Date().toISOString().slice(0, 10);
+    const today   = cmToday();
     const initType = sessionType === 'auto' ? 'training' : (sessionType || 'training');
 
     const { uniqueDates, dateMap, doubleDates } = _buildDateMap();
@@ -8109,7 +8109,7 @@ window.renderView = async function () {
         singleSessionId = sessionInfo.existingId || null;
 
         if (!singleSessionId) {
-          const date  = sessionInfo.date  || new Date().toISOString().slice(0, 10);
+          const date  = sessionInfo.date  || cmToday();
           const type  = sessionInfo.sessionType || sessionType || 'training';
           const title = sessionInfo.title || `GPS import · ${date}`;
           const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) };

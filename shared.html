@@ -241,7 +241,9 @@
   const token  = params.get('token');
 
   const main   = document.getElementById('shMain');
-  const today  = new Date().toISOString().split('T')[0];
+  // Local calendar date (not UTC — avoids an off-by-one for users east of UTC).
+  const _d = new Date();
+  const today  = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0');
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];

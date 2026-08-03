@@ -284,7 +284,7 @@
       // La específica del equipo pisa a la del club; entre varias, la que contiene hoy, si no la más reciente.
       const scoped = list.filter(s => s.team_id === _teamId);
       const pool = scoped.length ? scoped : list;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = cmToday();
       win = pool.find(s => s.start_date <= today && s.end_date >= today) || pool[0] || null;
     } catch (_) {}
     _seasonWindowCache = win ? { start: win.start_date, end: win.end_date, id: win.id } : null;

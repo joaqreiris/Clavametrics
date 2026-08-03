@@ -803,7 +803,7 @@
 
     const firstDay   = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const today = new Date().toISOString().split('T')[0];
+    const today = cmToday();
     const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
     let html = '';
 
@@ -903,7 +903,7 @@
     const url = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
     const a = document.createElement('a');
     const rangeLabel = activeDays===-1 ? 'season' : activeDays>0 ? `${activeDays}d` : 'all';
-    a.href = url; a.download = `sessions_${rangeLabel}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.href = url; a.download = `sessions_${rangeLabel}_${cmToday()}.csv`;
     a.click(); URL.revokeObjectURL(url);
   }
 
@@ -959,7 +959,7 @@
 
   // ── New Session ──
   function goNewSession() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = cmToday();
     window.location.href = `Daily Planning.html?date=${today}&openCreate=1`;
   }
 

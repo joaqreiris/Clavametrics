@@ -1723,7 +1723,7 @@ let _plannedIds = new Set();
 let _pendingCrestUrl = null; // staged crest URL after Storage upload, written to DB on save
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
 let _activeShareLink = null; // active share_link row for current MC (players scope)
-const TODAY = new Date().toISOString().split('T')[0];
+const TODAY = cmToday();
 
 const EVT_ICONS = {
   training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football',
@@ -4479,7 +4479,7 @@ async function renderListView() {
   if (!container) return;
   container.innerHTML = `<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>`;
 
-  const in6mo = new Date(Date.now() + 183 * 86400000).toISOString().split('T')[0];
+  const in6mo = cmYMD(new Date(Date.now() + 183 * 86400000));
   const { data: sessions } = await fetchAllEvents(TODAY, in6mo);
 
   const items = (sessions || []).map(s => ({
@@ -5105,7 +5105,7 @@ async function renderUpcoming() {
 // ── Calendar KPIs ─────────────────────────────────────────────
 function renderCalKPIs(mcs) {
   const today = new Date();
-  const in21d = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
+  const in21d = cmYMD(new Date(Date.now() + 21 * 86400000));
 
   // Next match: nearest calendar_event match from today onward
   const nextMatch = _matchSessions

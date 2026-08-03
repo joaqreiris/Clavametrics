@@ -2453,7 +2453,7 @@
   // default unit prefill per single-value test
   var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
     ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', hfvp:'W/kg', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
-  function evToday(){ return new Date().toISOString().slice(0,10); }
+  function evToday(){ return cmToday(); }
 
   // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
   var EV_LOWER_BETTER = { sprint:1, cod505:1, illinois:1, rsa:1, tt1600:1 };
@@ -4434,7 +4434,7 @@
           <option value="">${esc(tt('evaluations.select_player','Select player…'))}</option>${opts}
         </select></div>
       <div class="ev-frow"><label class="ev-fl">${esc(tt('common.date','Date'))}</label>
-        <input id="paDate" type="date" class="ev-finput" value="${new Date().toISOString().split('T')[0]}" required></div>`;
+        <input id="paDate" type="date" class="ev-finput" value="${cmToday()}" required></div>`;
 
     let specificFields = '';
 
@@ -6491,7 +6491,7 @@
 
   // Parse a test date → 'yyyy-mm-dd'. VALD exports DD/MM/YYYY; fall back to Date(); else today (warn).
   function parseForceDate(raw) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const s = String(raw ?? '').trim();
     if (!s) return { date: today, warn: true };
     let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);   // DD/MM/YYYY (day-first)
@@ -7443,7 +7443,7 @@
   // Group rows by (player + exercise), pick best VMP per load, track the latest date per group.
   function buildVbtGroups() {
     const { rows, map } = _vbt;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp>, testDate }
     const unmatchedNames = new Map(); // normName → rawName
     let matchedRows = 0;
@@ -7473,7 +7473,7 @@
 
   // Build the full profile list (display + save share this so they never diverge).
   function computeVbtProfiles() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const { groups, unmatchedNames } = buildVbtGroups();
     const profiles = groups.map(g => {
       const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));

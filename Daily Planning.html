@@ -811,7 +811,7 @@ async function loadDay(dateStr) {
   dpFlushEdits();     // persist any pending per-task edits (notes/series/work/rest) to the OLD day
   _dpCurrentDate = dateStr;
   const fmt = _dpFmt(dateStr);
-  const today = new Date().toISOString().split('T')[0];
+  const today = cmToday();
   const subLabel = dateStr === today ? tt('daily_planning.today', 'today') : '';
   document.getElementById('dpDateInput').value = dateStr;
 
@@ -1536,7 +1536,7 @@ async function dpRenderPrintSheet() {
     accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#15803D';
     const clubName = club.name || 'Club';
     const teamName = (_dpTeams||[]).find(t=>t.id===_dpTeamId)?.name || '';
-    const today = new Date().toISOString().split('T')[0];
+    const today = cmToday();
     const dateLabel = _dpFmt(_dpCurrentDate || today);
 
     // microcycle + next match
@@ -2327,14 +2327,14 @@ async function dpExportPDF() {
 
   const _dpQS   = new URLSearchParams(window.location.search);
   const urlDate = _dpQS.get('date');
-  const today   = new Date().toISOString().split('T')[0];
+  const today   = cmToday();
   const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
   // ?session=<id> → open exactly that session (the calendar links carry it, so clicking the
   // second training of a double session lands on THAT one, not the day's first).
   _dpPreferredSessionId = _dpQS.get('session') || null;
 
   const yesterday7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const yesterday  = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const yesterday  = cmYMD(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000));
 
   const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id)').eq('club_id', clubId).eq('player_teams.team_id', _dpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
@@ -2423,7 +2423,7 @@ async function dpExportPDF() {
         const mcMdDiff = mc?.match_date ? Math.round((new Date(mc.match_date + 'T12:00:00') - new Date(_dpCurrentDate + 'T12:00:00')) / 86400000) : null;
         const mcMdLabel = mcMdDiff === null ? '' : mcMdDiff === 0 ? ' · ' + tt('daily_planning.md_label','MD') : mcMdDiff > 0 ? ' · ' + tt('daily_planning.md_minus', `MD−${mcMdDiff}`, {n: mcMdDiff}) : ' · ' + tt('daily_planning.md_plus', `MD+${Math.abs(mcMdDiff)}`, {n: Math.abs(mcMdDiff)});
         const mcRivalLabel = mc?.rival ? ` · ${tt('daily_planning.vs_rival', `vs ${mc.rival}`, {rival: mc.rival})}` : '';
-        const today = new Date().toISOString().split('T')[0];
+        const today = cmToday();
         const subLabel = _dpCurrentDate === today ? tt('daily_planning.today','today') : '';
         const mcLabel = mc ? ((mc.name||'') + mcMdLabel + mcRivalLabel) : '';
         if (_crumb) _crumb.textContent = _fmt + (mcMdLabel || '');

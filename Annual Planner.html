@@ -670,7 +670,7 @@ function apRenderBig(){
   if (!panels || !extras) return;
   const s = _apSeasons.find(x => x.id === _apSeasonId);
   if (!s){ panels.innerHTML = ''; extras.innerHTML = ''; return; }
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   const micros = _apTL.micros || [], matches = _apTL.matches || [], phases = _apTL.phases || [], comps = _apTL.comps || [];
 
   // Current microcycle + today's MD
@@ -764,7 +764,7 @@ function apNewSeasonFromBig(){
 }
 
 function apDecideView(){
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   if (!_apSeasons.length){
     apSetView('setup');
     const c = document.getElementById('apSeasonCard'); if (c) c.classList.remove('is-collapsed');
@@ -800,7 +800,7 @@ function apRenderTimeline(){
       html += `<div class="ap-tl-seg${noCount}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}">${lbl}</div>`;
     });
   }
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   if (today >= _apSeasonStart && today <= _apSeasonEnd) {
     const pos = apClamp(apDays(_apSeasonStart, today) / total * 100, 0, 100);
     html += `<div class="ap-tl-today" style="left:${pos}%" title="Today"></div>`;
@@ -1817,7 +1817,7 @@ function apMicroOverlaps(start, end, excludeId){
 }
 
 async function apAddMicro(){
-  let base = new Date().toISOString().slice(0,10);
+  let base = cmToday();
   if (base < _apSeasonStart || base > _apSeasonEnd) base = _apSeasonStart;
   const wk = apMonSun(base);
   const start = wk.start < _apSeasonStart ? _apSeasonStart : wk.start;
@@ -1925,7 +1925,7 @@ function apTLRender(){
   const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
   const compColor = {}, compName = {};
   _apTL.comps.forEach(c => { compColor[c.id] = c.color; compName[c.id] = c.name; });
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   const todayPos = (today >= _apSeasonStart && today <= _apSeasonEnd) ? apClamp(apDays(_apSeasonStart, today) / total * 100, 0, 100) : null;
   _apTLLevels = [{key:'annual_planner.full_season',label:'Full season',days:null},{key:'annual_planner.zoom_6_months',label:'6 months',days:183},{key:'annual_planner.zoom_3_months',label:'3 months',days:91},{key:'annual_planner.zoom_6_weeks',label:'6 weeks',days:42}].filter(l => l.days === null || l.days < total);
   if (_apTLZoom >= _apTLLevels.length) _apTLZoom = 0;
@@ -1966,7 +1966,7 @@ function apTLRender(){
     return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:var(--cm-bg-soft);border:.5px solid var(--cm-border);border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 9px/1 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;white-space:nowrap;padding:0 4px">${width>6?ms.name:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">${tt('annual_planner.no_mesocycles_yet','No mesocycles yet')}</span>`;
 
-  const _today = new Date().toISOString().slice(0,10);
+  const _today = cmToday();
   const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
     const sel = mi.id === _apSelectedMicro;
@@ -2034,7 +2034,7 @@ function apTLApplyZoom(focus){
   requestAnimationFrame(() => {
     const sw = body.scrollWidth || body.offsetWidth;
     if (pct <= 100) { wrap.scrollLeft = 0; return; }
-    const today = new Date().toISOString().slice(0,10);
+    const today = cmToday();
     let frac = 0.5;
     if (today >= _apSeasonStart && today <= _apSeasonEnd) frac = apDays(_apSeasonStart, today) / total;
     if (focus) wrap.scrollLeft = Math.max(0, frac * sw - wrap.clientWidth / 2);
@@ -2157,7 +2157,7 @@ function apRenderCal(){
   const y = _apCalMonth.getFullYear(), m = _apCalMonth.getMonth();
   const monNames = Array.from({length:12}, (_, i) => new Date(2021, i, 1).toLocaleDateString(apLocale(), { month:'long' }));
   const selV = document.getElementById(_apCalFor).value;
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   const first = new Date(y, m, 1).getDay();
   const daysIn = new Date(y, m + 1, 0).getDate();
   let cells = '';

@@ -1067,7 +1067,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const $ = id => ov.querySelector('#' + id);
     $('na_title').textContent = tt('nutrition.assign_title_name', `Assign plan · ${p._name || 'player'}`, { name: p._name || tt('common.player', 'player') });
     $('na_tpl').innerHTML = tpls.map(t => `<option value="${t.id}" data-kcal="${t.base_kcal || ''}">${nuEsc(t.name)}${t.day_type ? ' · ' + t.day_type : ''}</option>`).join('');
-    $('na_date').value = new Date().toISOString().slice(0, 10);
+    $('na_date').value = cmToday();
     $('na_dt').value = '';
     const recalcScale = () => {
       const baseK = parseFloat($('na_tpl').selectedOptions[0]?.dataset.kcal) || null;
@@ -1109,7 +1109,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const wrap = document.querySelector('.nu-meals');
     const label = document.querySelector('.nu-section-l');
     if (!wrap) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const { data: asgs } = await window.sb.from('player_meal_assignments')
       .select('id,assigned_date,day_type,scale_factor, template:meal_plan_templates(id,name,day_type, meal_plan_meals(id,name,time_hint,meal_order, meal_plan_items(id,quantity_g, food:foods(*))))')
       .eq('player_id', p.id).eq('club_id', clubId)
@@ -1150,7 +1150,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   const BCX0 = 44, BCX1 = 780, BCYT = 30, BCYB = 140;
 
   async function renderBodyComp(p) {
-    const cutoff = new Date(Date.now() - 84 * 864e5).toISOString().slice(0, 10); // ~12 semanas
+    const cutoff = cmYMD(new Date(Date.now() - 84 * 864e5)); // ~12 semanas
     const { data } = await window.sb.from('body_composition')
       .select('measured_date,weight_kg,body_fat_pct,lean_mass_kg,method')
       .eq('player_id', p.id).eq('club_id', clubId)
@@ -1177,7 +1177,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     });
 
     const n = rows.length;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const x = i => n === 1 ? BCX1 : (BCX0 + (BCX1 - BCX0) * i / (n - 1));
     const leanVal = r => r.lean_mass_kg != null ? r.lean_mass_kg
       : (r.weight_kg != null && r.body_fat_pct != null ? NC.leanMass(r.weight_kg, r.body_fat_pct) : null);
@@ -1296,7 +1296,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         const btn = $('wi_save'); btn.disabled = true;
         const { error } = await window.sb.from('body_composition').insert({
           player_id: pl.id, club_id: clubId,
-          measured_date: $('wi_date').value || new Date().toISOString().slice(0, 10),
+          measured_date: $('wi_date').value || cmToday(),
           weight_kg: isNaN(w) ? null : w, body_fat_pct: isNaN(bf) ? null : bf,
           lean_mass_kg: NC.leanMass(isNaN(w) ? null : w, isNaN(bf) ? null : bf),
           method: $('wi_method').value, notes: $('wi_notes').value.trim() || null,
@@ -1310,7 +1310,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     }
     const $ = id => ov.querySelector('#' + id);
     $('wi_title').textContent = tt('nutrition.weigh_title_name', `Add weigh-in · ${p._name || 'player'}`, { name: p._name || tt('common.player', 'player') });
-    $('wi_date').value = new Date().toISOString().slice(0, 10);
+    $('wi_date').value = cmToday();
     $('wi_weight').value = ''; $('wi_bf').value = ''; $('wi_lean').value = '';
     $('wi_notes').value = ''; $('wi_method').value = 'scale';
     ov.classList.add('on');
@@ -1378,7 +1378,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   async function loadKPIs() {
     const ids = list.map(p => p.id), total = list.length;
     if (!total) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const monthStart = today.slice(0, 8) + '01';
     const [asg, tg, nuT, bcAll] = await Promise.all([
       window.sb.from('player_meal_assignments').select('player_id').eq('club_id', clubId).in('player_id', ids),
@@ -1460,7 +1460,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 
   async function fetchSquad() {
     const ids = list.map(p => p.id);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const [tg, nuT, bcAll, asg] = await Promise.all([
       window.sb.from('nutrition_targets').select('player_id,kcal_target,hydration_ml,body_fat_target_pct').eq('club_id', clubId).in('player_id', ids),
       window.sb.from('nutrition').select('player_id,calories,hydration').eq('club_id', clubId).gte('created_at', today).in('player_id', ids),
@@ -1664,7 +1664,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (metaEl) metaEl.innerHTML = `<span class="badge">${p.position || '—'} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
 
     // Today's date label
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const dateSubEl = document.querySelector('.nu-card-h .sub');
     if (dateSubEl) dateSubEl.textContent = new Date().toLocaleDateString(ttLoc(), { weekday:'long', day:'numeric', month:'short' });
 

@@ -678,7 +678,7 @@
 
   // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
   function summary(statuses, dates) {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = cmToday();
     const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
@@ -694,7 +694,7 @@
 
   // ── Summary tooltip HTML ──
   function summaryTooltip(statuses, dates) {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = cmToday();
     const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
@@ -996,7 +996,7 @@
 
     await avInitTeamSwitch();
 
-    todayStr           = new Date().toISOString().split('T')[0];
+    todayStr           = cmToday();
     MC_DATES.length = 0;
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
@@ -1542,7 +1542,7 @@
   let _avRangeOverride = null; // {start, end} o null = microciclo
   let _avRangePreset   = 'mc'; // preset activo del filtro de fecha (refleja segmentos en Stats)
   function avComputeRange(preset) {
-    const today = new Date().toISOString().slice(0,10);
+    const today = cmToday();
     const d = new Date(today + 'T00:00:00Z');
     const days = parseInt(preset, 10);
     const start = new Date(d.getTime() - (days-1)*86400000).toISOString().slice(0,10);

@@ -1622,7 +1622,7 @@ function gpRenderPrintSheet() {
     accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#15803D';
     const clubName = club.name || 'Club';
     const teamName = (_gpTeams||[]).find(t=>t.id===_gpTeamId)?.name || '';
-    const today = new Date().toISOString().split('T')[0];
+    const today = cmToday();
     const dateLabel = _gpFmt(_gpCurrentDate || today);
 
     // read block rows: cell[1] name, cell[3], cell[4], cell[5] (span.pct), cell[7]
@@ -1871,7 +1871,7 @@ async function gpExportPDF() {
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
   const urlDate  = new URLSearchParams(window.location.search).get('date');
-  const today    = new Date().toISOString().split('T')[0];
+  const today    = cmToday();
   const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
 
   const [playersRes, mcRes] = await Promise.all([

@@ -99,7 +99,7 @@
     if (exErr) { console.error('[rehab-create] existing plan lookup failed:', exErr); }
     if (existing && existing.id) { location.href = 'Rehab Planner.html?plan=' + existing.id; return; }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const { data, error } = await window.sb.from('rehab_plans').insert({
       club_id: clubId, player_id: injury.player_id, kind: 'rehab', injury_id: injury.id,
       status: 'on_track', programme_week: 1, programme_total_weeks: 8, start_date: today,

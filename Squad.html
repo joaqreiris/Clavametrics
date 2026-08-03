@@ -1894,7 +1894,7 @@ async function reloadPlayers() {
       return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
     }).join(','));
     const csv = [header, ...rows].join('\n');
-    const date = new Date().toISOString().split('T')[0];
+    const date = cmToday();
     const club = (_currentClubName || 'squad').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([csv], { type:'text/csv' })),
@@ -2422,7 +2422,7 @@ async function reloadPlayers() {
       return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
     }).join(','));
     const csv = [header, ...rows].join('\n');
-    const date = new Date().toISOString().split('T')[0];
+    const date = cmToday();
     const club = (_currentClubName || 'squad').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([csv], { type:'text/csv' })),
@@ -3507,7 +3507,7 @@ async function reloadPlayers() {
   async function loadUpcomingMatches() {
     if (_lUpcomingMatches.length > 0) return;
     if (!_currentClubId) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = cmToday();
 
     // Source 1: calendar_events (type='match' — imported fixtures or manual events)
     const { data: evtMatches, error: evtErr } = await window.sb.from('calendar_events')
@@ -3704,7 +3704,7 @@ async function reloadPlayers() {
       const canvas = await html2canvas(fieldWrap, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#ffffff' });
       const rivalSlug = _lMatchData.opponent ? '_vs_' + _lMatchData.opponent.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase() : '';
       const link = Object.assign(document.createElement('a'), {
-        download: `lineup${rivalSlug}_${_lFormation}_${new Date().toISOString().split('T')[0]}.png`,
+        download: `lineup${rivalSlug}_${_lFormation}_${cmToday()}.png`,
         href: canvas.toDataURL('image/png'),
       });
       link.click();

@@ -1445,7 +1445,7 @@ function rpBuildGate(phases, injuryId, refresh) {
         const aheadMsg = tt('rehab_planner.advance_ahead', 'Advancing {count} day ahead of schedule.|Advancing {count} days ahead of schedule.', { count: daysEarly });
         if (!confirm(`${aheadMsg}${crit}\n\n${tt('rehab_planner.advance_confirm_q','Confirm criteria met?')}`)) return;
       }
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = cmToday();
       await window.sb.from('injury_phases')
         .update({ status: 'done', actual_end: todayStr })
         .eq('id', curPh.id);

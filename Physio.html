@@ -757,7 +757,7 @@ let _editingTreatmentId = null;
   if (!_clubId) { document.getElementById('phHeadCtx').textContent = tt('physio.no_club_found', 'No club found — check your profile.'); return; }
   await phInitTeamSwitch();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cmToday();
   document.getElementById('phDateInput').value = today;
 
   // Load players ordered by last_name; filter inactive client-side to avoid null != issues
@@ -816,7 +816,7 @@ let _editingTreatmentId = null;
   }
 
   // Load treatments (last 30 days) — catch column-not-found errors if migration not yet run
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const monthAgo = cmYMD(new Date(Date.now() - 30 * 86400000));
   const { data: treatments, error: tErr } = await window.sb
     .from('treatments')
     .select(`id, player_id, injury_id, date, session_time, type, treatment_type, modalities,
@@ -923,7 +923,7 @@ document.getElementById('phPlayerSelect').addEventListener('change', async funct
   }
 
   injSel.innerHTML = `<option value="">${tt('common.loading','Loading…')}</option>`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cmToday();
   const { data: injuries } = await window.sb
     .from('injuries')
     .select('id,injury_type,body_area,start_date')
@@ -986,7 +986,7 @@ function resetForm() {
   document.getElementById('phEditBar').classList.remove('is-on');
   document.getElementById('phSaveBtn').innerHTML = `<i class="ti ti-device-floppy" style="font-size:14px"></i>${tt('common.save','Save')}`;
   document.getElementById('phPlayerSelect').selectedIndex = 0;
-  document.getElementById('phDateInput').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('phDateInput').value = cmToday();
   document.getElementById('phTimeInput').value = '';
   document.getElementById('phDurationInput').value = '';
   document.getElementById('phNotesInput').value = '';
@@ -1016,7 +1016,7 @@ function openEditTreatment(t, isDuplicate = false) {
   document.getElementById('phPlayerSelect').value = t.player_id;
   document.getElementById('phPlayerSelect').dispatchEvent(new Event('change'));
 
-  document.getElementById('phDateInput').value = isDuplicate ? new Date().toISOString().slice(0, 10) : (t.date || '');
+  document.getElementById('phDateInput').value = isDuplicate ? cmToday() : (t.date || '');
   document.getElementById('phTimeInput').value = t.session_time || '';
   document.getElementById('phDurationInput').value = t.duration_min || '';
 
@@ -1323,7 +1323,7 @@ async function registerClearance() {
   const playerName = player ? `${player.first_name} ${player.last_name}` : tt('common.player','Player');
   if (!confirm(tt('physio.confirm_clearance','Register medical clearance for {name}? This will mark their active injuries as cleared.',{name:playerName}))) return;
 
-  const today      = new Date().toISOString().split('T')[0];
+  const today      = cmToday();
   const todayFmt   = new Date().toLocaleDateString(window.CM_I18N?.current || 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const physioName = _profile?.full_name || tt('physio.physio_word','Physio');
 
@@ -1375,7 +1375,7 @@ document.getElementById('phClearBtn').addEventListener('click',   registerCleara
 // ══════════════════════════════════════════════════════
 function painClass(v) { return v === null || v === undefined ? '' : v <= 3 ? 'low' : v <= 6 ? 'mid' : 'high'; }
 function fmtDate(d) {
-  const today = new Date().toISOString().slice(0,10);
+  const today = cmToday();
   const dt = new Date(d + 'T12:00:00');
   const label = dt.toLocaleDateString(window.CM_I18N?.current || 'en-GB', { weekday:'short', day:'numeric', month:'short' });
   return d === today ? tt('common.today','Today') + ' · ' + label : label;

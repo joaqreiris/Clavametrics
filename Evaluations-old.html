@@ -1909,7 +1909,7 @@
 
   // ── Helpers ──
   function escS(s) { return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
-  function getPeriodCutoff() { return currentPeriodMs ? new Date(Date.now() - currentPeriodMs).toISOString().split('T')[0] : null; }
+  function getPeriodCutoff() { return currentPeriodMs ? cmYMD(new Date(Date.now() - currentPeriodMs)) : null; }
   function fmtDelta(diff, u) {
     if (diff > 0) return `<span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">+${diff}${u?' '+u:''}</span>`;
     if (diff < 0) return `<span style="color:var(--cm-danger);font:600 12px/1 var(--cm-font-mono)">${diff}${u?' '+u:''}</span>`;
@@ -1944,7 +1944,7 @@
   }
 
   async function loadKPIs() {
-    const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+    const cutoff = cmYMD(new Date(Date.now() - 90 * 86400000));
     let _evQ1 = window.sb.from('evaluations').select('player_id').eq('club_id', clubId).gte('test_date', cutoff);
     if (_evTeamPlayerIds) _evQ1 = _evQ1.in('player_id', _evTeamPlayerIds);
     const { data } = await _evQ1;
@@ -2085,7 +2085,7 @@
     document.getElementById('evalMTitle').textContent = 'New evaluation';
     document.getElementById('evalEditId').value = '';
     document.getElementById('evalType').value = prefillType || '';
-    document.getElementById('evalDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('evalDate').value = cmToday();
     document.getElementById('evalValue').value = '';
     document.getElementById('evalUnit').value = '';
     document.getElementById('evalNotes').value = '';
@@ -2141,7 +2141,7 @@
   // ── Subjective evaluation modal ──
   function openSubjModal() {
     document.getElementById('subjPlayer').value = selectedPlayerId || '';
-    document.getElementById('subjDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('subjDate').value = cmToday();
     ['subjTech','subjTact','subjPhys','subjMent'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.value = 5; el.nextElementSibling.textContent = '5'; }
@@ -2455,7 +2455,7 @@
     if (filterPid) q = q.eq('player_id', filterPid);
     q.then(({ data }) => {
       if (!data || !data.length) { alert('No data to export'); return; }
-      const today = new Date().toISOString().split('T')[0];
+      const today = cmToday();
       const hdr = 'player,position,test,date,result,unit,notes\n';
       const rows = data.map(e => { const p=e.players||{}; return [`${p.first_name||''} ${p.last_name||''}`.trim(), p.position||'', e.evaluation_type, e.test_date, e.value, e.unit||'', (e.notes||'').replace(/,/g,' ')].join(','); }).join('\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([hdr+rows],{type:'text/csv'}));
@@ -2604,7 +2604,7 @@
           <option value="">Select player…</option>${opts}
         </select></div>
       <div class="ev-frow"><label class="ev-fl">Date</label>
-        <input id="paDate" type="date" class="ev-finput" value="${new Date().toISOString().split('T')[0]}" required></div>`;
+        <input id="paDate" type="date" class="ev-finput" value="${cmToday()}" required></div>`;
 
     let specificFields = '';
 
@@ -3902,7 +3902,7 @@
     const tbody = document.getElementById('bulkTableBody');
     if (!tbody || tbody.children.length) return;
     for (let i=0; i<3; i++) addBulkRow();
-    const today = new Date().toISOString().slice(0,10);
+    const today = cmToday();
     const dateEl = document.getElementById('bulkDate');
     if (dateEl && !dateEl.value) dateEl.value = today;
   }
@@ -3963,7 +3963,7 @@
     if (vCol) document.getElementById('csvColValue').value = vCol;
     if (dCol) document.getElementById('csvColDate').value = dCol;
     if (uCol) document.getElementById('csvColUnit').value = uCol;
-    const today = new Date().toISOString().slice(0,10);
+    const today = cmToday();
     const fb = document.getElementById('csvFallbackDate');
     if (fb && !fb.value) fb.value = today;
     document.getElementById('csvPreviewCount').textContent = `(${rows.length} rows)`;
@@ -4420,7 +4420,7 @@
 
   // Parse a test date → 'yyyy-mm-dd'. VALD exports DD/MM/YYYY; fall back to Date(); else today (warn).
   function parseForceDate(raw) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const s = String(raw ?? '').trim();
     if (!s) return { date: today, warn: true };
     let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);   // DD/MM/YYYY (day-first)
@@ -5229,7 +5229,7 @@
   // Group rows by (player + exercise), pick best VMP per load, track the latest date per group.
   function buildVbtGroups() {
     const { rows, map } = _vbt;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp>, testDate }
     const unmatchedNames = new Map(); // normName → rawName
     let matchedRows = 0;
@@ -5259,7 +5259,7 @@
 
   // Build the full profile list (display + save share this so they never diverge).
   function computeVbtProfiles() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = cmToday();
     const { groups, unmatchedNames } = buildVbtGroups();
     const profiles = groups.map(g => {
       const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));

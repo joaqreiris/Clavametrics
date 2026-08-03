@@ -1226,7 +1226,7 @@ function collectReminders(listId) {
     document.getElementById('atDesc').value = '';
     document.getElementById('atPriority').value = 'medium';
     document.getElementById('atCategory').value = 'general';
-    dueInput.value = new Date().toISOString().split('T')[0];
+    dueInput.value = cmToday();
     const _rl = document.getElementById('atRemindersList'); if (_rl) _rl.innerHTML = '';
     await _loadMembers();
     _atSetMode('me');   // default to "For me" each time the modal opens
@@ -1884,7 +1884,7 @@ function renderTasks(tasks, view = 'my') {
   const userId = _s?.user?.id ?? null;
   window._hubUserId = userId;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = cmToday();
   const _todayMidnight = new Date(); _todayMidnight.setHours(0, 0, 0, 0);
   const todayStartISO = _todayMidnight.toISOString();
   const d28 = new Date(); d28.setDate(d28.getDate() - 28);
@@ -2053,7 +2053,7 @@ function renderTasks(tasks, view = 'my') {
           .push({ date: session.session_date, value: Number(r.load) });
       });
     });
-    const _ref = new Date().toISOString().slice(0, 10);
+    const _ref = cmToday();
     const acwrs = Object.values(recsByPlayer)
       .map(recs => window.gpsACWR.acwrForRecords(recs, _ref, { coupled: false }))
       .filter(v => v != null);

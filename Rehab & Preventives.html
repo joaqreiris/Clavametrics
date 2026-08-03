@@ -442,7 +442,7 @@ function tt(key, fallbackEN, vars) {
       ].join('\n');
       const a = Object.assign(document.createElement('a'), {
         href: 'data:text/csv;charset=utf-8,' + encodeURIComponent(lines),
-        download: `rehab-plans-${new Date().toISOString().slice(0,10)}.csv`
+        download: `rehab-plans-${cmToday()}.csv`
       });
       a.click();
     });
@@ -566,7 +566,7 @@ function tt(key, fallbackEN, vars) {
         if (!injury_id){ alert(tt('rehab_planner.np_err_injury', 'A rehab plan needs an active injury — pick one, or register one in the Injuries module first.')); return; }
       }
       const btn = _ov.querySelector('#rpv-np-create'); btn.disabled = true;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = cmToday();
       const payload = { club_id: clubId, player_id, kind: _kind, name, status: 'on_track', programme_week: 1, programme_total_weeks: weeks, start_date: today };
       if (injury_id) payload.injury_id = injury_id;
       const { data, error } = await window.sb.from('rehab_plans').insert(payload).select('id').single();

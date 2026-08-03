@@ -9,6 +9,19 @@
 
   window.sb = supabase.createClient(SB_URL, SB_KEY);
 
+  // ── Local date helpers ────────────────────────────────────────────────────
+  // Dates in the app are calendar dates (no time zone). "Today" must be the
+  // USER'S LOCAL day, not UTC — `new Date().toISOString()` returns the UTC date,
+  // which is a day behind for anyone east of UTC (e.g. Cambodia UTC+7 before 7am).
+  // cmYMD(d) formats a Date as local YYYY-MM-DD; cmToday() is today, local.
+  window.cmYMD = function (d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  };
+  window.cmToday = function () { return window.cmYMD(new Date()); };
+
   // ── Paginated fetch — defeats PostgREST's server max-rows cap (≈1000) ──────────
   // The server silently truncates any query to ~1000 rows; client-side .limit(50000)
   // does NOT override it. This is the ONLY robust way to read >1000 rows: page through

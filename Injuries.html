@@ -942,7 +942,7 @@ async function resolveInjSeasons() {
     _seasonsList = (data || []).filter(s => s.start_date && s.end_date);
   } catch(_) { /* no seasons → scope defaults to all time */ }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cmToday();
   let cur = _seasonsList.find(s => s.start_date <= today && s.end_date >= today);
   if (!cur) {
     const upcoming = _seasonsList.filter(s => s.start_date > today).sort((a,b) => a.start_date.localeCompare(b.start_date))[0];
@@ -1673,7 +1673,7 @@ function updatePhaseCompleteBtn() {
 async function updateAvailabilityForPhase(injId, phaseNum) {
   const inj = _allInjuries.find(i => i.id === injId);
   if (!inj?.player_id) return;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = cmToday();
   const avStatus = phaseNum !== null && phaseNum >= 4 ? 'partial' : 'injured';
   try {
     await window.sb.from('availability')
@@ -1691,7 +1691,7 @@ async function savePhaseStatus(status) {
   const ph      = phs?.find(p => p.id === phaseId);
   if (!ph) return;
 
-  const todayStr     = new Date().toISOString().split('T')[0];
+  const todayStr     = cmToday();
   const notes        = document.getElementById('phModalNotes').value.trim() || null;
   const actStart     = document.getElementById('phModalActStart').value || null;
   const actEnd       = document.getElementById('phModalActEnd').value   || null;
@@ -2593,7 +2593,7 @@ function openLogModal() {
   document.getElementById('logCategory').value  = '';
   document.getElementById('logAreaSel').value   = '';
   document.getElementById('logSev').value       = '';
-  document.getElementById('logStart').value     = new Date().toISOString().split('T')[0];
+  document.getElementById('logStart').value     = cmToday();
   document.getElementById('logReturn').value    = '';
   document.getElementById('logMechanism').value = '';
   document.getElementById('logNotes').value     = '';
@@ -2766,7 +2766,7 @@ function openDischarge(id) {
   if (info) info.textContent = pName
     ? tt('injuries.discharge_info', `Clearing injury for ${pName} (${inj.injury_type || tt('injuries.injury_word','injury')}).`, { name: pName, type: inj.injury_type || tt('injuries.injury_word','injury') })
     : tt('injuries.discharge_confirm','Confirm discharge.');
-  document.getElementById('disDate').value  = new Date().toISOString().split('T')[0];
+  document.getElementById('disDate').value  = cmToday();
   document.getElementById('disNotes').value = '';
   document.getElementById('modalDischarge').classList.add('is-open');
 }
@@ -2777,7 +2777,7 @@ function closeDischarge() {
 
 async function confirmDischarge() {
   if (!_dischargeId) return;
-  const returnDate = document.getElementById('disDate')?.value || new Date().toISOString().split('T')[0];
+  const returnDate = document.getElementById('disDate')?.value || cmToday();
   const disNotes   = document.getElementById('disNotes')?.value?.trim() || null;
 
   const inj   = _allInjuries.find(i => i.id === _dischargeId);
@@ -2946,7 +2946,7 @@ async function togglePhase(phaseId, injuryId) {
     }
   }
 
-  const todayStr  = new Date().toISOString().split('T')[0];
+  const todayStr  = cmToday();
   const newStatus = ph.status === 'in_progress' ? 'done' : 'in_progress';
   ph.status = newStatus;
   if (newStatus === 'done') ph.actual_end = todayStr;
