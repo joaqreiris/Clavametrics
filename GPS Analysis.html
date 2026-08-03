@@ -1323,7 +1323,7 @@ window.gpState = {
 };
 
 // ── Date range helpers ────────────────────────────────────────
-function _fmtDate(d) { return d.toISOString().slice(0, 10); }
+function _fmtDate(d) { return window.cmYMD ? window.cmYMD(d) : d.toISOString().slice(0, 10); }  // LOCAL date (not UTC → no off-by-one east of UTC)
 
 function getDateRange(state) {
   const now = new Date();

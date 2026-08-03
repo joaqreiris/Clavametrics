@@ -368,9 +368,13 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
     return [...merged.values()];
   }
 
-  // Range in ms (identical semantics to the previous per-request implementation).
-  const toMsRange   = toMs(to);
+  // Range in ms. `to` is a calendar date → toMs() gives its 00:00 UTC. The upper bound
+  // must cover the WHOLE `to` day (up to the next midnight, exclusive), otherwise every
+  // activity on the `to` day — i.e. TODAY's sessions — falls after 00:00 UTC and is
+  // dropped, so a same-day sync imports nothing.
+  const DAY_MS      = 86400000;
   const fromMsRange = toMs(from);
+  const toMsRange   = toMs(to) + DAY_MS;
 
   // ── 1. Fetch activities and filter to the range by start_time ───────────
   const actRes = await fetchCatapult(`${baseUrl}/activities`, { headers: authH });
@@ -383,7 +387,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   const allActivities = (await actRes.json().catch(() => [])) as Record<string, unknown>[];
   const activities = (Array.isArray(allActivities) ? allActivities : []).filter(a => {
     const ms = toMs(a.start_time ?? a.startTime ?? a.start);
-    return !isNaN(ms) && ms >= fromMsRange && ms <= toMsRange;
+    return !isNaN(ms) && ms >= fromMsRange && ms < toMsRange;   // [from 00:00, to+1day 00:00)
   });
 
   let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0;
