@@ -1645,24 +1645,57 @@
     return String(v);
   }
 
+  // Group faceted variants of one movement (label without its angle) into a single card.
+  function _groupKey(t){
+    var d = t._def;
+    if (!d) return '§' + t.key;                       // non-faceted test → its own card
+    var ang = _fmtAngle(d.joint_angle);
+    var g = (d.label || t.label || '');
+    if (ang) g = g.replace(new RegExp('\\s*' + ang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$'), '');
+    return g.trim() || t.key;
+  }
+  var _EV_CLR = { strong:'var(--cm-success)', moderate:'var(--cm-warning)', practice:'var(--cm-fg-faint)' };
+  function _refHtml(t){
+    var d = t._def; if (!d || !d.reference) return '';
+    return '<div class="b-ref" title="'+esc(d.reference)+'" style="display:flex;align-items:center;gap:5px;margin-top:4px;font:400 9px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);overflow:hidden">'
+      + (d.evidence_level ? '<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:'+(_EV_CLR[d.evidence_level]||'var(--cm-fg-faint)')+'"></span>' : '')
+      + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.reference)+'</span></div>';
+  }
+  var _SEL_CSS = 'width:100%;margin:1px 0;padding:5px 7px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px var(--cm-font-sans);cursor:pointer';
+  // Variant dropdown changed → re-point the card to the chosen def (status, reference, open target).
+  window.evOnVariantChange = function(sel){
+    var card = sel.closest('.ev-test-card'); var t = TEST_BY_KEY[sel.value];
+    if (!card || !t) return;
+    card.setAttribute('data-open-test', t.key);
+    var stEl = card.querySelector('.b-status'); if (stEl) stEl.setAttribute('data-status', t.key);
+    var rw = card.querySelector('.b-refwrap'); if (rw) rw.innerHTML = _refHtml(t);
+    paintStatus(t.key, (_lastStatusByKey || {})[t.key]);
+  };
+
   // ── render the catalog (cards start in a "loading…" status state) ──
   function renderCatalog(){
     var html = CATALOG.map(function(cat, i){
-      var cards = cat.tests.map(function(t){
-        var _d = t._def;
-        var _evClr = { strong:'var(--cm-success)', moderate:'var(--cm-warning)', practice:'var(--cm-fg-faint)' };
-        var refLine = (_d && _d.reference)
-          ? '<div class="b-ref" title="'+esc(_d.reference)+'" style="display:flex;align-items:center;gap:5px;margin-top:4px;font:400 9px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);overflow:hidden">'
-            + (_d.evidence_level ? '<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:'+(_evClr[_d.evidence_level]||'var(--cm-fg-faint)')+'"></span>' : '')
-            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(_d.reference)+'</span></div>'
-          : '';
-        return '<button class="ev-test-card" data-open-test="'+t.key+'">'
-          + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t.icon+'"></i></div>'
-          + '<div class="b-l">'+esc(testLabel(t))+'</div>'
-          + '<div class="b-s">'+esc(t.sub)+'</div>'
-          + '<div class="b-status" data-status="'+t.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
-          + refLine
-          + '</button>';
+      // One card per movement; angle/position/method variants live in a dropdown inside the card.
+      var groups = [], gi = {};
+      cat.tests.forEach(function(t){
+        var gk = _groupKey(t);
+        if (gi[gk] == null){ gi[gk] = groups.length; groups.push({ name: gk, tests: [] }); }
+        groups[gi[gk]].tests.push(t);
+      });
+      var cards = groups.map(function(g){
+        var t0 = g.tests[0], multi = g.tests.length > 1;
+        var body = multi
+          ? '<select class="ev-var-select" onclick="event.stopPropagation()" onchange="evOnVariantChange(this)" style="'+_SEL_CSS+'">'
+              + g.tests.map(function(t){ return '<option value="'+esc(t.key)+'">'+esc(t.sub)+'</option>'; }).join('')
+              + '</select>'
+          : '<div class="b-s">'+esc(t0.sub)+'</div>';
+        return '<div class="ev-test-card" role="button" tabindex="0" data-open-test="'+t0.key+'">'
+          + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t0.icon+'"></i></div>'
+          + '<div class="b-l">'+esc(multi ? g.name : testLabel(t0))+'</div>'
+          + body
+          + '<div class="b-status" data-status="'+t0.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
+          + '<div class="b-refwrap">'+_refHtml(t0)+'</div>'
+          + '</div>';
       }).join('');
       var batFam = cat.name === 'Isometric strength' ? 'isometric' : (cat.name === 'Mobility & screening' ? 'mobility' : null);
       var batBtn = (batFam && _assessDefs.some(function(d){ return d.family === batFam; }))
@@ -1696,7 +1729,9 @@
       el.style.color = 'var(--cm-fg-faint)';
     }
   }
+  var _lastStatusByKey = {};
   function paintAll(statusByKey){
+    _lastStatusByKey = statusByKey || {};
     Object.keys(TEST_BY_KEY).forEach(function(k){ paintStatus(k, statusByKey[k]); });
   }
 
