@@ -478,6 +478,7 @@ create table if not exists public.exercises (
   preview_png text,
   preview_path text,
   source_type text default 'canvas'::text not null,
+  folder_id uuid,
   constraint exercises_pkey primary key (id),
   constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),
@@ -485,6 +486,27 @@ create table if not exists public.exercises (
   constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text]))),
   constraint exercises_dose_mode_check CHECK ((dose_mode = ANY (ARRAY['interval'::text, 'reps'::text, 'minutes'::text])))
 );
+
+-- Folders/subfolders to organize the exercise libraries (field + gym).
+-- kind separates the two libraries into distinct trees. parent_id gives free N-level nesting.
+-- team_id NULL = folder shared across all categories; a team id = folder private to that team (field only).
+create table if not exists public.exercise_folders (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  parent_id uuid,
+  kind text default 'field'::text not null,
+  name text not null,
+  position integer default 0,
+  created_at timestamp with time zone default now(),
+  constraint exercise_folders_pkey primary key (id),
+  constraint exercise_folders_kind_check CHECK ((kind = ANY (ARRAY['field'::text, 'gym'::text]))),
+  constraint exercise_folders_parent_fk foreign key (parent_id) references public.exercise_folders(id) on delete cascade,
+  constraint exercise_folders_team_fk foreign key (team_id) references public.teams(id) on delete cascade
+);
+CREATE INDEX IF NOT EXISTS exercise_folders_club_kind_idx ON public.exercise_folders USING btree (club_id, kind);
+CREATE INDEX IF NOT EXISTS exercise_folders_parent_idx ON public.exercise_folders USING btree (parent_id);
+alter table public.exercises add constraint exercises_folder_fk foreign key (folder_id) references public.exercise_folders(id) on delete set null;
 
 create table if not exists public.foods (
   id uuid default gen_random_uuid() not null,
@@ -798,7 +820,9 @@ create table if not exists public.gym_exercises (
   planes text[],
   video_id text,
   source text,
+  folder_id uuid,
   constraint gym_exercises_pkey primary key (id),
+  constraint gym_exercises_folder_fk foreign key (folder_id) references public.exercise_folders(id) on delete set null,
   constraint gym_exercises_complexity_check CHECK ((complexity = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text]))),
   constraint gym_exercises_media_type_check CHECK (((media_type IS NULL) OR (media_type = ANY (ARRAY['image'::text, 'youtube'::text]))))
 );
@@ -4909,6 +4933,22 @@ create policy "exercises_scoped_select" on public.exercises as permissive for se
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (visible_teams IS NULL) OR (cardinality(visible_teams) = 0) OR (visible_teams && ( SELECT ARRAY( SELECT my_team_ids() AS my_team_ids) AS "array")))));
 create policy "exercises_super_all" on public.exercises as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.exercise_folders enable row level security;
+create policy "exercise_folders_cud" on public.exercise_folders as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "exercise_folders_scoped_select" on public.exercise_folders as permissive for select to public
+  using (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND ((kind = 'gym'::text) OR has_full_planning_access() OR (team_id IS NULL) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "exercise_folders_super_all" on public.exercise_folders as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
 

@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js?v=gps-avg"></script>
+<script src="assets/exercise-folders.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
@@ -893,6 +894,19 @@
             </label>
             <div id="plExVisTeams" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="planner.visibility_hint">If you don't check "all", only the selected categories will see this exercise.</div>
+          </div>
+
+          <div class="pl-form-group">
+            <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
+              <i class="ti ti-folder" style="font-size:14px"></i><span data-i18n="folders.folder">Folder</span>
+            </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+              <select class="pl-form-input" id="plExFolder" style="flex:1"></select>
+              <button type="button" onclick="plNewFolder()" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans);cursor:pointer">
+                <i class="ti ti-folder-plus" style="font-size:15px"></i>
+              </button>
+            </div>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="folders.new_nests_hint">"New folder" nests inside the folder selected above; leave it on "No folder" to create a top-level one.</div>
           </div>
 
           <div style="height:1px;background:var(--cm-border-soft);margin-bottom:14px"></div>
@@ -3221,7 +3235,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,folder_id,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -3398,6 +3412,7 @@
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
     plSetVisibilityUI(ex.visible_teams);
+    plRenderFolderSelect(ex.folder_id || '');
 
     // Suggest space/players from the name when the stored fields are empty (editable).
     _plAutofillMeasuresFromName();
@@ -3703,7 +3718,8 @@
       source_type:       _curSourceType || 'canvas',
       objects_json:      _curSourceType === 'image' ? null : _oj,
       preview_svg:       _curSourceType === 'image' ? null : _previewSvg,
-      visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
+      visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null),
+      folder_id:         document.getElementById('plExFolder')?.value || null
     };
 
     let error;
@@ -3880,11 +3896,33 @@
 
 })().catch(console.error);
 
-  let _plTeams = [], _plVisibleTeams = [];
+  let _plTeams = [], _plVisibleTeams = [], _plFolders = [];
   async function plLoadTeams() {
     const cid = await window.getClubId();
     _plTeams = await window.getTeams(cid);
+    await plLoadFolders();
   }
+  const _plActiveTeam = () => sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
+  async function plLoadFolders() {
+    _plFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
+    plRenderFolderSelect(document.getElementById('plExFolder')?.value || '');
+  }
+  function plRenderFolderSelect(selectedId) {
+    const sel = document.getElementById('plExFolder');
+    if (!sel || !window.CMFolders) return;
+    sel.innerHTML = window.CMFolders.optionsHtml(_plFolders, { teamId: _plActiveTeam(), selectedId });
+  }
+  // "New folder" nests under whatever is selected; team scope follows the exercise's visibility
+  // (shared folder when "visible to all categories" is on, otherwise the active team).
+  window.plNewFolder = async function() {
+    if (!window.CMFolders) return;
+    const parentId = document.getElementById('plExFolder')?.value || null;
+    const teamId = document.getElementById('plExVisAll')?.checked ? null : _plActiveTeam();
+    const row = await window.CMFolders.promptCreate({ kind: 'field', parentId, teamId });
+    if (!row) return;
+    await plLoadFolders();
+    plRenderFolderSelect(row.id);
+  };
   function plRenderVisTeams() {
     const wrap = document.getElementById('plExVisTeams');
     const allOn = document.getElementById('plExVisAll').checked;

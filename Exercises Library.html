@@ -206,6 +206,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js?v=gps-avg"></script>
+<script src="assets/exercise-folders.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/cm-daterange.js"></script>
@@ -289,6 +290,11 @@
             </div>
             <div class="sl-preview-grid" id="prevGrid"></div>
             <div class="sl-preview-tags" id="prevTags"></div>
+            <div id="prevFolderRow" style="display:flex;align-items:center;gap:8px;margin:10px 0 2px">
+              <label style="font:700 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)" data-i18n="folders.folder">Folder</label>
+              <select id="prevFolder" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--cm-border);background:var(--cm-surface,transparent);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)"></select>
+              <button type="button" id="prevNewFolder" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-folder-plus" style="font-size:14px"></i></button>
+            </div>
             <div class="sl-gps" id="prevGps" style="display:none"></div>
             <button class="cm-btn is-outline is-sm sl-preview-open" id="prevOpenBtn">
               <i class="ti ti-edit" style="font-size:13px"></i><span data-i18n="exlib.open_in_planner">Open in Planner</span>
@@ -422,6 +428,7 @@
   } catch {}
   window._slTeams = await window.getTeams(clubId);
   window._slTeamMap = Object.fromEntries((window._slTeams||[]).map(t => [t.id, t.name]));
+  window._slFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
   (function slRenderTeamFilter() {
     const wrap = document.getElementById('accTeam');
     if (!wrap || !window._slTeams) return;
@@ -432,7 +439,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,folder_id,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -631,7 +638,7 @@
       return;
     }
 
-    grid.innerHTML = visible.map(ex => {
+    const _cardHtml = ex => {
       const orient = calcOrient(ex);
       const meta   = orient ? ORIENT[orient] : null;
       const m2     = m2pp(ex);
@@ -678,7 +685,31 @@
         </div>
         ${tagsRow}
       </div>`;
-    }).join('');
+    };
+
+    // Group cards by folder ("No folder" first, then folders in tree order). Flat when 0/1 group.
+    const _folders = window._slFolders || [];
+    if (!_folders.length) {
+      grid.innerHTML = visible.map(_cardHtml).join('');
+    } else {
+      const order = window.CMFolders ? window.CMFolders.flatten(_folders) : _folders.map(f => ({ ...f, depth: 0 }));
+      const known = new Set(order.map(f => f.id));
+      const buckets = new Map();
+      visible.forEach(ex => {
+        const key = (ex.folder_id && known.has(ex.folder_id)) ? ex.folder_id : '';
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(ex);
+      });
+      const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const headHtml = (label, n, depth) => `<div class="sl-folder-head" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:${depth?10:2}px 0 2px;padding-left:${(depth||0)*14}px;font:700 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)"><i class="ti ti-folder" style="font-size:13px"></i>${esc(label)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
+      const groups = [];
+      const none = buckets.get('');
+      if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
+      order.forEach(f => { const items = buckets.get(f.id); if (items && items.length) groups.push({ label: f.name, depth: f.depth || 0, items }); });
+      grid.innerHTML = groups.length <= 1
+        ? visible.map(_cardHtml).join('')
+        : groups.map(g => headHtml(g.label, g.items.length, g.depth) + g.items.map(_cardHtml).join('')).join('');
+    }
 
     grid.querySelectorAll('.sl-card').forEach(card => {
       card.addEventListener('click', () => {
@@ -729,6 +760,32 @@
     (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
     document.getElementById('prevTags').innerHTML = tags;
     renderExGpsProfile(ex.id);
+
+    // Folder assignment — move this exercise into a folder straight from the library.
+    (function () {
+      const sel = document.getElementById('prevFolder');
+      if (!sel || !window.CMFolders) return;
+      sel.innerHTML = window.CMFolders.optionsHtml(window._slFolders || [], { teamId: null, selectedId: ex.folder_id || '' });
+      sel.onchange = async () => {
+        const fid = sel.value || null;
+        const { error } = await window.sb.from('exercises').update({ folder_id: fid }).eq('id', ex.id);
+        if (error) { alert(error.message); return; }
+        ex.folder_id = fid;
+        renderCards();
+      };
+      const nb = document.getElementById('prevNewFolder');
+      if (nb) nb.onclick = async () => {
+        const exAll = !ex.visible_teams || ex.visible_teams.length === 0;
+        const teamId = exAll ? null : (sessionStorage.getItem('cal_active_team') || ex.visible_teams[0] || null);
+        const row = await window.CMFolders.promptCreate({ kind: 'field', parentId: sel.value || null, teamId });
+        if (!row) return;
+        window._slFolders = await window.CMFolders.load('field');
+        await window.sb.from('exercises').update({ folder_id: row.id }).eq('id', ex.id);
+        ex.folder_id = row.id;
+        sel.innerHTML = window.CMFolders.optionsHtml(window._slFolders, { teamId: null, selectedId: row.id });
+        renderCards();
+      };
+    })();
 
     // Open in Planner → carry the exercise id so the Planner loads it for editing.
     const openBtn = document.getElementById('prevOpenBtn');

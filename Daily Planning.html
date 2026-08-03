@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/exercise-folders.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -432,7 +433,8 @@
     <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
       <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
       <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)" data-i18n="daily_planning.exercises_library">Exercises Library</div>
-      <input id="libSearch" type="text" placeholder="Search exercises…" data-i18n-ph="daily_planning.search_exercises_ph" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:180px" oninput="filterLib()">
+      <select id="libFolder" style="margin-left:auto;height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;max-width:150px" onchange="filterLib()"></select>
+      <input id="libSearch" type="text" placeholder="Search exercises…" data-i18n-ph="daily_planning.search_exercises_ph" style="height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:160px" oninput="filterLib()">
       <button onclick="closeLibModal()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
     </div>
     <div id="libList" style="overflow-y:auto;flex:1;padding:8px"></div>
@@ -491,7 +493,7 @@ let _dpDaySessions = [], _dpPreferredSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
-let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
+let _libExercises = [], _libFolders = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
@@ -1778,9 +1780,20 @@ async function openLibModal(mode) {
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id')
     .eq('club_id', _dpClubId).order('name');
   const { data, error } = await q;
+  _libFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
+  (function () {
+    const fsel = document.getElementById('libFolder');
+    if (!fsel) return;
+    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const list = window.CMFolders ? window.CMFolders.flatten(_libFolders) : [];
+    fsel.innerHTML = `<option value="">${esc(tt('folders.all_folders','All folders'))}</option>`
+      + `<option value="__none__">${esc(window.CMFolders ? window.CMFolders.noneLabel() : 'No folder')}</option>`
+      + list.map(f => `<option value="${f.id}">${(f.depth?'  '.repeat(f.depth):'')}${esc(f.name)}</option>`).join('');
+    fsel.style.display = _libFolders.length ? '' : 'none';
+  })();
   if (error?.code === '42P01') {
     document.getElementById('libList').innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.run_sql_migration','Run the SQL migration to enable the Planner library.')}</div>`;
     document.getElementById('libFooter').textContent = '—';
@@ -1796,14 +1809,17 @@ async function openLibModal(mode) {
 function closeLibModal() { document.getElementById('libBackdrop').style.display = 'none'; }
 function filterLib() {
   const q   = (document.getElementById('libSearch').value || '').toLowerCase();
-  const fil = q ? _libExercises.filter(e => (e.name||'').toLowerCase().includes(q)) : _libExercises;
+  const fsel = (document.getElementById('libFolder')?.value) || '';
+  let fil = q ? _libExercises.filter(e => (e.name||'').toLowerCase().includes(q)) : _libExercises.slice();
+  if (fsel === '__none__') fil = fil.filter(e => !e.folder_id);
+  else if (fsel) fil = fil.filter(e => e.folder_id === fsel);
   const list = document.getElementById('libList');
   document.getElementById('libFooter').textContent = tt('daily_planning.n_in_library', `${fil.length} exercise${fil.length !== 1 ? 's' : ''} in library`, {count: fil.length});
   if (!fil.length) {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_exercises_found','No exercises found. Create some in <a href="Planner.html" style="color:var(--cm-accent);text-decoration:none">Drill Designer</a>.')}</div>`;
     return;
   }
-  list.innerHTML = fil.map(e => {
+  const _libCard = e => {
     const area    = (e.field_width && e.field_height) ? e.field_width * e.field_height : null;
     const m2      = (area && e.players_count > 0) ? Math.round(area / e.players_count) : null;
     const calcO   = _dpCalcOrientFromM2(m2);
@@ -1830,7 +1846,23 @@ function filterLib() {
       </div>
       <i class="ti ti-plus" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>
     </div>`;
-  }).join('');
+  };
+  // Group by folder ("No folder" first, then folders in tree order). Flat when 0/1 group or a folder is already selected.
+  const _f = _libFolders || [];
+  if (!_f.length || fsel) { list.innerHTML = fil.map(_libCard).join(''); return; }
+  const order = window.CMFolders ? window.CMFolders.flatten(_f) : _f.map(x => ({ ...x, depth: 0 }));
+  const known = new Set(order.map(x => x.id));
+  const buckets = new Map();
+  fil.forEach(e => { const k = (e.folder_id && known.has(e.folder_id)) ? e.folder_id : ''; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e); });
+  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const head = (lbl, n, depth) => `<div style="display:flex;align-items:center;gap:6px;margin:${depth?8:2}px 0 2px;padding:2px 12px 2px ${12+(depth||0)*12}px;font:700 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)"><i class="ti ti-folder" style="font-size:12px"></i>${esc(lbl)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
+  const groups = [];
+  const none = buckets.get('');
+  if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
+  order.forEach(x => { const items = buckets.get(x.id); if (items && items.length) groups.push({ label: x.name, depth: x.depth || 0, items }); });
+  list.innerHTML = groups.length <= 1
+    ? fil.map(_libCard).join('')
+    : groups.map(g => head(g.label, g.items.length, g.depth) + g.items.map(_libCard).join('')).join('');
 }
 async function addPlannerExercise(exerciseId) {
   if (!await dpEnsureSession()) return;
