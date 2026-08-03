@@ -1431,9 +1431,16 @@
   // ── Available players ───────────────────────────────────────────
   const statusClass = { available:'is-success', partial:'is-warning', limited:'is-warning', unavailable:'is-danger', away:'is-warning' };
 
-  // Canonical active team source: the same sessionStorage key the rest of the
-  // app uses (Calendar topbar, Availability, etc.). Empty/null = "All teams" → no filter.
-  const _activeTeamId = () => sessionStorage.getItem('cal_active_team') || null;
+  // Canonical active team source: the same sessionStorage key the rest of the app uses
+  // (Calendar topbar, Availability, etc.). When nothing is pinned, default to the club's
+  // first team — the sidebar always has a team selected, so we never want "all players".
+  let _plTeamsCache = null;
+  async function _activeTeamId() {
+    const saved = sessionStorage.getItem('cal_active_team');
+    if (saved) return saved;
+    if (!_plTeamsCache) { try { _plTeamsCache = await window.getTeams(clubId); } catch (_) { _plTeamsCache = []; } }
+    return _plTeamsCache[0]?.id || null;
+  }
 
   let pillData = [];
   const _placedPlayerIds = new Set();
@@ -1443,11 +1450,14 @@
   const pillsEl = document.getElementById('plAvailPills');
 
   async function loadAvailable() {
+    const teamId = await _activeTeamId();
+    // Filter by team via the M:N player_teams table so a player who belongs to this team
+    // as a SECONDARY membership (primary team is another) still shows up — not just players
+    // whose primary players.team_id matches.
     let pq = window.sb.from('players')
-      .select('id,first_name,last_name,number,position')
+      .select('id,first_name,last_name,number,position' + (teamId ? ', player_teams!inner(team_id)' : ''))
       .eq('club_id', clubId).neq('status', 'inactive').is('archived_at', null);
-    const teamId = _activeTeamId();
-    if (teamId) pq = pq.eq('team_id', teamId);   // null = "All teams" → no team filter
+    if (teamId) pq = pq.eq('player_teams.team_id', teamId);   // null = no teams → no filter
     const { data: playersData } = await pq;
     const players = playersData || [];
 
