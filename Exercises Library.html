@@ -296,6 +296,10 @@
               <select id="prevFolder" style="flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--cm-border);background:var(--cm-surface,transparent);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)"></select>
               <button type="button" id="prevNewFolder" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;padding:6px 9px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-folder-plus" style="font-size:14px"></i></button>
             </div>
+            <label id="prevGkRow" style="display:flex;align-items:center;gap:8px;margin:8px 0 2px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">
+              <input type="checkbox" id="prevGk" style="width:15px;height:15px;accent-color:#7C3AED">
+              <i class="ti ti-hand-stop" style="font-size:14px;color:#7C3AED"></i><span data-i18n="planner.goalkeeper_exercise">Goalkeeper exercise</span>
+            </label>
             <div class="sl-gps" id="prevGps" style="display:none"></div>
             <button class="cm-btn is-outline is-sm sl-preview-open" id="prevOpenBtn">
               <i class="ti ti-edit" style="font-size:13px"></i><span data-i18n="exlib.open_in_planner">Open in Planner</span>
@@ -789,6 +793,21 @@
         await window.sb.from('exercises').update({ folder_id: row.id }).eq('id', ex.id);
         ex.folder_id = row.id;
         sel.innerHTML = window.CMFolders.optionsHtml(window._slFolders, { teamId: null, selectedId: row.id });
+        renderCards();
+      };
+    })();
+
+    // Goalkeeper flag — toggle it straight from the library (no need to open the Drill Designer).
+    (function () {
+      const gk = document.getElementById('prevGk');
+      if (!gk) return;
+      gk.checked = !!ex.is_goalkeeper;
+      gk.onchange = async () => {
+        const val = gk.checked;
+        const { error } = await window.sb.from('exercises').update({ is_goalkeeper: val }).eq('id', ex.id);
+        if (error) { alert(error.message); gk.checked = !val; return; }
+        ex.is_goalkeeper = val;
+        updateCounts();
         renderCards();
       };
     })();
