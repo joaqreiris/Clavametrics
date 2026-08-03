@@ -4228,6 +4228,28 @@
   function asSides(def){ return def.bilateral ? ['L','R'] : ['NA']; }
   function asSideLabel(s){ return s === 'L' ? tt('evaluations.side_left','Left') : s === 'R' ? tt('evaluations.side_right','Right') : ''; }
 
+  // Normalized metric list for a def (falls back to the single metric_key/unit).
+  function asMetrics(def){
+    var m = def.metrics;
+    if (typeof m === 'string'){ try { m = JSON.parse(m); } catch(e){ m = null; } }
+    if (m && m.length) return m;
+    return [{ key: def.metric_key, label: def.unit || def.metric_key, unit: def.unit, primary: true }];
+  }
+  function asPrimary(def){ var m = asMetrics(def); return m.filter(function(x){return x.primary;})[0] || m[0]; }
+
+  // Modified Thomas (value_type 'flags'): +/− per leg → reveal the structure checkboxes.
+  window.asSetFlag = function(side, v){
+    if (!_asEntry) return;
+    _asEntry.flags = _asEntry.flags || {};
+    _asEntry.flags[side] = v;
+    var b1 = document.getElementById('asFlag_'+side+'_1'), b0 = document.getElementById('asFlag_'+side+'_0');
+    if (b1) b1.classList.toggle('is-primary', v===1);
+    if (b0) b0.classList.toggle('is-primary', v===0);
+    var st = document.getElementById('asFlagStruct_'+side);
+    if (st) st.style.display = (v===1) ? 'flex' : 'none';
+    if (v===0) asMetrics(_asEntry.def).forEach(function(m){ var c=document.getElementById('asStruct_'+side+'_'+m.key); if(c) c.checked=false; });
+  };
+
   // best of up to 3 numeric trials for one side (max if higher-is-better, min otherwise)
   function asBestForSide(def, side){
     var vals = [];
@@ -4257,7 +4279,7 @@
     var t = _openTest;
     if (!t || !t._def){ return; }
     var def = t._def;
-    _asEntry = { def: def, sides: asSides(def), binary: {}, sameDay: {} };
+    _asEntry = { def: def, sides: asSides(def), binary: {}, flags: {}, sameDay: {} };
     document.getElementById('asEntryTitle').textContent = testLabel(t);
     document.getElementById('asEntrySub').textContent   = (def.unit || '') + (def.bilateral ? ' · L/R' : '');
     renderAssessmentForm(def);
@@ -4281,11 +4303,21 @@
         : '')
       + '</div>';
 
+    var mets = asMetrics(def), primary = asPrimary(def);
     var body = '';
     _asEntry.sides.forEach(function(s){
       var head2 = def.bilateral ? '<div class="pa-section" style="margin-top:14px">'+esc(asSideLabel(s))+'</div>' : '<div class="pa-section" style="margin-top:14px">'+esc(tt('evaluations.result','Result'))+'</div>';
       var field = '';
-      if (def.value_type === 'binary'){
+      if (def.value_type === 'flags'){
+        // Modified Thomas: +/− per leg, then which structures are positive.
+        field = '<div class="ev-frow"><div style="display:inline-flex;gap:6px">'
+          + '<button type="button" id="asFlag_'+s+'_1" onclick="asSetFlag(\''+s+'\',1)" class="cm-btn is-outline is-sm">'+esc(tt('evaluations.positive','Positive (+)'))+'</button>'
+          + '<button type="button" id="asFlag_'+s+'_0" onclick="asSetFlag(\''+s+'\',0)" class="cm-btn is-outline is-sm">'+esc(tt('evaluations.negative','Negative (−)'))+'</button>'
+          + '</div></div>'
+          + '<div id="asFlagStruct_'+s+'" style="display:none;flex-wrap:wrap;gap:10px;margin-top:6px">'
+          + mets.map(function(m){ return '<label style="display:inline-flex;align-items:center;gap:5px;font:500 12px var(--cm-font-sans);cursor:pointer"><input type="checkbox" id="asStruct_'+s+'_'+m.key+'"> '+esc(m.label||m.key)+'</label>'; }).join('')
+          + '</div>';
+      } else if (def.value_type === 'binary'){
         field = '<div class="ev-frow"><div style="display:inline-flex;gap:6px">'
           + '<button type="button" id="asBin_'+s+'_1" onclick="asSetBinary(\''+s+'\',1)" class="cm-btn is-outline is-sm">+</button>'
           + '<button type="button" id="asBin_'+s+'_0" onclick="asSetBinary(\''+s+'\',0)" class="cm-btn is-outline is-sm">−</button>'
@@ -4296,13 +4328,19 @@
           + (def.min_value!=null?' min="'+def.min_value+'"':'') + (def.max_value!=null?' max="'+def.max_value+'"':'')
           + ' class="ev-finput" placeholder="—" oninput="asEntryRecalc()"><span class="unit">'+esc(def.unit||'')+'</span></div></div></div>';
       } else {
-        // numeric: up to 3 trials → best
+        // Primary metric: up to 3 trials → best.
         var trials = '<div class="ev-f2" style="margin-bottom:0">';
         for (var i=1;i<=3;i++){
-          trials += '<div class="pt-field"><div class="input-wrap"><input id="asTrial_'+s+'_'+i+'" type="number" step="0.1" class="ev-finput" placeholder="'+esc(tt('evaluations.trial','Trial'))+' '+i+'" oninput="asEntryRecalc()"><span class="unit">'+esc(def.unit||'')+'</span></div></div>';
+          trials += '<div class="pt-field"><div class="input-wrap"><input id="asTrial_'+s+'_'+i+'" type="number" step="0.1" class="ev-finput" placeholder="'+esc(tt('evaluations.trial','Trial'))+' '+i+'" oninput="asEntryRecalc()"><span class="unit">'+esc(primary.unit||def.unit||'')+'</span></div></div>';
         }
         trials += '</div>';
         field = trials + '<div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px">'+esc(tt('evaluations.best_of_trials','Best'))+': <span id="asBest_'+s+'">—</span></div>';
+        // Additional metrics (e.g. VALD RFD / impulse) → one input each.
+        mets.forEach(function(m){
+          if (m === primary) return;
+          field += '<div class="ev-frow" style="margin-top:6px"><label class="ev-fl" style="font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">'+esc(m.label||m.key)+'</label>'
+            + '<div class="pt-field"><div class="input-wrap"><input id="asMetric_'+esc(m.key)+'_'+s+'" type="number" step="0.1" class="ev-finput" placeholder="—" oninput="asEntryRecalc()"><span class="unit">'+esc(m.unit||'')+'</span></div></div></div>';
+        });
       }
       body += head2 + field;
     });
@@ -4423,11 +4461,33 @@
 
     // collect metric rows (skip empty sides)
     var metricRows = [];
-    _asEntry.sides.forEach(function(s){
-      var v = asValueForSide(def, s);
-      if (v == null) return;
-      metricRows.push({ metric_key: def.metric_key, value: v, side: (s==='NA'?null:s), unit: def.unit });
-    });
+    if (def.value_type === 'flags'){
+      // Modified Thomas: one 0/1 row per structure per assessed leg (+ → checked=1, − → all 0).
+      var fmets = asMetrics(def);
+      _asEntry.sides.forEach(function(s){
+        var st = _asEntry.flags ? _asEntry.flags[s] : null;
+        if (st == null) return;                       // leg not assessed
+        fmets.forEach(function(m){
+          var chk = document.getElementById('asStruct_'+s+'_'+m.key);
+          var val = (st === 1 && chk && chk.checked) ? 1 : 0;
+          metricRows.push({ metric_key: m.key, value: val, side: (s==='NA'?null:s), unit: m.unit || def.unit });
+        });
+      });
+    } else {
+      var primary = asPrimary(def);
+      _asEntry.sides.forEach(function(s){
+        var v = asValueForSide(def, s);   // primary (best-of-trials / binary / score)
+        if (v != null) metricRows.push({ metric_key: primary.key || def.metric_key, value: v, side: (s==='NA'?null:s), unit: primary.unit || def.unit });
+        // additional metrics (single input each)
+        asMetrics(def).forEach(function(m){
+          if (m === primary) return;
+          var el = document.getElementById('asMetric_'+m.key+'_'+s);
+          if (!el) return;
+          var n = parseFloat(String(el.value).replace(',','.'));
+          if (isFinite(n)) metricRows.push({ metric_key: m.key, value: n, side: (s==='NA'?null:s), unit: m.unit || '' });
+        });
+      });
+    }
     if (!metricRows.length){ info.textContent = tt('evaluations.enter_at_least_one','Enter at least one value'); info.style.color='var(--cm-danger)'; return; }
 
     var bwEl = document.getElementById('asBw');
