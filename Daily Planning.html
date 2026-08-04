@@ -164,8 +164,13 @@
   .dp-exp-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
   .dp-exg-actions{display:flex;flex-wrap:wrap;gap:6px}
   /* Shared checklist popover */
-  .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-height:320px;overflow:auto}
+  .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-width:min(760px,92vw);max-height:360px;overflow:auto}
   .dp-exp-menu.is-open{display:block}
+  /* Position columns inside the player picker — horizontal so there's less vertical scroll */
+  .dp-exp-cols{display:flex;gap:8px;align-items:flex-start}
+  .dp-exp-col{display:flex;flex-direction:column;gap:1px;min-width:128px}
+  .dp-exp-col + .dp-exp-col{border-left:1px solid var(--cm-border-soft);padding-left:8px}
+  .dp-exp-col-h{position:sticky;top:0;background:var(--cm-surface);padding:3px 6px 4px;font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint)}
   .dp-exp-menu .hd{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 6px;font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint)}
   .dp-exp-menu .hd button{border:0;background:none;color:var(--cm-accent);font:500 11px/1 var(--cm-font-sans);cursor:pointer;padding:2px 4px}
   .dp-exp-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg)}
@@ -768,14 +773,31 @@ function dpOpenExGroup(seid, gid, btn){
   const sel = new Set((g.players||[]).map(String));
   // Hide players already taken by ANOTHER group of this exercise (a player is in one group only).
   const takenElsewhere = new Set(_dpExGroups(e).filter(x => x.id !== gid).flatMap(x => (x.players||[]).map(String)));
-  const opts = _dpTrainees().filter(p => !takenElsewhere.has(String(p.id)))
-    .map(p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExGroupPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`).join('')
-    || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
-  menu.innerHTML = `<div class="hd"><span>${_dpEsc(g.name)}</span><button onclick="dpClearExGroup()">${tt('daily_planning.clear','Clear')}</button></div>${opts}`;
-  const r = btn.getBoundingClientRect();
-  menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
-  menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  const avail = _dpTrainees().filter(p => !takenElsewhere.has(String(p.id)));
+  // Bucket available players by position (GK/DEF/MID/WNG/FWD) → one column each, so the
+  // picker reads horizontally and needs far less vertical scrolling.
+  const buckets = {};
+  avail.forEach(p => {
+    const g2 = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
+    if (!buckets[g2.l]) buckets[g2.l] = { o:g2.o, list:[] };
+    buckets[g2.l].list.push(p);
+  });
+  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${sel.has(String(p.id))?'checked':''} onchange="dpToggleExGroupPlayer('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`;
+  const cols = Object.entries(buckets)
+    .sort((a,b) => a[1].o - b[1].o)
+    .map(([lbl, { list }]) =>
+      `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${list.length}</div>${list.map(optRow).join('')}</div>`
+    ).join('');
+  const body = cols
+    ? `<div class="dp-exp-cols">${cols}</div>`
+    : `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
+  menu.innerHTML = `<div class="hd"><span>${_dpEsc(g.name)}</span><button onclick="dpClearExGroup()">${tt('daily_planning.clear','Clear')}</button></div>${body}`;
+  // Measure after render so a wide multi-column menu is clamped inside the viewport.
   menu.classList.add('is-open');
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.top  = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8)) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + 'px';
 }
 function dpToggleExGroupPlayer(pid, on){
   if (!_dpExgTarget) return; const { seid, gid } = _dpExgTarget;
