@@ -173,6 +173,14 @@ html.cm-rail .hub-nav-grip{display:none}
   html.cm-rail .hub-user{justify-content:center;padding:8px 0;gap:0}
   html.cm-rail .hub-logout-btn{justify-content:center;padding:7px 0;gap:0}
 }
+/* Live presence — who's online in this club right now */
+.cm-presence{align-items:center;margin-right:2px}
+.cm-presence-stack{display:inline-flex;align-items:center}
+.cm-pb{width:30px;height:30px;border-radius:50%;margin-left:-8px;border:2px solid;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans,sans-serif);color:#fff;overflow:hidden;position:relative;cursor:default;box-shadow:0 0 0 1px var(--cm-surface,#fff);transition:transform .12s ease}
+.cm-pb:first-child{margin-left:0}
+.cm-pb:hover{transform:translateY(-1px);z-index:2}
+.cm-pb img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.cm-pb.more{background:var(--cm-bg-soft,#f4f4f5);border-color:var(--cm-surface,#fff);color:var(--cm-fg-muted,#6b7280);font-size:10px}
     `;
     document.head.appendChild(s);
   }
@@ -1049,16 +1057,93 @@ html.cm-rail .hub-nav-grip{display:none}
     });
   }
 
+  // ── LIVE PRESENCE (who's online, per club) ───────────────────
+  // Supabase Realtime *Presence*: ephemeral, no DB tables. Each client tracks
+  // { userId, name, avatar, color, page } on a club-scoped channel; everyone
+  // receives the merged state live. Scoping by club is the ONLY privacy barrier
+  // (Presence isn't governed by RLS), so the channel name MUST carry the clubId.
+  const _PRESENCE_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2','#DB2777','#65A30D','#EA580C','#4F46E5','#0D9488','#9333EA'];
+  function _presenceColor(id) {
+    let h = 0; const s = String(id || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return _PRESENCE_COLORS[h % _PRESENCE_COLORS.length];
+  }
+  // Friendly current-page name for the hover tooltip ("Ana · GPS Analysis").
+  function _prettyPage() {
+    const t = (document.title || '').split(/[—|·]/)[0].trim();
+    if (t && !/^clavametrics$/i.test(t)) return t;
+    return decodeURIComponent((location.pathname.split('/').pop() || '').replace(/\.html$/i, '')) || 'App';
+  }
+  function _renderPresence(box, states, selfId) {
+    const byUser = new Map();
+    Object.values(states || {}).forEach(arr => (arr || []).forEach(m => {
+      if (!m || !m.userId || m.userId === selfId) return;   // others only
+      if (!byUser.has(m.userId)) byUser.set(m.userId, m);    // one bubble per person (any tab)
+    }));
+    const people = [...byUser.values()];
+    if (!people.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'inline-flex';
+    const MAX = 5;
+    const shown = people.slice(0, MAX);
+    const extra = people.length - shown.length;
+    const bubble = m => {
+      const col = m.color || _presenceColor(m.userId);
+      const title = `${m.name || '—'}${m.page ? ' · ' + m.page : ''}`;
+      const inner = m.avatar
+        ? `<img src="${_escHtml(m.avatar)}" alt="" onerror="this.remove()">`
+        : _escHtml((m.name || '?').trim().slice(0, 1).toUpperCase() || '?');
+      return `<span class="cm-pb" style="border-color:${col};background:${col}" title="${_escHtml(title)}">${inner}</span>`;
+    };
+    const more = extra > 0
+      ? `<span class="cm-pb more" title="${extra} ${_escHtml(_ttx('shell.presence_more', 'more online'))}">+${extra}</span>`
+      : '';
+    box.innerHTML = `<span class="cm-presence-stack">${shown.map(bubble).join('')}${more}</span>`;
+  }
+  async function _initPresence() {
+    let attempts = 0;
+    while (!window.sb && attempts < 20) { await new Promise(r => setTimeout(r, 200)); attempts++; }
+    if (!window.sb) return;
+    const { data: { user } } = await window.sb.auth.getUser();
+    if (!user) return;
+    let profile = null;
+    try { profile = (typeof window.getProfile === 'function') ? await window.getProfile() : null; } catch (_) {}
+    let clubId = profile?.club_id;
+    if (!clubId && window.getClubId) { try { clubId = await window.getClubId(); } catch (_) {} }
+    if (!clubId) return;
+
+    // Anchor into the topbar actions cluster (present on every shell page).
+    const bell = [...document.querySelectorAll('.cm-icon-btn')].find(b => b.querySelector('.ti-bell'));
+    const actions = document.querySelector('.cm-topbar-actions')
+      || (bell && bell.closest('.cm-topbar-actions')) || (bell && bell.parentNode);
+    if (!actions || document.getElementById('cm-presence')) return;
+    const box = document.createElement('div');
+    box.id = 'cm-presence'; box.className = 'cm-presence'; box.style.display = 'none';
+    actions.insertBefore(box, actions.firstChild);
+
+    const name = (window.cmDisplayName ? window.cmDisplayName(profile) : (profile?.full_name || '')) || 'Someone';
+    const avatar = (window.cmAvatarUrl ? window.cmAvatarUrl(profile) : null) || null;
+    const meta = { userId: user.id, name, avatar, color: _presenceColor(user.id), page: _prettyPage() };
+
+    // Drop any stale presence channel from a prior mount (re-entrancy safe).
+    try { window.sb.getChannels().filter(c => c.topic.includes('cm-presence')).forEach(c => window.sb.removeChannel(c)); } catch (_) {}
+    const chan = window.sb.channel(`cm-presence-${clubId}`, { config: { presence: { key: user.id } } });
+    chan.on('presence', { event: 'sync' }, () => _renderPresence(box, chan.presenceState(), user.id));
+    chan.subscribe(async status => { if (status === 'SUBSCRIBED') { try { await chan.track(meta); } catch (_) {} } });
+    // Leave cleanly when the tab goes away (Supabase also auto-reaps on disconnect).
+    window.addEventListener('pagehide', () => { try { chan.untrack(); window.sb.removeChannel(chan); } catch (_) {} });
+  }
+
   // ── BOOT ─────────────────────────────────────────────────────
   // Re-translate the whole shell whenever the i18n runtime boots or the user
   // switches language (covers the sidebar + the dynamically-built chrome panels).
   document.addEventListener('cm:langchanged', () => _applyI18n(document));
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); _initChatNotif(); });
+    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); _initChatNotif(); _initPresence(); });
   } else {
     inject();
     loadData();
     _initNotifications();
     _initChatNotif();
+    _initPresence();
   }
 })();
