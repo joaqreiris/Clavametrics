@@ -544,8 +544,13 @@
 
   async function loadPlayers(){
     try {
+      // Solo jugadores cuyo equipo PRIMARIO es el activo. Los invitados (miembros de este
+      // equipo pero con primario en otro / segundo equipo) NO deben aparecer acá: su carga se
+      // ve en su club/categoría primaria. is_primary lo garantiza el alta/asignación en Squad.
       const q = window.cmTeamPlayers
-        ? window.cmTeamPlayers(state.teamId, 'id,first_name,last_name,number,position,status').in('status',['available','injured','modified','unavailable','sick','away'])
+        ? window.cmTeamPlayers(state.teamId, 'id,first_name,last_name,number,position,status')
+            .eq('player_teams.is_primary', true)
+            .in('status',['available','injured','modified','unavailable','sick','away'])
         : sb().from('players').select('id,first_name,last_name,number,position,status').eq('club_id',state.clubId);
       const { data } = await q.order('number');
       state.players = data || [];
