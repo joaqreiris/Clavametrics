@@ -925,12 +925,11 @@ document.getElementById('phPlayerSelect').addEventListener('change', async funct
   }
 
   injSel.innerHTML = `<option value="">${tt('common.loading','Loading…')}</option>`;
-  const today = cmToday();
   const { data: injuries } = await window.sb
     .from('injuries')
     .select('id,injury_type,body_area,start_date')
     .eq('player_id', pid)
-    .or(`actual_return.is.null,actual_return.gte.${today}`)
+    .in('status', ['active', 'returning'])
     .order('start_date', { ascending: false });
 
   if (!injuries?.length) {
