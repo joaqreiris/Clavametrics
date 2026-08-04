@@ -100,6 +100,7 @@
   .ad-table tbody tr:hover td { background:var(--cm-bg-soft); cursor:pointer; }
   .ad-table .col-cb { width:32px; }
   .ad-table .col-role { width:160px; }
+  .ad-table .col-teams { width:220px; }
   .ad-table .col-sections { width:200px; }
   .ad-table .col-last { width:140px; }
   .ad-table .col-status { width:120px; }
@@ -111,6 +112,17 @@
   .ad-av.online::after { content:""; position:absolute; bottom:-1px; right:-1px; width:8px; height:8px; border-radius:50%; background:var(--cm-success); border:2px solid var(--cm-surface); }
   .ad-pl .name { font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .ad-pl .email { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+
+  /* Team membership chips */
+  .ad-teams-cell { display:flex; align-items:center; gap:4px; flex-wrap:wrap; max-width:214px; }
+  .ad-team-chip { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg); font:600 11px/1 var(--cm-font-sans); white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; }
+  .ad-team-chip .tdot { width:7px; height:7px; border-radius:50%; background:var(--tc,#2563EB); flex-shrink:0; }
+  .ad-team-chip.all { color:var(--cm-fg-muted); gap:4px; }
+  .ad-team-chip.all .ti { font-size:12px; }
+  .ad-team-chip.none { color:var(--cm-fg-faint); border-style:dashed; }
+  .ad-team-chip.more { color:var(--cm-fg-muted); font-weight:700; }
+  .ad-teamsel { height:30px; padding:0 8px; background:var(--cm-surface); color:var(--cm-fg); border:1px solid var(--cm-border); border-radius:8px; font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .ad-teamsel:hover { border-color:var(--cm-border-strong); }
 
   .ad-role { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:5px; font:600 11px/1 var(--cm-font-mono); letter-spacing:0.04em; }
   .ad-role .dot { width:6px; height:6px; border-radius:50%; }
@@ -450,6 +462,7 @@
         <button class="ad-pill" data-bucket="medical"><span class="dot" style="background:#7C3AED"></span><span data-i18n="admin.bucket_medical">Medical</span><span class="ct">3</span></button>
         <button class="ad-pill" data-bucket="player"><span class="dot" style="background:#60A5FA"></span><span data-i18n="common.player">Player</span><span class="ct">3</span></button>
         <div class="grow"></div>
+        <select id="adTeamFilter" class="ad-teamsel"><option value="all" data-i18n="admin.filter_all_teams">All teams</option></select>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i><span data-i18n="admin.filter">Filter</span></button>
         <button id="adSortBtn" class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span data-i18n="admin.sort">Sort</span></button>
       </div>
@@ -470,6 +483,7 @@
               <th class="col-cb"><span class="ad-cb"></span></th>
               <th data-i18n="admin.th_member">Member</th>
               <th class="col-role" data-i18n="admin.th_role">Role</th>
+              <th class="col-teams" data-i18n="admin.col_teams">Teams</th>
               <th class="col-sections" data-i18n="admin.th_sections">Sections</th>
               <th class="col-last" data-i18n="admin.th_last_active">Last active</th>
               <th class="col-status" data-i18n="admin.th_status">Status</th>
@@ -813,7 +827,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     });
   })();
 
-  const [membersRes, auditRes, playersRes, memberModsRes, invitesRes] = await Promise.all([
+  const [membersRes, auditRes, playersRes, memberModsRes, invitesRes, teamsRes, memberTeamsRes] = await Promise.all([
     window.sb.from('profiles')
       .select('id,full_name,email,role,club_role,created_at,last_seen_at,updated_at')
       .eq('club_id', clubId)
@@ -834,6 +848,14 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       .eq('club_id', clubId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false }),
+    window.sb.from('teams')
+      .select('id, name')
+      .eq('club_id', clubId)
+      .is('archived_at', null)
+      .order('name'),
+    window.sb.from('member_teams')
+      .select('profile_id, team_id')
+      .eq('club_id', clubId),
   ]);
 
   const members     = membersRes.data  || [];
@@ -848,6 +870,20 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (r.module_key !== '__managed__') (sectionMap[r.profile_id] ||= []).push(r.module_key);
   });
   let invites = invitesRes.data || [];
+
+  // ── Team membership (member_teams junction) ──────────────────────
+  const clubTeams  = teamsRes.data || [];                 // [{id,name}] active teams of the club
+  const teamName   = {}; clubTeams.forEach(t => { teamName[t.id] = t.name; });
+  const memberTeams = {};                                 // profile_id -> [team_id]
+  (memberTeamsRes.data || []).forEach(r => { (memberTeams[r.profile_id] ||= []).push(r.team_id); });
+  // Deterministic colour per team id, so each team keeps the same chip colour everywhere.
+  const _TEAM_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2','#DB2777','#65A30D','#EA580C','#4F46E5','#0D9488','#9333EA'];
+  function teamColor(id) {
+    let h = 0; const s = String(id || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return _TEAM_COLORS[h % _TEAM_COLORS.length];
+  }
+  const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
   // ── Org / workspace bar ──────────────────────────────────────────
   const clubName  = club?.name || '—';
@@ -915,6 +951,26 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     return parts.length ? parts.map(prettyRole).join(' · ') : tt('admin.member_default','Member');
   }
 
+  // Team chips for a member: one coloured chip per team (shows one vs several at a
+  // glance). Owners/admins have full access by role → "All teams"; unassigned staff → dashed.
+  function teamsCell(m) {
+    const bucket = (m.role || m.club_role || '').toLowerCase();
+    const ids = memberTeams[m.id] || [];
+    if (!ids.length) {
+      if (bucket === 'owner' || bucket === 'admin')
+        return `<div class="ad-teams-cell"><span class="ad-team-chip all"><i class="ti ti-asterisk"></i>${tt('admin.team_all_club','All teams')}</span></div>`;
+      return `<div class="ad-teams-cell"><span class="ad-team-chip none">${tt('admin.team_unassigned','Unassigned')}</span></div>`;
+    }
+    const named = ids.map(id => ({ id, name: teamName[id] || '—' })).sort((a, b) => a.name.localeCompare(b.name));
+    const MAX = 3;
+    const shown = named.slice(0, MAX);
+    const extra = named.length - shown.length;
+    const chips = shown.map(t =>
+      `<span class="ad-team-chip" style="--tc:${teamColor(t.id)}" title="${_esc(t.name)}"><span class="tdot"></span>${_esc(t.name)}</span>`).join('');
+    const more = extra > 0 ? `<span class="ad-team-chip more" title="${named.slice(MAX).map(t => _esc(t.name)).join(', ')}">+${extra}</span>` : '';
+    return `<div class="ad-teams-cell">${chips}${more}</div>`;
+  }
+
   function relTime(iso) {
     if (!iso) return '—';
     const diff = Date.now() - new Date(iso);
@@ -930,6 +986,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 
   // ── Members table: render + filtros (search / pills / sort) ──
   let _roleFilter = 'all';
+  let _teamFilter = 'all';   // 'all' | team_id | '__none__' (unassigned staff)
   let _search     = '';
   let _sortKey    = null; // null = orden DB | 'name' | 'recent'
 
@@ -955,6 +1012,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
           </div>
         </div></td>
         <td><span class="ad-role ${rc}"${isMe ? '' : ` data-role-edit="${m.id}" style="cursor:pointer" title="${tt('admin.change_role','Change role')}"`}><span class="dot"></span>${rl}</span></td>
+        <td>${teamsCell(m)}</td>
         <td>${sectionsCell(m)}</td>
         <td><span class="ad-last">${last}</span></td>
         <td><span class="ad-status ok"><span class="d"></span>${tt('admin.status_active','Active')}</span></td>
@@ -975,12 +1033,20 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   function applyFilters() {
     let list = members.slice();
     if (_roleFilter !== 'all') list = list.filter(m => memberBucket(m) === _roleFilter);
+    if (_teamFilter !== 'all') {
+      if (_teamFilter === '__none__') {
+        list = list.filter(m => !(memberTeams[m.id] || []).length && !['owner','admin'].includes((m.role || m.club_role || '').toLowerCase()));
+      } else {
+        list = list.filter(m => (memberTeams[m.id] || []).includes(_teamFilter));
+      }
+    }
     if (_search) {
       const q = _search.toLowerCase();
       list = list.filter(m =>
         (m.full_name || '').toLowerCase().includes(q) ||
         (m.email || '').toLowerCase().includes(q) ||
-        roleLabel(m).toLowerCase().includes(q));
+        roleLabel(m).toLowerCase().includes(q) ||
+        (memberTeams[m.id] || []).some(id => (teamName[id] || '').toLowerCase().includes(q)));
     }
     if (_sortKey === 'recent')    list.sort((a, b) => memberTs(b) - memberTs(a));
     else if (_sortKey === 'name') list.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
@@ -1009,6 +1075,14 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   // Búsqueda
   const _searchEl = document.getElementById('adMemberSearch');
   if (_searchEl) _searchEl.addEventListener('input', () => { _search = _searchEl.value.trim(); applyFilters(); });
+
+  // Filtro por equipo — poblar el select con los equipos del club (+ "Sin asignar")
+  const _teamSel = document.getElementById('adTeamFilter');
+  if (_teamSel) {
+    const opts = clubTeams.map(t => `<option value="${_esc(t.id)}">${_esc(t.name)}</option>`).join('');
+    _teamSel.insertAdjacentHTML('beforeend', opts + `<option value="__none__">${tt('admin.team_unassigned','Unassigned')}</option>`);
+    _teamSel.addEventListener('change', () => { _teamFilter = _teamSel.value; applyFilters(); });
+  }
 
   // Sort (cicla name ↔ recent)
   const _sortBtn = document.getElementById('adSortBtn');
