@@ -1395,7 +1395,7 @@ document.getElementById('actFilterChips')?.addEventListener('click', (e) => {
 hubSyncActChips();
 document.addEventListener('cm:langchanged', hubSyncActChips);
 
-function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount, squadCount, wellnessCount, todaySession }) {
+function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount, squadCount, wellnessCount, wellnessTotal, todaySession }) {
   const navInj   = document.getElementById('navInjuriesCount');
   const navLoad  = document.getElementById('navLoadCount');
   const navAvail = document.getElementById('navAvailCount');
@@ -1413,10 +1413,14 @@ function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount
     modSquad.innerHTML = squadCount !== null
       ? `<i class="ti ti-users"></i> ${tt('hub.n_players','{n} players',{n:squadCount})}`
       : `<i class="ti ti-users"></i> —`;
-  if (modWell)
-    modWell.innerHTML = (wellnessCount !== null && squadCount !== null)
-      ? `<i class="ti ti-circle-check"></i> ${tt('hub.n_of_m_today','{n} / {m} today',{n:wellnessCount,m:squadCount})}`
+  if (modWell) {
+    // Denominator = players expected to check in today (excludes sick/unavailable/away),
+    // matching the Wellness board — not the full squad count.
+    const wellDen = (wellnessTotal != null) ? wellnessTotal : squadCount;
+    modWell.innerHTML = (wellnessCount !== null && wellDen !== null)
+      ? `<i class="ti ti-circle-check"></i> ${tt('hub.n_of_m_today','{n} / {m} today',{n:wellnessCount,m:wellDen})}`
       : `<i class="ti ti-circle-check"></i> —`;
+  }
   if (modInj)
     modInj.innerHTML = `<i class="ti ti-activity-heartbeat"></i> ${tt('hub.n_active','{n} active',{n:injuryCount})}`;
   if (modLoad)
@@ -1908,10 +1912,9 @@ function renderTasks(tasks, view = 'my') {
     // expected_return needed for injury_returns_week KPI; include 'recovery' (schema) + 'returning' (legacy)
     _pidFilter(window.sb.from('injuries').select('status, start_date, expected_return')
       .eq('club_id', clubId).in('status', ['active', 'returning', 'recovery'])),
-    _pidFilter(window.sb.from('wellness').select('sleep_quality, mood, fatigue, stress, soreness')
-      .eq('club_id', clubId)
-      .gte('submitted_at', today + 'T00:00:00')
-      .lte('submitted_at', today + 'T23:59:59')),
+    // Same source of truth as the Wellness board: derives "today" in the viewer's local
+    // day (p_tz_offset) and excludes players not expected to check in (sick/unavailable/away).
+    window.sb.rpc('wellness_status', { p_club_id: clubId, p_team_id: _hubTeamId || null, p_date: today, p_tz_offset: new Date().getTimezoneOffset() }),
     userId
       ? window.sb.from('tasks')
           .select('id, title, priority, status, due_date, created_by, created_by_name, assigned_to, assigned_to_name, assigned_roles, team_id')
@@ -1976,13 +1979,17 @@ function renderTasks(tasks, view = 'my') {
     document.getElementById('kpiInjuries').textContent = '—';
   }
 
-  if (!wellnessRes.error && wellnessRes.data?.length) {
-    const avg = wellnessRes.data.reduce((s, r) =>
-      s + ((r.sleep_quality || 0) + (r.mood || 0) + (r.fatigue || 0) +
-           (r.stress || 0) + (r.soreness || 0)) / 5, 0) / wellnessRes.data.length;
+  // wellnessRes now comes from the wellness_status RPC: one row per player expected today,
+  // each with `responded` + metric fields for those who submitted.
+  const _wellRows = wellnessRes.data || [];
+  const _wellDone = _wellRows.filter(r => r.responded);
+  if (!wellnessRes.error && _wellDone.length) {
+    const avg = _wellDone.reduce((s, r) =>
+      s + (((+r.sleep_quality || 0) + (+r.mood || 0) + (+r.fatigue || 0) +
+           (+r.stress || 0) + (+r.soreness || 0)) / 5), 0) / _wellDone.length;
     document.getElementById('kpiWellness').innerHTML = `${avg.toFixed(1)}<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent =
-      tt('hub.n_of_m_submitted','{n} of {m} submitted',{n:wellnessRes.data.length,m:squadRes.count ?? '?'});
+      tt('hub.n_of_m_submitted','{n} of {m} submitted',{n:_wellDone.length,m:_wellRows.length});
   } else if (wellnessRes.error) {
     document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent = tt('hub.could_not_load','Could not load');
@@ -2080,7 +2087,8 @@ function renderTasks(tasks, view = 'my') {
     acwrWarningCount,
     notAvailableCount,
     squadCount:        squadRes.count ?? null,
-    wellnessCount:     wellnessRes.data?.length ?? 0,
+    wellnessCount:     _wellDone.length,
+    wellnessTotal:     _wellRows.length,
     todaySession:      todaySessionRes.data
   });
 
@@ -2549,8 +2557,8 @@ function renderTasks(tasks, view = 'my') {
       document.getElementById('kpiLoadWeekSub').textContent = tt('hub.past_7_days','past 7 days');
     }
     if (_kpiSel.includes('wellness_submissions')) {
-      document.getElementById('kpiWellnessSub').innerHTML = `${wellnessRes.data?.length??0}<sub>${tt('hub.submitted','submitted')}</sub>`;
-      document.getElementById('kpiWellnessSubSub').textContent = tt('hub.of_m_today','of {m} today',{m:squadRes.count??'?'});
+      document.getElementById('kpiWellnessSub').innerHTML = `${_wellDone.length}<sub>${tt('hub.submitted','submitted')}</sub>`;
+      document.getElementById('kpiWellnessSubSub').textContent = tt('hub.of_m_today','of {m} today',{m:_wellRows.length});
     }
     if (_kpiSel.includes('available_today')) {
       const _av = pillSource.filter(({ status='' }) => { const s=status.toLowerCase(); return s==='available'||s==='fit'; }).length;
@@ -2599,7 +2607,8 @@ function renderTasks(tasks, view = 'my') {
         acwrWarningCount,
         notAvailableCount,
         squadCount:    squadRes.count ?? null,
-        wellnessCount: wellnessRes.data?.length ?? 0,
+        wellnessCount: _wellDone.length,
+        wellnessTotal: _wellRows.length,
         todaySession:  todaySessionRes.data
       });
     } catch (e) {}
