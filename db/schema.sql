@@ -3495,6 +3495,40 @@ AS $function$
 $function$
 ;
 
+-- Does this session have a GPS report for one of MY players? SECURITY DEFINER so it reads
+-- gps_reports WITHOUT re-triggering RLS — avoids mutual recursion with the training_sessions /
+-- gps_reports policies. Used to let staff see the session rows behind GPS data they can already
+-- read (e.g. Catapult imports whose team_id is NULL).
+CREATE OR REPLACE FUNCTION public.session_has_my_gps(p_session uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.gps_reports r
+    where r.session_id = p_session
+      and r.player_id in (select public.my_player_ids())
+  );
+$function$
+;
+
+-- Same idea for a microcycle: visible if any of its sessions carries GPS for one of my players.
+CREATE OR REPLACE FUNCTION public.microcycle_has_my_gps(p_mc uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.training_sessions ts
+    join public.gps_reports r on r.session_id = ts.id
+    where ts.microcycle_id = p_mc
+      and r.player_id in (select public.my_player_ids())
+  );
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.primary_team_id()
  RETURNS uuid
  LANGUAGE sql
@@ -5527,7 +5561,7 @@ create policy "mc_scoped_cud" on public.microcycles as permissive for all to pub
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "mc_scoped_select" on public.microcycles as permissive for select to public
-  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR microcycle_has_my_gps(id))));
 create policy "microcycles_super_all" on public.microcycles as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
@@ -5958,8 +5992,11 @@ create policy "training_sessions_super_all" on public.training_sessions as permi
 create policy "ts_scoped_cud" on public.training_sessions as permissive for all to public
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+-- SELECT also allows a session behind GPS data the caller can already read (session_has_my_gps),
+-- so team staff see Catapult-imported sessions whose team_id is NULL. Editing (ts_scoped_cud)
+-- stays team/admin-scoped — this only widens VISIBILITY.
 create policy "ts_scoped_select" on public.training_sessions as permissive for select to public
-  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR session_has_my_gps(id))));
 
 alter table public.treatment_templates enable row level security;
 create policy "treatment_templates_club_delete" on public.treatment_templates as permissive for delete to public
