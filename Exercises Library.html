@@ -71,6 +71,48 @@
   }
   .sl-card:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
   .sl-card.is-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .sl-card.is-checked { border-color:var(--cm-accent); box-shadow:0 0 0 2px var(--cm-focus-ring); }
+
+  /* Multi-select: per-card checkbox (bottom-right of thumb, collision-free) */
+  .sl-check {
+    position:absolute; bottom:8px; right:8px; z-index:3;
+    width:24px; height:24px; border-radius:999px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.5); border:1.5px solid rgba(255,255,255,0.85);
+    color:transparent; cursor:pointer; opacity:0; transform:scale(.85);
+    transition:opacity 120ms, transform 120ms, background 120ms, border-color 120ms;
+    backdrop-filter:blur(6px);
+  }
+  .sl-check .ti { font-size:15px; }
+  .sl-card:hover .sl-check { opacity:1; transform:scale(1); }
+  .sl-card.is-checked .sl-check { opacity:1; transform:scale(1); background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
+
+  /* Floating bulk-action bar + folder menu */
+  .sl-selbar {
+    position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(8px);
+    z-index:1200; display:none; align-items:center; gap:10px;
+    padding:8px 10px 8px 16px; border-radius:14px;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    box-shadow:var(--cm-shadow-3, 0 12px 32px rgba(0,0,0,.22));
+    opacity:0; transition:opacity 140ms, transform 140ms;
+  }
+  .sl-selbar.is-visible { display:flex; opacity:1; transform:translateX(-50%) translateY(0); }
+  .sl-selbar .cnt { font:700 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; }
+  .sl-selbar .sep { width:1px; height:22px; background:var(--cm-border); }
+  .sl-selmenu {
+    position:fixed; z-index:1300; min-width:220px; max-height:320px; overflow:auto;
+    padding:6px; border-radius:12px; background:var(--cm-surface);
+    border:1px solid var(--cm-border); box-shadow:var(--cm-shadow-3, 0 12px 32px rgba(0,0,0,.22));
+    display:none;
+  }
+  .sl-selmenu.is-open { display:block; }
+  .sl-selmenu button {
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    padding:8px 10px; border:0; background:transparent; border-radius:8px;
+    font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer;
+  }
+  .sl-selmenu button:hover { background:var(--cm-bg-soft); }
+  .sl-selmenu .div { height:1px; background:var(--cm-border-soft); margin:5px 4px; }
 
   /* Pitch thumbnail */
   .sl-thumb {
@@ -513,6 +555,7 @@
   let searchText  = '';
   let sortMode    = 'recent';
   let selectedId  = null;
+  const selected  = new Set();   // multi-select: exercise ids checked for bulk actions
   // Collapsed folder ids (persisted). '' = the "No folder" group.
   const _slCollapsed = new Set(JSON.parse(localStorage.getItem('cm_sl_collapsed') || '[]'));
   const _slSaveCollapsed = () => { try { localStorage.setItem('cm_sl_collapsed', JSON.stringify([..._slCollapsed])); } catch (_) {} };
@@ -679,8 +722,9 @@
       if (m2) metaParts.push(`<span class="it"><i class="ti ti-ruler-measure"></i>${m2} m²/p</span>`);
       if (ex.series) metaParts.push(`<span class="it"><i class="ti ti-repeat"></i>${ex.series}×</span>`);
 
-      return `<div class="sl-card${selectedId === ex.id ? ' is-active' : ''}" data-id="${ex.id}">
+      return `<div class="sl-card${selectedId === ex.id ? ' is-active' : ''}${selected.has(ex.id) ? ' is-checked' : ''}" data-id="${ex.id}">
         <div class="sl-thumb${ex._previewImg ? ' has-img' : ''}">
+          <button class="sl-check" data-check="${ex.id}" title="${tt('exlib.select','Select')}" aria-label="${tt('exlib.select','Select')}"><i class="ti ti-check"></i></button>
           ${focusBadge}${durBadge}${mdBadgeThumb}
           ${ex.source_type === 'image' ? `<span class="sl-import-badge"><i class="ti ti-photo"></i>${tt('exlib.imported','Imported')}</span>` : ''}
           ${ex._previewImg ? `<img class="sl-thumb-img" src="${ex._previewImg}" alt="">` : ''}
@@ -745,6 +789,17 @@
         }
         grid.querySelectorAll('.sl-card').forEach(c =>
           c.classList.toggle('is-active', c.dataset.id === selectedId));
+      });
+    });
+
+    // Per-card checkbox → toggle multi-selection without opening the preview.
+    grid.querySelectorAll('.sl-check').forEach(cb => {
+      cb.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = cb.dataset.check;
+        if (selected.has(id)) selected.delete(id); else selected.add(id);
+        cb.closest('.sl-card')?.classList.toggle('is-checked', selected.has(id));
+        updateSelBar();
       });
     });
   }
@@ -882,6 +937,103 @@
   }
 
   document.getElementById('prevClose')?.addEventListener('click', hidePreview);
+
+  // ── Multi-select bulk actions (add to folder / delete) ───────────
+  function updateSelBar() {
+    const bar = document.getElementById('slSelBar'); if (!bar) return;
+    const n = selected.size;
+    bar.classList.toggle('is-visible', n > 0);
+    const cnt = document.getElementById('slSelCount');
+    if (cnt) cnt.textContent = tt('exlib.n_selected', '{count} selected|{count} selected', { count: n });
+    if (n === 0) closeSelMenu();
+  }
+  function clearSelection() {
+    selected.clear();
+    document.querySelectorAll('.sl-card.is-checked').forEach(c => c.classList.remove('is-checked'));
+    updateSelBar();
+  }
+  function closeSelMenu() { document.getElementById('slSelMenu')?.classList.remove('is-open'); }
+
+  async function bulkMove(folderId) {
+    const ids = [...selected]; if (!ids.length) return;
+    const { error } = await window.sb.from('exercises').update({ folder_id: folderId }).in('id', ids);
+    if (error) { alert(error.message); return; }
+    allExercises.forEach(e => { if (selected.has(e.id)) e.folder_id = folderId; });
+    closeSelMenu();
+    clearSelection();
+    renderCards();
+  }
+
+  async function bulkDelete() {
+    const ids = [...selected]; if (!ids.length) return;
+    const msg = tt('exlib.bulk_delete_confirm',
+      "Delete {count} exercise? This can't be undone.|Delete {count} exercises? This can't be undone.",
+      { count: ids.length });
+    if (!confirm(msg)) return;
+    const { error } = await window.sb.from('exercises').delete().in('id', ids);
+    if (error) { alert(error.message); return; }
+    const del = new Set(ids);
+    allExercises = allExercises.filter(e => !del.has(e.id));
+    if (del.has(selectedId)) hidePreview();
+    clearSelection();
+    updateCounts();
+    renderCards();
+  }
+
+  function openSelMenu(anchorBtn) {
+    const menu = document.getElementById('slSelMenu'); if (!menu) return;
+    const flat = (window.CMFolders && window._slFolders) ? window.CMFolders.flatten(window._slFolders) : [];
+    const noneLbl = window.CMFolders ? window.CMFolders.noneLabel() : tt('folders.none', 'No folder');
+    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let html = `<button data-fid="__none__"><i class="ti ti-folder-off" style="font-size:15px;color:var(--cm-fg-muted)"></i>${esc(noneLbl)}</button>`;
+    if (flat.length) html += `<div class="div"></div>`;
+    flat.forEach(f => { html += `<button data-fid="${esc(f.id)}" style="padding-left:${10 + (f.depth || 0) * 14}px"><i class="ti ti-folder" style="font-size:15px;color:var(--cm-fg-muted)"></i>${esc(f.name)}</button>`; });
+    html += `<div class="div"></div><button data-fid="__new__"><i class="ti ti-folder-plus" style="font-size:15px;color:var(--cm-accent)"></i>${esc(tt('folders.new', 'New folder'))}</button>`;
+    menu.innerHTML = html;
+    menu.classList.add('is-open');
+    const r = anchorBtn.getBoundingClientRect();
+    menu.style.left = Math.max(8, r.left) + 'px';
+    menu.style.top = Math.max(8, r.top - menu.offsetHeight - 8) + 'px';
+    menu.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', async () => {
+        const fid = b.dataset.fid;
+        if (fid === '__new__') {
+          const row = await window.CMFolders.promptCreate({ kind: 'field', parentId: null, teamId: null });
+          if (!row) return;
+          window._slFolders = await window.CMFolders.load('field');
+          await bulkMove(row.id);
+        } else {
+          await bulkMove(fid === '__none__' ? null : fid);
+        }
+      });
+    });
+  }
+
+  (function ensureSelBar() {
+    if (document.getElementById('slSelBar')) return;
+    const bar = document.createElement('div');
+    bar.className = 'sl-selbar'; bar.id = 'slSelBar';
+    bar.innerHTML =
+      `<span class="cnt" id="slSelCount"></span>` +
+      `<span class="sep"></span>` +
+      `<button class="cm-btn is-outline is-sm" id="slSelFolder"><i class="ti ti-folder-plus" style="font-size:14px"></i><span>${tt('exlib.add_to_folder', 'Add to folder')}</span></button>` +
+      `<button class="cm-btn is-outline is-sm" id="slSelDelete" style="color:var(--cm-danger,#dc2626)"><i class="ti ti-trash" style="font-size:14px"></i><span>${tt('common.delete', 'Delete')}</span></button>` +
+      `<button class="cm-btn is-ghost is-sm" id="slSelCancel" title="${tt('common.cancel', 'Cancel')}"><i class="ti ti-x" style="font-size:16px"></i></button>`;
+    document.body.appendChild(bar);
+    const menu = document.createElement('div');
+    menu.className = 'sl-selmenu'; menu.id = 'slSelMenu';
+    document.body.appendChild(menu);
+    document.getElementById('slSelFolder').addEventListener('click', e => {
+      e.stopPropagation();
+      const m = document.getElementById('slSelMenu');
+      if (m.classList.contains('is-open')) closeSelMenu(); else openSelMenu(e.currentTarget);
+    });
+    document.getElementById('slSelDelete').addEventListener('click', bulkDelete);
+    document.getElementById('slSelCancel').addEventListener('click', clearSelection);
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#slSelMenu') && !e.target.closest('#slSelFolder')) closeSelMenu();
+    });
+  })();
 
   // ── Filter interactions ──────────────────────────────────────────
   document.querySelectorAll('.sl-opt[data-group]').forEach(opt => {
