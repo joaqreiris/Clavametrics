@@ -5151,18 +5151,26 @@ create policy "gps_report_metrics_del" on public.gps_report_metrics as permissiv
   using (((club_id = get_user_club_id()) OR is_super_admin()));
 create policy "gps_report_metrics_ins" on public.gps_report_metrics as permissive for insert to authenticated
   with check (((club_id = get_user_club_id()) OR is_super_admin()));
+-- Inherit visibility from gps_reports (the subquery is filtered by gps_reports' own RLS),
+-- so any broadening there (e.g. session-team access) applies to the metrics too.
 create policy "gps_report_metrics_scoped_select" on public.gps_report_metrics as permissive for select to public
-  using ((is_super_admin() OR (report_id IN ( SELECT gps_reports.id
-   FROM gps_reports
-  WHERE (gps_reports.player_id IN ( SELECT my_player_ids() AS my_player_ids))))));
+  using ((is_super_admin() OR (report_id IN ( SELECT gps_reports.id FROM gps_reports))));
 create policy "gps_report_metrics_upd" on public.gps_report_metrics as permissive for update to authenticated
   using (((club_id = get_user_club_id()) OR is_super_admin()));
 
 alter table public.gps_reports enable row level security;
 create policy "gps_reports_scoped_insert" on public.gps_reports as permissive for insert to authenticated
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+-- Visible if: super admin · the player is on one of my teams (player_teams) · OR the report's
+-- SESSION belongs to one of my teams (training_sessions.team_id — set by the Catapult sync).
+-- The session branch covers athletes synced from Catapult that were never assigned to a team
+-- in player_teams, so a team's staff still see that team's session data.
 create policy "gps_reports_scoped_select" on public.gps_reports as permissive for select to public
-  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+  using ((is_super_admin()
+    OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))
+    OR (EXISTS ( SELECT 1 FROM training_sessions ts
+                 WHERE ((ts.id = gps_reports.session_id)
+                   AND (ts.team_id IN ( SELECT my_team_ids() AS my_team_ids)))))));
 create policy "gps_reports_scoped_update" on public.gps_reports as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
