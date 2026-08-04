@@ -176,11 +176,25 @@ html.cm-rail .hub-nav-grip{display:none}
 /* Live presence — who's online in this club right now */
 .cm-presence{align-items:center;margin-right:2px}
 .cm-presence-stack{display:inline-flex;align-items:center}
-.cm-pb{width:30px;height:30px;border-radius:50%;margin-left:-8px;border:2px solid;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans,sans-serif);color:#fff;overflow:hidden;position:relative;cursor:default;box-shadow:0 0 0 1px var(--cm-surface,#fff);transition:transform .12s ease}
+.cm-pb{width:30px;height:30px;border-radius:50%;margin-left:-8px;border:2px solid;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans,sans-serif);color:#fff;overflow:hidden;position:relative;cursor:default;box-shadow:0 0 0 1px var(--cm-surface,#fff);transition:transform .12s ease,box-shadow .16s ease}
 .cm-pb:first-child{margin-left:0}
-.cm-pb:hover{transform:translateY(-1px);z-index:2}
+.cm-pb:hover{transform:translateY(-2px);z-index:3}
 .cm-pb img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .cm-pb.more{background:var(--cm-bg-soft,#f4f4f5);border-color:var(--cm-surface,#fff);color:var(--cm-fg-muted,#6b7280);font-size:10px}
+/* (A) join/leave animation */
+@keyframes cmPbIn{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.cm-pb.entering{animation:cmPbIn .18s cubic-bezier(.2,.8,.2,1)}
+.cm-pb.leaving{animation:cmPbIn .16s ease reverse forwards;pointer-events:none;z-index:0}
+/* (B) same-page emphasis: a bolder ring in the person's colour */
+.cm-pb.is-here{box-shadow:0 0 0 2px var(--cm-surface,#fff),0 0 0 4px var(--pb,#2563EB)}
+/* (E) custom tooltip */
+.cm-pt{position:fixed;z-index:700;pointer-events:none;display:none;align-items:center;gap:8px;max-width:240px;padding:7px 10px;background:var(--cm-surface,#fff);color:var(--cm-fg-strong,#111);border:1px solid var(--cm-border,#e5e7eb);border-radius:9px;box-shadow:0 6px 24px rgba(0,0,0,.2);opacity:0;transform:translateY(-3px);transition:opacity .12s ease,transform .12s ease}
+.cm-pt.on{display:flex;opacity:1;transform:translateY(0)}
+.cm-pt-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cm-pt-txt{min-width:0}
+.cm-pt-name{font:600 12.5px/1.2 var(--cm-font-sans,sans-serif);display:block}
+.cm-pt-meta{font:500 11px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);display:block;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+@media(prefers-reduced-motion:reduce){.cm-pb,.cm-pb.entering,.cm-pb.leaving{animation:none;transition:none}.cm-pt{transition:none}}
     `;
     document.head.appendChild(s);
   }
@@ -1068,36 +1082,121 @@ html.cm-rail .hub-nav-grip{display:none}
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     return _PRESENCE_COLORS[h % _PRESENCE_COLORS.length];
   }
-  // Friendly current-page name for the hover tooltip ("Ana · GPS Analysis").
+  // Friendly current-page name for the tooltip ("Ana · GPS Analysis").
   function _prettyPage() {
     const t = (document.title || '').split(/[—|·]/)[0].trim();
     if (t && !/^clavametrics$/i.test(t)) return t;
     return decodeURIComponent((location.pathname.split('/').pop() || '').replace(/\.html$/i, '')) || 'App';
   }
-  function _renderPresence(box, states, selfId) {
+  // Translated role label, reusing the admin.role_* keys; humanized fallback.
+  function _prettyRole(r) {
+    if (!r) return '';
+    const k = String(r).toLowerCase();
+    const fb = k.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return _ttx('admin.role_' + k, fb);
+  }
+  const _reduceMotion = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; } };
+
+  // Custom tooltip (one reused node) — replaces the plain browser title.
+  let _ptEl = null;
+  function _presenceTip() {
+    if (_ptEl) return _ptEl;
+    _ptEl = document.createElement('div');
+    _ptEl.className = 'cm-pt';
+    _ptEl.innerHTML = `<span class="cm-pt-dot"></span><span class="cm-pt-txt"><span class="cm-pt-name"></span><span class="cm-pt-meta"></span></span>`;
+    document.body.appendChild(_ptEl);
+    return _ptEl;
+  }
+  function _showTip(el) {
+    const tip = _presenceTip();
+    const isMore = el.classList.contains('more');
+    const dot = tip.querySelector('.cm-pt-dot');
+    dot.style.display = isMore ? 'none' : 'block';
+    dot.style.background = el.style.getPropertyValue('--pb') || 'var(--cm-fg-muted)';
+    tip.querySelector('.cm-pt-name').textContent = el.dataset.name || '—';
+    const meta = [el.dataset.role, el.dataset.page].filter(Boolean).join(' · ');
+    const metaEl = tip.querySelector('.cm-pt-meta');
+    metaEl.textContent = meta; metaEl.style.display = meta ? 'block' : 'none';
+    tip.classList.add('on');
+    const r = el.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+    tip.style.left = left + 'px';
+    tip.style.top = (r.bottom + 8) + 'px';
+  }
+  function _hideTip() { if (_ptEl) _ptEl.classList.remove('on'); }
+
+  function _pbInner(m) {
+    return m.avatar
+      ? `<img src="${_escHtml(m.avatar)}" alt="" onerror="this.remove()">`
+      : _escHtml((m.name || '?').trim().slice(0, 1).toUpperCase() || '?');
+  }
+  // Keyed, incremental render: bubbles persist across syncs so joins animate in
+  // and leaves animate out (instead of a full innerHTML swap that pops).
+  function _renderPresence(box, states, selfId, selfPage) {
     const byUser = new Map();
     Object.values(states || {}).forEach(arr => (arr || []).forEach(m => {
       if (!m || !m.userId || m.userId === selfId) return;   // others only
       if (!byUser.has(m.userId)) byUser.set(m.userId, m);    // one bubble per person (any tab)
     }));
     const people = [...byUser.values()];
-    if (!people.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
-    box.style.display = 'inline-flex';
+    let stack = box.querySelector('.cm-presence-stack');
+    if (!stack) { stack = document.createElement('span'); stack.className = 'cm-presence-stack'; box.appendChild(stack); }
+    box.style.display = people.length ? 'inline-flex' : 'none';
+
     const MAX = 5;
     const shown = people.slice(0, MAX);
     const extra = people.length - shown.length;
-    const bubble = m => {
+    const wantIds = new Set(shown.map(m => m.userId));
+
+    // Leave animation for anyone no longer present.
+    stack.querySelectorAll('.cm-pb[data-uid]').forEach(el => {
+      if (wantIds.has(el.dataset.uid) || el.classList.contains('leaving')) return;
+      if (_reduceMotion()) { el.remove(); return; }
+      el.classList.add('leaving');
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+      setTimeout(() => { if (el.isConnected) el.remove(); }, 300);   // safety net
+    });
+
+    // Add / update visible people, preserving people-order in the DOM.
+    shown.forEach(m => {
+      let el = stack.querySelector(`.cm-pb[data-uid="${CSS.escape(m.userId)}"]:not(.leaving)`);
       const col = m.color || _presenceColor(m.userId);
-      const title = `${m.name || '—'}${m.page ? ' · ' + m.page : ''}`;
-      const inner = m.avatar
-        ? `<img src="${_escHtml(m.avatar)}" alt="" onerror="this.remove()">`
-        : _escHtml((m.name || '?').trim().slice(0, 1).toUpperCase() || '?');
-      return `<span class="cm-pb" style="border-color:${col};background:${col}" title="${_escHtml(title)}">${inner}</span>`;
-    };
-    const more = extra > 0
-      ? `<span class="cm-pb more" title="${extra} ${_escHtml(_ttx('shell.presence_more', 'more online'))}">+${extra}</span>`
-      : '';
-    box.innerHTML = `<span class="cm-presence-stack">${shown.map(bubble).join('')}${more}</span>`;
+      const here = !!(selfPage && m.page && m.page === selfPage);
+      const sig = (m.avatar || '') + '|' + (m.name || '');
+      if (!el) {
+        el = document.createElement('span');
+        el.className = 'cm-pb';
+        el.dataset.uid = m.userId;
+        el.innerHTML = _pbInner(m);
+        el.dataset.sig = sig;
+        if (!_reduceMotion()) {
+          el.classList.add('entering');
+          el.addEventListener('animationend', () => el.classList.remove('entering'), { once: true });
+        }
+      } else if (el.dataset.sig !== sig) {
+        el.innerHTML = _pbInner(m);
+        el.dataset.sig = sig;
+      }
+      el.style.setProperty('--pb', col);
+      el.style.borderColor = col;
+      el.style.background = col;
+      el.classList.toggle('is-here', here);      // (B) same-page emphasis
+      el.dataset.name = m.name || '—';
+      el.dataset.page = m.page || '';
+      el.dataset.role = _prettyRole(m.role);
+      stack.appendChild(el);                     // reorder to match people order
+    });
+
+    // "+N more" pill.
+    let moreEl = stack.querySelector('.cm-pb.more');
+    if (extra > 0) {
+      if (!moreEl) { moreEl = document.createElement('span'); moreEl.className = 'cm-pb more'; }
+      moreEl.textContent = `+${extra}`;
+      moreEl.dataset.name = `${extra} ${_ttx('shell.presence_more', 'more online')}`;
+      moreEl.dataset.role = ''; moreEl.dataset.page = '';
+      stack.appendChild(moreEl);
+    } else if (moreEl) { moreEl.remove(); }
   }
   async function _initPresence() {
     let attempts = 0;
@@ -1119,15 +1218,19 @@ html.cm-rail .hub-nav-grip{display:none}
     const box = document.createElement('div');
     box.id = 'cm-presence'; box.className = 'cm-presence'; box.style.display = 'none';
     actions.insertBefore(box, actions.firstChild);
+    // (E) custom tooltip on hover — delegated.
+    box.addEventListener('mouseover', e => { const el = e.target.closest('.cm-pb'); if (el) _showTip(el); });
+    box.addEventListener('mouseout', e => { const el = e.target.closest('.cm-pb'); if (el && !el.contains(e.relatedTarget)) _hideTip(); });
 
     const name = (window.cmDisplayName ? window.cmDisplayName(profile) : (profile?.full_name || '')) || 'Someone';
     const avatar = (window.cmAvatarUrl ? window.cmAvatarUrl(profile) : null) || null;
-    const meta = { userId: user.id, name, avatar, color: _presenceColor(user.id), page: _prettyPage() };
+    const selfPage = _prettyPage();
+    const meta = { userId: user.id, name, avatar, color: _presenceColor(user.id), page: selfPage, role: profile?.role || '' };
 
     // Drop any stale presence channel from a prior mount (re-entrancy safe).
     try { window.sb.getChannels().filter(c => c.topic.includes('cm-presence')).forEach(c => window.sb.removeChannel(c)); } catch (_) {}
     const chan = window.sb.channel(`cm-presence-${clubId}`, { config: { presence: { key: user.id } } });
-    chan.on('presence', { event: 'sync' }, () => _renderPresence(box, chan.presenceState(), user.id));
+    chan.on('presence', { event: 'sync' }, () => _renderPresence(box, chan.presenceState(), user.id, selfPage));
     chan.subscribe(async status => { if (status === 'SUBSCRIBED') { try { await chan.track(meta); } catch (_) {} } });
     // Leave cleanly when the tab goes away (Supabase also auto-reaps on disconnect).
     window.addEventListener('pagehide', () => { try { chan.untrack(); window.sb.removeChannel(chan); } catch (_) {} });
