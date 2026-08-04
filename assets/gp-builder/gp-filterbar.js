@@ -894,7 +894,7 @@
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
     const _seQ = window.sb.from('training_sessions').select('session_attributes')
       .eq('club_id', clubId).limit(3000);
-    const _mcQ = window.sb.from('microcycles').select('id,name,start_date')
+    const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date')
       .eq('club_id', clubId);
     // Opponent catalog: lets the Rival dimension group by ENTITY (opponent_id / canonical
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
@@ -973,12 +973,45 @@
     });
     options.md_code = Array.from(mdSet).sort(mdCompare).map(v => ({ value: v, label: v }));
 
-    // Microciclos reales del club — etiqueta REAL del MC (mc.name), no getISOWeek.
-    // value = id (los reports filtran por training_sessions.microcycle_id).
-    options.microcycle = (mcs || []).map(m => ({
-      value: m.id,
-      label: m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : m.id),
-    }));
+    // Asociación por FECHA: los training_sessions casi nunca traen microcycle_id seteado, así
+    // que un GPS pertenece al microciclo cuya ventana [start_date, end_date] contiene su
+    // session_date. Resolver: de los MC con start <= d, el de mayor start que aún contenga d
+    // (end null = abierto). Se expone en window para que gp-builder filtre igual.
+    const _mcRanges = (mcs || [])
+      .filter(m => m.start_date)
+      .map(m => ({
+        id:    String(m.id),
+        start: String(m.start_date).slice(0, 10),
+        end:   m.end_date ? String(m.end_date).slice(0, 10) : null,
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start));
+    function _mcForDate(d) {
+      if (!d) return '';
+      d = String(d).slice(0, 10);
+      let hit = '';
+      for (const m of _mcRanges) {
+        if (m.start > d) break;                        // orden asc → no hay match más adelante
+        if (m.end == null || d <= m.end) hit = m.id;   // mayor start <= d que aún contiene d
+      }
+      return hit;
+    }
+    window._gpMcForDate = _mcForDate;
+
+    // Microciclos SELECCIONABLES = solo los que tienen datos GPS (algún session_date cae en su
+    // ventana). value = id; etiqueta REAL del MC (mc.name).
+    const _mcWithData = new Set();
+    (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).forEach(r => {
+      const id = _mcForDate(r.training_sessions?.session_date);
+      if (id) _mcWithData.add(id);
+    });
+    const _mcLabel = m => m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : String(m.id));
+    options.microcycle = (mcs || [])
+      .filter(m => _mcWithData.has(String(m.id)))
+      .map(m => ({ value: String(m.id), label: _mcLabel(m) }));
+    // id → etiqueta para que el resolver muestre el NOMBRE del MC en la columna Microcycle
+    // (la asociación es por fecha vía _gpMcForDate). Incluye todos los MC, no solo con datos.
+    window._gpMcLabelById = {};
+    (mcs || []).forEach(m => { window._gpMcLabelById[String(m.id)] = _mcLabel(m); });
 
     // Relación real (un gps_report por fila) para el encadenado de filtros — scopeada
     // al equipo (team-or-null), igual que los datos que muestra el resolver.
@@ -987,7 +1020,7 @@
       return {
         d:   ts.session_date || '',
         md:  String(ts.session_attributes?.md_code ?? '') || '',
-        mc:  ts.microcycle_id != null ? String(ts.microcycle_id) : '',
+        mc:  _mcForDate(ts.session_date),   // por fecha, no por microcycle_id (suele venir null)
         p:   r.player_id,
         pos: r.players?.position || '',
         rv:  _rivalEntity(ts.session_attributes)?.key || '',

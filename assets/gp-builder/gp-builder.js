@@ -2699,7 +2699,17 @@
     }
     // microcycle_id isn't exposed by the task view → skip (microcycle isn't a task filter yet,
     // and filtering on a missing field would drop every row).
-    if (!isTask && FB.microcycleIds?.length) { const s = new Set(FB.microcycleIds.map(String)); out = out.filter(r => s.has(String(r.training_sessions?.microcycle_id ?? ''))); }
+    // Association is by DATE (session_date → MC window), matching the filter bar — training
+    // sessions rarely carry microcycle_id. Fall back to the raw id if the resolver isn't ready.
+    if (!isTask && FB.microcycleIds?.length) {
+      const s = new Set(FB.microcycleIds.map(String));
+      const forDate = window._gpMcForDate;
+      out = out.filter(r => {
+        const ts = r.training_sessions;
+        const mid = forDate ? forDate(ts?.session_date) : String(ts?.microcycle_id ?? '');
+        return s.has(String(mid));
+      });
+    }
     return out;
   }
   /** Re-render every builder card in the active dashboard (called on filter change). */
