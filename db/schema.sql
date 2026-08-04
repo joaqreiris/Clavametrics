@@ -3514,7 +3514,7 @@ $function$
 ;
 
 -- Same idea for a microcycle: visible if any of its sessions carries GPS for one of my players.
-CREATE OR REPLACE FUNCTION public.microcycle_has_my_gps(p_mc uuid)
+CREATE OR REPLACE FUNCTION public.microcycle_has_my_gps(p_mc text)
  RETURNS boolean
  LANGUAGE sql
  STABLE SECURITY DEFINER
