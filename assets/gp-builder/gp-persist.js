@@ -188,7 +188,7 @@
   window.loadDashboards = async function (clubId, sb) {
     const { data: dashes, error: dErr } = await sb
       .from('dashboards')
-      .select('id, report_type, name, scope, sort_order, is_shared, created_by')
+      .select('id, report_type, name, scope, sort_order, is_shared, team_id, owner_id, created_by')
       .eq('club_id', clubId)
       .order('sort_order', { ascending: true });
 
@@ -348,7 +348,11 @@
    * @param {object} sb
    * @returns {Promise<{id:string, name:string, sort_order:number}>}
    */
-  window.createDashboard = async function (name, clubId, userId, sb) {
+  // opts.shared (bool) + opts.teamId → team-shared dashboard; otherwise personal (owner-only).
+  window.createDashboard = async function (name, clubId, userId, sb, opts) {
+    opts = opts || {};
+    const shared = !!opts.shared;
+    const teamId = shared ? (opts.teamId || null) : null;
     // get max sort_order
     const { data: last } = await sb
       .from('dashboards')
@@ -362,8 +366,8 @@
 
     const { data, error } = await sb
       .from('dashboards')
-      .insert({ club_id: clubId, name, sort_order, is_shared: false, created_by: userId || null })
-      .select('id, name, sort_order')
+      .insert({ club_id: clubId, name, sort_order, owner_id: userId || null, is_shared: shared, team_id: teamId, created_by: userId || null })
+      .select('id, name, sort_order, is_shared, team_id, owner_id')
       .single();
 
     if (error) throw new Error(`createDashboard: ${error.message}`);
@@ -423,7 +427,9 @@
         name:       src.name + ' copy',
         scope:      src.scope,
         sort_order: (last?.sort_order ?? 0) + 1,
+        owner_id:   userId || null,   // a copy is personal to whoever duplicated it
         is_shared:  false,
+        team_id:    null,
         created_by: userId || null,
       })
       .select('id, name')

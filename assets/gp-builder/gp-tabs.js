@@ -33,6 +33,9 @@
   let _menuEl  = null;
   let _menuBkEl = null;
   let _menuOwner = null;
+  let _teams = [];              // [{id,name}] club teams (for the share picker + badges)
+  let _teamNameById = {};       // team_id -> name
+  let _myTeamIds = [];          // teams the current user belongs to (member_teams)
 
   // ── Helpers ──────────────────────────────────────────────────
 
@@ -42,11 +45,41 @@
     );
   }
 
+  const tt = (k, f, v) => { const t = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(k, v) : null; return (t && t !== k) ? t : f; };
+
+  // Visibility badge for a custom dashboard tab: personal (you) · team (name) · club (default).
+  function visBadge(d) {
+    if (d.is_shared && d.team_id) {
+      const nm = _teamNameById[d.team_id] || tt('gps_analysis.dash_team', 'Team');
+      return `<span class="gpt-badge team" title="${esc(nm)}"><i class="ti ti-users-group"></i>${esc(nm)}</span>`;
+    }
+    if (d.is_shared) return `<span class="gpt-badge club" title="${esc(tt('gps_analysis.dash_club', 'Whole club'))}"><i class="ti ti-building-community"></i></span>`;
+    return `<span class="gpt-badge personal" title="${esc(tt('gps_analysis.dash_personal', 'Personal'))}"><i class="ti ti-user"></i></span>`;
+  }
+
+  // Mirror of the SQL role_bucket(): owner/admin→admin, physio/…→medical,
+  // sc_coach/fitness_coach→sc, coach/assistant_coach/gk_coach→coach.
+  function roleBucket(r) {
+    switch ((r || '').toLowerCase()) {
+      case 'owner': case 'admin': return 'admin';
+      case 'medical': case 'physio': case 'doctor': case 'nutritionist': return 'medical';
+      case 'sc_coach': case 'fitness_coach': return 'sc';
+      case 'coach': case 'assistant_coach': case 'gk_coach': return 'coach';
+      case 'analyst': return 'analyst';
+      default: return 'staff';
+    }
+  }
+
+  // Mirrors can_edit_dashboard() so the UI shows the right affordances (RLS is the real gate).
   function canManage(dash) {
-    // Creator always can; admin/coach can manage any dashboard
     if (!dash) return false;
-    if (_userRole === 'admin' || _userRole === 'coach') return true;
-    return dash.created_by === _userId;
+    if (roleBucket(_userRole) === 'admin') return true;                 // admin/owner
+    if (dash.owner_id === _userId || dash.created_by === _userId) return true;   // owner/creator
+    // shared boards (club-wide default OR a team) → editable by S&C/Fitness/coaches;
+    // a team board additionally requires membership in that team.
+    if (dash.is_shared && ['sc', 'coach'].includes(roleBucket(_userRole))
+        && (!dash.team_id || _myTeamIds.includes(String(dash.team_id)))) return true;
+    return false;
   }
 
   function showPermissionError() {
@@ -161,6 +194,7 @@
         <div class="row">
           <i class="ti ti-layout-dashboard"></i>
           <span class="gpt-tab-label">${esc(d.name)}</span>
+          ${visBadge(d)}
           <button class="gpt-kb" title="Dashboard options"><i class="ti ti-dots"></i></button>
         </div>
         <div class="sub">${(d._cardCount ?? d.cards?.length ?? 0)} card${(d._cardCount ?? d.cards?.length ?? 0) !== 1 ? 's' : ''}</div>`;
@@ -281,18 +315,84 @@
     sectionsEl.appendChild(btn);
   }
 
-  async function createDashboardFlow() {
+  function createDashboardFlow() {
     if (!_clubId || !window.createDashboard || !window.sb) return;
+    openCreateDashboardModal();
+  }
+
+  async function _doCreateDashboard(name, shared, teamId) {
     try {
-      const d = await window.createDashboard('New dashboard', _clubId, _userId, window.sb);
-      _dashboards.push({ ...d, created_by: _userId, cards: [] });
+      const d = await window.createDashboard(name || tt('gps_analysis.dash_new', 'New dashboard'), _clubId, _userId, window.sb, { shared, teamId });
+      _dashboards.push({ ...d, created_by: _userId, owner_id: _userId, is_shared: shared, team_id: shared ? teamId : null, cards: [] });
       reRender();
-      // switch to the new tab and start rename immediately
       const viewKey = `db-${d.id}`;
       switchToView(viewKey);
-      const btn = document.querySelector(`#sections .gp-sec[data-view="${viewKey}"]`);
-      if (btn) startRename(btn, d);
-    } catch (e) { console.warn('gpt createDashboardFlow:', e); }
+    } catch (e) { console.warn('gpt createDashboard:', e); showPermissionError(); }
+  }
+
+  // Teams the user may share TO: admins → all club teams; everyone else → their own memberships.
+  function _shareableTeams() {
+    if (roleBucket(_userRole) === 'admin') return _teams.slice();
+    return _teams.filter(t => _myTeamIds.includes(String(t.id)));
+  }
+
+  function openCreateDashboardModal() {
+    document.getElementById('gptCreateBk')?.remove();
+    const teams = _shareableTeams();
+    const activeTeam = String(window._gpTeamId || '');
+    const defTeam = teams.find(t => String(t.id) === activeTeam)?.id || teams[0]?.id || '';
+    const bk = document.createElement('div');
+    bk.id = 'gptCreateBk';
+    bk.className = 'gpt-create-bk';
+    bk.innerHTML = `
+      <div class="gpt-create" role="dialog" aria-modal="true">
+        <div class="gpt-create-h">${esc(tt('gps_analysis.dash_create_title', 'New dashboard'))}</div>
+        <label class="gpt-create-lbl">${esc(tt('gps_analysis.dash_name', 'Name'))}</label>
+        <input id="gptDashName" class="gpt-create-in" type="text" value="${esc(tt('gps_analysis.dash_new', 'New dashboard'))}" autocomplete="off">
+        <label class="gpt-create-lbl">${esc(tt('gps_analysis.dash_visibility', 'Visibility'))}</label>
+        <div class="gpt-vis" id="gptVis">
+          <button type="button" class="gpt-vis-opt is-on" data-vis="personal">
+            <i class="ti ti-user"></i><span>${esc(tt('gps_analysis.dash_personal', 'Personal'))}</span>
+            <small>${esc(tt('gps_analysis.dash_personal_hint', 'Only you'))}</small>
+          </button>
+          <button type="button" class="gpt-vis-opt${teams.length ? '' : ' is-disabled'}" data-vis="team"${teams.length ? '' : ' disabled'}>
+            <i class="ti ti-users-group"></i><span>${esc(tt('gps_analysis.dash_team', 'Team'))}</span>
+            <small>${esc(teams.length ? tt('gps_analysis.dash_team_hint', "The team's staff") : tt('gps_analysis.dash_no_teams', 'No teams'))}</small>
+          </button>
+        </div>
+        <div class="gpt-create-team" id="gptTeamWrap" style="display:none">
+          <label class="gpt-create-lbl">${esc(tt('gps_analysis.dash_which_team', 'Which team'))}</label>
+          <select id="gptTeamSel" class="gpt-create-in">${teams.map(t => `<option value="${esc(t.id)}"${String(t.id) === String(defTeam) ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        </div>
+        <div class="gpt-create-f">
+          <button type="button" class="gpt-create-btn ghost" id="gptCancel">${esc(tt('common.cancel', 'Cancel'))}</button>
+          <button type="button" class="gpt-create-btn primary" id="gptCreate">${esc(tt('gps_analysis.dash_create', 'Create'))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bk);
+    if (window.CM_I18N) CM_I18N.applyTo(bk);
+
+    let vis = 'personal';
+    const teamWrap = bk.querySelector('#gptTeamWrap');
+    bk.querySelectorAll('.gpt-vis-opt').forEach(b => b.addEventListener('click', () => {
+      if (b.classList.contains('is-disabled')) return;
+      vis = b.dataset.vis;
+      bk.querySelectorAll('.gpt-vis-opt').forEach(o => o.classList.toggle('is-on', o === b));
+      teamWrap.style.display = vis === 'team' ? '' : 'none';
+    }));
+    const close = () => bk.remove();
+    bk.addEventListener('mousedown', e => { if (e.target === bk) close(); });
+    bk.querySelector('#gptCancel').addEventListener('click', close);
+    bk.querySelector('#gptCreate').addEventListener('click', () => {
+      const name = bk.querySelector('#gptDashName').value.trim();
+      const shared = vis === 'team';
+      const teamId = shared ? (bk.querySelector('#gptTeamSel')?.value || null) : null;
+      close();
+      _doCreateDashboard(name, shared, teamId);
+    });
+    const nameEl = bk.querySelector('#gptDashName');
+    nameEl.focus(); nameEl.select();
+    nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') bk.querySelector('#gptCreate').click(); if (e.key === 'Escape') close(); });
   }
 
   // ── Kebab dropdown ────────────────────────────────────────────
@@ -553,6 +653,13 @@
           .from('profiles').select('role').eq('id', _userId).maybeSingle();
         _userRole = profile?.role || null;
       }
+
+      // Teams (for the share picker + tab badges) and my memberships (for the picker/affordances).
+      try {
+        _teams = (typeof window.getTeams === 'function') ? (await window.getTeams(_clubId)) || [] : [];
+        _teamNameById = {}; _teams.forEach(t => { _teamNameById[t.id] = t.name; });
+      } catch (_) { _teams = []; }
+      try { _myTeamIds = ((await window.sb.rpc('my_team_ids')).data || []).map(String); } catch (_) { _myTeamIds = []; }
 
       _dashboards = await window.loadDashboards(_clubId, window.sb);
 

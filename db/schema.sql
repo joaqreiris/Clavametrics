@@ -359,10 +359,12 @@ create table if not exists public.dashboards (
   scope text default 'player'::text not null,
   sort_order integer default 0 not null,
   is_shared boolean default false not null,
+  team_id uuid,
   created_by uuid,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint dashboards_pkey primary key (id),
+  constraint dashboards_team_fk foreign key (team_id) references public.teams(id) on delete set null,
   constraint dashboards_scope_check CHECK ((scope = ANY (ARRAY['player'::text, 'squad'::text])))
 );
 CREATE INDEX idx_dashboards_club ON public.dashboards USING btree (club_id, sort_order);
@@ -3687,6 +3689,58 @@ AS $function$
 $function$
 ;
 
+-- Who can SEE a dashboard: the owner (personal) · club-wide defaults · a team the
+-- user belongs to (team-shared) · admins/owners (all of their club). SECURITY DEFINER
+-- so the check itself never re-triggers dashboards RLS (no recursion).
+CREATE OR REPLACE FUNCTION public.can_view_dashboard(p_dash uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.dashboards d
+    where d.id = p_dash
+      and d.club_id = public.get_user_club_id()
+      and (
+        public.is_super_admin()
+        or public.role_bucket((select role from public.profiles where id = auth.uid())) = 'admin'
+        or d.owner_id = auth.uid()
+        or (d.is_shared and d.team_id is null)
+        or (d.is_shared and d.team_id in (select public.my_team_ids()))
+      )
+  );
+$function$
+;
+
+-- Who can EDIT a dashboard (add/remove cards, rename, delete): the owner · admins/owners ·
+-- performance/coaching staff (S&C, Fitness, Head/Assistant/GK coach — role_bucket 'sc'|'coach')
+-- assigned to that team, for a team-shared dashboard. Physio/analyst/etc. can own & edit their
+-- OWN dashboards but not others' team boards.
+CREATE OR REPLACE FUNCTION public.can_edit_dashboard(p_dash uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.dashboards d
+    where d.id = p_dash
+      and d.club_id = public.get_user_club_id()
+      and (
+        public.is_super_admin()
+        or public.role_bucket((select role from public.profiles where id = auth.uid())) = 'admin'
+        or d.owner_id = auth.uid()
+        -- shared boards (club-wide defaults with team_id null, OR a specific team) are edited by
+        -- performance/coaching staff; for a team board they must belong to that team.
+        or (d.is_shared
+            and public.role_bucket((select role from public.profiles where id = auth.uid())) in ('sc','coach')
+            and (d.team_id is null or d.team_id in (select public.my_team_ids())))
+      )
+  );
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.seed_core_metrics_for_club()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4863,33 +4917,37 @@ create policy "competitions_super_all" on public.competitions as permissive for 
   with check (is_super_admin());
 
 alter table public.dashboard_cards enable row level security;
-create policy "club members manage dashboard cards" on public.dashboard_cards as permissive for all to authenticated
-  using ((dashboard_id IN ( SELECT dashboards.id
-   FROM dashboards
-  WHERE (dashboards.club_id = ( SELECT profiles.club_id
-           FROM profiles
-          WHERE (profiles.id = auth.uid()))))));
+-- Cards inherit their dashboard's visibility/editability (personal · team-shared · club default).
+create policy "dashboard_cards_select" on public.dashboard_cards as permissive for select to authenticated
+  using (public.can_view_dashboard(dashboard_id));
+create policy "dashboard_cards_modify" on public.dashboard_cards as permissive for all to authenticated
+  using (public.can_edit_dashboard(dashboard_id))
+  with check (public.can_edit_dashboard(dashboard_id));
 
 alter table public.dashboards enable row level security;
-create policy "club members create dashboards" on public.dashboards as permissive for insert to authenticated
-  with check ((club_id = ( SELECT profiles.club_id
-   FROM profiles
-  WHERE (profiles.id = auth.uid()))));
-create policy "club members view dashboards" on public.dashboards as permissive for select to authenticated
-  using ((club_id = ( SELECT profiles.club_id
-   FROM profiles
-  WHERE (profiles.id = auth.uid()))));
-create policy "creator or staff delete dashboards" on public.dashboards as permissive for delete to authenticated
-  using (((created_by = auth.uid()) OR (( SELECT profiles.role
-   FROM profiles
-  WHERE (profiles.id = auth.uid())) = ANY (ARRAY['admin'::text, 'coach'::text]))));
-create policy "creator or staff update dashboards" on public.dashboards as permissive for update to authenticated
-  using (((created_by = auth.uid()) OR (( SELECT profiles.role
-   FROM profiles
-  WHERE (profiles.id = auth.uid())) = ANY (ARRAY['admin'::text, 'coach'::text]))))
-  with check ((club_id = ( SELECT profiles.club_id
-   FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+-- SELECT inline (NOT via can_view_dashboard) to avoid the policy recursing on its own table.
+create policy "dashboards_visible_select" on public.dashboards as permissive for select to authenticated
+  using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid())))
+    AND (
+      is_super_admin()
+      OR public.role_bucket(( SELECT profiles.role FROM profiles WHERE (profiles.id = auth.uid()))) = 'admin'
+      OR (owner_id = auth.uid())
+      OR (is_shared AND team_id IS NULL)
+      OR (is_shared AND team_id IN ( SELECT public.my_team_ids() AS my_team_ids))
+    ));
+create policy "dashboards_insert" on public.dashboards as permissive for insert to authenticated
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid())))
+    AND (owner_id IS NULL OR owner_id = auth.uid())
+    AND (
+      team_id IS NULL
+      OR team_id IN ( SELECT public.my_team_ids() AS my_team_ids)
+      OR public.role_bucket(( SELECT profiles.role FROM profiles WHERE (profiles.id = auth.uid()))) = 'admin'
+    ));
+create policy "dashboards_update" on public.dashboards as permissive for update to authenticated
+  using (public.can_edit_dashboard(id))
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+create policy "dashboards_delete" on public.dashboards as permissive for delete to authenticated
+  using (public.can_edit_dashboard(id));
 
 alter table public.default_exercises enable row level security;
 create policy "Anyone authenticated can read default_exercises" on public.default_exercises as permissive for select to authenticated
