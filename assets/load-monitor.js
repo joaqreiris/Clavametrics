@@ -106,7 +106,14 @@
     catch { tl=null; }
 
     if(!tl || !tl.dates.length || tl.squadAcwr.every(v=>v==null)){
-      pane.innerHTML = `<div class="lm-chart-skeleton" style="animation:none"><div class="lm-empty" style="padding:40px;text-align:center;color:var(--cm-fg-faint)">${esc(tt('load_monitor.no_metric_6w', `No ${metricLabel()} data in the last 6 weeks.`, { metric: metricLabel() }))}</div></div>`;
+      // Distinguish "no data at all" from "data exists but no player has enough
+      // sessions yet for a stable ACWR baseline" (the chart blanks the latter to
+      // stay consistent with the insufficient KPI — see squadTimeline).
+      const hasLoad = tl && tl.squadLoad && tl.squadLoad.some(v=>v>0);
+      const msg = hasLoad
+        ? tt('load_monitor.insufficient_6w', `Not enough ${metricLabel()} sessions yet — a stable ACWR needs ≥4 sessions per player.`, { metric: metricLabel() })
+        : tt('load_monitor.no_metric_6w', `No ${metricLabel()} data in the last 6 weeks.`, { metric: metricLabel() });
+      pane.innerHTML = `<div class="lm-chart-skeleton" style="animation:none"><div class="lm-empty" style="padding:40px;text-align:center;color:var(--cm-fg-faint)">${esc(msg)}</div></div>`;
       if(state.chart){ state.chart.destroy(); state.chart=null; }
       return;
     }
