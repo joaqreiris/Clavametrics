@@ -1617,9 +1617,10 @@
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
 
-  // ── Smart alignment guides (Canva/Figma-style) ──────────────────
-  // While dragging, snap the object's edges/centres to those of other objects and show a
-  // magenta guide where they line up. Guides are transient — never serialized into history.
+  // ── Smart alignment + spacing guides (Canva/Figma-style) ────────
+  // While dragging, snap the object's edges/centres to other objects (magenta guides) AND show
+  // the real-pitch distance to neighbours in metres, snapping to equal spacing when gaps match.
+  // All overlays are transient (_type:'_preview') — never serialized into history.
   let _guideLines = [];
   function _clearGuides() {
     if (!_guideLines.length) return;
@@ -1628,27 +1629,81 @@
     _suppressHistory = false;
     _guideLines = [];
   }
-  function _addGuide(x1, y1, x2, y2) {
+  function _addLine(x1, y1, x2, y2, dashed) {
     const l = new fabric.Line([x1, y1, x2, y2], {
       stroke: '#ec4899', strokeWidth: 1, selectable: false, evented: false,
-      strokeDashArray: [4, 4], _type: '_preview' });
+      strokeDashArray: dashed ? [4, 4] : null, _type: '_preview' });
     _suppressHistory = true; fc.add(l); l.bringToFront?.(); _suppressHistory = false;
     _guideLines.push(l);
   }
+  function _addGuide(x1, y1, x2, y2) { _addLine(x1, y1, x2, y2, true); }
+  function _addLabel(x, y, txt) {
+    const t = new fabric.Text(txt, {
+      left: x, top: y, originX: 'center', originY: 'center',
+      fontSize: 11, fontFamily: 'monospace', fill: '#fff', backgroundColor: '#ec4899',
+      selectable: false, evented: false, _type: '_preview' });
+    _suppressHistory = true; fc.add(t); t.bringToFront?.(); _suppressHistory = false;
+    _guideLines.push(t);
+  }
+
+  // Canvas pixels → real pitch metres. The football playing rect (990 units wide) is 105 m; the
+  // SVG pitch is drawn with a single uniform scale (preserveAspectRatio meet), so one factor
+  // works for both axes and every variant/orientation.
+  const PITCH_M_PER_UNIT = 105 / 990;
+  function _metersPerPixel() {
+    const box = (window.CMField && CMField.FIELDS[_plField.type]?.vb?.[_plField.variant]) || [0, 0, 1050, 680];
+    let vbW = box[2], vbH = box[3];
+    if (_plField.orient === 'v') { const t = vbW; vbW = vbH; vbH = t; }
+    const s = Math.min(fc.getWidth() / vbW, fc.getHeight() / vbH); // pixels per viewBox unit
+    return s > 0 ? PITCH_M_PER_UNIT / s : 0;
+  }
+  function _fmtM(m) { return (m >= 10 ? m.toFixed(0) : m.toFixed(1)) + ' m'; }
+
+  // Nearest in-line neighbour on each side (edge gap), within maxGap px. L/R require vertical
+  // overlap (side-by-side); U/D require horizontal overlap (stacked).
+  function _neighbours(bx, rects, maxGap) {
+    const R = { L: null, R: null, U: null, D: null };
+    rects.forEach(ob => {
+      const vOver = ob.top < bx.top + bx.height && ob.top + ob.height > bx.top;
+      const hOver = ob.left < bx.left + bx.width && ob.left + ob.width > bx.left;
+      if (vOver) {
+        if (ob.left + ob.width <= bx.left + 0.5) { const g = bx.left - (ob.left + ob.width); if (g >= 0 && g <= maxGap && (!R.L || g < R.L.gap)) R.L = { ob, gap: g }; }
+        else if (ob.left >= bx.left + bx.width - 0.5) { const g = ob.left - (bx.left + bx.width); if (g >= 0 && g <= maxGap && (!R.R || g < R.R.gap)) R.R = { ob, gap: g }; }
+      }
+      if (hOver) {
+        if (ob.top + ob.height <= bx.top + 0.5) { const g = bx.top - (ob.top + ob.height); if (g >= 0 && g <= maxGap && (!R.U || g < R.U.gap)) R.U = { ob, gap: g }; }
+        else if (ob.top >= bx.top + bx.height - 0.5) { const g = ob.top - (bx.top + bx.height); if (g >= 0 && g <= maxGap && (!R.D || g < R.D.gap)) R.D = { ob, gap: g }; }
+      }
+    });
+    return R;
+  }
+  function _spanH(x1, x2, y, meters) {
+    _addLine(x1, y, x2, y, false);
+    _addLine(x1, y - 4, x1, y + 4, false); _addLine(x2, y - 4, x2, y + 4, false);
+    _addLabel((x1 + x2) / 2, y - 9, _fmtM(meters));
+  }
+  function _spanV(y1, y2, x, meters) {
+    _addLine(x, y1, x, y2, false);
+    _addLine(x - 4, y1, x + 4, y1, false); _addLine(x - 4, y2, x + 4, y2, false);
+    _addLabel(x + 16, (y1 + y2) / 2, _fmtM(meters));
+  }
+
   fc.on('object:moving', e => {
     const obj = e.target; if (!obj) return;
     _clearGuides();
     // Arrows/handles carry their own endpoint geometry — nudging left/top would desync them.
     if (obj._type === 'arrow' || obj._type === 'arrow_handle') return;
     const snap = 6 / (fc.getZoom() || 1);
+    const rects = fc.getObjects()
+      .filter(o => o !== obj && o.selectable && o._type !== '_preview' && o._type !== 'arrow_handle')
+      .map(o => o.getBoundingRect(true, true));
+
+    // 1) Edge/centre alignment snap.
     const br = obj.getBoundingRect(true, true);
     const mvx = [br.left, br.left + br.width / 2, br.left + br.width];
     const mvy = [br.top, br.top + br.height / 2, br.top + br.height];
-    const others = fc.getObjects().filter(o =>
-      o !== obj && o.selectable && o._type !== '_preview' && o._type !== 'arrow_handle');
     let bestX = null, bestY = null;
-    others.forEach(o => {
-      const ob = o.getBoundingRect(true, true);
+    rects.forEach(ob => {
       const oxs = [ob.left, ob.left + ob.width / 2, ob.left + ob.width];
       const oys = [ob.top, ob.top + ob.height / 2, ob.top + ob.height];
       mvx.forEach(m => oxs.forEach(t => {
@@ -1665,6 +1720,32 @@
     if (bestX) { obj.left += bestX.delta; _addGuide(bestX.x, bestX.a - 8, bestX.x, bestX.b + 8); }
     if (bestY) { obj.top  += bestY.delta; _addGuide(bestY.a - 8, bestY.y, bestY.b + 8, bestY.y); }
     if (bestX || bestY) obj.setCoords();
+
+    // 2) Spacing to neighbours + equal-gap snap, labelled in metres.
+    const mpp = _metersPerPixel();
+    const maxGap = 0.55 * Math.min(fc.getWidth(), fc.getHeight());
+    let bx = obj.getBoundingRect(true, true);
+    let nb = _neighbours(bx, rects, maxGap);
+    // Equalise horizontal gaps (unless X was already alignment-snapped).
+    if (!bestX && nb.L && nb.R && Math.abs(nb.L.gap - nb.R.gap) <= snap * 2) {
+      obj.left += (nb.R.gap - nb.L.gap) / 2; obj.setCoords();
+      bx = obj.getBoundingRect(true, true);
+    }
+    nb = _neighbours(bx, rects, maxGap);
+    // Equalise vertical gaps (unless Y was already alignment-snapped).
+    if (!bestY && nb.U && nb.D && Math.abs(nb.U.gap - nb.D.gap) <= snap * 2) {
+      obj.top += (nb.D.gap - nb.U.gap) / 2; obj.setCoords();
+      bx = obj.getBoundingRect(true, true);
+    }
+    nb = _neighbours(bx, rects, maxGap);
+
+    const cy = bx.top + bx.height / 2, cx = bx.left + bx.width / 2;
+    const eqH = nb.L && nb.R && Math.abs(nb.L.gap - nb.R.gap) <= 0.5;
+    if (nb.L && (eqH || !nb.R || nb.L.gap <= nb.R.gap)) _spanH(nb.L.ob.left + nb.L.ob.width, bx.left, cy, nb.L.gap * mpp);
+    if (nb.R && (eqH || !nb.L || nb.R.gap <  nb.L.gap)) _spanH(bx.left + bx.width, nb.R.ob.left, cy, nb.R.gap * mpp);
+    const eqV = nb.U && nb.D && Math.abs(nb.U.gap - nb.D.gap) <= 0.5;
+    if (nb.U && (eqV || !nb.D || nb.U.gap <= nb.D.gap)) _spanV(nb.U.ob.top + nb.U.ob.height, bx.top, cx, nb.U.gap * mpp);
+    if (nb.D && (eqV || !nb.U || nb.D.gap <  nb.U.gap)) _spanV(bx.top + bx.height, nb.D.ob.top, cx, nb.D.gap * mpp);
   });
 
   // Rotation snaps to 15° (clean stops at 45/90/180/270…); hold Shift for free, precise rotation.
