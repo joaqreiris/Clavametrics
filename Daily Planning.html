@@ -2587,10 +2587,28 @@ async function dpExportPDF() {
   const _dpQS   = new URLSearchParams(window.location.search);
   const urlDate = _dpQS.get('date');
   const today   = cmToday();
-  const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
+  let   initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
   // ?session=<id> → open exactly that session (the calendar links carry it, so clicking the
   // second training of a double session lands on THAT one, not the day's first).
   _dpPreferredSessionId = _dpQS.get('session') || null;
+
+  // If today's session is already over, open tomorrow's plan by default (so you edit next day's
+  // without a manual day-change). Only when no explicit date/session was requested via URL.
+  if (!urlDate && !_dpPreferredSessionId) {
+    try {
+      const { data: _todaySess } = await window.sb.from('training_sessions')
+        .select('session_time,end_time')
+        .eq('club_id', clubId).eq('team_id', _dpTeamId)
+        .eq('session_date', today).eq('is_historical', false);
+      // Last end (or start, if no end) among today's sessions, as local HH:MM.
+      const _endHM = (_todaySess || [])
+        .map(s => String(s.end_time || s.session_time || '').slice(0, 5))
+        .filter(Boolean).sort().pop();
+      const _now = new Date();
+      const _nowHM = String(_now.getHours()).padStart(2, '0') + ':' + String(_now.getMinutes()).padStart(2, '0');
+      if (_endHM && _nowHM > _endHM) initDate = _dpAddDays(today, 1);
+    } catch (_) { /* stay on today if the pre-check fails */ }
+  }
 
   const yesterday7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const yesterday  = cmYMD(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000));

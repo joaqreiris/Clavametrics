@@ -513,6 +513,9 @@
   let searchText  = '';
   let sortMode    = 'recent';
   let selectedId  = null;
+  // Collapsed folder ids (persisted). '' = the "No folder" group.
+  const _slCollapsed = new Set(JSON.parse(localStorage.getItem('cm_sl_collapsed') || '[]'));
+  const _slSaveCollapsed = () => { try { localStorage.setItem('cm_sl_collapsed', JSON.stringify([..._slCollapsed])); } catch (_) {} };
 
   function applyFilters() {
     return allExercises.filter(ex => {
@@ -711,15 +714,24 @@
         buckets.get(key).push(ex);
       });
       const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const headHtml = (label, n, depth) => `<div class="sl-folder-head" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:${depth?10:2}px 0 2px;padding-left:${(depth||0)*14}px;font:700 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)"><i class="ti ti-folder" style="font-size:13px"></i>${esc(label)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
+      const headHtml = (key, label, n, depth, collapsed) => `<div class="sl-folder-head" data-folder="${esc(key)}" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:${depth?10:2}px 0 2px;padding-left:${(depth||0)*14}px;font:700 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);cursor:pointer;user-select:none"><i class="ti ti-chevron-${collapsed?'right':'down'}" style="font-size:13px;transition:transform .12s"></i><i class="ti ti-folder" style="font-size:13px"></i>${esc(label)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
       const groups = [];
       const none = buckets.get('');
-      if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
-      order.forEach(f => { const items = buckets.get(f.id); if (items && items.length) groups.push({ label: f.name, depth: f.depth || 0, items }); });
+      if (none && none.length) groups.push({ key: '', label: window.CMFolders.noneLabel(), depth: 0, items: none });
+      order.forEach(f => { const items = buckets.get(f.id); if (items && items.length) groups.push({ key: f.id, label: f.name, depth: f.depth || 0, items }); });
       grid.innerHTML = groups.length <= 1
         ? visible.map(_cardHtml).join('')
-        : groups.map(g => headHtml(g.label, g.items.length, g.depth) + g.items.map(_cardHtml).join('')).join('');
+        : groups.map(g => { const collapsed = _slCollapsed.has(g.key); return headHtml(g.key, g.label, g.items.length, g.depth, collapsed) + (collapsed ? '' : g.items.map(_cardHtml).join('')); }).join('');
     }
+
+    grid.querySelectorAll('.sl-folder-head').forEach(head => {
+      head.addEventListener('click', () => {
+        const key = head.dataset.folder;
+        if (_slCollapsed.has(key)) _slCollapsed.delete(key); else _slCollapsed.add(key);
+        _slSaveCollapsed();
+        renderCards();
+      });
+    });
 
     grid.querySelectorAll('.sl-card').forEach(card => {
       card.addEventListener('click', () => {

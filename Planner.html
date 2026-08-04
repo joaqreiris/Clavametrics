@@ -566,6 +566,10 @@
   #plPropBar .psep { width:1px; height:18px; background:var(--cm-border); }
   .pl-pp-swatch { width:22px; height:22px; border-radius:50%; border:1.5px solid var(--cm-border); padding:0; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.15); transition:transform .1s; }
   .pl-pp-swatch:hover { transform:scale(1.15); }
+  #plPropBar select { height:26px; padding:0 6px; border:1px solid var(--cm-border); border-radius:6px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); font:500 12px/1 var(--cm-font-sans); cursor:pointer; outline:none; }
+  .pl-ta-btn { width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--cm-border); border-radius:6px; background:var(--cm-bg-soft); color:var(--cm-fg-muted); cursor:pointer; font-size:15px; transition:all .1s; }
+  .pl-ta-btn:hover { color:var(--cm-fg-strong); }
+  .pl-ta-btn.is-on { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
 
   /* Available players section */
   #plAvailPills { display:flex; flex-wrap:wrap; gap:5px; }
@@ -1164,6 +1168,19 @@
               <input type="text" id="plPropPlayerName" maxlength="14" placeholder="Name" data-i18n-attr="placeholder:planner.prop_player_name_ph;title:planner.prop_player_name_title" title="Label below the token (e.g. Coach)" style="width:96px;height:26px;padding:0 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:500 12px/1 var(--cm-font-sans);outline:none">
               <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);opacity:.75" data-i18n="planner.prop_player_num_hint">2× = number</span>
             </div>
+            <div id="plPropText" style="display:none;align-items:center;gap:8px">
+              <span data-i18n="planner.prop_color">Color</span>
+              <input type="color" id="plPropTextColor" value="#ffffff" data-i18n-attr="title:planner.prop_text_color" title="Text color">
+              <div class="psep"></div>
+              <span data-i18n="planner.prop_text_size">Size</span>
+              <select id="plPropTextSize" data-i18n-attr="title:planner.prop_text_size" title="Font size"></select>
+              <div class="psep"></div>
+              <span data-i18n="planner.prop_text_align">Align</span>
+              <button class="pl-ta-btn" type="button" data-align="left"    data-i18n-attr="title:planner.prop_text_align_left"    title="Left"><i class="ti ti-align-left"></i></button>
+              <button class="pl-ta-btn" type="button" data-align="center"  data-i18n-attr="title:planner.prop_text_align_center"  title="Center"><i class="ti ti-align-center"></i></button>
+              <button class="pl-ta-btn" type="button" data-align="right"   data-i18n-attr="title:planner.prop_text_align_right"   title="Right"><i class="ti ti-align-right"></i></button>
+              <button class="pl-ta-btn" type="button" data-align="justify" data-i18n-attr="title:planner.prop_text_align_justify" title="Justify"><i class="ti ti-align-justified"></i></button>
+            </div>
           </div>
 
           <div id="plPolyDoneBar">
@@ -1582,6 +1599,7 @@
   let _editingPlayer   = null;
 
   fc.on('object:modified', e => {
+    _clearGuides();
     const obj = e.target;
     if (obj && (obj.type === 'i-text' || obj.type === 'text') && (obj.scaleX !== 1 || obj.scaleY !== 1)) {
       const scale = Math.sqrt(Math.abs(obj.scaleX * obj.scaleY));
@@ -1598,6 +1616,56 @@
   });
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
+
+  // ── Smart alignment guides (Canva/Figma-style) ──────────────────
+  // While dragging, snap the object's edges/centres to those of other objects and show a
+  // magenta guide where they line up. Guides are transient — never serialized into history.
+  let _guideLines = [];
+  function _clearGuides() {
+    if (!_guideLines.length) return;
+    _suppressHistory = true;
+    _guideLines.forEach(l => fc.remove(l));
+    _suppressHistory = false;
+    _guideLines = [];
+  }
+  function _addGuide(x1, y1, x2, y2) {
+    const l = new fabric.Line([x1, y1, x2, y2], {
+      stroke: '#ec4899', strokeWidth: 1, selectable: false, evented: false,
+      strokeDashArray: [4, 4], _type: '_preview' });
+    _suppressHistory = true; fc.add(l); l.bringToFront?.(); _suppressHistory = false;
+    _guideLines.push(l);
+  }
+  fc.on('object:moving', e => {
+    const obj = e.target; if (!obj) return;
+    _clearGuides();
+    // Arrows/handles carry their own endpoint geometry — nudging left/top would desync them.
+    if (obj._type === 'arrow' || obj._type === 'arrow_handle') return;
+    const snap = 6 / (fc.getZoom() || 1);
+    const br = obj.getBoundingRect(true, true);
+    const mvx = [br.left, br.left + br.width / 2, br.left + br.width];
+    const mvy = [br.top, br.top + br.height / 2, br.top + br.height];
+    const others = fc.getObjects().filter(o =>
+      o !== obj && o.selectable && o._type !== '_preview' && o._type !== 'arrow_handle');
+    let bestX = null, bestY = null;
+    others.forEach(o => {
+      const ob = o.getBoundingRect(true, true);
+      const oxs = [ob.left, ob.left + ob.width / 2, ob.left + ob.width];
+      const oys = [ob.top, ob.top + ob.height / 2, ob.top + ob.height];
+      mvx.forEach(m => oxs.forEach(t => {
+        const diff = t - m;
+        if (Math.abs(diff) <= snap && (!bestX || Math.abs(diff) < Math.abs(bestX.delta)))
+          bestX = { delta: diff, x: t, a: Math.min(br.top, ob.top), b: Math.max(br.top + br.height, ob.top + ob.height) };
+      }));
+      mvy.forEach(m => oys.forEach(t => {
+        const diff = t - m;
+        if (Math.abs(diff) <= snap && (!bestY || Math.abs(diff) < Math.abs(bestY.delta)))
+          bestY = { delta: diff, y: t, a: Math.min(br.left, ob.left), b: Math.max(br.left + br.width, ob.left + ob.width) };
+      }));
+    });
+    if (bestX) { obj.left += bestX.delta; _addGuide(bestX.x, bestX.a - 8, bestX.x, bestX.b + 8); }
+    if (bestY) { obj.top  += bestY.delta; _addGuide(bestY.a - 8, bestY.y, bestY.b + 8, bestY.y); }
+    if (bestX || bestY) obj.setCoords();
+  });
 
   // Rotation snaps to 15° (clean stops at 45/90/180/270…); hold Shift for free, precise rotation.
   // A live badge shows the current degrees as a reference (0°, 90°, 180°…).
@@ -1617,7 +1685,7 @@
       _angleBadge.style.display = 'block';
     }
   });
-  fc.on('mouse:up', _hideAngleBadge);
+  fc.on('mouse:up', () => { _hideAngleBadge(); _clearGuides(); });
 
   function pushHistory() {
     if (_suppressHistory) return;
@@ -2082,8 +2150,8 @@
     const h2=new fabric.Circle({...hs,left:d.x2,top:d.y2,_role:'p2'});
     h1.on('mousedown',()=>{_handleDragging=true;});
     h2.on('mousedown',()=>{_handleDragging=true;});
-    h1.on('moving',()=>{d.x1=h1.left;d.y1=h1.top;_rebuildArrow(arrowId);});
-    h2.on('moving',()=>{d.x2=h2.left;d.y2=h2.top;_rebuildArrow(arrowId);});
+    h1.on('moving',(opt)=>{const q=_constrainHV(d.x2,d.y2,h1.left,h1.top,opt&&opt.e&&opt.e.shiftKey);d.x1=q.x;d.y1=q.y;h1.set({left:q.x,top:q.y});h1.setCoords();_rebuildArrow(arrowId);});
+    h2.on('moving',(opt)=>{const q=_constrainHV(d.x1,d.y1,h2.left,h2.top,opt&&opt.e&&opt.e.shiftKey);d.x2=q.x;d.y2=q.y;h2.set({left:q.x,top:q.y});h2.setCoords();_rebuildArrow(arrowId);});
     d.handles=[h1,h2];
     if (d.curved) {
       const hc=new fabric.Circle({...hs,left:d.cx,top:d.cy,_role:'pc',
@@ -2138,6 +2206,13 @@
     });
   }
 
+  // Hold Shift to lock a segment to horizontal / vertical while drawing or dragging an
+  // endpoint (same convention as Canva, Figma, PowerPoint). `ax,ay` is the fixed anchor.
+  function _constrainHV(ax, ay, px, py, shift) {
+    if (!shift) return { x: px, y: py };
+    return Math.abs(px - ax) >= Math.abs(py - ay) ? { x: px, y: ay } : { x: ax, y: py };
+  }
+
   function createBezierArrow(x1,y1,x2,y2,cfg) {
     const len=Math.sqrt((x2-x1)**2+(y2-y1)**2); if (len<5) return;
     const curved=!!cfg.curved;
@@ -2178,10 +2253,10 @@
       return;
     }
     if (currentTool !== 'arrow') return;
-    const p = fc.getPointer(e.e);
+    let p = fc.getPointer(e.e);
     _clearPreview();
     if (!_arrowP1) { _arrowP1 = { x:p.x, y:p.y }; }
-    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,_currentArrowCfg()); _arrowP1=null; }
+    else { p = _constrainHV(_arrowP1.x,_arrowP1.y,p.x,p.y,e.e.shiftKey); createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,_currentArrowCfg()); _arrowP1=null; }
   });
   fc.on('mouse:move', e => {
     if (currentTool==='free_polygon'&&_polyPoints.length>0) {
@@ -2191,7 +2266,8 @@
       fc.add(_polyPreview); fc.renderAll(); return;
     }
     if (currentTool!=='arrow'||!_arrowP1) return;
-    const p = fc.getPointer(e.e);
+    const p0 = fc.getPointer(e.e);
+    const p = _constrainHV(_arrowP1.x,_arrowP1.y,p0.x,p0.y,e.e.shiftKey);
     _clearPreview();
     _previewLine = new fabric.Line([_arrowP1.x,_arrowP1.y,p.x,p.y], {
       stroke:currentArrowColor, strokeWidth:1.5, strokeDashArray:[4,4], selectable:false, evented:false, _type:'_preview'
@@ -2250,6 +2326,15 @@
   const _propPlayerDiv      = document.getElementById('plPropPlayer');
   const _propPlayerColor    = document.getElementById('plPropPlayerColor');
   const _propPlayerName     = document.getElementById('plPropPlayerName');
+  const _propTextDiv        = document.getElementById('plPropText');
+  const _propTextColor      = document.getElementById('plPropTextColor');
+  const _propTextSize       = document.getElementById('plPropTextSize');
+  // Font-size options (single-step, like a word processor).
+  if (_propTextSize && !_propTextSize.options.length) {
+    [10,11,12,13,14,16,18,20,22,24,28,32,36,40,48].forEach(n => {
+      const o = document.createElement('option'); o.value = n; o.textContent = n; _propTextSize.appendChild(o);
+    });
+  }
 
   // Recolor an already-placed player token (body circle fill + auto-contrast number).
   // Players targeted by a recolor: every player in a multi-selection, or the single one.
@@ -2335,7 +2420,16 @@
     _propConeDiv.style.display='none';  _propBarrierDiv.style.display='none';
     _propGoalPostDiv.style.display='none'; _propPoleDiv.style.display='none';
     if (_propPlayerDiv) _propPlayerDiv.style.display='none';
-    if (obj._type==='arrow') {
+    if (_propTextDiv) _propTextDiv.style.display='none';
+    if (obj._type==='text' && (obj.type==='i-text' || obj.type==='text')) {
+      let _tf = obj.fill || '#ffffff';
+      if (/^#[0-9a-f]{3}$/i.test(_tf)) _tf = '#' + _tf.slice(1).split('').map(c=>c+c).join('');
+      if (_propTextColor) _propTextColor.value = _rgbaToHex(_tf);
+      if (_propTextSize)  _propTextSize.value  = Math.round(obj.fontSize || 14);
+      const al = obj.textAlign || 'left';
+      _propTextDiv.querySelectorAll('.pl-ta-btn').forEach(b => b.classList.toggle('is-on', b.dataset.align === al));
+      _propTextDiv.style.display='flex'; _propBar.style.display='flex';
+    } else if (obj._type==='arrow') {
       const d=_arrowData.get(obj._arrowId); if (!d) return;
       _propArrowColor.value=d.color.length===7?d.color:'#FBBF24';
       _propArrowDiv.style.display='flex'; _propBar.style.display='flex';
@@ -2466,6 +2560,27 @@
     a.dirty = true; fc.renderAll();
   });
   _propPoleColor?.addEventListener('change', () => pushHistory());
+
+  // ── Text properties (colour · font size · alignment) ────────────
+  _propTextColor?.addEventListener('input', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
+    a.set('fill', _propTextColor.value); fc.requestRenderAll();
+  });
+  _propTextColor?.addEventListener('change', () => pushHistory());
+  _propTextSize?.addEventListener('change', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
+    a.set({ fontSize: parseInt(_propTextSize.value, 10) || 14, scaleX: 1, scaleY: 1 });
+    a.initDimensions?.(); a.setCoords(); fc.requestRenderAll(); pushHistory();
+  });
+  _propTextDiv?.querySelectorAll('.pl-ta-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
+      a.set('textAlign', btn.dataset.align);
+      a.initDimensions?.(); a.setCoords(); fc.requestRenderAll();
+      _propTextDiv.querySelectorAll('.pl-ta-btn').forEach(b => b.classList.toggle('is-on', b === btn));
+      pushHistory();
+    });
+  });
 
   fc.on('selection:created', ({selected}) => {
     const obj=selected?.[0];
