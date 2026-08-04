@@ -125,6 +125,11 @@
     const labels = tl.dates.map(d=> new Date(d+'T12:00:00').toLocaleDateString(lang(),{day:'numeric',month:'short'}));
     const fai=cssVar('--cm-fg-faint','#aaa'), acc=accent();
     const maxLoad=Math.max(1,...tl.squadLoad);
+    // Fit the ACWR axis to the data (floor at 2.2 so the 0.8/1.3/1.5 zone lines stay
+    // visible; cap so a lone residual outlier can't flatten the meaningful range).
+    const acwrVals=tl.squadAcwr.filter(v=>v!=null);
+    const maxAcwr=acwrVals.length?Math.max(...acwrVals):0;
+    const yMax=Math.min(6, Math.max(2.2, Math.ceil((maxAcwr+0.15)*10)/10));
     if(state.chart){ state.chart.destroy(); state.chart=null; }
     state.chart = new Chart($('acwrCanvas'), {
       data:{ labels, datasets:[
@@ -136,7 +141,7 @@
       ]},
       options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:false}},
         scales:{
-          y:{ min:0, max:2.2, position:'left', grid:{color:'rgba(128,128,128,0.10)'}, ticks:{color:fai,font:{size:11},callback:v=>v.toFixed(1)} },
+          y:{ min:0, max:yMax, position:'left', grid:{color:'rgba(128,128,128,0.10)'}, ticks:{color:fai,font:{size:11},callback:v=>v.toFixed(1)} },
           y2:{ position:'right', max:maxLoad*3, grid:{display:false}, ticks:{color:fai,font:{size:10},callback:v=> v>=1000?(v/1000).toFixed(0)+'k':v} },
           x:{ grid:{color:'rgba(128,128,128,0.06)'}, ticks:{color:fai,font:{size:10},maxTicksLimit:10} },
         } }

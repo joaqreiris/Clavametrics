@@ -353,9 +353,16 @@
     for (const day of days) {
       const vals = [];
       let dayLoad = 0;
+      const chronFrom = _offsetDate(day, -(o.chronicDays - 1));
       for (const daily of Object.values(perPlayerDaily)) {
         const upto = daily.filter(d => d.date <= day);
-        const a = acwrFromDaily(upto, o);
+        // Mirror calculateSquad()'s minSessions guard: without ≥ minSessions real
+        // sessions in the chronic window the EWMA baseline is a cold-start artifact
+        // (acute spikes far above chronic → a huge ACWR that shoots off the chart).
+        // Blank those days so the timeline matches the "insufficient" KPI.
+        const realSessions = upto.reduce((n, d) =>
+          (d.load > 0 && (!chronFrom || d.date >= chronFrom)) ? n + 1 : n, 0);
+        const a = realSessions >= o.minSessions ? acwrFromDaily(upto, o) : null;
         if (a != null) vals.push(a);
         const today = daily.find(d => d.date === day);
         if (today) dayLoad += today.load;
