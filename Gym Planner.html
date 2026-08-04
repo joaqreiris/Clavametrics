@@ -61,6 +61,10 @@
   .gp-f input,.gp-f select,.gp-f textarea{width:100%;padding:9px 11px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none}
   .gp-f input:focus,.gp-f select:focus,.gp-f textarea:focus{border-color:var(--cm-accent)}
   .gp-f textarea{resize:vertical;min-height:60px}
+  /* Saved Load-groups preview (also used by the modal) */
+  .gp-grp-card{border:1px solid var(--cm-border);border-radius:9px;padding:11px 13px;margin:8px 0;background:var(--cm-bg-soft)}
+  .gp-grp-card:first-child{margin-top:0}
+  .gp-grp-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;margin:3px 3px 0 0;border-radius:13px;background:var(--cm-surface);border:1px solid var(--cm-border);font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
   /* Calendar-sourced fields: subtle left accent bar */
   .is-cal-sourced{box-shadow:inset 2px 0 0 var(--cm-accent)}
 
@@ -262,6 +266,19 @@
         </div>
       </div>
 
+      <!-- ===== LOAD GROUPS (saved to the plan) ===== -->
+      <div class="gp-card" id="gpGroupsCard" style="display:none">
+        <div class="gp-card-h">
+          <h3 data-i18n="gym_planner.load_groups">Load groups</h3>
+          <span class="ct" id="gpGroupsMeta">—</span>
+          <div class="right no-print">
+            <button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-adjustments" style="font-size:13px"></i><span data-i18n="gym_planner.edit_groups">Edit groups</span></button>
+            <button class="cm-btn is-ghost is-sm" onclick="gpClearGroups()"><i class="ti ti-trash" style="font-size:13px"></i><span data-i18n="gym_planner.remove_groups">Remove</span></button>
+          </div>
+        </div>
+        <div class="gp-card-b" id="gpGroupsBody" style="padding:10px 16px 14px"></div>
+      </div>
+
       <!-- ===== WARM-UP ===== -->
       <div class="gp-card warmup">
         <div class="gp-card-h">
@@ -378,6 +395,8 @@ let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = 
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
 let _gpCalFields = new Set();
 let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80, _gpGrpTargetVel = 0.80;
+// Load-groups config saved into the session's gym_content, so it persists and previews in the plan.
+let _gpGrpSavedCfg = null;
 // Print layout: 'cards' (image/initials tiles) or 'text' (compact text rows). Persisted per user —
 // when exercises have no image, the tiles are just dark boxes, so a text-only sheet reads better.
 let _gpPrintLayout = (() => { try { return localStorage.getItem('cm_gp_print_layout') === 'text' ? 'text' : 'cards'; } catch (_) { return 'cards'; } })();
@@ -561,7 +580,8 @@ function gpCollectContent() {
     plyo:   { min: m('gpPlyoMin'),   rows: gpCollectRows('gpPlyoBody', false) },
     main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) },
     adaptations: gpCollectAdapt(),
-    roster: [..._gpRoster]
+    roster: [..._gpRoster],
+    loadGroups: _gpGrpSavedCfg
   };
 }
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
@@ -592,6 +612,9 @@ function gpApplyContent(content) {
   });
   setMin('gpMainMin', content.main?.min);
   gpRecalcTotals();
+  // Restore the saved Load-groups config and preview it in the plan (async row load).
+  _gpGrpSavedCfg = content.loadGroups || null;
+  gpRenderSavedGroups();
 }
 
 // ── Exercise library picker ──
@@ -1336,6 +1359,10 @@ function gpBuildGroupsModal() {
         </div>
       </div>
       <div id="gpGrpBody" style="overflow-y:auto;flex:1;padding:10px 18px"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+        <button class="cm-btn is-ghost is-sm" onclick="gpCloseGroups()">${tt('common.cancel','Cancel')}</button>
+        <button class="cm-btn is-primary is-sm" style="margin-left:auto" onclick="gpSaveGroups()"><i class="ti ti-device-floppy" style="font-size:14px"></i>${tt('gym_planner.save_to_plan','Save to plan')}</button>
+      </div>
     </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#gpGrpMode').addEventListener('click', e => {
@@ -1354,8 +1381,13 @@ function gpBuildGroupsModal() {
 async function gpOpenGroups() {
   gpBuildGroupsModal();
   document.getElementById('gpGrpOv').style.display = 'flex';
+  // Reflect the current (possibly saved) state into the controls before loading data.
+  document.querySelectorAll('#gpGrpMode button').forEach(b => b.classList.toggle('is-on', b.dataset.m === _gpGrpMode));
   document.getElementById('gpGrpPctWrap').style.display = _gpGrpMode === 'rm' ? 'flex' : 'none';
   document.getElementById('gpGrpVelWrap').style.display = _gpGrpMode === 'vbt' ? 'flex' : 'none';
+  document.getElementById('gpGrpPct').value = _gpGrpPct;
+  document.getElementById('gpGrpVel').value = _gpGrpTargetVel;
+  document.getElementById('gpGrpK').value = _gpGrpK;
   await gpRefreshGroupData();
 }
 function gpCloseGroups() { const ov = document.getElementById('gpGrpOv'); if (ov) ov.style.display = 'none'; }
@@ -1434,6 +1466,60 @@ function gpRenderGroups() {
   });
   if (noData.length) html += `<div style="margin-top:8px;font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('gym_planner.no_test_data', `No test data (${noData.length})`, { count:noData.length })}: ${noData.map(nameOf).join(', ')}</div>`;
   body.innerHTML = html;
+}
+
+// Save the current modal config into the plan (persists in gym_content + previews below Athletes).
+function gpSaveGroups() {
+  const gd = gpComputeGroups();
+  if (!gd.ok || !gd.groups.length) { gpToast(tt('gym_planner.no_groups_to_save','Configure groups with test data before saving.')); return; }
+  _gpGrpSavedCfg = { mode:_gpGrpMode, variant:_gpGrpVariant, k:_gpGrpK, pct:_gpGrpPct, targetVel:_gpGrpTargetVel };
+  gpRenderSavedGroups();
+  gpScheduleSave();
+  gpCloseGroups();
+  gpToast(tt('gym_planner.groups_saved','Load groups saved to the plan.'));
+}
+// Remove the saved groups from the plan.
+function gpClearGroups() {
+  _gpGrpSavedCfg = null;
+  const card = document.getElementById('gpGroupsCard'); if (card) card.style.display = 'none';
+  gpScheduleSave();
+  gpToast(tt('gym_planner.groups_removed','Load groups removed from the plan.'));
+}
+// Render the saved groups preview card in the plan. Loads the eval rows for the saved
+// mode when needed (e.g. on page load) since the modal may never have been opened.
+async function gpRenderSavedGroups() {
+  const card = document.getElementById('gpGroupsCard');
+  const body = document.getElementById('gpGroupsBody');
+  const metaEl = document.getElementById('gpGroupsMeta');
+  if (!card || !body) return;
+  if (!_gpGrpSavedCfg) { card.style.display = 'none'; return; }
+  const cfg = _gpGrpSavedCfg;
+  _gpGrpMode = cfg.mode; _gpGrpVariant = cfg.variant; _gpGrpK = cfg.k;
+  _gpGrpPct = cfg.pct; _gpGrpTargetVel = cfg.targetVel;
+  try { _gpGrpRows = await gpLoadGroupRows(_gpGrpMode); } catch(_) { _gpGrpRows = []; }
+  const gd = gpComputeGroups();
+  if (!gd.ok || !gd.groups.length) { card.style.display = 'none'; return; }
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444','#0ea5e9'];
+  const isRM = gd.mode === 'rm';
+  const tgt = isRM ? tt('gym_planner.target_pct_rm', `target ${gd.pct}% RM`, { pct:gd.pct })
+                   : tt('gym_planner.target_vel_ms', `target ${gd.targetVel} m/s`, { vel:gd.targetVel });
+  const _pl = tt('gym_planner.n_players_count', `${gd.players} player${gd.players>1?'s':''}`, { count:gd.players });
+  const _gr = tt('gym_planner.n_groups_count', `${gd.k} groups`, { count:gd.k });
+  if (metaEl) metaEl.textContent = `${gd.variant} · ${isRM?'%RM':'VBT'} · ${_pl} · ${_gr} · ${tgt}`;
+  const cards = gd.groups.map((grp, i) => {
+    const color = COLORS[i % COLORS.length];
+    const chips = grp.items.map(it => `<span class="gp-grp-chip">${it.name}<span style="margin-left:5px;font:700 11px/1 var(--cm-font-mono);color:${color}">${it.load}</span></span>`).join('');
+    return `<div class="gp-grp-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color}"></span>
+        <span style="font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.group_label', `Group ${grp.letter}`, { letter:grp.letter })}</span>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${grp.items.length} · ${grp.range}</span>
+      </div>
+      <div>${chips}</div></div>`;
+  }).join('');
+  const noData = gd.noData && gd.noData.length ? `<div style="margin-top:8px;font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('gym_planner.no_test_data', `No test data (${gd.noData.length})`, { count:gd.noData.length })}: ${gd.noData.join(', ')}</div>` : '';
+  body.innerHTML = cards + noData;
+  card.style.display = '';
 }
 
 // Pure computation of the configured load groups (mirrors gpRenderGroups' math) —
@@ -2052,6 +2138,7 @@ async function gpExportPDF() {
       gpRecalcTotals();
       gpRenderRoster();
       _gpUpdatePublishBtn();
+      gpRenderSavedGroups();
       gpRenderPrintSheet();
     } catch (_) {}
   });
