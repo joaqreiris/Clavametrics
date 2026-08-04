@@ -1281,6 +1281,7 @@
                 <div class="pl-seg" data-line-group="style">
                   <button data-val="solid" class="is-on" data-i18n="planner.line_solid">Solid</button>
                   <button data-val="dashed" data-i18n="planner.line_dashed_word">Dashed</button>
+                  <button data-val="wavy" data-i18n="planner.line_wavy">Carry</button>
                 </div>
               </div>
               <div class="pl-line-row"><span class="pl-line-lbl" data-i18n="planner.line_start">Start</span>
@@ -1574,7 +1575,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowWavy','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1952,10 +1953,10 @@
 
   // ── Arrow drawing ────────────────────────────────────────────────
   // Composable line config (driven by the Lines composer panel).
-  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false,
+  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false, currentArrowWavy=false,
       currentArrowStartCap='none', currentArrowEndCap='arrow', currentArrowWidth=2.5;
   function _currentArrowCfg() {
-    return { color:currentArrowColor, dashed:currentArrowDash, curved:currentArrowCurved,
+    return { color:currentArrowColor, dashed:currentArrowDash, curved:currentArrowCurved, wavy:currentArrowWavy,
              startCap:currentArrowStartCap, endCap:currentArrowEndCap, width:currentArrowWidth };
   }
 
@@ -1980,15 +1981,51 @@
     if (kind === 'dot')   return _dotCap(x, y, color, w);
     return null;
   }
+  // Sample a point (and tangent) at t∈[0,1] along the base line — straight or quadratic.
+  function _arrowBasePoint(d, t) {
+    if (d.curved) {
+      const mt = 1 - t;
+      return {
+        x: mt*mt*d.x1 + 2*mt*t*d.cx + t*t*d.x2,
+        y: mt*mt*d.y1 + 2*mt*t*d.cy + t*t*d.y2,
+        tx: 2*mt*(d.cx-d.x1) + 2*t*(d.x2-d.cx),
+        ty: 2*mt*(d.cy-d.y1) + 2*t*(d.y2-d.cy)
+      };
+    }
+    return { x: d.x1+(d.x2-d.x1)*t, y: d.y1+(d.y2-d.y1)*t, tx: d.x2-d.x1, ty: d.y2-d.y1 };
+  }
+  // Wavy ("conducción") path: a sine wave rippling along the base line. Amplitude tapers
+  // to 0 at both ends so the endpoints (and the arrowhead) still meet the handles cleanly.
+  function _wavyPathD(d, w) {
+    const approxLen = d.curved
+      ? Math.hypot(d.cx-d.x1, d.cy-d.y1) + Math.hypot(d.x2-d.cx, d.y2-d.cy)
+      : Math.hypot(d.x2-d.x1, d.y2-d.y1);
+    const amp = 3.2 + w * 1.5;
+    const cycles = Math.max(2, Math.round(approxLen / 26));
+    const steps = cycles * 16;
+    let out = '';
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const bp = _arrowBasePoint(d, t);
+      const tl = Math.hypot(bp.tx, bp.ty) || 1;
+      const px = -bp.ty / tl, py = bp.tx / tl;      // unit perpendicular
+      const taper = Math.sin(Math.PI * t);          // 0 at ends, 1 in the middle
+      const off = amp * taper * Math.sin(t * cycles * 2 * Math.PI);
+      out += (i === 0 ? 'M ' : 'L ') + (bp.x + px*off).toFixed(2) + ' ' + (bp.y + py*off).toFixed(2) + ' ';
+    }
+    return out;
+  }
   function _buildArrowGroup(d) {
-    const { x1,y1,cx,cy,x2,y2,color,dashed,curved } = d;
+    const { x1,y1,cx,cy,x2,y2,color,dashed,curved,wavy } = d;
     const w        = d.width || 2.5;
     const startCap = d.startCap || 'none';
     const endCap   = d.endCap   || 'arrow';
-    const lineD = curved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
+    const lineD = wavy   ? _wavyPathD(d, w)
+                : curved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`
+                :          `M ${x1} ${y1} L ${x2} ${y2}`;
     const linePath = new fabric.Path(lineD, {
-      stroke:color, strokeWidth:w, fill:'', strokeLineCap:'round',
-      strokeDashArray: dashed ? [Math.max(6, w*3), Math.max(4, w*2)] : null,
+      stroke:color, strokeWidth:w, fill:'', strokeLineCap:'round', strokeLineJoin:'round',
+      strokeDashArray: (dashed && !wavy) ? [Math.max(6, w*3), Math.max(4, w*2)] : null,
       strokeUniform:true, selectable:false, evented:false
     });
     const parts = [linePath];
@@ -2001,7 +2038,7 @@
       selectable:true, evented:true, hasControls:false, hasBorders:false,
       perPixelTargetFind:true, _type:'arrow', _arrowId:d.id,
       _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2,
-      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved,
+      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved, _arrowWavy:d.wavy,
       _arrowStartCap:startCap, _arrowEndCap:endCap, _arrowWidth:w
     });
   }
@@ -2090,7 +2127,7 @@
       const d={
         id:grp._arrowId||(++_nextArrowId),
         x1:grp._x1,y1:grp._y1,cx:grp._cx,cy:grp._cy,x2:grp._x2,y2:grp._y2,
-        color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,
+        color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,wavy:!!grp._arrowWavy,
         ..._capsFromGrp(grp),
         grp,handles:[]
       };
@@ -2107,7 +2144,7 @@
     const offset=curved?len*0.20:0;
     const cx=(x1+x2)/2-(y2-y1)*offset/len, cy=(y1+y2)/2+(x2-x1)*offset/len;
     const id=++_nextArrowId;
-    const d={id,x1,y1,cx,cy,x2,y2,color:cfg.color,dashed:!!cfg.dashed,curved,
+    const d={id,x1,y1,cx,cy,x2,y2,color:cfg.color,dashed:!!cfg.dashed,curved,wavy:!!cfg.wavy,
       startCap:cfg.startCap||'none',endCap:cfg.endCap||'arrow',width:cfg.width||2.5,grp:null,handles:[]};
     d.grp=_buildArrowGroup(d);
     _arrowData.set(id,d);
@@ -2127,7 +2164,7 @@
     grp.set({ _x1:grp._x1, _y1:grp._y1, _cx:grp._cx, _cy:grp._cy, _x2:grp._x2, _y2:grp._y2 });
     const id = ++_nextArrowId; grp._arrowId = id;
     const d = { id, x1:grp._x1, y1:grp._y1, cx:grp._cx, cy:grp._cy, x2:grp._x2, y2:grp._y2,
-      color:grp._arrowColor||'#FBBF24', dashed:!!grp._arrowDash, curved:!!grp._arrowCurved,
+      color:grp._arrowColor||'#FBBF24', dashed:!!grp._arrowDash, curved:!!grp._arrowCurved, wavy:!!grp._arrowWavy,
       ..._capsFromGrp(grp), grp, handles:[] };
     _arrowData.set(id, d);
     _attachGroupHandlers(d);
@@ -2591,8 +2628,10 @@
     const svg = document.getElementById('plLinePreview'); if (!svg) return;
     const col = currentArrowColor, w = currentArrowWidth;
     const x1=18, y1=22, x2=194, y2=22, cx=106, cy = currentArrowCurved ? 5 : 22;
-    const lineD = currentArrowCurved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
-    const dash  = currentArrowDash ? ` stroke-dasharray="${Math.max(6,w*3)} ${Math.max(4,w*2)}"` : '';
+    const lineD = currentArrowWavy
+      ? _wavyPathD({ x1,y1,cx,cy,x2,y2, curved:currentArrowCurved }, w)
+      : (currentArrowCurved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`);
+    const dash  = (currentArrowDash && !currentArrowWavy) ? ` stroke-dasharray="${Math.max(6,w*3)} ${Math.max(4,w*2)}"` : '';
     const cap = (x,y,ox,oy,kind) => {
       if (kind === 'none') return '';
       if (kind === 'dot')  return `<circle cx="${x}" cy="${y}" r="${(2.8+w).toFixed(1)}" fill="${col}"/>`;
@@ -2604,13 +2643,13 @@
     };
     const endCap   = cap(x2, y2, currentArrowCurved?cx:x1, currentArrowCurved?cy:y1, currentArrowEndCap);
     const startCap = cap(x1, y1, currentArrowCurved?cx:x2, currentArrowCurved?cy:y2, currentArrowStartCap);
-    svg.innerHTML = `<path d="${lineD}" stroke="${col}" stroke-width="${w}" fill="none" stroke-linecap="round"${dash}/>${endCap}${startCap}`;
+    svg.innerHTML = `<path d="${lineD}" stroke="${col}" stroke-width="${w}" fill="none" stroke-linecap="round" stroke-linejoin="round"${dash}/>${endCap}${startCap}`;
   }
   (function wireLineComposer(){
     const menu = document.getElementById('plDropLinesMenu'); if (!menu) return;
     const setVar = (group, val) => {
       if      (group==='shape') currentArrowCurved = (val==='curved');
-      else if (group==='style') currentArrowDash  = (val==='dashed');
+      else if (group==='style') { currentArrowDash = (val==='dashed'); currentArrowWavy = (val==='wavy'); }
       else if (group==='start') currentArrowStartCap = val;
       else if (group==='end')   currentArrowEndCap   = val;
       else if (group==='width') currentArrowWidth = parseFloat(val) || 2.5;
