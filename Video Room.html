@@ -86,6 +86,8 @@
   .vr-origin .ti { font-size:14px; }
   .vr-origin.drive .ti { color:#1FA463; }
   .vr-origin.dropbox .ti { color:#0061FF; }
+  .vr-origin.youtube .ti { color:#FF0000; }
+  .vr-origin.vimeo .ti { color:#1AB7EA; }
 
   .vr-dur { position:absolute; bottom:10px; right:10px; z-index:3; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; background:rgba(8,12,16,0.82); color:#fff; font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.02em; }
   .vr-dur .ti { font-size:12px; opacity:0.85; }
@@ -284,21 +286,27 @@
     const t = $('#vrToast'); t.textContent = msg; t.classList.add('is-show');
     setTimeout(() => t.classList.remove('is-show'), 2400);
   }
+  function ytId(u)    { const m = (u || '').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/); return m ? m[1] : null; }
+  function vimeoId(u) { const m = (u || '').match(/vimeo\.com\/(?:video\/)?(\d+)/); return m ? m[1] : null; }
   function detectProvider(url) {
     const u = (url || '').toLowerCase();
     if (u.includes('drive.google.com') || u.includes('docs.google.com')) return 'google_drive';
     if (u.includes('dropbox.com')) return 'dropbox';
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+    if (u.includes('vimeo.com')) return 'vimeo';
     return 'other';
   }
   function detectKind(url) {
     const u = (url || '').toLowerCase();
     if (u.includes('drive.google.com') || u.includes('docs.google.com')) return u.includes('/folders/') ? 'folder' : 'video';
     if (u.includes('dropbox.com')) return (u.includes('/scl/fo/') || u.includes('/sh/')) ? 'folder' : 'video';
-    return 'video';
+    return 'video';   // youtube / vimeo / other are always a single video
   }
   const PROV = {
     google_drive: { cls:'drive',   icon:'ti-brand-google-drive', label:'Drive' },
     dropbox:      { cls:'dropbox', icon:'ti-brand-dropbox',      label:'Dropbox' },
+    youtube:      { cls:'youtube', icon:'ti-brand-youtube',      label:'YouTube' },
+    vimeo:        { cls:'vimeo',   icon:'ti-brand-vimeo',        label:'Vimeo' },
     other:        { cls:'',        icon:'ti-link',               label:'Link' },
   };
   function fmtDate(d) { try { return new Date(d).toLocaleDateString((window.CM_I18N && CM_I18N.current) || 'en-GB', { day:'2-digit', month:'short', year:'numeric' }); } catch { return ''; } }
@@ -568,14 +576,20 @@
     btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
     const activeTeam = sessionStorage.getItem('cal_active_team') || null;
 
+    const provider = detectProvider(url);
+    let externalId = null, autoThumb = null;
+    if (provider === 'youtube') { externalId = ytId(url); if (externalId) autoThumb = `https://img.youtube.com/vi/${externalId}/hqdefault.jpg`; }
+    else if (provider === 'vimeo') { externalId = vimeoId(url); }
+
     const { error } = await window.sb.from('videos').insert({
       club_id:          clubId,
       team_id:          activeTeam,
       title,
       url,
-      provider:         detectProvider(url),
+      provider,
+      external_id:      externalId,
       kind:             effectiveKind() || 'video',
-      thumbnail_url:    $('#vrThumb').value.trim() || null,
+      thumbnail_url:    $('#vrThumb').value.trim() || autoThumb || null,
       uploaded_by:      userId,
       uploaded_by_name: profileName,
     });

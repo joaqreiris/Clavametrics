@@ -2299,7 +2299,7 @@ create table if not exists public.videos (
   updated_at timestamp with time zone default now() not null,
   kind text default 'video'::text not null,
   constraint videos_pkey primary key (id),
-  constraint videos_provider_check CHECK ((provider = ANY (ARRAY['google_drive'::text, 'dropbox'::text, 'other'::text]))),
+  constraint videos_provider_check CHECK ((provider = ANY (ARRAY['google_drive'::text, 'dropbox'::text, 'youtube'::text, 'vimeo'::text, 'other'::text]))),
   constraint videos_kind_check CHECK ((kind = ANY (ARRAY['video'::text, 'folder'::text])))
 );
 CREATE INDEX idx_videos_club ON public.videos USING btree (club_id);

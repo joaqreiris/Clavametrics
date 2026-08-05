@@ -341,6 +341,8 @@
   const PROV = {
     google_drive: { cls:'drive',   icon:'ti-brand-google-drive', label:'Google Drive', open:tt('video_detail.open_in', 'Open in {name}', { name:'Google Drive' }) },
     dropbox:      { cls:'dropbox', icon:'ti-brand-dropbox',      label:'Dropbox',      open:tt('video_detail.open_in', 'Open in {name}', { name:'Dropbox' }) },
+    youtube:      { cls:'youtube', icon:'ti-brand-youtube',      label:'YouTube',      open:tt('video_detail.open_in', 'Open in {name}', { name:'YouTube' }) },
+    vimeo:        { cls:'vimeo',   icon:'ti-brand-vimeo',        label:'Vimeo',        open:tt('video_detail.open_in', 'Open in {name}', { name:'Vimeo' }) },
     other:        { cls:'',        icon:'ti-link',               label:tt('video_detail.prov_link', 'Link'), open:tt('video_detail.open_link', 'Open link') },
   };
   const prov = PROV[v.provider] || PROV.other;
@@ -370,6 +372,14 @@
       // Drive folders embed as a navigable grid; Dropbox folders have no reliable embed.
       if (v.provider === 'google_drive') { const fid = driveFolderId(); return fid ? `https://drive.google.com/embeddedfolderview?id=${fid}#grid` : null; }
       return null;
+    }
+    if (v.provider === 'youtube') {
+      const yid = v.external_id || (v.url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/) || [])[1];
+      return yid ? `https://www.youtube.com/embed/${yid}?rel=0&playsinline=1` : null;
+    }
+    if (v.provider === 'vimeo') {
+      const vid = v.external_id || (v.url.match(/vimeo\.com\/(?:video\/)?(\d+)/) || [])[1];
+      return vid ? `https://player.vimeo.com/video/${vid}` : null;
     }
     if (v.provider === 'google_drive') { const fid = driveId(); return fid ? `https://drive.google.com/file/d/${fid}/preview` : null; }
     if (v.provider === 'dropbox') {
