@@ -8892,14 +8892,21 @@ async function openManualGpsModal() {
   // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
   // so today's just-synced session is pickable. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
-  const [sessRes, rosterRes] = await Promise.all([ sQ, _gpRoster(clubId, teamId) ]);
+  const [sessRes, rosterRes, dataRes] = await Promise.all([
+    sQ, _gpRoster(clubId, teamId),
+    window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
+  ]);
   const sessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
+  // How many players already have data per session → mark it in the list so the user picks the
+  // session that actually holds GPS (the Catapult one), not an empty duplicate.
+  const _dataCount = {};
+  (dataRes.data || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
   if (!sessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions found for this team.')}</div>`; return; }
 
   body.innerHTML = `
     <label class="mgp-lbl">${tt('gps_analysis.manual_session','Session')}</label>
-    <select id="mgpSession" class="mgp-in">${sessions.map(s=>`<option value="${_esc(s.id)}">${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}</option>`).join('')}</select>
+    <select id="mgpSession" class="mgp-in">${sessions.map(s=>{ const n=_dataCount[s.id]||0; return `<option value="${_esc(s.id)}">${n?'✓ ':''}${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}${n?` (${n})`:''}</option>`; }).join('')}</select>
     <div id="mgpStatus" class="mgp-status"></div>
     <label class="mgp-lbl">${tt('gps_analysis.manual_player','Player')}</label>
     <select id="mgpPlayer" class="mgp-in"></select>
@@ -8998,6 +9005,9 @@ async function openManualGpsModal() {
     window.refreshDashboard?.();
   });
 
+  // Default to the most recent session that actually has GPS data (skip empty duplicates).
+  const _firstWithData = sessions.find(s => _dataCount[s.id]);
+  if (_firstWithData) body.querySelector('#mgpSession').value = _firstWithData.id;
   loadSession();
 }
 document.getElementById('gpManualBtn')?.addEventListener('click', openManualGpsModal);
