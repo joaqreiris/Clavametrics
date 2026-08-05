@@ -562,7 +562,7 @@
       <!-- ============== TOP-LEVEL BRANCH SEGMENT ============== -->
       <div class="ev-branch-seg" id="evBranchSeg">
         <button class="is-on" data-branch-btn="measured"><i class="ti ti-ruler-measure"></i><span data-i18n="evaluations.branch_measured">Measured</span></button>
-        <button data-branch-btn="field"><i class="ti ti-clipboard-list"></i><span data-i18n="evaluations.branch_field">Field assessment</span></button>
+        <button data-branch-btn="field" style="display:none"><i class="ti ti-clipboard-list"></i><span data-i18n="evaluations.branch_field">Field assessment</span></button>
         <button data-branch-btn="prevention"><i class="ti ti-shield-half-filled"></i><span data-i18n="evaluations.branch_prevention">Prevention</span></button>
       </div>
 
@@ -8210,7 +8210,9 @@
       + '#preventionView td.pb-act{text-align:center;padding:0 12px}'
       + '#preventionView .pb-act a{display:inline-flex;align-items:center;gap:4px;color:var(--cm-accent);font:600 11.5px/1 var(--cm-font-sans);text-decoration:none;white-space:nowrap}'
       + '#preventionView .pb-loading,#preventionView .pb-empty{padding:34px;text-align:center;color:var(--cm-fg-faint);font:500 13px/1.4 var(--cm-font-sans)}'
-      + '#preventionView .pb-foot{margin-top:12px;font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-faint);display:flex;gap:7px;align-items:flex-start}';
+      + '#preventionView .pb-foot{margin-top:12px;font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-faint);display:flex;gap:7px;align-items:flex-start}'
+      + '#preventionView .pb-cell[data-tip]{cursor:help}'
+      + '.pb-tip{position:fixed;z-index:9999;pointer-events:none;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);font:600 11.5px/1.4 var(--cm-font-mono);padding:6px 9px;border-radius:7px;box-shadow:0 6px 18px rgba(0,0,0,.18);opacity:0;transition:opacity .08s;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}';
     var el = document.createElement('style'); el.id = 'pb-styles'; el.textContent = css; document.head.appendChild(el);
   }
 
@@ -8291,17 +8293,18 @@
     if (!c.hasData) return '<td class="pb-col"><div class="pb-cell none">—</div></td>';
     var u = c.unit ? (' ' + c.unit) : '';
     var lv = c.L != null ? (pbFmt(c.L) + u) : null, rv = c.R != null ? (pbFmt(c.R) + u) : null, nv = c.NA != null ? (pbFmt(c.NA) + u) : null;
+    var name = c.def ? tt(c.def.i18n_key, c.def.label) : '';
     var main, tip;
     if (c.pct != null){
       main = Math.round(c.pct) + '%';
-      tip = 'L ' + (lv || '—') + ' · R ' + (rv || '—') + ' · ' + tt('evaluations.asym_pct','Asym') + ' ' + Math.round(c.pct) + '%';
+      tip = name + ' · L ' + (lv || '—') + ' · R ' + (rv || '—') + ' · ' + tt('evaluations.asym_pct','Asym') + ' ' + Math.round(c.pct) + '%';
     } else {
       var only = nv || lv || rv;
       main = only ? only.split(' ')[0] : '—';
-      tip = only || '';
+      tip = name + (only ? ' · ' + only : '');
     }
     var flag = c.status === 'alert' ? '▲' : (c.status === 'watch' ? '●' : '');
-    return '<td class="pb-col"><div class="pb-cell ' + c.status + '" title="' + pbEsc(tip) + '">'
+    return '<td class="pb-col"><div class="pb-cell ' + c.status + '" data-tip="' + pbEsc(tip) + '">'
       + (flag ? '<span class="fl">' + flag + '</span>' : '') + '<span class="n">' + pbEsc(main) + '</span></div></td>';
   }
 
@@ -8360,7 +8363,7 @@
       var pid = encodeURIComponent(p.id);
       var cnt = r.alerts ? '<span class="pb-cnt a">' + r.alerts + '</span>' : (r.watches ? '<span class="pb-cnt w">' + r.watches + '</span>' : '<span class="pb-cnt z">0</span>');
       return '<tr>'
-        + '<td class="stk"><div class="pb-plcell"><span class="pb-mono">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Player.html?id=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
+        + '<td class="stk"><div class="pb-plcell"><span class="pb-mono">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
         + r.cells.map(pbCellHtml).join('')
         + '<td class="pb-al">' + cnt + '</td>'
         + '<td class="pb-act"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '"><i class="ti ti-shield-plus"></i>' + pbEsc(tt('evaluations.prev_action','Preventive')) + '</a></td>'
@@ -8379,6 +8382,24 @@
       + '<div class="pb-scroll"><table class="pb-tbl"><thead><tr class="grp">' + grpHtml + '</tr><tr class="cols">' + colHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>'
       + '</div>'
       + '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.prev_foot','Cell shows left/right asymmetry of the latest test; hover for values. Default thresholds: watch ≥10%, alert ≥15% — configurable per test.')) + '</span></div>';
+
+    // custom hover tooltip (wired once on the persistent #pbBoard)
+    if (!mount._pbTipWired){
+      mount._pbTipWired = true;
+      var tipEl = document.getElementById('pbTip');
+      if (!tipEl){ tipEl = document.createElement('div'); tipEl.id = 'pbTip'; tipEl.className = 'pb-tip'; document.body.appendChild(tipEl); }
+      mount.addEventListener('mousemove', function(e){
+        var cell = e.target.closest ? e.target.closest('.pb-cell[data-tip]') : null;
+        if (cell && cell.getAttribute('data-tip')){
+          tipEl.textContent = cell.getAttribute('data-tip');
+          tipEl.style.opacity = '1';
+          var x = e.clientX + 14, y = e.clientY + 16;
+          if (x + tipEl.offsetWidth > window.innerWidth - 8) x = e.clientX - tipEl.offsetWidth - 12;
+          tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+        } else { tipEl.style.opacity = '0'; }
+      });
+      mount.addEventListener('mouseleave', function(){ tipEl.style.opacity = '0'; });
+    }
   }
 
   // ── re-render JS-built UI on language change (static nodes are re-applied by sidebar.js) ──
