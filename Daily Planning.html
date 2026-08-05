@@ -1280,7 +1280,7 @@ function dpExerciseCardHTML(e) {
             ${fieldStr ? `<span class="it"><i class="ti ti-rectangle"></i>${fieldStr}</span>` : ''}
           </div>
           ${(() => {
-            if (e.phase !== 'main') return '';   // editor only for field tasks (live in _dpFieldExercises)
+            // Inline time editor for every phase (main / activation / goalkeepers).
             const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
             const seriesMode = !!(e.series && e.work_time);   // interval — structure decides, not absence of a legacy duration
             const repsMode   = !seriesMode && (e.dose_mode === 'reps' || (!!e.series && e.reps != null && e.reps !== ''));
@@ -1346,9 +1346,9 @@ function dpExerciseCardHTML(e) {
           <div class="dp-ex-name">${nm}</div>
           <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
           ${desc ? `<div class="dp-ex-desc">${desc}</div>` : ''}
-          ${e.phase === 'main' ? `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
+          <div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
             <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;width:54px"><span>${tt('daily_planning.min_short','min')}</span>
-          </div>` : ''}
+          </div>
           ${dpExGroupsRow(e)}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
@@ -1402,12 +1402,30 @@ async function _dpEditFlushOne(seid){
 }
 // Flush ALL pending task edits NOW (call before switching day / on unload / on blur).
 function dpFlushEdits(){ Object.keys(_dpEditPending).forEach(seid => _dpEditFlushOne(seid)); }
-// A task may live in field exercises OR activation activities (both render the notes field).
+// A task may live in field exercises, activation activities OR goalkeeper training.
 function _dpFindTask(seid){
-  return _dpFieldExercises.find(x => x.id === seid) || (window._dpActItems||[]).find(x => x.id === seid) || null;
+  return _dpFieldExercises.find(x => x.id === seid)
+      || (window._dpActItems||[]).find(x => x.id === seid)
+      || (window._dpGkItems||[]).find(x => x.id === seid)
+      || null;
+}
+// Recompute the activation / goalkeeper section totals from their item lists (dpBlockMins,
+// so interval blocks count as series×(work+rest)), and refresh their header displays.
+function dpRecomputeSectionTotals(){
+  const act = Math.round((window._dpActItems||[]).reduce((s,e)=>s+dpBlockMins(e).total_min,0));
+  _dpActTotalMin = act;
+  const aCt = document.getElementById('dpActCt'), aDur = document.getElementById('dpActDuration');
+  if (aCt)  aCt.textContent = act ? tt('daily_planning.min_count', `${act} min`, {count: act}) : '—';
+  if (aDur) aDur.value = act || '';
+  const gks = (window._dpGkItems||[]);
+  const gk = Math.round(gks.reduce((s,e)=>s+dpBlockMins(e).total_min,0));
+  _dpGkTotalMin = gk;
+  const gCt = document.getElementById('dpGkCt'), gDur = document.getElementById('dpGkDuration');
+  if (gCt)  gCt.textContent = gk ? tt('daily_planning.min_count', `${gk} min`, {count: gk}) : (gks.length ? String(gks.length) : '—');
+  if (gDur) gDur.value = gk || '';
 }
 function _dpEffLabel(seid){
-  const e = _dpFieldExercises.find(x => x.id === seid);
+  const e = _dpFindTask(seid);
   if (!e) return;
   const mins = Math.round(dpBlockMins(e).total_min);
   const el = document.querySelector(`[data-eff="${seid}"]`);
@@ -1417,33 +1435,34 @@ function _dpEffLabel(seid){
   if (badge) badge.innerHTML = `<i class="ti ti-clock"></i>${mins ? mins + '′' : '—'}`;
 }
 function dpEditDur(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;   // field / activation / goalkeeper task
   e.duration = val === '' ? null : (parseInt(val) || 0);
   _dpEffLabel(seid);                    // per-card badge + inline total
+  dpRecomputeSectionTotals();           // activation / GK header totals
   recalcTotals();                       // live day totals + GPS projection
   _dpEditSave(seid, { duration: e.duration });
 }
 function dpEditSeries(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;
   e.series = val === '' ? null : (parseInt(val) || null);
-  _dpEffLabel(seid); recalcTotals();
+  _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();
   _dpEditSave(seid, { series: e.series });
 }
 function dpEditReps(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;
   e.reps = val === '' ? null : (parseInt(val) || null);
   _dpEditSave(seid, { reps: e.reps });   // reps don't change session minutes (duration drives the total)
 }
 function dpEditWork(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;
   e.work_time = val === '' ? null : val;
-  _dpEffLabel(seid); recalcTotals();
+  _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();
   _dpEditSave(seid, { work_time: e.work_time });
 }
 function dpEditRest(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;
   e.rest_time = val === '' ? null : val;
-  _dpEffLabel(seid); recalcTotals();       // total uses rest; projection (work_min) unaffected
+  _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();   // total uses rest; projection (work_min) unaffected
   _dpEditSave(seid, { rest_time: e.rest_time });
 }
 function dpEditNotes(seid, val){
@@ -2205,7 +2224,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
+    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
@@ -2213,7 +2232,7 @@ async function loadActivationActivities(sessionId) {
   acts.forEach(e => {
     e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
   });
-  const total = acts.reduce((s, a) => s + (a.duration || 0), 0);
+  const total = Math.round(acts.reduce((s, a) => s + dpBlockMins(a).total_min, 0));
   _dpActTotalMin = total;
   if (ctEl) ctEl.textContent = total ? tt('daily_planning.min_count', `${total} min`, {count: total}) : '—';
   if (durEl) durEl.value = total || '';
@@ -2273,14 +2292,14 @@ async function loadGoalkeeperActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
+    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','goalkeepers').order('position');
   const gks = data || [];
   window._dpGkItems = gks;
   gks.forEach(e => {
     e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
   });
-  const total = gks.reduce((s, a) => s + (a.duration || 0), 0);
+  const total = Math.round(gks.reduce((s, a) => s + dpBlockMins(a).total_min, 0));
   _dpGkTotalMin = total;
   if (ctEl) ctEl.textContent = total ? tt('daily_planning.min_count', `${total} min`, {count: total}) : (gks.length ? String(gks.length) : '—');
   if (durEl) durEl.value = total || '';
