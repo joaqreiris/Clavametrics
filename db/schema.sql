@@ -476,6 +476,7 @@ create table if not exists public.exercises (
   objective text,
   description text,
   visible_teams uuid[],
+  origin_team_id uuid,
   preview_svg text,
   preview_png text,
   preview_path text,
@@ -2155,6 +2156,9 @@ create table if not exists public.teams (
   constraint teams_club_id_name_key UNIQUE (club_id, name)
 );
 CREATE INDEX teams_club_id_idx ON public.teams USING btree (club_id);
+-- At most one "first team" (is_primary) per club — used by the exercise sharing hierarchy.
+CREATE UNIQUE INDEX IF NOT EXISTS teams_one_primary_per_club ON public.teams USING btree (club_id) WHERE is_primary;
+CREATE INDEX IF NOT EXISTS exercises_origin_team_idx ON public.exercises USING btree (origin_team_id);
 
 create table if not exists public.training_sessions (
   id uuid default gen_random_uuid() not null,
@@ -2374,6 +2378,7 @@ alter table public.evaluations add constraint evaluations_player_id_fkey FOREIGN
 alter table public.exercise_drills add constraint exercise_drills_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE;
 alter table public.exercises add constraint exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.exercises add constraint exercises_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.exercises add constraint exercises_origin_team_fkey FOREIGN KEY (origin_team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.force_column_mappings add constraint force_column_mappings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.force_metric_definitions add constraint force_metric_definitions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.force_test_metrics add constraint force_test_metrics_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;

@@ -430,7 +430,7 @@
 
           <div class="sl-acc">
             <div class="sl-acc-h" data-acc="team">
-              <span class="l" data-i18n="exlib.team">Team</span>
+              <span class="l" data-i18n="exlib.team_origin">Origin team</span>
               <span class="ct" id="ctTeamAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
@@ -481,12 +481,12 @@
     if (!wrap || !window._slTeams) return;
     wrap.innerHTML = window._slTeams.map(t =>
       `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span><span class="ct">—</span></div>`
-    ).join('') + `<div class="sl-opt" data-group="team" data-val="__all__"><span class="cb"></span><span class="lbl">${tt('exlib.all_categories','All categories')}</span><span class="ct">—</span></div>`;
+    ).join('') + `<div class="sl-opt" data-group="team" data-val="__none__"><span class="cb"></span><span class="lbl">${tt('exlib.no_origin_team','No team')}</span><span class="ct">—</span></div>`;
   })();
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,origin_team_id,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -582,14 +582,13 @@
         const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
         if (!filters.gametype.has(gt)) return false;
       }
-      // Team / category visibility
+      // Origin team (where the exercise comes from). '__none__' matches exercises with no origin.
       if (filters.team && filters.team.size) {
-        const vt = ex.visible_teams || [];
-        const isAll = vt.length === 0;
+        const origin = ex.origin_team_id || null;
         let match = false;
         for (const sel of filters.team) {
-          if (sel === '__all__' && isAll) { match = true; break; }
-          if (vt.includes(sel)) { match = true; break; }
+          if (sel === '__none__' && origin == null) { match = true; break; }
+          if (origin === sel) { match = true; break; }
         }
         if (!match) return false;
       }
@@ -1127,8 +1126,8 @@
     const sl = document.getElementById('sortLabel');
     if (sl && sortCycles[sortIdx]) sl.textContent = sortCycles[sortIdx][1]();
     // Team filter's fixed "All categories" option (rest of options are team names = data).
-    const allOpt = document.querySelector('#accTeam .sl-opt[data-val="__all__"] .lbl');
-    if (allOpt) allOpt.textContent = tt('exlib.all_categories','All categories');
+    const allOpt = document.querySelector('#accTeam .sl-opt[data-val="__none__"] .lbl');
+    if (allOpt) allOpt.textContent = tt('exlib.no_origin_team','No team');
     renderCards();
     if (selectedId) showPreview(selectedId);
   });
