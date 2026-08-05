@@ -233,6 +233,15 @@ async function loadContext(adminClient: Admin, integrationId: string): Promise<C
   const playerByExt = new Map<string, string>();
   for (const p of (players || [])) if (p.external_gps_id) playerByExt.set(String(p.external_gps_id), p.id as string);
 
+  // Season boundary: sessions BEFORE the club's first microcycle (MC 01) are "last season"
+  // → is_historical; on/after it → current (visible by default). Fetched once. Replaces the
+  // old "always historical" flag that hid freshly-synced data.
+  const { data: _firstMc } = await adminClient
+    .from('microcycles').select('start_date')
+    .eq('club_id', clubId).not('start_date', 'is', null)
+    .order('start_date', { ascending: true }).limit(1).maybeSingle();
+  const seasonStart: string | null = (_firstMc?.start_date as string) ?? null;
+
   // Data-driven resolveMap: slug → { target_metric, unit_conversion }. PAGINATE: a club can have
   // >1000 rows in gps_column_mappings (every Catapult parameter gets a row), and a plain .select()
   // is truncated to ~1000 by PostgREST. With .order(source_column_name) the alphabetically-LAST
@@ -411,10 +420,28 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
     try {
       // ── 2. Find-or-create the training_session for this activity ────────
       let sessionId: string | null = null;
+      const isHistorical = seasonStart ? (date < seasonStart) : false;
+      // 2a. Already synced this activity? reuse it.
       const { data: existing } = await adminClient
         .from('training_sessions').select('id')
         .eq('club_id', clubId).eq('external_activity_id', activityId).limit(1);
       sessionId = existing?.[0]?.id as string || null;
+      // 2b. Not synced yet — ADOPT a same-day session that has no activity yet (e.g. one created
+      //     by hand in the calendar) instead of creating a duplicate. Avoids two sessions per day.
+      if (!sessionId) {
+        const { data: sameDay } = await adminClient
+          .from('training_sessions').select('id')
+          .eq('club_id', clubId).eq('session_date', date)
+          .is('external_activity_id', null).neq('session_type', 'gym')
+          .order('created_at', { ascending: true }).limit(1);
+        if (sameDay?.[0]?.id) {
+          sessionId = sameDay[0].id as string;
+          await adminClient.from('training_sessions')
+            .update({ external_activity_id: activityId, is_historical: isHistorical, ...(teamId ? { team_id: teamId } : {}) })
+            .eq('id', sessionId);
+        }
+      }
+      // 2c. Nothing to adopt — create a fresh session.
       if (!sessionId) {
         const { data: newSess, error: sErr } = await adminClient
           .from('training_sessions')
@@ -423,7 +450,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
             title: `Training · ${date}`,
             session_date: date,
             session_type: 'training',
-            is_historical: true,
+            is_historical: isHistorical,
             external_activity_id: activityId,
             ...(teamId ? { team_id: teamId } : {}),
           })
