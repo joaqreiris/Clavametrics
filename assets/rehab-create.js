@@ -207,7 +207,61 @@
       alerts.push({ test: 'hip', severity: 'moderate',
         message: tt('preventive.alert_hip_asym', 'Hip ER/IR: {v}% L/R asymmetry', { v: Math.round(hip.value) }) });
     }
+    // new-source screening (force_tests + assessment_test_defs, same engine as the prevention board)
+    try { const extra = await buildScreeningAlerts(playerId, clubId); if (extra.length) alerts.push(...extra); }
+    catch (e) { console.warn('[rehab-create] screening alerts failed:', e); }
     return alerts;
+  }
+
+  // Screening alerts from the isometric/mobility board data (force_tests + force_test_metrics
+  // + assessment_test_defs), interpreted with window.assessNorms when present.
+  async function buildScreeningAlerts(playerId, clubId) {
+    if (!playerId || !clubId) return [];
+    const { data: defs } = await window.sb.from('assessment_test_defs').select('*')
+      .or(`club_id.is.null,club_id.eq.${clubId}`).eq('active', true);
+    const D = (defs || []).filter(d => d.family === 'isometric' || d.family === 'mobility');
+    if (!D.length) return [];
+    const byType = {}; D.forEach(d => { byType[d.test_type] = d; });
+    const { data: tests } = await window.sb.from('force_tests')
+      .select('id, test_type, test_date, bodyweight_kg')
+      .eq('club_id', clubId).eq('player_id', playerId)
+      .in('test_type', Object.keys(byType))
+      .order('test_date', { ascending: true });
+    if (!tests || !tests.length) return [];
+    const latestT = {}; tests.forEach(t => { latestT[t.test_type] = t; });   // asc → last = most recent
+    const ids = Object.keys(latestT).map(k => latestT[k].id);
+    const { data: mets } = await window.sb.from('force_test_metrics')
+      .select('test_id, metric_key, value, side').in('test_id', ids);
+    const byTest = {}; (mets || []).forEach(m => { (byTest[m.test_id] = byTest[m.test_id] || []).push(m); });
+    const AN = window.assessNorms;
+    const rank = s => ({ none: 0, ok: 1, watch: 2, alert: 3 }[s] || 0);
+    const out = [];
+    Object.keys(latestT).forEach(type => {
+      const def = byType[type], t = latestT[type];
+      let L = null, R = null, NA = null;
+      (byTest[t.id] || []).forEach(m => { if (m.metric_key === def.metric_key){ const s = m.side || 'NA', v = Number(m.value); if (s === 'L') L = v; else if (s === 'R') R = v; else NA = v; } });
+      const label = (window.tt ? tt(def.i18n_key, def.label) : def.label);
+      // asymmetry
+      let pct = null, asymStatus = 'none';
+      if (def.bilateral && L != null && R != null){
+        const hi = Math.max(L, R), lo = Math.min(L, R); if (hi > 0) pct = (hi - lo) / hi * 100;
+        asymStatus = AN ? AN.asymStatus(def, L, R).status : (pct >= 15 ? 'alert' : pct >= 10 ? 'watch' : 'ok');
+      }
+      if ((asymStatus === 'alert' || asymStatus === 'watch') && pct != null){
+        out.push({ test: def.key, severity: asymStatus === 'alert' ? 'high' : 'moderate',
+          message: tt('preventive.alert_asym', '{name}: {v}% L/R asymmetry', { name: label, v: Math.round(pct) }) });
+      }
+      // absolute out-of-norm (needs the engine)
+      if (AN){
+        let absStatus = 'none';
+        [L, R, NA].forEach(v => { if (v != null){ const st = AN.statusFor(def, { value: v }).status; if (rank(st) > rank(absStatus)) absStatus = st; } });
+        if (absStatus === 'alert' || absStatus === 'watch'){
+          out.push({ test: def.key + '_abs', severity: absStatus === 'alert' ? 'high' : 'moderate',
+            message: tt('preventive.alert_below_norm', '{name}: outside reference norm', { name: label }) });
+        }
+      }
+    });
+    return out;
   }
 
   const _ALERT_COLOR = { high: 'var(--cm-danger,#DC2626)', moderate: '#B45309', low: 'var(--cm-fg-muted)' };
