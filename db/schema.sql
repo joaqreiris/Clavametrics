@@ -2285,6 +2285,7 @@ create table if not exists public.videos (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   team_id uuid,
+  exercise_id uuid,
   title text not null,
   provider text default 'google_drive'::text not null,
   url text not null,
@@ -2304,6 +2305,7 @@ create table if not exists public.videos (
 CREATE INDEX idx_videos_club ON public.videos USING btree (club_id);
 CREATE INDEX idx_videos_team ON public.videos USING btree (team_id);
 CREATE INDEX idx_videos_uploaded_by ON public.videos USING btree (uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_videos_exercise ON public.videos USING btree (exercise_id);
 
 create table if not exists public.wellness (
   id uuid default gen_random_uuid() not null,
@@ -2582,6 +2584,7 @@ alter table public.video_sessions add constraint video_sessions_session_id_fkey 
 alter table public.video_sessions add constraint video_sessions_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
 alter table public.videos add constraint videos_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.videos add constraint videos_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.videos add constraint videos_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
 alter table public.wellness add constraint wellness_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.wellness add constraint wellness_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.wellness add constraint wellness_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;

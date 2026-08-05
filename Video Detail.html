@@ -50,6 +50,21 @@
   .vd-embedbadge .ti { font-size:14px; }
   .vd-embedbadge .dot { width:6px; height:6px; border-radius:50%; background:#3FB97E; box-shadow:0 0 0 3px rgba(63,185,126,0.25); }
 
+  /* Linked exercise panel (drill drawing + specs) */
+  .vd-ex-draw { border:1px solid var(--cm-border); border-radius:10px; overflow:hidden; background:#2f7d4c; margin-bottom:8px; }
+  .vd-ex-draw img { display:block; width:100%; height:auto; }
+  .vd-ex-name { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:6px; }
+  .vd-ex-meta { display:flex; flex-wrap:wrap; gap:6px 10px; font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .vd-ex-meta span { display:inline-flex; align-items:center; gap:4px; }
+  .vd-ex-meta .ti { font-size:13px; }
+  .vd-ex-acts { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .vd-ex-search { display:flex; align-items:center; gap:6px; border:1px solid var(--cm-border); border-radius:8px; padding:6px 9px; }
+  .vd-ex-search .ti { color:var(--cm-fg-muted); font-size:15px; }
+  .vd-ex-search input { border:0; background:transparent; color:var(--cm-fg); font:500 12.5px/1 var(--cm-font-sans); outline:none; width:100%; }
+  .vd-ex-results { display:flex; flex-direction:column; gap:2px; margin-top:6px; max-height:220px; overflow:auto; }
+  .vd-ex-opt { text-align:left; border:0; background:transparent; padding:7px 9px; border-radius:6px; font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; }
+  .vd-ex-opt:hover { background:var(--cm-bg-soft); }
+
   /* actions under player */
   .vd-acts { display:flex; align-items:center; gap:9px; margin-top:14px; flex-wrap:wrap; }
 
@@ -419,6 +434,11 @@
         </div>
 
         <div class="vd-panel">
+          <div class="vd-panel-hd"><i class="ti ti-vector"></i><h2>${esc(tt('video_detail.exercise', 'Exercise'))}</h2></div>
+          <div class="vd-panel-bd" id="vdExerciseBd"><div class="vd-empty-links">${esc(tt('common.loading', 'Loading…'))}</div></div>
+        </div>
+
+        <div class="vd-panel">
           <div class="vd-panel-hd"><i class="ti ti-note"></i><h2>${esc(tt('video_detail.notes', 'Notes'))}</h2></div>
           <div class="vd-panel-bd">
             <textarea class="vd-notes" id="vdNotes" placeholder="${esc(tt('video_detail.notes_ph', 'Add notes for the staff…'))}">${esc(v.notes || '')}</textarea>
@@ -471,6 +491,80 @@
   }
 
   renderMain();
+  renderExercisePanel();
+
+  // ── Linked exercise (drill drawing + specs beside the player) ─────────────────
+  let _vdExListPromise = null;
+  async function _vdSignPreview(ex) {
+    if (ex && ex.preview_path) {
+      try { const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(ex.preview_path, 3600); if (data && data.signedUrl) return data.signedUrl; } catch {}
+    }
+    return (ex && ex.preview_png) || null;
+  }
+  async function renderExercisePanel() {
+    const bd = document.getElementById('vdExerciseBd'); if (!bd) return;
+    if (!v.exercise_id) { _vdRenderExercisePicker(bd); return; }
+    bd.innerHTML = `<div class="vd-empty-links">${esc(tt('common.loading', 'Loading…'))}</div>`;
+    const { data: ex } = await window.sb.from('exercises')
+      .select('id,name,players_count,field_width,field_height,duration,series,work_time,rest_time,orientation,intensity,focus,preview_path,preview_png')
+      .eq('id', v.exercise_id).maybeSingle();
+    if (!ex) { bd.innerHTML = `<div class="vd-empty-links">${esc(tt('video_detail.exercise_missing', 'The linked exercise no longer exists.'))}</div>`; return; }
+    const img = await _vdSignPreview(ex);
+    const m2 = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0) ? Math.round(ex.field_width * ex.field_height / ex.players_count) : null;
+    const rows = [];
+    if (ex.players_count) rows.push(`<i class="ti ti-users"></i>${ex.players_count} ${esc(tt('video_detail.players_lc', 'players'))}`);
+    if (ex.field_width && ex.field_height) rows.push(`<i class="ti ti-rectangle"></i>${ex.field_width}×${ex.field_height} m`);
+    if (m2) rows.push(`<i class="ti ti-ruler-measure"></i>${m2} m²/p`);
+    if (ex.series && ex.work_time) rows.push(`<i class="ti ti-repeat"></i>${ex.series}× ${esc(ex.work_time)}${ex.rest_time ? (' + ' + esc(ex.rest_time)) : ''}`);
+    else if (ex.duration) rows.push(`<i class="ti ti-clock"></i>${ex.duration} min`);
+    if (ex.intensity) rows.push(`<i class="ti ti-flame"></i>${esc(ex.intensity)}`);
+    bd.innerHTML = `
+      ${img ? `<div class="vd-ex-draw"><img src="${esc(img)}" alt=""></div>` : ''}
+      <div class="vd-ex-name">${esc(ex.name || tt('video_detail.untitled_exercise', 'Untitled exercise'))}</div>
+      <div class="vd-ex-meta">${rows.map(r => `<span>${r}</span>`).join('')}</div>
+      <div class="vd-ex-acts">
+        <a class="cm-btn is-sm" href="Planner.html?exercise=${encodeURIComponent(ex.id)}"><i class="ti ti-external-link" style="font-size:14px"></i>${esc(tt('video_detail.open_drill', 'Open drill'))}</a>
+        <button class="cm-btn is-sm" id="vdExUnlink"><i class="ti ti-unlink" style="font-size:14px"></i>${esc(tt('video_detail.unlink', 'Unlink'))}</button>
+      </div>`;
+    document.getElementById('vdExUnlink')?.addEventListener('click', unlinkExercise);
+  }
+  async function _vdRenderExercisePicker(bd) {
+    bd.innerHTML = `
+      <div class="vd-ex-search"><i class="ti ti-search"></i><input id="vdExSearch" placeholder="${esc(tt('video_detail.search_exercise', 'Search a drill to link…'))}" autocomplete="off"></div>
+      <div class="vd-ex-results" id="vdExResults"></div>`;
+    const input = document.getElementById('vdExSearch'), results = document.getElementById('vdExResults');
+    _vdExListPromise = _vdExListPromise || window.sb.from('exercises').select('id,name').eq('club_id', clubId).order('name').then(r => r.data || []);
+    const list = await _vdExListPromise;
+    const paint = q => {
+      const qq = (q || '').trim().toLowerCase();
+      const rows = (qq ? list.filter(e => (e.name || '').toLowerCase().includes(qq)) : list).slice(0, 30);
+      results.innerHTML = rows.length
+        ? rows.map(e => `<button class="vd-ex-opt" data-id="${e.id}">${esc(e.name || tt('video_detail.untitled_exercise', 'Untitled exercise'))}</button>`).join('')
+        : `<div class="vd-empty-links" style="padding:10px">${esc(tt('video_detail.no_exercises', 'No drills found.'))}</div>`;
+    };
+    paint('');
+    input.addEventListener('input', () => paint(input.value));
+    results.addEventListener('click', e => { const b = e.target.closest('.vd-ex-opt'); if (b) linkExercise(b.dataset.id); });
+  }
+  async function linkExercise(exId) {
+    const { error } = await window.sb.from('videos').update({ exercise_id: exId, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { alert(error.message); return; }
+    v.exercise_id = exId;
+    // Reflect the link on the exercise so the Library preview shows this video too (never clobber an existing link).
+    try {
+      const { data: ex } = await window.sb.from('exercises').select('video_url').eq('id', exId).maybeSingle();
+      if (ex && !ex.video_url && v.url) await window.sb.from('exercises').update({ video_url: v.url }).eq('id', exId);
+    } catch {}
+    renderExercisePanel();
+    toast(tt('video_detail.exercise_linked', 'Exercise linked'));
+  }
+  async function unlinkExercise() {
+    const { error } = await window.sb.from('videos').update({ exercise_id: null, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { alert(error.message); return; }
+    v.exercise_id = null;
+    renderExercisePanel();
+    toast(tt('video_detail.exercise_unlinked', 'Exercise unlinked'));
+  }
 
   // ── Linked-to ─────────────────────────────────────────────────────────────────
   async function loadLinks() {
@@ -668,7 +762,7 @@
   })();
 
   // Re-render JS-built content on language change (player node is preserved).
-  document.addEventListener('cm:langchanged', () => { renderMain(); loadLinks(); });
+  document.addEventListener('cm:langchanged', () => { renderMain(); loadLinks(); renderExercisePanel(); });
 })();
 </script>
 

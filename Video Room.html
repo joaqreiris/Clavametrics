@@ -111,6 +111,7 @@
   .vr-chip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
   .vr-chip.muted   { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); border-color:var(--cm-border); }
   .vr-chip.unlinked { background:var(--cm-warning-bg); color:var(--cm-warning); border:1px dashed var(--cm-warning-bd); }
+  .vr-chip.exercise { background:var(--cm-accent-soft,rgba(34,197,94,.14)); color:var(--cm-accent); border-color:var(--cm-border-strong); }
 
   /* Skeleton */
   .vr-skel { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); overflow:hidden; }
@@ -410,7 +411,8 @@
     const shown = v.links.slice(0, 3);
     let chips = shown.map(l => `<span class="vr-chip ${l.type}"><i class="ti ${l.icon}"></i><span>${esc(l.label)}</span></span>`).join('');
     if (v.links.length > 3) chips += `<span class="vr-chip muted">${esc(tt('video_room.chip_more', `+${v.links.length - 3} more`, { count: v.links.length - 3 }))}</span>`;
-    if (!v.links.length) chips = `<span class="vr-chip unlinked"><i class="ti ti-link-off"></i><span>${esc(tt('video_room.chip_unlinked', 'Unlinked'))}</span></span>`;
+    if (!v.links.length && !v.exercise_id) chips = `<span class="vr-chip unlinked"><i class="ti ti-link-off"></i><span>${esc(tt('video_room.chip_unlinked', 'Unlinked'))}</span></span>`;
+    if (v.exercise_id) chips = `<span class="vr-chip exercise"><i class="ti ti-vector"></i><span>${esc(tt('video_room.chip_drill', 'Drill'))}</span></span>` + chips;
 
     return `
       <article class="vr-card" data-id="${esc(v.id)}">
