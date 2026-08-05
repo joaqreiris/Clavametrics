@@ -3338,6 +3338,8 @@
     if (p) return p;
     p = _ftPlayers.find(function(x){ return evNormName(x.last_name+' '+x.first_name)===nn; });
     if (p) return p;
+    var tokHit=_ftTokenMatch(_ftNorm(name).split(' ').filter(Boolean), _ftNameToks(_ftPlayers));
+    if (tokHit){ var tp=_ftPlayers.find(function(x){ return x.id===tokHit; }); if (tp) return tp; }
     return _ftPlayers.find(function(x){ var f=evNormName(x.first_name+' '+x.last_name); return f && (f.indexOf(nn)>=0 || nn.indexOf(f)>=0); }) || null;
   }
   function populateEvCsvMap(){
@@ -6445,6 +6447,21 @@
   //  allPlayers->_ftPlayers; save refresh -> View results + catalog status.
   // ════════════════════════════════════════════════════════════════════
   const _ftNorm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Build a [{id, toks:[...]}] index from a roster for token-subset name matching.
+  const _ftNameToks = roster => (roster || []).map(p => ({ id: p.id, toks: _ftNorm(`${p.first_name} ${p.last_name}`).split(' ').filter(Boolean) }));
+  // Token-subset fallback: match multi-surname names in any order (e.g. "Mauricio BARBOSA TEIXEIRA").
+  // Returns a player id only when exactly one candidate contains (or is contained by) all tokens and shares >=2.
+  function _ftTokenMatch(parts, nameToks) {
+    if (!parts || parts.length < 2 || !nameToks) return null;
+    const cand = nameToks.filter(e => {
+      if (e.toks.length < 2) return false;
+      const aInB = parts.every(t => e.toks.indexOf(t) >= 0);
+      const bInA = e.toks.every(t => parts.indexOf(t) >= 0);
+      const shared = parts.filter(t => e.toks.indexOf(t) >= 0).length;
+      return (aInB || bInA) && shared >= 2;
+    });
+    return cand.length === 1 ? cand[0].id : null;
+  }
 
   // Identity/fixed columns, by priority of role. First header that matches a role wins.
   const _FT_IDENTITY = [
@@ -6504,6 +6521,8 @@
         if (byName.has(swapped)) return { playerId: byName.get(swapped), how: 'name' };
       }
       if (manual.has(nn)) return { playerId: manual.get(nn), how: 'manual' };
+      const tokHit = _ftTokenMatch(parts, _ftState.nameToks);
+      if (tokHit) return { playerId: tokHit, how: 'name' };
     }
     return { playerId: null, how: null };
   }
@@ -6527,7 +6546,7 @@
           if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
           byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
         });
-        _ftState = { rows: res.data, headers, fields, metrics, roster, byId, byName, manual: new Map(), defs: [], savedMap: {}, colMap: {}, sourceLabel: 'csv', _createCol: null };
+        _ftState = { rows: res.data, headers, fields, metrics, roster, byId, byName, nameToks: _ftNameToks(roster), manual: new Map(), defs: [], savedMap: {}, colMap: {}, sourceLabel: 'csv', _createCol: null };
         // Catalog + saved column mappings (degrade gracefully if tables/migration absent)
         const looksVald = !!fields.testType && headers.some(h => /\[kg\]/i.test(h) || /\(asym\)/i.test(h));
         _ftState.sourceLabel = looksVald ? 'forcedecks' : 'csv';
@@ -6903,17 +6922,8 @@
       var parts = nn.split(' ');
       if (parts.length===2){ var sw=parts[1]+' '+parts[0]; if (byName.has(sw)) return { playerId:byName.get(sw), how:'name' }; }
       if (manual.has(nn)) return { playerId:manual.get(nn), how:'manual' };
-      // token-subset fallback: multi-surname names in any order (e.g. "Mauricio BARBOSA TEIXEIRA")
-      if (parts.length>=2){
-        var cand=(_asState.nameToks||[]).filter(function(e){
-          if (e.toks.length<2) return false;
-          var aInB = parts.every(function(t){ return e.toks.indexOf(t)>=0; });
-          var bInA = e.toks.every(function(t){ return parts.indexOf(t)>=0; });
-          var shared=parts.filter(function(t){ return e.toks.indexOf(t)>=0; }).length;
-          return (aInB||bInA) && shared>=2;
-        });
-        if (cand.length===1) return { playerId:cand[0].id, how:'name' };
-      }
+      var tokHit=_ftTokenMatch(parts, _asState.nameToks);
+      if (tokHit) return { playerId:tokHit, how:'name' };
     }
     return { playerId:null, how:null };
   }
@@ -6996,9 +7006,8 @@
     var cls=_asClassify(headers);
     var roster=await loadForceRoster();
     var byId=new Map(), byName=new Map();
-    var nameToks=[];
-    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); var nrm=_ftNorm(p.first_name+' '+p.last_name); byName.set(nrm, p.id); nameToks.push({ id:p.id, toks:nrm.split(' ').filter(Boolean) }); });
-    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, nameToks:nameToks, manual:new Map(), savedMap:{}, colMap:{} };
+    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); byName.set(_ftNorm(p.first_name+' '+p.last_name), p.id); });
+    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, nameToks:_ftNameToks(roster), manual:new Map(), savedMap:{}, colMap:{} };
     // saved column mappings (screening)
     try {
       var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side,metric_key').eq('club_id',_clubId).eq('source_label','screening');
@@ -7635,7 +7644,7 @@
     const parts = nn.split(' ');
     if (parts.length === 2 && _vbt.byName.has(parts[1] + ' ' + parts[0])) return _vbt.byName.get(parts[1] + ' ' + parts[0]);
     if (_vbt.manual.has(nn)) return _vbt.manual.get(nn);
-    return null;
+    return _ftTokenMatch(parts, _vbt.nameToks);
   }
 
   function parseVbtCsv(file) {
@@ -7652,7 +7661,7 @@
           if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
           byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
         });
-        _vbt = { rows: res.data, headers, map, roster, byId, byName, manual: new Map(), sourceLabel: 'vbt' };
+        _vbt = { rows: res.data, headers, map, roster, byId, byName, nameToks: _ftNameToks(roster), manual: new Map(), sourceLabel: 'vbt' };
         await loadVbtSavedMappings();
         document.getElementById('vbtDropZone').style.display = 'none';
         document.getElementById('vbtResultArea').style.display = '';
