@@ -6903,6 +6903,17 @@
       var parts = nn.split(' ');
       if (parts.length===2){ var sw=parts[1]+' '+parts[0]; if (byName.has(sw)) return { playerId:byName.get(sw), how:'name' }; }
       if (manual.has(nn)) return { playerId:manual.get(nn), how:'manual' };
+      // token-subset fallback: multi-surname names in any order (e.g. "Mauricio BARBOSA TEIXEIRA")
+      if (parts.length>=2){
+        var cand=(_asState.nameToks||[]).filter(function(e){
+          if (e.toks.length<2) return false;
+          var aInB = parts.every(function(t){ return e.toks.indexOf(t)>=0; });
+          var bInA = e.toks.every(function(t){ return parts.indexOf(t)>=0; });
+          var shared=parts.filter(function(t){ return e.toks.indexOf(t)>=0; }).length;
+          return (aInB||bInA) && shared>=2;
+        });
+        if (cand.length===1) return { playerId:cand[0].id, how:'name' };
+      }
     }
     return { playerId:null, how:null };
   }
@@ -6985,8 +6996,9 @@
     var cls=_asClassify(headers);
     var roster=await loadForceRoster();
     var byId=new Map(), byName=new Map();
-    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); byName.set(_ftNorm(p.first_name+' '+p.last_name), p.id); });
-    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, manual:new Map(), savedMap:{}, colMap:{} };
+    var nameToks=[];
+    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); var nrm=_ftNorm(p.first_name+' '+p.last_name); byName.set(nrm, p.id); nameToks.push({ id:p.id, toks:nrm.split(' ').filter(Boolean) }); });
+    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, nameToks:nameToks, manual:new Map(), savedMap:{}, colMap:{} };
     // saved column mappings (screening)
     try {
       var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side,metric_key').eq('club_id',_clubId).eq('source_label','screening');
