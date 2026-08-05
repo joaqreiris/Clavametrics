@@ -8256,6 +8256,17 @@
         (mr.data || []).forEach(function(m){ (metricsByTest[m.test_id] = metricsByTest[m.test_id] || []).push(m); });
       }
 
+      // keep only tests actually performed (≥1 player with a value for that test)
+      var typeHasData = {};
+      Object.keys(latest).forEach(function(k){
+        var t = latest[k], mets = metricsByTest[t.id] || [];
+        var def = cols.filter(function(c){ return c.test_type === t.test_type; })[0];
+        if (def && mets.some(function(m){ return m.metric_key === def.metric_key && m.value != null; })) typeHasData[t.test_type] = true;
+      });
+      _pbData.hadDefs = cols.length > 0;
+      cols = cols.filter(function(d){ return typeHasData[d.test_type]; });
+
+      _pbData.cols = cols;
       _pbData.latest = latest; _pbData.metricsByTest = metricsByTest;
       renderPreventionBoard();
     } catch(e){
@@ -8299,7 +8310,7 @@
     if (!mount || !_pbData) return;
     var d = _pbData;
     if (!d.roster.length){ mount.innerHTML = '<div class="pb-empty">' + pbEsc(tt('evaluations.prev_board_empty','No players to show.')) + '</div>'; if (tilesEl) tilesEl.innerHTML = ''; return; }
-    if (!d.cols.length){ mount.innerHTML = '<div class="pb-empty">' + pbEsc(tt('evaluations.prev_board_no_tests','No isometric or mobility tests configured.')) + '</div>'; if (tilesEl) tilesEl.innerHTML = ''; return; }
+    if (!d.cols.length){ mount.innerHTML = '<div class="pb-empty">' + pbEsc(d.hadDefs ? tt('evaluations.prev_board_no_data','No isometric or mobility tests recorded for this team yet.') : tt('evaluations.prev_board_no_tests','No isometric or mobility tests configured.')) + '</div>'; if (tilesEl) tilesEl.innerHTML = ''; return; }
 
     // per-player rows
     var rows = d.roster.map(function(p){
