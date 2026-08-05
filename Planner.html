@@ -1552,7 +1552,7 @@
     const z = Math.min(W / vbW, H / vbH) || 1;
     return { z, panX: (W - vbW * z) / 2, panY: (H - vbH * z) / 2, vbW, vbH };
   }
-  let _lastFit = _fitParams();
+  let _lastFit = null;   // set once the field (_plField) is initialised — see plRenderField boot below
   // Resize the canvas AND re-map every object from the old fit to the new one, so nothing
   // drifts relative to the pitch when the window / container changes size.
   function _refitCanvas() {
@@ -1622,6 +1622,7 @@
 
   plInitFieldSelector();
   plRenderField('football', 'full', 'h');
+  _lastFit = _fitParams();   // now _plField exists → baseline fit for resize re-mapping
 
   // ── Canvas state ────────────────────────────────────────────────
   let currentTool      = 'select';
