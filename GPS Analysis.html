@@ -8904,14 +8904,22 @@ async function openManualGpsModal() {
     <label class="mgp-lbl">${tt('gps_analysis.manual_mode','Fill mode')}</label>
     <div class="mgp-seg" id="mgpMode">
       <button type="button" data-mode="avg" class="is-on">${tt('gps_analysis.manual_mode_avg','Team average')}</button>
+      <button type="button" data-mode="avgpos">${tt('gps_analysis.manual_mode_avgpos','Position average')}</button>
       <button type="button" data-mode="manual">${tt('gps_analysis.manual_mode_manual','Manual')}</button>
     </div>
     <div id="mgpFields"></div>
     <div class="mgp-foot"><button class="cm-btn is-ghost is-sm" id="mgpCancel">${tt('common.cancel','Cancel')}</button><button class="cm-btn is-primary is-sm" id="mgpSave">${tt('gps_analysis.manual_save','Save data')}</button></div>`;
 
-  let mode = 'avg', sessionReports = [], avgVals = {};
+  let mode = 'avg', sessionReports = [], realReports = [], teamAvg = {};
   const metricKeys = _MANUAL_GPS_METRICS.map(m=>m.k);
-  const statusOf = pid => { const r = sessionReports.find(x=>x.player_id===pid); if (!r || r.is_invalid) return 'missing'; return (r.source==='manual'||r.source==='avg') ? 'est' : 'real'; };
+  const posByPlayer = {}; roster.forEach(p=>{ posByPlayer[p.id] = p.position || ''; });
+  const EST_SOURCES = ['manual','avg','avg_pos'];
+  const statusOf = pid => { const r = sessionReports.find(x=>x.player_id===pid); if (!r || r.is_invalid) return 'missing'; return EST_SOURCES.includes(r.source) ? 'est' : 'real'; };
+  const _avg = reps => { const out={}; _MANUAL_GPS_METRICS.forEach(m=>{ const vals=reps.map(r=>r[m.k]).filter(v=>v!=null&&isFinite(v)); out[m.k]=vals.length?+(vals.reduce((s,x)=>s+ +x,0)/vals.length).toFixed(2):null; }); return out; };
+  const selPid = () => body.querySelector('#mgpPlayer')?.value;
+  const selPos = () => posByPlayer[selPid()] || '';
+  const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
+  const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
 
   function renderStatus() {
     const miss = roster.filter(p=>statusOf(p.id)==='missing').length;
@@ -8926,20 +8934,29 @@ async function openManualGpsModal() {
     const order = { missing:0, est:1, real:2 }, mark = st => st==='missing'?'⚠ ':st==='est'?'~ ':'✓ ';
     const rows = roster.map(p=>({p, st:statusOf(p.id)}))
       .sort((a,b)=> (order[a.st]-order[b.st]) || String(a.p.last_name||'').localeCompare(String(b.p.last_name||'')));
-    sel.innerHTML = rows.map(({p,st})=>`<option value="${_esc(p.id)}">${mark(st)}${p.number?('#'+p.number+' '):''}${_esc((p.last_name||'')+' '+(p.first_name||''))}</option>`).join('');
+    sel.innerHTML = rows.map(({p,st})=>`<option value="${_esc(p.id)}">${mark(st)}${p.position?('['+_esc(p.position)+'] '):''}${p.number?('#'+p.number+' '):''}${_esc((p.last_name||'')+' '+(p.first_name||''))}</option>`).join('');
     if (cur && roster.some(p=>p.id===cur)) sel.value = cur;
   }
   function renderFields() {
     const wrap = body.querySelector('#mgpFields');
-    if (mode==='avg') {
-      const hasAvg = Object.values(avgVals).some(v=>v!=null);
-      wrap.innerHTML = hasAvg
-        ? `<div class="mgp-note">${tt('gps_analysis.manual_avg_note','Saves this player with the team average of the selected session:')}</div>
-           <div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${avgVals[m.k]!=null?avgVals[m.k]:'—'}${(avgVals[m.k]!=null&&m.u)?' '+m.u:''}</span></div>`).join('')}</div>`
-        : `<div class="mgp-empty">${tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.')}</div>`;
-    } else {
+    if (mode==='manual') {
       wrap.innerHTML = `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm"></label>`).join('')}</div>`;
+      return;
     }
+    const vals = currentAvg(), hasAvg = Object.values(vals).some(v=>v!=null);
+    let note, emptyMsg;
+    if (mode==='avgpos') {
+      const pos = selPos(), n = posReports().length;
+      note     = pos ? tt('gps_analysis.manual_avgpos_note','Saves the average of {n} {pos} player(s) with real data in this session:',{n,pos}) : tt('gps_analysis.manual_avgpos_nopos','The selected player has no position set — use Team average or Manual.');
+      emptyMsg = pos ? tt('gps_analysis.manual_avgpos_none','No other {pos} player has real data in this session — use Team average or Manual.',{pos}) : tt('gps_analysis.manual_avgpos_nopos','The selected player has no position set — use Team average or Manual.');
+    } else {
+      note     = tt('gps_analysis.manual_avg_note','Saves this player with the team average of the selected session:');
+      emptyMsg = tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.');
+    }
+    wrap.innerHTML = hasAvg
+      ? `<div class="mgp-note">${note}</div>
+         <div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${vals[m.k]!=null?vals[m.k]:'—'}${(vals[m.k]!=null&&m.u)?' '+m.u:''}</span></div>`).join('')}</div>`
+      : `<div class="mgp-empty">${emptyMsg}</div>`;
   }
   async function loadSession() {
     const sid = body.querySelector('#mgpSession').value;
@@ -8947,25 +8964,29 @@ async function openManualGpsModal() {
       .select('player_id,source,is_invalid,'+metricKeys.join(','))
       .eq('session_id', sid).eq('club_id', clubId);
     sessionReports = data || [];
-    const real = sessionReports.filter(r=>!r.is_invalid && r.source!=='manual' && r.source!=='avg');
-    avgVals = {};
-    _MANUAL_GPS_METRICS.forEach(m=>{ const vals = real.map(r=>r[m.k]).filter(v=>v!=null && isFinite(v)); avgVals[m.k] = vals.length ? +(vals.reduce((s,x)=>s+ +x,0)/vals.length).toFixed(2) : null; });
+    realReports = sessionReports.filter(r=>!r.is_invalid && !EST_SOURCES.includes(r.source));
+    teamAvg = _avg(realReports);
     renderStatus(); renderPlayers(); renderFields();
   }
 
   body.querySelector('#mgpSession').addEventListener('change', loadSession);
+  body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos') renderFields(); });
   body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
   body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
   body.querySelector('#mgpSave').addEventListener('click', async () => {
-    const sid = body.querySelector('#mgpSession').value, pid = body.querySelector('#mgpPlayer').value;
+    const sid = body.querySelector('#mgpSession').value, pid = selPid();
     if (!sid || !pid) return;
     if (statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
-    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='avg'?'avg':'manual' };
-    if (mode==='avg') {
-      if (!Object.values(avgVals).some(v=>v!=null)) { showToast(tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.'), true); return; }
-      _MANUAL_GPS_METRICS.forEach(m=>{ row[m.k] = avgVals[m.k]; });
-    } else {
+    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='manual'?'manual':(mode==='avgpos'?'avg_pos':'avg') };
+    if (mode==='manual') {
       _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='')?null:+v; });
+    } else {
+      const vals = currentAvg();
+      if (!Object.values(vals).some(v=>v!=null)) {
+        showToast(mode==='avgpos' ? tt('gps_analysis.manual_avgpos_none','No other {pos} player has real data in this session — use Team average or Manual.',{pos:selPos()}) : tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.'), true);
+        return;
+      }
+      _MANUAL_GPS_METRICS.forEach(m=>{ row[m.k] = vals[m.k]; });
     }
     const btn = body.querySelector('#mgpSave'); btn.disabled = true;
     const { error } = await window.sb.from('gps_reports').upsert(row, { onConflict:'player_id,session_id' });
