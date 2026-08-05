@@ -17,6 +17,7 @@
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -192,6 +193,28 @@
   .ph-modal-body { padding:16px 18px; flex:1; display:flex; flex-direction:column; gap:14px; }
   .ph-modal-foot { padding:12px 18px; border-top:1px solid var(--cm-border-soft); display:flex; gap:8px; justify-content:flex-end; }
 
+  /* Statistics modal */
+  #statsOverlay .ph-modal { width:min(1080px,96vw); }
+  .st-rangebar { display:flex; align-items:center; gap:6px; margin-left:auto; }
+  .st-range-btn { height:28px; padding:0 11px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:600 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .st-range-btn:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .st-range-btn.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .st-kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .st-kpi { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); padding:12px 14px; }
+  .st-kpi-l { display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:8px; }
+  .st-kpi-v { font:600 24px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .st-kpi-v small { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-left:3px; }
+  .st-kpi-t { margin-top:6px; font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .st-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .st-card { background:var(--cm-surface); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); padding:12px 14px; display:flex; flex-direction:column; }
+  .st-card.is-full { grid-column:1 / -1; }
+  .st-card-h { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .st-card-h h4 { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .st-card-h .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .st-canvas-wrap { position:relative; width:100%; }
+  .st-empty { display:flex; align-items:center; justify-content:center; height:100%; min-height:120px; color:var(--cm-fg-faint); font:500 12px/1.4 var(--cm-font-sans); text-align:center; }
+  @media (max-width:720px){ .st-kpis { grid-template-columns:repeat(2,1fr); } .st-grid { grid-template-columns:1fr; } }
+
   /* History modal */
   .hist-sections { display:flex; flex-direction:column; gap:16px; }
   .hist-sec-h { font:600 12px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:8px; }
@@ -325,6 +348,7 @@
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="btnExportWeek"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="physio.export_week">Export week</span></button>
+          <button class="cm-btn is-outline is-sm" id="btnStats" onclick="openStats()"><i class="ti ti-chart-histogram" style="font-size:14px"></i><span data-i18n="physio.statistics">Statistics</span></button>
           <button class="cm-btn is-outline is-sm" id="btnTemplates"><i class="ti ti-clipboard-list" style="font-size:14px"></i><span data-i18n="physio.protocols">Protocols</span></button>
           <button class="cm-btn is-primary is-sm" id="btnHistory"><i class="ti ti-clock-history" style="font-size:14px"></i><span data-i18n="physio.patient_history">Patient history</span></button>
         </div>
@@ -729,6 +753,90 @@
     </div>
     <div class="ph-modal-foot">
       <button class="cm-btn is-outline" onclick="closeHist()" data-i18n="common.close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STATISTICS MODAL ══ -->
+<div class="ph-overlay" id="statsOverlay">
+  <div class="ph-modal">
+    <div class="ph-modal-h">
+      <div><h3 data-i18n="physio.stats_title">Treatment statistics</h3><div class="sub" id="statsSubtitle" data-i18n="physio.stats_subtitle">Volume, reasons, practitioners & injury impact</div></div>
+      <div class="st-rangebar">
+        <button class="st-range-btn is-on" data-range="season" onclick="stSetRange('season')" data-i18n="physio.stats_range_season">Season</button>
+        <button class="st-range-btn" data-range="90d" onclick="stSetRange('90d')" data-i18n="physio.stats_range_90d">90 days</button>
+        <button class="st-range-btn" data-range="all" onclick="stSetRange('all')" data-i18n="physio.stats_range_all">All</button>
+      </div>
+      <button class="close" onclick="closeStats()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ph-modal-body" id="statsBody">
+      <!-- KPI tiles -->
+      <div class="st-kpis">
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-activity-heartbeat"></i><span data-i18n="physio.stats_kpi_total">Treatments</span></div>
+          <div class="st-kpi-v" id="stKpiTotal">—</div>
+          <div class="st-kpi-t" id="stKpiTotalSub">—</div>
+        </div>
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-chart-pie-2"></i><span data-i18n="physio.stats_kpi_split">Rehab / preventive</span></div>
+          <div class="st-kpi-v" id="stKpiSplit">—</div>
+          <div class="st-kpi-t" id="stKpiSplitSub">—</div>
+        </div>
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-users"></i><span data-i18n="physio.stats_kpi_players">Players treated</span></div>
+          <div class="st-kpi-v" id="stKpiPlayers">—</div>
+          <div class="st-kpi-t" data-i18n="physio.stats_kpi_players_sub">distinct players in range</div>
+        </div>
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-heart-minus"></i><span data-i18n="physio.stats_kpi_painred">Avg pain reduction</span></div>
+          <div class="st-kpi-v" id="stKpiPain">—</div>
+          <div class="st-kpi-t" id="stKpiPainSub">—</div>
+        </div>
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-bandage"></i><span data-i18n="physio.stats_kpi_newinj">New injuries</span></div>
+          <div class="st-kpi-v" id="stKpiNewInj">—</div>
+          <div class="st-kpi-t" data-i18n="physio.stats_kpi_newinj_sub">onset in range</div>
+        </div>
+        <div class="st-kpi">
+          <div class="st-kpi-l"><i class="ti ti-circle-check"></i><span data-i18n="physio.stats_kpi_resolved">Resolved injuries</span></div>
+          <div class="st-kpi-v" id="stKpiResolved">—</div>
+          <div class="st-kpi-t" id="stKpiResolvedSub">—</div>
+        </div>
+      </div>
+
+      <!-- Timeline: treatments vs injury load -->
+      <div class="st-card is-full">
+        <div class="st-card-h"><h4 data-i18n="physio.stats_timeline_title">Treatments &amp; injury load over time</h4><span class="sub" data-i18n="physio.stats_per_week">per week</span></div>
+        <div class="st-canvas-wrap" style="height:180px"><canvas id="stChartTreatments"></canvas></div>
+        <div class="st-canvas-wrap" style="height:120px;margin-top:6px"><canvas id="stChartInjuries"></canvas></div>
+        <div class="st-empty" id="stTimelineEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
+      </div>
+
+      <div class="st-grid">
+        <div class="st-card">
+          <div class="st-card-h"><h4 data-i18n="physio.stats_by_reason">By reason</h4></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartReason"></canvas></div>
+          <div class="st-empty" id="stReasonEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
+        </div>
+        <div class="st-card">
+          <div class="st-card-h"><h4 data-i18n="physio.stats_by_practitioner">By practitioner</h4></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartPractitioner"></canvas></div>
+          <div class="st-empty" id="stPractitionerEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
+        </div>
+        <div class="st-card">
+          <div class="st-card-h"><h4 data-i18n="physio.stats_by_zone">By body zone</h4></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartZone"></canvas></div>
+          <div class="st-empty" id="stZoneEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
+        </div>
+        <div class="st-card">
+          <div class="st-card-h"><h4 data-i18n="physio.stats_pain_effect">Pain pre → post</h4><span class="sub" id="stPainSub"></span></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartPain"></canvas></div>
+          <div class="st-empty" id="stPainEmpty" style="display:none" data-i18n="physio.stats_no_pain">No pain scores recorded in this range.</div>
+        </div>
+      </div>
+    </div>
+    <div class="ph-modal-foot">
+      <button class="cm-btn is-outline" onclick="closeStats()" data-i18n="common.close">Close</button>
     </div>
   </div>
 </div>
@@ -2284,6 +2392,227 @@ document.addEventListener('cm:langchanged', () => {
   // Re-render open protocol/history modals
   try { if (document.getElementById('protocolsOverlay')?.classList.contains('is-open')) { renderEvidenceProtocols(); renderClubProtocols(); } } catch (e) {}
   try { if (document.getElementById('histOverlay')?.classList.contains('is-open') && document.getElementById('histPlayerSelect')?.value) loadPlayerHistory(); } catch (e) {}
+  try { if (document.getElementById('statsOverlay')?.classList.contains('is-open') && _stData) stRender(); } catch (e) {}
+});
+
+// ══════════════════════════════════════════════════════
+// STATISTICS  (treatment analytics + injury impact)
+// ══════════════════════════════════════════════════════
+let _stRange = 'season', _stSeason = null, _stData = null, _stCharts = {};
+const ST_C = { rehab:'#DC2626', prev:'#16A34A', inj:'#7C3AED', bar:'#2A78D6', pre:'#DC2626', post:'#16A34A' };
+
+function stCss(v, fb){ try { const c = getComputedStyle(document.documentElement).getPropertyValue(v).trim(); return c || fb; } catch(e){ return fb; } }
+function stYMD(d){ return cmYMD(d); }
+function stMonday(ds){ const d = new Date(ds + 'T00:00:00'); const off = (d.getDay() + 6) % 7; d.setDate(d.getDate() - off); return stYMD(d); }
+function stAddDays(ds, n){ const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return stYMD(d); }
+function stWeeks(startDs, endDs){ const out = []; let cur = stMonday(startDs); const last = stMonday(endDs); let g = 0; while (cur <= last && g < 520){ out.push(cur); cur = stAddDays(cur, 7); g++; } return out.length ? out : [stMonday(endDs)]; }
+function stWkLabel(ds){ const d = new Date(ds + 'T00:00:00'); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`; }
+
+async function stResolveSeason(){
+  if (_stSeason) return _stSeason;
+  try {
+    let q = window.sb.from('seasons').select('start_date,end_date,status').eq('club_id', _clubId);
+    if (_phTeamId) q = q.or(`team_id.eq.${_phTeamId},team_id.is.null`);
+    const { data } = await q.order('start_date', { ascending:false });
+    const active = (data||[]).find(s => s.status === 'active') || (data||[])[0];
+    if (active && active.start_date){ _stSeason = { start: active.start_date, end: active.end_date || cmToday() }; return _stSeason; }
+  } catch(e){}
+  try {
+    const { data } = await window.sb.from('club_settings').select('season_start,season_end').eq('club_id', _clubId).eq('module_key','season').maybeSingle();
+    if (data && data.season_start){ _stSeason = { start: data.season_start, end: data.season_end || cmToday() }; return _stSeason; }
+  } catch(e){}
+  _stSeason = { start: cmYMD(new Date(Date.now() - 365*86400000)), end: cmToday() };
+  return _stSeason;
+}
+async function stComputeRange(){
+  const today = cmToday();
+  if (_stRange === '90d') return { start: cmYMD(new Date(Date.now() - 90*86400000)), end: today };
+  if (_stRange === 'all') return { start: '2015-01-01', end: today };
+  const s = await stResolveSeason();
+  return { start: s.start, end: (s.end < today ? s.end : today) };
+}
+
+window.openStats = async function(){
+  const ov = document.getElementById('statsOverlay');
+  ov.classList.add('is-open');
+  await stLoad();
+  stRender();
+};
+window.closeStats = function(){
+  document.getElementById('statsOverlay').classList.remove('is-open');
+  Object.values(_stCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _stCharts = {};
+};
+window.stSetRange = function(r){
+  if (r === _stRange) return;
+  _stRange = r;
+  document.querySelectorAll('#statsOverlay .st-range-btn').forEach(b => b.classList.toggle('is-on', b.dataset.range === r));
+  openStats();
+};
+
+async function stLoad(){
+  const { start, end } = await stComputeRange();
+  const pidSet = new Set(_allPlayers.map(p => p.id));
+  const [{ data: tr }, { data: inj }] = await Promise.all([
+    window.sb.from('treatments')
+      .select('id,player_id,injury_id,date,treatment_type,reason,physio_id,indicated_by,pain_pre,pain_post,zones,injuries(injury_type)')
+      .eq('club_id', _clubId).gte('date', start).lte('date', end).order('date'),
+    window.sb.from('injuries')
+      .select('id,player_id,injury_type,severity,status,start_date,returned_date')
+      .eq('club_id', _clubId).lte('start_date', end).or(`returned_date.gte.${start},returned_date.is.null`)
+  ]);
+  _stData = {
+    start, end,
+    treatments: (tr || []).filter(t => pidSet.has(t.player_id)),
+    injuries:   (inj || []).filter(i => pidSet.has(i.player_id))
+  };
+}
+
+function stRender(){
+  if (!_stData || typeof Chart === 'undefined') return;
+  const { start, end, treatments, injuries } = _stData;
+  const txt = stCss('--cm-fg-muted', '#6b7280');
+  const strong = stCss('--cm-fg-strong', '#111827');
+  const grid = stCss('--cm-border-soft', 'rgba(0,0,0,.08)');
+  const surf = stCss('--cm-surface', '#ffffff');
+  const staffName = {}; _allStaff.forEach(s => { staffName[s.id] = s.full_name || tt('physio.stats_unassigned','Unassigned'); });
+
+  // ── KPIs ──
+  const rehab = treatments.filter(t => (t.treatment_type||'rehab') === 'rehab').length;
+  const prev  = treatments.filter(t => t.treatment_type === 'preventive').length;
+  const total = treatments.length;
+  const weeksN = stWeeks(start, end).length;
+  document.getElementById('stKpiTotal').textContent = total;
+  document.getElementById('stKpiTotalSub').textContent = tt('physio.stats_perweek','{n}/week avg', { n: (total/weeksN).toFixed(1) });
+  const pr = total ? Math.round(rehab/total*100) : 0;
+  document.getElementById('stKpiSplit').innerHTML = total ? `${pr}%<small>/${100-pr}%</small>` : '—';
+  document.getElementById('stKpiSplitSub').textContent = tt('physio.stats_split_sub','{r} rehab · {p} preventive', { r: rehab, p: prev });
+  document.getElementById('stKpiPlayers').textContent = new Set(treatments.map(t => t.player_id)).size;
+
+  const painRows = treatments.filter(t => t.pain_pre != null && t.pain_post != null);
+  if (painRows.length){
+    const avgPre = painRows.reduce((a,t)=>a+t.pain_pre,0)/painRows.length;
+    const avgPost = painRows.reduce((a,t)=>a+t.pain_post,0)/painRows.length;
+    document.getElementById('stKpiPain').innerHTML = `−${(avgPre-avgPost).toFixed(1)}<small>${tt('physio.stats_pts','pts')}</small>`;
+    document.getElementById('stKpiPainSub').textContent = tt('physio.stats_pain_sub','{a} → {b} · {n} sessions', { a: avgPre.toFixed(1), b: avgPost.toFixed(1), n: painRows.length });
+  } else { document.getElementById('stKpiPain').textContent = '—'; document.getElementById('stKpiPainSub').textContent = tt('physio.stats_no_pain_short','no pain scores'); }
+
+  const newInj = injuries.filter(i => i.start_date >= start && i.start_date <= end);
+  document.getElementById('stKpiNewInj').textContent = newInj.length;
+  const resolved = injuries.filter(i => i.returned_date && i.returned_date >= start && i.returned_date <= end);
+  document.getElementById('stKpiResolved').textContent = resolved.length;
+  if (resolved.length){
+    const avgRec = Math.round(resolved.reduce((a,i)=> a + Math.max(0,(new Date(i.returned_date)-new Date(i.start_date))/86400000), 0)/resolved.length);
+    document.getElementById('stKpiResolvedSub').textContent = tt('physio.stats_recovery','{n} d avg recovery', { n: avgRec });
+  } else { document.getElementById('stKpiResolvedSub').textContent = tt('physio.stats_no_resolved','none in range'); }
+
+  // ── Common chart options ──
+  const gridOpt = { color: grid, drawBorder:false };
+  const legend = (pos) => ({ display:true, position:pos||'top', align:'end', labels:{ color:txt, font:{size:11}, boxWidth:9, boxHeight:9, usePointStyle:true, pointStyle:'rectRounded', padding:12 } });
+  const mk = (id, cfg) => { if (_stCharts[id]) _stCharts[id].destroy(); _stCharts[id] = new Chart(document.getElementById(id), cfg); };
+  const showEmpty = (emptyId, wraps, isEmpty) => {
+    document.getElementById(emptyId).style.display = isEmpty ? 'flex' : 'none';
+    wraps.forEach(w => { const el = document.getElementById(w); if (el) el.closest('.st-canvas-wrap').style.display = isEmpty ? 'none' : 'block'; });
+  };
+
+  // ── Timeline: treatments/week (stacked bar) + active injuries/week (area) ──
+  const allDates = [...treatments.map(t=>t.date), ...injuries.map(i=>i.start_date)].filter(Boolean).sort();
+  const tlEmpty = !allDates.length;
+  showEmpty('stTimelineEmpty', ['stChartTreatments','stChartInjuries'], tlEmpty);
+  if (!tlEmpty){
+    const tlStart = _stRange === 'all' ? allDates[0] : start;
+    const weeks = stWeeks(tlStart, end);
+    const labels = weeks.map(stWkLabel);
+    const rehabW = weeks.map(w => treatments.filter(t => (t.treatment_type||'rehab')==='rehab' && stMonday(t.date)===w).length);
+    const prevW  = weeks.map(w => treatments.filter(t => t.treatment_type==='preventive' && stMonday(t.date)===w).length);
+    const activeW = weeks.map(w => { const we = stAddDays(w,6); return injuries.filter(i => i.start_date <= we && (!i.returned_date || i.returned_date >= w)).length; });
+    mk('stChartTreatments', {
+      type:'bar',
+      data:{ labels, datasets:[
+        { label: tt('physio.stats_rehab','Rehab'), data: rehabW, backgroundColor: ST_C.rehab, stack:'t', borderRadius:3, borderSkipped:false, borderColor:surf, borderWidth:1 },
+        { label: tt('physio.stats_preventive','Preventive'), data: prevW, backgroundColor: ST_C.prev, stack:'t', borderRadius:3, borderSkipped:false, borderColor:surf, borderWidth:1 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend: legend('top'), tooltip:{ mode:'index', intersect:false } },
+        scales:{ x:{ stacked:true, grid:{display:false}, ticks:{ display:false } },
+                 y:{ stacked:true, beginAtZero:true, ticks:{ precision:0, color:txt, font:{size:10} }, grid:gridOpt } } }
+    });
+    mk('stChartInjuries', {
+      type:'line',
+      data:{ labels, datasets:[
+        { label: tt('physio.stats_active_injuries','Active injuries'), data: activeW, borderColor: ST_C.inj, backgroundColor:'rgba(124,58,237,.14)', fill:true, tension:.3, borderWidth:2, pointRadius:0, pointHoverRadius:4 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend: legend('top'), tooltip:{ mode:'index', intersect:false } },
+        scales:{ x:{ grid:{display:false}, ticks:{ color:txt, font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:12 } },
+                 y:{ beginAtZero:true, ticks:{ precision:0, color:txt, font:{size:10} }, grid:gridOpt } } }
+    });
+  }
+
+  // ── By reason ──
+  const reasonMap = new Map();
+  treatments.forEach(t => {
+    let k;
+    if (t.treatment_type === 'preventive') k = t.reason || tt('physio.stats_prev_unspec','Preventive (unspecified)');
+    else k = (t.injuries && t.injuries.injury_type) || tt('physio.stats_rehab_unspec','Rehab (unspecified)');
+    reasonMap.set(k, (reasonMap.get(k)||0) + 1);
+  });
+  stTopBar('stChartReason', 'stReasonEmpty', reasonMap, ST_C.bar, { txt, strong, grid, mk, legend });
+
+  // ── By practitioner ──
+  const practMap = new Map();
+  treatments.forEach(t => { const k = t.physio_id ? (staffName[t.physio_id] || tt('physio.stats_unassigned','Unassigned')) : tt('physio.stats_unassigned','Unassigned'); practMap.set(k, (practMap.get(k)||0) + 1); });
+  stTopBar('stChartPractitioner', 'stPractitionerEmpty', practMap, ST_C.bar, { txt, strong, grid, mk, legend });
+
+  // ── By body zone ──
+  const zoneMap = new Map();
+  treatments.forEach(t => (Array.isArray(t.zones) ? t.zones : []).forEach(z => { if (z) zoneMap.set(z, (zoneMap.get(z)||0) + 1); }));
+  stTopBar('stChartZone', 'stZoneEmpty', zoneMap, ST_C.bar, { txt, strong, grid, mk, legend });
+
+  // ── Pain pre → post ──
+  const painEmpty = painRows.length === 0;
+  showEmpty('stPainEmpty', ['stChartPain'], painEmpty);
+  document.getElementById('stPainSub').textContent = painRows.length ? tt('physio.stats_n_sessions','{n} sessions', { n: painRows.length }) : '';
+  if (!painEmpty){
+    const avgPre = painRows.reduce((a,t)=>a+t.pain_pre,0)/painRows.length;
+    const avgPost = painRows.reduce((a,t)=>a+t.pain_post,0)/painRows.length;
+    mk('stChartPain', {
+      type:'bar',
+      data:{ labels:[tt('physio.stats_pre','Pre'), tt('physio.stats_post','Post')], datasets:[
+        { data:[avgPre, avgPost], backgroundColor:[ST_C.pre, ST_C.post], borderRadius:5, borderSkipped:false, maxBarThickness:80 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>` ${c.parsed.y.toFixed(1)} / 10` } } },
+        scales:{ x:{ grid:{display:false}, ticks:{ color:strong, font:{size:12, weight:'600'} } },
+                 y:{ beginAtZero:true, max:10, ticks:{ stepSize:2, color:txt, font:{size:10} }, grid:gridOpt } } }
+    });
+  }
+}
+
+// Horizontal top-N bar for a count map (magnitude → single hue, identity on axis)
+function stTopBar(canvasId, emptyId, map, color, ctx){
+  const { txt, grid, mk } = ctx;
+  const entries = [...map.entries()].sort((a,b) => b[1]-a[1]);
+  const wrapEmpty = entries.length === 0;
+  document.getElementById(emptyId).style.display = wrapEmpty ? 'flex' : 'none';
+  document.getElementById(canvasId).closest('.st-canvas-wrap').style.display = wrapEmpty ? 'none' : 'block';
+  if (wrapEmpty){ if (_stCharts[canvasId]){ _stCharts[canvasId].destroy(); delete _stCharts[canvasId]; } return; }
+  let top = entries.slice(0, 8);
+  const restN = entries.slice(8).reduce((a,e)=>a+e[1], 0);
+  if (restN > 0) top.push([tt('physio.stats_other','Other'), restN]);
+  mk(canvasId, {
+    type:'bar',
+    data:{ labels: top.map(e=>e[0]), datasets:[{ data: top.map(e=>e[1]), backgroundColor: color, borderRadius:4, borderSkipped:false, maxBarThickness:22 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>` ${c.parsed.x}` } } },
+      scales:{ x:{ beginAtZero:true, ticks:{ precision:0, color:txt, font:{size:10} }, grid:{ color:grid, drawBorder:false } },
+               y:{ ticks:{ color:txt, font:{size:11}, autoSkip:false }, grid:{display:false} } } }
+  });
+}
+
+// Re-render charts on theme change (canvas colours are resolved at draw time)
+window.addEventListener('tweakchange', () => {
+  try { if (document.getElementById('statsOverlay')?.classList.contains('is-open') && _stData) stRender(); } catch(e){}
 });
 </script>
 
