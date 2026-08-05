@@ -930,6 +930,7 @@ let _clubId = null, _profile = null;
 // Time scope for body map + type breakdown — an ISO [_scopeFrom, _scopeTo] window
 // (either bound may be null = unbounded). Driven by the CMDateRange picker.
 let _scopeFrom = null, _scopeTo = null, _seasonsList = [];
+let _seasonFrom = null;   // current season start — STABLE (unlike _scopeFrom, not moved by the body-map date picker)
 
 // Load seasons registered in the Annual Planner (seasons table) and default the
 // scope window to the current one (today-in-range → nearest upcoming → most recent).
@@ -950,6 +951,15 @@ async function resolveInjSeasons() {
   }
   _scopeFrom = cur ? cur.start_date : null;
   _scopeTo   = cur ? cur.end_date   : null;
+  _seasonFrom = cur ? cur.start_date : null;   // stable season start for resolved-injury counters
+}
+
+// Resolved-injury counters reset each season: a resolved injury only counts if it STARTED
+// on/after the current season's start. Historical/"previous" injuries logged with an older
+// start date stay in the medical history but are excluded here. No season configured → count all.
+function injInSeason(inj) {
+  if (!_seasonFrom) return true;
+  return !!inj.start_date && inj.start_date >= _seasonFrom;
 }
 
 // Mount the shared date-range picker (same component as GPS "Sync now"): presets
@@ -2014,7 +2024,7 @@ function updateKPIs() {
   document.getElementById('kpiDaysLost').innerHTML = `${daysLost} <sub>${tt('injuries.days','days')}</sub>`;
 
   // Avg RTP
-  const resolved = _allInjuries.filter(i => (i.status === 'cleared' || i.status === 'resolved') && i.returned_date && i.start_date);
+  const resolved = _allInjuries.filter(i => (i.status === 'cleared' || i.status === 'resolved') && i.returned_date && i.start_date && injInSeason(i));
   const avgRTP = resolved.length
     ? Math.round(resolved.reduce((s, i) => s + Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000)), 0) / resolved.length)
     : null;
@@ -2097,8 +2107,9 @@ function getPriorInjury(inj) {
 function updateTabCounts() {
   const active    = _allInjuries.filter(i => getInjuryTab(i) === 'active');
   const returning = _allInjuries.filter(i => getInjuryTab(i) === 'returning');
-  const resolved  = _allInjuries.filter(i => getInjuryTab(i) === 'resolved');
-  const counts = { active: active.length, returning: returning.length, resolved: resolved.length };
+  // Resolved bucket is keyed 'cleared' (matching the tab button) and counts current-season injuries only.
+  const resolved  = _allInjuries.filter(i => getInjuryTab(i) === 'cleared' && injInSeason(i));
+  const counts = { active: active.length, returning: returning.length, cleared: resolved.length };
   document.querySelectorAll('.inj-seg').forEach(btn => {
     const ct = btn.querySelector('.ct');
     if (ct) ct.textContent = counts[btn.dataset.tab] ?? '';
@@ -2118,7 +2129,10 @@ function updateTabCounts() {
 }
 
 function matchesTab(inj) {
-  return getInjuryTab(inj) === _currentTab;
+  if (getInjuryTab(inj) !== _currentTab) return false;
+  // Resolved tab: only current-season injuries — historical/"previous" ones stay out.
+  if (_currentTab === 'cleared' && !injInSeason(inj)) return false;
+  return true;
 }
 
 // ═══════════════ FILTER + SORT + RENDER ═══════════════
@@ -2513,8 +2527,9 @@ function renderTypeBreakdown() {
 function renderRecentlyResolved() {
   const el   = document.getElementById('injResolved');
   const sub  = document.getElementById('injResolvedSub');
-  const list = _allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').slice(0,6);
-  if (sub) { const _n = _allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').length; sub.textContent = tt('injuries.n_total', `${_n} total`, { count: _n }); }
+  const isResolved = i => (i.status === 'cleared' || i.status === 'resolved') && injInSeason(i);
+  const list = _allInjuries.filter(isResolved).slice(0,6);
+  if (sub) { const _n = _allInjuries.filter(isResolved).length; sub.textContent = tt('injuries.n_total', `${_n} total`, { count: _n }); }
   if (!el) return;
   if (!list.length) {
     el.style.cssText = 'color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center';
@@ -2798,22 +2813,24 @@ async function confirmDischarge() {
     phs.forEach(p => { p.status = 'done'; });
   }
 
-  // Step 2: update existing 'injured' availability rows → 'available' from returnDate
+  // Step 2: red stays only up to the discharge day. DELETE the auto-created 'injured'
+  // days AFTER it (don't recolour them to 'available' — they must disappear), then mark
+  // the return day itself as the return-to-play marker.
   if (inj?.player_id) {
     try {
       await window.sb.from('availability')
-        .update({ status: 'available' })
+        .delete()
         .eq('player_id', inj.player_id)
         .eq('club_id', _clubId)
-        .gte('date', returnDate)
-        .eq('status', 'injured');
-      // Upsert a record for the return date itself (creates if missing)
+        .eq('status', 'injured')
+        .gt('date', returnDate);
+      // The return date becomes available (creates the row if missing).
       await window.sb.from('availability')
         .upsert(
           { player_id: inj.player_id, date: returnDate, status: 'available', club_id: _clubId },
           { onConflict: 'player_id,date' }
         );
-    } catch(e) { console.warn('[Injuries] availability update failed:', e.message); }
+    } catch(e) { console.warn('[Injuries] availability cleanup failed:', e.message); }
   }
 
   // Step 3: insert notifications for coaches / admins / staff
