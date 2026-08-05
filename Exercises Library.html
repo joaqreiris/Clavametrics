@@ -53,6 +53,10 @@
   .sl-pill .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
   .sl-pill.is-on .ct { color:var(--cm-accent); font-weight:600; }
   .sl-toolbar .grow { flex:1; }
+  .sl-origin-wrap { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 8px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); }
+  .sl-origin-wrap:hover { border-color:var(--cm-border-strong); }
+  .sl-origin-wrap select { border:0; background:transparent; color:var(--cm-fg-strong); font:500 12px/1 var(--cm-font-sans); cursor:pointer; max-width:180px; outline:none; }
+  .sl-origin-wrap.is-active { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
 
   /* Layout */
   .sl-grid { display:grid; grid-template-columns: 1fr 360px; gap:14px; align-items:start; }
@@ -307,6 +311,10 @@
         <button class="sl-pill" data-orient="ENDURANCE"><span class="dot" style="background:#16A34A"></span><span data-i18n="exlib.endurance">Endurance</span><span class="ct" id="ctEnd">—</span></button>
         <button class="sl-pill" data-orient="GOALKEEPER"><span class="dot" style="background:#7C3AED"></span><span data-i18n="exlib.goalkeepers">Goalkeepers</span><span class="ct" id="ctGk">—</span></button>
         <div class="grow"></div>
+        <div class="sl-origin-wrap" title="" data-i18n-attr="title:exlib.filter_origin_team">
+          <i class="ti ti-users-group" style="font-size:14px;color:var(--cm-fg-muted)"></i>
+          <select id="slOriginSel"></select>
+        </div>
         <button class="cm-btn is-outline is-sm" id="sortBtn"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span id="sortLabel" data-i18n="exlib.sort_recent">Recent</span></button>
       </div>
 
@@ -482,6 +490,18 @@
     wrap.innerHTML = window._slTeams.map(t =>
       `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span><span class="ct">—</span></div>`
     ).join('') + `<div class="sl-opt" data-group="team" data-val="__none__"><span class="cb"></span><span class="lbl">${tt('exlib.no_origin_team','No team')}</span><span class="ct">—</span></div>`;
+    // Quick origin selector in the toolbar (single-select mirror of the panel filter).
+    const sel = document.getElementById('slOriginSel');
+    if (sel) {
+      const mine = window.getActiveTeamId ? window.getActiveTeamId() : (sessionStorage.getItem('cal_active_team') || null);
+      sel.innerHTML =
+        `<option value="__ALL__">${tt('exlib.all_teams','All teams')}</option>` +
+        window._slTeams.map(t => {
+          const label = (t.id === mine) ? `${t.name} · ${tt('exlib.my_team','my team')}` : t.name;
+          return `<option value="${t.id}">${label}</option>`;
+        }).join('') +
+        `<option value="__none__">${tt('exlib.no_origin_team','No team')}</option>`;
+    }
   })();
 
   // ── Data ─────────────────────────────────────────────────────────
@@ -1043,9 +1063,30 @@
       else filters[group].add(val);
       opt.classList.toggle('is-on', filters[group].has(val));
       updateAccordionBadges();
+      if (group === 'team') syncOriginSelect();
       renderCards();
     });
   });
+
+  // Toolbar origin selector ↔ panel "Origin team" filter (single-select mirror, remembered per user).
+  function syncOriginSelect() {
+    const sel = document.getElementById('slOriginSel');
+    const wrap = document.querySelector('.sl-origin-wrap');
+    if (wrap) wrap.classList.toggle('is-active', filters.team.size > 0);
+    const vals = [...filters.team];
+    if (sel) sel.value = (vals.length === 1) ? vals[0] : '__ALL__';
+    try { localStorage.setItem('cm_sl_origin', (vals.length === 1) ? vals[0] : '__ALL__'); } catch {}
+  }
+  function applyOriginFilter(val) {
+    filters.team.clear();
+    if (val && val !== '__ALL__') filters.team.add(val);
+    document.querySelectorAll('.sl-opt[data-group="team"]').forEach(o =>
+      o.classList.toggle('is-on', filters.team.has(o.dataset.val)));
+    updateAccordionBadges();
+    syncOriginSelect();
+    renderCards();
+  }
+  document.getElementById('slOriginSel')?.addEventListener('change', e => applyOriginFilter(e.target.value));
 
   // Accordion toggle
   document.querySelectorAll('.sl-acc-h[data-acc]').forEach(h => {
@@ -1063,6 +1104,7 @@
       ['ctMdAcc',     filters.matchday],
       ['ctGtAcc',     filters.gametype],
       ['ctFocAcc',    filters.focus],
+      ['ctTeamAcc',   filters.team],
     ];
     pairs.forEach(([id, set]) => {
       const el = document.getElementById(id);
@@ -1082,6 +1124,7 @@
     if (cs) cs.value = '';
     if (ts) ts.value = '';
     updateAccordionBadges();
+    syncOriginSelect();
     renderCards();
   }
 
@@ -1118,6 +1161,14 @@
 
   // ── Initial render ───────────────────────────────────────────────
   updateCounts();
+  // Restore the remembered origin choice (so "only my team" sticks across visits).
+  try {
+    const savedOrigin = localStorage.getItem('cm_sl_origin');
+    if (savedOrigin && savedOrigin !== '__ALL__'
+        && (savedOrigin === '__none__' || (window._slTeams||[]).some(t => t.id === savedOrigin))) {
+      applyOriginFilter(savedOrigin);
+    } else { syncOriginSelect(); }
+  } catch { syncOriginSelect(); }
   renderCards();
 
   // Re-render dynamic content on language change (static is handled by sidebar.js).
