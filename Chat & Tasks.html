@@ -533,6 +533,24 @@
   </div>
 </div>
 
+<!-- ══ CREATE / MANAGE GROUP MODAL ══ -->
+<div class="dm-picker-overlay hidden" id="groupModalOverlay" onclick="closeGroupModal(event)">
+  <div class="dm-picker" style="width:360px;max-height:82vh">
+    <div class="dm-picker-head">
+      <h3 id="groupModalTitle" data-i18n="chat_tasks.new_group">New group</h3>
+      <button class="dm-picker-close" onclick="closeGroupModal()">×</button>
+    </div>
+    <input class="dm-picker-search" id="groupNameInput" data-i18n-ph="chat_tasks.group_name_ph" placeholder="Group name (e.g. Physios)" autocomplete="off" style="margin-bottom:0">
+    <input class="dm-picker-search" id="groupMemberSearch" data-i18n-ph="chat_tasks.search_member" placeholder="Search member…" oninput="renderGroupPicker()" autocomplete="off" style="margin-top:6px;margin-bottom:0">
+    <div class="dm-picker-list" id="groupMemberList"></div>
+    <div style="display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--cm-border)">
+      <button id="groupDeleteBtn" class="cm-btn is-outline is-sm" style="color:var(--cm-danger);border-color:var(--cm-danger);display:none" onclick="deleteOrLeaveGroup()"></button>
+      <button class="cm-btn is-outline is-sm" style="margin-left:auto" onclick="closeGroupModal()" data-i18n="common.cancel">Cancel</button>
+      <button id="groupSaveBtn" class="cm-btn is-primary is-sm" onclick="saveGroup()" data-i18n="chat_tasks.create_group">Create</button>
+    </div>
+  </div>
+</div>
+
 <!-- New Task Panel -->
 <div class="cm-panel-overlay" id="newTaskOverlay" onclick="if(event.target===this)closeNewTask()"></div>
 <div class="cm-panel" id="newTaskPanel">
@@ -694,6 +712,13 @@ let activeConv  = 'group';
 let pinnedFiles = [];
 let dmLastMsg   = {};
 let dmUnread    = {};
+let groups      = [];          // custom chat groups I belong to: {id, name, created_by, members:[profileId]}
+let groupUnread = {};          // groupId -> unread count (this session)
+let groupLastMsg= {};          // groupId -> last message (for conv-list preview)
+let allStaff    = [];          // full club staff (group member picker; NOT team-filtered like `members`)
+let groupDraft  = { editing: null, members: new Set() };  // create/edit group modal state
+const isCg = id => typeof id === 'string' && id.startsWith('cg:');
+const cgId = id => String(id).slice(3);
 const renderedIds   = new Set();
 let pendingAttachments = [];
 const CHAT_MAX_FILE_MB = 50;
@@ -895,7 +920,7 @@ async function boot() {
   // Loading them in parallel raced — messages rendered against an empty list, fell back to the
   // stored sender_name (the pre-onboarding email handle) and cached that via renderedIds.
   await loadMembers();
-  await Promise.all([loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
+  await Promise.all([loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles(), loadGroups()]);
   await loadDmPreviews();
   // Abrir conversación específica si viene de ?conv= (del panel de notificaciones)
   const _convParam = new URLSearchParams(location.search).get('conv');
@@ -937,6 +962,42 @@ async function loadMembers() {
   renderChatRightMembers();
 }
 
+// Full club staff (not team-filtered) — used by the group member picker so a group can span teams.
+async function loadAllStaff() {
+  const { data: allProfiles } = await window.sb.from('profiles')
+    .select('id, full_name, first_name, last_name, job_title, email, role, avatar_url')
+    .eq('club_id', currentUser.clubId);
+  let list = allProfiles || [];
+  try {
+    const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
+    const superIds = new Set((padmins || []).map(r => r.user_id));
+    list = list.filter(p => !superIds.has(p.id));
+  } catch (_) {}
+  allStaff = list;
+}
+
+// ── CHAT GROUPS ──
+// RLS returns only the groups I belong to (or created); a group message is a `messages` row
+// with group_id set (recipient_id/team_id null), readable only by members.
+async function loadGroups() {
+  const { data: grps } = await window.sb.from('chat_groups')
+    .select('id,name,created_by,created_at')
+    .eq('club_id', currentUser.clubId).order('created_at', { ascending: true });
+  const gids = (grps || []).map(g => g.id);
+  let byGroup = {};
+  if (gids.length) {
+    const { data: gm } = await window.sb.from('chat_group_members').select('group_id,profile_id').in('group_id', gids);
+    (gm || []).forEach(r => { (byGroup[r.group_id] = byGroup[r.group_id] || []).push(r.profile_id); });
+    // Last message per group for the conv-list preview.
+    const { data: lm } = await window.sb.from('messages')
+      .select('group_id,sender_name,content,created_at')
+      .in('group_id', gids).order('created_at', { ascending: false }).limit(200);
+    groupLastMsg = {};
+    (lm || []).forEach(m => { if (!groupLastMsg[m.group_id]) groupLastMsg[m.group_id] = m; });
+  }
+  groups = (grps || []).map(g => ({ ...g, members: byGroup[g.id] || [] }));
+}
+
 // ── MESSAGES ──
 // Resolve the active team from the same source of truth as the rest of the app:
 // the value set by ctInitTeamSwitch, else the team switcher, else the shared
@@ -952,13 +1013,15 @@ function ctResolveTeamId() {
 }
 
 async function loadMessages() {
-  let q = window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview').eq('club_id', currentUser.clubId);
+  let q = window.sb.from('messages').select('id,sender_id,recipient_id,group_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview').eq('club_id', currentUser.clubId);
   if (activeConv === 'group') {
-    q = q.is('recipient_id', null);
-    // Per-team channel, but also include legacy/edge null-team messages for this club so
-    // none are lost: recipient_id IS NULL AND (team_id = active team OR team_id IS NULL).
+    // Team channel: recipient_id IS NULL AND group_id IS NULL (custom-group messages also have a
+    // null recipient, so they must be excluded here). Include legacy null-team rows for this club.
+    q = q.is('recipient_id', null).is('group_id', null);
     const teamId = ctResolveTeamId();
     if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
+  } else if (isCg(activeConv)) {
+    q = q.eq('group_id', cgId(activeConv));
   } else {
     q = q.or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${activeConv}),and(sender_id.eq.${activeConv},recipient_id.eq.${currentUser.id})`);
   }
@@ -1107,8 +1170,9 @@ async function sendMessage() {
     club_id:      currentUser.clubId,
     sender_id:    currentUser.id,
     sender_name:  currentUser.name,
-    recipient_id: activeConv === 'group' ? null : activeConv,
+    recipient_id: (activeConv === 'group' || isCg(activeConv)) ? null : activeConv,
     team_id:      activeConv === 'group' ? groupTeamId : null,
+    group_id:     isCg(activeConv) ? cgId(activeConv) : null,
   };
 
   // With attachments, send one message per file; the text + link preview ride on the first.
@@ -1151,7 +1215,10 @@ async function sendMessage() {
   clearLinkPreview();
   (data || []).forEach(m => { messages.push(m); appendMsg(m); });
   const last = (data || [])[data.length - 1];
-  if (last && activeConv !== 'group') { dmLastMsg[activeConv] = last; renderConvList(); }
+  if (last) {
+    if (isCg(activeConv)) { groupLastMsg[cgId(activeConv)] = last; renderConvList(); }
+    else if (activeConv !== 'group') { dmLastMsg[activeConv] = last; renderConvList(); }
+  }
 }
 
 // ── CONV LIST ──
@@ -1176,6 +1243,29 @@ function renderConvList() {
       </div>
     </div>
     <div class="chat-list-label" style="display:flex;align-items:center">
+      ${esc(tt('chat_tasks.groups', 'Groups'))}
+      <button onclick="openGroupModal()" style="margin-left:auto;background:none;border:none;color:var(--cm-fg-muted);cursor:pointer;padding:2px 4px;border-radius:4px" title="${esc(tt('chat_tasks.new_group', 'New group'))}"><i class="ti ti-plus" style="font-size:14px"></i></button>
+    </div>`;
+
+  for (const g of groups) {
+    const conv     = 'cg:' + g.id;
+    const isActive = activeConv === conv;
+    const lm       = groupLastMsg[g.id];
+    let preview    = lm ? `${lm.sender_name}: ${(lm.content || '').slice(0, 38)}`
+                        : tt('chat_tasks.group_members_n', '{n} members', { n: g.members.length });
+    if (isActive && messages.length) { const m = messages[messages.length - 1]; preview = `${m.sender_name}: ${(m.content || '').slice(0, 38)}`; }
+    const unread   = groupUnread[g.id] || 0;
+    html += `<div class="conv${isActive ? ' is-on' : ''}" onclick="selectConv('${conv}')">
+      <div class="av g"><i class="ti ti-users"></i></div>
+      <div class="body">
+        <div class="name-row"><span class="name">${esc(g.name)}</span></div>
+        <div class="preview">${esc(preview)}</div>
+      </div>
+      ${unread > 0 ? `<span class="unread">${unread > 99 ? '99+' : unread}</span>` : ''}
+    </div>`;
+  }
+
+  html += `<div class="chat-list-label" style="display:flex;align-items:center">
       ${esc(tt('chat_tasks.direct_messages', 'Direct messages'))}
       <button onclick="openDmPicker()" style="margin-left:auto;background:none;border:none;color:var(--cm-fg-muted);cursor:pointer;padding:2px 4px;border-radius:4px" title="${esc(tt('chat_tasks.new_dm', 'New DM'))}"><i class="ti ti-edit" style="font-size:13px"></i></button>
     </div>`;
@@ -1209,7 +1299,8 @@ function renderConvList() {
 async function selectConv(id) {
   if (activeConv === id) return;
   activeConv = id;
-  if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
+  if (isCg(id)) { delete groupUnread[cgId(id)]; updateUnreadBadge(); }
+  else if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
   const channelKey = id === 'group' ? 'group' : id;
   window.cmChatMarkRead?.(channelKey);
   window.sb?.from('channel_reads').upsert({
@@ -1238,6 +1329,19 @@ function updateChatHeader() {
       <div class="right">
         <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
         <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+      </div>`;
+  } else if (isCg(activeConv)) {
+    const g = groups.find(x => x.id === cgId(activeConv));
+    const gname = g ? g.name : tt('chat_tasks.group', 'Group');
+    const gn = g ? g.members.length : 0;
+    el.innerHTML = `
+      <div class="av"><i class="ti ti-users"></i></div>
+      <div class="info">
+        <div class="name">${esc(gname)}</div>
+        <div class="meta"><span class="dot"></span>${esc(tt('chat_tasks.group_members_n', '{n} members', { n: gn }))}</div>
+      </div>
+      <div class="right">
+        <button class="cm-icon-btn" onclick="openGroupModal('${g ? g.id : ''}')" title="${esc(tt('chat_tasks.manage_group', 'Manage group'))}"><i class="ti ti-settings"></i></button>
       </div>`;
   } else {
     const m = members.find(x => x.id === activeConv);
@@ -1321,6 +1425,127 @@ function pickDm(userId) {
   document.querySelectorAll('.ct-view').forEach(s => s.style.display = 'none');
   document.querySelector('.ct-tab[data-view="chat"]').classList.add('is-on');
   document.querySelector('.ct-view[data-view="chat"]').style.display = '';
+}
+
+// ── CHAT GROUP MODAL (create / manage) ──
+async function openGroupModal(gid) {
+  if (!allStaff.length) { try { await loadAllStaff(); } catch (_) {} }
+  const editing = gid && groups.find(g => g.id === gid) ? gid : null;
+  groupDraft = { editing, members: new Set() };
+  const nameInp = document.getElementById('groupNameInput');
+  const delBtn  = document.getElementById('groupDeleteBtn');
+  const saveBtn = document.getElementById('groupSaveBtn');
+  const title   = document.getElementById('groupModalTitle');
+  if (editing) {
+    const g = groups.find(x => x.id === editing);
+    (g.members || []).forEach(id => groupDraft.members.add(id));
+    nameInp.value = g.name || '';
+    title.textContent = tt('chat_tasks.manage_group', 'Manage group');
+    saveBtn.textContent = tt('common.save', 'Save');
+    const iAmCreator = g.created_by === currentUser.id;
+    delBtn.style.display = '';
+    delBtn.textContent = iAmCreator ? tt('chat_tasks.delete_group', 'Delete group') : tt('chat_tasks.leave_group', 'Leave group');
+    nameInp.disabled = !iAmCreator;   // only the creator can rename
+  } else {
+    groupDraft.members.add(currentUser.id);   // creator is always a member
+    nameInp.value = '';
+    nameInp.disabled = false;
+    title.textContent = tt('chat_tasks.new_group', 'New group');
+    saveBtn.textContent = tt('chat_tasks.create_group', 'Create');
+    delBtn.style.display = 'none';
+  }
+  document.getElementById('groupMemberSearch').value = '';
+  document.getElementById('groupModalOverlay').classList.remove('hidden');
+  renderGroupPicker();
+  setTimeout(() => nameInp.focus(), 50);
+}
+function closeGroupModal(e) {
+  if (e && e.target !== document.getElementById('groupModalOverlay')) return;
+  document.getElementById('groupModalOverlay').classList.add('hidden');
+}
+function renderGroupPicker() {
+  const q    = (document.getElementById('groupMemberSearch').value || '').toLowerCase();
+  const list = document.getElementById('groupMemberList');
+  const rows = allStaff.filter(m => !q || window.cmDisplayName(m).toLowerCase().includes(q));
+  if (!rows.length) { list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font-size:13px">${esc(tt('chat_tasks.no_members', 'No members'))}</div>`; return; }
+  list.innerHTML = rows.map(m => {
+    const name = window.cmDisplayName(m);
+    const self = m.id === currentUser.id;
+    const on   = groupDraft.members.has(m.id);
+    return `<div class="conv" style="margin:2px 0;${self ? 'opacity:.7' : 'cursor:pointer'}"${self ? '' : ` onclick="toggleGroupMember('${m.id}')"`}>
+      ${window.cmAvatarHtml(m, 30)}
+      <div class="body"><div class="name-row"><span class="name">${esc(name)}${self ? ' · ' + esc(tt('chat_tasks.you_label', 'you')) : ''}</span></div><div class="preview">${esc(m.job_title || m.role || '')}</div></div>
+      <i class="ti ${on ? 'ti-circle-check-filled' : 'ti-circle'}" style="font-size:18px;color:${on ? 'var(--cm-accent)' : 'var(--cm-fg-faint)'};flex-shrink:0"></i>
+    </div>`;
+  }).join('');
+}
+function toggleGroupMember(id) {
+  if (id === currentUser.id) return;   // self is managed via create / leave
+  if (groupDraft.members.has(id)) groupDraft.members.delete(id); else groupDraft.members.add(id);
+  renderGroupPicker();
+}
+async function saveGroup() {
+  const name = (document.getElementById('groupNameInput').value || '').trim();
+  if (!name) { alert(tt('chat_tasks.group_name_required', 'Enter a group name.')); return; }
+  const memberIds = [...groupDraft.members];
+  if (memberIds.filter(id => id !== currentUser.id).length === 0) { alert(tt('chat_tasks.group_needs_member', 'Add at least one member.')); return; }
+  const saveBtn = document.getElementById('groupSaveBtn');
+  saveBtn.disabled = true;
+  try {
+    if (!groupDraft.editing) {
+      const { data: g, error } = await window.sb.from('chat_groups')
+        .insert({ club_id: currentUser.clubId, name, created_by: currentUser.id })
+        .select('id').single();
+      if (error) throw error;
+      const rows = memberIds.map(pid => ({ group_id: g.id, profile_id: pid, club_id: currentUser.clubId }));
+      const { error: mErr } = await window.sb.from('chat_group_members').insert(rows);
+      if (mErr) throw mErr;
+      await loadGroups();
+      document.getElementById('groupModalOverlay').classList.add('hidden');
+      renderConvList();
+      selectConv('cg:' + g.id);
+    } else {
+      const g = groups.find(x => x.id === groupDraft.editing);
+      if (g && g.created_by === currentUser.id && name !== g.name) {
+        await window.sb.from('chat_groups').update({ name }).eq('id', g.id);
+      }
+      const cur = new Set(g ? g.members : []);
+      const add = memberIds.filter(id => !cur.has(id));
+      const removeIds = [...cur].filter(id => !groupDraft.members.has(id));
+      if (add.length) await window.sb.from('chat_group_members').insert(add.map(pid => ({ group_id: g.id, profile_id: pid, club_id: currentUser.clubId })));
+      for (const pid of removeIds) await window.sb.from('chat_group_members').delete().eq('group_id', g.id).eq('profile_id', pid);
+      await loadGroups();
+      document.getElementById('groupModalOverlay').classList.add('hidden');
+      renderConvList();
+      updateChatHeader();
+    }
+  } catch (err) {
+    console.error('saveGroup failed:', err);
+    alert(tt('chat_tasks.group_save_failed', 'Could not save the group.'));
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+async function deleteOrLeaveGroup() {
+  const g = groups.find(x => x.id === groupDraft.editing);
+  if (!g) return;
+  const iAmCreator = g.created_by === currentUser.id;
+  const msg = iAmCreator ? tt('chat_tasks.confirm_delete_group', 'Delete this group for everyone?')
+                         : tt('chat_tasks.confirm_leave_group', 'Leave this group?');
+  if (!confirm(msg)) return;
+  try {
+    if (iAmCreator) await window.sb.from('chat_groups').delete().eq('id', g.id);
+    else await window.sb.from('chat_group_members').delete().eq('group_id', g.id).eq('profile_id', currentUser.id);
+  } catch (err) {
+    console.error('deleteOrLeaveGroup failed:', err);
+    alert(tt('chat_tasks.group_save_failed', 'Could not save the group.'));
+    return;
+  }
+  document.getElementById('groupModalOverlay').classList.add('hidden');
+  const wasActive = activeConv === 'cg:' + g.id;
+  await loadGroups();
+  if (wasActive) { activeConv = 'group'; renderedIds.clear(); messages = []; await loadMessages(); updateChatHeader(); }
+  renderConvList();
 }
 
 // ── TASKS ──
@@ -1886,7 +2111,7 @@ function setNewTaskMode(mode) {
 
 // ── BADGES ──
 function updateUnreadBadge() {
-  const total = Object.values(dmUnread).reduce((a, b) => a + b, 0);
+  const total = Object.values(dmUnread).reduce((a, b) => a + b, 0) + Object.values(groupUnread).reduce((a, b) => a + b, 0);
   const badge = document.getElementById('chatBadge');
   if (badge) { badge.textContent = total; badge.style.display = total ? '' : 'none'; }
 }
@@ -1921,16 +2146,31 @@ function subscribeRealtime() {
 function handleNewMessage(payload) {
   const msg = payload.new;
   if (!msg) return;
-  const isGroup  = !msg.recipient_id;
-  const inActive = (activeConv === 'group' && isGroup) ||
-    (!isGroup && activeConv !== 'group' && (msg.sender_id === activeConv || msg.recipient_id === activeConv));
+  const isCgMsg = !!msg.group_id;                       // custom group message
+  const isTeam  = !msg.recipient_id && !msg.group_id;   // team channel
+  const isDm    = !!msg.recipient_id;                   // 1:1 DM
+
+  // Ignore custom-group messages for groups I'm not a member of (defensive: covers the case
+  // where realtime delivery isn't RLS-filtered — never surface a preview/unread to a non-member).
+  if (isCgMsg && !groups.some(g => g.id === msg.group_id)) return;
+
+  const inActive =
+    (activeConv === 'group' && isTeam) ||
+    (isCg(activeConv) && isCgMsg && cgId(activeConv) === msg.group_id) ||
+    (isDm && !isCg(activeConv) && activeConv !== 'group' && (msg.sender_id === activeConv || msg.recipient_id === activeConv));
+
   if (inActive && !messages.find(m => m.id === msg.id)) { messages.push(msg); appendMsg(msg); }
-  if (!isGroup) {
+
+  if (isDm) {
     const pid = msg.sender_id === currentUser.id ? msg.recipient_id : msg.sender_id;
     if (!dmLastMsg[pid] || msg.created_at > dmLastMsg[pid].created_at) dmLastMsg[pid] = msg;
+  } else if (isCgMsg) {
+    if (!groupLastMsg[msg.group_id] || msg.created_at > groupLastMsg[msg.group_id].created_at) groupLastMsg[msg.group_id] = msg;
   }
+
   if (msg.sender_id !== currentUser.id && !inActive) {
-    if (!isGroup) dmUnread[msg.sender_id] = (dmUnread[msg.sender_id] || 0) + 1;
+    if (isDm) dmUnread[msg.sender_id] = (dmUnread[msg.sender_id] || 0) + 1;
+    else if (isCgMsg) groupUnread[msg.group_id] = (groupUnread[msg.group_id] || 0) + 1;
     updateUnreadBadge();
     renderConvList();
   }

@@ -244,6 +244,38 @@ create table if not exists public.channel_reads (
 );
 CREATE INDEX idx_channel_reads_team ON public.channel_reads USING btree (team_id);
 
+-- Custom chat groups (arbitrary staff subsets, e.g. "Physios") — messaging beyond the
+-- single team channel + 1:1 DMs. A group message = messages.group_id set (recipient_id/team_id null).
+create table if not exists public.chat_groups (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  name text not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint chat_groups_pkey primary key (id)
+);
+CREATE INDEX idx_chat_groups_club ON public.chat_groups USING btree (club_id);
+
+create table if not exists public.chat_group_members (
+  group_id uuid not null,
+  profile_id uuid not null,
+  club_id uuid not null,
+  added_at timestamp with time zone default now() not null,
+  constraint chat_group_members_pkey primary key (group_id, profile_id)
+);
+CREATE INDEX idx_chat_group_members_profile ON public.chat_group_members USING btree (profile_id);
+CREATE INDEX idx_chat_group_members_group ON public.chat_group_members USING btree (group_id);
+
+-- Membership check used by RLS. SECURITY DEFINER so it bypasses RLS on chat_group_members
+-- (a self-referential membership policy would otherwise recurse infinitely).
+create or replace function public.is_chat_group_member(gid uuid)
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (
+    select 1 from public.chat_group_members
+    where group_id = gid and profile_id = auth.uid()
+  );
+$$;
+
 create table if not exists public.club_branding (
   club_id uuid not null,
   crest_url text,
@@ -1386,12 +1418,14 @@ create table if not exists public.messages (
   attachment_type text,
   link_preview jsonb,
   team_id uuid,
+  group_id uuid,
   constraint messages_pkey primary key (id),
   constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'file'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );
 CREATE INDEX messages_club_created_idx ON public.messages USING btree (club_id, created_at DESC);
 CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, recipient_id) WHERE (recipient_id IS NOT NULL);
 CREATE INDEX idx_messages_team ON public.messages USING btree (team_id);
+CREATE INDEX idx_messages_group ON public.messages USING btree (group_id) WHERE (group_id IS NOT NULL);
 
 create table if not exists public.microcycles (
   id text not null,
@@ -2473,6 +2507,12 @@ alter table public.member_teams add constraint member_teams_team_id_fkey FOREIGN
 alter table public.mesocycles add constraint mesocycles_macrocycle_id_fkey FOREIGN KEY (macrocycle_id) REFERENCES macrocycles(id) ON DELETE CASCADE;
 alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.messages add constraint messages_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
+alter table public.chat_groups add constraint chat_groups_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.chat_groups add constraint chat_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.chat_group_members add constraint chat_group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
+alter table public.chat_group_members add constraint chat_group_members_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.chat_group_members add constraint chat_group_members_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.microcycles add constraint microcycles_mesocycle_id_fkey FOREIGN KEY (mesocycle_id) REFERENCES mesocycles(id) ON DELETE SET NULL;
 alter table public.microcycles add constraint microcycles_published_by_fkey FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.microcycles add constraint microcycles_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL;
@@ -5555,16 +5595,43 @@ create policy "mesocycles_super_all" on public.mesocycles as permissive for all 
   with check (is_super_admin());
 
 alter table public.messages enable row level security;
+-- Group messages (group_id set) are members-only; team channel + DMs (group_id null) keep the
+-- existing club-wide visibility (their per-conversation split is done client-side).
 create policy "messages_insert" on public.messages as permissive for insert to public
   with check ((club_id = ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid())))
+   AND (group_id IS NULL OR public.is_chat_group_member(group_id)));
 create policy "messages_select" on public.messages as permissive for select to public
   using ((club_id = ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid())))
+   AND (group_id IS NULL OR public.is_chat_group_member(group_id)));
 create policy "messages_update" on public.messages as permissive for update to public
   using ((sender_id = auth.uid()));
+
+alter table public.chat_groups enable row level security;
+create policy chat_groups_select on public.chat_groups as permissive for select to public
+  using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid())))
+    AND (created_by = auth.uid() OR public.is_chat_group_member(id)));
+create policy chat_groups_insert on public.chat_groups as permissive for insert to public
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid())))
+    AND created_by = auth.uid());
+create policy chat_groups_update on public.chat_groups as permissive for update to public
+  using (created_by = auth.uid());
+create policy chat_groups_delete on public.chat_groups as permissive for delete to public
+  using (created_by = auth.uid());
+
+alter table public.chat_group_members enable row level security;
+create policy chat_group_members_select on public.chat_group_members as permissive for select to public
+  using (profile_id = auth.uid() OR public.is_chat_group_member(group_id));
+create policy chat_group_members_insert on public.chat_group_members as permissive for insert to public
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid())))
+    AND (public.is_chat_group_member(group_id)
+      OR EXISTS ( SELECT 1 FROM chat_groups g WHERE g.id = group_id AND g.created_by = auth.uid())));
+create policy chat_group_members_delete on public.chat_group_members as permissive for delete to public
+  using (profile_id = auth.uid() OR public.is_chat_group_member(group_id)
+    OR EXISTS ( SELECT 1 FROM chat_groups g WHERE g.id = group_id AND g.created_by = auth.uid()));
 
 alter table public.microcycles enable row level security;
 create policy "mc_scoped_cud" on public.microcycles as permissive for all to public
