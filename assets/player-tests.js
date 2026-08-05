@@ -414,6 +414,17 @@
     .pp-as-ratio { display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:8px; background:var(--cm-surface); border:1px solid var(--cm-border-soft); font:500 11.5px/1 var(--cm-font-sans); }
     .pp-as-ratio .rv { font-family:var(--cm-font-mono); color:var(--cm-fg-strong); font-weight:600; }
     .pp-as-hist { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:1px 5px; border:1px solid var(--cm-border-soft); border-radius:5px; }
+    .pp-as-tbl { width:100%; border-collapse:collapse; }
+    .pp-as-tbl thead th { text-align:left; font:600 10.5px/1 var(--cm-font-mono); text-transform:uppercase; letter-spacing:.04em; color:var(--cm-fg-faint); padding:0 10px 8px; border-bottom:1px solid var(--cm-border); }
+    .pp-as-tbl thead th.num { text-align:right; }
+    .pp-as-tbl tbody td { padding:9px 10px; border-bottom:1px solid var(--cm-border-soft); font:500 12.5px/1.2 var(--cm-font-sans); vertical-align:middle; }
+    .pp-as-tbl tbody tr:last-child td { border-bottom:0; }
+    .pp-as-tbl td.nm { font-weight:600; color:var(--cm-fg-strong); }
+    .pp-as-tbl td.num { text-align:right; font-family:var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
+    .pp-as-tbl td.num .un { font-weight:500; color:var(--cm-fg-muted); margin-left:2px; font-size:11px; }
+    .pp-as-tbl td.num.asym { font-weight:700; }
+    .pp-as-tbl td.num.mut, .pp-as-tbl .mut { color:var(--cm-fg-faint); font-weight:500; }
+    .pp-as-tbl td.stt { text-align:left; white-space:nowrap; }
     `;
     const el = document.createElement('style'); el.id = 'pp-as-styles'; el.textContent = css; document.head.appendChild(el);
   }
@@ -499,24 +510,14 @@
       if (!keys.length) return;
       rendered = true;
 
-      // per-test rows (latest record)
+      // per-test rows (latest record) → scannable table
       const rowsHtml = keys.map(k => {
         const s = seriesByKey[k], def = s.def;
         const recs = s.records;
         const rec = recs[recs.length - 1];
-        const prev = recs[recs.length - 2];
         const unit = def.unit || '';
         const L = rec.sides.L, R = rec.sides.R, NA = rec.sides.NA;
-        const maxV = Math.max(...[L, R, NA].filter(v => v != null), 0) || 1;
         const AN = window.assessNorms;
-
-        let bars = '';
-        if (def.bilateral){
-          bars += bar('L', L, unit, maxV, 'var(--cm-accent)');
-          bars += bar('R', R, unit, maxV, 'var(--cm-accent)');
-        } else {
-          bars += bar('', NA, unit, maxV, 'var(--cm-accent)');
-        }
 
         // status: worst of per-side absolute + asymmetry
         let statuses = [];
@@ -539,37 +540,28 @@
           });
         }
 
-        // delta vs previous (representative value)
-        let dl = '', dir = 'flat';
-        if (prev){
-          const a = repValue(rec, def), b = repValue(prev, def);
-          if (a != null && b != null){
-            const d = a - b;
-            dir = window.evalDir ? window.evalDir.deltaDir(d, def.test_type, unit) : 'flat';
-            dl = (d > 0 ? '+' : d < 0 ? '−' : '') + fmtNum(Math.abs(d));
-          }
-        }
-
-        // N/kg secondary
+        // N/kg secondary (isometric, when bodyweight is known)
         let nkg = '';
         if (AN && rec.bw){
           const rv = repValue(rec, def);
           const norm = AN.normalize(rv, rec.bw);
-          if (norm != null) nkg = `<div class="pp-as-sec">${fmtNum(norm)} ${esc(unit)}/kg</div>`;
+          if (norm != null) nkg = `<div class="pp-as-sec">${esc(fmtNum(norm))} ${esc(unit)}/kg</div>`;
         }
 
-        const asymTxt = asym && asym.pct != null
-          ? `<span class="pp-as-chip" title="${esc(AN ? AN.explain(asym) : '')}" style="color:${statusColor(asym.status)}">${T('evaluations.asym_pct','Asym')} ${fmtNum(asym.pct)}%</span>` : '';
+        const cells = def.bilateral
+          ? `<td class="num">${valCell(L, unit)}</td><td class="num">${valCell(R, unit)}</td>`
+          : `<td class="num" colspan="2" style="text-align:center">${valCell(NA, unit)}</td>`;
+        const asymCell = (asym && asym.pct != null)
+          ? `<td class="num asym" style="color:${statusColor(asym.status)}" title="${esc(AN ? AN.explain(asym) : '')}">${fmtNum(asym.pct)}%</td>`
+          : `<td class="num mut">—</td>`;
+        const stCell = (st.status === 'none') ? '<span class="mut">—</span>' : statusChip(st);
 
-        return `<div class="pp-as-row">
-          <div class="pp-as-row-h">
-            <span class="nm">${esc(T(def.i18n_key, def.label))}</span>
-            ${s.historic ? `<span class="pp-as-hist">${esc(T('player.historic','historic'))}</span>` : ''}
-            <span class="meta">${asymTxt}${statusChip(st)}${dl ? `<span class="pp-as-dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span>` : ''}</span>
-          </div>
-          ${bars}
-          ${nkg}
-        </div>`;
+        return `<tr>
+          <td class="nm">${esc(T(def.i18n_key, def.label))}${s.historic ? ` <span class="pp-as-hist">${esc(T('player.historic','historic'))}</span>` : ''}${nkg}</td>
+          ${cells}
+          ${asymCell}
+          <td class="stt">${stCell}</td>
+        </tr>`;
       }).join('');
 
       // derived ratios (latest record per def in this family)
@@ -596,36 +588,51 @@
         }
       }
 
-      // one evolution chart (representative value) for the test with most records
-      let chartKey = keys[0];
-      keys.forEach(k => { if (seriesByKey[k].records.length > seriesByKey[chartKey].records.length) chartKey = k; });
-      const chartRows = seriesByKey[chartKey].records.map(rec => ({ test_date: rec.date, value: repValue(rec, seriesByKey[chartKey].def), unit: seriesByKey[chartKey].def.unit }));
+      // evolution chart — only for tests that actually have a trend (≥2 records)
+      const trendKeys = keys.filter(k => seriesByKey[k].records.length >= 2);
+      let chartKey = null;
+      if (trendKeys.length){
+        chartKey = trendKeys[0];
+        trendKeys.forEach(k => { if (seriesByKey[k].records.length > seriesByKey[chartKey].records.length) chartKey = k; });
+      }
+      const chartHtml = chartKey
+        ? `<div class="pp-ts-card-head" style="margin-top:16px;margin-bottom:8px"><h3 style="font-size:12.5px">${esc(T(seriesByKey[chartKey].def.i18n_key, seriesByKey[chartKey].def.label))}</h3><span class="sub" data-as-pills-for="${fam}"></span></div><div data-as-chart="${fam}"></div>`
+        : '';
 
       const cardId = 'pp-as-' + fam;
       mount.insertAdjacentHTML('beforeend', `
         <div class="pp-ts-card" id="${cardId}">
           <div class="pp-ts-card-head"><h3>${esc(label)}</h3><span class="sub">${keys.length} ${keys.length===1?'test':'tests'}</span></div>
-          <div class="pp-as-rows">${rowsHtml}</div>
+          <table class="pp-as-tbl">
+            <thead><tr><th>${esc(T('player.col_test','Test'))}</th><th class="num">L</th><th class="num">R</th><th class="num">Δ%</th><th>${esc(T('player.col_status','Status'))}</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
           ${ratiosHtml}
-          <div class="pp-ts-card-head" style="margin-top:16px;margin-bottom:8px"><h3 style="font-size:12.5px">${esc(T(seriesByKey[chartKey].def.i18n_key, seriesByKey[chartKey].def.label))}</h3><span class="sub" data-as-pills-for="${fam}"></span></div>
-          <div data-as-chart="${fam}"></div>
+          ${chartHtml}
         </div>`);
 
-      // pills to switch charted test + initial chart
-      const card = document.getElementById(cardId);
-      const chartEl = card.querySelector(`[data-as-chart="${fam}"]`);
-      const pillsHost = card.querySelector(`[data-as-pills-for="${fam}"]`);
-      const drawChart = (k) => { const S = seriesByKey[k]; chartEl.innerHTML = renderChart(S.records.map(rec => ({ test_date: rec.date, value: repValue(rec, S.def), unit: S.def.unit })), null); };
-      pillsHost.innerHTML = keys.map(k => `<button class="pp-tpill" style="height:24px;padding:0 9px;font-size:11px" data-k="${esc(k)}">${esc(T(seriesByKey[k].def.i18n_key, seriesByKey[k].def.label))}</button>`).join(' ');
-      pillsHost.querySelectorAll('.pp-tpill').forEach(b => b.addEventListener('click', () => {
-        pillsHost.querySelectorAll('.pp-tpill').forEach(x => x.classList.remove('is-on'));
-        b.classList.add('is-on'); drawChart(b.dataset.k);
-      }));
-      const firstPill = pillsHost.querySelector(`.pp-tpill[data-k="${chartKey}"]`); if (firstPill) firstPill.classList.add('is-on');
-      chartEl.innerHTML = renderChart(chartRows, null);
+      // pills + chart only when there is trend data
+      if (chartKey){
+        const card = document.getElementById(cardId);
+        const chartEl = card.querySelector(`[data-as-chart="${fam}"]`);
+        const pillsHost = card.querySelector(`[data-as-pills-for="${fam}"]`);
+        const drawChart = (k) => { const S = seriesByKey[k]; chartEl.innerHTML = renderChart(S.records.map(rec => ({ test_date: rec.date, value: repValue(rec, S.def), unit: S.def.unit })), null); };
+        pillsHost.innerHTML = trendKeys.map(k => `<button class="pp-tpill" style="height:24px;padding:0 9px;font-size:11px" data-k="${esc(k)}">${esc(T(seriesByKey[k].def.i18n_key, seriesByKey[k].def.label))}</button>`).join(' ');
+        pillsHost.querySelectorAll('.pp-tpill').forEach(b => b.addEventListener('click', () => {
+          pillsHost.querySelectorAll('.pp-tpill').forEach(x => x.classList.remove('is-on'));
+          b.classList.add('is-on'); drawChart(b.dataset.k);
+        }));
+        const firstPill = pillsHost.querySelector(`.pp-tpill[data-k="${chartKey}"]`); if (firstPill) firstPill.classList.add('is-on');
+        drawChart(chartKey);
+      }
     });
 
     return rendered;
+  }
+
+  function valCell(val, unit){
+    if (val == null) return '<span class="mut">—</span>';
+    return `${esc(fmtNum(val))}<span class="un">${esc(unit || '')}</span>`;
   }
 
   function bar(label, val, unit, maxV, color){
