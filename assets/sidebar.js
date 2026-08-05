@@ -216,10 +216,10 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
       { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI', key: 'lineup' },
       { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability',     key: 'availability' },
-      { href: 'Evaluations.html',       icon: 'ti-chart-dots',       label: 'Evaluations',      key: 'evaluations' },
       { href: 'Match%20Reports.html',   icon: 'ti-report-analytics', label: 'Match reports',    key: 'match-reports' },
     ]},
     { label: 'Performance', items: [
+      { href: 'Evaluations.html',       icon: 'ti-chart-dots',       label: 'Evaluations',      key: 'evaluations' },
       { href: 'Wellness.html',          icon: 'ti-heartbeat',        label: 'Wellness',         key: 'wellness' },
       { href: 'RPE.html',               icon: 'ti-activity',         label: 'RPE',              key: 'rpe' },
       { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor',     key: 'load-monitor' },
