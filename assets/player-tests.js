@@ -243,8 +243,10 @@
     if (!rows.length) {
       // No legacy evaluations — DB-driven assessment blocks may still exist.
       mount.innerHTML = '';
-      const had = await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
-      if (!had) mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`;
+      const flags = [];
+      const had = await renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags });
+      if (!had) { mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`; return; }
+      renderPreventionSummary(flags, mount);
       return;
     }
 
@@ -318,7 +320,9 @@
     paint();
 
     // DB-driven isometric strength + mobility blocks, appended below the legacy content.
-    await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
+    const flags = [];
+    await renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags });
+    renderPreventionSummary(flags, mount);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -336,6 +340,55 @@
   }
   const _rank = { none:0, ok:1, watch:2, alert:3 };
   function worst(list){ let b={status:'none'}; list.forEach(r=>{ if (r && (_rank[r.status]||0) > (_rank[b.status]||0)) b=r; }); return b; }
+
+  // ── Prevention summary banner (rolls up all watch/alert flags at a glance) ──
+  function styleInjectPrev(){
+    if (document.getElementById('pp-prev-styles')) return;
+    const css = `
+    .pp-prev-head { display:flex; align-items:center; gap:10px; }
+    .pp-prev-head .t { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+    .pp-prev-head.ok .t { color:var(--cm-fg-muted); font-weight:500; }
+    .pp-prev-head .d { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+    .pp-prev-counts { margin-left:auto; display:flex; gap:14px; }
+    .pp-prev-count { display:inline-flex; align-items:center; gap:6px; font:600 12px/1 var(--cm-font-sans); }
+    .pp-prev-count .d { width:8px; height:8px; border-radius:50%; }
+    .pp-prev-count.alert { color:var(--cm-danger); } .pp-prev-count.alert .d { background:var(--cm-danger); }
+    .pp-prev-count.watch { color:var(--cm-warning,#B45309); } .pp-prev-count.watch .d { background:var(--cm-warning,#B45309); }
+    .pp-prev-list { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:9px; }
+    .pp-prev-item { display:flex; align-items:center; gap:8px; }
+    .pp-prev-item .d { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+    .pp-prev-item .lbl { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+    .pp-prev-item .sub { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+    .pp-prev-item .rsn { margin-left:auto; font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); text-align:right; max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    `;
+    const el = document.createElement('style'); el.id = 'pp-prev-styles'; el.textContent = css; document.head.appendChild(el);
+  }
+
+  function renderPreventionSummary(flags, mount){
+    if (!mount) return;
+    styleInjectPrev();
+    const alerts  = (flags || []).filter(f => f.status === 'alert');
+    const watches = (flags || []).filter(f => f.status === 'watch');
+    let inner;
+    if (!alerts.length && !watches.length){
+      inner = `<div class="pp-prev-head ok"><span class="d" style="background:${statusColor('ok')}"></span>`
+        + `<span class="t">${esc(T('player.prev_all_clear','No prevention flags — all evaluations in range'))}</span></div>`;
+    } else {
+      const counts = [];
+      if (alerts.length)  counts.push(`<span class="pp-prev-count alert"><span class="d"></span>${alerts.length} ${esc(T('player.prev_alerts','alerts'))}</span>`);
+      if (watches.length) counts.push(`<span class="pp-prev-count watch"><span class="d"></span>${watches.length} ${esc(T('player.prev_watch','to watch'))}</span>`);
+      const items = alerts.concat(watches).map(f => `<li class="pp-prev-item">`
+        + `<span class="d" style="background:${statusColor(f.status)}"></span>`
+        + `<span class="lbl">${esc(f.label)}</span>`
+        + (f.sub ? `<span class="sub">${esc(f.sub)}</span>` : '')
+        + (f.detail ? `<span class="rsn" title="${esc(f.detail)}">${esc(f.detail)}</span>` : '')
+        + `</li>`).join('');
+      inner = `<div class="pp-prev-head"><span class="t">${esc(T('player.prev_title','Prevention summary'))}</span>`
+        + `<span class="pp-prev-counts">${counts.join('')}</span></div>`
+        + `<ul class="pp-prev-list">${items}</ul>`;
+    }
+    mount.insertAdjacentHTML('afterbegin', `<div class="pp-ts-card pp-prev">${inner}</div>`);
+  }
 
   function styleInjectAssess(){
     if (document.getElementById('pp-as-styles')) return;
@@ -374,7 +427,7 @@
     return rec.sides.NA != null ? rec.sides.NA : (rec.sides.L != null ? rec.sides.L : rec.sides.R);
   }
 
-  async function renderAssessmentBlocks({ playerId, clubId, teamId, mount }){
+  async function renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags = [] }){
     if (!mount) return false;
     let defs = [];
     try {
@@ -474,6 +527,18 @@
         if (AN && def.bilateral && L != null && R != null){ asym = AN.asymStatus(def, L, R); statuses.push(asym); }
         const st = worst(statuses);
 
+        // collect prevention flags (watch/alert) for the top summary
+        if (st.status === 'watch' || st.status === 'alert'){
+          flags.push({
+            label: T(def.i18n_key, def.label),
+            family: fam,
+            status: st.status,
+            detail: (AN ? (st.detail || st.reason || AN.explain(st) || '') : (st.detail || st.reason || '')),
+            sub: (asym && asym.pct != null && (asym.status === 'watch' || asym.status === 'alert'))
+              ? `${T('evaluations.asym_pct','Asym')} ${fmtNum(asym.pct)}%` : ''
+          });
+        }
+
         // delta vs previous (representative value)
         let dl = '', dir = 'flat';
         if (prev){
@@ -513,6 +578,17 @@
         const byKey = {};
         keys.forEach(k => { const r = seriesByKey[k].records; const rec = r[r.length-1]; byKey[k] = { L: rec.sides.L, R: rec.sides.R }; });
         const rs = window.assessNorms.ratios(byKey);
+        rs.forEach(r => {
+          if (r.status === 'watch' || r.status === 'alert'){
+            flags.push({
+              label: String(r.key) + (r.angle ? ' ' + r.angle : '') + (r.side && r.side !== 'NA' ? ' ' + r.side : ''),
+              family: fam,
+              status: r.status,
+              detail: r.reference || '',
+              sub: 'ratio ' + fmtNum(Math.round(r.value * 100) / 100)
+            });
+          }
+        });
         if (rs.length){
           ratiosHtml = `<div class="pp-as-ratios"><span class="pp-as-sec">${esc(T('player.derived_ratios','Derived ratios'))}</span>`
             + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}"><span class="d" style="width:7px;height:7px;border-radius:50%;background:${statusColor(r.status)}"></span>${esc(r.key)}${r.angle?' '+esc(r.angle):''}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
