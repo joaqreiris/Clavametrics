@@ -1049,7 +1049,24 @@
     options.rival = [...rivalMap.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label))
       .map(([key, v]) => ({ value: key, label: v.label, crest: v.crest }));
 
+    // Auto-sanado: descartar cualquier valor persistido/restaurado que ya NO exista en las
+    // opciones actuales (p. ej. un id de microciclo viejo o sin datos). Si no, el chip muestra
+    // el id crudo (UUID) y filtra todo → "No data".
+    let _pruned = false;
+    ['md_code','player','position','microcycle','rival','session_type'].forEach(k => {
+      if (!Array.isArray(state[k]) || !state[k].length) return;
+      const valid = new Set((options[k] || []).map(o => String(o.value)));
+      const before = state[k].length;
+      state[k] = state[k].filter(v => valid.has(String(v)));
+      if (state[k].length !== before) _pruned = true;
+    });
+
     applyChaining();   // si había filtros restaurados, deja _validCache listo
+    if (_pruned) {
+      try { persist(); } catch (_) {}
+      if (root) { DROPS.forEach(d => updateTrigger(d.key)); updateGlobal(); }
+      fire();          // re-corre las cards ya sin el filtro fantasma
+    }
 
     // re-render del panel abierto si corresponde
     if (openKey === 'date') syncDatePanel();

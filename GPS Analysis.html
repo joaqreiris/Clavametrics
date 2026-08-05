@@ -8889,7 +8889,9 @@ async function openManualGpsModal() {
 
   let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title')
     .eq('club_id', clubId).order('session_date',{ascending:false}).limit(120);
-  if (teamId) sQ = sQ.eq('team_id', teamId);
+  // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
+  // so today's just-synced session is pickable. RLS still limits what the user can see.
+  if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
   const [sessRes, rosterRes] = await Promise.all([ sQ, _gpRoster(clubId, teamId) ]);
   const sessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
