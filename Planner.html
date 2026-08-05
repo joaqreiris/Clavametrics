@@ -1091,8 +1091,8 @@
           </div>
           <div class="sep"></div>
           <div class="group">
-            <button data-i18n-attr="title:planner.undo" title="Undo"><i class="ti ti-arrow-back-up"></i></button>
-            <button data-i18n-attr="title:planner.redo" title="Redo"><i class="ti ti-arrow-forward-up"></i></button>
+            <button id="plUndoBtn" data-i18n-attr="title:planner.undo" title="Undo"><i class="ti ti-arrow-back-up"></i></button>
+            <button id="plRedoBtn" data-i18n-attr="title:planner.redo" title="Redo"><i class="ti ti-arrow-forward-up"></i></button>
           </div>
           <div class="sep"></div>
           <span class="stat" id="plCanvasStat" data-i18n="planner.no_exercise_selected">No exercise selected</span>
@@ -1629,6 +1629,7 @@
   let _arrowP1         = null;
   let _previewLine     = null;
   let _historyStack    = [];
+  let _redoStack       = [];
   const MAX_HISTORY    = 30;
   const _arrowData     = new Map();   // arrowId → arrow state + handles
   let _nextArrowId     = 0;
@@ -1815,6 +1816,37 @@
     if (_suppressHistory) return;
     _historyStack.push(JSON.stringify(fc.toJSON(ARROW_PROPS)));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
+    _redoStack.length = 0;                 // a fresh change invalidates the redo timeline
+    _syncUndoRedoButtons();
+  }
+  // Reload a serialized canvas state WITHOUT letting the reload re-enter history
+  // (object:added/removed would otherwise re-push the state we're restoring).
+  function _applyHistoryState(json) {
+    if (!json) return;
+    _suppressHistory = true;
+    fc.loadFromJSON(json, () => {
+      _rebuildArrowDataFromCanvas();
+      fc.discardActiveObject();
+      fc.renderAll();
+      _suppressHistory = false;
+      _syncUndoRedoButtons();
+    });
+  }
+  function doUndo() {
+    if (_historyStack.length < 2) return;        // nothing before the current state
+    _redoStack.push(_historyStack.pop());        // stash current state for redo
+    _applyHistoryState(_historyStack[_historyStack.length - 1]);
+  }
+  function doRedo() {
+    if (!_redoStack.length) return;
+    const next = _redoStack.pop();
+    _historyStack.push(next);
+    _applyHistoryState(next);
+  }
+  function _syncUndoRedoButtons() {
+    const u = document.getElementById('plUndoBtn'), r = document.getElementById('plRedoBtn');
+    if (u) { u.disabled = _historyStack.length < 2; u.style.opacity = u.disabled ? '.4' : ''; }
+    if (r) { r.disabled = _redoStack.length === 0; r.style.opacity = r.disabled ? '.4' : ''; }
   }
 
   function updateObjStat() {
@@ -1870,12 +1902,9 @@
     if (e.path) e.path.set({ strokeUniform: true, _type: 'drawing' });
   });
 
-  document.querySelector('[title="Undo"]')?.addEventListener('click', () => {
-    if (_historyStack.length < 2) return;
-    _historyStack.pop();
-    const prev = _historyStack[_historyStack.length-1];
-    if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
-  });
+  document.getElementById('plUndoBtn')?.addEventListener('click', doUndo);
+  document.getElementById('plRedoBtn')?.addEventListener('click', doRedo);
+  _syncUndoRedoButtons();
 
   // ── Object factories ────────────────────────────────────────────
   const teamColors = { t1:'#1D4ED8', t2:'#EF4444', t3:'#E5E7EB', t4:'#FACC15' };
@@ -2751,12 +2780,13 @@
       }
       fc.renderAll(); return;
     }
-    if ((e.ctrlKey||e.metaKey)&&e.key==='z') {
-      if (_historyStack.length<2) return;
-      _historyStack.pop();
-      const prev = _historyStack[_historyStack.length-1];
-      if (prev) fc.loadFromJSON(prev, ()=>{ _rebuildArrowDataFromCanvas(); fc.renderAll(); });
+    if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')) {
+      e.preventDefault();
+      if (e.shiftKey) doRedo(); else doUndo();   // Cmd/Ctrl+Z undo · +Shift redo
       return;
+    }
+    if ((e.ctrlKey||e.metaKey) && (e.key==='y'||e.key==='Y')) {   // Ctrl+Y redo (Windows)
+      e.preventDefault(); doRedo(); return;
     }
     // Clipboard — clone with the FULL custom-prop list (ARROW_PROPS) so colours,
     // types, teams and arrow geometry survive the round-trip. Every branch is
