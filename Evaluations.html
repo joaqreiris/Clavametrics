@@ -6891,8 +6891,8 @@
     // 1) name split + ignored identity (number/position/DOB) — BEFORE the generic date match
     headers.forEach(function(h){ var n=_ftNorm(h);
       if (used.has(h)) return;
-      if (/\b(first\s*name|firstname|nombre|given\s*name)\b/.test(n)){ fields.firstName=h; used.add(h); }
-      else if (/\b(last\s*name|lastname|surname|apellido|family\s*name)\b/.test(n)){ fields.lastName=h; used.add(h); }
+      if (/\b(first\s*name|firstname|nombre|given\s*name)\b/.test(n)){ if(!fields.firstName){ fields.firstName=h; used.add(h); } }
+      else if (/\b(last\s*name|lastname|surname|apellido|family\s*name)\b/.test(n)){ if(!fields.lastName){ fields.lastName=h; used.add(h); } }
       else if (/\b(number|dorsal|jersey|shirt|num)\b/.test(n) || n==='no' || n==='n'){ fields._ignore.push(h); used.add(h); }
       else if (/\b(position|pos|posicion|posición)\b/.test(n)){ fields._ignore.push(h); used.add(h); }
       else if (/\b(date\s*of\s*birth|dob|birth\s*date|nacimiento|fecha\s*nac)\b/.test(n) || /\bbirth\b/.test(n)){ fields._ignore.push(h); used.add(h); }
@@ -6902,6 +6902,9 @@
       var hit = headers.find(function(h){ return !used.has(h) && def.match(_ftNorm(h)); });
       if (hit){ fields[def.role]=hit; used.add(hit); }
     });
+    // A bare "NAME" column alongside a "LAST NAME" column is the first-name half of a
+    // split name, not the full name — treat it as firstName so _asFullName joins both.
+    if (fields.name && fields.lastName && !fields.firstName){ fields.firstName=fields.name; delete fields.name; }
     var metrics = headers.filter(function(h){ return !used.has(h); });
     return { fields:fields, metrics:metrics };
   }
