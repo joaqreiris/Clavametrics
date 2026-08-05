@@ -243,10 +243,8 @@
     if (!rows.length) {
       // No legacy evaluations — DB-driven assessment blocks may still exist.
       mount.innerHTML = '';
-      const flags = [];
-      const had = await renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags });
-      if (!had) { mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`; return; }
-      renderPreventionSummary(flags, mount);
+      const had = await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
+      if (!had) mount.innerHTML = `<div class="pp-ts-empty"><span class="t">No physical tests recorded yet</span></div>`;
       return;
     }
 
@@ -320,9 +318,7 @@
     paint();
 
     // DB-driven isometric strength + mobility blocks, appended below the legacy content.
-    const flags = [];
-    await renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags });
-    renderPreventionSummary(flags, mount);
+    await renderAssessmentBlocks({ playerId, clubId, teamId, mount });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -330,64 +326,13 @@
   //  assessment_test_defs). Resilient: any failure → block skipped, never throws.
   // ══════════════════════════════════════════════════════════════════════════
   const T = (k, f) => (window.tt ? window.tt(k, f) : f);
-  function statusColor(s){ return s==='alert'?'var(--cm-danger)':s==='watch'?'var(--cm-warning,#B45309)':s==='ok'?'var(--cm-success)':'var(--cm-fg-faint)'; }
-  function statusChip(res){
-    if (!res || res.status === 'none') return '';
-    const c = statusColor(res.status);
-    const lbl = T('evaluations.status_'+res.status, res.status);
-    const tip = window.assessNorms ? window.assessNorms.explain(res) : '';
-    return `<span class="pp-as-chip" title="${esc(tip)}" style="color:${c}"><span class="d" style="background:${c}"></span>${esc(lbl)}</span>`;
-  }
-  const _rank = { none:0, ok:1, watch:2, alert:3 };
-  function worst(list){ let b={status:'none'}; list.forEach(r=>{ if (r && (_rank[r.status]||0) > (_rank[b.status]||0)) b=r; }); return b; }
 
-  // ── Prevention summary banner (rolls up all watch/alert flags at a glance) ──
-  function styleInjectPrev(){
-    if (document.getElementById('pp-prev-styles')) return;
-    const css = `
-    .pp-prev-head { display:flex; align-items:center; gap:10px; }
-    .pp-prev-head .t { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-    .pp-prev-head.ok .t { color:var(--cm-fg-muted); font-weight:500; }
-    .pp-prev-head .d { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
-    .pp-prev-counts { margin-left:auto; display:flex; gap:14px; }
-    .pp-prev-count { display:inline-flex; align-items:center; gap:6px; font:600 12px/1 var(--cm-font-sans); }
-    .pp-prev-count .d { width:8px; height:8px; border-radius:50%; }
-    .pp-prev-count.alert { color:var(--cm-danger); } .pp-prev-count.alert .d { background:var(--cm-danger); }
-    .pp-prev-count.watch { color:var(--cm-warning,#B45309); } .pp-prev-count.watch .d { background:var(--cm-warning,#B45309); }
-    .pp-prev-list { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:9px; }
-    .pp-prev-item { display:flex; align-items:center; gap:8px; }
-    .pp-prev-item .d { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
-    .pp-prev-item .lbl { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
-    .pp-prev-item .sub { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
-    .pp-prev-item .rsn { margin-left:auto; font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); text-align:right; max-width:52%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    `;
-    const el = document.createElement('style'); el.id = 'pp-prev-styles'; el.textContent = css; document.head.appendChild(el);
-  }
-
-  function renderPreventionSummary(flags, mount){
-    if (!mount) return;
-    styleInjectPrev();
-    const alerts  = (flags || []).filter(f => f.status === 'alert');
-    const watches = (flags || []).filter(f => f.status === 'watch');
-    let inner;
-    if (!alerts.length && !watches.length){
-      inner = `<div class="pp-prev-head ok"><span class="d" style="background:${statusColor('ok')}"></span>`
-        + `<span class="t">${esc(T('player.prev_all_clear','No prevention flags — all evaluations in range'))}</span></div>`;
-    } else {
-      const counts = [];
-      if (alerts.length)  counts.push(`<span class="pp-prev-count alert"><span class="d"></span>${alerts.length} ${esc(T('player.prev_alerts','alerts'))}</span>`);
-      if (watches.length) counts.push(`<span class="pp-prev-count watch"><span class="d"></span>${watches.length} ${esc(T('player.prev_watch','to watch'))}</span>`);
-      const items = alerts.concat(watches).map(f => `<li class="pp-prev-item">`
-        + `<span class="d" style="background:${statusColor(f.status)}"></span>`
-        + `<span class="lbl">${esc(f.label)}</span>`
-        + (f.sub ? `<span class="sub">${esc(f.sub)}</span>` : '')
-        + (f.detail ? `<span class="rsn" title="${esc(f.detail)}">${esc(f.detail)}</span>` : '')
-        + `</li>`).join('');
-      inner = `<div class="pp-prev-head"><span class="t">${esc(T('player.prev_title','Prevention summary'))}</span>`
-        + `<span class="pp-prev-counts">${counts.join('')}</span></div>`
-        + `<ul class="pp-prev-list">${items}</ul>`;
-    }
-    mount.insertAdjacentHTML('afterbegin', `<div class="pp-ts-card pp-prev">${inner}</div>`);
+  // Pure left/right asymmetry percentage (data only — no risk flagging in the profile).
+  function asymPct(L, R){
+    if (L == null || R == null) return null;
+    const hi = Math.max(L, R), lo = Math.min(L, R);
+    if (!(hi > 0)) return null;
+    return (hi - lo) / hi * 100;
   }
 
   function styleInjectAssess(){
@@ -438,7 +383,7 @@
     return rec.sides.NA != null ? rec.sides.NA : (rec.sides.L != null ? rec.sides.L : rec.sides.R);
   }
 
-  async function renderAssessmentBlocks({ playerId, clubId, teamId, mount, flags = [] }){
+  async function renderAssessmentBlocks({ playerId, clubId, teamId, mount }){
     if (!mount) return false;
     let defs = [];
     try {
@@ -510,7 +455,7 @@
       if (!keys.length) return;
       rendered = true;
 
-      // per-test rows (latest record) → scannable table
+      // per-test rows (latest record) → descriptive table (values only, no risk flags)
       const rowsHtml = keys.map(k => {
         const s = seriesByKey[k], def = s.def;
         const recs = s.records;
@@ -518,27 +463,6 @@
         const unit = def.unit || '';
         const L = rec.sides.L, R = rec.sides.R, NA = rec.sides.NA;
         const AN = window.assessNorms;
-
-        // status: worst of per-side absolute + asymmetry
-        let statuses = [];
-        if (AN){
-          [['L',L],['R',R],['NA',NA]].forEach(([sd,v]) => { if (v != null) statuses.push(AN.statusFor(def, { value: v })); });
-        }
-        let asym = null;
-        if (AN && def.bilateral && L != null && R != null){ asym = AN.asymStatus(def, L, R); statuses.push(asym); }
-        const st = worst(statuses);
-
-        // collect prevention flags (watch/alert) for the top summary
-        if (st.status === 'watch' || st.status === 'alert'){
-          flags.push({
-            label: T(def.i18n_key, def.label),
-            family: fam,
-            status: st.status,
-            detail: (AN ? (st.detail || st.reason || AN.explain(st) || '') : (st.detail || st.reason || '')),
-            sub: (asym && asym.pct != null && (asym.status === 'watch' || asym.status === 'alert'))
-              ? `${T('evaluations.asym_pct','Asym')} ${fmtNum(asym.pct)}%` : ''
-          });
-        }
 
         // N/kg secondary (isometric, when bodyweight is known)
         let nkg = '';
@@ -551,16 +475,15 @@
         const cells = def.bilateral
           ? `<td class="num">${valCell(L, unit)}</td><td class="num">${valCell(R, unit)}</td>`
           : `<td class="num" colspan="2" style="text-align:center">${valCell(NA, unit)}</td>`;
-        const asymCell = (asym && asym.pct != null)
-          ? `<td class="num asym" style="color:${statusColor(asym.status)}" title="${esc(AN ? AN.explain(asym) : '')}">${fmtNum(asym.pct)}%</td>`
+        const pct = (def.bilateral && L != null && R != null) ? asymPct(L, R) : null;
+        const asymCell = (pct != null)
+          ? `<td class="num asym">${fmtNum(pct)}%</td>`
           : `<td class="num mut">—</td>`;
-        const stCell = (st.status === 'none') ? '<span class="mut">—</span>' : statusChip(st);
 
         return `<tr>
           <td class="nm">${esc(T(def.i18n_key, def.label))}${s.historic ? ` <span class="pp-as-hist">${esc(T('player.historic','historic'))}</span>` : ''}${nkg}</td>
           ${cells}
           ${asymCell}
-          <td class="stt">${stCell}</td>
         </tr>`;
       }).join('');
 
@@ -570,20 +493,9 @@
         const byKey = {};
         keys.forEach(k => { const r = seriesByKey[k].records; const rec = r[r.length-1]; byKey[k] = { L: rec.sides.L, R: rec.sides.R }; });
         const rs = window.assessNorms.ratios(byKey);
-        rs.forEach(r => {
-          if (r.status === 'watch' || r.status === 'alert'){
-            flags.push({
-              label: String(r.key) + (r.angle ? ' ' + r.angle : '') + (r.side && r.side !== 'NA' ? ' ' + r.side : ''),
-              family: fam,
-              status: r.status,
-              detail: r.reference || '',
-              sub: 'ratio ' + fmtNum(Math.round(r.value * 100) / 100)
-            });
-          }
-        });
         if (rs.length){
           ratiosHtml = `<div class="pp-as-ratios"><span class="pp-as-sec">${esc(T('player.derived_ratios','Derived ratios'))}</span>`
-            + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}"><span class="d" style="width:7px;height:7px;border-radius:50%;background:${statusColor(r.status)}"></span>${esc(r.key)}${r.angle?' '+esc(r.angle):''}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
+            + rs.map(r => `<span class="pp-as-ratio" title="${esc(r.reference||'')}">${esc(r.key)}${r.angle?' '+esc(r.angle):''}${r.side&&r.side!=='NA'?' '+esc(r.side):''} <span class="rv">${fmtNum(Math.round(r.value*100)/100)}</span></span>`).join('')
             + `</div>`;
         }
       }
@@ -604,7 +516,7 @@
         <div class="pp-ts-card" id="${cardId}">
           <div class="pp-ts-card-head"><h3>${esc(label)}</h3><span class="sub">${keys.length} ${keys.length===1?'test':'tests'}</span></div>
           <table class="pp-as-tbl">
-            <thead><tr><th>${esc(T('player.col_test','Test'))}</th><th class="num">L</th><th class="num">R</th><th class="num">Δ%</th><th>${esc(T('player.col_status','Status'))}</th></tr></thead>
+            <thead><tr><th>${esc(T('player.col_test','Test'))}</th><th class="num">L</th><th class="num">R</th><th class="num">Δ%</th></tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
           ${ratiosHtml}
