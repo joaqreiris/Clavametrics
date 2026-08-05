@@ -763,6 +763,7 @@ create table if not exists public.gps_reports (
   distance_per_minute numeric,
   updated_at timestamp with time zone default now(),
   is_invalid boolean default false not null,
+  source text default 'catapult' not null,   -- 'catapult' | 'csv' | 'manual' | 'avg' (origin of the row)
   constraint gps_reports_pkey primary key (id),
   constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
 );
@@ -2538,7 +2539,7 @@ alter table public.seasons add constraint seasons_club_id_fkey FOREIGN KEY (club
 alter table public.seasons add constraint seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id);
 alter table public.session_exercises add constraint session_exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.session_exercises add constraint session_exercises_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES gym_exercises(id) ON DELETE SET NULL;
-alter table public.session_exercises add constraint session_exercises_planner_exercise_id_fkey FOREIGN KEY (planner_exercise_id) REFERENCES exercises(id);
+alter table public.session_exercises add constraint session_exercises_planner_exercise_id_fkey FOREIGN KEY (planner_exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
 alter table public.session_exercises add constraint session_exercises_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
 alter table public.share_links add constraint share_links_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.share_links add constraint share_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
