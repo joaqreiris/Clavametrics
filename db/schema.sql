@@ -477,6 +477,7 @@ create table if not exists public.exercises (
   description text,
   visible_teams uuid[],
   origin_team_id uuid,
+  video_url text,
   preview_svg text,
   preview_png text,
   preview_path text,

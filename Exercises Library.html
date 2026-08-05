@@ -212,6 +212,19 @@
   .sl-preview-cell .v { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sl-preview-tags { display:flex; gap:4px; flex-wrap:wrap; }
   .sl-preview-open { width:100%; margin-top:10px; }
+  /* Preview media: drill drawing + video */
+  #prevMedia { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  #prevMedia:empty { display:none; }
+  .sl-pv-draw { border:1px solid var(--cm-border); border-radius:8px; overflow:hidden; background:#2f7d4c; }
+  .sl-pv-draw img { display:block; width:100%; height:auto; }
+  .sl-pv-video { position:relative; aspect-ratio:16/9; border-radius:8px; overflow:hidden; background:#000; border:1px solid var(--cm-border); }
+  .sl-pv-video iframe, .sl-pv-video video { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .sl-pv-videolink { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:8px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); text-decoration:none; }
+  .sl-pv-videolink:hover { border-color:var(--cm-border-strong); }
+  /* "Has video" badge on cards (centred play overlay) */
+  .sl-video-badge { position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .sl-video-badge > span { width:32px; height:32px; border-radius:999px; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; color:#fff; }
+  .sl-video-badge .ti { font-size:16px; margin-left:1px; }
   .sl-gps { margin-top:12px; padding-top:10px; border-top:1px solid var(--cm-border-soft); }
   .sl-gps-h { font:600 9px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:7px; display:flex; align-items:center; gap:5px; }
   .sl-gps-h span { font-weight:500; color:var(--cm-fg-faint); }
@@ -339,6 +352,7 @@
               <div class="name" id="prevName">—</div>
               <button class="close" id="prevClose" title="Close" data-i18n-attr="title:common.close">✕</button>
             </div>
+            <div id="prevMedia"></div>
             <div class="sl-preview-grid" id="prevGrid"></div>
             <div class="sl-preview-tags" id="prevTags"></div>
             <div id="prevFolderRow" style="display:flex;align-items:center;gap:8px;margin:10px 0 2px">
@@ -506,7 +520,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,origin_team_id,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -749,6 +763,7 @@
           ${focusBadge}${durBadge}${mdBadgeThumb}
           ${ex.source_type === 'image' ? `<span class="sl-import-badge"><i class="ti ti-photo"></i>${tt('exlib.imported','Imported')}</span>` : ''}
           ${ex._previewImg ? `<img class="sl-thumb-img" src="${ex._previewImg}" alt="">` : ''}
+          ${ex.video_url ? `<span class="sl-video-badge" title="${tt('exlib.has_video','Has video')}"><span><i class="ti ti-player-play-filled"></i></span></span>` : ''}
         </div>
         <div class="sl-body">
           <div class="title">${ex.name || tt('exlib.untitled','Untitled')}</div>
@@ -835,6 +850,20 @@
     const mdStr  = fmtMd(ex.match_day);
 
     document.getElementById('prevName').textContent = ex.name || tt('exlib.untitled','Untitled');
+
+    // Media block: the drill drawing + the video (autoplay muted) when there's a link.
+    const media = document.getElementById('prevMedia');
+    if (media) {
+      let mHtml = '';
+      if (ex._previewImg) mHtml += `<div class="sl-pv-draw"><img src="${ex._previewImg}" alt=""></div>`;
+      if (ex.video_url) {
+        const embed = videoEmbed(ex.video_url);
+        mHtml += embed
+          ? `<div class="sl-pv-video"><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+          : `<a class="sl-pv-videolink" href="${esc(ex.video_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>${tt('exlib.open_video','Open video')}</a>`;
+      }
+      media.innerHTML = mHtml;
+    }
 
     const cells = [
       { l:tt('exlib.pv_players','Players'),   v: ex.players_count || '—' },
@@ -953,9 +982,27 @@
 
   function hidePreview() {
     document.getElementById('slPreview').classList.remove('is-visible');
+    const media = document.getElementById('prevMedia'); if (media) media.innerHTML = '';   // stop any playing video
     selectedId = null;
     document.querySelectorAll('.sl-card').forEach(c => c.classList.remove('is-active'));
   }
+
+  // Build an embeddable, muted-autoplay URL from a pasted video link. Returns null for
+  // unknown providers (the preview then shows an "Open video" link instead).
+  function videoEmbed(url) {
+    const u = String(url || '').trim();
+    if (!u) return null;
+    let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1&mute=1&rel=0&playsinline=1`;
+    m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (m) return `https://player.vimeo.com/video/${m[1]}?autoplay=1&muted=1`;
+    m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
+    if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+    if (/dropbox\.com/.test(u)) return u.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=0/, '');
+    if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return u;   // direct file → <iframe> plays it
+    return null;
+  }
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   document.getElementById('prevClose')?.addEventListener('click', hidePreview);
 

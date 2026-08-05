@@ -888,6 +888,10 @@
             <label class="pl-form-label" data-i18n="planner.description">Description</label>
             <textarea class="pl-form-input" id="plExDescription" rows="3" data-i18n-ph="planner.description_ph" placeholder="Exercise description…" style="resize:vertical;min-height:60px"></textarea>
           </div>
+          <div class="pl-form-field" style="margin-bottom:14px">
+            <label class="pl-form-label" style="display:flex;align-items:center;gap:6px"><i class="ti ti-brand-youtube" style="font-size:14px"></i><span data-i18n="planner.video_link">Video link</span></label>
+            <input type="url" class="pl-form-input" id="plExVideo" data-i18n-ph="planner.video_link_ph" placeholder="YouTube, Vimeo, Google Drive…">
+          </div>
           <div class="pl-form-group">
             <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
               <i class="ti ti-eye" style="font-size:14px"></i><span data-i18n="planner.visibility_by_category">Visibility by category</span>
@@ -3560,7 +3564,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -3603,7 +3607,8 @@
       objective: src.objective, description: src.description,
       source_type: src.source_type, objects_json: src.objects_json, preview_svg: src.preview_svg,
       preview_png: src.preview_png || null, visible_teams: src.visible_teams,
-      origin_team_id: src.origin_team_id || null   // a copy keeps the source's origin team
+      origin_team_id: src.origin_team_id || null,   // a copy keeps the source's origin team
+      video_url: src.video_url || null
     };
     const { data, error } = await window.sb.from('exercises').insert(payload).select().single();
     if (error || !data) { alert(tt('planner.duplicate_failed', 'Could not duplicate the exercise')); return; }
@@ -3737,6 +3742,7 @@
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
+    { const _v = document.getElementById('plExVideo'); if (_v) _v.value = ex.video_url || ''; }
     plSetVisibilityUI(ex.visible_teams, ex.origin_team_id);
     plRenderFolderSelect(ex.folder_id || '');
     { const _gk = document.getElementById('plExGk'); if (_gk) _gk.checked = !!ex.is_goalkeeper; }
@@ -4073,6 +4079,7 @@
       game_type:         currentGameTypeOn ? (currentGameType || null) : null,
       objective:         document.getElementById('plExObjective')?.value?.trim()   || null,
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
+      video_url:         document.getElementById('plExVideo')?.value?.trim()       || null,
       // Image drills have no field objects; keep canvas state null so we never
       // overwrite the uploaded preview with an empty pitch.
       source_type:       _curSourceType || 'canvas',
