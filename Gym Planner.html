@@ -1602,10 +1602,25 @@ async function gpLoadAthletes(dateStr) {
 
 // Session switcher — mirrors Daily Planning. Shows the day's sessions so the user can jump back to
 // the field (Daily Planning) session from here. Only rendered when a field session exists.
+// A gym row with no real plan (no exercises, roster, adaptations, load groups or notes) is a
+// phantom and must not appear as a "GYM SESSION" tab — except the one being edited right now.
+function _gpGymSessionEmpty(s) {
+  const c = s?.gym_content || {};
+  const rows = (c.warmup?.rows?.length || 0) + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
+  const roster = Array.isArray(c.roster) ? c.roster.length : 0;
+  const groups = c.loadGroups ? (Array.isArray(c.loadGroups) ? c.loadGroups.length : Object.keys(c.loadGroups).length) : 0;
+  // Physio-seeded adaptations auto-populate; only coach-authored content (a replacement/reason,
+  // or a manually added row) counts as a real gym plan.
+  const adaptReal = Array.isArray(c.adaptations) && c.adaptations.some(a =>
+    (a.replacement || '').trim() || (a.reason || '').trim() || (!a.seeded && (a.player || '').trim()));
+  const notes = (s?.notes || '').trim();
+  return rows === 0 && roster === 0 && groups === 0 && !adaptReal && !notes;
+}
 function _gpRenderSessionSwitch(dateStr) {
   const host = document.getElementById('gpSessionSwitch');
   if (!host) return;
-  const sessions = _gpDaySessions || [];
+  const sessions = (_gpDaySessions || []).filter(s =>
+    s.session_type !== 'gym' || s.id === _gpCurrentSessionId || !_gpGymSessionEmpty(s));
   if (!sessions.some(s => s.session_type !== 'gym')) { host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = '';
   const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]));
@@ -1741,6 +1756,12 @@ function gpScheduleSave() {
 async function gpAutoSave() {
   const dateStr = _gpCurrentDate;
   if (!dateStr) return;
+  const content   = gpCollectContent();
+  const notesVal  = document.getElementById('gpNotes')?.value?.trim() || null;
+  // Don't create a phantom gym session: if the day has no real gym plan yet (no exercises,
+  // roster, adaptations, load groups or notes), skip the insert. Otherwise an empty visit
+  // would leave a spurious "GYM SESSION" tab in Daily Planning / Gym Planner.
+  if (!_gpCurrentSessionId && _gpGymSessionEmpty({ gym_content: content, notes: notesVal })) { _gpSaveDirty = false; return; }
   const payload = {
     club_id:       _gpClubId,
     session_date:  dateStr,
@@ -1749,9 +1770,9 @@ async function gpAutoSave() {
     session_time:  document.getElementById('gpStartTime')?.value || null,
     duration:      parseInt(document.getElementById('gpDuration')?.value) || null,
     location:      document.getElementById('gpLocation')?.value?.trim() || null,
-    notes:         document.getElementById('gpNotes')?.value?.trim() || null,
+    notes:         notesVal,
     estimated_rpe: parseInt(document.getElementById('gpEstRpe')?.value) || null,
-    gym_content:   gpCollectContent(),
+    gym_content:   content,
   };
   if (_gpCurrentSessionId) {
     const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);

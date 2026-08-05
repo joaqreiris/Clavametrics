@@ -886,7 +886,7 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   _dpDaySessions = sessResult.data || [];
@@ -2379,12 +2379,27 @@ function _dpUpdatePublishBtn() {
 // ── Multi-session day switcher ──
 // Before this, loadDay used .limit(1) and always opened the OLDEST session of the day, so a
 // second session (double session) was visible in the calendar but impossible to plan.
+// A gym row with no real plan (no exercises, roster, adaptations, load groups or notes) is a
+// phantom — it must NOT surface a "GYM SESSION" tab for a day that has no gym plan.
+function _dpGymSessionEmpty(s) {
+  const c = s?.gym_content || {};
+  const rows = (c.warmup?.rows?.length || 0) + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
+  const roster = Array.isArray(c.roster) ? c.roster.length : 0;
+  const groups = c.loadGroups ? (Array.isArray(c.loadGroups) ? c.loadGroups.length : Object.keys(c.loadGroups).length) : 0;
+  // Physio-seeded adaptations auto-populate; only coach-authored content (a replacement/reason,
+  // or a manually added row) counts as a real gym plan.
+  const adaptReal = Array.isArray(c.adaptations) && c.adaptations.some(a =>
+    (a.replacement || '').trim() || (a.reason || '').trim() || (!a.seeded && (a.player || '').trim()));
+  const notes = (s?.notes || '').trim();
+  return rows === 0 && roster === 0 && groups === 0 && !adaptReal && !notes;
+}
 function _dpRenderSessionSwitch() {
   const host = document.getElementById('dpSessionSwitch');
   if (!host) return;
-  if (!_dpDaySessions || _dpDaySessions.length < 2) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  const list = (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'gym' || !_dpGymSessionEmpty(s));
+  if (list.length < 2) { host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = '';
-  host.innerHTML = _dpDaySessions.map((s, i) => {
+  host.innerHTML = list.map((s, i) => {
     const time = s.session_time ? String(s.session_time).slice(0, 5) : '';
     const name = s.title || tt('daily_planning.session_n', 'Session {n}', { n: i + 1 });
     const on   = s.id === _dpCurrentSessionId ? ' is-on' : '';
