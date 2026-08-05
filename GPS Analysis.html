@@ -589,6 +589,24 @@
 
   /* ── Import wizard ────────────────────────────────────────── */
   .gp-modal.wide   { width:720px; }
+  /* Manual GPS entry modal */
+  .mgp-lbl { display:block; font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:14px 0 6px; }
+  .mgp-in { width:100%; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); outline:none; }
+  .mgp-in.sm { height:30px; }
+  .mgp-status { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .mgp-chip { font:600 10.5px/1 var(--cm-font-sans); padding:4px 8px; border-radius:6px; border:1px solid var(--cm-border); }
+  .mgp-chip.real { color:var(--cm-success,#16A34A); border-color:color-mix(in srgb, var(--cm-success,#16A34A) 30%, transparent); }
+  .mgp-chip.est  { color:var(--cm-warning,#D97706); border-color:color-mix(in srgb, var(--cm-warning,#D97706) 30%, transparent); }
+  .mgp-chip.miss { color:var(--cm-danger,#DC2626); border-color:color-mix(in srgb, var(--cm-danger,#DC2626) 30%, transparent); }
+  .mgp-seg { display:inline-flex; border:1px solid var(--cm-border); border-radius:8px; overflow:hidden; }
+  .mgp-seg button { padding:7px 14px; background:var(--cm-surface); border:0; cursor:pointer; font:600 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .mgp-seg button.is-on { background:var(--cm-accent-soft,rgba(21,128,61,.1)); color:var(--cm-accent,#15803D); }
+  .mgp-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; margin-top:10px; }
+  .mgp-cell { display:flex; flex-direction:column; gap:3px; }
+  .mgp-cell .k { font:500 10.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .mgp-cell .v { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .mgp-note, .mgp-empty { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:10px; }
+  .mgp-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
   .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
   .gp-wiz-step     { padding:10px 14px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); border-bottom:2px solid transparent; cursor:default; }
   .gp-wiz-step.is-on   { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -865,6 +883,7 @@
             <button class="cm-btn is-ghost is-sm" id="gpCatalogBtn"><i class="ti ti-list" style="font-size:14px"></i><span data-i18n="gps_analysis.metrics_catalog">Metrics catalog</span></button>
           </div>
           <button class="cm-btn is-ghost is-sm" id="gpGearBtn" title="Setup & configuration" data-i18n-attr="title:gps_analysis.setup_configuration"><i class="ti ti-settings" style="font-size:14px"></i><span data-i18n="gps_analysis.settings">Settings</span></button>
+          <button class="cm-btn is-ghost is-sm" id="gpManualBtn" data-i18n-attr="title:gps_analysis.manual_gps_hint" title="Add missing GPS data manually or from the team average"><i class="ti ti-pencil-plus" style="font-size:14px"></i><span data-i18n="gps_analysis.manual_gps">Manual data</span></button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="common.export">Export</span></button>
         </div>
       </div>
@@ -8840,6 +8859,125 @@ const _GPS_METRIC_LABELS = {
   time_played:              'Time played',
   avg_speed:                'Avg speed',
 };
+
+// ── Manual / estimated GPS entry ──────────────────────────────
+// When a Catapult device is off/broken/unrecorded, fill a player's session either with
+// the TEAM AVERAGE of that session or by typing values. Rows are tagged source='avg'|'manual'.
+const _MANUAL_GPS_METRICS = [
+  { k:'total_distance', l:'Total distance', u:'m' },
+  { k:'high_speed_distance', l:'HSR', u:'m' },
+  { k:'very_high_speed_distance', l:'VHSR', u:'m' },
+  { k:'sprint_distance', l:'Sprint distance', u:'m' },
+  { k:'sprint_count', l:'Sprint count', u:'' },
+  { k:'accelerations', l:'Accelerations', u:'' },
+  { k:'decelerations', l:'Decelerations', u:'' },
+  { k:'max_speed', l:'Max speed', u:'km/h' },
+  { k:'avg_speed', l:'Avg speed', u:'km/h' },
+  { k:'player_load', l:'Player load', u:'AU' },
+  { k:'hmld', l:'HMLD', u:'m' },
+  { k:'time_played', l:'Time played', u:'min' },
+  { k:'distance_per_minute', l:'Distance / min', u:'m/min' },
+];
+async function openManualGpsModal() {
+  const _esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const clubId = window._gpClubId || (await window.getClubId?.());
+  if (!clubId) return;
+  const teamId = window._gpTeamId || null;
+  const ov = makeModal(tt('gps_analysis.manual_gps_title','Add GPS data'),
+    `<div id="mgpBody"><div class="mgp-empty">${tt('common.loading','Loading…')}</div></div>`);
+  const body = ov.querySelector('#mgpBody');
+
+  let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title')
+    .eq('club_id', clubId).order('session_date',{ascending:false}).limit(120);
+  if (teamId) sQ = sQ.eq('team_id', teamId);
+  const [sessRes, rosterRes] = await Promise.all([ sQ, _gpRoster(clubId, teamId) ]);
+  const sessions = sessRes.data || [];
+  const roster   = rosterRes.data || [];
+  if (!sessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions found for this team.')}</div>`; return; }
+
+  body.innerHTML = `
+    <label class="mgp-lbl">${tt('gps_analysis.manual_session','Session')}</label>
+    <select id="mgpSession" class="mgp-in">${sessions.map(s=>`<option value="${_esc(s.id)}">${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}</option>`).join('')}</select>
+    <div id="mgpStatus" class="mgp-status"></div>
+    <label class="mgp-lbl">${tt('gps_analysis.manual_player','Player')}</label>
+    <select id="mgpPlayer" class="mgp-in"></select>
+    <label class="mgp-lbl">${tt('gps_analysis.manual_mode','Fill mode')}</label>
+    <div class="mgp-seg" id="mgpMode">
+      <button type="button" data-mode="avg" class="is-on">${tt('gps_analysis.manual_mode_avg','Team average')}</button>
+      <button type="button" data-mode="manual">${tt('gps_analysis.manual_mode_manual','Manual')}</button>
+    </div>
+    <div id="mgpFields"></div>
+    <div class="mgp-foot"><button class="cm-btn is-ghost is-sm" id="mgpCancel">${tt('common.cancel','Cancel')}</button><button class="cm-btn is-primary is-sm" id="mgpSave">${tt('gps_analysis.manual_save','Save data')}</button></div>`;
+
+  let mode = 'avg', sessionReports = [], avgVals = {};
+  const metricKeys = _MANUAL_GPS_METRICS.map(m=>m.k);
+  const statusOf = pid => { const r = sessionReports.find(x=>x.player_id===pid); if (!r || r.is_invalid) return 'missing'; return (r.source==='manual'||r.source==='avg') ? 'est' : 'real'; };
+
+  function renderStatus() {
+    const miss = roster.filter(p=>statusOf(p.id)==='missing').length;
+    const est  = roster.filter(p=>statusOf(p.id)==='est').length;
+    body.querySelector('#mgpStatus').innerHTML =
+      `<span class="mgp-chip real">${roster.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
+      + (est?` <span class="mgp-chip est">${est} ${tt('gps_analysis.manual_st_est','estimated')}</span>`:'')
+      + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'');
+  }
+  function renderPlayers() {
+    const sel = body.querySelector('#mgpPlayer'), cur = sel.value;
+    const order = { missing:0, est:1, real:2 }, mark = st => st==='missing'?'⚠ ':st==='est'?'~ ':'✓ ';
+    const rows = roster.map(p=>({p, st:statusOf(p.id)}))
+      .sort((a,b)=> (order[a.st]-order[b.st]) || String(a.p.last_name||'').localeCompare(String(b.p.last_name||'')));
+    sel.innerHTML = rows.map(({p,st})=>`<option value="${_esc(p.id)}">${mark(st)}${p.number?('#'+p.number+' '):''}${_esc((p.last_name||'')+' '+(p.first_name||''))}</option>`).join('');
+    if (cur && roster.some(p=>p.id===cur)) sel.value = cur;
+  }
+  function renderFields() {
+    const wrap = body.querySelector('#mgpFields');
+    if (mode==='avg') {
+      const hasAvg = Object.values(avgVals).some(v=>v!=null);
+      wrap.innerHTML = hasAvg
+        ? `<div class="mgp-note">${tt('gps_analysis.manual_avg_note','Saves this player with the team average of the selected session:')}</div>
+           <div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${avgVals[m.k]!=null?avgVals[m.k]:'—'}${(avgVals[m.k]!=null&&m.u)?' '+m.u:''}</span></div>`).join('')}</div>`
+        : `<div class="mgp-empty">${tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.')}</div>`;
+    } else {
+      wrap.innerHTML = `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm"></label>`).join('')}</div>`;
+    }
+  }
+  async function loadSession() {
+    const sid = body.querySelector('#mgpSession').value;
+    const { data } = await window.sb.from('gps_reports')
+      .select('player_id,source,is_invalid,'+metricKeys.join(','))
+      .eq('session_id', sid).eq('club_id', clubId);
+    sessionReports = data || [];
+    const real = sessionReports.filter(r=>!r.is_invalid && r.source!=='manual' && r.source!=='avg');
+    avgVals = {};
+    _MANUAL_GPS_METRICS.forEach(m=>{ const vals = real.map(r=>r[m.k]).filter(v=>v!=null && isFinite(v)); avgVals[m.k] = vals.length ? +(vals.reduce((s,x)=>s+ +x,0)/vals.length).toFixed(2) : null; });
+    renderStatus(); renderPlayers(); renderFields();
+  }
+
+  body.querySelector('#mgpSession').addEventListener('change', loadSession);
+  body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
+  body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
+  body.querySelector('#mgpSave').addEventListener('click', async () => {
+    const sid = body.querySelector('#mgpSession').value, pid = body.querySelector('#mgpPlayer').value;
+    if (!sid || !pid) return;
+    if (statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
+    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='avg'?'avg':'manual' };
+    if (mode==='avg') {
+      if (!Object.values(avgVals).some(v=>v!=null)) { showToast(tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.'), true); return; }
+      _MANUAL_GPS_METRICS.forEach(m=>{ row[m.k] = avgVals[m.k]; });
+    } else {
+      _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='')?null:+v; });
+    }
+    const btn = body.querySelector('#mgpSave'); btn.disabled = true;
+    const { error } = await window.sb.from('gps_reports').upsert(row, { onConflict:'player_id,session_id' });
+    if (error) { btn.disabled=false; showToast(tt('gps_analysis.manual_save_fail','Save failed: ')+error.message, true); return; }
+    ov.remove();
+    showToast(tt('gps_analysis.manual_saved','GPS data saved.'));
+    window.refreshDashboard?.();
+  });
+
+  loadSession();
+}
+document.getElementById('gpManualBtn')?.addEventListener('click', openManualGpsModal);
 
 async function loadGpsSettings(clubId) {
   if (!clubId) return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null, acwr_model: 'ewma', include_archived: false };
