@@ -225,6 +225,7 @@
   const listeners = new Set();
   let root = null;
   let openKey = null;        // key del panel abierto
+  let _optionsLoaded = false; // true una vez que loadData construyó las opciones (habilita la poda de valores stale)
   const drafts = {};         // selección provisional mientras el panel está abierto
 
   // ── Helpers de estado ───────────────────────────────────────────────────
@@ -682,12 +683,21 @@
       labelEl.textContent = dateLabel();
       return;
     }
-    const sel = state[key];
-    const map = new Map((options[key] || []).map(o => [o.value, o.label]));
+    let sel = state[key];
+    const map = new Map((options[key] || []).map(o => [String(o.value), o.label]));
+    // Red de seguridad: con las opciones ya cargadas, un valor seleccionado que NO existe en
+    // ellas es stale (p. ej. un microciclo viejo) → lo descartamos en vez de mostrar el id crudo
+    // y filtrar todo. Reejecuta las cards ya sin el filtro fantasma.
+    if (_optionsLoaded && sel.length && sel.some(v => !map.has(String(v)))) {
+      sel = state[key] = sel.filter(v => map.has(String(v)));
+      try { persist(); } catch (_) {}
+      fire();
+      if (!sel.length) { drop.classList.remove('is-active'); labelEl.textContent = T(cfg.placeholder); updateGlobal(); return; }
+    }
     if (sel.length === 1) {
-      labelEl.textContent = map.get(sel[0]) || sel[0];
+      labelEl.textContent = map.get(String(sel[0])) || sel[0];
     } else {
-      labelEl.textContent = map.get(sel[0]) || sel[0];
+      labelEl.textContent = map.get(String(sel[0])) || sel[0];
       countEl.textContent = String(sel.length);
       drop.classList.add('is-multi');
     }
@@ -900,17 +910,21 @@
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
     const _obQ = window.sb.from('opponent_branding').select('id, opponent_name, crest_url')
       .eq('club_id', clubId);
+    // Each query is made rejection-proof: if ANY fails, loadData still completes and reaches the
+    // stale-filter prune below — otherwise a single failed query aborts the whole build and a
+    // phantom persisted filter (e.g. an old microcycle id) never gets cleared.
+    const _safe = p => Promise.resolve(p).then(r => r, () => ({ data: [] }));
     const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }] = await Promise.all([
-      (_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'),
-      (_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
-      (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
+      _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
+      _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
+      _safe((_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false })),
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
       window.cmFetchAll(() => window.sb.from('gps_reports')
         .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
-      _obQ,
+      _safe(_obQ),
     ]);
 
     // Entity resolver: opponent_id (catalog) wins; else match raw text to a catalog row
@@ -1061,6 +1075,7 @@
       if (state[k].length !== before) _pruned = true;
     });
 
+    _optionsLoaded = true;   // habilita la red de seguridad del chip (updateTrigger)
     applyChaining();   // si había filtros restaurados, deja _validCache listo
     if (_pruned) {
       try { persist(); } catch (_) {}
