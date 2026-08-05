@@ -602,13 +602,15 @@
         const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
         if (!filters.gametype.has(gt)) return false;
       }
-      // Origin team (where the exercise comes from). '__none__' matches exercises with no origin.
+      // Origin team. Club-wide exercises (visible to all categories) belong to everyone, so they
+      // stay visible under any team selection; '__none__' matches exercises with no origin team.
       if (filters.team && filters.team.size) {
         const origin = ex.origin_team_id || null;
+        const isGlobal = !ex.visible_teams || ex.visible_teams.length === 0;
         let match = false;
         for (const sel of filters.team) {
-          if (sel === '__none__' && origin == null) { match = true; break; }
-          if (origin === sel) { match = true; break; }
+          if (sel === '__none__') { if (origin == null) { match = true; break; } continue; }
+          if (origin === sel || isGlobal) { match = true; break; }
         }
         if (!match) return false;
       }
