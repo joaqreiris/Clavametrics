@@ -897,6 +897,7 @@
               <span data-i18n="planner.visible_all_categories">Visible to all categories</span>
             </label>
             <div id="plExVisTeams" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            <div id="plExVisHint" style="display:none;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-warn,#b45309);margin-top:6px"></div>
             <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="planner.visibility_hint">If you don't check "all", only the selected categories will see this exercise.</div>
           </div>
 
@@ -1535,10 +1536,51 @@
   fc.wrapperEl.style.position = 'absolute';
   fc.wrapperEl.style.inset    = '0';
 
-  window.addEventListener('resize', () => {
+  // ── Resolution-independent coordinates ──────────────────────────
+  // Objects are persisted in the field's viewBox units and mapped to px with the SAME
+  // meet-fit the SVG pitch uses, so a drill looks identical in any browser / window size
+  // and stays aligned to the pitch. Runtime stays in px; only save/load + resize convert.
+  function _viewBoxDims() {
+    const box = (window.CMField && CMField.FIELDS[_plField.type]?.vb?.[_plField.variant]) || [0, 0, 1050, 680];
+    let vbW = box[2], vbH = box[3];
+    if (_plField.orient === 'v') { const t = vbW; vbW = vbH; vbH = t; }
+    return [vbW, vbH];
+  }
+  function _fitParams() {
+    const [vbW, vbH] = _viewBoxDims();
+    const W = fc.getWidth(), H = fc.getHeight();
+    const z = Math.min(W / vbW, H / vbH) || 1;
+    return { z, panX: (W - vbW * z) / 2, panY: (H - vbH * z) / 2, vbW, vbH };
+  }
+  let _lastFit = _fitParams();
+  // Resize the canvas AND re-map every object from the old fit to the new one, so nothing
+  // drifts relative to the pitch when the window / container changes size.
+  function _refitCanvas() {
     const { width, height } = fieldEl.getBoundingClientRect();
-    fc.setWidth(width); fc.setHeight(height); fc.renderAll();
-  });
+    if (!width || !height) return;
+    const oldFit = _lastFit;
+    fc.setWidth(width); fc.setHeight(height);
+    const newFit = _fitParams();
+    if (oldFit && oldFit.z > 0) {
+      const remapX = v => ((v - oldFit.panX) / oldFit.z) * newFit.z + newFit.panX;
+      const remapY = v => ((v - oldFit.panY) / oldFit.z) * newFit.z + newFit.panY;
+      fc.getObjects().forEach(o => {
+        o.left = remapX(o.left);
+        o.top  = remapY(o.top);
+        o.scaleX = (o.scaleX || 1) / oldFit.z * newFit.z;
+        o.scaleY = (o.scaleY || 1) / oldFit.z * newFit.z;
+        if (o._type === 'arrow') {
+          ['_x1','_cx','_x2'].forEach(k => { if (o[k] != null) o[k] = remapX(o[k]); });
+          ['_y1','_cy','_y2'].forEach(k => { if (o[k] != null) o[k] = remapY(o[k]); });
+        }
+        o.setCoords();
+      });
+      if (typeof _rebuildArrowDataFromCanvas === 'function') _rebuildArrowDataFromCanvas();
+    }
+    _lastFit = newFit;
+    fc.renderAll();
+  }
+  window.addEventListener('resize', _refitCanvas);
 
   // ── Vector pitch (field-system) ─────────────────────────────────
   // Renders the SVG pitch into #plPitch (behind the canvas). Persisted
@@ -3207,8 +3249,7 @@
     if(!_dockEl)return;
     if(document.fullscreenElement){fieldEl.appendChild(_dockEl);}
     else{_dockParent?.insertBefore(_dockEl,_dockSibling);}
-    const {width,height}=fieldEl.getBoundingClientRect();
-    fc.setWidth(width);fc.setHeight(height);fc.renderAll();
+    _refitCanvas();
   });
 
   // ── Zoom ────────────────────────────────────────────────────────
@@ -3488,7 +3529,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -3530,7 +3571,8 @@
       focus: src.focus, game_type_enabled: src.game_type_enabled, game_type: src.game_type,
       objective: src.objective, description: src.description,
       source_type: src.source_type, objects_json: src.objects_json, preview_svg: src.preview_svg,
-      preview_png: src.preview_png || null, visible_teams: src.visible_teams
+      preview_png: src.preview_png || null, visible_teams: src.visible_teams,
+      origin_team_id: src.origin_team_id || null   // a copy keeps the source's origin team
     };
     const { data, error } = await window.sb.from('exercises').insert(payload).select().single();
     if (error || !data) { alert(tt('planner.duplicate_failed', 'Could not duplicate the exercise')); return; }
@@ -3664,7 +3706,7 @@
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
-    plSetVisibilityUI(ex.visible_teams);
+    plSetVisibilityUI(ex.visible_teams, ex.origin_team_id);
     plRenderFolderSelect(ex.folder_id || '');
     { const _gk = document.getElementById('plExGk'); if (_gk) _gk.checked = !!ex.is_goalkeeper; }
 
@@ -3697,7 +3739,24 @@
       const _f = (ex.objects_json && ex.objects_json.field) || {};
       plRenderField(_f.type, _f.variant, _f.orient);   // old/empty → football/full/h
       if (ex.objects_json) {
-        fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
+        // New saves ('field1') carry viewBox-unit geometry → map to px for THIS canvas.
+        // Legacy saves (no _coord) load as-is (unchanged) and convert on the next save.
+        let _ojLoad = ex.objects_json;
+        if (_ojLoad._coord === 'field1' && Array.isArray(_ojLoad.objects)) {
+          _ojLoad = JSON.parse(JSON.stringify(_ojLoad));   // never mutate the cached exercise
+          const _fit = _fitParams();                       // field already restored above → vb matches
+          _ojLoad.objects.forEach(o => {
+            if (o.left != null) o.left = o.left * _fit.z + _fit.panX;
+            if (o.top  != null) o.top  = o.top  * _fit.z + _fit.panY;
+            o.scaleX = (o.scaleX != null ? o.scaleX : 1) * _fit.z;
+            o.scaleY = (o.scaleY != null ? o.scaleY : 1) * _fit.z;
+            if (o._type === 'arrow') {
+              ['_x1','_cx','_x2'].forEach(k => { if (o[k] != null) o[k] = o[k] * _fit.z + _fit.panX; });
+              ['_y1','_cy','_y2'].forEach(k => { if (o[k] != null) o[k] = o[k] * _fit.z + _fit.panY; });
+            }
+          });
+        }
+        fc.loadFromJSON(_ojLoad, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; _lastFit = _fitParams(); });
       } else {
         fc.clear(); fc.renderAll();
         _loadingExercise = false; _dirty = false;
@@ -3769,7 +3828,8 @@
       club_id:    clubId,
       name:       tt('planner.new_exercise', 'New exercise'),
       created_by: profile?.id || null,
-      visible_teams: _activeTeam ? [_activeTeam] : null
+      visible_teams: _activeTeam ? [_activeTeam] : null,
+      origin_team_id: _activeTeam || null   // stamp the originating team (immutable)
     }).select().single();
     if (!error && data) {
       await loadExercises();
@@ -3829,7 +3889,8 @@
       name:          tt('planner.new_exercise', 'New exercise'),
       source_type:   'image',
       created_by:    profile?.id || null,
-      visible_teams: _activeTeam ? [_activeTeam] : null
+      visible_teams: _activeTeam ? [_activeTeam] : null,
+      origin_team_id: _activeTeam || null   // stamp the originating team (immutable)
     }).select('id').single();
     if (error || !row) { alert(tt('planner.error_creating_exercise', `Error creating exercise: ${error?.message || 'unknown'}`, {msg: error?.message || 'unknown'})); return; }
     const path = `${clubId}/${row.id}.png`;
@@ -3872,6 +3933,20 @@
 
     const mdRaw = document.getElementById('plExMatchDay')?.value;
     const _oj = fc.toJSON(ARROW_PROPS);
+    // Persist geometry in field viewBox units (browser-independent) via the uniform meet-fit
+    // transform. Runtime objects are untouched — only this serialized copy is normalized.
+    const _fit = _fitParams();
+    (_oj.objects || []).forEach(o => {
+      if (o.left != null) o.left = (o.left - _fit.panX) / _fit.z;
+      if (o.top  != null) o.top  = (o.top  - _fit.panY) / _fit.z;
+      o.scaleX = (o.scaleX != null ? o.scaleX : 1) / _fit.z;
+      o.scaleY = (o.scaleY != null ? o.scaleY : 1) / _fit.z;
+      if (o._type === 'arrow') {   // arrow endpoints/controls are absolute canvas coords too
+        ['_x1','_cx','_x2'].forEach(k => { if (o[k] != null) o[k] = (o[k] - _fit.panX) / _fit.z; });
+        ['_y1','_cy','_y2'].forEach(k => { if (o[k] != null) o[k] = (o[k] - _fit.panY) / _fit.z; });
+      }
+    });
+    _oj._coord = 'field1';
     _oj.field = _plField;   // pitch sport/variant/orient (ignored by loadFromJSON)
     let _previewSvg = null;
     try {
@@ -3972,7 +4047,7 @@
       source_type:       _curSourceType || 'canvas',
       objects_json:      _curSourceType === 'image' ? null : _oj,
       preview_svg:       _curSourceType === 'image' ? null : _previewSvg,
-      visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null),
+      visible_teams:     _plComputeVisibleTeams(),
       folder_id:         document.getElementById('plExFolder')?.value || null,
       is_goalkeeper:     !!document.getElementById('plExGk')?.checked
     };
@@ -3983,7 +4058,7 @@
     } else {
       // First save: INSERT the draft (canvas + meta) and adopt the new row.
       const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
-      const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null };
+      const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null, origin_team_id: _activeTeam || null };
       if (insertPayload.visible_teams == null && _activeTeam) insertPayload.visible_teams = [_activeTeam];
       const res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
       error = res.error;
@@ -4152,12 +4227,44 @@
 })().catch(console.error);
 
   let _plTeams = [], _plVisibleTeams = [], _plFolders = [];
+  // Exercise sharing hierarchy: the designated first team + the club's open-sharing override,
+  // and the origin team of the exercise currently open in the editor.
+  let _plPrimaryTeamId = null, _plOpenSharing = false, _plOriginTeamId = null;
   async function plLoadTeams() {
     const cid = await window.getClubId();
     _plTeams = await window.getTeams(cid);
+    try {
+      const [{ data: prim }, { data: cs }] = await Promise.all([
+        window.sb.from('teams').select('id').eq('club_id', cid).eq('is_primary', true).maybeSingle(),
+        window.sb.from('club_settings').select('enabled').eq('club_id', cid).eq('module_key', 'exercises_open_sharing').maybeSingle(),
+      ]);
+      _plPrimaryTeamId = prim?.id || null;
+      _plOpenSharing = !!(cs && cs.enabled);
+    } catch { _plPrimaryTeamId = null; _plOpenSharing = false; }
     await plLoadFolders();
   }
   const _plActiveTeam = () => sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
+  // The origin used for the rule: the loaded exercise's origin, else the active team (new drafts).
+  const _plEffectiveOrigin = () => _plOriginTeamId || _plActiveTeam();
+  // Rule: a lower-category (non-primary) exercise may NOT be shared to the first team.
+  // Active only when a first team exists, open-sharing is OFF, and this exercise is from an inferior team.
+  const _plShareRuleActive = () => {
+    const origin = _plEffectiveOrigin();
+    return !_plOpenSharing && !!_plPrimaryTeamId && !!origin && origin !== _plPrimaryTeamId;
+  };
+  // Final visible_teams to persist, honouring the rule (never lets an inferior exercise reach the first team).
+  function _plComputeVisibleTeams() {
+    const allOn = document.getElementById('plExVisAll')?.checked;
+    const ruleOn = _plShareRuleActive();
+    if (allOn) {
+      if (!ruleOn) return null;                                   // truly all categories
+      const inf = _plTeams.filter(t => t.id !== _plPrimaryTeamId).map(t => t.id);
+      return inf.length ? inf : null;                             // "all other categories" (never the first team)
+    }
+    let list = _plVisibleTeams.slice();
+    if (ruleOn) list = list.filter(id => id !== _plPrimaryTeamId);
+    return list.length ? list : null;
+  }
   async function plLoadFolders() {
     _plFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
     plRenderFolderSelect(document.getElementById('plExFolder')?.value || '');
@@ -4181,9 +4288,23 @@
   function plRenderVisTeams() {
     const wrap = document.getElementById('plExVisTeams');
     const allOn = document.getElementById('plExVisAll').checked;
+    const ruleOn = _plShareRuleActive();
+    // When "all categories" is on for an inferior exercise, show a hint that the first team is excluded.
+    const hint = document.getElementById('plExVisHint');
+    if (hint) {
+      const show = ruleOn;
+      hint.style.display = show ? 'block' : 'none';
+      if (show) hint.textContent = allOn
+        ? tt('planner.share_all_excludes_first', 'Visible to all other categories (not the first team).')
+        : tt('planner.share_blocked_first_team', 'Lower-category exercises can’t be shared with the first team.');
+    }
     wrap.style.display = allOn ? 'none' : 'flex';
     if (allOn) { wrap.innerHTML = ''; return; }
     wrap.innerHTML = _plTeams.map(t => {
+      const blocked = ruleOn && t.id === _plPrimaryTeamId;
+      if (blocked) {
+        return `<button type="button" disabled title="${tt('planner.share_blocked_first_team','Lower-category exercises can’t be shared with the first team.')}" style="padding:6px 12px;border-radius:999px;border:1px dashed var(--cm-border);background:transparent;color:var(--cm-fg-faint);font:500 12px/1 var(--cm-font-sans);cursor:not-allowed;opacity:.55">${t.name}</button>`;
+      }
       const on = _plVisibleTeams.includes(t.id);
       return `<button type="button" onclick="plToggleVisTeam('${t.id}')" style="padding:6px 12px;border-radius:999px;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'};font:500 12px/1 var(--cm-font-sans);cursor:pointer">${t.name}</button>`;
     }).join('');
@@ -4193,11 +4314,13 @@
     plRenderVisTeams();
   };
   window.plToggleVisTeam = function(id) {
+    if (_plShareRuleActive() && id === _plPrimaryTeamId) return;   // can't share an inferior exercise to the first team
     const i = _plVisibleTeams.indexOf(id);
     if (i >= 0) _plVisibleTeams.splice(i, 1); else _plVisibleTeams.push(id);
     plRenderVisTeams();
   };
-  function plSetVisibilityUI(visibleTeams) {
+  function plSetVisibilityUI(visibleTeams, originTeamId) {
+    _plOriginTeamId = originTeamId || null;
     const all = !visibleTeams || visibleTeams.length === 0;
     document.getElementById('plExVisAll').checked = all;
     _plVisibleTeams = all ? [] : [...visibleTeams];
