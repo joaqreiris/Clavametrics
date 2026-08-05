@@ -74,7 +74,7 @@
   .chat-h .meta .dot { width:6px; height:6px; border-radius:50%; background:var(--cm-success); }
   .chat-h .right { display:flex; gap:6px; }
 
-  .chat-body { flex:1; min-height:0; overflow-y:auto; padding:24px 32px; display:flex; flex-direction:column; gap:14px; }
+  .chat-body { flex:1; min-height:0; overflow-y:auto; scroll-behavior:smooth; padding:24px 32px; display:flex; flex-direction:column; gap:14px; }
   .chat-day { text-align:center; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); letter-spacing:0.06em; text-transform:uppercase; margin:8px 0; position:relative; }
   .chat-day::before, .chat-day::after { content:""; position:absolute; top:50%; width:36%; height:1px; background:var(--cm-border); }
   .chat-day::before { left:0; }
@@ -93,6 +93,19 @@
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
+  /* message entry animation (only on freshly appended bubbles, not the bulk initial render) */
+  @keyframes cmMsgIn { from { opacity:0; transform:translateY(9px) scale(.985); } to { opacity:1; transform:translateY(0) scale(1); } }
+  .msg.anim-in { animation:cmMsgIn .28s cubic-bezier(.22,1,.36,1); }
+  .msg.anim-in .bubble { animation:cmMsgIn .32s cubic-bezier(.22,1,.36,1); }
+  /* optimistic states */
+  .msg.sending { opacity:.6; }
+  .msg.sending .bubble { transition:opacity .2s ease; }
+  .msg .time .ti.sending-ic { color:rgba(255,255,255,0.6); animation:cmSpin 1.1s linear infinite; }
+  .msg .time .ti.failed-ic { color:#FCA5A5; animation:none; }
+  @keyframes cmSpin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .msg.anim-in, .msg.anim-in .bubble, .msg .time .ti.sending-ic { animation:none; }
+  }
 
   /* attachments */
   .att { margin-top:6px; padding:8px 10px; border-radius:8px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; cursor:pointer; }
@@ -131,7 +144,11 @@
   .cmp-m-empty { padding:10px; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); }
   .chat-comp-input { flex:1; min-width:0; height:38px; padding:0 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); font:var(--cm-body); color:var(--cm-fg); outline:none; }
   .chat-comp-input:focus { border-color:var(--cm-accent); }
-  .chat-send { width:38px; height:38px; border-radius:var(--cm-r-3); border:0; background:var(--cm-accent); color:var(--cm-fg-on-accent); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .chat-send { width:38px; height:38px; border-radius:var(--cm-r-3); border:0; background:var(--cm-accent); color:var(--cm-fg-on-accent); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .12s cubic-bezier(.34,1.56,.64,1), filter .12s ease; }
+  .chat-send:hover { filter:brightness(1.06); }
+  .chat-send:active { transform:scale(.86); }
+  .chat-send.sent-pulse { animation:cmSendPulse .34s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes cmSendPulse { 0% { transform:scale(.86); } 55% { transform:scale(1.12); } 100% { transform:scale(1); } }
   .chat-send .ti { font-size:16px; }
 
   /* right details rail */
@@ -1077,16 +1094,17 @@ function renderMsgHTML(msg) {
   const avHTML = window.cmAvatarHtml(author || { full_name: msg.sender_name }, 30);
   const time   = formatTime(msg.created_at);
   const content = esc(msg.content || '').replace(/\n/g, '<br>');
-  const attHTML = msg.attachment_url ? renderAttHTML(msg) : '';
+  const attHTML = (msg.attachment_url || msg.attachment_name) ? renderAttHTML(msg) : '';
   const lpHTML  = msg.link_preview   ? renderLpHTML(msg.link_preview) : '';
-  return `<div class="msg${isMe ? ' me' : ''}" data-msg-id="${msg.id}">
+  const state = msg._failed ? ' failed' : (msg._sending ? ' sending' : '');
+  return `<div class="msg${isMe ? ' me' : ''}${state}" data-msg-id="${msg.id}">
     ${avHTML}
     <div class="msg-body">
       <div class="bubble">
         ${!isMe ? `<div class="who">${esc(authorName)}</div>` : ''}
         ${content ? `<div class="text">${content}</div>` : ''}
         ${attHTML}${lpHTML}
-        <div class="time">${time}${isMe ? ' <i class="ti ti-checks"></i>' : ''}</div>
+        <div class="time">${time}${isMe ? msgStatusIcon(msg) : ''}</div>
       </div>
       <div class="msg-actions">
         <button class="msg-action-btn" onclick="pinMsgFromHover('${msg.id}')" title="Pin"><i class="ti ti-pin"></i></button>
@@ -1095,13 +1113,21 @@ function renderMsgHTML(msg) {
   </div>`;
 }
 
+// Delivery status marker shown on own messages: sending (clock) → sent (double-check), or failed.
+function msgStatusIcon(msg) {
+  if (msg._failed)  return ' <i class="ti ti-alert-triangle failed-ic" title="' + tt('chat_tasks.send_failed', 'Not sent — tap to retry') + '"></i>';
+  if (msg._sending) return ' <i class="ti ti-clock sending-ic"></i>';
+  return ' <i class="ti ti-checks"></i>';
+}
+
 function renderAttHTML(msg) {
-  if (msg.attachment_type === 'image') {
+  if (msg.attachment_type === 'image' && msg.attachment_url) {
     return `<div class="att-img-wrap"><img src="${esc(msg.attachment_url)}" class="att-img" loading="lazy" alt="${esc(msg.attachment_name || '')}" onclick="window.open('${esc(msg.attachment_url)}','_blank')"></div>`;
   }
   const { icon, color } = fileTypeIcon(msg.attachment_type);
   const size = formatFileSize(msg.attachment_size);
-  return `<div class="att" onclick="window.open('${esc(msg.attachment_url)}','_blank')">
+  const open = msg.attachment_url ? ` onclick="window.open('${esc(msg.attachment_url)}','_blank')"` : '';
+  return `<div class="att"${open}>
     <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
     <div><div class="t">${esc(msg.attachment_name || tt('chat_tasks.file_fallback', 'File'))}</div>${size ? `<div class="s">${size}</div>` : ''}</div>
     <i class="ti ti-download" style="margin-left:auto;font-size:13px;color:var(--cm-fg-muted)"></i>
@@ -1138,13 +1164,115 @@ function appendMsg(msg) {
   if (empty) empty.remove();
   const tmp = document.createElement('div');
   tmp.innerHTML = renderMsgHTML(msg);
+  tmp.querySelector('.msg')?.classList.add('anim-in');   // entry animation for this new bubble only
   while (tmp.firstChild) wrap.appendChild(tmp.firstChild);
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
-function scrollToBottom() {
+function scrollToBottom(smooth) {
   const w = document.getElementById('chatBody');
-  if (w) w.scrollTop = w.scrollHeight;
+  if (!w) return;
+  if (smooth && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    w.scrollTo({ top: w.scrollHeight, behavior: 'smooth' });
+  } else {
+    w.scrollTop = w.scrollHeight;
+  }
+}
+
+let optimisticSeq = 0;   // client-side counter for temp message ids while the insert is in flight
+
+// Promote an optimistic (temp-id) bubble to the confirmed server message, or reconcile with the
+// realtime echo if it beat the insert() response. Keeps renderedIds/DOM consistent, no duplicates.
+function reconcileMsg(tempId, realMsg) {
+  const wrap = document.getElementById('chatBody');
+  const node = tempId ? wrap?.querySelector(`.msg[data-msg-id="${tempId}"]`) : null;
+  const echoAlready = renderedIds.has(realMsg.id);   // realtime INSERT event already painted it
+  if (tempId) renderedIds.delete(tempId);
+  if (node) {
+    if (echoAlready) { node.remove(); return; }      // duplicate — drop the optimistic one
+    renderedIds.add(realMsg.id);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderMsgHTML(realMsg);
+    const fresh = tmp.querySelector('.msg');
+    if (fresh) node.replaceWith(fresh); else node.remove();
+  }
+  // if node is gone (e.g. user switched conversation), the realtime handler paints it in context
+}
+
+const pendingSends = {};   // tempId -> delivery context, kept only while a send is failed & retryable
+
+// Mark an optimistic bubble as failed to send (server/upload error) and make it tap-to-retry.
+function markMsgFailed(tempId) {
+  const node = document.getElementById('chatBody')?.querySelector(`.msg[data-msg-id="${tempId}"]`);
+  if (!node) return;
+  node.classList.remove('sending');
+  node.classList.add('failed');
+  node.style.cursor = 'pointer';
+  node.onclick = () => retryMsg(tempId);
+  const ic = node.querySelector('.time .ti');
+  if (ic) { ic.className = 'ti ti-alert-triangle failed-ic'; ic.title = tt('chat_tasks.send_failed', 'Not sent — tap to retry'); }
+}
+
+// Flip a failed batch back to "sending" and re-run delivery.
+function retryMsg(tempId) {
+  const ctx = pendingSends[tempId];
+  if (!ctx) return;
+  ctx.tempIds.forEach(id => {
+    const node = document.getElementById('chatBody')?.querySelector(`.msg[data-msg-id="${id}"]`);
+    if (!node) return;
+    node.classList.remove('failed');
+    node.classList.add('sending');
+    node.style.cursor = '';
+    node.onclick = null;
+    const ic = node.querySelector('.time .ti');
+    if (ic) { ic.className = 'ti ti-clock sending-ic'; ic.removeAttribute('title'); }
+  });
+  deliverMessage(ctx);
+}
+
+// Upload attachments (if any) + insert, then reconcile the optimistic bubbles. Shared by the
+// first send and by retry so both paths behave identically.
+async function deliverMessage(ctx) {
+  const { base, content, atts, lpData, tempIds, conv } = ctx;
+  const payloads = [];
+  try {
+    if (atts.length) {
+      for (let i = 0; i < atts.length; i++) {
+        const a = atts[i];
+        const { url } = await uploadAttachment(a.file);
+        payloads.push({
+          ...base,
+          content: i === 0 ? (content || null) : null,
+          message_type: 'file',
+          attachment_url: url, attachment_name: a.name, attachment_size: a.size, attachment_type: a.type,
+          ...(i === 0 ? lpData : {})
+        });
+      }
+    } else {
+      payloads.push({ ...base, content: content || null, message_type: 'text', ...lpData });
+    }
+  } catch (err) {
+    console.error('Upload error:', err);
+    tempIds.forEach(id => markMsgFailed(id));
+    return;
+  }
+
+  const { data, error } = await window.sb.from('messages').insert(payloads).select();
+  if (error) {
+    console.error('sendMessage failed:', error);
+    tempIds.forEach(id => markMsgFailed(id));
+    return;
+  }
+  tempIds.forEach(id => { delete pendingSends[id]; });
+  (data || []).forEach((m, i) => {
+    reconcileMsg(tempIds[i], m);
+    if (!messages.find(x => x.id === m.id)) messages.push(m);
+  });
+  const last = (data || [])[data.length - 1];
+  if (last) {
+    if (isCg(conv)) { groupLastMsg[cgId(conv)] = last; renderConvList(); }
+    else if (conv !== 'group') { dmLastMsg[conv] = last; renderConvList(); }
+  }
 }
 
 async function sendMessage() {
@@ -1154,8 +1282,8 @@ async function sendMessage() {
   if (!content && !pendingAttachments.length) return;
 
   // Team channel needs a resolved team — never save a group message with a null team_id
-  // (that would hide it from everyone's team view). Checked BEFORE upload so the composer
-  // content is preserved. DMs are unaffected (they route by recipient_id).
+  // (that would hide it from everyone's team view). Checked BEFORE anything is shown so the
+  // composer content is preserved. DMs are unaffected (they route by recipient_id).
   let groupTeamId = null;
   if (activeConv === 'group') {
     groupTeamId = ctResolveTeamId();
@@ -1175,50 +1303,40 @@ async function sendMessage() {
     group_id:     isCg(activeConv) ? cgId(activeConv) : null,
   };
 
-  // With attachments, send one message per file; the text + link preview ride on the first.
-  // Without attachments, a single text message.
-  const payloads = [];
-  if (pendingAttachments.length) {
-    const sendBtn = document.querySelector('.chat-send');
-    if (sendBtn) sendBtn.disabled = true;
-    try {
-      for (let i = 0; i < pendingAttachments.length; i++) {
-        const a = pendingAttachments[i];
-        const { url } = await uploadAttachment(a.file);
-        payloads.push({
-          ...base,
-          content: i === 0 ? (content || null) : null,
-          message_type: 'file',
-          attachment_url: url, attachment_name: a.name, attachment_size: a.size, attachment_type: a.type,
-          ...(i === 0 ? lpData : {})
-        });
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      alert(tt('chat_tasks.error_uploading_file', 'Error uploading file: ' + (err.message || err), { msg: (err.message || err) }));
-      if (sendBtn) sendBtn.disabled = false;
-      return;                       // keep the typed text + pending attachments so nothing is lost
-    }
-    if (sendBtn) sendBtn.disabled = false;
-  } else {
-    payloads.push({ ...base, content: content || null, message_type: 'text', ...lpData });
-  }
+  // Snapshot the composer, then clear it and paint optimistic bubbles IMMEDIATELY — the network
+  // round-trip (upload + insert) happens afterwards in deliverMessage() and reconciles these in place.
+  const atts = pendingAttachments.slice();
+  const stamp = new Date().toISOString();
+  const tempIds = [];
 
-  const { data, error } = await window.sb.from('messages').insert(payloads).select();
-  if (error) {
-    console.error('sendMessage failed:', error);
-    alert('Could not send: ' + (error.message || error.code || 'unknown error'));
-    return;                       // keep the typed text + pending attachments so nothing is lost
+  const optimistic = [];
+  if (atts.length) {
+    atts.forEach((a, i) => {
+      const id = 'tmp-' + (++optimisticSeq); tempIds.push(id);
+      optimistic.push({
+        id, ...base,
+        content: i === 0 ? (content || null) : null,
+        message_type: 'file',
+        attachment_url: null, attachment_name: a.name, attachment_size: a.size, attachment_type: a.type,
+        created_at: stamp, _sending: true, ...(i === 0 ? lpData : {})
+      });
+    });
+  } else {
+    const id = 'tmp-' + (++optimisticSeq); tempIds.push(id);
+    optimistic.push({ id, ...base, content: content || null, message_type: 'text', created_at: stamp, _sending: true, ...lpData });
   }
+  optimistic.forEach(m => appendMsg(m));
+
   inp.value = '';
   removePendingAtt();
   clearLinkPreview();
-  (data || []).forEach(m => { messages.push(m); appendMsg(m); });
-  const last = (data || [])[data.length - 1];
-  if (last) {
-    if (isCg(activeConv)) { groupLastMsg[cgId(activeConv)] = last; renderConvList(); }
-    else if (activeConv !== 'group') { dmLastMsg[activeConv] = last; renderConvList(); }
-  }
+  inp.focus();
+  const sendBtn = document.querySelector('.chat-send');
+  if (sendBtn) { sendBtn.classList.remove('sent-pulse'); void sendBtn.offsetWidth; sendBtn.classList.add('sent-pulse'); }
+
+  const ctx = { base, content, atts, lpData, tempIds, conv: activeConv };
+  tempIds.forEach(id => { pendingSends[id] = ctx; });   // enables retry if delivery fails
+  deliverMessage(ctx);
 }
 
 // ── CONV LIST ──
