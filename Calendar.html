@@ -1347,7 +1347,7 @@
           <label for="calEvtF_type" data-i18n="calendar.type">Type</label>
           <select id="calEvtF_type">
             <optgroup label="Training" data-i18n-attr="label:calendar.optgroup_training">
-              <option value="tactical" data-i18n="calendar.type_training_field">Training (field)</option>
+              <option value="training" data-i18n="calendar.type_training_field">Training (field)</option>
               <option value="gym" data-i18n="calendar.type_gym">Gym</option>
               <option value="recovery" data-i18n="calendar.type_recovery">Recovery</option>
               <option value="walkthrough" data-i18n="calendar.type_walkthrough">Walkthrough / activation</option>
@@ -1775,6 +1775,7 @@ function showCalToast(msg) {
 // Values returned here are the NON-staff audiences (staff is always included)
 const VISIBLE_TO_DEFAULTS = {
   match:         ['players','medical'],
+  training:      ['players','medical'],
   tactical:      ['players','medical'],
   gym:           ['players','medical'],
   recovery:      ['players','medical'],
@@ -2545,7 +2546,7 @@ const CAL_EVT_TYPES = [
 ];
 
 const DURATION_DEFAULTS = {
-  tactical:90, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
+  training:90, tactical:90, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
   breakfast:45, lunch:60, dinner:60,
   hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
   press:30, medical_check:30, walkthrough:30, scouting:60,
@@ -2649,7 +2650,7 @@ function toggleMatchFields(type) {
 
 function toggleRpeRow(type) {
   const el = document.getElementById('calEvtRpeRow');
-  if (el) el.style.display = (type === 'tactical' || type === 'gym' || type === 'conditioning') ? '' : 'none';
+  if (el) el.style.display = (type === 'training' || type === 'tactical' || type === 'gym' || type === 'conditioning') ? '' : 'none';
 }
 
 function updateAuPreview() {
@@ -2758,7 +2759,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
   document.getElementById('calEvtTitle').textContent = session ? tt('calendar.edit_event','Edit event') : tt('calendar.new_event','New event');
   document.getElementById('calEvtId').value = session?.id || '';
   document.getElementById('calEvtF_title').value = session?.title || '';
-  const evtType = session?.session_type || 'tactical';
+  const evtType = session?.session_type || 'training';
   const typeSel = document.getElementById('calEvtF_type');
   // Drop any temp option injected on a previous open (avoid accumulation)
   typeSel.querySelectorAll('option[data-temp="1"]').forEach(o => o.remove());
@@ -2908,7 +2909,7 @@ function _positionPop(pop, anchor, width) {
 }
 
 const EVT_TYPE_LABELS_EN = {
-  tactical:'Training', gym:'Gym', match:'Match', recovery:'Recovery', travel:'Travel',
+  training:'Training', tactical:'Training', gym:'Gym', match:'Match', recovery:'Recovery', travel:'Travel',
   meeting:'Meeting', evaluation:'Evaluation', video_session:'Video session',
   breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner',
   hotel_checkin:'Hotel check-in', hotel_checkout:'Hotel check-out',
@@ -2918,7 +2919,7 @@ const EVT_TYPE_LABELS_EN = {
   conditioning:'Training',
 };
 const EVT_TYPE_KEY = {
-  tactical:'calendar.filter_training', gym:'calendar.type_gym', match:'calendar.type_match', recovery:'calendar.type_recovery', travel:'calendar.type_travel',
+  training:'calendar.filter_training', tactical:'calendar.filter_training', gym:'calendar.type_gym', match:'calendar.type_match', recovery:'calendar.type_recovery', travel:'calendar.type_travel',
   meeting:'calendar.type_meeting', evaluation:'calendar.type_evaluation', video_session:'calendar.type_video_session',
   breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
@@ -3592,6 +3593,8 @@ async function saveEvt() {
 
   if (!type) { showCalToast(tt('calendar.pick_event_type','Pick an event type')); saving.style.display='none'; saveBtn.disabled=false; return; }
   if (!title) { showCalToast(tt('calendar.title_required','Title is required.')); saving.style.display='none'; saveBtn.disabled=false; return; }
+  // Field (load) sessions require a start time: dedup + double-session (AM/PM) key on it.
+  if (type === 'training' && !startTimeVal) { showCalToast(tt('calendar.field_time_required','A start time is required for field training sessions.')); saving.style.display='none'; saveBtn.disabled=false; return; }
 
   // Validation: day_off conflict (soft)
   if (type === 'day_off' && !_editEvtId) {
@@ -4914,7 +4917,7 @@ function showMatchPopover(anchor, items) {
 // ── Upcoming Events ───────────────────────────────────────────
 // ── Upcoming filters ──────────────────────────────────────────
 const UPCOMING_FILTER_GROUPS = [
-  { label:'Training',  key:'calendar.grp_training',  types:['tactical','gym','recovery','walkthrough'] },
+  { label:'Training',  key:'calendar.grp_training',  types:['training','gym','recovery','walkthrough'] },
   { label:'Match',     key:'calendar.grp_match',     types:['match'] },
   { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner'] },
   { label:'Logistics', key:'calendar.grp_logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
@@ -4968,10 +4971,10 @@ function _renderUpcomingFiltered() {
   const container = document.getElementById('calUpcomingList');
   if (!container) return;
   const filters = _loadUpcomingFilters();
-  // 'conditioning' treated same as 'tactical' for filter purposes
+  // legacy 'tactical'/'conditioning' items show under the unified 'training' filter
   const visible = _upcomingAllItems.filter(item => {
     const t = item.type;
-    return filters.has(t) || (t === 'conditioning' && filters.has('tactical'));
+    return filters.has(t) || ((t === 'conditioning' || t === 'tactical') && filters.has('training'));
   });
   if (!visible.length) {
     container.innerHTML = _upcomingAllItems.length

@@ -2132,10 +2132,13 @@ async function dpAutoSaveSession() {
   } else {
     // Anti-duplicate guard: a session for this day/team may already exist (e.g. created from
     // Calendar) even if loadDay didn't set _dpCurrentSessionId. Re-check before inserting a second one.
-    const { data: existing } = await window.sb.from('training_sessions')
+    // Exclude gym (separate module); when a start time is set, match the session AT that time so
+    // AM/PM double sessions don't collide.
+    let existQ = window.sb.from('training_sessions')
       .select('id').eq('club_id', _dpClubId).eq('team_id', _dpTeamId)
-      .eq('session_date', date).eq('is_historical', false)
-      .order('created_at', { ascending: true }).limit(1);
+      .eq('session_date', date).eq('is_historical', false).neq('session_type', 'gym');
+    if (startVal) existQ = existQ.eq('session_time', startVal);
+    const { data: existing } = await existQ.order('created_at', { ascending: true }).limit(1);
     const existingId = existing?.[0]?.id || null;
     if (existingId) {
       _dpCurrentSessionId = existingId;
@@ -2146,6 +2149,13 @@ async function dpAutoSaveSession() {
         _dpUpdatePublishBtn();
       }
     } else {
+      // Field (load) sessions require a start time (dedup + AM/PM). Hold the autosave — don't create
+      // a timeless session — until the coach sets one.
+      if (!startVal) {
+        if (dotEl)  dotEl.style.background = 'var(--cm-fg-muted)';
+        if (statEl) statEl.textContent = tt('daily_planning.need_start_time','Set a start time to save the session');
+        return;
+      }
       payload.team_id = _dpTeamId;
       const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
       saveError = error;

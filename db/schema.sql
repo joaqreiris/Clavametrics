@@ -2242,6 +2242,9 @@ CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING 
 CREATE INDEX idx_training_sessions_attributes ON public.training_sessions USING gin (session_attributes);
 CREATE INDEX idx_training_sessions_club_microcycle ON public.training_sessions USING btree (club_id, microcycle_id);
 CREATE UNIQUE INDEX uq_training_sessions_club_activity ON public.training_sessions USING btree (club_id, external_activity_id) WHERE (external_activity_id IS NOT NULL);
+-- One field (load) session per team/date/START TIME. Allows AM/PM double sessions (distinct times)
+-- and leaves gym + timeless API-owned rows (session_time NULL) unconstrained.
+CREATE UNIQUE INDEX uq_training_sessions_field_slot ON public.training_sessions USING btree (team_id, session_date, session_time) WHERE (session_type = 'training'::text AND session_time IS NOT NULL);
 CREATE INDEX training_sessions_recurrence_group_id_idx ON public.training_sessions USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 
 create table if not exists public.treatment_templates (
