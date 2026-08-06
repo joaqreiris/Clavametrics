@@ -1464,6 +1464,15 @@
           _applyRefMode(ln, e.target.matches('[data-rl-val2mode]'), e.target.value);
           renderRefLines(); renderCard(); return;
         }
+        // "which metric" selector → bind the line to a metric AND auto-tint it with that metric's
+        // colour (default distinction; the colour picker still overrides afterwards). Rebuild so the
+        // colour swatch reflects the new tint.
+        if (e.target.matches('[data-rl-metric]')) {
+          ln.metricId = e.target.value || null;
+          const mi = _metricInfos(S).find(m => m.id === ln.metricId);
+          if (mi) ln.color = mi.color;
+          renderRefLines(); renderCard(); return;
+        }
         if      (e.target.matches('[data-rl-value]'))   { const v = e.target.value.trim(); ln.value  = v === '' ? null : Number(v); }
         else if (e.target.matches('[data-rl-value2]'))  { const v = e.target.value.trim(); ln.value2 = v === '' ? null : Number(v); }
         else if (e.target.matches('[data-rl-sdn]'))       ln.sdN  = Number(e.target.value);
@@ -1698,6 +1707,26 @@
   // inside gp-builder.js (no CSS file touched).
   let _rlSeq = 0;
   function _refLineId() { return 'rl_' + (++_rlSeq) + '_' + Math.random().toString(36).slice(2, 7); }
+
+  /** Per-metric render info for the reference-line editor: id, display name, resolved COLOR and
+   *  whether it draws as a combo LINE (y1 axis). Mirrors the colour/axis logic in barsChartData so
+   *  the ref-line "which metric" selector can auto-tint the line with the metric's own colour. */
+  function _metricInfos(S) {
+    if (!S || !Array.isArray(S.metrics)) return [];
+    const cfg = buildConfig(S);
+    const isLine  = S.metrics.map(m => !!m.line);
+    const barCols = barColors(cfg, isLine.filter(f => !f).length || 1);
+    const lineCol = _cssVar('--cm-warning', '#D97706');
+    let bi = 0;
+    return S.metrics.map((m, i) => {
+      const cat = catalogMap.get(m.id);
+      return { id: m.id, name: cat?.name || m.id, isLine: isLine[i],
+               color: isLine[i] ? lineCol : (barCols[bi++] || barCols[0]) };
+    });
+  }
+  /** primaryMetricId = first BAR metric (the metric an auto line falls back to when unassigned). */
+  function _primaryMetricId(infos) { const b = infos.find(m => !m.isLine); return (b || infos[0])?.id || null; }
+
   function renderRefLines() {
     const host = document.getElementById('gpbRefLines');
     if (!host) return;
@@ -1705,6 +1734,19 @@
     const inputCss = 'height:26px;min-width:0;padding:0 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)';
     const selCss   = 'height:26px;min-width:0;padding:0 4px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans);cursor:pointer';
     const isScatter = !!(S && S.type === 'scatter');
+    // Metric selector: only meaningful for bars with ≥2 metrics (else there's no ambiguity about
+    // WHICH metric an auto line — mean/median/… — refers to). Value = metric id; the render computes
+    // the stat over that metric and draws it on the metric's own axis (bar vs combo-line/y1).
+    const metricInfos = (!isScatter && S && S.type === 'bars') ? _metricInfos(S) : [];
+    const showMetricSel = metricInfos.length >= 2;
+    const primMetId = _primaryMetricId(metricInfos);
+    const metricSel = (ln) => {
+      if (!showMetricSel) return '';
+      const cur = (ln.metricId && metricInfos.some(m => m.id === ln.metricId)) ? ln.metricId : primMetId;
+      const opts = metricInfos.map(m =>
+        `<option value="${esc(m.id)}" ${m.id === cur ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+      return `<select data-rl-metric title="${esc(_tt('gps_analysis.builder_ref_line_metric', 'Metric'))}" style="max-width:96px;${selCss}">${opts}</select>`;
+    };
     // Value slot: a Manual/auto dropdown; Manual shows a number input, Mean±SD shows an n selector.
     const MODES = [
       ['manual', _tt('gps_analysis.builder_ref_mode_manual', 'Manual')],
@@ -1740,6 +1782,7 @@
           <button type="button" data-rl-type="line" class="${!band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_line', 'Line'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-type="band" class="${band ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_type_band', 'Band'))}"><i class="ti ti-columns"></i></button>
         </div>
+        ${metricSel(ln)}
         ${slot(ln.value, ln.sdN, ln.sdDir, 'rl-valmode', 'rl-value', 'rl-sdn', fromPh)}
         ${band ? slot(ln.value2, ln.sdN2, ln.sdDir2, 'rl-val2mode', 'rl-value2', 'rl-sdn2', _tt('gps_analysis.builder_ref_band_to', 'To')) : ''}
         <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 88px;${inputCss}">
@@ -3244,12 +3287,14 @@
     const keep = (list || []).filter(r => r && (Number.isFinite(Number(r.value)) || _isRefToken(r.value)));
     return keep.map(r => {
       const type = r.type === 'band' ? 'band' : 'line';
-      const arr  = typeof valuesFor === 'function' ? valuesFor({ axis: r.axis === 'x' ? 'x' : 'y' }) : null;
+      // valuesFor gets the WHOLE item so it can pick the value set per axis (scatter) or per
+      // metric (bars, via r.metricId); axis is normalized here for its convenience.
+      const arr  = typeof valuesFor === 'function' ? valuesFor({ ...r, axis: r.axis === 'x' ? 'x' : 'y' }) : null;
       const resolve = (raw, sdN, sdDir) => _isRefToken(raw)
         ? _refStat(raw, arr, sdN, sdDir)
         : (Number.isFinite(Number(raw)) ? Number(raw) : null);
       return {
-        type, axis: r.axis === 'x' ? 'x' : 'y',
+        type, axis: r.axis === 'x' ? 'x' : 'y', metricId: r.metricId || null,
         value:  resolve(r.value,  r.sdN,  r.sdDir),
         value2: type === 'band' ? resolve(r.value2, r.sdN2, r.sdDir2) : null,
         fill: r.fill === 'bordered' ? 'bordered' : 'solid',
@@ -3300,6 +3345,10 @@
       const horizontal = !!opts.horizontal;
       const scale = horizontal ? scales.x : scales.y;      // value axis follows orientation
       if (!scale) return;
+      // Combo cards: a line bound to a metric drawn as a line reads its value on the SECONDARY (y1)
+      // axis, so it sits at the same height as that metric's line — the visual "which metric" cue.
+      const y1 = scales.y1;
+      const scaleFor = ln => (!horizontal && ln.onLineAxis && y1) ? y1 : scale;
       const { top: A_T, bottom: A_B, left: A_L, right: A_R } = chartArea;
       const clampVal = p => horizontal ? Math.max(A_L, Math.min(A_R, p)) : Math.max(A_T, Math.min(A_B, p));
       const inPlot   = p => horizontal ? (p >= A_L && p <= A_R) : (p >= A_T && p <= A_B);
@@ -3335,10 +3384,11 @@
         const op    = ln.opacity == null ? 1 : Math.max(0, Math.min(1, ln.opacity));
         const txt   = _refLabelText(ln);
         const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
+        const sc = scaleFor(ln);
 
         if (isBand) {
-          const p1 = scale.getPixelForValue(val);
-          const p2 = scale.getPixelForValue(Number(ln.value2));
+          const p1 = sc.getPixelForValue(val);
+          const p2 = sc.getPixelForValue(Number(ln.value2));
           // translucent fill across the category axis, clamped to the plot
           ctx.globalAlpha = op; ctx.fillStyle = color; ctx.setLineDash([]);
           if (!horizontal) {
@@ -3358,7 +3408,7 @@
           // label at the top edge of the band (higher value for vertical, rightmost for horizontal)
           drawLabel(clampVal(!horizontal ? Math.min(p1, p2) : Math.max(p1, p2)), txt, color);
         } else {
-          const p = scale.getPixelForValue(val);
+          const p = sc.getPixelForValue(val);
           if (!inPlot(p)) continue;
           ctx.globalAlpha = op; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
           ctx.setLineDash(ln.style === 'dashed' ? [5, 4] : []);
@@ -3447,6 +3497,11 @@
 
     const ticks = size === 'sm' ? 4 : 5;
     let datasets, mcDiffs = null, hasLine = false, max1 = null, step1 = null, stacked = !!config.style?.stacked;
+    // Per-metric info for reference lines: metricId → { vals (visible, post-zoom), isLine (combo →
+    // y1 axis), color }. Lets an auto line (mean/median/…) be computed over — and tinted to match —
+    // the metric it references, instead of always the primary bar. Populated in both branches below.
+    const refMetricMap = new Map();
+    let primaryMetricId = null;
 
     if (mcOn) {
       stacked = false;                              // current-vs-ref is always grouped
@@ -3462,8 +3517,12 @@
       datasets = [];
       for (const s of ss) {
         const base = s.name || s.label;
-        datasets.push(mk(s, single ? names.cur : `${base} · ${names.cur}`, 'cur', accent));
+        const curDs = mk(s, single ? names.cur : `${base} · ${names.cur}`, 'cur', accent);
+        datasets.push(curDs);
         datasets.push(mk(s, single ? names.ref : `${base} · ${names.ref}`, 'ref', grey));
+        // Ref-line stats reference the CURRENT-MC bar (accent) of each metric.
+        refMetricMap.set(s.label, { vals: curDs.data.filter(v => v != null).map(Number), isLine: false, color: accent });
+        if (primaryMetricId == null) primaryMetricId = s.label;
       }
       // diff% per category from the first metric (label over each pair)
       const s0 = ss[0];
@@ -3475,13 +3534,17 @@
       let bi = 0;
       datasets = ss.map((s, i) => {
         const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
+        const vals = data.filter(v => v != null).map(Number);
         if (isLine[i]) {                            // combo: line on the secondary axis
+          refMetricMap.set(s.label, { vals, isLine: true, color: lineCol });
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lineCol, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
             pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
         }
         const col = barCols[bi++];
+        refMetricMap.set(s.label, { vals, isLine: false, color: col });
+        if (primaryMetricId == null) primaryMetricId = s.label;
         return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
           backgroundColor: col, borderColor: col, borderWidth: 0,
           borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
@@ -3498,17 +3561,26 @@
 
     const barDs  = datasets.filter(d => !d._isLine);
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
-    // Reference lines/bands: sanitize once (shared with scatter). Bars ignore item.axis and always
-    // draw on their single value axis, so it's harmless here. Auto tokens (mean/median/sd/max/min) are
-    // computed over the PRIMARY metric — the first bar dataset (excludes the combo line and the grey MC
-    // reference bar). Option B — fold value AND value2 (resolved) into the value-axis max so a high
-    // line/band still lands inside the plot. Absent/empty on every existing card → refMax = 0 →
-    // maxVal unchanged (retrocompat).
-    const _refPrimaryVals = (barDs[0]?.data || []).filter(v => v != null).map(Number);
-    const refLines = _sanitizeRefItems(config.referenceLines, () => _refPrimaryVals);
-    const refMax  = refLines.length
-      ? Math.max(0, ...refLines.flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v))))
-      : 0;
+    // Reference lines/bands: sanitize once (shared with scatter). Auto tokens (mean/median/sd/max/min)
+    // are computed over the metric the line REFERENCES (item.metricId) — falling back to the primary
+    // bar metric when unassigned (retrocompat: existing lines carry no metricId). A line bound to a
+    // combo metric draws on the SECONDARY (y1) axis via `onLineAxis`, tinted to the metric's colour in
+    // the editor. Option B — fold each resolved value into the max of ITS axis (bar value-axis vs y1)
+    // so a high line still lands inside the plot.
+    const _refPrimaryVals = refMetricMap.get(primaryMetricId)?.vals
+      || (barDs[0]?.data || []).filter(v => v != null).map(Number);
+    const refLines = _sanitizeRefItems(config.referenceLines, item => {
+      const m = item.metricId && refMetricMap.get(item.metricId);
+      return m ? m.vals : _refPrimaryVals;
+    });
+    refLines.forEach(ln => {
+      const m = ln.metricId && refMetricMap.get(ln.metricId);
+      ln.onLineAxis = !horizontal && hasLine && !!(m && m.isLine);   // combo line metric → y1
+    });
+    const _refValsFor = pred => refLines.filter(pred).flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v)));
+    const refMax  = Math.max(0, ..._refValsFor(r => !r.onLineAxis));   // grows the bar value-axis
+    const refMax1 = Math.max(0, ..._refValsFor(r =>  r.onLineAxis));   // grows the y1 (combo) axis
+    if (hasLine && refMax1 > (max1 || 0)) ({ max: max1, step: step1 } = niceScale(refMax1, ticks));
     const dataMax = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
       : Math.max(0, ...allBarVals);
