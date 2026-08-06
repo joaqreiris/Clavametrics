@@ -8311,6 +8311,7 @@
       + (flag ? '<span class="fl">' + flag + '</span>' : '') + '<span class="n">' + pbEsc(main) + '</span></div></td>';
   }
 
+  var _pbShowAllCols = false;   // when false, columns with data for only a few players (e.g. GK-only shoulder tests) are hidden
   function renderPreventionBoard(){
     var mount = document.getElementById('pbBoard'), tilesEl = document.getElementById('pbTiles');
     if (!mount || !_pbData) return;
@@ -8350,14 +8351,31 @@
         + '<div class="pb-tile neutral"><span class="stripe"></span><div class="k">' + pbEsc(tt('evaluations.prev_tile_maxasym','Largest asymmetry')) + '</div><div class="v">' + (maxAsym.pct >= 0 ? Math.round(maxAsym.pct) + '%' : '—') + '</div><div class="c">' + (maxAsym.pct >= 0 ? pbEsc(maxAsym.player.last_name + ' · ' + pbShortLabel(maxAsym.def)) : '—') + '</div></div>';
     }
 
+    // Hide "sparse" columns — a test recorded for only a small minority of the squad (e.g. the
+    // GK-only shoulder tests) leaves a dead band across every outfield row. Drop those by default;
+    // a toggle reveals them. Group colspans below derive from visCols, so they re-adjust for free.
+    var pbTotal = rows.length || 1;
+    var pbFill = d.cols.map(function(_, i){ return rows.reduce(function(n, r){ return n + ((r.cells[i] && r.cells[i].hasData) ? 1 : 0); }, 0); });
+    var pbSparse = pbFill.map(function(f){ return f > 0 && (f / pbTotal) < 0.30; });
+    var pbHiddenCount = pbSparse.filter(Boolean).length;
+    var pbVisIdx = d.cols.map(function(_, i){ return i; }).filter(function(i){ return _pbShowAllCols || !pbSparse[i]; });
+    if (!pbVisIdx.length) pbVisIdx = d.cols.map(function(_, i){ return i; });   // never hide the whole table
+    var visCols = pbVisIdx.map(function(i){ return d.cols[i]; });
+    var pbTogBtn = pbHiddenCount
+      ? '<button id="pbColToggle" type="button" title="' + pbEsc(tt('evaluations.prev_cols_hint','Tests recorded for only a few players are hidden')) + '" style="margin-left:6px;display:inline-flex;align-items:center;gap:5px;font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:999px;padding:5px 10px;cursor:pointer;white-space:nowrap">'
+        + '<i class="ti ' + (_pbShowAllCols ? 'ti-eye-off' : 'ti-eye') + '" style="font-size:13px"></i>'
+        + pbEsc(_pbShowAllCols ? tt('evaluations.prev_hide_cols','Hide sparse tests') : tt('evaluations.prev_show_cols','Show {n} hidden tests', { n: pbHiddenCount }))
+        + '</button>'
+      : '';
+
     // grouped headers
     var groups = [];
-    d.cols.forEach(function(def){ var last = groups[groups.length-1]; if (last && last.fam === def.family) last.count++; else groups.push({ fam: def.family, count: 1 }); });
+    visCols.forEach(function(def){ var last = groups[groups.length-1]; if (last && last.fam === def.family) last.count++; else groups.push({ fam: def.family, count: 1 }); });
     var famLabel = function(fam){ return fam === 'isometric' ? tt('player.iso_strength_block','Isometric strength') : tt('player.mobility_block','Mobility'); };
     var grpHtml = '<th class="pl stk"></th>' + groups.map(function(g){ return '<th class="fam" colspan="' + g.count + '">' + pbEsc(famLabel(g.fam)) + '</th>'; }).join('')
       + '<th rowspan="2" style="vertical-align:bottom;padding-bottom:10px">' + pbEsc(tt('evaluations.prev_col_alerts','Alerts')) + '</th><th rowspan="2"></th>';
     var colHtml = '<th class="pl stk">' + pbEsc(tt('evaluations.player','Player')) + '</th>'
-      + d.cols.map(function(def){ return '<th>' + pbShortLabel(def) + '</th>'; }).join('');
+      + visCols.map(function(def){ return '<th>' + pbShortLabel(def) + '</th>'; }).join('');
 
     // body
     var bodyHtml = rows.map(function(r){
@@ -8367,7 +8385,7 @@
       var cnt = r.alerts ? '<span class="pb-cnt a">' + r.alerts + '</span>' : (r.watches ? '<span class="pb-cnt w">' + r.watches + '</span>' : '<span class="pb-cnt z">0</span>');
       return '<tr>'
         + '<td class="stk"><div class="pb-plcell"><span class="pb-mono">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
-        + r.cells.map(pbCellHtml).join('')
+        + pbVisIdx.map(function(i){ return pbCellHtml(r.cells[i]); }).join('')
         + '<td class="pb-al">' + cnt + '</td>'
         + '<td class="pb-act"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '"><i class="ti ti-shield-plus"></i>' + pbEsc(tt('evaluations.prev_action','Preventive')) + '</a></td>'
         + '</tr>';
@@ -8381,10 +8399,15 @@
       + '<span class="pb-lg"><span class="sw watch"></span>' + pbEsc(tt('evaluations.prev_legend_watch','Watch ≥10%')) + '</span>'
       + '<span class="pb-lg"><span class="sw alert"></span>' + pbEsc(tt('evaluations.prev_legend_alert','Alert ≥15%')) + '</span>'
       + '<span class="pb-lg"><span class="sw none"></span>' + pbEsc(tt('evaluations.prev_legend_none','No data')) + '</span>'
+      + pbTogBtn
       + '</div></div>'
       + '<div class="pb-scroll"><table class="pb-tbl"><thead><tr class="grp">' + grpHtml + '</tr><tr class="cols">' + colHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>'
       + '</div>'
       + '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.prev_foot','Cell shows left/right asymmetry of the latest test; hover for values. Default thresholds: watch ≥10%, alert ≥15% — configurable per test.')) + '</span></div>';
+
+    // column visibility toggle (re-wired each render since innerHTML is rebuilt)
+    var pbTog = document.getElementById('pbColToggle');
+    if (pbTog) pbTog.addEventListener('click', function(){ _pbShowAllCols = !_pbShowAllCols; renderPreventionBoard(); });
 
     // custom hover tooltip (wired once on the persistent #pbBoard)
     if (!mount._pbTipWired){
