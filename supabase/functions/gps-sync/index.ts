@@ -206,6 +206,7 @@ interface Ctx {
   playerByExt: Map<string, string>;
   resolveMap: Map<string, { target: string; conv: number }>;
   mappedSlugs: string[];
+  seasonStart: string | null;
 }
 
 async function loadContext(adminClient: Admin, integrationId: string): Promise<Ctx> {
@@ -283,7 +284,7 @@ async function loadContext(adminClient: Admin, integrationId: string): Promise<C
   // Slugs we actually request from /stats: every mapped slug except ignored.
   const mappedSlugs = [...resolveMap.entries()].filter(([, v]) => v.target && v.target !== '__ignore__').map(([s]) => s);
 
-  return { integrationId, clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs };
+  return { integrationId, clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs, seasonStart };
 }
 
 interface ChunkResult {
@@ -338,7 +339,7 @@ async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response>
 }
 
 async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string): Promise<ChunkResult> {
-  const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs } = ctx;
+  const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs, seasonStart } = ctx;
   const unmappedParams = new Set<string>();
   let _statsCalls = 0;   // TEMP: count /stats requests this chunk (logged at chunk end; remove after)
 
