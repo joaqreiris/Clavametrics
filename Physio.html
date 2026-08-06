@@ -597,6 +597,8 @@
             <div class="ph-f" id="adaptWrap">
               <label data-i18n="physio.adaptation_for_next_session">Adaptation for next session</label>
               <textarea id="phAdaptInput" data-i18n-ph="physio.field_avoid_max_velocity_runs" placeholder="Field: avoid max-velocity runs. Gym: reduce squat load 20%." rows="2"></textarea>
+              <label style="margin-top:8px" data-i18n="physio.adaptation_date">Applies to session date</label>
+              <input type="date" id="phAdaptDateInput">
             </div>
           </div>
 
@@ -869,6 +871,15 @@ let _editingTreatmentId = null;
 
   const today = cmToday();
   document.getElementById('phDateInput').value = today;
+  document.getElementById('phAdaptDateInput').value = today;
+  // Keep the adaptation's target date tracking the treatment date until the physio
+  // overrides it — so an adaptation defaults to the day it was recorded.
+  document.getElementById('phDateInput').addEventListener('change', function () {
+    const ad = document.getElementById('phAdaptDateInput');
+    if (!ad.value || ad.value === ad.dataset.autofrom) ad.value = this.value;
+    ad.dataset.autofrom = this.value;
+  });
+  document.getElementById('phAdaptDateInput').dataset.autofrom = today;
 
   // Load players ordered by last_name; filter inactive client-side to avoid null != issues
   console.log('club_id en Treatments:', _clubId);
@@ -1100,6 +1111,7 @@ function resetForm() {
   document.getElementById('phDurationInput').value = '';
   document.getElementById('phNotesInput').value = '';
   document.getElementById('phAdaptInput').value = '';
+  document.getElementById('phAdaptDateInput').value = cmToday();
   document.getElementById('notifyChk').checked = false;
   document.getElementById('phInjurySelect').innerHTML = `<option value="">${tt('physio.select_player_first','— select player first —')}</option>`;
   document.getElementById('noInjuriesMsg').style.display = 'none';
@@ -1149,6 +1161,7 @@ function openEditTreatment(t, isDuplicate = false) {
   document.getElementById('phNotesInput').value = t.notes || '';
   document.getElementById('notifyChk').checked = t.notify_coaches || false;
   document.getElementById('phAdaptInput').value = t.adaptation_notes || t.adaptation || '';
+  document.getElementById('phAdaptDateInput').value = isDuplicate ? cmToday() : (t.adaptation_date || t.date || '');
 
   if (_currentTreatType === 'rehab' && t.injury_id) {
     setTimeout(() => {
@@ -1254,6 +1267,7 @@ window.addEventListener('scroll', _phClosePortal, { passive: true });
 async function saveTreatment(andNew) {
   const pid       = document.getElementById('phPlayerSelect').value;
   const date      = document.getElementById('phDateInput').value;
+  const adaptDate = document.getElementById('phAdaptDateInput').value || date;
   const time      = document.getElementById('phTimeInput').value || null;
   const duration  = parseInt(document.getElementById('phDurationInput').value) || null;
   const notes     = document.getElementById('phNotesInput').value.trim() || null;
@@ -1285,7 +1299,9 @@ async function saveTreatment(andNew) {
   const payload = {
     club_id:          _clubId,
     player_id:        pid,
+    team_id:          _phTeamId || null,
     date,
+    adaptation_date:  adaptDate,
     session_time:     time,
     duration_min:     duration,
     treatment_type:   _currentTreatType,

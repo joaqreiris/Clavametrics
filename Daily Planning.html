@@ -885,7 +885,7 @@ async function loadDay(dateStr) {
 
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
@@ -954,14 +954,17 @@ async function loadDay(dateStr) {
   (avResult.data || []).forEach(a => { avMap[a.player_id] = a; });
   _dpAvMap = avMap;
 
+  // Team scope: show adaptations for THIS team only (legacy rows have no team_id → keep showing).
+  const _dpAdaptRows = (adaptResult.data || []).filter(t => t.team_id == null || t.team_id === _dpTeamId);
+
   _dpDayAdaptMap = {};
-  (adaptResult.data || []).forEach(t => {
-    if (t.notify_coaches && t.adaptation_notes && !_dpDayAdaptMap[t.player_id]) _dpDayAdaptMap[t.player_id] = t;
+  _dpAdaptRows.forEach(t => {
+    if (t.adaptation_notes && !_dpDayAdaptMap[t.player_id]) _dpDayAdaptMap[t.player_id] = t;
   });
 
   dpRenderSquad(avMap);
 
-  _dpPhysioRows = (adaptResult.data || []).filter(t => t.adaptation_notes);
+  _dpPhysioRows = _dpAdaptRows.filter(t => t.adaptation_notes);
   dpRenderPhysioList();
 
   await dpRenderPrintSheet();

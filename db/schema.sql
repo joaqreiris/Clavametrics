@@ -2287,6 +2287,8 @@ create table if not exists public.treatments (
   notify_coaches boolean default false,
   adaptation_applied_at timestamp with time zone,
   adaptation_applied_by uuid,
+  team_id uuid,
+  adaptation_date date,
   constraint treatments_pkey primary key (id),
   constraint treatments_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
   constraint treatments_pain_pre_check CHECK (((pain_pre >= 0) AND (pain_pre <= 10))),
@@ -2619,6 +2621,9 @@ alter table public.treatments add constraint treatments_injury_id_fkey FOREIGN K
 alter table public.treatments add constraint treatments_performed_by_fkey FOREIGN KEY (performed_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.treatments add constraint treatments_physio_id_fkey FOREIGN KEY (physio_id) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.treatments add constraint treatments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.treatments add constraint treatments_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+CREATE INDEX idx_treatments_team ON public.treatments USING btree (team_id);
+CREATE INDEX idx_treatments_adapt_date ON public.treatments USING btree (adaptation_date);
 alter table public.video_matches add constraint video_matches_event_id_fkey FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE;
 alter table public.video_matches add constraint video_matches_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
 alter table public.video_players add constraint video_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
