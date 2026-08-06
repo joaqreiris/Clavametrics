@@ -1649,7 +1649,7 @@ function dpUpdateAu() {
   if (elN) elN.textContent = (rpe && !dur) ? tt('daily_planning.add_exercises_first','add exercises first') : (dur && !rpe) ? tt('daily_planning.set_rpe_above','set RPE above') : '';
 }
 
-// ── Dedicated print sheet (ClavaMetrics "Daily Session Plan") — built from live data, NO physio ──
+// ── Dedicated print sheet (ClavaMetrics "Daily Session Plan") — built from live data; physio = one thin line under the squad ──
 async function dpRenderPrintSheet() {
   const host = document.getElementById('dpPrintSheet');
   if (!host) return;
@@ -1802,10 +1802,15 @@ async function dpRenderPrintSheet() {
       else avCt++;
     });
     const availN = avCt + partCt;
+    // Physio adaptations — one thin line each, just below the squad. Amber dot ties them to the ● in the roster.
+    const physioLines = (_dpPhysioRows || []).length ? `<div style="margin-top:7px;padding-top:6px;border-top:1px solid #E7E7E4;display:flex;flex-direction:column;gap:3px">
+      ${(_dpPhysioRows||[]).map(t => { const pl=t.players||{}; const nm=lastName(pl)||(pl.last_name||pl.first_name||'—'); const note=(t.adaptation_notes||'').trim(); return `<div style="font:400 10px/1.4 ${FONT};color:#5B6470"><span style="font-size:7px;color:#b5851f;vertical-align:middle">●</span> <span style="font-family:${MONO};font-size:9px;color:#9CA3AF">${esc(pl.number??'—')}</span> <b style="font-weight:600;color:#7C2D12">${esc(nm)}</b> <span style="color:#C9CDD3">—</span> ${esc(note)}</div>`; }).join('')}
+    </div>` : '';
     const squadBlock = (_dpPlayers||[]).length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_squad_available', `Squad · ${availN} available`, {count: availN}))}
       ${traineeRows}${outRow}
       <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${esc(tt('daily_planning.sheet_squad_summary', `${availN} available · ${partCt} partial · ${awayCt} away`, {avail: availN, partial: partCt, away: awayCt}))}</div>
+      ${physioLines}
     </div>` : '';
 
     // Shared diagram-card renderer for both Field and Activation
