@@ -429,16 +429,22 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
       sessionId = existing?.[0]?.id as string || null;
       // 2b. Not synced yet — ADOPT a same-day session that has no activity yet (e.g. one created
       //     by hand in the calendar) instead of creating a duplicate. Avoids two sessions per day.
+      //     TEAM-SCOPED: an integration belongs to exactly ONE team (config.team_id), so it may
+      //     only adopt its OWN team's session — never steal/overwrite another team's same-day
+      //     session (multi-team clubs train several teams the same day). When the integration has
+      //     no team, only adopt an unassigned (team_id IS NULL) session. We therefore no longer
+      //     rewrite team_id on adopt: the adopted row already belongs to the right team.
       if (!sessionId) {
-        const { data: sameDay } = await adminClient
+        let adoptQ = adminClient
           .from('training_sessions').select('id')
           .eq('club_id', clubId).eq('session_date', date)
-          .is('external_activity_id', null).neq('session_type', 'gym')
-          .order('created_at', { ascending: true }).limit(1);
+          .is('external_activity_id', null).neq('session_type', 'gym');
+        adoptQ = teamId ? adoptQ.eq('team_id', teamId) : adoptQ.is('team_id', null);
+        const { data: sameDay } = await adoptQ.order('created_at', { ascending: true }).limit(1);
         if (sameDay?.[0]?.id) {
           sessionId = sameDay[0].id as string;
           await adminClient.from('training_sessions')
-            .update({ external_activity_id: activityId, is_historical: isHistorical, ...(teamId ? { team_id: teamId } : {}) })
+            .update({ external_activity_id: activityId, is_historical: isHistorical })
             .eq('id', sessionId);
         }
       }
