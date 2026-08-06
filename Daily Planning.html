@@ -55,6 +55,8 @@
   .dp-sess-tab .nm{max-width:150px;overflow:hidden;text-overflow:ellipsis}
   .dp-sess-tab:hover{color:var(--cm-fg)}
   .dp-sess-tab.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
+  .dp-sess-tab.dp-sess-new{color:var(--cm-fg-strong)}
+  .dp-sess-tab.dp-sess-new .ti{font-size:12px;margin-right:2px}
   .dp-card-b{padding:14px 16px}
 
   /* Form grid */
@@ -2161,6 +2163,12 @@ async function dpAutoSaveSession() {
       saveError = error;
       if (!error && data?.id) {
         _dpCurrentSessionId = data.id;
+        _dpPreferredSessionId = data.id;
+        // Add the freshly-created session to the day list so its tab appears immediately
+        // (double-session AM/PM) without a full reload.
+        _dpDaySessions = [...(_dpDaySessions || []), { id: data.id, title: payload.title, session_time: payload.session_time, session_type: payload.session_type }]
+          .sort((a, b) => String(a.session_time || '').localeCompare(String(b.session_time || '')));
+        _dpRenderSessionSwitch();
         await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
         _dpUpdatePublishBtn();
       }
@@ -2410,16 +2418,24 @@ function _dpRenderSessionSwitch() {
   const host = document.getElementById('dpSessionSwitch');
   if (!host) return;
   const list = (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'gym' || !_dpGymSessionEmpty(s));
-  if (list.length < 2) { host.style.display = 'none'; host.innerHTML = ''; return; }
+  const creating = !_dpCurrentSessionId;   // in "new session" mode (no row loaded)
+  // Show the switch whenever there is at least one field session (so the "+ New session" affordance
+  // for AM/PM double sessions is reachable) or while creating a new one.
+  if (list.length < 1 && !creating) { host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = '';
-  host.innerHTML = list.map((s, i) => {
+  // Render a tab per existing session when there are ≥2, or while creating on top of ≥1 existing.
+  const showTabs = list.length >= 2 || (list.length >= 1 && creating);
+  const tabs = showTabs ? list.map((s, i) => {
     const time = s.session_time ? String(s.session_time).slice(0, 5) : '';
     const name = s.title || tt('daily_planning.session_n', 'Session {n}', { n: i + 1 });
     const on   = s.id === _dpCurrentSessionId ? ' is-on' : '';
     return `<button type="button" class="dp-sess-tab${on}" data-sess="${_dpEsc(s.id)}" title="${_dpEsc(name)}">`
       + (time ? `<span class="tm">${_dpEsc(time)}</span>` : '')
       + `<span class="nm">${_dpEsc(name)}</span></button>`;
-  }).join('');
+  }).join('') : '';
+  const newLabel = tt('daily_planning.new_session', 'New session');
+  const newBtn = `<button type="button" class="dp-sess-tab dp-sess-new${creating ? ' is-on' : ''}" data-new="1" title="${_dpEsc(newLabel)}"><i class="ti ti-plus"></i><span class="nm">${_dpEsc(newLabel)}</span></button>`;
+  host.innerHTML = tabs + newBtn;
   host.querySelectorAll('[data-sess]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.sess;
     if (id === _dpCurrentSessionId) return;
@@ -2436,6 +2452,31 @@ function _dpRenderSessionSwitch() {
     } catch (_) {}
     loadDay(_dpCurrentDate);
   }));
+  const nb = host.querySelector('[data-new]');
+  if (nb) nb.addEventListener('click', () => { if (!creating) _dpNewSession(); });
+}
+
+// Reset the editor to create a brand-new (second) field session for the current day, without
+// touching the existing one. The row is created by the autosave once a start time is entered
+// (dpAutoSaveSession holds until then), so double sessions get their required session_time.
+function _dpNewSession() {
+  dpFlushTargets(); dpFlushEdits();
+  _dpCurrentSessionId = null;
+  _dpPreferredSessionId = null;
+  _dpPublished = false;
+  _dpGpsTargets = {};
+  ['dpSessionTitle','dpStartTime','dpEndTime','dpNotes','dpEstRpe','dpOrientation','dpFocus','dpMatchDay']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  _dpCalFields = new Set();
+  if (typeof dpMarkCalFields === 'function') dpMarkCalFields();
+  loadSessionExercises(null);
+  loadActivationActivities(null);
+  loadGoalkeeperActivities(null);
+  _dpUpdatePublishBtn();
+  _dpRenderSessionSwitch();
+  const statEl = document.getElementById('dpSaveStatus');
+  if (statEl) statEl.textContent = tt('daily_planning.need_start_time', 'Set a start time to save the session');
+  const st = document.getElementById('dpStartTime'); if (st) st.focus();
 }
 function _dpEsc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 
