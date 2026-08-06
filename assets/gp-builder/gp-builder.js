@@ -127,6 +127,10 @@
     { id:'median', name:'Median',              short:'MED',  icon:'ti-chart-dots', peakOk:false },
     { id:'max',    name:'Maximum',             short:'MAX',  icon:'ti-arrow-up',   peakOk:true  },
     { id:'min',    name:'Minimum',             short:'MIN',  icon:'ti-arrow-down', peakOk:true  },
+    // Count of DISTINCT sessions in the group (e.g. how many trainings a player did in an MC). The
+    // metric's value is irrelevant → unitless integer; the resolver counts session ids. peakOk so it
+    // never disables on peak metrics.
+    { id:'count',  name:'Count (sessions)',    short:'N',    icon:'ti-list-numbers', peakOk:true },
   ];
   const AGG = Object.fromEntries(AGGS.map(a => [a.id, a]));
 
@@ -4839,7 +4843,7 @@
           refVal = bv;                                             // the baseline absolute value
         }
       }
-      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle, dec: decOfMetric(m.id), showSub: config.style?.showSub !== false };
+      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal, title: userTitle, dec: m.agg === 'count' ? 0 : decOfMetric(m.id), showSub: config.style?.showSub !== false };
     });
     return { items, single: items.length <= 1 };
   }
@@ -5388,7 +5392,7 @@
       const mid  = config.metrics?.[i]?.id;
       const cat  = catalogMap.get(mid) || {};
       const f    = config.metrics?.[i]?.format || _defaultFormat(cat);
-      if (COUNT_METRICS.has(mid)) f.dec = 0;   // counts are integers, even on older saved cards
+      if (COUNT_METRICS.has(mid) || config.metrics?.[i]?.agg === 'count') f.dec = 0;   // counts are integers, even on older saved cards
       const vals = s.points.map(p => p.y).filter(v => isFinite(v));
       const min  = vals.length ? Math.min(...vals) : 0;
       const max  = vals.length ? Math.max(...vals) : 1;
