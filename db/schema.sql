@@ -1913,6 +1913,8 @@ create table if not exists public.rehab_plans (
   source_label text,
   risk_metric text,
   status text default 'on_track'::text not null,
+  share_token uuid default gen_random_uuid(),
+  shared boolean not null default false,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint rehab_plans_pkey primary key (id),
@@ -1924,6 +1926,7 @@ create table if not exists public.rehab_plans (
 CREATE INDEX idx_rehab_plans_club ON public.rehab_plans USING btree (club_id);
 CREATE INDEX idx_rehab_plans_club_status ON public.rehab_plans USING btree (club_id, status);
 CREATE INDEX rehab_plans_injury_id_idx ON public.rehab_plans USING btree (injury_id);
+CREATE UNIQUE INDEX idx_rehab_plans_share_token ON public.rehab_plans USING btree (share_token);
 
 create table if not exists public.rehab_protocols (
   id uuid default gen_random_uuid() not null,

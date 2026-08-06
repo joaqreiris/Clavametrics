@@ -41,6 +41,7 @@
         <button class="cm-btn is-ghost" id="back-to-picker" style="display:none"><i class="ti ti-arrow-left"></i> <span data-i18n="rehab_planner.change_plan_type">Change plan type</span></button>
         <button class="cm-btn is-ghost" id="btn-delete-plan" style="color:var(--cm-danger,#DC2626)"><i class="ti ti-trash"></i> <span data-i18n="rehab_planner.delete_plan">Delete plan</span></button>
         <button class="cm-btn is-outline is-sm" id="btn-suggest-plan" style="display:none"><i class="ti ti-wand"></i> <span data-i18n="preventive.suggest_plan">Suggest plan</span></button>
+        <button class="cm-btn is-secondary" id="btn-share-plan"><i class="ti ti-share-2"></i> <span data-i18n="rehab_planner.share_plan">Share with player</span></button>
         <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> <span data-i18n="common.export">Export</span></button>
         <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> <span data-i18n="rehab_planner.save_plan">Save plan</span></button>
       </div>
@@ -998,6 +999,141 @@ function tt(key, fallbackEN, vars) {
     if (error) { btn.disabled = false; console.error('[rehab] delete plan failed:', error); alert(tt('rehab_planner.delete_failed', 'Could not delete plan') + ': ' + (error.message || error.code || '')); return; }
     location.href = 'Rehab & Preventives.html';
   });
+
+  // ── Share with player (public, login-free link via rehab_plans.share_token) ──
+  document.getElementById('btn-share-plan')?.addEventListener('click', () => openShareModal());
+
+  function rpToast(msg) {
+    let t = document.getElementById('rpShareToast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'rpShareToast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(12px);z-index:9600;background:var(--cm-fg-strong,#111);color:var(--cm-bg,#fff);font:600 13px/1 var(--cm-font-sans);padding:11px 16px;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.28);opacity:0;transition:opacity .2s ease,transform .2s ease;pointer-events:none;';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)'; });
+    clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(12px)'; }, 2200);
+  }
+
+  let _shareOv = null;
+  function shareBuild() {
+    if (_shareOv) return _shareOv;
+    const style = document.createElement('style');
+    style.textContent = `
+      .sh-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9500;display:none;align-items:center;justify-content:center;padding:5vh 16px;overflow:auto}
+      .sh-ov.on{display:flex}
+      .sh-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;width:460px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25);overflow:hidden}
+      .sh-h{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border-soft)}
+      .sh-h h3{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0}
+      .sh-h .x{margin-left:auto;width:28px;height:28px;border-radius:7px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer}
+      .sh-b{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+      .sh-lead{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0}
+      .sh-toggle{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid var(--cm-border);border-radius:10px;background:var(--cm-bg-soft)}
+      .sh-toggle .tx{flex:1}
+      .sh-toggle .tt{font:600 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+      .sh-toggle .ts{font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px}
+      .sh-sw{width:44px;height:26px;border-radius:999px;background:var(--cm-border-strong,#ccc);position:relative;cursor:pointer;flex-shrink:0;transition:background .2s ease;border:0}
+      .sh-sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s ease}
+      .sh-sw.on{background:var(--cm-accent,#15803D)}
+      .sh-sw.on::after{transform:translateX(18px)}
+      .sh-link{display:flex;flex-direction:column;gap:9px}
+      .sh-link.dim{opacity:.45;pointer-events:none}
+      .sh-inp{display:flex;gap:7px}
+      .sh-inp input{flex:1;height:38px;border:1px solid var(--cm-border);border-radius:9px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:500 12.5px/1 var(--cm-font-mono);padding:0 11px;min-width:0}
+      .sh-actions{display:flex;gap:8px}
+      .sh-actions .cm-btn{flex:1;justify-content:center}
+      .sh-wa{background:#25D366 !important;border-color:#25D366 !important;color:#fff !important}
+      .sh-f{display:flex;padding:12px 18px 16px;border-top:1px solid var(--cm-border-soft)}
+    `;
+    document.head.appendChild(style);
+    const ov = document.createElement('div');
+    ov.className = 'sh-ov'; ov.id = 'sh-ov';
+    ov.innerHTML = `
+      <div class="sh-modal" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+        <div class="sh-h"><i class="ti ti-share-2" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="sh-title">${tt('rehab_planner.share_title','Share with player')}</h3>
+          <button class="x" id="sh-close" aria-label="${tt('common.close','Close')}"><i class="ti ti-x"></i></button></div>
+        <div class="sh-b">
+          <p class="sh-lead">${tt('rehab_planner.share_lead','The player opens a simple mobile view with the exercises, sets and reps — no login needed.')}</p>
+          <div class="sh-toggle">
+            <div class="tx"><div class="tt">${tt('rehab_planner.share_active','Link active')}</div>
+              <div class="ts" id="sh-state">${tt('rehab_planner.share_off','Off — the link will not open')}</div></div>
+            <button class="sh-sw" id="sh-sw" role="switch" aria-checked="false" aria-label="${tt('rehab_planner.share_active','Link active')}"></button>
+          </div>
+          <div class="sh-link dim" id="sh-linkwrap">
+            <div class="sh-inp"><input id="sh-url" readonly value=""></div>
+            <div class="sh-actions">
+              <button class="cm-btn is-outline is-sm" id="sh-copy"><i class="ti ti-copy"></i> ${tt('common.copy','Copy')}</button>
+              <button class="cm-btn is-sm sh-wa" id="sh-wa"><i class="ti ti-brand-whatsapp"></i> WhatsApp</button>
+            </div>
+          </div>
+        </div>
+        <div class="sh-f"><button class="cm-btn is-outline is-sm" id="sh-done" style="margin-left:auto">${tt('common.done','Done')}</button></div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#sh-close').onclick = ov.querySelector('#sh-done').onclick = () => ov.classList.remove('on');
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+    _shareOv = ov;
+    return ov;
+  }
+
+  async function openShareModal() {
+    const ov = shareBuild();
+    const swEl = ov.querySelector('#sh-sw');
+    const stateEl = ov.querySelector('#sh-state');
+    const linkWrap = ov.querySelector('#sh-linkwrap');
+    const urlEl = ov.querySelector('#sh-url');
+
+    // Fetch current sharing state + token (backfilled for all plans by the migration).
+    const { data: row, error } = await window.sb.from('rehab_plans')
+      .select('share_token, shared').eq('id', planId).single();
+    if (error || !row) { rpToast(tt('rehab_planner.share_load_failed', 'Could not load sharing settings.')); return; }
+
+    let shared = !!row.shared;
+    let token = row.share_token;
+    const url = () => `${location.origin}/preventive-share.html?token=${token}`;
+
+    function paint() {
+      swEl.classList.toggle('on', shared);
+      swEl.setAttribute('aria-checked', shared ? 'true' : 'false');
+      stateEl.textContent = shared
+        ? tt('rehab_planner.share_on', 'On — anyone with the link can view')
+        : tt('rehab_planner.share_off', "Off — the link won't open");
+      linkWrap.classList.toggle('dim', !shared);
+      urlEl.value = url();
+    }
+    paint();
+    ov.classList.add('on');
+
+    swEl.onclick = async () => {
+      const next = !shared;
+      swEl.disabled = true;
+      // Ensure a token exists (defensive: older rows may predate the column backfill).
+      const patch = { shared: next };
+      if (next && !token) { token = (crypto.randomUUID && crypto.randomUUID()) || null; if (token) patch.share_token = token; }
+      const { data: upd, error: e2 } = await window.sb.from('rehab_plans')
+        .update(patch).eq('id', planId).eq('club_id', clubId).select('share_token, shared').single();
+      swEl.disabled = false;
+      if (e2 || !upd) { rpToast(tt('rehab_planner.share_save_failed', 'Could not update sharing.')); return; }
+      shared = !!upd.shared; token = upd.share_token;
+      paint();
+      rpToast(shared ? tt('rehab_planner.share_enabled', 'Link activated') : tt('rehab_planner.share_disabled', 'Link deactivated'));
+    };
+
+    ov.querySelector('#sh-copy').onclick = () => {
+      const u = url();
+      (navigator.clipboard?.writeText(u) || Promise.reject()).then(
+        () => rpToast(tt('rehab_planner.share_copied', 'Link copied')),
+        () => { urlEl.select(); try { document.execCommand('copy'); rpToast(tt('rehab_planner.share_copied', 'Link copied')); } catch(_){} }
+      );
+    };
+    ov.querySelector('#sh-wa').onclick = () => {
+      if (!shared) { rpToast(tt('rehab_planner.share_enable_first', 'Activate the link first')); return; }
+      const msg = tt('rehab_planner.share_wa_msg', 'Here is your training plan: {url}', { url: url() });
+      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+    };
+  }
 
   // ── Save plan button ──
   const saveBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
