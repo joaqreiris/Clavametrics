@@ -4060,6 +4060,16 @@ begin
   end if;
 
   update public.profiles set club_role = norm where id = target_id;
+
+  -- Dual-role: grant the secondary role's default page modules so the member gets
+  -- combined access (e.g. nutritionist + physio → also sees Treatments/Rehab).
+  -- Only for ALREADY-MANAGED members: a member with no member_modules rows has full
+  -- access, and inserting rows would flip them into "managed" (restricted) — a regression.
+  if norm is not null and exists (
+       select 1 from public.member_modules
+       where profile_id = target_id and club_id = target_club) then
+    perform public.apply_role_template(target_club, target_id, norm);
+  end if;
 end; $function$
 ;
 

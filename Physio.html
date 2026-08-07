@@ -902,7 +902,7 @@ let _editingTreatmentId = null;
   // Load staff/physio (profiles for the club)
   const { data: staff, error: staffErr } = await window.sb
     .from('profiles')
-    .select('id,full_name,role')
+    .select('id,full_name,role,club_role')
     .eq('club_id', _clubId);
   if (staffErr) console.error('[physio] staff error:', staffErr);
   _allStaff = staff || [];
@@ -920,8 +920,10 @@ let _editingTreatmentId = null;
   document.getElementById('filterPlayer').innerHTML = playerOptsAll;
   document.getElementById('histPlayerSelect').innerHTML = `<option value="">${_selPlayer}</option>` + playerOpts;
 
-  // Populate physio select (prefer role includes physio/medical, fallback all staff)
-  const physioStaff = _allStaff.filter(s => /physio|medical|doctor|rehabilit/i.test(s.role||'')) || _allStaff;
+  // Populate physio select (prefer role includes physio/medical, fallback all staff).
+  // Dual-role: match against BOTH the primary (role) and secondary (club_role) role,
+  // so a member who is e.g. nutritionist + physio still shows up here.
+  const physioStaff = _allStaff.filter(s => /physio|medical|doctor|rehabilit/i.test((s.role||'') + ' ' + (s.club_role||'')));
   const staffToShow = physioStaff.length ? physioStaff : _allStaff;
   document.getElementById('phPhysioSelect').innerHTML = `<option value="">${tt('physio.select_physio','— select physio —')}</option>` +
     staffToShow.map(s => `<option value="${s.id}">${s.full_name || s.id}</option>`).join('');

@@ -296,8 +296,8 @@
     _modPromise = (async () => {
       try {
         const prof = await window.getProfile();
-        const role = (prof?.role || '').toLowerCase();
-        if (role === 'admin' || role === 'owner') return { all: true, keys: new Set() };
+        // Dual-role: full access if EITHER role (primary or secondary) is admin/owner.
+        if (window.cmFullAccess(prof)) return { all: true, keys: new Set() };
         // Super-admin de plataforma: bypass total en CUALQUIER club (su profiles.role
         // en un club ajeno no es admin/owner, pero la RLS ya lo exceptúa vía is_super_admin()).
         try { if (await window.isSuperAdmin()) return { all: true, keys: new Set() }; } catch (_) {}
@@ -544,6 +544,19 @@
       default: return 'staff';
     }
   };
+  // ── Dual-role support ────────────────────────────────────────────────────────
+  // A member's effective access = UNION of their primary (role) and secondary
+  // (club_role) roles, so a "nutritionist + physio" gets both roles' abilities.
+  // Prefer these over the `(profile.role || profile.club_role)` idiom, which only
+  // ever reads the primary role and silently drops the secondary one.
+  window.cmRoleBuckets = function (profile) {
+    var s = new Set();
+    if (profile) [profile.role, profile.club_role].forEach(function (r) { if (r) s.add(window.cmRoleBucket(r)); });
+    return s;
+  };
+  window.cmHasBucket  = function (profile, bucket) { return window.cmRoleBuckets(profile).has(bucket); };
+  // Full (admin/owner) access if EITHER role maps to the admin bucket.
+  window.cmFullAccess = function (profile) { return window.cmRoleBuckets(profile).has('admin'); };
   // Club staff profiles whose bucket ∈ `buckets`, as [{id, role}]. Excludes platform
   // super-admins AND any 'player' profile — players are not auth users, so their id
   // would break the notifications.user_id → auth.users FK and fail the whole
@@ -553,14 +566,15 @@
       if (!clubId || !Array.isArray(buckets) || !buckets.length) return [];
       const want = new Set(buckets);
       const { data: profs } = await window.sb.from('profiles')
-        .select('id, role').eq('club_id', clubId);
+        .select('id, role, club_role').eq('club_id', clubId);
       let list = (profs || []).filter(p => (p.role || '').toLowerCase() !== 'player');
       try {
         const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
         const superIds = new Set((padmins || []).map(r => r.user_id));
         list = list.filter(p => !superIds.has(p.id));
       } catch (_) { /* si no se puede leer platform_admins, seguir */ }
-      return list.filter(p => want.has(window.cmRoleBucket(p.role)));
+      // Dual-role: a member qualifies if EITHER their primary or secondary role is in `buckets`.
+      return list.filter(p => want.has(window.cmRoleBucket(p.role)) || (p.club_role && want.has(window.cmRoleBucket(p.club_role))));
     } catch (_) { return []; }
   };
 
