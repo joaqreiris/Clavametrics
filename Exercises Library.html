@@ -1376,15 +1376,65 @@
     const listEl = ov.querySelector('[data-list]');
     const modalMsg = ov.querySelector('[data-msg]');
 
-    function exOptions(sel){
-      return `<option value="">${tt('exlib.opt_unmapped','— Unmapped —')}</option>
-        <option value="__ignore__"${sel==='__ignore__'?' selected':''}>${tt('exlib.ignore','Ignore')}</option>
-        <optgroup label="${tt('exlib.exercises_optgroup','Exercises')}">${exercises.map(e => `<option value="${e.id}"${sel===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</optgroup>`;
+    // Human label for the current choice, shown on the picker trigger button.
+    function choiceLabel(choice){
+      if (choice === '__ignore__') return tt('exlib.ignore','Ignore');
+      if (choice) { const ex = exercises.find(e => e.id === choice); if (ex) return ex.name; }
+      return tt('exlib.opt_unmapped','— Unmapped —');
     }
-    function moveOptions(){
-      return `<option value="">${tt('exlib.move_to','Move to…')}</option>
-        <option value="__ignore__">${tt('exlib.ignore','Ignore')}</option>
-        <optgroup label="${tt('exlib.exercises_optgroup','Exercises')}">${exercises.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}</optgroup>`;
+
+    // Pretty exercise picker — replaces the raw <select> with a Daily-Planning-style
+    // searchable list. Resolves to an exercise id, '' (unmap) or '__ignore__';
+    // resolves null when the user cancels (→ caller leaves the choice untouched).
+    function pickExercise(current){
+      return new Promise(resolve => {
+        const pov = document.createElement('div');
+        pov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);display:flex;align-items:flex-start;justify-content:center;padding-top:60px';
+        pov.innerHTML = `<div style="background:var(--cm-surface,var(--cm-bg));border:1px solid var(--cm-border);border-radius:14px;width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+          <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+            <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
+            <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('exlib.select_exercise','Select exercise')}</div>
+            <input data-psearch type="text" placeholder="${tt('exlib.search_exercises','Search exercises…')}" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:170px">
+            <button data-pclose style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+          </div>
+          <div data-plist style="overflow-y:auto;flex:1;padding:8px"></div>
+        </div>`;
+        document.body.appendChild(pov);
+        const plist = pov.querySelector('[data-plist]');
+        const psearch = pov.querySelector('[data-psearch]');
+        const close = val => { pov.remove(); resolve(val); };
+
+        const specialRow = (val, icon, label) => `<div data-pick="${val}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer${current===val?';background:var(--cm-bg-soft)':''}">
+          <i class="ti ${icon}" style="font-size:16px;color:var(--cm-fg-muted);flex-shrink:0"></i>
+          <div style="flex:1;min-width:0;font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${label}</div>
+          ${current===val?'<i class="ti ti-check" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>':''}
+        </div>`;
+        const exRow = e => {
+          const area = (e.field_width && e.field_height) ? e.field_width*e.field_height : null;
+          const m2   = (area && e.players_count>0) ? Math.round(area/e.players_count) : null;
+          const fieldStr = (e.field_width && e.field_height) ? `${e.field_width}×${e.field_height}m` : null;
+          const meta = [e.players_count?tt('exlib.players_meta','{count} players',{count:e.players_count}):null, m2?`${m2} ${tt('exlib.m2_p','m²/p')}`:null, fieldStr].filter(Boolean).join(' · ');
+          const sel = current===e.id;
+          return `<div data-pick="${e.id}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer${sel?';background:var(--cm-bg-soft)':''}">
+            <div style="flex:1;min-width:0"><div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${esc(e.name)||tt('daily_planning.untitled','Untitled')}</div>${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px">${meta}</div>`:''}</div>
+            <i class="ti ${sel?'ti-check':'ti-plus'}" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>
+          </div>`;
+        };
+        function render(){
+          const q = (psearch.value||'').trim().toLowerCase();
+          const fil = q ? exercises.filter(e => (e.name||'').toLowerCase().includes(q)) : exercises.slice();
+          let html = '';
+          if (!q) html += specialRow('', 'ti-circle-off', tt('exlib.opt_unmapped','— Unmapped —')) + specialRow('__ignore__', 'ti-eye-off', tt('exlib.ignore','Ignore'));
+          html += fil.length ? fil.map(exRow).join('') : `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('exlib.no_exercises_found','No exercises found.')}</div>`;
+          plist.innerHTML = html;
+        }
+        plist.addEventListener('click', ev => { const r = ev.target.closest('[data-pick]'); if (r) close(r.dataset.pick); });
+        psearch.addEventListener('input', render);
+        pov.addEventListener('click', ev => { if (ev.target === pov) close(null); });
+        pov.querySelector('[data-pclose]').addEventListener('click', () => close(null));
+        render();
+        psearch.focus();
+      });
     }
 
     // ── Capa 2: manual regrouping. Groups are a VIEW; only period_name→choice
@@ -1519,7 +1569,7 @@
           ${g.names.map(n => `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:3px 0">
             <input type="checkbox" data-namesel="${i}" value="${esc(n.period_name)}">
             <span style="font:500 11px var(--cm-font-mono);color:var(--cm-fg)">${esc(n.period_name)} <span style="color:var(--cm-fg-muted)">· ${n.n_instances||0}×</span></span>
-            <select data-moveone="${i}" data-pn="${esc(n.period_name)}" style="padding:4px 7px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:600 10.5px var(--cm-font-sans)">${moveOptions()}</select>
+            <button type="button" data-moveone-btn="${i}" data-pn="${esc(n.period_name)}" style="display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-muted);font:600 10.5px var(--cm-font-sans);cursor:pointer">${tt('exlib.move_to','Move to…')}<i class="ti ti-chevron-down" style="font-size:13px"></i></button>
           </div>`).join('')}
           <div style="margin-top:6px;display:flex;justify-content:flex-end">
             <button type="button" data-splitout="${i}" style="${MINIBTN_CSS}">${tt('exlib.split_out_selected','Split out selected →')}</button>
@@ -1532,17 +1582,25 @@
               <div style="font:600 12.5px var(--cm-font-sans);color:var(--cm-fg)">${esc(g.repName)}${resolved?'':' · <span style="color:var(--cm-warning,#b45309)">'+tt('exlib.unmapped','unmapped')+'</span>'}</div>
               <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('exlib.n_instances','{count} instance|{count} instances',{count:g.nInst})} · ${tt('exlib.min_avg','~{min} min avg',{min:g.avgMin.toFixed(1)})}</div>
             </div>
-            <select data-choice="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${exOptions(g.choice)}</select>
+            <button type="button" data-choice-btn="${i}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:${resolved?'var(--cm-fg-strong)':'var(--cm-fg-muted)'};font:inherit;cursor:pointer;text-align:left"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(choiceLabel(g.choice))}</span><i class="ti ti-chevron-down" style="font-size:15px;color:var(--cm-fg-muted);flex-shrink:0"></i></button>
             <button class="cm-btn is-outline is-sm" data-create="${i}" title="${tt('exlib.create_exercise_title','Create an exercise named &quot;{name}&quot; and map to it',{name:esc(g.repName)})}">${tt('exlib.create_exercise','Create exercise')}</button>
           </div>${dimsEditorHtml(g, i)}${gpsLine}${variantsLine}${panel}
         </div>`;
       }).join('');
-      listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; paint(); }));
+      listEl.querySelectorAll('[data-choice-btn]').forEach(b => b.addEventListener('click', async () => {
+        const i = +b.dataset.choiceBtn, val = await pickExercise(groups[i].choice);
+        if (val === null) return;                 // cancelled → leave choice untouched
+        groups[i].choice = val; paint();
+      }));
       listEl.querySelectorAll('[data-create]').forEach(b => b.addEventListener('click', () => createForGroup(+b.dataset.create)));
       listEl.querySelectorAll('[data-expand]').forEach(b => b.addEventListener('click', () => { const g=groups[+b.dataset.expand]; g.expanded=!g.expanded; paint(); }));
       listEl.querySelectorAll('[data-mergesel]').forEach(c => c.addEventListener('change', () => { groups[+c.dataset.mergesel].msel = c.checked; updateMergeBar(); }));
       listEl.querySelectorAll('[data-splitout]').forEach(b => b.addEventListener('click', () => splitOut(+b.dataset.splitout)));
-      listEl.querySelectorAll('[data-moveone]').forEach(s => s.addEventListener('change', () => moveName(+s.dataset.moveone, s.dataset.pn, s.value)));
+      listEl.querySelectorAll('[data-moveone-btn]').forEach(b => b.addEventListener('click', async () => {
+        const val = await pickExercise('');
+        if (val === null || val === '') return;   // cancelled / unmap → no move
+        moveName(+b.dataset.moveoneBtn, b.dataset.pn, val);
+      }));
       // Capa 3: structured dims — write live to the target, persist on save.
       listEl.querySelectorAll('[data-dim]').forEach(inp => inp.addEventListener('input', () => {
         const gi = +inp.dataset.gi, g = groups[gi], t = dimTarget(g); if (!t) return;
