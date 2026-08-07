@@ -171,6 +171,15 @@
   .vr-kind-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
   .vr-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 
+  /* Card actions menu (⋯) */
+  .vr-cardmenu { position:fixed; z-index:700; min-width:172px; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-3, 0 8px 24px rgba(0,0,0,.16)); padding:5px; }
+  .vr-cardmenu[hidden] { display:none; }
+  .vr-cardmenu button { display:flex; align-items:center; gap:9px; width:100%; text-align:left; border:0; background:transparent; padding:8px 10px; border-radius:var(--cm-r-2); font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; }
+  .vr-cardmenu button:hover { background:var(--cm-bg-soft); }
+  .vr-cardmenu button .ti { font-size:15px; color:var(--cm-fg-muted); }
+  .vr-cardmenu button.danger { color:var(--cm-danger, #dc2626); }
+  .vr-cardmenu button.danger .ti { color:var(--cm-danger, #dc2626); }
+
   .vr-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
   .vr-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
@@ -290,6 +299,12 @@
       <button class="cm-btn is-primary is-sm" id="vrFolderSaveBtn" type="button" data-i18n="video_room.create_folder">Create folder</button>
     </div>
   </div>
+</div>
+
+<!-- Card actions menu -->
+<div class="vr-cardmenu" id="vrCardMenu" hidden>
+  <button type="button" data-act="copy"><i class="ti ti-link"></i><span data-i18n="video_room.copy_link">Copy link</span></button>
+  <button type="button" data-act="delete" class="danger"><i class="ti ti-trash"></i><span data-i18n="video_room.delete">Delete</span></button>
 </div>
 
 <div class="vr-toast" id="vrToast"></div>
@@ -482,7 +497,7 @@
         <div class="vr-body">
           <div class="top">
             <h3>${esc(v.title || (isFolder ? tt('video_room.untitled_folder', 'Untitled folder') : tt('video_room.untitled_video', 'Untitled video')))}</h3>
-            <button class="more" data-copy="${esc(v.url)}" title="${esc(tt('video_room.copy_link', 'Copy link'))}"><i class="ti ti-dots"></i></button>
+            <button class="more" data-menu="${esc(v.id)}" data-copy="${esc(v.url)}" title="${esc(tt('video_room.more_actions', 'More'))}"><i class="ti ti-dots"></i></button>
           </div>
           <div class="vr-meta">
             <i class="ti ti-calendar-event"></i>${fmtDate(v.created_at)}
@@ -553,11 +568,44 @@
     if (delFolderBtn) { e.stopPropagation(); deleteFolder(delFolderBtn.dataset.delFolder); return; }
     const folderCard = e.target.closest('.vr-folder');
     if (folderCard?.dataset.folder) { currentFolder = folderCard.dataset.folder; render(); return; }
-    const copyBtn = e.target.closest('.vr-card .more');
-    if (copyBtn) { e.stopPropagation(); navigator.clipboard?.writeText(copyBtn.dataset.copy).then(() => toast(tt('video_room.link_copied', 'Link copied'))); return; }
+    const moreBtn = e.target.closest('.vr-card .more');
+    if (moreBtn) { e.stopPropagation(); openCardMenu(moreBtn); return; }
     const card = e.target.closest('.vr-card');
     if (card?.dataset.id) window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(card.dataset.id);
   });
+
+  // ── Card actions menu (copy / delete) ──────────────────────────────────────
+  const cardMenu = $('#vrCardMenu');
+  let menuTarget = null;   // { id, url }
+  function openCardMenu(btn) {
+    const closed = cardMenu.hidden || menuTarget?.id !== btn.dataset.menu;
+    if (!closed) { cardMenu.hidden = true; menuTarget = null; return; }
+    menuTarget = { id: btn.dataset.menu, url: btn.dataset.copy };
+    cardMenu.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const mw = cardMenu.offsetWidth || 172;
+    cardMenu.style.top  = `${Math.min(r.bottom + 6, window.innerHeight - cardMenu.offsetHeight - 8)}px`;
+    cardMenu.style.left = `${Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8))}px`;
+  }
+  function closeCardMenu() { cardMenu.hidden = true; menuTarget = null; }
+  cardMenu.addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b || !menuTarget) return;
+    const t = menuTarget;
+    if (b.dataset.act === 'copy') { navigator.clipboard?.writeText(t.url).then(() => toast(tt('video_room.link_copied', 'Link copied'))); closeCardMenu(); return; }
+    if (b.dataset.act === 'delete') { closeCardMenu(); await deleteVideo(t.id); }
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#vrCardMenu') && !e.target.closest('.vr-card .more')) closeCardMenu(); });
+  window.addEventListener('scroll', closeCardMenu, true);
+
+  async function deleteVideo(id) {
+    const v = VIDEOS.find(x => x.id === id);
+    const name = v?.title || tt('video_room.untitled_video', 'Untitled video');
+    if (!confirm(tt('video_room.delete_video_confirm', `Delete "${name}"? This only removes it from ClavaMetrics — the file stays in Google Drive / Dropbox.`, { name }))) return;
+    const { error } = await window.sb.from('videos').delete().eq('id', id);
+    if (error) { alert(error.message); return; }
+    toast(tt('video_room.video_deleted', 'Deleted'));
+    await loadVideos();
+  }
 
   async function deleteFolder(id) {
     const f = FOLDERS.find(x => x.id === id);
