@@ -1177,6 +1177,10 @@
               <span data-i18n="planner.prop_color">Color</span>
               <input type="color" id="plPropTextColor" value="#ffffff" data-i18n-attr="title:planner.prop_text_color" title="Text color">
               <div class="psep"></div>
+              <span data-i18n="planner.prop_text_bg">Background</span>
+              <input type="color" id="plPropTextBg" value="#000000" data-i18n-attr="title:planner.prop_text_bg" title="Text background">
+              <button class="pl-ta-btn" type="button" id="plPropTextBgClear" data-i18n-attr="title:planner.prop_text_bg_none" title="No background"><i class="ti ti-ban"></i></button>
+              <div class="psep"></div>
               <span data-i18n="planner.prop_text_size">Size</span>
               <select id="plPropTextSize" data-i18n-attr="title:planner.prop_text_size" title="Font size"></select>
               <div class="psep"></div>
@@ -1658,10 +1662,14 @@
     pushHistory();
   });
   fc.on('object:scaling', e => {
-    const obj = e.target;
-    if (obj.type !== 'i-text' && obj.type !== 'text') return;
-    const s = Math.max(obj.scaleX, obj.scaleY);
-    obj.scaleX = s; obj.scaleY = s;
+    const obj = e.target; if (!obj) return;
+    if (obj.type === 'i-text' || obj.type === 'text') {
+      const s = Math.max(obj.scaleX, obj.scaleY);
+      obj.scaleX = s; obj.scaleY = s;
+      return;
+    }
+    // Zones (rect/circle/polygon) get a live metres readout as they're resized.
+    if (obj._type === 'zone' || obj._type === 'goal') { _clearGuides(); _showSizeGuides(obj); }
   });
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
@@ -1735,6 +1743,21 @@
     _addLine(x, y1, x, y2, false);
     _addLine(x - 4, y1, x + 4, y1, false); _addLine(x - 4, y2, x + 4, y2, false);
     _addLabel(x + 16, (y1 + y2) / 2, _fmtM(meters));
+  }
+  // Same distance reference as the player-spacing guides, but for a shape being resized:
+  // its width × height (in real-pitch metres) drawn just outside the top/left edges.
+  function _showSizeGuides(obj) {
+    const mpp = _metersPerPixel(); if (!mpp) return;
+    const br = obj.getBoundingRect(true, true);
+    _spanH(br.left, br.left + br.width, br.top - 12, br.width * mpp);
+    _spanV(br.top, br.top + br.height, br.left - 20, br.height * mpp);
+  }
+  // Live length reference (metres) at the midpoint of an arrow while it's drawn or reshaped.
+  function _showArrowLenGuide(x1, y1, x2, y2) {
+    const mpp = _metersPerPixel(); if (!mpp) return;
+    _clearGuides();
+    const len = Math.hypot(x2 - x1, y2 - y1) * mpp;
+    _addLabel((x1 + x2) / 2, (y1 + y2) / 2 - 12, _fmtM(len));
   }
 
   fc.on('object:moving', e => {
@@ -2316,8 +2339,8 @@
     const h2=new fabric.Circle({...hs,left:d.x2,top:d.y2,_role:'p2'});
     h1.on('mousedown',()=>{_handleDragging=true;});
     h2.on('mousedown',()=>{_handleDragging=true;});
-    h1.on('moving',(opt)=>{const q=_constrainHV(d.x2,d.y2,h1.left,h1.top,opt&&opt.e&&opt.e.shiftKey);d.x1=q.x;d.y1=q.y;h1.set({left:q.x,top:q.y});h1.setCoords();_rebuildArrow(arrowId);});
-    h2.on('moving',(opt)=>{const q=_constrainHV(d.x1,d.y1,h2.left,h2.top,opt&&opt.e&&opt.e.shiftKey);d.x2=q.x;d.y2=q.y;h2.set({left:q.x,top:q.y});h2.setCoords();_rebuildArrow(arrowId);});
+    h1.on('moving',(opt)=>{const q=_constrainHV(d.x2,d.y2,h1.left,h1.top,opt&&opt.e&&opt.e.shiftKey);d.x1=q.x;d.y1=q.y;h1.set({left:q.x,top:q.y});h1.setCoords();_rebuildArrow(arrowId);_showArrowLenGuide(d.x1,d.y1,d.x2,d.y2);});
+    h2.on('moving',(opt)=>{const q=_constrainHV(d.x1,d.y1,h2.left,h2.top,opt&&opt.e&&opt.e.shiftKey);d.x2=q.x;d.y2=q.y;h2.set({left:q.x,top:q.y});h2.setCoords();_rebuildArrow(arrowId);_showArrowLenGuide(d.x1,d.y1,d.x2,d.y2);});
     d.handles=[h1,h2];
     if (d.curved) {
       const hc=new fabric.Circle({...hs,left:d.cx,top:d.cy,_role:'pc',
@@ -2438,7 +2461,9 @@
     _previewLine = new fabric.Line([_arrowP1.x,_arrowP1.y,p.x,p.y], {
       stroke:currentArrowColor, strokeWidth:1.5, strokeDashArray:[4,4], selectable:false, evented:false, _type:'_preview'
     });
-    fc.add(_previewLine); fc.renderAll();
+    fc.add(_previewLine);
+    _showArrowLenGuide(_arrowP1.x, _arrowP1.y, p.x, p.y);
+    fc.renderAll();
   });
   function _finishFreePolygon() {
     _polyLastT = Date.now();
@@ -2494,6 +2519,8 @@
   const _propPlayerName     = document.getElementById('plPropPlayerName');
   const _propTextDiv        = document.getElementById('plPropText');
   const _propTextColor      = document.getElementById('plPropTextColor');
+  const _propTextBg         = document.getElementById('plPropTextBg');
+  const _propTextBgClear    = document.getElementById('plPropTextBgClear');
   const _propTextSize       = document.getElementById('plPropTextSize');
   // Font-size options (single-step, like a word processor).
   if (_propTextSize && !_propTextSize.options.length) {
@@ -2591,9 +2618,11 @@
       let _tf = obj.fill || '#ffffff';
       if (/^#[0-9a-f]{3}$/i.test(_tf)) _tf = '#' + _tf.slice(1).split('').map(c=>c+c).join('');
       if (_propTextColor) _propTextColor.value = _rgbaToHex(_tf);
+      if (_propTextBg)    _propTextBg.value    = obj.textBackgroundColor ? _rgbaToHex(obj.textBackgroundColor) : '#000000';
+      if (_propTextBgClear) _propTextBgClear.classList.toggle('is-on', !obj.textBackgroundColor);
       if (_propTextSize)  _propTextSize.value  = Math.round(obj.fontSize || 14);
       const al = obj.textAlign || 'left';
-      _propTextDiv.querySelectorAll('.pl-ta-btn').forEach(b => b.classList.toggle('is-on', b.dataset.align === al));
+      _propTextDiv.querySelectorAll('.pl-ta-btn[data-align]').forEach(b => b.classList.toggle('is-on', b.dataset.align === al));
       _propTextDiv.style.display='flex'; _propBar.style.display='flex';
     } else if (obj._type==='arrow') {
       const d=_arrowData.get(obj._arrowId); if (!d) return;
@@ -2733,17 +2762,30 @@
     a.set('fill', _propTextColor.value); fc.requestRenderAll();
   });
   _propTextColor?.addEventListener('change', () => pushHistory());
+  _propTextBg?.addEventListener('input', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
+    a.set('textBackgroundColor', _propTextBg.value);
+    _propTextBgClear?.classList.remove('is-on');
+    fc.requestRenderAll();
+  });
+  _propTextBg?.addEventListener('change', () => pushHistory());
+  _propTextBgClear?.addEventListener('click', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
+    a.set('textBackgroundColor', '');
+    _propTextBgClear.classList.add('is-on');
+    fc.requestRenderAll(); pushHistory();
+  });
   _propTextSize?.addEventListener('change', () => {
     const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
     a.set({ fontSize: parseInt(_propTextSize.value, 10) || 14, scaleX: 1, scaleY: 1 });
     a.initDimensions?.(); a.setCoords(); fc.requestRenderAll(); pushHistory();
   });
-  _propTextDiv?.querySelectorAll('.pl-ta-btn').forEach(btn => {
+  _propTextDiv?.querySelectorAll('.pl-ta-btn[data-align]').forEach(btn => {
     btn.addEventListener('click', () => {
       const a = fc.getActiveObject(); if (!a || a._type !== 'text') return;
       a.set('textAlign', btn.dataset.align);
       a.initDimensions?.(); a.setCoords(); fc.requestRenderAll();
-      _propTextDiv.querySelectorAll('.pl-ta-btn').forEach(b => b.classList.toggle('is-on', b === btn));
+      _propTextDiv.querySelectorAll('.pl-ta-btn[data-align]').forEach(b => b.classList.toggle('is-on', b === btn));
       pushHistory();
     });
   });
