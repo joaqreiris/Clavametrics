@@ -2103,16 +2103,17 @@ async function dpAutoSaveSession() {
   const title   = nameVal || 'Training';
   const startVal = document.getElementById('dpStartTime')?.value || null;
   const endVal   = document.getElementById('dpEndTime')?.value   || null;
-  // duration = EFFECTIVE training time (activation + field drills) — this is what drives sRPE
-  // load. Fall back to the wall-clock span (end−start) only when no drills are planned.
+  // duration = total PLANNED span (start→end wall clock) — this is what drives sRPE load.
+  // Fall back to the effective drill time (activation + field drills) only when start/end
+  // aren't both set.
   let duration = null;
-  if (_dpSessionTotalMin > 0) duration = _dpSessionTotalMin;
-  if (!duration && startVal && endVal) {
+  if (startVal && endVal) {
     const [sh, sm] = startVal.split(':').map(Number);
     const [eh, em] = endVal.split(':').map(Number);
     const diff = (eh * 60 + em) - (sh * 60 + sm);
     if (diff > 0) duration = diff;
   }
+  if (!duration && _dpSessionTotalMin > 0) duration = _dpSessionTotalMin;
 
   const mcId = document.getElementById('dpMicrocycle')?.value || null;
   const payload = {

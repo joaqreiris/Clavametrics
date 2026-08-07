@@ -2848,6 +2848,27 @@ END;
 $function$
 ;
 
+-- When the planned session duration changes, propagate it to the linked RPE rows so
+-- the sRPE load (AU) stays in sync. The BEFORE UPDATE rpe_calculate_load_trigger then
+-- recomputes load = rpe * duration on each affected row.
+CREATE OR REPLACE FUNCTION public.propagate_session_duration_to_rpe()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NEW.duration IS DISTINCT FROM OLD.duration THEN
+    UPDATE public.rpe
+       SET duration = NEW.duration
+     WHERE session_id = NEW.id
+       AND duration IS DISTINCT FROM NEW.duration;
+  END IF;
+  RETURN NEW;
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.clear_gps_credential(p_integration_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -4818,6 +4839,7 @@ CREATE TRIGGER act_task AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXEC
 CREATE TRIGGER trg_single_primary BEFORE INSERT OR UPDATE OF is_primary ON public.teams FOR EACH ROW WHEN (new.is_primary) EXECUTE FUNCTION enforce_single_primary_team();
 CREATE TRIGGER act_session AFTER INSERT OR UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session();
 CREATE TRIGGER act_session_mod AFTER UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session_mod();
+CREATE TRIGGER rpe_propagate_session_duration AFTER UPDATE OF duration ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION propagate_session_duration_to_rpe();
 CREATE TRIGGER act_treatment AFTER INSERT OR UPDATE ON public.treatments FOR EACH ROW EXECUTE FUNCTION trg_act_treatment();
 CREATE TRIGGER act_wellness AFTER INSERT ON public.wellness FOR EACH ROW EXECUTE FUNCTION trg_act_wellness();
 
