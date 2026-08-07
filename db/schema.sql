@@ -1608,6 +1608,19 @@ create table if not exists public.pinned_files (
 );
 CREATE INDEX idx_pinned_files_team ON public.pinned_files USING btree (team_id);
 
+-- Pinned chat messages, per conversation (conv_id = 'group' | DM peer id | 'cg:<uuid>').
+create table if not exists public.pinned_messages (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  conv_id text default 'group'::text not null,
+  message_id uuid not null,
+  pinned_by uuid,
+  pinned_at timestamp with time zone default now() not null,
+  constraint pinned_messages_pkey primary key (id),
+  constraint pinned_messages_uniq unique (club_id, conv_id, message_id)
+);
+CREATE INDEX idx_pinned_messages_conv ON public.pinned_messages USING btree (club_id, conv_id);
+
 create table if not exists public.plans (
   id uuid default gen_random_uuid() not null,
   slug text not null,
@@ -2561,6 +2574,9 @@ alter table public.phase_types add constraint phase_types_club_id_fkey FOREIGN K
 alter table public.pinned_files add constraint pinned_files_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.pinned_files add constraint pinned_files_pinned_by_fkey FOREIGN KEY (pinned_by) REFERENCES auth.users(id);
 alter table public.pinned_files add constraint pinned_files_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.pinned_messages add constraint pinned_messages_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.pinned_messages add constraint pinned_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE;
+alter table public.pinned_messages add constraint pinned_messages_pinned_by_fkey FOREIGN KEY (pinned_by) REFERENCES auth.users(id);
 alter table public.platform_admins add constraint platform_admins_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.player_anthropometrics add constraint player_anthropometrics_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.player_anthropometrics add constraint player_anthropometrics_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
@@ -5842,6 +5858,14 @@ create policy "Club members can view pinned files" on public.pinned_files as per
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+alter table public.pinned_messages enable row level security;
+create policy "Club members can pin messages" on public.pinned_messages as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+create policy "Club members can unpin messages" on public.pinned_messages as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+create policy "Club members can view pinned messages" on public.pinned_messages as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
 
 alter table public.plans enable row level security;
 create policy "plans_select" on public.plans as permissive for select to anon, authenticated

@@ -356,6 +356,16 @@
   .cr-unpin { background:none; border:none; color:var(--cm-fg-faint); cursor:pointer; padding:2px 4px; border-radius:4px; display:none; align-items:center; justify-content:center; flex-shrink:0; }
   .cr-file:hover .cr-unpin { display:flex; }
   .cr-unpin:hover { color:var(--cm-danger); background:var(--cm-danger-bg); }
+  /* pinned messages list (reuses cr-file visuals) */
+  #pinnedMessagesContainer { display:flex; flex-direction:column; gap:6px; }
+  .cr-pin { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:7px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); cursor:pointer; }
+  .cr-pin:hover { border-color:var(--cm-border-strong); }
+  .cr-pin .ic { width:26px; height:26px; border-radius:5px; background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-accent); flex-shrink:0; }
+  .cr-pin .ic .ti { font-size:13px; }
+  .cr-pin .body { flex:1; min-width:0; }
+  .cr-pin .t { font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cr-pin .s { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .cr-pin:hover .cr-unpin { display:flex; }
 
   /* Pending attachment in composer */
   .pending-att { padding:5px 8px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; }
@@ -535,6 +545,10 @@
           <div class="cr-section">
             <h4 id="chatRightMembersTitle" data-i18n="chat_tasks.members">Members</h4>
             <div id="chatRightMembers"></div>
+          </div>
+          <div class="cr-section">
+            <h4 id="pinnedMessagesTitle" data-i18n="chat_tasks.pinned_messages">Pinned messages</h4>
+            <div id="pinnedMessagesContainer"></div>
           </div>
           <div class="cr-section">
             <div class="cr-section-head">
@@ -810,6 +824,7 @@ let messages    = [];
 let members     = [];
 let activeConv  = 'group';
 let pinnedFiles = [];
+let pinnedMessages = [];
 let dmLastMsg   = {};
 let dmUnread    = {};
 let groups      = [];          // custom chat groups I belong to: {id, name, created_by, members:[profileId]}
@@ -961,6 +976,75 @@ function renderPinnedFiles() {
   }).join('');
 }
 
+// ── PINNED MESSAGES (per conversation) ──
+function convKey() { return activeConv === 'group' ? 'group' : activeConv; }
+
+async function loadPinnedMessages() {
+  pinnedMessages = [];
+  if (!window.sb || !currentUser) { renderPinnedMessages(); return; }
+  const { data } = await window.sb.from('pinned_messages')
+    .select('id,message_id,pinned_at')
+    .eq('club_id', currentUser.clubId)
+    .eq('conv_id', convKey())
+    .order('pinned_at', { ascending: false });
+  pinnedMessages = data || [];
+  renderPinnedMessages();
+}
+
+function pinnedSnippet(msg) {
+  if (!msg) return tt('chat_tasks.original_unavailable', 'Original message');
+  if (msg.deleted_at) return tt('chat_tasks.msg_deleted', 'This message was deleted');
+  let s = (msg.content || '').trim();
+  if (!s && (msg.attachment_url || msg.attachment_name)) {
+    s = msg.attachment_type === 'image' ? tt('chat_tasks.quote_photo', 'Photo') : (msg.attachment_name || tt('chat_tasks.file_fallback', 'File'));
+  }
+  return s || tt('chat_tasks.file_fallback', 'File');
+}
+
+function renderPinnedMessages() {
+  const container = document.getElementById('pinnedMessagesContainer');
+  const titleEl   = document.getElementById('pinnedMessagesTitle');
+  if (!container) return;
+  if (titleEl) titleEl.textContent = pinnedMessages.length
+    ? tt('chat_tasks.pinned_messages_count', `Pinned messages · ${pinnedMessages.length}`, { n: pinnedMessages.length })
+    : tt('chat_tasks.pinned_messages', 'Pinned messages');
+  if (!pinnedMessages.length) {
+    container.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:4px 0">${esc(tt('chat_tasks.no_pinned_messages', 'No pinned messages'))}</div>`;
+    return;
+  }
+  container.innerHTML = pinnedMessages.map(p => {
+    const msg = messages.find(m => m.id === p.message_id);
+    const author = msg ? (members.find(x => x.id === msg.sender_id) || null) : null;
+    const who = author ? window.cmDisplayName(author) : (msg?.sender_name || '');
+    let snippet = pinnedSnippet(msg);
+    if (snippet.length > 90) snippet = snippet.slice(0, 90) + '…';
+    return `<div class="cr-pin" onclick="scrollToMsg('${esc(String(p.message_id))}', event)">
+      <div class="ic"><i class="ti ti-pin"></i></div>
+      <div class="body"><div class="t">${esc(snippet)}</div><div class="s">${who ? esc(who) : ''}</div></div>
+      <button class="cr-unpin" onclick="unpinMessage('${p.id}', event)" title="${esc(tt('chat_tasks.unpin', 'Unpin'))}"><i class="ti ti-x" style="font-size:10px"></i></button>
+    </div>`;
+  }).join('');
+}
+
+async function togglePinMessage(msgId) {
+  if (!currentUser || String(msgId).startsWith('tmp-')) return;
+  const existing = pinnedMessages.find(p => p.message_id === msgId);
+  if (existing) { await unpinMessage(existing.id); return; }
+  const { data, error } = await window.sb.from('pinned_messages').insert({
+    club_id: currentUser.clubId, conv_id: convKey(), message_id: msgId, pinned_by: currentUser.id
+  }).select().single();
+  if (error) { console.error('pin message error', error); return; }
+  if (data) { pinnedMessages.unshift(data); renderPinnedMessages(); showToast(tt('chat_tasks.pinned_toast', 'Pinned')); }
+}
+
+async function unpinMessage(id, ev) {
+  if (ev) ev.stopPropagation();
+  const { error } = await window.sb.from('pinned_messages').delete().eq('id', id);
+  if (error) { console.error('unpin message error', error); return; }
+  pinnedMessages = pinnedMessages.filter(p => p.id !== id);
+  renderPinnedMessages();
+}
+
 function openPinFileForm() { openPinModal(); }
 
 function closePinFileForm() {
@@ -1025,6 +1109,7 @@ async function boot() {
   // Abrir conversación específica si viene de ?conv= (del panel de notificaciones)
   const _convParam = new URLSearchParams(location.search).get('conv');
   if (_convParam) { activeConv = _convParam; await loadMessages(); }
+  await loadPinnedMessages();
   renderConvList();
   updateChatHeader();
   subscribeRealtime();
@@ -1982,6 +2067,7 @@ async function selectConv(id) {
   renderConvList();
   updateChatHeader();
   await loadMessages();
+  loadPinnedMessages();
   scrollToBottom();
 }
 
@@ -3026,12 +3112,8 @@ function clearLinkPreview() {
 // ── PIN FROM MESSAGE ──
 async function pinMsgFromHover(msgId) {
   const msg = messages.find(m => m.id === msgId);
-  if (!msg) return;
-  if (msg.attachment_url) {
-    await pinFileDirectly(msg.attachment_url, msg.attachment_name, msg.attachment_type);
-  } else {
-    openPinModal();
-  }
+  if (!msg || msg.deleted_at) return;
+  await togglePinMessage(msgId);   // pin/unpin the message itself → "Pinned messages" panel
 }
 
 async function pinFileDirectly(url, name, type) {
