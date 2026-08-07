@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/exercise-folders.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
@@ -64,6 +65,40 @@
   .vd-ex-results { display:flex; flex-direction:column; gap:2px; margin-top:6px; max-height:220px; overflow:auto; }
   .vd-ex-opt { text-align:left; border:0; background:transparent; padding:7px 9px; border-radius:6px; font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; }
   .vd-ex-opt:hover { background:var(--cm-bg-soft); }
+
+  /* ── Drill picker modal (mirrors Daily Planning library) ── */
+  .vdxp-backdrop { display:none; position:fixed; inset:0; background:rgba(8,10,12,.5); backdrop-filter:blur(4px); z-index:900; align-items:flex-start; justify-content:center; padding-top:60px; }
+  .vdxp-backdrop.is-open { display:flex; }
+  .vdxp-modal { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); width:560px; max-width:94vw; max-height:78vh; display:flex; flex-direction:column; box-shadow:0 24px 80px rgba(0,0,0,.2); }
+  .vdxp-head { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--cm-border); }
+  .vdxp-head > .ti { font-size:16px; color:var(--cm-accent); }
+  .vdxp-title { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .vdxp-select { margin-left:auto; height:30px; padding:0 8px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:6px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; max-width:150px; }
+  .vdxp-search { display:flex; align-items:center; gap:6px; height:30px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:6px; width:170px; }
+  .vdxp-search .ti { font-size:14px; color:var(--cm-fg-muted); }
+  .vdxp-search input { border:0; background:transparent; outline:none; font:var(--cm-body-sm); color:var(--cm-fg); width:100%; }
+  .vdxp-x { background:transparent; border:0; cursor:pointer; color:var(--cm-fg-muted); font-size:18px; display:flex; }
+  .vdxp-typebar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:10px 18px; border-bottom:1px solid var(--cm-border); }
+  .vdxp-list { overflow-y:auto; flex:1; padding:8px; }
+  .vdxp-foot { padding:10px 18px; border-top:1px solid var(--cm-border); font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .vdxp-grouphd { display:flex; align-items:center; gap:6px; margin:2px 0; padding:2px 12px; font:700 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .vdxp-grouphd .ti { font-size:12px; }
+  .vdxp-grouphd .n { font-weight:500; opacity:.7; }
+  .vdxp-opt { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:8px; cursor:pointer; transition:background .12s; }
+  .vdxp-opt:hover { background:var(--cm-bg-soft); }
+  .vdxp-opt .nm { font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .vdxp-opt .mt { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; display:flex; gap:8px; flex-wrap:wrap; }
+  .vdxp-opt .add { font-size:16px; color:var(--cm-accent); flex-shrink:0; margin-left:auto; }
+  /* chips + type tags (borrowed from Daily Planning) */
+  .dp-lib-chip { padding:5px 12px; border-radius:999px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); font:600 11.5px/1 var(--cm-font-sans); cursor:pointer; transition:all .12s; }
+  .dp-lib-chip:hover { border-color:var(--cm-accent); color:var(--cm-fg); }
+  .dp-lib-chip.is-on { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
+  .dp-ex-tag { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.04em; background:rgba(0,0,0,0.55); color:#fff; flex-shrink:0; }
+  .dp-ex-tag.tac { background:rgba(59,130,246,0.92); color:#fff; }
+  .dp-ex-tag.orient-act { background:rgba(245,158,11,0.92); color:#451a03; }
+  .dp-ex-tag.orient-str { background:rgba(220,38,38,0.92); color:#fff; }
+  .dp-ex-tag.orient-vel { background:rgba(59,130,246,0.92); color:#fff; }
+  .dp-ex-tag.orient-end { background:rgba(22,163,74,0.92); color:#fff; }
 
   /* actions under player */
   .vd-acts { display:flex; align-items:center; gap:9px; margin-top:14px; flex-wrap:wrap; }
@@ -238,6 +273,29 @@
       <div id="vdRoot"></div>
     </section>
   </main>
+</div>
+
+<!-- Drill picker modal -->
+<div class="vdxp-backdrop" id="vdxpBackdrop" role="dialog" aria-modal="true" aria-labelledby="vdxpTitle">
+  <div class="vdxp-modal">
+    <div class="vdxp-head">
+      <i class="ti ti-vector"></i>
+      <div class="vdxp-title" id="vdxpTitle" data-i18n="video_detail.picker_title">Link a drill</div>
+      <select id="vdxpFolder" class="vdxp-select" style="display:none"></select>
+      <label class="vdxp-search"><i class="ti ti-search"></i><input id="vdxpSearch" type="text" placeholder="Search drills…" data-i18n-ph="video_detail.search_drills_ph" autocomplete="off"></label>
+      <button class="vdxp-x" id="vdxpClose" aria-label="Close" data-i18n-attr="aria-label:common.close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="vdxp-typebar" id="vdxpTypeBar">
+      <button type="button" class="dp-lib-chip is-on" data-orient="" data-i18n="common.all">All</button>
+      <button type="button" class="dp-lib-chip" data-orient="ACTIVATION" data-i18n="daily_planning.type_activation">Activation</button>
+      <button type="button" class="dp-lib-chip" data-orient="STRENGTH" data-i18n="daily_planning.type_strength">Strength</button>
+      <button type="button" class="dp-lib-chip" data-orient="VELOCITY" data-i18n="daily_planning.type_velocity">Velocity</button>
+      <button type="button" class="dp-lib-chip" data-orient="ENDURANCE" data-i18n="daily_planning.type_endurance">Endurance</button>
+      <button type="button" class="dp-lib-chip" data-orient="GK" data-i18n="daily_planning.type_goalkeeper">Goalkeepers</button>
+    </div>
+    <div class="vdxp-list" id="vdxpList"></div>
+    <div class="vdxp-foot" id="vdxpFoot" data-i18n="common.loading">Loading…</div>
+  </div>
 </div>
 
 <div class="vd-toast" id="vdToast"></div>
@@ -504,7 +562,6 @@
   renderExercisePanel();
 
   // ── Linked exercise (drill drawing + specs beside the player) ─────────────────
-  let _vdExListPromise = null;
   async function _vdSignPreview(ex) {
     if (ex && ex.preview_path) {
       try { const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(ex.preview_path, 3600); if (data && data.signedUrl) return data.signedUrl; } catch {}
@@ -534,28 +591,116 @@
       <div class="vd-ex-meta">${rows.map(r => `<span>${r}</span>`).join('')}</div>
       <div class="vd-ex-acts">
         <a class="cm-btn is-sm" href="Planner.html?exercise=${encodeURIComponent(ex.id)}"><i class="ti ti-external-link" style="font-size:14px"></i>${esc(tt('video_detail.open_drill', 'Open drill'))}</a>
+        <button class="cm-btn is-sm" id="vdExChange"><i class="ti ti-switch-horizontal" style="font-size:14px"></i>${esc(tt('video_detail.change_drill', 'Change'))}</button>
         <button class="cm-btn is-sm" id="vdExUnlink"><i class="ti ti-unlink" style="font-size:14px"></i>${esc(tt('video_detail.unlink', 'Unlink'))}</button>
       </div>`;
     document.getElementById('vdExUnlink')?.addEventListener('click', unlinkExercise);
+    document.getElementById('vdExChange')?.addEventListener('click', openExPicker);
   }
-  async function _vdRenderExercisePicker(bd) {
-    bd.innerHTML = `
-      <div class="vd-ex-search"><i class="ti ti-search"></i><input id="vdExSearch" placeholder="${esc(tt('video_detail.search_exercise', 'Search a drill to link…'))}" autocomplete="off"></div>
-      <div class="vd-ex-results" id="vdExResults"></div>`;
-    const input = document.getElementById('vdExSearch'), results = document.getElementById('vdExResults');
-    _vdExListPromise = _vdExListPromise || window.sb.from('exercises').select('id,name').eq('club_id', clubId).order('name').then(r => r.data || []);
-    const list = await _vdExListPromise;
-    const paint = q => {
-      const qq = (q || '').trim().toLowerCase();
-      const rows = (qq ? list.filter(e => (e.name || '').toLowerCase().includes(qq)) : list).slice(0, 30);
-      results.innerHTML = rows.length
-        ? rows.map(e => `<button class="vd-ex-opt" data-id="${e.id}">${esc(e.name || tt('video_detail.untitled_exercise', 'Untitled exercise'))}</button>`).join('')
-        : `<div class="vd-empty-links" style="padding:10px">${esc(tt('video_detail.no_exercises', 'No drills found.'))}</div>`;
+  function _vdRenderExercisePicker(bd) {
+    bd.innerHTML = `<div class="vd-empty-links" style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+      <span>${esc(tt('video_detail.no_exercise_linked', 'No drill linked to this video yet.'))}</span>
+      <button class="cm-btn is-sm is-primary" id="vdExPick"><i class="ti ti-search" style="font-size:14px"></i>${esc(tt('video_detail.picker_title', 'Link a drill'))}</button>
+    </div>`;
+    document.getElementById('vdExPick')?.addEventListener('click', openExPicker);
+  }
+
+  // ── Rich drill picker (folders + task-type filters, mirrors Daily Planning) ──
+  const VDXP_CALC = m2 => { if (!m2 || m2 <= 0) return null; if (m2 < 40) return 'ACTIVATION'; if (m2 < 80) return 'STRENGTH'; if (m2 < 160) return 'VELOCITY'; return 'ENDURANCE'; };
+  const VDXP_ORIENT = {
+    ACTIVATION: { short:'ACT', tagCls:'orient-act' }, STRENGTH: { short:'STR', tagCls:'orient-str' },
+    VELOCITY:   { short:'VEL', tagCls:'orient-vel' }, ENDURANCE:{ short:'END', tagCls:'orient-end' },
+  };
+  let _vdxpEx = [], _vdxpFolders = [], _vdxpOrient = '', _vdxpLoaded = false;
+  const vdxpBackdrop = document.getElementById('vdxpBackdrop');
+
+  function vdxpEffOrient(e) {
+    const area = (e.field_width && e.field_height) ? e.field_width * e.field_height : null;
+    const m2 = (area && e.players_count > 0) ? Math.round(area / e.players_count) : null;
+    return (e.orientation || VDXP_CALC(m2) || '').toUpperCase();
+  }
+  function vdxpFilter() {
+    const q = (document.getElementById('vdxpSearch').value || '').toLowerCase();
+    const fsel = document.getElementById('vdxpFolder').value || '';
+    let fil = q ? _vdxpEx.filter(e => (e.name || '').toLowerCase().includes(q)) : _vdxpEx.slice();
+    if (fsel === '__none__') fil = fil.filter(e => !e.folder_id);
+    else if (fsel) fil = fil.filter(e => e.folder_id === fsel);
+    if (_vdxpOrient === 'GK') fil = fil.filter(e => e.is_goalkeeper);
+    else if (_vdxpOrient) fil = fil.filter(e => vdxpEffOrient(e) === _vdxpOrient);
+
+    document.getElementById('vdxpFoot').textContent = tt('video_detail.n_drills', `${fil.length} drill${fil.length !== 1 ? 's' : ''}`, { count: fil.length });
+    const list = document.getElementById('vdxpList');
+    if (!fil.length) { list.innerHTML = `<div class="vd-empty-links" style="padding:24px;text-align:center">${esc(tt('video_detail.no_exercises', 'No drills found.'))}</div>`; return; }
+
+    const card = e => {
+      const area = (e.field_width && e.field_height) ? e.field_width * e.field_height : null;
+      const m2 = (area && e.players_count > 0) ? Math.round(area / e.players_count) : null;
+      const dispO = (e.orientation || VDXP_CALC(m2) || '').toUpperCase();
+      const meta = VDXP_ORIENT[dispO];
+      const tagCls = e.is_goalkeeper ? 'tac' : (meta ? meta.tagCls : 'tac');
+      const tagLbl = e.is_goalkeeper ? 'GK' : (meta ? meta.short : 'FIELD');
+      const bits = [
+        e.duration ? `<span><i class="ti ti-clock" style="font-size:10px"></i> ${e.duration}′</span>` : '',
+        (e.series && e.work_time) ? `<span>${esc(e.series)}×${esc(e.work_time)}</span>` : '',
+        e.players_count ? `<span style="color:var(--cm-fg-faint)">${e.players_count} ${esc(tt('video_detail.players_lc', 'players'))}</span>` : '',
+        m2 ? `<span style="color:var(--cm-fg-faint)">${m2} m²/p</span>` : '',
+      ].filter(Boolean).join('');
+      return `<div class="vdxp-opt" data-id="${esc(e.id)}">
+        <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
+        <div style="flex:1;min-width:0"><div class="nm">${esc(e.name || tt('video_detail.untitled_exercise', 'Untitled exercise'))}</div><div class="mt">${bits}</div></div>
+        <i class="ti ti-plus add"></i></div>`;
     };
-    paint('');
-    input.addEventListener('input', () => paint(input.value));
-    results.addEventListener('click', e => { const b = e.target.closest('.vd-ex-opt'); if (b) linkExercise(b.dataset.id); });
+
+    // Group by folder ("No folder" first, then tree order) unless a folder is picked or there are none.
+    if (!_vdxpFolders.length || fsel) { list.innerHTML = fil.map(card).join(''); return; }
+    const order = window.CMFolders ? window.CMFolders.flatten(_vdxpFolders) : _vdxpFolders.map(x => ({ ...x, depth: 0 }));
+    const known = new Set(order.map(x => x.id));
+    const buckets = new Map();
+    fil.forEach(e => { const k = (e.folder_id && known.has(e.folder_id)) ? e.folder_id : ''; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e); });
+    const head = (lbl, n, depth) => `<div class="vdxp-grouphd" style="padding-left:${12 + (depth || 0) * 12}px"><i class="ti ti-folder"></i>${esc(lbl)}<span class="n">${n}</span></div>`;
+    const groups = [];
+    const none = buckets.get(''); if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
+    order.forEach(x => { const items = buckets.get(x.id); if (items && items.length) groups.push({ label: x.name, depth: x.depth || 0, items }); });
+    list.innerHTML = groups.length <= 1 ? fil.map(card).join('') : groups.map(g => head(g.label, g.items.length, g.depth) + g.items.map(card).join('')).join('');
   }
+  function vdxpSetOrient(val) {
+    _vdxpOrient = val || '';
+    document.querySelectorAll('#vdxpTypeBar .dp-lib-chip').forEach(b => b.classList.toggle('is-on', (b.dataset.orient || '') === _vdxpOrient));
+    vdxpFilter();
+  }
+  function closeExPicker() { vdxpBackdrop.classList.remove('is-open'); }
+  async function openExPicker() {
+    vdxpBackdrop.classList.add('is-open');
+    document.getElementById('vdxpSearch').value = '';
+    vdxpSetOrient('');
+    if (!_vdxpLoaded) {
+      document.getElementById('vdxpFoot').textContent = tt('common.loading', 'Loading…');
+      const [{ data }, folders] = await Promise.all([
+        window.sb.from('exercises')
+          .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,folder_id,is_goalkeeper')
+          .eq('club_id', clubId).order('name'),
+        window.CMFolders ? window.CMFolders.load('field') : Promise.resolve([]),
+      ]);
+      _vdxpEx = data || [];
+      _vdxpFolders = folders || [];
+      const fsel = document.getElementById('vdxpFolder');
+      const flat = window.CMFolders ? window.CMFolders.flatten(_vdxpFolders) : [];
+      fsel.innerHTML = `<option value="">${esc(tt('folders.all_folders', 'All folders'))}</option>`
+        + `<option value="__none__">${esc(window.CMFolders ? window.CMFolders.noneLabel() : 'No folder')}</option>`
+        + flat.map(f => `<option value="${esc(f.id)}">${(f.depth ? '  '.repeat(f.depth) : '')}${esc(f.name)}</option>`).join('');
+      fsel.style.display = _vdxpFolders.length ? '' : 'none';
+      _vdxpLoaded = true;
+    }
+    vdxpFilter();
+    document.getElementById('vdxpSearch').focus();
+  }
+  document.getElementById('vdxpClose').addEventListener('click', closeExPicker);
+  vdxpBackdrop.addEventListener('click', e => { if (e.target === vdxpBackdrop) closeExPicker(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExPicker(); });
+  document.getElementById('vdxpSearch').addEventListener('input', vdxpFilter);
+  document.getElementById('vdxpFolder').addEventListener('change', vdxpFilter);
+  document.getElementById('vdxpTypeBar').addEventListener('click', e => { const b = e.target.closest('.dp-lib-chip'); if (b) vdxpSetOrient(b.dataset.orient || ''); });
+  document.getElementById('vdxpList').addEventListener('click', e => { const o = e.target.closest('.vdxp-opt'); if (o) { linkExercise(o.dataset.id); closeExPicker(); } });
   async function linkExercise(exId) {
     const { error } = await window.sb.from('videos').update({ exercise_id: exId, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { alert(error.message); return; }
