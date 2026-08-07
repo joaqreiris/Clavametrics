@@ -102,6 +102,18 @@
   .msg.sending .bubble { transition:opacity .2s ease; }
   .msg .time .ti.sending-ic { color:rgba(255,255,255,0.6); animation:cmSpin 1.1s linear infinite; }
   .msg .time .ti.failed-ic { color:#FCA5A5; animation:none; }
+  /* read receipts: delivered = faint, read = bright green (WhatsApp-style) */
+  .msg .time .ti.deliv-ic { color:rgba(255,255,255,0.55); }
+  .msg .time .ti.read-ic  { color:#86EFAC; }
+  .msg-readby { display:inline-flex; align-items:center; gap:2px; border:0; background:transparent; padding:0; margin:0; cursor:pointer; color:inherit; font:inherit; line-height:1; }
+  .msg-readby .rb-n { font:600 10px/1 var(--cm-font-mono); color:rgba(255,255,255,0.75); }
+  .rb-pop { position:fixed; z-index:400; min-width:200px; max-width:280px; max-height:320px; overflow-y:auto; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px; box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18)); padding:8px; }
+  .rb-pop .rb-head { font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); padding:6px 4px 4px; }
+  .rb-pop .rb-row { display:flex; align-items:center; gap:8px; padding:4px; border-radius:6px; }
+  .rb-pop .rb-row:hover { background:var(--cm-bg-soft); }
+  .rb-pop .rb-name { flex:1; min-width:0; font:var(--cm-body-sm); color:var(--cm-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rb-pop .rb-time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); flex-shrink:0; }
+  .rb-pop .rb-empty { font:var(--cm-body-sm); color:var(--cm-fg-faint); padding:4px; }
   @keyframes cmSpin { to { transform:rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
     .msg.anim-in, .msg.anim-in .bubble, .msg .time .ti.sending-ic { animation:none; }
@@ -1048,7 +1060,62 @@ async function loadMessages() {
   const { data } = await q.order('created_at', { ascending: true }).limit(100);
   messages = data || [];
   renderedIds.clear();
+  await loadReadState();
   renderMessages();
+}
+
+// ── READ RECEIPTS ("leído por") ──
+// Read state is derived from channel_reads.last_read_at (one row per user+channel). A message is
+// "read" by a user when that user's last_read_at for this conversation is >= the message's created_at.
+let readState = {};   // user_id -> last_read_at (ISO) for the ACTIVE conversation
+
+function activeChannelKey() { return activeConv === 'group' ? 'group' : activeConv; }
+
+// Upsert my own read marker (now) for a channel, and refresh local unread chrome.
+function markChannelReadDb(channelKey) {
+  window.cmChatMarkRead?.(channelKey);
+  window.sb?.from('channel_reads').upsert({
+    user_id: currentUser.id, channel_key: channelKey, club_id: currentUser.clubId,
+    last_read_at: new Date().toISOString()
+  }, { onConflict: 'user_id,channel_key,club_id' });
+}
+
+async function loadReadState() {
+  readState = {};
+  if (!currentUser || !window.sb) return;
+  let q = window.sb.from('channel_reads').select('user_id,last_read_at').eq('club_id', currentUser.clubId);
+  if (activeConv === 'group' || isCg(activeConv)) {
+    q = q.eq('channel_key', activeChannelKey());          // team / custom-group channel
+  } else {
+    q = q.eq('channel_key', currentUser.id).eq('user_id', activeConv);  // DM: peer's marker keyed by my id
+  }
+  const { data } = await q;
+  (data || []).forEach(r => { if (r.user_id !== currentUser.id) readState[r.user_id] = r.last_read_at; });
+}
+
+// Who is expected to read this outgoing message (everyone but me), by conversation type.
+function expectedReaders(msg) {
+  let ids;
+  if (msg.group_id) {
+    const g = groups.find(x => x.id === msg.group_id);
+    ids = g ? g.members.slice() : [];
+  } else if (!msg.recipient_id) {
+    ids = members.map(m => m.id);                          // team channel: all club members
+  } else {
+    ids = [msg.recipient_id];                              // DM
+  }
+  return ids.filter(id => id && id !== currentUser.id);
+}
+
+function hasRead(uid, msg) {
+  const t = readState[uid];
+  return !!(t && Date.parse(t) >= Date.parse(msg.created_at));
+}
+
+function msgReadInfo(msg) {
+  const expected = expectedReaders(msg);
+  const readers  = expected.filter(uid => hasRead(uid, msg));
+  return { total: expected.length, readers, allRead: expected.length > 0 && readers.length === expected.length };
 }
 
 async function loadDmPreviews() {
@@ -1116,11 +1183,56 @@ function renderMsgHTML(msg) {
   </div>`;
 }
 
-// Delivery status marker shown on own messages: sending (clock) → sent (double-check), or failed.
+// Delivery/read marker on own messages: sending (clock) → delivered (grey ✓✓) → read (accent ✓✓).
+// Group/team messages expose a clickable "read by" list.
 function msgStatusIcon(msg) {
   if (msg._failed)  return ' <i class="ti ti-alert-triangle failed-ic" title="' + tt('chat_tasks.send_failed', 'Not sent — tap to retry') + '"></i>';
   if (msg._sending) return ' <i class="ti ti-clock sending-ic"></i>';
-  return ' <i class="ti ti-checks"></i>';
+  if (String(msg.id).startsWith('tmp-')) return ' <i class="ti ti-checks deliv-ic"></i>';
+  const info = msgReadInfo(msg);
+  if (msg.recipient_id) {   // DM
+    return info.allRead
+      ? ` <i class="ti ti-checks read-ic" title="${esc(tt('chat_tasks.msg_read', 'Read'))}"></i>`
+      : ` <i class="ti ti-checks deliv-ic" title="${esc(tt('chat_tasks.msg_delivered', 'Delivered'))}"></i>`;
+  }
+  // Team channel / custom group → clickable read-by
+  const cls = info.allRead ? 'read-ic' : 'deliv-ic';
+  const n   = info.readers.length ? `<span class="rb-n">${info.readers.length}</span>` : '';
+  return ` <button type="button" class="msg-readby" onclick="showReadBy('${msg.id}', event)" title="${esc(tt('chat_tasks.read_by', 'Read by'))}"><i class="ti ti-checks ${cls}"></i>${n}</button>`;
+}
+
+// Popover listing who has / hasn't read a group message.
+function _closeReadBy() { document.getElementById('rbPop')?.remove(); }
+function showReadBy(msgId, ev) {
+  if (ev) ev.stopPropagation();
+  const msg = messages.find(m => String(m.id) === String(msgId));
+  if (!msg) return;
+  const nameOf = uid => { const m = members.find(x => x.id === uid); return m ? (window.cmDisplayName(m) || m.full_name || '?') : '?'; };
+  const avOf   = uid => window.cmAvatarHtml(members.find(x => x.id === uid) || { full_name: nameOf(uid) }, 22);
+  const read = [], pending = [];
+  expectedReaders(msg).forEach(uid => (hasRead(uid, msg) ? read : pending).push(uid));
+  const row = (uid, withTime) => `<div class="rb-row">${avOf(uid)}<span class="rb-name">${esc(nameOf(uid))}</span>${withTime && readState[uid] ? `<span class="rb-time">${esc(formatTime(readState[uid]))}</span>` : ''}</div>`;
+  let html = `<div class="rb-head">${esc(tt('chat_tasks.read_by', 'Read by'))}</div>`;
+  html += read.length ? read.map(uid => row(uid, true)).join('') : `<div class="rb-empty">${esc(tt('chat_tasks.read_by_none', 'No one yet'))}</div>`;
+  if (pending.length) html += `<div class="rb-head">${esc(tt('chat_tasks.pending', 'Pending'))}</div>` + pending.map(uid => row(uid, false)).join('');
+  _closeReadBy();
+  const pop = document.createElement('div');
+  pop.className = 'rb-pop'; pop.id = 'rbPop'; pop.innerHTML = html;
+  document.body.appendChild(pop);
+  const r = ev.currentTarget.getBoundingClientRect();
+  pop.style.top  = Math.min(r.bottom + 6, window.innerHeight - pop.offsetHeight - 8) + 'px';
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+  setTimeout(() => document.addEventListener('click', _closeReadBy, { once: true }), 0);
+}
+
+// Re-render only the status markers of my own visible messages (no scroll jump).
+function refreshReadTicks() {
+  document.querySelectorAll('#chatBody .msg.me').forEach(node => {
+    const msg = messages.find(m => String(m.id) === String(node.getAttribute('data-msg-id')));
+    if (!msg) return;
+    const timeEl = node.querySelector('.bubble .time');
+    if (timeEl) timeEl.innerHTML = formatTime(msg.created_at) + msgStatusIcon(msg);
+  });
 }
 
 function renderAttHTML(msg) {
@@ -1424,11 +1536,7 @@ async function selectConv(id) {
   if (isCg(id)) { delete groupUnread[cgId(id)]; updateUnreadBadge(); }
   else if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
   const channelKey = id === 'group' ? 'group' : id;
-  window.cmChatMarkRead?.(channelKey);
-  window.sb?.from('channel_reads').upsert({
-    user_id: currentUser.id, channel_key: channelKey, club_id: currentUser.clubId,
-    last_read_at: new Date().toISOString()
-  }, { onConflict: 'user_id,channel_key,club_id' });
+  markChannelReadDb(channelKey);
   renderedIds.clear();
   messages = [];
   document.getElementById('chatBody').innerHTML = `<div style="text-align:center;padding:48px;color:var(--cm-fg-muted)">${esc(tt('common.loading', 'Loading…'))}</div>`;
@@ -2249,6 +2357,8 @@ function subscribeRealtime() {
   try { window.sb.getChannels().filter(c => ['cm-chat-messages','cm-tasks'].includes(c.topic.replace('realtime:',''))).forEach(c => window.sb.removeChannel(c)); } catch(_){}
   window.sb.channel('cm-chat-messages')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${currentUser.clubId}` }, handleNewMessage)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
     .subscribe();
 
   window.sb.channel('cm-tasks')
@@ -2263,6 +2373,18 @@ function subscribeRealtime() {
       renderKanban(); renderChatRightTasks(); updateTasksBadge();
     })
     .subscribe();
+}
+
+// Someone updated their read marker → refresh the read ticks if it affects the open conversation.
+function handleReadReceipt(payload) {
+  const r = payload.new;
+  if (!r || r.user_id === currentUser.id) return;
+  const relevant = (activeConv === 'group' || isCg(activeConv))
+    ? r.channel_key === activeChannelKey()
+    : (r.channel_key === currentUser.id && r.user_id === activeConv);
+  if (!relevant) return;
+  readState[r.user_id] = r.last_read_at;
+  refreshReadTicks();
 }
 
 function handleNewMessage(payload) {
@@ -2284,7 +2406,11 @@ function handleNewMessage(payload) {
   // Sonido al recibir un mensaje entrante (nunca para los propios / eco optimista)
   if (msg.sender_id !== currentUser.id) playIncomingSound();
 
-  if (inActive && !messages.find(m => m.id === msg.id)) { messages.push(msg); appendMsg(msg); }
+  if (inActive && !messages.find(m => m.id === msg.id)) {
+    messages.push(msg); appendMsg(msg);
+    // Viendo la conversación → marcar leído al instante para que el emisor vea el doble check.
+    if (msg.sender_id !== currentUser.id) markChannelReadDb(activeChannelKey());
+  }
 
   if (isDm) {
     const pid = msg.sender_id === currentUser.id ? msg.recipient_id : msg.sender_id;
@@ -2669,7 +2795,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeNewTask(); closeTaskDetail(); closeDmPicker(); closePinModal(); }
 });
 document.getElementById('msgInput')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+  // Shift+Espacio → salto de línea (escribir más abajo sin enviar), además de Shift+Enter.
+  if (e.key === ' ' && e.shiftKey) { e.preventDefault(); _composerInsertAtCursor('\n'); autoGrowComposer(); }
 });
 document.getElementById('msgInput')?.addEventListener('input', e => {
   clearTimeout(urlDetectTimer);

@@ -114,6 +114,7 @@ html.cm-rail .hub-nav-grip{display:none}
 .cm-ni-ico.injury{background:rgba(245,158,11,.1);color:#B45309}
 .cm-ni-ico.session{background:rgba(34,197,94,.1);color:#15803D}
 .cm-ni-ico.def{background:var(--cm-bg-soft,#f4f4f5);color:var(--cm-fg-muted,#6b7280)}
+.cm-ni-ico.birthday{background:rgba(236,72,153,.1);color:#be185d}
 .cm-ni-body{flex:1;min-width:0}
 .cm-ni-title{font:600 12.5px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cm-ni-desc{font:500 11.5px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -600,7 +601,7 @@ html.cm-rail .hub-nav-grip{display:none}
   let _notifData = [];
 
   function _notifIcon(type) {
-    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'] };
+    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'] };
     const [cls, icon] = map[type] || ['def','ti-bell'];
     return `<div class="cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>`;
   }

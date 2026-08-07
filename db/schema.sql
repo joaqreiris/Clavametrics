@@ -3718,6 +3718,55 @@ begin
 end; $function$
 ;
 
+-- Birthday reminders for STAFF / coaches: mirrors notify_player_birthdays() but reads
+-- profiles.birth_date, notifies every OTHER staff member of the club (never the birthday person
+-- themselves), and links to the members page. Idempotent (same-day + same-title guard) so the
+-- same daily cron can run it safely.
+CREATE OR REPLACE FUNCTION public.notify_staff_birthdays()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.notifications (user_id, club_id, type, title, body, link)
+  select pr.id, p.club_id, 'staff_birthday', bd.title, bd.body, '/Admin.html'
+  from public.profiles p
+  cross join lateral (
+    select case
+             when to_char(p.birth_date,'MM-DD') = to_char(current_date,     'MM-DD') then 0
+             when to_char(p.birth_date,'MM-DD') = to_char(current_date + 1,  'MM-DD') then 1
+           end as d
+  ) m
+  cross join lateral (
+    select coalesce(
+             nullif(trim(coalesce(p.first_name,'')||' '||coalesce(p.last_name,'')), ''),
+             p.full_name
+           ) as nm
+  ) nc
+  cross join lateral (
+    select
+      case when m.d = 0
+           then '🎂 ' || nc.nm || '''s birthday is today'
+           else '🎂 ' || nc.nm || '''s birthday is tomorrow'
+      end as title,
+      'Turns ' || (extract(year from (current_date + m.d))::int - extract(year from p.birth_date)::int)
+        || ' · born ' || to_char(p.birth_date, 'DD Mon YYYY') as body
+  ) bd
+  join public.profiles pr on pr.club_id = p.club_id and pr.id <> p.id
+  where p.birth_date is not null
+    and m.d is not null
+    and nc.nm is not null
+    and not exists (
+      select 1 from public.notifications n
+      where n.user_id = pr.id
+        and n.type = 'staff_birthday'
+        and n.created_at::date = current_date
+        and n.title = bd.title
+    );
+end; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5)
  RETURNS TABLE(id uuid, title text, session_date date, duration integer, session_type text)
  LANGUAGE plpgsql
@@ -4959,6 +5008,12 @@ alter table public.channel_reads enable row level security;
 create policy "Users manage their own reads" on public.channel_reads as permissive for all to public
   using ((auth.uid() = user_id))
   with check ((auth.uid() = user_id));
+-- Read receipts ("leído por"): club members may READ each other's read markers (own-only write
+-- is still enforced by the policy above). Powers the WhatsApp-style read ticks / read-by list.
+create policy "channel_reads_select_club" on public.channel_reads as permissive for select to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
 
 alter table public.club_branding enable row level security;
 create policy "club_branding_modify" on public.club_branding as permissive for all to authenticated
