@@ -120,6 +120,14 @@
   .react-picker { position:fixed; z-index:400; display:flex; gap:2px; padding:5px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:22px; box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18)); }
   .react-picker .rp-e { width:32px; height:32px; border:0; background:transparent; border-radius:50%; cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; transition:transform .1s ease, background .1s ease; }
   .react-picker .rp-e:hover { background:var(--cm-bg-soft); transform:scale(1.22); }
+  /* typing indicator */
+  .typing-indicator { display:flex; align-items:center; gap:8px; padding:4px 24px 6px; font:var(--cm-body-sm); color:var(--cm-fg-muted); background:var(--cm-surface); }
+  .typing-indicator .td-dots { display:inline-flex; gap:3px; }
+  .typing-indicator .td-dots i { width:5px; height:5px; border-radius:50%; background:var(--cm-fg-muted); display:inline-block; animation:cmTypingDot 1.2s infinite ease-in-out; }
+  .typing-indicator .td-dots i:nth-child(2) { animation-delay:.18s; }
+  .typing-indicator .td-dots i:nth-child(3) { animation-delay:.36s; }
+  @keyframes cmTypingDot { 0%,60%,100% { opacity:.3; transform:translateY(0); } 30% { opacity:1; transform:translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .typing-indicator .td-dots i { animation:none; } }
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
@@ -459,6 +467,8 @@
             <div style="text-align:center;padding:48px;color:var(--cm-fg-muted);font-size:13px" data-i18n="common.loading">Loading…</div>
 
           </div>
+
+          <div class="typing-indicator" id="typingIndicator" style="display:none"></div>
 
           <div class="chat-composer" id="chatComposer" style="align-items:flex-end" data-drop-label="Drop image to attach" data-i18n-attr="data-drop-label:chat_tasks.drop_to_attach">
             <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.mp4,.mov" style="display:none" onchange="handleFileSelect(event)">
@@ -1244,6 +1254,73 @@ function scrollToMsg(id, ev) {
   node.classList.remove('msg-flash'); void node.offsetWidth; node.classList.add('msg-flash');
 }
 
+// ── TYPING INDICATOR (realtime broadcast, no DB) ──
+let typingChannel = null;
+let typingState = {};        // userId -> { name, timer }  (only for the ACTIVE conversation)
+let _typingSentAt = 0;
+let _typingStopTimer = null;
+
+function initTypingChannel() {
+  if (!window.sb || !currentUser) return;
+  try { window.sb.getChannels().filter(c => c.topic.replace('realtime:', '') === 'cm-typing').forEach(c => window.sb.removeChannel(c)); } catch (_) {}
+  typingChannel = window.sb.channel('cm-typing', { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'typing' }, handleTyping)
+    .subscribe();
+}
+
+function sendTyping(isTyping) {
+  if (!typingChannel) return;
+  typingChannel.send({ type: 'broadcast', event: 'typing', payload: { userId: currentUser.id, name: currentUser.name, conv: activeConv, typing: isTyping } });
+}
+
+// Throttled: emit "typing" at most every ~2s while the user types; auto-stop after a pause.
+function onTypingInput() {
+  const inp = document.getElementById('msgInput');
+  if (!inp || !inp.value.trim()) { if (_typingSentAt) { sendTyping(false); _typingSentAt = 0; clearTimeout(_typingStopTimer); } return; }
+  const now = Date.now();
+  if (now - _typingSentAt > 2000) { sendTyping(true); _typingSentAt = now; }
+  clearTimeout(_typingStopTimer);
+  _typingStopTimer = setTimeout(() => { sendTyping(false); _typingSentAt = 0; }, 3500);
+}
+
+function stopTypingNow() {
+  clearTimeout(_typingStopTimer);
+  if (_typingSentAt) { sendTyping(false); _typingSentAt = 0; }
+}
+
+function handleTyping(payload) {
+  const p = payload?.payload;
+  if (!p || p.userId === currentUser.id || p.conv !== activeConv) return;
+  if (p.typing) {
+    if (!typingState[p.userId]) typingState[p.userId] = {};
+    typingState[p.userId].name = p.name;
+    clearTimeout(typingState[p.userId].timer);
+    typingState[p.userId].timer = setTimeout(() => { delete typingState[p.userId]; renderTyping(); }, 5000);
+  } else if (typingState[p.userId]) {
+    clearTimeout(typingState[p.userId].timer);
+    delete typingState[p.userId];
+  }
+  renderTyping();
+}
+
+function clearTypingState() {
+  Object.values(typingState).forEach(t => clearTimeout(t.timer));
+  typingState = {};
+  renderTyping();
+}
+
+function renderTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (!el) return;
+  const names = Object.values(typingState).map(t => t.name).filter(Boolean);
+  if (!names.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const label = names.length === 1
+    ? `${esc(names[0])} ${esc(tt('chat_tasks.is_typing', 'is typing…'))}`
+    : esc(tt('chat_tasks.several_typing', 'Several people are typing…'));
+  el.innerHTML = `<span class="td-dots"><i></i><i></i><i></i></span><span class="td-label">${label}</span>`;
+  el.style.display = 'flex';
+}
+
 // ── EMOJI REACTIONS ──
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 let reactions = {};   // message_id -> [{ user_id, emoji }]
@@ -1619,6 +1696,7 @@ async function sendMessage() {
   removePendingAtt();
   clearLinkPreview();
   cancelReply();
+  stopTypingNow();
   inp.focus();
   const sendBtn = document.querySelector('.chat-send');
   if (sendBtn) { sendBtn.classList.remove('sent-pulse'); void sendBtn.offsetWidth; sendBtn.classList.add('sent-pulse'); }
@@ -1705,6 +1783,8 @@ function renderConvList() {
 
 async function selectConv(id) {
   if (activeConv === id) return;
+  stopTypingNow();       // stop broadcasting "typing" in the conversation I'm leaving
+  clearTypingState();    // drop any incoming-typing indicators from the previous conversation
   activeConv = id;
   if (isCg(id)) { delete groupUnread[cgId(id)]; updateUnreadBadge(); }
   else if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
@@ -2547,6 +2627,8 @@ function subscribeRealtime() {
       renderKanban(); renderChatRightTasks(); updateTasksBadge();
     })
     .subscribe();
+
+  initTypingChannel();
 }
 
 // Someone updated their read marker → refresh the read ticks if it affects the open conversation.
@@ -2974,6 +3056,7 @@ document.getElementById('msgInput')?.addEventListener('keydown', e => {
   if (e.key === ' ' && e.shiftKey) { e.preventDefault(); _composerInsertAtCursor('\n'); autoGrowComposer(); }
 });
 document.getElementById('msgInput')?.addEventListener('input', e => {
+  onTypingInput();
   clearTimeout(urlDetectTimer);
   const url = extractUrl(e.target.value);
   if (url) {
