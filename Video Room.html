@@ -67,6 +67,27 @@
   .vr-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
   .vr-count { font:var(--cm-mono); color:var(--cm-fg-muted); }
 
+  /* ── In-page breadcrumb (inside a folder) ── */
+  .vr-crumb { display:flex; align-items:center; gap:8px; margin:-6px 0 20px; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vr-crumb[hidden] { display:none; }
+  .vr-crumb .sep { font-size:15px; color:var(--cm-fg-faint); }
+  .vr-crumb .folder-name { display:inline-flex; align-items:center; gap:6px; color:var(--cm-fg-strong); font-weight:600; }
+  .vr-back { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 10px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:var(--cm-r-3); color:var(--cm-fg); font:500 13px/1 var(--cm-font-sans); cursor:pointer; transition:background var(--cm-dur-1), border-color var(--cm-dur-1); }
+  .vr-back:hover { background:var(--cm-bg-soft); border-color:var(--cm-border-strong); }
+  .vr-back .ti { font-size:15px; color:var(--cm-fg-muted); }
+
+  /* ── Folder card ── */
+  .vr-folder { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); cursor:pointer; transition:border-color 140ms, box-shadow 140ms, transform 140ms; display:flex; align-items:center; gap:13px; padding:16px 15px; }
+  .vr-folder:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-2px); }
+  .vr-folder .fic { width:44px; height:44px; flex-shrink:0; border-radius:12px; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; }
+  .vr-folder .fic .ti { font-size:22px; }
+  .vr-folder .fmeta { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .vr-folder h3 { font:600 14.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; letter-spacing:-0.005em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-folder .fcount { font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .vr-folder .more { width:28px; height:28px; flex-shrink:0; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-folder .more:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vr-folder .more .ti { font-size:17px; }
+
   /* ── Grid ── */
   .vr-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }
   @media (max-width:1080px){ .vr-grid { grid-template-columns:repeat(2,1fr); } }
@@ -216,8 +237,15 @@
 
         <div class="vr-right">
           <span class="vr-count" id="vrCount">—</span>
+          <button class="cm-btn is-ghost" id="vrAddFolderBtn"><i class="ti ti-folder-plus" style="font-size:16px"></i><span data-i18n="video_room.new_folder">New folder</span></button>
           <button class="cm-btn is-primary" id="vrAddBtn"><i class="ti ti-plus" style="font-size:16px"></i><span data-i18n="video_room.add_video">Add video</span></button>
         </div>
+      </div>
+
+      <div class="vr-crumb" id="vrCrumb" hidden>
+        <button class="vr-back" type="button" id="vrBackBtn"><i class="ti ti-arrow-left"></i><span data-i18n="video_room.back">Video room</span></button>
+        <i class="ti ti-chevron-right sep"></i>
+        <span class="folder-name" id="vrCrumbName"></span>
       </div>
 
       <div class="vr-grid" id="vrGrid"></div>
@@ -246,6 +274,20 @@
     <div class="vr-modal-actions">
       <button class="cm-btn is-ghost is-sm" id="vrCancelBtn" type="button" data-i18n="common.cancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="vrSaveBtn" type="button" data-i18n="video_room.save_video">Save video</button>
+    </div>
+  </div>
+</div>
+
+<!-- New folder modal -->
+<div class="vr-modal-backdrop" id="vrFolderBackdrop" role="dialog" aria-modal="true" aria-labelledby="vrFolderTitle">
+  <div class="vr-modal">
+    <h3 id="vrFolderTitle" data-i18n="video_room.new_folder">New folder</h3>
+    <label><span data-i18n="video_room.folder_name_label">Folder name</span>
+      <input type="text" id="vrFolderName" placeholder="e.g. Matches, Opponents, Set pieces" maxlength="120" data-i18n-ph="video_room.folder_name_ph">
+    </label>
+    <div class="vr-modal-actions">
+      <button class="cm-btn is-ghost is-sm" id="vrFolderCancelBtn" type="button" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="vrFolderSaveBtn" type="button" data-i18n="video_room.create_folder">Create folder</button>
     </div>
   </div>
 </div>
@@ -326,6 +368,8 @@
 
   // ── State ────────────────────────────────────────────────────────────────
   let VIDEOS = [];                                  // enriched video rows
+  let FOLDERS = [];                                 // native (in-app) folders
+  let currentFolder = null;                         // folder id when drilled in, else null
   const filters = { q:'', link:'all', date:'any', team:'all' };
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
@@ -338,8 +382,12 @@
   // ── Data load ────────────────────────────────────────────────────────────
   async function loadVideos() {
     renderSkeleton();
-    const { data: videos, error } = await window.sb.from('videos')
-      .select('*').eq('club_id', clubId).order('created_at', { ascending: false });
+    const [{ data: videos, error }, { data: folders }] = await Promise.all([
+      window.sb.from('videos').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
+      window.sb.from('video_folders').select('*').eq('club_id', clubId).order('name', { ascending: true }),
+    ]);
+    FOLDERS = folders || [];
+    if (currentFolder && !FOLDERS.some(f => f.id === currentFolder)) currentFolder = null;  // folder gone → back to root
     if (error) { console.error('[VideoRoom] videos load error:', error); grid.innerHTML = `<div class="vr-empty"><h3>${esc(tt('video_room.load_error_title', "Couldn't load videos"))}</h3><p>${esc(error.message)}</p></div>`; return; }
 
     const list = videos || [];
@@ -445,30 +493,87 @@
       </article>`;
   }
 
+  function folderVideoCount(id) { return VIDEOS.filter(v => v.folder_id === id).length; }
+
+  function folderCardHtml(f) {
+    const n = folderVideoCount(f.id);
+    return `
+      <article class="vr-folder" data-folder="${esc(f.id)}">
+        <span class="fic"><i class="ti ti-folder"></i></span>
+        <div class="fmeta">
+          <h3>${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}</h3>
+          <span class="fcount">${esc(tt('video_room.folder_count', `${n} video${n === 1 ? '' : 's'}`, { count: n }))}</span>
+        </div>
+        <button class="more" data-del-folder="${esc(f.id)}" title="${esc(tt('video_room.delete_folder', 'Delete folder'))}"><i class="ti ti-trash"></i></button>
+      </article>`;
+  }
+
+  function renderCrumb() {
+    const crumb = $('#vrCrumb');
+    const f = currentFolder ? FOLDERS.find(x => x.id === currentFolder) : null;
+    if (!f) { crumb.hidden = true; return; }
+    crumb.hidden = false;
+    $('#vrCrumbName').innerHTML = `<i class="ti ti-folder"></i>${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}`;
+  }
+
   function render() {
-    const rows = VIDEOS.filter(passesFilters);
+    renderCrumb();
+
+    // Folders shown only at root, honouring search + team filter.
+    const folderRows = currentFolder ? [] : FOLDERS.filter(f =>
+      (!filters.q || (f.name || '').toLowerCase().includes(filters.q)) &&
+      (filters.team === 'all' || f.team_id === filters.team));
+
+    // Videos: scoped to the current folder (or the root/loose ones), then filtered.
+    const rows = VIDEOS.filter(v => (v.folder_id || null) === currentFolder && passesFilters(v));
+
     $('#vrCount').textContent = tt('video_room.count_of', `${rows.length} of ${VIDEOS.length}`, { shown: rows.length, total: VIDEOS.length });
-    if (!VIDEOS.length) {
+
+    if (!VIDEOS.length && !FOLDERS.length) {
       grid.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ti-video"></i></span>
         <h3>${esc(tt('video_room.empty_title', 'No videos yet'))}</h3><p>${esc(tt('video_room.empty_body', 'Link your first clip from Google Drive or Dropbox to start building your library.'))}</p>
         <button class="cm-btn is-primary is-sm" id="vrEmptyAdd"><i class="ti ti-plus" style="font-size:15px"></i>${esc(tt('video_room.add_video', 'Add video'))}</button></div>`;
       $('#vrEmptyAdd')?.addEventListener('click', openModal);
       return;
     }
-    if (!rows.length) {
-      grid.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ti-filter-off"></i></span>
-        <h3>${esc(tt('video_room.no_matches_title', 'No matches'))}</h3><p>${esc(tt('video_room.no_matches_body', 'No videos match the current search or filters.'))}</p></div>`;
+    if (!folderRows.length && !rows.length) {
+      const inFolder = !!currentFolder;
+      grid.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ${inFolder ? 'ti-folder-open' : 'ti-filter-off'}"></i></span>
+        <h3>${esc(inFolder ? tt('video_room.folder_empty_title', 'This folder is empty') : tt('video_room.no_matches_title', 'No matches'))}</h3>
+        <p>${esc(inFolder ? tt('video_room.folder_empty_body', 'Add a video link to fill this folder.') : tt('video_room.no_matches_body', 'No videos match the current search or filters.'))}</p>
+        ${inFolder ? `<button class="cm-btn is-primary is-sm" id="vrEmptyAdd"><i class="ti ti-plus" style="font-size:15px"></i>${esc(tt('video_room.add_video', 'Add video'))}</button>` : ''}</div>`;
+      $('#vrEmptyAdd')?.addEventListener('click', openModal);
       return;
     }
-    grid.innerHTML = rows.map(cardHtml).join('');
+    grid.innerHTML = folderRows.map(folderCardHtml).join('') + rows.map(cardHtml).join('');
   }
 
   grid.addEventListener('click', e => {
-    const copyBtn = e.target.closest('.more');
+    const delFolderBtn = e.target.closest('[data-del-folder]');
+    if (delFolderBtn) { e.stopPropagation(); deleteFolder(delFolderBtn.dataset.delFolder); return; }
+    const folderCard = e.target.closest('.vr-folder');
+    if (folderCard?.dataset.folder) { currentFolder = folderCard.dataset.folder; render(); return; }
+    const copyBtn = e.target.closest('.vr-card .more');
     if (copyBtn) { e.stopPropagation(); navigator.clipboard?.writeText(copyBtn.dataset.copy).then(() => toast(tt('video_room.link_copied', 'Link copied'))); return; }
     const card = e.target.closest('.vr-card');
     if (card?.dataset.id) window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(card.dataset.id);
   });
+
+  async function deleteFolder(id) {
+    const f = FOLDERS.find(x => x.id === id);
+    const n = folderVideoCount(id);
+    const msg = n
+      ? tt('video_room.delete_folder_confirm_n', `Delete "${f?.name || ''}"? Its ${n} video${n === 1 ? '' : 's'} will move out of the folder (not deleted).`, { name: f?.name || '', count: n })
+      : tt('video_room.delete_folder_confirm', `Delete "${f?.name || ''}"?`, { name: f?.name || '' });
+    if (!confirm(msg)) return;
+    const { error } = await window.sb.from('video_folders').delete().eq('id', id);
+    if (error) { alert(error.message); return; }
+    if (currentFolder === id) currentFolder = null;
+    toast(tt('video_room.folder_deleted', 'Folder deleted'));
+    await loadVideos();
+  }
+
+  $('#vrBackBtn').addEventListener('click', () => { currentFolder = null; render(); });
 
   // ── Filter dropdowns ───────────────────────────────────────────────────────
   const LINK_OPTS = () => [
@@ -574,7 +679,9 @@
 
     const btn = $('#vrSaveBtn');
     btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
-    const activeTeam = sessionStorage.getItem('cal_active_team') || null;
+    // Inside a folder, inherit its team; otherwise fall back to the active team.
+    const folder = currentFolder ? FOLDERS.find(f => f.id === currentFolder) : null;
+    const activeTeam = folder ? (folder.team_id || null) : (sessionStorage.getItem('cal_active_team') || null);
 
     const provider = detectProvider(url);
     let externalId = null, autoThumb = null;
@@ -589,6 +696,7 @@
       provider,
       external_id:      externalId,
       kind:             effectiveKind() || 'video',
+      folder_id:        currentFolder || null,
       thumbnail_url:    $('#vrThumb').value.trim() || autoThumb || null,
       uploaded_by:      userId,
       uploaded_by_name: profileName,
@@ -597,6 +705,35 @@
     btn.disabled = false; btn.textContent = tt('video_room.save_video', 'Save video');
     if (error) { alert(tt('video_room.save_error', 'Error saving video: ' + error.message, { msg: error.message })); return; }
     closeModal(); toast(tt('video_room.video_added', 'Video added'));
+    await loadVideos();
+  });
+
+  // ── New folder modal ────────────────────────────────────────────────────────
+  const folderBackdrop = $('#vrFolderBackdrop');
+  function openFolderModal() { $('#vrFolderName').value = ''; folderBackdrop.classList.add('is-open'); $('#vrFolderName').focus(); }
+  function closeFolderModal() { folderBackdrop.classList.remove('is-open'); }
+  $('#vrAddFolderBtn').addEventListener('click', openFolderModal);
+  $('#vrFolderCancelBtn').addEventListener('click', closeFolderModal);
+  folderBackdrop.addEventListener('click', e => { if (e.target === folderBackdrop) closeFolderModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFolderModal(); });
+  $('#vrFolderName').addEventListener('keydown', e => { if (e.key === 'Enter') $('#vrFolderSaveBtn').click(); });
+
+  $('#vrFolderSaveBtn').addEventListener('click', async () => {
+    const name = $('#vrFolderName').value.trim();
+    if (!name) { $('#vrFolderName').focus(); return; }
+    const btn = $('#vrFolderSaveBtn');
+    btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
+    const activeTeam = sessionStorage.getItem('cal_active_team') || null;
+    const { error } = await window.sb.from('video_folders').insert({
+      club_id:         clubId,
+      team_id:         activeTeam,
+      name,
+      created_by:      userId,
+      created_by_name: profileName,
+    });
+    btn.disabled = false; btn.textContent = tt('video_room.create_folder', 'Create folder');
+    if (error) { alert(error.message); return; }
+    closeFolderModal(); toast(tt('video_room.folder_created', 'Folder created'));
     await loadVideos();
   });
 

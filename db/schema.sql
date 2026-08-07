@@ -2371,6 +2371,7 @@ create table if not exists public.videos (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   kind text default 'video'::text not null,
+  folder_id uuid,
   constraint videos_pkey primary key (id),
   constraint videos_provider_check CHECK ((provider = ANY (ARRAY['google_drive'::text, 'dropbox'::text, 'youtube'::text, 'vimeo'::text, 'other'::text]))),
   constraint videos_kind_check CHECK ((kind = ANY (ARRAY['video'::text, 'folder'::text])))
@@ -2379,6 +2380,22 @@ CREATE INDEX idx_videos_club ON public.videos USING btree (club_id);
 CREATE INDEX idx_videos_team ON public.videos USING btree (team_id);
 CREATE INDEX idx_videos_uploaded_by ON public.videos USING btree (uploaded_by);
 CREATE INDEX IF NOT EXISTS idx_videos_exercise ON public.videos USING btree (exercise_id);
+CREATE INDEX IF NOT EXISTS idx_videos_folder ON public.videos USING btree (folder_id);
+
+-- Native (in-app) folders to organize video links inside Video Room.
+create table if not exists public.video_folders (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  name text not null,
+  created_by uuid not null,
+  created_by_name text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint video_folders_pkey primary key (id)
+);
+CREATE INDEX IF NOT EXISTS idx_video_folders_club ON public.video_folders USING btree (club_id);
+CREATE INDEX IF NOT EXISTS idx_video_folders_team ON public.video_folders USING btree (team_id);
 
 create table if not exists public.wellness (
   id uuid default gen_random_uuid() not null,
@@ -2674,6 +2691,9 @@ alter table public.video_sessions add constraint video_sessions_video_id_fkey FO
 alter table public.videos add constraint videos_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.videos add constraint videos_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.videos add constraint videos_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
+alter table public.videos add constraint videos_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES video_folders(id) ON DELETE SET NULL;
+alter table public.video_folders add constraint video_folders_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.video_folders add constraint video_folders_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.wellness add constraint wellness_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.wellness add constraint wellness_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.wellness add constraint wellness_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
@@ -6299,6 +6319,30 @@ create policy "videos update club" on public.videos as permissive for update to 
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 create policy "videos_super_all" on public.videos as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.video_folders enable row level security;
+create policy "video_folders delete club" on public.video_folders as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "video_folders insert club" on public.video_folders as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "video_folders select team-scoped" on public.video_folders as permissive for select to public
+  using (((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))));
+create policy "video_folders update club" on public.video_folders as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "video_folders_super_all" on public.video_folders as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
 
