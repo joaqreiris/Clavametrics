@@ -142,8 +142,11 @@
   .cmp-m-item .who .n { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
   .cmp-m-item .who .r { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
   .cmp-m-empty { padding:10px; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); }
-  .chat-comp-input { flex:1; min-width:0; height:38px; padding:0 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); font:var(--cm-body); color:var(--cm-fg); outline:none; }
+  .chat-comp-input { flex:1; min-width:0; min-height:38px; max-height:160px; padding:8px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); font:var(--cm-body); font-family:inherit; line-height:1.4; color:var(--cm-fg); outline:none; resize:none; overflow-y:auto; box-sizing:border-box; }
   .chat-comp-input:focus { border-color:var(--cm-accent); }
+  /* Drag-and-drop de imágenes/archivos sobre el chat */
+  .chat-composer.is-dragover { outline:2px dashed var(--cm-accent); outline-offset:-6px; border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
+  .chat-composer.is-dragover::after { content:attr(data-drop-label); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:var(--cm-body); font-weight:600; color:var(--cm-accent); background:color-mix(in srgb, var(--cm-surface) 78%, transparent); border-radius:var(--cm-r-3); pointer-events:none; z-index:5; }
   .chat-send { width:38px; height:38px; border-radius:var(--cm-r-3); border:0; background:var(--cm-accent); color:var(--cm-fg-on-accent); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .12s cubic-bezier(.34,1.56,.64,1), filter .12s ease; }
   .chat-send:hover { filter:brightness(1.06); }
   .chat-send:active { transform:scale(.86); }
@@ -415,7 +418,7 @@
 
           </div>
 
-          <div class="chat-composer" style="align-items:flex-end">
+          <div class="chat-composer" id="chatComposer" style="align-items:flex-end" data-drop-label="Drop image to attach" data-i18n-attr="data-drop-label:chat_tasks.drop_to_attach">
             <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.mp4,.mov" style="display:none" onchange="handleFileSelect(event)">
             <div class="chat-comp-tools">
               <button data-i18n-attr="title:chat_tasks.attach_file" title="Attach file" onclick="handleAttachClick()"><i class="ti ti-paperclip"></i></button>
@@ -426,7 +429,7 @@
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
               <div id="pendingAtt" style="display:none"></div>
               <div id="linkPreviewDraft" style="display:none"></div>
-              <input class="chat-comp-input" id="msgInput" data-i18n-ph="chat_tasks.message_placeholder" placeholder="Message — Enter to send, Shift+Enter for newline">
+              <textarea class="chat-comp-input" id="msgInput" rows="1" data-i18n-ph="chat_tasks.message_placeholder" placeholder="Message — Enter to send, Shift+Enter for newline"></textarea>
             </div>
             <button class="chat-send" onclick="sendMessage()"><i class="ti ti-send"></i></button>
             <div class="cmp-pop cmp-emoji is-hidden" id="emojiPop"></div>
@@ -1328,6 +1331,7 @@ async function sendMessage() {
   optimistic.forEach(m => appendMsg(m));
 
   inp.value = '';
+  autoGrowComposer();
   removePendingAtt();
   clearLinkPreview();
   inp.focus();
@@ -2277,6 +2281,9 @@ function handleNewMessage(payload) {
     (isCg(activeConv) && isCgMsg && cgId(activeConv) === msg.group_id) ||
     (isDm && !isCg(activeConv) && activeConv !== 'group' && (msg.sender_id === activeConv || msg.recipient_id === activeConv));
 
+  // Sonido al recibir un mensaje entrante (nunca para los propios / eco optimista)
+  if (msg.sender_id !== currentUser.id) playIncomingSound();
+
   if (inActive && !messages.find(m => m.id === msg.id)) { messages.push(msg); appendMsg(msg); }
 
   if (isDm) {
@@ -2314,9 +2321,10 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function handleFileSelect(e) {
-  const files = [...e.target.files];
-  e.target.value = '';
+// Add a list of File objects to the composer's pending attachments (shared by the file picker,
+// paste-from-clipboard and drag-and-drop paths). Enforces the size cap and re-renders the chips.
+function addFilesToPending(files) {
+  files = [...files].filter(Boolean);
   if (!files.length) return;
   const tooBig = [];
   files.forEach(file => {
@@ -2327,6 +2335,12 @@ function handleFileSelect(e) {
     alert(tt('chat_tasks.file_too_large', `Too large (max ${CHAT_MAX_FILE_MB} MB): {names}`, { max: CHAT_MAX_FILE_MB, names: tooBig.join(', ') }));
   }
   renderPendingAtt();
+}
+
+function handleFileSelect(e) {
+  const files = [...e.target.files];
+  e.target.value = '';
+  addFilesToPending(files);
 }
 
 function pendingAttChipHtml(f, i) {
@@ -2666,6 +2680,86 @@ document.getElementById('msgInput')?.addEventListener('input', e => {
     clearLinkPreview();
   }
 });
+
+// ── COMPOSER: auto-grow (el texto baja de línea en vez de correrse a la derecha) ──
+function autoGrowComposer() {
+  const inp = document.getElementById('msgInput');
+  if (!inp) return;
+  inp.style.height = 'auto';
+  inp.style.height = Math.min(inp.scrollHeight, 160) + 'px';
+}
+document.getElementById('msgInput')?.addEventListener('input', autoGrowComposer);
+
+// ── SONIDO DE MENSAJE ENTRANTE ──
+// Tono corto sintetizado con Web Audio (sin assets externos). El AudioContext se crea/reanuda
+// perezosamente: los navegadores exigen un gesto de usuario previo, que en este flujo siempre
+// existe (el usuario abrió/usó el chat) antes de que llegue el primer mensaje.
+let _chatAudioCtx = null;
+function playIncomingSound() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!_chatAudioCtx) _chatAudioCtx = new AC();
+    const ctx = _chatAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(660, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.14, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.34);
+  } catch (_) { /* audio bloqueado / no soportado: silencioso */ }
+}
+
+// ── PEGAR CAPTURA / IMAGEN DESDE EL PORTAPAPELES ──
+// Cubre "Impr Pant" en Windows y Cmd+Ctrl+Shift+4 en Mac → Cmd+V en el chat.
+document.getElementById('msgInput')?.addEventListener('paste', e => {
+  const items = [...(e.clipboardData?.items || [])];
+  const imgs = items.filter(it => it.kind === 'file' && it.type.startsWith('image/'));
+  if (!imgs.length) return;
+  e.preventDefault();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const files = imgs.map((it, i) => {
+    const blob = it.getAsFile();
+    if (!blob) return null;
+    const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+    // Los blobs del portapapeles suelen venir sin nombre → generamos uno legible.
+    return blob.name && blob.name !== 'image.png'
+      ? blob
+      : new File([blob], `screenshot-${stamp}${imgs.length > 1 ? '-' + (i + 1) : ''}.${ext}`, { type: blob.type });
+  });
+  addFilesToPending(files);
+});
+
+// ── ARRASTRAR Y SOLTAR ARCHIVOS/CAPTURAS SOBRE EL COMPOSER ──
+(function initComposerDnd() {
+  const zone = document.getElementById('chatComposer');
+  if (!zone) return;
+  let depth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  zone.addEventListener('dragenter', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth++; zone.classList.add('is-dragover');
+  });
+  zone.addEventListener('dragover', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+  });
+  zone.addEventListener('dragleave', () => {
+    if (--depth <= 0) { depth = 0; zone.classList.remove('is-dragover'); }
+  });
+  zone.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; zone.classList.remove('is-dragover');
+    addFilesToPending(e.dataTransfer.files);
+  });
+})();
 
 // Re-render JS-built chrome when the language changes (static nodes are handled
 // by the sidebar's i18n runtime; only re-paint text, never touch realtime/scroll).
