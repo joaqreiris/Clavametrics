@@ -1829,12 +1829,20 @@
   function _applyHistoryState(json) {
     if (!json) return;
     _suppressHistory = true;
+    // Safety net: if loadFromJSON's callback never fires (e.g. a saved image
+    // fails to load) the flag would stick true and silently kill history/undo
+    // until a full page reload. Force it back after a grace period no matter what.
+    const _rescue = setTimeout(() => { _suppressHistory = false; _syncUndoRedoButtons(); }, 4000);
     fc.loadFromJSON(json, () => {
-      _rebuildArrowDataFromCanvas();
-      fc.discardActiveObject();
-      fc.renderAll();
-      _suppressHistory = false;
-      _syncUndoRedoButtons();
+      try {
+        _rebuildArrowDataFromCanvas();
+        fc.discardActiveObject();
+        fc.renderAll();
+      } finally {
+        clearTimeout(_rescue);
+        _suppressHistory = false;
+        _syncUndoRedoButtons();
+      }
     });
   }
   function doUndo() {
@@ -2798,7 +2806,10 @@
     // wrapped so a single bad clone can never wedge the editor.
     if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
       const active=fc.getActiveObject();
-      if (active) { try { active.clone(c=>{_clipboard=c;}, ARROW_PROPS); } catch(err){ console.error('[copy] failed', err); } }
+      if (active) {
+        try { active.clone(c=>{_clipboard=c;}, ARROW_PROPS); }
+        catch(err){ console.error('[copy] failed', err); _toast(tt('planner.copy_failed','Could not copy the selection. Try again.'), true); }
+      }
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
@@ -2808,11 +2819,13 @@
         if (active.type==='activeSelection') active.getObjects().forEach(o=>fc.remove(o));
         else fc.remove(active);
         fc.discardActiveObject(); fc.renderAll();
-      } catch(err){ console.error('[cut] failed', err); }
+      } catch(err){ console.error('[cut] failed', err); _toast(tt('planner.copy_failed','Could not copy the selection. Try again.'), true); }
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
-      if (!_clipboard) return;
+      // Nothing in the (internal) clipboard: tell the user instead of no-op'ing
+      // silently — the #1 confusion behind "paste stopped working".
+      if (!_clipboard) { _toast(tt('planner.nothing_to_paste','Nothing to paste — copy an object first (Ctrl/Cmd+C).')); return; }
       const OFF = 20;
       try {
         _clipboard.clone(cloned=>{
@@ -2822,10 +2835,10 @@
             const pasted = [];
             if (cloned.type==='activeSelection') {
               cloned.canvas = fc;
-              cloned.forEachObject(o=>{ o.set({evented:true}); fc.add(o); pasted.push(o); });
+              cloned.forEachObject(o=>{ o.set({evented:true}); fc.add(o); o.setCoords(); pasted.push(o); });
               cloned.setCoords();
             } else {
-              fc.add(cloned); pasted.push(cloned);
+              fc.add(cloned); cloned.setCoords(); pasted.push(cloned);
             }
             // Re-register any pasted arrows (fresh id + shifted geometry) so they
             // stay editable and never share an id with the source arrow.
@@ -2833,9 +2846,9 @@
             // advance the source offset so repeated pastes cascade
             _clipboard.left=(_clipboard.left||0)+OFF; _clipboard.top=(_clipboard.top||0)+OFF;
             fc.setActiveObject(cloned); fc.requestRenderAll();
-          } catch(err){ console.error('[paste] apply failed', err); fc.discardActiveObject(); fc.requestRenderAll(); }
+          } catch(err){ console.error('[paste] apply failed', err); fc.discardActiveObject(); fc.requestRenderAll(); _toast(tt('planner.paste_failed','Could not paste. Copy the object again (Ctrl/Cmd+C).'), true); }
         }, ARROW_PROPS);
-      } catch(err){ console.error('[paste] clone failed', err); }
+      } catch(err){ console.error('[paste] clone failed', err); _toast(tt('planner.paste_failed','Could not paste. Copy the object again (Ctrl/Cmd+C).'), true); }
       return;
     }
   });
@@ -3794,7 +3807,14 @@
             }
           });
         }
-        fc.loadFromJSON(_ojLoad, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; _lastFit = _fitParams(); });
+        // Rescue the flag if the load callback never fires (broken/missing image
+        // src) — otherwise _loadingExercise sticks true and dirty-tracking/saves
+        // silently stop working until the page is reloaded.
+        const _rescueLoad = setTimeout(() => { _loadingExercise = false; }, 6000);
+        fc.loadFromJSON(_ojLoad, () => {
+          try { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _lastFit = _fitParams(); }
+          finally { clearTimeout(_rescueLoad); _loadingExercise = false; _dirty = false; }
+        });
       } else {
         fc.clear(); fc.renderAll();
         _loadingExercise = false; _dirty = false;
