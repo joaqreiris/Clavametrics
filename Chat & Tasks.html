@@ -135,6 +135,16 @@
   .deleted-text { display:flex; align-items:center; gap:5px; font-style:italic; color:var(--cm-fg-muted) !important; }
   .msg.me .deleted-text { color:rgba(255,255,255,0.75) !important; }
   .deleted-text .ti { font-size:13px; }
+  /* in-conversation search */
+  .msg-search { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--cm-border); background:var(--cm-surface); }
+  .msg-search .ms-ic { font-size:15px; color:var(--cm-fg-muted); }
+  .msg-search .ms-input { flex:1; min-width:0; height:30px; padding:0 8px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:6px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; }
+  .msg-search .ms-input:focus { border-color:var(--cm-accent); }
+  .msg-search .ms-count { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); min-width:34px; text-align:center; }
+  .msg-search .ms-nav { width:28px; height:28px; border:0; background:transparent; color:var(--cm-fg-muted); border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .msg-search .ms-nav:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .msg-search-hit .bubble { box-shadow:0 0 0 2px color-mix(in srgb, var(--cm-accent) 40%, transparent); }
+  .msg-search-cur .bubble { box-shadow:0 0 0 2px var(--cm-accent); }
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
@@ -465,9 +475,18 @@
               <div class="meta"><span class="dot"></span><span data-i18n="common.loading">Loading…</span></div>
             </div>
             <div class="right">
-              <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
+              <button class="cm-icon-btn" onclick="toggleMsgSearch()" data-i18n-attr="title:chat_tasks.search_in_conversation" title="Search in conversation"><i class="ti ti-search"></i></button>
               <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
             </div>
+          </div>
+
+          <div class="msg-search" id="msgSearch" style="display:none">
+            <i class="ti ti-search ms-ic"></i>
+            <input id="msgSearchInput" class="ms-input" data-i18n-ph="chat_tasks.search_in_conversation" placeholder="Search in conversation…" oninput="runMsgSearch(this.value)" onkeydown="msgSearchKey(event)" autocomplete="off">
+            <span class="ms-count" id="msgSearchCount"></span>
+            <button class="ms-nav" onclick="msgSearchPrev()" data-i18n-attr="title:chat_tasks.previous" title="Previous"><i class="ti ti-chevron-up"></i></button>
+            <button class="ms-nav" onclick="msgSearchNext()" data-i18n-attr="title:chat_tasks.next" title="Next"><i class="ti ti-chevron-down"></i></button>
+            <button class="ms-nav" onclick="closeMsgSearch()" data-i18n-attr="title:common.close" title="Close"><i class="ti ti-x"></i></button>
           </div>
 
           <div class="chat-body" id="chatBody">
@@ -1495,6 +1514,68 @@ async function deleteMsg(msgId) {
   if (error) console.error('delete failed', error);
 }
 
+// ── IN-CONVERSATION SEARCH ──
+// Searches the messages loaded for the open conversation, highlights hits and lets you step
+// through them (newest first). Purely client-side over the loaded window.
+let msgSearchMatches = [], msgSearchIdx = -1;
+
+function toggleMsgSearch() {
+  const bar = document.getElementById('msgSearch');
+  if (!bar) return;
+  if (bar.style.display !== 'none') { closeMsgSearch(); return; }
+  bar.style.display = 'flex';
+  const inp = document.getElementById('msgSearchInput');
+  if (inp) { inp.value = ''; inp.focus(); }
+  runMsgSearch('');
+}
+
+function closeMsgSearch() {
+  const bar = document.getElementById('msgSearch');
+  if (bar) bar.style.display = 'none';
+  clearMsgSearchHighlights();
+  msgSearchMatches = []; msgSearchIdx = -1;
+}
+
+function clearMsgSearchHighlights() {
+  document.querySelectorAll('#chatBody .msg-search-hit, #chatBody .msg-search-cur')
+    .forEach(n => n.classList.remove('msg-search-hit', 'msg-search-cur'));
+}
+
+function runMsgSearch(q) {
+  q = (q || '').trim().toLowerCase();
+  clearMsgSearchHighlights();
+  msgSearchMatches = []; msgSearchIdx = -1;
+  if (q) messages.forEach(m => { if (!m.deleted_at && (m.content || '').toLowerCase().includes(q)) msgSearchMatches.push(m.id); });
+  msgSearchMatches.forEach(id => {
+    document.querySelector(`#chatBody .msg[data-msg-id="${CSS.escape(String(id))}"]`)?.classList.add('msg-search-hit');
+  });
+  if (msgSearchMatches.length) gotoMsgMatch(msgSearchMatches.length - 1);   // newest match first
+  else updateMsgSearchCount();
+}
+
+function updateMsgSearchCount() {
+  const el = document.getElementById('msgSearchCount');
+  const inp = document.getElementById('msgSearchInput');
+  if (!el) return;
+  el.textContent = msgSearchMatches.length ? `${msgSearchIdx + 1}/${msgSearchMatches.length}` : ((inp?.value || '').trim() ? '0/0' : '');
+}
+
+function gotoMsgMatch(idx) {
+  if (!msgSearchMatches.length) return;
+  msgSearchIdx = (idx + msgSearchMatches.length) % msgSearchMatches.length;
+  document.querySelectorAll('#chatBody .msg-search-cur').forEach(n => n.classList.remove('msg-search-cur'));
+  const node = document.querySelector(`#chatBody .msg[data-msg-id="${CSS.escape(String(msgSearchMatches[msgSearchIdx]))}"]`);
+  if (node) { node.classList.add('msg-search-cur'); node.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  updateMsgSearchCount();
+}
+
+function msgSearchNext() { if (msgSearchMatches.length) gotoMsgMatch(msgSearchIdx + 1); }
+function msgSearchPrev() { if (msgSearchMatches.length) gotoMsgMatch(msgSearchIdx - 1); }
+function msgSearchKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeMsgSearch(); }
+  else if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? msgSearchPrev() : msgSearchNext(); }
+}
+
 // Replace a single message's DOM node from its (mutated) object, without a full re-render.
 function repaintMsg(msg) {
   const node = document.querySelector(`#chatBody .msg[data-msg-id="${CSS.escape(String(msg.id))}"]`);
@@ -1889,6 +1970,7 @@ async function selectConv(id) {
   if (activeConv === id) return;
   stopTypingNow();       // stop broadcasting "typing" in the conversation I'm leaving
   clearTypingState();    // drop any incoming-typing indicators from the previous conversation
+  closeMsgSearch();      // reset in-conversation search
   activeConv = id;
   if (isCg(id)) { delete groupUnread[cgId(id)]; updateUnreadBadge(); }
   else if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
