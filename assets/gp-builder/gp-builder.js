@@ -145,6 +145,15 @@
     { id:'cool',  cols:['#0E7490','#0891B2','#22D3EE','#A5F3FC'] },
     { id:'mono',  cols:['#1F2937','#4B5563','#9CA3AF','#E5E7EB'] },
   ];
+  // Per-series color overrides (style.colors = { [metricId]: '#hex' }). Compacted on save to only
+  // the metrics still present on the card, so removed metrics don't leave orphan keys in the config.
+  function _compactColors(S) {
+    if (!S || !S.colors) return null;
+    const ids = new Set((S.metrics || []).map(m => m.id));
+    const out = {};
+    for (const k of Object.keys(S.colors)) if (ids.has(k) && S.colors[k]) out[k] = S.colors[k];
+    return Object.keys(out).length ? out : null;
+  }
   const RANGES = [
     { id:'mc',      name:'MC (current)',  icon:'ti-calendar-week',  d:'Current microcycle' },
     { id:'w7',      name:'Last 7 days',   icon:'ti-calendar',       d:'Rolling week' },
@@ -360,7 +369,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
+      style: { size:S.size, color:S.color, palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -562,9 +571,9 @@
               <div class="lab" data-i18n="gps_analysis.builder_accent_color">Accent color</div>
               <div class="es-swatches" id="gpbColors"></div>
             </div>
-            <div class="es-sec">
-              <div class="lab" data-i18n="gps_analysis.builder_chart_palette">Chart palette</div>
-              <div class="es-swatches" id="gpbPalettes"></div>
+            <div class="es-sec" data-only="bars,line">
+              <div class="lab" data-i18n="gps_analysis.builder_series_colors">Series colors</div>
+              <div id="gpbSeriesColors"></div>
             </div>
             <div class="es-sec">
               <div class="lab" data-i18n="gps_analysis.builder_card_size">Card size</div>
@@ -746,7 +755,7 @@
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
-             size:'md', color:'#15803D', palette:'pitch', title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
+             size:'md', color:'#15803D', palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
@@ -1115,6 +1124,7 @@
       S.size    = cfg.size;
       S.color   = cfg.color;
       S.palette = cfg.palette;
+      S.colors  = cfg.colors ? { ...cfg.colors } : {};
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
@@ -1148,6 +1158,7 @@
       S.size    = rawConfig.style?.size          || 'md';
       S.color   = rawConfig.style?.color         || '#15803D';
       S.palette = rawConfig.style?.palette       || 'pitch';
+      S.colors  = rawConfig.style?.colors ? { ...rawConfig.style.colors } : {};
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
@@ -1239,13 +1250,8 @@
       b.onclick = () => { if (!S) return; S.color = b.dataset.color; syncStyle(); renderCard(); }
     );
 
-    // palettes
-    document.getElementById('gpbPalettes').innerHTML = PALETTES.map(p =>
-      `<button class="es-pal" data-pal="${esc(p.id)}">${p.cols.map(c=>`<i style="background:${c}"></i>`).join('')}</button>`
-    ).join('');
-    document.getElementById('gpbPalettes').querySelectorAll('[data-pal]').forEach(b =>
-      b.onclick = () => { if (!S) return; S.palette = b.dataset.pal; syncStyle(); renderCard(); }
-    );
+    // Per-series colors (replaces the old fixed "Chart palette"). Rendered dynamically per card
+    // in renderSeriesColors() (called from syncStyle) because the rows depend on S.metrics.
 
     // tabs Setup/Style. En D&D el tab "Setup" enruta al pane de zonas (data-pane="dd") — reemplaza
     // al Setup del clásico — y "Style" reusa el MISMO pane Style del clásico (mismos handlers/S).
@@ -1676,14 +1682,66 @@
     });
   }
 
+  // Per-series color rows (Style tab). One row per metric on the card: name + preset swatches +
+  // a native custom picker + a reset-to-accent action. The section itself is only shown for
+  // bars/line (data-only) — other viz types are single-colour and use the Accent control. When a
+  // series has no explicit override the effective colour is S.color (accent), shown highlighted.
+  function renderSeriesColors() {
+    const wrap = document.getElementById('gpbSeriesColors');
+    if (!wrap || !S) return;
+    if (!S.colors) S.colors = {};
+    const mets = (S.metrics || []).filter(m => catalogMap.get(m.id));
+    if (!mets.length) {
+      wrap.innerHTML = `<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);padding:2px 0">${
+        esc(_tt('gps_analysis.builder_series_colors_empty', 'Add a metric to set its color.'))}</div>`;
+      return;
+    }
+    const sw = (mid, hex, on) =>
+      `<button type="button" class="es-sw${on ? ' is-on' : ''}" data-sccol="${esc(mid)}|${esc(hex)}" style="background:${hex}"></button>`;
+    wrap.innerHTML = mets.map(m => {
+      const cat = catalogMap.get(m.id);
+      const eff = S.colors[m.id] || S.color;
+      const overridden = !!S.colors[m.id];
+      const presets = COLORS.map(c => sw(m.id, c.hex, eff.toLowerCase() === c.hex.toLowerCase())).join('');
+      const customOn = overridden && !COLORS.some(c => c.hex.toLowerCase() === eff.toLowerCase());
+      return `<div style="padding:4px 0 6px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <span style="flex:1;min-width:0;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cat.name)}</span>
+          ${overridden ? `<button type="button" data-scrst="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_series_colors_reset', 'Reset to accent'))}" style="flex:0 0 auto;border:none;background:none;cursor:pointer;color:var(--cm-fg-faint);display:inline-flex;padding:2px"><i class="ti ti-arrow-back-up" style="font-size:14px"></i></button>` : ''}
+        </div>
+        <div class="es-swatches" style="align-items:center">
+          ${presets}
+          <label class="es-sw" title="${esc(_tt('gps_analysis.builder_series_colors_custom', 'Custom color'))}" style="position:relative;overflow:hidden;background:${customOn ? eff : 'var(--cm-bg-soft)'};${customOn ? 'box-shadow:0 0 0 2px var(--cm-fg) inset' : ''};display:inline-flex;align-items:center;justify-content:center;cursor:pointer">
+            ${customOn ? '' : '<i class="ti ti-plus" style="font-size:12px;color:var(--cm-fg-muted);pointer-events:none"></i>'}
+            <input type="color" data-sccustom="${esc(m.id)}" value="${customOn ? eff : (S.color || '#15803D')}" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;padding:0">
+          </label>
+        </div>
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('[data-sccol]').forEach(b => b.onclick = () => {
+      if (!S) return;
+      const [mid, hex] = b.dataset.sccol.split('|');
+      S.colors[mid] = hex;
+      renderSeriesColors(); renderCard();
+    });
+    wrap.querySelectorAll('[data-sccustom]').forEach(inp => inp.oninput = () => {
+      if (!S) return;
+      S.colors[inp.dataset.sccustom] = inp.value;
+      renderCard();   // live while dragging; rows re-render on the next syncStyle / interaction
+    });
+    wrap.querySelectorAll('[data-scrst]').forEach(b => b.onclick = () => {
+      if (!S) return;
+      delete S.colors[b.dataset.scrst];
+      renderSeriesColors(); renderCard();
+    });
+  }
+
   function syncStyle() {
     if (!S) return;
     document.getElementById('gpbColors').querySelectorAll('[data-color]').forEach(b =>
       b.classList.toggle('is-on', b.dataset.color === S.color)
     );
-    document.getElementById('gpbPalettes').querySelectorAll('[data-pal]').forEach(b =>
-      b.classList.toggle('is-on', b.dataset.pal === S.palette)
-    );
+    renderSeriesColors();
     document.getElementById('gpbSize').querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.size === S.size)
     );
@@ -3521,11 +3579,12 @@
       datasets = [];
       for (const s of ss) {
         const base = s.name || s.label;
-        const curDs = mk(s, single ? names.cur : `${base} · ${names.cur}`, 'cur', accent);
+        const curCol = config.style?.colors?.[s.label] || accent;
+        const curDs = mk(s, single ? names.cur : `${base} · ${names.cur}`, 'cur', curCol);
         datasets.push(curDs);
         datasets.push(mk(s, single ? names.ref : `${base} · ${names.ref}`, 'ref', grey));
         // Ref-line stats reference the CURRENT-MC bar (accent) of each metric.
-        refMetricMap.set(s.label, { vals: curDs.data.filter(v => v != null).map(Number), isLine: false, color: accent });
+        refMetricMap.set(s.label, { vals: curDs.data.filter(v => v != null).map(Number), isLine: false, color: curCol });
         if (primaryMetricId == null) primaryMetricId = s.label;
       }
       // diff% per category from the first metric (label over each pair)
@@ -3540,13 +3599,14 @@
         const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
         const vals = data.filter(v => v != null).map(Number);
         if (isLine[i]) {                            // combo: line on the secondary axis
-          refMetricMap.set(s.label, { vals, isLine: true, color: lineCol });
+          const lc = config.style?.colors?.[s.label] || lineCol;
+          refMetricMap.set(s.label, { vals, isLine: true, color: lc });
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
-            yAxisID: 'y1', borderColor: lineCol, backgroundColor: 'transparent',
+            yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
-            pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
+            pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
         }
-        const col = barCols[bi++];
+        const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
         refMetricMap.set(s.label, { vals, isLine: false, color: col });
         if (primaryMetricId == null) primaryMetricId = s.label;
         return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
@@ -3849,7 +3909,7 @@
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels,
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines } : {}),
     };
@@ -3933,7 +3993,7 @@
     let ci = 0;
     const datasets = ss.map(s => {
       const isRef = !!s.dashed;
-      const col   = isRef ? 'rgba(148,163,184,0.9)' : colors[ci++];
+      const col   = isRef ? 'rgba(148,163,184,0.9)' : (config.style?.colors?.[s.label] || colors[ci++]);
       return {
         label: s.name || s.label,
         unit:  s.unit || '',
@@ -4087,7 +4147,7 @@
       viz: 'line',
       dimensions: S.dimensions,
       comparison: cmpConfig(S),
-      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
+      style: { size: S.size, color: S.color, palette: S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
       __example: true,
     };
     mountLineChart(body, cfg, series);
