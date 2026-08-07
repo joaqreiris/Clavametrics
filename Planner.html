@@ -1144,6 +1144,8 @@
               <div class="psep"></div>
               <span data-i18n="planner.prop_border">Border</span>
               <input type="color" id="plPropZoneStroke" value="#22c55e" data-i18n-attr="title:planner.prop_border_color" title="Border color">
+              <button class="pl-ta-btn" type="button" id="plPropZoneSolid" data-i18n-attr="title:planner.prop_border_solid" title="Solid border"><svg viewBox="0 0 20 20" style="width:15px;height:15px"><line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+              <button class="pl-ta-btn" type="button" id="plPropZoneDashed" data-i18n-attr="title:planner.prop_border_dashed" title="Dashed border"><svg viewBox="0 0 20 20" style="width:15px;height:15px"><line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg></button>
             </div>
             <div id="plPropCone" style="display:none;align-items:center;gap:8px">
               <span data-i18n="planner.prop_cone_color">Cone color</span>
@@ -2508,6 +2510,8 @@
   const _propZoneFill     = document.getElementById('plPropZoneFill');
   const _propZoneAlpha    = document.getElementById('plPropZoneAlpha');
   const _propZoneStroke   = document.getElementById('plPropZoneStroke');
+  const _propZoneSolid    = document.getElementById('plPropZoneSolid');
+  const _propZoneDashed   = document.getElementById('plPropZoneDashed');
   const _propConeColor      = document.getElementById('plPropConeColor');
   const _propBarrierColor   = document.getElementById('plPropBarrierColor');
   const _propGoalPostDiv    = document.getElementById('plPropGoalPost');
@@ -2632,6 +2636,9 @@
       _propZoneFill.value   = _rgbaToHex(obj.fill);
       _propZoneAlpha.value  = Math.round(_rgbaToAlpha(obj.fill)*100);
       _propZoneStroke.value = _rgbaToHex(obj.stroke);
+      const _zd = Array.isArray(obj.strokeDashArray) && obj.strokeDashArray.length > 0;
+      _propZoneDashed?.classList.toggle('is-on', _zd);
+      _propZoneSolid?.classList.toggle('is-on', !_zd);
       _propZoneDiv.style.display='flex'; _propBar.style.display='flex';
     } else if (obj._type==='cone') {
       _propConeColor.value = obj._coneColor || '#f97316';
@@ -2682,6 +2689,18 @@
   _propZoneFill?.addEventListener('change',   ()=>pushHistory());
   _propZoneAlpha?.addEventListener('change',  ()=>pushHistory());
   _propZoneStroke?.addEventListener('change', ()=>pushHistory());
+
+  // Border style: continuous vs dashed. Width-aware dash so it scales with thick borders.
+  function _setZoneDash(dashed) {
+    const a=fc.getActiveObject(); if (!a||(a._type!=='zone'&&a._type!=='goal')) return;
+    const w=a.strokeWidth||2;
+    a.set('strokeDashArray', dashed ? [Math.max(6, w*3), Math.max(3, w*1.5)] : null);
+    _propZoneDashed?.classList.toggle('is-on', dashed);
+    _propZoneSolid?.classList.toggle('is-on', !dashed);
+    fc.renderAll(); pushHistory();
+  }
+  _propZoneSolid?.addEventListener('click',  ()=>_setZoneDash(false));
+  _propZoneDashed?.addEventListener('click', ()=>_setZoneDash(true));
 
   _propConeColor?.addEventListener('input', () => {
     const a = fc.getActiveObject(); if (!a||a._type!=='cone') return;
