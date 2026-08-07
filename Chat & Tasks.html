@@ -90,6 +90,24 @@
   .msg.me .who { display:none; }
   .msg .text { font:var(--cm-body-sm); color:var(--cm-fg); overflow-wrap:anywhere; word-break:break-word; }
   .msg.me .text { color:var(--cm-fg-on-accent); }
+  /* quoted (reply) block inside a bubble */
+  .msg-quote { display:flex; flex-direction:column; gap:1px; border-left:3px solid var(--cm-accent); background:var(--cm-bg-soft); border-radius:5px; padding:4px 8px; margin-bottom:5px; cursor:pointer; max-width:100%; overflow:hidden; }
+  .msg-quote.is-gone { cursor:default; opacity:.7; }
+  .msg-quote .mq-who { font:600 11px/1.2 var(--cm-font-sans); color:var(--cm-accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .msg-quote .mq-txt { font:var(--cm-body-sm); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .msg.me .msg-quote { background:rgba(255,255,255,.16); border-left-color:rgba(255,255,255,.8); }
+  .msg.me .msg-quote .mq-who { color:var(--cm-fg-on-accent); }
+  .msg.me .msg-quote .mq-txt { color:rgba(255,255,255,.82); }
+  @keyframes cmMsgFlash { 0%,100% { background:transparent; } 25% { background:color-mix(in srgb, var(--cm-accent) 22%, transparent); } }
+  .msg-flash .bubble { animation:cmMsgFlash 1.1s ease; }
+  /* reply draft bar above the composer input */
+  .reply-draft { display:flex; align-items:center; gap:8px; background:var(--cm-bg-soft); border-radius:8px; padding:6px 8px; }
+  .reply-draft .rd-bar { width:3px; align-self:stretch; background:var(--cm-accent); border-radius:2px; }
+  .reply-draft .rd-body { flex:1; min-width:0; }
+  .reply-draft .rd-who { font:600 11px/1.3 var(--cm-font-sans); color:var(--cm-accent); }
+  .reply-draft .rd-txt { font:var(--cm-body-sm); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reply-draft .rd-x { flex-shrink:0; width:24px; height:24px; border:0; background:transparent; color:var(--cm-fg-muted); border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .reply-draft .rd-x:hover { background:var(--cm-border); color:var(--cm-fg); }
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
@@ -439,6 +457,7 @@
               <button data-i18n-attr="title:chat_tasks.create_task" title="Create task" onclick="composerCreateTask(event)"><i class="ti ti-flag-2"></i></button>
             </div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+              <div id="replyDraft" style="display:none"></div>
               <div id="pendingAtt" style="display:none"></div>
               <div id="linkPreviewDraft" style="display:none"></div>
               <textarea class="chat-comp-input" id="msgInput" rows="1" data-i18n-ph="chat_tasks.message_placeholder" placeholder="Message — Enter to send, Shift+Enter for newline"></textarea>
@@ -1045,7 +1064,7 @@ function ctResolveTeamId() {
 }
 
 async function loadMessages() {
-  let q = window.sb.from('messages').select('id,sender_id,recipient_id,group_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview').eq('club_id', currentUser.clubId);
+  let q = window.sb.from('messages').select('id,sender_id,recipient_id,group_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview,reply_to').eq('club_id', currentUser.clubId);
   if (activeConv === 'group') {
     // Team channel: recipient_id IS NULL AND group_id IS NULL (custom-group messages also have a
     // null recipient, so they must be excluded here). Include legacy null-team rows for this club.
@@ -1167,20 +1186,82 @@ function renderMsgHTML(msg) {
   const attHTML = (msg.attachment_url || msg.attachment_name) ? renderAttHTML(msg) : '';
   const lpHTML  = msg.link_preview   ? renderLpHTML(msg.link_preview) : '';
   const state = msg._failed ? ' failed' : (msg._sending ? ' sending' : '');
+  const quoteHTML = msg.reply_to ? renderQuoteHTML(msg.reply_to) : '';
   return `<div class="msg${isMe ? ' me' : ''}${state}" data-msg-id="${msg.id}">
     ${avHTML}
     <div class="msg-body">
       <div class="bubble">
         ${!isMe ? `<div class="who">${esc(authorName)}</div>` : ''}
+        ${quoteHTML}
         ${content ? `<div class="text">${content}</div>` : ''}
         ${attHTML}${lpHTML}
         <div class="time">${time}${isMe ? msgStatusIcon(msg) : ''}</div>
       </div>
       <div class="msg-actions">
+        <button class="msg-action-btn" onclick="startReply('${msg.id}')" data-i18n-attr="title:chat_tasks.reply" title="Reply"><i class="ti ti-arrow-back-up"></i></button>
         <button class="msg-action-btn" onclick="pinMsgFromHover('${msg.id}')" title="Pin"><i class="ti ti-pin"></i></button>
       </div>
     </div>
   </div>`;
+}
+
+// A short preview of a quoted message inside a bubble. Looks the original up in the loaded set;
+// clicking it jumps to that message. Falls back gracefully if it's outside the loaded window.
+function renderQuoteHTML(refId) {
+  const src = messages.find(m => String(m.id) === String(refId));
+  if (!src) return `<div class="msg-quote is-gone">${esc(tt('chat_tasks.original_unavailable', 'Original message'))}</div>`;
+  const a = members.find(x => x.id === src.sender_id) || null;
+  const who = a ? window.cmDisplayName(a) : (src.sender_name || '?');
+  let snippet = (src.content || '').trim();
+  if (!snippet && (src.attachment_url || src.attachment_name)) {
+    snippet = src.attachment_type === 'image'
+      ? tt('chat_tasks.quote_photo', 'Photo')
+      : (src.attachment_name || tt('chat_tasks.file_fallback', 'File'));
+  }
+  snippet = snippet.length > 120 ? snippet.slice(0, 120) + '…' : snippet;
+  return `<div class="msg-quote" onclick="scrollToMsg('${esc(String(refId))}', event)"><span class="mq-who">${esc(who)}</span><span class="mq-txt">${esc(snippet)}</span></div>`;
+}
+
+function scrollToMsg(id, ev) {
+  if (ev) ev.stopPropagation();
+  const node = document.querySelector(`#chatBody .msg[data-msg-id="${CSS.escape(String(id))}"]`);
+  if (!node) return;
+  node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  node.classList.remove('msg-flash'); void node.offsetWidth; node.classList.add('msg-flash');
+}
+
+// ── REPLY (quote) ──
+let replyingTo = null;   // message object currently being replied to
+
+function startReply(msgId) {
+  const msg = messages.find(m => String(m.id) === String(msgId));
+  if (!msg) return;
+  replyingTo = msg;
+  renderReplyDraft();
+  document.getElementById('msgInput')?.focus();
+}
+
+function cancelReply() { replyingTo = null; renderReplyDraft(); }
+
+function renderReplyDraft() {
+  const el = document.getElementById('replyDraft');
+  if (!el) return;
+  if (!replyingTo) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const a = members.find(x => x.id === replyingTo.sender_id) || null;
+  const who = a ? window.cmDisplayName(a) : (replyingTo.sender_name || '?');
+  let snippet = (replyingTo.content || '').trim();
+  if (!snippet && (replyingTo.attachment_url || replyingTo.attachment_name)) {
+    snippet = replyingTo.attachment_type === 'image'
+      ? tt('chat_tasks.quote_photo', 'Photo')
+      : (replyingTo.attachment_name || tt('chat_tasks.file_fallback', 'File'));
+  }
+  snippet = snippet.length > 120 ? snippet.slice(0, 120) + '…' : snippet;
+  el.innerHTML = `<div class="reply-draft">
+    <div class="rd-bar"></div>
+    <div class="rd-body"><div class="rd-who">${esc(tt('chat_tasks.replying_to', 'Replying to'))} ${esc(who)}</div><div class="rd-txt">${esc(snippet)}</div></div>
+    <button class="rd-x" onclick="cancelReply()" title="${esc(tt('common.cancel', 'Cancel'))}"><i class="ti ti-x"></i></button>
+  </div>`;
+  el.style.display = 'block';
 }
 
 // Delivery/read marker on own messages: sending (clock) → delivered (grey ✓✓) → read (accent ✓✓).
@@ -1348,7 +1429,7 @@ function retryMsg(tempId) {
 // Upload attachments (if any) + insert, then reconcile the optimistic bubbles. Shared by the
 // first send and by retry so both paths behave identically.
 async function deliverMessage(ctx) {
-  const { base, content, atts, lpData, tempIds, conv } = ctx;
+  const { base, content, atts, lpData, replyData = {}, tempIds, conv } = ctx;
   const payloads = [];
   try {
     if (atts.length) {
@@ -1360,11 +1441,11 @@ async function deliverMessage(ctx) {
           content: i === 0 ? (content || null) : null,
           message_type: 'file',
           attachment_url: url, attachment_name: a.name, attachment_size: a.size, attachment_type: a.type,
-          ...(i === 0 ? lpData : {})
+          ...(i === 0 ? { ...lpData, ...replyData } : {})
         });
       }
     } else {
-      payloads.push({ ...base, content: content || null, message_type: 'text', ...lpData });
+      payloads.push({ ...base, content: content || null, message_type: 'text', ...lpData, ...replyData });
     }
   } catch (err) {
     console.error('Upload error:', err);
@@ -1409,6 +1490,7 @@ async function sendMessage() {
   }
 
   const lpData = draftLinkPreview ? { link_preview: draftLinkPreview } : {};
+  const replyData = replyingTo ? { reply_to: replyingTo.id } : {};
   const base = {
     club_id:      currentUser.clubId,
     sender_id:    currentUser.id,
@@ -1433,12 +1515,12 @@ async function sendMessage() {
         content: i === 0 ? (content || null) : null,
         message_type: 'file',
         attachment_url: null, attachment_name: a.name, attachment_size: a.size, attachment_type: a.type,
-        created_at: stamp, _sending: true, ...(i === 0 ? lpData : {})
+        created_at: stamp, _sending: true, ...(i === 0 ? { ...lpData, ...replyData } : {})
       });
     });
   } else {
     const id = 'tmp-' + (++optimisticSeq); tempIds.push(id);
-    optimistic.push({ id, ...base, content: content || null, message_type: 'text', created_at: stamp, _sending: true, ...lpData });
+    optimistic.push({ id, ...base, content: content || null, message_type: 'text', created_at: stamp, _sending: true, ...lpData, ...replyData });
   }
   optimistic.forEach(m => appendMsg(m));
 
@@ -1446,11 +1528,12 @@ async function sendMessage() {
   autoGrowComposer();
   removePendingAtt();
   clearLinkPreview();
+  cancelReply();
   inp.focus();
   const sendBtn = document.querySelector('.chat-send');
   if (sendBtn) { sendBtn.classList.remove('sent-pulse'); void sendBtn.offsetWidth; sendBtn.classList.add('sent-pulse'); }
 
-  const ctx = { base, content, atts, lpData, tempIds, conv: activeConv };
+  const ctx = { base, content, atts, lpData, replyData, tempIds, conv: activeConv };
   tempIds.forEach(id => { pendingSends[id] = ctx; });   // enables retry if delivery fails
   deliverMessage(ctx);
 }

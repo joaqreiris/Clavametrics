@@ -1419,6 +1419,7 @@ create table if not exists public.messages (
   link_preview jsonb,
   team_id uuid,
   group_id uuid,
+  reply_to uuid,
   constraint messages_pkey primary key (id),
   constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'file'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );
@@ -2516,6 +2517,7 @@ alter table public.mesocycles add constraint mesocycles_macrocycle_id_fkey FOREI
 alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
+alter table public.messages add constraint messages_reply_to_fkey FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL;
 alter table public.chat_groups add constraint chat_groups_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.chat_groups add constraint chat_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.chat_group_members add constraint chat_group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
