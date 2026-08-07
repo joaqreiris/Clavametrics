@@ -227,13 +227,13 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner',      key: 'gym-planner' },
       { href: 'Individual%20Planner.html', icon: 'ti-user-cog',       label: 'Individual S&C',   key: 'individual-sc' },
       { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library',      key: 'gym-library' },
-      { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition',        key: 'nutrition' },
     ]},
     { label: 'Medical', items: [
       { href: 'Clinical%20Records.html',    icon: 'ti-clipboard-heart',      label: 'Clinical records',    key: 'clinical' },
       { href: 'Injuries.html',              icon: 'ti-bandage',              label: 'Injuries',            key: 'injuries' },
       { href: 'Physio.html',                icon: 'ti-stethoscope',          label: 'Treatments',          key: 'treatments' },
       { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives', key: 'rehab' },
+      { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition',        key: 'nutrition' },
     ]},
     { label: 'Workspace', items: [
       { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings', i18n: 'shell.nav.settings' },
