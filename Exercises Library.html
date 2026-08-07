@@ -221,6 +221,38 @@
   .sl-pv-video iframe, .sl-pv-video video { position:absolute; inset:0; width:100%; height:100%; border:0; }
   .sl-pv-videolink { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:8px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); text-decoration:none; }
   .sl-pv-videolink:hover { border-color:var(--cm-border-strong); }
+  /* Expand affordances (open the big lightbox preview) */
+  .sl-preview-topbar .expand { border:0; background:none; color:var(--cm-fg-muted); cursor:pointer; font-size:15px; padding:0; margin-right:10px; display:inline-flex; }
+  .sl-preview-topbar .expand:hover { color:var(--cm-fg); }
+  .sl-pv-draw { cursor:zoom-in; }
+  .sl-pv-media { position:relative; }
+  .sl-pv-expand { position:absolute; top:6px; right:6px; z-index:4; width:26px; height:26px; border-radius:6px; border:0; background:rgba(8,12,16,0.6); backdrop-filter:blur(3px); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .sl-pv-expand:hover { background:rgba(8,12,16,0.82); }
+  .sl-pv-expand .ti { font-size:15px; }
+
+  /* ── Lightbox (big preview) ── */
+  .sl-lb-backdrop { position:fixed; inset:0; z-index:950; display:none; align-items:center; justify-content:center; padding:32px; background:rgba(8,10,12,0.6); backdrop-filter:blur(6px); }
+  .sl-lb-backdrop.is-open { display:flex; }
+  .sl-lb { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); width:min(1040px,94vw); max-height:90vh; overflow:auto; box-shadow:0 24px 80px rgba(0,0,0,0.3); display:flex; flex-direction:column; }
+  .sl-lb-head { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--cm-border); position:sticky; top:0; background:var(--cm-surface); z-index:1; }
+  .sl-lb-title { flex:1; font:600 17px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sl-lb-x { border:0; background:transparent; color:var(--cm-fg-muted); font-size:20px; cursor:pointer; line-height:1; }
+  .sl-lb-x:hover { color:var(--cm-fg); }
+  .sl-lb-body { padding:20px; }
+  .sl-lb-media { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
+  @media (max-width:860px){ .sl-lb-media { grid-template-columns:1fr; } }
+  .sl-lb-draw { border:1px solid var(--cm-border); border-radius:10px; overflow:hidden; background:#2f7d4c; }
+  .sl-lb-draw img { display:block; width:100%; height:auto; }
+  .sl-lb-video { position:relative; aspect-ratio:16/9; border-radius:10px; overflow:hidden; background:#000; border:1px solid var(--cm-border); }
+  .sl-lb-video iframe, .sl-lb-video video { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .sl-lb-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:16px; }
+  @media (max-width:860px){ .sl-lb-grid { grid-template-columns:repeat(2,1fr); } }
+  .sl-lb-cell { background:var(--cm-bg-soft); border-radius:8px; padding:8px 10px; }
+  .sl-lb-cell .l { font:500 9px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:3px; }
+  .sl-lb-cell .v { font:600 13.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sl-lb-tags { display:flex; gap:5px; flex-wrap:wrap; margin-top:12px; }
+  .sl-lb-acts { display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
+
   /* "Has video" badge on cards (centred play overlay) */
   .sl-video-badge { position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center; pointer-events:none; }
   .sl-video-badge > span { width:32px; height:32px; border-radius:999px; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.5); display:flex; align-items:center; justify-content:center; color:#fff; }
@@ -350,6 +382,7 @@
           <div class="sl-preview" id="slPreview">
             <div class="sl-preview-topbar">
               <div class="name" id="prevName">—</div>
+              <button class="expand" id="prevExpand" title="Expand" data-i18n-attr="title:exlib.expand_preview"><i class="ti ti-arrows-diagonal"></i></button>
               <button class="close" id="prevClose" title="Close" data-i18n-attr="title:common.close">✕</button>
             </div>
             <div id="prevMedia"></div>
@@ -468,6 +501,22 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- Big preview lightbox -->
+<div class="sl-lb-backdrop" id="slLightbox" role="dialog" aria-modal="true" aria-labelledby="lbName">
+  <div class="sl-lb">
+    <div class="sl-lb-head">
+      <div class="sl-lb-title" id="lbName">—</div>
+      <button class="sl-lb-x" id="lbClose" aria-label="Close" data-i18n-attr="aria-label:common.close">✕</button>
+    </div>
+    <div class="sl-lb-body">
+      <div class="sl-lb-media" id="lbMedia"></div>
+      <div class="sl-lb-grid" id="lbGrid"></div>
+      <div class="sl-lb-tags" id="lbTags"></div>
+      <div class="sl-lb-acts" id="lbActs"></div>
+    </div>
+  </div>
 </div>
 
 <div id="tweaks-root"></div>
@@ -852,40 +901,25 @@
     document.getElementById('prevName').textContent = ex.name || tt('exlib.untitled','Untitled');
 
     // Media block: the drill drawing + the video (autoplay muted) when there's a link.
+    // Both act as an "expand" affordance that opens the big lightbox preview.
     const media = document.getElementById('prevMedia');
     if (media) {
       let mHtml = '';
-      if (ex._previewImg) mHtml += `<div class="sl-pv-draw"><img src="${ex._previewImg}" alt=""></div>`;
+      if (ex._previewImg) mHtml += `<div class="sl-pv-draw" data-expand><img src="${ex._previewImg}" alt=""></div>`;
       if (ex.video_url) {
         const embed = videoEmbed(ex.video_url);
         mHtml += embed
-          ? `<div class="sl-pv-video"><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+          ? `<div class="sl-pv-media"><div class="sl-pv-video"><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><button class="sl-pv-expand" data-expand title="${esc(tt('exlib.expand_preview','Expand'))}"><i class="ti ti-arrows-diagonal"></i></button></div>`
           : `<a class="sl-pv-videolink" href="${esc(ex.video_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>${tt('exlib.open_video','Open video')}</a>`;
       }
       media.innerHTML = mHtml;
+      media.querySelectorAll('[data-expand]').forEach(el => el.addEventListener('click', () => openLightbox(ex.id)));
     }
 
-    const cells = [
-      { l:tt('exlib.pv_players','Players'),   v: ex.players_count || '—' },
-      { l:tt('exlib.pv_field','Field'),     v: (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height} m` : '—' },
-      { l:tt('exlib.pv_m2_player','m²/player'), v: m2 ? `${m2} m²` : '—' },
-      { l:tt('exlib.pv_duration','Duration'),  v: ex.duration ? `${ex.duration} min` : '—' },
-      { l:tt('exlib.match_day','Match Day'), v: mdStr || '—' },
-      { l:tt('exlib.pv_series','Series'),    v: ex.series || '—' },
-      { l:tt('exlib.pv_work','Work'),      v: ex.work_time || '—' },
-      { l:tt('exlib.pv_rest','Rest'),      v: ex.rest_time || '—' },
-      { l:tt('exlib.intensity','Intensity'), v: ex.intensity ? INT_LABEL[ex.intensity] : '—' },
-      { l:tt('exlib.orientation','Orientation'), v: meta ? meta.label : '—' },
-    ];
-    document.getElementById('prevGrid').innerHTML = cells.map(c =>
+    document.getElementById('prevGrid').innerHTML = _slCells(ex).map(c =>
       `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`
     ).join('');
-
-    let tags = '';
-    if (ex.game_type_enabled && ex.game_type) tags += `<span class="sl-tag t-game">${ex.game_type}</span>`;
-    if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
-    (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
-    document.getElementById('prevTags').innerHTML = tags;
+    document.getElementById('prevTags').innerHTML = _slTagsHtml(ex);
     renderExGpsProfile(ex.id);
 
     // Folder assignment — move this exercise into a folder straight from the library.
@@ -1003,6 +1037,68 @@
     return null;
   }
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // Shared info cells + tags (rail preview and lightbox render the same data).
+  function _slCells(ex) {
+    const orient = calcOrient(ex);
+    const meta   = orient ? ORIENT[orient] : null;
+    const m2     = m2pp(ex);
+    return [
+      { l:tt('exlib.pv_players','Players'),   v: ex.players_count || '—' },
+      { l:tt('exlib.pv_field','Field'),     v: (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height} m` : '—' },
+      { l:tt('exlib.pv_m2_player','m²/player'), v: m2 ? `${m2} m²` : '—' },
+      { l:tt('exlib.pv_duration','Duration'),  v: ex.duration ? `${ex.duration} min` : '—' },
+      { l:tt('exlib.match_day','Match Day'), v: fmtMd(ex.match_day) || '—' },
+      { l:tt('exlib.pv_series','Series'),    v: ex.series || '—' },
+      { l:tt('exlib.pv_work','Work'),      v: ex.work_time || '—' },
+      { l:tt('exlib.pv_rest','Rest'),      v: ex.rest_time || '—' },
+      { l:tt('exlib.intensity','Intensity'), v: ex.intensity ? INT_LABEL[ex.intensity] : '—' },
+      { l:tt('exlib.orientation','Orientation'), v: meta ? meta.label : '—' },
+    ];
+  }
+  function _slTagsHtml(ex) {
+    let tags = '';
+    if (ex.game_type_enabled && ex.game_type) tags += `<span class="sl-tag t-game">${esc(ex.game_type)}</span>`;
+    if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
+    (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${esc(f)}</span>`; });
+    return tags;
+  }
+
+  // ── Lightbox (big preview: large drill + large video + full info) ──
+  const _slLb = document.getElementById('slLightbox');
+  function openLightbox(id) {
+    const ex = allExercises.find(x => x.id === id);
+    if (!ex) return;
+    document.getElementById('lbName').textContent = ex.name || tt('exlib.untitled','Untitled');
+
+    let media = '';
+    if (ex._previewImg) media += `<div class="sl-lb-draw"><img src="${ex._previewImg}" alt=""></div>`;
+    if (ex.video_url) {
+      const embed = videoEmbed(ex.video_url);
+      media += embed
+        ? `<div class="sl-lb-video"><iframe src="${embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+        : `<a class="sl-pv-videolink" href="${esc(ex.video_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>${tt('exlib.open_video','Open video')}</a>`;
+    }
+    document.getElementById('lbMedia').innerHTML = media || `<div class="sl-empty-links" style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('exlib.no_media','No drawing or video yet.')}</div>`;
+
+    document.getElementById('lbGrid').innerHTML = _slCells(ex).map(c =>
+      `<div class="sl-lb-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('');
+    document.getElementById('lbTags').innerHTML = _slTagsHtml(ex);
+
+    let acts = `<a class="cm-btn is-outline is-sm" href="Planner.html?exercise=${encodeURIComponent(ex.id)}"><i class="ti ti-edit" style="font-size:13px"></i>${esc(tt('exlib.open_in_planner','Open in Planner'))}</a>`;
+    if (ex.video_url) acts += `<a class="cm-btn is-sm" href="${esc(ex.video_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:13px"></i>${esc(tt('exlib.open_video','Open video'))}</a>`;
+    document.getElementById('lbActs').innerHTML = acts;
+
+    _slLb.classList.add('is-open');
+  }
+  function closeLightbox() {
+    _slLb.classList.remove('is-open');
+    document.getElementById('lbMedia').innerHTML = '';   // stop any playing video
+  }
+  document.getElementById('lbClose')?.addEventListener('click', closeLightbox);
+  _slLb?.addEventListener('click', e => { if (e.target === _slLb) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _slLb.classList.contains('is-open')) closeLightbox(); });
+  document.getElementById('prevExpand')?.addEventListener('click', () => { if (selectedId) openLightbox(selectedId); });
 
   document.getElementById('prevClose')?.addEventListener('click', hidePreview);
 
