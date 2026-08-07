@@ -248,7 +248,7 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
   React.useEffect(() => {
     if (!open || pf || !userId || !window.sb) return;
     window.sb.from('profiles')
-      .select('first_name,last_name,phone,birth_date,job_title,preferred_lang,avatar_url,full_name')
+      .select('first_name,last_name,phone,birth_date,preferred_lang,avatar_url,full_name')
       .eq('id', userId).single()
       .then(({ data }) => {
         const d = data || {};
@@ -257,8 +257,7 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
           last_name:  d.last_name  || '',
           phone:      d.phone      || '',
           birth_date: d.birth_date || '',
-          job_title:  d.job_title  || '',
-          preferred_lang: d.preferred_lang || (window.CM_I18N && window.CM_I18N.current) || 'en',
+          preferred_lang: (window.CM_I18N && window.CM_I18N.current) || d.preferred_lang || 'en',
           avatar_url: d.avatar_url || (profile && profile.avatar_url) || null,
         });
       }, () => {});
@@ -298,7 +297,7 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
       const fullName = (first + ' ' + last).trim();
       const patch = {
         first_name: first, last_name: last, phone: pf.phone || null, birth_date: pf.birth_date || null,
-        job_title: pf.job_title || null, preferred_lang: pf.preferred_lang, full_name: fullName,
+        preferred_lang: pf.preferred_lang, full_name: fullName,
       };
       if (avatarUrl) patch.avatar_url = avatarUrl;
       const { error } = await window.sb.from('profiles').update(patch).eq('id', uid);
@@ -459,22 +458,6 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
               </div>
             </Section>
 
-            <Section label={_t("settings.language", "Language")} hint={_t("settings.language.hint", "Choose the language for the whole app.")}>
-              <div className="sd-chips">
-                <button className={`sd-chip ${!langExplicit ? "is-on" : ""}`} onClick={chooseAuto}>
-                  {_t("settings.language.auto", "Auto (detect)")}
-                </button>
-                {langCodes.map((code) => (
-                  <button
-                    key={code}
-                    className={`sd-chip ${langExplicit && curLang === code ? "is-on" : ""}`}
-                    onClick={() => chooseLang(code)}>
-                    {langNames[code] || code.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </Section>
-
             <Section label={_t("settings.reset","Reset")}>
               {resetConfirm ? (
                 <div className="sd-reset-confirm">
@@ -563,10 +546,8 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
                     <input type="tel" value={pf.phone} onChange={e=>setPfField('phone', e.target.value)} /></label>
                   <label className="sd-pf-f"><span>{_t("settings.profile.birth_date","Birth date")}</span>
                     <input type="date" value={pf.birth_date || ''} onChange={e=>setPfField('birth_date', e.target.value)} /></label>
-                  <label className="sd-pf-f sd-pf-wide"><span>{_t("settings.profile.job_title","Job title")}</span>
-                    <input value={pf.job_title} onChange={e=>setPfField('job_title', e.target.value)} /></label>
                   <label className="sd-pf-f sd-pf-wide"><span>{_t("settings.profile.language","Language")}</span>
-                    <select value={pf.preferred_lang} onChange={e=>setPfField('preferred_lang', e.target.value)}>
+                    <select value={pf.preferred_lang} onChange={e=>{ const v=e.target.value; setPfField('preferred_lang', v); chooseLang(v); }}>
                       <option value="en">English</option>
                       <option value="es">Español</option>
                       <option value="pt">Português</option>
