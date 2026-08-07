@@ -8225,10 +8225,12 @@
     if (!mount) return;
     mount.innerHTML = '<div class="pb-loading">…</div>'; if (tiles) tiles.innerHTML = '';
     try {
-      // roster (team-scoped, with position)
-      var sel = 'id, first_name, last_name, position' + (_teamId ? ', player_teams!inner(team_id)' : '');
+      // roster (team-scoped, with position). Prevention board shows only players whose
+      // PRIMARY team is the active team (player_teams.is_primary) — guests linked from
+      // another squad are excluded; view their data from their own team instead.
+      var sel = 'id, first_name, last_name, position' + (_teamId ? ', player_teams!inner(team_id, is_primary)' : '');
       var rq = window.sb.from('players').select(sel).eq('club_id', _clubId).is('archived_at', null);
-      if (_teamId) rq = rq.eq('player_teams.team_id', _teamId);
+      if (_teamId) rq = rq.eq('player_teams.team_id', _teamId).eq('player_teams.is_primary', true);
       var rr = await rq; if (rr.error) throw rr.error;
       var seen = {}, roster = (rr.data || []).filter(function(p){ return seen[p.id] ? false : (seen[p.id] = true); });
 
