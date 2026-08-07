@@ -4524,7 +4524,7 @@
     _asEntry.sides.forEach(function(s){ if (vals[s] != null) byKey[def.key][s] = vals[s]; });
     var rs = AN.ratios(byKey);
     rs.forEach(function(r){
-      rows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)"><span style="font:500 12px/1;color:var(--cm-fg-muted)" title="'+esc(r.reference||'')+'">'+esc(r.key)+(r.angle?' '+esc(r.angle):'')+' '+(r.side&&r.side!=='NA'?esc(r.side)+' ':'')+esc((Math.round(r.value*100)/100).toString())+'</span>'+asStatusChip({ status:r.status, detail:'', reference:r.reference })+'</div>');
+      rows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)"><span style="font:500 12px/1;color:var(--cm-fg-muted)" title="'+esc(r.reference||'')+'">'+esc(tt('evaluations.ratio_'+r.key, r.key))+(r.angle?' '+esc(r.angle):'')+' '+(r.side&&r.side!=='NA'?esc(r.side)+' ':'')+esc((Math.round(r.value*100)/100).toFixed(2))+'</span>'+asStatusChip({ status:r.status, detail:'', reference:r.reference })+'</div>');
     });
 
     var fb = document.getElementById('asEntryFeedback');
@@ -8292,6 +8292,44 @@
     return { status: st.status, pct: asym ? asym.pct : null, L:L, R:R, NA:NA, unit: def.unit || '', hasData: (L != null || R != null || NA != null) };
   }
 
+  // Derived ADD:ABD ratio for a player, from the latest isometric hip add/abd tests.
+  // Worst (per side/angle) wins so the column mirrors the board's risk-first ordering.
+  function pbRatioRow(playerId){
+    var AN = window.assessNorms; if (!AN) return { status:'none', has:false };
+    var byKey = {};
+    (_assessDefs || []).forEach(function(def){
+      if (def.family !== 'isometric') return;
+      var t = _pbData.latest[playerId + '|' + def.test_type]; if (!t) return;
+      var o = {};
+      (_pbData.metricsByTest[t.id] || []).forEach(function(m){
+        if (m.metric_key === def.metric_key && m.value != null) o[m.side || 'NA'] = Number(m.value);
+      });
+      if (o.L != null || o.R != null || o.NA != null) byKey[def.key] = o;
+    });
+    var rs = AN.ratios(byKey).filter(function(r){ return r.key === 'add_abd'; });
+    if (!rs.length) return { status:'none', has:false };
+    var worst = rs.reduce(function(b, r){
+      var rk = _PB_RANK[r.status]||0, bk = _PB_RANK[b.status]||0;
+      if (rk > bk) return r;
+      if (rk === bk && r.value < b.value) return r;
+      return b;
+    });
+    return { status: worst.status, value: worst.value, items: rs, has: true };
+  }
+
+  function pbRatioFmt(v){ v = Number(v); return isFinite(v) ? v.toFixed(2) : '—'; }
+
+  function pbRatioCellHtml(rt){
+    if (!rt || !rt.has) return '<td class="pb-col"><div class="pb-cell none">—</div></td>';
+    var name = tt('evaluations.ratio_add_abd','ADD:ABD');
+    var lines = rt.items.map(function(r){
+      return (r.angle ? r.angle + ' ' : '') + (r.side && r.side !== 'NA' ? r.side + ' ' : '') + '=' + pbRatioFmt(r.value);
+    }).join('¦');
+    var flag = rt.status === 'alert' ? '▲' : (rt.status === 'watch' ? '●' : '');
+    return '<td class="pb-col"><div class="pb-cell ' + rt.status + '" data-tip="1" data-name="' + pbEsc(name) + '" data-ratio="' + pbEsc(lines) + '">'
+      + (flag ? '<span class="fl">' + flag + '</span>' : '') + '<span class="n">' + pbEsc(pbRatioFmt(rt.value)) + '</span></div></td>';
+  }
+
   function pbCellHtml(c){
     if (!c.hasData) return '<td class="pb-col"><div class="pb-cell none">—</div></td>';
     var u = c.unit ? (' ' + c.unit) : '';
@@ -8326,11 +8364,12 @@
         if (!t) return { status:'none', hasData:false, def:def };
         var c = pbComputeCell(def, d.metricsByTest[t.id]); c.def = def; return c;
       });
+      var ratio = pbRatioRow(p.id);
       return {
-        player: p, cells: cells,
-        alerts: cells.filter(function(c){ return c.status === 'alert'; }).length,
-        watches: cells.filter(function(c){ return c.status === 'watch'; }).length,
-        evaluated: cells.some(function(c){ return c.hasData; })
+        player: p, cells: cells, ratio: ratio,
+        alerts: cells.filter(function(c){ return c.status === 'alert'; }).length + (ratio.status === 'alert' ? 1 : 0),
+        watches: cells.filter(function(c){ return c.status === 'watch'; }).length + (ratio.status === 'watch' ? 1 : 0),
+        evaluated: cells.some(function(c){ return c.hasData; }) || ratio.has
       };
     });
     rows.sort(function(a,b){ return (b.alerts-a.alerts) || (b.watches-a.watches) || String(a.player.last_name||'').localeCompare(String(b.player.last_name||'')); });
@@ -8372,10 +8411,13 @@
     var groups = [];
     visCols.forEach(function(def){ var last = groups[groups.length-1]; if (last && last.fam === def.family) last.count++; else groups.push({ fam: def.family, count: 1 }); });
     var famLabel = function(fam){ return fam === 'isometric' ? tt('player.iso_strength_block','Isometric strength') : tt('player.mobility_block','Mobility'); };
+    var showRatioCol = rows.some(function(r){ return r.ratio && r.ratio.has; });
     var grpHtml = '<th class="pl stk"></th>' + groups.map(function(g){ return '<th class="fam" colspan="' + g.count + '">' + pbEsc(famLabel(g.fam)) + '</th>'; }).join('')
+      + (showRatioCol ? '<th class="fam" colspan="1">' + pbEsc(tt('evaluations.prev_group_derived','Derived')) + '</th>' : '')
       + '<th rowspan="2" style="vertical-align:bottom;padding-bottom:10px">' + pbEsc(tt('evaluations.prev_col_alerts','Alerts')) + '</th><th rowspan="2"></th>';
     var colHtml = '<th class="pl stk">' + pbEsc(tt('evaluations.player','Player')) + '</th>'
-      + visCols.map(function(def){ return '<th>' + pbShortLabel(def) + '</th>'; }).join('');
+      + visCols.map(function(def){ return '<th>' + pbShortLabel(def) + '</th>'; }).join('')
+      + (showRatioCol ? '<th>' + pbEsc(tt('evaluations.ratio_add_abd','ADD:ABD')) + '</th>' : '');
 
     // body
     var bodyHtml = rows.map(function(r){
@@ -8386,6 +8428,7 @@
       return '<tr>'
         + '<td class="stk"><div class="pb-plcell"><span class="pb-mono">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
         + pbVisIdx.map(function(i){ return pbCellHtml(r.cells[i]); }).join('')
+        + (showRatioCol ? pbRatioCellHtml(r.ratio) : '')
         + '<td class="pb-al">' + cnt + '</td>'
         + '<td class="pb-act"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '"><i class="ti ti-shield-plus"></i>' + pbEsc(tt('evaluations.prev_action','Preventive')) + '</a></td>'
         + '</tr>';
@@ -8403,7 +8446,8 @@
       + '</div></div>'
       + '<div class="pb-scroll"><table class="pb-tbl"><thead><tr class="grp">' + grpHtml + '</tr><tr class="cols">' + colHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>'
       + '</div>'
-      + '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.prev_foot','Cell shows left/right asymmetry of the latest test; hover for values. Default thresholds: watch ≥10%, alert ≥15% — configurable per test.')) + '</span></div>';
+      + '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.prev_foot','Cell shows left/right asymmetry of the latest test; hover for values. Default thresholds: watch ≥10%, alert ≥15% — configurable per test.')) + '</span></div>'
+      + (showRatioCol ? '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.ratio_foot','ADD:ABD = hip adductor ÷ abductor strength (worst side of the latest test). ≥0.90 in range · 0.80–0.89 watch · <0.80 alert. Ref: Thorborg et al., AJSM 2010.')) + '</span></div>' : '');
 
     // column visibility toggle (re-wired each render since innerHTML is rebuilt)
     var pbTog = document.getElementById('pbColToggle');
@@ -8418,8 +8462,13 @@
         var cell = e.target.closest ? e.target.closest('.pb-cell[data-tip]') : null;
         if (cell){
           var html = '<div class="pb-tip-name">' + pbEsc(cell.getAttribute('data-name') || '') + '</div>';
+          var ratio = cell.getAttribute('data-ratio');
           var asym = cell.getAttribute('data-asym');
-          if (asym){
+          if (ratio){
+            html += '<div class="pb-tip-grid">' + ratio.split('¦').map(function(part){
+              var kv = part.split('='); return '<span class="k">' + pbEsc(kv[0] || '') + '</span><span class="v">' + pbEsc(kv[1] || '') + '</span>';
+            }).join('') + '</div>';
+          } else if (asym){
             html += '<div class="pb-tip-grid">'
               + '<span class="k">L</span><span class="v">' + pbEsc(cell.getAttribute('data-l') || '—') + '</span>'
               + '<span class="k">R</span><span class="v">' + pbEsc(cell.getAttribute('data-r') || '—') + '</span>'
