@@ -2740,23 +2740,37 @@ async function saveInjury() {
 
     // Notify staff (coaches, admin, S&C, medical) that a new injury was reported.
     // Historical records are back-dated data entry, not live events — they don't alert.
+    // Each recipient row is localized to that recipient's own language, and gated by
+    // their "Injury reported" (alertInjury) preference (default on). Stored notifications
+    // are text snapshots, so the recipient's language can't be resolved at render time.
     if (!isHistorical) {
       try {
-        const pl     = newInj.players || _playersMap[player_id] || {};
-        const pName  = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'A player';
+        const pl    = newInj.players || _playersMap[player_id] || {};
+        const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
+        // key: preferred_lang -> { locale, title(name), body(type,sev,ret), tbd, anon }
+        const NL = {
+          en: { locale:'en-GB', title:n=>`${n} reported injured`,  body:(t,s,r)=>`${t} · ${s}. Expected return ${r}.`, tbd:'TBD',         anon:'A player'  },
+          es: { locale:'es-ES', title:n=>`Nueva lesión: ${n}`,     body:(t,s,r)=>`${t} · ${s}. Retorno estimado: ${r}.`, tbd:'sin definir', anon:'Un jugador' },
+          pt: { locale:'pt-BR', title:n=>`Nova lesão: ${n}`,       body:(t,s,r)=>`${t} · ${s}. Retorno estimado: ${r}.`, tbd:'a definir',   anon:'Um jogador' },
+        };
         const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
-        const others = recips.filter(p => p.id && p.id !== (_profile?.id || null));
-        if (others.length) {
-          const { error: nErr } = await window.sb.from('notifications').insert(
-            others.map(p => ({
+        const rows = recips
+          .filter(p => p.id && p.id !== (_profile?.id || null))
+          .filter(p => !p.notification_settings || p.notification_settings.alertInjury !== false)
+          .map(p => {
+            const L   = NL[p.preferred_lang] || NL.en;
+            const ret = expected_return ? new Date(expected_return).toLocaleDateString(L.locale, { day:'numeric', month:'short' }) : L.tbd;
+            return {
               user_id: p.id,
               club_id: _clubId,
               type:    'injury_reported',
-              title:   `${pName} reported injured`,
-              body:    `${injury_type} · ${severity}. Expected return ${expected_return ? new Date(expected_return).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : 'TBD'}.`,
+              title:   L.title(pName || L.anon),
+              body:    L.body(injury_type, severity, ret),
               link:    '/Injuries.html'
-            }))
-          );
+            };
+          });
+        if (rows.length) {
+          const { error: nErr } = await window.sb.from('notifications').insert(rows);
           if (nErr) console.warn('[notif] injury_reported insert failed:', nErr.message);
         }
       } catch(e) { console.warn('[notif] injury_reported insert failed:', e.message); }

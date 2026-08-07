@@ -566,7 +566,7 @@
       if (!clubId || !Array.isArray(buckets) || !buckets.length) return [];
       const want = new Set(buckets);
       const { data: profs } = await window.sb.from('profiles')
-        .select('id, role, club_role').eq('club_id', clubId);
+        .select('id, role, club_role, preferred_lang, notification_settings').eq('club_id', clubId);
       let list = (profs || []).filter(p => (p.role || '').toLowerCase() !== 'player');
       try {
         const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
