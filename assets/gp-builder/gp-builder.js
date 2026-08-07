@@ -133,6 +133,25 @@
     { id:'count',  name:'Count (sessions)',    short:'N',    icon:'ti-list-numbers', peakOk:true },
   ];
   const AGG = Object.fromEntries(AGGS.map(a => [a.id, a]));
+  // Level-2 "combine players" aggregation for single-value cards (KPI / gauge) at squad scope.
+  // The per-metric agg is level 1 (per player, over the range); this reduces the per-player
+  // values into one squad number. 'pooled' = legacy behaviour (all rows aggregated at once →
+  // configs without a rollup stay byte-identical). See resolver aggregateSeries single-value branch.
+  const SQUAD_AGGS = [
+    { id:'pooled', name:'Pooled (all sessions)', short:'POOL', icon:'ti-stack-2' },
+    { id:'avg',    name:'Average per player',    short:'AVG',  icon:'ti-divide' },
+    { id:'total',  name:'Sum per player',        short:'SUM',  icon:'ti-sigma' },
+    { id:'median', name:'Median per player',     short:'MED',  icon:'ti-chart-dots' },
+    { id:'max',    name:'Max per player',        short:'MAX',  icon:'ti-arrow-up' },
+    { id:'min',    name:'Min per player',        short:'MIN',  icon:'ti-arrow-down' },
+  ];
+  const SQUAD_AGG = Object.fromEntries(SQUAD_AGGS.map(a => [a.id, a]));
+  // The rollup control only makes sense for single-value viz (one number per metric) at squad scope.
+  function _squadAggApplies(S) { return !!S && S.scope === 'squad' && (S.type === 'kpi' || S.type === 'gauge'); }
+  function _squadAggName(id) {
+    const a = SQUAD_AGG[id] || SQUAD_AGG.pooled;
+    return _tt('gps_analysis.builder_squad_agg_' + a.id, a.name);
+  }
 
   const COLORS = [
     { id:'green',  hex:'#15803D' }, { id:'blue',   hex:'#2563EB' },
@@ -350,7 +369,9 @@
       ...(S.titleCustom ? { titleCustom: true } : {}),
       viz:    S.type,
       source: S.source || 'session',
-      scope:  { level: S.scope },
+      // rollup = level-2 "combine players" agg; omitted unless it applies AND is non-pooled, so
+      // existing single-value cards serialize byte-identically.
+      scope:  { level: S.scope, ...(_squadAggApplies(S) && S.squadAgg && S.squadAgg !== 'pooled' ? { rollup: S.squadAgg } : {}) },
       metrics: S.metrics.map(m => {
         const cat = catalogMap.get(m.id) || {};
         const out = { id:m.id, agg:m.agg, kind:cat.kind||'accum', unit:cat.unit||'', custom:!!cat.is_custom };
@@ -753,7 +774,7 @@
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     // Default: NO comparison → the card shows RAW values, not %. Comparison is opt-in
     // per card (the Comparison dropdown writes config.comparison; null = raw).
-    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
+    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
@@ -1115,6 +1136,7 @@
       S.type    = cfg.type;
       S.source  = cfg.source || 'session';
       S.scope   = cfg.scope;
+      S.squadAgg = cfg.squadAgg || 'pooled';   // legacy configs have no rollup → pooled
       S.range   = cfg.range;
       S.compare = cfg.compare === 'role' ? 'position' : cfg.compare;
       S.refMcId = cfg.refMcId || null;
@@ -1149,6 +1171,7 @@
       S.type    = rawConfig.viz                  || 'bars';
       S.source  = rawConfig.source || 'session';
       S.scope   = rawConfig.scope?.level         || 'player';
+      S.squadAgg = rawConfig.scope?.rollup       || 'pooled';
       S.range   = rawConfig.range?.type          || 'mc';
       S.compare = (rawConfig.comparison?.baseline === 'role' ? 'position' : rawConfig.comparison?.baseline) || 'none';
       S.refMcId = rawConfig.comparison?.refMcId  || null;
@@ -6156,6 +6179,15 @@
       }
       return `<div class="rb-pop-h"><div class="t">${kind==='range' ? _tt('gps_analysis.builder_time_range', 'Time range') : _tt('gps_analysis.builder_comparison_baseline', 'Comparison / baseline')}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
     }
+    if (kind === 'squad') {
+      const rows = SQUAD_AGGS.map(a => `<button class="rb-opt ${(S.squadAgg||'pooled')===a.id?'is-on':''}" data-squad="${esc(a.id)}">
+        <span class="ic"><i class="ti ${a.icon}"></i></span>
+        <span class="tx"><span class="t">${esc(_squadAggName(a.id))}</span>${a.id==='pooled'
+          ? `<span class="d">${esc(_tt('gps_analysis.builder_squad_agg_pooled_desc', 'All players & sessions aggregated at once'))}</span>`
+          : `<span class="d">${esc(_tt('gps_analysis.builder_squad_agg_desc', 'Aggregate per player, then combine'))}</span>`}</span>
+        <i class="ti ti-check ck"></i></button>`).join('');
+      return `<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_combine_players', 'Combine players')}</div></div><div class="rb-pop-b">${rows}</div>`;
+    }
     if (kind === 'bars') {
       return `<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_bar_options', 'Bar options')}</div></div>
         <div class="rb-pop-b" style="gap:12px;padding:11px 13px">
@@ -6243,6 +6275,13 @@
       const f = S.metrics.find(m => m.id === popEl.dataset.field);
       if (f) f.agg = b.dataset.agg;
       renderMetrics(); pulseNext = true; renderCard(); closePop();
+    });
+    // Combine-players (level-2 rollup) picker — pick → apply → close. ddSyncFromS re-renders the
+    // D&D config row (so the select label updates) and the card with real resolver data.
+    popEl.querySelectorAll('[data-squad]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      S.squadAgg = b.dataset.squad;
+      closePop(); ddSyncFromS();
     });
     // Bar options popover — orientation segmented + stacked toggle (stays open).
     popEl.querySelectorAll('[data-orient]').forEach(b => b.onclick = e => {
@@ -6704,6 +6743,10 @@
             <button data-scope="squad" class="${S.scope==='squad'?'is-on':''}"><i class="ti ti-users"></i>${_tt('gps_analysis.builder_scope_squad', 'Squad')}</button>
           </div>
         </div>
+        ${_squadAggApplies(S) ? `<div class="bdd-cfg-f">
+          <span class="k">${_tt('gps_analysis.builder_combine_players', 'Combine players')}</span>
+          <button class="es-select bdd-cfg-sel" data-ddpop="squad"><i class="ti ${(SQUAD_AGG[S.squadAgg]||SQUAD_AGG.pooled).icon}"></i><span class="v" id="gpbDDSquadAggName">${esc(_squadAggName(S.squadAgg))}</span><i class="ti ti-chevron-down cv"></i></button>
+        </div>` : ''}
         <div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_time_range', 'Time range')}</span>
           <button class="es-select bdd-cfg-sel" data-ddpop="range"><i class="ti ti-calendar-week"></i><span class="v" id="gpbDDRangeName">${esc(rangeName)}</span><i class="ti ti-chevron-down cv"></i></button>
@@ -7331,6 +7374,7 @@
     // Map gp.card/v1 → internal state S
     S.type    = config.viz                        || 'bars';
     S.scope   = config.scope?.level               || 'player';
+    S.squadAgg = config.scope?.rollup             || 'pooled';
     S.range   = config.range?.type                || 'mc';
     S.compare = (config.comparison?.baseline === 'role' ? 'position' : config.comparison?.baseline) || 'none';
     S.refMcId = config.comparison?.refMcId        || null;
@@ -7340,6 +7384,7 @@
     S.size    = config.style?.size                || 'md';
     S.color   = config.style?.color               || '#15803D';
     S.palette = config.style?.palette             || 'pitch';
+    S.colors  = config.style?.colors ? { ...config.style.colors } : {};
     S.axes    = config.style?.axes    !== false;
     S.legend  = config.style?.legend  !== false;
     S.labels  = !!config.style?.dataLabels;
