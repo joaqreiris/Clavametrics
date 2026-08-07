@@ -1420,6 +1420,8 @@ create table if not exists public.messages (
   team_id uuid,
   group_id uuid,
   reply_to uuid,
+  edited_at timestamp with time zone,
+  deleted_at timestamp with time zone,
   constraint messages_pkey primary key (id),
   constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'file'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );

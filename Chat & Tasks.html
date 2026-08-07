@@ -128,6 +128,13 @@
   .typing-indicator .td-dots i:nth-child(3) { animation-delay:.36s; }
   @keyframes cmTypingDot { 0%,60%,100% { opacity:.3; transform:translateY(0); } 30% { opacity:1; transform:translateY(-3px); } }
   @media (prefers-reduced-motion: reduce) { .typing-indicator .td-dots i { animation:none; } }
+  /* edited / deleted */
+  .msg .time .edited-tag { font:italic 500 10px/1 var(--cm-font-sans); color:var(--cm-fg-faint); margin-right:2px; }
+  .msg.me .time .edited-tag { color:rgba(255,255,255,0.6); }
+  .bubble.is-deleted { opacity:.85; }
+  .deleted-text { display:flex; align-items:center; gap:5px; font-style:italic; color:var(--cm-fg-muted) !important; }
+  .msg.me .deleted-text { color:rgba(255,255,255,0.75) !important; }
+  .deleted-text .ti { font-size:13px; }
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
@@ -479,6 +486,7 @@
               <button data-i18n-attr="title:chat_tasks.create_task" title="Create task" onclick="composerCreateTask(event)"><i class="ti ti-flag-2"></i></button>
             </div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+              <div id="editDraft" style="display:none"></div>
               <div id="replyDraft" style="display:none"></div>
               <div id="pendingAtt" style="display:none"></div>
               <div id="linkPreviewDraft" style="display:none"></div>
@@ -1086,7 +1094,7 @@ function ctResolveTeamId() {
 }
 
 async function loadMessages() {
-  let q = window.sb.from('messages').select('id,sender_id,recipient_id,group_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview,reply_to').eq('club_id', currentUser.clubId);
+  let q = window.sb.from('messages').select('id,sender_id,recipient_id,group_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview,reply_to,edited_at,deleted_at').eq('club_id', currentUser.clubId);
   if (activeConv === 'group') {
     // Team channel: recipient_id IS NULL AND group_id IS NULL (custom-group messages also have a
     // null recipient, so they must be excluded here). Include legacy null-team rows for this club.
@@ -1209,6 +1217,24 @@ function renderMsgHTML(msg) {
   const lpHTML  = msg.link_preview   ? renderLpHTML(msg.link_preview) : '';
   const state = msg._failed ? ' failed' : (msg._sending ? ' sending' : '');
   const quoteHTML = msg.reply_to ? renderQuoteHTML(msg.reply_to) : '';
+  const isTmp = String(msg.id).startsWith('tmp-');
+  const canEdit = isMe && !isTmp && !msg.deleted_at && !msg.attachment_url;   // edit text messages only
+
+  // Deleted tombstone: keep the row (thread/replies intact) but strip all content + actions.
+  if (msg.deleted_at) {
+    return `<div class="msg${isMe ? ' me' : ''}" data-msg-id="${msg.id}">
+      ${avHTML}
+      <div class="msg-body">
+        <div class="bubble is-deleted">
+          ${!isMe ? `<div class="who">${esc(authorName)}</div>` : ''}
+          <div class="text deleted-text"><i class="ti ti-ban"></i> ${esc(tt('chat_tasks.msg_deleted', 'This message was deleted'))}</div>
+          <div class="time">${time}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const editedTag = msg.edited_at ? `<span class="edited-tag">${esc(tt('chat_tasks.edited', 'edited'))}</span>` : '';
   return `<div class="msg${isMe ? ' me' : ''}${state}" data-msg-id="${msg.id}">
     ${avHTML}
     <div class="msg-body">
@@ -1217,12 +1243,14 @@ function renderMsgHTML(msg) {
         ${quoteHTML}
         ${content ? `<div class="text">${content}</div>` : ''}
         ${attHTML}${lpHTML}
-        <div class="time">${time}${isMe ? msgStatusIcon(msg) : ''}</div>
+        <div class="time">${editedTag}${time}${isMe ? msgStatusIcon(msg) : ''}</div>
       </div>
       <div class="msg-reactions" data-react-for="${msg.id}">${renderReactionsHTML(msg.id)}</div>
       <div class="msg-actions">
         <button class="msg-action-btn" onclick="showReactPicker('${msg.id}', event)" data-i18n-attr="title:chat_tasks.react" title="React"><i class="ti ti-mood-plus"></i></button>
         <button class="msg-action-btn" onclick="startReply('${msg.id}')" data-i18n-attr="title:chat_tasks.reply" title="Reply"><i class="ti ti-arrow-back-up"></i></button>
+        ${canEdit ? `<button class="msg-action-btn" onclick="startEdit('${msg.id}')" data-i18n-attr="title:chat_tasks.edit" title="Edit"><i class="ti ti-pencil"></i></button>` : ''}
+        ${isMe && !isTmp ? `<button class="msg-action-btn" onclick="deleteMsg('${msg.id}')" data-i18n-attr="title:chat_tasks.delete" title="Delete"><i class="ti ti-trash"></i></button>` : ''}
         <button class="msg-action-btn" onclick="pinMsgFromHover('${msg.id}')" title="Pin"><i class="ti ti-pin"></i></button>
       </div>
     </div>
@@ -1236,7 +1264,7 @@ function renderQuoteHTML(refId) {
   if (!src) return `<div class="msg-quote is-gone">${esc(tt('chat_tasks.original_unavailable', 'Original message'))}</div>`;
   const a = members.find(x => x.id === src.sender_id) || null;
   const who = a ? window.cmDisplayName(a) : (src.sender_name || '?');
-  let snippet = (src.content || '').trim();
+  let snippet = src.deleted_at ? tt('chat_tasks.msg_deleted', 'This message was deleted') : (src.content || '').trim();
   if (!snippet && (src.attachment_url || src.attachment_name)) {
     snippet = src.attachment_type === 'image'
       ? tt('chat_tasks.quote_photo', 'Photo')
@@ -1409,6 +1437,73 @@ function startReply(msgId) {
 }
 
 function cancelReply() { replyingTo = null; renderReplyDraft(); }
+
+// ── EDIT / DELETE own messages ──
+let editingMsg = null;   // message object currently being edited
+
+function startEdit(msgId) {
+  const msg = messages.find(m => String(m.id) === String(msgId));
+  if (!msg || msg.sender_id !== currentUser.id || msg.deleted_at) return;
+  cancelReply();
+  editingMsg = msg;
+  const inp = document.getElementById('msgInput');
+  if (inp) { inp.value = msg.content || ''; autoGrowComposer(); inp.focus(); }
+  renderEditDraft();
+}
+
+function cancelEdit() {
+  editingMsg = null;
+  renderEditDraft();
+  const inp = document.getElementById('msgInput');
+  if (inp) { inp.value = ''; autoGrowComposer(); }
+}
+
+function renderEditDraft() {
+  const el = document.getElementById('editDraft');
+  if (!el) return;
+  if (!editingMsg) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="reply-draft">
+    <div class="rd-bar"></div>
+    <div class="rd-body"><div class="rd-who"><i class="ti ti-pencil" style="font-size:11px"></i> ${esc(tt('chat_tasks.editing_message', 'Editing message'))}</div></div>
+    <button class="rd-x" onclick="cancelEdit()" title="${esc(tt('common.cancel', 'Cancel'))}"><i class="ti ti-x"></i></button>
+  </div>`;
+  el.style.display = 'block';
+}
+
+// Persist an edit: update content + edited_at, then repaint the bubble in place.
+async function doEditMessage(newContent) {
+  const msg = editingMsg;
+  editingMsg = null;
+  renderEditDraft();
+  const stamp = new Date().toISOString();
+  msg.content = newContent; msg.edited_at = stamp;
+  repaintMsg(msg);
+  const { error } = await window.sb.from('messages').update({ content: newContent, edited_at: stamp }).eq('id', msg.id);
+  if (error) console.error('edit failed', error);
+}
+
+async function deleteMsg(msgId) {
+  const msg = messages.find(m => String(m.id) === String(msgId));
+  if (!msg || msg.sender_id !== currentUser.id || String(msgId).startsWith('tmp-')) return;
+  if (!confirm(tt('chat_tasks.delete_confirm', 'Delete this message for everyone?'))) return;
+  const stamp = new Date().toISOString();
+  msg.deleted_at = stamp; msg.content = null; msg.attachment_url = null; msg.attachment_name = null; msg.link_preview = null;
+  repaintMsg(msg);
+  const { error } = await window.sb.from('messages')
+    .update({ deleted_at: stamp, content: null, attachment_url: null, attachment_name: null, attachment_size: null, attachment_type: null, link_preview: null })
+    .eq('id', msgId);
+  if (error) console.error('delete failed', error);
+}
+
+// Replace a single message's DOM node from its (mutated) object, without a full re-render.
+function repaintMsg(msg) {
+  const node = document.querySelector(`#chatBody .msg[data-msg-id="${CSS.escape(String(msg.id))}"]`);
+  if (!node) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderMsgHTML(msg);
+  const fresh = tmp.querySelector('.msg');
+  if (fresh) node.replaceWith(fresh);
+}
 
 function renderReplyDraft() {
   const el = document.getElementById('replyDraft');
@@ -1642,6 +1737,15 @@ async function sendMessage() {
   if (!currentUser) return;
   const inp = document.getElementById('msgInput');
   const content = (inp.value || '').trim();
+
+  // Edit mode: update the existing message instead of sending a new one (empty content cancels).
+  if (editingMsg) {
+    if (!content || content === (editingMsg.content || '')) { cancelEdit(); return; }
+    doEditMessage(content);
+    inp.value = ''; autoGrowComposer(); stopTypingNow(); inp.focus();
+    return;
+  }
+
   if (!content && !pendingAttachments.length) return;
 
   // Team channel needs a resolved team — never save a group message with a null team_id
@@ -2610,6 +2714,7 @@ function subscribeRealtime() {
   try { window.sb.getChannels().filter(c => ['cm-chat-messages','cm-tasks'].includes(c.topic.replace('realtime:',''))).forEach(c => window.sb.removeChannel(c)); } catch(_){}
   window.sb.channel('cm-chat-messages')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${currentUser.clubId}` }, handleNewMessage)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `club_id=eq.${currentUser.clubId}` }, handleMsgUpdate)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `club_id=eq.${currentUser.clubId}` }, handleReaction)
@@ -2641,6 +2746,20 @@ function handleReadReceipt(payload) {
   if (!relevant) return;
   readState[r.user_id] = r.last_read_at;
   refreshReadTicks();
+}
+
+// An existing message was edited or soft-deleted elsewhere → sync local copy + repaint in place.
+function handleMsgUpdate(payload) {
+  const upd = payload.new;
+  if (!upd) return;
+  const i = messages.findIndex(m => m.id === upd.id);
+  if (i < 0) return;
+  messages[i] = { ...messages[i], ...upd };
+  repaintMsg(messages[i]);
+  // Keep the conversation-list preview honest if the last message changed.
+  const isDm = !!upd.recipient_id, isCgMsg = !!upd.group_id;
+  if (isDm) { const pid = upd.sender_id === currentUser.id ? upd.recipient_id : upd.sender_id; if (dmLastMsg[pid]?.id === upd.id) { dmLastMsg[pid] = messages[i]; renderConvList(); } }
+  else if (isCgMsg) { if (groupLastMsg[upd.group_id]?.id === upd.id) { groupLastMsg[upd.group_id] = messages[i]; renderConvList(); } }
 }
 
 function handleNewMessage(payload) {
