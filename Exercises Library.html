@@ -53,14 +53,29 @@
   .sl-pill .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
   .sl-pill.is-on .ct { color:var(--cm-accent); font-weight:600; }
   .sl-toolbar .grow { flex:1; }
-  .sl-origin-wrap { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 8px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); }
-  .sl-origin-wrap:hover { border-color:var(--cm-border-strong); }
-  .sl-origin-wrap select { border:0; background:transparent; color:var(--cm-fg-strong); font:500 12px/1 var(--cm-font-sans); cursor:pointer; max-width:180px; outline:none; }
-  .sl-origin-wrap.is-active { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
 
   /* Layout */
-  .sl-grid { display:grid; grid-template-columns: 1fr 360px; gap:14px; align-items:start; }
-  @media (max-width:1200px) { .sl-grid { grid-template-columns:1fr; } }
+  .sl-grid { display:grid; grid-template-columns: 1fr; gap:14px; align-items:start; }
+  .sl-grid.has-rail { grid-template-columns: 1fr 360px; }
+  @media (max-width:1200px) { .sl-grid, .sl-grid.has-rail { grid-template-columns:1fr; } }
+
+  /* ── Filter bar (dropdown filters, top) ── */
+  .sl-filterbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 16px; }
+  .sl-filterbar .grow { flex:1; }
+  .sl-fdrop { position:relative; }
+  .sl-fbtn { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); color:var(--cm-fg); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; transition:border-color .12s, background .12s; }
+  .sl-fbtn:hover { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
+  .sl-fbtn > .ti { font-size:15px; color:var(--cm-fg-muted); }
+  .sl-fbtn .chev { font-size:15px; color:var(--cm-fg-faint); margin-left:1px; }
+  .sl-fbtn .badge { display:none; min-width:17px; height:17px; padding:0 5px; border-radius:999px; background:var(--cm-accent); color:#fff; font:600 10.5px/17px var(--cm-font-mono); text-align:center; }
+  .sl-fdrop.is-active .sl-fbtn { border-color:var(--cm-accent); background:var(--cm-accent-soft); color:var(--cm-fg-strong); }
+  .sl-fdrop.is-active .sl-fbtn .badge { display:inline-block; }
+  .sl-fmenu { position:absolute; top:calc(100% + 6px); left:0; z-index:200; min-width:210px; max-height:320px; overflow-y:auto; padding:6px; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-3, 0 8px 24px rgba(0,0,0,.16)); display:none; }
+  .sl-fmenu.is-open { display:block; }
+  .sl-fbar-count { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .sl-fbar-clear { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:transparent; color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .sl-fbar-clear:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .sl-fbar-clear .ti { font-size:14px; }
 
   /* Card grid */
   .sl-cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; }
@@ -186,18 +201,15 @@
   .sl-tag.t-game      { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd,var(--cm-info-bg)); }
   .sl-tag.t-focus     { font-size:10px; }
 
-  /* RIGHT rail */
+  /* RIGHT rail (preview only; shown when a card is selected) */
   .sl-rail {
+    display:none;
     background:var(--cm-surface); border:1px solid var(--cm-border);
     border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
     position:sticky; top:80px;
     max-height:calc(100vh - 100px); overflow-y:auto;
   }
-  .sl-rail-h { padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; }
-  .sl-rail-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .sl-rail-h .right { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
-  .sl-rail-h .clear { background:none; border:0; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; margin-left:8px; }
-  .sl-rail-h .clear:hover { color:var(--cm-fg); }
+  .sl-grid.has-rail .sl-rail { display:block; }
 
   /* Preview panel (inside rail, shown when card selected) */
   .sl-preview { border-bottom:1px solid var(--cm-border-soft); padding:14px 16px; display:none; }
@@ -265,16 +277,6 @@
   .sl-gps-ctx { font:500 9.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:6px; }
   .sl-gps-empty { font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-faint); padding:2px 0; }
 
-  .sl-acc { border-bottom:1px solid var(--cm-border-soft); }
-  .sl-acc:last-child { border-bottom:0; }
-  .sl-acc-h { display:flex; align-items:center; gap:8px; padding:11px 16px; cursor:pointer; user-select:none; }
-  .sl-acc-h .l { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.04em; text-transform:uppercase; color:var(--cm-fg-muted); }
-  .sl-acc-h .ct { margin-left:auto; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
-  .sl-acc-h .ti { font-size:14px; color:var(--cm-fg-muted); margin-left:6px; transition:transform 150ms; }
-  .sl-acc-h.is-open .ti { transform:rotate(180deg); }
-  .sl-acc-b { padding:0 16px 14px; display:flex; flex-direction:column; gap:4px; display:none; }
-  .sl-acc-b.is-open { display:flex; }
-
   .sl-opt { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; }
   .sl-opt:hover { background:var(--cm-bg-soft); }
   .sl-opt .cb {
@@ -290,8 +292,6 @@
   }
   .sl-opt .lbl { flex:1; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
   .sl-opt .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
-
-  .sl-rail-foot { padding:12px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 </style>
@@ -356,11 +356,64 @@
         <button class="sl-pill" data-orient="ENDURANCE"><span class="dot" style="background:#16A34A"></span><span data-i18n="exlib.endurance">Endurance</span><span class="ct" id="ctEnd">—</span></button>
         <button class="sl-pill" data-orient="GOALKEEPER"><span class="dot" style="background:#7C3AED"></span><span data-i18n="exlib.goalkeepers">Goalkeepers</span><span class="ct" id="ctGk">—</span></button>
         <div class="grow"></div>
-        <div class="sl-origin-wrap" title="" data-i18n-attr="title:exlib.filter_origin_team">
-          <i class="ti ti-users-group" style="font-size:14px;color:var(--cm-fg-muted)"></i>
-          <select id="slOriginSel"></select>
-        </div>
         <button class="cm-btn is-outline is-sm" id="sortBtn"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span id="sortLabel" data-i18n="exlib.sort_recent">Recent</span></button>
+      </div>
+
+      <!-- Filter bar (dropdown filters) -->
+      <div class="sl-filterbar">
+        <!-- Intensity -->
+        <div class="sl-fdrop" data-drop="intensity">
+          <button class="sl-fbtn" type="button"><i class="ti ti-flame"></i><span data-i18n="exlib.intensity">Intensity</span><span class="badge" id="ctIntAcc"></span><i class="ti ti-chevron-down chev"></i></button>
+          <div class="sl-fmenu">
+            <div class="sl-opt" data-group="intensity" data-val="LOW"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_low">Low</span><span class="ct" id="cntIntLow">—</span></div>
+            <div class="sl-opt" data-group="intensity" data-val="MEDIUM"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_medium">Medium</span><span class="ct" id="cntIntMed">—</span></div>
+            <div class="sl-opt" data-group="intensity" data-val="HIGH"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_high">High</span><span class="ct" id="cntIntHigh">—</span></div>
+            <div class="sl-opt" data-group="intensity" data-val="VERY_HIGH"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_very_high">Very High</span><span class="ct" id="cntIntVH">—</span></div>
+          </div>
+        </div>
+        <!-- Match Day -->
+        <div class="sl-fdrop" data-drop="matchday">
+          <button class="sl-fbtn" type="button"><i class="ti ti-calendar-event"></i><span data-i18n="exlib.match_day">Match Day</span><span class="badge" id="ctMdAcc"></span><i class="ti ti-chevron-down chev"></i></button>
+          <div class="sl-fmenu">
+            <div class="sl-opt" data-group="matchday" data-val="-5"><span class="cb"></span><span class="lbl">MD−5</span><span class="ct" id="cntMdM5">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="-4"><span class="cb"></span><span class="lbl">MD−4</span><span class="ct" id="cntMdM4">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="-3"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct" id="cntMdM3">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="-2"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct" id="cntMdM2">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="-1"><span class="cb"></span><span class="lbl">MD−1</span><span class="ct" id="cntMdM1">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="0"><span class="cb"></span><span class="lbl">MD</span><span class="ct" id="cntMd0">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="1"><span class="cb"></span><span class="lbl">MD+1</span><span class="ct" id="cntMdP1">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="2"><span class="cb"></span><span class="lbl">MD+2</span><span class="ct" id="cntMdP2">—</span></div>
+            <div class="sl-opt" data-group="matchday" data-val="3"><span class="cb"></span><span class="lbl">MD+3</span><span class="ct" id="cntMdP3">—</span></div>
+          </div>
+        </div>
+        <!-- Game type -->
+        <div class="sl-fdrop" data-drop="gametype">
+          <button class="sl-fbtn" type="button"><i class="ti ti-ball-football"></i><span data-i18n="exlib.game_type">Game type</span><span class="badge" id="ctGtAcc"></span><i class="ti ti-chevron-down chev"></i></button>
+          <div class="sl-fmenu">
+            <div class="sl-opt" data-group="gametype" data-val="SSG"><span class="cb"></span><span class="lbl">SSG</span><span class="ct" id="cntSSG">—</span></div>
+            <div class="sl-opt" data-group="gametype" data-val="MSG"><span class="cb"></span><span class="lbl">MSG</span><span class="ct" id="cntMSG">—</span></div>
+            <div class="sl-opt" data-group="gametype" data-val="LSG"><span class="cb"></span><span class="lbl">LSG</span><span class="ct" id="cntLSG">—</span></div>
+            <div class="sl-opt" data-group="gametype" data-val="NONE"><span class="cb"></span><span class="lbl" data-i18n="common.none">None</span><span class="ct" id="cntGtNone">—</span></div>
+          </div>
+        </div>
+        <!-- Focus -->
+        <div class="sl-fdrop" data-drop="focus">
+          <button class="sl-fbtn" type="button"><i class="ti ti-target"></i><span data-i18n="exlib.focus">Focus</span><span class="badge" id="ctFocAcc"></span><i class="ti ti-chevron-down chev"></i></button>
+          <div class="sl-fmenu">
+            <div class="sl-opt" data-group="focus" data-val="Táctico"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_tactical">Tactical</span><span class="ct" id="cntFocTac">—</span></div>
+            <div class="sl-opt" data-group="focus" data-val="Individual"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_individual">Individual</span><span class="ct" id="cntFocInd">—</span></div>
+            <div class="sl-opt" data-group="focus" data-val="Físico"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_physical">Physical</span><span class="ct" id="cntFocFis">—</span></div>
+            <div class="sl-opt" data-group="focus" data-val="Sectorial"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_sectorial">Sectorial</span><span class="ct" id="cntFocSec">—</span></div>
+          </div>
+        </div>
+        <!-- Origin team -->
+        <div class="sl-fdrop" data-drop="team">
+          <button class="sl-fbtn" type="button"><i class="ti ti-users-group"></i><span data-i18n="exlib.team_origin">Origin team</span><span class="badge" id="ctTeamAcc"></span><i class="ti ti-chevron-down chev"></i></button>
+          <div class="sl-fmenu" id="accTeam"></div>
+        </div>
+        <div class="grow"></div>
+        <span class="sl-fbar-count" id="railMatchCount"></span>
+        <button class="sl-fbar-clear" id="clearAllFilters"><i class="ti ti-filter-off"></i><span data-i18n="exlib.clear_all_filters">Clear all filters</span></button>
       </div>
 
       <div class="sl-grid">
@@ -370,14 +423,8 @@
           <div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)" data-i18n="exlib.loading_exercises">Loading exercises…</div>
         </div>
 
-        <!-- RIGHT rail: preview + filters -->
+        <!-- RIGHT rail: preview only -->
         <aside class="sl-rail">
-          <div class="sl-rail-h">
-            <h3 data-i18n="common.filters">Filters</h3>
-            <span class="right" id="railMatchCount"></span>
-            <button class="clear" id="clearAllFilters" data-i18n="exlib.clear_all">Clear all</button>
-          </div>
-
           <!-- Preview panel (hidden until card selected) -->
           <div class="sl-preview" id="slPreview">
             <div class="sl-preview-topbar">
@@ -400,100 +447,6 @@
             <div class="sl-gps" id="prevGps" style="display:none"></div>
             <button class="cm-btn is-outline is-sm sl-preview-open" id="prevOpenBtn">
               <i class="ti ti-edit" style="font-size:13px"></i><span data-i18n="exlib.open_in_planner">Open in Planner</span>
-            </button>
-          </div>
-
-          <!-- Orientation -->
-          <div class="sl-acc">
-            <div class="sl-acc-h is-open" data-acc="orient">
-              <span class="l" data-i18n="exlib.orientation">Orientation</span>
-              <span class="ct" id="ctOrientAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b is-open" id="accOrient">
-              <div class="sl-opt" data-group="orientation" data-val="ACTIVATION"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#D97706;margin-right:6px;vertical-align:0"></span><span data-i18n="exlib.activation">Activation</span></span><span class="ct" id="cntAct">—</span></div>
-              <div class="sl-opt" data-group="orientation" data-val="STRENGTH"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:6px;vertical-align:0"></span><span data-i18n="exlib.strength">Strength</span></span><span class="ct" id="cntStr">—</span></div>
-              <div class="sl-opt" data-group="orientation" data-val="VELOCITY"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0891B2;margin-right:6px;vertical-align:0"></span><span data-i18n="exlib.velocity">Velocity</span></span><span class="ct" id="cntVel">—</span></div>
-              <div class="sl-opt" data-group="orientation" data-val="ENDURANCE"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16A34A;margin-right:6px;vertical-align:0"></span><span data-i18n="exlib.endurance">Endurance</span></span><span class="ct" id="cntEnd">—</span></div>
-            </div>
-          </div>
-
-          <!-- Intensity -->
-          <div class="sl-acc">
-            <div class="sl-acc-h" data-acc="intensity">
-              <span class="l" data-i18n="exlib.intensity">Intensity</span>
-              <span class="ct" id="ctIntAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b" id="accIntensity">
-              <div class="sl-opt" data-group="intensity" data-val="LOW"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_low">Low</span><span class="ct" id="cntIntLow">—</span></div>
-              <div class="sl-opt" data-group="intensity" data-val="MEDIUM"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_medium">Medium</span><span class="ct" id="cntIntMed">—</span></div>
-              <div class="sl-opt" data-group="intensity" data-val="HIGH"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_high">High</span><span class="ct" id="cntIntHigh">—</span></div>
-              <div class="sl-opt" data-group="intensity" data-val="VERY_HIGH"><span class="cb"></span><span class="lbl" data-i18n="exlib.int_very_high">Very High</span><span class="ct" id="cntIntVH">—</span></div>
-            </div>
-          </div>
-
-          <!-- Match Day -->
-          <div class="sl-acc">
-            <div class="sl-acc-h" data-acc="matchday">
-              <span class="l" data-i18n="exlib.match_day">Match Day</span>
-              <span class="ct" id="ctMdAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b" id="accMatchday">
-              <div class="sl-opt" data-group="matchday" data-val="-5"><span class="cb"></span><span class="lbl">MD−5</span><span class="ct" id="cntMdM5">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="-4"><span class="cb"></span><span class="lbl">MD−4</span><span class="ct" id="cntMdM4">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="-3"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct" id="cntMdM3">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="-2"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct" id="cntMdM2">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="-1"><span class="cb"></span><span class="lbl">MD−1</span><span class="ct" id="cntMdM1">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="0"><span class="cb"></span><span class="lbl">MD</span><span class="ct" id="cntMd0">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="1"><span class="cb"></span><span class="lbl">MD+1</span><span class="ct" id="cntMdP1">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="2"><span class="cb"></span><span class="lbl">MD+2</span><span class="ct" id="cntMdP2">—</span></div>
-              <div class="sl-opt" data-group="matchday" data-val="3"><span class="cb"></span><span class="lbl">MD+3</span><span class="ct" id="cntMdP3">—</span></div>
-            </div>
-          </div>
-
-          <!-- Game type -->
-          <div class="sl-acc">
-            <div class="sl-acc-h" data-acc="gametype">
-              <span class="l" data-i18n="exlib.game_type">Game type</span>
-              <span class="ct" id="ctGtAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b" id="accGametype">
-              <div class="sl-opt" data-group="gametype" data-val="SSG"><span class="cb"></span><span class="lbl">SSG</span><span class="ct" id="cntSSG">—</span></div>
-              <div class="sl-opt" data-group="gametype" data-val="MSG"><span class="cb"></span><span class="lbl">MSG</span><span class="ct" id="cntMSG">—</span></div>
-              <div class="sl-opt" data-group="gametype" data-val="LSG"><span class="cb"></span><span class="lbl">LSG</span><span class="ct" id="cntLSG">—</span></div>
-              <div class="sl-opt" data-group="gametype" data-val="NONE"><span class="cb"></span><span class="lbl" data-i18n="common.none">None</span><span class="ct" id="cntGtNone">—</span></div>
-            </div>
-          </div>
-
-          <!-- Focus -->
-          <div class="sl-acc">
-            <div class="sl-acc-h" data-acc="focus">
-              <span class="l" data-i18n="exlib.focus">Focus</span>
-              <span class="ct" id="ctFocAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b" id="accFocus">
-              <div class="sl-opt" data-group="focus" data-val="Táctico"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_tactical">Tactical</span><span class="ct" id="cntFocTac">—</span></div>
-              <div class="sl-opt" data-group="focus" data-val="Individual"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_individual">Individual</span><span class="ct" id="cntFocInd">—</span></div>
-              <div class="sl-opt" data-group="focus" data-val="Físico"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_physical">Physical</span><span class="ct" id="cntFocFis">—</span></div>
-              <div class="sl-opt" data-group="focus" data-val="Sectorial"><span class="cb"></span><span class="lbl" data-i18n="exlib.focus_sectorial">Sectorial</span><span class="ct" id="cntFocSec">—</span></div>
-            </div>
-          </div>
-
-          <div class="sl-acc">
-            <div class="sl-acc-h" data-acc="team">
-              <span class="l" data-i18n="exlib.team_origin">Origin team</span>
-              <span class="ct" id="ctTeamAcc"></span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b" id="accTeam"></div>
-          </div>
-          <div class="sl-rail-foot">
-            <button class="cm-btn is-outline is-block" id="clearAllFilters2">
-              <i class="ti ti-filter-off" style="font-size:14px"></i><span data-i18n="exlib.clear_all_filters">Clear all filters</span>
             </button>
           </div>
         </aside>
@@ -967,6 +920,7 @@
     const openBtn = document.getElementById('prevOpenBtn');
     if (openBtn) openBtn.onclick = () => { window.location.href = 'Planner.html?exercise=' + encodeURIComponent(ex.id); };
 
+    document.querySelector('.sl-grid')?.classList.add('has-rail');
     document.getElementById('slPreview').classList.add('is-visible');
     document.getElementById('slPreview').scrollIntoView({ behavior:'smooth', block:'nearest' });
   }
@@ -1016,6 +970,7 @@
 
   function hidePreview() {
     document.getElementById('slPreview').classList.remove('is-visible');
+    document.querySelector('.sl-grid')?.classList.remove('has-rail');
     const media = document.getElementById('prevMedia'); if (media) media.innerHTML = '';   // stop any playing video
     selectedId = null;
     document.querySelectorAll('.sl-card').forEach(c => c.classList.remove('is-active'));
@@ -1233,13 +1188,21 @@
   }
   document.getElementById('slOriginSel')?.addEventListener('change', e => applyOriginFilter(e.target.value));
 
-  // Accordion toggle
-  document.querySelectorAll('.sl-acc-h[data-acc]').forEach(h => {
-    h.addEventListener('click', () => {
-      const body = h.nextElementSibling;
-      const open = body.classList.toggle('is-open');
-      h.classList.toggle('is-open', open);
+  // Filter dropdowns (top bar) — open/close, one at a time.
+  document.querySelectorAll('.sl-fdrop .sl-fbtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const menu = btn.nextElementSibling;
+      const isOpen = menu.classList.contains('is-open');
+      document.querySelectorAll('.sl-fmenu.is-open').forEach(m => m.classList.remove('is-open'));
+      if (!isOpen) menu.classList.add('is-open');
     });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.sl-fdrop')) document.querySelectorAll('.sl-fmenu.is-open').forEach(m => m.classList.remove('is-open'));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.sl-fmenu.is-open').forEach(m => m.classList.remove('is-open'));
   });
 
   function updateAccordionBadges() {
@@ -1253,7 +1216,7 @@
     ];
     pairs.forEach(([id, set]) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = set.size ? set.size : '';
+      if (el) { el.textContent = set.size ? set.size : ''; el.closest('.sl-fdrop')?.classList.toggle('is-active', set.size > 0); }
     });
   }
 
