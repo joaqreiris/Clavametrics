@@ -1428,6 +1428,21 @@ CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, rec
 CREATE INDEX idx_messages_team ON public.messages USING btree (team_id);
 CREATE INDEX idx_messages_group ON public.messages USING btree (group_id) WHERE (group_id IS NOT NULL);
 
+-- Emoji reactions on chat messages. One row per (message, user, emoji); toggling re-inserts/deletes.
+-- REPLICA IDENTITY FULL so realtime DELETE events carry message_id/user_id/emoji (not just the PK).
+create table if not exists public.message_reactions (
+  id uuid default gen_random_uuid() not null,
+  message_id uuid not null,
+  user_id uuid not null,
+  club_id uuid not null,
+  emoji text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint message_reactions_pkey primary key (id),
+  constraint message_reactions_uniq unique (message_id, user_id, emoji)
+);
+CREATE INDEX idx_message_reactions_msg ON public.message_reactions USING btree (message_id);
+alter table public.message_reactions replica identity full;
+
 create table if not exists public.microcycles (
   id text not null,
   name text not null,
@@ -2518,6 +2533,9 @@ alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KE
 alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
 alter table public.messages add constraint messages_reply_to_fkey FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL;
+alter table public.message_reactions add constraint message_reactions_message_id_fkey FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE;
+alter table public.message_reactions add constraint message_reactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.message_reactions add constraint message_reactions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.chat_groups add constraint chat_groups_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.chat_groups add constraint chat_groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.chat_group_members add constraint chat_group_members_group_id_fkey FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE;
@@ -5709,6 +5727,14 @@ create policy "messages_select" on public.messages as permissive for select to p
    AND (group_id IS NULL OR public.is_chat_group_member(group_id)));
 create policy "messages_update" on public.messages as permissive for update to public
   using ((sender_id = auth.uid()));
+
+alter table public.message_reactions enable row level security;
+create policy message_reactions_select on public.message_reactions as permissive for select to public
+  using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+create policy message_reactions_insert on public.message_reactions as permissive for insert to public
+  with check ((user_id = auth.uid()) AND (club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+create policy message_reactions_delete on public.message_reactions as permissive for delete to public
+  using ((user_id = auth.uid()));
 
 alter table public.chat_groups enable row level security;
 create policy chat_groups_select on public.chat_groups as permissive for select to public

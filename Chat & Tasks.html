@@ -108,6 +108,18 @@
   .reply-draft .rd-txt { font:var(--cm-body-sm); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .reply-draft .rd-x { flex-shrink:0; width:24px; height:24px; border:0; background:transparent; color:var(--cm-fg-muted); border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   .reply-draft .rd-x:hover { background:var(--cm-border); color:var(--cm-fg); }
+  /* emoji reactions */
+  .msg-reactions { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
+  .msg-reactions:empty { display:none; }
+  .msg.me .msg-reactions { justify-content:flex-end; }
+  .react-chip { display:inline-flex; align-items:center; gap:3px; padding:1px 7px 1px 5px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:11px; cursor:pointer; line-height:1; }
+  .react-chip .rc-e { font-size:12px; }
+  .react-chip .rc-n { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .react-chip.is-mine { border-color:var(--cm-accent); background:color-mix(in srgb, var(--cm-accent) 14%, transparent); }
+  .react-chip.is-mine .rc-n { color:var(--cm-accent); }
+  .react-picker { position:fixed; z-index:400; display:flex; gap:2px; padding:5px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:22px; box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18)); }
+  .react-picker .rp-e { width:32px; height:32px; border:0; background:transparent; border-radius:50%; cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; transition:transform .1s ease, background .1s ease; }
+  .react-picker .rp-e:hover { background:var(--cm-bg-soft); transform:scale(1.22); }
   .msg .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; display:flex; gap:4px; align-items:center; }
   .msg.me .time { color:rgba(255,255,255,0.7); justify-content:flex-end; }
   .msg .time .ti { font-size:12px; color:#86EFAC; }
@@ -1079,7 +1091,7 @@ async function loadMessages() {
   const { data } = await q.order('created_at', { ascending: true }).limit(100);
   messages = data || [];
   renderedIds.clear();
-  await loadReadState();
+  await Promise.all([loadReadState(), loadReactions()]);
   renderMessages();
 }
 
@@ -1197,7 +1209,9 @@ function renderMsgHTML(msg) {
         ${attHTML}${lpHTML}
         <div class="time">${time}${isMe ? msgStatusIcon(msg) : ''}</div>
       </div>
+      <div class="msg-reactions" data-react-for="${msg.id}">${renderReactionsHTML(msg.id)}</div>
       <div class="msg-actions">
+        <button class="msg-action-btn" onclick="showReactPicker('${msg.id}', event)" data-i18n-attr="title:chat_tasks.react" title="React"><i class="ti ti-mood-plus"></i></button>
         <button class="msg-action-btn" onclick="startReply('${msg.id}')" data-i18n-attr="title:chat_tasks.reply" title="Reply"><i class="ti ti-arrow-back-up"></i></button>
         <button class="msg-action-btn" onclick="pinMsgFromHover('${msg.id}')" title="Pin"><i class="ti ti-pin"></i></button>
       </div>
@@ -1228,6 +1242,82 @@ function scrollToMsg(id, ev) {
   if (!node) return;
   node.scrollIntoView({ behavior: 'smooth', block: 'center' });
   node.classList.remove('msg-flash'); void node.offsetWidth; node.classList.add('msg-flash');
+}
+
+// ── EMOJI REACTIONS ──
+const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+let reactions = {};   // message_id -> [{ user_id, emoji }]
+
+async function loadReactions() {
+  reactions = {};
+  if (!window.sb || !messages.length) return;
+  const ids = messages.map(m => m.id).filter(id => !String(id).startsWith('tmp-'));
+  if (!ids.length) return;
+  const { data } = await window.sb.from('message_reactions').select('message_id,user_id,emoji').in('message_id', ids);
+  (data || []).forEach(r => (reactions[r.message_id] = reactions[r.message_id] || []).push({ user_id: r.user_id, emoji: r.emoji }));
+}
+
+// Group a message's reactions by emoji → ordered chips with counts + whether I reacted.
+function reactionChips(msgId) {
+  const list = reactions[msgId] || [];
+  const by = {};
+  list.forEach(r => { (by[r.emoji] = by[r.emoji] || { count: 0, mine: false }).count++; if (r.user_id === currentUser.id) by[r.emoji].mine = true; });
+  return Object.entries(by).map(([emoji, v]) => ({ emoji, ...v }));
+}
+
+function renderReactionsHTML(msgId) {
+  const chips = reactionChips(msgId);
+  if (!chips.length) return '';
+  return chips.map(c => `<button type="button" class="react-chip${c.mine ? ' is-mine' : ''}" onclick="toggleReaction('${esc(String(msgId))}','${c.emoji}')"><span class="rc-e">${c.emoji}</span><span class="rc-n">${c.count}</span></button>`).join('');
+}
+
+function refreshReactionsUI(msgId) {
+  const el = document.querySelector(`#chatBody [data-react-for="${CSS.escape(String(msgId))}"]`);
+  if (el) el.innerHTML = renderReactionsHTML(msgId);
+}
+
+async function toggleReaction(msgId, emoji) {
+  if (!currentUser || String(msgId).startsWith('tmp-')) return;
+  const list = reactions[msgId] = reactions[msgId] || [];
+  const mine = list.find(r => r.user_id === currentUser.id && r.emoji === emoji);
+  if (mine) reactions[msgId] = list.filter(r => !(r.user_id === currentUser.id && r.emoji === emoji));
+  else list.push({ user_id: currentUser.id, emoji });
+  refreshReactionsUI(msgId);
+  try {
+    if (mine) await window.sb.from('message_reactions').delete().eq('message_id', msgId).eq('user_id', currentUser.id).eq('emoji', emoji);
+    else      await window.sb.from('message_reactions').insert({ message_id: msgId, user_id: currentUser.id, emoji, club_id: currentUser.clubId });
+  } catch (e) { console.error('reaction toggle failed', e); }
+}
+
+function _closeReactPicker() { document.getElementById('reactPicker')?.remove(); }
+function showReactPicker(msgId, ev) {
+  if (ev) ev.stopPropagation();
+  if (String(msgId).startsWith('tmp-')) return;
+  _closeReactPicker();
+  const pop = document.createElement('div');
+  pop.className = 'react-picker'; pop.id = 'reactPicker';
+  pop.innerHTML = REACT_EMOJIS.map(e => `<button type="button" class="rp-e" onclick="toggleReaction('${esc(String(msgId))}','${e}'); _closeReactPicker();">${e}</button>`).join('');
+  document.body.appendChild(pop);
+  const r = ev.currentTarget.getBoundingClientRect();
+  pop.style.top  = Math.max(8, r.top - pop.offsetHeight - 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(r.left - pop.offsetWidth / 2 + 15, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+  setTimeout(() => document.addEventListener('click', _closeReactPicker, { once: true }), 0);
+}
+
+// Realtime: someone reacted / un-reacted. Update the map + repaint that message's chips.
+function handleReaction(payload) {
+  const row = payload.new || payload.old;
+  if (!row || !row.message_id) return;
+  const msgId = row.message_id;
+  const list = reactions[msgId] = reactions[msgId] || [];
+  if (payload.eventType === 'INSERT' || payload.new) {
+    const n = payload.new;
+    if (n && !list.find(r => r.user_id === n.user_id && r.emoji === n.emoji)) list.push({ user_id: n.user_id, emoji: n.emoji });
+  } else if (payload.old) {
+    const o = payload.old;
+    reactions[msgId] = list.filter(r => !(r.user_id === o.user_id && r.emoji === o.emoji));
+  }
+  refreshReactionsUI(msgId);
 }
 
 // ── REPLY (quote) ──
@@ -2442,6 +2532,7 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${currentUser.clubId}` }, handleNewMessage)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'channel_reads', filter: `club_id=eq.${currentUser.clubId}` }, handleReadReceipt)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `club_id=eq.${currentUser.clubId}` }, handleReaction)
     .subscribe();
 
   window.sb.channel('cm-tasks')
