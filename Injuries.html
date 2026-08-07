@@ -2737,6 +2737,30 @@ async function saveInjury() {
     }
 
     _allInjuries.unshift(newInj);
+
+    // Notify staff (coaches, admin, S&C, medical) that a new injury was reported.
+    // Historical records are back-dated data entry, not live events — they don't alert.
+    if (!isHistorical) {
+      try {
+        const pl     = newInj.players || _playersMap[player_id] || {};
+        const pName  = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'A player';
+        const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
+        const others = recips.filter(p => p.id && p.id !== (_profile?.id || null));
+        if (others.length) {
+          const { error: nErr } = await window.sb.from('notifications').insert(
+            others.map(p => ({
+              user_id: p.id,
+              club_id: _clubId,
+              type:    'injury_reported',
+              title:   `${pName} reported injured`,
+              body:    `${injury_type} · ${severity}. Expected return ${expected_return ? new Date(expected_return).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : 'TBD'}.`,
+              link:    '/Injuries.html'
+            }))
+          );
+          if (nErr) console.warn('[notif] injury_reported insert failed:', nErr.message);
+        }
+      } catch(e) { console.warn('[notif] injury_reported insert failed:', e.message); }
+    }
   }
 
   closeLogModal();
