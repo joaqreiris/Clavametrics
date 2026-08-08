@@ -227,6 +227,7 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis',     key: 'gps' },
       { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner',      key: 'gym-planner' },
       { href: 'Individual%20Planner.html', icon: 'ti-user-cog',       label: 'Individual S&C',   key: 'individual-sc' },
+      { href: 'Top-Up.html',            icon: 'ti-run',              label: 'Top-Up',           key: 'top-up', i18n: 'topup.nav' },
       { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library',      key: 'gym-library' },
     ]},
     { label: 'Medical', items: [

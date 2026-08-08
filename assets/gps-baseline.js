@@ -110,6 +110,8 @@
    * { baseline: number|null, count: number, source: 'full'|'partial'|'insufficient_data',
    *   confidence: 'high'|'medium'|'none', warning: string|null }
    * baseline_n is read from club_gps_settings; opts.n overrides it.
+   * opts.mode: 'best' (default) → mean of the top-N match values;
+   *            'avg'            → mean of ALL match values (typical-match reference).
    */
   window.getMatchBaseline = async function (player_id, metric, clubId, opts) {
     if (!player_id || !metric || !clubId) {
@@ -118,10 +120,11 @@
     }
 
     const isCore = BASELINE_METRICS.includes(metric);
+    const mode   = (opts && opts.mode) === 'avg' ? 'avg' : 'best';
 
     const settings = await _loadClubSettings(clubId);
     const n   = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
-    const key = _cacheKey(player_id, metric, n);
+    const key = _cacheKey(player_id, metric, mode === 'avg' ? 'avg' : n);
     const now = Date.now();
     if (_cache[key] && now - _cache[key].ts < CACHE_TTL_MS) return _cache[key].result;
 
@@ -140,15 +143,16 @@
 
     if (isCore) {
       // Core metric — column in gps_reports
-      const { data, error } = await window.sb
+      let q = window.sb
         .from('gps_reports')
         .select(`${metric}, training_sessions!inner(session_date)`)
         .eq('player_id', player_id)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', _datesArr)
-        .not(metric, 'is', null)
-        .order(metric, { ascending: false })
-        .limit(n);
+        .not(metric, 'is', null);
+      // 'best' → top-N by value; 'avg' → every match (typical-match mean)
+      if (mode !== 'avg') q = q.order(metric, { ascending: false }).limit(n);
+      const { data, error } = await q;
       queryError = error;
       vals = (data || []).map(r => +(r[metric] || 0));
     } else {
@@ -163,14 +167,14 @@
       queryError = e1;
       const reportIds = (matchReports || []).map(r => r.id);
       if (reportIds.length) {
-        const { data: eav, error: e2 } = await window.sb
+        let q2 = window.sb
           .from('gps_report_metrics')
           .select('value')
           .in('report_id', reportIds)
           .eq('metric_key', metric)
-          .not('value', 'is', null)
-          .order('value', { ascending: false })
-          .limit(n);
+          .not('value', 'is', null);
+        if (mode !== 'avg') q2 = q2.order('value', { ascending: false }).limit(n);
+        const { data: eav, error: e2 } = await q2;
         if (!queryError) queryError = e2;
         vals = (eav || []).map(r => +(r.value || 0));
       }
