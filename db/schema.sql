@@ -1861,6 +1861,7 @@ create table if not exists public.profiles (
   birth_date date,
   job_title text,
   preferred_lang text,
+  timezone text,
   onboarded boolean default false not null,
   constraint profiles_pkey primary key (id),
   constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text]))),
@@ -3743,10 +3744,16 @@ begin
   insert into public.notifications (user_id, club_id, type, title, body, link)
   select pr.id, pl.club_id, 'player_birthday', bd.title, bd.body, '/Squad.html'
   from public.players pl
+  join public.profiles pr on pr.club_id = pl.club_id
+  -- "today"/"tomorrow" follow the RECIPIENT's local calendar day (auto-detected browser
+  -- timezone stored in profiles.timezone), not UTC — avoids the off-by-one east of UTC.
+  cross join lateral (
+    select (now() at time zone coalesce(nullif(pr.timezone,''),'UTC'))::date as ld
+  ) tz
   cross join lateral (
     select case
-             when to_char(pl.date_of_birth,'MM-DD') = to_char(current_date,     'MM-DD') then 0
-             when to_char(pl.date_of_birth,'MM-DD') = to_char(current_date + 1,  'MM-DD') then 1
+             when to_char(pl.date_of_birth,'MM-DD') = to_char(tz.ld,      'MM-DD') then 0
+             when to_char(pl.date_of_birth,'MM-DD') = to_char(tz.ld + 1,  'MM-DD') then 1
            end as d
   ) m
   cross join lateral (
@@ -3758,10 +3765,9 @@ begin
            then '🎂 ' || nc.nm || '''s birthday is today'
            else '🎂 ' || nc.nm || '''s birthday is tomorrow'
       end as title,
-      'Turns ' || (extract(year from (current_date + m.d))::int - extract(year from pl.date_of_birth)::int)
+      'Turns ' || (extract(year from (tz.ld + m.d))::int - extract(year from pl.date_of_birth)::int)
         || ' · born ' || to_char(pl.date_of_birth, 'DD Mon YYYY') as body
   ) bd
-  join public.profiles pr on pr.club_id = pl.club_id
   where pl.date_of_birth is not null
     and pl.archived_at is null
     and m.d is not null
@@ -3770,7 +3776,7 @@ begin
       select 1 from public.notifications n
       where n.user_id = pr.id
         and n.type = 'player_birthday'
-        and n.created_at::date = current_date
+        and (n.created_at at time zone coalesce(nullif(pr.timezone,''),'UTC'))::date = tz.ld
         and n.title = bd.title
     );
 end; $function$
@@ -3790,10 +3796,16 @@ begin
   insert into public.notifications (user_id, club_id, type, title, body, link)
   select pr.id, p.club_id, 'staff_birthday', bd.title, bd.body, '/Admin.html'
   from public.profiles p
+  join public.profiles pr on pr.club_id = p.club_id and pr.id <> p.id
+  -- "today"/"tomorrow" follow the RECIPIENT's local calendar day (auto-detected browser
+  -- timezone stored in profiles.timezone), not UTC — avoids the off-by-one east of UTC.
+  cross join lateral (
+    select (now() at time zone coalesce(nullif(pr.timezone,''),'UTC'))::date as ld
+  ) tz
   cross join lateral (
     select case
-             when to_char(p.birth_date,'MM-DD') = to_char(current_date,     'MM-DD') then 0
-             when to_char(p.birth_date,'MM-DD') = to_char(current_date + 1,  'MM-DD') then 1
+             when to_char(p.birth_date,'MM-DD') = to_char(tz.ld,      'MM-DD') then 0
+             when to_char(p.birth_date,'MM-DD') = to_char(tz.ld + 1,  'MM-DD') then 1
            end as d
   ) m
   cross join lateral (
@@ -3808,10 +3820,9 @@ begin
            then '🎂 ' || nc.nm || '''s birthday is today'
            else '🎂 ' || nc.nm || '''s birthday is tomorrow'
       end as title,
-      'Turns ' || (extract(year from (current_date + m.d))::int - extract(year from p.birth_date)::int)
+      'Turns ' || (extract(year from (tz.ld + m.d))::int - extract(year from p.birth_date)::int)
         || ' · born ' || to_char(p.birth_date, 'DD Mon YYYY') as body
   ) bd
-  join public.profiles pr on pr.club_id = p.club_id and pr.id <> p.id
   where p.birth_date is not null
     and m.d is not null
     and nc.nm is not null
@@ -3819,7 +3830,7 @@ begin
       select 1 from public.notifications n
       where n.user_id = pr.id
         and n.type = 'staff_birthday'
-        and n.created_at::date = current_date
+        and (n.created_at at time zone coalesce(nullif(pr.timezone,''),'UTC'))::date = tz.ld
         and n.title = bd.title
     );
 end; $function$

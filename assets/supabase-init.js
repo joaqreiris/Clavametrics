@@ -96,6 +96,21 @@
   let _club            = null;
   let _clubIdPromise   = null;
   let _clubPromise     = null;
+  let _tzSynced        = false;
+
+  // Persist the browser's IANA timezone (e.g. 'Europe/Madrid', 'Asia/Phnom_Penh') on the
+  // user's profile so server-side jobs (birthday reminders, etc.) compute "today" against the
+  // user's LOCAL calendar day instead of UTC. Fire-and-forget; only writes when it changed.
+  function syncProfileTimezone(userId, current) {
+    if (_tzSynced || !userId) return;
+    _tzSynced = true;
+    let tz;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { return; }
+    if (!tz || tz === current) return;
+    window.sb.from('profiles').update({ timezone: tz }).eq('id', userId)
+      .then(({ error }) => { if (error) console.warn('[supabase-init] timezone sync failed:', error.message); },
+            () => {});
+  }
 
   window.getClubId = function () {
     if (_clubId) return Promise.resolve(_clubId);
@@ -111,14 +126,14 @@
         // Cargar tu profile REAL (tu id), independiente del club override
         if (!_profile) {
           const { data: realProf } = await window.sb.from('profiles')
-            .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded').eq('id', user.id).single();
-          if (realProf) { _profile = realProf; window.__cm_profile = realProf; }
+            .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone').eq('id', user.id).single();
+          if (realProf) { _profile = realProf; window.__cm_profile = realProf; syncProfileTimezone(user.id, realProf.timezone); }
         }
         _clubId = _ov;
         return _clubId;
       }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
-        .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded')
+        .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone')
         .eq('id', user.id)
         .single();
       if (profileErr) console.warn('[supabase-init] profile fetch error:', profileErr.message);
@@ -126,6 +141,7 @@
         _clubId  = profile.club_id;
         _profile = profile;
         window.__cm_profile = profile;
+        syncProfileTimezone(user.id, profile.timezone);
       }
       return _clubId;
     })();
