@@ -1023,9 +1023,13 @@ async function ytFetch() {
       // supabase-js sets a generic message on non-2xx; read the response body for the real reason
       let msg = error.message || String(error);
       try {
-        const body = await error.context?.json?.();
-        if (body && body.error) msg = body.error;
-      } catch (_) { /* body not JSON — keep generic message */ }
+        const ctx = error.context;
+        if (ctx && typeof ctx.text === 'function') {
+          const raw = await (ctx.clone ? ctx.clone() : ctx).text();
+          try { const b = JSON.parse(raw); if (b && b.error) msg = b.error; }
+          catch (_) { if (raw) msg = raw; }
+        }
+      } catch (_) { /* keep generic message */ }
       throw new Error(msg);
     }
     if (data && data.error) throw new Error(data.error);
