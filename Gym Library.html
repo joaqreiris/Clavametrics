@@ -1019,7 +1019,15 @@ async function ytFetch() {
   document.getElementById('yt-list').innerHTML = '';
   try {
     const { data, error } = await window.sb.functions.invoke('youtube-import', { body: { playlistUrl: url } });
-    if (error) throw error;
+    if (error) {
+      // supabase-js sets a generic message on non-2xx; read the response body for the real reason
+      let msg = error.message || String(error);
+      try {
+        const body = await error.context?.json?.();
+        if (body && body.error) msg = body.error;
+      } catch (_) { /* body not JSON — keep generic message */ }
+      throw new Error(msg);
+    }
     if (data && data.error) throw new Error(data.error);
     ytVideos = (data && data.videos) || [];
     const existing = new Set(ALL_EXERCISES.map(e => e.video_id).filter(Boolean));
