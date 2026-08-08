@@ -56,6 +56,7 @@
   .tu-pcard-head .refs .warn{color:var(--cm-warning,#b45309)}
   .tu-refsrc{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
   .tu-refsrc.personal{background:rgba(21,128,61,.12);color:#15803D}
+  .tu-refsrc.gps{background:rgba(13,148,136,.14);color:#0d9488}
   .tu-refsrc.position{background:rgba(37,99,235,.12);color:#2563EB}
   .tu-refsrc.manual{background:rgba(245,158,11,.15);color:#b45309}
   .tu-refbox{margin-top:6px;padding:10px;border:1px dashed var(--cm-border);border-radius:10px}
@@ -295,26 +296,28 @@
 
   function initPlayer(pid){
     const p = state.players.find(x => x.id === pid);
-    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, minutes: 0, actual: {}, lastMatch: null, manualRef: {}, loading: true };
+    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, refAll: null, minutes: 0, actual: {}, lastMatch: null, manualRef: {}, loading: true };
     loadPlayerData(pid);
   }
 
   async function loadPlayerData(pid){
     const pd = state.pdata[pid]; if (!pd) return;
     pd.loading = true;
-    const [vift, vmax, ref] = await Promise.all([
+    const [vift, vmax, ref, refAll] = await Promise.all([
       TU.getLatestVift(pid, clubId),
       TU.getPlayerVmax(pid, clubId),
       TU.getReference(pid, clubId, neededMetrics(), state.mode),
+      TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
     ]);
     if (!state.pdata[pid]) return;   // deselected while loading
     pd.vift = vift ? vift.vift : null;
     pd.vmax = vmax;
     pd.ref = ref;
+    pd.refAll = refAll;
     if (state.source === 'measured') await loadMeasured(pid);
     pd.loading = false;
-    // Personal ref missing on any needed metric → warm the positional fallback.
-    const needsPos = neededMetrics().some(m => !ref[m] || ref[m].baseline == null);
+    // Still missing on any needed metric after personal + all-GPS → warm positional.
+    const needsPos = neededMetrics().some(m => (!ref[m] || ref[m].baseline == null) && (!refAll[m] || refAll[m].baseline == null));
     if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     renderResults();
   }
@@ -339,6 +342,7 @@
       if (out.ref[m]) return;
       let base = null, src = 'none';
       if (pd.ref && pd.ref[m] && pd.ref[m].baseline != null){ base = pd.ref[m].baseline; src = 'personal'; }
+      else if (pd.refAll && pd.refAll[m] && pd.refAll[m].baseline != null){ base = pd.refAll[m].baseline; src = 'gps'; }
       else if (posRef && posRef[m] && posRef[m].baseline != null){ base = posRef[m].baseline; src = 'position'; }
       else if (pd.manualRef && pd.manualRef[m] != null){ base = +pd.manualRef[m]; src = 'manual'; }
       out.ref[m] = { baseline: base };
@@ -359,8 +363,11 @@
     state.posRef = {};   // metrics/mode changed → positional cache is stale
     await Promise.all(state.selected.map(async pid => {
       const pd = state.pdata[pid]; if (!pd) return;
-      pd.ref = await TU.getReference(pid, clubId, neededMetrics(), state.mode);
-      const needsPos = neededMetrics().some(m => !pd.ref[m] || pd.ref[m].baseline == null);
+      [pd.ref, pd.refAll] = await Promise.all([
+        TU.getReference(pid, clubId, neededMetrics(), state.mode),
+        TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
+      ]);
+      const needsPos = neededMetrics().some(m => (!pd.ref[m] || pd.ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
       if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     }));
     renderResults();
@@ -388,7 +395,7 @@
       : { source: state.source, actual: pd.actual };
     return TU.computeDeficit(resolved.ref, opts);
   }
-  const REF_SRC_LABEL = { personal: () => tt('topup.ref_personal','personal'), position: () => tt('topup.ref_position','posición'), manual: () => tt('topup.ref_manual_src','manual') };
+  const REF_SRC_LABEL = { personal: () => tt('topup.ref_personal','personal'), gps: () => tt('topup.ref_gps','GPS'), position: () => tt('topup.ref_position','posición'), manual: () => tt('topup.ref_manual_src','manual') };
   const barClass = (pct) => pct >= 60 ? 'hi' : pct >= 30 ? 'mid' : '';
 
   // Manual reference inputs for metrics with no personal/positional data.

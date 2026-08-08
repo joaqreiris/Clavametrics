@@ -71,18 +71,49 @@
   async function getLatestVift(playerId, clubId) {
     if (!playerId || !clubId) return null;
     try {
+      // Broad match: the type string has legacy variants — leading space, reordered
+      // ('IFT 30-15'), 'VIFT', or an en-dash ('30–15'). `%ift%` catches anything with
+      // IFT/VIFT; `%30%15%` catches both dash styles of "30-15". Pick the latest with a value.
       const { data } = await window.sb
         .from('evaluations')
         .select('value, test_date, evaluation_type')
         .eq('player_id', playerId)
         .eq('club_id', clubId)
-        .ilike('evaluation_type', '30-15 IFT%')
+        .or('evaluation_type.ilike.%ift%,evaluation_type.ilike.%30%15%')
         .not('value', 'is', null)
         .order('test_date', { ascending: false })
         .limit(1)
         .maybeSingle();
       return data ? { vift: +data.value, date: data.test_date } : null;
     } catch { return null; }
+  }
+
+  // ── Fallback reference across ALL of a player's GPS sessions (any type) ──
+  // Used when <3 sessions are tagged as matches (common: GPS imports land as
+  // session_type='training' and are never promoted to 'match'). Matches are
+  // usually a player's highest-load sessions, so best-N over all GPS is a sound
+  // proxy. source:'gps' so the UI can label it as not-match-tagged.
+  async function getAllGpsReference(playerId, clubId, metrics, mode) {
+    const out = {}; metrics.forEach(m => out[m] = { baseline: null, count: 0, source: 'gps' });
+    const core = Array.from(new Set(metrics.filter(m => METRIC_DEFS[m])));
+    if (!playerId || !clubId || !core.length) return out;
+    try {
+      const { data } = await window.sb
+        .from('gps_reports')
+        .select(core.join(',') + ',is_invalid')
+        .eq('player_id', playerId)
+        .eq('club_id', clubId);
+      const rows = (data || []).filter(r => !r.is_invalid);
+      const n = 5, MIN = 3;
+      core.forEach(m => {
+        let vals = rows.map(r => r[m]).filter(v => v != null).map(Number);
+        if (vals.length < MIN) { out[m] = { baseline: null, count: vals.length, source: 'gps' }; return; }
+        const used = mode === 'avg' ? vals : vals.slice().sort((a, b) => b - a).slice(0, n);
+        const mean = used.reduce((s, v) => s + v, 0) / used.length;
+        out[m] = { baseline: +mean.toFixed(1), count: used.length, source: 'gps' };
+      });
+    } catch { /* degrade to nulls */ }
+    return out;
   }
 
   // ── Player maximal velocity (km/h) — peak max_speed across all sessions ─
@@ -227,7 +258,7 @@
 
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
-    getLatestVift, getPlayerVmax, getReference, getPositionReference, getLatestMatchActual,
+    getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD,
     // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
     setFallbackThresholds(hsr, sprint) {
