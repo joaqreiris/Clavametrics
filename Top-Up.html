@@ -96,6 +96,26 @@
   .tu-manual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
   .tu-manual-grid .tu-field{min-width:0}
   .tu-manual-grid input{height:38px;font:600 13px/1 var(--cm-font-sans)}
+  /* compact prescription lines (field-scannable) */
+  .tu-line{display:flex;align-items:center;gap:10px;padding:9px 0;font:600 14.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-line+.tu-line{border-top:1px solid var(--cm-border)}
+  .tu-line .ic{width:28px;height:28px;flex:none;border-radius:8px;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);font-size:16px}
+  .tu-line .main{flex:1;min-width:0}
+  .tu-line .main b{color:var(--cm-accent);font-weight:700}
+  .tu-line .dim{color:var(--cm-fg-muted);font-weight:600}
+  .tu-line .meta{font:600 11px/1.1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;text-align:right}
+  .tu-line.muted{color:var(--cm-fg-muted);font-weight:500;font-size:13px}
+  .tu-line .lband{font:700 10.5px/1 var(--cm-font-sans);padding:4px 9px;border-radius:999px;flex:none}
+  .tu-line .lband.low{background:rgba(21,128,61,.12);color:#15803D}
+  .tu-line .lband.mid{background:rgba(245,158,11,.15);color:#b45309}
+  .tu-line .lband.high{background:rgba(220,38,38,.12);color:#b91c1c}
+  .tu-hwarn{font:600 10.5px/1.3 var(--cm-font-mono);color:var(--cm-warning,#b45309);margin-top:2px;padding-left:38px}
+  .tu-defchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--cm-border)}
+  .tu-defchips span{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.02em;padding:5px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .tu-defchips b{color:var(--cm-fg-strong);font-size:12px}
+  .tu-defchips small{color:var(--cm-fg-faint)}
+  .tu-defchips span.hi b{color:var(--cm-danger,#dc2626)}
+  .tu-defchips span.mid b{color:var(--cm-warning,#b45309)}
   .hide{display:none!important}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -424,99 +444,86 @@
     </div>`;
   }
 
-  function playerCardHTML(pid){
-    const pd = state.pdata[pid]; if (!pd) return '';
-    const p = pd.player;
-
-    if (pd.loading) return `<div class="tu-pcard">${headHTML(pid, pd, '')}<div class="tu-note">${tt('common.loading','Cargando…')}</div></div>`;
-
+  // Card = STATIC header (holds the minutes input, never re-rendered while typing)
+  // + a body that re-renders on input. Keeps focus/caret stable and, with event
+  // delegation on the container, avoids the dead-input bug (listeners were lost
+  // when the whole card was replaced on each keystroke).
+  function refBadgeFor(pd){
     const resolved = resolveRef(pd);
-    const def = deficitFor(pd, resolved);
-    const pos = p.position;
-    const posLoading = pos && state.posRef[pos] && state.posRef[pos].loading;
-
-    // ref-source badge: use HSR's source (primary block metric), else first available
     const primarySrc = (resolved.srcBy['high_speed_distance'] && resolved.srcBy['high_speed_distance'] !== 'none')
       ? resolved.srcBy['high_speed_distance']
       : (Object.values(resolved.srcBy).find(s => s !== 'none') || 'none');
-    const refBadge = primarySrc !== 'none'
+    return primarySrc !== 'none'
       ? `<span class="tu-refsrc ${primarySrc}">${tt('topup.ref','ref')}: ${(REF_SRC_LABEL[primarySrc] ? REF_SRC_LABEL[primarySrc]() : primarySrc)}</span>` : '';
-    const head = headHTML(pid, pd, refBadge);
+  }
 
+  function playerCardHTML(pid){
+    const pd = state.pdata[pid]; if (!pd) return '';
+    const badge = pd.loading ? '' : refBadgeFor(pd);
+    return `<div class="tu-pcard">${headHTML(pid, pd, badge)}<div class="tu-pcard-body" data-body="${pid}">${bodyHTML(pid)}</div></div>`;
+  }
+
+  // The re-renderable part: prescription lines (the actionable output) + compact
+  // deficit chips. No stacked bars — scannable at a glance on the field.
+  function bodyHTML(pid){
+    const pd = state.pdata[pid]; if (!pd) return '';
+    if (pd.loading) return `<div class="tu-note">${tt('common.loading','Cargando…')}</div>`;
+
+    const resolved = resolveRef(pd);
+    const def = deficitFor(pd, resolved);
+    const pos = pd.player.position;
+    const posLoading = pos && state.posRef[pos] && state.posRef[pos].loading;
     const anyRef = def && Object.values(def).some(d => d.reference != null);
-    // metrics still without any reference → offer manual-reference inputs
     const missing = neededMetrics().concat(state.metrics).filter((k, i, a) => a.indexOf(k) === i)
       .filter(k => resolved.srcBy[k] === 'none');
 
     if (!anyRef){
       const loadingNote = posLoading ? `<div class="tu-note">${tt('topup.pos_loading','Buscando referencia por posición…')}</div>` : '';
-      return `<div class="tu-pcard">${head}
-        <div class="tu-note warn">${tt('topup.no_ref','Sin referencia personal ni por posición. Ingresá un objetivo manual.')}</div>
-        ${loadingNote}${manualRefHTML(pid, missing.length ? missing : neededMetrics())}</div>`;
+      return `<div class="tu-note warn">${tt('topup.no_ref','Sin referencia personal ni por posición. Ingresá un objetivo manual.')}</div>${loadingNote}${manualRefHTML(pid, missing.length ? missing : neededMetrics())}`;
     }
 
-    // measured but no match data
-    let srcWarn = '';
-    if (state.source === 'measured' && !pd.lastMatch){
-      srcWarn = `<div class="tu-note warn">${tt('topup.hint_measured_none','Sin datos GPS de partido. Usá Estimado o Manual.')}</div>`;
-    }
-    // partial: some metrics still missing a reference → inline manual inputs for those
-    const partialRef = missing.length ? manualRefHTML(pid, missing) : '';
-
-    // deficit bars
-    let bars = state.metrics.map(k => {
-      const d = def[k]; const u = (TU.METRIC_DEFS[k]||{}).unit;
-      if (!d || d.reference == null) return `<div class="tu-def-row"><span class="n">${esc(mLabel(k))}</span><span class="v tu-muted">${tt('topup.na','s/d')}</span></div>`;
-      return `<div class="tu-def-row">
-        <span class="n">${esc(mLabel(k))}</span>
-        <span class="v">${fmtNum(d.deficit,u)} <small>/ ${fmtNum(d.reference,u)} ${esc(u)}</small></span>
-        <div class="tu-bar ${barClass(d.pct)}"><span style="width:${Math.min(100,d.pct)}%"></span></div></div>`;
-    }).join('');
-
-    // manual inputs
-    let manual = '';
+    let pre = '';
+    if (state.source === 'measured' && !pd.lastMatch)
+      pre += `<div class="tu-note warn">${tt('topup.hint_measured_none','Sin datos GPS de partido. Usá Estimado o Manual.')}</div>`;
+    if (missing.length) pre += manualRefHTML(pid, missing);
     if (state.source === 'manual'){
-      manual = `<div class="tu-manual-grid">` + neededMetrics().map(k => {
+      pre += `<div class="tu-manual-grid">` + neededMetrics().map(k => {
         const u = (TU.METRIC_DEFS[k]||{}).unit; const val = pd.actual[k] != null ? pd.actual[k] : '';
         return `<div class="tu-field"><label>${esc(mLabel(k))} (${u})</label>
           <input class="tu-input" type="number" min="0" inputmode="decimal" data-actual="${pid}:${k}" value="${val}" placeholder="0"></div>`;
       }).join('') + `</div>`;
     }
 
-    // HIIT block
-    const hsr = def['high_speed_distance'];
-    const hsrDef = hsr && hsr.deficit != null ? hsr.deficit : 0;
+    // HIIT line
+    const hsrDef = (def['high_speed_distance']||{}).deficit || 0;
     const p2 = preset();
     const rx = pd.vift ? TU.prescribeHIIT(pd.vift, hsrDef, p2, pd.vmax) : null;
-    let hiit = `<div class="tu-block"><div class="lbl"><i class="ti ti-run"></i>${tt('topup.hiit_block','Bloque intermitente (HIIT · %VIFT)')} · ${esc(p2.label)}</div>`;
-    if (!rx){ hiit += `<div class="tu-note warn">${tt('topup.no_vift_block','Cargá un 30-15 IFT para el bloque de carrera.')}</div>`; }
-    else if (hsrDef <= 0){ hiit += `<div class="tu-note">${tt('topup.no_deficit','Sin déficit de HSR: ya alcanzó su referencia.')}</div>`; }
+    let hiit;
+    if (!rx) hiit = `<div class="tu-line muted"><span class="ic"><i class="ti ti-run"></i></span><span class="main">${tt('topup.no_vift_block','Cargá un 30-15 IFT para el bloque de carrera.')}</span></div>`;
+    else if (hsrDef <= 0) hiit = `<div class="tu-line muted"><span class="ic"><i class="ti ti-run"></i></span><span class="main">${tt('topup.no_deficit','Sin déficit de HSR: ya alcanzó su referencia.')}</span></div>`;
     else {
-      hiit += `<div class="tu-rx"><div class="big"><b>${rx.reps}</b> reps · <b>${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h <span style="color:var(--cm-fg-muted);font-weight:600">(${p2.run}-${p2.rest})</span></div>
-        <div class="sub">${tt('topup.covers','Cubre')} ~${Math.round(rx.totalRunM).toLocaleString()} m ${tt('topup.of_hsr_deficit','del déficit de HSR')} (${fmtNum(hsrDef,'m')} m)</div>
-        <div class="tu-stats">
-          <div class="tu-stat"><div class="k">${tt('topup.sets','Series')}</div><div class="val">${rx.sets}</div></div>
-          <div class="tu-stat"><div class="k">${tt('topup.per_set','Reps/serie')}</div><div class="val">${rx.repsPerSet}</div></div>
-          <div class="tu-stat"><div class="k">${tt('topup.time','Tiempo')}</div><div class="val">${rx.timeMin}′</div></div>
-        </div>`;
-      if (!rx.countsAsHSR) hiit += `<div class="tu-note warn">${tt('topup.below_hsr', `A ${rx.speedKmh} km/h estás por debajo del umbral de HSR (${rx.hsrThreshold} km/h = 60% Vmax): subí el %VIFT.`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
-      hiit += `</div>`;
+      hiit = `<div class="tu-line"><span class="ic"><i class="ti ti-run"></i></span>
+        <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${p2.run}-${p2.rest})</span></span>
+        <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
+      if (!rx.countsAsHSR) hiit += `<div class="tu-hwarn">${tt('topup.below_hsr_short', `${rx.speedKmh} km/h < umbral HSR (${rx.hsrThreshold})`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
     }
-    hiit += `</div>`;
 
-    // COD block
+    // COD line
     const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
     const cod = TU.prescribeCOD(accDef, decDef);
-    let codHtml = `<div class="tu-block"><div class="lbl"><i class="ti ti-arrows-shuffle"></i>${tt('topup.cod_block','Bloque neuromuscular (COD)')}</div>`;
-    if (accDef + decDef <= 0){ codHtml += `<div class="tu-note">${tt('topup.no_cod','Sin déficit de acc/dec.')}</div>`; }
-    else {
-      codHtml += `<span class="tu-band ${cod.band.id}">${tt('topup.band','Banda')} ${tt('topup.band_'+cod.band.id, cod.band.label)} · ${tt('topup.acc_dec_deficit','déficit acc+dec')} ${cod.total}</span>
-        <div class="tu-rx"><div class="big">${tt('topup.cod_'+cod.band.id, cod.band.reps)}</div>
-        <div class="sub">${tt('topup.cod_detail_'+cod.band.id, cod.band.detail)}</div></div>`;
-    }
-    codHtml += `</div>`;
+    let codLine;
+    if (accDef + decDef <= 0) codLine = `<div class="tu-line muted"><span class="ic"><i class="ti ti-arrows-shuffle"></i></span><span class="main">${tt('topup.no_cod','Sin déficit de acc/dec.')}</span></div>`;
+    else codLine = `<div class="tu-line"><span class="ic"><i class="ti ti-arrows-shuffle"></i></span><span class="lband ${cod.band.id}">${tt('topup.band_'+cod.band.id, cod.band.label)}</span><span class="main">${tt('topup.cod_'+cod.band.id, cod.band.reps)}</span></div>`;
 
-    return `<div class="tu-pcard">${head}${srcWarn}<div class="tu-def">${bars}</div>${partialRef}${manual}${hiit}${codHtml}</div>`;
+    // compact deficit chips (deficit / reference per selected metric)
+    const chips = state.metrics.map(k => {
+      const d = def[k]; const u = (TU.METRIC_DEFS[k]||{}).unit;
+      if (!d || d.reference == null) return `<span>${esc(mLabel(k))} <b>${tt('topup.na','s/d')}</b></span>`;
+      const cls = d.pct >= 60 ? 'hi' : d.pct >= 30 ? 'mid' : '';
+      return `<span class="${cls}">${esc(mLabel(k))} <b>${fmtNum(d.deficit,u)}</b><small>/${fmtNum(d.reference,u)}</small></span>`;
+    }).join('');
+
+    return pre + hiit + codLine + `<div class="tu-defchips">${chips}</div>`;
   }
 
   function renderResults(){
@@ -527,40 +534,40 @@
       return;
     }
     box.innerHTML = state.selected.map(pid => playerCardHTML(pid)).join('');
-    // wire per-card inputs
-    box.querySelectorAll('input[data-mins]').forEach(inp => inp.addEventListener('input', () => {
-      const pid = inp.dataset.mins, pd = state.pdata[pid]; if (!pd) return;
-      pd.minutes = +inp.value || 0; rerenderCard(pid);
-    }));
-    box.querySelectorAll('input[data-actual]').forEach(inp => inp.addEventListener('input', () => {
-      const [pid, k] = inp.dataset.actual.split(':'); const pd = state.pdata[pid]; if (!pd) return;
-      const v = inp.value.trim(); if (v === '') delete pd.actual[k]; else pd.actual[k] = +v; rerenderCard(pid);
-    }));
-    box.querySelectorAll('input[data-mref]').forEach(inp => inp.addEventListener('input', () => {
-      const [pid, k] = inp.dataset.mref.split(':'); const pd = state.pdata[pid]; if (!pd) return;
-      const v = inp.value.trim(); if (v === '') delete pd.manualRef[k]; else pd.manualRef[k] = +v; rerenderCard(pid);
-    }));
   }
 
-  // Re-render a single card without losing focus on other cards' inputs.
-  function rerenderCard(pid){
+  // Re-render ONLY a card's body (header + its minutes input stay put → smooth typing).
+  function updateBody(pid, focusKey, kind){
+    const el = $('tu-results').querySelector(`[data-body="${pid}"]`);
+    if (!el) return;
+    el.innerHTML = bodyHTML(pid);
+    if (focusKey){
+      const sel = kind === 'mref' ? `input[data-mref="${focusKey}"]` : `input[data-actual="${focusKey}"]`;
+      const inp = el.querySelector(sel);
+      if (inp){ inp.focus(); try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch(_){} }
+    }
+  }
+
+  // Event delegation on the results container — attached ONCE, survives body re-renders.
+  function wireResultsDelegation(){
     const box = $('tu-results');
-    const nodes = box.querySelectorAll('.tu-pcard');
-    const idx = state.selected.indexOf(pid);
-    if (idx < 0 || !nodes[idx]) return;
-    const wrap = document.createElement('div'); wrap.innerHTML = playerCardHTML(pid);
-    const fresh = wrap.firstElementChild;
-    const active = document.activeElement;
-    const ds = active && active.dataset || {};
-    const wasMins = ds.mins === pid;
-    const actualKey = (ds.actual && ds.actual.startsWith(pid+':')) ? ds.actual : null;
-    const mrefKey   = (ds.mref && ds.mref.startsWith(pid+':')) ? ds.mref : null;
-    nodes[idx].replaceWith(fresh);
-    // restore focus + caret
-    const refocus = (sel) => { const el = fresh.querySelector(sel); if (el){ el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch(_){} } };
-    if (wasMins) refocus(`input[data-mins="${pid}"]`);
-    else if (actualKey) refocus(`input[data-actual="${actualKey}"]`);
-    else if (mrefKey) refocus(`input[data-mref="${mrefKey}"]`);
+    box.addEventListener('input', (e) => {
+      const ds = e.target.dataset || {};
+      if (ds.mins != null){                       // minutes input lives in the header
+        const pd = state.pdata[ds.mins]; if (!pd) return;
+        pd.minutes = +e.target.value || 0; updateBody(ds.mins); return;
+      }
+      if (ds.actual){
+        const [pid, k] = ds.actual.split(':'); const pd = state.pdata[pid]; if (!pd) return;
+        const v = e.target.value.trim(); if (v === '') delete pd.actual[k]; else pd.actual[k] = +v;
+        updateBody(pid, ds.actual, 'actual'); return;
+      }
+      if (ds.mref){
+        const [pid, k] = ds.mref.split(':'); const pd = state.pdata[pid]; if (!pd) return;
+        const v = e.target.value.trim(); if (v === '') delete pd.manualRef[k]; else pd.manualRef[k] = +v;
+        updateBody(pid, ds.mref, 'mref'); return;
+      }
+    });
   }
 
   function sourceHint(){
@@ -589,6 +596,7 @@
   }));
 
   // ── boot ──
+  wireResultsDelegation();   // once — survives body re-renders
   renderMetricChips();
   await initTeams();
   await loadPlayers();
