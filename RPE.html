@@ -192,9 +192,9 @@
       <!-- ── Late RPE — needs a session ── -->
       <div id="orphanWrap">
         <div class="tr-group-label" style="margin-top:34px;">
-          <h2 data-i18n="rpe.lateGroupTitle">Late RPE — needs a session</h2>
+          <h2 data-i18n="rpe.lateGroupTitle">Late RPE — needs a session or match</h2>
           <span class="count" id="orphanCount">0 unlinked</span>
-          <span class="right"><span class="tr-sortnote"><i class="ti ti-info-circle"></i><span data-i18n="rpe.attachEach">Attach each to the right session to compute its load</span></span></span>
+          <span class="right"><span class="tr-sortnote"><i class="ti ti-info-circle"></i><span data-i18n="rpe.attachEach">Attach each to the right session or match to compute its load</span></span></span>
         </div>
         <div id="listOrphans"></div>
       </div>
@@ -299,6 +299,7 @@
   const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
+                  matches:[], matSessCache:{},
                   responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
@@ -310,6 +311,38 @@
   function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => { const k = String(a).toLowerCase(); return tt('rpe.pain.' + k, PAIN_LABELS[k] || cap(a)); }); }
   function sessionLabel(s) { return `${s.session_date} · ${s.title || s.session_type || tt('rpe.sessionFallback', 'Session')}`; }
   function sessionLabelDur(s) { return `${sessionLabel(s)} (${s.duration || '?'}′)`; }
+  // A calendar_events match (type='match') mapped to the training-session shape the pickers
+  // use. Its id is prefixed `evt:` so we know to materialize a real training_sessions row
+  // (via ensure_match_session) before anything links rpe.session_id to it.
+  function matchAsSession(m) {
+    return { id: 'evt:' + m.id, session_date: m.date, session_time: m.start_time,
+      title: m.opponent ? tt('rpe.matchVs', `Match vs ${m.opponent}`, { opp: m.opponent }) : tt('rpe.match', 'Match'),
+      session_type: 'match', duration: m.duration_minutes, team_id: m.team_id || null, created_at: m.created_at };
+  }
+  // Merge recent training sessions with calendar matches for the assign/share pickers.
+  // A match is deduped by date when a materialized training_sessions 'match' already exists.
+  function mergedRecentList() {
+    const tsMatchDates = new Set((state.recent || []).filter(s => s.session_type === 'match').map(s => s.session_date));
+    const ts = (state.recent || []).map(s => ({ value: s.id, session_date: s.session_date, label: sessionLabelDur(s) }));
+    const ev = (state.matches || []).filter(m => !tsMatchDates.has(m.date)).map(m => {
+      const ms = matchAsSession(m);
+      return { value: ms.id, session_date: ms.session_date, label: sessionLabelDur(ms) };
+    });
+    return [...ts, ...ev].sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
+  }
+  // Turn a picker value into a real training_sessions id. Plain ids pass through; an `evt:`
+  // match id is materialized once (cached) into a training_sessions 'match' row.
+  async function resolveSession(value) {
+    if (!value) return null;
+    if (!String(value).startsWith('evt:')) return value;
+    if (state.matSessCache[value]) return state.matSessCache[value];
+    try {
+      const { data, error } = await window.sb.rpc('ensure_match_session', { p_event_id: value.slice(4) });
+      if (error || !data) return null;
+      state.matSessCache[value] = data;
+      return data;
+    } catch (e) { console.warn('[RPE] ensure_match_session:', e && e.message); return null; }
+  }
   function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
   // Chooser button label for a same-day session: "AM · Gym · 07:30".
   function todaySessionBtnLabel(s) {
@@ -463,12 +496,13 @@
 
   function orphanHTML(o) {
     const b = T.bandRpe(o.rpe);
-    const canAssign = state.recent.length > 0;
-    const opts = state.recent.slice(0, 5).map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('');
+    const recentList = mergedRecentList();
+    const canAssign = recentList.length > 0;
+    const opts = recentList.slice(0, 6).map(o => `<option value="${o.value}">${T.escape(o.label)}</option>`).join('');
     const assignInner = canAssign
       ? `<select class="cm-select" aria-label="${T.escape(tt('rpe.sessionForPlayer', `Session for ${o.name}`, { name: o.name }))}">${opts}</select>
         <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>${tt('rpe.assign','Assign')}</button>`
-      : `<span style="font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-faint);">${tt('rpe.createSessionToAssign','Create a session to assign')}</span>
+      : `<span style="font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-faint);">${tt('rpe.createSessionToAssign','Create a session or match to assign')}</span>
         <button class="cm-btn is-primary is-sm o-assign-btn" disabled><i class="ti ti-plug-connected"></i>${tt('rpe.assign','Assign')}</button>`;
     return `
     <div class="orphan" data-id="${o.id}">
@@ -523,7 +557,7 @@
     return `<div class="tr-empty">
       <span class="ic"><i class="ti ti-calendar-off"></i></span>
       <h3>${tt('rpe.noSessionTitle','No session today')}</h3>
-      <p>${tt('rpe.noSessionSub','RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them once today has a session.')}</p>
+      <p>${tt('rpe.noSessionSub','RPE is tied to a session or match. Player submissions are still captured and will appear below as unlinked — assign them once today has a session or match.')}</p>
       ${reviewBtn}
     </div>`;
   }
@@ -619,9 +653,37 @@
     } catch (e) { console.warn('[RPE] recent_sessions:', e && e.message); state.recent = []; }
   }
 
+  // Recent matches from the calendar (they live in calendar_events, not training_sessions),
+  // so RPE can be attached to a game, not only a training session.
+  async function loadRecentMatches() {
+    try {
+      const activeTeam = sessionStorage.getItem('cal_active_team');
+      const todayStr = localToday();
+      let q = window.sb.from('calendar_events')
+        .select('id, date, start_time, duration_minutes, title, opponent, team_id, created_at')
+        .eq('club_id', state.cid).eq('type', 'match').lte('date', todayStr);
+      if (activeTeam) q = q.eq('team_id', activeTeam);
+      const { data, error } = await q.order('date', { ascending: false }).limit(8);
+      state.matches = error ? [] : (data || []);
+    } catch (e) { console.warn('[RPE] recent_matches:', e && e.message); state.matches = []; }
+  }
+
   async function loadRpe() {
     const sel = document.getElementById('rmSessionSelect');
-    const sessionId = sel.value || null;
+    let sessionId = sel.value || null;
+    // A calendar match is opened by materializing it into a real training_sessions row the
+    // first time. Rewrite the option (and maps) to the real id so downstream ops (board,
+    // share link, remind) use it directly.
+    if (sessionId && String(sessionId).startsWith('evt:')) {
+      state.loading = true; state.error = false; state.view = 'board'; renderRpe();
+      const realId = await resolveSession(sessionId);
+      if (!realId) { state.loading = false; state.error = true; renderRpe(); return; }
+      const opt = sel.options[sel.selectedIndex];
+      const matchObj = state.sessionsById[sessionId];
+      if (opt) opt.value = realId;
+      if (matchObj) { state.sessionsById[realId] = { ...matchObj, id: realId }; }
+      sessionId = realId;
+    }
     if (!sessionId) {
       // No concrete session picked → chooser (double-session day) or no-session-today.
       // Never fall through to the latest past session.
@@ -687,8 +749,18 @@
       .eq('club_id', state.cid)
       .lte('session_date', todayStr); // RPE is only rated for today or past — exclude future prepared sessions so they don't crowd out today
     if (activeTeam) q = q.eq('team_id', activeTeam);
-    const { data, error } = await q.order('session_date', { ascending: false }).limit(8);
-    const sessions = error ? [] : (data || []);
+    const [{ data, error }] = await Promise.all([
+      q.order('session_date', { ascending: false }).limit(8),
+      loadRecentMatches(), // matches live in calendar_events — fold them into the picker
+    ]);
+    const tsSessions = error ? [] : (data || []);
+    // Merge in calendar matches (deduped by date against any materialized training 'match'),
+    // so a game shows up as a pickable RPE target alongside training sessions.
+    const tsMatchDates = new Set(tsSessions.filter(s => s.session_type === 'match').map(s => s.session_date));
+    const evSessions = (state.matches || []).filter(m => !tsMatchDates.has(m.date)).map(matchAsSession);
+    const sessions = [...tsSessions, ...evSessions]
+      .sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)))
+      .slice(0, 10);
     state.sessionsList = sessions;
     state.sessionsById = {};
     sessions.forEach(s => { state.sessionsById[s.id] = s; });
@@ -749,11 +821,13 @@
     const row = btn.closest('.orphan');
     const rpeId = row.getAttribute('data-id');
     const sel = row.querySelector('.cm-select');
-    const sessionId = sel.value;
+    const rawVal = sel.value;
     const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : tt('rpe.session', 'session');
-    if (!sessionId) return;
+    if (!rawVal) return;
     btn.disabled = true;
     try {
+      const sessionId = await resolveSession(rawVal); // materialize a calendar match if needed
+      if (!sessionId) throw new Error('session_unresolved');
       const { error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
       if (error) throw error;
       row.classList.add('is-done');
@@ -915,13 +989,13 @@
     shareTeam.innerHTML = (state.fullAccess ? `<option value="">${T.escape(tt('rpe.wholeClub','Whole club'))}</option>` : '') +
       state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','No session (linked by date)'))}</option>` +
-      state.recent.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('');
+      mergedRecentList().map(o => `<option value="${o.value}">${T.escape(o.label)}</option>`).join('');
     const curSess = document.getElementById('rmSessionSelect').value;
     if (curSess && [...shareSession.options].some(o => o.value === curSess)) shareSession.value = curSess;
 
     async function gen() {
       const teamId = shareTeam.value || null;
-      const sessionId = shareSession.value || null;
+      const sessionId = await resolveSession(shareSession.value || null); // materialize a calendar match if needed
       btnGen.disabled = true;
       try {
         const token = crypto.randomUUID();

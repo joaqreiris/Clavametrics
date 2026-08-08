@@ -3004,6 +3004,50 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.ensure_match_session(p_event_id uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+-- Materialize a calendar_events match into a linkable training_sessions row so RPE
+-- (whose session_id FK targets training_sessions) can attach to it. Idempotent: reuses
+-- an existing 'match' session for the same club/team/date. Deduped by date to stay in
+-- sync with the Calendar, which drops a training_sessions 'match' when a calendar event
+-- exists on the same date.
+declare e record; v_id uuid; v_caller_club uuid;
+begin
+  select * into e from public.calendar_events where id = p_event_id and type = 'match';
+  if not found then return null; end if;
+
+  -- Only staff of the event's club (or a platform admin) may materialize it.
+  select club_id into v_caller_club from public.profiles where id = auth.uid();
+  if e.club_id is distinct from v_caller_club and not public.is_platform_admin() then
+    return null;
+  end if;
+
+  select ts.id into v_id
+  from public.training_sessions ts
+  where ts.club_id = e.club_id
+    and ts.session_date = e.date
+    and ts.session_type = 'match'
+    and ts.team_id is not distinct from e.team_id
+  limit 1;
+  if v_id is not null then return v_id; end if;
+
+  insert into public.training_sessions
+    (club_id, team_id, session_date, session_time, duration, session_type,
+     title, estimated_rpe, published, visible_to)
+  values
+    (e.club_id, e.team_id, e.date, e.start_time, e.duration_minutes, 'match',
+     coalesce(nullif(trim(e.title), ''),
+              case when e.opponent is not null then 'Match vs ' || e.opponent else 'Match' end),
+     e.estimated_rpe, true, coalesce(e.visible_to, ARRAY['staff'::text]))
+  returning id into v_id;
+  return v_id;
+end; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.get_pending_rpe(p_club_id uuid)
  RETURNS TABLE(id uuid, player_name text, rpe numeric, session_date date, created_at timestamp with time zone)
  LANGUAGE plpgsql
@@ -3519,24 +3563,43 @@ CREATE OR REPLACE FUNCTION public.link_rpe_to_session(p_rpe_id uuid)
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare r record; s record; v_team uuid;
+declare r record; s record; v_team uuid; v_date date; v_evt uuid; v_sid uuid;
 begin
   select * into r from public.rpe where id = p_rpe_id;
   if not found or r.session_id is not null then return; end if;
 
   -- categoría del jugador
   select team_id into v_team from public.players where id = r.player_id;
+  v_date := coalesce(r.session_date, r.created_at::date);
 
   -- buscar sesión de la misma fecha Y de la categoría del jugador
   select ts.* into s
   from public.training_sessions ts
   where ts.club_id = r.club_id
-    and ts.session_date = coalesce(r.session_date, r.created_at::date)
+    and ts.session_date = v_date
     and (v_team is null or ts.team_id = v_team)   -- ← ahora matchea por categoría
   order by ts.duration desc nulls last
   limit 1;
 
-  if found then
+  -- Sin sesión de entrenamiento ese día → probar un partido del calendario (calendar_events).
+  -- Se materializa a training_sessions para que el RPE pueda enlazarse.
+  if not found then
+    select ce.id into v_evt
+    from public.calendar_events ce
+    where ce.club_id = r.club_id
+      and ce.type = 'match'
+      and ce.date = v_date
+      and (v_team is null or ce.team_id is not distinct from v_team)
+    limit 1;
+    if v_evt is not null then
+      v_sid := public.ensure_match_session(v_evt);
+      if v_sid is not null then
+        select ts.* into s from public.training_sessions ts where ts.id = v_sid;
+      end if;
+    end if;
+  end if;
+
+  if s.id is not null then
     update public.rpe
        set session_id = s.id,
            duration   = coalesce(r.duration, s.duration),
