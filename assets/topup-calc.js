@@ -16,10 +16,14 @@
 (function () {
   'use strict';
 
-  // Running speed thresholds (km/h). Defaults follow common team-sport bands;
-  // override via TopUp.setThresholds() if a club calibrates differently.
-  let HSR_THRESHOLD    = 19.8;   // ≥ this counts as high-speed running
-  let SPRINT_THRESHOLD = 25.2;   // ≥ this counts as sprint
+  // Speed bands are INDIVIDUALISED as a % of each player's maximal velocity
+  // (matches the Catapult import config used by this club):
+  //   HSR 60-75% Vmax · VHSR 75-90% Vmax · sprint > 90% Vmax.
+  // So the HSR/sprint thresholds are per-player = pct × Vmax (km/h).
+  const BAND_PCT = { hsr: 0.60, vhsr: 0.75, sprint: 0.90 };
+  // Fallback absolute thresholds (km/h) only when a player's Vmax is unknown.
+  let HSR_FALLBACK    = 19.8;
+  let SPRINT_FALLBACK = 25.2;
 
   // Metrics we know how to prescribe against. `kind` drives which block fills it.
   //   volume → informational (total work) · hsr → HIIT block · sprint → HIIT (supra)
@@ -75,6 +79,25 @@
         .limit(1)
         .maybeSingle();
       return data ? { vift: +data.value, date: data.test_date } : null;
+    } catch { return null; }
+  }
+
+  // ── Player maximal velocity (km/h) — peak max_speed across all sessions ─
+  // Used to individualise the HSR/sprint thresholds (% of Vmax). Peak, not mean,
+  // because "maximal velocity" is the best sprint the player has hit on record.
+  async function getPlayerVmax(playerId, clubId) {
+    if (!playerId || !clubId) return null;
+    try {
+      const { data } = await window.sb
+        .from('gps_reports')
+        .select('max_speed')
+        .eq('player_id', playerId)
+        .eq('club_id', clubId)
+        .not('max_speed', 'is', null)
+        .order('max_speed', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data && data.max_speed ? +data.max_speed : null;
     } catch { return null; }
   }
 
@@ -150,14 +173,17 @@
   }
 
   // ── HIIT block from an HSR deficit + VIFT ──────────────────────────────
+  // vmaxKmh (optional) individualises the HSR/sprint thresholds (% of Vmax).
   // Returns null if no VIFT. Otherwise a prescription object.
-  function prescribeHIIT(viftKmh, hsrDeficitM, preset) {
+  function prescribeHIIT(viftKmh, hsrDeficitM, preset, vmaxKmh) {
     if (!viftKmh || viftKmh <= 0) return null;
     const p = preset || DEFAULT_PRESET;
     const speedKmh   = +(viftKmh * p.pct / 100).toFixed(1);
     const mPerRep    = Math.round(kmhToMs(speedKmh) * p.run);
-    const countsAsHSR = speedKmh >= HSR_THRESHOLD;
-    const countsAsSprint = speedKmh >= SPRINT_THRESHOLD;
+    const hsrThreshold    = vmaxKmh > 0 ? +(vmaxKmh * BAND_PCT.hsr).toFixed(1)    : HSR_FALLBACK;
+    const sprintThreshold = vmaxKmh > 0 ? +(vmaxKmh * BAND_PCT.sprint).toFixed(1) : SPRINT_FALLBACK;
+    const countsAsHSR    = speedKmh >= hsrThreshold;
+    const countsAsSprint = speedKmh >= sprintThreshold;
 
     let reps = 0, sets = 0, repsPerSet = 0, totalRunM = 0, timeMin = 0;
     if (hsrDeficitM > 0 && mPerRep > 0) {
@@ -169,7 +195,7 @@
     }
     return {
       preset: p, speedKmh, mPerRep, reps, sets, repsPerSet, totalRunM, timeMin,
-      countsAsHSR, countsAsSprint, hsrThreshold: HSR_THRESHOLD,
+      countsAsHSR, countsAsSprint, hsrThreshold, sprintThreshold, vmax: vmaxKmh || null,
     };
   }
 
@@ -181,13 +207,13 @@
   }
 
   window.TopUp = {
-    METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS,
-    getLatestVift, getReference, getLatestMatchActual,
+    METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
+    getLatestVift, getPlayerVmax, getReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD,
-    setThresholds(hsr, sprint) {
-      if (hsr > 0) HSR_THRESHOLD = +hsr;
-      if (sprint > 0) SPRINT_THRESHOLD = +sprint;
+    // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
+    setFallbackThresholds(hsr, sprint) {
+      if (hsr > 0) HSR_FALLBACK = +hsr;
+      if (sprint > 0) SPRINT_FALLBACK = +sprint;
     },
-    get thresholds() { return { hsr: HSR_THRESHOLD, sprint: SPRINT_THRESHOLD }; },
   };
 })();

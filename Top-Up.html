@@ -12,14 +12,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <style>
-  .tu-wrap{max-width:760px;margin:0 auto;padding:20px 16px 80px}
+  .tu-wrap{max-width:820px;margin:0 auto;padding:20px 16px 90px}
   .tu-h{margin:0 0 3px;font:var(--cm-h2);color:var(--cm-fg-strong)}
   .tu-sub{margin:0 0 18px;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
   .tu-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:16px;margin-bottom:14px}
   .tu-card h3{margin:0 0 12px;font:600 13px/1.2 var(--cm-font-sans);letter-spacing:.01em;color:var(--cm-fg-strong);display:flex;align-items:center;gap:8px}
   .tu-card h3 .ti{font-size:17px;color:var(--cm-fg-muted)}
   .tu-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
-  .tu-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px}
+  .tu-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:150px}
   .tu-field label{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .tu-input,.tu-select{height:44px;padding:0 12px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:10px;font:600 15px/1 var(--cm-font-sans);width:100%}
   .tu-input:focus,.tu-select:focus{outline:none;border-color:var(--cm-accent)}
@@ -31,38 +31,64 @@
   .tu-chips{display:flex;flex-wrap:wrap;gap:7px}
   .tu-chip{font:600 11.5px/1 var(--cm-font-sans);padding:8px 11px;border-radius:999px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);cursor:pointer;user-select:none}
   .tu-chip.on{border-color:var(--cm-accent);background:rgba(21,128,61,.10);color:var(--cm-fg-strong)}
-  .tu-vift{display:inline-flex;align-items:center;gap:7px;font:600 12px/1 var(--cm-font-mono);letter-spacing:.03em;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:999px;padding:7px 12px;color:var(--cm-fg-strong)}
-  .tu-vift.warn{color:var(--cm-warning,#b45309);border-color:var(--cm-warning,#b45309)}
-  .tu-vift b{color:var(--cm-accent)}
+  /* player picker */
+  .tu-pick-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .tu-search{flex:1;min-width:160px;height:40px;padding:0 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:10px;font:500 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-search:focus{outline:none;border-color:var(--cm-accent)}
+  .tu-pick-count{font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap}
+  .tu-linkbtn{background:none;border:0;color:var(--cm-accent);font:600 12px/1 var(--cm-font-sans);cursor:pointer;padding:6px 4px}
+  .tu-pick-list{max-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;padding-right:2px}
+  .tu-pick-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--cm-border);border-radius:10px;cursor:pointer;user-select:none;background:var(--cm-surface)}
+  .tu-pick-item:hover{border-color:var(--cm-accent)}
+  .tu-pick-item.on{border-color:var(--cm-accent);background:rgba(21,128,61,.08)}
+  .tu-pick-item .box{width:20px;height:20px;flex:none;border-radius:6px;border:2px solid var(--cm-border);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+  .tu-pick-item.on .box{background:var(--cm-accent);border-color:var(--cm-accent)}
+  .tu-pick-item .num{font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:20px}
+  .tu-pick-item .nm{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* player result card */
+  .tu-pcard{border:1px solid var(--cm-border);border-radius:14px;padding:14px;margin-bottom:12px;background:var(--cm-surface)}
+  .tu-pcard-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .tu-pcard-head .av{width:36px;height:36px;flex:none;border-radius:50%;background:var(--cm-bg-soft);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--cm-font-sans)}
+  .tu-pcard-head .who{min-width:0}
+  .tu-pcard-head .who .name{font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-pcard-head .who .refs{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap}
+  .tu-pcard-head .refs b{color:var(--cm-accent)}
+  .tu-pcard-head .refs .warn{color:var(--cm-warning,#b45309)}
+  .tu-pcard-head .mins{margin-left:auto;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .tu-pcard-head .mins label{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tu-pcard-head .mins input{width:70px;height:40px;text-align:center;padding:0 6px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;font:700 16px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-pcard-head .mins input:focus{outline:none;border-color:var(--cm-accent)}
   /* deficit rows */
-  .tu-def{display:flex;flex-direction:column;gap:10px}
+  .tu-def{display:flex;flex-direction:column;gap:9px}
   .tu-def-row{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
-  .tu-def-row .n{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .tu-def-row .v{font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:right;white-space:nowrap}
-  .tu-def-row .v small{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .tu-bar{grid-column:1/-1;height:8px;border-radius:5px;background:var(--cm-bg-soft);overflow:hidden}
+  .tu-def-row .n{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-def-row .v{font:600 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:right;white-space:nowrap}
+  .tu-def-row .v small{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-bar{grid-column:1/-1;height:7px;border-radius:5px;background:var(--cm-bg-soft);overflow:hidden}
   .tu-bar>span{display:block;height:100%;border-radius:5px;background:var(--cm-accent);transition:width .25s}
   .tu-bar.hi>span{background:var(--cm-danger,#dc2626)}
   .tu-bar.mid>span{background:var(--cm-warning,#f59e0b)}
   .tu-muted{font:var(--cm-body-sm);color:var(--cm-fg-muted)}
   .tu-note{font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px}
   .tu-note.warn{color:var(--cm-warning,#b45309)}
-  /* prescription big number line */
-  .tu-rx{background:var(--cm-bg-soft);border-radius:12px;padding:14px;margin-top:4px}
-  .tu-rx .big{font:700 17px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-block{margin-top:12px;padding-top:12px;border-top:1px dashed var(--cm-border)}
+  .tu-block .lbl{font:600 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .tu-rx .big{font:700 15.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
   .tu-rx .big b{color:var(--cm-accent)}
-  .tu-rx .sub{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
-  .tu-stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-  .tu-stat{flex:1;min-width:74px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;padding:9px 10px;text-align:center}
-  .tu-stat .k{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
-  .tu-stat .val{font:700 18px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:4px}
-  .tu-band{display:inline-flex;align-items:center;gap:6px;font:700 12px/1 var(--cm-font-sans);padding:6px 11px;border-radius:999px}
+  .tu-rx .sub{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px}
+  .tu-stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .tu-stat{flex:1;min-width:66px;background:var(--cm-bg-soft);border-radius:9px;padding:8px 9px;text-align:center}
+  .tu-stat .k{font:600 9px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tu-stat .val{font:700 16px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px}
+  .tu-band{display:inline-flex;align-items:center;gap:6px;font:700 11.5px/1 var(--cm-font-sans);padding:5px 10px;border-radius:999px;margin-bottom:8px}
   .tu-band.low{background:rgba(21,128,61,.12);color:#15803D}
   .tu-band.mid{background:rgba(245,158,11,.15);color:#b45309}
   .tu-band.high{background:rgba(220,38,38,.12);color:#b91c1c}
   .tu-empty{padding:26px 12px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
   .tu-empty .ti{display:block;font-size:30px;margin-bottom:8px;color:var(--cm-fg-faint)}
-  .tu-manual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:4px}
+  .tu-manual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+  .tu-manual-grid .tu-field{min-width:0}
+  .tu-manual-grid input{height:38px;font:600 13px/1 var(--cm-font-sans)}
   .hide{display:none!important}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -99,23 +125,9 @@
       <h1 class="tu-h" data-i18n="topup.heading">Complemento post-partido</h1>
       <p class="tu-sub" data-i18n="topup.subtitle">Prescribe tareas complementarias según los minutos jugados y la referencia de partido.</p>
 
-      <!-- 1 · Setup -->
+      <!-- 1 · Global setup -->
       <div class="tu-card">
         <div class="tu-row">
-          <div class="tu-field" style="flex:2 1 220px">
-            <label data-i18n="topup.select_player">Jugador</label>
-            <select id="tu-player" class="tu-select"><option value="" data-i18n="common.loading">Loading…</option></select>
-          </div>
-          <div class="tu-field" style="max-width:120px">
-            <label data-i18n="topup.minutes_played">Minutos</label>
-            <input id="tu-minutes" class="tu-input" type="number" min="0" max="130" inputmode="numeric" value="0">
-          </div>
-          <div class="tu-field" style="max-width:120px">
-            <label data-i18n="topup.match_duration">Duración partido</label>
-            <input id="tu-duration" class="tu-input" type="number" min="10" max="130" inputmode="numeric" value="90">
-          </div>
-        </div>
-        <div class="tu-row" style="margin-top:14px">
           <div class="tu-field">
             <label data-i18n="topup.ref_mode">Referencia de carga</label>
             <div class="tu-seg" id="tu-mode">
@@ -132,20 +144,39 @@
             </div>
           </div>
         </div>
+        <div class="tu-row" style="margin-top:14px">
+          <div class="tu-field" style="max-width:150px">
+            <label data-i18n="topup.match_duration">Duración partido</label>
+            <input id="tu-duration" class="tu-input" type="number" min="10" max="130" inputmode="numeric" value="90">
+          </div>
+          <div class="tu-field">
+            <label data-i18n="topup.preset">Formato HIIT</label>
+            <select id="tu-preset" class="tu-select"></select>
+          </div>
+        </div>
         <div id="tu-source-hint" class="tu-note"></div>
-        <!-- manual actual inputs -->
-        <div id="tu-manual" class="tu-manual-grid hide"></div>
       </div>
 
-      <!-- metric selector -->
+      <!-- 2 · Target metrics -->
       <div class="tu-card">
         <h3><i class="ti ti-adjustments-horizontal"></i><span data-i18n="topup.metrics_settings">Métricas objetivo</span></h3>
         <div class="tu-chips" id="tu-metrics"></div>
       </div>
 
+      <!-- 3 · Player multi-select -->
+      <div class="tu-card">
+        <h3><i class="ti ti-users"></i><span data-i18n="topup.select_players">Jugadores</span></h3>
+        <div class="tu-pick-top">
+          <input id="tu-search" class="tu-search" type="search" data-i18n-ph="topup.search_ph" placeholder="Buscar jugador…">
+          <span class="tu-pick-count" id="tu-pick-count">0</span>
+          <button class="tu-linkbtn" id="tu-clear" data-i18n="topup.clear">Limpiar</button>
+        </div>
+        <div class="tu-pick-list" id="tu-pick-list"></div>
+      </div>
+
       <!-- results -->
       <div id="tu-results">
-        <div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i><span data-i18n="topup.pick_prompt">Elegí un jugador y cargá los minutos para ver la prescripción.</span></div></div>
+        <div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i><span data-i18n="topup.pick_prompt_multi">Seleccioná uno o más jugadores para ver sus prescripciones.</span></div></div>
       </div>
     </div>
   </main>
@@ -159,51 +190,45 @@
 
   const ok = await window.guardModule('top-up');
   if (!ok) return;
-  // Hard role gate: this is an S&C field tool → only S&C/fitness coaches (bucket 'sc')
-  // and admins/owners. Independent of per-member module config so it's restricted
-  // even in clubs that haven't set up managed modules.
+  // Hard role gate: S&C field tool → only S&C/fitness coaches (bucket 'sc') + admins.
   try {
     const prof = await window.getProfile();
     if (!window.cmFullAccess(prof) && !window.cmHasBucket(prof, 'sc')) {
       try { sessionStorage.setItem('cm_denied', 'top-up'); } catch (_) {}
       window.location.replace('Hub.html'); return;
     }
-  } catch (_) { /* fail-open on error, guardModule already covered auth */ }
+  } catch (_) {}
   const clubId = await window.getClubId();
   window.applyClubTheme?.();
 
   const TU = window.TopUp;
   const mLabel = (k) => tt('topup.m.' + k, (TU.METRIC_DEFS[k] || {}).label || k);
   const fmtNum = (v, unit) => unit === 'm' ? Math.round(v).toLocaleString() : (unit === 'n' ? Math.round(v) : (Math.round(v * 10) / 10));
+  const initials = (n) => (n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
 
   // ── persisted prefs (per club) ──
   const PK = 'tu_prefs.' + clubId;
   const DEFAULT_METRICS = ['high_speed_distance','sprint_distance','accelerations','decelerations','total_distance'];
-  let prefs;
-  try { prefs = JSON.parse(localStorage.getItem(PK) || '{}') || {}; } catch { prefs = {}; }
+  let prefs; try { prefs = JSON.parse(localStorage.getItem(PK) || '{}') || {}; } catch { prefs = {}; }
   const state = {
     teamId: null,
-    playerId: '',
-    minutes: 0,
+    players: [],           // squad list
+    selected: [],          // player ids, in selection order
+    pdata: {},             // pid → { player, vift, vmax, ref, minutes, actual, lastMatch, loading }
+    filter: '',
     duration: +prefs.duration || 90,
     mode: prefs.mode === 'avg' ? 'avg' : 'best',
     source: 'estimate',
     presetId: prefs.presetId || TU.DEFAULT_PRESET.id,
     metrics: Array.isArray(prefs.metrics) && prefs.metrics.length ? prefs.metrics : DEFAULT_METRICS.slice(),
-    vift: null,
-    ref: null,          // reference per metric
-    actual: {},         // manual/measured actual values
-    lastMatch: null,
   };
-  function savePrefs(){
-    try { localStorage.setItem(PK, JSON.stringify({ duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics })); } catch {}
-  }
+  const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({ duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics })); } catch {} };
 
-  // metrics that the calc always needs for the two blocks
   const BLOCK_METRICS = ['high_speed_distance','accelerations','decelerations'];
   const neededMetrics = () => Array.from(new Set(state.metrics.concat(BLOCK_METRICS)));
+  const preset = () => TU.PRESETS.find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
 
-  // ── team + players ──
+  // ── team + squad ──
   async function initTeams(){
     const sel = $('tu-team');
     let teams = [];
@@ -217,12 +242,12 @@
     sel.addEventListener('change', async () => {
       state.teamId = sel.value;
       try { sessionStorage.setItem('cal_active_team', state.teamId); } catch {}
-      await loadPlayers(); resetPlayer();
+      state.selected = []; state.pdata = {};
+      await loadPlayers(); renderPicker(); renderResults();
     });
   }
 
   async function loadPlayers(){
-    const sel = $('tu-player');
     let players = [];
     try {
       const q = window.cmTeamPlayers
@@ -231,55 +256,76 @@
       const { data } = await q.order('number');
       players = data || [];
     } catch { players = []; }
-    const opt = [`<option value="" data-i18n="topup.select_player">${tt('topup.select_player','Jugador')}…</option>`]
-      .concat(players.map(p => {
-        const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || ('#' + (p.number ?? '—'));
-        const num = p.number != null ? p.number + ' · ' : '';
-        return `<option value="${p.id}">${esc(num + name)}</option>`;
-      }));
-    sel.innerHTML = opt.join('');
+    state.players = players.map(p => ({
+      id: p.id,
+      name: [p.first_name, p.last_name].filter(Boolean).join(' ') || ('#' + (p.number ?? '—')),
+      number: p.number, position: p.position,
+    }));
   }
 
-  function resetPlayer(){
-    state.playerId = ''; state.vift = null; state.ref = null; state.actual = {}; state.lastMatch = null;
-    $('tu-player').value = ''; render();
+  // ── picker ──
+  function renderPicker(){
+    const list = $('tu-pick-list');
+    const f = state.filter.toLowerCase().trim();
+    const rows = state.players.filter(p => !f || p.name.toLowerCase().includes(f) || String(p.number||'').includes(f));
+    list.innerHTML = rows.length ? rows.map(p => {
+      const on = state.selected.includes(p.id);
+      return `<div class="tu-pick-item ${on?'on':''}" data-pid="${p.id}">
+        <span class="box">${on?'<i class="ti ti-check"></i>':''}</span>
+        <span class="num">${p.number!=null?p.number:''}</span>
+        <span class="nm">${esc(p.name)}</span></div>`;
+    }).join('') : `<div class="tu-empty" style="grid-column:1/-1">${tt('topup.no_players','Sin jugadores')}</div>`;
+    list.querySelectorAll('.tu-pick-item').forEach(it => it.addEventListener('click', () => togglePlayer(it.dataset.pid)));
+    $('tu-pick-count').textContent = state.selected.length;
   }
 
-  // ── data loads for the selected player ──
-  async function loadPlayerData(){
-    if (!state.playerId){ state.vift = null; state.ref = null; return; }
-    renderLoading();
-    const [viftRes, refRes] = await Promise.all([
-      TU.getLatestVift(state.playerId, clubId),
-      TU.getReference(state.playerId, clubId, neededMetrics(), state.mode),
+  function togglePlayer(pid){
+    const i = state.selected.indexOf(pid);
+    if (i >= 0){ state.selected.splice(i, 1); delete state.pdata[pid]; }
+    else { state.selected.push(pid); initPlayer(pid); }
+    renderPicker(); renderResults();
+  }
+
+  function initPlayer(pid){
+    const p = state.players.find(x => x.id === pid);
+    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, minutes: 0, actual: {}, lastMatch: null, loading: true };
+    loadPlayerData(pid);
+  }
+
+  async function loadPlayerData(pid){
+    const pd = state.pdata[pid]; if (!pd) return;
+    pd.loading = true;
+    const [vift, vmax, ref] = await Promise.all([
+      TU.getLatestVift(pid, clubId),
+      TU.getPlayerVmax(pid, clubId),
+      TU.getReference(pid, clubId, neededMetrics(), state.mode),
     ]);
-    state.vift = viftRes ? viftRes.vift : null;
-    state.ref = refRes;
-    render();
+    if (!state.pdata[pid]) return;   // deselected while loading
+    pd.vift = vift ? vift.vift : null;
+    pd.vmax = vmax;
+    pd.ref = ref;
+    if (state.source === 'measured') await loadMeasured(pid);
+    pd.loading = false;
+    renderResults();
   }
 
-  async function loadMeasured(){
-    const m = await TU.getLatestMatchActual(state.playerId, clubId);
-    state.lastMatch = m;
-    if (m){
-      state.actual = Object.assign({}, m.metrics);
-      if (m.minutes != null){ state.minutes = Math.round(m.minutes); $('tu-minutes').value = state.minutes; }
-    }
-    render();
+  async function loadMeasured(pid){
+    const pd = state.pdata[pid]; if (!pd) return;
+    const m = await TU.getLatestMatchActual(pid, clubId);
+    if (!state.pdata[pid]) return;
+    pd.lastMatch = m;
+    if (m){ pd.actual = Object.assign({}, m.metrics); if (m.minutes != null) pd.minutes = Math.round(m.minutes); }
   }
 
-  // ── deficit + prescription ──
-  function currentDeficit(){
-    if (!state.ref) return null;
-    const opts = state.source === 'estimate'
-      ? { source: 'estimate', minutes: state.minutes, duration: state.duration }
-      : { source: state.source, actual: state.actual };
-    return TU.computeDeficit(state.ref, opts);
+  async function reloadRefs(){
+    await Promise.all(state.selected.map(async pid => {
+      const pd = state.pdata[pid]; if (!pd) return;
+      pd.ref = await TU.getReference(pid, clubId, neededMetrics(), state.mode);
+    }));
+    renderResults();
   }
 
-  // ── render ──
-  function renderLoading(){ $('tu-results').innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-loader"></i>${tt('common.loading','Cargando…')}</div></div>`; }
-
+  // ── metric chips ──
   function renderMetricChips(){
     const box = $('tu-metrics');
     box.innerHTML = Object.keys(TU.METRIC_DEFS).map(k => {
@@ -287,171 +333,175 @@
       return `<span class="tu-chip${on}" data-metric="${k}">${esc(mLabel(k))}</span>`;
     }).join('');
     box.querySelectorAll('.tu-chip').forEach(ch => ch.addEventListener('click', async () => {
-      const k = ch.dataset.metric;
-      const i = state.metrics.indexOf(k);
-      if (i >= 0){ if (state.metrics.length > 1) state.metrics.splice(i, 1); }
-      else state.metrics.push(k);
-      savePrefs(); renderMetricChips();
-      if (state.playerId){ state.ref = await TU.getReference(state.playerId, clubId, neededMetrics(), state.mode); render(); }
+      const k = ch.dataset.metric, i = state.metrics.indexOf(k);
+      if (i >= 0){ if (state.metrics.length > 1) state.metrics.splice(i, 1); } else state.metrics.push(k);
+      savePrefs(); renderMetricChips(); await reloadRefs();
     }));
   }
 
-  function renderManualInputs(){
-    const box = $('tu-manual');
-    if (state.source !== 'manual'){ box.classList.add('hide'); return; }
-    box.classList.remove('hide');
-    const keys = neededMetrics();
-    box.innerHTML = keys.map(k => {
-      const def = TU.METRIC_DEFS[k] || {};
-      const val = state.actual[k] != null ? state.actual[k] : '';
-      return `<div class="tu-field"><label>${esc(mLabel(k))} <span style="color:var(--cm-fg-faint)">(${def.unit||''})</span></label>
-        <input class="tu-input" type="number" min="0" inputmode="decimal" data-actual="${k}" value="${val}" placeholder="0"></div>`;
-    }).join('');
-    box.querySelectorAll('input[data-actual]').forEach(inp => inp.addEventListener('input', () => {
-      const k = inp.dataset.actual; const v = inp.value.trim();
-      if (v === '') delete state.actual[k]; else state.actual[k] = +v;
-      render();
-    }));
+  // ── deficit + prescription per player ──
+  function deficitFor(pd){
+    if (!pd.ref) return null;
+    const opts = state.source === 'estimate'
+      ? { source: 'estimate', minutes: pd.minutes, duration: state.duration }
+      : { source: state.source, actual: pd.actual };
+    return TU.computeDeficit(pd.ref, opts);
   }
+  const barClass = (pct) => pct >= 60 ? 'hi' : pct >= 30 ? 'mid' : '';
 
-  function sourceHint(){
-    const el = $('tu-source-hint');
-    if (state.source === 'estimate'){
-      el.className = 'tu-note';
-      el.textContent = tt('topup.hint_estimate', 'Déficit estimado a partir de los minutos jugados (referencia × minutos restantes).');
-    } else if (state.source === 'measured'){
-      el.className = 'tu-note';
-      if (state.lastMatch){
-        el.textContent = tt('topup.hint_measured_ok', 'Medido del último partido ({date}). Déficit = referencia − hecho.', { date: state.lastMatch.sessionDate || '—' });
-      } else if (state.playerId){
-        el.className = 'tu-note warn';
-        el.textContent = tt('topup.hint_measured_none', 'Sin datos GPS de partido para este jugador. Usá Estimado o Manual.');
-      } else el.textContent = '';
-    } else {
-      el.className = 'tu-note';
-      el.textContent = tt('topup.hint_manual', 'Ingresá a mano lo que hizo (p. ej. leído de tu sistema en vivo). Déficit = referencia − hecho.');
-    }
-  }
+  function playerCardHTML(pid){
+    const pd = state.pdata[pid]; if (!pd) return '';
+    const p = pd.player;
+    const head = `<div class="tu-pcard-head">
+      <span class="av">${esc(initials(p.name))}</span>
+      <div class="who"><div class="name">${p.number!=null?('<b style="color:var(--cm-fg-muted)">'+p.number+'</b> '):''}${esc(p.name)}</div>
+        <div class="refs">
+          ${pd.vift ? `VIFT <b>${pd.vift.toFixed(1)}</b>` : `<span class="warn">${tt('topup.no_vift','Sin VIFT')}</span>`}
+          ${pd.vmax ? `· Vmax ${pd.vmax.toFixed(1)} km/h` : ''}
+        </div></div>
+      <div class="mins"><label data-i18n="topup.minutes_played">Minutos</label>
+        <input type="number" min="0" max="130" inputmode="numeric" data-mins="${pid}" value="${pd.minutes||0}" ${state.source==='measured'?'':''}></div>
+    </div>`;
 
-  function barClass(pct){ return pct >= 60 ? 'hi' : pct >= 30 ? 'mid' : ''; }
+    if (pd.loading) return `<div class="tu-pcard">${head}<div class="tu-note">${tt('common.loading','Cargando…')}</div></div>`;
 
-  function render(){
-    renderManualInputs();
-    sourceHint();
-    if (!state.playerId){
-      $('tu-results').innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i>${tt('topup.pick_prompt','Elegí un jugador y cargá los minutos para ver la prescripción.')}</div></div>`;
-      return;
-    }
-    const def = currentDeficit();
-    if (!def){ renderLoading(); return; }
-
-    // reference availability
-    const hsr = def['high_speed_distance'];
-    const anyRef = Object.values(def).some(d => d.reference != null);
-    let html = '';
-
-    // header: vift + reference mode
-    const viftChip = state.vift
-      ? `<span class="tu-vift"><i class="ti ti-gauge"></i>VIFT <b>${state.vift.toFixed(1)}</b> km/h</span>`
-      : `<span class="tu-vift warn"><i class="ti ti-alert-triangle"></i>${tt('topup.no_vift','Sin VIFT (cargar 30-15 IFT)')}</span>`;
-    const modeTxt = state.mode === 'avg' ? tt('topup.ref_avg','Promedio partido') : tt('topup.ref_best5','Mejores 5');
-
+    const def = deficitFor(pd);
+    const anyRef = def && Object.values(def).some(d => d.reference != null);
     if (!anyRef){
-      html += `<div class="tu-card"><div class="tu-empty"><i class="ti ti-database-off"></i>${tt('topup.insufficient_ref','Datos de partido insuficientes para calcular la referencia (se necesitan al menos 3 partidos con GPS).')}</div></div>`;
-      $('tu-results').innerHTML = html;
-      return;
+      return `<div class="tu-pcard">${head}<div class="tu-note warn">${tt('topup.insufficient_ref','Datos de partido insuficientes (se necesitan ≥3 partidos con GPS).')}</div></div>`;
     }
 
-    // ── deficit card ──
-    html += `<div class="tu-card"><h3><i class="ti ti-chart-arrows-vertical"></i>${tt('topup.deficit','Déficit a complementar')}
-      <span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(modeTxt)}</span></h3>
-      <div style="margin-bottom:12px">${viftChip}</div>
-      <div class="tu-def">`;
-    state.metrics.forEach(k => {
+    // measured but no match data
+    let srcWarn = '';
+    if (state.source === 'measured' && !pd.lastMatch){
+      srcWarn = `<div class="tu-note warn">${tt('topup.hint_measured_none','Sin datos GPS de partido. Usá Estimado o Manual.')}</div>`;
+    }
+
+    // deficit bars
+    let bars = state.metrics.map(k => {
       const d = def[k]; const u = (TU.METRIC_DEFS[k]||{}).unit;
-      if (!d || d.reference == null){
-        html += `<div class="tu-def-row"><span class="n">${esc(mLabel(k))}</span><span class="v tu-muted">${tt('topup.na','s/d')}</span></div>`;
-        return;
-      }
-      html += `<div class="tu-def-row">
+      if (!d || d.reference == null) return `<div class="tu-def-row"><span class="n">${esc(mLabel(k))}</span><span class="v tu-muted">${tt('topup.na','s/d')}</span></div>`;
+      return `<div class="tu-def-row">
         <span class="n">${esc(mLabel(k))}</span>
         <span class="v">${fmtNum(d.deficit,u)} <small>/ ${fmtNum(d.reference,u)} ${esc(u)}</small></span>
-        <div class="tu-bar ${barClass(d.pct)}"><span style="width:${Math.min(100,d.pct)}%"></span></div>
-      </div>`;
-    });
-    html += `</div></div>`;
+        <div class="tu-bar ${barClass(d.pct)}"><span style="width:${Math.min(100,d.pct)}%"></span></div></div>`;
+    }).join('');
 
-    // ── HIIT block ──
-    const preset = TU.PRESETS.find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
-    const hsrDeficit = hsr && hsr.deficit != null ? hsr.deficit : 0;
-    const rx = state.vift ? TU.prescribeHIIT(state.vift, hsrDeficit, preset) : null;
-    html += `<div class="tu-card"><h3><i class="ti ti-run"></i>${tt('topup.hiit_block','Bloque intermitente (HIIT · %VIFT)')}</h3>`;
-    html += `<div class="tu-field" style="margin-bottom:12px"><label>${tt('topup.preset','Formato')}</label>
-      <select id="tu-preset" class="tu-select">${TU.PRESETS.map(p => `<option value="${p.id}" ${p.id===preset.id?'selected':''}>${esc(p.label)}</option>`).join('')}</select></div>`;
-    if (!rx){
-      html += `<div class="tu-note warn">${tt('topup.no_vift_block','Cargá un resultado de 30-15 IFT para prescribir el bloque de carrera.')}</div>`;
-    } else if (hsrDeficit <= 0){
-      html += `<div class="tu-note">${tt('topup.no_deficit','Sin déficit de HSR: el jugador ya alcanzó su referencia. No hace falta complemento de carrera.')}</div>`;
-    } else {
-      html += `<div class="tu-rx">
-        <div class="big"><b>${rx.reps}</b> reps · <b>${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h
-          <span style="color:var(--cm-fg-muted);font-weight:600">(${preset.run}-${preset.rest})</span></div>
-        <div class="sub">${tt('topup.covers','Cubre')} ~${Math.round(rx.totalRunM).toLocaleString()} m ${tt('topup.of_hsr_deficit','del déficit de HSR')} (${fmtNum(hsrDeficit,'m')} m)</div>
+    // manual inputs
+    let manual = '';
+    if (state.source === 'manual'){
+      manual = `<div class="tu-manual-grid">` + neededMetrics().map(k => {
+        const u = (TU.METRIC_DEFS[k]||{}).unit; const val = pd.actual[k] != null ? pd.actual[k] : '';
+        return `<div class="tu-field"><label>${esc(mLabel(k))} (${u})</label>
+          <input class="tu-input" type="number" min="0" inputmode="decimal" data-actual="${pid}:${k}" value="${val}" placeholder="0"></div>`;
+      }).join('') + `</div>`;
+    }
+
+    // HIIT block
+    const hsr = def['high_speed_distance'];
+    const hsrDef = hsr && hsr.deficit != null ? hsr.deficit : 0;
+    const p2 = preset();
+    const rx = pd.vift ? TU.prescribeHIIT(pd.vift, hsrDef, p2, pd.vmax) : null;
+    let hiit = `<div class="tu-block"><div class="lbl"><i class="ti ti-run"></i>${tt('topup.hiit_block','Bloque intermitente (HIIT · %VIFT)')} · ${esc(p2.label)}</div>`;
+    if (!rx){ hiit += `<div class="tu-note warn">${tt('topup.no_vift_block','Cargá un 30-15 IFT para el bloque de carrera.')}</div>`; }
+    else if (hsrDef <= 0){ hiit += `<div class="tu-note">${tt('topup.no_deficit','Sin déficit de HSR: ya alcanzó su referencia.')}</div>`; }
+    else {
+      hiit += `<div class="tu-rx"><div class="big"><b>${rx.reps}</b> reps · <b>${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h <span style="color:var(--cm-fg-muted);font-weight:600">(${p2.run}-${p2.rest})</span></div>
+        <div class="sub">${tt('topup.covers','Cubre')} ~${Math.round(rx.totalRunM).toLocaleString()} m ${tt('topup.of_hsr_deficit','del déficit de HSR')} (${fmtNum(hsrDef,'m')} m)</div>
         <div class="tu-stats">
           <div class="tu-stat"><div class="k">${tt('topup.sets','Series')}</div><div class="val">${rx.sets}</div></div>
           <div class="tu-stat"><div class="k">${tt('topup.per_set','Reps/serie')}</div><div class="val">${rx.repsPerSet}</div></div>
           <div class="tu-stat"><div class="k">${tt('topup.time','Tiempo')}</div><div class="val">${rx.timeMin}′</div></div>
         </div>`;
-      if (!rx.countsAsHSR){
-        html += `<div class="tu-note warn">${tt('topup.below_hsr', `A ${rx.speedKmh} km/h estás por debajo del umbral de HSR (${rx.hsrThreshold} km/h): subí el %VIFT para generar carga de alta velocidad.`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
-      }
-      html += `</div>`;
+      if (!rx.countsAsHSR) hiit += `<div class="tu-note warn">${tt('topup.below_hsr', `A ${rx.speedKmh} km/h estás por debajo del umbral de HSR (${rx.hsrThreshold} km/h = 60% Vmax): subí el %VIFT.`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
+      hiit += `</div>`;
     }
-    html += `</div>`;
+    hiit += `</div>`;
 
-    // ── COD / neuromuscular block ──
-    const accDef = (def['accelerations']||{}).deficit || 0;
-    const decDef = (def['decelerations']||{}).deficit || 0;
+    // COD block
+    const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
     const cod = TU.prescribeCOD(accDef, decDef);
-    html += `<div class="tu-card"><h3><i class="ti ti-arrows-shuffle"></i>${tt('topup.cod_block','Bloque neuromuscular (cambios de dirección)')}</h3>`;
-    if (accDef + decDef <= 0){
-      html += `<div class="tu-note">${tt('topup.no_cod','Sin déficit de aceleraciones/desaceleraciones.')}</div>`;
-    } else {
-      html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <span class="tu-band ${cod.band.id}">${tt('topup.band','Banda')} ${tt('topup.band_'+cod.band.id, cod.band.label)}</span>
-        <span class="tu-muted">${tt('topup.acc_dec_deficit','Déficit acc+dec')}: <b>${cod.total}</b></span></div>
+    let codHtml = `<div class="tu-block"><div class="lbl"><i class="ti ti-arrows-shuffle"></i>${tt('topup.cod_block','Bloque neuromuscular (COD)')}</div>`;
+    if (accDef + decDef <= 0){ codHtml += `<div class="tu-note">${tt('topup.no_cod','Sin déficit de acc/dec.')}</div>`; }
+    else {
+      codHtml += `<span class="tu-band ${cod.band.id}">${tt('topup.band','Banda')} ${tt('topup.band_'+cod.band.id, cod.band.label)} · ${tt('topup.acc_dec_deficit','déficit acc+dec')} ${cod.total}</span>
         <div class="tu-rx"><div class="big">${tt('topup.cod_'+cod.band.id, cod.band.reps)}</div>
         <div class="sub">${tt('topup.cod_detail_'+cod.band.id, cod.band.detail)}</div></div>`;
     }
-    html += `</div>`;
+    codHtml += `</div>`;
 
-    $('tu-results').innerHTML = html;
-    $('tu-preset')?.addEventListener('change', (e) => { state.presetId = e.target.value; savePrefs(); render(); });
+    return `<div class="tu-pcard">${head}${srcWarn}<div class="tu-def">${bars}</div>${manual}${hiit}${codHtml}</div>`;
   }
 
-  // ── wire controls ──
-  $('tu-player').addEventListener('change', async (e) => { state.playerId = e.target.value; state.actual = {}; state.lastMatch = null; await loadPlayerData(); if (state.source === 'measured' && state.playerId) await loadMeasured(); });
-  $('tu-minutes').addEventListener('input', (e) => { state.minutes = +e.target.value || 0; render(); });
-  $('tu-duration').addEventListener('input', (e) => { state.duration = +e.target.value || 90; savePrefs(); render(); });
+  function renderResults(){
+    sourceHint();
+    const box = $('tu-results');
+    if (!state.selected.length){
+      box.innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i>${tt('topup.pick_prompt_multi','Seleccioná uno o más jugadores para ver sus prescripciones.')}</div></div>`;
+      return;
+    }
+    box.innerHTML = state.selected.map(pid => playerCardHTML(pid)).join('');
+    // wire per-card inputs
+    box.querySelectorAll('input[data-mins]').forEach(inp => inp.addEventListener('input', () => {
+      const pid = inp.dataset.mins, pd = state.pdata[pid]; if (!pd) return;
+      pd.minutes = +inp.value || 0; rerenderCard(pid);
+    }));
+    box.querySelectorAll('input[data-actual]').forEach(inp => inp.addEventListener('input', () => {
+      const [pid, k] = inp.dataset.actual.split(':'); const pd = state.pdata[pid]; if (!pd) return;
+      const v = inp.value.trim(); if (v === '') delete pd.actual[k]; else pd.actual[k] = +v; rerenderCard(pid);
+    }));
+  }
+
+  // Re-render a single card without losing focus on other cards' inputs.
+  function rerenderCard(pid){
+    const box = $('tu-results');
+    const nodes = box.querySelectorAll('.tu-pcard');
+    const idx = state.selected.indexOf(pid);
+    if (idx < 0 || !nodes[idx]) return;
+    const wrap = document.createElement('div'); wrap.innerHTML = playerCardHTML(pid);
+    const fresh = wrap.firstElementChild;
+    const active = document.activeElement;
+    const wasMins = active && active.dataset && active.dataset.mins === pid;
+    const wasActual = active && active.dataset && active.dataset.actual && active.dataset.actual.startsWith(pid+':');
+    const selKey = wasActual ? active.dataset.actual : null;
+    nodes[idx].replaceWith(fresh);
+    // restore focus
+    if (wasMins){ const el = fresh.querySelector(`input[data-mins="${pid}"]`); if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+    else if (selKey){ const el = fresh.querySelector(`input[data-actual="${selKey}"]`); if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+  }
+
+  function sourceHint(){
+    const el = $('tu-source-hint');
+    if (state.source === 'estimate'){ el.className = 'tu-note'; el.textContent = tt('topup.hint_estimate','Déficit estimado por minutos jugados (referencia × minutos restantes).'); }
+    else if (state.source === 'measured'){ el.className = 'tu-note'; el.textContent = tt('topup.hint_measured','Medido del último partido de cada jugador. Déficit = referencia − hecho.'); }
+    else { el.className = 'tu-note'; el.textContent = tt('topup.hint_manual','Ingresá a mano lo que hizo cada jugador. Déficit = referencia − hecho.'); }
+  }
+
+  // ── wire global controls ──
+  $('tu-preset').innerHTML = TU.PRESETS.map(p => `<option value="${p.id}" ${p.id===state.presetId?'selected':''}>${esc(p.label)}</option>`).join('');
+  $('tu-preset').addEventListener('change', (e) => { state.presetId = e.target.value; savePrefs(); renderResults(); });
+  $('tu-duration').value = state.duration;
+  $('tu-duration').addEventListener('input', (e) => { state.duration = +e.target.value || 90; savePrefs(); renderResults(); });
+  $('tu-search').addEventListener('input', (e) => { state.filter = e.target.value; renderPicker(); });
+  $('tu-clear').addEventListener('click', () => { state.selected = []; state.pdata = {}; renderPicker(); renderResults(); });
   $('tu-mode').querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
     $('tu-mode').querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on');
-    state.mode = b.dataset.mode; savePrefs();
-    if (state.playerId){ state.ref = await TU.getReference(state.playerId, clubId, neededMetrics(), state.mode); render(); }
+    state.mode = b.dataset.mode; savePrefs(); await reloadRefs();
   }));
   $('tu-source').querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
     $('tu-source').querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on');
     state.source = b.dataset.src;
-    if (state.source === 'measured' && state.playerId && !state.lastMatch) await loadMeasured();
-    render();
+    if (state.source === 'measured'){ await Promise.all(state.selected.map(pid => state.pdata[pid] && !state.pdata[pid].lastMatch ? loadMeasured(pid) : null)); }
+    renderResults();
   }));
 
   // ── boot ──
-  $('tu-minutes').value = 0; $('tu-duration').value = state.duration;
   renderMetricChips();
   await initTeams();
   await loadPlayers();
-  render();
-  window.CM_I18N?.ready?.then(() => { renderMetricChips(); render(); });
+  renderPicker();
+  renderResults();
+  window.CM_I18N?.ready?.then(() => { renderMetricChips(); renderPicker(); renderResults(); });
 })();
 </script>
 </body>
