@@ -50,6 +50,88 @@
   ];
   const DEFAULT_PRESET = PRESETS[0];
 
+  // ── Speed bands: which running speed = which locomotor zone ────────────
+  // Two models, CONFIGURABLE PER CLUB so the tool never breaks on a club that
+  // defines its zones differently:
+  //   'pct' → individualised, a % of the player's Vmax (HSR 60-75 · VHSR 75-90 · sprint >90)
+  //   'abs' → fixed km/h thresholds (e.g. HSR 19-24 · sprint >24) — what much of the
+  //           literature uses. A club may run just HSR+Sprint, or add VHSR, etc.
+  // Each band maps to the GPS distance metric it fills. `hi:null` = open-ended (top band).
+  const DEFAULT_BANDS_PCT = {
+    mode: 'pct', aim: 0.5,   // aim = where inside the band to target (0=low edge, 1=high edge)
+    bands: [
+      { id: 'hsr',    metric: 'high_speed_distance',      lo: 0.60, hi: 0.75 },
+      { id: 'vhsr',   metric: 'very_high_speed_distance', lo: 0.75, hi: 0.90 },
+      { id: 'sprint', metric: 'sprint_distance',          lo: 0.90, hi: null },
+    ],
+  };
+  const DEFAULT_BANDS_ABS = {
+    mode: 'abs', aim: 0.5,
+    bands: [
+      { id: 'hsr',    metric: 'high_speed_distance', lo: 19, hi: 24 },
+      { id: 'sprint', metric: 'sprint_distance',     lo: 24, hi: null },
+    ],
+  };
+
+  // Target running speed (km/h) inside a band. pct needs Vmax; abs is absolute.
+  function bandTargetSpeed(band, mode, aim, vmax) {
+    const a = (aim == null ? 0.5 : aim);
+    if (mode === 'pct') {
+      if (!vmax || vmax <= 0) return null;
+      const hi = band.hi == null ? 1.0 : band.hi;         // open sprint → up to Vmax
+      return +(vmax * (band.lo + a * (hi - band.lo))).toFixed(1);
+    }
+    const hi = band.hi == null ? band.lo * 1.15 : band.hi; // open abs → +15%
+    return +(band.lo + a * (hi - band.lo)).toFixed(1);
+  }
+
+  // ── Anaerobic Speed Reserve ────────────────────────────────────────────
+  // ASR = MSS − MAS. Practical proxy here: Vmax (peak GPS speed ≈ MSS) − VIFT
+  // (30-15 ≈ aerobic anchor). Individualises tolerance to supramaximal running
+  // and profiles players (speed/endurance/hybrid). Refs: Sandford/Buchheit 2019.
+  function anaerobicSpeedReserve(vift, vmax) {
+    if (!vift || !vmax || vmax <= vift) return null;
+    return +(vmax - vift).toFixed(1);
+  }
+  // % of a player's ASR that a given running speed represents.
+  function pctASR(speed, vift, vmax) {
+    if (!vift || !vmax || vmax <= vift) return null;
+    return Math.round(((speed - vift) / (vmax - vift)) * 100);
+  }
+  // Speed/endurance/hybrid profile from the ASR/VIFT ratio (rough, for tagging).
+  function speedProfile(vift, vmax) {
+    const asr = anaerobicSpeedReserve(vift, vmax);
+    if (asr == null || !vift) return null;
+    const ratio = asr / vift;              // reserve relative to aerobic speed
+    if (ratio >= 1.0) return 'speed';      // big reserve → speed-biased
+    if (ratio <= 0.7) return 'endurance';  // small reserve → endurance-biased
+    return 'hybrid';
+  }
+
+  // ── Run block prescribed to fill a target band's deficit ───────────────
+  // opts: { band, mode, aim, vmax, vift, deficitM, runSec, restSec }
+  // Speed comes from the BAND (guarantees the metres count in that zone); reps
+  // from the deficit; %ASR reports how deep into the player's reserve it sits.
+  function prescribeRun(opts) {
+    const speed = bandTargetSpeed(opts.band, opts.mode, opts.aim, opts.vmax);
+    if (speed == null || speed <= 0) return null;
+    const mPerRep = Math.round((speed / 3.6) * opts.runSec);
+    let reps = 0, sets = 0, repsPerSet = 0, totalRunM = 0, timeMin = 0;
+    if (opts.deficitM > 0 && mPerRep > 0) {
+      reps = Math.max(1, Math.ceil(opts.deficitM / mPerRep));
+      repsPerSet = Math.min(reps, opts.runSec <= 12 ? 10 : 8);
+      sets = Math.max(1, Math.ceil(reps / repsPerSet));
+      totalRunM = reps * mPerRep;
+      timeMin = +(reps * (opts.runSec + opts.restSec) / 60).toFixed(1);
+    }
+    const asrPct = pctASR(speed, opts.vift, opts.vmax);
+    return {
+      speed, mPerRep, reps, sets, repsPerSet, totalRunM, timeMin, asrPct,
+      // deep into the reserve with long reps → likely not repeatable; flag it.
+      tooHard: asrPct != null && asrPct > 50 && opts.runSec > 12,
+    };
+  }
+
   // Change-of-direction dose bands, keyed by total (acc+dec) deficit count.
   const COD_BANDS = [
     { id: 'low',  max: 12, label: 'Baja',  reps: '2 × (5-10-5) shuttle',
@@ -258,8 +340,10 @@
 
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
+    DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS,
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
-    computeDeficit, prescribeHIIT, prescribeCOD,
+    computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
+    bandTargetSpeed, anaerobicSpeedReserve, pctASR, speedProfile,
     // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
     setFallbackThresholds(hsr, sprint) {
       if (hsr > 0) HSR_FALLBACK = +hsr;

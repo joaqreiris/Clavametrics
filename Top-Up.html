@@ -61,6 +61,18 @@
   .tu-refsrc.manual{background:rgba(245,158,11,.15);color:#b45309}
   .tu-refbox{margin-top:6px;padding:10px;border:1px dashed var(--cm-border);border-radius:10px}
   .tu-refbox .rl{font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px}
+  .tu-asr{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.03em;color:var(--cm-info,#2563EB)}
+  /* bands editor */
+  .tu-bands{margin-top:10px;padding:12px;border:1px solid var(--cm-border);border-radius:10px;background:var(--cm-bg-soft)}
+  .tu-bands .brow{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .tu-bands .brow:last-child{margin-bottom:0}
+  .tu-bands .bname{font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:60px}
+  .tu-bands .bmetric{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1;min-width:80px}
+  .tu-bands input{width:64px;height:34px;text-align:center;padding:0 6px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-bands input:focus{outline:none;border-color:var(--cm-accent)}
+  .tu-bands .bsep{color:var(--cm-fg-faint);font:600 12px/1 var(--cm-font-mono)}
+  .tu-bands .bunit{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-bands .bhint{font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:8px}
   .tu-pcard-head .mins{margin-left:auto;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
   .tu-pcard-head .mins label{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .tu-pcard-head .mins input{width:70px;height:40px;text-align:center;padding:0 6px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;font:700 16px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
@@ -177,10 +189,26 @@
             <input id="tu-duration" class="tu-input" type="number" min="10" max="130" inputmode="numeric" value="90">
           </div>
           <div class="tu-field">
-            <label data-i18n="topup.preset">Formato HIIT</label>
+            <label data-i18n="topup.speed_model">Velocidad de carrera</label>
+            <div class="tu-seg" id="tu-speedmodel">
+              <button data-sm="pct" data-i18n="topup.sm_pct">%Vmax</button>
+              <button data-sm="abs" data-i18n="topup.sm_abs">Absoluto</button>
+              <button data-sm="vift" data-i18n="topup.sm_vift">%VIFT</button>
+            </div>
+          </div>
+        </div>
+        <div class="tu-row" style="margin-top:12px">
+          <div class="tu-field" id="tu-band-field">
+            <label data-i18n="topup.target_band">Banda objetivo</label>
+            <select id="tu-targetband" class="tu-select"></select>
+          </div>
+          <div class="tu-field">
+            <label data-i18n="topup.preset">Formato (piques)</label>
             <select id="tu-preset" class="tu-select"></select>
           </div>
         </div>
+        <button class="tu-linkbtn" id="tu-bands-toggle" style="margin-top:8px;padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
+        <div id="tu-bands-editor" class="hide"></div>
         <div id="tu-source-hint" class="tu-note"></div>
       </div>
 
@@ -249,12 +277,26 @@
     source: 'estimate',
     presetId: prefs.presetId || TU.DEFAULT_PRESET.id,
     metrics: Array.isArray(prefs.metrics) && prefs.metrics.length ? prefs.metrics : DEFAULT_METRICS.slice(),
+    // run-speed model: 'pct' (% Vmax) · 'abs' (fixed km/h) · 'vift' (% VIFT, classic HIIT)
+    speedModel: ['pct','abs','vift'].includes(prefs.speedModel) ? prefs.speedModel : 'pct',
+    aim: typeof prefs.aim === 'number' ? prefs.aim : 0.5,
+    targetBand: prefs.targetBand || 'hsr',
+    bandsPct: Array.isArray(prefs.bandsPct) && prefs.bandsPct.length ? prefs.bandsPct : TU.DEFAULT_BANDS_PCT.bands.map(b => ({...b})),
+    bandsAbs: Array.isArray(prefs.bandsAbs) && prefs.bandsAbs.length ? prefs.bandsAbs : TU.DEFAULT_BANDS_ABS.bands.map(b => ({...b})),
+    bandsOpen: false,
   };
-  const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({ duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics })); } catch {} };
+  const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({
+    duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics,
+    speedModel: state.speedModel, aim: state.aim, targetBand: state.targetBand, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
+  })); } catch {} };
 
   const BLOCK_METRICS = ['high_speed_distance','accelerations','decelerations'];
   const neededMetrics = () => Array.from(new Set(state.metrics.concat(BLOCK_METRICS)));
   const preset = () => TU.PRESETS.find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
+  // Active band set for the current speed model (pct/abs). Only bands whose metric
+  // is a known GPS metric — so a club with just HSR+Sprint (or custom) never breaks.
+  const activeBands = () => (state.speedModel === 'abs' ? state.bandsAbs : state.bandsPct).filter(b => TU.METRIC_DEFS[b.metric]);
+  const activeBand = () => { const bs = activeBands(); return bs.find(b => b.id === state.targetBand) || bs[0] || null; };
 
   // ── team + squad ──
   async function initTeams(){
@@ -383,10 +425,15 @@
     state.posRef = {};   // metrics/mode changed → positional cache is stale
     await Promise.all(state.selected.map(async pid => {
       const pd = state.pdata[pid]; if (!pd) return;
-      [pd.ref, pd.refAll] = await Promise.all([
+      // Refresh VIFT + Vmax too: both are read live from evaluations / gps_reports,
+      // so any new GPS import (Vmax) or test load (VIFT) is reflected here.
+      const [ref, refAll, vift, vmax] = await Promise.all([
         TU.getReference(pid, clubId, neededMetrics(), state.mode),
         TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
+        TU.getLatestVift(pid, clubId),
+        TU.getPlayerVmax(pid, clubId),
       ]);
+      pd.ref = ref; pd.refAll = refAll; pd.vift = vift ? vift.vift : null; pd.vmax = vmax;
       const needsPos = neededMetrics().some(m => (!pd.ref[m] || pd.ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
       if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     }));
@@ -404,6 +451,48 @@
       const k = ch.dataset.metric, i = state.metrics.indexOf(k);
       if (i >= 0){ if (state.metrics.length > 1) state.metrics.splice(i, 1); } else state.metrics.push(k);
       savePrefs(); renderMetricChips(); await reloadRefs();
+    }));
+  }
+
+  // ── run-speed model + bands UI ──
+  function renderSpeedModelUI(){
+    $('tu-speedmodel').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.sm === state.speedModel));
+    // target band only applies to band models (pct/abs)
+    $('tu-band-field').style.display = state.speedModel === 'vift' ? 'none' : '';
+    renderTargetBand();
+    renderBandsEditor();
+  }
+  function renderTargetBand(){
+    const sel = $('tu-targetband');
+    const bands = activeBands();
+    if (!bands.length){ sel.innerHTML = ''; return; }
+    if (!bands.some(b => b.id === state.targetBand)) state.targetBand = bands[0].id;
+    sel.innerHTML = bands.map(b => `<option value="${b.id}" ${b.id===state.targetBand?'selected':''}>${esc(tt('topup.band_'+b.id, b.id.toUpperCase()))} · ${esc(mLabel(b.metric))}</option>`).join('');
+  }
+  function renderBandsEditor(){
+    const box = $('tu-bands-editor');
+    if (state.speedModel === 'vift' || !state.bandsOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const isPct = state.speedModel === 'pct';
+    const bands = state.speedModel === 'abs' ? state.bandsAbs : state.bandsPct;
+    const disp = (v) => v == null ? '' : (isPct ? Math.round(v*100) : v);
+    const unit = isPct ? '%' : 'km/h';
+    box.innerHTML = `<div class="tu-bands">` + bands.map((b, i) => {
+      if (!TU.METRIC_DEFS[b.metric]) return '';
+      return `<div class="brow">
+        <span class="bname">${esc(tt('topup.band_'+b.id, b.id.toUpperCase()))}</span>
+        <span class="bmetric">${esc(mLabel(b.metric))}</span>
+        <input type="number" inputmode="decimal" data-band="${i}" data-edge="lo" value="${disp(b.lo)}"><span class="bsep">–</span>
+        <input type="number" inputmode="decimal" data-band="${i}" data-edge="hi" value="${b.hi==null?'':disp(b.hi)}" placeholder="∞">
+        <span class="bunit">${unit}</span></div>`;
+    }).join('') + `<div class="bhint">${isPct ? tt('topup.bands_hint_pct','% de la velocidad máxima (Vmax) de cada jugador. Vacío en el tope = abierto.') : tt('topup.bands_hint_abs','Umbrales fijos en km/h. Vacío en el tope = abierto (ej. sprint).')}</div></div>`;
+    box.querySelectorAll('input[data-band]').forEach(inp => inp.addEventListener('input', () => {
+      const i = +inp.dataset.band, edge = inp.dataset.edge;
+      const raw = inp.value.trim();
+      const arr = state.speedModel === 'abs' ? state.bandsAbs : state.bandsPct;
+      if (raw === ''){ arr[i][edge] = edge === 'hi' ? null : arr[i][edge]; }
+      else { let v = +raw; if (isPct) v = v/100; arr[i][edge] = v; }
+      savePrefs(); renderResults();
     }));
   }
 
@@ -436,7 +525,8 @@
       <div class="who"><div class="name">${p.number!=null?('<b style="color:var(--cm-fg-muted)">'+p.number+'</b> '):''}${esc(p.name)}</div>
         <div class="refs">
           ${pd.vift ? `VIFT <b>${pd.vift.toFixed(1)}</b>` : `<span class="warn">${tt('topup.no_vift','Sin VIFT')}</span>`}
-          ${pd.vmax ? `· Vmax ${pd.vmax.toFixed(1)} km/h` : ''}
+          ${pd.vmax ? `· Vmax ${pd.vmax.toFixed(1)}` : ''}
+          ${(() => { const asr = TU.anaerobicSpeedReserve(pd.vift, pd.vmax); return asr != null ? `· <span class="tu-asr">ASR ${asr}</span>` : ''; })()}
           ${refBadge || ''}
         </div></div>
       <div class="mins"><label data-i18n="topup.minutes_played">Minutos</label>
@@ -455,6 +545,40 @@
       : (Object.values(resolved.srcBy).find(s => s !== 'none') || 'none');
     return primarySrc !== 'none'
       ? `<span class="tu-refsrc ${primarySrc}">${tt('topup.ref','ref')}: ${(REF_SRC_LABEL[primarySrc] ? REF_SRC_LABEL[primarySrc]() : primarySrc)}</span>` : '';
+  }
+
+  const RUN_IC = `<span class="ic"><i class="ti ti-run"></i></span>`;
+  // %VIFT model (classic HIIT anchored to VIFT) — fills the HSR deficit.
+  function runLineVIFT(pd, def, p2){
+    const hsrDef = (def['high_speed_distance']||{}).deficit || 0;
+    const rx = pd.vift ? TU.prescribeHIIT(pd.vift, hsrDef, p2, pd.vmax) : null;
+    if (!rx) return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.no_vift_block','Cargá un 30-15 IFT para el bloque de carrera.')}</span></div>`;
+    if (hsrDef <= 0) return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.no_deficit','Sin déficit de HSR: ya alcanzó su referencia.')}</span></div>`;
+    let line = `<div class="tu-line">${RUN_IC}
+      <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${p2.run}-${p2.rest})</span></span>
+      <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
+    if (!rx.countsAsHSR) line += `<div class="tu-hwarn">${tt('topup.below_hsr_short', `${rx.speedKmh} km/h < umbral HSR (${rx.hsrThreshold})`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
+    return line;
+  }
+  // Band model (% Vmax or absolute) — speed comes from the target band so the
+  // metres are guaranteed to land in the zone we're filling; %ASR reported.
+  function runLineBand(pd, def, p2){
+    const band = activeBand();
+    if (!band) return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.no_band','Configurá una banda objetivo.')}</span></div>`;
+    const bLabel = tt('topup.band_'+band.id, band.id.toUpperCase());
+    if (state.speedModel === 'pct' && !pd.vmax)
+      return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.need_vmax','Sin Vmax: usá modo Absoluto o cargá GPS.')}</span></div>`;
+    const d = def[band.metric];
+    const deficitM = d && d.deficit != null ? d.deficit : 0;
+    const rx = TU.prescribeRun({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift, deficitM, runSec: p2.run, restSec: p2.rest });
+    if (!rx) return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.no_run','No se puede calcular la velocidad.')}</span></div>`;
+    if (deficitM <= 0) return `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_deficit_band','sin déficit')}</span></div>`;
+    const asrTxt = rx.asrPct != null ? ` · ${rx.asrPct}% ASR` : '';
+    let line = `<div class="tu-line">${RUN_IC}
+      <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speed} km/h <span class="dim">(${p2.run}-${p2.rest}) · ${esc(bLabel)}${asrTxt}</span></span>
+      <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
+    if (rx.tooHard) line += `<div class="tu-hwarn">${tt('topup.too_hard', `Muy alto en su reserva (${rx.asrPct}% ASR): acortá piques o subí pausa.`, { p: rx.asrPct })}</div>`;
+    return line;
   }
 
   function playerCardHTML(pid){
@@ -494,19 +618,9 @@
       }).join('') + `</div>`;
     }
 
-    // HIIT line
-    const hsrDef = (def['high_speed_distance']||{}).deficit || 0;
+    // Running block — speed from the chosen model (%Vmax band / absolute band / %VIFT)
     const p2 = preset();
-    const rx = pd.vift ? TU.prescribeHIIT(pd.vift, hsrDef, p2, pd.vmax) : null;
-    let hiit;
-    if (!rx) hiit = `<div class="tu-line muted"><span class="ic"><i class="ti ti-run"></i></span><span class="main">${tt('topup.no_vift_block','Cargá un 30-15 IFT para el bloque de carrera.')}</span></div>`;
-    else if (hsrDef <= 0) hiit = `<div class="tu-line muted"><span class="ic"><i class="ti ti-run"></i></span><span class="main">${tt('topup.no_deficit','Sin déficit de HSR: ya alcanzó su referencia.')}</span></div>`;
-    else {
-      hiit = `<div class="tu-line"><span class="ic"><i class="ti ti-run"></i></span>
-        <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${p2.run}-${p2.rest})</span></span>
-        <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
-      if (!rx.countsAsHSR) hiit += `<div class="tu-hwarn">${tt('topup.below_hsr_short', `${rx.speedKmh} km/h < umbral HSR (${rx.hsrThreshold})`, { s: rx.speedKmh, t: rx.hsrThreshold })}</div>`;
-    }
+    const hiit = state.speedModel === 'vift' ? runLineVIFT(pd, def, p2) : runLineBand(pd, def, p2);
 
     // COD line
     const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
@@ -594,15 +708,22 @@
     if (state.source === 'measured'){ await Promise.all(state.selected.map(pid => state.pdata[pid] && !state.pdata[pid].lastMatch ? loadMeasured(pid) : null)); }
     renderResults();
   }));
+  // run-speed model + bands
+  $('tu-speedmodel').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    state.speedModel = b.dataset.sm; savePrefs(); renderSpeedModelUI(); renderResults();
+  }));
+  $('tu-targetband').addEventListener('change', (e) => { state.targetBand = e.target.value; savePrefs(); renderResults(); });
+  $('tu-bands-toggle').addEventListener('click', () => { state.bandsOpen = !state.bandsOpen; renderBandsEditor(); });
 
   // ── boot ──
   wireResultsDelegation();   // once — survives body re-renders
+  renderSpeedModelUI();
   renderMetricChips();
   await initTeams();
   await loadPlayers();
   renderPicker();
   renderResults();
-  window.CM_I18N?.ready?.then(() => { renderMetricChips(); renderPicker(); renderResults(); });
+  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPicker(); renderResults(); });
 })();
 </script>
 </body>
