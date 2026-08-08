@@ -3727,6 +3727,15 @@ async function saveEvt() {
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
 
+  // Keep a materialized RPE match-session (if one was linked) in sync with the edited
+  // duration, so its sRPE load tracks the game's real minutes. No-op when no session exists.
+  if (type === 'match' && date) {
+    let mq = window.sb.from('training_sessions').update({ duration })
+      .eq('club_id', clubId).eq('session_date', date).eq('session_type', 'match');
+    mq = _activeTeamId ? mq.eq('team_id', _activeTeamId) : mq.is('team_id', null);
+    try { await mq; } catch (e) { console.warn('match-session duration sync:', e); }
+  }
+
   // Ensure the rival is in the club's opponent catalog (opponent_branding). Case-insensitive lookup +
   // preserve the REAL casing, so it never duplicates the GPS-imported (proper-case) entries. Runs for
   // EVERY match rival (not only when a crest was uploaded) so a newly-typed rival becomes selectable

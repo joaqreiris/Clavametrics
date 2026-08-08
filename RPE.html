@@ -123,6 +123,16 @@
             <div class="k"><i class="ti ti-unlink"></i><span data-i18n="rpe.lateUnlinked">Late / unlinked</span></div>
             <div class="v" id="sumOrphan">0</div>
           </div>
+          <!-- Editable match duration (shown only when the session is a match). Drives sRPE = RPE × duration. -->
+          <div class="tr-sum-stat" id="sumDurWrap" style="display:none;">
+            <div class="k"><i class="ti ti-clock-edit"></i><span data-i18n="rpe.matchDuration">Match duration</span></div>
+            <div class="v" style="display:flex;align-items:center;gap:5px;">
+              <input id="sumDurInput" type="number" min="5" max="300" step="1" inputmode="numeric"
+                aria-label="Match duration (min)"
+                style="width:58px;font:inherit;color:inherit;background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:7px;padding:2px 7px;text-align:right;">
+              <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);" data-i18n="rpe.minShort">min</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -300,6 +310,7 @@
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
+                  currentSessionId:null, currentIsMatch:false, sessionDuration:null,
                   responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
@@ -602,6 +613,14 @@
     document.getElementById('sumDen').textContent = '/ ' + total;
     document.getElementById('sumSrpe').textContent = state.avgSrpe || 0;
     document.getElementById('sumHigh').textContent = high;
+    // Match duration editor: only for matches, and don't clobber the field while it's focused.
+    const durWrap = document.getElementById('sumDurWrap');
+    if (durWrap) {
+      const show = state.currentIsMatch && state.sessionDuration != null && !state.loading;
+      durWrap.style.display = show ? '' : 'none';
+      const inp = document.getElementById('sumDurInput');
+      if (show && inp && document.activeElement !== inp) inp.value = state.sessionDuration;
+    }
     document.getElementById('pipResp').textContent = done;
     document.getElementById('pipPend').textContent = missing;
     document.getElementById('remindT').textContent = missing
@@ -695,12 +714,17 @@
       return;
     }
     state.view = 'board';
+    state.currentSessionId = sessionId;
+    state.currentIsMatch = (state.sessionsById[sessionId]?.session_type === 'match');
     if (sel.selectedIndex >= 0) document.getElementById('pgSub').textContent = sel.options[sel.selectedIndex].text;
     state.loading = true; state.error = false; renderRpe();
     try {
       const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sessionId });
       if (error) throw error;
       const rows = data || [];
+      // Session duration drives the sRPE; session_rpe_status returns it per row (v_dur).
+      const durRow = rows.find(r => r.duration != null);
+      state.sessionDuration = durRow ? Number(durRow.duration) : (state.sessionsById[sessionId]?.duration ?? null);
       const responders = rows.filter(r => r.responded).map(modelFromRow);
       const pending = rows.filter(r => !r.responded).map(modelFromRow);
       // highest-first: rpe DESC, then load (sRPE) DESC
@@ -862,6 +886,40 @@
       setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1600);
     }
   });
+
+  /* ── Match duration editor (summary card) — writes the session + calendar, recomputes load ── */
+  async function setMatchDuration(rawVal) {
+    const dur = parseInt(rawVal, 10);
+    const sid = state.currentSessionId;
+    if (!sid || !dur || dur < 1) { renderRpe(); return; }
+    if (dur === state.sessionDuration) return; // no change
+    const meta = state.sessionsById[sid] || {};
+    try {
+      const { error } = await window.sb.from('training_sessions').update({ duration: dur }).eq('id', sid);
+      if (error) throw error;
+      // Keep the canonical calendar match in sync so both sides agree.
+      if (meta.session_type === 'match' && meta.session_date) {
+        let cq = window.sb.from('calendar_events').update({ duration_minutes: dur })
+          .eq('club_id', state.cid).eq('type', 'match').eq('date', meta.session_date);
+        cq = meta.team_id ? cq.eq('team_id', meta.team_id) : cq.is('team_id', null);
+        await cq;
+      }
+      state.sessionDuration = dur;
+      meta.duration = dur;
+      T.toast(tt('rpe.durationUpdated', `Duration set to ${dur}′ · load recomputed`, { min: dur }), 'ti-clock-check');
+      await loadRpe(); // recompute the board (and persisted loads) from the new duration
+    } catch (e) {
+      console.warn('[RPE] setMatchDuration:', e && e.message);
+      T.toast(tt('rpe.durationError', "Couldn't update duration"), 'ti-alert-triangle');
+      renderRpe(); // restore the field to the stored value
+    }
+  }
+  function wireDurationEditor() {
+    const inp = document.getElementById('sumDurInput');
+    if (!inp) return;
+    inp.addEventListener('change', () => setMatchDuration(inp.value));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+  }
 
   /* ── Refresh ── */
   function wireRefresh() {
@@ -1032,6 +1090,7 @@
       wireShareModal();
       wireRemind();
       wireRefresh();
+      wireDurationEditor();
       wireLiveRefresh();
       state.inited = true;
       await Promise.all([loadRpe(), loadOrphans()]);
