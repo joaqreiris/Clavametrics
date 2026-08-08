@@ -64,16 +64,19 @@
   const clamp0  = (x) => (x > 0 ? x : 0);
 
   // ── Latest VIFT (30-15 IFT) for a player ───────────────────────────────
-  // evaluations.value IS the VIFT in km/h when evaluation_type = '30-15 IFT'.
+  // evaluations.value IS the VIFT in km/h for 30-15 IFT rows. Match the type by
+  // case-insensitive PREFIX (ilike '30-15 IFT%'), the SAME way Evaluations.html
+  // reads it (startsWithCI) — the data has variants (suffixes/case/whitespace),
+  // so an exact eq() silently misses them.
   async function getLatestVift(playerId, clubId) {
     if (!playerId || !clubId) return null;
     try {
       const { data } = await window.sb
         .from('evaluations')
-        .select('value, test_date')
+        .select('value, test_date, evaluation_type')
         .eq('player_id', playerId)
         .eq('club_id', clubId)
-        .eq('evaluation_type', '30-15 IFT')
+        .ilike('evaluation_type', '30-15 IFT%')
         .not('value', 'is', null)
         .order('test_date', { ascending: false })
         .limit(1)
