@@ -54,6 +54,12 @@
   .tu-pcard-head .who .refs{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap}
   .tu-pcard-head .refs b{color:var(--cm-accent)}
   .tu-pcard-head .refs .warn{color:var(--cm-warning,#b45309)}
+  .tu-refsrc{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .tu-refsrc.personal{background:rgba(21,128,61,.12);color:#15803D}
+  .tu-refsrc.position{background:rgba(37,99,235,.12);color:#2563EB}
+  .tu-refsrc.manual{background:rgba(245,158,11,.15);color:#b45309}
+  .tu-refbox{margin-top:6px;padding:10px;border:1px dashed var(--cm-border);border-radius:10px}
+  .tu-refbox .rl{font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px}
   .tu-pcard-head .mins{margin-left:auto;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
   .tu-pcard-head .mins label{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .tu-pcard-head .mins input{width:70px;height:40px;text-align:center;padding:0 6px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;font:700 16px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
@@ -214,7 +220,8 @@
     teamId: null,
     players: [],           // squad list
     selected: [],          // player ids, in selection order
-    pdata: {},             // pid → { player, vift, vmax, ref, minutes, actual, lastMatch, loading }
+    pdata: {},             // pid → { player, vift, vmax, ref, minutes, actual, lastMatch, manualRef, loading }
+    posRef: {},            // position → { loading, ref:{metric:{baseline,count}} } (fallback cache)
     filter: '',
     duration: +prefs.duration || 90,
     mode: prefs.mode === 'avg' ? 'avg' : 'best',
@@ -288,7 +295,7 @@
 
   function initPlayer(pid){
     const p = state.players.find(x => x.id === pid);
-    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, minutes: 0, actual: {}, lastMatch: null, loading: true };
+    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, minutes: 0, actual: {}, lastMatch: null, manualRef: {}, loading: true };
     loadPlayerData(pid);
   }
 
@@ -306,7 +313,38 @@
     pd.ref = ref;
     if (state.source === 'measured') await loadMeasured(pid);
     pd.loading = false;
+    // Personal ref missing on any needed metric → warm the positional fallback.
+    const needsPos = neededMetrics().some(m => !ref[m] || ref[m].baseline == null);
+    if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     renderResults();
+  }
+
+  // Positional fallback reference, cached per position.
+  async function ensurePosRef(position){
+    if (!position || state.posRef[position]) return;
+    state.posRef[position] = { loading: true, ref: null };
+    const ids = state.players.filter(p => p.position === position).map(p => p.id);
+    const ref = await TU.getPositionReference(ids, clubId, neededMetrics(), state.mode);
+    state.posRef[position] = { loading: false, ref };
+    renderResults();
+  }
+
+  // Resolve the reference per metric: personal → position → manual → none.
+  // Returns { ref:{metric:{baseline}}, srcBy:{metric:'personal'|'position'|'manual'|'none'} }.
+  function resolveRef(pd){
+    const out = { ref: {}, srcBy: {} };
+    const pos = pd.player && pd.player.position;
+    const posRef = pos && state.posRef[pos] && state.posRef[pos].ref;
+    neededMetrics().concat(state.metrics).forEach(m => {
+      if (out.ref[m]) return;
+      let base = null, src = 'none';
+      if (pd.ref && pd.ref[m] && pd.ref[m].baseline != null){ base = pd.ref[m].baseline; src = 'personal'; }
+      else if (posRef && posRef[m] && posRef[m].baseline != null){ base = posRef[m].baseline; src = 'position'; }
+      else if (pd.manualRef && pd.manualRef[m] != null){ base = +pd.manualRef[m]; src = 'manual'; }
+      out.ref[m] = { baseline: base };
+      out.srcBy[m] = src;
+    });
+    return out;
   }
 
   async function loadMeasured(pid){
@@ -318,9 +356,12 @@
   }
 
   async function reloadRefs(){
+    state.posRef = {};   // metrics/mode changed → positional cache is stale
     await Promise.all(state.selected.map(async pid => {
       const pd = state.pdata[pid]; if (!pd) return;
       pd.ref = await TU.getReference(pid, clubId, neededMetrics(), state.mode);
+      const needsPos = neededMetrics().some(m => !pd.ref[m] || pd.ref[m].baseline == null);
+      if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     }));
     renderResults();
   }
@@ -340,35 +381,71 @@
   }
 
   // ── deficit + prescription per player ──
-  function deficitFor(pd){
-    if (!pd.ref) return null;
+  function deficitFor(pd, resolved){
+    if (!resolved) return null;
     const opts = state.source === 'estimate'
       ? { source: 'estimate', minutes: pd.minutes, duration: state.duration }
       : { source: state.source, actual: pd.actual };
-    return TU.computeDeficit(pd.ref, opts);
+    return TU.computeDeficit(resolved.ref, opts);
   }
+  const REF_SRC_LABEL = { personal: () => tt('topup.ref_personal','personal'), position: () => tt('topup.ref_position','posición'), manual: () => tt('topup.ref_manual_src','manual') };
   const barClass = (pct) => pct >= 60 ? 'hi' : pct >= 30 ? 'mid' : '';
 
-  function playerCardHTML(pid){
-    const pd = state.pdata[pid]; if (!pd) return '';
+  // Manual reference inputs for metrics with no personal/positional data.
+  function manualRefHTML(pid, keys){
+    const pd = state.pdata[pid];
+    return `<div class="tu-refbox"><div class="rl">${tt('topup.manual_ref','Referencia manual (objetivo de partido)')}</div>
+      <div class="tu-manual-grid">` + keys.map(k => {
+        const u = (TU.METRIC_DEFS[k]||{}).unit; const val = pd.manualRef[k] != null ? pd.manualRef[k] : '';
+        return `<div class="tu-field"><label>${esc(mLabel(k))} (${u})</label>
+          <input class="tu-input" type="number" min="0" inputmode="decimal" data-mref="${pid}:${k}" value="${val}" placeholder="0"></div>`;
+      }).join('') + `</div></div>`;
+  }
+
+  function headHTML(pid, pd, refBadge){
     const p = pd.player;
-    const head = `<div class="tu-pcard-head">
+    return `<div class="tu-pcard-head">
       <span class="av">${esc(initials(p.name))}</span>
       <div class="who"><div class="name">${p.number!=null?('<b style="color:var(--cm-fg-muted)">'+p.number+'</b> '):''}${esc(p.name)}</div>
         <div class="refs">
           ${pd.vift ? `VIFT <b>${pd.vift.toFixed(1)}</b>` : `<span class="warn">${tt('topup.no_vift','Sin VIFT')}</span>`}
           ${pd.vmax ? `· Vmax ${pd.vmax.toFixed(1)} km/h` : ''}
+          ${refBadge || ''}
         </div></div>
       <div class="mins"><label data-i18n="topup.minutes_played">Minutos</label>
-        <input type="number" min="0" max="130" inputmode="numeric" data-mins="${pid}" value="${pd.minutes||0}" ${state.source==='measured'?'':''}></div>
+        <input type="number" min="0" max="130" inputmode="numeric" data-mins="${pid}" value="${pd.minutes||0}"></div>
     </div>`;
+  }
 
-    if (pd.loading) return `<div class="tu-pcard">${head}<div class="tu-note">${tt('common.loading','Cargando…')}</div></div>`;
+  function playerCardHTML(pid){
+    const pd = state.pdata[pid]; if (!pd) return '';
+    const p = pd.player;
 
-    const def = deficitFor(pd);
+    if (pd.loading) return `<div class="tu-pcard">${headHTML(pid, pd, '')}<div class="tu-note">${tt('common.loading','Cargando…')}</div></div>`;
+
+    const resolved = resolveRef(pd);
+    const def = deficitFor(pd, resolved);
+    const pos = p.position;
+    const posLoading = pos && state.posRef[pos] && state.posRef[pos].loading;
+
+    // ref-source badge: use HSR's source (primary block metric), else first available
+    const primarySrc = (resolved.srcBy['high_speed_distance'] && resolved.srcBy['high_speed_distance'] !== 'none')
+      ? resolved.srcBy['high_speed_distance']
+      : (Object.values(resolved.srcBy).find(s => s !== 'none') || 'none');
+    const refBadge = primarySrc !== 'none'
+      ? `<span class="tu-refsrc ${primarySrc}">${tt('topup.ref','ref')}: ${(REF_SRC_LABEL[primarySrc] ? REF_SRC_LABEL[primarySrc]() : primarySrc)}</span>` : '';
+    const head = headHTML(pid, pd, refBadge);
+
     const anyRef = def && Object.values(def).some(d => d.reference != null);
+    // metrics still without any reference → offer manual-reference inputs
+    const missing = neededMetrics().concat(state.metrics).filter((k, i, a) => a.indexOf(k) === i)
+      .filter(k => resolved.srcBy[k] === 'none');
+
     if (!anyRef){
-      return `<div class="tu-pcard">${head}<div class="tu-note warn">${tt('topup.insufficient_ref','Datos de partido insuficientes (se necesitan ≥3 partidos con GPS).')}</div></div>`;
+      const loadingNote = posLoading ? `<div class="tu-note">${tt('topup.pos_loading','Buscando referencia por posición…')}</div>` : '';
+      return `<div class="tu-pcard">${head}
+        <div class="tu-note warn">${tt('topup.no_ref','Sin referencia personal ni por posición. Ingresá un objetivo manual.')}</div>
+        ${loadingNote}${manualRefHTML(pid, missing.length ? missing : neededMetrics())}</div>`;
     }
 
     // measured but no match data
@@ -376,6 +453,8 @@
     if (state.source === 'measured' && !pd.lastMatch){
       srcWarn = `<div class="tu-note warn">${tt('topup.hint_measured_none','Sin datos GPS de partido. Usá Estimado o Manual.')}</div>`;
     }
+    // partial: some metrics still missing a reference → inline manual inputs for those
+    const partialRef = missing.length ? manualRefHTML(pid, missing) : '';
 
     // deficit bars
     let bars = state.metrics.map(k => {
@@ -430,7 +509,7 @@
     }
     codHtml += `</div>`;
 
-    return `<div class="tu-pcard">${head}${srcWarn}<div class="tu-def">${bars}</div>${manual}${hiit}${codHtml}</div>`;
+    return `<div class="tu-pcard">${head}${srcWarn}<div class="tu-def">${bars}</div>${partialRef}${manual}${hiit}${codHtml}</div>`;
   }
 
   function renderResults(){
@@ -450,6 +529,10 @@
       const [pid, k] = inp.dataset.actual.split(':'); const pd = state.pdata[pid]; if (!pd) return;
       const v = inp.value.trim(); if (v === '') delete pd.actual[k]; else pd.actual[k] = +v; rerenderCard(pid);
     }));
+    box.querySelectorAll('input[data-mref]').forEach(inp => inp.addEventListener('input', () => {
+      const [pid, k] = inp.dataset.mref.split(':'); const pd = state.pdata[pid]; if (!pd) return;
+      const v = inp.value.trim(); if (v === '') delete pd.manualRef[k]; else pd.manualRef[k] = +v; rerenderCard(pid);
+    }));
   }
 
   // Re-render a single card without losing focus on other cards' inputs.
@@ -461,13 +544,16 @@
     const wrap = document.createElement('div'); wrap.innerHTML = playerCardHTML(pid);
     const fresh = wrap.firstElementChild;
     const active = document.activeElement;
-    const wasMins = active && active.dataset && active.dataset.mins === pid;
-    const wasActual = active && active.dataset && active.dataset.actual && active.dataset.actual.startsWith(pid+':');
-    const selKey = wasActual ? active.dataset.actual : null;
+    const ds = active && active.dataset || {};
+    const wasMins = ds.mins === pid;
+    const actualKey = (ds.actual && ds.actual.startsWith(pid+':')) ? ds.actual : null;
+    const mrefKey   = (ds.mref && ds.mref.startsWith(pid+':')) ? ds.mref : null;
     nodes[idx].replaceWith(fresh);
-    // restore focus
-    if (wasMins){ const el = fresh.querySelector(`input[data-mins="${pid}"]`); if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
-    else if (selKey){ const el = fresh.querySelector(`input[data-actual="${selKey}"]`); if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+    // restore focus + caret
+    const refocus = (sel) => { const el = fresh.querySelector(sel); if (el){ el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch(_){} } };
+    if (wasMins) refocus(`input[data-mins="${pid}"]`);
+    else if (actualKey) refocus(`input[data-actual="${actualKey}"]`);
+    else if (mrefKey) refocus(`input[data-mref="${mrefKey}"]`);
   }
 
   function sourceHint(){

@@ -112,6 +112,22 @@
     return out;
   }
 
+  // ── Positional reference (fallback when a player lacks personal match data) ─
+  // Mean of the same-position teammates' personal baselines, per metric.
+  // playerIds = same-position squad members (with data). Respects best/avg mode.
+  async function getPositionReference(playerIds, clubId, metrics, mode) {
+    if (!playerIds || !playerIds.length) { const o = {}; metrics.forEach(m => o[m] = { baseline: null, count: 0, source: 'position' }); return o; }
+    const rows = await Promise.all(playerIds.map(pid => getReference(pid, clubId, metrics, mode)));
+    const out = {};
+    metrics.forEach(m => {
+      const vals = rows.map(r => r[m] && r[m].baseline).filter(v => v != null);
+      out[m] = vals.length
+        ? { baseline: +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(1), count: vals.length, source: 'position' }
+        : { baseline: null, count: 0, source: 'position' };
+    });
+    return out;
+  }
+
   // ── Latest match the player actually played (for a MEASURED deficit) ───
   // Returns { sessionDate, minutes, metrics:{key:value} } or null.
   async function getLatestMatchActual(playerId, clubId) {
@@ -208,7 +224,7 @@
 
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
-    getLatestVift, getPlayerVmax, getReference, getLatestMatchActual,
+    getLatestVift, getPlayerVmax, getReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD,
     // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
     setFallbackThresholds(hsr, sprint) {
