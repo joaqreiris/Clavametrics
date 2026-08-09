@@ -1089,7 +1089,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -1117,15 +1117,18 @@ async function loadSessionExercises(sessionId) {
   recalcTotals();
 }
 
-// Planner exercises own their definition. session_exercises snapshots name/players/field/area at
-// insert time, so an exercise edited afterwards in the Drill Designer would render stale here.
-// Refresh ONLY the display/identity fields from the live exercise (never the per-session dosing,
-// notes or groups the coach tunes on the card), repaint, and persist so print/PDF/GPS stay in sync.
+// Planner exercises own their definition. session_exercises snapshots name/players/field/area AND
+// dosing at insert time, so an exercise edited afterwards in the Drill Designer would render stale.
+// Refresh from the live exercise: display/identity fields always, plus dosing (series/duration/
+// work·rest/reps/mode) — but a dosing field the coach tuned on THIS day's card wins (that's what was
+// planned for the day), tracked in session_exercises.dosing_overrides. Never touch notes or groups.
+// Then repaint and persist so print/PDF/GPS stay in sync.
+const DP_DOSE_SYNC = ['series','duration','work_time','rest_time','reps'];   // per-card editable → honour override
 async function dpSyncPlannerFields(list, reqSession) {
   const ids = [...new Set((list || []).map(e => e.planner_exercise_id).filter(Boolean))];
   if (!ids.length) return;
   const { data: rows } = await window.sb.from('exercises')
-    .select('id,name,field_width,field_height,players_count,orientation')
+    .select('id,name,field_width,field_height,players_count,orientation,dose_mode,series,duration,work_time,rest_time,reps')
     .eq('club_id', _dpClubId).in('id', ids);
   if (!rows || _dpCurrentSessionId !== reqSession) return;   // navigated away — don't clobber
   const byId = Object.fromEntries(rows.map(r => [r.id, r]));
@@ -1141,7 +1144,10 @@ async function dpSyncPlannerFields(list, reqSession) {
       players_count:    src.players_count ?? null,
       m2_per_player:    m2,
       calc_orientation: _dpCalcOrientFromM2(m2) || src.orientation || null,
+      dose_mode:        src.dose_mode ?? null,   // no per-card control → always follows the drill
     };
+    const ov = new Set(Array.isArray(e.dosing_overrides) ? e.dosing_overrides : []);
+    DP_DOSE_SYNC.forEach(f => { if (!ov.has(f)) next[f] = src[f] ?? null; });   // day-level override wins
     if (!Object.keys(next).some(k => (e[k] ?? null) !== (next[k] ?? null))) return;   // unchanged
     Object.assign(e, next);
     updates.push({ id: e.id, patch: next });
@@ -1446,36 +1452,44 @@ function _dpEffLabel(seid){
   const badge = document.querySelector(`.dp-ex[data-seid="${seid}"] .dp-ex-dur`);
   if (badge) badge.innerHTML = `<i class="ti ti-clock"></i>${mins ? mins + '′' : '—'}`;
 }
+// A dosing field edited on the card is what was PLANNED for this day → pin it so a later Drill
+// Designer edit won't overwrite it (dpSyncPlannerFields skips fields listed in dosing_overrides).
+function _dpMarkDoseOverride(e, field){
+  const set = new Set(Array.isArray(e.dosing_overrides) ? e.dosing_overrides : []);
+  set.add(field);
+  e.dosing_overrides = [...set];
+  return e.dosing_overrides;
+}
 function dpEditDur(seid, val){
   const e = _dpFindTask(seid); if (!e) return;   // field / activation / goalkeeper task
   e.duration = val === '' ? null : (parseInt(val) || 0);
   _dpEffLabel(seid);                    // per-card badge + inline total
   dpRecomputeSectionTotals();           // activation / GK header totals
   recalcTotals();                       // live day totals + GPS projection
-  _dpEditSave(seid, { duration: e.duration });
+  _dpEditSave(seid, { duration: e.duration, dosing_overrides: _dpMarkDoseOverride(e, 'duration') });
 }
 function dpEditSeries(seid, val){
   const e = _dpFindTask(seid); if (!e) return;
   e.series = val === '' ? null : (parseInt(val) || null);
   _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();
-  _dpEditSave(seid, { series: e.series });
+  _dpEditSave(seid, { series: e.series, dosing_overrides: _dpMarkDoseOverride(e, 'series') });
 }
 function dpEditReps(seid, val){
   const e = _dpFindTask(seid); if (!e) return;
   e.reps = val === '' ? null : (parseInt(val) || null);
-  _dpEditSave(seid, { reps: e.reps });   // reps don't change session minutes (duration drives the total)
+  _dpEditSave(seid, { reps: e.reps, dosing_overrides: _dpMarkDoseOverride(e, 'reps') });   // reps don't change session minutes (duration drives the total)
 }
 function dpEditWork(seid, val){
   const e = _dpFindTask(seid); if (!e) return;
   e.work_time = val === '' ? null : val;
   _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();
-  _dpEditSave(seid, { work_time: e.work_time });
+  _dpEditSave(seid, { work_time: e.work_time, dosing_overrides: _dpMarkDoseOverride(e, 'work_time') });
 }
 function dpEditRest(seid, val){
   const e = _dpFindTask(seid); if (!e) return;
   e.rest_time = val === '' ? null : val;
   _dpEffLabel(seid); dpRecomputeSectionTotals(); recalcTotals();   // total uses rest; projection (work_min) unaffected
-  _dpEditSave(seid, { rest_time: e.rest_time });
+  _dpEditSave(seid, { rest_time: e.rest_time, dosing_overrides: _dpMarkDoseOverride(e, 'rest_time') });
 }
 function dpEditNotes(seid, val){
   const e = _dpFindTask(seid); if (!e) return;   // field OR activation task

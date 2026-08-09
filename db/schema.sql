@@ -2087,6 +2087,7 @@ create table if not exists public.session_exercises (
   rest_time text,
   dose_mode text,
   reps integer,
+  dosing_overrides text[] default '{}'::text[] not null,
   player_groups jsonb,
   constraint session_exercises_pkey primary key (id),
   constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text, 'goalkeepers'::text])))
