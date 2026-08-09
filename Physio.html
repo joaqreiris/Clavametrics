@@ -831,6 +831,11 @@
           <div class="st-empty" id="stZoneEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
         </div>
         <div class="st-card">
+          <div class="st-card-h"><h4 data-i18n="physio.stats_by_modality">By modality</h4></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartModality"></canvas></div>
+          <div class="st-empty" id="stModalityEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
+        </div>
+        <div class="st-card">
           <div class="st-card-h"><h4 data-i18n="physio.stats_pain_effect">Pain pre → post</h4><span class="sub" id="stPainSub"></span></div>
           <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartPain"></canvas></div>
           <div class="st-empty" id="stPainEmpty" style="display:none" data-i18n="physio.stats_no_pain">No pain scores recorded in this range.</div>
@@ -2473,7 +2478,7 @@ async function stLoad(){
   const pidSet = new Set(_allPlayers.map(p => p.id));
   const [{ data: tr }, { data: inj }] = await Promise.all([
     window.sb.from('treatments')
-      .select('id,player_id,injury_id,date,treatment_type,reason,physio_id,indicated_by,pain_pre,pain_post,zones,injuries(injury_type)')
+      .select('id,player_id,injury_id,date,treatment_type,reason,physio_id,indicated_by,pain_pre,pain_post,zones,modalities,injuries(injury_type)')
       .eq('club_id', _clubId).gte('date', start).lte('date', end).order('date'),
     window.sb.from('injuries')
       .select('id,player_id,injury_type,severity,status,start_date,returned_date')
@@ -2586,6 +2591,21 @@ function stRender(){
   const zoneMap = new Map();
   treatments.forEach(t => (Array.isArray(t.zones) ? t.zones : []).forEach(z => { if (z) zoneMap.set(z, (zoneMap.get(z)||0) + 1); }));
   stTopBar('stChartZone', 'stZoneEmpty', zoneMap, ST_C.bar, { txt, strong, grid, mk, legend });
+
+  // ── By modality (treatment technique — a session can have several) ──
+  const MOD_LABELS = {
+    'Manual therapy': tt('physio.manual_therapy','Manual therapy'),
+    'Exercise':       tt('physio.exercise','Exercise'),
+    'Electrotherapy': tt('physio.electrotherapy','Electrotherapy'),
+    'Hydrotherapy':   tt('physio.hydro','Hydrotherapy'),
+    'Massage':        tt('physio.massage','Massage'),
+    'Taping':         tt('physio.taping','Taping'),
+    'Needling':       tt('physio.needling','Needling'),
+    'Other':          tt('physio.other','Other')
+  };
+  const modMap = new Map();
+  treatments.forEach(t => (Array.isArray(t.modalities) ? t.modalities : []).forEach(m => { if (m){ const k = MOD_LABELS[m] || m; modMap.set(k, (modMap.get(k)||0) + 1); } }));
+  stTopBar('stChartModality', 'stModalityEmpty', modMap, ST_C.bar, { txt, strong, grid, mk, legend });
 
   // ── Pain pre → post ──
   const painEmpty = painRows.length === 0;
