@@ -478,6 +478,21 @@
   </div>
 </div>
 
+<!-- Strength (Gym) Library Modal -->
+<div id="gymLibBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px" onclick="if(event.target===this)closeGymLibModal()">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-barbell" style="font-size:16px;color:var(--cm-accent)"></i>
+      <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)" data-i18n="daily_planning.strength_library">Strength Library</div>
+      <input id="gymLibSearch" type="text" placeholder="Search strength exercises…" data-i18n-ph="daily_planning.search_strength_ph" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:180px" oninput="filterGymLib()">
+      <button onclick="closeGymLibModal()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="gymLibTypeBar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid var(--cm-border)"></div>
+    <div id="gymLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
+    <div style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="gymLibFooter" data-i18n="common.loading">Loading…</div>
+  </div>
+</div>
+
 <!-- Manual Exercise Modal -->
 <div id="manualExBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center" onclick="if(event.target===this)closeManualExModal()">
   <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
@@ -1089,10 +1104,11 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description,media_type,media_ref,video_id)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
+  dpResolveGymImgs(_dpFieldExercises, sessionId, () => renderExerciseList(_dpFieldExercises));   // fill strength photos, then repaint
   // instant paint using whatever previews are already cached (others fall back to the generic pitch)
   _dpFieldExercises.forEach(e => {
     e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
@@ -1163,14 +1179,14 @@ function renderExerciseList(exercises) {
   const grid = document.getElementById('dpExGrid');
   const ct   = document.getElementById('dpExCt');
   if (!exercises.length) {
-    grid.innerHTML = `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button>`;
+    grid.innerHTML = `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button><button class="dp-ex-add no-print" onclick="openGymLibModal('main')"><i class="ti ti-barbell" style="font-size:14px"></i>${tt('daily_planning.add_strength','Strength')}</button>`;
     if (ct) ct.textContent = '0';
     dpInitReorder();
     return;
   }
   const totalMin = Math.round(exercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
   if (ct) ct.textContent = `${exercises.length} · ${tt('daily_planning.min_count', `${totalMin} min`, {count: totalMin})}`;
-  grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button>`;
+  grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button><button class="dp-ex-add no-print" onclick="openGymLibModal('main')"><i class="ti ti-barbell" style="font-size:14px"></i>${tt('daily_planning.add_strength','Strength')}</button>`;
   dpInitReorder();
 }
 
@@ -1230,7 +1246,8 @@ function dpWireReorder(grid, kind){
 function dpPaintActStrip(){
   const strip = document.getElementById('dpActStrip'); if (!strip) return;
   const acts = window._dpActItems || [];
-  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`
+    + `<button class="dp-ex-add no-print" onclick="openGymLibModal('activation')"><i class="ti ti-barbell" style="font-size:14px"></i>${tt('daily_planning.add_strength','Strength')}</button>`;
   strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
 }
 // Repaint the goalkeeper strip from window._dpGkItems (mirrors loadGoalkeeperActivities).
@@ -1257,6 +1274,26 @@ async function dpReorderExercise(dragSeid, targetSeid, after, kind){
     window.sb.from('session_exercises').update({ position: x.position }).eq('id', x.id).eq('club_id', _dpClubId)));
   const failed = results.find(r => r.error);
   if (failed) { console.warn('[dp-reorder] save failed:', failed.error.message); dpToast(tt('daily_planning.reorder_failed','Could not save the new order.')); }
+}
+
+// Thumbnail source for a strength (gym) card: signed photo if cached, else YouTube frame, else none.
+function dpGymImg(e) {
+  const gx = e.gym_exercises; if (!gx) return null;
+  if (gx.media_type === 'image' && gx.media_ref) return _dpGymImgCache[gx.media_ref] || null;
+  if (gx.video_id) return `https://img.youtube.com/vi/${gx.video_id}/mqdefault.jpg`;
+  return null;
+}
+// Resolve signed URLs for any strength cards whose photos aren't cached yet, then repaint.
+async function dpResolveGymImgs(list, reqSession, repaint) {
+  const need = [...new Set((list || [])
+    .map(e => e.gym_exercises)
+    .filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _dpGymImgCache))
+    .map(g => g.media_ref))];
+  if (!need.length) return;
+  const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(need, 3600);
+  (urls || []).forEach(u => { if (u && u.path) _dpGymImgCache[u.path] = u.signedUrl; });
+  if (reqSession != null && _dpCurrentSessionId !== reqSession) return;
+  if (repaint) repaint();
 }
 
 function dpExerciseCardHTML(e) {
@@ -1345,31 +1382,56 @@ function dpExerciseCardHTML(e) {
         </div>
       </div>`;
     } else {
-      // Gym / manual exercise
-      const nm  = e.gym_exercises?.name || e.name || '—';
-      const cat = (e.gym_exercises?.category || 'other').toLowerCase();
+      // Gym (strength library) / manual exercise
+      const gx  = e.gym_exercises || null;
+      const isGym = !!e.exercise_id;
+      const nm  = gx?.name || e.name || '—';
+      const cat = (gx?.category || (isGym ? 'strength' : 'other')).toLowerCase();
       const cls = CAT_CLS[cat] || 'oth';
       const lbl = dpCatLabel(cat);
-      const desc      = e.gym_exercises?.description || e.notes || '';
+      const desc      = gx?.description || '';
       const intensity = e.intensity || '';
+      const img       = dpGymImg(e);
+      const isVideo   = !!(gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref));
+      const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
+      const thumb = img
+        ? `<div class="dp-ex-thumb has-img">
+            <span class="dp-ex-tag ${cls}">${lbl}</span>
+            <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+            <img class="dp-ex-img" src="${img}" alt="">
+            ${isVideo ? `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:22px;text-shadow:0 1px 6px rgba(0,0,0,.6)"><i class="ti ti-player-play-filled"></i></span>` : ''}
+          </div>`
+        : `<div class="dp-ex-thumb">
+            <span class="dp-ex-tag ${cls}">${lbl}</span>
+            <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+            <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
+              <i class="ti ti-barbell" style="font-size:28px;opacity:.35;color:#fff"></i>
+            </div>
+          </div>`;
+      // Strength cards dose by series × reps (with optional minutes); manual keeps the simple duration field.
+      const editRow = isGym
+        ? `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
+            <span>×</span>
+            <input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}" style="${EI};width:46px">
+            <span>${tt('daily_planning.reps_short','reps')}</span>
+            <span>·</span>
+            <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>
+          </div>`
+        : `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>
+          </div>`;
       return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
-        <div class="dp-ex-thumb">
-          <span class="dp-ex-tag ${cls}">${lbl}</span>
-          <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
-          <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
-            <i class="ti ti-dumbbell" style="font-size:28px;opacity:.35;color:#fff"></i>
-          </div>
-        </div>
+        ${thumb}
         <div class="dp-ex-b">
           <div class="dp-ex-name">${nm}</div>
           <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
-          ${desc ? `<div class="dp-ex-desc">${desc}</div>` : ''}
-          <div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
-            <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;width:54px"><span>${tt('daily_planning.min_short','min')}</span>
-          </div>
+          ${desc ? `<div class="dp-ex-desc" title="${tt('daily_planning.strength_library','Strength Library')}">${desc}</div>` : ''}
+          ${editRow}
+          <textarea class="no-print" placeholder="${tt('daily_planning.session_notes_ph','Session notes…')}" oninput="dpEditNotes('${e.id}',this.value)" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;resize:vertical;min-height:30px">${(e.notes ?? '').replace(/</g,'&lt;')}</textarea>
           ${dpExGroupsRow(e)}
           <div class="dp-ex-foot">
-            <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
+            <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${gx ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
             <span class="grow"></span>
             <button class="no-print" onclick="deleteExercise('${e.id}')" title="${tt('daily_planning.remove','Remove')}"><i class="ti ti-trash"></i></button>
           </div>
@@ -1681,8 +1743,9 @@ async function dpRenderPrintSheet() {
       ...((window._dpActItems)||[]).map(e=>e.planner_exercise_id)
     ].filter(Boolean);
     try { await dpResolvePreviews(_allIds); } catch(_) {}
+    try { await dpResolveGymImgs([...(_dpFieldExercises||[]), ...((window._dpActItems)||[])], null, null); } catch(_) {}
     const _img = e => (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id]
-                      : (e._previewImg || e._previewPng || null);
+                      : (e._previewImg || e._previewPng || dpGymImg(e) || null);
     const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
     const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
@@ -1837,19 +1900,22 @@ async function dpRenderPrintSheet() {
     // Shared diagram-card renderer for both Field and Activation
     const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
     const printExCard = e => {
-      const tag = orientShort(e);
+      const tag = e.exercise_id ? dpCatLabel((e.gym_exercises?.category || 'strength').toLowerCase()) : orientShort(e);
       const meta = [];
       if (e.players_count) meta.push(`${e.players_count} pl`);
       if (e.m2_per_player) meta.push(`${e.m2_per_player} m²/p`);
       if (e.field_width && e.field_height) meta.push(`${e.field_width}×${e.field_height} m`);
       const seriesMode = !!(e.series && e.work_time);
       const totalMin = seriesMode ? Math.round(dpBlockMins(e).total_min) : (e.duration || null);
+      const repsMode = !seriesMode && !!e.exercise_id && e.series != null && e.reps != null;
       const workLine = seriesMode
         ? (e.rest_time
             ? tt('daily_planning.sheet_work_rest_line', `${e.series} × ${esc(e.work_time)} work + ${esc(e.rest_time)} rest`, {series: e.series, work: esc(e.work_time), rest: esc(e.rest_time)})
             : tt('daily_planning.sheet_work_line', `${e.series} × ${esc(e.work_time)} work`, {series: e.series, work: esc(e.work_time)}))
+        : repsMode
+        ? `${e.series} × ${e.reps} ${tt('daily_planning.reps_short','reps')}`
         : '';
-      const note = (e.notes || '').trim();
+      const note = (e.notes || '').trim() || (e.gym_exercises?.description || '').trim();
       const grps = _dpExGroups(e).filter(g => (g.players||[]).length);
       const playersLine = grps.length
         ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:3px">${grps.map(g => {
@@ -1862,10 +1928,11 @@ async function dpRenderPrintSheet() {
         : '';
       const dur = totalMin ? totalMin + '′' : '';
       const src = _img(e);
+      const phBg = e.exercise_id ? '#2B3038' : '#1F7A43';   // strength → neutral slate, field → pitch green
       const thumb = src ? `<img src="${esc(src)}" crossorigin="anonymous" style="display:block;width:100%;height:auto">`
-                        : `<div style="width:100%;height:124px;background:#1F7A43"></div>`;
+                        : `<div style="width:100%;height:124px;background:${phBg}"></div>`;
       return `<div class="dsp-brk" style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
-        <div style="position:relative;background:#1F7A43;line-height:0">${thumb}
+        <div style="position:relative;background:${phBg};line-height:0">${thumb}
           ${tag?`<span style="position:absolute;top:6px;left:6px;background:var(--club-accent);color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
           ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
         </div>
@@ -2086,6 +2153,126 @@ async function addPlannerExercise(exerciseId) {
   else await loadSessionExercises(_dpCurrentSessionId);
 }
 
+// ── Strength (gym) library picker ──────────────────────────────────────────
+// Reuses the club's Gym Library (gym_exercises). Adds picks to session_exercises
+// via the exercise_id FK (phase = current strip), so a strength drill can live
+// inside Activation or Field exercises. Cards render the exercise photo/video when
+// present, otherwise a linear name + series×reps + description.
+let _gymLibMode = 'activation', _gymLibCat = '', _gymLibExercises = [];
+const _dpGymImgCache = {};   // media_ref -> signed URL (shared with the card renderer)
+const GYM_CAT_ORDER = ['strength','power','plyo','speed','mobility','core','prehab','other'];
+
+async function openGymLibModal(mode) {
+  _gymLibMode = mode || 'activation';
+  _gymLibCat = '';
+  document.getElementById('gymLibBackdrop').style.display = 'flex';
+  document.getElementById('gymLibSearch').value = '';
+  document.getElementById('gymLibFooter').textContent = tt('common.loading','Loading…');
+  document.getElementById('gymLibList').innerHTML = '';
+  _gymLibExercises = [];
+  const { data, error } = await window.sb.from('gym_exercises')
+    .select('id,name,category,muscle_group,description,complexity,media_type,media_ref,video_id')
+    .eq('club_id', _dpClubId).order('name');
+  if (error) {
+    document.getElementById('gymLibList').innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_strength_found','No strength exercises found.')}</div>`;
+    document.getElementById('gymLibFooter').textContent = '—';
+    return;
+  }
+  _gymLibExercises = data || [];
+  // resolve signed URLs for image thumbnails (cheap; keeps the picker visual)
+  const paths = [...new Set(_gymLibExercises.filter(e => e.media_type === 'image' && e.media_ref).map(e => e.media_ref))]
+    .filter(p => !(p in _dpGymImgCache));
+  if (paths.length) {
+    const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
+    (urls || []).forEach(u => { if (u && u.path) _dpGymImgCache[u.path] = u.signedUrl; });
+  }
+  dpBuildGymCatBar();
+  filterGymLib();
+}
+function closeGymLibModal() { document.getElementById('gymLibBackdrop').style.display = 'none'; }
+function gymLibSetCat(val) {
+  _gymLibCat = val || '';
+  document.querySelectorAll('#gymLibTypeBar .dp-lib-chip').forEach(b =>
+    b.classList.toggle('is-on', (b.dataset.cat || '') === _gymLibCat));
+  filterGymLib();
+}
+function dpBuildGymCatBar() {
+  const bar = document.getElementById('gymLibTypeBar');
+  const present = new Set(_gymLibExercises.map(e => (e.category || 'other').toLowerCase()));
+  const cats = [...GYM_CAT_ORDER.filter(c => present.has(c)), ...[...present].filter(c => !GYM_CAT_ORDER.includes(c)).sort()];
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  let html = `<button type="button" class="dp-lib-chip is-on" data-cat="" onclick="gymLibSetCat('')" data-i18n="common.all">All</button>`;
+  html += cats.map(c => `<button type="button" class="dp-lib-chip" data-cat="${c}" onclick="gymLibSetCat('${c}')">${cap(c)}</button>`).join('');
+  bar.innerHTML = html;
+  if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(bar);
+}
+function _gymThumbSrc(e) {
+  if (e.media_type === 'image' && e.media_ref && _dpGymImgCache[e.media_ref]) return _dpGymImgCache[e.media_ref];
+  if (e.video_id) return `https://img.youtube.com/vi/${e.video_id}/mqdefault.jpg`;
+  return null;
+}
+function filterGymLib() {
+  const q = (document.getElementById('gymLibSearch').value || '').toLowerCase();
+  let fil = _gymLibExercises.slice();
+  if (q) fil = fil.filter(e => (e.name||'').toLowerCase().includes(q) || (e.muscle_group||'').toLowerCase().includes(q));
+  if (_gymLibCat) fil = fil.filter(e => (e.category || 'other').toLowerCase() === _gymLibCat);
+  const list = document.getElementById('gymLibList');
+  document.getElementById('gymLibFooter').textContent = tt('daily_planning.n_in_library', `${fil.length} exercises in library`, {count: fil.length});
+  if (!fil.length) {
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_strength_found','No strength exercises found.')}</div>`;
+    return;
+  }
+  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const card = e => {
+    const cat = (e.category || 'other').toLowerCase();
+    const cls = CAT_CLS[cat] || 'oth';
+    const lbl = dpCatLabel(cat);
+    const thumb = _gymThumbSrc(e);
+    const meta2 = [e.muscle_group ? esc(e.muscle_group) : null, e.complexity ? esc(e.complexity) : null].filter(Boolean).join(' · ');
+    return `<div onclick="addGymExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
+      <div style="flex-shrink:0;width:44px;height:44px;border-radius:7px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;position:relative">
+        ${thumb ? `<img src="${thumb}" alt="" style="width:100%;height:100%;object-fit:cover">${e.video_id && !( e.media_type==='image' ) ? '<i class="ti ti-player-play-filled" style="position:absolute;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)"></i>' : ''}` : `<i class="ti ti-barbell" style="font-size:18px;color:var(--cm-fg-faint)"></i>`}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${esc(e.name || tt('daily_planning.untitled','Untitled'))}</div>
+        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="dp-ex-tag ${cls}" style="position:static;transform:none;font-size:10px">${lbl}</span>
+          ${meta2 ? `<span style="color:var(--cm-fg-faint)">${meta2}</span>` : ''}
+        </div>
+      </div>
+      <i class="ti ti-plus" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>
+    </div>`;
+  };
+  list.innerHTML = fil.map(card).join('');
+}
+async function addGymExercise(gymId) {
+  if (!await dpEnsureSession()) return;
+  const ex = _gymLibExercises.find(e => e.id === gymId);
+  const phase = _gymLibMode === 'activation' ? 'activation' : _gymLibMode === 'goalkeepers' ? 'goalkeepers' : 'main';
+  const pos = dpNextPosition(phase);
+  const { error } = await window.sb.from('session_exercises').insert({
+    club_id:     _dpClubId,
+    session_id:  _dpCurrentSessionId,
+    exercise_id: gymId,               // FK → gym_exercises
+    name:        ex?.name || null,
+    phase,
+    dose_mode:   'reps',              // strength drills dose by series × reps
+    series:      3,
+    reps:        10,
+    duration:    null,
+    position:    pos
+  });
+  if (error) {
+    console.error('addGymExercise insert error:', error);
+    alert(tt('daily_planning.add_exercise_failed','Add exercise failed:') + '\n' + (error.message||'') + '\ncode: ' + (error.code||''));
+    return;
+  }
+  closeGymLibModal();
+  if (phase === 'activation') await loadActivationActivities(_dpCurrentSessionId);
+  else if (phase === 'goalkeepers') await loadGoalkeeperActivities(_dpCurrentSessionId);
+  else await loadSessionExercises(_dpCurrentSessionId);
+}
+
 // ── Manual exercise ──
 async function openManualExModal() {
   if (!await dpEnsureSession()) return;
@@ -2287,7 +2474,8 @@ async function loadActivationActivities(sessionId) {
   const strip = document.getElementById('dpActStrip');
   const ctEl  = document.getElementById('dpActCt');
   const durEl = document.getElementById('dpActDuration');
-  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+  const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`
+    + `<button class="dp-ex-add no-print" onclick="openGymLibModal('activation')"><i class="ti ti-barbell" style="font-size:14px"></i>${tt('daily_planning.add_strength','Strength')}</button>`;
   if (!sessionId) {
     strip.innerHTML = addBtn;
     if (ctEl) ctEl.textContent = '—';
@@ -2298,10 +2486,11 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
+    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,intensity,exercise_id,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups,gym_exercises(name,category,description,media_type,media_ref,video_id)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
+  dpResolveGymImgs(acts, sessionId, () => dpPaintActStrip());   // fill strength photos, then repaint the strip
   // instant paint using whatever previews are already cached
   acts.forEach(e => {
     e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
@@ -2853,7 +3042,8 @@ async function dpExportPDF() {
       renderExerciseList(_dpFieldExercises || []);
       if (window._dpActItems) {
         const strip = document.getElementById('dpActStrip');
-        const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
+        const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`
+    + `<button class="dp-ex-add no-print" onclick="openGymLibModal('activation')"><i class="ti ti-barbell" style="font-size:14px"></i>${tt('daily_planning.add_strength','Strength')}</button>`;
         if (strip) strip.innerHTML = (window._dpActItems).map(dpExerciseCardHTML).join('') + addBtn;
       }
       recalcTotals();   // totals + AU + GPS projection
