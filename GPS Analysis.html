@@ -8057,6 +8057,25 @@ window.renderView = async function () {
       let dateSessionMap = null;
       let singleSessionId = null;
 
+      // Find (or create) the training_session for a date+type. Shared by all three import
+      // paths so the "match existing → else insert" logic is identical AND runs synchronously
+      // at commit time. The single-session path used to trust sessionInfo.existingId, which is
+      // filled by a 350ms-debounced UI lookup — on rapid re-imports that lookup hadn't finished,
+      // so existingId stayed null and a duplicate session was spawned. Resolving here closes it.
+      // Match key stays (club, date, type, is_historical) — unchanged — so legitimate double
+      // sessions and existing behaviour are untouched; only the missing lookup is added.
+      async function _gpResolveSessionId(date, type, title) {
+        const { data: existing } = await window.sb.from('training_sessions')
+          .select('id').eq('club_id', clubId).eq('session_date', date)
+          .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
+        if (existing?.[0]?.id) return existing[0].id;
+        const { data: newSess, error } = await window.sb.from('training_sessions')
+          .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
+          .select('id').single();
+        if (error) throw new Error(`Could not create session for ${date}: ${error.message}`);
+        return newSess.id;
+      }
+
       if (isMultiMode) {
         dateSessionMap = {};
         const _typeColEntry = Object.entries(_wizState.columnMap).find(([, c]) => c.field === 'session_type');
@@ -8084,19 +8103,8 @@ window.renderView = async function () {
 
           for (let i = 0; i < _uniqueSess.length; i++) {
             const { date, type } = _uniqueSess[i];
-            const { data: existing } = await window.sb.from('training_sessions')
-              .select('id').eq('club_id', clubId).eq('session_date', date)
-              .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
-            let sessionId = existing?.[0]?.id || null;
-            if (!sessionId) {
-              const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
-              const { data: newSess, error } = await window.sb.from('training_sessions')
-                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
-                .select('id').single();
-              if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
-              sessionId = newSess.id;
-            }
-            dateSessionMap[`${date}__${type}`] = sessionId;
+            const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
+            dateSessionMap[`${date}__${type}`] = await _gpResolveSessionId(date, type, title);
             setStatus('Creating sessions…', `${i + 1} / ${_uniqueSess.length}`);
           }
         } else {
@@ -8106,19 +8114,8 @@ window.renderView = async function () {
 
           for (let i = 0; i < uniqueDates.length; i++) {
             const date = uniqueDates[i];
-            const { data: existing } = await window.sb.from('training_sessions')
-              .select('id').eq('club_id', clubId).eq('session_date', date)
-              .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
-            let sessionId = existing?.[0]?.id || null;
-            if (!sessionId) {
-              const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
-              const { data: newSess, error } = await window.sb.from('training_sessions')
-                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
-                .select('id').single();
-              if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
-              sessionId = newSess.id;
-            }
-            dateSessionMap[date] = sessionId;
+            const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
+            dateSessionMap[date] = await _gpResolveSessionId(date, type, title);
             setStatus('Creating sessions…', `${i + 1} / ${uniqueDates.length}`);
           }
         }
@@ -8131,11 +8128,10 @@ window.renderView = async function () {
           const date  = sessionInfo.date  || cmToday();
           const type  = sessionInfo.sessionType || sessionType || 'training';
           const title = sessionInfo.title || `GPS import · ${date}`;
-          const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) };
-          const { data: newSess, error } = await window.sb.from('training_sessions')
-            .insert(payload).select('id').single();
-          if (error) { finishWithError('Could not create session: ' + error.message); return; }
-          singleSessionId = newSess.id;
+          // Resolve synchronously (match existing → else insert) instead of blindly inserting:
+          // a rapid re-import could reach here with existingId still null (debounced UI lookup
+          // unfinished) and create a duplicate session for a date that already had one.
+          singleSessionId = await _gpResolveSessionId(date, type, title);
           sessionInfo.existingId = singleSessionId;
         }
       }
