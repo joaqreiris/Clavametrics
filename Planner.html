@@ -3249,7 +3249,13 @@
   });
 
   // Ctrl/Cmd+V anywhere on the editor (but not while typing or editing canvas text).
+  // A placed custom object behaves like any other object: once it lives on the
+  // canvas, Cmd/Ctrl+C/X/V route through the internal Fabric clipboard (keydown
+  // handler above, _objPath is in ARROW_PROPS so the copy survives save/reload).
+  // So if that internal clipboard has content, yield to it — otherwise a stale
+  // external image left in the OS clipboard would be re-added on every duplicate.
   document.addEventListener('paste', e => {
+    if (_clipboard) return;   // duplicating a canvas object → let the keydown handler own it
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
     if (fc?.getActiveObject?.()?.isEditing) return;
