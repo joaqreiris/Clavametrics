@@ -214,6 +214,23 @@
   .st-canvas-wrap { position:relative; width:100%; }
   .st-empty { display:flex; align-items:center; justify-content:center; height:100%; min-height:120px; color:var(--cm-fg-faint); font:500 12px/1.4 var(--cm-font-sans); text-align:center; }
   @media (max-width:720px){ .st-kpis { grid-template-columns:repeat(2,1fr); } .st-grid { grid-template-columns:1fr; } }
+  /* Per-player table */
+  .st-playertbl-wrap { overflow-x:auto; }
+  .st-playertbl { width:100%; border-collapse:collapse; font:500 12.5px/1.3 var(--cm-font-sans); }
+  .st-playertbl th { text-align:left; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); padding:0 10px 8px; white-space:nowrap; border-bottom:1px solid var(--cm-border-soft); }
+  .st-playertbl th.num, .st-playertbl td.num { text-align:right; }
+  .st-playertbl td { padding:8px 10px; border-bottom:1px solid var(--cm-border-soft); vertical-align:middle; }
+  .st-playertbl tr:last-child td { border-bottom:none; }
+  .st-playertbl tbody tr:hover { background:var(--cm-bg-soft); }
+  .st-pl-name { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .st-pl-num { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-right:5px; }
+  .st-pl-total { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .st-pl-split { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .st-pl-zones { display:flex; flex-wrap:wrap; gap:4px; }
+  .st-zchip { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:999px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); font:500 11px/1.4 var(--cm-font-sans); color:var(--cm-fg); white-space:nowrap; }
+  .st-zchip b { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .st-zchip.is-hot { background:var(--cm-accent-soft); border-color:var(--cm-border-strong); color:var(--cm-fg-strong); }
+  .st-pl-last { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; }
 
   /* History modal */
   .hist-sections { display:flex; flex-direction:column; gap:16px; }
@@ -836,10 +853,19 @@
           <div class="st-empty" id="stModalityEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
         </div>
         <div class="st-card">
-          <div class="st-card-h"><h4 data-i18n="physio.stats_pain_effect">Pain pre → post</h4><span class="sub" id="stPainSub"></span></div>
-          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartPain"></canvas></div>
-          <div class="st-empty" id="stPainEmpty" style="display:none" data-i18n="physio.stats_no_pain">No pain scores recorded in this range.</div>
+          <div class="st-card-h"><h4 data-i18n="physio.stats_by_weekday">Workload by weekday</h4><span class="sub" data-i18n="physio.stats_by_weekday_sub">staff planning</span></div>
+          <div class="st-canvas-wrap" style="height:230px"><canvas id="stChartWeekday"></canvas></div>
+          <div class="st-empty" id="stWeekdayEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
         </div>
+      </div>
+
+      <!-- Per-player breakdown -->
+      <div class="st-card is-full">
+        <div class="st-card-h"><h4 data-i18n="physio.stats_by_player">By player</h4><span class="sub" data-i18n="physio.stats_by_player_sub">sessions & zones treated</span></div>
+        <div class="st-playertbl-wrap">
+          <table class="st-playertbl" id="stPlayerTable"></table>
+        </div>
+        <div class="st-empty" id="stPlayerEmpty" style="display:none" data-i18n="physio.stats_no_data">No data in this range.</div>
       </div>
     </div>
     <div class="ph-modal-foot">
@@ -2607,23 +2633,73 @@ function stRender(){
   treatments.forEach(t => (Array.isArray(t.modalities) ? t.modalities : []).forEach(m => { if (m){ const k = MOD_LABELS[m] || m; modMap.set(k, (modMap.get(k)||0) + 1); } }));
   stTopBar('stChartModality', 'stModalityEmpty', modMap, ST_C.bar, { txt, strong, grid, mk, legend });
 
-  // ── Pain pre → post ──
-  const painEmpty = painRows.length === 0;
-  showEmpty('stPainEmpty', ['stChartPain'], painEmpty);
-  document.getElementById('stPainSub').textContent = painRows.length ? tt('physio.stats_n_sessions','{n} sessions', { n: painRows.length }) : '';
-  if (!painEmpty){
-    const avgPre = painRows.reduce((a,t)=>a+t.pain_pre,0)/painRows.length;
-    const avgPost = painRows.reduce((a,t)=>a+t.pain_post,0)/painRows.length;
-    mk('stChartPain', {
+  // ── Workload by weekday (staff planning: when does the medical desk saturate) ──
+  // Mon→Sun; split rehab/preventive to see load composition per day.
+  const dowLabels = ['dow_mo','dow_tu','dow_we','dow_th','dow_fr','dow_sa','dow_su']
+    .map(k => tt('sessions_history.' + k, k.slice(4,6).replace(/^./,c=>c.toUpperCase())));
+  const dowRehab = [0,0,0,0,0,0,0], dowPrev = [0,0,0,0,0,0,0];
+  treatments.forEach(t => {
+    if (!t.date) return;
+    const d = new Date(t.date + 'T00:00:00');       // local, avoids UTC off-by-one
+    const idx = (d.getDay() + 6) % 7;               // 0=Mon … 6=Sun
+    if (t.treatment_type === 'preventive') dowPrev[idx]++; else dowRehab[idx]++;
+  });
+  const wdEmpty = treatments.length === 0;
+  showEmpty('stWeekdayEmpty', ['stChartWeekday'], wdEmpty);
+  if (!wdEmpty){
+    mk('stChartWeekday', {
       type:'bar',
-      data:{ labels:[tt('physio.stats_pre','Pre'), tt('physio.stats_post','Post')], datasets:[
-        { data:[avgPre, avgPost], backgroundColor:[ST_C.pre, ST_C.post], borderRadius:5, borderSkipped:false, maxBarThickness:80 }
+      data:{ labels: dowLabels, datasets:[
+        { label: tt('physio.stats_rehab','Rehab'), data: dowRehab, backgroundColor: ST_C.rehab, stack:'d', borderRadius:3, borderSkipped:false, borderColor:surf, borderWidth:1, maxBarThickness:34 },
+        { label: tt('physio.stats_preventive','Preventive'), data: dowPrev, backgroundColor: ST_C.prev, stack:'d', borderRadius:3, borderSkipped:false, borderColor:surf, borderWidth:1, maxBarThickness:34 }
       ]},
       options:{ responsive:true, maintainAspectRatio:false, animation:false,
-        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>` ${c.parsed.y.toFixed(1)} / 10` } } },
-        scales:{ x:{ grid:{display:false}, ticks:{ color:strong, font:{size:12, weight:'600'} } },
-                 y:{ beginAtZero:true, max:10, ticks:{ stepSize:2, color:txt, font:{size:10} }, grid:gridOpt } } }
+        plugins:{ legend: legend('top'), tooltip:{ mode:'index', intersect:false } },
+        scales:{ x:{ stacked:true, grid:{display:false}, ticks:{ color:txt, font:{size:11} } },
+                 y:{ stacked:true, beginAtZero:true, ticks:{ precision:0, color:txt, font:{size:10} }, grid:gridOpt } } }
     });
+  }
+
+  // ── By player: sessions, rehab/prev split, zones treated, last visit ──
+  const playerName = {}, playerNum = {};
+  _allPlayers.forEach(p => {
+    playerName[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' ') || tt('physio.stats_unknown_player','Unknown');
+    playerNum[p.id] = p.number;
+  });
+  const plMap = new Map();   // player_id → { total, rehab, prev, zones:Map, last }
+  treatments.forEach(t => {
+    let row = plMap.get(t.player_id);
+    if (!row){ row = { total:0, rehab:0, prev:0, zones:new Map(), last:'' }; plMap.set(t.player_id, row); }
+    row.total++;
+    if (t.treatment_type === 'preventive') row.prev++; else row.rehab++;
+    (Array.isArray(t.zones) ? t.zones : []).forEach(z => { if (z) row.zones.set(z, (row.zones.get(z)||0) + 1); });
+    if (t.date && t.date > row.last) row.last = t.date;
+  });
+  const plRows = [...plMap.entries()].sort((a,b) => b[1].total - a[1].total);
+  const plTable = document.getElementById('stPlayerTable');
+  document.getElementById('stPlayerEmpty').style.display = plRows.length ? 'none' : 'flex';
+  plTable.style.display = plRows.length ? 'table' : 'none';
+  if (plRows.length){
+    const fmtDate = (s) => { const d = new Date(s + 'T00:00:00'); return d.toLocaleDateString(undefined, { day:'2-digit', month:'short' }); };
+    const head = `<thead><tr>
+      <th data-i18n="common.player">Player</th>
+      <th class="num" data-i18n="physio.stats_col_sessions">Sessions</th>
+      <th data-i18n="physio.stats_col_zones">Zones treated</th>
+      <th class="num" data-i18n="physio.stats_col_last">Last</th>
+    </tr></thead>`;
+    const body = plRows.map(([pid, r]) => {
+      const zChips = [...r.zones.entries()].sort((a,b) => b[1]-a[1]).map(([z,n]) =>
+        `<span class="st-zchip${n >= 3 ? ' is-hot' : ''}">${z}${n > 1 ? ` <b>×${n}</b>` : ''}</span>`).join('');
+      const numTag = playerNum[pid] != null ? `<span class="st-pl-num">#${playerNum[pid]}</span>` : '';
+      return `<tr>
+        <td><span class="st-pl-name">${numTag}${playerName[pid] || tt('physio.stats_unknown_player','Unknown')}</span></td>
+        <td class="num"><span class="st-pl-total">${r.total}</span><br><span class="st-pl-split">${r.rehab}R · ${r.prev}P</span></td>
+        <td><div class="st-pl-zones">${zChips || '<span class="st-pl-split">—</span>'}</div></td>
+        <td class="num"><span class="st-pl-last">${r.last ? fmtDate(r.last) : '—'}</span></td>
+      </tr>`;
+    }).join('');
+    plTable.innerHTML = head + '<tbody>' + body + '</tbody>';
+    if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(plTable);
   }
 }
 
