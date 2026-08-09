@@ -525,7 +525,7 @@ let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAda
 // A day can hold more than one training session (double session). We load them ALL and let the
 // user switch; _dpPreferredSessionId is the one to open (from ?session= or the switcher).
 // It self-corrects on date change: an id that isn't in the new day falls back to the first.
-let _dpDaySessions = [], _dpPreferredSessionId = null;
+let _dpDaySessions = [], _dpPreferredSessionId = null, _dpDayOff = false;
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
@@ -931,6 +931,7 @@ async function loadDay(dateStr) {
   // session itself (see note below) — never from an ancillary calendar_events row.
   try {
     const ctx = await window.cmResolveDayContext(dateStr, _dpTeamId, _dpClubId);
+    _dpDayOff = !!ctx.dayOff;
     _dpCalFields = new Set();
     const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
     const mcSelN = document.getElementById('dpMicrocycle');
@@ -1072,10 +1073,16 @@ function dpCatLabel(cat){ return tt(CAT_LABEL_KEY[cat] || 'daily_planning.other'
 async function loadSessionExercises(sessionId) {
   const grid = document.getElementById('dpExGrid');
   if (!sessionId) {
-    grid.innerHTML = `<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
+    grid.innerHTML = _dpDayOff
+      ? `<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
+      <i class="ti ti-bed" style="font-size:24px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>
+      ${tt('daily_planning.rest_day','Rest day — no training planned.')}
+      <div style="margin-top:12px"><button class="cm-btn is-ghost is-sm no-print" onclick="dpRemoveDayOff()"><i class="ti ti-x" style="font-size:13px"></i>${tt('daily_planning.remove_day_off','Remove day off')}</button></div>
+    </div>`
+      : `<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
       <i class="ti ti-calendar-off" style="font-size:24px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>
       ${tt('daily_planning.no_session_for_date','No session for this date.')}
-      <div style="margin-top:12px"><button class="cm-btn is-primary is-sm" onclick="dpCreateSession()"><i class="ti ti-plus" style="font-size:13px"></i>${tt('daily_planning.create_session_for_date','Create training session for this date')}</button></div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="cm-btn is-primary is-sm" onclick="dpCreateSession()"><i class="ti ti-plus" style="font-size:13px"></i>${tt('daily_planning.create_session_for_date','Create training session for this date')}</button>${_dpDaySessions.length ? '' : `<button class="cm-btn is-ghost is-sm no-print" onclick="dpMarkDayOff()"><i class="ti ti-bed" style="font-size:13px"></i>${tt('daily_planning.mark_day_off','Mark as day off')}</button>`}</div>
     </div>`;
     _dpFieldExercises = [];
     recalcTotals();
@@ -2206,6 +2213,29 @@ async function dpEnsureSession() {
   if (_dpCurrentSessionId) return true;
   await dpAutoSaveSession();
   return !!_dpCurrentSessionId;
+}
+
+// ── Day off ── stored in calendar_events (type='day_off'), the same store the Calendar uses,
+// so a day marked off here shows as a rest day there too (and vice-versa).
+async function dpMarkDayOff() {
+  if (!_dpTeamId || !_dpClubId || !_dpCurrentDate) return;
+  await window.sb.from('calendar_events').delete()
+    .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', _dpCurrentDate).eq('type', 'day_off');
+  const { error } = await window.sb.from('calendar_events').insert({
+    title: 'Day off', type: 'day_off', date: _dpCurrentDate,
+    club_id: _dpClubId, team_id: _dpTeamId, visible_to: ['players','medical'] });
+  if (error) { dpToast(tt('daily_planning.day_off_error','Could not update the day. Try again.')); return; }
+  _dpDayOff = true;
+  await loadDay(_dpCurrentDate);
+}
+
+async function dpRemoveDayOff() {
+  if (!_dpTeamId || !_dpClubId || !_dpCurrentDate) return;
+  const { error } = await window.sb.from('calendar_events').delete()
+    .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', _dpCurrentDate).eq('type', 'day_off');
+  if (error) { dpToast(tt('daily_planning.day_off_error','Could not update the day. Try again.')); return; }
+  _dpDayOff = false;
+  await loadDay(_dpCurrentDate);
 }
 
 // ── Print Roster ──
