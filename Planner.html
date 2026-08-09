@@ -2291,6 +2291,16 @@
       strokeUniform:true, selectable:false, evented:false
     });
     const parts = [linePath];
+    // Dashed shafts have gaps between segments; with perPixelTargetFind those gaps are dead
+    // zones you can't click or grab, so a dashed line feels un-selectable. A wide, near-invisible
+    // hit-area along the same path makes the whole shaft selectable without altering the dashes.
+    if (dashed && !wavy) {
+      parts.unshift(new fabric.Path(lineD, {
+        stroke:'rgba(0,0,0,0.02)', strokeWidth:Math.max(14, w*5), fill:'',
+        strokeLineCap:'round', strokeLineJoin:'round', strokeUniform:true,
+        selectable:false, evented:false
+      }));
+    }
     // Outward tangents at each end (curved → toward control point; straight → toward other end).
     const endPart   = _capPart(endCap,   x2, y2, curved?(x2-cx):(x2-x1), curved?(y2-cy):(y2-y1), color, w);
     const startPart = _capPart(startCap, x1, y1, curved?(x1-cx):(x1-x2), curved?(y1-cy):(y1-y2), color, w);
