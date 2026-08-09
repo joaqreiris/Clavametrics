@@ -779,9 +779,11 @@
   #plMyObjects { display:flex; flex-wrap:wrap; gap:6px; padding:4px 12px 6px; max-height:148px; overflow-y:auto; }
   #plMyObjects:empty { display:none; }
   .pl-myobj-empty { padding:2px 16px 6px; font:400 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-faint); }
-  .pl-myobj { position:relative; width:46px; height:46px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color 80ms; }
-  .pl-myobj:hover { border-color:var(--cm-accent); }
+  .pl-myobj { width:52px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .pl-myobj-thumb { position:relative; width:46px; height:46px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); display:flex; align-items:center; justify-content:center; transition:border-color 80ms; }
+  .pl-myobj:hover .pl-myobj-thumb { border-color:var(--cm-accent); }
   .pl-myobj img { max-width:34px; max-height:34px; object-fit:contain; pointer-events:none; }
+  .pl-myobj-name { max-width:52px; font:500 9px/1.15 var(--cm-font-sans); color:var(--cm-fg-soft); text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pl-myobj-del { position:absolute; top:-6px; right:-6px; width:16px; height:16px; border:0; border-radius:50%; background:var(--cm-danger); color:#fff; cursor:pointer; display:none; align-items:center; justify-content:center; padding:0; }
   .pl-myobj-del .ti { font-size:10px; }
   .pl-myobj:hover .pl-myobj-del { display:flex; }
@@ -1286,6 +1288,7 @@
               <div class="pl-drop-sep"></div>
               <div class="pl-myobj-head" data-i18n="planner.my_objects">My objects</div>
               <div id="plMyObjects"></div>
+              <button class="pl-drop-opt" id="plPasteObjBtn"><i class="ti ti-clipboard"></i><span data-i18n="planner.paste_object">Paste object…</span></button>
               <button class="pl-drop-opt" id="plUploadObjBtn"><i class="ti ti-upload"></i><span data-i18n="planner.upload_object">Upload object…</span></button>
             </div>
           </div>
@@ -3051,6 +3054,54 @@
     setTimeout(() => t.remove(), 2500);
   }
 
+  const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  // The object name is stored inside the filename (no DB change): the display
+  // name is base64url-encoded (filename-safe, unicode-safe) and joined to the
+  // uuid with a dot → `${uid}/${encName}.${uuid}.png`. base64url never contains
+  // a dot, so the first dot cleanly separates name from uuid. Legacy files
+  // (`${uuid}.png`, no dot before the extension) simply have no name.
+  function _encName(name) {
+    try { return btoa(unescape(encodeURIComponent(name || ''))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+    catch { return ''; }
+  }
+  function _decName(enc) {
+    try {
+      let b = String(enc || '').replace(/-/g,'+').replace(/_/g,'/');
+      while (b.length % 4) b += '=';
+      return decodeURIComponent(escape(atob(b)));
+    } catch { return ''; }
+  }
+  // Parse the display name out of a storage filename (extension already known).
+  function _nameFromFile(fname) {
+    const base = String(fname || '').replace(/\.(png|svg)$/i, '');
+    const dot  = base.indexOf('.');
+    return dot > 0 ? _decName(base.slice(0, dot)) : '';
+  }
+  // Normalise any pasted/selected bitmap to a PNG File. SVG/PNG pass through;
+  // anything else the browser can decode (jpeg/gif/webp, or a screenshot blob)
+  // is repainted to a PNG canvas. Formats the browser can't decode (tiff, pdf)
+  // reject → caller shows a "copy as an image" hint.
+  function _toObjectFile(blob) {
+    return new Promise((resolve, reject) => {
+      if (!blob) { reject(new Error('empty')); return; }
+      if (blob.type === 'image/svg+xml') { resolve(new File([blob], 'o.svg', { type: 'image/svg+xml' })); return; }
+      if (blob.type === 'image/png')     { resolve(new File([blob], 'o.png', { type: 'image/png' }));     return; }
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+          c.getContext('2d').drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          c.toBlob(b => b ? resolve(new File([b], 'o.png', { type: 'image/png' })) : reject(new Error('encode')), 'image/png');
+        } catch (err) { URL.revokeObjectURL(url); reject(err); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+      img.src = url;
+    });
+  }
+
   // Insert a custom object onto the canvas. PNG → fabric.Image, SVG → grouped
   // SVG elements. Saved into objects_json automatically (it's a Fabric object).
   function addCustomObject(url, path) {
@@ -3117,11 +3168,15 @@
     const urlFor = {};
     (signed || []).forEach((s, i) => { if (s?.signedUrl) urlFor[paths[i]] = s.signedUrl; });
     host.innerHTML = files.map((f, i) => {
-      const path = paths[i];
-      const url  = urlFor[path] || '';
-      return `<div class="pl-myobj" data-url="${url}" data-path="${path}" title="${f.name}">
-        <img src="${url}" alt="" loading="lazy">
-        <button class="pl-myobj-del" data-del="${path}" title="${tt('planner.delete_object', 'Delete object')}"><i class="ti ti-trash"></i></button>
+      const path  = paths[i];
+      const url   = urlFor[path] || '';
+      const label = _nameFromFile(f.name) || tt('planner.unnamed_object', 'Untitled');
+      return `<div class="pl-myobj" data-url="${url}" data-path="${path}" title="${_esc(label)}">
+        <div class="pl-myobj-thumb">
+          <img src="${url}" alt="" loading="lazy">
+          <button class="pl-myobj-del" data-del="${path}" title="${tt('planner.delete_object', 'Delete object')}"><i class="ti ti-trash"></i></button>
+        </div>
+        <div class="pl-myobj-name">${_esc(label)}</div>
       </div>`;
     }).join('');
     host.querySelectorAll('.pl-myobj').forEach(el => {
@@ -3138,14 +3193,15 @@
     });
   }
 
-  async function uploadCustomObject(file) {
+  async function uploadCustomObject(file, name) {
     const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
     const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
     if (!isSvg && !isPng) { _toast(tt('planner.only_png_svg', 'Only PNG or SVG files are allowed.'), true); return; }
     const uid = await _objUid();
     if (!uid) { _toast(tt('planner.login_to_upload', 'You must be logged in to upload.'), true); return; }
     const ext  = isSvg ? 'svg' : 'png';
-    const path = `${uid}/${crypto.randomUUID()}.${ext}`;
+    const enc  = _encName((name || '').trim() || tt('planner.default_object_name', 'Object'));
+    const path = `${uid}/${enc}.${crypto.randomUUID()}.${ext}`;
     const { error } = await window.sb.storage.from(FIELD_BUCKET)
       .upload(path, file, { contentType: isSvg ? 'image/svg+xml' : 'image/png', upsert: false });
     if (error) { _toast(tt('planner.upload_failed', `Upload failed: ${error.message}`, {msg: error.message}), true); return; }
@@ -3157,8 +3213,55 @@
     e.stopPropagation();
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/png,image/svg+xml';
-    inp.onchange = ev => { const f = ev.target.files?.[0]; if (f) uploadCustomObject(f); };
+    inp.onchange = ev => {
+      const f = ev.target.files?.[0]; if (!f) return;
+      const def  = (f.name || '').replace(/\.(png|svg)$/i, '') || tt('planner.default_object_name', 'Object');
+      const name = prompt(tt('planner.name_object', 'Name this object:'), def);
+      if (name === null) return;   // cancelled
+      uploadCustomObject(f, name);
+    };
     inp.click();
+  });
+
+  // Paste-an-image → new custom object. Normalises the bitmap, asks for a name,
+  // reuses the same upload path as the file picker.
+  async function _addPastedObject(blob) {
+    let file;
+    try { file = await _toObjectFile(blob); }
+    catch { _toast(tt('planner.paste_not_image', 'Could not read the pasted image. Copy it as a PNG image and try again.'), true); return; }
+    const name = prompt(tt('planner.name_object', 'Name this object:'), tt('planner.default_object_name', 'Object'));
+    if (name === null) return;     // cancelled
+    await uploadCustomObject(file, name);
+  }
+
+  // Button uses the async Clipboard API (explicit user gesture → permission ok).
+  document.getElementById('plPasteObjBtn')?.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!navigator.clipboard?.read) { _toast(tt('planner.paste_shortcut_hint', 'Copy an image, then press Ctrl/Cmd+V here.'), true); return; }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find(t => t.indexOf('image') === 0);
+        if (type) { await _addPastedObject(await it.getType(type)); return; }
+      }
+      _toast(tt('planner.clipboard_no_image', 'No image found in the clipboard.'), true);
+    } catch { _toast(tt('planner.paste_shortcut_hint', 'Copy an image, then press Ctrl/Cmd+V here.'), true); }
+  });
+
+  // Ctrl/Cmd+V anywhere on the editor (but not while typing or editing canvas text).
+  document.addEventListener('paste', e => {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+    if (fc?.getActiveObject?.()?.isEditing) return;
+    const items = e.clipboardData?.items || [];
+    for (const it of items) {
+      if (it.type && it.type.indexOf('image') === 0) {
+        e.preventDefault();
+        const blob = it.getAsFile();
+        if (blob) _addPastedObject(blob);
+        return;
+      }
+    }
   });
   loadCustomObjects();
 
