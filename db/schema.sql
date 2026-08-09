@@ -3859,9 +3859,10 @@ end; $function$
 ;
 
 -- Birthday reminders for STAFF / coaches: mirrors notify_player_birthdays() but reads
--- profiles.birth_date, notifies every OTHER staff member of the club (never the birthday person
--- themselves), and links to the members page. Idempotent (same-day + same-title guard) so the
--- same daily cron can run it safely.
+-- profiles.birth_date, notifies every OTHER staff member (never the birthday person themselves),
+-- and links to the members page. Scoped BY TEAM — a staff member is only notified about
+-- colleagues sharing one of their teams (member_teams); admins/owners keep the club-wide view.
+-- Idempotent (same-day + same-title guard) so the same daily cron can run it safely.
 CREATE OR REPLACE FUNCTION public.notify_staff_birthdays()
  RETURNS void
  LANGUAGE plpgsql
@@ -3902,6 +3903,18 @@ begin
   where p.birth_date is not null
     and m.d is not null
     and nc.nm is not null
+    -- Team scoping: admins/owners see the whole club; everyone else only colleagues
+    -- who share one of their teams.
+    and (
+      lower(coalesce(pr.role,'')) in ('admin','owner')
+      or exists (
+        select 1
+        from public.member_teams m1
+        join public.member_teams m2 on m2.team_id = m1.team_id
+        where m1.profile_id = pr.id
+          and m2.profile_id = p.id
+      )
+    )
     and not exists (
       select 1 from public.notifications n
       where n.user_id = pr.id
