@@ -625,8 +625,14 @@
   // Status to show for a cell with NO stored record. Injury is global (shows in every
   // team); a guest with no record defaults to 'other_team' (with their own squad);
   // everyone else defaults to 'available'. 'other_team' is view-only — never stored.
-  function avDefaultStatus(pid) {
-    if (injuredIds.has(pid)) return 'injured';
+  // 'injured' is a LIVE flag (injuredIds = players injured *right now*), so it may only
+  // default TODAY's cell. Past days must reflect what was actually recorded then — the
+  // real injury window is persisted as 'injured' rows, so those stay red on their own.
+  // Applying the live flag to past no-record days would flip them red→green the instant
+  // the injury is cleared (a player is no longer in injuredIds, so the default becomes
+  // 'available'); history must not change colour on discharge.
+  function avDefaultStatus(pid, date) {
+    if (injuredIds.has(pid) && (!date || date >= todayStr)) return 'injured';
     if (_avGuestTeam.has(pid)) return 'other_team';
     return 'available';
   }
@@ -727,7 +733,7 @@
       if (!e) {
         if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
-        return avDefaultStatus(playerId);
+        return avDefaultStatus(playerId, date);
       }
       return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
     });
@@ -806,7 +812,7 @@
           if (!e) {
             if (isFutureDate(date)) return null;            // future: blank, no assumed status
             if (!dayCountable(date)) return null;           // not planned → neutral/blank
-            return avDefaultStatus(p.id);
+            return avDefaultStatus(p.id, date);
           }
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
@@ -847,7 +853,7 @@
     const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
-      const s = e ? (e.status || 'available') : avDefaultStatus(p.id);   // guests → 'other_team', not counted as available
+      const s = e ? (e.status || 'available') : avDefaultStatus(p.id, todayStr);   // guests → 'other_team', not counted as available
       // "Nombre Apellido" — first name + first surname only
       const name = `${p.first_name || ''} ${(p.last_name || '').split(' ')[0]}`.trim();
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
@@ -1277,7 +1283,7 @@
       if (!ent) {
         if (isFutureDate(date)) return null;              // future: blank
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
-        return avDefaultStatus(pid);
+        return avDefaultStatus(pid, date);
       }
       return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
     });
