@@ -619,6 +619,14 @@
   .mc-evt.video .ti { color:#64748B; }
   .mc-evt.day-off { font-style:italic; color:var(--cm-fg-faint); border:1px dashed var(--cm-border); background:transparent; }
 
+  /* Outdoor training substitutes (no field): beach = sand/amber, outdoor endurance = teal/green */
+  .mc-evt.st-beach   { background:var(--cm-warning-bg); border-color:var(--cm-warning-bd); color:#92400E; }
+  .mc-evt.st-beach .ti   { color:var(--cm-warning); }
+  .mc-evt.st-beach .time { color:#78350F; }
+  .mc-evt.st-outdoor { background:color-mix(in srgb, var(--cm-success-bg) 80%, var(--cm-surface)); border-color:var(--cm-success-bd); color:#0F766E; }
+  .mc-evt.st-outdoor .ti   { color:#0D9488; }
+  .mc-evt.st-outdoor .time { color:#115E59; }
+
   /* Meal types */
   .mc-evt.breakfast,.mc-evt.lunch,.mc-evt.dinner { background:var(--cm-warning-bg); border-color:var(--cm-warning-bd); color:#92400E; }
   .mc-evt.breakfast .ti,.mc-evt.lunch .ti,.mc-evt.dinner .ti { color:var(--cm-warning); }
@@ -810,6 +818,53 @@
   .sq-modal-field input:focus,.sq-modal-field select:focus,.sq-modal-field textarea:focus { border-color:var(--cm-accent); }
   .sq-modal-foot { display:flex;align-items:center;gap:8px;padding:14px 20px 18px;border-top:1px solid var(--cm-border); }
   .sq-modal-foot .grow { flex:1; }
+
+  /* === Event-type picker (visual card grid) === */
+  .cal-type-select-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); border:0; }
+  .cal-type-trigger {
+    display:flex; align-items:center; gap:9px; width:100%; height:36px;
+    padding:0 10px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); color:var(--cm-fg); font:var(--cm-body-sm); text-align:left;
+    cursor:pointer; transition:border-color 100ms, box-shadow 100ms;
+  }
+  .cal-type-trigger:hover { border-color:var(--cm-border-strong); }
+  .cal-type-trigger:focus-visible { outline:none; border-color:var(--cm-accent); box-shadow:0 0 0 1px var(--cm-accent); }
+  .cal-type-trigger > .ti:first-child { font-size:16px; color:var(--cm-accent); flex-shrink:0; }
+  .cal-type-trigger #calEvtTypeTrigLabel { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--cm-fg-strong); font-weight:500; }
+  .cal-type-trigger-caret { font-size:15px; color:var(--cm-fg-faint); flex-shrink:0; }
+
+  .cal-typepop-backdrop {
+    position:fixed; inset:0; background:rgba(8,10,12,.5); backdrop-filter:blur(4px);
+    z-index:320; display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity 150ms ease;
+  }
+  .cal-typepop-backdrop.is-open { opacity:1; pointer-events:auto; }
+  .cal-typepop {
+    background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5);
+    box-shadow:0 24px 48px rgba(0,0,0,.22); width:640px; max-width:calc(100vw - 32px);
+    max-height:calc(100vh - 64px); overflow-y:auto; display:flex; flex-direction:column;
+    transform:translateY(8px) scale(.99); transition:transform 150ms ease;
+  }
+  .cal-typepop-backdrop.is-open .cal-typepop { transform:translateY(0) scale(1); }
+  .cal-typepop-head { display:flex; align-items:center; gap:12px; padding:18px 20px 14px; border-bottom:1px solid var(--cm-border); position:sticky; top:0; background:var(--cm-surface); z-index:1; }
+  .cal-typepop-head h3 { font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .cal-typepop-body { padding:16px 20px 22px; display:flex; flex-direction:column; gap:18px; }
+  .cal-typegroup-label { font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-faint); margin-bottom:9px; }
+  .cal-typegrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:8px; }
+  .cal-typecard {
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
+    padding:14px 8px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); color:var(--cm-fg); cursor:pointer; text-align:center;
+    transition:border-color 110ms, background 110ms, transform 80ms, box-shadow 110ms;
+  }
+  .cal-typecard:hover { border-color:var(--cm-border-strong); background:var(--cm-surface); transform:translateY(-1px); box-shadow:var(--cm-shadow-2); }
+  .cal-typecard .ti { font-size:22px; color:var(--cm-accent); }
+  .cal-typecard span { font:500 11.5px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .cal-typecard.is-selected { border-color:var(--cm-accent); background:var(--cm-accent-soft); box-shadow:0 0 0 1px var(--cm-accent); }
+  .cal-typecard.is-selected .ti { color:var(--cm-accent-press); }
+  /* Highlight the two outdoor-training substitutes so they stand out as the "no field" options */
+  .cal-typecard[data-val="beach"] .ti   { color:var(--cm-warning); }
+  .cal-typecard[data-val="outdoor"] .ti { color:#0D9488; }
   .sq-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
   .sq-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
   /* Prevent page-level horizontal scroll — only mc-days scrolls horizontally */
@@ -1327,6 +1382,17 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- Event-type picker (card grid) — opened from the trigger inside the New event modal -->
+<div class="cal-typepop-backdrop" id="calTypePopBackdrop">
+  <div class="cal-typepop" role="dialog" aria-modal="true" aria-labelledby="calTypePopTitle">
+    <div class="cal-typepop-head">
+      <h3 id="calTypePopTitle" data-i18n="calendar.choose_event_type">Choose event type</h3>
+      <button class="sq-modal-close" id="calTypePopClose" data-i18n-attr="aria-label:common.close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cal-typepop-body" id="calTypePopBody"><!-- built from #calEvtF_type optgroups --></div>
+  </div>
+</div>
+
 <!-- New event modal -->
 <div class="sq-modal-backdrop" id="calEvtBackdrop">
   <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="calEvtTitle">
@@ -1344,10 +1410,19 @@
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
-          <label for="calEvtF_type" data-i18n="calendar.type">Type</label>
-          <select id="calEvtF_type">
+          <label for="calEvtTypeTrigger" data-i18n="calendar.type">Type</label>
+          <!-- Visual trigger: opens the card-grid picker. The <select> below stays as the functional
+               source of truth (read by saveEvt, set by openEvtModal) but is visually hidden. -->
+          <button type="button" class="cal-type-trigger" id="calEvtTypeTrigger" aria-haspopup="dialog" aria-expanded="false">
+            <i class="ti ti-soccer-field" id="calEvtTypeTrigIcon"></i>
+            <span id="calEvtTypeTrigLabel" data-i18n="calendar.type_training_field">Training (field)</span>
+            <i class="ti ti-chevron-down cal-type-trigger-caret"></i>
+          </button>
+          <select id="calEvtF_type" class="cal-type-select-hidden" tabindex="-1" aria-hidden="true">
             <optgroup label="Training" data-i18n-attr="label:calendar.optgroup_training">
               <option value="training" data-i18n="calendar.type_training_field">Training (field)</option>
+              <option value="beach" data-i18n="calendar.type_beach">Beach session</option>
+              <option value="outdoor" data-i18n="calendar.type_outdoor">Outdoor endurance</option>
               <option value="gym" data-i18n="calendar.type_gym">Gym</option>
               <option value="recovery" data-i18n="calendar.type_recovery">Recovery</option>
               <option value="walkthrough" data-i18n="calendar.type_walkthrough">Walkthrough / activation</option>
@@ -1726,7 +1801,7 @@ let _activeShareLink = null; // active share_link row for current MC (players sc
 const TODAY = cmToday();
 
 const EVT_ICONS = {
-  training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football',
+  training:'ti-soccer-field', beach:'ti-beach', outdoor:'ti-run', gym:'ti-barbell', match:'ti-ball-football',
   recovery:'ti-heart-rate-monitor', travel:'ti-plane',
   meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop',
   breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
@@ -1776,6 +1851,8 @@ function showCalToast(msg) {
 const VISIBLE_TO_DEFAULTS = {
   match:         ['players','medical'],
   training:      ['players','medical'],
+  beach:         ['players','medical'],
+  outdoor:       ['players','medical'],
   tactical:      ['players','medical'],
   gym:           ['players','medical'],
   recovery:      ['players','medical'],
@@ -2053,11 +2130,16 @@ function renderGrid() {
       ? `<div class="mc-evt day-off">${tt('calendar.rest_day','Rest day')}</div>`
       : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && s.session_type !== 'day_off').map(s => {
           const cat = focusToClass(s.session_type);
-          const icon = EVT_ICONS[cat] || 'ti-calendar';
+          // Outdoor/beach are training-class substitutes: keep training routing/filters but give them
+          // their own icon, label and colour (modifier class) so they read as distinct events.
+          const isOutdoorTrain = s.session_type === 'beach' || s.session_type === 'outdoor';
+          const icon = isOutdoorTrain ? EVT_ICONS[s.session_type] : (EVT_ICONS[cat] || 'ti-calendar');
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
           // Training: generic "Training" label + no minutes (MD tag already in the day header)
-          const evtName   = cat === 'training' ? tt('calendar.filter_training','Training') : (s.title || s.session_type || cat);
+          const evtName   = isOutdoorTrain ? evtTypeLabel(s.session_type)
+                          : cat === 'training' ? tt('calendar.filter_training','Training')
+                          : (s.title || s.session_type || cat);
           const durSuffix = cat === 'training' ? '' : dur;
           // AU hidden in player view (staff-only metric)
           const au = (!isPlayerView && s.duration && s.estimated_rpe)
@@ -2066,7 +2148,7 @@ function renderGrid() {
           const leadEl = (cat === 'match' && s.rival_crest_url)
             ? `<img src="${s.rival_crest_url}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
             : `<i class="ti ${icon}"></i>`;
-          return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
+          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + s.session_type : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
             <span class="name" title="${evtName + durSuffix}">${evtName}${durSuffix}</span>${au}
@@ -2550,7 +2632,7 @@ const CAL_EVT_TYPES = [
 ];
 
 const DURATION_DEFAULTS = {
-  training:90, tactical:90, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
+  training:90, tactical:90, beach:75, outdoor:75, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
   breakfast:45, lunch:60, dinner:60,
   hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
   press:30, medical_check:30, walkthrough:30, scouting:60,
@@ -2654,7 +2736,7 @@ function toggleMatchFields(type) {
 
 function toggleRpeRow(type) {
   const el = document.getElementById('calEvtRpeRow');
-  if (el) el.style.display = (type === 'training' || type === 'tactical' || type === 'gym' || type === 'conditioning' || type === 'match') ? '' : 'none';
+  if (el) el.style.display = (type === 'training' || type === 'tactical' || type === 'beach' || type === 'outdoor' || type === 'gym' || type === 'conditioning' || type === 'match') ? '' : 'none';
 }
 
 function updateAuPreview() {
@@ -2777,6 +2859,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
     typeSel.appendChild(opt);
     typeSel.value = evtType;
   }
+  calSyncTypeTrigger();
   document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
 
   // Duration: use saved value, or apply default for new events
@@ -2921,7 +3004,7 @@ const EVT_TYPE_LABELS_EN = {
   bus_departure:'Bus departure', bus_arrival:'Bus arrival',
   press:'Press conference', medical_check:'Medical check',
   walkthrough:'Walkthrough', scouting:'Scouting', day_off:'Day off', other:'Other',
-  conditioning:'Training',
+  conditioning:'Training', beach:'Beach session', outdoor:'Outdoor endurance',
 };
 const EVT_TYPE_KEY = {
   training:'calendar.filter_training', tactical:'calendar.filter_training', gym:'calendar.type_gym', match:'calendar.type_match', recovery:'calendar.type_recovery', travel:'calendar.type_travel',
@@ -2931,7 +3014,7 @@ const EVT_TYPE_KEY = {
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting', day_off:'calendar.type_day_off', other:'calendar.type_other',
-  conditioning:'calendar.filter_training',
+  conditioning:'calendar.filter_training', beach:'calendar.type_beach', outdoor:'calendar.type_outdoor',
 };
 function evtTypeLabel(type) {
   const key = EVT_TYPE_KEY[type];
@@ -2949,7 +3032,7 @@ function showEvtPopover(anchor, session) {
   closeEvtPopover();
   const isPlayerView = _calView === 'player';
   const cat    = focusToClass(session.session_type);
-  const icon   = EVT_ICONS[cat] || 'ti-calendar';
+  const icon   = (session.session_type === 'beach' || session.session_type === 'outdoor') ? EVT_ICONS[session.session_type] : (EVT_ICONS[cat] || 'ti-calendar');
   const typeLabel = evtTypeLabel(session.session_type) || session.session_type || '';
   const title  = session.title || typeLabel;
   const date   = session.session_date;
@@ -3599,7 +3682,7 @@ async function saveEvt() {
   if (!type) { showCalToast(tt('calendar.pick_event_type','Pick an event type')); saving.style.display='none'; saveBtn.disabled=false; return; }
   if (!title) { showCalToast(tt('calendar.title_required','Title is required.')); saving.style.display='none'; saveBtn.disabled=false; return; }
   // Field (load) sessions require a start time: dedup + double-session (AM/PM) key on it.
-  if (type === 'training' && !startTimeVal) { showCalToast(tt('calendar.field_time_required','A start time is required for field training sessions.')); saving.style.display='none'; saveBtn.disabled=false; return; }
+  if ((type === 'training' || type === 'beach' || type === 'outdoor') && !startTimeVal) { showCalToast(tt('calendar.field_time_required','A start time is required for field training sessions.')); saving.style.display='none'; saveBtn.disabled=false; return; }
 
   // Validation: day_off conflict (soft)
   if (type === 'day_off' && !_editEvtId) {
@@ -3808,7 +3891,86 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   if (durWrap) durWrap.style.display = (t === 'day_off' || t === 'match') ? 'none' : '';
   // Update visible-to defaults to match new type (only on new events)
   if (!_editEvtId) setVisibleToDefaults(t);
+  calSyncTypeTrigger();
 });
+
+// ── Event-type picker (visual card grid) ──────────────────────────
+// The <select id="calEvtF_type"> stays as the functional source of truth; this only skins it.
+const TYPE_ICONS = {
+  training:'ti-soccer-field', beach:'ti-beach', outdoor:'ti-run', gym:'ti-barbell',
+  recovery:'ti-heart-rate-monitor', walkthrough:'ti-walk',
+  match:'ti-ball-football', scouting:'ti-binoculars',
+  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
+  hotel_checkin:'ti-login', hotel_checkout:'ti-logout',
+  bus_departure:'ti-bus', bus_arrival:'ti-bus', travel:'ti-plane',
+  press:'ti-microphone', medical_check:'ti-stethoscope', meeting:'ti-users',
+  evaluation:'ti-clipboard-list', video_session:'ti-device-desktop',
+  day_off:'ti-bed', other:'ti-dots',
+};
+function calSyncTypeTrigger() {
+  const sel = document.getElementById('calEvtF_type');
+  const icoEl = document.getElementById('calEvtTypeTrigIcon');
+  const lblEl = document.getElementById('calEvtTypeTrigLabel');
+  if (!sel || !lblEl) return;
+  const val = sel.value;
+  const opt = sel.options[sel.selectedIndex];
+  if (icoEl) icoEl.className = 'ti ' + (TYPE_ICONS[val] || 'ti-calendar');
+  lblEl.removeAttribute('data-i18n');   // stop i18n from re-overwriting the dynamic label
+  lblEl.textContent = opt ? opt.textContent : (evtTypeLabel(val) || val);
+}
+function calBuildTypePop() {
+  const sel  = document.getElementById('calEvtF_type');
+  const body = document.getElementById('calTypePopBody');
+  if (!sel || !body) return;
+  let html = '';
+  sel.querySelectorAll('optgroup').forEach(og => {
+    const cards = Array.from(og.querySelectorAll('option')).map(o => {
+      const v = o.value;
+      return `<button type="button" class="cal-typecard" data-val="${v}">
+        <i class="ti ${TYPE_ICONS[v] || 'ti-calendar'}"></i>
+        <span>${_esc(o.textContent)}</span>
+      </button>`;
+    }).join('');
+    html += `<div class="cal-typegroup">
+      <div class="cal-typegroup-label">${_esc(og.label)}</div>
+      <div class="cal-typegrid">${cards}</div>
+    </div>`;
+  });
+  body.innerHTML = html;
+  body.querySelectorAll('.cal-typecard').forEach(card => {
+    card.addEventListener('click', () => {
+      const v = card.dataset.val;
+      if (sel.value !== v) { sel.value = v; sel.dispatchEvent(new Event('change')); }
+      else { calSyncTypeTrigger(); }
+      calCloseTypePop();
+    });
+  });
+}
+function calOpenTypePop() {
+  const sel = document.getElementById('calEvtF_type');
+  calBuildTypePop();
+  const cur = sel ? sel.value : '';
+  document.querySelectorAll('#calTypePopBody .cal-typecard').forEach(c =>
+    c.classList.toggle('is-selected', c.dataset.val === cur));
+  const bd = document.getElementById('calTypePopBackdrop');
+  bd.classList.add('is-open');
+  document.getElementById('calEvtTypeTrigger')?.setAttribute('aria-expanded', 'true');
+  const selCard = bd.querySelector('.cal-typecard.is-selected') || bd.querySelector('.cal-typecard');
+  setTimeout(() => selCard?.focus(), 30);
+}
+function calCloseTypePop() {
+  document.getElementById('calTypePopBackdrop')?.classList.remove('is-open');
+  document.getElementById('calEvtTypeTrigger')?.setAttribute('aria-expanded', 'false');
+}
+document.getElementById('calEvtTypeTrigger')?.addEventListener('click', calOpenTypePop);
+document.getElementById('calTypePopClose')?.addEventListener('click', calCloseTypePop);
+document.getElementById('calTypePopBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) calCloseTypePop(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('calTypePopBackdrop')?.classList.contains('is-open')) {
+    e.stopPropagation(); calCloseTypePop();
+  }
+}, true);
+
 document.getElementById('calEvtF_duration').addEventListener('input', updateAuPreview);
 document.getElementById('calEvtF_rpe').addEventListener('change', updateAuPreview);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });

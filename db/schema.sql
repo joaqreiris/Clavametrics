@@ -2265,7 +2265,7 @@ create table if not exists public.training_sessions (
   recurrence_group_id uuid,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
-  constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'other'::text])))
+  constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'beach'::text, 'outdoor'::text, 'other'::text])))
 );
 CREATE INDEX training_sessions_club_id_idx ON public.training_sessions USING btree (club_id);
 CREATE INDEX training_sessions_type_idx ON public.training_sessions USING btree (club_id, session_type);

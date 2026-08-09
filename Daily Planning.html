@@ -2119,7 +2119,10 @@ async function dpAutoSaveSession() {
   if (dotEl)  dotEl.style.background = 'var(--cm-warning)';
   if (statEl) statEl.textContent = tt('daily_planning.saving','Saving…');
 
-  const typeVal = 'training';
+  // Preserve the existing session_type when editing (beach / outdoor / tactical …); only new
+  // sessions created from here default to 'training'. Never re-tag a non-field session as 'training'.
+  const _curSess = (_dpDaySessions || []).find(s => s.id === _dpCurrentSessionId);
+  const typeVal = (_curSess && _curSess.session_type && _curSess.session_type !== 'gym') ? _curSess.session_type : 'training';
   const nameVal = document.getElementById('dpSessionTitle')?.value?.trim();
   const title   = nameVal || 'Training';
   const startVal = document.getElementById('dpStartTime')?.value || null;
