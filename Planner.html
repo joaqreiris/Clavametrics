@@ -4210,7 +4210,10 @@
     let _previewBlob = null;
     try {
       fc.discardActiveObject(); fc.renderAll();              // no selection handles
-      const W = fc.getWidth(), H = fc.getHeight(), SCALE = 2;
+      // Cap export size: thumbnails render ~150px and the lightbox never exceeds
+      // ~1000px, so an unbounded 2× canvas on large screens just ships pixels
+      // nobody sees. Keep 2× on small fields, downscale so width tops out at 1000px.
+      const W = fc.getWidth(), H = fc.getHeight(), SCALE = Math.min(2, 1000 / W);
       const out = document.createElement('canvas');
       out.width = Math.round(W * SCALE); out.height = Math.round(H * SCALE);
       const ctx = out.getContext('2d');
