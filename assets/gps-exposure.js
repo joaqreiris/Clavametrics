@@ -29,6 +29,7 @@
   ];
   const WEEKS_SHOWN   = 6;   // sparkline length
   const BASELINE_WEEKS = 4;  // trailing weeks used as baseline
+  const MIN_BASELINE_WEEKS = 2;   // need this many complete in-season weeks before a % is trustworthy
 
   // ── utils ─────────────────────────────────────────────────────────────────
   function esc(s) {
@@ -158,10 +159,28 @@
     });
   }
 
+  // Baseline anchored to the season start. Only *complete* weeks that begin on or
+  // after seasonStart count — a week straddling the season boundary (or before it)
+  // is dropped, so a fresh season can't inflate deltas off one stray day. weeks[i]
+  // aligns with series[i]; index 0 = current, 1..BASELINE_WEEKS = the baseline.
+  function baselineStats(series, weeks, seasonStart) {
+    const vals = [];
+    for (let i = 1; i <= BASELINE_WEEKS && i < weeks.length; i++) {
+      if (seasonStart && weeks[i] && weeks[i].start < seasonStart) continue;   // pre-season week
+      const v = series[i];
+      if (v != null && isFinite(v)) vals.push(v);
+    }
+    const baseline = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    // With a known season, readiness = enough complete in-season weeks. Without one,
+    // fall back to "any baseline week has data" (legacy behaviour).
+    const ready = seasonStart ? vals.length >= MIN_BASELINE_WEEKS : vals.length > 0;
+    return { baseline, weeksUsed: vals.length, ready };
+  }
+
   // ── compute (reusable; no DOM) ──────────────────────────────────────────────
   // Returns { ok, athletes, sessions, tiles:[{key,label,unit,fmt,current,baseline,
   //           delta,spark[]}] } for the squad (level 'squad') or one player.
-  async function compute({ clubId, players, refDate, level, playerId }) {
+  async function compute({ clubId, players, refDate, level, playerId, seasonStart }) {
     const ref = refDate || iso(new Date());
     const from = offset(ref, -(7 * WEEKS_SHOWN + 1));
     const playerIds = new Set((players || []).map(p => p.id));
@@ -176,31 +195,37 @@
       weeks.push({ start: offset(ref, -(7 * w + 6)), end: offset(ref, -(7 * w)) });
 
     // Distinct sessions per week window (0=current … oldest) — feeds baseline
-    // confidence: a low-session baseline makes 'sum' deltas explode.
+    // confidence when there's no season anchor to lean on.
     const weekSessions = weeks.map(w =>
       new Set(rows.filter(r => r.date >= w.start && r.date <= w.end).map(r => r.session_id)).size);
     const baseSess = weekSessions.slice(1, 1 + BASELINE_WEEKS);
+
+    // How many complete baseline weeks actually fall inside the season.
+    let baseWeeksInSeason = 0;
+    for (let i = 1; i <= BASELINE_WEEKS && i < weeks.length; i++)
+      if ((!seasonStart || weeks[i].start >= seasonStart) && weekSessions[i] > 0) baseWeeksInSeason++;
 
     const pid = level === 'player' ? playerId : null;
     const tiles = METRICS.map(m => {
       const series = weeklySeries(rowsByPlayer, weeks, m, pid);   // 0=current … oldest
       const current = series[0];
-      const baseVals = series.slice(1, 1 + BASELINE_WEEKS).filter(v => v != null && isFinite(v));
-      const baseline = baseVals.length ? baseVals.reduce((s, v) => s + v, 0) / baseVals.length : null;
-      const delta = (current != null && baseline) ? (current - baseline) / baseline * 100 : null;
+      const { baseline, weeksUsed, ready } = baselineStats(series, weeks, seasonStart);
+      const delta = (ready && current != null && baseline) ? (current - baseline) / baseline * 100 : null;
       return { key: m.key, label: m.label, unit: m.unit, fmt: m.fmt, agg: m.agg, current, baseline, delta,
-        baseWeeks: baseVals.length, spark: [...series].reverse() };   // oldest → newest
+        baseWeeks: weeksUsed, ready, spark: [...series].reverse() };   // oldest → newest
     });
     const sessions = new Set(rows.map(r => r.session_id)).size;
+    const baselineReady = seasonStart ? baseWeeksInSeason >= MIN_BASELINE_WEEKS : tiles.some(t => t.ready);
     return { ok: true, athletes: Object.keys(rowsByPlayer).length, sessions, tiles, fmtVal,
       weekSessions, curSessions: weekSessions[0],
-      baseSessionsAvg: baseSess.length ? baseSess.reduce((s, v) => s + v, 0) / baseSess.length : 0 };
+      baseSessionsAvg: baseSess.length ? baseSess.reduce((s, v) => s + v, 0) / baseSess.length : 0,
+      seasonStart: seasonStart || null, baseWeeksInSeason, minBaselineWeeks: MIN_BASELINE_WEEKS, baselineReady };
   }
 
   // ── metric detail (per-player breakdown for one metric) ─────────────────────
   // Powers the drill-in modal: reveals WHO drives a squad delta and whether the
   // baseline is thin. Reuses the same fetch/aggregation as compute().
-  async function metricDetail({ clubId, players, refDate, metricKey }) {
+  async function metricDetail({ clubId, players, refDate, metricKey, seasonStart }) {
     const metric = METRICS.find(m => m.key === metricKey);
     if (!metric) return { ok: false };
     const ref = refDate || iso(new Date());
@@ -223,28 +248,30 @@
     const nameById = {};
     (players || []).forEach(p => { nameById[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Player'; });
 
-    const baseAvg = arr => { const v = arr.slice(1, 1 + BASELINE_WEEKS).filter(x => x != null && isFinite(x));
-      return v.length ? { val: v.reduce((s, x) => s + x, 0) / v.length, n: v.length } : { val: null, n: 0 }; };
-
     const per = Object.keys(rowsByPlayer)
       .filter(id => !players || playerIds.has(id))
       .map(id => {
         const s = weeklySeries(rowsByPlayer, weeks, metric, id);
-        const current = s[0], b = baseAvg(s);
-        const delta = (current != null && b.val) ? (current - b.val) / b.val * 100 : null;
-        return { id, name: nameById[id] || 'Player', current, baseline: b.val, delta, spark: [...s].reverse() };
+        const current = s[0], b = baselineStats(s, weeks, seasonStart);
+        const delta = (b.ready && current != null && b.baseline) ? (current - b.baseline) / b.baseline * 100 : null;
+        return { id, name: nameById[id] || 'Player', current, baseline: b.baseline, delta, spark: [...s].reverse() };
       })
       .sort((a, b) => (b.current || 0) - (a.current || 0));   // top contributors first
 
-    const sb = baseAvg(squadSeries);
+    const sb = baselineStats(squadSeries, weeks, seasonStart);
     const current = squadSeries[0];
-    const delta = (current != null && sb.val) ? (current - sb.val) / sb.val * 100 : null;
+    const delta = (sb.ready && current != null && sb.baseline) ? (current - sb.baseline) / sb.baseline * 100 : null;
+    // First season week that anchors the baseline (for the chart marker).
+    const seasonWeekIdx = seasonStart ? weeks.findIndex(w => w.start >= seasonStart) : -1;
     const baseSess = weekSessions.slice(1, 1 + BASELINE_WEEKS);
     return { ok: true, metric,
       series: [...squadSeries].reverse(), weekSessions: [...weekSessions].reverse(),   // oldest → newest
-      current, baseline: sb.val, delta, baseWeeks: sb.n, per, fmtVal,
+      current, baseline: sb.baseline, delta, baseWeeks: sb.weeksUsed, ready: sb.ready, per, fmtVal,
       curSessions: weekSessions[0],
-      baseSessionsAvg: baseSess.length ? baseSess.reduce((s, v) => s + v, 0) / baseSess.length : 0 };
+      baseSessionsAvg: baseSess.length ? baseSess.reduce((s, v) => s + v, 0) / baseSess.length : 0,
+      seasonStart: seasonStart || null,
+      seasonWeekIdxFromNewest: seasonWeekIdx >= 0 ? (WEEKS_SHOWN - 1 - seasonWeekIdx) : -1,
+      minBaselineWeeks: MIN_BASELINE_WEEKS };
   }
 
   // ── render (standalone card; used when NOT embedding in a custom layout) ─────

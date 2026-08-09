@@ -61,10 +61,31 @@
   }
 
   // ── state ─────────────────────────────────────────────────────────────────
-  const state = { clubId:null, teamId:null, players:[], refDate:iso(new Date()),
+  const state = { clubId:null, teamId:null, players:[], refDate:iso(new Date()), seasonStart:null,
     metric:'srpe', model:'ewma', coupled:false, availWindow:7, chart:null,
     lastSquad:null, lastStress:null, lastExposure:null,
     catalog:[], cols:[], signalSet:[], sortKey:'risk', sortDir:'desc', availRows:[] };
+
+  // Active season start anchors the GPS-exposure baseline (so a fresh season isn't
+  // compared against stray pre-season days). Prefer a season scoped to the active
+  // team that contains refDate; fall back to a club-wide one, else the latest.
+  async function loadSeason(){
+    state.seasonStart=null;
+    if(!state.clubId) return;
+    try{
+      const { data } = await sb().from('seasons')
+        .select('start_date,end_date,status,team_id').eq('club_id',state.clubId).eq('status','active')
+        .order('start_date',{ascending:false});
+      const rows=(data||[]).filter(s=>s.start_date);
+      if(!rows.length) return;
+      const ref=state.refDate, covers=s=>s.start_date<=ref && (!s.end_date||s.end_date>=ref);
+      const pick = rows.find(s=>s.team_id===state.teamId && covers(s))
+        || rows.find(s=>!s.team_id && covers(s))
+        || rows.find(s=>s.team_id===state.teamId)
+        || rows.find(covers) || rows[0];
+      state.seasonStart = pick ? pick.start_date : null;
+    }catch{ state.seasonStart=null; }
+  }
 
   function metricKey(){ return METRIC_MAP[state.metric] || 'srpe_load'; }
   function metricLabel(){ const m=window.gpsACWR?.getMetric(metricKey()); return tt('load_monitor.metric_'+state.metric, m? m.label : 's-RPE'); }
@@ -159,7 +180,7 @@
   async function renderExposure(){
     const grid=$('gpsGrid'), empty=$('gpsEmpty'); if(!grid) return;
     let res;
-    try { res = await window.gpsExposure.compute({ clubId:state.clubId, players:state.players, refDate:state.refDate, level:'squad' }); }
+    try { res = await window.gpsExposure.compute({ clubId:state.clubId, players:state.players, refDate:state.refDate, level:'squad', seasonStart:state.seasonStart }); }
     catch { res=null; }
     state.lastExposure = (res&&res.ok)? res : null;
     if(!res || !res.ok){
@@ -170,23 +191,32 @@
     }
     if(empty) empty.style.display='none';
     const fmt=res.fmtVal||window.gpsExposure.fmtVal;
-    // Baseline confidence: a thin baseline (few weeks/sessions logged) inflates
-    // 'sum' deltas — a data-logging artifact, not a real spike. Flag it so a
-    // +550% doesn't read as an emergency.
-    const weak = exposureLowConfidence(res);
+    // Baseline readiness. With a season anchor (baselineReady), the % only shows once
+    // enough complete in-season weeks exist — until then it's "building". Without a
+    // season, fall back to the thin-baseline heuristic so a low base can't fake a spike.
+    const building = !res.baselineReady;
+    const weak = !building && !res.seasonStart && exposureLowConfidence(res);
+    const buildTxt = `${res.baseWeeksInSeason||0}/${res.minBaselineWeeks||2}`;
     grid.innerHTML = res.tiles.map(t=>{
       const d=t.delta;
       const suspect = weak && t.agg!=='mean' && d!=null && d>=100;   // volume metric on a thin baseline
-      const dCls = suspect?'flat': d==null?'flat': d>=2?'up': d<=-2?'down':'flat';
-      const dIco = suspect?'ti-alert-triangle': d==null?'ti-minus': d>=2?'ti-trending-up': d<=-2?'ti-trending-down':'ti-minus';
-      const dTxt = d==null?'—':(d>0?'+':'')+d.toFixed(0)+'%';
+      let chip;
+      if(building){
+        chip=`<span class="lm-delta flat" title="${esc(tt('load_monitor.exp_building_tip','Baseline still building — weeks since season start'))}"><i class="ti ti-progress"></i>${esc(buildTxt)}</span>`;
+      }else{
+        const dCls = suspect?'flat': d==null?'flat': d>=2?'up': d<=-2?'down':'flat';
+        const dIco = suspect?'ti-alert-triangle': d==null?'ti-minus': d>=2?'ti-trending-up': d<=-2?'ti-trending-down':'ti-minus';
+        const dTxt = d==null?'—':(d>0?'+':'')+d.toFixed(0)+'%';
+        const dTitle = suspect ? esc(tt('load_monitor.exp_lowconf_delta','Baseline built on few sessions — this % is unreliable')) : '';
+        chip=`<span class="lm-delta ${dCls}"${dTitle?` title="${dTitle}"`:''}><i class="ti ${dIco}"></i>${dTxt}</span>`;
+      }
       const label = tt('load_monitor.exp_'+t.key, t.label);
-      const dTitle = suspect ? esc(tt('load_monitor.exp_lowconf_delta','Baseline built on few sessions — this % is unreliable')) : '';
+      const baseTxt = building ? esc(tt('load_monitor.exp_building','building…')) : fmt(t.baseline,t.fmt);
       return `<div class="lm-gps-cell" data-metric="${esc(t.key)}" role="button" tabindex="0" title="${esc(tt('load_monitor.exp_open','Open breakdown'))}">
-        <div class="top"><span class="lbl">${esc(label)}</span><span class="lm-delta ${dCls}"${dTitle?` title="${dTitle}"`:''}><i class="ti ${dIco}"></i>${dTxt}</span></div>
+        <div class="top"><span class="lbl">${esc(label)}</span>${chip}</div>
         <div class="val">${fmt(t.current,t.fmt)}${t.unit?`<small>${esc(t.unit)}</small>`:''}</div>
         ${spark(t.spark, accent(), 34)}
-        <div class="base"><span>${esc(tt('load_monitor.exp_baseline','baseline'))}</span><span>${fmt(t.baseline,t.fmt)}</span></div>
+        <div class="base"><span>${esc(tt('load_monitor.exp_baseline','baseline'))}</span><span>${baseTxt}</span></div>
       </div>`;
     }).join('');
     // wire drill-in
@@ -197,7 +227,13 @@
     });
     try{ const card=cardOf('gpsGrid');
       const subBase=tt('load_monitor.exp_sub', `Weekly totals vs 4-week baseline · ${offset(state.refDate,-6)} → ${state.refDate}`, { from:offset(state.refDate,-6), to:state.refDate });
-      setSub(card, weak ? subBase+' · '+tt('load_monitor.exp_thin_baseline','⚠ thin baseline') : subBase);
+      let sub=subBase;
+      if(building){
+        sub += ' · ' + (res.seasonStart
+          ? tt('load_monitor.exp_building_sub', `⏳ baseline building · ${res.baseWeeksInSeason||0}/${res.minBaselineWeeks} wks since season start ${res.seasonStart}`, { have:res.baseWeeksInSeason||0, need:res.minBaselineWeeks, date:res.seasonStart })
+          : tt('load_monitor.exp_building_sub_nos', '⏳ baseline building · not enough history yet'));
+      } else if(weak){ sub += ' · ' + tt('load_monitor.exp_thin_baseline','⚠ thin baseline'); }
+      setSub(card, sub);
       setPill(card, tt('load_monitor.exp_pill', `${res.athletes} athletes · ${res.sessions} sessions`, { athletes:res.athletes, sessions:res.sessions }), false);
     }catch(e){}
   }
@@ -271,7 +307,13 @@
     const labs=vals.map((v,i)=>{ const cx=padX+gap*i+gap/2; const back=n-1-i;
       const lb=back===0?tt('load_monitor.exp_wk_now','now'):('−'+back+'w');
       return `<text class="lmx-cap" x="${cx.toFixed(1)}" y="${H-6}" text-anchor="middle">${esc(lb)}</text>`;}).join('');
-    return `<div class="lmx-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${baseLine}${bars}${labs}</svg></div>`;
+    // Season-start marker: dashed vertical line at the left edge of the first in-season week.
+    let seasonMark='';
+    const si=d.seasonWeekIdxFromNewest;
+    if(si!=null && si>0 && si<n){ const mx=padX+gap*si;
+      seasonMark=`<line x1="${mx.toFixed(1)}" y1="0" x2="${mx.toFixed(1)}" y2="${chartH}" stroke="${cssVar('--cm-fg-faint','#9aa')}" stroke-width="1" stroke-dasharray="2 3"/>
+        <text class="lmx-cap" x="${(mx+3).toFixed(1)}" y="10" text-anchor="start" fill="${cssVar('--cm-fg-faint','#9aa')}">${esc(tt('load_monitor.exp_season_start','season start'))}</text>`; }
+    return `<div class="lmx-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${seasonMark}${baseLine}${bars}${labs}</svg></div>`;
   }
 
   async function openExposureModal(metricKey){
@@ -286,7 +328,7 @@
     document.addEventListener('keydown', onKey);
 
     let d;
-    try{ d=await window.gpsExposure.metricDetail({ clubId:state.clubId, players:state.players, refDate:state.refDate, metricKey }); }
+    try{ d=await window.gpsExposure.metricDetail({ clubId:state.clubId, players:state.players, refDate:state.refDate, metricKey, seasonStart:state.seasonStart }); }
     catch{ d=null; }
     if(!ov.isConnected) return;
     const fmt=(d&&d.fmtVal)||window.gpsExposure.fmtVal;
@@ -298,23 +340,33 @@
       ov.querySelector('.lmx-x').addEventListener('click', close); return;
     }
 
-    const weak=exposureLowConfidence(d);
+    const building = !d.ready;
+    const weak = !building && !d.seasonStart && exposureLowConfidence(d);
     const dv=d.delta, dCls=dv==null?'flat':dv>=2?'up':dv<=-2?'down':'flat';
     const isMean=d.metric.agg==='mean';
     const dTxt=dv==null?'—':(dv>0?'+':'')+dv.toFixed(0)+'%';
     const unit=d.metric.unit?` ${esc(d.metric.unit)}`:'';
-    const scope=tt('load_monitor.exp_modal_scope', `Squad · last 7 days vs ${d.baseWeeks}-wk baseline`, { n:d.baseWeeks });
+    const scope = building
+      ? (d.seasonStart
+          ? tt('load_monitor.exp_modal_scope_build', `Squad · baseline building ${d.baseWeeks}/${d.minBaselineWeeks} wks since season start`, { have:d.baseWeeks, need:d.minBaselineWeeks })
+          : tt('load_monitor.exp_modal_scope_nos', 'Squad · not enough history for a baseline yet'))
+      : tt('load_monitor.exp_modal_scope', `Squad · last 7 days vs ${d.baseWeeks}-wk baseline`, { n:d.baseWeeks });
 
-    const warn = (weak && !isMean) ? `<div class="lmx-warn"><i class="ti ti-alert-triangle"></i><span>${esc(
-      tt('load_monitor.exp_lowconf', `Thin baseline: prior weeks logged ~${d.baseSessionsAvg.toFixed(1)} sessions vs ${d.curSessions} this week. Summed totals jump for a data-logging reason, so the % overstates the real change. Compare per-player rows below instead.`,
-        { base:d.baseSessionsAvg.toFixed(1), cur:d.curSessions }))}</span></div>` : '';
+    const warn = building
+      ? `<div class="lmx-warn"><i class="ti ti-progress"></i><span>${esc( d.seasonStart
+          ? tt('load_monitor.exp_building_note', `Season started ${d.seasonStart}. The baseline needs ${d.minBaselineWeeks} complete weeks before a % is shown — you have ${d.baseWeeks} so far. Until then, read the raw weekly bars and per-player rows below.`,
+              { date:d.seasonStart, need:d.minBaselineWeeks, have:d.baseWeeks })
+          : tt('load_monitor.exp_building_note_nos','Not enough logged history yet to build a baseline. Read the raw weekly bars and per-player rows below.') )}</span></div>`
+      : (weak && !isMean) ? `<div class="lmx-warn"><i class="ti ti-alert-triangle"></i><span>${esc(
+          tt('load_monitor.exp_lowconf', `Thin baseline: prior weeks logged ~${d.baseSessionsAvg.toFixed(1)} sessions vs ${d.curSessions} this week. Summed totals jump for a data-logging reason, so the % overstates the real change. Compare per-player rows below instead.`,
+            { base:d.baseSessionsAvg.toFixed(1), cur:d.curSessions }))}</span></div>` : '';
 
     const eq=`<div class="lmx-eq">
       <span>${esc(tt('load_monitor.exp_now','This week'))} <b>${esc(fmt(d.current,d.metric.fmt))}${unit}</b></span>
       <span>−</span>
-      <span>${esc(tt('load_monitor.exp_baseline','baseline'))} <b>${esc(fmt(d.baseline,d.metric.fmt))}${unit}</b></span>
+      <span>${esc(tt('load_monitor.exp_baseline','baseline'))} <b>${building?esc(tt('load_monitor.exp_building','building…')):esc(fmt(d.baseline,d.metric.fmt))+unit}</b></span>
       <span>=</span>
-      <span class="d ${dCls}">${dTxt}</span>
+      <span class="d ${building?'flat':dCls}">${building?'—':dTxt}</span>
       <span style="color:var(--cm-fg-faint)">· ${esc(isMean?tt('load_monitor.exp_agg_mean','per-session average'):tt('load_monitor.exp_agg_sum','squad total'))}</span>
     </div>`;
 
@@ -744,7 +796,7 @@
     const saved=sessionStorage.getItem('cal_active_team');
     state.teamId=(saved&&teams.some(t=>t.id===saved))?saved:teams[0].id;
     sel.innerHTML=teams.map(t=>`<option value="${t.id}" ${t.id===state.teamId?'selected':''}>${esc(t.name)}</option>`).join('');
-    sel.addEventListener('change', async ()=>{ state.teamId=sel.value; sessionStorage.setItem('cal_active_team',state.teamId); await loadPlayers(); await loadAll(); });
+    sel.addEventListener('change', async ()=>{ state.teamId=sel.value; sessionStorage.setItem('cal_active_team',state.teamId); await loadSeason(); await loadPlayers(); await loadAll(); });
   }
 
   function wireControls(){
@@ -808,6 +860,7 @@
     state.signalSet = loadSignalSet();
 
     await initTeamSwitch();
+    await loadSeason();
     await loadPlayers();
     wireControls();
     await loadAll();
