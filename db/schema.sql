@@ -3794,9 +3794,11 @@ begin
 end; $function$
 ;
 
--- Birthday reminders: one notification per club staff member the day BEFORE and the day OF
--- each active player's birthday. Idempotent (guarded by same-day + same-title) so a daily
--- cron can run it safely. Scheduled via pg_cron (see the cron.schedule setup, run once).
+-- Birthday reminders: one notification per staff member the day BEFORE and the day OF
+-- each active player's birthday. Scoped BY TEAM — a staff member is only notified about
+-- players on one of THEIR teams (member_teams ↔ player_teams); admins/owners keep the
+-- club-wide view. Idempotent (guarded by same-day + same-title) so a daily cron can run
+-- it safely. Scheduled via pg_cron (see the cron.schedule setup, run once).
 CREATE OR REPLACE FUNCTION public.notify_player_birthdays()
  RETURNS void
  LANGUAGE plpgsql
@@ -3835,6 +3837,17 @@ begin
     and pl.archived_at is null
     and m.d is not null
     and nc.nm is not null
+    -- Team scoping: admins/owners see the whole club; everyone else only their teams.
+    and (
+      lower(coalesce(pr.role,'')) in ('admin','owner')
+      or exists (
+        select 1
+        from public.player_teams pt
+        join public.member_teams mt on mt.team_id = pt.team_id
+        where pt.player_id = pl.id
+          and mt.profile_id = pr.id
+      )
+    )
     and not exists (
       select 1 from public.notifications n
       where n.user_id = pr.id
