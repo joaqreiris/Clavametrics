@@ -170,23 +170,188 @@
     }
     if(empty) empty.style.display='none';
     const fmt=res.fmtVal||window.gpsExposure.fmtVal;
+    // Baseline confidence: a thin baseline (few weeks/sessions logged) inflates
+    // 'sum' deltas — a data-logging artifact, not a real spike. Flag it so a
+    // +550% doesn't read as an emergency.
+    const weak = exposureLowConfidence(res);
     grid.innerHTML = res.tiles.map(t=>{
       const d=t.delta;
-      const dCls = d==null?'flat': d>=2?'up': d<=-2?'down':'flat';
-      const dIco = d==null?'ti-minus': d>=2?'ti-trending-up': d<=-2?'ti-trending-down':'ti-minus';
+      const suspect = weak && t.agg!=='mean' && d!=null && d>=100;   // volume metric on a thin baseline
+      const dCls = suspect?'flat': d==null?'flat': d>=2?'up': d<=-2?'down':'flat';
+      const dIco = suspect?'ti-alert-triangle': d==null?'ti-minus': d>=2?'ti-trending-up': d<=-2?'ti-trending-down':'ti-minus';
       const dTxt = d==null?'—':(d>0?'+':'')+d.toFixed(0)+'%';
       const label = tt('load_monitor.exp_'+t.key, t.label);
-      return `<div class="lm-gps-cell">
-        <div class="top"><span class="lbl">${esc(label)}</span><span class="lm-delta ${dCls}"><i class="ti ${dIco}"></i>${dTxt}</span></div>
+      const dTitle = suspect ? esc(tt('load_monitor.exp_lowconf_delta','Baseline built on few sessions — this % is unreliable')) : '';
+      return `<div class="lm-gps-cell" data-metric="${esc(t.key)}" role="button" tabindex="0" title="${esc(tt('load_monitor.exp_open','Open breakdown'))}">
+        <div class="top"><span class="lbl">${esc(label)}</span><span class="lm-delta ${dCls}"${dTitle?` title="${dTitle}"`:''}><i class="ti ${dIco}"></i>${dTxt}</span></div>
         <div class="val">${fmt(t.current,t.fmt)}${t.unit?`<small>${esc(t.unit)}</small>`:''}</div>
         ${spark(t.spark, accent(), 34)}
         <div class="base"><span>${esc(tt('load_monitor.exp_baseline','baseline'))}</span><span>${fmt(t.baseline,t.fmt)}</span></div>
       </div>`;
     }).join('');
+    // wire drill-in
+    grid.querySelectorAll('.lm-gps-cell[data-metric]').forEach(cell=>{
+      const open=()=>openExposureModal(cell.dataset.metric);
+      cell.addEventListener('click', open);
+      cell.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+    });
     try{ const card=cardOf('gpsGrid');
-      setSub(card, tt('load_monitor.exp_sub', `Weekly totals vs 4-week baseline · ${offset(state.refDate,-6)} → ${state.refDate}`, { from:offset(state.refDate,-6), to:state.refDate }));
+      const subBase=tt('load_monitor.exp_sub', `Weekly totals vs 4-week baseline · ${offset(state.refDate,-6)} → ${state.refDate}`, { from:offset(state.refDate,-6), to:state.refDate });
+      setSub(card, weak ? subBase+' · '+tt('load_monitor.exp_thin_baseline','⚠ thin baseline') : subBase);
       setPill(card, tt('load_monitor.exp_pill', `${res.athletes} athletes · ${res.sessions} sessions`, { athletes:res.athletes, sessions:res.sessions }), false);
     }catch(e){}
+  }
+
+  // Thin-baseline heuristic: baseline weeks averaged < 2 logged sessions, or the
+  // current week has ≥2× the baseline's session count (so summed volume jumps for
+  // a logging reason, not a training one).
+  function exposureLowConfidence(res){
+    const b=res.baseSessionsAvg||0, c=res.curSessions||0;
+    return b < 2 || (b > 0 && c >= 2*b);
+  }
+
+  // ── GPS exposure drill-in modal ─────────────────────────────────────────────
+  function exposureModalStyles(){
+    if($('lmExpModalStyles')) return;
+    const css=`
+    .lmx-ov{position:fixed;inset:0;z-index:var(--cm-z-modal,1000);display:flex;align-items:center;justify-content:center;
+      padding:24px;background:color-mix(in srgb,var(--cm-bg) 40%,rgba(0,0,0,.55));backdrop-filter:saturate(140%) blur(3px);}
+    .lmx{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5,16px);box-shadow:var(--cm-shadow-3,0 20px 60px rgba(0,0,0,.35));
+      width:min(760px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;}
+    .lmx-head{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--cm-border-soft);}
+    .lmx-head .tl{flex:1;min-width:0;}
+    .lmx-head h3{font:600 17px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);letter-spacing:-0.01em;}
+    .lmx-head .sc{margin-top:4px;font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);}
+    .lmx-x{border:0;background:var(--cm-bg-soft);color:var(--cm-fg-muted);width:30px;height:30px;border-radius:var(--cm-r-3);cursor:pointer;flex-shrink:0;font-size:16px;}
+    .lmx-x:hover{background:var(--cm-bg-sunk);color:var(--cm-fg);}
+    .lmx-body{padding:16px 20px 20px;overflow:auto;}
+    .lmx-eq{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;font:500 13px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);margin:2px 0 14px;}
+    .lmx-eq b{font-weight:700;color:var(--cm-fg-strong);}
+    .lmx-eq .d{font-weight:700;}
+    .lmx-eq .d.up{color:var(--cm-danger);} .lmx-eq .d.down{color:var(--cm-success);} .lmx-eq .d.flat{color:var(--cm-neutral);}
+    .lmx-warn{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:var(--cm-r-3);margin-bottom:14px;
+      background:var(--cm-warning-bg,color-mix(in srgb,var(--cm-warning) 12%,transparent));color:var(--cm-warning);font:500 12px/1.45 var(--cm-font-sans);}
+    .lmx-warn .ti{font-size:15px;flex-shrink:0;margin-top:1px;}
+    .lmx-chart{margin:6px 0 18px;}
+    .lmx-chart svg{width:100%;height:auto;display:block;overflow:visible;}
+    .lmx-cap{font:500 10.5px/1 var(--cm-font-mono);fill:var(--cm-fg-faint);}
+    .lmx-val{font:700 10.5px/1 var(--cm-font-mono);fill:var(--cm-fg-muted);}
+    .lmx-tbl{width:100%;border-collapse:collapse;font:500 12.5px/1.3 var(--cm-font-sans);}
+    .lmx-tbl th{text-align:right;font:600 10.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.04em;color:var(--cm-fg-faint);padding:0 8px 8px;border-bottom:1px solid var(--cm-border-soft);}
+    .lmx-tbl th:first-child{text-align:left;}
+    .lmx-tbl td{padding:8px;border-bottom:1px solid var(--cm-border-soft);text-align:right;color:var(--cm-fg);white-space:nowrap;}
+    .lmx-tbl td:first-child{text-align:left;color:var(--cm-fg-strong);font-weight:600;}
+    .lmx-tbl tr:last-child td{border-bottom:0;}
+    .lmx-tbl .sp{width:90px;} .lmx-tbl .sp svg{width:80px;height:20px;display:block;}
+    .lmx-d{font:700 11px/1 var(--cm-font-mono);}
+    .lmx-d.up{color:var(--cm-danger);} .lmx-d.down{color:var(--cm-success);} .lmx-d.flat{color:var(--cm-fg-faint);}
+    .lmx-sech{font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-faint);margin:4px 0 8px;}`;
+    const el=document.createElement('style'); el.id='lmExpModalStyles'; el.textContent=css; document.head.appendChild(el);
+  }
+
+  function exposureBarChart(d, fmt){
+    // Uniform-scale viewBox (meet) so value labels never distort.
+    const vals=d.series, n=vals.length, base=d.baseline;
+    const nums=vals.filter(v=>v!=null&&isFinite(v));
+    const W=720, chartH=118, botH=22, H=chartH+botH, padX=8, topPad=16;
+    const hi=Math.max(base||0, ...nums, 1), gap=(W-padX*2)/n, bw=Math.min(gap*0.5,56);
+    const y=v=>chartH-(v/hi)*(chartH-topPad);
+    const acc=accent(), muted=cssVar('--cm-fg-faint','#9aa'), warn=cssVar('--cm-warning','#f59e0b');
+    const bars=vals.map((v,i)=>{
+      if(v==null) return '';
+      const cx=padX+gap*i+gap/2, x=cx-bw/2, yy=y(v), h=chartH-yy;
+      const cur=i===n-1;
+      return `<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h,1).toFixed(1)}" rx="3"
+        fill="${cur?acc:muted}" opacity="${cur?1:.45}"/>
+        <text class="lmx-val" x="${cx.toFixed(1)}" y="${(yy-5).toFixed(1)}" text-anchor="middle">${esc(fmt(v,d.metric.fmt))}</text>`;
+    }).join('');
+    const baseLine=(base!=null)?`<line x1="${padX}" y1="${y(base).toFixed(1)}" x2="${W-padX}" y2="${y(base).toFixed(1)}"
+      stroke="${warn}" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text class="lmx-cap" x="${padX}" y="${(y(base)-4).toFixed(1)}" text-anchor="start" fill="${warn}">${esc(tt('load_monitor.exp_baseline','baseline'))}</text>`:'';
+    const labs=vals.map((v,i)=>{ const cx=padX+gap*i+gap/2; const back=n-1-i;
+      const lb=back===0?tt('load_monitor.exp_wk_now','now'):('−'+back+'w');
+      return `<text class="lmx-cap" x="${cx.toFixed(1)}" y="${H-6}" text-anchor="middle">${esc(lb)}</text>`;}).join('');
+    return `<div class="lmx-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${baseLine}${bars}${labs}</svg></div>`;
+  }
+
+  async function openExposureModal(metricKey){
+    exposureModalStyles();
+    // build shell immediately (loading), then fill
+    const ov=document.createElement('div'); ov.className='lmx-ov';
+    ov.innerHTML=`<div class="lmx" role="dialog" aria-modal="true"><div class="lmx-body" style="padding:40px;text-align:center;color:var(--cm-fg-faint)"><i class="ti ti-loader-2"></i> ${esc(tt('common.loading','Loading…'))}</div></div>`;
+    document.body.appendChild(ov);
+    const close=()=>{ ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey=e=>{ if(e.key==='Escape') close(); };
+    ov.addEventListener('click', e=>{ if(e.target===ov) close(); });
+    document.addEventListener('keydown', onKey);
+
+    let d;
+    try{ d=await window.gpsExposure.metricDetail({ clubId:state.clubId, players:state.players, refDate:state.refDate, metricKey }); }
+    catch{ d=null; }
+    if(!ov.isConnected) return;
+    const fmt=(d&&d.fmtVal)||window.gpsExposure.fmtVal;
+    const label=tt('load_monitor.exp_'+metricKey, (d&&d.metric&&d.metric.label)||metricKey);
+
+    if(!d||!d.ok){
+      ov.querySelector('.lmx').innerHTML=`<div class="lmx-head"><div class="tl"><h3>${esc(label)}</h3></div><button class="lmx-x" aria-label="Close">✕</button></div>
+        <div class="lmx-body" style="color:var(--cm-fg-faint)">${esc(tt('load_monitor.exp_nodetail','No GPS rows for this metric in the window.'))}</div>`;
+      ov.querySelector('.lmx-x').addEventListener('click', close); return;
+    }
+
+    const weak=exposureLowConfidence(d);
+    const dv=d.delta, dCls=dv==null?'flat':dv>=2?'up':dv<=-2?'down':'flat';
+    const isMean=d.metric.agg==='mean';
+    const dTxt=dv==null?'—':(dv>0?'+':'')+dv.toFixed(0)+'%';
+    const unit=d.metric.unit?` ${esc(d.metric.unit)}`:'';
+    const scope=tt('load_monitor.exp_modal_scope', `Squad · last 7 days vs ${d.baseWeeks}-wk baseline`, { n:d.baseWeeks });
+
+    const warn = (weak && !isMean) ? `<div class="lmx-warn"><i class="ti ti-alert-triangle"></i><span>${esc(
+      tt('load_monitor.exp_lowconf', `Thin baseline: prior weeks logged ~${d.baseSessionsAvg.toFixed(1)} sessions vs ${d.curSessions} this week. Summed totals jump for a data-logging reason, so the % overstates the real change. Compare per-player rows below instead.`,
+        { base:d.baseSessionsAvg.toFixed(1), cur:d.curSessions }))}</span></div>` : '';
+
+    const eq=`<div class="lmx-eq">
+      <span>${esc(tt('load_monitor.exp_now','This week'))} <b>${esc(fmt(d.current,d.metric.fmt))}${unit}</b></span>
+      <span>−</span>
+      <span>${esc(tt('load_monitor.exp_baseline','baseline'))} <b>${esc(fmt(d.baseline,d.metric.fmt))}${unit}</b></span>
+      <span>=</span>
+      <span class="d ${dCls}">${dTxt}</span>
+      <span style="color:var(--cm-fg-faint)">· ${esc(isMean?tt('load_monitor.exp_agg_mean','per-session average'):tt('load_monitor.exp_agg_sum','squad total'))}</span>
+    </div>`;
+
+    const rows=d.per.filter(p=>p.current!=null||p.baseline!=null).map(p=>{
+      const pd=p.delta, pc=pd==null?'flat':pd>=2?'up':pd<=-2?'down':'flat';
+      const pt=pd==null?'—':(pd>0?'+':'')+pd.toFixed(0)+'%';
+      return `<tr>
+        <td>${esc(p.name)}</td>
+        <td>${esc(fmt(p.current,d.metric.fmt))}</td>
+        <td style="color:var(--cm-fg-faint)">${esc(fmt(p.baseline,d.metric.fmt))}</td>
+        <td class="sp">${spark(p.spark, accent(), 20)}</td>
+        <td><span class="lmx-d ${pc}">${pt}</span></td>
+      </tr>`;
+    }).join('');
+
+    ov.querySelector('.lmx').innerHTML=`
+      <div class="lmx-head">
+        <div class="tl"><h3>${esc(label)}</h3><div class="sc">${esc(scope)}</div></div>
+        <button class="lmx-x" aria-label="${esc(tt('common.close','Close'))}">✕</button>
+      </div>
+      <div class="lmx-body">
+        ${eq}
+        ${warn}
+        ${exposureBarChart(d, fmt)}
+        <div class="lmx-sech">${esc(tt('load_monitor.exp_perplayer','Per-player · this week'))}</div>
+        <table class="lmx-tbl">
+          <thead><tr>
+            <th>${esc(tt('common.player','Player'))}</th>
+            <th>${esc(tt('load_monitor.exp_now','This week'))}</th>
+            <th>${esc(tt('load_monitor.exp_baseline','baseline'))}</th>
+            <th>${esc(tt('load_monitor.exp_trend','6-wk'))}</th>
+            <th>Δ</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    ov.querySelector('.lmx-x').addEventListener('click', close);
   }
 
   // ── Impending stressors ─────────────────────────────────────────────────────
