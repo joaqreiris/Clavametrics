@@ -1215,7 +1215,7 @@ function renderExerciseList(exercises) {
   const { field, strength } = dpSplitByKind(exercises);
   const fieldAdd = `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button>`;
   grid.innerHTML = field.map(dpExerciseCardHTML).join('') + fieldAdd;
-  if (strEl) strEl.innerHTML = dpStrengthSectionHTML(strength, 'main');
+  if (strEl) strEl.innerHTML = dpStrengthSectionHTML(strength, 'main', false);   // no add button in Field — strength is added from Activation only
   if (ct) {
     const totalMin = Math.round(exercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
     ct.textContent = exercises.length ? `${exercises.length} · ${tt('daily_planning.min_count', `${totalMin} min`, {count: totalMin})}` : '0';
@@ -1367,10 +1367,11 @@ function dpStrengthCardHTML(e) {
     </div>
   </div>`;
 }
-// Build the strength sub-section (header + list + add button) for a phase. Compact when empty (just the add button).
-function dpStrengthSectionHTML(items, phase) {
+// Build the strength sub-section (header + list + add button) for a phase.
+// showAdd=false (e.g. Field exercises) omits the "add" entry point — strength is only added from Activation.
+function dpStrengthSectionHTML(items, phase, showAdd = true) {
   const mode = phase === 'goalkeepers' ? 'goalkeepers' : phase === 'activation' ? 'activation' : 'main';
-  const addBtn = `<button class="dp-str-add no-print" onclick="openGymLibModal('${mode}')"><i class="ti ti-barbell"></i>${tt('daily_planning.add_strength_exercise','Add strength exercise')}</button>`;
+  const addBtn = showAdd ? `<button class="dp-str-add no-print" onclick="openGymLibModal('${mode}')"><i class="ti ti-barbell"></i>${tt('daily_planning.add_strength_exercise','Add strength exercise')}</button>` : '';
   if (!items.length) return addBtn;
   return `<div class="dp-str-head"><i class="ti ti-barbell"></i><span>${tt('daily_planning.strength','Strength')}</span><span class="ct">${items.length}</span></div>`
     + `<div class="dp-str-list">${items.map(dpStrengthCardHTML).join('')}</div>`
