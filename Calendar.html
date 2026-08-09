@@ -2500,7 +2500,8 @@ async function renderWorkload() {
     const pending  = sessions.filter(s => !s.rpe || !s.duration).length;
     const trAu  = withRpe.filter(s => s.type === 'training').reduce((sum, s) => sum + s.duration * s.rpe, 0);
     const gymAu = withRpe.filter(s => s.type === 'gym').reduce((sum, s) => sum + s.duration * s.rpe, 0);
-    return { mc, au: trAu + gymAu, trAu, gymAu, pending, total: sessions.length };
+    const mtAu  = withRpe.filter(s => s.type === 'match').reduce((sum, s) => sum + s.duration * s.rpe, 0);
+    return { mc, au: trAu + gymAu + mtAu, trAu, gymAu, mtAu, pending, total: sessions.length };
   });
 
   const maxAu = Math.max(...mcData.map(d => d.au), 1);
@@ -2509,6 +2510,7 @@ async function renderWorkload() {
   const barsHtml = mcData.map(d => {
     const trH  = d.trAu  ? `${Math.round((d.trAu  / maxAu) * 95)}%` : '0';
     const gymH = d.gymAu ? `${Math.round((d.gymAu / maxAu) * 95)}%` : '0';
+    const mtH  = d.mtAu  ? `${Math.round((d.mtAu  / maxAu) * 95)}%` : '0';
     const _mcNm = d.mc.name || 'MC';
     const tooltip = d.au > 0
       ? (d.pending ? tt('calendar.wk_tooltip_au_no_est_rpe','{name}: {au} AU · {p} without estimated RPE',{name:_mcNm,au:d.au,p:d.pending}) : tt('calendar.wk_tooltip_au','{name}: {au} AU',{name:_mcNm,au:d.au}))
@@ -2516,6 +2518,7 @@ async function renderWorkload() {
     return `<div class="wk-bar-grp" title="${tooltip}">
       <div class="wk-bar tr"  style="height:${trH}"></div>
       <div class="wk-bar gym" style="height:${gymH}"></div>
+      <div class="wk-bar mt"  style="height:${mtH}"></div>
     </div>`;
   }).join('');
 
@@ -2534,6 +2537,7 @@ async function renderWorkload() {
     <div class="wk-legend">
       <span class="it"><span class="sw" style="background:var(--cm-info)"></span>${tt('calendar.legend_training','Training')}</span>
       <span class="it"><span class="sw" style="background:var(--cm-violet)"></span>${tt('calendar.legend_gym','Gym')}</span>
+      <span class="it"><span class="sw" style="background:var(--cm-danger)"></span>${tt('calendar.legend_match','Match')}</span>
     </div>`;
 }
 
