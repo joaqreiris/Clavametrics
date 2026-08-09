@@ -245,7 +245,7 @@
   .dp-str-head{display:flex;align-items:center;gap:7px;margin:0 0 8px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .dp-str-head .ti{font-size:14px;color:var(--cm-accent)}
   .dp-str-head .ct{margin-left:2px;padding:1px 7px;border-radius:999px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font-size:10px}
-  .dp-str-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+  .dp-str-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:10px;margin-bottom:10px}
   .dp-str{display:flex;flex-direction:column;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;overflow:hidden}
   .dp-str:hover{border-color:var(--cm-border-strong)}
   .dp-str:hover .dp-str-del{display:inline-flex}
@@ -256,8 +256,10 @@
   .dp-str-del:hover{background:rgba(220,38,38,.9)}
   .dp-str-b{padding:6px 8px 8px;display:flex;flex-direction:column;gap:5px;flex:1}
   .dp-str-name{font:600 12px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .dp-str-dose{display:flex;align-items:center;gap:3px;margin-top:auto;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .dp-str-dose input{width:30px;padding:3px 4px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11px;text-align:center}
+  .dp-str-dose{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .dp-str-dose input{width:42px;padding:4px 5px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:12px;text-align:center}
+  .dp-str-dose input.t{width:52px}
+  .dp-str-dose select{padding:4px 4px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11px;cursor:pointer}
   .dp-str-add{width:100%;background:transparent;border:1.5px dashed var(--cm-border-strong);border-radius:9px;color:var(--cm-fg-muted);cursor:pointer;font:600 12px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center;gap:6px;padding:10px}
   .dp-str-add:hover{border-color:var(--cm-accent);color:var(--cm-fg);background:var(--cm-accent-soft)}
   .dp-str-add .ti{font-size:15px}
@@ -1346,10 +1348,13 @@ function dpStrengthCardHTML(e) {
   const desc = (gx?.description || '').replace(/"/g, '&quot;');
   const img  = dpGymImg(e);
   const isVideo = !!(gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref));
-  const II = 'width:30px;padding:3px 4px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11px;text-align:center';
+  const isTime = !!e.work_time || e.dose_mode === 'interval' || e.dose_mode === 'minutes';
   const thumb = img
     ? `<img src="${img}" alt="">${isVideo ? '<span class="dp-str-play"><i class="ti ti-player-play-filled"></i></span>' : ''}`
     : `<i class="ti ti-barbell" style="font-size:30px;color:var(--cm-fg-faint)"></i>`;
+  const valueInput = isTime
+    ? `<input type="text" class="t" value="${e.work_time ?? ''}" placeholder="0:30" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}">`
+    : `<input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}">`;
   return `<div class="dp-str" data-seid="${e.id}" title="${desc || nm.replace(/"/g,'&quot;')}">
     <div class="dp-str-thumb">
       <span class="dp-ex-tag ${cls}" style="top:6px;left:6px">${lbl}</span>
@@ -1359,13 +1364,34 @@ function dpStrengthCardHTML(e) {
     <div class="dp-str-b">
       <div class="dp-str-name">${nm}</div>
       <div class="dp-str-dose no-print">
-        <input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${II}">
+        <input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}">
         <span>×</span>
-        <input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}" style="${II}">
-        <span>${tt('daily_planning.reps_short','reps')}</span>
+        ${valueInput}
+        <select onchange="dpStrSetUnit('${e.id}',this.value)" title="${tt('daily_planning.reps_or_time','Reps or time')}">
+          <option value="reps" ${!isTime ? 'selected' : ''}>${tt('daily_planning.reps_short','reps')}</option>
+          <option value="time" ${isTime ? 'selected' : ''}>${tt('daily_planning.time_unit','time')}</option>
+        </select>
       </div>
     </div>
   </div>`;
+}
+// Toggle a strength tile between reps (series × reps) and time (series × work_time). Series always stays.
+async function dpStrSetUnit(seid, unit) {
+  const e = _dpFindTask(seid); if (!e) return;
+  if (unit === 'time') {
+    e.dose_mode = 'interval'; e.reps = null;
+    if (!e.work_time) e.work_time = '0:30';
+  } else {
+    e.dose_mode = 'reps'; e.work_time = null; e.rest_time = null;
+    if (e.reps == null) e.reps = 10;
+  }
+  ['dose_mode','reps','work_time','rest_time'].forEach(f => _dpMarkDoseOverride(e, f));
+  if ((e.phase || '') === 'activation') dpPaintActStrip(); else renderExerciseList(_dpFieldExercises || []);
+  dpRecomputeSectionTotals(); recalcTotals();
+  const { error } = await window.sb.from('session_exercises')
+    .update({ dose_mode: e.dose_mode, reps: e.reps, work_time: e.work_time, rest_time: e.rest_time, dosing_overrides: e.dosing_overrides })
+    .eq('id', seid).eq('club_id', _dpClubId);
+  if (error) console.warn('[dp-str-unit] save failed:', error.message);
 }
 // Build the strength sub-section (header + list + add button) for a phase.
 // showAdd=false (e.g. Field exercises) omits the "add" entry point — strength is only added from Activation.
@@ -2034,7 +2060,8 @@ async function dpRenderPrintSheet() {
       const nm  = e.name || gx?.name || '—';
       const cat = (gx?.category || 'strength').toLowerCase();
       const lbl = dpCatLabel(cat);
-      const reps = (e.series != null && e.reps != null && e.reps !== '') ? `${e.series} × ${e.reps} ${tt('daily_planning.reps_short','reps')}` : '';
+      const reps = (e.series && e.work_time) ? `${e.series} × ${esc(e.work_time)}`
+                 : (e.series != null && e.reps != null && e.reps !== '') ? `${e.series} × ${e.reps} ${tt('daily_planning.reps_short','reps')}` : '';
       const desc = (gx?.description || e.notes || '').trim();
       const src  = _img(e);
       const thumb = src
