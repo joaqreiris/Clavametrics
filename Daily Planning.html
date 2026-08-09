@@ -240,25 +240,25 @@
   .dp-ex-tag.str{background:rgba(220,38,38,0.92);color:#fff}
   .dp-ex-tag.mob{background:rgba(13,148,136,0.95);color:#fff}
   .dp-ex-tag.oth{background:rgba(100,116,139,0.95);color:#fff}
-  /* ── Strength (gym) sub-section: linear/list cards, visually distinct from the pitch cards ── */
-  .dp-str-wrap{padding:0 16px 14px}
+  /* ── Strength (gym) sub-section: compact square tiles that flow horizontally, distinct from the pitch cards ── */
   .dp-str-wrap:empty{display:none}
-  .dp-str-head{display:flex;align-items:center;gap:7px;margin:2px 0 10px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .dp-str-head{display:flex;align-items:center;gap:7px;margin:0 0 8px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .dp-str-head .ti{font-size:14px;color:var(--cm-accent)}
   .dp-str-head .ct{margin-left:2px;padding:1px 7px;border-radius:999px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font-size:10px}
-  .dp-str-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-  .dp-str{display:flex;gap:12px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;padding:10px}
+  .dp-str-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+  .dp-str{display:flex;flex-direction:column;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;overflow:hidden}
   .dp-str:hover{border-color:var(--cm-border-strong)}
-  .dp-str-thumb{flex-shrink:0;width:88px;height:88px;border-radius:8px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;position:relative}
+  .dp-str:hover .dp-str-del{display:inline-flex}
+  .dp-str-thumb{position:relative;width:100%;aspect-ratio:1/1;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;overflow:hidden}
   .dp-str-thumb img{width:100%;height:100%;object-fit:cover}
-  .dp-str-play{position:absolute;color:#fff;font-size:22px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
-  .dp-str-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
-  .dp-str-name{font:600 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .dp-str-foot{display:flex;align-items:center;gap:5px;padding-top:6px;margin-top:2px;border-top:1px solid var(--cm-border-soft)}
-  .dp-str-foot .grow{flex:1}
-  .dp-str-foot button{width:26px;height:26px;border-radius:5px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer}
-  .dp-str-foot button:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
-  .dp-str-add{width:100%;background:transparent;border:1.5px dashed var(--cm-border-strong);border-radius:10px;color:var(--cm-fg-muted);cursor:pointer;font:600 12.5px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center;gap:6px;padding:12px}
+  .dp-str-play{position:absolute;color:#fff;font-size:20px;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .dp-str-del{position:absolute;top:5px;right:5px;width:20px;height:20px;border:0;border-radius:5px;background:rgba(0,0,0,.5);color:#fff;cursor:pointer;display:none;align-items:center;justify-content:center;font-size:12px;backdrop-filter:blur(3px)}
+  .dp-str-del:hover{background:rgba(220,38,38,.9)}
+  .dp-str-b{padding:6px 8px 8px;display:flex;flex-direction:column;gap:5px;flex:1}
+  .dp-str-name{font:600 12px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .dp-str-dose{display:flex;align-items:center;gap:3px;margin-top:auto;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .dp-str-dose input{width:30px;padding:3px 4px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11px;text-align:center}
+  .dp-str-add{width:100%;background:transparent;border:1.5px dashed var(--cm-border-strong);border-radius:9px;color:var(--cm-fg-muted);cursor:pointer;font:600 12px/1 var(--cm-font-sans);display:flex;align-items:center;justify-content:center;gap:6px;padding:10px}
   .dp-str-add:hover{border-color:var(--cm-accent);color:var(--cm-fg);background:var(--cm-accent-soft)}
   .dp-str-add .ti{font-size:15px}
   .dp-lib-chip{padding:5px 12px;border-radius:999px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer;transition:all .12s}
@@ -436,11 +436,11 @@
           </div>
         </div>
         <div class="dp-card-b">
+          <div class="dp-str-wrap" id="dpActStrength" style="padding:0 0 12px">
+            <!-- Strength activation cards (shown first) — populated by dpPaintActStrip() -->
+          </div>
           <div class="dp-ex-grid" id="dpActStrip" style="padding:0">
             <!-- Populated by loadActivationActivities() -->
-          </div>
-          <div class="dp-str-wrap" id="dpActStrength" style="padding:12px 0 0">
-            <!-- Strength activation cards — populated by dpPaintActStrip() -->
           </div>
         </div>
       </div>
@@ -1336,42 +1336,33 @@ function dpSplitByKind(items) {
   (items || []).forEach(e => (e.exercise_id ? strength : field).push(e));
   return { field, strength };
 }
-// A strength card: linear list layout with a small photo/video thumb (or a neutral barbell tile) — never a pitch.
+// A strength card: compact square tile — photo/video thumb (or neutral barbell tile), name + series×reps below. Never a pitch.
 function dpStrengthCardHTML(e) {
   const gx  = e.gym_exercises || null;
   const nm  = gx?.name || e.name || '—';
   const cat = (gx?.category || 'strength').toLowerCase();
   const cls = CAT_CLS[cat] || 'oth';
   const lbl = dpCatLabel(cat);
-  const desc = gx?.description || '';
+  const desc = (gx?.description || '').replace(/"/g, '&quot;');
   const img  = dpGymImg(e);
   const isVideo = !!(gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref));
-  const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
+  const II = 'width:30px;padding:3px 4px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11px;text-align:center';
   const thumb = img
     ? `<img src="${img}" alt="">${isVideo ? '<span class="dp-str-play"><i class="ti ti-player-play-filled"></i></span>' : ''}`
-    : `<i class="ti ti-barbell" style="font-size:26px;color:var(--cm-fg-faint)"></i>`;
-  return `<div class="dp-str" data-seid="${e.id}">
-    <div class="dp-str-thumb">${thumb}</div>
+    : `<i class="ti ti-barbell" style="font-size:30px;color:var(--cm-fg-faint)"></i>`;
+  return `<div class="dp-str" data-seid="${e.id}" title="${desc || nm.replace(/"/g,'&quot;')}">
+    <div class="dp-str-thumb">
+      <span class="dp-ex-tag ${cls}" style="top:6px;left:6px">${lbl}</span>
+      ${thumb}
+      <button class="dp-str-del no-print" onclick="deleteExercise('${e.id}')" title="${tt('daily_planning.remove','Remove')}"><i class="ti ti-x"></i></button>
+    </div>
     <div class="dp-str-b">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="dp-ex-tag ${cls}" style="position:static;transform:none;font-size:10px;height:18px;backdrop-filter:none">${lbl}</span>
-        <span class="dp-str-name">${nm}</span>
-      </div>
-      ${desc ? `<div class="dp-ex-desc" title="${tt('daily_planning.strength_library','Strength Library')}">${desc}</div>` : ''}
-      <div class="dp-ex-edit no-print" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:2px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
-        <input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
+      <div class="dp-str-name">${nm}</div>
+      <div class="dp-str-dose no-print">
+        <input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${II}">
         <span>×</span>
-        <input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}" style="${EI};width:46px">
+        <input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}" style="${II}">
         <span>${tt('daily_planning.reps_short','reps')}</span>
-        <span>·</span>
-        <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>
-      </div>
-      <textarea class="no-print" placeholder="${tt('daily_planning.session_notes_ph','Session notes…')}" oninput="dpEditNotes('${e.id}',this.value)" style="width:100%;margin-top:2px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;resize:vertical;min-height:30px">${(e.notes ?? '').replace(/</g,'&lt;')}</textarea>
-      ${dpExGroupsRow(e)}
-      <div class="dp-str-foot">
-        <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${gx ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
-        <span class="grow"></span>
-        <button class="no-print" onclick="deleteExercise('${e.id}')" title="${tt('daily_planning.remove','Remove')}"><i class="ti ti-trash"></i></button>
       </div>
     </div>
   </div>`;
