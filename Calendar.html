@@ -2650,7 +2650,7 @@ function toggleMatchFields(type) {
 
 function toggleRpeRow(type) {
   const el = document.getElementById('calEvtRpeRow');
-  if (el) el.style.display = (type === 'training' || type === 'tactical' || type === 'gym' || type === 'conditioning') ? '' : 'none';
+  if (el) el.style.display = (type === 'training' || type === 'tactical' || type === 'gym' || type === 'conditioning' || type === 'match') ? '' : 'none';
 }
 
 function updateAuPreview() {
@@ -2803,8 +2803,9 @@ function openEvtModal(session, defaultDate, focusTasks) {
   document.getElementById('calEvtF_homeaway').value    = session?.home_away   || '';
   const compSel = document.getElementById('calEvtF_competition');
   compSel.innerHTML = `<option value="">${tt('calendar.no_competition','— No competition')}</option>` +
-    _calComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-  compSel.value = session?.competition_id || '';
+    _calComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('') +
+    `<option value="friendly">${tt('calendar.comp_friendly','Friendly')}</option>`;
+  compSel.value = session?.competition_id || (session?.competition === 'friendly' ? 'friendly' : '');
   document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
   document.getElementById('calEvtF_location').value    = session?.location    || '';
   document.getElementById('calEvtF_rpe').value = session?.estimated_rpe || '';
@@ -3653,8 +3654,9 @@ async function saveEvt() {
       if (type === 'match') {
         basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
         basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
-        const compId = document.getElementById('calEvtF_competition').value || null;
-        const comp   = _calComps.find(c => c.id === compId);
+        const compVal = document.getElementById('calEvtF_competition').value || null;
+        const compId  = compVal === 'friendly' ? null : compVal;
+        const comp    = _calComps.find(c => c.id === compId);
         basePayload.competition_id = compId;
         basePayload.competition    = comp ? comp.comp_type : 'friendly';
         basePayload.season_id      = _calSeasonId;
@@ -3684,8 +3686,9 @@ async function saveEvt() {
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
-      const compId = document.getElementById('calEvtF_competition').value || null;
-      const comp   = _calComps.find(c => c.id === compId);
+      const compVal = document.getElementById('calEvtF_competition').value || null;
+      const compId  = compVal === 'friendly' ? null : compVal;
+      const comp    = _calComps.find(c => c.id === compId);
       payload.competition_id = compId;
       payload.competition    = comp ? comp.comp_type : 'friendly';
       payload.season_id      = _calSeasonId;
