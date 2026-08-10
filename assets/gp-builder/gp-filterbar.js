@@ -945,7 +945,7 @@
     const _gpTeam = window._gpTeamId || null;
     const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions,archived_at')
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
-    const _seQ = window.sb.from('training_sessions').select('session_attributes, match_day_offset')
+    const _seQ = window.sb.from('training_sessions').select('session_date, session_attributes, match_day_offset')
       .eq('club_id', clubId).limit(3000);
     const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date')
       .eq('club_id', clubId);
@@ -963,7 +963,7 @@
     const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }, { data: seasons }] = await Promise.all([
       _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
-      _safe((_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false })),
+      _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false })),
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
@@ -1034,7 +1034,7 @@
     // MD code de una sesión: la COLUMNA match_day_offset primero (lo que escribe Daily
     // Planning), luego session_attributes.md_code como fallback. Mismo orden de prioridad
     // que _getMcMdCode() en GPS Analysis, para que el filtro y el análisis coincidan.
-    const _mdOf = (ts) => {
+    const _mdRaw = (ts) => {
       const off = ts && ts.match_day_offset;
       if (off != null) {
         if (typeof off === 'string') return off || '';
@@ -1043,13 +1043,22 @@
       }
       return (ts && ts.session_attributes && ts.session_attributes.md_code) || '';
     };
-
-    // MD codes reales (columna match_day_offset ∪ session_attributes.md_code)
-    const mdSet = new Set();
+    // MD by DATE, mirroring the microcycle-by-date derivation: the MD is assigned in
+    // Calendar / Daily Planning (on the planned session), but the imported GPS day is usually
+    // a different row with match_day_offset NULL. Map date → MD from every session that HAS an
+    // MD, so a GPS day inherits the MD of the planned session on the same date. First MD wins.
+    window._gpMdForDate = {};
     (sessions || []).forEach(s => {
-      const v = _mdOf(s);
-      if (v) mdSet.add(String(v));
+      const v = _mdRaw(s);
+      const d = s && s.session_date ? String(s.session_date).slice(0, 10) : '';
+      if (v && d && !window._gpMdForDate[d]) window._gpMdForDate[d] = v;
     });
+    const _mdOf = (ts) => _mdRaw(ts) || (ts && ts.session_date ? (window._gpMdForDate[String(ts.session_date).slice(0, 10)] || '') : '');
+
+    // MD codes reales (columna/attr ∪ los derivados por fecha, para que las opciones matcheen
+    // lo que ven las filas GPS que heredan el MD del día planificado).
+    const mdSet = new Set();
+    (sessions || []).forEach(s => { const v = _mdRaw(s); if (v) mdSet.add(String(v)); });
     options.md_code = Array.from(mdSet).sort(mdCompare).map(v => ({ value: v, label: v }));
 
     // Asociación por FECHA: los training_sessions casi nunca traen microcycle_id seteado, así

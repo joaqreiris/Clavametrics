@@ -23,11 +23,17 @@
   function _gpMdOf(s) {
     const off = s && s.match_day_offset;
     if (off != null) {
-      if (typeof off === 'string') return off || '';
-      if (off === 0) return 'MD';
-      return off < 0 ? `MD${off}` : `MD+${off}`;
+      if (typeof off === 'string') { if (off) return off; }
+      else if (off === 0) return 'MD';
+      else return off < 0 ? `MD${off}` : `MD+${off}`;
     }
-    return (s && s.session_attributes && s.session_attributes.md_code) || '';
+    const own = (s && s.session_attributes && s.session_attributes.md_code) || '';
+    if (own) return own;
+    // Fallback: inherit the MD of the planned session on the same date (Calendar / Daily
+    // Planning), so imported GPS days with match_day_offset NULL still filter by MD. Map is
+    // built by the filter bar (window._gpMdForDate) alongside the microcycle-by-date helper.
+    const d = s && s.session_date ? String(s.session_date).slice(0, 10) : '';
+    return (d && window._gpMdForDate && window._gpMdForDate[d]) || '';
   }
 
   // ── Domain constants (mirrors lib/gp-card/) ────────────────
@@ -2361,7 +2367,7 @@
         const wantRv = FB?.rivals?.length       ? new Set(FB.rivals)              : null;
         const wantSt = FB?.sessionTypes?.length ? new Set(FB.sessionTypes)        : null;
         const { data: ts } = await sb.from('training_sessions')
-          .select('id,session_attributes,match_day_offset,session_type').in('id', sessionIds);
+          .select('id,session_date,session_attributes,match_day_offset,session_type').in('id', sessionIds);
         if (stale()) return;
         sessionIds = (ts || []).filter(s => {
           const a = s.session_attributes || {};
