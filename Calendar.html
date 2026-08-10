@@ -3008,8 +3008,10 @@ function _positionPop(pop, anchor, width) {
     pop.style.left = left + 'px';
   });
   setTimeout(() => {
-    document.addEventListener('click', function _cp(e) {
-      if (!pop.contains(e.target)) { closeEvtPopover(); closeMatchPopover(); document.removeEventListener('click', _cp); }
+    // Use mousedown, not click: a native <select> menu (e.g. the inline orientation editor)
+    // dispatches a stray click outside the popover when it closes, which would wrongly dismiss it.
+    document.addEventListener('mousedown', function _cp(e) {
+      if (!pop.contains(e.target)) { closeEvtPopover(); closeMatchPopover(); document.removeEventListener('mousedown', _cp); }
     });
   }, 0);
 }
