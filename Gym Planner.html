@@ -56,8 +56,11 @@
   .gp-eq-item .gp-eq-name{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:6px}
   .gp-eq-item .gp-eq-name .gp-eq-manual{font:600 8.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px}
   .gp-eq-item .gp-eq-ex{font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .gp-eq-item .gp-eq-level{height:30px;padding:0 6px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg);outline:none;flex:none;max-width:96px}
-  .gp-eq-item .gp-eq-level:focus{border-color:var(--cm-accent)}
+  .gp-eq-item.is-band{grid-column:1/-1;flex-wrap:wrap}
+  .gp-eq-item .gp-eq-levels{flex:1 0 100%;display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+  .gp-eq-item .gp-eq-blvl-f{display:flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .gp-eq-item .gp-eq-blvl{width:46px;height:28px;padding:0 6px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:600 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none}
+  .gp-eq-item .gp-eq-blvl:focus{border-color:var(--cm-accent)}
   .gp-eq-item .gp-eq-qty{width:52px;height:30px;padding:0 8px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none;flex:none}
   .gp-eq-item .gp-eq-qty:focus{border-color:var(--cm-accent)}
   .gp-eq-item .gp-eq-rm{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--cm-fg-faint);border-radius:5px;cursor:pointer}
@@ -794,7 +797,7 @@ function gpCollectContent() {
     roster: [..._gpRoster],
     loadGroups: _gpGrpSavedCfg,
     equipment: gpCollectEquipment(),
-    equipmentLevels: gpCollectEquipLevels()
+    bandQty: gpCollectBandQty()
   };
 }
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
@@ -832,7 +835,15 @@ function gpApplyContent(content) {
   gpRecalcTotals();
   // Restore the saved Load-groups config and preview it in the plan (async row load).
   _gpEquipQty = { ...(content.equipment || {}) };
-  _gpEquipLevel = { ...(content.equipmentLevels || {}) };
+  _gpBandQty = {};
+  Object.keys(content.bandQty || {}).forEach(t => { _gpBandQty[t] = { ...(content.bandQty[t] || {}) }; });
+  // Migrate the earlier one-level-per-band shape (equipmentLevels + equipment[band]) → per-level map.
+  Object.keys(content.equipmentLevels || {}).forEach(t => {
+    if (!GP_BAND_TOKENS.has(t)) return;
+    const lv = content.equipmentLevels[t]; const q = (content.equipment && content.equipment[t]) || '1';
+    if (lv) { _gpBandQty[t] = _gpBandQty[t] || {}; if (_gpBandQty[t][lv] == null) _gpBandQty[t][lv] = q; }
+  });
+  GP_BAND_TOKENS.forEach(t => { delete _gpEquipQty[t]; });   // bands live in _gpBandQty only
   gpRenderEquipment();
   _gpGrpSavedCfg = content.loadGroups || null;
   gpRenderSavedGroups();
@@ -907,11 +918,12 @@ function gpRenderRowThumb(tr){
 }
 
 // ── Equipment (materials) — auto-detected from each exercise's library equipment_tags ──
-// Persisted in gym_content.equipment as { token: qty }; band resistance in gym_content.equipmentLevels
-// as { token: level }. Only tokens with a quantity are stored; detected tokens re-appear on load, so
-// quantities survive but the list stays driven by exercises. Labels resolve custom club materials first.
-let _gpEquipQty = {};        // token -> qty string (live source of truth for quantities)
-let _gpEquipLevel = {};      // band/mini_band token -> resistance level token
+// Persisted in gym_content.equipment as { token: qty } (non-band) and gym_content.bandQty as
+// { bandToken: { level: qty } } (a band can be needed at several resistances at once, e.g. 2 light
+// + 2 heavy). Detected tokens re-appear on load, so quantities survive but the list stays driven by
+// exercises. Labels resolve the club's custom materials first, then the static taxonomy.
+let _gpEquipQty = {};        // non-band token -> qty string
+let _gpBandQty = {};         // band token -> { level: qty } (per-resistance quantities)
 let _gpCustomEquip = {};     // custom club material: slug -> label (loaded from club_equipment)
 const GP_BAND_TOKENS = new Set(['band', 'mini_band']);
 const gpBandLevels = () => [
@@ -953,44 +965,55 @@ async function gpRenderEquipment(){
   gpBuildEquipAddOptions();
   const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const detected = gpComputeEquipment();
-  // Show detected tokens plus any manual ones the user added/kept a quantity on.
-  const tokens = [...new Set([...detected.keys(), ...Object.keys(_gpEquipQty)])]
+  // Show detected tokens plus any manual ones the user added / kept a quantity on.
+  const tokens = [...new Set([...detected.keys(), ...Object.keys(_gpEquipQty), ...Object.keys(_gpBandQty)])]
     .sort((a, b) => gpEqLabel(a).localeCompare(gpEqLabel(b)));
   const ct = document.getElementById('gpEquipCt'); if (ct) ct.textContent = tokens.length || '—';
   if (!tokens.length) {
     body.innerHTML = `<div class="gp-eq-empty">${esc(tt('gym_planner.no_equipment','No equipment yet — it appears automatically as you add exercises tagged with materials.'))}</div>`;
     return;
   }
+  const head = (t, isManual, exNames) => `<div class="gp-eq-main">
+      <span class="gp-eq-name">${esc(gpEqLabel(t))}${isManual ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>` : ''}</span>
+      ${exNames.length ? `<span class="gp-eq-ex" title="${esc(exNames.join(', '))}">${esc(exNames.join(' · '))}</span>` : ''}
+    </div>`;
+  const rmBtn = isManual => isManual ? `<button type="button" class="gp-eq-rm no-print" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-x" style="font-size:14px"></i></button>` : '';
   body.innerHTML = `<div class="gp-eq-grid">${tokens.map(t => {
     const exNames = detected.has(t) ? [...detected.get(t)] : [];
     const isManual = !detected.has(t);
+    if (GP_BAND_TOKENS.has(t)) {
+      const bq = _gpBandQty[t] || {};
+      // A band can be needed at several resistances → one quantity input per level.
+      const levels = gpBandLevels().map(([v, l]) => `<label class="gp-eq-blvl-f"><span>${esc(l)}</span>
+          <input class="gp-eq-blvl" type="number" min="0" inputmode="numeric" data-level="${v}" value="${esc(bq[v] != null ? bq[v] : '')}" placeholder="—"></label>`).join('');
+      return `<div class="gp-eq-item is-band" data-token="${esc(t)}">
+        ${head(t, isManual, exNames)}
+        <div class="gp-eq-levels">${levels}</div>
+        ${rmBtn(isManual)}
+      </div>`;
+    }
     const qty = _gpEquipQty[t] != null ? _gpEquipQty[t] : '';
-    const isBand = GP_BAND_TOKENS.has(t);
-    const lv = _gpEquipLevel[t] || '';
-    const levelSel = isBand ? `<select class="gp-eq-level no-print" title="${esc(tt('gym_planner.band_level','Resistance'))}">
-        <option value="">${esc(tt('gym_planner.band_any','— level'))}</option>
-        ${gpBandLevels().map(([v, l]) => `<option value="${v}"${v===lv?' selected':''}>${esc(l)}</option>`).join('')}
-      </select>` : '';
     return `<div class="gp-eq-item" data-token="${esc(t)}">
-      <div class="gp-eq-main">
-        <span class="gp-eq-name">${esc(gpEqLabel(t))}${isManual ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>` : ''}</span>
-        ${exNames.length ? `<span class="gp-eq-ex" title="${esc(exNames.join(', '))}">${esc(exNames.join(' · '))}</span>` : ''}
-      </div>
-      ${levelSel}
+      ${head(t, isManual, exNames)}
       <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" title="${esc(tt('gym_planner.qty','Quantity'))}">
-      ${isManual ? `<button type="button" class="gp-eq-rm no-print" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-x" style="font-size:14px"></i></button>` : ''}
+      ${rmBtn(isManual)}
     </div>`;
   }).join('')}</div>`;
 }
 // Store only tokens the coach gave a quantity → keeps the payload lean and list exercise-driven.
 function gpCollectEquipment(){
   const out = {};
-  Object.keys(_gpEquipQty).forEach(t => { const v = (_gpEquipQty[t] || '').trim(); if (v) out[t] = v; });
+  Object.keys(_gpEquipQty).forEach(t => { if (GP_BAND_TOKENS.has(t)) return; const v = (_gpEquipQty[t] || '').trim(); if (v) out[t] = v; });
   return out;
 }
-function gpCollectEquipLevels(){
+// Bands: keep only levels with a quantity; drop empty band tokens.
+function gpCollectBandQty(){
   const out = {};
-  Object.keys(_gpEquipLevel).forEach(t => { if (GP_BAND_TOKENS.has(t) && _gpEquipLevel[t]) out[t] = _gpEquipLevel[t]; });
+  Object.keys(_gpBandQty).forEach(t => {
+    const levels = {};
+    Object.keys(_gpBandQty[t] || {}).forEach(lv => { const v = (_gpBandQty[t][lv] || '').trim(); if (v) levels[lv] = v; });
+    if (Object.keys(levels).length) out[t] = levels;
+  });
   return out;
 }
 // Load the club's custom materials once so labels/pickers resolve them alongside the taxonomy.
@@ -2274,17 +2297,25 @@ function gpRenderPrintSheet() {
     let equipBlock = '';
     try {
       const eqMap = (typeof gpComputeEquipment === 'function') ? gpComputeEquipment() : new Map();
-      const eqTokens = [...new Set([...eqMap.keys(), ...Object.keys(_gpEquipQty || {})])]
+      const eqTokens = [...new Set([...eqMap.keys(), ...Object.keys(_gpEquipQty || {}), ...Object.keys(_gpBandQty || {})])]
         .sort((a, b) => gpEqLabel(a).localeCompare(gpEqLabel(b)));
-      if (eqTokens.length) {
+      const chip = (name, q) => `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${name}${q ? `<span style="font:700 11px ${MONO};color:var(--club-accent)">×${esc(q)}</span>` : ''}</span>`;
+      const chips = [];
+      eqTokens.forEach(t => {
+        if (GP_BAND_TOKENS.has(t)) {
+          // One chip per resistance level that has a quantity (fallback: a bare band chip).
+          const bq = (_gpBandQty && _gpBandQty[t]) || {};
+          const withQ = gpBandLevels().filter(([v]) => (bq[v] || '').trim());
+          if (withQ.length) withQ.forEach(([v, l]) => chips.push(chip(`${esc(gpEqLabel(t))} <span style="font:500 10px ${MONO};color:#5B6470">· ${esc(l)}</span>`, (bq[v] || '').trim())));
+          else chips.push(chip(esc(gpEqLabel(t)), ''));
+        } else {
+          chips.push(chip(esc(gpEqLabel(t)), ((_gpEquipQty && _gpEquipQty[t]) || '').trim()));
+        }
+      });
+      if (chips.length) {
         equipBlock = `<div class="gsp-brk" style="margin-bottom:16px">
           ${sectionTitle(`${tt('gym_planner.equipment','Equipment')} · ${eqTokens.length}`)}
-          <div style="display:flex;flex-wrap:wrap;gap:6px">${eqTokens.map(t => {
-            const q = ((_gpEquipQty && _gpEquipQty[t]) || '').trim();
-            const lv = (GP_BAND_TOKENS.has(t) && _gpEquipLevel && _gpEquipLevel[t]) ? gpBandLevelLabel(_gpEquipLevel[t]) : '';
-            const name = esc(gpEqLabel(t)) + (lv ? ` <span style="font:500 10px ${MONO};color:#5B6470">· ${esc(lv)}</span>` : '');
-            return `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${name}${q ? `<span style="font:700 11px ${MONO};color:var(--club-accent)">×${esc(q)}</span>` : ''}</span>`;
-          }).join('')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">${chips.join('')}</div>
         </div>`;
       }
     } catch (e) { console.warn('gpRenderPrintSheet equipment failed', e); }
@@ -2584,26 +2615,23 @@ async function gpExportPDF() {
     const add = document.getElementById('gpEquipAdd');
     if (body) {
       body.addEventListener('input', e => {
+        const t = e.target.closest('.gp-eq-item')?.dataset.token; if (!t) return;
+        const bl = e.target.closest('.gp-eq-blvl');
+        if (bl) { const lv = bl.dataset.level; _gpBandQty[t] = _gpBandQty[t] || {}; _gpBandQty[t][lv] = bl.value; gpScheduleSave(); return; }
         const inp = e.target.closest('.gp-eq-qty'); if (!inp) return;
-        const t = inp.closest('.gp-eq-item')?.dataset.token; if (!t) return;
         _gpEquipQty[t] = inp.value; gpScheduleSave();
-      });
-      body.addEventListener('change', e => {
-        const sel = e.target.closest('.gp-eq-level'); if (!sel) return;
-        const t = sel.closest('.gp-eq-item')?.dataset.token; if (!t) return;
-        if (sel.value) _gpEquipLevel[t] = sel.value; else delete _gpEquipLevel[t];
-        gpScheduleSave();
       });
       body.addEventListener('click', e => {
         const rm = e.target.closest('.gp-eq-rm'); if (!rm) return;
         const t = rm.closest('.gp-eq-item')?.dataset.token; if (!t) return;
-        delete _gpEquipQty[t]; gpRenderEquipment(); gpScheduleSave();
+        delete _gpEquipQty[t]; delete _gpBandQty[t]; gpRenderEquipment(); gpScheduleSave();
       });
     }
     if (add) add.addEventListener('change', () => {
       const t = add.value; add.value = '';
       if (!t) return;
-      if (_gpEquipQty[t] == null) _gpEquipQty[t] = '';
+      if (GP_BAND_TOKENS.has(t)) { _gpBandQty[t] = _gpBandQty[t] || {}; }
+      else if (_gpEquipQty[t] == null) { _gpEquipQty[t] = ''; }
       gpRenderEquipment(); gpScheduleSave();
     });
   })();
