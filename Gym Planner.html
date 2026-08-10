@@ -737,13 +737,16 @@ function gpCollectRows(tbodyId, withMode) {
     // Exclude the VBT velocity-loss input so the core `v` array stays index-stable.
     const v = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss')).map(i => i.value);
     const exId = tr.dataset.exId || null;
+    // Library name this row is currently tracking. The typed name (v[0]) is a per-day
+    // override when it differs from libName; otherwise it follows the library exercise.
+    const libName = tr.dataset.libName != null ? tr.dataset.libName : undefined;
     const link = tr.dataset.link || null;
     if (withMode) {
       const on = tr.querySelector('.gp-mode button.is-on');
       const vloss = tr.querySelector('.gp-vbt-loss')?.value || '';
-      return { v, exId, mode: on ? on.textContent.trim() : 'SR', vloss, link };
+      return { v, exId, libName, mode: on ? on.textContent.trim() : 'SR', vloss, link };
     }
-    return { v, exId };
+    return { v, exId, libName };
   });
 }
 function gpCollectContent() {
@@ -760,27 +763,29 @@ function gpCollectContent() {
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
 const gpRowVals = r => Array.isArray(r) ? r : (r?.v || []);
 const gpRowEx   = r => Array.isArray(r) ? null : (r?.exId || null);
+const gpRowLibName = r => Array.isArray(r) ? undefined : (r?.libName);
 const gpRowMode = r => Array.isArray(r) ? null : (r?.mode || null);
 const gpRowVloss = r => Array.isArray(r) ? '' : (r?.vloss || '');
 const gpRowLink = r => Array.isArray(r) ? null : (r?.link || null);
-function gpFillRow(tr, vals, exId) {
+function gpFillRow(tr, vals, exId, libName) {
   // Fill only the core inputs (exclude the VBT loss input) so indices align with `v`.
   const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
   (vals || []).forEach((val, i) => { if (inputs[i]) inputs[i].value = val; });
   if (exId) tr.dataset.exId = exId;
+  if (libName != null) tr.dataset.libName = libName;
 }
 function gpApplyContent(content) {
   content = content || {};
   const setMin = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   const wb = document.getElementById('gpWarmupBody'); wb.innerHTML = '';
-  (content.warmup?.rows || []).forEach(r => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, gpRowVals(r), gpRowEx(r)); });
+  (content.warmup?.rows || []).forEach(r => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, gpRowVals(r), gpRowEx(r), gpRowLibName(r)); });
   setMin('gpWarmupMin', content.warmup?.min);
   const pb = document.getElementById('gpPlyoBody'); pb.innerHTML = '';
-  (content.plyo?.rows || []).forEach(r => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, gpRowVals(r), gpRowEx(r)); });
+  (content.plyo?.rows || []).forEach(r => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, gpRowVals(r), gpRowEx(r), gpRowLibName(r)); });
   setMin('gpPlyoMin', content.plyo?.min);
   const mb = document.getElementById('gpMainBody'); mb.innerHTML = '';
   (content.main?.rows || []).forEach(r => {
-    gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, gpRowVals(r), gpRowEx(r));
+    gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, gpRowVals(r), gpRowEx(r), gpRowLibName(r));
     const lossEl = tr.querySelector('.gp-vbt-loss'); if (lossEl) lossEl.value = gpRowVloss(r);
     gpApplyRowMode(tr, gpRowMode(r) || 'SR');
     const lk = gpRowLink(r); if (lk) tr.dataset.link = lk;
@@ -816,6 +821,28 @@ async function gpResolveSessionMedia(){
     (urls||[]).forEach(u=>{ if(u&&u.path&&u.signedUrl) _gpMediaCache[exByPath[u.path]]={type:'image',src:u.signedUrl}; }); }catch(_){} }
   ids.forEach(id=>{ if(id in _gpMediaCache) return; const e=byId[id]; const yt=e&&gpYoutubeId(e.video_url);
     _gpMediaCache[id]= yt ? {type:'youtube',src:`https://img.youtube.com/vi/${yt}/mqdefault.jpg`} : null; });
+}
+// Keep each linked row's exercise name in sync with the library (live), UNLESS the coach
+// overrode it for this day in the planner. A row is "overridden" when its typed name no
+// longer matches the library name it was tracking (dataset.libName). Requires _gpLib loaded
+// (gpResolveSessionMedia / gpEnsureLib do that first).
+function gpSyncRowNames(){
+  if(!_gpLib) return;
+  const byId={}; _gpLib.forEach(e=>{ byId[e.id]=e; });
+  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr=>{
+    const exId=tr.dataset.exId; if(!exId) return;
+    const e=byId[exId]; if(!e||!e.name) return;               // library exercise deleted/unknown → leave row untouched
+    const inp=tr.querySelector('.name-cell input'); if(!inp) return;
+    // Legacy rows linked before this feature have no baseline: seed it with the current
+    // library name (safe — a row whose text already differs is treated as an override).
+    let tracked=tr.dataset.libName;
+    if(tracked==null) tracked=tr.dataset.libName=e.name;
+    if((inp.value||'')===tracked){                            // still following the library → propagate the edit
+      if(inp.value!==e.name) inp.value=e.name;
+      tr.dataset.libName=e.name;
+    }
+    // else: per-day override → keep the coach's text as-is
+  });
 }
 function gpExThumbSrc(exId){ const m=exId&&_gpMediaCache[exId]; return m?m.src:null; }
 function gpRenderRowThumb(tr){
@@ -906,7 +933,8 @@ function gpPickLib(id, name) {
   const ctx = _gpLibCtx || {};
   const fill = inp => { if (inp) { inp.value = name; inp.dispatchEvent(new Event('input', { bubbles: true })); } };
   if (ctx.input) {
-    const tr = ctx.input.closest('tr'); if (tr) tr.dataset.exId = id || '';
+    const tr = ctx.input.closest('tr');
+    if (tr) { tr.dataset.exId = id || ''; if (id) tr.dataset.libName = name; else delete tr.dataset.libName; }
     fill(ctx.input);
     if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
   }
@@ -916,7 +944,8 @@ function gpPickLib(id, name) {
     if (fn) {
       fn();
       fill(document.getElementById(bodyId).lastElementChild?.querySelector('input'));
-      const tr = document.getElementById(bodyId).lastElementChild; if (tr) tr.dataset.exId = id || '';
+      const tr = document.getElementById(bodyId).lastElementChild;
+      if (tr) { tr.dataset.exId = id || ''; if (id) tr.dataset.libName = name; else delete tr.dataset.libName; }
       if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
     }
   }
@@ -1036,6 +1065,7 @@ async function gpRunAi() {
     };
     gpApplyContent(content);
     await gpResolveSessionMedia();
+    gpSyncRowNames();
     document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
     gpRenderPrintSheet();
     const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
@@ -1123,6 +1153,9 @@ async function gpApplyTemplate(id) {
   const t = _gpTpls.find(x => x.id === id);
   if (!t) return;
   gpApplyContent(t.content || {});
+  await gpResolveSessionMedia();
+  gpSyncRowNames();
+  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
   gpScheduleSave();
   gpCloseTpl();
 }
@@ -1884,6 +1917,7 @@ async function gpLoadDay(dateStr) {
   _gpSavedRoster = sess?.gym_content?.roster || null;
 
   await gpResolveSessionMedia();
+  gpSyncRowNames();
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
 
   // Calendar overlays: microcycle / match-day / RPE only. Start time and duration come
