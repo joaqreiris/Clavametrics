@@ -1576,8 +1576,10 @@
     ]},
     { name:'Mobility & screening', icon:'ti-stretching', ic:'rgba(59,130,246,0.12)', ico:'#1D4ED8', tests:[
       { key:'fms',      label:'FMS',                sub:'Functional movement screen', icon:'ti-checkbox', src:{from:'evaluations', match:'FMS'} },
-      { key:'ankle',    label:'Ankle dorsiflexion', sub:'Weight-bearing lunge · L/R', icon:'ti-angle',    src:{from:'evaluations', match:'Ankle dorsiflexion'} },
-      { key:'hiprot',   label:'Hip ER/IR',          sub:'Hip rotation · L/R',         icon:'ti-rotate',   src:{from:'evaluations', match:'Hip ER/IR'} },
+      // Ankle dorsiflexion & Hip ER/IR are now data-driven from assessment_test_defs
+      // (mob_ankle_df / mob_hip_ir / mob_hip_er → force_tests with native L/R). The old
+      // evaluations-backed cards were retired so individual + bulk land in the same test
+      // and surface in the Prevention board.
       { key:'sitreach', label:'Sit & reach',        sub:'Posterior chain',            icon:'ti-yoga',     src:{from:'evaluations', match:'Sit'} },
     ]},
     { name:'Anthropometrics', icon:'ti-ruler', ic:'rgba(17,94,89,0.12)', ico:'#0F766E', tests:[
@@ -1608,8 +1610,9 @@
     mob_ankle_df:'ti-angle', mob_hip_ir:'ti-rotate-2', mob_hip_er:'ti-rotate-clockwise',
     mob_aslr:'ti-arrow-up', mob_thomas:'ti-yoga', mob_hypermobility:'ti-body-scan'
   };
-  // existing hardcoded mobility cards already cover these defs → enrich, don't duplicate
-  var _LEGACY_MOB_DEFKEYS = ['mob_ankle_df','mob_hip_ir','mob_hip_er'];
+  // Retired: Ankle/Hip legacy cards used to shadow these defs. Now every mobility def
+  // renders as its own force_tests-backed card (no evaluations shadowing).
+  var _LEGACY_MOB_DEFKEYS = [];
 
   var POS_LABEL    = { supine:'Supine', prone:'Prone', standing:'Standing', seated:'Seated', side_lying:'Side-lying' };
   var METHOD_LABEL = { hhd:'HHD', force_frame:'Force frame', force_plate:'Force plate', nordbord:'NordBord',
@@ -1666,11 +1669,6 @@
     }
 
     rebuildTestIndex();
-
-    // 3) Enrich legacy mobility cards (Ankle dorsiflexion, Hip ER/IR) with their def for chip/reference.
-    var byKey = {}; _assessDefs.forEach(function(d){ byKey[d.key] = d; });
-    if (TEST_BY_KEY['ankle']  && byKey.mob_ankle_df) TEST_BY_KEY['ankle']._def  = byKey.mob_ankle_df;
-    if (TEST_BY_KEY['hiprot'] && (byKey.mob_hip_ir || byKey.mob_hip_er)) TEST_BY_KEY['hiprot']._def = byKey.mob_hip_ir || byKey.mob_hip_er;
 
     _assessMerged = true;
   }
