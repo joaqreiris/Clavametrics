@@ -2457,13 +2457,19 @@ async function _gpOpenAssignRivals(opts) {
         <input id="arSearch" type="text" placeholder="${tt('gps_analysis.ar_search','Search date…')}" style="flex:1;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
         <button id="arOutToggle" class="cm-btn ${onlyOutsideDefault?'is-filled':'is-outline'} is-sm" data-on="${onlyOutsideDefault?'1':'0'}"><i class="ti ti-filter" style="font-size:14px"></i>${tt('gps_analysis.ar_only_outside','Only outside season')}</button>
       </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg-soft)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg)"><input type="checkbox" id="arSelAll" style="cursor:pointer">${tt('gps_analysis.ar_select_all_shown','Select all shown')}</label>
+        <span id="arSelCount" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('gps_analysis.ar_selected','0 selected',{n:0})}</span>
+        <button id="arBulkSeason" class="cm-btn is-filled is-sm" disabled style="margin-left:auto"><i class="ti ti-calendar-stats" style="font-size:14px"></i>${tt('gps_analysis.ar_bulk_assign_season','Assign season')}</button>
+      </div>
       <div style="max-height:48vh;overflow:auto">
       ${rows.length ? `
         <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:0 0 6px">${tt('gps_analysis.ar_no_rival_yet','Days with no rival yet')}</div>
         <table class="gp-map-table" style="width:100%">
-        <thead><tr><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_players','Players')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_rival','Rival')}</th></tr></thead>
+        <thead><tr><th style="width:26px"></th><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_players','Players')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_rival','Rival')}</th></tr></thead>
         <tbody>${rows.map(r => `
           <tr data-sid="${r.id}" data-date="${r.date}" data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '')).toLowerCase()}">
+            <td><input type="checkbox" class="ar-check" data-sid="${r.id}" style="cursor:pointer"></td>
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
             <td style="font:500 11.5px/1 var(--cm-font-mono)">${r.players}</td>
@@ -2474,9 +2480,10 @@ async function _gpOpenAssignRivals(opts) {
       ${assignedRows.length ? `
         <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:${rows.length ? '16px' : '0'} 0 6px">${tt('gps_analysis.ar_with_rival','Days with a rival')}</div>
         <table class="gp-map-table" style="width:100%">
-        <thead><tr><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_rival','Rival')}</th><th>${tt('gps_analysis.ar_col_ha','H/A')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_action','Action')}</th></tr></thead>
+        <thead><tr><th style="width:26px"></th><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_rival','Rival')}</th><th>${tt('gps_analysis.ar_col_ha','H/A')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_action','Action')}</th></tr></thead>
         <tbody>${assignedRows.map(r => `
-          <tr data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
+          <tr data-sid="${r.id}" data-date="${r.date}" data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
+            <td><input type="checkbox" class="ar-check" data-sid="${r.id}" style="cursor:pointer"></td>
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
             <td style="font:600 11.5px/1 var(--cm-font-sans)">${_gpEsc(r.rival || '—')}</td>
@@ -2496,6 +2503,33 @@ async function _gpOpenAssignRivals(opts) {
     const arOut    = body.querySelector('#arOutToggle');
     const arRows   = [...body.querySelectorAll('tbody tr')];
     const arEmpty  = body.querySelector('#arNoMatch');
+    // ── Bulk season selection: checkboxes + a header "select all shown" that respects the
+    //    active search / outside-season filter, so you can season-tag hundreds of days at once.
+    const arChecks   = [...body.querySelectorAll('.ar-check')];
+    const arSelAll   = body.querySelector('#arSelAll');
+    const arSelCount = body.querySelector('#arSelCount');
+    const arBulkBtn  = body.querySelector('#arBulkSeason');
+    const _visible   = c => c.closest('tr').style.display !== 'none';
+    const _selected  = () => arChecks.filter(c => c.checked && _visible(c)).map(c => c.dataset.sid);
+    const syncSel = () => {
+      const sel = _selected();
+      arSelCount.textContent = tt('gps_analysis.ar_selected', `${sel.length} selected`, { n: sel.length });
+      arBulkBtn.disabled = sel.length === 0;
+      const vis = arChecks.filter(_visible);
+      arSelAll.checked = vis.length > 0 && vis.every(c => c.checked);
+      arSelAll.indeterminate = !arSelAll.checked && vis.some(c => c.checked);
+    };
+    arChecks.forEach(c => c.addEventListener('change', syncSel));
+    arSelAll.addEventListener('change', () => {
+      arChecks.filter(_visible).forEach(c => { c.checked = arSelAll.checked; });
+      syncSel();
+    });
+    arBulkBtn.addEventListener('click', () => {
+      const sids = _selected();
+      if (!sids.length) return;
+      const seed = sids.map(id => body.querySelector(`tr[data-sid="${id}"]`)?.dataset.date).filter(Boolean).sort()[0] || null;
+      _gpBulkSeasonPicker(arBulkBtn, clubId, teamId, sids, seed);
+    });
     const applyFilter = () => {
       const q = arSearch.value.trim().toLowerCase();
       const onlyOut = arOut.dataset.on === '1';
@@ -2506,6 +2540,7 @@ async function _gpOpenAssignRivals(opts) {
         if (hit) shown++;
       });
       arEmpty.style.display = shown ? 'none' : '';
+      syncSel();   // hidden rows drop out of the selection count / select-all state
     };
     arSearch.addEventListener('input', applyFilter);
     arOut.addEventListener('click', () => {
@@ -2623,6 +2658,42 @@ async function _gpAssignSeasonToDay(clubId, sessionId, seasonId) {
       .update({ season_id: seasonId || null }).eq('id', sessionId).eq('club_id', clubId);
     if (error) throw error;
     showToast(seasonId ? tt('gps_analysis.ar_season_set','Season assigned') : tt('gps_analysis.ar_season_cleared','Season cleared'));
+    try { window.cmInvalidateGpsCache?.(); window.invalidateBaselineCache?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.refreshDashboard?.(); } catch {}
+    document.querySelector('.gp-modal-overlay')?.remove();
+    _gpOpenAssignRivals();
+  } catch (e) { showToast(`${tt('gps_analysis.ar_season_failed','Season assign failed')}: ${e.message}`, true); }
+}
+
+// Bulk season picker: same list as the per-row one, but assigns to MANY sessions at once.
+// seedDate primes a New season with a sensible window (earliest selected day).
+function _gpBulkSeasonPicker(anchor, clubId, teamId, sids, seedDate) {
+  if (!sids || !sids.length) { showToast(tt('gps_analysis.ar_pick_rows','Pick at least one day'), true); return; }
+  const seasons = window.__gpSeasons || [];
+  const items = [
+    { label: '✕ ' + tt('gps_analysis.ar_clear_season','Clear season'), _clear: true },
+    ...seasons.map(s => ({ label: `${s.name} (${s.start_date} → ${s.end_date})`, seasonId: s.id })),
+    { label: '＋ ' + tt('gps_analysis.ar_new_season','New season…'), _new: true },
+  ];
+  makePopover(anchor, items, item => {
+    if (item._new) return _gpNewSeasonForm(clubId, teamId, s => _gpBulkAssignSeason(clubId, sids, s.id), seedDate);
+    _gpBulkAssignSeason(clubId, sids, item._clear ? null : item.seasonId);
+  });
+}
+
+// One season_id write over many sessions (chunked so the id list never blows the URL/param cap).
+async function _gpBulkAssignSeason(clubId, sids, seasonId) {
+  try {
+    for (let i = 0; i < sids.length; i += 200) {
+      const chunk = sids.slice(i, i + 200);
+      const { error } = await window.sb.from('training_sessions')
+        .update({ season_id: seasonId || null }).eq('club_id', clubId).in('id', chunk);
+      if (error) throw error;
+    }
+    showToast(seasonId
+      ? tt('gps_analysis.ar_season_set_n', `Season assigned to ${sids.length} days`, { n: sids.length })
+      : tt('gps_analysis.ar_season_cleared_n', `Season cleared on ${sids.length} days`, { n: sids.length }));
     try { window.cmInvalidateGpsCache?.(); window.invalidateBaselineCache?.(); } catch {}
     try { await window.gpFilterBar?.reload?.(); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
