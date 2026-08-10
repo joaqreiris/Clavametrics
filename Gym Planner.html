@@ -17,6 +17,7 @@
 <script src="assets/sidebar.js"></script>
 <script defer src="assets/gps-acwr.js"></script>
 <script src="assets/global-search.js" defer></script>
+<script src="lib/exercise-taxonomy.js"></script>
 <!-- Export PDF libs — loaded as globals (same proven pattern as Daily Planning) instead of dynamic import -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -45,6 +46,21 @@
   .gp-card.warmup{border-left:3px solid var(--cm-success)}
   .gp-card.plyo{border-left:3px solid var(--cm-warning)}
   .gp-card.adapt{border-left:3px solid var(--cm-info)}
+  .gp-card.equip{border-left:3px solid var(--cm-accent)}
+  .gp-card.equip .gp-card-h h3{color:var(--cm-accent)}
+  /* Equipment section */
+  .gp-eq-add{height:28px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;outline:none;max-width:170px}
+  .gp-eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+  .gp-eq-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:9px;background:var(--cm-bg-soft)}
+  .gp-eq-item .gp-eq-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .gp-eq-item .gp-eq-name{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:6px}
+  .gp-eq-item .gp-eq-name .gp-eq-manual{font:600 8.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px}
+  .gp-eq-item .gp-eq-ex{font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gp-eq-item .gp-eq-qty{width:52px;height:30px;padding:0 8px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none;flex:none}
+  .gp-eq-item .gp-eq-qty:focus{border-color:var(--cm-accent)}
+  .gp-eq-item .gp-eq-rm{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--cm-fg-faint);border-radius:5px;cursor:pointer}
+  .gp-eq-item .gp-eq-rm:hover{background:var(--cm-bg-subtle);color:var(--cm-danger)}
+  .gp-eq-empty{font:var(--cm-body-sm);color:var(--cm-fg-muted);padding:4px 2px}
   .gp-card-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border-soft)}
   .gp-card-h h3{font:600 13px/1 var(--cm-font-sans);letter-spacing:0.04em;text-transform:uppercase;color:var(--cm-fg-strong)}
   .gp-card.warmup .gp-card-h h3{color:var(--cm-success)}
@@ -268,6 +284,19 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ===== EQUIPMENT (auto-detected from the exercises' library tags) ===== -->
+      <div class="gp-card equip" id="gpEquipCard">
+        <div class="gp-card-h">
+          <h3 data-i18n="gym_planner.equipment">Equipment</h3>
+          <span class="ct" id="gpEquipCt">—</span>
+          <span class="sub" data-i18n="gym_planner.equipment_hint">auto-detected from exercises · set quantities</span>
+          <div class="right no-print">
+            <select id="gpEquipAdd" class="gp-eq-add" title="" data-i18n-attr="title:gym_planner.add_material"><option value="" data-i18n="gym_planner.add_material">+ Add material…</option></select>
+          </div>
+        </div>
+        <div class="gp-card-b" id="gpEquipBody" style="padding:12px 16px"></div>
       </div>
 
       <!-- ===== TOTALS — order: Warm-up, Plyometrics, Main work, Tonnage, Athletes, AU ===== -->
@@ -586,6 +615,7 @@ function gpDeleteRow(btn) {
   // Deleting one half of a superset leaves the other half orphaned → drop its link.
   if (wasLinked && tbody.id === 'gpMainBody') gpRefreshMainLinks();
   gpRecalcTotals();
+  gpRenderEquipment();
 }
 
 // ── Drag-to-reorder (all tables) + superset linking (main work) ──
@@ -760,7 +790,8 @@ function gpCollectContent() {
     main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) },
     adaptations: gpCollectAdapt(),
     roster: [..._gpRoster],
-    loadGroups: _gpGrpSavedCfg
+    loadGroups: _gpGrpSavedCfg,
+    equipment: gpCollectEquipment()
   };
 }
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
@@ -797,6 +828,8 @@ function gpApplyContent(content) {
   setMin('gpMainMin', content.main?.min);
   gpRecalcTotals();
   // Restore the saved Load-groups config and preview it in the plan (async row load).
+  _gpEquipQty = { ...(content.equipment || {}) };
+  gpRenderEquipment();
   _gpGrpSavedCfg = content.loadGroups || null;
   gpRenderSavedGroups();
 }
@@ -806,7 +839,7 @@ let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = 'strength'
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,muscle_group,category,complexity,equipment,media_type,media_ref,video_url')
+    .select('id,name,muscle_group,category,complexity,equipment,equipment_tags,media_type,media_ref,video_url')
     .eq('club_id', _gpClubId).order('name');
   _gpLib = data || [];
   return _gpLib;
@@ -867,6 +900,69 @@ function gpRenderRowThumb(tr){
   if(!src){ if(thumb) thumb.remove(); return; }
   if(!thumb){ thumb=document.createElement('span'); thumb.className='gp-row-thumb'; cell.insertBefore(thumb, cell.firstChild); }
   thumb.innerHTML=`<img src="${src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`;
+}
+
+// ── Equipment (materials) — auto-detected from each exercise's library equipment_tags ──
+// Persisted in gym_content.equipment as { token: qty }. Only tokens with a quantity are stored;
+// detected tokens re-appear on load, so quantities survive but the list stays driven by exercises.
+let _gpEquipQty = {};        // token -> qty string (live source of truth for quantities)
+let _gpEquipAddBuilt = false;
+const gpEqLabel = t => (window.CMTaxonomy ? window.CMTaxonomy.label('equipment', t) : t);
+// Map token -> Set(exercise names) for every exercise in the session that declares it (skip bodyweight).
+function gpComputeEquipment(){
+  const byId = {}; (_gpLib || []).forEach(e => { byId[e.id] = e; });
+  const map = new Map();
+  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr => {
+    const e = tr.dataset.exId ? byId[tr.dataset.exId] : null;
+    const tags = e && Array.isArray(e.equipment_tags) ? e.equipment_tags : [];
+    if (!tags.length) return;
+    const nm = (tr.querySelector('.name-cell input')?.value || '').trim();
+    tags.forEach(t => { if (!t || t === 'bodyweight') return; if (!map.has(t)) map.set(t, new Set()); if (nm) map.get(t).add(nm); });
+  });
+  return map;
+}
+function gpBuildEquipAddOptions(){
+  if (_gpEquipAddBuilt) return; _gpEquipAddBuilt = true;
+  const sel = document.getElementById('gpEquipAdd'); if (!sel || !window.CMTaxonomy) return;
+  const opts = (window.CMTaxonomy.LISTS.equipment || [])
+    .filter(it => it.token !== 'bodyweight')
+    .map(it => ({ token: it.token, label: gpEqLabel(it.token) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  sel.insertAdjacentHTML('beforeend', opts.map(o => `<option value="${o.token}">${o.label}</option>`).join(''));
+}
+async function gpRenderEquipment(){
+  const body = document.getElementById('gpEquipBody'); if (!body) return;
+  await gpEnsureLib();                 // detection needs the library equipment_tags
+  gpBuildEquipAddOptions();
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const detected = gpComputeEquipment();
+  // Show detected tokens plus any manual ones the user added/kept a quantity on.
+  const tokens = [...new Set([...detected.keys(), ...Object.keys(_gpEquipQty)])]
+    .sort((a, b) => gpEqLabel(a).localeCompare(gpEqLabel(b)));
+  const ct = document.getElementById('gpEquipCt'); if (ct) ct.textContent = tokens.length || '—';
+  if (!tokens.length) {
+    body.innerHTML = `<div class="gp-eq-empty">${esc(tt('gym_planner.no_equipment','No equipment yet — it appears automatically as you add exercises tagged with materials.'))}</div>`;
+    return;
+  }
+  body.innerHTML = `<div class="gp-eq-grid">${tokens.map(t => {
+    const exNames = detected.has(t) ? [...detected.get(t)] : [];
+    const isManual = !detected.has(t);
+    const qty = _gpEquipQty[t] != null ? _gpEquipQty[t] : '';
+    return `<div class="gp-eq-item" data-token="${esc(t)}">
+      <div class="gp-eq-main">
+        <span class="gp-eq-name">${esc(gpEqLabel(t))}${isManual ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>` : ''}</span>
+        ${exNames.length ? `<span class="gp-eq-ex" title="${esc(exNames.join(', '))}">${esc(exNames.join(' · '))}</span>` : ''}
+      </div>
+      <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" data-i18n-attr="title:gym_planner.qty" title="${esc(tt('gym_planner.qty','Quantity'))}">
+      ${isManual ? `<button type="button" class="gp-eq-rm no-print" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-x" style="font-size:14px"></i></button>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+// Store only tokens the coach gave a quantity → keeps the payload lean and list exercise-driven.
+function gpCollectEquipment(){
+  const out = {};
+  Object.keys(_gpEquipQty).forEach(t => { const v = (_gpEquipQty[t] || '').trim(); if (v) out[t] = v; });
+  return out;
 }
 
 function gpBuildLibModal() {
@@ -1082,6 +1178,7 @@ async function gpRunAi() {
     await gpSyncRowNames();
     await gpResolveSessionMedia();
     document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+    gpRenderEquipment();
     gpRenderPrintSheet();
     const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
     const noteParts = [plan.notes, ...mainNotes].filter(Boolean);
@@ -1171,6 +1268,7 @@ async function gpApplyTemplate(id) {
   await gpSyncRowNames();
   await gpResolveSessionMedia();
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+  gpRenderEquipment();
   gpScheduleSave();
   gpCloseTpl();
 }
@@ -1934,6 +2032,7 @@ async function gpLoadDay(dateStr) {
   await gpSyncRowNames();
   await gpResolveSessionMedia();
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+  gpRenderEquipment();   // relinked rows may add exIds → refresh detected materials
 
   // Calendar overlays: microcycle / match-day / RPE only. Start time and duration come
   // from THIS gym session — the Calendar block IS this training_sessions row (source='session'),
@@ -2134,6 +2233,24 @@ function gpRenderPrintSheet() {
       <div style="font:500 11.5px/1.45 ${FONT};color:#3C4149">${esc(notes).replace(/\n/g,'<br>')}</div>
     </div>` : '';
 
+    // 4b) Equipment needed — auto-detected from exercises (+ any manual), with quantities. Shown
+    // high on the sheet so staff know what to prepare before the session.
+    let equipBlock = '';
+    try {
+      const eqMap = (typeof gpComputeEquipment === 'function') ? gpComputeEquipment() : new Map();
+      const eqTokens = [...new Set([...eqMap.keys(), ...Object.keys(_gpEquipQty || {})])]
+        .sort((a, b) => gpEqLabel(a).localeCompare(gpEqLabel(b)));
+      if (eqTokens.length) {
+        equipBlock = `<div class="gsp-brk" style="margin-bottom:16px">
+          ${sectionTitle(`${tt('gym_planner.equipment','Equipment')} · ${eqTokens.length}`)}
+          <div style="display:flex;flex-wrap:wrap;gap:6px">${eqTokens.map(t => {
+            const q = ((_gpEquipQty && _gpEquipQty[t]) || '').trim();
+            return `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(gpEqLabel(t))}${q ? `<span style="font:700 11px ${MONO};color:var(--club-accent)">×${esc(q)}</span>` : ''}</span>`;
+          }).join('')}</div>
+        </div>`;
+      }
+    } catch (e) { console.warn('gpRenderPrintSheet equipment failed', e); }
+
     // 5) Athletes
     const roster = (_gpPlayers||[]).filter(p => _gpRoster.has(p.id));
     const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
@@ -2278,7 +2395,7 @@ function gpRenderPrintSheet() {
     } catch (e) { console.warn('gpRenderPrintSheet groups failed', e); }
 
     host.innerHTML = `<div class="gsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${footer}
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${equipBlock}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${footer}
     </div>${groupsPage}`;
   } catch (e) {
     console.warn('gpRenderPrintSheet failed', e);
@@ -2414,14 +2531,38 @@ async function gpExportPDF() {
     if (el) el.addEventListener('change', gpScheduleSave);
   });
 
-  // Recalc totals when any table input changes
+  // Recalc totals + refresh auto-detected equipment when any table input changes
   ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
+    const el = document.getElementById(id); if (el) el.addEventListener('input', () => { gpRecalcTotals(); gpRenderEquipment(); gpScheduleSave(); });
   });
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
   });
   document.getElementById('gpAdaptBody').addEventListener('input', gpScheduleSave);
+
+  // Equipment section — edit quantities, add a manual material, remove a manual one.
+  (function () {
+    const body = document.getElementById('gpEquipBody');
+    const add = document.getElementById('gpEquipAdd');
+    if (body) {
+      body.addEventListener('input', e => {
+        const inp = e.target.closest('.gp-eq-qty'); if (!inp) return;
+        const t = inp.closest('.gp-eq-item')?.dataset.token; if (!t) return;
+        _gpEquipQty[t] = inp.value; gpScheduleSave();
+      });
+      body.addEventListener('click', e => {
+        const rm = e.target.closest('.gp-eq-rm'); if (!rm) return;
+        const t = rm.closest('.gp-eq-item')?.dataset.token; if (!t) return;
+        delete _gpEquipQty[t]; gpRenderEquipment(); gpScheduleSave();
+      });
+    }
+    if (add) add.addEventListener('change', () => {
+      const t = add.value; add.value = '';
+      if (!t) return;
+      if (_gpEquipQty[t] == null) _gpEquipQty[t] = '';
+      gpRenderEquipment(); gpScheduleSave();
+    });
+  })();
 
   // Print-layout toggle (image cards vs text-only) — persist and re-render the print sheet.
   (function () {
