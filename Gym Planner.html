@@ -2020,7 +2020,7 @@ function gpRenderPrintSheet() {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
         const mode = (tr.querySelector('.gp-mode button.is-on')?.textContent || '').trim();
-        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '', mode };
+        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
       });
     };
 
@@ -2143,24 +2143,36 @@ function gpRenderPrintSheet() {
       }).join('')}</div>
     </div>` : '';
 
-    // MAIN WORK — cards
+    // MAIN WORK — cards. Linked rows (tr.dataset.link) render as one superset block.
     const mainRows = readRows('gpMainBody').filter(r=>r.name);
     const mSets = kv(g('gpTotMain')), mTon = kv(g('gpTotTonnage'));
+    const mainCardHtml = r => {
+      const isVbt = r.mode === 'VBT';
+      const params=[];
+      if (isVbt) {
+        if(r.c3)params.push({l:tt('gym_planner.sets_label','Sets'),v:r.c3});
+        if(r.c4)params.push({l:tt('gym_planner.target_vel','Target vel'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' m/s'});
+        if(r.c5 && r.c5!=='—')params.push({l:tt('gym_planner.vel_loss','Vel loss'),v:/%/.test(r.c5)?r.c5:r.c5+'%'});
+      } else {
+        if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
+      }
+      const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
+      return exCard({name:r.name, params, note, tag:isVbt?'VBT':'STR', tagColor:isVbt?'#2563EB':'#B91C1C', exId:r.exId});
+    };
+    // A superset = two adjacent rows sharing a link id → wrap them as one accented block.
+    const supersetWrap = inner => `<div style="grid-column:span ${textLayout?'1':'2'};break-inside:avoid;border:1px solid var(--club-accent);border-radius:${textLayout?'8px':'12px'};padding:${textLayout?'7px 8px 8px':'8px'}">
+      <div style="display:flex;align-items:center;margin-bottom:6px"><span style="display:inline-flex;align-items:center;gap:4px;background:var(--club-accent);color:#fff;font:700 8px ${MONO};letter-spacing:.05em;padding:2px 7px;border-radius:4px;line-height:1.3"><span style="font-size:9px">⛓</span>${esc(tt('gym_planner.superset_badge','Superset'))}</span></div>
+      <div style="display:grid;grid-template-columns:${textLayout?'1fr':'1fr 1fr'};gap:${textLayout?'7px':'10px'}">${inner}</div>
+    </div>`;
+    const mainCells = [];
+    for (let i=0;i<mainRows.length;i++){
+      const r = mainRows[i], nx = mainRows[i+1];
+      if (r.link && nx && nx.link === r.link) { mainCells.push(supersetWrap(mainCardHtml(r)+mainCardHtml(nx))); i++; }
+      else mainCells.push(mainCardHtml(r));
+    }
     const mainBlock = mainRows.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
-      <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${mainRows.map(r=>{
-        const isVbt = r.mode === 'VBT';
-        const params=[];
-        if (isVbt) {
-          if(r.c3)params.push({l:tt('gym_planner.sets_label','Sets'),v:r.c3});
-          if(r.c4)params.push({l:tt('gym_planner.target_vel','Target vel'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' m/s'});
-          if(r.c5 && r.c5!=='—')params.push({l:tt('gym_planner.vel_loss','Vel loss'),v:/%/.test(r.c5)?r.c5:r.c5+'%'});
-        } else {
-          if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
-        }
-        const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
-        return exCard({name:r.name, params, note, tag:isVbt?'VBT':'STR', tagColor:isVbt?'#2563EB':'#B91C1C', exId:r.exId});
-      }).join('')}</div>
+      <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${mainCells.join('')}</div>
     </div>` : '';
 
     // 7) Footer
