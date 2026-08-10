@@ -2393,11 +2393,12 @@ async function renderKpiCard(cardEl, metricKey, sel) {
 // attributes if missing, never overwriting session_id / type / is_historical. A
 // day whose reports have NO session gets a historical 'match' container created
 // and its reports linked. Historical containers are excluded from Calendar/Planner.
-async function _gpOpenAssignRivals() {
+async function _gpOpenAssignRivals(opts) {
+  const onlyOutsideDefault = !!(opts && opts.onlyOutside);
   const clubId = window._gpClubId || (await window.getClubId?.());
   if (!clubId) { showToast('No club selected', true); return; }
   const teamId = window._gpTeamId || null;
-  const ov   = makeModal('Assign rival to GPS days', '<div id="arBody" style="min-width:540px;max-width:640px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading GPS days…</div></div>');
+  const ov   = makeModal(tt('gps_analysis.ar_title','Assign rivals & seasons'), '<div id="arBody" style="min-width:600px;max-width:720px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading GPS days…</div></div>');
   const body = ov.querySelector('#arBody');
   try {
     // NO team filter here: the real inclusion criterion is "the session has GPS
@@ -2407,7 +2408,7 @@ async function _gpOpenAssignRivals() {
     const [sessions, reps, { data: opps }] = await Promise.all([
       // Paginated (server caps at ~1000): big clubs would otherwise lose sessions here too.
       window.cmFetchAll(() => window.sb.from('training_sessions')
-        .select('id, session_date, session_type, is_historical, session_attributes')
+        .select('id, session_date, session_type, is_historical, season_id, session_attributes')
         .eq('club_id', clubId), { label: 'assign-rivals.sessions' }),
       // PRESENCE check only: a day that has ANY GPS row needs a rival, even if some rows
       // are flagged invalid (outliers). Validity matters for value reads, not "has GPS?".
@@ -2415,13 +2416,15 @@ async function _gpOpenAssignRivals() {
       window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id').eq('club_id', clubId), { label: 'assign-rivals.reports' }),
       window.sb.from('opponent_branding').select('id, opponent_name, crest_url').eq('club_id', clubId).order('opponent_name'),
     ]);
+    await _gpLoadSeasons(clubId, teamId);
     const cnt = new Map();
     (reps || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, (cnt.get(r.session_id) || 0) + 1); });
     const gpsDays = (sessions || []).filter(s => cnt.has(s.id));                              // sessions w/ valid GPS
     const _rivalOf = s => s.session_attributes?.rival || s.session_attributes?.opponent || null;
+    const _haOf = s => s.session_attributes?.home_away || null;
     const rows = gpsDays
       .filter(s => !_rivalOf(s))                                                              // no rival yet
-      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, players: cnt.get(s.id) }))
+      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, players: cnt.get(s.id), seasonId: s.season_id || null }))
       .sort((a, b) => String(b.date).localeCompare(String(a.date)));                          // newest first (paging is id-ordered)
     // Days you can UNDO a rival on: GPS days that already carry a rival, plus historical
     // 'match' containers we created just to hold a rival (which may have no GPS of their own).
@@ -2429,113 +2432,270 @@ async function _gpOpenAssignRivals() {
     const assignedRows = (sessions || [])
       .filter(s => _rivalOf(s))
       .filter(s => cnt.has(s.id) || (s.is_historical === true && s.session_type === 'match'))
-      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, rival: _rivalOf(s) }))
+      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, rival: _rivalOf(s), ha: _haOf(s), seasonId: s.season_id || null }))
       .sort((a, b) => String(b.date).localeCompare(String(a.date)));
     // Diagnostics: if a known GPS day is missing from `rows`, this tells you whether it has
     // no valid GPS (excluded by is_invalid) or it already carries a rival.
-    console.info(`[AssignRivals] club sessions=${sessions?.length || 0} · GPS days=${gpsDays.length} · unassigned=${rows.length} · assigned(removable)=${assignedRows.length}`);
+    console.info(`[AssignRivals] club sessions=${sessions?.length || 0} · GPS days=${gpsDays.length} · unassigned=${rows.length} · assigned(removable)=${assignedRows.length} · seasons=${(window.__gpSeasons||[]).length}`);
     window.__gpOpponents = opps || [];
-    if (!gpsDays.length && !assignedRows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">No GPS days yet.</div>'; return; }
+    if (!gpsDays.length && !assignedRows.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.ar_no_gps_days','No GPS days yet.')}</div>`; return; }
+    // A day is "outside season" when it carries no season_id AND its date matches no season range.
+    const _out = r => !r.seasonId && !_gpDateInAnySeason(r.date);
+    const outsideCount = [...rows, ...assignedRows].filter(_out).length;
+    const _seasonCell = (r) => {
+      const s = r.seasonId ? _gpSeasonById(r.seasonId) : null;
+      const out = _out(r);
+      const label = s ? _gpEsc(s.name) : (out ? tt('gps_analysis.ar_no_season','No season') : tt('gps_analysis.ar_set_season','Set season'));
+      const style = (out && !s) ? 'border-color:var(--cm-warn,#d97706);color:var(--cm-warn,#d97706)' : '';
+      return `<button class="cm-btn is-outline is-sm ar-season" data-sid="${r.id}" data-season="${r.seasonId||''}" style="${style}"><i class="ti ti-calendar-stats" style="font-size:14px"></i>${label}</button>`;
+    };
+    const _haLabel = ha => ha === 'home' ? tt('gps_analysis.ar_home','Home') : ha === 'away' ? tt('gps_analysis.ar_away','Away') : ha === 'neutral' ? tt('gps_analysis.ar_neutral','Neutral') : '—';
     body.innerHTML = `
-      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">Assigning sets a GPS day as a match vs the chosen rival (the session is reused — Calendar/Planner unaffected). Removing a rival keeps all GPS data.</p>
-      <input id="arSearch" type="text" placeholder="Search date…" style="width:100%;margin:0 0 10px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
+      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">${tt('gps_analysis.ar_intro','Assign a rival to turn a GPS day into a match (the session is reused — Calendar/Planner unaffected), set Home/Away, and/or bucket the day into a season so imported/pre-season data shows in season views. Removing a rival keeps all GPS data.')}</p>
+      ${outsideCount ? `<div style="display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:9px 12px;border:1px solid var(--cm-warn,#d97706);border-radius:8px;background:var(--cm-warn-soft,rgba(217,119,6,.08));color:var(--cm-warn,#d97706);font:500 11.5px/1.5 var(--cm-font-sans)"><i class="ti ti-alert-triangle" style="font-size:15px;flex-shrink:0"></i><span>${tt('gps_analysis.ar_outside_banner', `${outsideCount} imported day(s) fall outside every season — assign a season so they appear in season views.`, { count: outsideCount })}</span></div>` : ''}
+      <div style="display:flex;gap:8px;margin:0 0 10px">
+        <input id="arSearch" type="text" placeholder="${tt('gps_analysis.ar_search','Search date…')}" style="flex:1;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
+        <button id="arOutToggle" class="cm-btn ${onlyOutsideDefault?'is-filled':'is-outline'} is-sm" data-on="${onlyOutsideDefault?'1':'0'}"><i class="ti ti-filter" style="font-size:14px"></i>${tt('gps_analysis.ar_only_outside','Only outside season')}</button>
+      </div>
       <div style="max-height:48vh;overflow:auto">
       ${rows.length ? `
-        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:0 0 6px">Days with no rival yet</div>
+        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:0 0 6px">${tt('gps_analysis.ar_no_rival_yet','Days with no rival yet')}</div>
         <table class="gp-map-table" style="width:100%">
-        <thead><tr><th>Date</th><th>Type</th><th>Players</th><th style="text-align:right">Rival</th></tr></thead>
+        <thead><tr><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_players','Players')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_rival','Rival')}</th></tr></thead>
         <tbody>${rows.map(r => `
-          <tr data-sid="${r.id}" data-date="${r.date}" data-search="${(r.date + ' ' + (r.type || '')).toLowerCase()}">
+          <tr data-sid="${r.id}" data-date="${r.date}" data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '')).toLowerCase()}">
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
             <td style="font:500 11.5px/1 var(--cm-font-mono)">${r.players}</td>
-            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-assign" data-sid="${r.id}" data-date="${r.date}"><i class="ti ti-ball-football" style="font-size:14px"></i>Assign rival</button></td>
+            <td>${_seasonCell(r)}</td>
+            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-assign" data-sid="${r.id}" data-date="${r.date}" data-season="${r.seasonId||''}"><i class="ti ti-ball-football" style="font-size:14px"></i>${tt('gps_analysis.ar_assign_rival','Assign rival')}</button></td>
           </tr>`).join('')}</tbody>
         </table>` : ''}
       ${assignedRows.length ? `
-        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:${rows.length ? '16px' : '0'} 0 6px">Days with a rival</div>
+        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:${rows.length ? '16px' : '0'} 0 6px">${tt('gps_analysis.ar_with_rival','Days with a rival')}</div>
         <table class="gp-map-table" style="width:100%">
-        <thead><tr><th>Date</th><th>Type</th><th>Rival</th><th style="text-align:right">Action</th></tr></thead>
+        <thead><tr><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_rival','Rival')}</th><th>${tt('gps_analysis.ar_col_ha','H/A')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_action','Action')}</th></tr></thead>
         <tbody>${assignedRows.map(r => `
-          <tr data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
+          <tr data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
-            <td style="font:600 11.5px/1 var(--cm-font-sans)">${r.rival || '—'}</td>
-            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-remove" data-sid="${r.id}" data-rival="${(r.rival || '').replace(/"/g, '&quot;')}"><i class="ti ti-x" style="font-size:14px"></i>Remove rival</button></td>
+            <td style="font:600 11.5px/1 var(--cm-font-sans)">${_gpEsc(r.rival || '—')}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${_haLabel(r.ha)}</td>
+            <td>${_seasonCell(r)}</td>
+            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-remove" data-sid="${r.id}" data-rival="${_gpEsc(r.rival || '')}"><i class="ti ti-x" style="font-size:14px"></i>${tt('gps_analysis.ar_remove_rival','Remove rival')}</button></td>
           </tr>`).join('')}</tbody>
         </table>` : ''}
-      <div id="arNoMatch" style="display:none;padding:18px;text-align:center;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No days match.</div></div>`;
+      <div id="arNoMatch" style="display:none;padding:18px;text-align:center;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gps_analysis.ar_no_days_match','No days match.')}</div></div>`;
     body.querySelectorAll('.ar-assign').forEach(btn =>
-      btn.addEventListener('click', () => _gpRivalPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.date)));
+      btn.addEventListener('click', () => _gpAssignMatchForm(clubId, teamId, btn.dataset.sid, btn.dataset.date, btn.dataset.season || null)));
     body.querySelectorAll('.ar-remove').forEach(btn =>
       btn.addEventListener('click', () => _gpRemoveRivalFromDay(clubId, btn.dataset.sid, btn.dataset.rival)));
+    body.querySelectorAll('.ar-season').forEach(btn =>
+      btn.addEventListener('click', () => _gpSeasonPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.season || null)));
     const arSearch = body.querySelector('#arSearch');
+    const arOut    = body.querySelector('#arOutToggle');
     const arRows   = [...body.querySelectorAll('tbody tr')];
     const arEmpty  = body.querySelector('#arNoMatch');
-    arSearch.addEventListener('input', () => {
+    const applyFilter = () => {
       const q = arSearch.value.trim().toLowerCase();
+      const onlyOut = arOut.dataset.on === '1';
       let shown = 0;
       arRows.forEach(tr => {
-        const hit = !q || tr.dataset.search.includes(q);
+        const hit = (!q || tr.dataset.search.includes(q)) && (!onlyOut || tr.dataset.out === '1');
         tr.style.display = hit ? '' : 'none';
         if (hit) shown++;
       });
       arEmpty.style.display = shown ? 'none' : '';
+    };
+    arSearch.addEventListener('input', applyFilter);
+    arOut.addEventListener('click', () => {
+      const on = arOut.dataset.on === '1' ? '0' : '1';
+      arOut.dataset.on = on;
+      arOut.classList.toggle('is-filled', on === '1');
+      arOut.classList.toggle('is-outline', on === '0');
+      applyFilter();
     });
+    applyFilter();
   } catch (e) {
     body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`;
   }
 }
 
-// Rival picker for one day: opponent_branding list + "New rival…" (name + crest).
-function _gpRivalPicker(anchor, clubId, teamId, sessionId, date) {
-  const opps = window.__gpOpponents || [];
+// Minimal HTML escape for user-controlled text/attrs (no global esc in this file).
+function _gpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Seasons (assign a GPS day to a season entity) ─────────────────────────────
+// Seasons scoped to the club, team-or-null (mirrors how session ids are scoped in the
+// resolver). Cached on window for the open modal. Newest first.
+async function _gpLoadSeasons(clubId, teamId) {
+  const { data } = await window.sb.from('seasons')
+    .select('id, name, team_id, start_date, end_date, status')
+    .eq('club_id', clubId)
+    .order('start_date', { ascending: false });
+  const all = data || [];
+  const scoped = all.filter(s => !teamId || s.team_id == null || String(s.team_id) === String(teamId));
+  window.__gpSeasons = scoped.length ? scoped : all;
+  return window.__gpSeasons;
+}
+function _gpSeasonById(id) { return (window.__gpSeasons || []).find(s => String(s.id) === String(id)) || null; }
+// Does a date fall inside ANY known season range? Drives the "outside season" flag that
+// surfaces sync-imported days that no season recognises.
+function _gpDateInAnySeason(date) {
+  if (!date) return false;
+  return (window.__gpSeasons || []).some(s => String(s.start_date) <= date && date <= String(s.end_date));
+}
+
+// Per-row season picker (popover): pick an existing season, clear it, or create a new one.
+function _gpSeasonPicker(anchor, clubId, teamId, sessionId, currentSeasonId) {
+  const seasons = window.__gpSeasons || [];
   const items = [
-    ...opps.map(o => ({ label: o.opponent_name, name: o.opponent_name, crest: o.crest_url || null, oppId: o.id })),
-    { label: '＋ New rival…', _new: true },
+    ...(currentSeasonId ? [{ label: '✕ ' + tt('gps_analysis.ar_clear_season','Clear season'), _clear: true }] : []),
+    ...seasons.map(s => ({ label: (String(s.id) === String(currentSeasonId) ? '✓ ' : '') + `${s.name} (${s.start_date} → ${s.end_date})`, seasonId: s.id })),
+    { label: '＋ ' + tt('gps_analysis.ar_new_season','New season…'), _new: true },
   ];
-  makePopover(anchor, items, async item => {
-    if (item._new) return _gpNewRivalForm(clubId, teamId, sessionId, date);
-    // Existing catalog entry → reuse its id (no duplicate).
-    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, item.name, item.crest, item.oppId);
+  makePopover(anchor, items, item => {
+    if (item._new) return _gpNewSeasonForm(clubId, teamId, s => _gpAssignSeasonToDay(clubId, sessionId, s.id));
+    _gpAssignSeasonToDay(clubId, sessionId, item._clear ? null : item.seasonId);
   });
 }
 
-// Small modal to create a brand-new rival → saved to opponent_branding. Crest can be
-// uploaded from the computer (→ Storage, club-assets bucket) or pasted as a URL.
-function _gpNewRivalForm(clubId, teamId, sessionId, date) {
-  const ov = makeModal('New rival', `
-    <div style="min-width:380px;display:flex;flex-direction:column;gap:12px">
-      <label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Rival name
-        <input id="arName" type="text" placeholder="e.g. Polvorín FC" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box"></label>
-      <div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Crest (optional)</div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <div id="arCrestPrev" style="width:48px;height:48px;flex-shrink:0;border:1px dashed var(--cm-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--cm-surface-2);color:var(--cm-fg-muted);overflow:hidden"><i class="ti ti-shield" style="font-size:18px"></i></div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex:1">
-          <label class="cm-btn is-outline is-sm" style="cursor:pointer;align-self:flex-start">
-            <i class="ti ti-upload" style="font-size:14px"></i><span id="arUpLbl">Upload from computer</span>
-            <input id="arFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">
-          </label>
-          <input id="arCrest" type="text" placeholder="…or paste a crest URL" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
-        </div>
+// Create a season inline (name + start + end) → seasons row → onCreated(season). Same
+// insert shape as the Annual Planner so a season created here is a first-class season.
+function _gpNewSeasonForm(clubId, teamId, onCreated) {
+  const _lbl = 'font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
+  const _inp = 'margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box';
+  const ov = makeModal(tt('gps_analysis.ar_new_season_title','New season'), `
+    <div style="min-width:360px;display:flex;flex-direction:column;gap:12px">
+      <label style="${_lbl}">${tt('gps_analysis.ar_season_name','Season name')}
+        <input id="arSeasonName" type="text" placeholder="${tt('gps_analysis.ar_season_name_ph','e.g. 2024/25')}" style="${_inp}"></label>
+      <div style="display:flex;gap:10px">
+        <label style="${_lbl};flex:1">${tt('gps_analysis.ar_start_date','Start date')}
+          <input id="arSeasonStart" type="date" style="${_inp}"></label>
+        <label style="${_lbl};flex:1">${tt('gps_analysis.ar_end_date','End date')}
+          <input id="arSeasonEnd" type="date" style="${_inp}"></label>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button id="arCancel" class="cm-btn is-outline is-sm">Cancel</button>
-        <button id="arSave" class="cm-btn is-filled is-sm">Save &amp; assign</button>
+        <button id="arSeasonCancel" class="cm-btn is-outline is-sm">${tt('gps_analysis.ar_cancel','Cancel')}</button>
+        <button id="arSeasonSave" class="cm-btn is-filled is-sm">${tt('gps_analysis.ar_create_assign','Create & assign')}</button>
       </div>
     </div>`);
-  const prev    = ov.querySelector('#arCrestPrev');
-  const crestIn = ov.querySelector('#arCrest');
-  const fileIn  = ov.querySelector('#arFile');
-  const upLbl   = ov.querySelector('#arUpLbl');
-  const saveBtn = ov.querySelector('#arSave');
-  const showPrev = url => { prev.innerHTML = url ? `<img src="${url}" style="width:100%;height:100%;object-fit:contain">` : '<i class="ti ti-shield" style="font-size:18px"></i>'; };
+  ov.querySelector('#arSeasonCancel').onclick = () => ov.remove();
+  ov.querySelector('#arSeasonSave').onclick = async () => {
+    const name  = ov.querySelector('#arSeasonName').value.trim();
+    const start = ov.querySelector('#arSeasonStart').value;
+    const end   = ov.querySelector('#arSeasonEnd').value;
+    if (!name || !start || !end) { showToast(tt('gps_analysis.ar_season_fields','Name, start and end are required'), true); return; }
+    if (start > end) { showToast(tt('gps_analysis.ar_season_order','Start date must be before end date'), true); return; }
+    const btn = ov.querySelector('#arSeasonSave'); btn.disabled = true;
+    try {
+      const { data, error } = await window.sb.from('seasons').insert({
+        club_id: clubId, team_id: teamId || null, name, start_date: start, end_date: end,
+        status: 'active', planning_model: 'tactical'
+      }).select('id, name, team_id, start_date, end_date, status').single();
+      if (error) throw error;
+      window.__gpSeasons = [data, ...(window.__gpSeasons || [])];
+      ov.remove();
+      onCreated?.(data);
+    } catch (e) { showToast(`${tt('gps_analysis.ar_season_failed','Season action failed')}: ${e.message}`, true); btn.disabled = false; }
+  };
+}
+
+// Persist a season_id on the day's session (no type change — a training stays a training).
+async function _gpAssignSeasonToDay(clubId, sessionId, seasonId) {
+  try {
+    const { error } = await window.sb.from('training_sessions')
+      .update({ season_id: seasonId || null }).eq('id', sessionId).eq('club_id', clubId);
+    if (error) throw error;
+    showToast(seasonId ? tt('gps_analysis.ar_season_set','Season assigned') : tt('gps_analysis.ar_season_cleared','Season cleared'));
+    try { window.cmInvalidateGpsCache?.(); window.invalidateBaselineCache?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.refreshDashboard?.(); } catch {}
+    document.querySelector('.gp-modal-overlay')?.remove();
+    _gpOpenAssignRivals();
+  } catch (e) { showToast(`${tt('gps_analysis.ar_season_failed','Season assign failed')}: ${e.message}`, true); }
+}
+
+// ── Assign a match to a day: rival (existing/new + crest) + Home/Away + Season, one modal.
+function _gpAssignMatchForm(clubId, teamId, sessionId, date, currentSeasonId) {
+  const opps = window.__gpOpponents || [];
+  const seasons = window.__gpSeasons || [];
+  const _lbl = 'font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
+  const _inp = 'margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box';
+  const haBtn = (v, lbl, on) => `<button type="button" class="cm-btn ${on?'is-filled':'is-outline'} is-sm ar-ha" data-ha="${v}" style="flex:1;justify-content:center">${lbl}</button>`;
+  const ov = makeModal(tt('gps_analysis.ar_assign_match','Assign match'), `
+    <div style="min-width:400px;max-width:460px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${_gpEsc(date || '')}</div>
+      <label style="${_lbl}">${tt('gps_analysis.ar_rival','Rival')}
+        <select id="arRivalSel" style="${_inp}">
+          ${opps.map(o => `<option value="${o.id}" data-name="${_gpEsc(o.opponent_name)}" data-crest="${_gpEsc(o.crest_url||'')}">${_gpEsc(o.opponent_name)}</option>`).join('')}
+          <option value="__new__">${tt('gps_analysis.ar_new_rival','＋ New rival…')}</option>
+        </select></label>
+      <div id="arNewWrap" style="display:none;flex-direction:column;gap:10px">
+        <label style="${_lbl}">${tt('gps_analysis.ar_rival_name','Rival name')}
+          <input id="arName" type="text" placeholder="${tt('gps_analysis.ar_rival_name_ph','e.g. Polvorín FC')}" style="${_inp}"></label>
+        <div style="${_lbl}">${tt('gps_analysis.ar_crest_optional','Crest (optional)')}</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="arCrestPrev" style="width:48px;height:48px;flex-shrink:0;border:1px dashed var(--cm-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--cm-surface-2);color:var(--cm-fg-muted);overflow:hidden"><i class="ti ti-shield" style="font-size:18px"></i></div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+            <label class="cm-btn is-outline is-sm" style="cursor:pointer;align-self:flex-start">
+              <i class="ti ti-upload" style="font-size:14px"></i><span id="arUpLbl">${tt('gps_analysis.ar_upload','Upload from computer')}</span>
+              <input id="arFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">
+            </label>
+            <input id="arCrest" type="text" placeholder="${tt('gps_analysis.ar_crest_url','…or paste a crest URL')}" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="${_lbl};margin-bottom:6px">${tt('gps_analysis.ar_home_away','Home / Away')}</div>
+        <div style="display:flex;gap:6px">${haBtn('home', tt('gps_analysis.ar_home','Home'), true)}${haBtn('away', tt('gps_analysis.ar_away','Away'), false)}${haBtn('neutral', tt('gps_analysis.ar_neutral','Neutral'), false)}</div>
+      </div>
+      <label style="${_lbl}">${tt('gps_analysis.ar_season','Season')}
+        <select id="arSeasonSel" style="${_inp}">
+          <option value="">${tt('gps_analysis.ar_no_season_opt','— No season —')}</option>
+          ${seasons.map(s => `<option value="${s.id}" ${String(s.id)===String(currentSeasonId)?'selected':''}>${_gpEsc(s.name)} (${s.start_date} → ${s.end_date})</option>`).join('')}
+          <option value="__new__">${tt('gps_analysis.ar_new_season','＋ New season…')}</option>
+        </select></label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="arCancel" class="cm-btn is-outline is-sm">${tt('gps_analysis.ar_cancel','Cancel')}</button>
+        <button id="arSave" class="cm-btn is-filled is-sm">${tt('gps_analysis.ar_save_assign','Save & assign')}</button>
+      </div>
+    </div>`);
+  let ha = 'home';
+  let seasonPrev = String(currentSeasonId || '');
+  const rivalSel = ov.querySelector('#arRivalSel');
+  const newWrap  = ov.querySelector('#arNewWrap');
+  const seasonSel= ov.querySelector('#arSeasonSel');
+  const prev     = ov.querySelector('#arCrestPrev');
+  const crestIn  = ov.querySelector('#arCrest');
+  const fileIn   = ov.querySelector('#arFile');
+  const upLbl    = ov.querySelector('#arUpLbl');
+  const saveBtn  = ov.querySelector('#arSave');
+  if (!opps.length) rivalSel.value = '__new__';
+  const syncNew = () => { newWrap.style.display = rivalSel.value === '__new__' ? 'flex' : 'none'; };
+  syncNew();
+  rivalSel.addEventListener('change', syncNew);
+  ov.querySelectorAll('.ar-ha').forEach(b => b.addEventListener('click', () => {
+    ha = b.dataset.ha;
+    ov.querySelectorAll('.ar-ha').forEach(x => { const on = x.dataset.ha === ha; x.classList.toggle('is-filled', on); x.classList.toggle('is-outline', !on); });
+  }));
+  seasonSel.addEventListener('change', () => {
+    if (seasonSel.value === '__new__') {
+      _gpNewSeasonForm(clubId, teamId, s => {
+        const opt = document.createElement('option');
+        opt.value = s.id; opt.textContent = `${s.name} (${s.start_date} → ${s.end_date})`;
+        seasonSel.insertBefore(opt, seasonSel.lastElementChild);
+        seasonSel.value = s.id; seasonPrev = s.id;
+      });
+      seasonSel.value = seasonPrev;   // revert until the new season actually lands
+    } else { seasonPrev = seasonSel.value; }
+  });
+  const showPrev = url => { prev.innerHTML = url ? `<img src="${_gpEsc(url)}" style="width:100%;height:100%;object-fit:contain">` : '<i class="ti ti-shield" style="font-size:18px"></i>'; };
   crestIn.addEventListener('input', () => showPrev(crestIn.value.trim()));
   fileIn.addEventListener('change', async () => {
     const file = fileIn.files?.[0];
     if (!file) return;
-    showPrev(URL.createObjectURL(file));      // instant local preview
-    upLbl.textContent = 'Uploading…'; saveBtn.disabled = true;
+    showPrev(URL.createObjectURL(file));
+    upLbl.textContent = tt('gps_analysis.ar_uploading','Uploading…'); saveBtn.disabled = true;
     try {
       const opName = ov.querySelector('#arName').value.trim() || 'rival';
       const slug   = window.slugifyOpponent ? window.slugifyOpponent(opName) : 'rival';
@@ -2544,21 +2704,30 @@ function _gpNewRivalForm(clubId, teamId, sessionId, date) {
       const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true, contentType: file.type });
       if (error) throw error;
       const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
-      crestIn.value = publicUrl;             // surface it so the user sees/can edit it
-      showPrev(publicUrl);
-      upLbl.textContent = 'Replace crest';
+      crestIn.value = publicUrl; showPrev(publicUrl);
+      upLbl.textContent = tt('gps_analysis.ar_replace_crest','Replace crest');
     } catch (e) {
-      showToast(`Upload failed: ${e.message}`, true);
-      upLbl.textContent = 'Upload from computer';
+      showToast(`${tt('gps_analysis.ar_upload_failed','Upload failed')}: ${e.message}`, true);
+      upLbl.textContent = tt('gps_analysis.ar_upload','Upload from computer');
     } finally { saveBtn.disabled = false; }
   });
   ov.querySelector('#arCancel').onclick = () => ov.remove();
   saveBtn.onclick = async () => {
-    const name  = ov.querySelector('#arName').value.trim();
-    const crest = crestIn.value.trim() || null;
-    if (!name) { showToast('Enter a rival name', true); return; }
+    let name, crest = null, oppId = null;
+    if (rivalSel.value === '__new__') {
+      name  = ov.querySelector('#arName').value.trim();
+      crest = crestIn.value.trim() || null;
+      if (!name) { showToast(tt('gps_analysis.ar_enter_rival','Enter a rival name'), true); return; }
+    } else {
+      const opt = rivalSel.selectedOptions[0];
+      name  = opt?.dataset.name || opt?.textContent || '';
+      crest = opt?.dataset.crest || null;
+      oppId = rivalSel.value || null;
+      if (!name) { showToast(tt('gps_analysis.ar_pick_rival','Pick a rival'), true); return; }
+    }
+    const seasonId = (seasonSel.value && seasonSel.value !== '__new__') ? seasonSel.value : null;
     ov.remove();
-    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, name, crest);
+    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, name, crest, oppId, ha, seasonId);
   };
 }
 
@@ -2897,17 +3066,20 @@ gpGearBtn?.addEventListener('click', e => {
   if (_pop && _popAnchor === gpGearBtn) { closePop(); return; }   // toggle: second click closes
   const n  = window._gpSessionCount;
   const fc = window._gpFlaggedN || 0;   // cached — open the menu NOW; don't block on a DB count
+  const oc = window._gpOutsideN || 0;   // cached "imported days without a season" count
   Promise.resolve(_gpFlaggedCount()).catch(() => {});   // refresh the count in the background for next open
+  Promise.resolve(_gpOutsideSeasonCount()).catch(() => {});
   makePopover(gpGearBtn, [
     { label: tt('gps_analysis.data_sources','Data sources') + (Number.isFinite(n) ? ` · ${tt('gps_analysis.n_gps_sessions','{n} GPS sessions',{n})}` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
     { label: tt('gps_analysis.gps_settings','GPS settings'),    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
     { label: tt('gps_analysis.metrics_catalog','Metrics catalog'), icon: 'ti-list',                   act: 'gpCatalogBtn' },
-    { label: tt('gps_analysis.assign_rivals','Assign rivals'),   icon: 'ti-ball-football',          act: 'rivals' },
+    { label: tt('gps_analysis.assign_rivals','Assign rivals & seasons') + (oc ? ` · ${tt('gps_analysis.n_need_season','{n} need a season',{n:oc})}` : ''),   icon: 'ti-ball-football',          act: oc ? 'rivals_outside' : 'rivals' },
     { sep: true },
     { label: tt('gps_analysis.flagged_periods','Flagged periods') + (fc ? ` · ${tt('gps_analysis.n_need_review','{n} need review',{n:fc})}` : ''), icon: 'ti-flag', act: 'flagged' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
     else if (item.act === 'rivals') _gpOpenAssignRivals();
+    else if (item.act === 'rivals_outside') _gpOpenAssignRivals({ onlyOutside: true });
     else document.getElementById(item.act)?.click();
   });
 });
@@ -2925,6 +3097,18 @@ async function _gpFlaggedCount() {
     .eq('club_id', clubId).eq('is_flagged', true);
   window._gpFlaggedN = count || 0;
   return window._gpFlaggedN;
+}
+// Cheap "post-sync review" signal: sessions the sync imported as historical that still carry
+// no season (season_id null). Surfaced as a badge on the Assign rivals menu item so the user
+// knows there are imported days to bucket into a season. Head-count only (no rows fetched).
+async function _gpOutsideSeasonCount() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (!clubId || !window.sb) return 0;
+  const { count } = await window.sb.from('training_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId).eq('is_historical', true).is('season_id', null);
+  window._gpOutsideN = count || 0;
+  return window._gpOutsideN;
 }
 async function _gpOpenFlaggedPanel() {
   const clubId = window._gpClubId || await window.getClubId?.();
@@ -7143,196 +7327,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <!-- ═══════════════════════════════════════════════════════════
      LOAD MONITORING (vista mgrp) — ACWR gauges + tabla + alertas
 ═══════════════════════════════════════════════════════════ -->
-<script>
-(function () {
-  const fmtAcwr = v => v != null ? v.toFixed(2) : '—';
-
-  // SVG semicircular gauge (value 0–2.0, zones from gpsACWR.ACWR_ZONES)
-  function _gaugeSVG(value, label) {
-    const cx = 100, cy = 92, r = 68, sw = 12, max = 2.0;
-    const zones = window.gpsACWR?.ACWR_ZONES || [];
-
-    function pt(v) {
-      const a = Math.PI * (1 - v / max);
-      return [+(cx + r * Math.cos(a)).toFixed(1), +(cy - r * Math.sin(a)).toFixed(1)];
-    }
-    function arc(v1, v2, color) {
-      const [x1, y1] = pt(v1), [x2, y2] = pt(Math.min(v2, max));
-      const span = (v2 - v1) / max;
-      const large = span > 0.5 ? 1 : 0;
-      return `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt"/>`;
-    }
-
-    const v   = Math.min(max, Math.max(0, value ?? 0));
-    const [nx, ny] = pt(v);
-    const zone = window.gpsACWR?.getZone(v) || null;
-    const zoneColors = { under:'rgba(139,92,246,.4)', sweet:'rgba(74,222,128,.5)', caution:'rgba(251,191,36,.6)', risk:'rgba(248,113,113,.5)' };
-
-    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:170px;display:block;margin:0 auto">
-      ${arc(0,   0.8, zoneColors.under)}
-      ${arc(0.8, 1.3, zoneColors.sweet)}
-      ${arc(1.3, 1.5, zoneColors.caution)}
-      ${arc(1.5, 2.0, zoneColors.risk)}
-      ${value != null ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
-      <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
-      <text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${fmtAcwr(value)}</text>
-      <text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${zone?.label || ''}</text>
-      <text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${label}</text>
-      <text x="22" y="106" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">0</text>
-      <text x="178" y="106" text-anchor="end" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">2.0</text>
-    </svg>`;
-  }
-
-  // ── DOM ──────────────────────────────────────────────────────
-  // Filtros viejos del dashboard (lm-refdate / lm-custom-date / lm-metric / Refresh /
-  // lm-info) eliminados: la barra de desplegables (gpFilterBar) es la ÚNICA fuente de
-  // filtrado. lmInfo queda como sink detached para no romper los mensajes de estado.
-  const lmInfo      = document.getElementById('lm-info') || document.createElement('span');
-  // Risk-alerts and ACWR-by-player cards were removed; keep detached sinks so the shared
-  // lmLoad() (which still drives the ACWR gauges) can write to them harmlessly.
-  const alertsBody  = document.getElementById('lm-alerts-body') || document.createElement('div');
-  const gaugesBody  = document.getElementById('lm-gauges-body');
-  const tableBody   = document.getElementById('lm-table-body') || document.createElement('div');
-  const zoneFilter  = document.getElementById('lm-zone-filter');
-  if (!gaugesBody) return;   // gauges card gone too → nothing to drive here
-
-  let _playerAcwrData = null;
-  let _playerMap      = {};
-  let _lmSortKey      = 'player_load';
-  let _lmSortDir      = -1;
-
-  // ── load ─────────────────────────────────────────────────────
-  async function lmLoad() {
-    lmInfo.textContent = 'Calculating ACWR...';
-    alertsBody.innerHTML = gaugesBody.innerHTML = tableBody.innerHTML =
-      '<div style="padding:16px;color:var(--cm-fg-muted)">Calculating...</div>';
-
-    try {
-      const clubId = await window.getClubId?.();
-      if (!clubId || !window.sb || !window.gpsACWR) { lmInfo.textContent = tt('gps_analysis.not_ready','Not ready.'); return; }
-
-      // Fecha de referencia derivada de la barra (fin del rango elegido); null = hoy.
-      const refDate = window.gpFilterBar?.getState?.()?.date?.to || null;
-
-      const [playerAcwr, players] = await Promise.all([
-        window.gpsACWR.calculatePlayerACWR({ clubId, refDate }),
-        _gpRoster(clubId, window._gpTeamId),
-      ]);
-
-      _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
-      // Respect the active player/position filter (same predicate as the science chart) so gauges,
-      // table and chart all show the SAME set under the same filter. calculatePlayerACWR is
-      // club-wide; we narrow it here and recompute the team average from the filtered players.
-      const _pred = _gpAcwrEffective(pid => _playerMap[pid]?.position);
-      _playerAcwrData = Object.fromEntries(Object.entries(playerAcwr || {}).filter(([pid]) => _pred(pid)));
-
-      // Team gauges = per-player → mean over the FILTERED set (matches the chart's aggregation).
-      const teamAcwr = {};
-      for (const m of (window.gpsACWR.ACWR_METRICS || [])) {
-        const vals = Object.values(_playerAcwrData).map(p => p[m.key]).filter(v => v != null);
-        teamAcwr[m.key] = vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
-      }
-
-      const metricKey = 'player_load';   // métrica base ACWR (default); el ACWR no depende de ella
-      lmInfo.textContent = `Ref: ${refDate || 'today'} · ${Object.keys(_playerAcwrData).length} players`;
-
-      _renderGauges(teamAcwr);
-      // Risk-alerts and ACWR-by-player cards were removed — only the gauges remain here.
-    } catch (e) { console.error('lmLoad:', e); lmInfo.textContent = tt('gps_analysis.error_calc_acwr','Error calculating ACWR.'); }
-  }
-
-  // ── gauges ───────────────────────────────────────────────────
-  function _renderGauges(teamAcwr) {
-    if (!teamAcwr) { gaugesBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No training data in the last 28 days.</div>'; return; }
-    const metrics = window.gpsACWR.ACWR_METRICS || [];
-    gaugesBody.innerHTML = `<div class="gp-gauges-row">${
-      metrics.map(m => `<div class="gp-gauge-wrap">${_gaugeSVG(teamAcwr[m.key], m.label)}</div>`).join('')
-    }</div>`;
-  }
-
-
-  // ── table ────────────────────────────────────────────────────
-  function _renderTable() {
-    if (!_playerAcwrData || !Object.keys(_playerAcwrData).length) {
-      tableBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return;
-    }
-    const metrics  = window.gpsACWR.ACWR_METRICS || [];
-    const getZone  = window.gpsACWR.getZone;
-    const filter   = zoneFilter?.value || 'all';
-
-    let entries = Object.entries(_playerAcwrData);
-
-    // Zone filter
-    if (filter === 'risk') {
-      entries = entries.filter(([, d]) => metrics.some(m => getZone(d[m.key])?.cls === 'risk'));
-    } else if (filter === 'caution') {
-      entries = entries.filter(([, d]) => metrics.some(m => ['caution','risk'].includes(getZone(d[m.key])?.cls)));
-    }
-
-    // Sort
-    entries.sort((a, b) => {
-      if (_lmSortKey === 'player') {
-        const an = (_playerMap[a[0]]?.last_name || '');
-        const bn = (_playerMap[b[0]]?.last_name || '');
-        return an.localeCompare(bn) * _lmSortDir;
-      }
-      const av = a[1][_lmSortKey] ?? -1;
-      const bv = b[1][_lmSortKey] ?? -1;
-      return (av - bv) * _lmSortDir;
-    });
-
-    const headers = `<tr>
-      <th data-key="player" style="text-align:left">Player</th>
-      <th data-key="sessCount" style="text-align:right">Sessions</th>
-      ${metrics.map(m => `<th data-key="${m.key}">ACWR ${m.label}</th>`).join('')}
-    </tr>`;
-
-    const rows = entries.map(([pid, d]) => {
-      const p    = _playerMap[pid] || {};
-      const name = `${p.last_name || ''} ${(p.first_name||'')[0]||''}.`.trim();
-      const pos  = p.position ? `<span style="font-size:10px;color:var(--cm-fg-muted)"> · ${p.position}</span>` : '';
-      const sessWarn = d.insufficient ? ' <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:11px" title="Insufficient data"></i>' : '';
-
-      const cells = metrics.map(m => {
-        const v   = d[m.key];
-        const z   = getZone(v);
-        const cls = d.insufficient ? 'insuff' : (z?.cls || 'neu');
-        return `<td><span class="lm-z ${cls}">${fmtAcwr(v)}</span></td>`;
-      }).join('');
-
-      return `<tr>
-        <td>${name}${pos}</td>
-        <td style="text-align:right">${d.sessCount}${sessWarn}</td>
-        ${cells}
-      </tr>`;
-    }).join('');
-
-    tableBody.innerHTML = `<table class="lm-tbl"><thead>${headers}</thead><tbody>${rows}</tbody></table>`;
-
-    tableBody.querySelectorAll('th[data-key]').forEach(th => {
-      th.addEventListener('click', () => {
-        if (_lmSortKey === th.dataset.key) _lmSortDir *= -1; else { _lmSortKey = th.dataset.key; _lmSortDir = -1; }
-        _renderTable();
-      });
-    });
-  }
-
-  // ── events ───────────────────────────────────────────────────
-  // La barra de desplegables es la única fuente: re-cargar ACWR al cambiar un filtro
-  // (solo si mgrp está activo — el cálculo ACWR es costoso).
-  document.addEventListener('gpfilter:change', () => {
-    if (document.querySelector('.gp-view[data-view="mgrp"].is-on')) lmLoad();
-  });
-  // Filtro de zona dentro de la card (ACWR by player) — per-card, se mantiene.
-  zoneFilter?.addEventListener('change', () => { if (_playerAcwrData) _renderTable(); });
-
-  window._lmInit = lmLoad;
-
-  document.getElementById('sections')?.addEventListener('click', e => {
-    if (e.target.closest('.gp-sec[data-view="mgrp"]')) setTimeout(() => { if (!_playerAcwrData) lmLoad(); }, 0);
-  });
-})();
-</script>
+<script src="assets/gps-load-monitor.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════
      SESSION CONTROL (vista grp) — filtros + KPIs + tabla
@@ -7346,323 +7341,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
      de las últimas N sesiones del mismo MD code.
      N configurable (5/10/∞), mínimo 3 para calcular z.
 ═══════════════════════════════════════════════════════════ -->
-<script>
-(function () {
-  function _ztN() {
-    const v = parseInt(document.getElementById('sc-zt-n-sel')?.value || '10', 10);
-    return isNaN(v) || v <= 0 ? Infinity : v;
-  }
-  const _ZT_MIN = 3;
-
-  // Metrics available directly in gps_reports columns
-  const _ZT_CORE_COLS = new Set([
-    'total_distance','high_speed_distance','very_high_speed_distance',
-    'sprint_distance','sprint_count','max_speed',
-    'accelerations','decelerations','player_load','time_played',
-  ]);
-
-  // max aggregation (pico); everything else = avg (acumulable)
-  const _ZT_PEAK = new Set(['max_speed']);
-
-  const _ZT_DEFAULTS = [
-    'total_distance','high_speed_distance','sprint_count','player_load','max_speed',
-  ];
-
-  let _ztMetrics = [..._ZT_DEFAULTS];
-
-  // ── label / unit / format helpers ────────────────────────────
-  function _ztLabel(key) {
-    const cat = (window._gpCatalog || []).find(d => d.key === key);
-    if (cat?.label) return cat.label;
-    return { total_distance:'Total Distance', high_speed_distance:'HSR',
-             very_high_speed_distance:'VHSR', sprint_distance:'Sprint Dist',
-             sprint_count:'Sprints', max_speed:'Max Speed',
-             accelerations:'Accelerations', decelerations:'Decelerations',
-             player_load:'Player Load', time_played:'Time Played' }[key]
-           || key.replace(/_/g,' ');
-  }
-
-  function _ztUnit(key) {
-    return (window._gpCatalog || []).find(d => d.key === key)?.unit || '';
-  }
-
-  function _ztFmt(v, key) {
-    if (v == null || isNaN(v)) return '—';
-    const dec = (window._gpCatalog || []).find(d => d.key === key)?.decimals
-              ?? (key === 'max_speed' ? 1 : 0);
-    return Number(v).toFixed(dec);
-  }
-
-  // squad avg (or max for pico metrics) of one session's reports
-  function _ztSquadAgg(reports, key) {
-    const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
-    if (!vals.length) return null;
-    return _ZT_PEAK.has(key) ? Math.max(...vals)
-                              : vals.reduce((s,v) => s+v, 0) / vals.length;
-  }
-
-  // Extract MD code from a session (match_day_offset > session_attributes.md_code)
-  function _ztMdCode(sess) {
-    if (!sess) return null;
-    const off = sess.match_day_offset;
-    if (off != null) {
-      if (typeof off === 'string') return off || null;
-      if (off === 0) return 'MD';
-      return off < 0 ? `MD${off}` : `MD+${off}`;
-    }
-    return sess.session_attributes?.md_code || null;
-  }
-
-  function _ztZClass(z) {
-    if (z == null) return 'neu';
-    const a = Math.abs(z);
-    return a < 1 ? 'ok' : a < 2 ? 'warn' : 'high';
-  }
-
-  function _ztInterpret(z, mdCode) {
-    if (z == null) return 'sin datos suficientes';
-    const a   = Math.abs(z);
-    const dir = z >= 0 ? 'por encima' : 'por debajo';
-    const md  = mdCode ? ` para ${mdCode}` : '';
-    if (a < 0.5) return `dentro de lo habitual${md}`;
-    if (a < 1)   return `ligeramente ${dir} de lo habitual${md}`;
-    if (a < 2)   return `${dir} de lo habitual${md}`;
-    return `muy ${dir} de lo habitual${md}`;
-  }
-
-  // ── Main render (squad-only summary) ────────────────────────
-  async function renderZt() {
-    const body = document.getElementById('sc-zt-body');
-    const nEl  = document.getElementById('sc-zt-n');
-    if (!body) return;
-
-    const st = window._scState;
-    const sessionId = st?.sessionId;
-    if (!sessionId || !window.sb) {
-      body.innerHTML = '<div class="gp-empty" style="padding:16px 0">Select a session to see temporal variation.</div>';
-      if (nEl) nEl.textContent = '—';
-      return;
-    }
-
-    body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculating…</div>';
-
-    try {
-      const clubId = window._gpClubId || await window.getClubId?.();
-      if (!clubId) return;
-
-      // Fetch all sessions (lightweight — id, date, type, title + MD code fields)
-      const { data: allSess, error: sErr } = await window.sb
-        .from('training_sessions')
-        .select('id,session_date,session_type,title,match_day_offset,session_attributes')
-        .eq('club_id', clubId)
-        .order('session_date', { ascending: false });
-      if (sErr) throw sErr;
-
-      const current  = (allSess || []).find(s => s.id === sessionId);
-      if (!current) { body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Session not found.</div>'; return; }
-
-      const matchKey = _ztMdCode(current);
-
-      // Last _ZT_N sessions with the exact same MD code, strictly before current date
-      const equivalents = (allSess || []).filter(s =>
-        s.id !== sessionId &&
-        s.session_date < current.session_date &&
-        matchKey != null &&
-        _ztMdCode(s) === matchKey
-      ).slice(0, Number.isFinite(_ztN()) ? _ztN() : undefined);
-
-      if (nEl) nEl.textContent = equivalents.length;
-
-      if (!matchKey) {
-        body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
-          Sin MD code definido para esta sesión — no se puede calcular variación temporal.
-        </div>`;
-        return;
-      }
-
-      if (equivalents.length < _ZT_MIN) {
-        body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
-          Not enough equivalent ${matchKey} sessions (found: ${equivalents.length}, minimum: ${_ZT_MIN}).
-        </div>`;
-        return;
-      }
-
-      // Batch per-session squad aggregation. Prefer the server-side RPC (gps_session_agg,
-      // migración 114): 1 fila por sesión en vez de squad×N filas crudas. Si el RPC no está
-      // desplegado, cae al fetch crudo + agg en JS — números idénticos en ambos caminos.
-      const allIds = [sessionId, ...equivalents.map(s => s.id)];
-      const _roster = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? window._gpPlayerIds : null;
-
-      // Probe el RPC una sola vez por carga: si no está desplegado, no reintentar en cada
-      // render (evita un round-trip fallido + ruido de consola hasta aplicar la migración).
-      window.__cmRpcAvail = window.__cmRpcAvail || {};
-      let aggBySession = null;   // { [session_id]: { <col>_avg, max_speed_max, … } }
-      if (window.__cmRpcAvail.gps_session_agg !== false) {
-        try {
-          const { data: aggRows, error: aggErr } = await window.sb.rpc('gps_session_agg', {
-            p_club_id: clubId, p_session_ids: allIds, p_player_ids: _roster,
-          });
-          if (aggErr) throw aggErr;
-          window.__cmRpcAvail.gps_session_agg = true;
-          if (Array.isArray(aggRows)) {
-            aggBySession = {};
-            for (const a of aggRows) aggBySession[a.session_id] = a;
-          }
-        } catch (aggErr) {
-          window.__cmRpcAvail.gps_session_agg = false;
-          console.warn('[squad vs] gps_session_agg RPC unavailable — raw fallback:', aggErr?.message || aggErr);
-          aggBySession = null;
-        }
-      }
-
-      let reports = null;
-      if (!aggBySession) {
-        try {
-          reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-            .from('gps_reports')
-            .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
-            .eq('club_id', clubId)
-            .eq('is_invalid', false)
-            .in('session_id', allIds)), { label: 'squad-vs' });
-        } catch (rErr) { console.error('[squad vs] query failed:', rErr); throw rErr; }
-      }
-
-      // Unifica ambos caminos: squad agg de una sesión+métrica (avg, o max para métricas pico).
-      // RPC → lee la columna precalculada; crudo → pliega las filas de la sesión en JS.
-      const _sessAgg = (sid, key) => {
-        if (aggBySession) {
-          const a = aggBySession[sid];
-          if (!a) return null;
-          const v = a[_ZT_PEAK.has(key) ? 'max_speed_max' : key + '_avg'];
-          return (v == null || isNaN(v)) ? null : Number(v);
-        }
-        return _ztSquadAgg((reports || []).filter(r => r.session_id === sid), key);
-      };
-
-      // Historical series: one squad-avg value per equivalent session
-      const histSeries = {};
-      for (const key of _ztMetrics) {
-        if (!_ZT_CORE_COLS.has(key)) { histSeries[key] = []; continue; }
-        histSeries[key] = equivalents
-          .map(s => _sessAgg(s.id, key))
-          .filter(v => v != null && !isNaN(v));
-      }
-
-      // Build metric rows
-      const rows = _ztMetrics.map(key => {
-        const cur  = _sessAgg(sessionId, key);
-        const hist = histSeries[key] || [];
-
-        if (hist.length < _ZT_MIN || cur == null) {
-          return `<div class="sc-zt-row">
-            <span class="sc-zt-label">${_ztLabel(key)}</span>
-            <span class="gp-zc neu" style="width:52px">—</span>
-            <span class="sc-zt-text">not enough data</span>
-          </div>`;
-        }
-
-        const mean  = hist.reduce((s,v) => s+v, 0) / hist.length;
-        const variance = hist.reduce((s,v) => s + (v-mean)**2, 0) / hist.length;
-        const std   = Math.sqrt(variance);
-        const z     = std > 0 ? (cur - mean) / std : null;
-
-        const sign  = z != null ? (z >= 0 ? '+' : '') : '';
-        const zTxt  = z != null ? `${sign}${z.toFixed(1)}` : '—';
-        const unit  = _ztUnit(key);
-        const title = `Actual: ${_ztFmt(cur,key)}${unit?' '+unit:''} · Media equiv.: ${_ztFmt(mean,key)}${unit?' '+unit:''} (n=${hist.length})`;
-
-        return `<div class="sc-zt-row" title="${title}">
-          <span class="sc-zt-label">${_ztLabel(key)}</span>
-          <span class="gp-zc ${_ztZClass(z)}" style="width:52px">${zTxt}</span>
-          <span class="sc-zt-text">${_ztInterpret(z, matchKey)}</span>
-        </div>`;
-      });
-
-      body.innerHTML = `
-        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          plantel · ${matchKey || 'sesión'} · N = ${equivalents.length}
-        </div>
-        ${rows.join('')}`;
-
-    } catch (e) {
-      console.warn('renderZt:', e);
-      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Calculation failed.</div>';
-    }
-  }
-
-  // Expose so the SC IIFE sessSel handler can call it
-  window._ztRender = renderZt;
-
-  // ── Metric editor modal ──────────────────────────────────────
-  function openZtMetricsModal() {
-    const availKeys = (window._gpCatalog || []).filter(d => _ZT_CORE_COLS.has(d.key)).map(d => d.key);
-    const keys = availKeys.length ? availKeys : [..._ZT_CORE_COLS];
-
-    const items = keys.map(k => {
-      const on = _ztMetrics.includes(k);
-      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${_ztLabel(k)}${_ztUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${_ztUnit(k)}</span>` : ''}
-      </label>`;
-    }).join('');
-
-    const ov = makeModal('Métricas — Variation vs equivalents',
-      `<div style="max-height:320px;overflow-y:auto;padding:4px 0 12px">${items}</div>
-       <div style="display:flex;gap:8px;justify-content:flex-end">
-         <button id="_ztCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
-         <button id="_ztApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
-       </div>`
-    );
-
-    ov.querySelector('#_ztCancel')?.addEventListener('click', () => ov.remove());
-    ov.querySelector('#_ztApply')?.addEventListener('click', () => {
-      const checked = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
-      if (!checked.length) { showToast('Select at least one metric'); return; }
-      _ztMetrics = checked;
-      const card = document.getElementById('card-sc-zscore-temporal');
-      if (card) {
-        const cfg = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
-        card.dataset.config = JSON.stringify({ ...cfg, metrics: _ztMetrics });
-        saveLayout('grp').catch(e => console.warn('zt saveLayout:', e));
-      }
-      ov.remove();
-      renderZt();
-    });
-  }
-
-  // ── Init ─────────────────────────────────────────────────────
-  async function ztInit() {
-    // Restore persisted metric selection
-    try {
-      const layout = await loadLayout('grp');
-      const saved  = layout?.find(c => c.card_id === 'sc-zscore-temporal');
-      if (saved?.config?.metrics?.length) _ztMetrics = saved.config.metrics;
-    } catch { /* defaults */ }
-
-    (window._gpScEdit = window._gpScEdit || {}).zt = openZtMetricsModal;   // click-to-edit dispatch
-    document.getElementById('sc-zt-edit-btn')?.addEventListener('click', openZtMetricsModal);
-
-    // Session change → re-render (slight delay so _scState.sessionId is updated)
-    document.getElementById('sc-sess-sel')?.addEventListener('change', () => setTimeout(renderZt, 80));
-
-    // N selector change → re-render
-    document.getElementById('sc-zt-n-sel')?.addEventListener('change', () => renderZt());
-
-    // grp tab activation
-    document.getElementById('sections')?.addEventListener('click', e => {
-      if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderZt, 300);
-    });
-
-    // Auto-render if grp is already active on load
-    if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
-      const poll = () => window._scState?.sessionId ? renderZt() : setTimeout(poll, 500);
-      setTimeout(poll, 600);
-    }
-  }
-
-  ztInit();
-})();
-</script>
+<script src="assets/gps-ztable.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════
      OUTLIERS HEATMAP — Session Control (grp)
@@ -7672,248 +7351,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
      Sort: clic en columna, o default por desvío total.
      Umbral y métricas editables.
 ═══════════════════════════════════════════════════════════ -->
-<script>
-(function () {
-  const _OL_MIN  = 3;
-  const _OL_ALL  = [
-    'total_distance','high_speed_distance','very_high_speed_distance',
-    'sprint_distance','sprint_count','max_speed',
-    'accelerations','decelerations','player_load',
-  ];
-  const _OL_LABELS = {
-    total_distance:'Dist.', high_speed_distance:'HSR',
-    very_high_speed_distance:'VHSR', sprint_distance:'Sprint',
-    sprint_count:'N spr.', max_speed:'Vel.máx.',
-    accelerations:'Acel.', decelerations:'Desac.', player_load:'P.Load',
-  };
-  const _OL_PEAK = new Set(['max_speed']);
-
-  function _olMdCode(sess) {
-    if (!sess) return null;
-    const off = sess.match_day_offset;
-    if (off != null) {
-      if (typeof off === 'string') return off || null;
-      if (off === 0) return 'MD';
-      return off < 0 ? `MD${off}` : `MD+${off}`;
-    }
-    return sess.session_attributes?.md_code || null;
-  }
-
-  let _olMetrics = [..._OL_ALL];
-  let _olSortCol = null; // null = sort by totalDev, string key = sort by that metric
-
-  // Background color: red for z<0, blue for z>0, intensity ∝ |z|, capped at 3
-  function _olBg(z) {
-    if (z == null || Math.abs(z) < 0.25) return '';
-    const α = (Math.min(Math.abs(z), 3) / 3 * 0.72).toFixed(2);
-    return z < 0 ? `rgba(220,38,38,${α})` : `rgba(59,130,246,${α})`;
-  }
-
-  // Build and inject the heatmap; reattaches sort listeners
-  function _olDraw(matrix, thresh, mdCode, prevCount) {
-    const body = document.getElementById('outliersBody');
-    if (!body) return;
-
-    const cols = _olMetrics;
-
-    // Sort rows
-    const sorted = [...matrix].sort((a, b) => {
-      if (_olSortCol) {
-        return Math.abs(b.zByMetric[_olSortCol] ?? 0) - Math.abs(a.zByMetric[_olSortCol] ?? 0);
-      }
-      return b.totalDev - a.totalDev;
-    });
-
-    const thCells = cols.map(k => {
-      const isSrt = _olSortCol === k;
-      return `<th class="ol-hm-th${isSrt ? ' is-sort' : ''}" data-key="${k}">${_OL_LABELS[k] || k}</th>`;
-    }).join('');
-
-    const bodyRows = sorted.map(({ player, zByMetric }) => {
-      const name = player
-        ? `${(player.first_name || '')[0] || '?'}. ${player.last_name || ''}`
-        : '—';
-      const tdCells = cols.map(k => {
-        const z  = zByMetric[k];
-        const bg = _olBg(z);
-        const over = z != null && Math.abs(z) >= thresh;
-        const txt = z == null ? '—' : `${z >= 0 ? '+' : ''}${z.toFixed(1)}`;
-        return `<td class="${over ? 'is-thresh' : ''}" style="${bg ? 'background:' + bg : ''}"><div class="ol-hm-cell">${txt}</div></td>`;
-      }).join('');
-      return `<tr>
-        <td class="ol-pc"><div class="ol-hm-cell">${name}</div></td>
-        ${tdCells}
-      </tr>`;
-    }).join('');
-
-    const noSort    = _olSortCol === null;
-    const refDetail = prevCount > 0 ? ` · N equiv.=${prevCount}` : '';
-    body.innerHTML = `
-      <div style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:6px 10px 3px;text-transform:uppercase;letter-spacing:.04em">
-        ${mdCode}${refDetail} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
-      </div>
-      <div class="ol-hm-wrap">
-        <table class="ol-hm">
-          <thead><tr>
-            <th class="ol-pc ol-hm-th${noSort && !_olSortCol ? '' : ''}" data-key="">Player</th>
-            ${thCells}
-          </tr></thead>
-          <tbody>${bodyRows}</tbody>
-        </table>
-      </div>`;
-
-    // Sort on column header click
-    body.querySelectorAll('.ol-hm-th[data-key]').forEach(th => {
-      th.addEventListener('click', () => {
-        const k = th.dataset.key;
-        _olSortCol = (_olSortCol === k || k === '') ? null : k;
-        _olDraw(matrix, thresh, mdCode, prevCount);
-      });
-    });
-  }
-
-  async function renderScOutliers() {
-    const body = document.getElementById('outliersBody');
-    if (!body) return;
-
-    const st = window._scState;
-    const sessionId = st?.sessionId;
-    if (!sessionId || !window.sb) {
-      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a session to see the heatmap.</div>';
-      return;
-    }
-
-    const compareSessionId = st?.compareSessionId;
-    if (!compareSessionId) {
-      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a comparison date to see the outlier heatmap.</div>';
-      return;
-    }
-
-    body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculating…</div>';
-
-    try {
-      const thresh = parseFloat(document.getElementById('sc-outlier-thresh')?.value || '2');
-      const clubId = window._gpClubId || await window.getClubId?.();
-      if (!clubId) return;
-
-      const [reports, { data: players }] = await Promise.all([
-        window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports')
-          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
-          .eq('club_id', clubId)
-          .eq('is_invalid', false)
-          .in('session_id', [sessionId, compareSessionId])), { label: 'outliers-compare' })
-          .catch(e => { console.error('[outliers compare] query failed:', e); return []; }),
-        _gpRoster(clubId, window._gpTeamId),
-      ]);
-
-      const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
-      const curRpts   = (reports || []).filter(r => r.session_id === sessionId);
-      const refRpts   = (reports || []).filter(r => r.session_id === compareSessionId);
-
-      if (!refRpts.length) {
-        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No GPS data in the comparison session.</div>';
-        return;
-      }
-
-      // For each metric: compute reference squad mean/std from compare session
-      const refStats = {};
-      for (const key of _olMetrics) {
-        const vals = refRpts.map(r => r[key]).filter(v => v != null && !isNaN(v));
-        if (vals.length < 2) { refStats[key] = null; continue; }
-        const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
-        const std  = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
-        refStats[key] = { mean, std };
-      }
-
-      // Find compare session label (use _allSessions exposed by SC IIFE)
-      const cmpSessObj = (window._scAllSessions || []).find(s => s.id === compareSessionId);
-      const cmpLabel     = cmpSessObj?.session_date || compareSessionId.slice(0, 10);
-      const cmpMdCode    = cmpSessObj ? _olMdCode(cmpSessObj) : '';
-
-      const matrix = [];
-      for (const cur of curRpts) {
-        const player    = playerMap[cur.player_id];
-        const zByMetric = {};
-        let totalDev = 0;
-        for (const key of _olMetrics) {
-          const curVal = cur[key];
-          const ref    = refStats[key];
-          if (curVal == null || isNaN(curVal) || !ref || ref.std === 0) { zByMetric[key] = null; continue; }
-          const z = (curVal - ref.mean) / ref.std;
-          zByMetric[key] = z;
-          totalDev += Math.abs(z);
-        }
-        matrix.push({ player, zByMetric, totalDev });
-      }
-
-      const headerLabel = `vs ${cmpLabel}${cmpMdCode ? ' · ' + cmpMdCode : ''}`;
-      _olDraw(matrix, thresh, headerLabel, 0);
-
-    } catch (e) {
-      console.warn('renderScOutliers:', e);
-      const body2 = document.getElementById('outliersBody');
-      if (body2) body2.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Calculation failed.</div>';
-    }
-  }
-
-  // Metric editor modal
-  function openOlMetricsModal() {
-    const items = _OL_ALL.map(k => {
-      const on = _olMetrics.includes(k);
-      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${_OL_LABELS[k] || k}
-      </label>`;
-    }).join('');
-
-    const ov = makeModal('Métricas — Outliers heatmap',
-      `<div style="max-height:300px;overflow-y:auto;padding:4px 0 12px">${items}</div>
-       <div style="display:flex;gap:8px;justify-content:flex-end">
-         <button id="_olCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
-         <button id="_olApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
-       </div>`);
-
-    ov.querySelector('#_olCancel')?.addEventListener('click', () => ov.remove());
-    ov.querySelector('#_olApply')?.addEventListener('click', () => {
-      const checked = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
-      if (!checked.length) { showToast('Select at least one metric'); return; }
-      _olMetrics = checked;
-      const card = document.getElementById('card-outliers');
-      if (card) {
-        const cfg = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
-        card.dataset.config = JSON.stringify({ ...cfg, metrics: _olMetrics });
-        saveLayout('grp').catch(e => console.warn('ol saveLayout:', e));
-      }
-      ov.remove();
-      renderScOutliers();
-    });
-  }
-
-  window._scOutliersRender = renderScOutliers;
-
-  async function olInit() {
-    try {
-      const layout = await loadLayout('grp');
-      const saved  = layout?.find(c => c.card_id === 'outliers');
-      if (saved?.config?.metrics?.length) _olMetrics = saved.config.metrics;
-    } catch { /* defaults */ }
-
-    (window._gpScEdit = window._gpScEdit || {}).outliers = openOlMetricsModal;   // click-to-edit dispatch
-    document.getElementById('sc-outlier-edit-btn')?.addEventListener('click', openOlMetricsModal);
-    document.getElementById('sc-outlier-thresh')?.addEventListener('change', () => renderScOutliers());
-    document.getElementById('sc-compare-date-sel')?.addEventListener('change', () => setTimeout(renderScOutliers, 80));
-    document.getElementById('sections')?.addEventListener('click', e => {
-      if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderScOutliers, 400);
-    });
-    if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
-      const poll = () => window._scState?.sessionId ? renderScOutliers() : setTimeout(poll, 500);
-      setTimeout(poll, 700);
-    }
-  }
-
-  olInit();
-})();
-</script>
+<script src="assets/gps-outliers.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════
      VS SESIÓN — comparación % 1-a-1 vs sesión de referencia
@@ -7921,301 +7359,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
      (actual − ref) / |ref| × 100 por métrica del grupo.
      Solo sesiones del mismo MD code en el selector.
 ═══════════════════════════════════════════════════════════ -->
-<script>
-(function () {
-  // Peak metrics: max agg; everything else = avg (acumulable)
-  const _VS_PEAK = new Set(['max_speed','avg_speed','peak_speed']);
-  const _VS_CORE_COLS = new Set([
-    'total_distance','high_speed_distance','very_high_speed_distance',
-    'sprint_distance','sprint_count','max_speed',
-    'accelerations','decelerations','player_load','time_played',
-  ]);
-  const _VS_DEFAULTS = [
-    'total_distance','high_speed_distance','sprint_count','player_load','max_speed',
-  ];
-
-  let _vsMetrics   = [..._VS_DEFAULTS];
-  let _vsAllSess   = [];
-  let _vsCacheClub = null;
-
-  function _vsMdCode(sess) {
-    if (!sess) return null;
-    const off = sess.match_day_offset;
-    if (off != null) {
-      if (typeof off === 'string') return off || null;
-      if (off === 0) return 'MD';
-      return off < 0 ? `MD${off}` : `MD+${off}`;
-    }
-    return sess.session_attributes?.md_code || null;
-  }
-
-  function _vsLabel(key) {
-    const cat = (window._gpCatalog || []).find(d => d.key === key);
-    if (cat?.label) return cat.label;
-    return { total_distance:'Total Distance', high_speed_distance:'HSR',
-             very_high_speed_distance:'VHSR', sprint_distance:'Sprint Dist',
-             sprint_count:'Sprints', max_speed:'Max Speed',
-             accelerations:'Accelerations', decelerations:'Decelerations',
-             player_load:'Player Load', time_played:'Time Played' }[key]
-           || key.replace(/_/g,' ');
-  }
-
-  function _vsUnit(key) {
-    return (window._gpCatalog || []).find(d => d.key === key)?.unit || '';
-  }
-
-  function _vsFmt(v, key) {
-    if (v == null || isNaN(v)) return '—';
-    const dec = (window._gpCatalog || []).find(d => d.key === key)?.decimals
-              ?? (key === 'max_speed' ? 1 : 0);
-    return Number(v).toFixed(dec);
-  }
-
-  function _vsSquadAgg(reports, key) {
-    const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
-    if (!vals.length) return null;
-    return _VS_PEAK.has(key) ? Math.max(...vals)
-                             : vals.reduce((s, v) => s + v, 0) / vals.length;
-  }
-
-  async function _vsEnsureSessions(clubId) {
-    if (_vsCacheClub === clubId && _vsAllSess.length) return;
-    const { data } = await window.sb
-      .from('training_sessions')
-      .select('id,session_date,session_type,title,match_day_offset,session_attributes')
-      .eq('club_id', clubId)
-      .order('session_date', { ascending: false });
-    _vsAllSess   = data || [];
-    _vsCacheClub = clubId;
-  }
-
-  async function _buildVsOptions() {
-    const sel = document.getElementById('sc-vs-compare-sel');
-    if (!sel) return;
-    const sessionId = window._scState?.sessionId;
-    sel.innerHTML = '<option value="">' + tt('gps_analysis.compare_with','Compare with…') + '</option>';
-    if (!sessionId || !window.sb) return;
-
-    const clubId = window._gpClubId || await window.getClubId?.();
-    if (!clubId) return;
-
-    await _vsEnsureSessions(clubId);
-
-    const current = _vsAllSess.find(s => s.id === sessionId);
-    if (!current) return;
-    const mdCode = _vsMdCode(current);
-    if (!mdCode) {
-      sel.innerHTML = '<option value="">Sin MD code definido</option>';
-      return;
-    }
-
-    const candidates = _vsAllSess.filter(s =>
-      s.id !== sessionId && _vsMdCode(s) === mdCode
-    ).slice(0, 30);
-
-    if (!candidates.length) {
-      sel.innerHTML = `<option value="">No ${mdCode} sessions available</option>`;
-      return;
-    }
-    sel.innerHTML = '<option value="">' + tt('gps_analysis.compare_with','Compare with…') + '</option>';
-    candidates.forEach(s => {
-      const o = document.createElement('option');
-      o.value = s.id;
-      o.textContent = `${s.session_date} · ${s.title || mdCode}`;
-      sel.appendChild(o);
-    });
-  }
-
-  async function renderVsSession() {
-    const body = document.getElementById('sc-vs-body');
-    if (!body) return;
-
-    const sessionId = window._scState?.sessionId;
-    const sel       = document.getElementById('sc-vs-compare-sel');
-    const refId     = sel?.value || null;
-
-    if (!sessionId) {
-      body.innerHTML = '<div class="gp-empty" style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a session to see the comparison.</div>';
-      return;
-    }
-    if (!refId) {
-      body.innerHTML = '<div class="gp-empty" style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a reference session in the selector above.</div>';
-      return;
-    }
-    if (!window.sb) return;
-
-    body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculating…</div>';
-
-    try {
-      const clubId = window._gpClubId || await window.getClubId?.();
-      if (!clubId) return;
-
-      await _vsEnsureSessions(clubId);
-
-      const _ids = [sessionId, refId];
-      const _roster = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? window._gpPlayerIds : null;
-
-      // Prefer server-side per-session aggregation (RPC gps_session_agg, migración 114);
-      // raw fallback si no está desplegado. Probe una vez por carga (window.__cmRpcAvail).
-      window.__cmRpcAvail = window.__cmRpcAvail || {};
-      let aggBySession = null;
-      if (window.__cmRpcAvail.gps_session_agg !== false) {
-        try {
-          const { data: aggRows, error: aggErr } = await window.sb.rpc('gps_session_agg', {
-            p_club_id: clubId, p_session_ids: _ids, p_player_ids: _roster,
-          });
-          if (aggErr) throw aggErr;
-          window.__cmRpcAvail.gps_session_agg = true;
-          if (Array.isArray(aggRows)) { aggBySession = {}; for (const a of aggRows) aggBySession[a.session_id] = a; }
-        } catch (aggErr) {
-          window.__cmRpcAvail.gps_session_agg = false;
-          console.warn('[ref compare] gps_session_agg RPC unavailable — raw fallback:', aggErr?.message || aggErr);
-          aggBySession = null;
-        }
-      }
-
-      let reports = null;
-      if (!aggBySession) {
-        try {
-          reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-            .from('gps_reports')
-            .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
-            .eq('club_id', clubId)
-            .eq('is_invalid', false)
-            .in('session_id', _ids)), { label: 'ref-compare' });
-        } catch (error) { console.error('[ref compare] query failed:', error); throw error; }
-      }
-
-      // Squad agg de una sesión+métrica: RPC (columna precalc, max para pico) o crudo (JS).
-      const _sessAgg = (sid, key) => {
-        if (aggBySession) {
-          const a = aggBySession[sid];
-          if (!a) return null;
-          const v = a[_VS_PEAK.has(key) ? key + '_max' : key + '_avg'];
-          return (v == null || isNaN(v)) ? null : Number(v);
-        }
-        return _vsSquadAgg((reports || []).filter(r => r.session_id === sid), key);
-      };
-
-      const refSess  = _vsAllSess.find(s => s.id === refId);
-      const refLabel = refSess ? `${refSess.session_date} · ${refSess.title || _vsMdCode(refSess) || '—'}` : refId;
-      const mdCode   = refSess ? (_vsMdCode(refSess) || '') : '';
-
-      const rows = _vsMetrics.filter(k => _VS_CORE_COLS.has(k)).map(key => {
-        const cur  = _sessAgg(sessionId, key);
-        const ref  = _sessAgg(refId, key);
-        const unit = _vsUnit(key);
-
-        if (cur == null || ref == null) {
-          return `<div class="sc-vs-row">
-            <span class="sc-vs-label">${_vsLabel(key)}</span>
-            <span class="sc-vs-pct neu">—</span>
-            <span class="sc-vs-vals">no data</span>
-          </div>`;
-        }
-
-        const pct    = ref !== 0 ? (cur - ref) / Math.abs(ref) * 100 : null;
-        const pctStr = pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : '—';
-        const cls    = pct == null ? 'neu' : pct > 0 ? 'pos' : pct < 0 ? 'neg' : 'neu';
-        const valStr = `${_vsFmt(cur, key)}${unit ? ' '+unit : ''} vs ${_vsFmt(ref, key)}${unit ? ' '+unit : ''}`;
-
-        return `<div class="sc-vs-row">
-          <span class="sc-vs-label">${_vsLabel(key)}</span>
-          <span class="sc-vs-pct ${cls}">${pctStr}</span>
-          <span class="sc-vs-vals">${valStr}</span>
-        </div>`;
-      });
-
-      body.innerHTML = `
-        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          plantel · ${mdCode} · vs ${refLabel}
-        </div>
-        ${rows.join('') || '<div style="padding:12px 0;color:var(--cm-fg-muted)">No metrics selected.</div>'}`;
-
-    } catch (e) {
-      console.warn('renderVsSession:', e);
-      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Calculation failed.</div>';
-    }
-  }
-
-  function openVsMetricsModal() {
-    const availKeys = (window._gpCatalog || []).filter(d => _VS_CORE_COLS.has(d.key)).map(d => d.key);
-    const keys = availKeys.length ? availKeys : [..._VS_CORE_COLS];
-
-    const items = keys.map(k => {
-      const on = _vsMetrics.includes(k);
-      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${_vsLabel(k)}${_vsUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${_vsUnit(k)}</span>` : ''}
-      </label>`;
-    }).join('');
-
-    const ov = makeModal('Métricas — vs sesión',
-      `<div style="max-height:320px;overflow-y:auto;padding:4px 0 12px">${items}</div>
-       <div style="display:flex;gap:8px;justify-content:flex-end">
-         <button id="_vsCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
-         <button id="_vsApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
-       </div>`
-    );
-
-    ov.querySelector('#_vsCancel')?.addEventListener('click', () => ov.remove());
-    ov.querySelector('#_vsApply')?.addEventListener('click', () => {
-      const checked = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
-      if (!checked.length) { showToast('Select at least one metric'); return; }
-      _vsMetrics = checked;
-      const card = document.getElementById('card-sc-vs-session');
-      if (card) {
-        const cfg = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
-        card.dataset.config = JSON.stringify({ ...cfg, metrics: _vsMetrics });
-        saveLayout('grp').catch(e => console.warn('vs saveLayout:', e));
-      }
-      ov.remove();
-      renderVsSession();
-    });
-  }
-
-  async function vsInit() {
-    try {
-      const layout = await loadLayout('grp');
-      const saved  = layout?.find(c => c.card_id === 'sc-vs-session');
-      if (saved?.config?.metrics?.length) _vsMetrics = saved.config.metrics;
-    } catch { /* defaults */ }
-
-    (window._gpScEdit = window._gpScEdit || {}).vs = openVsMetricsModal;   // click-to-edit dispatch
-    document.getElementById('sc-vs-edit-btn')?.addEventListener('click', openVsMetricsModal);
-
-    // Expose reload hook so _loadSessionData can notify this card on auto-selection
-    window._vsReload = async () => {
-      _vsCacheClub = null;
-      const sel = document.getElementById('sc-vs-compare-sel');
-      if (sel) sel.value = '';
-      await _buildVsOptions();
-      renderVsSession();
-    };
-
-    // Session change → rebuild options, clear selection, re-render
-    document.getElementById('sc-sess-sel')?.addEventListener('change', () => window._vsReload?.());
-
-    document.getElementById('sc-vs-compare-sel')?.addEventListener('change', () => renderVsSession());
-
-    document.getElementById('sections')?.addEventListener('click', e => {
-      if (e.target.closest?.('.gp-sec[data-view="grp"]')) {
-        setTimeout(async () => { await _buildVsOptions(); renderVsSession(); }, 300);
-      }
-    });
-
-    if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
-      const poll = () => {
-        if (window._scState?.sessionId) { _buildVsOptions().then(renderVsSession); }
-        else setTimeout(poll, 500);
-      };
-      setTimeout(poll, 700);
-    }
-  }
-
-  vsInit().catch(e => console.warn('vsInit:', e));
-})();
-</script>
+<script src="assets/gps-vs-session.js"></script>
 
 <script>
 // ── Session Control: puente barra de filtros → sesión actual ───────────────
