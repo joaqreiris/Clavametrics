@@ -95,7 +95,7 @@
   .gp-tbl thead th{font:600 10px/1 var(--cm-font-sans);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted);text-align:left;padding:8px 8px;border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-soft);white-space:nowrap}
   .gp-tbl tbody td{padding:6px 6px;border-bottom:1px solid var(--cm-border-soft);vertical-align:middle}
   .gp-tbl tbody tr:last-child td{border-bottom:0}
-  .gp-num{font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center;width:28px}
+  .gp-num{font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center;width:46px}
   .gp-tbl input,.gp-tbl select{width:100%;padding:6px 8px;background:var(--cm-surface);border:1px solid transparent;border-radius:5px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);outline:none}
   .gp-tbl input:hover,.gp-tbl select:hover{border-color:var(--cm-border-soft)}
   .gp-tbl input:focus,.gp-tbl select:focus{border-color:var(--cm-accent);background:var(--cm-bg-soft)}
@@ -114,6 +114,29 @@
   .gp-vzone .mk{position:absolute;top:-2px;width:2px;height:10px;background:var(--cm-fg-strong);border-radius:1px;transform:translateX(-1px);box-shadow:0 0 0 1.5px var(--cm-surface)}
   .gp-tbl .pct{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
   .gp-tbl .vel{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;background:rgba(168,85,247,0.14);color:#7C3AED;font:700 11px/1 var(--cm-font-mono);letter-spacing:0.04em}
+  /* Drag-to-reorder + superset linking */
+  .gp-num{position:relative}
+  .gp-tbl .gp-num-inner{display:inline-flex;align-items:center;gap:4px;justify-content:center}
+  .gp-grip{color:var(--cm-fg-muted);opacity:.35;cursor:grab;font-size:14px;line-height:1;display:inline-flex;transition:opacity .12s}
+  .gp-tbl tbody tr:hover .gp-grip{opacity:.75}
+  .gp-grip:active{cursor:grabbing}
+  tr.gp-dragging{opacity:.55;background:var(--cm-accent-soft)}
+  tr.gp-drop-target td{box-shadow:inset 0 2px 0 var(--cm-accent)}
+  .gp-tbl .btn-link{width:24px;height:24px;border-radius:5px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .gp-tbl .btn-link:hover{background:var(--cm-accent-soft);color:var(--cm-accent)}
+  .gp-tbl .btn-link .ti{font-size:14px}
+  /* Locked (linked) rows: the pair reads as one superset block */
+  tr.gp-locked{background:var(--cm-accent-soft)}
+  tr.gp-locked .gp-grip{opacity:.4;cursor:not-allowed;color:var(--cm-accent)}
+  tr.gp-linked-a td,tr.gp-linked-b td{border-bottom-color:transparent}
+  tr.gp-linked-a td:first-child{box-shadow:inset 3px 0 0 var(--cm-accent);border-top-left-radius:6px}
+  tr.gp-linked-b td:first-child{box-shadow:inset 3px 0 0 var(--cm-accent);border-bottom-left-radius:6px}
+  tr.gp-linked-b td{border-bottom:1px solid var(--cm-border-soft)}
+  .gp-link-badge{display:inline-flex;align-items:center;gap:3px;height:16px;padding:0 5px;border-radius:8px;background:var(--cm-accent);color:#fff;font:700 8.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;vertical-align:middle;margin-left:6px}
+  .gp-link-badge .ti{font-size:10px}
+  .gp-linkpick-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:var(--cm-fg-strong);font:600 13px/1.2 var(--cm-font-sans)}
+  .gp-linkpick-item:hover{background:var(--cm-accent-soft)}
+  .gp-linkpick-item .n{font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:18px}
 
   /* Session switcher: jump between the day's field (Daily Planning) and gym sessions. */
   .gp-sess-switch{margin-left:auto;display:inline-flex;gap:2px;padding:2px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft);max-width:60%;overflow-x:auto}
@@ -546,7 +569,7 @@ function gpRecalcTotals() {
 // ── Row management ──────────────────────────────────────────────────────
 function gpRenumber(tbody) {
   tbody.querySelectorAll('tr').forEach((tr, i) => {
-    const c = tr.querySelector('.gp-num');
+    const c = tr.querySelector('.gp-n') || tr.querySelector('.gp-num');
     if (c) c.textContent = i + 1;
   });
 }
@@ -554,9 +577,158 @@ function gpRenumber(tbody) {
 function gpDeleteRow(btn) {
   const tr    = btn.closest('tr');
   const tbody = tr.parentElement;
+  const wasLinked = !!tr.dataset.link;
   tr.remove();
   gpRenumber(tbody);
+  // Deleting one half of a superset leaves the other half orphaned → drop its link.
+  if (wasLinked && tbody.id === 'gpMainBody') gpRefreshMainLinks();
   gpRecalcTotals();
+}
+
+// ── Drag-to-reorder (all tables) + superset linking (main work) ──
+// The leading cell carries a grip handle + the row number. Rows are only draggable
+// while the grip is held, so text selection inside inputs still works normally.
+function gpNumCell(num) {
+  return `<td class="gp-num"><span class="gp-num-inner"><i class="ti ti-grip-vertical gp-grip" title="${tt('gym_planner.drag_reorder','Drag to reorder')}"></i><span class="gp-n">${num}</span></span></td>`;
+}
+let _gpDrag = { row: null, tbody: null };
+function gpDragAfter(tbody, y) {
+  const rows = [...tbody.querySelectorAll('tr:not(.gp-dragging)')];
+  let best = { off: -Infinity, el: null };
+  for (const r of rows) {
+    const b = r.getBoundingClientRect();
+    const off = y - b.top - b.height / 2;
+    if (off < 0 && off > best.off) best = { off, el: r };
+  }
+  // Never let a drop land between the two halves of a superset: snap before the pair.
+  if (best.el && best.el.classList.contains('gp-linked-b')) best.el = best.el.previousElementSibling || best.el;
+  return best.el;
+}
+function gpWireTbodyDnD(tbody) {
+  if (tbody._gpSortWired) return; tbody._gpSortWired = true;
+  tbody.addEventListener('dragover', e => {
+    const drag = _gpDrag.row;
+    if (!drag || _gpDrag.tbody !== tbody) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const after = gpDragAfter(tbody, e.clientY);
+    if (after == null) { if (drag !== tbody.lastElementChild) tbody.appendChild(drag); }
+    else if (after !== drag) tbody.insertBefore(drag, after);
+  });
+  tbody.addEventListener('drop', e => e.preventDefault());
+}
+function gpWireRowDnD(tr, tbody) {
+  gpWireTbodyDnD(tbody);
+  const grip = tr.querySelector('.gp-grip');
+  if (grip) {
+    grip.addEventListener('mousedown', () => { if (!tr.classList.contains('gp-locked')) tr.setAttribute('draggable', 'true'); });
+    grip.addEventListener('mouseup', () => tr.removeAttribute('draggable'));
+  }
+  tr.addEventListener('dragstart', e => {
+    if (tr.classList.contains('gp-locked')) { e.preventDefault(); return; }
+    _gpDrag.row = tr; _gpDrag.tbody = tbody;
+    tr.classList.add('gp-dragging');
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ''); } catch (_) {} }
+  });
+  tr.addEventListener('dragend', () => {
+    tr.classList.remove('gp-dragging');
+    tr.removeAttribute('draggable');
+    const moved = !!_gpDrag.row;
+    _gpDrag.row = null; _gpDrag.tbody = null;
+    if (moved) { gpRenumber(tbody); gpRecalcTotals(); gpScheduleSave(); }
+  });
+}
+
+// A superset = two main rows sharing tr.dataset.link. They render as one locked block.
+function gpToggleLink(btn) {
+  const tr = btn.closest('tr');
+  if (tr.dataset.link) gpUnlinkRow(tr);
+  else gpOpenLinkModal(tr);
+}
+function gpLinkRows(a, b) {
+  const gid = 'lk' + Math.random().toString(36).slice(2, 9);
+  a.dataset.link = gid; b.dataset.link = gid;
+  a.after(b); // keep the pair adjacent, in this order
+  gpRefreshMainLinks();
+  gpRenumber(document.getElementById('gpMainBody'));
+  gpScheduleSave();
+}
+function gpUnlinkRow(tr) {
+  const gid = tr.dataset.link; if (!gid) return;
+  const tbody = document.getElementById('gpMainBody');
+  tbody.querySelectorAll('tr').forEach(r => { if (r.dataset.link === gid) delete r.dataset.link; });
+  gpRefreshMainLinks();
+  gpScheduleSave();
+}
+// Recompute all superset visuals/locks from tr.dataset.link. Idempotent.
+function gpRefreshMainLinks() {
+  const tbody = document.getElementById('gpMainBody'); if (!tbody) return;
+  const groups = {};
+  tbody.querySelectorAll('tr').forEach(tr => { const g = tr.dataset.link; if (g) (groups[g] = groups[g] || []).push(tr); });
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.classList.remove('gp-linked-a', 'gp-linked-b', 'gp-locked');
+    tr.removeAttribute('draggable');
+    const lb = tr.querySelector('.btn-link');
+    if (lb) { lb.innerHTML = '<i class="ti ti-link"></i>'; lb.title = tt('gym_planner.link_exercise', 'Link into a superset'); }
+    const bd = tr.querySelector('.gp-link-badge'); if (bd) bd.remove();
+  });
+  Object.values(groups).forEach(rows => {
+    if (rows.length < 2) { rows.forEach(tr => delete tr.dataset.link); return; }
+    const [a, b] = rows; // pairs only; ignore any extras defensively
+    rows.slice(2).forEach(tr => delete tr.dataset.link);
+    if (a.nextElementSibling !== b) a.after(b);
+    a.classList.add('gp-linked-a', 'gp-locked');
+    b.classList.add('gp-linked-b', 'gp-locked');
+    [a, b].forEach(tr => {
+      const lb = tr.querySelector('.btn-link');
+      if (lb) { lb.innerHTML = '<i class="ti ti-unlink"></i>'; lb.title = tt('gym_planner.unlink', 'Unlink'); }
+    });
+    const nc = a.querySelector('.name-cell');
+    if (nc && !nc.querySelector('.gp-link-badge')) {
+      const sp = document.createElement('span');
+      sp.className = 'gp-link-badge';
+      sp.innerHTML = `<i class="ti ti-link"></i>${tt('gym_planner.superset_badge', 'Superset')}`;
+      nc.appendChild(sp);
+    }
+  });
+}
+function gpOpenLinkModal(tr) {
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]));
+  const tbody = document.getElementById('gpMainBody');
+  const rows = [...tbody.querySelectorAll('tr')];
+  const idx = i => i + 1;
+  const cands = rows.map((r, i) => ({ r, i })).filter(o => o.r !== tr && !o.r.dataset.link);
+  let ov = document.getElementById('gpLinkOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'gpLinkOv';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:920;align-items:flex-start;justify-content:center;padding-top:72px';
+    ov.onclick = e => { if (e.target === ov) ov.style.display = 'none'; };
+    document.body.appendChild(ov);
+  }
+  const nameOf = r => (r.querySelector('.name-cell input')?.value || '').trim() || tt('gym_planner.unnamed_exercise', 'Unnamed exercise');
+  const thisName = nameOf(tr);
+  const body = cands.length
+    ? cands.map(o => `<button class="gp-linkpick-item" data-i="${o.i}"><span class="n">${idx(o.i)}</span><i class="ti ti-link" style="font-size:14px;color:var(--cm-accent)"></i><span>${esc(nameOf(o.r))}</span></button>`).join('')
+    : `<div style="padding:24px 16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.link_no_candidates','No other free exercises to link with. Add another main exercise first.')}</div>`;
+  ov.innerHTML = `
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;max-height:74vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+        <i class="ti ti-link" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.link_modal_title','Link into a superset')}</div>
+        <button id="gpLinkClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:12px 18px 4px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gym_planner.link_modal_hint','Pick the exercise to pair with this one. Linked exercises stay together as a superset and are locked in place.')}</div>
+      <div style="padding:6px 18px 4px;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-transform:uppercase;letter-spacing:.05em">${tt('gym_planner.link_pick_partner','Link with')} · <span style="color:var(--cm-accent)">${esc(thisName)}</span></div>
+      <div style="overflow-y:auto;flex:1;padding:6px 10px 12px">${body}</div>
+    </div>`;
+  ov.style.display = 'flex';
+  ov.querySelector('#gpLinkClose').onclick = () => { ov.style.display = 'none'; };
+  ov.querySelectorAll('.gp-linkpick-item').forEach(btn => btn.onclick = () => {
+    const partner = rows[+btn.dataset.i];
+    if (partner) gpLinkRows(tr, partner);
+    ov.style.display = 'none';
+  });
 }
 
 // ── Persistencia del contenido (warmup/plyo/main) ──
@@ -565,10 +737,11 @@ function gpCollectRows(tbodyId, withMode) {
     // Exclude the VBT velocity-loss input so the core `v` array stays index-stable.
     const v = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss')).map(i => i.value);
     const exId = tr.dataset.exId || null;
+    const link = tr.dataset.link || null;
     if (withMode) {
       const on = tr.querySelector('.gp-mode button.is-on');
       const vloss = tr.querySelector('.gp-vbt-loss')?.value || '';
-      return { v, exId, mode: on ? on.textContent.trim() : 'SR', vloss };
+      return { v, exId, mode: on ? on.textContent.trim() : 'SR', vloss, link };
     }
     return { v, exId };
   });
@@ -589,6 +762,7 @@ const gpRowVals = r => Array.isArray(r) ? r : (r?.v || []);
 const gpRowEx   = r => Array.isArray(r) ? null : (r?.exId || null);
 const gpRowMode = r => Array.isArray(r) ? null : (r?.mode || null);
 const gpRowVloss = r => Array.isArray(r) ? '' : (r?.vloss || '');
+const gpRowLink = r => Array.isArray(r) ? null : (r?.link || null);
 function gpFillRow(tr, vals, exId) {
   // Fill only the core inputs (exclude the VBT loss input) so indices align with `v`.
   const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
@@ -609,7 +783,9 @@ function gpApplyContent(content) {
     gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, gpRowVals(r), gpRowEx(r));
     const lossEl = tr.querySelector('.gp-vbt-loss'); if (lossEl) lossEl.value = gpRowVloss(r);
     gpApplyRowMode(tr, gpRowMode(r) || 'SR');
+    const lk = gpRowLink(r); if (lk) tr.dataset.link = lk;
   });
+  gpRefreshMainLinks();
   setMin('gpMainMin', content.main?.min);
   gpRecalcTotals();
   // Restore the saved Load-groups config and preview it in the plan (async row load).
@@ -962,7 +1138,7 @@ function gpAddWarmupRow() {
   const tbody = document.getElementById('gpWarmupBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
-  tr.innerHTML = `<td class="gp-num">${num}</td>
+  tr.innerHTML = `${gpNumCell(num)}
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><input class="num-input" placeholder="1"></td>
     <td><input placeholder="—"></td>
@@ -970,7 +1146,8 @@ function gpAddWarmupRow() {
     <td><input placeholder="${tt('gym_planner.notes','Notes')}"></td>
     <td><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
-  tr.querySelector('input').focus();
+  gpWireRowDnD(tr, tbody);
+  tr.querySelector('.name-cell input').focus();
   gpRecalcTotals();
 }
 
@@ -978,7 +1155,7 @@ function gpAddPlyoRow() {
   const tbody = document.getElementById('gpPlyoBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
-  tr.innerHTML = `<td class="gp-num">${num}</td>
+  tr.innerHTML = `${gpNumCell(num)}
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><select><option>${tt('gym_planner.intensive','Intensive')}</option><option>${tt('gym_planner.extensive','Extensive')}</option></select></td>
     <td><input placeholder="3 × 5"></td>
@@ -988,7 +1165,8 @@ function gpAddPlyoRow() {
     <td><input placeholder="${tt('gym_planner.notes','Notes')}"></td>
     <td><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
-  tr.querySelector('input').focus();
+  gpWireRowDnD(tr, tbody);
+  tr.querySelector('.name-cell input').focus();
   gpRecalcTotals();
 }
 
@@ -1056,7 +1234,7 @@ function gpAddMainRow() {
   const tbody = document.getElementById('gpMainBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
-  tr.innerHTML = `<td class="gp-num">${num}</td>
+  tr.innerHTML = `${gpNumCell(num)}
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
@@ -1065,8 +1243,9 @@ function gpAddMainRow() {
     <td><input placeholder="2 min"></td>
     <td><input placeholder="2-0-1"></td>
     <td><input class="num-input" placeholder="—"></td>
-    <td><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
+    <td style="white-space:nowrap"><button class="btn-link" onclick="gpToggleLink(this)" title="${tt('gym_planner.link_exercise','Link into a superset')}"><i class="ti ti-link"></i></button><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
+  gpWireRowDnD(tr, tbody);
   // Wire SR/VBT toggle for the new row
   const modeEl = tr.querySelector('.gp-mode');
   modeEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
@@ -1074,7 +1253,7 @@ function gpAddMainRow() {
     gpRecalcTotals();
     gpScheduleSave();
   }));
-  tr.querySelector('input').focus();
+  tr.querySelector('.name-cell input').focus();
   gpRecalcTotals();
 }
 
