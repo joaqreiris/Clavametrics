@@ -2666,6 +2666,130 @@ async function _gpAssignSeasonToDay(clubId, sessionId, seasonId) {
   } catch (e) { showToast(`${tt('gps_analysis.ar_season_failed','Season assign failed')}: ${e.message}`, true); }
 }
 
+// ── Clean up empty sessions ───────────────────────────────────────────────────
+// Imported/historical sessions that carry NO GPS data (no gps_reports, or every report's
+// total_distance is 0/null) are dead weight. Here the user reviews and deletes them.
+// Deleting a training_sessions row CASCADES gps_reports/metrics/period_reports (safe) but
+// ALSO rpe + session_exercises + video_sessions — so we protect any session that has RPE
+// (locked, not deletable) and exclude sessions carrying a rival (intentional match markers).
+async function _gpOpenEmptySessions() {
+  const clubId = window._gpClubId || (await window.getClubId?.());
+  if (!clubId) { showToast('No club selected', true); return; }
+  const ov = makeModal(tt('gps_analysis.es_title','Clean up empty sessions'), '<div id="esBody" style="min-width:600px;max-width:760px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading…</div></div>');
+  const body = ov.querySelector('#esBody');
+  try {
+    const today = window.cmToday ? window.cmToday() : new Date().toISOString().slice(0, 10);
+    const [sessions, reps, rpes] = await Promise.all([
+      window.cmFetchAll(() => window.sb.from('training_sessions')
+        .select('id, session_date, session_type, is_historical, external_activity_id, title, session_attributes')
+        .eq('club_id', clubId), { label: 'empty-sessions.sessions' }),
+      window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id, total_distance').eq('club_id', clubId), { label: 'empty-sessions.reports' }),
+      window.cmFetchAll(() => window.sb.from('rpe').select('session_id').eq('club_id', clubId), { label: 'empty-sessions.rpe' }),
+    ]);
+    const repCount = new Map(), anyData = new Set();
+    (reps || []).forEach(r => {
+      if (!r.session_id) return;
+      repCount.set(r.session_id, (repCount.get(r.session_id) || 0) + 1);
+      if (r.total_distance != null && Number(r.total_distance) > 0) anyData.add(r.session_id);
+    });
+    const hasRpe = new Set((rpes || []).map(r => r.session_id).filter(Boolean));
+    const _imported = s => !!s.external_activity_id || s.is_historical === true;
+    const _rival = s => s.session_attributes?.rival || s.session_attributes?.opponent;
+    const cand = (sessions || [])
+      .filter(s => _imported(s) && !anyData.has(s.id) && !_rival(s) && String(s.session_date) <= today)
+      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, title: s.title || '',
+                   reports: repCount.get(s.id) || 0, rpe: hasRpe.has(s.id) }))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    console.info(`[EmptySessions] club sessions=${sessions?.length || 0} · candidates=${cand.length} · rpe-locked=${cand.filter(c => c.rpe).length}`);
+    if (!cand.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.es_none','No empty imported sessions found.')}</div>`; return; }
+    const _dataCell = c => c.reports ? tt('gps_analysis.es_all_zero', `${c.reports} · all 0`, { n: c.reports }) : tt('gps_analysis.es_no_records', 'No records');
+    body.innerHTML = `
+      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">${tt('gps_analysis.es_intro','Imported/historical sessions with no GPS data (no records, or all values 0). Deleting removes the session and any empty GPS rows — it cannot be undone. Sessions that carry an RPE score are locked to protect that data.')}</p>
+      <div style="display:flex;gap:8px;margin:0 0 10px">
+        <input id="esSearch" type="text" placeholder="${tt('gps_analysis.ar_search','Search date…')}" style="flex:1;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg-soft)">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg)"><input type="checkbox" id="esSelAll" style="cursor:pointer">${tt('gps_analysis.ar_select_all_shown','Select all shown')}</label>
+        <span id="esSelCount" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('gps_analysis.ar_selected','0 selected',{n:0})}</span>
+        <button id="esDelBtn" class="cm-btn is-sm" disabled style="margin-left:auto;background:var(--cm-danger);color:#fff;border-color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:14px"></i>${tt('gps_analysis.es_delete_selected','Delete selected')}</button>
+      </div>
+      <div style="max-height:48vh;overflow:auto">
+        <table class="gp-map-table" style="width:100%">
+        <thead><tr><th style="width:26px"></th><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.es_col_title','Title')}</th><th>${tt('gps_analysis.es_col_data','Data')}</th></tr></thead>
+        <tbody>${cand.map(c => `
+          <tr data-sid="${c.id}" data-search="${(c.date + ' ' + (c.type || '') + ' ' + (c.title || '')).toLowerCase()}">
+            <td>${c.rpe ? `<span title="${tt('gps_analysis.es_locked_rpe','Has RPE — kept')}" style="color:var(--cm-fg-muted)"><i class="ti ti-lock" style="font-size:14px"></i></span>` : `<input type="checkbox" class="es-check" data-sid="${c.id}" style="cursor:pointer">`}</td>
+            <td style="font:600 12px/1 var(--cm-font-mono)">${c.date}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${c.type || '—'}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans)">${_gpEsc(c.title || '—')}</td>
+            <td style="font:500 11px/1 var(--cm-font-sans);color:${c.reports ? 'var(--cm-warn,#d97706)' : 'var(--cm-fg-muted)'}">${_dataCell(c)}${c.rpe ? ` · <span style="color:var(--cm-fg-muted)">${tt('gps_analysis.es_locked_rpe','Has RPE — kept')}</span>` : ''}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <div id="esNoMatch" style="display:none;padding:18px;text-align:center;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gps_analysis.ar_no_days_match','No days match.')}</div>
+      </div>`;
+    const esSearch = body.querySelector('#esSearch');
+    const esRows   = [...body.querySelectorAll('tbody tr')];
+    const esEmpty  = body.querySelector('#esNoMatch');
+    const esChecks = [...body.querySelectorAll('.es-check')];
+    const esSelAll = body.querySelector('#esSelAll');
+    const esCount  = body.querySelector('#esSelCount');
+    const esDel    = body.querySelector('#esDelBtn');
+    const _vis = c => c.closest('tr').style.display !== 'none';
+    const _sel = () => esChecks.filter(c => c.checked && _vis(c)).map(c => c.dataset.sid);
+    const syncSel = () => {
+      const sel = _sel();
+      esCount.textContent = tt('gps_analysis.ar_selected', `${sel.length} selected`, { n: sel.length });
+      esDel.disabled = sel.length === 0;
+      const vis = esChecks.filter(_vis);
+      esSelAll.checked = vis.length > 0 && vis.every(c => c.checked);
+      esSelAll.indeterminate = !esSelAll.checked && vis.some(c => c.checked);
+    };
+    esChecks.forEach(c => c.addEventListener('change', syncSel));
+    esSelAll.addEventListener('change', () => { esChecks.filter(_vis).forEach(c => { c.checked = esSelAll.checked; }); syncSel(); });
+    esSearch.addEventListener('input', () => {
+      const q = esSearch.value.trim().toLowerCase();
+      let shown = 0;
+      esRows.forEach(tr => { const hit = !q || tr.dataset.search.includes(q); tr.style.display = hit ? '' : 'none'; if (hit) shown++; });
+      esEmpty.style.display = shown ? 'none' : '';
+      syncSel();
+    });
+    esDel.addEventListener('click', () => _gpConfirmDeleteSessions(clubId, _sel()));
+  } catch (e) {
+    body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`;
+  }
+}
+
+// Confirm + delete (chunked). Cascades handle GPS rows; sessions with RPE were never offered.
+function _gpConfirmDeleteSessions(clubId, ids) {
+  if (!ids || !ids.length) return;
+  const ov = makeModal(tt('gps_analysis.es_confirm_title','Delete sessions'), `
+    <div style="min-width:380px;max-width:460px;display:flex;flex-direction:column;gap:14px">
+      <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0">${tt('gps_analysis.es_confirm_body', `Delete ${ids.length} session(s) permanently? This removes the sessions and any linked GPS rows. This cannot be undone.`, { n: ids.length })}</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="esCancel" class="cm-btn is-outline is-sm">${tt('gps_analysis.ar_cancel','Cancel')}</button>
+        <button id="esConfirm" class="cm-btn is-sm" style="background:var(--cm-danger);color:#fff;border-color:var(--cm-danger)">${tt('gps_analysis.es_delete_selected','Delete selected')}</button>
+      </div>
+    </div>`);
+  ov.querySelector('#esCancel').onclick = () => ov.remove();
+  ov.querySelector('#esConfirm').onclick = async () => {
+    const btn = ov.querySelector('#esConfirm'); btn.disabled = true;
+    try {
+      for (let i = 0; i < ids.length; i += 200) {
+        const chunk = ids.slice(i, i + 200);
+        const { error } = await window.sb.from('training_sessions').delete().eq('club_id', clubId).in('id', chunk);
+        if (error) throw error;
+      }
+      showToast(tt('gps_analysis.es_deleted', `${ids.length} sessions deleted`, { n: ids.length }));
+      try { window.cmInvalidateGpsCache?.(); window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
+      try { await window.gpFilterBar?.reload?.(); } catch {}
+      try { await window.refreshDashboard?.(); } catch {}
+      ov.remove();
+      document.querySelector('.gp-modal-overlay')?.remove();
+      _gpOpenEmptySessions();
+    } catch (e) { showToast(`${tt('gps_analysis.es_delete_failed','Delete failed')}: ${e.message}`, true); btn.disabled = false; }
+  };
+}
+
 // Bulk season picker: same list as the per-row one, but assigns to MANY sessions at once.
 // seedDate primes a New season with a sensible window (earliest selected day).
 function _gpBulkSeasonPicker(anchor, clubId, teamId, sids, seedDate) {
@@ -3169,10 +3293,12 @@ gpGearBtn?.addEventListener('click', e => {
     { label: tt('gps_analysis.assign_rivals','Assign rivals & seasons') + (oc ? ` · ${tt('gps_analysis.n_need_season','{n} need a season',{n:oc})}` : ''),   icon: 'ti-ball-football',          act: oc ? 'rivals_outside' : 'rivals' },
     { sep: true },
     { label: tt('gps_analysis.flagged_periods','Flagged periods') + (fc ? ` · ${tt('gps_analysis.n_need_review','{n} need review',{n:fc})}` : ''), icon: 'ti-flag', act: 'flagged' },
+    { label: tt('gps_analysis.es_title','Clean up empty sessions'), icon: 'ti-trash', act: 'empty_sessions' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
     else if (item.act === 'rivals') _gpOpenAssignRivals();
     else if (item.act === 'rivals_outside') _gpOpenAssignRivals({ onlyOutside: true });
+    else if (item.act === 'empty_sessions') _gpOpenEmptySessions();
     else document.getElementById(item.act)?.click();
   });
 });
