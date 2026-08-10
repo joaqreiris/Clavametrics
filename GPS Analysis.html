@@ -1373,6 +1373,13 @@ function getDateRange(state) {
         : new Date(now.getFullYear() - 1, 6, 1);
       return { from: _fmtDate(seasonStart), to: _fmtDate(now) };
     }
+    case 'season': {
+      // A specific seasons row picked from the date pill. Use its exact window; fall back to
+      // the current-season heuristic if the stored dates went missing.
+      if (s.seasonFrom && s.seasonTo) return { from: s.seasonFrom, to: s.seasonTo };
+      const ss = now.getMonth() >= 6 ? new Date(now.getFullYear(), 6, 1) : new Date(now.getFullYear() - 1, 6, 1);
+      return { from: _fmtDate(ss), to: _fmtDate(now) };
+    }
     case 'allTime': return { from: '2000-01-01', to: _fmtDate(now) };
     case 'custom':  return { from: s.dateFrom || _fmtDate(new Date(now.getFullYear(), 0, 1)), to: s.dateTo || _fmtDate(now) };
     default:        { const f = new Date(now); f.setDate(f.getDate()-30); return { from: _fmtDate(f), to: _fmtDate(now) }; }
@@ -1384,6 +1391,7 @@ function getDatePresetLabel(state) {
   const m = { last7:tt('gps_analysis.preset_last7','Last 7 days'), last30:tt('gps_analysis.preset_last30','Last 30 days'), last90:tt('gps_analysis.preset_last90','Last 90 days'), currentMC:tt('gps_analysis.preset_current_mc','Current MC'),
                currentMonth:tt('gps_analysis.preset_current_month','Current month'), currentSeason:tt('gps_analysis.preset_current_season','Current season'), allTime:tt('gps_analysis.preset_all_time','All time') };
   if (s.datePreset === 'custom') return `${s.dateFrom || '?'} — ${s.dateTo || '?'}`;
+  if (s.datePreset === 'season') return s.seasonName || tt('gps_analysis.preset_current_season','Current season');
   return m[s.datePreset] || tt('gps_analysis.preset_last30','Last 30 days');
 }
 
@@ -1394,6 +1402,7 @@ function _gpPrefsKey() {
 function saveGpsPrefs() {
   const s = window.gpState;
   const v = { datePreset:s.datePreset, dateFrom:s.dateFrom, dateTo:s.dateTo,
+              seasonId:s.seasonId, seasonFrom:s.seasonFrom, seasonTo:s.seasonTo, seasonName:s.seasonName,
               includeHistorical:s.includeHistorical, microcycle:s.microcycle,
               playerId:s.playerId, playerName:s.playerName, baseline:s.baseline };
   try { localStorage.setItem(_gpPrefsKey(), JSON.stringify(v)); } catch(_) {}
@@ -3442,6 +3451,11 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
     pop.className = 'gp-popover';
     pop.style.minWidth = '220px';
 
+    // Real seasons for a "pick a specific season" section (lazy, team-scoped). With 2+ seasons
+    // the generic "Current season" heuristic isn't enough — the user needs to choose which one.
+    let _seasons = Array.isArray(window.__gpSeasons) ? window.__gpSeasons : null;
+    if (!_seasons) { try { _seasons = await _gpLoadSeasons(window._gpClubId || await window.getClubId(), window._gpTeamId || null); } catch { _seasons = []; } }
+
     const presets = [
       { preset: 'last7',         label: tt('gps_analysis.preset_last7','Last 7 days') },
       { preset: 'last30',        label: tt('gps_analysis.preset_last30','Last 30 days') },
@@ -3466,6 +3480,30 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       });
       pop.appendChild(btn);
     });
+
+    // ── Pick a specific season (real seasons rows) ──
+    if (_seasons && _seasons.length) {
+      const ssep = document.createElement('div'); ssep.className = 'gp-popover-sep'; pop.appendChild(ssep);
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'padding:4px 10px;font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em';
+      hdr.textContent = tt('gps_analysis.filter_by_season','Season');
+      pop.appendChild(hdr);
+      _seasons.forEach(sn => {
+        const b = document.createElement('button');
+        b.className = 'gp-popover-item';
+        b.innerHTML = `<i class="ti ti-calendar-stats" style="font-size:13px"></i>${_gpEsc(sn.name)} <span style="color:var(--cm-fg-muted);font-size:10px">(${sn.start_date} → ${sn.end_date})</span>`;
+        if (window.gpState.datePreset === 'season' && String(window.gpState.seasonId) === String(sn.id)) b.style.fontWeight = '700';
+        b.addEventListener('click', e => {
+          e.stopPropagation(); closePop();
+          Object.assign(window.gpState, { datePreset: 'season', seasonId: sn.id, seasonFrom: sn.start_date, seasonTo: sn.end_date, seasonName: sn.name });
+          document.getElementById('dateRangeLabel').textContent = getDatePresetLabel();
+          saveGpsPrefs();
+          window.renderView?.();
+          window.refreshDashboard?.();
+        });
+        pop.appendChild(b);
+      });
+    }
 
     const sep = document.createElement('div'); sep.className = 'gp-popover-sep'; pop.appendChild(sep);
 
@@ -4585,10 +4623,13 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
       await import('./lib/gp-card/resolver.js').catch(() => ({}));
     if (!aggregateSeries) return; // resolver not available as module in this context
 
+    const _gs = window.gpState || {};
     const ctx = { clubId, playerId: window.gpState?.playerId || null, mcId: window.gpState?.mcId || null,
                   teamId: window._gpTeamId || null,
                   teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null,
                   archivedPlayerIds: Array.isArray(window._gpArchivedPlayerIds) ? window._gpArchivedPlayerIds : [],
+                  // Global season filter → a `{type:'season'}` card follows the chosen season.
+                  ...(_gs.datePreset === 'season' && _gs.seasonId ? { seasonId: _gs.seasonId, seasonFrom: _gs.seasonFrom, seasonTo: _gs.seasonTo } : {}),
                   asOf: cmToday() };
     const sessionIds = await getSessionIds(config.range, ctx, window.sb);
     if (!sessionIds.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No sessions in range</div></div>'; return; }
@@ -4669,8 +4710,12 @@ window.refreshDashboard = async function (opts = {}) {
   const { from, to } = getDateRange();
   let sessQry = window.sb.from('training_sessions')
     .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId)
-    .gte('session_date', from).lte('session_date', to);
+    .eq('club_id', clubId);
+  if (window.gpState.datePreset === 'season' && window.gpState.seasonId) {
+    sessQry = sessQry.or(`and(session_date.gte.${from},session_date.lte.${to}),season_id.eq.${window.gpState.seasonId}`);
+  } else {
+    sessQry = sessQry.gte('session_date', from).lte('session_date', to);
+  }
   if (window._gpTeamId) sessQry = sessQry.eq('team_id', window._gpTeamId);
   if (!window.gpState.includeHistorical) sessQry = sessQry.eq('is_historical', false);
   const { count: sessionCount } = await sessQry;
@@ -5821,9 +5866,15 @@ async function _fetchReports(state) {
   const { from, to } = getDateRange(s);
 
   let qry = window.sb.from('training_sessions')
-    .select('id,session_date').eq('club_id', clubId)
-    .gte('session_date', from).lte('session_date', to)
-    .order('session_date', { ascending: false }).limit(200);
+    .select('id,session_date').eq('club_id', clubId);
+  // Specific season → include days linked by season_id even if their date falls outside the
+  // season window (imported/pre-season data bucketed via Assign rivals), mirroring the resolver.
+  if (s.datePreset === 'season' && s.seasonId) {
+    qry = qry.or(`and(session_date.gte.${from},session_date.lte.${to}),season_id.eq.${s.seasonId}`);
+  } else {
+    qry = qry.gte('session_date', from).lte('session_date', to);
+  }
+  qry = qry.order('session_date', { ascending: false }).limit(200);
 
   if (!s.includeHistorical) qry = qry.eq('is_historical', false);
 
