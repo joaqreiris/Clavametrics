@@ -672,11 +672,22 @@
     } catch (e) { console.warn('[RPE] recent_sessions:', e && e.message); state.recent = []; }
   }
 
+  // Active team = the sidebar's selected team, with the same fallback the rest of the app uses
+  // (Sessions History / Load Monitor): saved-if-valid, else the first accessible team. Never null
+  // for a club with teams — otherwise the session picker would leak every team's sessions.
+  function activeTeamId() {
+    const teams = state.teams || [];
+    let saved = null;
+    try { saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team'); } catch (e) {}
+    if (saved && teams.some(t => t.id === saved)) return saved;
+    return teams[0] ? teams[0].id : null;
+  }
+
   // Recent matches from the calendar (they live in calendar_events, not training_sessions),
   // so RPE can be attached to a game, not only a training session.
   async function loadRecentMatches() {
     try {
-      const activeTeam = sessionStorage.getItem('cal_active_team');
+      const activeTeam = activeTeamId();
       const todayStr = localToday();
       let q = window.sb.from('calendar_events')
         .select('id, date, start_time, duration_minutes, title, opponent, team_id, created_at')
@@ -766,7 +777,7 @@
   /* ── Session select — anchor to TODAY; keep past sessions browsable ── */
   async function initSessionSelect() {
     const sel = document.getElementById('rmSessionSelect');
-    const activeTeam = sessionStorage.getItem('cal_active_team');
+    const activeTeam = activeTeamId();
     const todayStr = localToday();
     let q = window.sb.from('training_sessions')
       .select('id, session_date, session_time, title, session_type, team_id, created_at')
@@ -1086,7 +1097,8 @@
       if (!(await window.guardModule())) return;
       state.cid = await window.getClubId();
       if (window.applyClubTheme) await window.applyClubTheme();
-      await Promise.all([initSessionSelect(), initTeams(), loadRecentSessions()]);
+      await initTeams(); // must run first: initSessionSelect/loadRecentMatches resolve the active team from state.teams
+      await Promise.all([initSessionSelect(), loadRecentSessions()]);
       wireShareModal();
       wireRemind();
       wireRefresh();

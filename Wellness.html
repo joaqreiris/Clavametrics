@@ -533,8 +533,11 @@
       const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
     }
     state.teams = teams; state.fullAccess = fullAccess;
-    const saved = sessionStorage.getItem('cal_active_team');
-    const useTeam = (saved && teams.some(t => t.id === saved)) ? saved : (fullAccess ? '' : (teams[0]?.id || ''));
+    let saved = null;
+    try { saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team'); } catch (e) {}
+    // Default to the sidebar's active team (first team) even for full-access users — "Whole club"
+    // stays selectable but must not be the default, or Wellness leaks every team's players.
+    const useTeam = (saved && teams.some(t => t.id === saved)) ? saved : (teams[0]?.id || '');
     sel.innerHTML = (fullAccess ? `<option value="">${tt('wellness.wholeClub','Whole club')}</option>` : '') +
       teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     sel.value = useTeam;
