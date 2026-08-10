@@ -16,6 +16,20 @@
 (function () {
   'use strict';
 
+  // MD code de una sesión: la COLUMNA match_day_offset primero (lo que escribe Daily
+  // Planning), luego session_attributes.md_code como fallback. Mismo orden de prioridad
+  // que _getMcMdCode() en GPS Analysis y _mdOf() en gp-filterbar.js, para que el filtro
+  // que puebla el dropdown y el que aplica sobre los datos coincidan.
+  function _gpMdOf(s) {
+    const off = s && s.match_day_offset;
+    if (off != null) {
+      if (typeof off === 'string') return off || '';
+      if (off === 0) return 'MD';
+      return off < 0 ? `MD${off}` : `MD+${off}`;
+    }
+    return (s && s.session_attributes && s.session_attributes.md_code) || '';
+  }
+
   // ── Domain constants (mirrors lib/gp-card/) ────────────────
 
   // dimMax = how many DIMENSIONS (grouping/axis fields) this viz accepts.
@@ -2347,11 +2361,11 @@
         const wantRv = FB?.rivals?.length       ? new Set(FB.rivals)              : null;
         const wantSt = FB?.sessionTypes?.length ? new Set(FB.sessionTypes)        : null;
         const { data: ts } = await sb.from('training_sessions')
-          .select('id,session_attributes,session_type').in('id', sessionIds);
+          .select('id,session_attributes,match_day_offset,session_type').in('id', sessionIds);
         if (stale()) return;
         sessionIds = (ts || []).filter(s => {
           const a = s.session_attributes || {};
-          if (wantMd && !wantMd.has(String(a.md_code ?? ''))) return false;
+          if (wantMd && !wantMd.has(String(_gpMdOf(s)))) return false;
           // Rival is grouped by ENTITY: the filterbar emits the normalized name as the key
           // (opponent_id-backed when available). We always store the rival text alongside
           // opponent_id, so the normalized text reproduces the same key here.
@@ -2471,10 +2485,10 @@
           if (FB?.mdCodes?.length && refSessions.length) {
             const want = new Set(FB.mdCodes.map(String));
             const { data: ts } = await sb.from('training_sessions')
-              .select('id,session_attributes').in('id', refSessions);
+              .select('id,session_attributes,match_day_offset').in('id', refSessions);
             if (stale()) return;
             refSessions = (ts || [])
-              .filter(s => want.has(String(s.session_attributes?.md_code ?? '')))
+              .filter(s => want.has(String(_gpMdOf(s))))
               .map(s => s.id);
           }
           let refSeries = [];

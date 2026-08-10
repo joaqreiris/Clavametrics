@@ -902,7 +902,7 @@
     const _gpTeam = window._gpTeamId || null;
     const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions,archived_at')
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
-    const _seQ = window.sb.from('training_sessions').select('session_attributes')
+    const _seQ = window.sb.from('training_sessions').select('session_attributes, match_day_offset')
       .eq('club_id', clubId).limit(3000);
     const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date')
       .eq('club_id', clubId);
@@ -922,7 +922,7 @@
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
       window.cmFetchAll(() => window.sb.from('gps_reports')
-        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
+        .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
       _safe(_obQ),
     ]);
@@ -979,10 +979,23 @@
     });
     _posRaw = Array.from(posSet);
 
-    // MD codes reales desde session_attributes.md_code
+    // MD code de una sesión: la COLUMNA match_day_offset primero (lo que escribe Daily
+    // Planning), luego session_attributes.md_code como fallback. Mismo orden de prioridad
+    // que _getMcMdCode() en GPS Analysis, para que el filtro y el análisis coincidan.
+    const _mdOf = (ts) => {
+      const off = ts && ts.match_day_offset;
+      if (off != null) {
+        if (typeof off === 'string') return off || '';
+        if (off === 0) return 'MD';
+        return off < 0 ? `MD${off}` : `MD+${off}`;
+      }
+      return (ts && ts.session_attributes && ts.session_attributes.md_code) || '';
+    };
+
+    // MD codes reales (columna match_day_offset ∪ session_attributes.md_code)
     const mdSet = new Set();
     (sessions || []).forEach(s => {
-      const v = s.session_attributes && s.session_attributes.md_code;
+      const v = _mdOf(s);
       if (v) mdSet.add(String(v));
     });
     options.md_code = Array.from(mdSet).sort(mdCompare).map(v => ({ value: v, label: v }));
@@ -1033,7 +1046,7 @@
       const ts = r.training_sessions || {};
       return {
         d:   ts.session_date || '',
-        md:  String(ts.session_attributes?.md_code ?? '') || '',
+        md:  _mdOf(ts),
         mc:  _mcForDate(ts.session_date),   // por fecha, no por microcycle_id (suele venir null)
         p:   r.player_id,
         pos: r.players?.position || '',
