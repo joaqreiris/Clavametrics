@@ -2584,7 +2584,13 @@ function _gpNewSeasonForm(clubId, teamId, onCreated) {
     const name  = ov.querySelector('#arSeasonName').value.trim();
     const start = ov.querySelector('#arSeasonStart').value;
     const end   = ov.querySelector('#arSeasonEnd').value;
-    if (!name || !start || !end) { showToast(tt('gps_analysis.ar_season_fields','Name, start and end are required'), true); return; }
+    // Report the SPECIFIC missing field(s): a native <input type="date"> reads back '' when the
+    // typed value never validated (locale format mismatch), so "everything's filled" can still fail.
+    const missing = [];
+    if (!name)  missing.push(tt('gps_analysis.ar_season_name','Season name'));
+    if (!start) missing.push(tt('gps_analysis.ar_start_date','Start date'));
+    if (!end)   missing.push(tt('gps_analysis.ar_end_date','End date'));
+    if (missing.length) { showToast(`${tt('gps_analysis.ar_season_fields','Name, start and end are required')} — ${missing.join(', ')}`, true); return; }
     if (start > end) { showToast(tt('gps_analysis.ar_season_order','Start date must be before end date'), true); return; }
     const btn = ov.querySelector('#arSeasonSave'); btn.disabled = true;
     try {
