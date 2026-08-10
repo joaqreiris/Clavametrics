@@ -107,26 +107,41 @@
   /* Empty state */
   .gl-empty{grid-column:1/-1;padding:56px 0;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body)}
 
-  /* Overlay / Modal */
-  .gl-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
-  .gl-overlay.is-open{display:flex}
+  /* Overlay / Modal — event-picker aesthetic (blurred backdrop, entrance animation, sticky head/foot) */
+  .gl-overlay{position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity 150ms ease}
+  .gl-overlay.is-open{opacity:1;pointer-events:auto}
+  .gl-overlay > *{transform:translateY(8px) scale(.99);transition:transform 150ms ease}
+  .gl-overlay.is-open > *{transform:translateY(0) scale(1)}
   .gl-modal-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:100%;max-width:460px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--cm-shadow-3);max-height:88vh;overflow-y:auto}
   .gl-modal-box h2{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0}
-  .gm-field{display:flex;flex-direction:column;gap:4px}
-  .gm-field label{font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
-  .gm-field input,.gm-field select,.gm-field textarea{height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;width:100%;box-sizing:border-box}
-  .gm-field textarea{height:72px;padding:8px 10px;resize:vertical}
-  .gm-usable{display:flex;flex-wrap:wrap;gap:8px 14px;padding:2px 0}
-  .gm-usable label{display:inline-flex;align-items:center;gap:5px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer}
+  /* Exercise create/edit modal — event-picker style (scoped so YT/delete modals keep their look) */
+  #gl-modal .gl-modal-box{max-width:620px;padding:0;gap:0;border-radius:var(--cm-r-5);box-shadow:0 24px 48px rgba(0,0,0,.22);max-height:90vh;overflow:hidden}
+  .gm-head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--cm-border);flex:none}
+  .gm-head h2{flex:1;font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0}
+  .gm-close{flex:none;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--cm-fg-muted);cursor:pointer;transition:background 100ms,color 100ms}
+  .gm-close:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .gm-close .ti{font-size:18px}
+  .gm-body{padding:18px 22px 20px;overflow-y:auto}
+  #gm-form{display:flex;flex-direction:column;gap:22px}
+  .gm-section{display:flex;flex-direction:column;gap:12px}
+  .gm-section-label{font:600 10.5px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .gm-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .gm-field{display:flex;flex-direction:column;gap:5px}
+  .gm-field.is-span{grid-column:1/-1}
+  .gm-field label{font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;gap:5px}
+  .gm-field input,.gm-field select,.gm-field textarea{height:38px;padding:0 11px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;width:100%;box-sizing:border-box;transition:border-color 100ms,box-shadow 100ms}
+  .gm-field textarea{height:72px;padding:9px 11px;resize:vertical}
+  .gm-field input:focus,.gm-field select:focus,.gm-field textarea:focus{border-color:var(--cm-accent);box-shadow:0 0 0 1px var(--cm-accent)}
+  .gm-usable{display:flex;flex-wrap:wrap;gap:8px 16px;padding:2px 0}
+  .gm-usable label{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer}
   .gm-usable input{width:auto;height:auto;accent-color:var(--cm-accent)}
-  .gm-field input:focus,.gm-field select:focus,.gm-field textarea:focus{border-color:var(--cm-border-strong)}
-  .gm-chips{display:flex;flex-wrap:wrap;gap:5px;padding:2px 0;max-height:74px;overflow-y:auto}
-  .gm-chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;background:var(--cm-surface);border:1px solid var(--cm-border);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap}
-  #gm-form > div{gap:10px !important}
-  .gm-chip:hover{color:var(--cm-fg);border-color:var(--cm-border-strong)}
-  .gm-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
+  .gm-chips{display:flex;flex-wrap:wrap;gap:7px;padding:1px 0}
+  .gm-chip{display:inline-flex;align-items:center;height:32px;padding:0 13px;border-radius:999px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap;transition:border-color 110ms,background 110ms,color 110ms,transform 80ms}
+  .gm-chip:hover{color:var(--cm-fg-strong);border-color:var(--cm-border-strong);background:var(--cm-surface);transform:translateY(-1px)}
+  .gm-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-accent);box-shadow:0 0 0 1px var(--cm-accent)}
   .gm-opt{font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
   .gm-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:4px}
+  #gl-modal .gm-actions{padding:14px 22px;border-top:1px solid var(--cm-border);flex:none}
   .gm-del-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--cm-shadow-3)}
   .gm-del-box p{font:var(--cm-body);color:var(--cm-fg-muted);margin:0}
 
@@ -229,107 +244,135 @@
 <!-- Exercise modal (create / edit) -->
 <div class="gl-overlay" id="gl-modal">
   <div class="gl-modal-box">
-    <h2 id="gl-modal-title" data-i18n="gym_library.new_exercise">New exercise</h2>
-    <form id="gm-form" onsubmit="return false">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.field_name">Name</span> <span style="color:var(--cm-danger)">*</span></label>
-          <input id="gm-name" placeholder="e.g. Back squat" maxlength="120" data-i18n-ph="gym_library.name_ph">
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.primary_purpose">Primary purpose</span> <span style="color:var(--cm-danger)">*</span></label>
-          <select id="gm-primary-purpose"><option value="">Select…</option></select>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.muscle_groups">Muscle groups</span> <span style="color:var(--cm-danger)">*</span></label>
-          <div class="gm-chips" id="gm-muscle-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.movement_patterns">Movement patterns</label>
-          <div class="gm-chips" id="gm-pattern-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.type">Type</label>
-          <select id="gm-category-type">
-            <option value="strength" data-i18n="gym_library.type_strength">Strength</option>
-            <option value="power" data-i18n="gym_library.type_power">Power</option>
-            <option value="olympic" data-i18n="gym_library.type_olympic">Olympic</option>
-            <option value="mobility" data-i18n="gym_library.type_mobility">Mobility</option>
-            <option value="activation" data-i18n="gym_library.type_activation">Activation</option>
-            <option value="core" data-i18n="gym_library.type_core">Core</option>
-            <option value="balance" data-i18n="gym_library.type_balance">Balance</option>
-            <option value="conditioning" data-i18n="gym_library.type_conditioning">Conditioning</option>
-            <option value="prehab" data-i18n="gym_library.type_prehab">Prehab</option>
-            <option value="speed" data-i18n="gym_library.type_speed">Speed</option>
-            <option value="cooldown" data-i18n="gym_library.type_cooldown">Cooldown</option>
-          </select>
-        </div>
-        <div class="gm-field">
-          <label data-i18n="folders.folder">Folder</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <select id="gm-folder" style="flex:1"></select>
-            <button type="button" onclick="gmNewFolder()" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-folder-plus" style="font-size:15px"></i></button>
+    <div class="gm-head">
+      <h2 id="gl-modal-title" data-i18n="gym_library.new_exercise">New exercise</h2>
+      <button type="button" class="gm-close" id="gm-close-x" title="" data-i18n-attr="title:common.cancel"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="gm-body">
+      <form id="gm-form" onsubmit="return false">
+
+        <!-- Essentials -->
+        <div class="gm-section">
+          <div class="gm-section-label" data-i18n="gym_library.section_essentials">Essentials</div>
+          <div class="gm-field is-span">
+            <label><span data-i18n="gym_library.field_name">Name</span> <span style="color:var(--cm-danger)">*</span></label>
+            <input id="gm-name" placeholder="e.g. Back squat" maxlength="120" data-i18n-ph="gym_library.name_ph">
+          </div>
+          <div class="gm-grid2">
+            <div class="gm-field">
+              <label><span data-i18n="gym_library.primary_purpose">Primary purpose</span> <span style="color:var(--cm-danger)">*</span></label>
+              <select id="gm-primary-purpose"><option value="">Select…</option></select>
+            </div>
+            <div class="gm-field">
+              <label data-i18n="gym_library.type">Type</label>
+              <select id="gm-category-type">
+                <option value="strength" data-i18n="gym_library.type_strength">Strength</option>
+                <option value="power" data-i18n="gym_library.type_power">Power</option>
+                <option value="olympic" data-i18n="gym_library.type_olympic">Olympic</option>
+                <option value="mobility" data-i18n="gym_library.type_mobility">Mobility</option>
+                <option value="activation" data-i18n="gym_library.type_activation">Activation</option>
+                <option value="core" data-i18n="gym_library.type_core">Core</option>
+                <option value="balance" data-i18n="gym_library.type_balance">Balance</option>
+                <option value="conditioning" data-i18n="gym_library.type_conditioning">Conditioning</option>
+                <option value="prehab" data-i18n="gym_library.type_prehab">Prehab</option>
+                <option value="speed" data-i18n="gym_library.type_speed">Speed</option>
+                <option value="cooldown" data-i18n="gym_library.type_cooldown">Cooldown</option>
+              </select>
+            </div>
+            <div class="gm-field">
+              <label data-i18n="gym_library.complexity">Complexity</label>
+              <select id="gm-complexity">
+                <option value="Low" data-i18n="gym_library.complexity_low">Low</option>
+                <option value="Medium" data-i18n="gym_library.complexity_medium">Medium</option>
+                <option value="High" data-i18n="gym_library.complexity_high">High</option>
+              </select>
+            </div>
+            <div class="gm-field">
+              <label data-i18n="folders.folder">Folder</label>
+              <div style="display:flex;align-items:center;gap:8px">
+                <select id="gm-folder" style="flex:1"></select>
+                <button type="button" onclick="gmNewFolder()" title="" data-i18n-attr="title:folders.new" style="flex:0 0 auto;display:inline-flex;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-folder-plus" style="font-size:15px"></i></button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.complexity">Complexity</label>
-          <select id="gm-complexity">
-            <option value="Low" data-i18n="gym_library.complexity_low">Low</option>
-            <option value="Medium" data-i18n="gym_library.complexity_medium">Medium</option>
-            <option value="High" data-i18n="gym_library.complexity_high">High</option>
-          </select>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.equipment">Equipment</span> <span class="gm-opt" data-i18n="gym_library.empty_bodyweight">· empty = bodyweight</span></label>
-          <div class="gm-chips" id="gm-equipment-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.purpose_additional">Purpose — additional</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
-          <div class="gm-chips" id="gm-purpose-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.contraction_type">Contraction type</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
-          <div class="gm-chips" id="gm-contraction-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.movement_speed">Movement speed</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
-          <div class="gm-chips" id="gm-speed-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.plane">Plane</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
-          <div class="gm-chips" id="gm-plane-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label><span data-i18n="gym_library.myofascial_chains">Myofascial chains</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
-          <div class="gm-chips" id="gm-chain-chips"></div>
-        </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.usable_in">Usable in</label>
-          <div class="gm-usable">
-            <label><input type="checkbox" class="gm-usable-cb" value="gym" checked> <span data-i18n="gym_library.module_gym">Gym</span></label>
-            <label><input type="checkbox" class="gm-usable-cb" value="individual"> <span data-i18n="gym_library.module_individual">Individual</span></label>
-            <label><input type="checkbox" class="gm-usable-cb" value="rehab"> <span data-i18n="gym_library.module_rehab">Rehab</span></label>
-            <label><input type="checkbox" class="gm-usable-cb" value="preventive"> <span data-i18n="gym_library.module_preventive">Preventive</span></label>
+
+        <!-- Muscles & movement -->
+        <div class="gm-section">
+          <div class="gm-section-label" data-i18n="gym_library.section_muscles">Muscles &amp; movement</div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.muscle_groups">Muscle groups</span> <span style="color:var(--cm-danger)">*</span></label>
+            <div class="gm-chips" id="gm-muscle-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label data-i18n="gym_library.movement_patterns">Movement patterns</label>
+            <div class="gm-chips" id="gm-pattern-chips"></div>
           </div>
         </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.description">Description</label>
-          <textarea id="gm-desc" placeholder="Coaching cues, execution notes…" maxlength="600" data-i18n-ph="gym_library.description_ph"></textarea>
-        </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.video_url">Video URL</label>
-          <input id="gm-video" placeholder="https://youtube.com/…" maxlength="500" data-i18n-ph="gym_library.video_url_ph">
-        </div>
-        <div class="gm-field">
-          <label data-i18n="gym_library.image_gif">Image / GIF</label>
-          <div class="gm-media-row" style="display:flex;align-items:center;gap:10px">
-            <input id="gm-media" type="file" accept="image/png,image/gif,image/jpeg,image/webp" style="flex:1;min-width:0">
-            <img id="gm-media-preview" alt="" style="display:none;width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--cm-bg-subtle)">
-            <button type="button" class="cm-btn is-ghost is-sm" id="gm-media-remove" style="display:none" data-i18n="gym_library.remove_image">Remove image</button>
+
+        <!-- Attributes (optional) -->
+        <div class="gm-section">
+          <div class="gm-section-label" data-i18n="gym_library.section_attributes">Attributes (optional)</div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.equipment">Equipment</span> <span class="gm-opt" data-i18n="gym_library.empty_bodyweight">· empty = bodyweight</span></label>
+            <div class="gm-chips" id="gm-equipment-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.purpose_additional">Purpose — additional</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
+            <div class="gm-chips" id="gm-purpose-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.contraction_type">Contraction type</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
+            <div class="gm-chips" id="gm-contraction-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.movement_speed">Movement speed</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
+            <div class="gm-chips" id="gm-speed-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.plane">Plane</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
+            <div class="gm-chips" id="gm-plane-chips"></div>
+          </div>
+          <div class="gm-field">
+            <label><span data-i18n="gym_library.myofascial_chains">Myofascial chains</span> <span class="gm-opt" data-i18n="gym_library.optional">(optional)</span></label>
+            <div class="gm-chips" id="gm-chain-chips"></div>
           </div>
         </div>
-      </div>
-    </form>
+
+        <!-- Availability & media -->
+        <div class="gm-section">
+          <div class="gm-section-label" data-i18n="gym_library.section_media">Availability &amp; media</div>
+          <div class="gm-field">
+            <label data-i18n="gym_library.usable_in">Usable in</label>
+            <div class="gm-usable">
+              <label><input type="checkbox" class="gm-usable-cb" value="gym" checked> <span data-i18n="gym_library.module_gym">Gym</span></label>
+              <label><input type="checkbox" class="gm-usable-cb" value="individual"> <span data-i18n="gym_library.module_individual">Individual</span></label>
+              <label><input type="checkbox" class="gm-usable-cb" value="rehab"> <span data-i18n="gym_library.module_rehab">Rehab</span></label>
+              <label><input type="checkbox" class="gm-usable-cb" value="preventive"> <span data-i18n="gym_library.module_preventive">Preventive</span></label>
+            </div>
+          </div>
+          <div class="gm-field">
+            <label data-i18n="gym_library.description">Description</label>
+            <textarea id="gm-desc" placeholder="Coaching cues, execution notes…" maxlength="600" data-i18n-ph="gym_library.description_ph"></textarea>
+          </div>
+          <div class="gm-grid2">
+            <div class="gm-field">
+              <label data-i18n="gym_library.video_url">Video URL</label>
+              <input id="gm-video" placeholder="https://youtube.com/…" maxlength="500" data-i18n-ph="gym_library.video_url_ph">
+            </div>
+            <div class="gm-field">
+              <label data-i18n="gym_library.image_gif">Image / GIF</label>
+              <div class="gm-media-row" style="display:flex;align-items:center;gap:10px">
+                <input id="gm-media" type="file" accept="image/png,image/gif,image/jpeg,image/webp" style="flex:1;min-width:0">
+                <img id="gm-media-preview" alt="" style="display:none;width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--cm-bg-subtle)">
+                <button type="button" class="cm-btn is-ghost is-sm" id="gm-media-remove" style="display:none" data-i18n="gym_library.remove_image">Remove image</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </form>
+    </div>
     <div class="gm-actions">
       <button type="button" class="cm-btn is-outline is-sm" id="gm-ai-tag" style="margin-right:auto" data-i18n="gym_library.auto_tag_ai">Auto-tag with AI</button>
       <button class="cm-btn is-ghost is-sm" id="gm-cancel" data-i18n="common.cancel">Cancel</button>
@@ -1193,6 +1236,7 @@ function attachListeners() {
 
   document.getElementById('gm-save').addEventListener('click', saveExercise);
   document.getElementById('gm-cancel').addEventListener('click', closeModal);
+  document.getElementById('gm-close-x').addEventListener('click', closeModal);
 
   document.getElementById('gm-media').addEventListener('change', e => {
     const file = e.target.files && e.target.files[0];
