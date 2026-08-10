@@ -539,8 +539,15 @@
   .gp-xm-t .pin { position:absolute; top:0; bottom:0; transform:translateX(-50%); display:flex; align-items:center; }
   .gp-xm-t .pin .pd { width:9px; height:9px; border-radius:50%; background:var(--cm-fg-strong); border:2px solid var(--cm-surface); box-shadow:0 0 0 1px var(--cm-fg-strong); }
   .gp-xm-v { text-align:right; font:600 12px/1 var(--cm-font-mono); }
+  .gp-xm-v.ok { color:var(--cm-success); }
   .gp-xm-v.warn { color:var(--cm-warning); }
   .gp-xm-v.danger { color:var(--cm-danger); }
+  /* E:P band mode (feature flag gps_ep_ratio): neutral track + explicit target zone */
+  .gp-xm-t.ep::before { background:var(--cm-bg-sunk); }
+  .gp-xm-band { position:absolute; top:4px; bottom:4px; background:rgba(34,197,94,0.22); border-left:1.5px solid rgba(34,197,94,.5); border-right:1.5px solid rgba(34,197,94,.5); border-radius:2px; }
+  .gp-xm-t .pin.ok .pd { background:var(--cm-success); box-shadow:0 0 0 1px var(--cm-success); }
+  .gp-xm-t .pin.warn .pd { background:var(--cm-warning); box-shadow:0 0 0 1px var(--cm-warning); }
+  .gp-xm-t .pin.danger .pd { background:var(--cm-danger); box-shadow:0 0 0 1px var(--cm-danger); }
 
   .gp-rank { display:flex; flex-direction:column; gap:8px; }
   .gp-rank-row { display:grid; grid-template-columns: 24px 1fr 60px; align-items:center; gap:10px; }
@@ -8444,20 +8451,47 @@ async function renderMatchMax(report) {
     metricKeys.map(k => window.getMatchBaseline(pid, k, clubId))
   );
 
+  // E:P target bands (feature flag gps_ep_ratio) — per-club, only for accumulable metrics.
+  // Ensure the per-club flags are loaded so the sync accessor below is authoritative (not the
+  // fail-closed code default) on the first render for a club with an override row.
+  if (window.getClubFlags) { try { await window.getClubFlags(); } catch (_e) {} }
+  const epOn    = window.clubFlagSync ? window.clubFlagSync('gps_ep_ratio') : false;
+  const epBands = epOn && window.clubFlagConfigSync ? (window.clubFlagConfigSync('gps_ep_ratio').bands || {}) : {};
+
   const rows = metricKeys.map((k, i) => {
     const { icon, label } = _xmMetricMeta(k);
     const val     = aggregated[k] || 0;
     const bl      = baselineResults[i];
     const ratio   = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
-    // 1.0× (match baseline) = pin at 75%; >1.33× clips to 100%
-    const pct     = ratio != null ? Math.min(Math.round(ratio * 75), 100) : 0;
-    const warnCls = ratio > 1.2 ? 'danger' : ratio > 1.1 ? 'warn' : '';
     const isPeak  = _XM_PEAK_METRICS.has(k);
     const conf    = bl.confidence === 'high' ? '✓' : bl.confidence === 'medium' ? '~' : '';
+
+    // E:P mode: colour vs the target band and rescale the track so the band sits centred. The
+    // legacy scale pins 1.0×=75% and clips >1.33×, which is meaningless for a weekly-accumulated
+    // ratio of ~2.5–3.5×. Peaks (max speed…) never get a band and keep the legacy scale.
+    const band = (epOn && !isPeak && ratio != null && Array.isArray(epBands[k])) ? epBands[k] : null;
+    let pct, statusCls, epLabel = '';
+    if (band) {
+      const [lo, hi] = band;
+      const scaleMax = hi * 1.3;
+      pct       = Math.max(0, Math.min(100, Math.round(ratio / scaleMax * 100)));
+      statusCls = (ratio >= lo && ratio <= hi) ? 'ok'
+                : ratio < lo ? (ratio >= lo * 0.85 ? 'warn' : 'danger')
+                :              (ratio <= hi * 1.15 ? 'warn' : 'danger');
+      epLabel   = statusCls === 'ok' ? tt('gps_analysis.ep_in','in range')
+                : ratio < lo ? tt('gps_analysis.ep_low','below') : tt('gps_analysis.ep_high','above');
+    } else {
+      // Legacy scale (unchanged): 1.0×=75%, warn>1.1, danger>1.2
+      pct       = ratio != null ? Math.min(Math.round(ratio * 75), 100) : 0;
+      statusCls = ratio > 1.2 ? 'danger' : ratio > 1.1 ? 'warn' : '';
+    }
+
     const tooltip = bl.warning
       ? bl.warning
-      : `${isPeak ? 'Pico' : 'Total MC'} · Baseline ${conf}: promedio ${bl.count} partidos`;
-    return { icon, label, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline, bl };
+      : band
+        ? `E:P ${ratio}× (${epLabel}) · ${tt('gps_analysis.ep_target','target')} ${band[0]}–${band[1]}× · ${bl.count} ${tt('gps_analysis.ep_matches','matches')}`
+        : `${isPeak ? 'Pico' : 'Total MC'} · Baseline ${conf}: promedio ${bl.count} partidos`;
+    return { icon, label, ratio, pct, statusCls, tooltip, hasBaseline: !!bl.baseline, bl, band };
   });
 
   const allMissing = rows.every(r => !r.hasBaseline);
@@ -8472,18 +8506,28 @@ async function renderMatchMax(report) {
     return;
   }
 
-  container.innerHTML = rows.map(r => `
+  container.innerHTML = rows.map(r => {
+    let track;
+    if (r.band) {
+      const [lo, hi]  = r.band;
+      const scaleMax  = hi * 1.3;
+      const bandStyle = `left:${(lo / scaleMax * 100).toFixed(1)}%;right:${(100 - hi / scaleMax * 100).toFixed(1)}%`;
+      track = `<span class="gp-xm-band" style="${bandStyle}"></span>`;
+    } else {
+      track = `<span class="th" style="left:50%"></span><span class="th" style="left:75%"></span>`;
+    }
+    return `
     <div class="gp-xm-row" title="${r.tooltip}">
       <span class="gp-xm-l"><i class="ti ${r.icon}"></i>${r.label}</span>
-      <span class="gp-xm-t">
-        <span class="th" style="left:50%"></span>
-        <span class="th" style="left:75%"></span>
+      <span class="gp-xm-t${r.band ? ' ep' : ''}">
+        ${track}
         ${r.hasBaseline
-          ? `<span class="pin" style="left:${r.pct}%"><span class="pd"></span></span>`
+          ? `<span class="pin ${r.statusCls}" style="left:${r.pct}%"><span class="pd"></span></span>`
           : `<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding-left:6px">No data</span>`}
       </span>
-      <span class="gp-xm-v ${r.warnCls}">${r.hasBaseline ? r.ratio + '×' : '—'}</span>
-    </div>`).join('');
+      <span class="gp-xm-v ${r.statusCls}">${r.hasBaseline ? r.ratio + '×' : '—'}</span>
+    </div>`;
+  }).join('');
 }
 
 // ── Metrics editor popover for × match avg card ───────────────

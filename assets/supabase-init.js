@@ -180,6 +180,76 @@
     return _profilePromise;
   };
 
+  // ── Club product feature flags ───────────────────────────────────────────────
+  // A THIRD gating axis, distinct from plan/billing (getPlanFeatures/planAllows) and generic
+  // config (club_settings): switches experimental product behaviour on/off per club. Model is
+  // "global default in code + per-club override in club_feature_flags":
+  //   value(key) = per-club override (if a row exists) ?? CM_DEFAULT_FLAGS[key].enabled ?? false
+  // Roll a beta to one club → insert an override row; ship it to everyone → flip the code default;
+  // let a club opt out later → insert a disabled override. FAIL-CLOSED on purpose (unlike plan
+  // gating): an unknown key or a failed fetch must NOT leak a half-baked feature to every club.
+  const CM_DEFAULT_FLAGS = {
+    // E:P (Entrenamiento:Partido) target bands in GPS Analysis "× Match avg" card.
+    // config.bands[metric] = [lower, upper] weekly-accumulated ÷ match-reference ratio.
+    // Only accumulable metrics; peaks (max_speed…) have no band. Per-club override merges.
+    gps_ep_ratio: {
+      enabled: false,
+      config: {
+        bands: {
+          total_distance:          [2.5, 3.5],
+          high_speed_distance:     [2.0, 2.5],
+          very_high_speed_distance:[2.0, 2.5],
+          sprint_distance:         [1.5, 2.5],
+          accelerations:           [2.6, 3.05],
+          decelerations:           [2.6, 3.05],
+          player_load:             [2.5, 3.5],
+          hmld:                    [2.0, 2.5],
+        },
+      },
+    },
+  };
+  let _flagsPromise = null;
+  let _flagsMap     = null;   // flag_key → { enabled, config } — per-club OVERRIDES only
+  window.getClubFlags = function () {
+    if (_flagsMap) return Promise.resolve(_flagsMap);
+    if (_flagsPromise) return _flagsPromise;
+    _flagsPromise = (async () => {
+      try {
+        const clubId = await window.getClubId();
+        if (!clubId) { _flagsPromise = null; return {}; }   // no club yet → only code defaults; retry later
+        const { data, error } = await window.sb.from('club_feature_flags')
+          .select('flag_key, enabled, config').eq('club_id', clubId);
+        if (error || !Array.isArray(data)) { _flagsPromise = null; return {}; } // fail-closed now, retry next call
+        const m = {};
+        for (const r of data) m[r.flag_key] = { enabled: !!r.enabled, config: r.config || {} };
+        _flagsMap = m;
+        return m;
+      } catch (_e) { _flagsPromise = null; return {}; }
+    })();
+    return _flagsPromise;
+  };
+  const _flagDefault = k => !!(CM_DEFAULT_FLAGS[k] && CM_DEFAULT_FLAGS[k].enabled);
+  const _flagCfgBase = k => (CM_DEFAULT_FLAGS[k] && CM_DEFAULT_FLAGS[k].config) || {};
+  // Async truth: override row wins, else code default, else false.
+  window.clubHasFlag = async function (key) {
+    const m = await window.getClubFlags();
+    if (m && Object.prototype.hasOwnProperty.call(m, key)) return m[key].enabled;
+    return _flagDefault(key);
+  };
+  window.clubFlagConfig = async function (key) {
+    const m = await window.getClubFlags();
+    return Object.assign({}, _flagCfgBase(key), (m && m[key] && m[key].config) || {});
+  };
+  // Sync accessors for render loops — meaningful only AFTER getClubFlags() has resolved once;
+  // before that they return the code default (fail-closed). Call getClubFlags() during page init.
+  window.clubFlagSync = function (key) {
+    if (_flagsMap && Object.prototype.hasOwnProperty.call(_flagsMap, key)) return _flagsMap[key].enabled;
+    return _flagDefault(key);
+  };
+  window.clubFlagConfigSync = function (key) {
+    return Object.assign({}, _flagCfgBase(key), (_flagsMap && _flagsMap[key] && _flagsMap[key].config) || {});
+  };
+
   // ── Shared display helpers (names + avatars) ─────────────────────────────────
   // One place decides how a person is shown across the app: never the raw email as a
   // name, photos when available (private 'profile-avatars' bucket, signed URLs cached),
@@ -276,6 +346,7 @@
     _clubId = null; _profile = null; _club = null;
     _clubIdPromise = null; _clubPromise = null; _profilePromise = null;
     _modPromise = null;
+    _flagsMap = null; _flagsPromise = null;
   };
 
   // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──

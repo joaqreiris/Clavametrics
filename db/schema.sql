@@ -324,6 +324,21 @@ create table if not exists public.club_settings (
   constraint club_settings_club_id_module_key_key UNIQUE (club_id, module_key)
 );
 
+-- Product feature flags per club: enable/disable experimental product behaviour for a single
+-- club without touching billing (club_modules) or generic config (club_settings). Model is
+-- "global default in code + per-club override here": a row overrides the code default for that
+-- club (enable a beta for one club, or let a club opt out later). `config` holds per-club knobs
+-- (thresholds, weighting factors) so a club-specific variant needs no code change. Toggled by
+-- super-admin via SQL for now.
+create table if not exists public.club_feature_flags (
+  club_id uuid not null,
+  flag_key text not null,
+  enabled boolean default false not null,
+  config jsonb default '{}'::jsonb not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint club_feature_flags_pkey primary key (club_id, flag_key)
+);
+
 create table if not exists public.clubs (
   id uuid default gen_random_uuid() not null,
   name text not null,
@@ -2456,6 +2471,7 @@ alter table public.channel_reads add constraint channel_reads_team_id_fkey FOREI
 alter table public.channel_reads add constraint channel_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.club_branding add constraint club_branding_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.club_gps_settings add constraint club_gps_settings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.club_feature_flags add constraint club_feature_flags_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.club_modules add constraint club_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.club_settings add constraint club_settings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.competitions add constraint competitions_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE;
@@ -5189,6 +5205,17 @@ create policy "club members manage gps settings" on public.club_gps_settings as 
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+alter table public.club_feature_flags enable row level security;
+-- Any club member can read their club's flags (frontend gates UI on them). Fail-closed in code.
+create policy "club_feature_flags_select" on public.club_feature_flags as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+-- Only platform super-admins toggle flags (via SQL for now); no club-admin write on purpose.
+create policy "club_feature_flags_super_all" on public.club_feature_flags as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
 
 alter table public.club_modules enable row level security;
 create policy "club_modules_select" on public.club_modules as permissive for select to public
