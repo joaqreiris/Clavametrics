@@ -1502,53 +1502,6 @@ function makePopover(anchor, items, onSelect) {
   _posPopover(pop, anchor);
 }
 
-function makeSearchPopover(anchor, players) {
-  closePop();
-  const pop = document.createElement('div');
-  pop.className = 'gp-popover';
-  pop.style.minWidth = '250px';
-  const wrap = document.createElement('div');
-  wrap.style.padding = '4px 4px 2px';
-  const inp = document.createElement('input');
-  inp.className = 'gp-pop-search';
-  inp.placeholder = 'Search player…';
-  wrap.appendChild(inp);
-  pop.appendChild(wrap);
-  const list = document.createElement('div');
-  list.style.maxHeight = '220px';
-  list.style.overflowY = 'auto';
-  pop.appendChild(list);
-
-  function render(q) {
-    list.innerHTML = '';
-    const filt = q ? players.filter(p => `${p.first_name} ${p.last_name} ${p.position||''}`.toLowerCase().includes(q.toLowerCase())) : players;
-    if (!filt.length) {
-      const em = document.createElement('div');
-      em.style.cssText = 'padding:8px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
-      em.textContent = tt('gps_analysis.no_players_found','No players found');
-      list.appendChild(em); return;
-    }
-    filt.slice(0, 20).forEach(p => {
-      const btn = document.createElement('button');
-      btn.className = 'gp-popover-item';
-      btn.textContent = `${p.first_name[0]}. ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}`;
-      btn.addEventListener('click', e => {
-        e.stopPropagation(); closePop();
-        window.gpState.playerId = p.id;
-        const label = `${p.first_name[0]}. ${p.last_name}`;
-        anchor.innerHTML = `<i class="ti ti-user"></i>${label}`;
-        showToast(`Player → ${label}`);
-        window.renderView?.();
-      });
-      list.appendChild(btn);
-    });
-  }
-
-  render('');
-  inp.addEventListener('input', () => render(inp.value));
-  _posPopover(pop, anchor);
-  requestAnimationFrame(() => inp.focus());
-}
 
 // ── Modal ─────────────────────────────────────────────────────
 function makeModal(title, bodyHTML) {
@@ -1673,40 +1626,6 @@ function _unstashToGrid(viewKey, activeIds, grid) {
   }
 }
 
-function openCatalog(insertBefore) {
-  const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
-  const defs = GP_CARD_DEFS[view] || [];
-
-  const html = defs.map(def => {
-    if (def.stub) {
-      return `<button class="gp-catalog-item" data-name="${def.name}" disabled style="opacity:0.45;cursor:not-allowed">${def.name}<span style="display:block;font:500 10px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px">coming soon</span></button>`;
-    }
-    const inDashboard = def.id && !!document.getElementById(def.id);
-    const inStash     = def.id && _cardStash.has(def.id);
-    if (inDashboard) {
-      return `<button class="gp-catalog-item" data-name="${def.name}" disabled style="opacity:0.45;cursor:not-allowed">${def.name}<span style="display:block;font:500 10px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px">ya en el dashboard</span></button>`;
-    }
-    if (!inStash) return ''; // card not yet stashed & not a stub — shouldn't happen
-    return `<button class="gp-catalog-item" data-name="${def.name}">${def.name}</button>`;
-  }).filter(Boolean).join('');
-
-  const modal = makeModal('Add card', `<div class="gp-catalog">${html || '<p style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:8px 0">All cards are already on the dashboard.</p>'}</div>`);
-
-  modal.querySelectorAll('.gp-catalog-item:not([disabled])').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const def = defs.find(d => d.name === btn.dataset.name);
-      if (!def || !def.id) return;
-      const card = _cardStash.get(def.id);
-      if (!card) return;
-      _cardStash.delete(def.id);
-      insertBefore.parentNode.insertBefore(card, insertBefore);
-      modal.remove();
-      showToast(`${def.name} added`);
-      const currentView = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
-      saveLayout(currentView).catch(e => console.warn('saveLayout on add:', e));
-    });
-  });
-}
 
 // ── "Agregar gráfico" panel (dos caminos + galería de evidencia) ──────────────
 // Look portado de assets/chart-reference/add-chart.css/js (aprobado). Reemplaza al
@@ -5941,7 +5860,6 @@ window.renderView = async function () {
   // String helpers delegate to the shared matcher core (assets/gps-matcher.js)
   // so CSV and Catapult mapping score names identically. Behavior unchanged.
   function _norm(s)    { return window.CMGpsMatch.normName(s); }
-  function _lev(a, b)  { return window.CMGpsMatch.lev(a, b); }
   function _sim(a, b)  { return window.CMGpsMatch.sim(a, b); }
 
   // ── Category hint — infer expected category from column name ─
@@ -9655,14 +9573,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 (function () {
   const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d, minimumFractionDigits: d });
 
-  // Get the Monday of a given ISO week / year
-  function isoWeekMonday(week, year) {
-    const jan4 = new Date(Date.UTC(year, 0, 4));
-    const day  = jan4.getUTCDay() || 7;
-    const mon  = new Date(jan4);
-    mon.setUTCDate(jan4.getUTCDate() - day + 1 + (week - 1) * 7);
-    return mon;
-  }
 
   function mdCode(sessionDate, matchDate) {
     if (!matchDate) return null;
@@ -10705,14 +10615,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return (curr - ref) / ref * 100;
   }
 
-  // ── MD_Code helpers ──────────────────────────────────────────
-  function mdCodeFromDates(sessionDate, matchDate) {
-    if (!matchDate) return null;
-    const diff = Math.round((new Date(matchDate + 'T00:00:00') - new Date(sessionDate + 'T00:00:00')) / 86400000);
-    if (diff === 0) return 'MD';
-    if (diff > 0)  return `MD-${diff}`;
-    return `MD+${Math.abs(diff)}`;
-  }
 
   // ── METRIC definitions ────────────────────────────────────────
   const MC_METRICS = [
@@ -11779,12 +11681,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
   function _mpTdOutside(e) { if (_mpTdPopup && !_mpTdPopup.contains(e.target)) { _mpTdPopup?.remove(); _mpTdPopup=null; } }
 
-  // Rival label helper
-  function _mpRivalLabel(r, maxLen) {
-    const rival = r.session?.rival;
-    if (rival) return `vs ${rival}`.slice(0, maxLen || 14);
-    return r.session?.title ? r.session.title.slice(0, maxLen || 10) : (r.session?.session_date?.slice(5) || '');
-  }
 
   // ── init ─────────────────────────────────────────────────────
   async function mpInit() {
@@ -11925,11 +11821,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     window.GpBuilder.resolveAndRenderCard(el, el.__config);
   }
 
-  function _destroyCharts() {
-    // TD/HI ahora son cards del builder (resolveAndRenderCard gestiona body.__chart).
-    if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
-    if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
-  }
 
   // ── events ───────────────────────────────────────────────────
   // (Sin listeners de filtros propios: los selectores viejos se eliminaron.)
@@ -12074,52 +11965,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }</div>`;
   }
 
-  // ── alerts ───────────────────────────────────────────────────
-  function _renderAlerts(metricKey) {
-    if (!_playerAcwrData || !Object.keys(_playerAcwrData).length) {
-      alertsBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return;
-    }
-    const getZone = window.gpsACWR.getZone;
-    const alerts  = [];
-
-    // Players in high risk
-    const riskPlayers = Object.entries(_playerAcwrData)
-      .filter(([, d]) => d[metricKey] != null && getZone(d[metricKey])?.cls === 'risk')
-      .sort((a, b) => b[1][metricKey] - a[1][metricKey]);
-    if (riskPlayers.length) {
-      const metricLabel = (window.gpsACWR.ACWR_METRICS.find(m => m.key === metricKey)?.label) || metricKey;
-      const names = riskPlayers.map(([pid, d]) => {
-        const p = _playerMap[pid] || {};
-        return `${p.last_name || pid} (${fmtAcwr(d[metricKey])})`;
-      }).join(' · ');
-      alerts.push({ cls: 'risk', icon: 'ti-alert-triangle', title: `${riskPlayers.length} player${riskPlayers.length > 1 ? 's' : ''} in HIGH RISK zone for ${metricLabel}`, body: names });
-    }
-
-    // Players in caution
-    const cautionPlayers = Object.entries(_playerAcwrData)
-      .filter(([, d]) => d[metricKey] != null && getZone(d[metricKey])?.cls === 'caution');
-    if (cautionPlayers.length) {
-      const metricLabel = (window.gpsACWR.ACWR_METRICS.find(m => m.key === metricKey)?.label) || metricKey;
-      const names = cautionPlayers.map(([pid]) => (_playerMap[pid]?.last_name || pid)).join(', ');
-      alerts.push({ cls: 'caution', icon: 'ti-alert-circle', title: `${cautionPlayers.length} player${cautionPlayers.length > 1 ? 's' : ''} in CAUTION zone for ${metricLabel}`, body: names });
-    }
-
-    // Insufficient data
-    const insuffPlayers = Object.entries(_playerAcwrData).filter(([, d]) => d.insufficient);
-    if (insuffPlayers.length) {
-      const names = insuffPlayers.map(([pid]) => (_playerMap[pid]?.last_name || pid)).join(', ');
-      alerts.push({ cls: 'info', icon: 'ti-info-circle', title: `${insuffPlayers.length} player${insuffPlayers.length > 1 ? 's' : ''} with insufficient data (<4 sessions in 28 days)`, body: names });
-    }
-
-    if (!alerts.length) {
-      alertsBody.innerHTML = '<div class="lm-alert-list"><div style="color:var(--cm-success);font:600 12.5px/1.3 var(--cm-font-sans);padding:10px 14px">' + tt('gps_analysis.acwr_no_alerts','All players in sweet spot or under-training. No alerts.') + '</div></div>';
-      return;
-    }
-
-    alertsBody.innerHTML = `<div class="lm-alert-list">${alerts.map(a =>
-      `<div class="lm-alert ${a.cls}"><i class="ti ${a.icon}"></i><div><div class="la-title">${a.title}</div><div class="la-body">${a.body}</div></div></div>`
-    ).join('')}</div>`;
-  }
 
   // ── table ────────────────────────────────────────────────────
   function _renderTable() {
@@ -12443,19 +12288,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return s?.session_attributes?.md_code || null;
   }
 
-  // Count equivalent sessions (same MD code, strictly before current date)
-  function _countEquivalents(sessionId) {
-    const current = _allSessions.find(s => s.id === sessionId);
-    if (!current) return { count: 0, mdCode: null };
-    const mdCode = _getMdCode(current);
-    if (!mdCode) return { count: 0, mdCode: null };
-    const count = _allSessions.filter(s =>
-      s.id !== sessionId &&
-      s.session_date < current.session_date &&
-      _getMdCode(s) === mdCode
-    ).length;
-    return { count, mdCode };
-  }
 
   // ── Compare state persistence ─────────────────────────────────
   const _SC_COMPARE_LS = 'sc_compare_state_v1';
