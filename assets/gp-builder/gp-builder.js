@@ -2810,7 +2810,11 @@
       case '7':      return { type: 'w7' };
       case '30':     return { type: 'w30' };
       case '90':     return { type: 'custom', from: _fbDaysBack(90) };
-      case 'season': return { type: 'season' };
+      // A specific seasons row → its exact window + id (resolver ORs season_id, pulling in
+      // out-of-window imported/pre-season days). Generic 'season' (no id) → resolver derives.
+      case 'season': return d.seasonId
+        ? { type: 'season', from: d.from || null, to: d.to || null, seasonId: d.seasonId }
+        : { type: 'season' };
       case 'all':    return { type: 'allTime' };
     }
     const r = { type: 'custom' };

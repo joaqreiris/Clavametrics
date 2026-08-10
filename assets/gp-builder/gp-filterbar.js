@@ -93,6 +93,8 @@
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
   const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], date: [] };
+  // Real seasons rows (team-scoped), for a "pick a specific season" section in the date panel.
+  let _seasons = [];
 
   // 'YYYY-MM-DD' → '25 Apr 2026' (consistent, human-readable date label).
   const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -155,6 +157,7 @@
   }
   function _dateBounds() {
     const dt = state.date;
+    if (dt.seasonId && dt.from) return { from: dt.from, to: dt.to || null };   // specific season window
     if (dt.preset) {
       const p = DATE_PRESETS.find(x => x.id === dt.preset);
       const back = n => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
@@ -305,7 +308,8 @@
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
         state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
         state.date     = (s.date && typeof s.date === 'object')
-          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [] }
+          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [],
+              seasonId: s.date.seasonId || null, seasonName: s.date.seasonName || null }
           : { preset: null, from: null, to: null, days: [] };
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
@@ -479,6 +483,7 @@
       `<div class="fb-presets">` +
         DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${T(p.label)}</button>`).join('') +
       `</div>` +
+      `<div class="fb-seasons-wrap"></div>` +
       `<div class="fb-date-h">Specific dates</div>` +
       `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="${T('Search date…')}"></div>` +
       `<div class="fb-actions-top">` +
@@ -561,6 +566,41 @@
     panel.querySelector('.fb-date-from').value = '';
     panel.querySelector('.fb-date-to').value = '';
     commitDate(panel);
+  }
+
+  // Real seasons as pick-one buttons in the date panel. With 2+ seasons the generic "Season"
+  // preset (a 365-day / derived window) is ambiguous, so we hide it and let the user choose an
+  // actual seasons row → the exact [start,end] window AND its id flow to the resolver.
+  function renderSeasonBtns() {
+    const dateDrop = root?.querySelector('.fb-drop[data-key="date"]');
+    if (!dateDrop) return;
+    const wrap = dateDrop.querySelector('.fb-seasons-wrap');
+    if (!wrap) return;
+    const genericSeason = dateDrop.querySelector('.fb-preset[data-preset="season"]');
+    if (genericSeason) genericSeason.style.display = _seasons.length ? 'none' : '';
+    if (!_seasons.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<div class="fb-date-h">${T('Season')}</div><div class="fb-presets">` +
+      _seasons.map(s => `<button class="fb-preset fb-season" type="button" data-id="${escAttr(s.id)}" data-from="${escAttr(s.start_date)}" data-to="${escAttr(s.end_date)}" data-name="${escAttr(s.name)}">${escHtml(s.name)}</button>`).join('') +
+      `</div>`;
+    wrap.querySelectorAll('.fb-season').forEach(btn => {
+      if (state.date.seasonId && String(state.date.seasonId) === String(btn.dataset.id)) btn.classList.add('is-on');
+      btn.addEventListener('click', () => {
+        const on = !btn.classList.contains('is-on');
+        const panel = btn.closest('.fb-panel');
+        panel.querySelectorAll('.fb-preset, .fb-season').forEach(b => b.classList.remove('is-on'));
+        drafts.date = new Set();
+        panel.querySelector('.fb-date-from').value = '';
+        panel.querySelector('.fb-date-to').value = '';
+        if (on) {
+          btn.classList.add('is-on');
+          state.date = { preset: 'season', from: btn.dataset.from, to: btn.dataset.to, days: [], seasonId: btn.dataset.id, seasonName: btn.dataset.name };
+        } else {
+          state.date = { preset: null, from: null, to: null, days: [] };
+        }
+        _afterChange();
+        renderDateList();
+      });
+    });
   }
 
   // ── Render de la lista de checkboxes desde datos reales ─────────────────
@@ -709,6 +749,7 @@
       if (days.length === 1) return _fmtDateLabel(days[0]);
       return `${days.length} dates`;
     }
+    if (state.date.seasonId && state.date.seasonName) return state.date.seasonName;
     if (state.date.preset) {
       const p = DATE_PRESETS.find(x => x.id === state.date.preset);
       return p ? T(p.label) : state.date.preset;
@@ -882,8 +923,10 @@
   function syncDatePanel() {
     const panel = root.querySelector('.fb-drop[data-key="date"] .fb-panel');
     if (!panel) return;
-    panel.querySelectorAll('.fb-preset').forEach(b =>
-      b.classList.toggle('is-on', state.date.preset === b.dataset.preset));
+    // Generic presets only (season buttons carry no data-preset; they're handled below).
+    panel.querySelectorAll('.fb-preset:not(.fb-season)').forEach(b =>
+      b.classList.toggle('is-on', !state.date.seasonId && state.date.preset === b.dataset.preset));
+    renderSeasonBtns();   // rebuild the season buttons + mark the active one from state
     const days = state.date.days || [];
     // Custom range inputs only reflect a manual from/to (not the days' compat bound).
     const isCustom = !state.date.preset && !days.length && (state.date.from || state.date.to);
@@ -910,11 +953,14 @@
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
     const _obQ = window.sb.from('opponent_branding').select('id, opponent_name, crest_url')
       .eq('club_id', clubId);
+    // Real seasons for the date panel's "pick a season" section (team-or-null scope below).
+    const _snQ = window.sb.from('seasons').select('id, name, team_id, start_date, end_date')
+      .eq('club_id', clubId).order('start_date', { ascending: false });
     // Each query is made rejection-proof: if ANY fails, loadData still completes and reaches the
     // stale-filter prune below — otherwise a single failed query aborts the whole build and a
     // phantom persisted filter (e.g. an old microcycle id) never gets cleared.
     const _safe = p => Promise.resolve(p).then(r => r, () => ({ data: [] }));
-    const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }, { data: seasons }] = await Promise.all([
       _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       _safe((_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false })),
@@ -925,7 +971,13 @@
         .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
       _safe(_obQ),
+      _safe(_snQ),
     ]);
+    // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
+    _seasons = (seasons || [])
+      .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
+      .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
+    renderSeasonBtns();
 
     // Entity resolver: opponent_id (catalog) wins; else match raw text to a catalog row
     // by name; else fall back to the normalized text. Returns a stable { key, label, crest }
