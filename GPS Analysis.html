@@ -2733,8 +2733,12 @@ function _gpAssignMatchForm(clubId, teamId, sessionId, date, currentSeasonId) {
 
 // Persist: reuse opponent_branding (insert if new), then tag the day's session
 // (idempotent) or create a historical container if the day has no session.
-async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, crestUrl, knownOppId) {
+async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, crestUrl, knownOppId, homeAway, seasonId) {
   try {
+    // home_away lives in session_attributes (like `rival`); only for matches. season_id is a
+    // real column so the season-range filter can pull the day in even off its date window.
+    const ha = (homeAway === 'home' || homeAway === 'away' || homeAway === 'neutral') ? homeAway : null;
+    const sid = seasonId || null;
     // 1. opponent_branding (club catalog) — reuse by (club, name); insert if missing, fill
     //    crest if given. We CAPTURE its id so the day references the entity, not just text:
     //    that's what makes the same rival comparable across seasons/sources.
@@ -2754,7 +2758,7 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
     }
     const finalCrest = crestUrl || existsOpp?.crest_url || null;
     // session_attributes carries BOTH: rival (text, back-compat) + opponent_id (the real relation).
-    const rivalAttrs = { rival: rivalName, ...(oppId ? { opponent_id: oppId } : {}), ...(finalCrest ? { rival_crest_url: finalCrest } : {}) };
+    const rivalAttrs = { rival: rivalName, ...(oppId ? { opponent_id: oppId } : {}), ...(finalCrest ? { rival_crest_url: finalCrest } : {}), ...(ha ? { home_away: ha } : {}) };
 
     if (sessionId) {
       // 2a. Existing session → merge rival AND mark the day as a MATCH. A day with a rival
@@ -2765,8 +2769,10 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
       const prevType = s?.session_type || 'training';
       const attrs = { ...(s?.session_attributes || {}), ...rivalAttrs };
       if (prevType !== 'match' && attrs._rivalPrevType == null) attrs._rivalPrevType = prevType;
+      const upd = { session_attributes: attrs, session_type: 'match' };
+      if (sid) upd.season_id = sid;   // only overwrite season when one was chosen — never clear it here
       const { error } = await window.sb.from('training_sessions')
-        .update({ session_attributes: attrs, session_type: 'match' }).eq('id', sessionId);
+        .update(upd).eq('id', sessionId);
       if (error) throw error;
     } else if (date) {
       // 2b. No session for this day → create a HISTORICAL match container (invisible in
@@ -2775,7 +2781,7 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
       const { data: created, error } = await window.sb.from('training_sessions')
         .insert({ club_id: clubId, ...(teamId ? { team_id: teamId } : {}), session_date: date,
                   session_type: 'match', is_historical: true, title: `Match vs ${rivalName}`,
-                  session_attributes: rivalAttrs })
+                  ...(sid ? { season_id: sid } : {}), session_attributes: rivalAttrs })
         .select('id').maybeSingle();
       if (error) throw error;
       // (linking null-session reports to `created.id` would require a date on those rows)

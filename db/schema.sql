@@ -2278,6 +2278,7 @@ create table if not exists public.training_sessions (
   external_activity_id text,
   gps_targets jsonb default '{}'::jsonb not null,
   recurrence_group_id uuid,
+  season_id uuid,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
   constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'beach'::text, 'outdoor'::text, 'other'::text])))
@@ -2289,6 +2290,7 @@ CREATE INDEX idx_training_sessions_club_date ON public.training_sessions USING b
 CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING btree (club_id, is_historical, session_date);
 CREATE INDEX idx_training_sessions_attributes ON public.training_sessions USING gin (session_attributes);
 CREATE INDEX idx_training_sessions_club_microcycle ON public.training_sessions USING btree (club_id, microcycle_id);
+CREATE INDEX idx_training_sessions_season ON public.training_sessions USING btree (season_id) WHERE (season_id IS NOT NULL);
 CREATE UNIQUE INDEX uq_training_sessions_club_activity ON public.training_sessions USING btree (club_id, external_activity_id) WHERE (external_activity_id IS NOT NULL);
 -- One field (load) session per team/date/START TIME. Allows AM/PM double sessions (distinct times)
 -- and leaves gym + timeless API-owned rows (session_time NULL) unconstrained.
@@ -2686,6 +2688,7 @@ alter table public.tasks add constraint tasks_team_id_fkey FOREIGN KEY (team_id)
 alter table public.teams add constraint teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.training_sessions add constraint training_sessions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.training_sessions add constraint training_sessions_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.training_sessions add constraint training_sessions_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL;
 alter table public.training_sessions add constraint training_sessions_microcycle_id_fkey FOREIGN KEY (microcycle_id) REFERENCES microcycles(id) ON DELETE SET NULL;
 alter table public.training_sessions add constraint training_sessions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.treatment_templates add constraint treatment_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
