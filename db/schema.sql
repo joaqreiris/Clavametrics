@@ -902,6 +902,20 @@ create table if not exists public.gym_session_templates (
 );
 CREATE INDEX idx_gym_templates_club ON public.gym_session_templates USING btree (club_id);
 
+-- Club-defined custom equipment/materials, merged with the static taxonomy in the exercise
+-- picker and the Gym Planner equipment section. slug is the token stored in equipment_tags.
+create table if not exists public.club_equipment (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  slug text not null,
+  label text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint club_equipment_pkey primary key (id),
+  constraint club_equipment_club_slug_uniq unique (club_id, slug),
+  constraint club_equipment_club_fk foreign key (club_id) references clubs(id) on delete cascade
+);
+CREATE INDEX idx_club_equipment_club ON public.club_equipment USING btree (club_id);
+
 create table if not exists public.individual_block_completions (
   id uuid default gen_random_uuid() not null,
   block_id uuid not null,
@@ -5567,6 +5581,11 @@ create policy "gym_exercises_super_all" on public.gym_exercises as permissive fo
 
 alter table public.gym_session_templates enable row level security;
 create policy "gym_session_templates_rw" on public.gym_session_templates as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.club_equipment enable row level security;
+create policy "club_equipment_rw" on public.club_equipment as permissive for all to authenticated
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
 

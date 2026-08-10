@@ -56,6 +56,8 @@
   .gp-eq-item .gp-eq-name{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:6px}
   .gp-eq-item .gp-eq-name .gp-eq-manual{font:600 8.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px}
   .gp-eq-item .gp-eq-ex{font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gp-eq-item .gp-eq-level{height:30px;padding:0 6px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg);outline:none;flex:none;max-width:96px}
+  .gp-eq-item .gp-eq-level:focus{border-color:var(--cm-accent)}
   .gp-eq-item .gp-eq-qty{width:52px;height:30px;padding:0 8px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none;flex:none}
   .gp-eq-item .gp-eq-qty:focus{border-color:var(--cm-accent)}
   .gp-eq-item .gp-eq-rm{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--cm-fg-faint);border-radius:5px;cursor:pointer}
@@ -791,7 +793,8 @@ function gpCollectContent() {
     adaptations: gpCollectAdapt(),
     roster: [..._gpRoster],
     loadGroups: _gpGrpSavedCfg,
-    equipment: gpCollectEquipment()
+    equipment: gpCollectEquipment(),
+    equipmentLevels: gpCollectEquipLevels()
   };
 }
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
@@ -829,6 +832,7 @@ function gpApplyContent(content) {
   gpRecalcTotals();
   // Restore the saved Load-groups config and preview it in the plan (async row load).
   _gpEquipQty = { ...(content.equipment || {}) };
+  _gpEquipLevel = { ...(content.equipmentLevels || {}) };
   gpRenderEquipment();
   _gpGrpSavedCfg = content.loadGroups || null;
   gpRenderSavedGroups();
@@ -903,11 +907,28 @@ function gpRenderRowThumb(tr){
 }
 
 // ── Equipment (materials) — auto-detected from each exercise's library equipment_tags ──
-// Persisted in gym_content.equipment as { token: qty }. Only tokens with a quantity are stored;
-// detected tokens re-appear on load, so quantities survive but the list stays driven by exercises.
+// Persisted in gym_content.equipment as { token: qty }; band resistance in gym_content.equipmentLevels
+// as { token: level }. Only tokens with a quantity are stored; detected tokens re-appear on load, so
+// quantities survive but the list stays driven by exercises. Labels resolve custom club materials first.
 let _gpEquipQty = {};        // token -> qty string (live source of truth for quantities)
-let _gpEquipAddBuilt = false;
-const gpEqLabel = t => (window.CMTaxonomy ? window.CMTaxonomy.label('equipment', t) : t);
+let _gpEquipLevel = {};      // band/mini_band token -> resistance level token
+let _gpCustomEquip = {};     // custom club material: slug -> label (loaded from club_equipment)
+const GP_BAND_TOKENS = new Set(['band', 'mini_band']);
+const gpBandLevels = () => [
+  ['light', tt('gym_planner.band_light','Light')],
+  ['medium', tt('gym_planner.band_medium','Medium')],
+  ['heavy', tt('gym_planner.band_heavy','Heavy')],
+  ['very_heavy', tt('gym_planner.band_very_heavy','Very heavy')],
+];
+const gpBandLevelLabel = lv => (gpBandLevels().find(([v]) => v === lv) || [null, ''])[1];
+const gpEqLabel = t => _gpCustomEquip[t] || (window.CMTaxonomy ? window.CMTaxonomy.label('equipment', t) : t);
+// Merge the static taxonomy with the club's custom materials for pickers/labels.
+function gpAllEquip(){
+  const out = [];
+  (window.CMTaxonomy ? (window.CMTaxonomy.LISTS.equipment || []) : []).forEach(it => { if (it.token !== 'bodyweight') out.push({ token: it.token, label: gpEqLabel(it.token) }); });
+  Object.keys(_gpCustomEquip).forEach(slug => out.push({ token: slug, label: _gpCustomEquip[slug] }));
+  return out.sort((a, b) => a.label.localeCompare(b.label));
+}
 // Map token -> Set(exercise names) for every exercise in the session that declares it (skip bodyweight).
 function gpComputeEquipment(){
   const byId = {}; (_gpLib || []).forEach(e => { byId[e.id] = e; });
@@ -922,13 +943,9 @@ function gpComputeEquipment(){
   return map;
 }
 function gpBuildEquipAddOptions(){
-  if (_gpEquipAddBuilt) return; _gpEquipAddBuilt = true;
-  const sel = document.getElementById('gpEquipAdd'); if (!sel || !window.CMTaxonomy) return;
-  const opts = (window.CMTaxonomy.LISTS.equipment || [])
-    .filter(it => it.token !== 'bodyweight')
-    .map(it => ({ token: it.token, label: gpEqLabel(it.token) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-  sel.insertAdjacentHTML('beforeend', opts.map(o => `<option value="${o.token}">${o.label}</option>`).join(''));
+  const sel = document.getElementById('gpEquipAdd'); if (!sel) return;
+  const ph = tt('gym_planner.add_material','+ Add material…');
+  sel.innerHTML = `<option value="">${ph}</option>` + gpAllEquip().map(o => `<option value="${o.token}">${o.label}</option>`).join('');
 }
 async function gpRenderEquipment(){
   const body = document.getElementById('gpEquipBody'); if (!body) return;
@@ -948,12 +965,19 @@ async function gpRenderEquipment(){
     const exNames = detected.has(t) ? [...detected.get(t)] : [];
     const isManual = !detected.has(t);
     const qty = _gpEquipQty[t] != null ? _gpEquipQty[t] : '';
+    const isBand = GP_BAND_TOKENS.has(t);
+    const lv = _gpEquipLevel[t] || '';
+    const levelSel = isBand ? `<select class="gp-eq-level no-print" title="${esc(tt('gym_planner.band_level','Resistance'))}">
+        <option value="">${esc(tt('gym_planner.band_any','— level'))}</option>
+        ${gpBandLevels().map(([v, l]) => `<option value="${v}"${v===lv?' selected':''}>${esc(l)}</option>`).join('')}
+      </select>` : '';
     return `<div class="gp-eq-item" data-token="${esc(t)}">
       <div class="gp-eq-main">
         <span class="gp-eq-name">${esc(gpEqLabel(t))}${isManual ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>` : ''}</span>
         ${exNames.length ? `<span class="gp-eq-ex" title="${esc(exNames.join(', '))}">${esc(exNames.join(' · '))}</span>` : ''}
       </div>
-      <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" data-i18n-attr="title:gym_planner.qty" title="${esc(tt('gym_planner.qty','Quantity'))}">
+      ${levelSel}
+      <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" title="${esc(tt('gym_planner.qty','Quantity'))}">
       ${isManual ? `<button type="button" class="gp-eq-rm no-print" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-x" style="font-size:14px"></i></button>` : ''}
     </div>`;
   }).join('')}</div>`;
@@ -963,6 +987,18 @@ function gpCollectEquipment(){
   const out = {};
   Object.keys(_gpEquipQty).forEach(t => { const v = (_gpEquipQty[t] || '').trim(); if (v) out[t] = v; });
   return out;
+}
+function gpCollectEquipLevels(){
+  const out = {};
+  Object.keys(_gpEquipLevel).forEach(t => { if (GP_BAND_TOKENS.has(t) && _gpEquipLevel[t]) out[t] = _gpEquipLevel[t]; });
+  return out;
+}
+// Load the club's custom materials once so labels/pickers resolve them alongside the taxonomy.
+async function gpLoadCustomEquip(){
+  try {
+    const { data } = await window.sb.from('club_equipment').select('slug,label').eq('club_id', _gpClubId);
+    _gpCustomEquip = {}; (data || []).forEach(r => { _gpCustomEquip[r.slug] = r.label; });
+  } catch (_) { _gpCustomEquip = {}; }
 }
 
 function gpBuildLibModal() {
@@ -2245,7 +2281,9 @@ function gpRenderPrintSheet() {
           ${sectionTitle(`${tt('gym_planner.equipment','Equipment')} · ${eqTokens.length}`)}
           <div style="display:flex;flex-wrap:wrap;gap:6px">${eqTokens.map(t => {
             const q = ((_gpEquipQty && _gpEquipQty[t]) || '').trim();
-            return `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(gpEqLabel(t))}${q ? `<span style="font:700 11px ${MONO};color:var(--club-accent)">×${esc(q)}</span>` : ''}</span>`;
+            const lv = (GP_BAND_TOKENS.has(t) && _gpEquipLevel && _gpEquipLevel[t]) ? gpBandLevelLabel(_gpEquipLevel[t]) : '';
+            const name = esc(gpEqLabel(t)) + (lv ? ` <span style="font:500 10px ${MONO};color:#5B6470">· ${esc(lv)}</span>` : '');
+            return `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${name}${q ? `<span style="font:700 11px ${MONO};color:var(--club-accent)">×${esc(q)}</span>` : ''}</span>`;
           }).join('')}</div>
         </div>`;
       }
@@ -2550,6 +2588,12 @@ async function gpExportPDF() {
         const t = inp.closest('.gp-eq-item')?.dataset.token; if (!t) return;
         _gpEquipQty[t] = inp.value; gpScheduleSave();
       });
+      body.addEventListener('change', e => {
+        const sel = e.target.closest('.gp-eq-level'); if (!sel) return;
+        const t = sel.closest('.gp-eq-item')?.dataset.token; if (!t) return;
+        if (sel.value) _gpEquipLevel[t] = sel.value; else delete _gpEquipLevel[t];
+        gpScheduleSave();
+      });
       body.addEventListener('click', e => {
         const rm = e.target.closest('.gp-eq-rm'); if (!rm) return;
         const t = rm.closest('.gp-eq-item')?.dataset.token; if (!t) return;
@@ -2578,6 +2622,7 @@ async function gpExportPDF() {
     });
   })();
 
+  await gpLoadCustomEquip();   // club custom materials → labels + add-material dropdown
   try { await gpLoadDay(initDate); } catch (e) { console.error('gpLoadDay failed', e); }
 
   // Re-render JS-generated chrome when the language changes (static tags are

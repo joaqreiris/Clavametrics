@@ -138,6 +138,8 @@
   .gm-chips{display:flex;flex-wrap:wrap;gap:7px;padding:1px 0}
   .gm-chip{display:inline-flex;align-items:center;height:32px;padding:0 13px;border-radius:999px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;white-space:nowrap;transition:border-color 110ms,background 110ms,color 110ms,transform 80ms}
   .gm-chip:hover{color:var(--cm-fg-strong);border-color:var(--cm-border-strong);background:var(--cm-surface);transform:translateY(-1px)}
+  .gm-chip-add{display:inline-flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:999px;background:transparent;border:1px dashed var(--cm-border-strong);color:var(--cm-fg-muted);cursor:pointer;transition:border-color 110ms,color 110ms,background 110ms}
+  .gm-chip-add:hover{color:var(--cm-accent);border-color:var(--cm-accent);background:var(--cm-accent-soft)}
   .gm-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-accent);box-shadow:0 0 0 1px var(--cm-accent)}
   .gm-opt{font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
   .gm-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:4px}
@@ -413,6 +415,21 @@
   </div>
 </div>
 
+<!-- Add custom material modal -->
+<div class="gl-overlay" id="gm-mat-modal">
+  <div class="gm-del-box" style="max-width:360px">
+    <h2 style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0" data-i18n="gym_library.add_material">Add material</h2>
+    <div class="gm-field">
+      <label data-i18n="gym_library.material_name">Material name</label>
+      <input id="gm-mat-name" maxlength="40" placeholder="e.g. TRX, Nordic bench…" data-i18n-ph="gym_library.material_ph">
+    </div>
+    <div class="gm-actions">
+      <button class="cm-btn is-ghost is-sm" onclick="gmCloseAddMaterial()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" onclick="gmSaveMaterial()" data-i18n="common.add">Add</button>
+    </div>
+  </div>
+</div>
+
 <!-- Video lightbox -->
 <div class="gl-video-overlay" id="gl-video-modal">
   <div class="gl-video-box">
@@ -439,7 +456,16 @@ const CATEGORY_ORDER = ['strength','power','olympic','mobility','activation','co
 let ALL_EXERCISES = [];
 let FOLDERS_GYM = [];
 let CLUB_ID = null;
+let CUSTOM_EQUIP = {};   // club custom materials: slug -> label (merged with the static taxonomy)
 let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', purpose:'', pattern:'', usableIn:'', view:'grid' };
+// Equipment label resolves a club custom material first, then the static taxonomy.
+const equipLabel = t => CUSTOM_EQUIP[t] || CMTaxonomy.label('equipment', t);
+async function loadCustomEquip(){
+  try {
+    const { data } = await window.sb.from('club_equipment').select('slug,label').eq('club_id', CLUB_ID);
+    CUSTOM_EQUIP = {}; (data || []).forEach(r => { CUSTOM_EQUIP[r.slug] = r.label; });
+  } catch (_) { CUSTOM_EQUIP = {}; }
+}
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 let editingId = null;
 let _gmMediaFile = null;
@@ -481,6 +507,7 @@ async function boot() {
   const [, club] = await Promise.all([window.getProfile(), window.getClub()]);
   CLUB_ID = await window.getClubId();
   if (club) window.applyClubTheme();
+  await loadCustomEquip();
   await reloadExercises(false);
   attachListeners();
 }
@@ -703,7 +730,8 @@ function appendAddCard(grid) {
 
 function labelsFor(e, dimension, col, legacy) {
   const toks = e[col] || [];
-  if (toks.length) return toks.map(t => CMTaxonomy.label(dimension, t));
+  const lab = dimension === 'equipment' ? equipLabel : (t => CMTaxonomy.label(dimension, t));
+  if (toks.length) return toks.map(lab);
   return legacy ? [legacy] : [];
 }
 function purposeLabel(e) {
@@ -799,11 +827,44 @@ function renderChipCloud(containerId, dimension, selected) {
 function readChipCloud(containerId) {
   return [...document.querySelectorAll(`#${containerId} .gm-chip.is-on`)].map(b => b.dataset.token);
 }
+// Equipment chips = static taxonomy + the club's custom materials + a "+" to add a new one.
+function renderEquipmentChips(selected) {
+  const sel = new Set(selected || []);
+  const chip = (token, label) => `<button type="button" class="gm-chip${sel.has(token)?' is-on':''}" data-token="${esc(token)}">${esc(label)}</button>`;
+  const taxo = (CMTaxonomy.LISTS.equipment || []).map(it => chip(it.token, it.label)).join('');
+  const custom = Object.keys(CUSTOM_EQUIP).map(slug => chip(slug, CUSTOM_EQUIP[slug])).join('');
+  const add = `<button type="button" class="gm-chip-add" onclick="gmOpenAddMaterial()" title="${esc(tt('gym_library.add_material','Add material'))}"><i class="ti ti-plus" style="font-size:13px"></i></button>`;
+  document.getElementById('gm-equipment-chips').innerHTML = taxo + custom + add;
+}
+window.gmOpenAddMaterial = function(){
+  const m = document.getElementById('gm-mat-modal');
+  document.getElementById('gm-mat-name').value = '';
+  m.classList.add('is-open');
+  setTimeout(() => document.getElementById('gm-mat-name').focus(), 30);
+};
+window.gmCloseAddMaterial = function(){ document.getElementById('gm-mat-modal').classList.remove('is-open'); };
+window.gmSaveMaterial = async function(){
+  const input = document.getElementById('gm-mat-name');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const selected = readChipCloud('gm-equipment-chips');   // keep the current picks across the re-render
+  // Already a known material? Reuse its token (taxonomy alias or an existing custom slug) — no duplicate.
+  const taxoTok = CMTaxonomy.resolve('equipment', name);
+  if (taxoTok) { gmCloseAddMaterial(); renderEquipmentChips([...new Set([...selected, taxoTok])]); return; }
+  const slug = 'c_' + name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+  if (!slug || slug === 'c_') { input.focus(); return; }
+  if (CUSTOM_EQUIP[slug]) { gmCloseAddMaterial(); renderEquipmentChips([...new Set([...selected, slug])]); return; }
+  const { error } = await window.sb.from('club_equipment').insert({ club_id: CLUB_ID, slug, label: name });
+  if (error) { alert(tt('gym_library.material_save_failed','Could not save material:') + ' ' + error.message); return; }
+  CUSTOM_EQUIP[slug] = name;
+  gmCloseAddMaterial();
+  renderEquipmentChips([...new Set([...selected, slug])]);
+};
 function renderAllChips(ex) {
   const pp = ex ? ex.primary_purpose : '';
   renderChipCloud('gm-muscle-chips','muscle_group', ex && ex.muscle_groups);
   renderChipCloud('gm-pattern-chips','movement_pattern', ex && ex.movement_patterns);
-  renderChipCloud('gm-equipment-chips','equipment', ex && ex.equipment_tags);
+  renderEquipmentChips(ex && ex.equipment_tags);
   renderChipCloud('gm-purpose-chips','purpose', ex ? (ex.purposes||[]).filter(p=>p!==pp) : []);
   renderChipCloud('gm-contraction-chips','contraction_type', ex && ex.contraction_types);
   renderChipCloud('gm-speed-chips','movement_speed', ex && ex.movement_speeds);
@@ -924,7 +985,7 @@ async function saveExercise() {
   const speeds = readChipCloud('gm-speed-chips');
   const planesSel = readChipCloud('gm-plane-chips');
   const chains = readChipCloud('gm-chain-chips');
-  const lbl = (dim, toks) => toks.map(t => CMTaxonomy.label(dim, t));
+  const lbl = (dim, toks) => toks.map(t => dim === 'equipment' ? equipLabel(t) : CMTaxonomy.label(dim, t));
 
   const payload = {
     club_id: CLUB_ID,
@@ -1252,7 +1313,14 @@ function attachListeners() {
     setMediaPreview(null);
   });
   document.getElementById('gl-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeVideo(); document.getElementById('gl-del-modal').classList.remove('is-open'); } });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const mat = document.getElementById('gm-mat-modal');
+    if (mat.classList.contains('is-open')) { mat.classList.remove('is-open'); return; }   // close only the topmost
+    closeModal(); closeVideo(); document.getElementById('gl-del-modal').classList.remove('is-open');
+  });
+  document.getElementById('gm-mat-modal').addEventListener('click', e => { if (e.target === e.currentTarget) gmCloseAddMaterial(); });
+  document.getElementById('gm-mat-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); gmSaveMaterial(); } });
 
   document.getElementById('gl-video-close').addEventListener('click', closeVideo);
   document.getElementById('gl-video-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeVideo(); });
