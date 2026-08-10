@@ -2447,7 +2447,7 @@ async function _gpOpenAssignRivals(opts) {
       const out = _out(r);
       const label = s ? _gpEsc(s.name) : (out ? tt('gps_analysis.ar_no_season','No season') : tt('gps_analysis.ar_set_season','Set season'));
       const style = (out && !s) ? 'border-color:var(--cm-warn,#d97706);color:var(--cm-warn,#d97706)' : '';
-      return `<button class="cm-btn is-outline is-sm ar-season" data-sid="${r.id}" data-season="${r.seasonId||''}" style="${style}"><i class="ti ti-calendar-stats" style="font-size:14px"></i>${label}</button>`;
+      return `<button class="cm-btn is-outline is-sm ar-season" data-sid="${r.id}" data-season="${r.seasonId||''}" data-date="${r.date||''}" style="${style}"><i class="ti ti-calendar-stats" style="font-size:14px"></i>${label}</button>`;
     };
     const _haLabel = ha => ha === 'home' ? tt('gps_analysis.ar_home','Home') : ha === 'away' ? tt('gps_analysis.ar_away','Away') : ha === 'neutral' ? tt('gps_analysis.ar_neutral','Neutral') : '—';
     body.innerHTML = `
@@ -2491,7 +2491,7 @@ async function _gpOpenAssignRivals(opts) {
     body.querySelectorAll('.ar-remove').forEach(btn =>
       btn.addEventListener('click', () => _gpRemoveRivalFromDay(clubId, btn.dataset.sid, btn.dataset.rival)));
     body.querySelectorAll('.ar-season').forEach(btn =>
-      btn.addEventListener('click', () => _gpSeasonPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.season || null)));
+      btn.addEventListener('click', () => _gpSeasonPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.season || null, btn.dataset.date || null)));
     const arSearch = body.querySelector('#arSearch');
     const arOut    = body.querySelector('#arOutToggle');
     const arRows   = [...body.querySelectorAll('tbody tr')];
@@ -2546,7 +2546,7 @@ function _gpDateInAnySeason(date) {
 }
 
 // Per-row season picker (popover): pick an existing season, clear it, or create a new one.
-function _gpSeasonPicker(anchor, clubId, teamId, sessionId, currentSeasonId) {
+function _gpSeasonPicker(anchor, clubId, teamId, sessionId, currentSeasonId, date) {
   const seasons = window.__gpSeasons || [];
   const items = [
     ...(currentSeasonId ? [{ label: '✕ ' + tt('gps_analysis.ar_clear_season','Clear season'), _clear: true }] : []),
@@ -2554,25 +2554,35 @@ function _gpSeasonPicker(anchor, clubId, teamId, sessionId, currentSeasonId) {
     { label: '＋ ' + tt('gps_analysis.ar_new_season','New season…'), _new: true },
   ];
   makePopover(anchor, items, item => {
-    if (item._new) return _gpNewSeasonForm(clubId, teamId, s => _gpAssignSeasonToDay(clubId, sessionId, s.id));
+    if (item._new) return _gpNewSeasonForm(clubId, teamId, s => _gpAssignSeasonToDay(clubId, sessionId, s.id), date);
     _gpAssignSeasonToDay(clubId, sessionId, item._clear ? null : item.seasonId);
   });
 }
 
 // Create a season inline (name + start + end) → seasons row → onCreated(season). Same
 // insert shape as the Annual Planner so a season created here is a first-class season.
-function _gpNewSeasonForm(clubId, teamId, onCreated) {
+function _gpNewSeasonForm(clubId, teamId, onCreated, seedDate) {
   const _lbl = 'font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
   const _inp = 'margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box';
+  // Prefill a sensible football-season window (Jul→Jun) around the day being bucketed. Native
+  // <input type="date"> reads back '' when a segment (often the year) is left incomplete, so a
+  // hand-typed date can silently fail validation — prefilling means the fields are never blank
+  // and the user just adjusts. Defaults come from the day's date, else today.
+  const _sd = (seedDate && /^\d{4}-\d{2}-\d{2}$/.test(seedDate)) ? seedDate
+            : (window.cmToday ? window.cmToday() : (new Date().getFullYear() + '-01-01'));
+  const _y = +_sd.slice(0, 4), _m = +_sd.slice(5, 7);
+  const _sy = _m >= 7 ? _y : _y - 1;                       // season anchored to ~July
+  const _defStart = `${_sy}-07-01`, _defEnd = `${_sy + 1}-06-30`;
+  const _defName = `${_sy}/${String((_sy + 1) % 100).padStart(2, '0')}`;
   const ov = makeModal(tt('gps_analysis.ar_new_season_title','New season'), `
     <div style="min-width:360px;display:flex;flex-direction:column;gap:12px">
       <label style="${_lbl}">${tt('gps_analysis.ar_season_name','Season name')}
-        <input id="arSeasonName" type="text" placeholder="${tt('gps_analysis.ar_season_name_ph','e.g. 2024/25')}" style="${_inp}"></label>
+        <input id="arSeasonName" type="text" value="${_defName}" placeholder="${tt('gps_analysis.ar_season_name_ph','e.g. 2024/25')}" style="${_inp}"></label>
       <div style="display:flex;gap:10px">
         <label style="${_lbl};flex:1">${tt('gps_analysis.ar_start_date','Start date')}
-          <input id="arSeasonStart" type="date" style="${_inp}"></label>
+          <input id="arSeasonStart" type="date" value="${_defStart}" style="${_inp}"></label>
         <label style="${_lbl};flex:1">${tt('gps_analysis.ar_end_date','End date')}
-          <input id="arSeasonEnd" type="date" style="${_inp}"></label>
+          <input id="arSeasonEnd" type="date" value="${_defEnd}" style="${_inp}"></label>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button id="arSeasonCancel" class="cm-btn is-outline is-sm">${tt('gps_analysis.ar_cancel','Cancel')}</button>
@@ -2691,7 +2701,7 @@ function _gpAssignMatchForm(clubId, teamId, sessionId, date, currentSeasonId) {
         opt.value = s.id; opt.textContent = `${s.name} (${s.start_date} → ${s.end_date})`;
         seasonSel.insertBefore(opt, seasonSel.lastElementChild);
         seasonSel.value = s.id; seasonPrev = s.id;
-      });
+      }, date);
       seasonSel.value = seasonPrev;   // revert until the new season actually lands
     } else { seasonPrev = seasonSel.value; }
   });
