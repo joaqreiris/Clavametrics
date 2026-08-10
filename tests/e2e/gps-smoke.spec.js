@@ -100,6 +100,11 @@ async function gotoView(page, view) {
 }
 
 // ── 1. Every view mounts without exploding ─────────────────────────────────────
+// This is the ONLY coverage for `mgrp` (ACWR gauges). Rendering that view WITH data
+// needs a 28-day fixture with ≥ minSessions per player AND a getClubId() that resolves
+// under mock (its lmLoad awaits window.getClubId()); with the current 3-session fixture
+// it stays in the "Calculating…" state, so a "renders with data" assertion there would be
+// flaky/false. Deferred as documented debt — the other 4 views get the stronger check below.
 test.describe('GPS smoke — views mount', () => {
   test('each dashboard view renders without a page error', async ({ page }) => {
     const errors = await gotoGps(page);
@@ -189,6 +194,55 @@ test.describe('GPS smoke — charts draw', () => {
         return canvases.filter(c => c.clientWidth > 0 && c.clientHeight > 0).length;
       });
     }, { timeout: 15_000, message: 'no chart canvas ever gained a size' }).toBeGreaterThan(0);
+
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+});
+
+// ── 5. The match & microcycle views render WITH data ───────────────────────────
+// Closes the gap where views 3/4 only had the no-pageerror guard. `mind` and `mc` both
+// auto-load on view switch (mind's match KPI resolves via the builder; mc via
+// _mcTriggerLoad → _mcRenderTableCard + _mcLoad), so a broken refactor that leaves either
+// blank now fails loudly. `mgrp` is the one exception — see the note on the mount test.
+test.describe('GPS smoke — match & microcycle views render with data', () => {
+  test('mind (match): KPI shows a number and the TD chart canvas sizes', async ({ page }) => {
+    const errors = await gotoGps(page);
+    await gotoView(page, 'mind');
+
+    // card-gen-match-kpi is a default-visible builder KPI; the resolver fills .v with a number.
+    const kpi = page.locator('#card-gen-match-kpi .gp-kpi .v').first();
+    await expect.poll(
+      async () => (await kpi.textContent().catch(() => ''))?.replace(/\s/g, '') || '',
+      { timeout: 15_000, message: 'match KPI never showed a digit' }
+    ).toMatch(/\d/);
+
+    // The per-match TD chart draws a canvas into #card-mp-td. NOTE: the render replaces the
+    // original <canvas id="canvasMPTD"> with a fresh id-less canvas, so we match by CARD, not
+    // by canvas id. A non-zero box = the chart pipeline produced output.
+    await expect.poll(() => page.evaluate(() => {
+      const canvases = Array.from(document.querySelectorAll('#card-mp-td canvas'));
+      return canvases.filter(c => c.clientWidth > 0 && c.clientHeight > 0).length;
+    }), { timeout: 15_000, message: 'match TD chart canvas never gained a size' }).toBeGreaterThan(0);
+
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('mc (microcycle compare): diff table renders rows and the shape chart sizes', async ({ page }) => {
+    const errors = await gotoGps(page);
+    await gotoView(page, 'mc');
+
+    // card-mc-table resolves via the builder on view switch → one row per player (3 in the fixture).
+    const rows = page.locator('#card-mc-table tbody tr');
+    await expect.poll(() => rows.count(), {
+      timeout: 15_000, message: 'mc diff table never rendered rows',
+    }).toBeGreaterThan(0);
+
+    // The microcycle-shape chart draws a canvas into #card-mc-shape (match by card, not by
+    // canvas id — the render can swap the canvas element).
+    await expect.poll(() => page.evaluate(() => {
+      const canvases = Array.from(document.querySelectorAll('#card-mc-shape canvas'));
+      return canvases.filter(c => c.clientWidth > 0 && c.clientHeight > 0).length;
+    }), { timeout: 15_000, message: 'mc shape chart canvas never gained a size' }).toBeGreaterThan(0);
 
     expect(errors, errors.join('\n')).toEqual([]);
   });
