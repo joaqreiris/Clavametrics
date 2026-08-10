@@ -824,19 +824,31 @@ async function gpResolveSessionMedia(){
 }
 // Keep each linked row's exercise name in sync with the library (live), UNLESS the coach
 // overrode it for this day in the planner. A row is "overridden" when its typed name no
-// longer matches the library name it was tracking (dataset.libName). Requires _gpLib loaded
-// (gpResolveSessionMedia / gpEnsureLib do that first).
-function gpSyncRowNames(){
-  if(!_gpLib) return;
-  const byId={}; _gpLib.forEach(e=>{ byId[e.id]=e; });
+// longer matches the library name it was tracking (dataset.libName). Loads the library first.
+const gpNormName = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+async function gpSyncRowNames(){
+  const lib = await gpEnsureLib(); if(!lib || !lib.length) return;
+  const byId={}, byNorm={};
+  lib.forEach(e=>{ byId[e.id]=e; const k=gpNormName(e.name); if(k){ byNorm[k] = (k in byNorm) ? null : e; } }); // null = ambiguous
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr=>{
-    const exId=tr.dataset.exId; if(!exId) return;
-    const e=byId[exId]; if(!e||!e.name) return;               // library exercise deleted/unknown → leave row untouched
     const inp=tr.querySelector('.name-cell input'); if(!inp) return;
-    // Legacy rows linked before this feature have no baseline: seed it with the current
-    // library name (safe — a row whose text already differs is treated as an override).
+    let e = tr.dataset.exId ? byId[tr.dataset.exId] : null;
+    // Unlinked (or dangling) row: relink by a unique normalized-name match so renames that
+    // only change case/spacing/punctuation (e.g. "Pull-up" → "PULL UP") still connect.
+    if(!e){
+      const cand = byNorm[gpNormName(inp.value)];
+      if(cand){ e=cand; tr.dataset.exId=cand.id; inp.value=cand.name; tr.dataset.libName=cand.name; }
+    }
+    if(!e || !e.name) return;                                  // library exercise deleted/unknown → leave row untouched
     let tracked=tr.dataset.libName;
-    if(tracked==null) tracked=tr.dataset.libName=e.name;
+    if(tracked==null){
+      // Legacy linked row (no baseline yet). If it's the same name just reformatted in the
+      // library, adopt the exact spelling and start tracking; otherwise the row text is a
+      // real per-day override — keep it but record the library name as the baseline.
+      if(gpNormName(inp.value)===gpNormName(e.name)){ inp.value=e.name; }
+      tr.dataset.libName=e.name;
+      return;
+    }
     if((inp.value||'')===tracked){                            // still following the library → propagate the edit
       if(inp.value!==e.name) inp.value=e.name;
       tr.dataset.libName=e.name;
@@ -1064,8 +1076,8 @@ async function gpRunAi() {
       main:   { min: plan.main?.min || '',   rows: (plan.main?.items||[]).map(it => ({ v:[it.name, _gpSR(it), it.load||'', it.rest||'', '', ''], exId: it.exercise_id || null, mode: it.mode||'SR' })) },
     };
     gpApplyContent(content);
+    await gpSyncRowNames();
     await gpResolveSessionMedia();
-    gpSyncRowNames();
     document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
     gpRenderPrintSheet();
     const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
@@ -1153,8 +1165,8 @@ async function gpApplyTemplate(id) {
   const t = _gpTpls.find(x => x.id === id);
   if (!t) return;
   gpApplyContent(t.content || {});
+  await gpSyncRowNames();
   await gpResolveSessionMedia();
-  gpSyncRowNames();
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
   gpScheduleSave();
   gpCloseTpl();
@@ -1916,8 +1928,8 @@ async function gpLoadDay(dateStr) {
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
   _gpSavedRoster = sess?.gym_content?.roster || null;
 
+  await gpSyncRowNames();
   await gpResolveSessionMedia();
-  gpSyncRowNames();
   document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
 
   // Calendar overlays: microcycle / match-day / RPE only. Start time and duration come
