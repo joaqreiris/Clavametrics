@@ -2396,8 +2396,15 @@
     _arrowData.forEach(d=>_removeArrowHandles(d));
     _arrowData.clear();
     fc.getObjects().filter(o=>o._type==='arrow'&&o._x1!=null).forEach(grp=>{
+      // Guard against a duplicate _arrowId across two groups (an old paste/duplicate that
+      // didn't reassign ids leaves them sharing one, persisted in older exercises): if the
+      // id is already taken, mint a fresh one so every arrow maps to its OWN data entry.
+      // Otherwise the second arrow overwrites the first in _arrowData and selecting one
+      // shows the OTHER arrow's endpoint handles — the "white dots land far from the arrow" bug.
+      let _aid = grp._arrowId;
+      if (_aid == null || _arrowData.has(_aid)) _aid = ++_nextArrowId;
       const d={
-        id:grp._arrowId||(++_nextArrowId),
+        id:_aid,
         x1:grp._x1,y1:grp._y1,cx:grp._cx,cy:grp._cy,x2:grp._x2,y2:grp._y2,
         color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,wavy:!!grp._arrowWavy,
         ..._capsFromGrp(grp),
