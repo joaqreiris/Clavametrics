@@ -973,6 +973,22 @@
     border-radius:4px; padding:5px 8px; white-space:pre-wrap; word-break:break-word;
     border:1px solid var(--cm-border-soft); margin-top:2px;
   }
+  /* Inline orientation editor (field training only) */
+  .cal-epop-orient {
+    display:flex; align-items:center; gap:6px; padding:8px 12px;
+    border-top:1px solid var(--cm-border-soft);
+  }
+  .cal-epop-orient > .ti { font-size:12px; flex-shrink:0; color:var(--cm-fg-muted); }
+  .cal-epop-orient-lbl {
+    font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); flex-shrink:0;
+  }
+  .cal-epop-orient-sel {
+    flex:1; min-width:0; height:26px; padding:0 6px;
+    font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong);
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border);
+    border-radius:6px; cursor:pointer;
+  }
+  .cal-epop-orient-saved { font-size:13px; color:var(--cm-success, #16a34a); flex-shrink:0; }
   /* Tasks section */
   .cal-epop-tasks { border-top:1px solid var(--cm-border-soft); }
   .cal-epop-tasks-head {
@@ -2471,7 +2487,7 @@ async function handleCrossDayMove(evt, newDate) {
 async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to,recurrence_group_id,created_at')
+      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,orientation,visible_to,recurrence_group_id,created_at')
       .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
@@ -2968,6 +2984,8 @@ function openEvtModal(session, defaultDate, focusTasks) {
 function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; _editEvtSource = null; }
 
 // ── Unified event popover ─────────────────────────────────────
+// Session orientation values — must mirror Daily Planning's #dpOrientation options.
+const CAL_ORIENTATIONS = ['introductory','activation','muscle_tension','speed','duration','recovery'];
 let _evtPop = null;
 
 function closeEvtPopover() {
@@ -3098,6 +3116,21 @@ function showEvtPopover(anchor, session) {
     }
   }
 
+  // Inline orientation editor — field training sessions only (matches Daily Planning's
+  // per-session orientation; both write training_sessions.orientation, so edits reflect on both sides).
+  const showOrient = !isPlayerView && cat === 'training' && session.source === 'session';
+  const orientSection = showOrient
+    ? `<div class="cal-epop-orient">
+         <i class="ti ti-compass"></i>
+         <span class="cal-epop-orient-lbl">${tt('daily_planning.orientation','Orientation')}</span>
+         <select class="cal-epop-orient-sel" id="epOrientSel">
+           <option value="">${tt('calendar.orientation_none','— None')}</option>
+           ${CAL_ORIENTATIONS.map(o => `<option value="${o}"${session.orientation === o ? ' selected' : ''}>${tt('daily_planning.'+o, o)}</option>`).join('')}
+         </select>
+         <i class="ti ti-check cal-epop-orient-saved" id="epOrientSaved" style="display:none"></i>
+       </div>`
+    : '';
+
   const tasksSection = (!isPlayerView)
     ? `<div class="cal-epop-tasks" id="epTasksWrap">
          <div class="cal-epop-tasks-head" id="epTasksHead">
@@ -3122,6 +3155,7 @@ function showEvtPopover(anchor, session) {
       </div>
     </div>
     ${rows.length || notesHtml ? `<div class="cal-epop-body">${rows.join('')}${notesHtml}</div>` : ''}
+    ${orientSection}
     ${tasksSection}
     ${(!isPlayerView) ? `<div class="cal-epop-foot">
       ${planBtn}
@@ -3138,6 +3172,22 @@ function showEvtPopover(anchor, session) {
   // Wire edit button
   const editBtn = pop.querySelector('#epEditBtn');
   if (editBtn) editBtn.addEventListener('click', () => { closeEvtPopover(); openEvtModal(session); });
+
+  // Wire inline orientation editor — persists straight to training_sessions.orientation,
+  // the same column Daily Planning reads/writes (edits reflect on both sides).
+  const orientSel = pop.querySelector('#epOrientSel');
+  if (orientSel) orientSel.addEventListener('change', async () => {
+    const val = orientSel.value || null;
+    orientSel.disabled = true;
+    const { error } = await window.sb.from('training_sessions').update({ orientation: val }).eq('id', session.id);
+    orientSel.disabled = false;
+    if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+    session.orientation = val;
+    const cached = _sessions.find(s => s.id === session.id && s.source === 'session');
+    if (cached) cached.orientation = val;
+    const saved = pop.querySelector('#epOrientSaved');
+    if (saved) { saved.style.display = ''; setTimeout(() => { if (saved) saved.style.display = 'none'; }, 1400); }
+  });
 
   // Wire delete button
   const delBtnEl = pop.querySelector('#epDelBtn');
