@@ -6569,7 +6569,7 @@ async function renderWeeklyBars(state) {
   const teamMode = !pid;
 
   if (!clubId || !scopePlayers) {
-    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player to view wk-on-wk load change.</div>';
+    container.innerHTML = `<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">${tt('gps_analysis.select_player_wkok', 'Select a player to view wk-on-wk load change.')}</div>`;
     if (legendEl) legendEl.innerHTML = '';
     return;
   }
@@ -6610,7 +6610,7 @@ async function renderWeeklyBars(state) {
     .slice(0, 10);
 
   if (!candidates.length) {
-    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No microcycles available.</div>';
+    container.innerHTML = `<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">${tt('gps_analysis.wkok_no_microcycles', 'No microcycles available.')}</div>`;
     return;
   }
 
@@ -6640,7 +6640,7 @@ async function renderWeeklyBars(state) {
 
   const allSids = Object.values(sessionsByMc).flat();
   if (!allSids.length) {
-    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No session data for these microcycles.</div>';
+    container.innerHTML = `<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">${tt('gps_analysis.wkok_no_session_data', 'No session data for these microcycles.')}</div>`;
     return;
   }
 
@@ -6700,8 +6700,8 @@ async function renderWeeklyBars(state) {
 
   if (!mcTotals.length) {
     const _msg = teamMode
-      ? 'No GPS data for the team in recent microcycles.'
-      : 'No GPS data for this player in recent microcycles.';
+      ? tt('gps_analysis.wkok_no_gps_team', 'No GPS data for the team in recent microcycles.')
+      : tt('gps_analysis.wkok_no_gps_player', 'No GPS data for this player in recent microcycles.');
     container.innerHTML = `<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">${_msg}</div>`;
     return;
   }
@@ -6728,40 +6728,44 @@ async function renderWeeklyBars(state) {
   const maxTotal = Math.max(...points.map(p => p.total), 1);
   const BAR_MAX  = 110; // px available for bars (within 150px container minus labels)
 
+  const _fmtVol = (v) => metricKey === 'total_distance' ? window.gpFmtDist(v) : Math.round(v) + ' ' + unit;
   container.innerHTML = points.map(p => {
     const barH   = Math.max(Math.round((p.total / maxTotal) * BAR_MAX), p.total > 0 ? 3 : 0);
     const col    = _wkCol(p.pct);
-    const pctLbl = p.pct !== null ? (p.pct >= 0 ? '+' : '') + p.pct + '%' : '—';
-    const totalFmt = metricKey === 'total_distance'
-      ? window.gpFmtDist(p.total)
-      : Math.round(p.total) + ' ' + unit;
+    // Primer microciclo = base (sin %); del 2º en adelante, aumento porcentual de carga.
+    const pctLbl = p.pct !== null ? (p.pct >= 0 ? '+' : '') + p.pct + '%' : tt('gps_analysis.wkok_base', 'base');
+    const totalFmt = _fmtVol(p.total);
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%">
       <div style="height:16px;display:flex;align-items:center;justify-content:center">
         <span style="font:700 12px/1 var(--cm-font-sans);color:${col}">${pctLbl}</span>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:80%">
-        <div style="background:${col};border-radius:3px 3px 0 0;height:${barH}px;transition:height .3s" title="${teamMode ? 'avg/player: ' : ''}${totalFmt}"></div>
+        <div style="background:${col};border-radius:3px 3px 0 0;height:${barH}px;transition:height .3s" title="${teamMode ? tt('gps_analysis.wkok_avg_player', 'avg/player') + ': ' : ''}${totalFmt}"></div>
       </div>
-      <div style="height:20px;display:flex;align-items:center;justify-content:center">
+      <div style="height:15px;display:flex;align-items:center;justify-content:center">
+        <span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)">${totalFmt}</span>
+      </div>
+      <div style="height:18px;display:flex;align-items:center;justify-content:center">
         <span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">${p.mcName}</span>
       </div>
     </div>`;
   }).join('');
 
-  // Metric pick label
+  // Metric pick label (+ nota de agregado de equipo cuando corresponde)
   const metricPickEl = document.querySelector('[data-wb-metric-pick]');
   if (metricPickEl) {
-    metricPickEl.innerHTML = `${cat?.label || metricKey} <i class="ti ti-chevron-down"></i>`;
+    const _teamNote = teamMode ? ` · ${tt('gps_analysis.wkok_squad_avg', 'squad avg')}` : '';
+    metricPickEl.innerHTML = `${cat?.label || metricKey}${_teamNote} <i class="ti ti-chevron-down"></i>`;
   }
 
   // Legend: semaphore key + ACWR note
   if (legendEl) {
     legendEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-success)"></span>≤${threshYellow}% (safe)</span>
-      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-warning)"></span>${threshYellow + 1}–${threshRed}% (caution)</span>
-      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-danger)"></span>&gt;${threshRed}% (spike)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-success)"></span>${tt('gps_analysis.wkok_legend_safe', `≤${threshYellow}% (safe)`, { n: threshYellow })}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-warning)"></span>${tt('gps_analysis.wkok_legend_caution', `${threshYellow + 1}–${threshRed}% (caution)`, { a: threshYellow + 1, b: threshRed })}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-danger)"></span>${tt('gps_analysis.wkok_legend_spike', `&gt;${threshRed}% (spike)`, { n: threshRed })}</span>
       <span style="flex:1"></span>
-      <span style="font-style:italic;font-size:10.5px">Progresión de carga / ACWR principle (Gabbett) — umbrales ajustables en ···</span>
+      <span style="font-style:italic;font-size:10.5px">${tt('gps_analysis.wkok_footer', 'Load progression / ACWR principle (Gabbett) — thresholds editable in ···')}</span>
     </div>`;
   }
 }
