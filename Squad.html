@@ -410,14 +410,23 @@
   }
   .sq-lineup-history-list { overflow-y:auto; max-height:640px; }
   .sq-lineup-history-item {
-    display:flex; flex-direction:column; gap:2px;
+    display:flex; align-items:center; gap:8px;
     padding:10px 14px; border-bottom:1px solid var(--cm-border-soft);
-    cursor:pointer; transition:background var(--cm-dur-1);
+    transition:background var(--cm-dur-1);
   }
   .sq-lineup-history-item:hover { background:var(--cm-bg-soft); }
   .sq-lineup-history-item:last-child { border-bottom:0; }
+  .sq-lineup-hi-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; cursor:pointer; }
   .sq-lineup-hi-title { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sq-lineup-hi-meta  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .sq-lineup-hi-del {
+    flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border:0; border-radius:var(--cm-r-2);
+    background:transparent; color:var(--cm-fg-muted); cursor:pointer;
+    opacity:0; transition:opacity var(--cm-dur-1), background var(--cm-dur-1), color var(--cm-dur-1);
+  }
+  .sq-lineup-history-item:hover .sq-lineup-hi-del { opacity:1; }
+  .sq-lineup-hi-del:hover { background:var(--cm-danger-soft, rgba(220,38,38,.12)); color:var(--cm-danger, #dc2626); }
 
   /* Field */
   .sq-field-wrap { display:flex; flex-direction:column; gap:12px; }
@@ -3863,12 +3872,32 @@ async function reloadPlayers() {
     container.innerHTML = _lSavedLineups.map(l => {
       const date = new Date(l.created_at).toLocaleDateString(ttLocale(), { day:'2-digit', month:'short', year:'2-digit' });
       return `<div class="sq-lineup-history-item" data-lineup-id="${l.id}">
-        <div class="sq-lineup-hi-title">${l.title || l.formation}</div>
-        <div class="sq-lineup-hi-meta">${l.formation} · ${date}</div>
+        <div class="sq-lineup-hi-main">
+          <div class="sq-lineup-hi-title">${l.title || l.formation}</div>
+          <div class="sq-lineup-hi-meta">${l.formation} · ${date}</div>
+        </div>
+        <button class="sq-lineup-hi-del" data-lineup-del title="${tt('squad.delete_lineup','Delete lineup')}" aria-label="${tt('squad.delete_lineup','Delete lineup')}"><i class="ti ti-trash" style="font-size:15px"></i></button>
       </div>`;
     }).join('');
-    container.querySelectorAll('.sq-lineup-history-item').forEach(item => {
-      item.addEventListener('click', async () => {
+    // Delete a saved lineup
+    container.querySelectorAll('[data-lineup-del]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const item = btn.closest('.sq-lineup-history-item');
+        const id = item?.dataset.lineupId;
+        if (!id) return;
+        if (!confirm(tt('squad.confirm_delete_lineup','Delete this saved lineup? This cannot be undone.'))) return;
+        btn.disabled = true;
+        const { error } = await window.sb.from('lineups').delete().eq('id', id);
+        if (error) { btn.disabled = false; showToast(tt('squad.error_deleting_lineup','Error deleting: {msg}', { msg: error.message })); return; }
+        _lSavedLineups = _lSavedLineups.filter(l => l.id !== id);
+        renderLineupHistory();
+        showToast(tt('squad.lineup_deleted','Lineup deleted.'));
+      });
+    });
+    container.querySelectorAll('.sq-lineup-hi-main').forEach(main => {
+      const item = main.closest('.sq-lineup-history-item');
+      main.addEventListener('click', async () => {
         const { data } = await window.sb.from('lineups').select('*').eq('id', item.dataset.lineupId).single();
         if (!data) return;
         _lFormation = data.formation;
