@@ -614,6 +614,25 @@
   .mgp-cell .v { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
   .mgp-note, .mgp-empty { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:10px; }
   .mgp-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+  /* Searchable player picker (replaces the native <select> that the OS renders untidily). */
+  .mgp-pick { margin-top:2px; }
+  .mgp-search { position:relative; margin-bottom:6px; }
+  .mgp-search input { width:100%; height:34px; padding:0 10px 0 32px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); outline:none; }
+  .mgp-search input:focus { border-color:var(--cm-accent,#15803D); }
+  .mgp-search i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--cm-fg-muted); font-size:15px; pointer-events:none; }
+  .mgp-list { max-height:236px; overflow-y:auto; border:1px solid var(--cm-border); border-radius:8px; background:var(--cm-bg-soft); padding:4px; display:flex; flex-direction:column; gap:1px; }
+  .mgp-opt { display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:7px 8px; border:0; background:transparent; border-radius:6px; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .mgp-opt:hover { background:var(--cm-surface); }
+  .mgp-opt.is-sel { background:var(--cm-accent-soft,rgba(21,128,61,.1)); }
+  .mgp-opt.is-sel .mgp-opt-name { color:var(--cm-accent,#15803D); font-weight:700; }
+  .mgp-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .mgp-dot.st-real { background:var(--cm-success,#16A34A); }
+  .mgp-dot.st-est  { background:var(--cm-warning,#D97706); }
+  .mgp-dot.st-missing { background:var(--cm-danger,#DC2626); }
+  .mgp-opt-num { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); min-width:24px; }
+  .mgp-opt-pos { font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.04em; color:var(--cm-fg-muted); background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:4px; padding:3px 5px; flex-shrink:0; }
+  .mgp-opt-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mgp-list-empty { padding:16px; text-align:center; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
   .gp-wiz-step     { padding:10px 14px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); border-bottom:2px solid transparent; cursor:default; }
   .gp-wiz-step.is-on   { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -4664,7 +4683,7 @@ function _gpRoster(clubId, teamId) {
   const key = `${clubId}|${teamId || '_all'}`;
   if (window._gpRosterCache.has(key)) return window._gpRosterCache.get(key);
   // Roster por membresía (junction player_teams), no por players.team_id primario.
-  const q = window.cmTeamPlayers(teamId, 'id,first_name,last_name,number,position')
+  const q = window.cmTeamPlayers(teamId, 'id,first_name,last_name,number,position,team_id')
     .neq('status', 'inactive');
   const p = q.order('last_name').then(res => {
     if (res.error) window._gpRosterCache.delete(key); // permití reintento si falló
@@ -6880,7 +6899,11 @@ async function openManualGpsModal() {
     <select id="mgpSession" class="mgp-in">${sessions.map(s=>{ const n=_dataCount[s.id]||0; return `<option value="${_esc(s.id)}">${n?'✓ ':''}${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}${n?` (${n})`:''}</option>`; }).join('')}</select>
     <div id="mgpStatus" class="mgp-status"></div>
     <label class="mgp-lbl">${tt('gps_analysis.manual_player','Player')}</label>
-    <select id="mgpPlayer" class="mgp-in"></select>
+    <div class="mgp-pick">
+      <div class="mgp-search"><i class="ti ti-search"></i><input type="text" id="mgpPlayerSearch" placeholder="${tt('gps_analysis.manual_player_search','Search player…')}"></div>
+      <div class="mgp-list" id="mgpPlayerList" role="listbox"></div>
+    </div>
+    <select id="mgpPlayer" hidden></select>
     <label class="mgp-lbl">${tt('gps_analysis.manual_mode','Fill mode')}</label>
     <div class="mgp-seg" id="mgpMode">
       <button type="button" data-mode="avg" class="is-on">${tt('gps_analysis.manual_mode_avg','Team average')}</button>
@@ -6901,21 +6924,46 @@ async function openManualGpsModal() {
   const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
   const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
 
+  // Players whose primary team differs from the one being viewed are "guests" (second team /
+  // other category). If they have no GPS in the session they only clutter the list → hide them.
+  const isGuest = p => !!(teamId && p.team_id && String(p.team_id) !== String(teamId));
+  const visibleRoster = () => roster.filter(p => !(isGuest(p) && statusOf(p.id)==='missing'));
+  const _sortedVisible = () => {
+    const order = { missing:0, est:1, real:2 };
+    return visibleRoster().map(p=>({p, st:statusOf(p.id)}))
+      .sort((a,b)=> (order[a.st]-order[b.st]) || String(a.p.last_name||'').localeCompare(String(b.p.last_name||'')));
+  };
   function renderStatus() {
-    const miss = roster.filter(p=>statusOf(p.id)==='missing').length;
-    const est  = roster.filter(p=>statusOf(p.id)==='est').length;
+    const vis  = visibleRoster();
+    const miss = vis.filter(p=>statusOf(p.id)==='missing').length;
+    const est  = vis.filter(p=>statusOf(p.id)==='est').length;
     body.querySelector('#mgpStatus').innerHTML =
-      `<span class="mgp-chip real">${roster.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
+      `<span class="mgp-chip real">${vis.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
       + (est?` <span class="mgp-chip est">${est} ${tt('gps_analysis.manual_st_est','estimated')}</span>`:'')
       + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'');
   }
+  function renderPlayerList() {
+    const listEl = body.querySelector('#mgpPlayerList'), sel = body.querySelector('#mgpPlayer');
+    const term = (body.querySelector('#mgpPlayerSearch')?.value||'').trim().toLowerCase();
+    const rows = _sortedVisible().filter(({p})=> !term ||
+      `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''}`.toLowerCase().includes(term));
+    if (!rows.length) { listEl.innerHTML = `<div class="mgp-list-empty">${tt('gps_analysis.manual_no_players','No players match.')}</div>`; return; }
+    listEl.innerHTML = rows.map(({p,st})=>`<button type="button" class="mgp-opt${p.id===sel.value?' is-sel':''}" data-pid="${_esc(p.id)}" role="option">`
+      + `<span class="mgp-dot st-${st}"></span>`
+      + `<span class="mgp-opt-num">${p.number?('#'+_esc(p.number)):''}</span>`
+      + (p.position?`<span class="mgp-opt-pos">${_esc(p.position)}</span>`:'')
+      + `<span class="mgp-opt-name">${_esc((p.last_name||'')+' '+(p.first_name||''))}</span></button>`).join('');
+    listEl.querySelectorAll('.mgp-opt').forEach(el=>el.addEventListener('click',()=>{
+      sel.value = el.dataset.pid; sel.dispatchEvent(new Event('change')); renderPlayerList();
+    }));
+  }
   function renderPlayers() {
     const sel = body.querySelector('#mgpPlayer'), cur = sel.value;
-    const order = { missing:0, est:1, real:2 }, mark = st => st==='missing'?'⚠ ':st==='est'?'~ ':'✓ ';
-    const rows = roster.map(p=>({p, st:statusOf(p.id)}))
-      .sort((a,b)=> (order[a.st]-order[b.st]) || String(a.p.last_name||'').localeCompare(String(b.p.last_name||'')));
-    sel.innerHTML = rows.map(({p,st})=>`<option value="${_esc(p.id)}">${mark(st)}${p.position?('['+_esc(p.position)+'] '):''}${p.number?('#'+p.number+' '):''}${_esc((p.last_name||'')+' '+(p.first_name||''))}</option>`).join('');
-    if (cur && roster.some(p=>p.id===cur)) sel.value = cur;
+    const rows = _sortedVisible();
+    sel.innerHTML = rows.map(({p})=>`<option value="${_esc(p.id)}">${_esc((p.last_name||'')+' '+(p.first_name||''))}</option>`).join('');
+    if (cur && rows.some(({p})=>p.id===cur)) sel.value = cur;
+    else if (rows.length) sel.value = rows[0].p.id;
+    renderPlayerList();
   }
   function renderFields() {
     const wrap = body.querySelector('#mgpFields');
@@ -6950,6 +6998,7 @@ async function openManualGpsModal() {
   }
 
   body.querySelector('#mgpSession').addEventListener('change', loadSession);
+  body.querySelector('#mgpPlayerSearch').addEventListener('input', renderPlayerList);
   body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos') renderFields(); });
   body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
   body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
