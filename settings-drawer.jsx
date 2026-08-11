@@ -205,6 +205,13 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
   // Language (wired to CM_I18N; "Auto" = no explicit choice → runtime detection)
   const [curLang, setCurLang]           = React.useState(() => (window.CM_I18N ? window.CM_I18N.current : "en"));
   const [langExplicit, setLangExplicit] = React.useState(() => { try { return !!localStorage.getItem("cm_lang"); } catch { return false; } });
+  const [teams, setTeams]               = React.useState([]);   // club teams, for the per-type notification filter
+
+  // Load the club's teams once the drawer is opened (for the "by team" notification filter).
+  React.useEffect(() => {
+    if (!open || teams.length || !window.getClub || !window.getTeams) return;
+    window.getClub().then(c => c && window.getTeams(c.id)).then(t => t && setTeams(t)).catch(() => {});
+  }, [open]);
 
   // Apply locally + persist localStorage + notify host for Supabase save
   const didMount = React.useRef(false);
@@ -325,6 +332,25 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
 
   const set = (patch) => setS((p) => ({ ...p, ...patch }));
   const setNotif = (key, val) => set({ notif: { ...s.notif, [key]: val } });
+
+  // Per-type team filter. Stored under notif.teamFilter[type] as an explicit array of
+  // visible team ids; an absent entry means "all teams". Toggling a team off the first
+  // time seeds the list with every team, then removes the one being hidden.
+  const allTeamIds = () => teams.map(t => t.id);
+  const teamAllowed = (type, teamId) => {
+    const cur = s.notif && s.notif.teamFilter && s.notif.teamFilter[type];
+    return !Array.isArray(cur) || cur.includes(teamId);
+  };
+  const toggleTeamFilter = (type, teamId) => {
+    const tf = { ...((s.notif && s.notif.teamFilter) || {}) };
+    let cur = Array.isArray(tf[type]) ? tf[type] : allTeamIds();
+    cur = cur.includes(teamId) ? cur.filter(x => x !== teamId) : [...cur, teamId];
+    tf[type] = cur;
+    const nextNotif = { ...s.notif, teamFilter: tf };
+    set({ notif: nextNotif });
+    // Let the bell (assets/sidebar.js) refresh its filter without a page reload.
+    try { document.dispatchEvent(new CustomEvent('cm:notiffilterchanged', { detail: tf })); } catch {}
+  };
   const langCodes = (window.CM_I18N && window.CM_I18N.langs) || ["en", "es", "pt"];
   const langNames = (window.CM_I18N && window.CM_I18N.name) || { en:"English", es:"Español", pt:"Português" };
   const chooseLang = (code) => {
@@ -497,6 +523,35 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
                     onClick={() => setNotif(key, !(s.notif && s.notif[key]))}>
                     <span className="sd-toggle-thumb" />
                   </button>
+                </div>
+              ))}
+            </Section>
+            <Section label={_t("settings.notif_teams","Notifications by team")} hint={_t("settings.notif_teams.hint","For each alert, pick which teams you want notifications about. Club-wide alerts always show.")}>
+              {teams.length < 2 ? (
+                <div className="sd-row-sub">{_t("settings.notif_teams.single","You only have one team — nothing to filter here.")}</div>
+              ) : [
+                { type:"wellness_alert",  label:"Discomfort reported",  sub:"Wellness & post-RPE discomfort alerts" },
+                { type:"task_reminder",   label:"Task reminders",       sub:"Reminders for tasks due soon" },
+                { type:"player_birthday", label:"Player birthdays",     sub:"Birthday reminders for players" },
+              ].map(({ type, label, sub }) => (
+                <div key={type} className="sd-teamrow">
+                  <div className="sd-teamrow-h">
+                    <div className="sd-row-label">{_t("settings.notif_type_" + type, label)}</div>
+                    <div className="sd-row-sub">{_t("settings.notif_type_" + type + ".sub", sub)}</div>
+                  </div>
+                  <div className="sd-teamchips">
+                    {teams.map(tm => {
+                      const on = teamAllowed(type, tm.id);
+                      return (
+                        <button key={tm.id} type="button"
+                          className={`sd-teamchip ${on ? "is-on" : ""}`}
+                          aria-pressed={on}
+                          onClick={() => toggleTeamFilter(type, tm.id)}>
+                          <i className={`ti ${on ? "ti-check" : "ti-plus"}`}></i>{tm.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </Section>
@@ -736,6 +791,20 @@ const SD_CSS = `
     transition:left 160ms;
   }
   .sd-toggle.is-on .sd-toggle-thumb { left:21px; }
+
+  /* Per-type team filter */
+  .sd-teamrow { padding:12px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .sd-teamrow:last-child { border-bottom:0; }
+  .sd-teamrow-h { margin-bottom:8px; }
+  .sd-teamchips { display:flex; flex-wrap:wrap; gap:6px; }
+  .sd-teamchip {
+    display:inline-flex; align-items:center; gap:5px; cursor:pointer;
+    padding:5px 10px; border-radius:999px; font:600 12px/1 var(--cm-font-sans);
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted);
+    transition:background 140ms, color 140ms, border-color 140ms;
+  }
+  .sd-teamchip.is-on { background:var(--cm-accent-soft,var(--cm-accent)); border-color:var(--cm-accent); color:var(--cm-accent); }
+  .sd-teamchip .ti { font-size:13px; }
 
   /* Info note */
   .sd-note { display:flex; align-items:flex-start; gap:7px; padding:10px 12px; margin-top:12px; background:var(--cm-bg-soft); border-radius:8px; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }

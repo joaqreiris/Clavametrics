@@ -1525,6 +1525,7 @@ create table if not exists public.notifications (
   id uuid default gen_random_uuid() not null,
   user_id uuid not null,
   club_id uuid,
+  team_id uuid,
   type text not null,
   title text not null,
   body text,
@@ -3800,8 +3801,8 @@ begin
     begin
       -- Skip closed tasks, but still stamp sent so they aren't re-evaluated forever.
       if r.status not in ('done', 'cancelled') then
-        insert into public.notifications (user_id, club_id, type, title, body, link)
-        select uid, r.club_id, 'task_reminder',
+        insert into public.notifications (user_id, club_id, team_id, type, title, body, link)
+        select uid, r.club_id, r.team_id, 'task_reminder',
                'Reminder: ' || r.title, 'This task is due soon.', '/Chat & Tasks.html'
         from (
           select r.assigned_to as uid where r.assigned_to is not null
@@ -3840,8 +3841,8 @@ CREATE OR REPLACE FUNCTION public.notify_player_birthdays()
  SET search_path TO 'public'
 AS $function$
 begin
-  insert into public.notifications (user_id, club_id, type, title, body, link)
-  select pr.id, pl.club_id, 'player_birthday', bd.title, bd.body, '/Squad.html'
+  insert into public.notifications (user_id, club_id, team_id, type, title, body, link)
+  select pr.id, pl.club_id, pl.team_id, 'player_birthday', bd.title, bd.body, '/Squad.html'
   from public.players pl
   join public.profiles pr on pr.club_id = pl.club_id
   -- "today"/"tomorrow" follow the RECIPIENT's local calendar day (auto-detected browser
@@ -4426,8 +4427,8 @@ begin
   if array_length(v_areas, 1) > 0 then
     select coalesce(nullif(trim(coalesce(first_name,'')||' '||coalesce(last_name,'')),''),'A player'), team_id
       into v_pname, v_team from public.players where id = p_player_id;
-    insert into public.notifications (user_id, club_id, type, title, body, link)
-    select pr.id, v_link.club_id, 'wellness_alert',
+    insert into public.notifications (user_id, club_id, team_id, type, title, body, link)
+    select pr.id, v_link.club_id, v_team, 'wellness_alert',
            v_pname || ' reported discomfort',
            'Areas: ' || array_to_string(v_areas, ', ') || coalesce(' · "'||v_note||'"','') ||
              case when v_link.scope='rpe' then ' (post-RPE)' else '' end,

@@ -600,6 +600,17 @@ html.cm-rail .hub-nav-grip{display:none}
 
   // ── NOTIFICATIONS ────────────────────────────────────────────
   let _notifData = [];
+  // Per-user, per-type team filter: { type: [teamId,…] }. Absent/non-array for a
+  // type ⇒ show all teams. Notifications without a team_id (club-level) always show.
+  let _notifTeamFilter = {};
+
+  function _passesTeamFilter(n) {
+    if (!n || !n.team_id) return true;
+    const allowed = _notifTeamFilter && _notifTeamFilter[n.type];
+    if (!Array.isArray(allowed)) return true;
+    return allowed.includes(n.team_id);
+  }
+  function _visibleNotifs() { return _notifData.filter(_passesTeamFilter); }
 
   function _notifIcon(type) {
     const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'] };
@@ -620,7 +631,7 @@ html.cm-rail .hub-nav-grip{display:none}
   }
 
   function _updateNotifBadge() {
-    const unread = _notifData.filter(n => !n.read).length;
+    const unread = _visibleNotifs().filter(n => !n.read).length;
     const badge = document.getElementById('cm-nbadge');
     if (!badge) return;
     badge.textContent = unread > 99 ? '99+' : unread;
@@ -630,12 +641,13 @@ html.cm-rail .hub-nav-grip{display:none}
   function _renderNotifList() {
     const list = document.getElementById('cm-np-list');
     if (!list) return;
-    if (!_notifData.length) {
+    const visible = _visibleNotifs();
+    if (!visible.length) {
       list.innerHTML = '<div class="cm-np-empty" data-i18n="shell.nonotif">No notifications yet</div>';
       _applyI18n(list);
       return;
     }
-    list.innerHTML = _notifData.map(n => `
+    list.innerHTML = visible.map(n => `
       <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${n.id}" href="${n.link || '#'}">
         ${_notifIcon(n.type)}
         <div class="cm-ni-body">
@@ -717,13 +729,27 @@ html.cm-rail .hub-nav-grip{display:none}
     wrap.appendChild(panel);
     _applyI18n(panel);
 
-    // Load last 30 notifications — bail silently if table doesn't exist
+    // Load this user's per-type team filter (stored alongside notif prefs).
+    try {
+      const { data: prof } = await window.sb
+        .from('profiles').select('notification_settings').eq('id', user.id).single();
+      _notifTeamFilter = (prof && prof.notification_settings && prof.notification_settings.teamFilter) || {};
+    } catch (_) { _notifTeamFilter = {}; }
+    // Live-refresh when the user edits the filter in the settings drawer.
+    document.addEventListener('cm:notiffilterchanged', e => {
+      _notifTeamFilter = (e && e.detail) || {};
+      _renderNotifList();
+      _updateNotifBadge();
+    });
+
+    // Load last 40 notifications — bail silently if table doesn't exist.
+    // Fetch a bit extra so the team filter still leaves a full-ish list.
     const { data: notifs, error: notifErr } = await window.sb
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(40);
     if (notifErr) return;
     _notifData = notifs || [];
     _renderNotifList();
@@ -781,7 +807,7 @@ html.cm-rail .hub-nav-grip{display:none}
         _notifData.unshift(payload.new);
         _renderNotifList();
         _updateNotifBadge();
-        _showNotifToast(payload.new);
+        if (_passesTeamFilter(payload.new)) _showNotifToast(payload.new);
       })
       .subscribe();
   }
