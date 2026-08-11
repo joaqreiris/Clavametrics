@@ -1786,13 +1786,35 @@ function renderTasks(tasks, view = 'my') {
       <div class="when">${formatDue(task.due_date)}</div>`;
     if (!isTeam) {
       const check = el.querySelector('.check');
+      let _closing = false;
       async function toggle() {
-        const nowDone = !el.classList.contains('is-done');
-        el.classList.toggle('is-done');
-        check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
-        await window.sb.from('tasks').update({ status: nowDone ? 'done' : 'pending' }).eq('id', task.id);
-        // Only notify on the transition to done (never when reverting to pending).
-        if (nowDone) _hubNotifyCompleted(task, window._hubUserId, window._hubProfileName, window._hubClubId, window._hubTeamId);
+        if (_closing) return;
+        _closing = true;
+        // Marking done removes the task from the list (the queries never load
+        // done tasks, so this keeps the on-screen list in sync without a reload).
+        el.classList.add('is-done');
+        check.setAttribute('aria-checked', 'true');
+        await window.sb.from('tasks').update({ status: 'done' }).eq('id', task.id);
+        _hubNotifyCompleted(task, window._hubUserId, window._hubProfileName, window._hubClubId, window._hubTeamId);
+        // Drop it from the cached lists so switching tabs doesn't bring it back.
+        if (Array.isArray(window._hubMyTasks))   window._hubMyTasks   = window._hubMyTasks.filter(t => t.id !== task.id);
+        if (Array.isArray(window._hubTeamTasks)) window._hubTeamTasks = window._hubTeamTasks.filter(t => t.id !== task.id);
+        // Fade out, then remove and refresh the pending count.
+        el.style.transition = 'opacity .25s ease, height .25s ease, margin .25s ease, padding .25s ease';
+        el.style.opacity = '0';
+        setTimeout(() => {
+          el.remove();
+          const remaining = container.querySelectorAll('.task').length;
+          const countEl = document.getElementById('btnAddTask').closest('.section-header')?.querySelector('.count');
+          if (countEl) countEl.textContent = remaining;
+          if (!remaining) {
+            const empty = document.createElement('div');
+            empty.className = 'task';
+            empty.style.cssText = 'justify-content:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
+            empty.textContent = tt('hub.no_pending_tasks','No pending tasks');
+            container.appendChild(empty);
+          }
+        }, 250);
       }
       check.addEventListener('click', () => toggle());
       check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
