@@ -2746,10 +2746,10 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const running=(job.status==='running'||job.status==='queued');
     const stale = running && job.heartbeat_at && (Date.now()-new Date(job.heartbeat_at).getTime()>_SYNC_STALE_MS);
 
-    let label, cls='', animated=false, retry=false, done=false;
+    let label, cls='', animated=false, retry=false, isDone=false;
     if(running && stale){ label=tt('admin.gps_sync_stalled','Sync stalled — the worker stopped responding.'); cls='s-error'; retry=true; }
     else if(running){ label=tt('admin.gps_syncing_progress','Syncing… {done}/{total} ({pct}%)',{ done, total, pct }); animated=true; }
-    else if(job.status==='done'){ label=tt('admin.gps_sync_complete','Sync complete'); cls='s-done'; done=true; }
+    else if(job.status==='done'){ label=tt('admin.gps_sync_complete','Sync complete'); cls='s-done'; isDone=true; }
     else if(job.status==='cancelled'){ label=tt('admin.gps_sync_cancelled','Cancelled'); }
     else if(job.status==='error'){ label=tt('admin.gps_sync_failed_x','Sync failed: {msg}',{ msg: job.error||'unknown' }); cls='s-error'; retry=true; }
 
@@ -2764,13 +2764,13 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         <div class="gps-sync-track"><div class="gps-sync-fill ${cls} ${animated?'is-anim':''}" style="width:${fillPct}%"></div></div>
         <span class="gps-sync-pct">${running?pct+'%':''}</span>
       </div>
-      <div class="gps-sync-meta ${cls==='s-error'?'is-err':''} ${done?'is-ok':''}">
-        ${done?'<i class="ti ti-circle-check-filled"></i>':''}
+      <div class="gps-sync-meta ${cls==='s-error'?'is-err':''} ${isDone?'is-ok':''}">
+        ${isDone?'<i class="ti ti-circle-check-filled"></i>':''}
         <span>${_esc(label)}</span>
         ${sum?`<span>· ${_esc(sum)}</span>`:''}
         ${running?`<button class="gps-int-btn ghost gps-sync-cancel" data-synccancel="${prov}">${tt('admin.gps_cancel','Cancel')}</button>`:''}
         ${retry?`<button class="gps-int-btn ghost gps-sync-retry" data-syncretry="${prov}">${tt('admin.gps_retry','Retry')}</button>`:''}
-        ${done?`<button class="gps-int-btn ghost gps-sync-dismiss" data-syncdismiss="${prov}">${tt('common.dismiss','Dismiss')}</button>`:''}
+        ${isDone?`<button class="gps-int-btn ghost gps-sync-dismiss" data-syncdismiss="${prov}">${tt('common.dismiss','Dismiss')}</button>`:''}
       </div>`;
     const rb=bar.querySelector('[data-syncretry]'); if(rb) rb.addEventListener('click',()=>syncNow(prov));
     const cb=bar.querySelector('[data-synccancel]'); if(cb) cb.addEventListener('click',()=>_cancelSync(prov));
