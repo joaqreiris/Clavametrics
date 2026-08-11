@@ -6892,7 +6892,9 @@ async function openManualGpsModal() {
   const _esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const clubId = window._gpClubId || (await window.getClubId?.());
   if (!clubId) return;
-  const teamId = window._gpTeamId || null;
+  // Fall back to the team switcher's value: if teamId ends up null the roster is the WHOLE club
+  // and no one can be flagged as an alternate (the guest check needs a reference team).
+  const teamId = window._gpTeamId || document.getElementById('gpsTeamSelect')?.value || null;
   const ov = makeModal(tt('gps_analysis.manual_gps_title','Add GPS data'),
     `<div id="mgpBody"><div class="mgp-empty">${tt('common.loading','Loading…')}</div></div>`);
   const body = ov.querySelector('#mgpBody');
