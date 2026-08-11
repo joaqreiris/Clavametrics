@@ -3682,31 +3682,35 @@ begin
 end; $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.my_plan_features()
+-- Features (jsonb array) a las que un CLUB tiene derecho, resolviendo:
+-- paga > prueba(15d) > gratis, con rollup por equipos. Parametrizado por club
+-- para poder usarlo en RLS (club_has_feature) además del rollup del usuario.
+CREATE OR REPLACE FUNCTION public.club_plan_features(p_club_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
 DECLARE
-  v_club uuid := public.get_user_club_id();
   v_feats jsonb;
   v_has_teams boolean;
   v_has_paid boolean;
   v_in_trial boolean;
 BEGIN
+  IF p_club_id IS NULL THEN RETURN '[]'::jsonb; END IF;
+
   -- ¿hay alguna suscripción paga/activa en el club?
   SELECT EXISTS(
     SELECT 1 FROM public.subscriptions s
       JOIN public.teams t ON t.id = s.team_id
-     WHERE t.club_id = v_club
+     WHERE t.club_id = p_club_id
        AND s.status IN ('active','trialing','past_due')
   ) INTO v_has_paid;
 
   -- ¿el club está dentro de la prueba de 15 días?
   SELECT EXISTS(
     SELECT 1 FROM public.clubs
-     WHERE id = v_club
+     WHERE id = p_club_id
        AND trial_ends_at IS NOT NULL
        AND trial_ends_at > now()
   ) INTO v_in_trial;
@@ -3718,7 +3722,7 @@ BEGIN
     RETURN coalesce(v_feats,'[]'::jsonb);
   END IF;
 
-  SELECT EXISTS(SELECT 1 FROM public.teams WHERE club_id = v_club) INTO v_has_teams;
+  SELECT EXISTS(SELECT 1 FROM public.teams WHERE club_id = p_club_id) INTO v_has_teams;
 
   IF NOT v_has_teams THEN
     SELECT coalesce(features,'[]'::jsonb) INTO v_feats
@@ -3730,11 +3734,35 @@ BEGIN
     INTO v_feats
     FROM public.teams t
     CROSS JOIN LATERAL jsonb_array_elements_text(public.team_features(t.id)) AS elem
-   WHERE t.club_id = v_club;
+   WHERE t.club_id = p_club_id;
 
   RETURN coalesce(v_feats,'[]'::jsonb);
 END; $function$
 ;
+
+-- Rollup de features del club del usuario actual (delega en club_plan_features).
+CREATE OR REPLACE FUNCTION public.my_plan_features()
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT public.club_plan_features(public.get_user_club_id());
+$function$
+;
+
+-- ¿El club tiene derecho a esta feature? (para gatear en RLS)
+CREATE OR REPLACE FUNCTION public.club_has_feature(p_club_id uuid, p_key text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT coalesce(public.club_plan_features(p_club_id) ? p_key, false);
+$function$
+;
+GRANT EXECUTE ON FUNCTION public.club_plan_features(uuid) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.club_has_feature(uuid, text) TO authenticated, anon;
 
 CREATE OR REPLACE FUNCTION public.my_player_ids()
  RETURNS SETOF uuid
@@ -6044,6 +6072,17 @@ alter table public.nutrition_targets enable row level security;
 create policy "nutrition_targets_rw" on public.nutrition_targets as permissive for all to authenticated
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
+
+-- Gate por plan (Bloque B, Parte 2): además de pertenecer al club, el club debe
+-- tener la feature 'nutrition'. RESTRICTIVE = se suma con AND a las policies de
+-- arriba sin tocarlas. Super admin exento. Se gatea por el club del usuario
+-- (las permissive ya garantizan club_id = get_user_club_id()).
+create policy "nutrition_plan_gate" on public.nutrition as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'));
+create policy "nutrition_targets_plan_gate" on public.nutrition_targets as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'));
 
 alter table public.opponent_branding enable row level security;
 create policy "opponent_branding_all" on public.opponent_branding as permissive for all to authenticated
