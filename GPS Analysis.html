@@ -6892,9 +6892,10 @@ async function openManualGpsModal() {
   const _esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const clubId = window._gpClubId || (await window.getClubId?.());
   if (!clubId) return;
-  // Fall back to the team switcher's value: if teamId ends up null the roster is the WHOLE club
-  // and no one can be flagged as an alternate (the guest check needs a reference team).
-  const teamId = window._gpTeamId || document.getElementById('gpsTeamSelect')?.value || null;
+  // Need a reference team, else the roster is the WHOLE club and nobody can be flagged as an
+  // alternate. Try, in order: the resolved GPS team, the switcher value, the saved active team.
+  const teamId = window._gpTeamId || document.getElementById('gpsTeamSelect')?.value
+    || sessionStorage.getItem('cal_active_team') || null;
   const ov = makeModal(tt('gps_analysis.manual_gps_title','Add GPS data'),
     `<div id="mgpBody"><div class="mgp-empty">${tt('common.loading','Loading…')}</div></div>`);
   const body = ov.querySelector('#mgpBody');
@@ -6904,31 +6905,21 @@ async function openManualGpsModal() {
   // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
   // so today's just-synced session is pickable. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
-  const [sessRes, rosterRes, dataRes, teamsList, ptRes] = await Promise.all([
+  const [sessRes, rosterRes, dataRes, primRes] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
     window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
-    Promise.resolve(window.getTeams?.(clubId)).catch(()=>[]),
-    window.sb.from('player_teams').select('player_id,team_id,is_primary').eq('club_id', clubId),
+    // Ids of players whose PRIMARY membership is this team (same is_primary filter Top-Up /
+    // Evaluations use). Everyone else in the roster is an alternate training up from another team.
+    teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
+           : Promise.resolve({ data: [] }),
   ]);
   const sessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
-  // Map primary-team id → name, so an "alternate" (a 2nd-team player who trains up with the
-  // first team) can be tagged with the team he actually belongs to and told apart at a glance.
-  const teamsById = {}; (teamsList || []).forEach(t => { teamsById[t.id] = t.name; });
-  // A player's home team = his player_teams row flagged is_primary. players.team_id is a legacy
-  // denormalized column that's mostly NULL here, so it can't be trusted — use the junction.
-  // Fallbacks: legacy team_id, then a lone membership. null = can't tell → treat as own squad.
-  const ptByPlayer = {}; (ptRes?.data || []).forEach(r => { (ptByPlayer[r.player_id] ||= []).push(r); });
-  const homeTeamOf = p => {
-    const rows = ptByPlayer[p.id] || [];
-    const prim = rows.find(r => r.is_primary);
-    if (prim) return prim.team_id;
-    if (p.team_id) return p.team_id;
-    return rows.length === 1 ? rows[0].team_id : null;
-  };
-  // "Alternate/guest" = member of the viewed team whose home team is a different one.
-  const isGuest = p => { const h = homeTeamOf(p); return !!(teamId && h && String(h) !== String(teamId)); };
-  const guestTeam = p => teamsById[homeTeamOf(p)] || tt('gps_analysis.manual_other_team','Other team');
+  // Main squad = primary members of this team. If the set is empty (primaries never configured in
+  // Squad) we can't tell alternates apart, so we flag nobody rather than wrongly hide the squad.
+  const primaryIds = new Set((primRes?.data || []).map(r => r.id));
+  const isGuest = p => !!(teamId && primaryIds.size && !primaryIds.has(p.id));
+  const guestLabel = tt('gps_analysis.manual_alt_badge','Alternate');
   const hasGuests = roster.some(isGuest);
   // How many players already have data per session → mark it in the list so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
@@ -6997,14 +6988,14 @@ async function openManualGpsModal() {
     const listEl = body.querySelector('#mgpPlayerList'), sel = body.querySelector('#mgpPlayer');
     const term = (body.querySelector('#mgpPlayerSearch')?.value||'').trim().toLowerCase();
     const rows = _sortedVisible().filter(({p})=> !term ||
-      `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''} ${isGuest(p)?guestTeam(p):''}`.toLowerCase().includes(term));
+      `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''}`.toLowerCase().includes(term));
     if (!rows.length) { listEl.innerHTML = `<div class="mgp-list-empty">${tt('gps_analysis.manual_no_players','No players match.')}</div>`; return; }
     listEl.innerHTML = rows.map(({p,st})=>`<button type="button" class="mgp-opt${p.id===sel.value?' is-sel':''}" data-pid="${_esc(p.id)}" role="option">`
       + `<span class="mgp-dot st-${st}"></span>`
       + `<span class="mgp-opt-num">${p.number?('#'+_esc(p.number)):''}</span>`
       + (p.position?`<span class="mgp-opt-pos">${_esc(p.position)}</span>`:'')
       + `<span class="mgp-opt-name">${_esc((p.last_name||'')+' '+(p.first_name||''))}</span>`
-      + (isGuest(p)?`<span class="mgp-opt-team" title="${_esc(guestTeam(p))}"><i class="ti ti-arrows-exchange"></i>${_esc(guestTeam(p))}</span>`:'')
+      + (isGuest(p)?`<span class="mgp-opt-team" title="${_esc(guestLabel)}"><i class="ti ti-arrows-exchange"></i>${_esc(guestLabel)}</span>`:'')
       + `</button>`).join('');
     listEl.querySelectorAll('.mgp-opt').forEach(el=>el.addEventListener('click',()=>{
       sel.value = el.dataset.pid; sel.dispatchEvent(new Event('change')); renderPlayerList();
