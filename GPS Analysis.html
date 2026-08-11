@@ -6609,7 +6609,9 @@ async function renderWeeklyBars(state) {
   const _inSeason = (mc) => {
     if (!_seasonActive) return true;
     if (_sId && mc.season_id) return mc.season_id === _sId;      // etiquetado explícito
-    return (!_sFrom || mc.start_date >= _sFrom) && (!_sTo || mc.start_date <= _sTo);  // por ventana de fechas
+    // Solapamiento con la ventana de temporada (no contención): un microciclo puede
+    // empezar días antes del inicio oficial (pretemporada) y pertenecer igual.
+    return (!_sFrom || mc.end_date >= _sFrom) && (!_sTo || mc.start_date <= _sTo);
   };
   // Guard al momento de dibujar contra la race de pwInit (si _pwMcList se armó antes
   // de que window._gpTeamId estuviera seteado, podría traer microciclos de otros equipos).

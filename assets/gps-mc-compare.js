@@ -106,7 +106,9 @@
     const _inSeason = (m) => {
       if (!_seasonActive) return true;
       if (_sId && m.season_id) return m.season_id === _sId;
-      return (!_sFrom || m.start_date >= _sFrom) && (!_sTo || m.start_date <= _sTo);
+      // Solapamiento con la ventana de temporada (no contención): un microciclo puede
+      // empezar días antes del inicio oficial (pretemporada) y pertenecer igual.
+      return (!_sFrom || m.end_date >= _sFrom) && (!_sTo || m.start_date <= _sTo);
     };
     // Guard contra la race de mcInit (microciclos de otros equipos si _gpTeamId no estaba listo).
     const _teamId = window._gpTeamId || null;
