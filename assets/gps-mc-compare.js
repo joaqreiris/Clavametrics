@@ -61,14 +61,19 @@
     try {
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
+      let _sessQ = window.sb.from('training_sessions')
+        .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
+        .eq('club_id', clubId).neq('session_type', 'rehab');
+      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
+        .eq('club_id', clubId);
+      if (window._gpTeamId) {                                    // acotar al equipo activo
+        _sessQ = _sessQ.eq('team_id', window._gpTeamId);
+        _mcQ   = _mcQ.eq('team_id', window._gpTeamId);
+      }
       const [{ data: sessions }, { data: players }, { data: microcycles }] = await Promise.all([
-        window.sb.from('training_sessions')
-          .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
-          .eq('club_id', clubId).neq('session_type', 'rehab')
-          .order('session_date', { ascending: true }),
+        _sessQ.order('session_date', { ascending: true }),
         _gpRoster(clubId, window._gpTeamId),
-        window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
-          .eq('club_id', clubId).order('start_date', { ascending: true }),
+        _mcQ.order('start_date', { ascending: true }),
       ]);
       _mcSessions = sessions || [];
       _playerMap  = Object.fromEntries((players || []).map(p => [p.id, p]));

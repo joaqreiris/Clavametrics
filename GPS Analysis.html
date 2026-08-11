@@ -633,6 +633,11 @@
   .mgp-opt-pos { font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.04em; color:var(--cm-fg-muted); background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:4px; padding:3px 5px; flex-shrink:0; }
   .mgp-opt-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mgp-list-empty { padding:16px; text-align:center; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .mgp-teamf { margin-bottom:8px; }
+  /* Badge on an alternate player: he trains here but belongs to another team. */
+  .mgp-opt-team { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; margin-left:auto; font:600 9.5px/1 var(--cm-font-sans); color:var(--cm-accent,#2563EB); background:color-mix(in srgb, var(--cm-accent,#2563EB) 12%, transparent); border:1px solid color-mix(in srgb, var(--cm-accent,#2563EB) 30%, transparent); border-radius:5px; padding:3px 6px; max-width:110px; overflow:hidden; }
+  .mgp-opt-team i { font-size:12px; }
+  .mgp-opt-team span, .mgp-opt-team { white-space:nowrap; text-overflow:ellipsis; }
   .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
   .gp-wiz-step     { padding:10px 14px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); border-bottom:2px solid transparent; cursor:default; }
   .gp-wiz-step.is-on   { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -6577,11 +6582,13 @@ async function renderWeeklyBars(state) {
   const _mcForDate = (d) => candidates.find(mc => d >= mc.start_date && d <= mc.end_date)?.id || null;
 
   // Fetch every session in the covering date window, then assign each to its MC.
-  const { data: allSess } = await window.sb.from('training_sessions')
+  let _wbSessQ = window.sb.from('training_sessions')
     .select('id,session_date,microcycle_id')
     .eq('club_id', clubId)
     .gte('session_date', winStart)
     .lte('session_date', winEnd);
+  if (window._gpTeamId) _wbSessQ = _wbSessQ.eq('team_id', window._gpTeamId);   // solo sesiones del equipo activo
+  const { data: allSess } = await _wbSessQ;
 
   const sessionsByMc = {};
   (allSess || []).forEach(s => {
@@ -6948,10 +6955,15 @@ async function openManualGpsModal() {
   const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
   const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
 
-  // Players whose primary team differs from the one being viewed are "guests" (second team /
-  // other category). If they have no GPS in the session they only clutter the list → hide them.
-  const isGuest = p => !!(teamId && p.team_id && String(p.team_id) !== String(teamId));
-  const visibleRoster = () => roster.filter(p => !(isGuest(p) && statusOf(p.id)==='missing'));
+  // Alternate players (isGuest, defined above) belong primarily to another team. Default view
+  // ('squad') hides the ones with no GPS this session — they'd only be noise. Switch the filter
+  // to 'all' to also list dataless alternates. Either way, alternates carry a team badge so you
+  // can tell them apart from the core squad.
+  let teamFilter = 'squad';
+  const visibleRoster = () => roster.filter(p => {
+    if (!isGuest(p)) return true;                       // own squad → always
+    return teamFilter === 'all' || statusOf(p.id) !== 'missing';
+  });
   const _sortedVisible = () => {
     const order = { missing:0, est:1, real:2 };
     return visibleRoster().map(p=>({p, st:statusOf(p.id)}))
@@ -6970,13 +6982,15 @@ async function openManualGpsModal() {
     const listEl = body.querySelector('#mgpPlayerList'), sel = body.querySelector('#mgpPlayer');
     const term = (body.querySelector('#mgpPlayerSearch')?.value||'').trim().toLowerCase();
     const rows = _sortedVisible().filter(({p})=> !term ||
-      `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''}`.toLowerCase().includes(term));
+      `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''} ${isGuest(p)?guestTeam(p):''}`.toLowerCase().includes(term));
     if (!rows.length) { listEl.innerHTML = `<div class="mgp-list-empty">${tt('gps_analysis.manual_no_players','No players match.')}</div>`; return; }
     listEl.innerHTML = rows.map(({p,st})=>`<button type="button" class="mgp-opt${p.id===sel.value?' is-sel':''}" data-pid="${_esc(p.id)}" role="option">`
       + `<span class="mgp-dot st-${st}"></span>`
       + `<span class="mgp-opt-num">${p.number?('#'+_esc(p.number)):''}</span>`
       + (p.position?`<span class="mgp-opt-pos">${_esc(p.position)}</span>`:'')
-      + `<span class="mgp-opt-name">${_esc((p.last_name||'')+' '+(p.first_name||''))}</span></button>`).join('');
+      + `<span class="mgp-opt-name">${_esc((p.last_name||'')+' '+(p.first_name||''))}</span>`
+      + (isGuest(p)?`<span class="mgp-opt-team" title="${_esc(guestTeam(p))}"><i class="ti ti-arrows-exchange"></i>${_esc(guestTeam(p))}</span>`:'')
+      + `</button>`).join('');
     listEl.querySelectorAll('.mgp-opt').forEach(el=>el.addEventListener('click',()=>{
       sel.value = el.dataset.pid; sel.dispatchEvent(new Event('change')); renderPlayerList();
     }));
@@ -7023,6 +7037,11 @@ async function openManualGpsModal() {
 
   body.querySelector('#mgpSession').addEventListener('change', loadSession);
   body.querySelector('#mgpPlayerSearch').addEventListener('input', renderPlayerList);
+  body.querySelectorAll('#mgpTeamFilter button').forEach(b=>b.addEventListener('click',()=>{
+    teamFilter = b.dataset.f;
+    body.querySelectorAll('#mgpTeamFilter button').forEach(x=>x.classList.toggle('is-on',x===b));
+    renderStatus(); renderPlayers();
+  }));
   body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos') renderFields(); });
   body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
   body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
