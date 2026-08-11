@@ -61,17 +61,17 @@
     try {
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
-      let _sessQ = window.sb.from('training_sessions')
-        .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
-        .eq('club_id', clubId).neq('session_type', 'rehab');
+      // No filtramos sesiones por team_id (las importadas por GPS suelen tenerlo null);
+      // el scope de equipo lo dan el roster (_scopeTeam sobre gps_reports) y los
+      // microciclos, que sí están acotados por team_id al equipo activo.
       let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
         .eq('club_id', clubId);
-      if (window._gpTeamId) {                                    // acotar al equipo activo
-        _sessQ = _sessQ.eq('team_id', window._gpTeamId);
-        _mcQ   = _mcQ.eq('team_id', window._gpTeamId);
-      }
+      if (window._gpTeamId) _mcQ = _mcQ.eq('team_id', window._gpTeamId);   // solo microciclos del equipo activo
       const [{ data: sessions }, { data: players }, { data: microcycles }] = await Promise.all([
-        _sessQ.order('session_date', { ascending: true }),
+        window.sb.from('training_sessions')
+          .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
+          .eq('club_id', clubId).neq('session_type', 'rehab')
+          .order('session_date', { ascending: true }),
         _gpRoster(clubId, window._gpTeamId),
         _mcQ.order('start_date', { ascending: true }),
       ]);

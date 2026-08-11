@@ -6582,13 +6582,14 @@ async function renderWeeklyBars(state) {
   const _mcForDate = (d) => candidates.find(mc => d >= mc.start_date && d <= mc.end_date)?.id || null;
 
   // Fetch every session in the covering date window, then assign each to its MC.
-  let _wbSessQ = window.sb.from('training_sessions')
+  // No filtramos sesiones por team_id: las importadas por GPS suelen tenerlo null.
+  // El scope de equipo lo da el player_id (roster) al leer gps_reports más abajo,
+  // y los candidateMcIds ya están acotados al equipo activo (window._pwMcList).
+  const { data: allSess } = await window.sb.from('training_sessions')
     .select('id,session_date,microcycle_id')
     .eq('club_id', clubId)
     .gte('session_date', winStart)
     .lte('session_date', winEnd);
-  if (window._gpTeamId) _wbSessQ = _wbSessQ.eq('team_id', window._gpTeamId);   // solo sesiones del equipo activo
-  const { data: allSess } = await _wbSessQ;
 
   const sessionsByMc = {};
   (allSess || []).forEach(s => {
