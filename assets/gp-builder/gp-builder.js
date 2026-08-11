@@ -5438,12 +5438,14 @@
     const name = (cat?.name || '').toLowerCase();
     const id   = (cat?.id || cat?.key || '').toLowerCase();
     const grp  = (cat?.group_name || '').toLowerCase();
-    let mode = 'plain', dir = 'high', dec = 0;
+    // Default = los decimales configurados de la métrica (catálogo). Antes se hardcodeaba 0, así que
+    // métricas como max_speed (km/h, 2 dec) se mostraban enteras aunque su config dijera lo contrario.
+    let mode = 'plain', dir = 'high', dec = Number.isFinite(cat?.decimals) ? cat.decimals : 0;
     if (COUNT_METRICS.has(id)) { mode = 'bar'; dec = 0; }                                                  // counts → integer
     else if (/acwr|ratio/.test(name) || /acwr|ratio/.test(id)) { mode = 'icon'; dir = 'band'; dec = 2; }  // load ratio band
     else if (unit === '%' || /readiness|wellness|availab/.test(name)) { mode = 'pct'; dec = 0; }          // % / readiness
-    else if (grp === 'distance' || unit === 'm' || unit === 'km') { mode = 'bar'; }                       // distance / volume
-    else if (grp === 'count' || unit === 'n' || /count|sprint/.test(name)) { mode = 'bar'; }              // counts
+    else if (grp === 'distance' || unit === 'm' || unit === 'km') { mode = 'bar'; dec = 0; }              // distance / volume → metros enteros
+    else if (grp === 'count' || unit === 'n' || /count|sprint/.test(name)) { mode = 'bar'; dec = 0; }     // counts → integer
     return { mode, dir, dec, barColor: null, heatScale: 'gyr', iconStyle: 'dot', thr: null };
   }
 
@@ -5539,8 +5541,13 @@
     return series.map((s, i) => {
       const mid  = config.metrics?.[i]?.id;
       const cat  = catalogMap.get(mid) || {};
-      const f    = config.metrics?.[i]?.format || _defaultFormat(cat);
+      // Clon (no mutar el format persistido): el heal de decimales es sólo de display.
+      const f    = { ...(config.metrics?.[i]?.format || _defaultFormat(cat)) };
       if (COUNT_METRICS.has(mid) || config.metrics?.[i]?.agg === 'count') f.dec = 0;   // counts are integers, even on older saved cards
+      // Heal de cards viejas: al guardar, la tabla horneaba _defaultFormat que ANTES ignoraba los
+      // decimales del catálogo (dec 0). Una columna 'plain' con dec 0 cuya métrica tiene decimales
+      // configurados es esa firma stale → usar los decimales del catálogo (ej. max_speed → 2 dec).
+      else if (f.mode === 'plain' && (f.dec ?? 0) === 0 && Number.isFinite(cat.decimals) && cat.decimals > 0) f.dec = cat.decimals;
       const vals = s.points.map(p => p.y).filter(v => isFinite(v));
       const min  = vals.length ? Math.min(...vals) : 0;
       const max  = vals.length ? Math.max(...vals) : 1;
