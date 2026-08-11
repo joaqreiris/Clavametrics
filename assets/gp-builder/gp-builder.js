@@ -3809,8 +3809,19 @@
       // preview contexts (indefinite height) keep the fixed bucket height as before.
       if (body.closest && body.closest('.gp-grid.is-canvas')) {
         body.style.position = 'relative';
-        wrap.style.cssText = 'position:absolute;inset:0';
+        // Horizontal bars grow ~26px per category (d.height). When that overflows the card slot,
+        // scroll INSIDE the card so every bar keeps a readable name label instead of being crushed
+        // into the fixed slot. Otherwise keep the absolute-fill (chart tracks the card height).
+        const slotH = body.clientHeight || 0;
+        if (d.horizontal && d.height > slotH + 8) {
+          body.style.overflowY = 'auto';
+          wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+        } else {
+          body.style.overflowY = '';
+          wrap.style.cssText = 'position:absolute;inset:0';
+        }
       } else {
+        body.style.overflowY = '';
         wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
       }
       const canvas = document.createElement('canvas');   // no global id — unique per card body
