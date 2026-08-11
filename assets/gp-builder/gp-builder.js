@@ -3831,11 +3831,12 @@
       const catScale = {
         display: d.showAxes, stacked: d.stacked,
         grid: { display: false, drawTicks: false },
-        // Con muchas barras (sin anidar) dejamos que Chart.js ROTE los labels hasta ~52° en
-        // vez de esconderlos: minRotation 0 los mantiene horizontales cuando entran pocos, y
-        // sólo rota cuando el ancho no alcanza. Anidado se queda en 0 (el corchete del piso
-        // superior asume ticks rectos y ya reserva su propio alto).
-        ticks: { font: { size: 10.5 }, color: '#6B7280', minRotation: 0, maxRotation: _nested ? 0 : 52, autoSkip: true, autoSkipPadding: 4 },
+        // Dejamos que Chart.js ROTE los labels hasta ~52° en vez de recortarlos con «…»:
+        // minRotation 0 los mantiene horizontales cuando entran pocos, y rota sólo cuando el
+        // ancho no alcanza. Anidado (microciclo × jugador) TAMBIÉN rota: con muchos jugadores
+        // los nombres horizontales se truncaban («KINHE…»); rotados se leen completos y el
+        // corchete del piso superior sigue cayendo debajo (getPixelForValue no depende del giro).
+        ticks: { font: { size: 10.5 }, color: '#6B7280', minRotation: 0, maxRotation: 52, autoSkip: true, autoSkipPadding: 4 },
         border: { display: d.showAxes },
         // Referencia común (p. ej. la fecha compartida por todas las barras): una sola vez,
         // bajo los ticks, en lugar de repetirla en cada label. Sólo cuando NO está anidado.
