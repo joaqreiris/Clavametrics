@@ -419,6 +419,10 @@
   /* Single-value gauge = KPI-style compact tile — SAME footprint as the KPI (2×3 / 180px). */
   .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-gauge-single) { max-height:none; align-self:start; }
   .gp-grid.is-canvas .gp-c:has(> .gp-c-b.gp-gauge-single) { --gp-w:2 !important; --gp-h:3 !important; max-width:180px; }
+  /* Reserva el footprint angosto DESDE EL MOUNT (antes de que llegue el dato) para KPI/gauge-single,
+     así el skeleton "Loading…" ya nace chico en vez de nacer span-6 y saltar a chico al renderizar
+     (la explosión de tamaños en la carga). Mismos valores que las reglas :has() de arriba. */
+  .gp-grid.is-canvas .gp-c.gp-c-kpi-slot { --gp-w:2 !important; --gp-h:3 !important; max-width:180px; }
   .gp-c:has(> .gp-c-b.gp-gauge-single) .gp-rh { display:none !important; pointer-events:none !important; }
   .gp-c-b.gp-gauge-single { justify-content:flex-start; align-items:center; text-align:center; padding:6px 8px; }
   /* Single gauge fills the card width (bigger arc, no wasted side margin). */
@@ -2129,9 +2133,9 @@ async function applyLayoutToView(viewKey) {
 // Default visible: card-outliers (científica) + card-gen-session-table (genérica builder).
 // On first load (no saved layout): stash the rest + save defaults.
 // On subsequent loads: stash any card absent from saved layout.
-const _GRP_DEFAULTS = new Set([
-  'card-outliers', 'card-gen-session-table',
-]);
+// Dashboards vacíos por defecto: en el primer load NO se muestra ninguna card;
+// el dueño agrega las que quiera. (Antes venían con algunas cards por defecto.)
+const _GRP_DEFAULTS = new Set([]);
 
 async function applyGrpDefaultLayout() {
   const grid = document.querySelector('.gp-view[data-view="grp"] .gp-grid');
@@ -2178,7 +2182,7 @@ async function applyGrpDefaultLayout() {
 // ── Mc view: apply default visibility + restore stash state ──────
 // Default visible: card-mc-table (genérica builder) + card-mc-monotony (científica).
 // On first load (no saved layout): stash the rest + save defaults.
-const _MC_DEFAULTS = new Set(['card-mc-table', 'card-mc-monotony']);
+const _MC_DEFAULTS = new Set([]);   // dashboard vacío por defecto
 
 async function applyMcDefaultLayout() {
   const grid = document.querySelector('.gp-view[data-view="mc"] .gp-grid');
@@ -2218,9 +2222,10 @@ async function applyMcDefaultLayout() {
 // ── Generic default-visibility (ind / mgrp) ─────────────────────
 // Same first-load minimization as grp/mc, parametrized by a defaults Set.
 // On first load: stash every catalog card whose id is not in defaultsSet.
-const _IND_DEFAULTS  = new Set(['card-acwr', 'card-gen-week-kpi']);
-const _MGRP_DEFAULTS = new Set(['card-lm-gauges']);
-const _MIND_DEFAULTS = new Set(['card-mp-td', 'card-mp-hi']);
+// Dashboards vacíos por defecto (ver nota en _GRP_DEFAULTS).
+const _IND_DEFAULTS  = new Set([]);
+const _MGRP_DEFAULTS = new Set([]);
+const _MIND_DEFAULTS = new Set([]);
 
 async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
@@ -4566,6 +4571,13 @@ async function _mountSavedBuilderCards(clubId) {
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
     } catch (e) { /* no layout → cards flow to defaults, still functional */ }
 
+    // ¿La card se va a renderizar como tile angosto (KPI o gauge de valor único)? Se detecta
+    // desde el config para reservar el ancho chico ya en el skeleton (evita la explosión al cargar).
+    // Coincide con las reglas :has(.gp-kpi) / :has(.gp-gauge-single): KPI siempre; gauge sólo cuando
+    // es single (squad + 1 métrica → gp-gauge-single).
+    const _isKpiSlot = (cfg) => cfg?.viz === 'kpi'
+      || (cfg?.viz === 'gauge' && cfg?.scope?.level === 'squad' && (cfg?.metrics?.length ?? 1) <= 1);
+
     for (const card of builderCards) {
       const config = card.config;
       if (!config || config.schema !== 'gp.card/v1') continue;
@@ -4576,12 +4588,14 @@ async function _mountSavedBuilderCards(clubId) {
       // (size:full → width 12) and the user's saved w/x/y/h never loads (the "reverts to 12" bug).
       const _existing = grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`);
       if (_existing) {
+        if (_isKpiSlot(config)) _existing.classList.add('gp-c-kpi-slot');
         const _coEx = _coordsById?.get(String(card.id));
         if (_coEx && window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(_existing, _coEx);
         continue;
       }
 
       const el = window.gpBuildBuilderCardEl(config, card.id);
+      if (_isKpiSlot(config)) el.classList.add('gp-c-kpi-slot');
       el.dataset.size = card.size || config.style?.size || 'md';
       el.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', b.textContent.trim() === ({ sm:'S', md:'M', lg:'L', full:'FULL' }[el.dataset.size] || 'M')));
