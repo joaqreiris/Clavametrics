@@ -1126,6 +1126,7 @@
           <div class="ctx" id="calHeadCtx"><strong>Microcycle 14</strong> · MD-2 · 32 microcycles planned · season ends <strong>Jun 28</strong></div>
         </div>
         <div class="meta">
+          <button class="cm-btn is-outline is-sm" id="calDaySheetBtn" data-i18n-attr="title:calendar.daysheet.btn_title" title="Build the day plan to send players"><i class="ti ti-clipboard-text" style="font-size:14px"></i><span data-i18n="calendar.daysheet.btn">Day sheet</span></button>
           <button class="cm-btn is-outline is-sm" id="calHeadExportBtn" data-i18n-attr="title:calendar.export_pdf_title" title="Print / Export PDF (current view)"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="calendar.export_pdf">Export PDF</span></button>
           <button class="cm-btn is-outline is-sm" id="calNewMcBtn"><i class="ti ti-calendar-plus" style="font-size:14px"></i><span data-i18n="calendar.new_microcycle">New microcycle</span></button>
           <button class="cm-btn is-outline is-sm" id="calImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i><span data-i18n="calendar.import_fixtures">Import fixtures</span></button>
@@ -1393,6 +1394,67 @@
 
 <!-- Dedicated print sheet (Microcycle Week Plan / Monthly Training Plan) -->
 <div id="calPrintSheet" aria-hidden="true"></div>
+
+<!-- ============ Day Sheet (send tomorrow's plan to players) ============ -->
+<style>
+  .ds-backdrop{position:fixed;inset:0;background:rgba(8,10,12,.55);backdrop-filter:blur(4px);z-index:220;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease;padding:24px}
+  .ds-backdrop.is-open{opacity:1;pointer-events:auto}
+  .ds-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 60px rgba(0,0,0,.28);width:1080px;max-width:100%;max-height:calc(100vh - 48px);display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease;overflow:hidden}
+  .ds-backdrop.is-open .ds-modal{transform:translateY(0)}
+  .ds-head{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--cm-border);flex:none}
+  .ds-head h2{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0;display:flex;align-items:center;gap:9px}
+  .ds-head h2 .ti{color:var(--cm-accent);font-size:19px}
+  .ds-head .sp{flex:1}
+  .ds-close{width:30px;height:30px;border-radius:7px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .ds-close:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .ds-body{display:grid;grid-template-columns:340px 1fr;min-height:0;flex:1}
+  @media (max-width:860px){ .ds-body{grid-template-columns:1fr;overflow-y:auto} }
+
+  /* editor pane */
+  .ds-editor{border-right:1px solid var(--cm-border);overflow-y:auto;background:var(--cm-bg-soft)}
+  .ds-grp{padding:14px 16px;border-bottom:1px solid var(--cm-border)}
+  .ds-grp h3{margin:0 0 10px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.13em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .ds-fld{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+  .ds-fld:last-child{margin-bottom:0}
+  .ds-fld label{font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .ds-in{width:100%;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg);font:400 13px var(--cm-font-sans);padding:8px 10px;border-radius:var(--cm-r-3)}
+  .ds-in:focus{outline:none;border-color:var(--cm-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--cm-accent) 18%,transparent)}
+  .ds-row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .ds-hint{font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin:-2px 0 9px}
+  .ds-swatches{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .ds-sw{width:26px;height:26px;border-radius:7px;border:2px solid var(--cm-border);cursor:pointer;padding:0}
+  .ds-sw.on{border-color:var(--cm-fg);box-shadow:0 0 0 2px var(--cm-bg-soft),0 0 0 4px var(--cm-accent)}
+  .ds-color{width:34px;height:26px;padding:0;border:1px solid var(--cm-border);border-radius:7px;background:none;cursor:pointer}
+  .ds-item{display:flex;gap:8px;align-items:flex-start;padding:9px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);margin-bottom:8px}
+  .ds-item .fields{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .ds-item .del{border:0;background:none;color:var(--cm-fg-faint);cursor:pointer;padding:4px;border-radius:6px;line-height:0}
+  .ds-item .del:hover{color:var(--cm-danger);background:var(--cm-danger-bg)}
+  .ds-mini{border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg);font:400 12.5px var(--cm-font-sans);padding:6px 8px;border-radius:6px;width:100%}
+  .ds-mini:focus{outline:none;border-color:var(--cm-accent)}
+  .ds-timerow{display:grid;grid-template-columns:78px 1fr;gap:6px}
+  .ds-add{width:100%;border:1px dashed var(--cm-border);background:none;color:var(--cm-fg-muted);font:500 12px var(--cm-font-sans);padding:9px;border-radius:var(--cm-r-3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+  .ds-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+
+  /* stage / sheet */
+  .ds-stage{overflow:auto;background:var(--cm-bg);padding:22px;display:flex;justify-content:center;align-items:flex-start}
+  #dsSheet{flex:none}
+</style>
+
+<div class="ds-backdrop" id="dsBackdrop" aria-hidden="true">
+  <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="dsHeadTitle">
+    <div class="ds-head">
+      <h2 id="dsHeadTitle"><i class="ti ti-clipboard-text"></i><span data-i18n="calendar.daysheet.title">Day sheet</span></h2>
+      <div class="sp"></div>
+      <button class="cm-btn is-outline is-sm" id="dsExportPng"><i class="ti ti-photo" style="font-size:14px"></i><span data-i18n="calendar.daysheet.png">PNG</span></button>
+      <button class="cm-btn is-primary is-sm" id="dsExportPdf"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="calendar.daysheet.pdf">PDF</span></button>
+      <button class="ds-close" id="dsClose" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ds-body">
+      <aside class="ds-editor" id="dsEditor"></aside>
+      <div class="ds-stage"><div id="dsSheet"></div></div>
+    </div>
+  </div>
+</div>
 
 <!-- Tweaks + Settings -->
 <div id="tweaks-root"></div>
@@ -1990,6 +2052,7 @@ async function togglePublishGroup(group) {
 // Badge click handlers
 document.getElementById('calPubBadgePlayers').addEventListener('click', () => openShareModal());
 document.getElementById('calHeadExportBtn')?.addEventListener('click', () => exportPDF());
+document.getElementById('calDaySheetBtn')?.addEventListener('click', () => openDaySheet());
 document.getElementById('calPubBadgeMedical').addEventListener('click', () => togglePublishGroup('medical'));
 document.getElementById('calPubBadgeBoard').addEventListener('click', () => togglePublishGroup('board'));
 
@@ -5939,6 +6002,254 @@ async function exportPNG() {
   }
 
   if (prevView !== 'player') { setTimeout(() => { _calView = prevView; renderGrid(); }, 100); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Day Sheet — build tomorrow's plan to send players (PNG / PDF)
+// ═══════════════════════════════════════════════════════════════
+let _dsState = null, _dsBound = false;
+
+const DS_ICONS = {
+  departure:'<path d="M4 16V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10M4 16h13M4 16v2a1 1 0 0 0 1 1h1M17 16h3v-4l-3-3M17 16v3h-1M8 19h6"/><circle cx="7" cy="19" r="1.6"/><circle cx="16" cy="19" r="1.6"/>',
+  arrival:'<path d="M12 21s-6-5.7-6-10a6 6 0 1 1 12 0c0 4.3-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/>',
+  activation:'<path d="M4 12h3l2-5 3 10 2-6 2 3h4"/>',
+  training:'<path d="M6 4v5a6 6 0 0 0 12 0V4M9 4h6M12 15v3M9 21h6"/>',
+  gym:'<path d="M6 8v8M18 8v8M4 10v4M20 10v4M6 12h12"/>',
+  meal:'<path d="M5 3v8a2 2 0 0 0 4 0V3M7 11v10M19 3c-1.5 0-3 1.8-3 5s1.5 4 3 4v9"/>',
+  meeting:'<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5.2"/>',
+  video:'<rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/>',
+  travel:'<path d="M21 15.5 3 10.5V7l3 1 4-3 1 1-2.5 3 5 1.5L18 6l1.5.5-1 4 3 1v2l-3.5 1Z"/>',
+  kickoff:'<circle cx="12" cy="12" r="8"/><path d="m12 8 3 2-1 4h-4l-1-4 3-2Z"/>',
+  recovery:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15 5 17 3 17 3c1 4 .5 12-6 17M5 14c2 0 4 1 5 3"/>',
+  meds:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  custom:'<circle cx="12" cy="12" r="3"/>',
+};
+const DS_TYPES = ['departure','arrival','activation','training','gym','meal','meeting','video','travel','kickoff','recovery','meds','custom'];
+const DS_SWATCHES = ['#2F5FD0','#8AC4EA','#12833E','#C81E3A','#0E1C3F','#E8820C','#111827','#7A2AA8'];
+
+function dsTypeLabel(t){ return tt('calendar.daysheet.type_'+t, ({departure:'Departure',arrival:'Arrival',activation:'Activation',training:'Training',gym:'Gym',meal:'Meal',meeting:'Meeting',video:'Video',travel:'Travel',kickoff:'Kick-off',recovery:'Recovery',meds:'Medical',custom:'Other'})[t] || t); }
+function dsAddDays(ymd, n){ const d = new Date(ymd+'T12:00:00'); d.setDate(d.getDate()+n); return cmYMD(d); }
+function dsReadableOn(hex){ const h=hex.replace('#',''); const f=i=>parseInt(h.slice(i,i+2),16)/255; const lin=c=>c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4); const L=.2126*lin(f(0))+.7152*lin(f(2))+.0722*lin(f(4)); return L>.55?'#14171C':'#ffffff'; }
+function dsInitials(name){ const w=(name||'').trim().split(/\s+/); return (((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||(name||'?').slice(0,2)).toUpperCase(); }
+function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const m=c.map(v=>Math.round(v*amt+255*(1-amt))); return '#'+m.map(v=>v.toString(16).padStart(2,'0')).join(''); }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',breakfast:'meal',lunch:'meal',dinner:'meal'})[st] || 'custom'; }
+function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
+
+async function dsInlineImg(url){
+  if (!url || url.startsWith('data:')) return url;
+  try {
+    const r = await fetch(url, { mode:'cors' }); const b = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(url); fr.readAsDataURL(b); });
+  } catch(_) { return url; }
+}
+
+function dsMcForDate(dateStr){ return (_allMCs||[]).find(m => m.start_date && m.end_date && m.start_date <= dateStr && dateStr <= m.end_date) || null; }
+function dsSyncDate(){
+  const ds = _dsState.date;
+  try { _dsState.dateLine = new Date(ds+'T12:00:00').toLocaleDateString(ttLocale(), { weekday:'long', day:'numeric', month:'long' }).replace(/^\w/, c => c.toUpperCase()); } catch(_){ _dsState.dateLine = ds; }
+  _dsState.tag = calMdForDate(ds, dsMcForDate(ds)) || '';
+}
+
+async function dsPrefillFromEvents(){
+  let data = [];
+  try { const r = await fetchAllEvents(_dsState.date, _dsState.date); data = (r && r.data) || []; } catch(_){}
+  const evs = data.filter(e => e.session_type !== 'day_off');
+  const timed = evs.filter(e => e.start_time).sort((a,b) => (a.start_time||'').localeCompare(b.start_time||''));
+  _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), label:dsEvLabel(e), sub:e.notes || e.location || '' }));
+  // Untimed events (e.g. a pre-departure smoothie) become editable info items
+  evs.filter(e => !e.start_time).forEach(e => _dsState.info.push({ k:calMetaLabel(e.session_type), v:dsEvLabel(e) + (e.notes?(' — '+e.notes):''), wide:true }));
+}
+
+async function openDaySheet(){
+  const club = window._calClub || {};
+  let accent = (club.primary_color || '').trim();
+  accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#2F5FD0';
+  const teamName = (_myTeams||[]).find(t => t.id === _activeTeamId)?.name || '';
+  const clubName = teamName || club.name || tt('calendar.print_club_fallback','Club');
+  _dsState = {
+    date: dsAddDays(TODAY, 1), club: clubName, accent, logo: null,
+    title: tt('calendar.daysheet.default_title','Tomorrow schedule'), tag:'', dateLine:'',
+    info: [
+      { k: tt('calendar.daysheet.info_venue','Training venue'), v:'', wide:true },
+      { k: tt('calendar.daysheet.info_kit','Kit colour'), v:'', kit:accent },
+    ],
+    tl: [],
+  };
+  dsSyncDate();
+  document.getElementById('dsBackdrop').classList.add('is-open');
+  dsBindOnce();
+  dsRenderEditor(); dsRenderSheet();
+  _dsState.logo = await dsInlineImg(club.logo_url || null);
+  await dsPrefillFromEvents();
+  dsRenderEditor(); dsRenderSheet();
+}
+function closeDaySheet(){ document.getElementById('dsBackdrop').classList.remove('is-open'); }
+
+function dsRenderSheet(){
+  const s = _dsState; if (!s) return;
+  const FONT = "'Geist',ui-sans-serif,system-ui,sans-serif", MONO = "'Geist Mono',ui-monospace,monospace";
+  const esc = calEsc, ink='#161A20', sub='#6A727E', line='#ECEDEA', paper='#FFFFFF';
+  const onAcc = dsReadableOn(s.accent);
+  const crest = s.logo
+    ? `<div style="width:48px;height:48px;border-radius:11px;overflow:hidden;flex:none"><img src="${esc(s.logo)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
+    : `<div style="width:48px;height:48px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.16);color:${onAcc};font:800 18px ${FONT}">${esc(dsInitials(s.club))}</div>`;
+  const info = (s.info||[]).map(i => `<div style="background:${paper};padding:11px 13px;${i.wide?'grid-column:1/-1;':''}">
+      <div style="font:700 9px/1 ${MONO};letter-spacing:.12em;text-transform:uppercase;color:${sub}">${esc(i.k)}</div>
+      <div style="margin-top:5px;font:600 13.5px/1.3 ${FONT};color:${ink};display:flex;align-items:center;gap:7px">${i.kit?`<span style="width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.15);flex:none;background:${esc(i.kit)}"></span>`:''}${esc(i.v)||'<span style="color:#C4C8CD">—</span>'}</div>
+    </div>`).join('');
+  const tl = (s.tl||[]).map(r => `<div style="display:grid;grid-template-columns:52px 34px 1fr;align-items:center;gap:9px;padding:7px 0;position:relative">
+      <div style="font:700 13px ${MONO};color:${ink};text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.02em">${esc(r.t)}</div>
+      <div style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${dsTint(s.accent,.12)};color:${s.accent};z-index:1;box-shadow:0 0 0 4px ${paper}"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">${DS_ICONS[r.type]||DS_ICONS.custom}</svg></div>
+      <div><b style="display:block;font:650 14px/1.25 ${FONT};color:${ink}">${esc(r.label)}</b>${r.sub?`<span style="display:block;margin-top:1px;font:400 11.5px/1.3 ${FONT};color:${sub}">${esc(r.sub)}</span>`:''}</div>
+    </div>`).join('');
+  document.getElementById('dsSheet').innerHTML = `
+  <div style="width:680px;background:${paper};border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(20,23,29,.10);font-family:${FONT}">
+    <div style="background:${s.accent};color:${onAcc};padding:22px 26px 20px">
+      <div style="display:flex;align-items:center;gap:13px">
+        ${crest}
+        <div style="flex:1;min-width:0"><b style="display:block;font:700 15.5px/1.1 ${FONT};letter-spacing:-.01em">${esc(s.club)}</b><span style="display:block;margin-top:3px;font:600 10px/1 ${MONO};letter-spacing:.14em;text-transform:uppercase;opacity:.72">${esc(tt('calendar.daysheet.daily_plan','Daily plan'))}</span></div>
+        ${s.tag?`<div style="font:700 9.5px/1 ${MONO};letter-spacing:.1em;text-transform:uppercase;background:rgba(255,255,255,.18);padding:5px 9px;border-radius:999px;white-space:nowrap">${esc(s.tag)}</div>`:''}
+      </div>
+      <h1 style="margin:16px 0 0;font:800 27px/1.05 ${FONT};letter-spacing:-.02em">${esc(s.title)}</h1>
+      ${s.dateLine?`<div style="margin-top:5px;font:600 12px ${MONO};opacity:.82">${esc(s.dateLine)}</div>`:''}
+    </div>
+    <div style="padding:20px 26px 8px">
+      ${info?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${line};border:1px solid ${line};border-radius:11px;overflow:hidden;margin-bottom:22px">${info}</div>`:''}
+      <div style="font:700 10px/1 ${MONO};letter-spacing:.14em;text-transform:uppercase;color:${sub};margin:0 0 12px;display:flex;align-items:center;gap:9px">${esc(tt('calendar.daysheet.schedule','Schedule'))}<span style="flex:1;height:1px;background:${line}"></span></div>
+      <div style="position:relative;margin-left:6px">${tl?`<div style="position:absolute;left:43px;top:8px;bottom:8px;width:2px;background:${line}"></div>`:''}${tl || `<div style="color:#C4C8CD;font:400 12.5px ${FONT};padding:8px 0">${esc(tt('calendar.daysheet.no_events','No timed events for this day yet.'))}</div>`}</div>
+    </div>
+    <div style="margin-top:14px;padding:14px 26px;border-top:1px solid ${line};display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div style="font:600 10.5px ${MONO};color:${sub}">${esc(s.club)}</div>
+      <div style="font:600 10px/1 ${MONO};letter-spacing:.1em;text-transform:uppercase;color:${sub};opacity:.8">ClavaMetrics</div>
+    </div>
+  </div>`;
+}
+
+function dsRenderEditor(){
+  const s = _dsState; if (!s) return; const esc = calEsc;
+  const swatches = DS_SWATCHES.map(c => `<button class="ds-sw${s.accent.toLowerCase()===c.toLowerCase()?' on':''}" style="background:${c}" data-sw="${c}" title="${c}"></button>`).join('');
+  const infoRows = (s.info||[]).map((i,ix) => `
+    <div class="ds-item" data-scope="info" data-i="${ix}">
+      <div class="fields">
+        <input class="ds-mini" data-scope="info" data-i="${ix}" data-f="k" placeholder="${esc(tt('calendar.daysheet.ph_label','Label'))}" value="${esc(i.k)}">
+        <input class="ds-mini" data-scope="info" data-i="${ix}" data-f="v" placeholder="${esc(tt('calendar.daysheet.ph_value','Value'))}" value="${esc(i.v)}">
+        <label style="display:flex;align-items:center;gap:7px;font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">
+          <input type="checkbox" data-scope="info" data-i="${ix}" data-f="kiton" ${i.kit?'checked':''}> ${esc(tt('calendar.daysheet.colour_swatch','colour swatch'))}
+          <input type="color" data-scope="info" data-i="${ix}" data-f="kit" value="${esc(i.kit||s.accent)}" style="width:28px;height:20px;padding:0;border:1px solid var(--cm-border);border-radius:5px;${i.kit?'':'visibility:hidden'}">
+        </label>
+      </div>
+      <button class="del" data-del="info" data-i="${ix}" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-trash"></i></button>
+    </div>`).join('');
+  const typeOpts = t => DS_TYPES.map(v => `<option value="${v}" ${t===v?'selected':''}>${esc(dsTypeLabel(v))}</option>`).join('');
+  const tlRows = (s.tl||[]).map((r,ix) => `
+    <div class="ds-item" data-scope="tl" data-i="${ix}">
+      <div class="fields">
+        <div class="ds-timerow">
+          <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="t" placeholder="08:30" value="${esc(r.t)}">
+          <select class="ds-mini" data-scope="tl" data-i="${ix}" data-f="type">${typeOpts(r.type)}</select>
+        </div>
+        <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="label" placeholder="${esc(tt('calendar.daysheet.ph_moment','What happens'))}" value="${esc(r.label)}">
+        <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="sub" placeholder="${esc(tt('calendar.daysheet.ph_detail','Detail (optional)'))}" value="${esc(r.sub)}">
+      </div>
+      <button class="del" data-del="tl" data-i="${ix}" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-trash"></i></button>
+    </div>`).join('');
+  document.getElementById('dsEditor').innerHTML = `
+    <div class="ds-grp">
+      <h3>${esc(tt('calendar.daysheet.grp_header','Header'))}</h3>
+      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.date','Day'))}</label><input class="ds-in" type="date" data-k="date" value="${esc(s.date)}"></div>
+      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.club','Club / team'))}</label><input class="ds-in" data-k="club" value="${esc(s.club)}"></div>
+      <div class="ds-row2">
+        <div class="ds-fld"><label>${esc(tt('calendar.daysheet.title_lbl','Title'))}</label><input class="ds-in" data-k="title" value="${esc(s.title)}"></div>
+        <div class="ds-fld"><label>${esc(tt('calendar.daysheet.tag','Tag'))}</label><input class="ds-in" data-k="tag" value="${esc(s.tag)}"></div>
+      </div>
+      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.date_line','Date line'))}</label><input class="ds-in" data-k="dateLine" value="${esc(s.dateLine)}"></div>
+      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.logo','Logo'))}</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="dsLogoFile" accept="image/*" style="font-size:11.5px;color:var(--cm-fg-muted);min-width:0">
+          <button class="cm-btn is-ghost is-sm" id="dsLogoClear" type="button">${esc(tt('calendar.daysheet.clear','Clear'))}</button>
+        </div>
+      </div>
+    </div>
+    <div class="ds-grp">
+      <h3>${esc(tt('calendar.daysheet.grp_colour','Club colour'))}</h3>
+      <div class="ds-swatches">${swatches}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:11px"><input type="color" class="ds-color" data-k="accent" value="${/^#[0-9a-fA-F]{6}$/.test(s.accent)?esc(s.accent):'#2F5FD0'}"><label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(tt('calendar.daysheet.custom_accent','Custom accent'))}</label></div>
+    </div>
+    <div class="ds-grp">
+      <h3>${esc(tt('calendar.daysheet.grp_info','Info items'))}</h3>
+      <div class="ds-hint">${esc(tt('calendar.daysheet.info_hint','Fixed facts with no time — venue, kit colour, what to bring, pre-departure notes.'))}</div>
+      ${infoRows}
+      <button class="ds-add" data-add="info" type="button"><i class="ti ti-plus"></i> ${esc(tt('calendar.daysheet.add_info','Add info item'))}</button>
+    </div>
+    <div class="ds-grp">
+      <h3>${esc(tt('calendar.daysheet.grp_timeline','Timeline'))}</h3>
+      <div class="ds-hint">${esc(tt('calendar.daysheet.tl_hint','Timed moments — pulled from the calendar (bus departure, meals, kick-off…).'))}</div>
+      ${tlRows}
+      <button class="ds-add" data-add="tl" type="button"><i class="ti ti-plus"></i> ${esc(tt('calendar.daysheet.add_tl','Add timeline row'))}</button>
+    </div>`;
+}
+
+function dsBindOnce(){
+  if (_dsBound) return; _dsBound = true;
+  const ed = document.getElementById('dsEditor');
+  ed.addEventListener('input', e => {
+    const t = e.target; if (t.type === 'checkbox' || t.tagName === 'SELECT' || t.type === 'file' || t.type === 'date') return;
+    if (t.dataset.k){ if (t.dataset.k === 'accent'){ _dsState.accent = t.value; dsRenderEditor(); dsRenderSheet(); return; } _dsState[t.dataset.k] = t.value; dsRenderSheet(); return; }
+    if (t.dataset.scope){ _dsState[t.dataset.scope][+t.dataset.i][t.dataset.f] = t.value; dsRenderSheet(); }
+  });
+  ed.addEventListener('change', async e => {
+    const t = e.target;
+    if (t.id === 'dsLogoFile'){ const f = t.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { _dsState.logo = fr.result; dsRenderSheet(); }; fr.readAsDataURL(f); return; }
+    if (t.dataset.k === 'date'){ _dsState.date = t.value; dsSyncDate(); dsRenderEditor(); dsRenderSheet(); await dsPrefillFromEvents(); dsRenderEditor(); dsRenderSheet(); return; }
+    if (t.dataset.scope && t.dataset.f === 'kiton'){ const it = _dsState[t.dataset.scope][+t.dataset.i]; it.kit = t.checked ? (it.kit || _dsState.accent) : null; dsRenderEditor(); dsRenderSheet(); return; }
+    if (t.dataset.scope && (t.dataset.f === 'type' || t.dataset.f === 'kit')){ _dsState[t.dataset.scope][+t.dataset.i][t.dataset.f] = t.value; dsRenderSheet(); }
+  });
+  ed.addEventListener('click', e => {
+    const sw = e.target.closest('[data-sw]'); if (sw){ _dsState.accent = sw.dataset.sw; dsRenderEditor(); dsRenderSheet(); return; }
+    const del = e.target.closest('[data-del]'); if (del){ _dsState[del.dataset.del].splice(+del.dataset.i,1); dsRenderEditor(); dsRenderSheet(); return; }
+    const add = e.target.closest('[data-add]'); if (add){ if (add.dataset.add === 'info') _dsState.info.push({ k:tt('calendar.daysheet.new_item','New item'), v:'', wide:true }); else _dsState.tl.push({ t:'', type:'custom', label:tt('calendar.daysheet.new_moment','New moment'), sub:'' }); dsRenderEditor(); dsRenderSheet(); return; }
+    if (e.target.closest('#dsLogoClear')){ _dsState.logo = null; dsRenderSheet(); }
+  });
+  document.getElementById('dsClose')?.addEventListener('click', closeDaySheet);
+  document.getElementById('dsBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeDaySheet(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('dsBackdrop')?.classList.contains('is-open')) closeDaySheet(); });
+  document.getElementById('dsExportPng')?.addEventListener('click', () => dsExport('png'));
+  document.getElementById('dsExportPdf')?.addEventListener('click', () => dsExport('pdf'));
+}
+
+async function dsLoadScript(src, glob){ if (window[glob]) return; await new Promise((res,rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); }); }
+async function dsExport(kind){
+  try {
+    if (!window.html2canvas) await dsLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','html2canvas').catch(()=>{});
+    if (kind === 'pdf' && !window.jspdf) await dsLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','jspdf').catch(()=>{});
+    if (!window.html2canvas){ showCalToast(tt('calendar.export_lib_failed','Could not load image export library.')); return; }
+    const node = document.getElementById('dsSheet').firstElementChild;
+    const canvas = await window.html2canvas(node, { backgroundColor:'#ffffff', scale:2, useCORS:true });
+    const fname = `daysheet-${_dsState.date}`;
+    if (kind === 'png'){
+      const a = document.createElement('a'); a.download = fname+'.png'; a.href = canvas.toDataURL('image/png'); a.click();
+      showCalToast(tt('calendar.image_exported','Image exported.')); return;
+    }
+    const { jsPDF } = window.jspdf || {};
+    if (!jsPDF){ showCalToast(tt('calendar.export_lib_failed','Could not load image export library.')); return; }
+    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
+    const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW, fullH = canvas.height * imgW / canvas.width;
+    if (fullH <= pageH){ pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,imgW,fullH); }
+    else {
+      const sliceH = Math.floor(canvas.width * pageH / pageW); let pos = 0;
+      while (pos < canvas.height){
+        const h = Math.min(sliceH, canvas.height - pos);
+        const c = document.createElement('canvas'); c.width = canvas.width; c.height = h;
+        c.getContext('2d').drawImage(canvas, 0, pos, canvas.width, h, 0, 0, canvas.width, h);
+        if (pos > 0) pdf.addPage();
+        pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,imgW, h * imgW / canvas.width);
+        pos += h;
+      }
+    }
+    pdf.save(fname+'.pdf');
+    showCalToast(tt('calendar.daysheet.pdf_saved','PDF saved.'));
+  } catch(e){ showCalToast(tt('calendar.export_failed','Export failed: {msg}',{msg:e.message})); }
 }
 
 // Wire share modal

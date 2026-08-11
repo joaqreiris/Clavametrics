@@ -1076,7 +1076,35 @@ function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || undefi
 function showHubToast(msg) {
   const t = document.getElementById('hubToast');
   t.textContent = msg; t.classList.add('is-show');
+  t.style.pointerEvents = ''; t.style.display = '';
   setTimeout(() => t.classList.remove('is-show'), 2800);
+}
+// Toast with an inline "Undo" action. onUndo runs if the user clicks Undo
+// within the window; onExpire runs otherwise (once the toast auto-hides).
+let _hubUndoTimer = null;
+function showHubUndoToast(msg, undoLabel, onUndo, onExpire) {
+  const t = document.getElementById('hubToast');
+  if (_hubUndoTimer) { clearTimeout(_hubUndoTimer); _hubUndoTimer = null; }
+  t.innerHTML = '';
+  t.append(document.createTextNode(msg + '  '));
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = undoLabel;
+  btn.style.cssText = 'background:none;border:0;color:var(--cm-accent,#7aa2ff);font:600 13px/1 var(--cm-font-sans);cursor:pointer;padding:0;margin-left:2px;text-decoration:underline;';
+  t.appendChild(btn);
+  t.classList.add('is-show');
+  t.style.pointerEvents = 'auto';
+  let done = false;
+  const finish = (undo) => {
+    if (done) return; done = true;
+    if (_hubUndoTimer) { clearTimeout(_hubUndoTimer); _hubUndoTimer = null; }
+    t.classList.remove('is-show');
+    t.style.pointerEvents = '';
+    if (undo) onUndo && onUndo(); else onExpire && onExpire();
+    setTimeout(() => { t.textContent = ''; }, 220);
+  };
+  btn.addEventListener('click', () => finish(true));
+  _hubUndoTimer = setTimeout(() => finish(false), 5000);
 }
 // Notice when the page-access guard redirected the user here (access denied).
 document.addEventListener('DOMContentLoaded', () => {
@@ -1795,7 +1823,6 @@ function renderTasks(tasks, view = 'my') {
         el.classList.add('is-done');
         check.setAttribute('aria-checked', 'true');
         await window.sb.from('tasks').update({ status: 'done' }).eq('id', task.id);
-        _hubNotifyCompleted(task, window._hubUserId, window._hubProfileName, window._hubClubId, window._hubTeamId);
         // Drop it from the cached lists so switching tabs doesn't bring it back.
         if (Array.isArray(window._hubMyTasks))   window._hubMyTasks   = window._hubMyTasks.filter(t => t.id !== task.id);
         if (Array.isArray(window._hubTeamTasks)) window._hubTeamTasks = window._hubTeamTasks.filter(t => t.id !== task.id);
@@ -1815,6 +1842,25 @@ function renderTasks(tasks, view = 'my') {
             container.appendChild(empty);
           }
         }, 250);
+        // Offer a brief Undo. Notifying assignees is deferred until the window
+        // expires so an undone completion never sends a "completed" ping.
+        showHubUndoToast(
+          tt('hub.task_completed','Task completed'),
+          tt('common.undo','Undo'),
+          async () => {   // Undo: revert to pending and restore it in the list.
+            await window.sb.from('tasks').update({ status: 'pending' }).eq('id', task.id);
+            if (Array.isArray(window._hubMyTasks) && !window._hubMyTasks.some(t => t.id === task.id)) {
+              window._hubMyTasks.push(task);
+              window._hubMyTasks.sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+            }
+            window._hubTeamTasks = null;   // force a fresh team-tab fetch
+            const _v = window._hubTaskView || 'my';
+            if (_v === 'my') renderTasks(window._hubMyTasks, 'my');
+          },
+          () => {   // Expired: the completion stands, notify assignees now.
+            _hubNotifyCompleted(task, window._hubUserId, window._hubProfileName, window._hubClubId, window._hubTeamId);
+          }
+        );
       }
       check.addEventListener('click', () => toggle());
       check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
