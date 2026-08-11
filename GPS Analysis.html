@@ -6569,7 +6569,22 @@ async function renderWeeklyBars(state) {
   // them), so we bucket sessions into microcycles by date range [start_date,
   // end_date] and only fall back to the FK when it is already set (Daily Planning).
   const mcList     = window._pwMcList || [];
-  const candidates = mcList.slice(0, 10).filter(mc => mc.start_date && mc.end_date);
+  // Scope a la temporada activa: nunca comparar contra microciclos de temporadas
+  // pasadas. Con el pill de temporada activo usamos su [from,to] (y season_id si el
+  // microciclo lo tiene); sin temporada activa se cae a "los 10 más recientes".
+  const _fbDate = (window.gpFilterBar?.getState?.() || {}).date || {};
+  const _seasonActive = !!(_fbDate.seasonId || _fbDate.preset === 'season' || _fbDate.preset === 'currentSeason');
+  const _sId = _fbDate.seasonId || null;
+  const _sFrom = _seasonActive ? (_fbDate.from || null) : null;
+  const _sTo   = _seasonActive ? (_fbDate.to   || null) : null;
+  const _inSeason = (mc) => {
+    if (!_seasonActive) return true;
+    if (_sId && mc.season_id) return mc.season_id === _sId;      // etiquetado explícito
+    return (!_sFrom || mc.start_date >= _sFrom) && (!_sTo || mc.start_date <= _sTo);  // por ventana de fechas
+  };
+  const candidates = mcList
+    .filter(mc => mc.start_date && mc.end_date && _inSeason(mc))
+    .slice(0, 10);
 
   if (!candidates.length) {
     container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No microcycles available.</div>';

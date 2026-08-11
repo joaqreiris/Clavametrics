@@ -64,7 +64,7 @@
       // No filtramos sesiones por team_id (las importadas por GPS suelen tenerlo null);
       // el scope de equipo lo dan el roster (_scopeTeam sobre gps_reports) y los
       // microciclos, que sí están acotados por team_id al equipo activo.
-      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
+      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,season_id')
         .eq('club_id', clubId);
       if (window._gpTeamId) _mcQ = _mcQ.eq('team_id', window._gpTeamId);   // solo microciclos del equipo activo
       const [{ data: sessions }, { data: players }, { data: microcycles }] = await Promise.all([
@@ -99,13 +99,26 @@
     // them), so bucket each session into the microcycle whose [start_date, end_date]
     // contains its session_date. Sessions that already have the FK (Daily Planning)
     // keep it, so linked behaviour is untouched.
+    // Scope a la temporada activa (nunca mezclar con temporadas pasadas).
+    const _fbDate = (window.gpFilterBar?.getState?.() || {}).date || {};
+    const _seasonActive = !!(_fbDate.seasonId || _fbDate.preset === 'season' || _fbDate.preset === 'currentSeason');
+    const _sId = _fbDate.seasonId || null, _sFrom = _seasonActive ? (_fbDate.from || null) : null, _sTo = _seasonActive ? (_fbDate.to || null) : null;
+    const _inSeason = (m) => {
+      if (!_seasonActive) return true;
+      if (_sId && m.season_id) return m.season_id === _sId;
+      return (!_sFrom || m.start_date >= _sFrom) && (!_sTo || m.start_date <= _sTo);
+    };
     const micros = Object.values(_mcMicros)
-      .filter(m => m.start_date && m.end_date)
+      .filter(m => m.start_date && m.end_date && _inSeason(m))
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const _seasonMcIds = new Set(micros.map(m => m.id));
     const _mcForDate = (d) => micros.find(m => d >= m.start_date && d <= m.end_date)?.id || null;
     const mcs = {};
     for (const s of _mcSessions) {
-      const mcId = s.microcycle_id || _mcForDate(s.session_date);
+      // Respetar el FK solo si el microciclo cae en la temporada activa; si no, por fecha.
+      const mcId = (s.microcycle_id && _seasonMcIds.has(s.microcycle_id))
+        ? s.microcycle_id
+        : _mcForDate(s.session_date);
       if (!mcId) continue;
       if (!mcs[mcId]) mcs[mcId] = { id: mcId, sessions: [], mdMap: {} };
       mcs[mcId].sessions.push(s);
