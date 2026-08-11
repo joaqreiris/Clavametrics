@@ -629,11 +629,20 @@
   .mgp-dot.st-real { background:var(--cm-success,#16A34A); }
   .mgp-dot.st-est  { background:var(--cm-warning,#D97706); }
   .mgp-dot.st-missing { background:var(--cm-danger,#DC2626); }
-  .mgp-opt-num { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); min-width:24px; }
+  .mgp-opt-num { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); min-width:24px; flex-shrink:0; white-space:nowrap; }
   .mgp-opt-pos { font:600 9.5px/1 var(--cm-font-mono); letter-spacing:.04em; color:var(--cm-fg-muted); background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:4px; padding:3px 5px; flex-shrink:0; }
   .mgp-opt-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mgp-list-empty { padding:16px; text-align:center; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .mgp-teamf { margin-bottom:8px; }
+  /* Custom session dropdown (replaces the OS-rendered <select>). */
+  .mgp-ses-btn { display:flex; align-items:center; gap:8px; width:100%; min-height:40px; padding:8px 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; cursor:pointer; text-align:left; }
+  .mgp-ses-btn:hover, .mgp-ses-btn[aria-expanded="true"] { border-color:var(--cm-accent,#15803D); }
+  .mgp-ses-cur { display:flex; align-items:center; gap:8px; flex:1; overflow:hidden; }
+  .mgp-ses-cur-title { flex:1; font:500 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mgp-ses-chev { color:var(--cm-fg-muted); font-size:16px; flex-shrink:0; transition:transform .15s; }
+  .mgp-ses-btn[aria-expanded="true"] .mgp-ses-chev { transform:rotate(180deg); }
+  .mgp-ses-list { margin-top:6px; max-height:280px; }
+  .mgp-ses-count { flex-shrink:0; margin-left:auto; font:700 10px/1 var(--cm-font-mono); color:var(--cm-success,#16A34A); background:color-mix(in srgb, var(--cm-success,#16A34A) 12%, transparent); border:1px solid color-mix(in srgb, var(--cm-success,#16A34A) 30%, transparent); border-radius:5px; padding:3px 6px; }
   /* Badge on an alternate player: he trains here but belongs to another team. */
   .mgp-opt-team { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; margin-left:auto; font:600 9.5px/1 var(--cm-font-sans); color:var(--cm-accent,#2563EB); background:color-mix(in srgb, var(--cm-accent,#2563EB) 12%, transparent); border:1px solid color-mix(in srgb, var(--cm-accent,#2563EB) 30%, transparent); border-radius:5px; padding:3px 6px; max-width:110px; overflow:hidden; }
   .mgp-opt-team i { font-size:12px; }
@@ -6915,10 +6924,10 @@ async function openManualGpsModal() {
     `<div id="mgpBody"><div class="mgp-empty">${tt('common.loading','Loading…')}</div></div>`);
   const body = ov.querySelector('#mgpBody');
 
-  let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title')
-    .eq('club_id', clubId).order('session_date',{ascending:false}).limit(120);
-  // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
-  // so today's just-synced session is pickable. RLS still limits what the user can see.
+  let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title,team_id')
+    .eq('club_id', clubId).order('session_date',{ascending:false}).limit(200);
+  // DB pre-filter: this team's sessions + untagged ones (Catapult imports land team_id NULL).
+  // Sessions tagged to ANOTHER team never come back. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
   const [sessRes, rosterRes, dataRes, primRes] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
@@ -6928,7 +6937,7 @@ async function openManualGpsModal() {
     teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
            : Promise.resolve({ data: [] }),
   ]);
-  const sessions = sessRes.data || [];
+  const _rawSessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
   // Main squad = primary members of this team. If the set is empty (primaries never configured in
   // Squad) we can't tell alternates apart, so we flag nobody rather than wrongly hide the squad.
@@ -6936,15 +6945,31 @@ async function openManualGpsModal() {
   const isGuest = p => !!(teamId && primaryIds.size && !primaryIds.has(p.id));
   const guestLabel = tt('gps_analysis.manual_alt_badge','Alternate');
   const hasGuests = roster.some(isGuest);
-  // How many players already have data per session → mark it in the list so the user picks the
+  // How many players already have data per session → shown as a badge so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
   const _dataCount = {};
   (dataRes.data || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
-  if (!sessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions found for this team.')}</div>`; return; }
+  // Client filter: keep THIS team's sessions + untagged imports that actually hold GPS. Untagged
+  // empties (other teams' planning noise) are dropped. A 'This team / All' toggle reveals the rest.
+  let sessScope = 'team';
+  const _teamSessions = teamId
+    ? _rawSessions.filter(s => String(s.team_id)===String(teamId) || (s.team_id==null && _dataCount[s.id]))
+    : _rawSessions;
+  const hasHiddenSess = teamId && _teamSessions.length < _rawSessions.length;
+  const curSessions = () => (sessScope==='all' || !teamId) ? _rawSessions : _teamSessions;
+  if (!_rawSessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions found for this team.')}</div>`; return; }
 
   body.innerHTML = `
     <label class="mgp-lbl">${tt('gps_analysis.manual_session','Session')}</label>
-    <select id="mgpSession" class="mgp-in">${sessions.map(s=>{ const n=_dataCount[s.id]||0; return `<option value="${_esc(s.id)}">${n?'✓ ':''}${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}${n?` (${n})`:''}</option>`; }).join('')}</select>
+    ${hasHiddenSess ? `<div class="mgp-seg mgp-teamf" id="mgpSessScope">
+      <button type="button" data-s="team" class="is-on">${tt('gps_analysis.manual_filter_squad','This team')}</button>
+      <button type="button" data-s="all">${tt('gps_analysis.manual_sess_all','All')}</button>
+    </div>` : ''}
+    <div class="mgp-pick">
+      <button type="button" class="mgp-ses-btn" id="mgpSesBtn" aria-expanded="false"><span class="mgp-ses-cur" id="mgpSesCur"></span><i class="ti ti-chevron-down mgp-ses-chev"></i></button>
+      <div class="mgp-list mgp-ses-list" id="mgpSesList" role="listbox" hidden></div>
+    </div>
+    <input type="hidden" id="mgpSession">
     <div id="mgpStatus" class="mgp-status"></div>
     <label class="mgp-lbl">${tt('gps_analysis.manual_player','Player')}</label>
     ${hasGuests ? `<div class="mgp-seg mgp-teamf" id="mgpTeamFilter">
@@ -6975,6 +7000,36 @@ async function openManualGpsModal() {
   const selPos = () => posByPlayer[selPid()] || '';
   const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
   const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
+
+  // ── Session picker (custom dropdown replacing the OS-rendered <select>) ──────
+  function _sesRowHTML(s, selId) {
+    return `<button type="button" class="mgp-opt${s.id===selId?' is-sel':''}" data-sid="${_esc(s.id)}" role="option">`
+      + `<span class="mgp-opt-num">${_esc(s.session_date)}</span>`
+      + (s.session_type?`<span class="mgp-opt-pos">${_esc(s.session_type)}</span>`:'')
+      + `<span class="mgp-opt-name">${_esc(s.title||'')}</span>`
+      + (_dataCount[s.id]?`<span class="mgp-ses-count" title="${tt('gps_analysis.manual_st_real','with data')}">${_dataCount[s.id]}</span>`:'')
+      + `</button>`;
+  }
+  function renderSesBtn() {
+    const s = curSessions().find(x => x.id === body.querySelector('#mgpSession').value);
+    body.querySelector('#mgpSesCur').innerHTML = s
+      ? `<span class="mgp-opt-num">${_esc(s.session_date)}</span>${s.session_type?`<span class="mgp-opt-pos">${_esc(s.session_type)}</span>`:''}<span class="mgp-ses-cur-title">${_esc(s.title||'')}</span>${_dataCount[s.id]?`<span class="mgp-ses-count">${_dataCount[s.id]}</span>`:''}`
+      : `<span class="mgp-ses-cur-title" style="color:var(--cm-fg-muted)">${tt('gps_analysis.manual_pick_session','Select a session…')}</span>`;
+  }
+  function renderSesList() {
+    const selId = body.querySelector('#mgpSession').value;
+    body.querySelector('#mgpSesList').innerHTML = curSessions().map(s => _sesRowHTML(s, selId)).join('');
+    body.querySelectorAll('#mgpSesList .mgp-opt').forEach(el => el.addEventListener('click', () => { setSession(el.dataset.sid); closeSesList(); }));
+  }
+  function openSesList()  { const l=body.querySelector('#mgpSesList'); renderSesList(); l.hidden=false; body.querySelector('#mgpSesBtn').setAttribute('aria-expanded','true'); }
+  function closeSesList() { body.querySelector('#mgpSesList').hidden=true; body.querySelector('#mgpSesBtn').setAttribute('aria-expanded','false'); }
+  function setSession(sid) {
+    const list = curSessions();
+    if (!list.some(s => s.id === sid)) sid = list[0]?.id || '';
+    body.querySelector('#mgpSession').value = sid;
+    renderSesBtn();
+    loadSession();
+  }
 
   // Alternate players (isGuest, defined above) belong primarily to another team. Default view
   // ('squad') hides the ones with no GPS this session — they'd only be noise. Switch the filter
@@ -7056,7 +7111,21 @@ async function openManualGpsModal() {
     renderStatus(); renderPlayers(); renderFields();
   }
 
-  body.querySelector('#mgpSession').addEventListener('change', loadSession);
+  body.querySelector('#mgpSesBtn').addEventListener('click', () => {
+    body.querySelector('#mgpSesList').hidden ? openSesList() : closeSesList();
+  });
+  body.querySelectorAll('#mgpSessScope button').forEach(b => b.addEventListener('click', () => {
+    sessScope = b.dataset.s;
+    body.querySelectorAll('#mgpSessScope button').forEach(x => x.classList.toggle('is-on', x===b));
+    setSession(body.querySelector('#mgpSession').value);   // keep selection if still visible, else first
+    if (!body.querySelector('#mgpSesList').hidden) renderSesList();
+  }));
+  // Close the session list when clicking outside it.
+  document.addEventListener('mousedown', e => {
+    if (!body.isConnected) return;
+    const pick = body.querySelector('#mgpSesBtn')?.parentElement;
+    if (pick && !pick.contains(e.target)) closeSesList();
+  });
   body.querySelector('#mgpPlayerSearch').addEventListener('input', renderPlayerList);
   body.querySelectorAll('#mgpTeamFilter button').forEach(b=>b.addEventListener('click',()=>{
     teamFilter = b.dataset.f;
@@ -7090,9 +7159,8 @@ async function openManualGpsModal() {
   });
 
   // Default to the most recent session that actually has GPS data (skip empty duplicates).
-  const _firstWithData = sessions.find(s => _dataCount[s.id]);
-  if (_firstWithData) body.querySelector('#mgpSession').value = _firstWithData.id;
-  loadSession();
+  const _default = curSessions().find(s => _dataCount[s.id]) || curSessions()[0];
+  setSession(_default?.id);
 }
 document.getElementById('gpManualBtn')?.addEventListener('click', openManualGpsModal);
 
