@@ -6061,6 +6061,29 @@ const DS_SWATCHES = ['#2F5FD0','#8AC4EA','#12833E','#C81E3A','#0E1C3F','#E8820C'
 
 function dsTypeLabel(t){ return tt('calendar.daysheet.type_'+t, ({departure:'Departure',arrival:'Arrival',activation:'Activation',training:'Training',gym:'Gym',meal:'Meal',meeting:'Meeting',video:'Video',travel:'Travel',kickoff:'Kick-off',recovery:'Recovery',meds:'Medical',custom:'Other'})[t] || t); }
 function dsAddDays(ymd, n){ const d = new Date(ymd+'T12:00:00'); d.setDate(d.getDate()+n); return cmYMD(d); }
+// Default day-sheet date: keep showing TODAY until today's planned training has finished,
+// then roll to tomorrow. End = start_time + duration; if no duration, start + 3h. A day with
+// no scheduled training (e.g. match day / day off) rolls to tomorrow as before.
+async function dsDefaultDate(){
+  try {
+    const r = await fetchAllEvents(TODAY, TODAY);
+    const trainings = ((r && r.data) || []).filter(e =>
+      e.source === 'session' && e.start_time && !['match','day_off'].includes(e.session_type));
+    if (trainings.length){
+      const now = new Date();
+      let latestEnd = null;
+      trainings.forEach(e => {
+        const [hh, mm] = String(e.start_time).slice(0,5).split(':').map(Number);
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh||0, mm||0, 0, 0);
+        const dur = Number(e.duration) > 0 ? Number(e.duration) : 180;
+        const end = new Date(start.getTime() + dur*60000);
+        if (!latestEnd || end > latestEnd) latestEnd = end;
+      });
+      if (latestEnd && now < latestEnd) return TODAY;
+    }
+  } catch(_){}
+  return dsAddDays(TODAY, 1);
+}
 function dsReadableOn(hex){ const h=hex.replace('#',''); const f=i=>parseInt(h.slice(i,i+2),16)/255; const lin=c=>c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4); const L=.2126*lin(f(0))+.7152*lin(f(2))+.0722*lin(f(4)); return L>.55?'#14171C':'#ffffff'; }
 function dsInitials(name){ const w=(name||'').trim().split(/\s+/); return (((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||(name||'?').slice(0,2)).toUpperCase(); }
 function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const m=c.map(v=>Math.round(v*amt+255*(1-amt))); return '#'+m.map(v=>v.toString(16).padStart(2,'0')).join(''); }
@@ -6170,6 +6193,8 @@ async function openDaySheet(){
   document.getElementById('dsBackdrop').classList.add('is-open');
   dsBindOnce();
   dsRenderEditor(); dsRenderSheet();
+  _dsState.date = await dsDefaultDate();   // stay on today until today's training ends, then roll to tomorrow
+  dsSyncDate();
   _dsState.logo = await dsInlineImg(club.logo_url || null);
   dsApplyTmpl(await dsLoadTmplDB());  // authoritative (shared across staff/devices)
   await dsPrefillFromEvents();
