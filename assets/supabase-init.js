@@ -413,10 +413,12 @@
   // ── Plan gating (entitlement por plan del club) ──────────────────
   // Eje SEPARADO de getMyModules (que es permiso por staff). Un módulo se
   // ve si pasa AMBOS candados: canAccess (RBAC) Y planAllows (plan del club).
-  // INTERRUPTOR MAESTRO: mientras esté en false, planAllows() siempre da true
-  // (el mecanismo queda armado pero no esconde nada). Prender cuando Paddle
-  // esté vivo y los comps sembrados a clubes/testers.
-  window.CM_PLAN_GATING_ENABLED = false;
+  // INTERRUPTOR MAESTRO: en false, planAllows() siempre da true (armado pero no
+  // esconde nada). ENCENDIDO 2026-08-11 (Bloque B, Parte 1): Paddle vivo + comps
+  // sembrados (MOI/RC Celta full). El candado del navegador ya restringe por plan.
+  // OJO: sigue siendo client-only y fail-open; el enforcement server-side (RLS)
+  // es la Parte 2. El super admin overridea con grant_comp_subscription(_club).
+  window.CM_PLAN_GATING_ENABLED = true;
 
   // Equipo activo global (lo setea el selector del sidebar y las páginas).
   // Fuente única de verdad para el gating per-team (Opción B).
