@@ -6556,9 +6556,19 @@ async function renderWeeklyBars(state) {
   const legendEl  = document.getElementById('wkok-legend');
   if (!container) return;
   const clubId = window._gpClubId;
-  const pid    = state?.playerId;
+  // La filter bar es la fuente autoritativa de selección: si hay jugador elegido usamos
+  // ese; si está en "All players" (sin selección) → pid null → agregado de equipo.
+  // (No confiamos en state.playerId: el caller de Player Week Report lo fuerza a list[0].)
+  const _fbState = window.gpFilterBar?.getState?.();
+  const pid = _fbState ? ((_fbState.playerIds || []).find(Boolean) || null)
+                       : (state?.playerId || null);
+  // Sin jugador elegido ("All players") → agregado de equipo (promedio del plantel
+  // por microciclo). Con jugador elegido → solo ese jugador.
+  const rosterIds = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? window._gpPlayerIds : null;
+  const scopePlayers = pid ? [pid] : rosterIds;
+  const teamMode = !pid;
 
-  if (!clubId || !pid) {
+  if (!clubId || !scopePlayers) {
     container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player to view wk-on-wk load change.</div>';
     if (legendEl) legendEl.innerHTML = '';
     return;
@@ -6630,53 +6640,65 @@ async function renderWeeklyBars(state) {
     return;
   }
 
-  // Fetch metric values for the player
-  const loadBySid = {};
+  // Fetch metric values scoped to the player (or the whole roster in team mode),
+  // keyed by player → session so we can aggregate per microcycle either way.
+  const loadByPlayerSid = {};   // player_id → { session_id → sum }
+  const _add = (playerId, sid, v) => {
+    (loadByPlayerSid[playerId] = loadByPlayerSid[playerId] || {});
+    loadByPlayerSid[playerId][sid] = (loadByPlayerSid[playerId][sid] || 0) + v;
+  };
   if (_WB_CORE_COLS.has(metricKey)) {
     const rpts = await window.cmFetchAll(() => window.sb.from('gps_reports')
-      .select(`session_id,${metricKey}`)
+      .select(`session_id,player_id,${metricKey}`)
       .eq('is_invalid', false)
       .in('session_id', allSids)
       .eq('club_id', clubId)
-      .eq('player_id', pid), { label: 'weeklybars.core' }).catch(() => []);
-    (rpts || []).forEach(r => {
-      loadBySid[r.session_id] = (loadBySid[r.session_id] || 0) + (r[metricKey] || 0);
-    });
+      .in('player_id', scopePlayers), { label: 'weeklybars.core' }).catch(() => []);
+    (rpts || []).forEach(r => _add(r.player_id, r.session_id, r[metricKey] || 0));
   } else {
     const coreRows = await window.cmFetchAll(() => window.sb.from('gps_reports')
-      .select('id,session_id')
+      .select('id,session_id,player_id')
       .eq('is_invalid', false)
       .in('session_id', allSids)
       .eq('club_id', clubId)
-      .eq('player_id', pid), { label: 'weeklybars.eav-ids' }).catch(() => []);
-    const rptToSid = Object.fromEntries((coreRows || []).map(r => [r.id, r.session_id]));
-    const rptIds   = (coreRows || []).map(r => r.id);
+      .in('player_id', scopePlayers), { label: 'weeklybars.eav-ids' }).catch(() => []);
+    const rptMeta = Object.fromEntries((coreRows || []).map(r => [r.id, { sid: r.session_id, pid: r.player_id }]));
+    const rptIds  = (coreRows || []).map(r => r.id);
     if (rptIds.length) {
       const { data: eav } = await window.sb.from('gps_report_metrics')
         .select('report_id,value')
         .in('report_id', rptIds)
         .eq('metric_key', metricKey);
       (eav || []).forEach(r => {
-        const sid = rptToSid[r.report_id];
-        if (sid) loadBySid[sid] = (loadBySid[sid] || 0) + (+r.value || 0);
+        const m = rptMeta[r.report_id];
+        if (m) _add(m.pid, m.sid, +r.value || 0);
       });
     }
   }
 
-  // Compute total per MC; keep only MCs that have data for this player
-  // candidateMcIds is newest-first → preserve that order, then reverse for chronological display
+  // Compute total per MC. Per-jugador → total del jugador; equipo → promedio del
+  // plantel (media de los totales por jugador que tienen datos en ese microciclo).
+  const players = Object.keys(loadByPlayerSid);
   const mcTotals = candidateMcIds
     .map(mcId => {
-      const sids  = sessionsByMc[mcId] || [];
-      const total = sids.reduce((sum, sid) => sum + (loadBySid[sid] || 0), 0);
-      return { mcId, total, hasData: sids.some(sid => loadBySid[sid] > 0) };
+      const sids = sessionsByMc[mcId] || [];
+      const perPlayer = players
+        .map(p => sids.reduce((sum, sid) => sum + (loadByPlayerSid[p][sid] || 0), 0))
+        .filter(v => v > 0);
+      const total = teamMode
+        ? (perPlayer.length ? perPlayer.reduce((a, b) => a + b, 0) / perPlayer.length : 0)
+        : (perPlayer[0] || 0);
+      return { mcId, total, hasData: perPlayer.length > 0 };
     })
     .filter(d => d.hasData)
     .slice(0, 5)
     .reverse(); // chronological (oldest → newest)
 
   if (!mcTotals.length) {
-    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No GPS data for this player in recent microcycles.</div>';
+    const _msg = teamMode
+      ? 'No GPS data for the team in recent microcycles.'
+      : 'No GPS data for this player in recent microcycles.';
+    container.innerHTML = `<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">${_msg}</div>`;
     return;
   }
 
@@ -6714,7 +6736,7 @@ async function renderWeeklyBars(state) {
         <span style="font:700 12px/1 var(--cm-font-sans);color:${col}">${pctLbl}</span>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:80%">
-        <div style="background:${col};border-radius:3px 3px 0 0;height:${barH}px;transition:height .3s" title="${totalFmt}"></div>
+        <div style="background:${col};border-radius:3px 3px 0 0;height:${barH}px;transition:height .3s" title="${teamMode ? 'avg/player: ' : ''}${totalFmt}"></div>
       </div>
       <div style="height:20px;display:flex;align-items:center;justify-content:center">
         <span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">${p.mcName}</span>
