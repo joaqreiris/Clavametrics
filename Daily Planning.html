@@ -222,6 +222,12 @@
   .dp-ex-dur .ti{font-size:11px}
   .dp-ex-thumb-content{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:8px}
   .dp-ex-thumb-content svg{width:60%;height:60%;opacity:0.85}
+  /* Video preview badge (centred play button over the drill/gym thumbnail) */
+  .dp-ex-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3;width:40px;height:40px;border-radius:999px;border:1.5px solid rgba(255,255,255,0.7);background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:transform .12s ease,background .12s ease}
+  .dp-ex-play:hover{background:rgba(0,0,0,0.72);transform:translate(-50%,-50%) scale(1.08)}
+  .dp-ex-play .ti{font-size:18px;margin-left:2px}
+  .dp-vid-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000;border:1px solid var(--cm-border)}
+  .dp-vid-frame iframe,.dp-vid-frame video{position:absolute;inset:0;width:100%;height:100%;border:0}
   .dp-ex-b{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
   .dp-ex-name{font:600 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
   .dp-ex-meta{display:flex;gap:6px;flex-wrap:wrap;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
@@ -563,6 +569,18 @@
   </div>
 </div>
 
+<!-- Exercise Video Preview Modal -->
+<div id="dpVidBackdrop" class="no-print" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.62);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:24px" onclick="if(event.target===this)dpCloseVideo()">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:760px;max-width:96vw;box-shadow:0 24px 80px rgba(0,0,0,.35);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-player-play-filled" style="font-size:16px;color:var(--cm-accent)"></i>
+      <div id="dpVidTitle" style="font:600 14px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button onclick="dpCloseVideo()" title="Close" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="dpVidBody" style="padding:14px 16px;display:flex;align-items:center;justify-content:center;min-height:120px"></div>
+  </div>
+</div>
+
 <div id="dpPrintSheet" aria-hidden="true"></div>
 
 <div id="tweaks-root"></div>
@@ -593,7 +611,7 @@ async function dpResolvePreviews(ids) {
   if (!need.length) return;
   try {
     const { data: rows } = await window.sb.from('exercises')
-      .select('id, preview_path, preview_png, objective, description').eq('club_id', _dpClubId).in('id', need);
+      .select('id, preview_path, preview_png, objective, description, video_url').eq('club_id', _dpClubId).in('id', need);
     const paths = (rows||[]).filter(r => r.preview_path).map(r => r.preview_path);
     let signed = {};
     if (paths.length) {
@@ -602,7 +620,7 @@ async function dpResolvePreviews(ids) {
     }
     (rows||[]).forEach(r => {
       _dpPngCache[r.id] = r.preview_path ? (signed[r.preview_path] || null) : (r.preview_png || null);
-      _dpDescCache[r.id] = { objective: r.objective || '', description: r.description || '' };
+      _dpDescCache[r.id] = { objective: r.objective || '', description: r.description || '', video_url: r.video_url || '' };
     });
   } catch(_) {}
   need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; if (!(id in _dpDescCache)) _dpDescCache[id] = null; });  // remember misses, don't refetch
@@ -788,6 +806,58 @@ function dpExGroupsRow(e){
 }
 // Other tasks in this session that already have at least one non-empty group.
 function _dpAllTasks(){ return [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ]; }
+
+// ── Video preview (same providers the Exercise Library recognises) ───────────
+// Build an embeddable, muted-autoplay URL from a pasted link. Returns null for
+// unknown providers (the modal then shows an "Open video" link instead).
+function dpVideoEmbed(url){
+  const u = String(url || '').trim();
+  if (!u) return null;
+  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1&mute=1&rel=0&playsinline=1`;
+  m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (m) return `https://player.vimeo.com/video/${m[1]}?autoplay=1&muted=1`;
+  m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  if (/dropbox\.com/.test(u)) return u.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace(/[?&]dl=0/, '');
+  if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return u;   // direct file → <iframe> plays it
+  return null;
+}
+// Find a session_exercise (field / activation / goalkeeper) by its id.
+function dpFindTask(seid){
+  return [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]), ...((window._dpGkItems)||[]) ]
+    .find(x => String(x.id) === String(seid)) || null;
+}
+// Resolve a task's linked video → { url, embed, name } or null.
+function dpTaskVideo(e){
+  if (!e) return null;
+  if (e.planner_exercise_id){
+    const url = (_dpDescCache[e.planner_exercise_id] || {}).video_url || '';
+    return url ? { url, embed: dpVideoEmbed(url), name: e.name || '' } : null;
+  }
+  const gx = e.gym_exercises || null;
+  if (gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref)){
+    return { url: `https://www.youtube.com/watch?v=${gx.video_id}`,
+             embed: `https://www.youtube.com/embed/${gx.video_id}?autoplay=1&mute=1&rel=0&playsinline=1`,
+             name: gx.name || e.name || '' };
+  }
+  return null;
+}
+function dpOpenVideo(ev, seid){
+  if (ev){ ev.stopPropagation(); ev.preventDefault(); }
+  const v = dpTaskVideo(dpFindTask(seid));
+  if (!v) return;
+  document.getElementById('dpVidTitle').textContent = v.name || tt('daily_planning.exercise_video','Exercise video');
+  document.getElementById('dpVidBody').innerHTML = v.embed
+    ? `<div class="dp-vid-frame"><iframe src="${v.embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+    : `<a class="cm-btn is-outline is-sm" href="${_dpEsc(v.url)}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:14px"></i>${tt('daily_planning.open_video','Open video')}</a>`;
+  document.getElementById('dpVidBackdrop').style.display = 'flex';
+}
+function dpCloseVideo(){
+  document.getElementById('dpVidBody').innerHTML = '';   // unload iframe → stops playback
+  document.getElementById('dpVidBackdrop').style.display = 'none';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('dpVidBackdrop')?.style.display === 'flex') dpCloseVideo(); });
 function _dpTasksWithGroups(excludeSeid){
   return _dpAllTasks().filter(x => x.id !== excludeSeid && _dpExGroups(x).some(g => (g.players||[]).length));
 }
@@ -1419,11 +1489,14 @@ function dpExerciseCardHTML(e) {
       const fieldStr = (w && h) ? `${w}×${h}m` : null;
       const _resolved = (e.planner_exercise_id in _dpPngCache);     // preview lookup finished (may be null)
       const _loading  = !!e.planner_exercise_id && !_resolved && !e._previewPng;
+      const _vurl     = (_dpDescCache[e.planner_exercise_id] || {}).video_url || '';
+      const _playBadge = _vurl ? `<button type="button" class="dp-ex-play no-print" onclick="dpOpenVideo(event,'${e.id}')" title="${tt('daily_planning.preview_video','Preview video')}"><i class="ti ti-player-play-filled"></i></button>` : '';
       return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
         ${e._previewPng ? `<div class="dp-ex-thumb has-img">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
           <img class="dp-ex-img" src="${e._previewPng}" alt="">
+          ${_playBadge}
         </div>` : _loading ? `<div class="dp-ex-thumb is-loading">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
@@ -1434,6 +1507,7 @@ function dpExerciseCardHTML(e) {
           <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
             <i class="ti ti-soccer-field" style="font-size:28px;opacity:.35;color:#fff"></i>
           </div>
+          ${_playBadge}
         </div>`}
         <div class="dp-ex-b">
           <div class="dp-ex-name">${e.name || '—'}</div>
@@ -1502,12 +1576,13 @@ function dpExerciseCardHTML(e) {
       const img       = dpGymImg(e);
       const isVideo   = !!(gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref));
       const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
+      const _gymPlay = isVideo ? `<button type="button" class="dp-ex-play no-print" onclick="dpOpenVideo(event,'${e.id}')" title="${tt('daily_planning.preview_video','Preview video')}"><i class="ti ti-player-play-filled"></i></button>` : '';
       const thumb = img
         ? `<div class="dp-ex-thumb has-img">
             <span class="dp-ex-tag ${cls}">${lbl}</span>
             <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
             <img class="dp-ex-img" src="${img}" alt="">
-            ${isVideo ? `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:22px;text-shadow:0 1px 6px rgba(0,0,0,.6)"><i class="ti ti-player-play-filled"></i></span>` : ''}
+            ${_gymPlay}
           </div>`
         : `<div class="dp-ex-thumb">
             <span class="dp-ex-tag ${cls}">${lbl}</span>
@@ -1515,6 +1590,7 @@ function dpExerciseCardHTML(e) {
             <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
               <i class="ti ti-barbell" style="font-size:28px;opacity:.35;color:#fff"></i>
             </div>
+            ${_gymPlay}
           </div>`;
       // Strength cards dose by series × reps (with optional minutes); manual keeps the simple duration field.
       const editRow = isGym
