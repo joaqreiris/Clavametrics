@@ -3202,7 +3202,8 @@
     return { max: step * ticks, step };
   }
   // Alto reservado para el piso superior del eje jerárquico (línea + texto).
-  const _BAR_TIER_H = 26;
+  const _BAR_TIER_H = 26;   // piso inferior (barras verticales): alto de la tira de grupo
+  const _BAR_TIER_W = 26;   // tira izquierda (barras horizontales): ancho de la tira de grupo
   /** Trunca `txt` con «…» para que entre en maxW px con la fuente actual de ctx. */
   function _ellipsize(ctx, txt, maxW) {
     const s = String(txt == null ? '' : txt);
@@ -3244,8 +3245,10 @@
       if (!opts || !opts.show) return;                       // sólo 2 dims + vertical + ejes visibles
       const dims = opts.dims;
       if (!Array.isArray(dims) || dims.length < 2) return;
-      const sx = chart.scales && chart.scales.x;
-      if (!sx || !chart.chartArea) return;
+      const horizontal = !!opts.horizontal;
+      // Barras verticales → eje de categoría X (piso inferior); horizontales → eje Y (tira izquierda).
+      const sc = horizontal ? (chart.scales && chart.scales.y) : (chart.scales && chart.scales.x);
+      if (!sc || !chart.chartArea) return;
       const { ctx, chartArea } = chart;
       const n = dims.length;
       // Agrupar índices CONSECUTIVOS por el valor de nivel 1.
@@ -3256,31 +3259,57 @@
         if (last && last.label === g) last.end = i;
         else groups.push({ label: g, start: i, end: i });
       }
-      const px = i => sx.getPixelForValue(i);
-      const step = n > 1 ? Math.abs(px(1) - px(0)) : (chartArea.right - chartArea.left);
+      const px = i => sc.getPixelForValue(i);
+      const span = horizontal ? (chartArea.bottom - chartArea.top) : (chartArea.right - chartArea.left);
+      const step = n > 1 ? Math.abs(px(1) - px(0)) : span;
       const half = (step || 0) / 2;
-      const yLine = sx.bottom - _BAR_TIER_H + 9;
-      const yText = sx.bottom - 5;
       ctx.save();
       ctx.font = '600 10px Geist, Inter, sans-serif';
-      ctx.textBaseline = 'alphabetic';
-      for (const g of groups) {
-        const L = Math.max(chartArea.left,  px(g.start) - half + 2);
-        const R = Math.min(chartArea.right, px(g.end)   + half - 2);
-        if (!(R > L)) continue;
-        ctx.strokeStyle = 'rgba(148,163,184,0.55)'; ctx.lineWidth = 1;
-        ctx.beginPath();                                     // corchete: patita ┌ línea ┐ patita
-        ctx.moveTo(L, yLine + 4); ctx.lineTo(L, yLine); ctx.lineTo(R, yLine); ctx.lineTo(R, yLine + 4);
-        ctx.stroke();
-        // Región clickeable: el alto del piso superior, en píxeles CSS — el MISMO espacio que
-        // e.offsetX/offsetY de un PointerEvent, así que se comparan sin conversión. Vive DEBAJO
-        // del chartArea (alto reservado por afterFit) → nunca se solapa con las barras, o sea
-        // que un click en una barra no puede confundirse con uno en un corchete.
-        chart.$gpGroupHits.push({ x0: L, x1: R, y0: yLine - 2, y1: sx.bottom, label: g.label });
-        const maxW = R - L - 6;                              // labels largos → ellipsis, sin pisar al vecino
-        if (maxW < 12) continue;
-        ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
-        ctx.fillText(_ellipsize(ctx, g.label, maxW), (L + R) / 2, yText);
+      ctx.strokeStyle = 'rgba(148,163,184,0.55)';
+      ctx.fillStyle = '#6B7280';
+      ctx.lineWidth = 1;
+      if (!horizontal) {
+        // ── Piso INFERIOR (barras verticales): corchete horizontal + label centrado ──
+        const yLine = sc.bottom - _BAR_TIER_H + 9;
+        const yText = sc.bottom - 5;
+        ctx.textBaseline = 'alphabetic';
+        for (const g of groups) {
+          const L = Math.max(chartArea.left,  px(g.start) - half + 2);
+          const R = Math.min(chartArea.right, px(g.end)   + half - 2);
+          if (!(R > L)) continue;
+          ctx.beginPath();                                   // corchete ⎵ (abre hacia las barras)
+          ctx.moveTo(L, yLine + 4); ctx.lineTo(L, yLine); ctx.lineTo(R, yLine); ctx.lineTo(R, yLine + 4);
+          ctx.stroke();
+          // Región clickeable (zoom): vive DEBAJO del chartArea → nunca se solapa con las barras.
+          chart.$gpGroupHits.push({ x0: L, x1: R, y0: yLine - 2, y1: sc.bottom, label: g.label });
+          const maxW = R - L - 6;                            // labels largos → ellipsis, sin pisar al vecino
+          if (maxW < 12) continue;
+          ctx.textAlign = 'center';
+          ctx.fillText(_ellipsize(ctx, g.label, maxW), (L + R) / 2, yText);
+        }
+      } else {
+        // ── Tira IZQUIERDA (barras horizontales): corchete vertical + label rotado ──
+        // La tira vive en [sc.left, sc.left+_BAR_TIER_W]: afterFit reservó ese ancho a la
+        // IZQUIERDA de los nombres, así que no se pisan con los ticks de jugador.
+        const xLine = sc.left + _BAR_TIER_W - 5;             // corchete junto a los nombres
+        const xText = sc.left + 9;                           // label rotado, en el extremo izquierdo
+        for (const g of groups) {
+          const T = Math.max(chartArea.top,    px(g.start) - half + 2);
+          const B = Math.min(chartArea.bottom, px(g.end)   + half - 2);
+          if (!(B > T)) continue;
+          ctx.beginPath();                                   // corchete [ (abre hacia las barras)
+          ctx.moveTo(xLine + 4, T); ctx.lineTo(xLine, T); ctx.lineTo(xLine, B); ctx.lineTo(xLine + 4, B);
+          ctx.stroke();
+          chart.$gpGroupHits.push({ x0: sc.left, x1: sc.left + _BAR_TIER_W, y0: T - 2, y1: B + 2, label: g.label });
+          const maxH = B - T - 6;
+          if (maxH < 12) continue;
+          ctx.save();                                        // label vertical (lee de abajo hacia arriba)
+          ctx.translate(xText, (T + B) / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(_ellipsize(ctx, g.label, maxH), 0, 0);
+          ctx.restore();
+        }
       }
       ctx.restore();
     },
@@ -3838,7 +3867,7 @@
       };
       // Eje jerárquico: SÓLO con 2 niveles reales, vertical y ejes visibles. Horizontal queda
       // fuera de alcance → cae al comportamiento de siempre (label concatenado), sin romperse.
-      const _nested = d.nDims >= 2 && !d.horizontal && d.showAxes;
+      const _nested = d.nDims >= 2 && d.showAxes;   // jerárquico en AMBAS orientaciones
       const catScale = {
         display: d.showAxes, stacked: d.stacked,
         grid: { display: false, drawTicks: false },
@@ -3857,7 +3886,7 @@
         // hueco por debajo de ella → el piso superior se solaparía con la leyenda. Creciendo
         // la escala, la leyenda se corre sola y queda espacio limpio bajo los ticks. Además
         // no toca el cálculo de layout.padding → una card sin anidar queda idéntica.
-        ...(_nested ? { afterFit: sc => { sc.height += _BAR_TIER_H; } } : {}),
+        ...(_nested ? { afterFit: sc => { if (d.horizontal) sc.width += _BAR_TIER_W; else sc.height += _BAR_TIER_H; } } : {}),
       };
       const scales = {};
       scales[d.horizontal ? 'x' : 'y'] = valueScale;     // value axis follows orientation
@@ -3928,7 +3957,7 @@
             gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
             gpbMcDiff: { show: d.isMcGrouped, diffs: d.mcDiffs, horizontal: d.horizontal, upCol: d.mcUpCol, dnCol: d.mcDnCol, withValues: d.showLbl },
             gpbRefLines: { lines: d.referenceLines, horizontal: d.horizontal },
-            gpbBarGroupAxis: { show: _nested, dims: d.catDims },
+            gpbBarGroupAxis: { show: _nested, dims: d.catDims, horizontal: d.horizontal },
           },
           scales,
         },
