@@ -6902,19 +6902,31 @@ async function openManualGpsModal() {
   // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
   // so today's just-synced session is pickable. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
-  const [sessRes, rosterRes, dataRes, teamsList] = await Promise.all([
+  const [sessRes, rosterRes, dataRes, teamsList, ptRes] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
     window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
     Promise.resolve(window.getTeams?.(clubId)).catch(()=>[]),
+    window.sb.from('player_teams').select('player_id,team_id,is_primary').eq('club_id', clubId),
   ]);
   const sessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
   // Map primary-team id → name, so an "alternate" (a 2nd-team player who trains up with the
   // first team) can be tagged with the team he actually belongs to and told apart at a glance.
   const teamsById = {}; (teamsList || []).forEach(t => { teamsById[t.id] = t.name; });
-  // "Alternate/guest" = member of the viewed team whose PRIMARY team (players.team_id) is another one.
-  const isGuest = p => !!(teamId && p.team_id && String(p.team_id) !== String(teamId));
-  const guestTeam = p => teamsById[p.team_id] || tt('gps_analysis.manual_other_team','Other team');
+  // A player's home team = his player_teams row flagged is_primary. players.team_id is a legacy
+  // denormalized column that's mostly NULL here, so it can't be trusted — use the junction.
+  // Fallbacks: legacy team_id, then a lone membership. null = can't tell → treat as own squad.
+  const ptByPlayer = {}; (ptRes?.data || []).forEach(r => { (ptByPlayer[r.player_id] ||= []).push(r); });
+  const homeTeamOf = p => {
+    const rows = ptByPlayer[p.id] || [];
+    const prim = rows.find(r => r.is_primary);
+    if (prim) return prim.team_id;
+    if (p.team_id) return p.team_id;
+    return rows.length === 1 ? rows[0].team_id : null;
+  };
+  // "Alternate/guest" = member of the viewed team whose home team is a different one.
+  const isGuest = p => { const h = homeTeamOf(p); return !!(teamId && h && String(h) !== String(teamId)); };
+  const guestTeam = p => teamsById[homeTeamOf(p)] || tt('gps_analysis.manual_other_team','Other team');
   const hasGuests = roster.some(isGuest);
   // How many players already have data per session → mark it in the list so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
