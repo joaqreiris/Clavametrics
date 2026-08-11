@@ -256,6 +256,23 @@ create table if not exists public.chat_groups (
 );
 CREATE INDEX idx_chat_groups_club ON public.chat_groups USING btree (club_id);
 
+-- Day Sheet templates: one reusable "tomorrow's plan" template per club+team
+-- (title, colours, fixed info items, venue maps link, format, language).
+create table if not exists public.day_sheet_templates (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  data jsonb default '{}'::jsonb not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint day_sheet_templates_pkey primary key (id),
+  constraint day_sheet_templates_club_team_key unique (club_id, team_id)
+);
+CREATE INDEX idx_day_sheet_templates_club_team ON public.day_sheet_templates USING btree (club_id, team_id);
+alter table public.day_sheet_templates enable row level security;
+create policy "day_sheet_templates club members" on public.day_sheet_templates as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+
 create table if not exists public.chat_group_members (
   group_id uuid not null,
   profile_id uuid not null,
