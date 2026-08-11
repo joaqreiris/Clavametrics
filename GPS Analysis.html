@@ -6559,28 +6559,40 @@ async function renderWeeklyBars(state) {
   container.innerHTML = '<div style="padding:12px;color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">Loading…</div>';
   if (legendEl) legendEl.innerHTML = '';
 
-  // Candidate MC ids — up to 10 newest from global list (newest-first order)
-  const mcList        = window._pwMcList || [];
-  const candidateMcIds = mcList.slice(0, 10).map(mc => mc.id);
+  // Candidate MCs — up to 10 newest from global list (newest-first order).
+  // GPS-imported sessions carry no microcycle_id (the import wizard never links
+  // them), so we bucket sessions into microcycles by date range [start_date,
+  // end_date] and only fall back to the FK when it is already set (Daily Planning).
+  const mcList     = window._pwMcList || [];
+  const candidates = mcList.slice(0, 10).filter(mc => mc.start_date && mc.end_date);
 
-  if (!candidateMcIds.length) {
+  if (!candidates.length) {
     container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No microcycles available.</div>';
     return;
   }
 
-  // Fetch sessions for all candidates in one query
+  const candidateMcIds = candidates.map(mc => mc.id);
+  const winStart = candidates.reduce((m, mc) => mc.start_date < m ? mc.start_date : m, candidates[0].start_date);
+  const winEnd   = candidates.reduce((m, mc) => mc.end_date   > m ? mc.end_date   : m, candidates[0].end_date);
+  const _mcForDate = (d) => candidates.find(mc => d >= mc.start_date && d <= mc.end_date)?.id || null;
+
+  // Fetch every session in the covering date window, then assign each to its MC.
   const { data: allSess } = await window.sb.from('training_sessions')
-    .select('id,microcycle_id')
+    .select('id,session_date,microcycle_id')
     .eq('club_id', clubId)
-    .in('microcycle_id', candidateMcIds);
+    .gte('session_date', winStart)
+    .lte('session_date', winEnd);
 
   const sessionsByMc = {};
   (allSess || []).forEach(s => {
-    if (!sessionsByMc[s.microcycle_id]) sessionsByMc[s.microcycle_id] = [];
-    sessionsByMc[s.microcycle_id].push(s.id);
+    const mcId = (s.microcycle_id && candidateMcIds.includes(s.microcycle_id))
+      ? s.microcycle_id
+      : _mcForDate(s.session_date);
+    if (!mcId) return;
+    (sessionsByMc[mcId] = sessionsByMc[mcId] || []).push(s.id);
   });
 
-  const allSids = (allSess || []).map(s => s.id);
+  const allSids = Object.values(sessionsByMc).flat();
   if (!allSids.length) {
     container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No session data for these microcycles.</div>';
     return;
@@ -6882,12 +6894,20 @@ async function openManualGpsModal() {
   // Include team-tagged sessions AND untagged ones (Catapult imports arrive with team_id NULL),
   // so today's just-synced session is pickable. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
-  const [sessRes, rosterRes, dataRes] = await Promise.all([
+  const [sessRes, rosterRes, dataRes, teamsList] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
     window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
+    Promise.resolve(window.getTeams?.(clubId)).catch(()=>[]),
   ]);
   const sessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
+  // Map primary-team id → name, so an "alternate" (a 2nd-team player who trains up with the
+  // first team) can be tagged with the team he actually belongs to and told apart at a glance.
+  const teamsById = {}; (teamsList || []).forEach(t => { teamsById[t.id] = t.name; });
+  // "Alternate/guest" = member of the viewed team whose PRIMARY team (players.team_id) is another one.
+  const isGuest = p => !!(teamId && p.team_id && String(p.team_id) !== String(teamId));
+  const guestTeam = p => teamsById[p.team_id] || tt('gps_analysis.manual_other_team','Other team');
+  const hasGuests = roster.some(isGuest);
   // How many players already have data per session → mark it in the list so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
   const _dataCount = {};
@@ -6899,6 +6919,10 @@ async function openManualGpsModal() {
     <select id="mgpSession" class="mgp-in">${sessions.map(s=>{ const n=_dataCount[s.id]||0; return `<option value="${_esc(s.id)}">${n?'✓ ':''}${_esc(s.session_date)}${s.session_type?' · '+_esc(s.session_type):''}${s.title?' · '+_esc(s.title):''}${n?` (${n})`:''}</option>`; }).join('')}</select>
     <div id="mgpStatus" class="mgp-status"></div>
     <label class="mgp-lbl">${tt('gps_analysis.manual_player','Player')}</label>
+    ${hasGuests ? `<div class="mgp-seg mgp-teamf" id="mgpTeamFilter">
+      <button type="button" data-f="squad" class="is-on">${tt('gps_analysis.manual_filter_squad','This team')}</button>
+      <button type="button" data-f="all">${tt('gps_analysis.manual_filter_all','+ Alternates')}</button>
+    </div>` : ''}
     <div class="mgp-pick">
       <div class="mgp-search"><i class="ti ti-search"></i><input type="text" id="mgpPlayerSearch" placeholder="${tt('gps_analysis.manual_player_search','Search player…')}"></div>
       <div class="mgp-list" id="mgpPlayerList" role="listbox"></div>

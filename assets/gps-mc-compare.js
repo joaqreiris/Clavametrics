@@ -67,7 +67,7 @@
           .eq('club_id', clubId).neq('session_type', 'rehab')
           .order('session_date', { ascending: true }),
         _gpRoster(clubId, window._gpTeamId),
-        window.sb.from('microcycles').select('id,name,start_date,match_date,rival')
+        window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
           .eq('club_id', clubId).order('start_date', { ascending: true }),
       ]);
       _mcSessions = sessions || [];
@@ -90,9 +90,17 @@
 
   // ── Build index grouped by real microcycle ─────────────────────
   function _buildMcIndex() {
+    // GPS-imported sessions carry no microcycle_id (the import wizard never links
+    // them), so bucket each session into the microcycle whose [start_date, end_date]
+    // contains its session_date. Sessions that already have the FK (Daily Planning)
+    // keep it, so linked behaviour is untouched.
+    const micros = Object.values(_mcMicros)
+      .filter(m => m.start_date && m.end_date)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const _mcForDate = (d) => micros.find(m => d >= m.start_date && d <= m.end_date)?.id || null;
     const mcs = {};
     for (const s of _mcSessions) {
-      const mcId = s.microcycle_id;
+      const mcId = s.microcycle_id || _mcForDate(s.session_date);
       if (!mcId) continue;
       if (!mcs[mcId]) mcs[mcId] = { id: mcId, sessions: [], mdMap: {} };
       mcs[mcId].sessions.push(s);
