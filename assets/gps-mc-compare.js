@@ -64,7 +64,7 @@
       // No filtramos sesiones por team_id (las importadas por GPS suelen tenerlo null);
       // el scope de equipo lo dan el roster (_scopeTeam sobre gps_reports) y los
       // microciclos, que sí están acotados por team_id al equipo activo.
-      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,season_id')
+      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,season_id,team_id')
         .eq('club_id', clubId);
       if (window._gpTeamId) _mcQ = _mcQ.eq('team_id', window._gpTeamId);   // solo microciclos del equipo activo
       const [{ data: sessions }, { data: players }, { data: microcycles }] = await Promise.all([
@@ -108,8 +108,11 @@
       if (_sId && m.season_id) return m.season_id === _sId;
       return (!_sFrom || m.start_date >= _sFrom) && (!_sTo || m.start_date <= _sTo);
     };
+    // Guard contra la race de mcInit (microciclos de otros equipos si _gpTeamId no estaba listo).
+    const _teamId = window._gpTeamId || null;
+    const _inTeam = (m) => !_teamId || !m.team_id || m.team_id === _teamId;
     const micros = Object.values(_mcMicros)
-      .filter(m => m.start_date && m.end_date && _inSeason(m))
+      .filter(m => m.start_date && m.end_date && _inTeam(m) && _inSeason(m))
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
     const _seasonMcIds = new Set(micros.map(m => m.id));
     const _mcForDate = (d) => micros.find(m => d >= m.start_date && d <= m.end_date)?.id || null;

@@ -142,7 +142,7 @@
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
 
-      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,season_id')
+      let _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,season_id,team_id')
         .eq('club_id', clubId);
       if (window._gpTeamId) _mcQ = _mcQ.eq('team_id', window._gpTeamId);   // solo microciclos del equipo activo
       const [{ data: players }, { data: mcs }] = await Promise.all([

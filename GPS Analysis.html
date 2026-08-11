@@ -6601,8 +6601,12 @@ async function renderWeeklyBars(state) {
     if (_sId && mc.season_id) return mc.season_id === _sId;      // etiquetado explícito
     return (!_sFrom || mc.start_date >= _sFrom) && (!_sTo || mc.start_date <= _sTo);  // por ventana de fechas
   };
+  // Guard al momento de dibujar contra la race de pwInit (si _pwMcList se armó antes
+  // de que window._gpTeamId estuviera seteado, podría traer microciclos de otros equipos).
+  const _teamId = window._gpTeamId || null;
+  const _inTeam = (mc) => !_teamId || !mc.team_id || mc.team_id === _teamId;
   const candidates = mcList
-    .filter(mc => mc.start_date && mc.end_date && _inSeason(mc))
+    .filter(mc => mc.start_date && mc.end_date && _inTeam(mc) && _inSeason(mc))
     .slice(0, 10);
 
   if (!candidates.length) {
