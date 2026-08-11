@@ -385,6 +385,7 @@
   .pp-proration strong { color:var(--cm-fg-strong); }
 
 </style>
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 </head>
 <body class="cm">
 
@@ -678,7 +679,7 @@
       </div>
       <div class="actions">
         <a class="cm-btn is-ghost" href="Admin.html" data-i18n="common.cancel">Cancel</a>
-        <button class="cm-btn is-primary">
+        <button class="cm-btn is-primary" id="ppConfirmBtn">
           <span data-i18n="plan_picker.confirm_change">Confirm change</span>
           <i class="ti ti-arrow-right" style="font-size:14px"></i>
         </button>
@@ -762,6 +763,59 @@
       b.classList.add('is-on');
       cycle = b.dataset.cycle;
       render();
+    });
+  });
+
+  // ── Paddle checkout ─────────────────────────────────
+  const PADDLE_TOKEN = 'test_effd5adff10614f5ee3b57a539b';   // sandbox client-side token
+  // mapa data-tier del picker → slug real en la tabla plans
+  const TIER_TO_SLUG = { free:'initiation', basic:'basic', pro:'professional', full:'full' };
+  let PRICE_MAP = {};   // slug → { monthly, yearly }
+
+  if (window.Paddle) {
+    Paddle.Environment.set('sandbox');
+    Paddle.Initialize({ token: PADDLE_TOKEN });
+  }
+
+  // traer los price_id de la base (los que cargaste en la migración 128)
+  (async function loadPrices(){
+    try{
+      if(!window.sb) return;
+      const { data } = await sb.from('plans').select('slug, provider_price_monthly_id, provider_price_yearly_id');
+      (data||[]).forEach(p => PRICE_MAP[p.slug] = { monthly:p.provider_price_monthly_id, yearly:p.provider_price_yearly_id });
+    }catch(e){ console.error('No pude cargar price_ids', e); }
+  })();
+
+  const confirmBtn = document.getElementById('ppConfirmBtn');
+  if (confirmBtn) confirmBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const slug = TIER_TO_SLUG[selected] || selected;
+
+    // Free no pasa por checkout
+    if (slug === 'initiation'){
+      alert('El plan Free no requiere pago. (El downgrade a Free se maneja aparte.)');
+      return;
+    }
+
+    const priceId = (PRICE_MAP[slug] || {})[ cycle === 'annual' ? 'yearly' : 'monthly' ];
+    if (!priceId){ alert('No encuentro el price de Paddle para este plan. Avisá al admin.'); return; }
+    if (!window.Paddle){ alert('Paddle todavía no cargó, probá de nuevo en un segundo.'); return; }
+
+    // identidad de la categoría que paga → viaja en customData y vuelve en el webhook
+    const teamId = (typeof window.getActiveTeamId === 'function') ? window.getActiveTeamId() : null;
+    let clubId = null, email = null;
+    try{
+      const { data:u } = await sb.auth.getUser();
+      email = u?.user?.email || null;
+      const { data:prof } = await sb.from('profiles').select('club_id').eq('id', u.user.id).single();
+      clubId = prof?.club_id || null;
+    }catch(_){}
+
+    Paddle.Checkout.open({
+      items: [{ priceId, quantity: 1 }],
+      customer: email ? { email } : undefined,
+      customData: { team_id: teamId, club_id: clubId, plan_slug: slug, cycle },
+      settings: { displayMode:'overlay', theme:'light', successUrl: window.location.origin + '/Admin.html' }
     });
   });
 
