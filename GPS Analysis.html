@@ -1620,6 +1620,9 @@ const GP_CARD_DEFS = {
     { name: 'Exposure context',   id: 'card-mc-exposure', stub: false },
     { name: 'Biggest movers',     id: 'card-mc-movers',   stub: false },
     { name: 'Microcycle shape',   id: 'card-mc-shape',    stub: false },
+    // Weekly volume · wk-on-wk vive en 'ind' pero es una comparación de microciclos:
+    // se permite también acá (ver _EXTRA_CARD_OWNERS) para que persista en este dashboard.
+    { name: 'Weekly bars',        id: 'card-weekly-bars', stub: false },
   ],
 };
 
@@ -1882,6 +1885,12 @@ const _STATIC_CARD_OWNER = (() => {
   return m;
 })();
 
+// Cards que legítimamente pueden vivir en MÁS de un dashboard (no son contaminación):
+// su HTML-home está en una vista pero se ofrecen en el catálogo de otra. saveLayout NO
+// debe descartarlas cuando el usuario las agrega a esa vista extra. weekly-bars vive en
+// 'ind' pero es una comparación de microciclos → también válida en 'mc'.
+const _EXTRA_CARD_OWNERS = { 'weekly-bars': new Set(['ind', 'mc']) };
+
 async function saveLayout(viewKey, overrideDid) {
   const did = overrideDid || _DASHBOARD_IDS[viewKey];
   if (!did) { console.warn(`saveLayout(${viewKey}): unknown viewKey`); return; }
@@ -1899,7 +1908,8 @@ async function saveLayout(viewKey, overrideDid) {
     // (Builder UUIDs have no static owner → kept; their true dashboard isn't readable from the DOM.)
     const _kept = [...grid.querySelectorAll('.gp-c')].filter(el => {
       const owner = _STATIC_CARD_OWNER.get(el.dataset.cardId);
-      if (owner && owner !== viewKey) { console.warn(`saveLayout(${viewKey}): dropping foreign card "${el.dataset.cardId}" (owner=${owner})`); return false; }
+      const _allowedExtra = _EXTRA_CARD_OWNERS[el.dataset.cardId]?.has(viewKey);
+      if (owner && owner !== viewKey && !_allowedExtra) { console.warn(`saveLayout(${viewKey}): dropping foreign card "${el.dataset.cardId}" (owner=${owner})`); return false; }
       return true;
     });
     const layout = _kept.map((el, idx) => {
