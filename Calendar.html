@@ -1435,6 +1435,20 @@
   .ds-add{width:100%;border:1px dashed var(--cm-border);background:none;color:var(--cm-fg-muted);font:500 12px var(--cm-font-sans);padding:9px;border-radius:var(--cm-r-3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
   .ds-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
 
+  /* colour dropdown (info items) */
+  .ds-colwrap{position:relative}
+  .ds-colbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);font:500 11.5px var(--cm-font-sans);padding:5px 9px;border-radius:6px;cursor:pointer}
+  .ds-colbtn:hover{border-color:var(--cm-accent);color:var(--cm-fg)}
+  .ds-colbtn .ds-coldot{width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.18);flex:none}
+  .ds-colbtn .ti{font-size:14px}
+  .ds-colpop{position:absolute;z-index:5;top:calc(100% + 5px);left:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:196px;padding:9px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;box-shadow:0 10px 26px rgba(0,0,0,.16)}
+  .ds-colpop[hidden]{display:none}
+  .ds-swm{width:24px;height:24px;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0}
+  .ds-swm.on{border-color:var(--cm-fg)}
+  .ds-colpop .ds-color{width:28px;height:24px;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer}
+  .ds-none{border:1px solid var(--cm-border);background:none;color:var(--cm-fg-muted);font:500 10.5px var(--cm-font-sans);padding:4px 8px;border-radius:6px;cursor:pointer;margin-left:auto}
+  .ds-none:hover{color:var(--cm-danger);border-color:var(--cm-danger)}
+
   /* stage / sheet */
   .ds-stage{overflow:auto;background:var(--cm-bg);padding:22px;display:flex;justify-content:center;align-items:flex-start}
   #dsSheet{flex:none}
@@ -6055,10 +6069,18 @@ async function dsPrefillFromEvents(){
   try { const r = await fetchAllEvents(_dsState.date, _dsState.date); data = (r && r.data) || []; } catch(_){}
   const evs = data.filter(e => e.session_type !== 'day_off');
   const timed = evs.filter(e => e.start_time).sort((a,b) => (a.start_time||'').localeCompare(b.start_time||''));
-  _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), label:dsEvLabel(e), sub:e.notes || e.location || '' }));
-  // Untimed events (e.g. a pre-departure smoothie) become editable info items
-  evs.filter(e => !e.start_time).forEach(e => _dsState.info.push({ k:calMetaLabel(e.session_type), v:dsEvLabel(e) + (e.notes?(' — '+e.notes):''), wide:true }));
+  _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), label:dsEvLabel(e), sub:e.notes || e.location || '', match:e.session_type === 'match' }));
+  // Drop any stale event-derived info from a previous open, then re-append this day's
+  // untimed events (e.g. a pre-departure smoothie) as editable, non-persisted items.
+  _dsState.info = (_dsState.info || []).filter(i => !i._ev);
+  evs.filter(e => !e.start_time).forEach(e => _dsState.info.push({ k:calMetaLabel(e.session_type), v:dsEvLabel(e) + (e.notes?(' — '+e.notes):''), wide:true, _ev:true }));
 }
+
+// Persist the manual parts (title, accent, fixed info) per club+team so the
+// coach doesn't retype them; only date / MD tag / timeline refresh each open.
+function dsTmplKey(){ return `cm_daysheet_tmpl_${_clubId||''}_${_activeTeamId||''}`; }
+function dsSaveTmpl(){ if (!_dsState) return; try { localStorage.setItem(dsTmplKey(), JSON.stringify({ title:_dsState.title, accent:_dsState.accent, info:(_dsState.info||[]).filter(i => !i._ev) })); } catch(_){} }
+function dsLoadTmpl(){ try { const r = localStorage.getItem(dsTmplKey()); return r ? JSON.parse(r) : null; } catch(_){ return null; } }
 
 async function openDaySheet(){
   const club = window._calClub || {};
@@ -6066,10 +6088,13 @@ async function openDaySheet(){
   accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#2F5FD0';
   const teamName = (_myTeams||[]).find(t => t.id === _activeTeamId)?.name || '';
   const clubName = teamName || club.name || tt('calendar.print_club_fallback','Club');
+  const saved = dsLoadTmpl();
   _dsState = {
-    date: dsAddDays(TODAY, 1), club: clubName, accent, logo: null,
-    title: tt('calendar.daysheet.default_title','Tomorrow schedule'), tag:'', dateLine:'',
-    info: [
+    date: dsAddDays(TODAY, 1), club: clubName, logo: null,
+    accent: (saved && /^#[0-9a-fA-F]{6}$/.test(saved.accent||'')) ? saved.accent : accent,
+    title: (saved && saved.title) || tt('calendar.daysheet.default_title','Tomorrow schedule'),
+    tag:'', dateLine:'',
+    info: (saved && Array.isArray(saved.info)) ? saved.info.map(i => ({ ...i })) : [
       { k: tt('calendar.daysheet.info_venue','Training venue'), v:'', wide:true },
       { k: tt('calendar.daysheet.info_kit','Kit colour'), v:'', kit:accent },
     ],
@@ -6083,7 +6108,7 @@ async function openDaySheet(){
   await dsPrefillFromEvents();
   dsRenderEditor(); dsRenderSheet();
 }
-function closeDaySheet(){ document.getElementById('dsBackdrop').classList.remove('is-open'); }
+function closeDaySheet(){ dsSaveTmpl(); document.getElementById('dsBackdrop').classList.remove('is-open'); }
 
 function dsRenderSheet(){
   const s = _dsState; if (!s) return;
@@ -6093,15 +6118,29 @@ function dsRenderSheet(){
   const crest = s.logo
     ? `<div style="width:48px;height:48px;border-radius:11px;overflow:hidden;flex:none"><img src="${esc(s.logo)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
     : `<div style="width:48px;height:48px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.16);color:${onAcc};font:800 18px ${FONT}">${esc(dsInitials(s.club))}</div>`;
-  const info = (s.info||[]).map(i => `<div style="background:${paper};padding:11px 13px;${i.wide?'grid-column:1/-1;':''}">
+  let _col = 0;
+  const info = (s.info||[]).map((i,ix,arr) => {
+    let wide = !!i.wide;
+    if (!wide && ix === arr.length - 1 && _col === 0) wide = true;   // no lone half-cell / empty box
+    if (wide) _col = 0; else _col = (_col + 1) % 2;
+    return `<div style="background:${paper};padding:11px 13px;${wide?'grid-column:1/-1;':''}">
       <div style="font:700 9px/1 ${MONO};letter-spacing:.12em;text-transform:uppercase;color:${sub}">${esc(i.k)}</div>
       <div style="margin-top:5px;font:600 13.5px/1.3 ${FONT};color:${ink};display:flex;align-items:center;gap:7px">${i.kit?`<span style="width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.15);flex:none;background:${esc(i.kit)}"></span>`:''}${esc(i.v)||'<span style="color:#C4C8CD">—</span>'}</div>
-    </div>`).join('');
-  const tl = (s.tl||[]).map(r => `<div style="display:grid;grid-template-columns:52px 34px 1fr;align-items:center;gap:9px;padding:7px 0;position:relative">
+    </div>`;
+  }).join('');
+  const tl = (s.tl||[]).map(r => {
+    const ico = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">${DS_ICONS[r.match?'kickoff':r.type]||DS_ICONS.custom}</svg>`;
+    if (r.match) return `<div style="display:grid;grid-template-columns:52px 34px 1fr;align-items:center;gap:9px;padding:9px 8px;margin:4px 0;position:relative;background:${dsTint(s.accent,.09)};border-radius:12px">
+      <div style="font:700 13px ${MONO};color:${s.accent};text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.02em">${esc(r.t)}</div>
+      <div style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${s.accent};color:${onAcc};z-index:1;box-shadow:0 0 0 4px ${paper}">${ico}</div>
+      <div><b style="display:block;font:700 14.5px/1.25 ${FONT};color:${ink}">${esc(r.label)}</b>${r.sub?`<span style="display:block;margin-top:1px;font:500 11.5px/1.3 ${MONO};color:${s.accent}">${esc(r.sub)}</span>`:''}</div>
+    </div>`;
+    return `<div style="display:grid;grid-template-columns:52px 34px 1fr;align-items:center;gap:9px;padding:7px 0;position:relative">
       <div style="font:700 13px ${MONO};color:${ink};text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.02em">${esc(r.t)}</div>
-      <div style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${dsTint(s.accent,.12)};color:${s.accent};z-index:1;box-shadow:0 0 0 4px ${paper}"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">${DS_ICONS[r.type]||DS_ICONS.custom}</svg></div>
+      <div style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${dsTint(s.accent,.12)};color:${s.accent};z-index:1;box-shadow:0 0 0 4px ${paper}">${ico}</div>
       <div><b style="display:block;font:650 14px/1.25 ${FONT};color:${ink}">${esc(r.label)}</b>${r.sub?`<span style="display:block;margin-top:1px;font:400 11.5px/1.3 ${FONT};color:${sub}">${esc(r.sub)}</span>`:''}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   document.getElementById('dsSheet').innerHTML = `
   <div style="width:680px;background:${paper};border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(20,23,29,.10);font-family:${FONT}">
     <div style="background:${s.accent};color:${onAcc};padding:22px 26px 20px">
@@ -6116,7 +6155,7 @@ function dsRenderSheet(){
     <div style="padding:20px 26px 8px">
       ${info?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${line};border:1px solid ${line};border-radius:11px;overflow:hidden;margin-bottom:22px">${info}</div>`:''}
       <div style="font:700 10px/1 ${MONO};letter-spacing:.14em;text-transform:uppercase;color:${sub};margin:0 0 12px;display:flex;align-items:center;gap:9px">${esc(tt('calendar.daysheet.schedule','Schedule'))}<span style="flex:1;height:1px;background:${line}"></span></div>
-      <div style="position:relative;margin-left:6px">${tl?`<div style="position:absolute;left:43px;top:8px;bottom:8px;width:2px;background:${line}"></div>`:''}${tl || `<div style="color:#C4C8CD;font:400 12.5px ${FONT};padding:8px 0">${esc(tt('calendar.daysheet.no_events','No timed events for this day yet.'))}</div>`}</div>
+      <div style="position:relative;margin-left:6px">${tl?`<div style="position:absolute;left:77px;top:10px;bottom:10px;width:2px;background:${line}"></div>`:''}${tl || `<div style="color:#C4C8CD;font:400 12.5px ${FONT};padding:8px 0">${esc(tt('calendar.daysheet.no_events','No timed events for this day yet.'))}</div>`}</div>
     </div>
     <div style="margin-top:14px;padding:14px 26px;border-top:1px solid ${line};display:flex;align-items:center;justify-content:space-between;gap:10px">
       <div style="font:600 10.5px ${MONO};color:${sub}">${esc(s.club)}</div>
@@ -6133,10 +6172,14 @@ function dsRenderEditor(){
       <div class="fields">
         <input class="ds-mini" data-scope="info" data-i="${ix}" data-f="k" placeholder="${esc(tt('calendar.daysheet.ph_label','Label'))}" value="${esc(i.k)}">
         <input class="ds-mini" data-scope="info" data-i="${ix}" data-f="v" placeholder="${esc(tt('calendar.daysheet.ph_value','Value'))}" value="${esc(i.v)}">
-        <label style="display:flex;align-items:center;gap:7px;font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">
-          <input type="checkbox" data-scope="info" data-i="${ix}" data-f="kiton" ${i.kit?'checked':''}> ${esc(tt('calendar.daysheet.colour_swatch','colour swatch'))}
-          <input type="color" data-scope="info" data-i="${ix}" data-f="kit" value="${esc(i.kit||s.accent)}" style="width:28px;height:20px;padding:0;border:1px solid var(--cm-border);border-radius:5px;${i.kit?'':'visibility:hidden'}">
-        </label>
+        <div class="ds-colwrap">
+          <button class="ds-colbtn" type="button" data-colbtn="${ix}">${i.kit?`<span class="ds-coldot" style="background:${esc(i.kit)}"></span>`:'<i class="ti ti-palette"></i>'}${esc(i.kit?tt('calendar.daysheet.colour','Colour'):tt('calendar.daysheet.add_colour','Add colour'))}</button>
+          <div class="ds-colpop" data-pop="${ix}" hidden>
+            ${DS_SWATCHES.map(c => `<button type="button" class="ds-swm${(i.kit||'').toLowerCase()===c.toLowerCase()?' on':''}" style="background:${c}" data-swkit="${c}" data-i="${ix}"></button>`).join('')}
+            <input type="color" class="ds-color" data-scope="info" data-i="${ix}" data-f="kit" value="${esc(i.kit||s.accent)}">
+            <button type="button" class="ds-none" data-swkit="__none" data-i="${ix}">${esc(tt('calendar.daysheet.none','None'))}</button>
+          </div>
+        </div>
       </div>
       <button class="del" data-del="info" data-i="${ix}" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-trash"></i></button>
     </div>`).join('');
@@ -6163,12 +6206,6 @@ function dsRenderEditor(){
         <div class="ds-fld"><label>${esc(tt('calendar.daysheet.tag','Tag'))}</label><input class="ds-in" data-k="tag" value="${esc(s.tag)}"></div>
       </div>
       <div class="ds-fld"><label>${esc(tt('calendar.daysheet.date_line','Date line'))}</label><input class="ds-in" data-k="dateLine" value="${esc(s.dateLine)}"></div>
-      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.logo','Logo'))}</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="file" id="dsLogoFile" accept="image/*" style="font-size:11.5px;color:var(--cm-fg-muted);min-width:0">
-          <button class="cm-btn is-ghost is-sm" id="dsLogoClear" type="button">${esc(tt('calendar.daysheet.clear','Clear'))}</button>
-        </div>
-      </div>
     </div>
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_colour','Club colour'))}</h3>
@@ -6194,21 +6231,23 @@ function dsBindOnce(){
   const ed = document.getElementById('dsEditor');
   ed.addEventListener('input', e => {
     const t = e.target; if (t.type === 'checkbox' || t.tagName === 'SELECT' || t.type === 'file' || t.type === 'date') return;
-    if (t.dataset.k){ if (t.dataset.k === 'accent'){ _dsState.accent = t.value; dsRenderEditor(); dsRenderSheet(); return; } _dsState[t.dataset.k] = t.value; dsRenderSheet(); return; }
-    if (t.dataset.scope){ _dsState[t.dataset.scope][+t.dataset.i][t.dataset.f] = t.value; dsRenderSheet(); }
+    if (t.dataset.k){ if (t.dataset.k === 'accent'){ _dsState.accent = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; } _dsState[t.dataset.k] = t.value; dsRenderSheet(); dsSaveTmpl(); return; }
+    if (t.dataset.scope){ _dsState[t.dataset.scope][+t.dataset.i][t.dataset.f] = t.value; dsRenderSheet(); if (t.dataset.scope === 'info') dsSaveTmpl(); }
   });
   ed.addEventListener('change', async e => {
     const t = e.target;
-    if (t.id === 'dsLogoFile'){ const f = t.files[0]; if (!f) return; const fr = new FileReader(); fr.onload = () => { _dsState.logo = fr.result; dsRenderSheet(); }; fr.readAsDataURL(f); return; }
     if (t.dataset.k === 'date'){ _dsState.date = t.value; dsSyncDate(); dsRenderEditor(); dsRenderSheet(); await dsPrefillFromEvents(); dsRenderEditor(); dsRenderSheet(); return; }
-    if (t.dataset.scope && t.dataset.f === 'kiton'){ const it = _dsState[t.dataset.scope][+t.dataset.i]; it.kit = t.checked ? (it.kit || _dsState.accent) : null; dsRenderEditor(); dsRenderSheet(); return; }
-    if (t.dataset.scope && (t.dataset.f === 'type' || t.dataset.f === 'kit')){ _dsState[t.dataset.scope][+t.dataset.i][t.dataset.f] = t.value; dsRenderSheet(); }
+    if (t.dataset.scope && t.dataset.f === 'kit'){ _dsState[t.dataset.scope][+t.dataset.i].kit = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
+    if (t.dataset.scope && t.dataset.f === 'type'){ _dsState[t.dataset.scope][+t.dataset.i].type = t.value; dsRenderSheet(); }
   });
   ed.addEventListener('click', e => {
-    const sw = e.target.closest('[data-sw]'); if (sw){ _dsState.accent = sw.dataset.sw; dsRenderEditor(); dsRenderSheet(); return; }
-    const del = e.target.closest('[data-del]'); if (del){ _dsState[del.dataset.del].splice(+del.dataset.i,1); dsRenderEditor(); dsRenderSheet(); return; }
-    const add = e.target.closest('[data-add]'); if (add){ if (add.dataset.add === 'info') _dsState.info.push({ k:tt('calendar.daysheet.new_item','New item'), v:'', wide:true }); else _dsState.tl.push({ t:'', type:'custom', label:tt('calendar.daysheet.new_moment','New moment'), sub:'' }); dsRenderEditor(); dsRenderSheet(); return; }
-    if (e.target.closest('#dsLogoClear')){ _dsState.logo = null; dsRenderSheet(); }
+    const cb = e.target.closest('[data-colbtn]');
+    if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
+    const swk = e.target.closest('[data-swkit]');
+    if (swk){ const it = _dsState.info[+swk.dataset.i]; it.kit = swk.dataset.swkit === '__none' ? null : swk.dataset.swkit; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
+    const sw = e.target.closest('[data-sw]'); if (sw){ _dsState.accent = sw.dataset.sw; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
+    const del = e.target.closest('[data-del]'); if (del){ _dsState[del.dataset.del].splice(+del.dataset.i,1); dsRenderEditor(); dsRenderSheet(); if (del.dataset.del === 'info') dsSaveTmpl(); return; }
+    const add = e.target.closest('[data-add]'); if (add){ if (add.dataset.add === 'info'){ _dsState.info.push({ k:tt('calendar.daysheet.new_item','New item'), v:'', wide:true }); dsSaveTmpl(); } else _dsState.tl.push({ t:'', type:'custom', label:tt('calendar.daysheet.new_moment','New moment'), sub:'' }); dsRenderEditor(); dsRenderSheet(); return; }
   });
   document.getElementById('dsClose')?.addEventListener('click', closeDaySheet);
   document.getElementById('dsBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeDaySheet(); });
