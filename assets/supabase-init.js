@@ -786,4 +786,15 @@
     s.setProperty('--cm-accent',     hex);
     s.setProperty('--cm-accent-rgb', `${r},${g},${b}`);
   };
+
+  // ── Aviso de vencimiento de prueba ──────────────────────────────────
+  // Carga el módulo del aviso en TODA página autenticada (una sola vez).
+  (function loadTrialNotice(){
+    if (window.__cmTrialNoticeLoaded) return;
+    window.__cmTrialNoticeLoaded = true;
+    const s = document.createElement('script');
+    s.src = 'assets/trial-notice.js';
+    s.defer = true;
+    document.head.appendChild(s);
+  })();
 })();

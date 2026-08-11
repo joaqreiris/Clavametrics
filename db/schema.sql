@@ -361,6 +361,7 @@ create table if not exists public.clubs (
   billing_stripe_customer_id text,
   billing_provider text,
   billing_provider_customer_id text,
+  trial_ends_at timestamp with time zone default (now() + interval '15 days'),
   constraint clubs_pkey primary key (id),
   constraint clubs_billing_status_check CHECK ((billing_status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
   constraint clubs_billing_provider_check CHECK ((billing_provider = 'paddle'::text))
@@ -3674,7 +3675,32 @@ DECLARE
   v_club uuid := public.get_user_club_id();
   v_feats jsonb;
   v_has_teams boolean;
+  v_has_paid boolean;
+  v_in_trial boolean;
 BEGIN
+  -- ¿hay alguna suscripción paga/activa en el club?
+  SELECT EXISTS(
+    SELECT 1 FROM public.subscriptions s
+      JOIN public.teams t ON t.id = s.team_id
+     WHERE t.club_id = v_club
+       AND s.status IN ('active','trialing','past_due')
+  ) INTO v_has_paid;
+
+  -- ¿el club está dentro de la prueba de 15 días?
+  SELECT EXISTS(
+    SELECT 1 FROM public.clubs
+     WHERE id = v_club
+       AND trial_ends_at IS NOT NULL
+       AND trial_ends_at > now()
+  ) INTO v_in_trial;
+
+  -- prueba activa y sin pago → features del plan full (todo desbloqueado)
+  IF v_in_trial AND NOT v_has_paid THEN
+    SELECT coalesce(features,'[]'::jsonb) INTO v_feats
+      FROM public.plans WHERE slug = 'full';
+    RETURN coalesce(v_feats,'[]'::jsonb);
+  END IF;
+
   SELECT EXISTS(SELECT 1 FROM public.teams WHERE club_id = v_club) INTO v_has_teams;
 
   IF NOT v_has_teams THEN
@@ -4501,6 +4527,7 @@ CREATE OR REPLACE FUNCTION public.team_plan_slug(p_team_id uuid)
  SET search_path TO 'public'
 AS $function$
   SELECT coalesce(
+    -- 1) suscripción paga/activa gana
     (SELECT pl.slug
        FROM public.subscriptions s
        JOIN public.plans pl ON pl.id = s.plan_id
@@ -4508,6 +4535,14 @@ AS $function$
         AND s.status IN ('active','trialing','past_due')
       ORDER BY pl.sort_order DESC   -- defensivo: si hubiera >1, la más alta
       LIMIT 1),
+    -- 2) club dentro de la prueba de 15 días → full
+    (SELECT 'full'
+       FROM public.teams t
+       JOIN public.clubs c ON c.id = t.club_id
+      WHERE t.id = p_team_id
+        AND c.trial_ends_at IS NOT NULL
+        AND c.trial_ends_at > now()),
+    -- 3) por defecto, gratis
     'initiation'
   );
 $function$
