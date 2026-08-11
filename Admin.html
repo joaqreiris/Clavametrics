@@ -2907,8 +2907,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       const c=counts();
       ov.querySelectorAll('[data-c]').forEach(s=>{ s.textContent=c[s.dataset.c]; });
       ov.querySelectorAll('.map-tab').forEach(t=>{ const on=t.dataset.f===filter; t.style.background=on?'var(--cm-accent-soft)':'var(--cm-bg-soft)'; t.style.color=on?'var(--cm-accent)':'var(--cm-fg-muted)'; t.style.borderColor=on?'var(--cm-accent)':'var(--cm-border)'; });
-      // Pending = every high-confidence (matched) OR medium (verify) suggestion still unconfirmed.
-      const pending=rows.filter(r=>!r.done&&!r.already&&(r.cat==='verify'||r.cat==='matched')).length;
+      // Pending = high-confidence (matched) suggestions still unconfirmed (bulk only touches these).
+      const pending=rows.filter(r=>!r.done&&!r.already&&r.cat==='matched').length;
       const cBtn=ov.querySelector('[data-bulk="confirm"]');
       cBtn.style.display=pending>0?'':'none';
       cBtn.textContent=tt('admin.gps_confirm_all_matches','Confirm all matches')+` (${pending})`;
@@ -2923,8 +2923,13 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     }
     async function doConfirm(r){
       const p=r.match.player; if(!p) return;
+      // external_gps_id must be unique: strip this athlete id off any OTHER player first, so a
+      // mis-mapped duplicate (e.g. two #17s) is repaired instead of leaving a stale link behind.
+      // RLS scopes the update to this club.
+      await window.sb.from('players').update({ external_gps_id:null }).eq('external_gps_id',r.a.athlete_id).neq('id',p.id);
       const { error }=await window.sb.from('players').update({ external_gps_id:r.a.athlete_id }).eq('id',p.id);
       if(error){ alert(tt('admin.gps_failed_to_map','Failed to map: {msg}',{ msg:error.message })); return; }
+      if(p) p.external_gps_id=r.a.athlete_id;   // keep in-memory squad in sync for later matches
       r.done=true; r.wasAdded=false; r.cat='matched'; mapped++;
     }
     async function doAdd(r){
@@ -2949,8 +2954,15 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     }
     ov.querySelectorAll('.map-tab').forEach(t=>t.addEventListener('click',()=>{ filter=t.dataset.f; paint(); }));
     ov.querySelector('[data-bulk="confirm"]').addEventListener('click',async()=>{
-      // Confirm every high-confidence (matched) AND medium (verify) suggestion in one go.
-      for(const r of rows){ if(!r.done && !r.already && (r.cat==='verify'||r.cat==='matched')) await doConfirm(r); } paint();
+      // Auto-confirm only HIGH-confidence (matched) suggestions; ambiguous "verify" rows stay
+      // manual. Guard: never let two athletes claim the same player in one pass (dup jerseys).
+      const claimed=new Set(rows.filter(r=>r.already&&r.match.player).map(r=>r.match.player.id));
+      for(const r of rows){
+        if(r.done||r.already||r.cat!=='matched'||!r.match.player) continue;
+        if(claimed.has(r.match.player.id)) continue;   // player already taken → leave for manual review
+        await doConfirm(r); claimed.add(r.match.player.id);
+      }
+      paint();
     });
     ov.querySelector('[data-bulk="add"]').addEventListener('click',async()=>{
       for(const r of rows){ if(!r.done && r.cat==='unmatched') await doAdd(r); } paint();

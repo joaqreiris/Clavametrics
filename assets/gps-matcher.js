@@ -39,28 +39,32 @@
   }
 
   // Score a single source player against a squad. Priority:
-  //   1. external_gps_id exact (1.1)  2. jersey exact (1.0)  3. name fuzzy.
+  //   1. external_gps_id exact (1.1)
+  //   2. jersey + name COMBINED — jersey is strong but NOT unique (duplicate numbers happen),
+  //      so the name breaks the tie between two same-number players. jersey+name ⇒ up to 1.0;
+  //      jersey with a disagreeing name ⇒ 0.7 (drops to "verify" so it isn't auto-confirmed).
+  //   3. name only (both orders + initial+last) ⇒ nameSim.
   function findBestMatch(rawName, rawJersey, rawExtGpsId, squad) {
     let best = null, bestScore = 0;
     (squad || []).forEach(p => {
       let score = 0;
 
-      // 1. External GPS ID — exact
       if (rawExtGpsId && p.external_gps_id && p.external_gps_id === rawExtGpsId) {
         score = 1.1;
       } else {
-        // 2. Jersey number — exact
+        let nameSim = 0;
+        if (rawName) {
+          const n = normName(rawName);
+          nameSim = Math.max(
+            sim(n, normName(p.first_name + ' ' + p.last_name)),
+            sim(n, normName(p.last_name + ' ' + p.first_name)),
+            sim(n, normName((p.first_name?.[0] || '') + ' ' + p.last_name)));
+        }
         const jerseyOk = rawJersey && p.number &&
           String(p.number) === rawJersey.replace(/\D/g, '');
-        if (jerseyOk) {
-          score = 1.0;
-        } else if (rawName) {
-          // 3. Name fuzzy
-          const full1 = normName(p.first_name + ' ' + p.last_name);
-          const full2 = normName(p.last_name + ' ' + p.first_name);
-          const full3 = normName((p.first_name?.[0] || '') + ' ' + p.last_name);
-          score = Math.max(sim(normName(rawName), full1), sim(normName(rawName), full2), sim(normName(rawName), full3));
-        }
+        // Jersey alone = 0.7 (verify, not auto-confirm); name refines it up to 1.0 so the
+        // correctly-named same-number player always outranks a mere number collision.
+        score = jerseyOk ? 0.7 + 0.3 * nameSim : nameSim;
       }
       if (score > bestScore) { bestScore = score; best = p; }
     });
