@@ -636,12 +636,71 @@
     return el;
   }
 
+  // ── Personal tab order (per-user, localStorage) ───────────────
+  // Reordering tabs is a personal navigation preference: it's saved locally per user+club and
+  // never touches the DB or other users' view. Tabs not in the saved list (newly created) fall
+  // to the end; the "+ New" button (.gpt-addtab) always stays last.
+
+  function _tabOrderKey() { return `cm_gp_taborder_${_userId || '?'}_${_clubId || '?'}`; }
+  function _loadTabOrder() {
+    try { const v = JSON.parse(localStorage.getItem(_tabOrderKey()) || '[]'); return Array.isArray(v) ? v : []; }
+    catch (_) { return []; }
+  }
+  function _persistCurrentTabOrder() {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl) return;
+    const order = [...sectionsEl.querySelectorAll('.gp-sec[data-view]')].map(t => t.dataset.view).filter(Boolean);
+    try { localStorage.setItem(_tabOrderKey(), JSON.stringify(order)); } catch (_) {}
+  }
+  function applyTabOrder() {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl) return;
+    const order = _loadTabOrder();
+    if (!order.length) return;
+    const addtab = sectionsEl.querySelector('.gpt-addtab') || null;
+    const byView = new Map([...sectionsEl.querySelectorAll('.gp-sec[data-view]')].map(t => [t.dataset.view, t]));
+    order.forEach(v => { const t = byView.get(v); if (t) { sectionsEl.insertBefore(t, addtab); byView.delete(v); } });
+    byView.forEach(t => sectionsEl.insertBefore(t, addtab));   // uncovered (new) tabs → end
+    if (addtab) sectionsEl.appendChild(addtab);
+  }
+
+  // Drag-to-reorder. HTML5 DnD is safe here — tabs live outside any gp-canvas grid, so the
+  // pointer free-canvas engine (which suppresses native dragstart only inside .gp-grid.is-canvas)
+  // never interferes. Click-to-switch still fires normally when there's no drag.
+  let _tabDrag = null;
+  function wireTabDrag() {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl) return;
+    sectionsEl.querySelectorAll('.gp-sec[data-view]').forEach(tab => {
+      if (tab.dataset.gptDragWired) return;
+      tab.dataset.gptDragWired = '1';
+      tab.setAttribute('draggable', 'true');
+      tab.addEventListener('dragstart', e => {
+        _tabDrag = tab; tab.classList.add('gpt-tab-dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', tab.dataset.view || ''); } catch (_) {}
+      });
+      tab.addEventListener('dragend', () => {
+        tab.classList.remove('gpt-tab-dragging');
+        if (_tabDrag) { _persistCurrentTabOrder(); _tabDrag = null; }
+      });
+      tab.addEventListener('dragover', e => {
+        if (!_tabDrag || _tabDrag === tab) return;
+        e.preventDefault();
+        const r = tab.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        sectionsEl.insertBefore(_tabDrag, after ? tab.nextSibling : tab);
+      });
+    });
+  }
+
   // ── Re-render all tab decorations ─────────────────────────────
 
   function reRender() {
     enhancePredefinedTabs(_dashboards);
     renderCustomTabs(_dashboards);
     renderAddTabButton();
+    applyTabOrder();
+    wireTabDrag();
     wireAllGridDrags();
   }
 
