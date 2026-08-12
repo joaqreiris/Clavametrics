@@ -829,7 +829,7 @@ create table if not exists public.gps_reports (
   distance_per_minute numeric,
   updated_at timestamp with time zone default now(),
   is_invalid boolean default false not null,
-  source text default 'catapult' not null,   -- 'catapult' | 'csv' | 'manual' | 'avg' (origin of the row)
+  source text default 'catapult' not null,   -- 'catapult' | 'csv' | 'manual' | 'avg' | 'avg_pos' | 'partial' (origin of the row)
   constraint gps_reports_pkey primary key (id),
   constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
 );

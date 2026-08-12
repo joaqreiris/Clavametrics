@@ -7053,6 +7053,7 @@ async function openManualGpsModal() {
       <button type="button" data-mode="avg" class="is-on">${tt('gps_analysis.manual_mode_avg','Team average')}</button>
       <button type="button" data-mode="avgpos">${tt('gps_analysis.manual_mode_avgpos','Position average')}</button>
       <button type="button" data-mode="manual">${tt('gps_analysis.manual_mode_manual','Manual')}</button>
+      <button type="button" data-mode="complete">${tt('gps_analysis.manual_mode_complete','Complement')}</button>
     </div>
     <div id="mgpFields"></div>
     <div class="mgp-foot"><button class="cm-btn is-ghost is-sm" id="mgpCancel">${tt('common.cancel','Cancel')}</button><button class="cm-btn is-primary is-sm" id="mgpSave">${tt('gps_analysis.manual_save','Save data')}</button></div>`;
@@ -7060,7 +7061,7 @@ async function openManualGpsModal() {
   let mode = 'avg', sessionReports = [], realReports = [], teamAvg = {};
   const metricKeys = _MANUAL_GPS_METRICS.map(m=>m.k);
   const posByPlayer = {}; roster.forEach(p=>{ posByPlayer[p.id] = p.position || ''; });
-  const EST_SOURCES = ['manual','avg','avg_pos'];
+  const EST_SOURCES = ['manual','avg','avg_pos','partial'];
   const statusOf = pid => { const r = sessionReports.find(x=>x.player_id===pid); if (!r || r.is_invalid) return 'missing'; return EST_SOURCES.includes(r.source) ? 'est' : 'real'; };
   const _avg = reps => { const out={}; _MANUAL_GPS_METRICS.forEach(m=>{ const vals=reps.map(r=>r[m.k]).filter(v=>v!=null&&isFinite(v)); out[m.k]=vals.length?+(vals.reduce((s,x)=>s+ +x,0)/vals.length).toFixed(2):null; }); return out; };
   const selPid = () => body.querySelector('#mgpPlayer')?.value;
@@ -7152,6 +7153,18 @@ async function openManualGpsModal() {
       wrap.innerHTML = `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm"></label>`).join('')}</div>`;
       return;
     }
+    if (mode==='complete') {
+      // Top-up mode: the GPS captured part of the session (device died mid-way). Type only the
+      // metrics you want to add/fix; blank inputs KEEP the value already stored (merge, not overwrite).
+      const cur = sessionReports.find(x=>x.player_id===selPid());
+      if (!cur || cur.is_invalid) {
+        wrap.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_complete_nodata','This player has no data in this session yet — use Manual mode.')}</div>`;
+        return;
+      }
+      wrap.innerHTML = `<div class="mgp-note">${tt('gps_analysis.manual_complete_note','Type only the metrics to add or fix — blank fields keep the existing value.')}</div>`
+        + `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>{ const ph = (cur[m.k]!=null) ? cur[m.k] : '—'; return `<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm" placeholder="${ph}"></label>`; }).join('')}</div>`;
+      return;
+    }
     const vals = currentAvg(), hasAvg = Object.values(vals).some(v=>v!=null);
     let note, emptyMsg;
     if (mode==='avgpos') {
@@ -7199,16 +7212,22 @@ async function openManualGpsModal() {
     body.querySelectorAll('#mgpTeamFilter button').forEach(x=>x.classList.toggle('is-on',x===b));
     renderStatus(); renderPlayers();
   }));
-  body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos') renderFields(); });
+  body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos' || mode==='complete') renderFields(); });
   body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
   body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
   body.querySelector('#mgpSave').addEventListener('click', async () => {
     const sid = body.querySelector('#mgpSession').value, pid = selPid();
     if (!sid || !pid) return;
-    if (statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
-    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='manual'?'manual':(mode==='avgpos'?'avg_pos':'avg') };
+    // 'complete' merges onto existing data by design, so it skips the overwrite prompt.
+    if (mode!=='complete' && statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
+    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='manual'?'manual':(mode==='avgpos'?'avg_pos':(mode==='complete'?'partial':'avg')) };
     if (mode==='manual') {
       _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='')?null:+v; });
+    } else if (mode==='complete') {
+      // Upsert replaces the whole row, so seed every metric from the stored one; only typed inputs override.
+      const cur = sessionReports.find(x=>x.player_id===pid);
+      if (!cur || cur.is_invalid) { showToast(tt('gps_analysis.manual_complete_nodata','This player has no data in this session yet — use Manual mode.'), true); return; }
+      _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='') ? cur[m.k] : +v; });
     } else {
       const vals = currentAvg();
       if (!Object.values(vals).some(v=>v!=null)) {
