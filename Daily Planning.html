@@ -2877,7 +2877,11 @@ function _dpUpdatePublishBtn() {
 // phantom — it must NOT surface a "GYM SESSION" tab for a day that has no gym plan.
 function _dpGymSessionEmpty(s) {
   const c = s?.gym_content || {};
-  const rows = (c.warmup?.rows?.length || 0) + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
+  // warm-up may be the new typed-sub-blocks shape (warmup.blocks) or the legacy flat shape (warmup.rows).
+  const wuRows = Array.isArray(c.warmup?.blocks)
+    ? c.warmup.blocks.reduce((n, b) => n + ((b.rows || []).length), 0)
+    : (c.warmup?.rows?.length || 0);
+  const rows = wuRows + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
   const roster = Array.isArray(c.roster) ? c.roster.length : 0;
   const groups = c.loadGroups ? (Array.isArray(c.loadGroups) ? c.loadGroups.length : Object.keys(c.loadGroups).length) : 0;
   // Physio-seeded adaptations auto-populate; only coach-authored content (a replacement/reason,

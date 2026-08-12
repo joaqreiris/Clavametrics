@@ -77,6 +77,23 @@
   .gp-card-h .right{margin-left:auto;display:flex;gap:6px;align-items:center}
   .gp-card-b{padding:14px 16px}
 
+  /* Warm-up sub-blocks (activation / strength / mobility / myofascial / custom) */
+  .gp-wu-block{border:1px solid var(--cm-border-soft);border-left:3px solid var(--cm-fg-faint);border-radius:9px;margin-bottom:10px;overflow:hidden;background:var(--cm-bg-soft)}
+  .gp-wu-block-h{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 12px}
+  .gp-wu-dot{width:8px;height:8px;border-radius:50%;background:var(--cm-fg-faint);flex:none}
+  .gp-wu-title{flex:0 1 auto;min-width:130px;max-width:280px;height:26px;padding:0 8px;background:transparent;border:1px solid transparent;border-radius:5px;font:700 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-strong);outline:none}
+  .gp-wu-title:hover{border-color:var(--cm-border-soft)}
+  .gp-wu-title:focus{border-color:var(--cm-accent);background:var(--cm-surface)}
+  .gp-wu-block-h .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .gp-wu-block .gp-tbl{padding:0 4px}
+  .gp-wu-block .gp-tbl input,.gp-wu-block .gp-tbl select{background:var(--cm-surface)}
+  .gp-wu-block .gp-add-row{margin:2px 10px 10px;width:auto;padding:7px}
+  .gp-wu-add{position:relative;margin-top:2px}
+  .gp-wu-menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:210px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;box-shadow:var(--cm-shadow-2);padding:5px;display:none;flex-direction:column;gap:1px}
+  .gp-wu-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:0;background:transparent;border-radius:6px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;text-align:left}
+  .gp-wu-menu button:hover{background:var(--cm-bg-soft)}
+  .gp-wu-menu .sw{width:9px;height:9px;border-radius:50%;flex:none}
+
   /* Form grid */
   .gp-fg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 14px}
   .gp-fg .col-2{grid-column:span 2}
@@ -349,21 +366,20 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpWarmupMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
           </div>
         </div>
-        <div class="gp-card-b" style="padding:6px 16px 14px">
-          <table class="gp-tbl">
-            <thead>
-              <tr>
-                <th></th><th style="min-width:220px" data-i18n="gym_planner.exercise">Exercise</th>
-                <th data-i18n="gym_planner.sets">Sets</th><th data-i18n="gym_planner.reps_time">Reps / time</th><th data-i18n="gym_planner.tempo">Tempo</th><th data-i18n="gym_planner.notes">Notes</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="gpWarmupBody">
-            </tbody>
-          </table>
-          <button class="gp-add-row no-print" onclick="gpAddWarmupRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_warmup">Add warm-up</span></button>
+        <div class="gp-card-b" style="padding:10px 16px 14px">
+          <div id="gpWarmupBlocks"></div>
+          <div class="gp-wu-add no-print">
+            <button class="gp-add-row" onclick="gpToggleWuMenu(this)" style="margin-top:0"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_block">Add block</span><i class="ti ti-chevron-down" style="font-size:13px;margin-left:2px"></i></button>
+            <div class="gp-wu-menu">
+              <button onclick="gpAddWarmupBlock('activation',null,true); gpToggleWuMenu()"><span class="sw" style="background:var(--cm-success)"></span><span data-i18n="gym_planner.block_activation">Activation</span></button>
+              <button onclick="gpAddWarmupBlock('strength',null,true); gpToggleWuMenu()"><span class="sw" style="background:#B91C1C"></span><span data-i18n="gym_planner.block_strength">Strength</span></button>
+              <button onclick="gpAddWarmupBlock('mobility',null,true); gpToggleWuMenu()"><span class="sw" style="background:#2563EB"></span><span data-i18n="gym_planner.block_mobility">Mobility</span></button>
+              <button onclick="gpAddWarmupBlock('myofascial',null,true); gpToggleWuMenu()"><span class="sw" style="background:#7C3AED"></span><span data-i18n="gym_planner.block_myofascial">Myofascial release</span></button>
+              <button onclick="gpAddWarmupBlock('custom','',true); gpToggleWuMenu()"><span class="sw" style="background:var(--cm-fg-muted)"></span><span data-i18n="gym_planner.block_custom">Custom block</span></button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -484,13 +500,13 @@ function _gpAddDays(dateStr, n) {
 
 // ── Totals recalc (derived live from DOM table rows + duration inputs) ───
 function gpRecalcTotals() {
-  const warmupBody = document.getElementById('gpWarmupBody');
+  const warmupBody = document.getElementById('gpWarmupBlocks');
   const mainBody   = document.getElementById('gpMainBody');
   const plyoBody   = document.getElementById('gpPlyoBody');
 
-  // ── Warm-up: row count, sum Sets col (col 2) ──
-  const warmupRows = warmupBody ? warmupBody.querySelectorAll('tr').length : 0;
-  const warmupSets = warmupBody ? [...warmupBody.querySelectorAll('tr')].reduce((s, tr) => {
+  // ── Warm-up: row count, sum Sets col (col 2) — scope to tbody so per-block thead rows are excluded ──
+  const warmupRows = warmupBody ? warmupBody.querySelectorAll('tbody tr').length : 0;
+  const warmupSets = warmupBody ? [...warmupBody.querySelectorAll('tbody tr')].reduce((s, tr) => {
     const inp = tr.querySelectorAll('td')[2]?.querySelector('input');
     return s + (parseInt(inp?.value) || 0);
   }, 0) : 0;
@@ -771,8 +787,11 @@ function gpOpenLinkModal(tr) {
 }
 
 // ── Persistencia del contenido (warmup/plyo/main) ──
-function gpCollectRows(tbodyId, withMode) {
-  return [...document.getElementById(tbodyId).querySelectorAll('tr')].map(tr => {
+function gpCollectRows(tbodyRef, withMode) {
+  // tbodyRef may be an element id (plyo/main) or a <tbody> element (warm-up sub-blocks).
+  const tbody = typeof tbodyRef === 'string' ? document.getElementById(tbodyRef) : tbodyRef;
+  if (!tbody) return [];
+  return [...tbody.querySelectorAll('tr')].map(tr => {
     // Exclude the VBT velocity-loss input so the core `v` array stays index-stable.
     const v = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss')).map(i => i.value);
     const exId = tr.dataset.exId || null;
@@ -791,7 +810,7 @@ function gpCollectRows(tbodyId, withMode) {
 function gpCollectContent() {
   const m = id => document.getElementById(id)?.value || '';
   return {
-    warmup: { min: m('gpWarmupMin'), rows: gpCollectRows('gpWarmupBody', false) },
+    warmup: { min: m('gpWarmupMin'), blocks: gpCollectWarmupBlocks() },
     plyo:   { min: m('gpPlyoMin'),   rows: gpCollectRows('gpPlyoBody', false) },
     main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) },
     adaptations: gpCollectAdapt(),
@@ -818,8 +837,16 @@ function gpFillRow(tr, vals, exId, libName) {
 function gpApplyContent(content) {
   content = content || {};
   const setMin = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-  const wb = document.getElementById('gpWarmupBody'); wb.innerHTML = '';
-  (content.warmup?.rows || []).forEach(r => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, gpRowVals(r), gpRowEx(r), gpRowLibName(r)); });
+  const wb = document.getElementById('gpWarmupBlocks'); wb.innerHTML = '';
+  // New shape: warmup.blocks = [{type,label,rows}]. Legacy shape: warmup.rows (flat) → one activation block.
+  let wuBlocks = content.warmup?.blocks;
+  if (!Array.isArray(wuBlocks)) wuBlocks = content.warmup?.rows ? [{ type: 'activation', label: '', rows: content.warmup.rows }] : [];
+  if (!wuBlocks.length) wuBlocks = [{ type: 'activation', label: '', rows: [] }];   // seed one block so the section is never empty
+  wuBlocks.forEach(bl => {
+    const el = gpAddWarmupBlock(bl.type || 'custom', bl.label);
+    const tb = el.querySelector('tbody');
+    (bl.rows || []).forEach(r => { gpAddWarmupRow(tb); gpFillRow(tb.lastElementChild, gpRowVals(r), gpRowEx(r), gpRowLibName(r)); });
+  });
   setMin('gpWarmupMin', content.warmup?.min);
   const pb = document.getElementById('gpPlyoBody'); pb.innerHTML = '';
   (content.plyo?.rows || []).forEach(r => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, gpRowVals(r), gpRowEx(r), gpRowLibName(r)); });
@@ -865,7 +892,7 @@ async function gpEnsureLib() {
 function gpYoutubeId(url){ if(!url) return null; const m=String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m?m[1]:null; }
 const _gpMediaCache = {};  // exId -> { type, src } | null
 async function gpResolveSessionMedia(){
-  const ids=[...new Set([...document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr')].map(tr=>tr.dataset.exId).filter(Boolean))];
+  const ids=[...new Set([...document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr')].map(tr=>tr.dataset.exId).filter(Boolean))];
   const lib=await gpEnsureLib(); const byId={}; (lib||[]).forEach(e=>byId[e.id]=e);
   const paths=[], exByPath={};
   ids.forEach(id=>{ const e=byId[id]; if(e&&e.media_type==='image'&&e.media_ref&&!(id in _gpMediaCache)){ paths.push(e.media_ref); exByPath[e.media_ref]=id; } });
@@ -882,7 +909,7 @@ async function gpSyncRowNames(){
   const lib = await gpEnsureLib(); if(!lib || !lib.length) return;
   const byId={}, byNorm={};
   lib.forEach(e=>{ byId[e.id]=e; const k=gpNormName(e.name); if(k){ byNorm[k] = (k in byNorm) ? null : e; } }); // null = ambiguous
-  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr=>{
+  document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr=>{
     const inp=tr.querySelector('.name-cell input'); if(!inp) return;
     let e = tr.dataset.exId ? byId[tr.dataset.exId] : null;
     // Unlinked (or dangling) row: relink by a unique normalized-name match so renames that
@@ -946,7 +973,7 @@ function gpAllEquip(){
 function gpComputeEquipment(){
   const byId = {}; (_gpLib || []).forEach(e => { byId[e.id] = e; });
   const map = new Map();
-  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr => {
+  document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(tr => {
     const e = tr.dataset.exId ? byId[tr.dataset.exId] : null;
     const tags = e && Array.isArray(e.equipment_tags) ? e.equipment_tags : [];
     if (!tags.length) return;
@@ -1094,9 +1121,9 @@ async function gpOpenLib(ctx) {
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
   document.getElementById('gpLibFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpLibList').innerHTML = '';
-  _gpLibCat = 'strength'; _gpLibMuscle = '';
+  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : 'strength'; _gpLibMuscle = '';
   await gpEnsureLib();
-  if (!(_gpLib||[]).some(e => e.category === 'strength')) _gpLibCat = '';
+  if (_gpLibCat && !(_gpLib||[]).some(e => e.category === _gpLibCat)) _gpLibCat = '';
   gpRenderLibChips(); gpRenderLibList();
 }
 function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
@@ -1109,9 +1136,17 @@ function gpPickLib(id, name) {
     fill(ctx.input);
     if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
   }
+  else if (ctx.warmupBody) {
+    // Warm-up sub-block: append a row to that block's <tbody>.
+    gpAddWarmupRow(ctx.warmupBody);
+    const tr = ctx.warmupBody.lastElementChild;
+    fill(tr?.querySelector('input'));
+    if (tr) { tr.dataset.exId = id || ''; if (id) tr.dataset.libName = name; else delete tr.dataset.libName; }
+    if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
+  }
   else if (ctx.section) {
-    const fn = { warmup: gpAddWarmupRow, plyo: gpAddPlyoRow, main: gpAddMainRow }[ctx.section];
-    const bodyId = { warmup: 'gpWarmupBody', plyo: 'gpPlyoBody', main: 'gpMainBody' }[ctx.section];
+    const fn = { plyo: gpAddPlyoRow, main: gpAddMainRow }[ctx.section];
+    const bodyId = { plyo: 'gpPlyoBody', main: 'gpMainBody' }[ctx.section];
     if (fn) {
       fn();
       fill(document.getElementById(bodyId).lastElementChild?.querySelector('input'));
@@ -1226,7 +1261,7 @@ async function gpRunAi() {
     if (!plan) throw new Error('Empty plan');
 
     const cur = gpCollectContent();
-    const hasWork = (cur.warmup.rows.length + cur.plyo.rows.length + cur.main.rows.length) > 0;
+    const hasWork = (gpWuRowCount(cur.warmup) + cur.plyo.rows.length + cur.main.rows.length) > 0;
     if (hasWork && !confirm(tt('gym_planner.ai_replace_confirm','Replace the current session with the AI draft?'))) { btn.disabled = false; status.textContent = ''; return; }
 
     const content = {
@@ -1237,7 +1272,7 @@ async function gpRunAi() {
     gpApplyContent(content);
     await gpSyncRowNames();
     await gpResolveSessionMedia();
-    document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+    document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
     gpRenderEquipment();
     gpRenderPrintSheet();
     const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
@@ -1290,7 +1325,7 @@ async function gpLoadTemplates() {
 }
 function gpTplCount(c) {
   const n = s => (c?.[s]?.rows || []).length;
-  return n('warmup') + n('plyo') + n('main');
+  return gpWuRowCount(c?.warmup) + n('plyo') + n('main');
 }
 function gpRenderTemplates() {
   const list = document.getElementById('gpTplList'), foot = document.getElementById('gpTplFoot');
@@ -1327,7 +1362,7 @@ async function gpApplyTemplate(id) {
   gpApplyContent(t.content || {});
   await gpSyncRowNames();
   await gpResolveSessionMedia();
-  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+  document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
   gpRenderEquipment();
   gpScheduleSave();
   gpCloseTpl();
@@ -1340,8 +1375,84 @@ async function gpDeleteTemplate(id) {
   await gpLoadTemplates();
 }
 
-function gpAddWarmupRow() {
-  const tbody = document.getElementById('gpWarmupBody');
+// ── Warm-up sub-blocks (typed: activation / strength / mobility / myofascial / custom) ──
+const GP_WU_TYPES = {
+  activation: { i18n:'gym_planner.block_activation', def:'Activation',        color:'var(--cm-success)',   libCat:'' },
+  strength:   { i18n:'gym_planner.block_strength',   def:'Strength',          color:'#B91C1C',             libCat:'strength' },
+  mobility:   { i18n:'gym_planner.block_mobility',   def:'Mobility',          color:'#2563EB',             libCat:'' },
+  myofascial: { i18n:'gym_planner.block_myofascial', def:'Myofascial release', color:'#7C3AED',            libCat:'' },
+  custom:     { i18n:'gym_planner.block_custom',     def:'Custom block',      color:'var(--cm-fg-muted)',  libCat:'' }
+};
+function gpAddWarmupBlock(type, label, focus) {
+  type = GP_WU_TYPES[type] ? type : 'custom';
+  const t = GP_WU_TYPES[type];
+  const title = (label != null && label !== '') ? label : (type === 'custom' ? '' : tt(t.i18n, t.def));
+  const wrap = document.getElementById('gpWarmupBlocks');
+  const bl = document.createElement('div');
+  bl.className = 'gp-wu-block';
+  bl.dataset.type = type;
+  bl.style.borderLeftColor = t.color;
+  bl.innerHTML = `
+    <div class="gp-wu-block-h">
+      <span class="gp-wu-dot" style="background:${t.color}"></span>
+      <input class="gp-wu-title" value="${String(title).replace(/"/g,'&quot;')}" placeholder="${tt('gym_planner.block_name_ph','Block name')}" oninput="gpScheduleSave()">
+      <div class="right">
+        <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenWuLib(this)"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">${tt('gym_planner.from_library','From library')}</span></button>
+        <button class="btn-x no-print" title="${tt('gym_planner.remove_block','Remove block')}" onclick="gpDeleteWuBlock(this)"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <table class="gp-tbl">
+      <thead><tr>
+        <th></th><th style="min-width:220px" data-i18n="gym_planner.exercise">${tt('gym_planner.exercise','Exercise')}</th>
+        <th data-i18n="gym_planner.sets">${tt('gym_planner.sets','Sets')}</th><th data-i18n="gym_planner.reps_time">${tt('gym_planner.reps_time','Reps / time')}</th><th data-i18n="gym_planner.tempo">${tt('gym_planner.tempo','Tempo')}</th><th data-i18n="gym_planner.notes">${tt('gym_planner.notes','Notes')}</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="gp-add-row no-print" onclick="gpAddWarmupRow(this.closest('.gp-wu-block').querySelector('tbody'))"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_exercise">${tt('gym_planner.add_exercise','Add exercise')}</span></button>`;
+  wrap.appendChild(bl);
+  if (focus) bl.querySelector('.gp-wu-title').focus();
+  gpRecalcTotals();
+  return bl;
+}
+function gpDeleteWuBlock(btn) {
+  const bl = btn.closest('.gp-wu-block'); if (!bl) return;
+  const hasRows = bl.querySelectorAll('tbody tr').length > 0;
+  if (hasRows && !confirm(tt('gym_planner.remove_block_confirm','Remove this block and its exercises?'))) return;
+  bl.remove();
+  gpRecalcTotals(); gpRenderEquipment(); gpScheduleSave();
+}
+function gpOpenWuLib(btn) {
+  const bl = btn.closest('.gp-wu-block'); if (!bl) return;
+  const tb = bl.querySelector('tbody');
+  const cat = (GP_WU_TYPES[bl.dataset.type] || {}).libCat || '';
+  gpOpenLib({ warmupBody: tb, libCat: cat });
+}
+function gpToggleWuMenu(btn) {
+  const add = btn ? btn.closest('.gp-wu-add') : null;
+  const menu = add ? add.querySelector('.gp-wu-menu') : null;
+  const willOpen = menu && menu.style.display !== 'flex';
+  document.querySelectorAll('.gp-wu-menu').forEach(m => m.style.display = 'none');
+  if (willOpen) menu.style.display = 'flex';
+}
+// Serialize the warm-up section as an ordered list of typed sub-blocks.
+function gpCollectWarmupBlocks() {
+  return [...document.querySelectorAll('#gpWarmupBlocks .gp-wu-block')].map(bl => ({
+    type: bl.dataset.type || 'custom',
+    label: (bl.querySelector('.gp-wu-title')?.value || '').trim(),
+    rows: gpCollectRows(bl.querySelector('tbody'), false)
+  }));
+}
+// Count warm-up rows across both the new (blocks) and legacy (rows) shapes.
+function gpWuRowCount(w) {
+  if (!w) return 0;
+  if (Array.isArray(w.blocks)) return w.blocks.reduce((n, b) => n + ((b.rows || []).length), 0);
+  return (w.rows || []).length;
+}
+
+function gpAddWarmupRow(tbody) {
+  // tbody is the target sub-block <tbody>; fall back to the last block for library/legacy calls.
+  if (!tbody || tbody.tagName !== 'TBODY') tbody = document.querySelector('#gpWarmupBlocks .gp-wu-block:last-child tbody');
+  if (!tbody) return;
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `${gpNumCell(num)}
@@ -1991,7 +2102,7 @@ async function gpLoadAthletes(dateStr) {
 // phantom and must not appear as a "GYM SESSION" tab — except the one being edited right now.
 function _gpGymSessionEmpty(s) {
   const c = s?.gym_content || {};
-  const rows = (c.warmup?.rows?.length || 0) + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
+  const rows = gpWuRowCount(c.warmup) + (c.plyo?.rows?.length || 0) + (c.main?.rows?.length || 0);
   const roster = Array.isArray(c.roster) ? c.roster.length : 0;
   const groups = c.loadGroups ? (Array.isArray(c.loadGroups) ? c.loadGroups.length : Object.keys(c.loadGroups).length) : 0;
   // Physio-seeded adaptations auto-populate; only coach-authored content (a replacement/reason,
@@ -2091,7 +2202,7 @@ async function gpLoadDay(dateStr) {
 
   await gpSyncRowNames();
   await gpResolveSessionMedia();
-  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+  document.querySelectorAll('#gpWarmupBlocks tbody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
   gpRenderEquipment();   // relinked rows may add exIds → refresh detected materials
 
   // Calendar overlays: microcycle / match-day / RPE only. Start time and duration come
@@ -2224,7 +2335,9 @@ function gpRenderPrintSheet() {
     const readRows = tbodyId => {
       const tb = document.getElementById(tbodyId);
       if (!tb) return [];
-      return [...tb.querySelectorAll('tr')].map(tr => {
+      // gpWarmupBlocks is a container of per-block tables; scope to tbody so headers are skipped.
+      const rows = tb.tagName === 'TBODY' ? tb.querySelectorAll('tr') : tb.querySelectorAll('tbody tr');
+      return [...rows].map(tr => {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
         const mode = (tr.querySelector('.gp-mode button.is-on')?.textContent || '').trim();
@@ -2362,11 +2475,14 @@ function gpRenderPrintSheet() {
     // Compact single-column list for text; 3-up grid for image cards.
     const exGridCols = textLayout ? '1fr' : 'repeat(3,1fr)';
 
-    // WARM-UP — pills
-    const wuRows = readRows('gpWarmupBody').filter(r=>r.name);
-    const warmupBlock = wuRows.length ? `<div class="gsp-brk" style="margin-bottom:16px">
+    // WARM-UP — grouped by sub-block (activation / strength / mobility / myofascial / custom), pills per block
+    const wuBlocksData = [...document.querySelectorAll('#gpWarmupBlocks .gp-wu-block')].map(bl => ({
+      label: (bl.querySelector('.gp-wu-title')?.value || '').trim(),
+      names: [...bl.querySelectorAll('tbody tr')].map(tr => (tr.querySelector('.name-cell input')?.value || '').trim()).filter(Boolean)
+    })).filter(b => b.names.length);
+    const warmupBlock = wuBlocksData.length ? `<div class="gsp-brk" style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.warmup','Warm-up')}${wuMin?` · ${wuMin} ${tt('gym_planner.unit_min','min')}`:''}`)}
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${wuRows.map(r=>`<span style="border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(r.name)}</span>`).join('')}</div>
+      ${wuBlocksData.map(b=>`${b.label?`<div style="font:700 9.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin:8px 0 5px">${esc(b.label)}</div>`:''}<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px">${b.names.map(n=>`<span style="border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(n)}</span>`).join('')}</div>`).join('')}
     </div>` : '';
 
     // PLYOMETRICS — cards
@@ -2601,8 +2717,11 @@ async function gpExportPDF() {
     if (el) el.addEventListener('change', gpScheduleSave);
   });
 
+  // Close any open warm-up "Add block" menu when clicking outside of it.
+  document.addEventListener('click', e => { if (!e.target.closest('.gp-wu-add')) document.querySelectorAll('.gp-wu-menu').forEach(m => m.style.display = 'none'); });
+
   // Recalc totals + refresh auto-detected equipment when any table input changes
-  ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
+  ['gpWarmupBlocks','gpPlyoBody','gpMainBody'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', () => { gpRecalcTotals(); gpRenderEquipment(); gpScheduleSave(); });
   });
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
