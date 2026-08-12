@@ -376,6 +376,133 @@
     return out;
   }
 
+  // Modos de variación disponibles según el eje X (bars): microcycle → vs MC anterior;
+  // md_code / session_date → vs último MD igual + vs promedio MD. Vacío ⇒ el chip no aparece.
+  function _relModesFor(S) {
+    if (!S || S.type !== 'bars') return [];
+    const dimIds = (S.dimensions || []).map(d => d.id);
+    const modes = [];
+    if (dimIds.includes('microcycle')) modes.push('prev_mc');
+    if (dimIds.includes('md_code') || dimIds.includes('session_date')) { modes.push('last_md'); modes.push('avg_md'); }
+    return modes;
+  }
+  function _hasRelMetric(S) { return !!S && (S.metrics || []).some(m => m.rel); }
+
+  // Mini-menú de modos de variación sobre el botón % del chip de métrica.
+  function _openRelMenu(btn) {
+    const modes = _relModesFor(S);
+    const m = (S.metrics || []).find(x => x.id === btn.dataset.ddRel);
+    if (!modes.length || !m) return;
+    if (popOwner === btn) { closePop(); return; }
+    const cur = m.rel || '';
+    const LBL = {
+      prev_mc: _tt('gps_analysis.builder_rel_prev_mc', 'Δ% vs previous MC'),
+      last_md: _tt('gps_analysis.builder_rel_last_md', 'Δ% vs last same MD'),
+      avg_md:  _tt('gps_analysis.builder_rel_avg_md',  'Δ% vs MD average'),
+    };
+    const ICO = { prev_mc: 'ti-calendar-stats', last_md: 'ti-history', avg_md: 'ti-chart-bar' };
+    const opt = (val, label, icon) => `<button class="rb-opt ${cur === val ? 'is-on' : ''}" data-rel-opt="${esc(val)}">
+      <span class="ic"><i class="ti ${icon}"></i></span>
+      <span class="tx"><span class="t">${esc(label)}</span></span>
+      <i class="ti ti-check ck"></i></button>`;
+    let rows = opt('', _tt('gps_analysis.builder_rel_none', 'No variation'), 'ti-circle-off');
+    for (const md of modes) rows += opt(md, LBL[md], ICO[md]);
+    openPop(`<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)')}</div></div><div class="rb-pop-b">${rows}</div>`, btn, 'rel');
+    popEl.querySelectorAll('[data-rel-opt]').forEach(o => o.addEventListener('click', () => {
+      const mm = (S.metrics || []).find(x => x.id === btn.dataset.ddRel);
+      if (mm) mm.rel = o.dataset.relOpt || undefined;
+      closePop(); ddSyncFromS();
+    }));
+  }
+
+  /** Δ% vs MD (last_md / avg_md). A diferencia de la de MC, la referencia NO está en el
+   *  gráfico: se trae de la temporada. Reusa fetchReports + aggregateSeries del resolver.
+   *  Para cada punto arma la referencia por (grupo × md_code): promedio histórico del mismo
+   *  MD (avg_md) o la ocurrencia previa del mismo MD antes de la selección (last_md). Alinea
+   *  por dims reemplazando el valor del eje temporal por su md_code (en eje session_date usa
+   *  window._gpMdForDate). Devuelve series sintéticas `<id>__relmd` (línea de %, eje 2º), que
+   *  reusan el mismo render, bandas de color y orden que la de MC. */
+  async function _buildMdRelSeries(config, rows, curSeries, ctx, sb, FBcard) {
+    const dimIds = (config.dimensions || []).map(d => d.id);
+    const tIdx = dimIds.findIndex(id => id === 'md_code' || id === 'session_date');
+    if (tIdx < 0) return [];
+    // Las funciones del resolver se desestructuran acá (no son globales del módulo).
+    const { getSessionIds, fetchReports, fetchExtraMetrics, aggregateSeries } = await _importResolver();
+    const isDateAxis = dimIds[tIdx] === 'session_date';
+    const _sess = r => r.training_sessions || r;
+
+    // md_codes de la selección actual + fecha de corte (mínima).
+    const wantMd = new Set(); let cutoff = null;
+    for (const r of rows) {
+      const md = _gpMdOf(_sess(r)); if (md) wantMd.add(String(md));
+      const d = r.training_sessions?.session_date ?? r.session_date;
+      if (d) { const ds = String(d).slice(0, 10); if (cutoff == null || ds < cutoff) cutoff = ds; }
+    }
+    if (!wantMd.size) return [];
+
+    // Filas de la temporada (mismo scope; sin filtros de tiempo del card), sólo esos md_code.
+    const seasonIds = await getSessionIds({ type: 'season' }, ctx, sb);
+    if (!seasonIds.length) return [];
+    const seasonFB = FBcard ? { ...FBcard, microcycleIds: [], date: null } : null;
+    let seasonRows = _fbFilterRows(await fetchReports(seasonIds, config, ctx, catalogMap, sb), seasonFB, config.source);
+    seasonRows = seasonRows.filter(r => wantMd.has(String(_gpMdOf(_sess(r)))));
+    if (!seasonRows.length) return [];
+
+    // Referencia POR OCURRENCIA con el MISMO agg de la métrica (para no romper la escala:
+    // comparar un total contra un promedio daría un % sin sentido). Agrego la temporada por
+    // (dims no temporales × md_code × session_date) → una fila por ocurrencia de cada MD; de
+    // ahí saco el promedio (avg_md) o la última ocurrencia previa al corte (last_md).
+    const nonTimeIds = dimIds.filter((_, i) => i !== tIdx);
+    const refDims = [...nonTimeIds, 'md_code', 'session_date'];
+    const refConfig = { ...config, dimensions: refDims.map(id => ({ id })) };   // conserva el agg original
+    const eav = await fetchExtraMetrics(seasonRows, refConfig, catalogMap, _clubId, sb);
+    const refSeries = aggregateSeries(seasonRows, eav, refConfig, catalogMap);
+    // metricId → Map(groupKey "dims no temporales ¦ md" → [{ date, val }])
+    const occIdx = new Map();
+    for (const s of refSeries) {
+      const g = new Map();
+      for (const p of s.points) {
+        const d = p.dims || [p.x];
+        const groupKey = d.slice(0, -1).join('¦');       // saca la fecha (último nivel)
+        if (!g.has(groupKey)) g.set(groupKey, []);
+        g.get(groupKey).push({ date: String(d[d.length - 1] || ''), val: p.y });
+      }
+      occIdx.set(s.label, g);
+    }
+    const refVal = (metricId, groupKey, mode) => {
+      const arr = (occIdx.get(metricId) || new Map()).get(groupKey);
+      if (!arr || !arr.length) return null;
+      if (mode === 'avg_md') {
+        const vs = arr.map(o => o.val).filter(v => v != null && !isNaN(v));
+        return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
+      }
+      // last_md: la ocurrencia más reciente ANTES del corte de la selección actual.
+      const prior = arr.filter(o => o.date && (!cutoff || o.date < cutoff) && o.val != null && !isNaN(o.val))
+                       .sort((a, b) => b.date.localeCompare(a.date));
+      return prior.length ? prior[0].val : null;
+    };
+
+    const mdOfDate = v => (isDateAxis ? (window._gpMdForDate?.[String(v).slice(0, 10)] || '') : v);
+    const out = [];
+    curSeries.forEach(s => {
+      const mc = config.metrics.find(m => m.id === s.label);
+      const mode = mc && mc.rel;
+      if ((mode !== 'last_md' && mode !== 'avg_md') || !s.points?.length) return;
+      const nm  = catalogMap.get(s.label)?.name || s.name || s.label;
+      const lbl = mode === 'avg_md' ? _tt('gps_analysis.builder_rel_avg_md_short', 'Δ% vs MD avg')
+                                    : _tt('gps_analysis.builder_rel_last_md_short', 'Δ% vs last MD');
+      out.push({ label: `${s.label}__relmd`, name: `${lbl} · ${nm}`, unit: '%', line: true, _rel: 'md',
+        points: s.points.map(p => {
+          const dv = p.dims || [p.x];
+          const groupKey = [...dv.filter((_, i) => i !== tIdx), mdOfDate(dv[tIdx])].join('¦');
+          const ref = refVal(s.label, groupKey, mode);
+          const pct = (ref != null && ref !== 0 && !isNaN(ref) && p.y != null && !isNaN(p.y)) ? (p.y - ref) / ref * 100 : null;
+          return { ...p, y: pct, _abs: p.y };
+        }) });
+    });
+    return out;
+  }
+
   // Icon/sample value by category (for mock rendering)
   const CAT_ICON = {
     distance:'ti-route', speed:'ti-brand-speedtest', acceleration:'ti-trending-up',
@@ -1475,9 +1602,9 @@
         // Bar/Line combo on a metric chip (bars only) — toggle the SAME m.line as the classic.
         const lineBtn = e.target.closest('[data-dd-line]');
         if (lineBtn) { const m = (S.metrics || []).find(x => x.id === lineBtn.dataset.ddLine); if (m) { m.line = !m.line; ddSyncFromS(); } return; }
-        // Δ% vs MC anterior — alterna el modo relativo de esa métrica.
+        // Variación Δ% — abre el mini-menú de modos (según el eje X).
         const relBtn = e.target.closest('[data-dd-rel]');
-        if (relBtn) { const m = (S.metrics || []).find(x => x.id === relBtn.dataset.ddRel); if (m) { m.rel = m.rel === 'prev_mc' ? undefined : 'prev_mc'; ddSyncFromS(); } return; }
+        if (relBtn) { _openRelMenu(relBtn); return; }
         const rmDim = e.target.closest('[data-rmdim]');
         if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
         const rmMet = e.target.closest('[data-rm]');
@@ -1874,7 +2001,7 @@
   /** Sección "Colorear Δ% por bandas" en Style. Sólo aparece en bars con una métrica en
    *  modo Δ% vs MC anterior. Off ⇒ color por signo; On ⇒ 4 bandas editables (2 umbrales). */
   function _relBandsSection() {
-    if (!S || S.type !== 'bars' || !(S.metrics || []).some(m => m.rel === 'prev_mc')) return '';
+    if (!S || S.type !== 'bars' || !_hasRelMetric(S)) return '';
     const on = !!S.relBands;
     const b  = S.relBands || _REL_BANDS_DEFAULT;
     const hi = Number(b.hi), lo = Number(b.lo);
@@ -2550,6 +2677,17 @@
       // ninguna métrica lo pide o si no hay dimensión de microciclo.
       series = _applyRelTransform(config, series);
 
+      // Modo relativo "vs MD" (Δ% vs último MD igual / vs promedio MD): trae la referencia
+      // de la temporada y AÑADE una línea de % por métrica. Sólo bars, sin comparación mc.
+      if (config.viz === 'bars' && config.comparison?.baseline !== 'mc'
+          && (config.metrics || []).some(m => m.rel === 'last_md' || m.rel === 'avg_md')) {
+        try {
+          const mdExtra = await _buildMdRelSeries(config, rows, series, ctx, sb, FBcard);
+          if (stale()) return;
+          if (mdExtra.length) series = series.concat(mdExtra);
+        } catch (e) { console.warn('gpb md variation failed — degrading:', e); }
+      }
+
       // Diagnostics: prove the series is 100% real (gps_reports/Supabase) and let you
       // cross-check the total against Session Control. Silence with window.GPB_DEBUG=false.
       if (window.GPB_DEBUG !== false) {
@@ -2937,9 +3075,30 @@
     const d = new Date(); d.setDate(d.getDate() - days);
     return d.toISOString().slice(0, 10);
   }
+  /** Union window [from,to] of the microcycles selected in the bar (by DATE, since
+   *  training_sessions rarely carry microcycle_id). Non-contiguous picks cover the gaps —
+   *  _fbFilterRows() narrows back to the exact MC set afterwards. null = nothing to scope. */
+  function _fbMcRange(FB) {
+    if (!FB?.microcycleIds?.length) return null;
+    const ranges = window._gpMcRangeById; if (!ranges) return null;
+    let from = null, to = null, open = false;
+    for (const id of FB.microcycleIds) {
+      const r = ranges[String(id)]; if (!r) continue;
+      if (from == null || r.start < from) from = r.start;
+      if (r.end == null) open = true;                              // microciclo abierto → sin tope
+      else if (to == null || r.end > to) to = r.end;
+    }
+    if (!from) return null;
+    return open ? { type: 'custom', from } : { type: 'custom', from, to };
+  }
   /** Date filter (if active) overrides the card's own range; else keep card range. */
   function _fbEffectiveRange(FB, cardRange) {
     const d = FB?.date;
+    // No active date filter but a microcycle IS picked in the bar → scope the FETCH to the
+    // selected microcycles' window. Sin esto, una card range:'mc' trae solo el MC más reciente
+    // y _fbFilterRows() descarta todo para un MC más viejo (card vacía en la carga inicial).
+    const _dateActive = d && (d.preset || d.from || d.to || (d.days && d.days.length));
+    if (!_dateActive) { const mcR = _fbMcRange(FB); if (mcR) return mcR; }
     if (!d) return cardRange;   // no bar context (or a pinned island) → the card's own range
     // The bar is the single source of the visible date window. NO active date filter means
     // "all dates" — NOT the card's internal default (e.g. w30), which shows empty on
@@ -6929,11 +7088,10 @@
     const lineToggle = S && S.type === 'bars'
       ? `<button class="bdd-line${m.line ? ' is-line' : ''}" data-dd-line="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}"><i class="ti ti-chart-bar"></i><i class="ti ti-chart-line"></i></button>`
       : '';
-    // Δ% vs MC anterior — modo relativo. Sólo tiene sentido con eje temporal, así que se
-    // muestra únicamente en bars/line CON una dimensión de microciclo (si no, no hay "anterior").
-    const canRel = S && S.type === 'bars' && (S.dimensions || []).some(d => d.id === 'microcycle');
-    const relToggle = canRel
-      ? `<button class="bdd-rel${m.rel === 'prev_mc' ? ' is-on' : ''}" data-dd-rel="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_variation', 'Show as Δ% vs previous MC (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_variation', 'Show as Δ% vs previous MC (secondary axis)'))}"><i class="ti ti-percentage"></i></button>`
+    // Modo variación Δ% — abre un mini-menú con los modos disponibles según el eje X:
+    // microcycle → vs MC anterior; md_code/session_date → vs último MD igual / vs promedio MD.
+    const relToggle = _relModesFor(S).length
+      ? `<button class="bdd-rel${m.rel ? ' is-on' : ''}" data-dd-rel="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}" aria-label="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}"><i class="ti ti-percentage"></i></button>`
       : '';
     return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
