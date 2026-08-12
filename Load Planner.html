@@ -18,15 +18,15 @@
 <style>
   .lp-doc{padding:22px 26px 60px;max-width:1320px;margin:0 auto;font-family:var(--cm-font-sans)}
   .lp-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
-  .lp-head h1{font-size:22px;font-weight:700;color:var(--cm-fg-strong);margin:0}
-  .lp-sub{font-size:13px;color:var(--cm-fg-muted);margin-top:3px}
+  .lp-head h1{font:600 24px/1.1 var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong);margin:0}
+  .lp-sub{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
   .lp-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .lp-select{height:34px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);color:var(--cm-fg);font:600 13px var(--cm-font-sans);padding:0 30px 0 12px;cursor:pointer;
     appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
   .lp-card{background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);margin-bottom:18px;overflow:hidden}
   .lp-card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--cm-border-soft)}
-  .lp-card-h .t{font-size:14px;font-weight:700;color:var(--cm-fg-strong)}
-  .lp-card-h .m{font-size:12px;color:var(--cm-fg-muted);font-weight:600}
+  .lp-card-h .t{font:600 13px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-strong)}
+  .lp-card-h .m{font:var(--cm-meta);color:var(--cm-fg-muted)}
   .lp-legend{display:flex;gap:14px;align-items:center;font-size:11px;color:var(--cm-fg-muted);flex-wrap:wrap}
   .lp-legend span{display:inline-flex;align-items:center;gap:5px}
   .lp-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -37,7 +37,7 @@
   .lp-grid thead th{background:var(--cm-bg-soft);position:sticky;top:0;z-index:2}
   .lp-grid th:first-child,.lp-grid td:first-child{text-align:left;position:sticky;left:0;background:var(--cm-surface);z-index:1;min-width:150px}
   .lp-grid thead th:first-child{z-index:3;background:var(--cm-bg-soft)}
-  .lp-dcol .md{font-size:11px;font-weight:800;color:var(--cm-fg-strong)}
+  .lp-dcol .md{font-size:11px;font-weight:700;color:var(--cm-fg-strong)}
   .lp-dcol .dt{font-size:9.5px;color:var(--cm-fg-faint)}
   .lp-tag{display:inline-block;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:999px;text-transform:uppercase;letter-spacing:.02em;margin-top:2px}
   .t-training{background:var(--cm-info-bg,#e0f2fe);color:var(--cm-info,#0369a1)}
@@ -59,7 +59,7 @@
   .lp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
   .lp-kpi{background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);padding:14px 16px}
   .lp-kpi .k{font-size:11.5px;color:var(--cm-fg-muted);font-weight:600;margin-bottom:6px}
-  .lp-kpi .v{font-size:24px;font-weight:800;color:var(--cm-fg-strong);font-family:var(--cm-font-mono);line-height:1}
+  .lp-kpi .v{font-size:24px;font-weight:700;color:var(--cm-fg-strong);font-family:var(--cm-font-mono);line-height:1}
   .lp-kpi .s{font-size:11px;color:var(--cm-fg-faint);margin-top:5px}
   .lp-cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;padding:16px}
   .lp-cmpc .cl{font-size:11px;font-weight:700;color:var(--cm-fg-muted);margin-bottom:6px}
@@ -78,7 +78,7 @@
   .lp-pl .nm{font-weight:600;color:var(--cm-fg-strong);font-size:13px}
   .lp-pl .po{font-size:11px;color:var(--cm-fg-faint)}
   .lp-cell{text-align:center;min-width:92px;vertical-align:middle;padding:7px 8px;cursor:pointer}
-  .lp-cell .cx{font:800 15px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .lp-cell .cx{font:700 15px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
   .lp-cell .cavg{font-size:10px;color:var(--cm-fg-muted);margin-top:2px;font-family:var(--cm-font-mono)}
   .lp-cell .cref{font-size:9.5px;color:var(--cm-fg-faint);margin-top:1px}
   .lp-cbar{display:block;height:5px;border-radius:999px;background:var(--cm-bg-sunk);margin-top:5px;overflow:hidden;position:relative}
@@ -214,6 +214,7 @@ let META_BY_KEY=Object.assign({},META), ACTIVE_METRICS=null;
 let ROSTER=[], MANUAL={};
 let MC=null, PREVMC=null, DAYS=[], PLAN={}, ANCHOR=null;
 let SELMC=null, ALLMCS=[];   // selected microcycle id + team microcycle list
+let MCTREND={}, TREND=[];    // mcId→metric→team avg total + ordered [{id,name}] for the trend chart
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, PREV={};
 let sortK='proj', sortD=-1;
 
@@ -288,7 +289,7 @@ async function reload(){
     await Promise.all([ loadRoster(), loadManual() ]);
     await loadMicrocycle();
     await Promise.all([ loadMatchRefs(), loadAccrued() ]);
-    await loadPrevMC();
+    await loadMcTrend();
   }catch(e){ console.error('[lp] reload failed:',e); }
   try{ render(); }
   catch(e){ console.error('[lp] render failed:',e); document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.render_error','Something went wrong rendering the page.')+'<br><span class="lp-mini">'+((e&&e.message)||e)+'</span></div>'; }
@@ -380,25 +381,40 @@ async function loadAccrued(){
   const today=window.cmToday(), start=DAYS[0].date, end=DAYS.filter(d=>!d.isFuture).slice(-1)[0]?.date||today;
   if(end<start) return;
   const cols=METRICS.join(',');
+  // Scope by ROSTER player_ids (not session.team_id): GPS-imported sessions usually carry
+  // team_id=null, so filtering by it drops everything. Same convention as GPS Analysis.
   const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
-    .select(`player_id,${cols},training_sessions!inner(session_date,team_id)`)
-    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).eq('training_sessions.team_id',TEAM)
+    .select(`player_id,${cols},training_sessions!inner(session_date)`)
+    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false)
     .gte('training_sessions.session_date',start).lte('training_sessions.session_date',end),{label:'lp-accrued'}).catch(()=>[]);
   (rows||[]).forEach(r=>METRICS.forEach(m=>{ if(r[m]!=null) ACCRUED[r.player_id][m]=(ACCRUED[r.player_id][m]||0)+(+r[m]); }));
 }
 
-async function loadPrevMC(){
-  PREV={}; PREVMC=null; if(!MC||!ALLMCS.length) return;
-  const idx=ALLMCS.findIndex(m=>m.id===MC.id);
-  PREVMC = idx>0 ? ALLMCS[idx-1] : null;   // immediately preceding microcycle (e.g. MC 01 when in MC 02)
-  if(!PREVMC) return;
-  const pids=ROSTER.map(p=>p.id); const cols=METRICS.join(',');
-  const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
-    .select(`player_id,${cols},training_sessions!inner(session_date,team_id)`)
-    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).eq('training_sessions.team_id',TEAM)
-    .gte('training_sessions.session_date',PREVMC.start_date).lte('training_sessions.session_date',PREVMC.end_date),{label:'lp-prevmc'}).catch(()=>[]);
-  const sum={}; (rows||[]).forEach(r=>{ sum[r.player_id]=sum[r.player_id]||{}; METRICS.forEach(m=>{ if(r[m]!=null) sum[r.player_id][m]=(sum[r.player_id][m]||0)+(+r[m]); }); });
-  METRICS.forEach(m=>{ const vals=Object.values(sum).map(s=>s[m]).filter(v=>v!=null); PREV[m]= vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null; });
+// Team-average total per metric per microcycle across the last few MCs (for the trend chart).
+// Buckets sessions into MCs by microcycle_id or by date range; scopes GPS by roster player_ids.
+async function loadMcTrend(){
+  MCTREND={}; TREND=[];
+  if(!ALLMCS.length||!ROSTER.length||!METRICS.length) return;
+  const upto = MC? ALLMCS.filter(m=>m.start_date<=MC.end_date) : ALLMCS;
+  const cand = upto.slice(-6);
+  if(!cand.length) return;
+  const winStart=cand.reduce((a,m)=>m.start_date<a?m.start_date:a,cand[0].start_date);
+  const winEnd  =cand.reduce((a,m)=>m.end_date>a?m.end_date:a,cand[0].end_date);
+  const candIds=cand.map(m=>m.id);
+  const mcForDate=d=>cand.find(m=>d>=m.start_date&&d<=m.end_date)?.id||null;
+  let sess=[]; try{ const {data}=await window.sb.from('training_sessions').select('id,session_date,microcycle_id')
+      .eq('club_id',CLUB).gte('session_date',winStart).lte('session_date',winEnd); sess=data||[]; }catch(e){}
+  const sidToMc={}, sids=[];
+  sess.forEach(s=>{ const mcId=(s.microcycle_id&&candIds.includes(s.microcycle_id))?s.microcycle_id:mcForDate(s.session_date); if(!mcId)return; sidToMc[s.id]=mcId; sids.push(s.id); });
+  if(!sids.length) return;
+  const pids=ROSTER.map(p=>p.id), cols=METRICS.join(',');
+  const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports').select(`player_id,session_id,${cols}`)
+    .eq('club_id',CLUB).eq('is_invalid',false).in('session_id',sids).in('player_id',pids),{label:'lp-trend'}).catch(()=>[]);
+  const acc={}; // mcId → pid → metric → sum
+  (rows||[]).forEach(r=>{ const mcId=sidToMc[r.session_id]; if(!mcId)return; (acc[mcId]=acc[mcId]||{}); (acc[mcId][r.player_id]=acc[mcId][r.player_id]||{});
+    METRICS.forEach(m=>{ if(r[m]!=null) acc[mcId][r.player_id][m]=(acc[mcId][r.player_id][m]||0)+(+r[m]); }); });
+  cand.forEach(mc=>{ const byP=acc[mc.id]; if(!byP)return; MCTREND[mc.id]={}; METRICS.forEach(m=>{ const vals=Object.values(byP).map(o=>o[m]).filter(v=>v!=null&&v>0); MCTREND[mc.id][m]= vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null; }); });
+  TREND=cand.filter(mc=>MCTREND[mc.id]).map(mc=>({id:mc.id,name:mc.name||mc.start_date}));
 }
 
 // per-metric planned remaining (× match) = Σ future/today pct[date][metric]/100
@@ -466,30 +482,28 @@ function kpiHTML(){
   </div>`;
 }
 
-// team projected total vs previous microcycle (per metric) — mini bars + % diff
+// Team load by microcycle (bar per MC + % change vs previous) — GPS Analysis wk-on-wk model.
 function compareHTML(){
-  if(!PREVMC) return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.vs_prev','Team vs previous microcycle')}</span></div><div class="lp-empty">${tt('load_planner.no_prev','No previous microcycle found for this team.')}</div></div>`;
-  const cards=METRICS.map(m=>{
-    const prev=PREV[m];
-    // current projected team total avg per metric = avg over players of (accrued + plannedRemainingAbs)
-    const projs=ROSTER.map(p=>{ const c=cellData(p,m); return c.projAbs; }).filter(v=>v!=null);
-    const cur= projs.length? projs.reduce((a,b)=>a+b,0)/projs.length : null;
-    const diff= (prev&&cur!=null&&prev>0)? (cur-prev)/prev*100 : null;
-    const mx=Math.max(prev||0,cur||0)||1;
-    const bp= prev!=null?(prev/mx*46):0, bc= cur!=null?(cur/mx*46):0;
-    const dcls= diff==null?'flat':diff>3?'up':diff<-3?'down':'flat';
-    return `<div class="lp-cmpc"><div class="cl">${shortLabel(m)}</div>
-      <svg viewBox="0 0 120 56" preserveAspectRatio="none">
-        <rect x="14" y="${50-bp}" width="38" height="${bp}" rx="2" fill="var(--cm-border-strong,#cbd5e1)"></rect>
-        <rect x="66" y="${50-bc}" width="38" height="${bc}" rx="2" fill="var(--cm-accent)"></rect>
-        <text x="33" y="55" font-size="7" text-anchor="middle" fill="var(--cm-fg-faint)">prev</text>
-        <text x="85" y="55" font-size="7" text-anchor="middle" fill="var(--cm-fg-faint)">proj</text>
-      </svg>
-      <div class="delta ${dcls}">${diff==null?'—':(diff>0?'+':'')+diff.toFixed(0)+'%'}</div></div>`;
-  }).join('');
-  return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.vs_prev','Team vs previous microcycle')}</span>
-      <span class="m">${PREVMC.name||''} → ${tt('load_planner.projected','projected')}</span></div>
-    <div class="lp-cmp">${cards}</div></div>`;
+  const m=FOCUS, mm=metaOf(m);
+  const pts=TREND.map((t,i)=>{ const total=MCTREND[t.id][m]; const prev=i>0?MCTREND[TREND[i-1].id][m]:null;
+    const pct=(prev&&total!=null&&prev>0)?Math.round((total-prev)/prev*100):null; return {name:t.name,total,pct}; }).filter(p=>p.total!=null&&p.total>0);
+  const inner = !pts.length
+    ? `<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`
+    : (()=>{ const maxT=Math.max(...pts.map(p=>p.total),1), BAR=120;
+        const col=pct=> pct===null?'var(--cm-fg-muted)':Math.abs(pct)<=15?'var(--cm-success)':Math.abs(pct)<=25?'var(--cm-warning)':'var(--cm-danger)';
+        const bars=pts.map(p=>{ const h=Math.max(Math.round(p.total/maxT*BAR),3), c=col(p.pct);
+          const lbl=p.pct!==null?(p.pct>=0?'+':'')+p.pct+'%':tt('load_planner.base','base');
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px">
+            <div style="height:16px;display:flex;align-items:center"><span style="font:600 12px/1 var(--cm-font-sans);color:${c}">${lbl}</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:58%"><div style="background:${c};border-radius:4px 4px 0 0;height:${h}px" title="${fmtN(p.total,mm.dec)} ${mm.unit}"></div></div>
+            <div style="height:15px"><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg)">${fmtN(p.total,mm.dec)}</span></div>
+            <div style="height:16px;max-width:100%;overflow:hidden"><span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap">${p.name}</span></div>
+          </div>`; }).join('');
+        return `<div style="display:flex;gap:10px;align-items:stretch;height:200px;padding:18px 16px">${bars}</div>`; })();
+  return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.mc_trend','Team load by microcycle')}</span>
+      <span class="m">${mm.label} · ${tt('load_planner.squad_avg','squad avg / player')}</span></div>
+    ${inner}
+    <div class="lp-grid-foot"><span class="lp-mini">${tt('load_planner.mc_trend_hint','Team average per player per microcycle · % = change vs previous microcycle.')}</span></div></div>`;
 }
 
 function matrixHTML(){
