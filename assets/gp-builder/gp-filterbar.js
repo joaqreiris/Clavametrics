@@ -1084,6 +1084,11 @@
       return hit;
     }
     window._gpMcForDate = _mcForDate;
+    // id → ventana [start,end] del microciclo, para que gp-builder scopee el FETCH por FECHA
+    // cuando el bar tiene microciclo(s) elegido(s) (los training_sessions casi nunca traen
+    // microcycle_id, así que scopear por id devolvería 0; la asociación real es por fecha).
+    window._gpMcRangeById = {};
+    _mcRanges.forEach(m => { window._gpMcRangeById[m.id] = { start: m.start, end: m.end }; });
 
     // Microciclos SELECCIONABLES = solo los que tienen datos GPS (algún session_date cae en su
     // ventana). value = id; etiqueta REAL del MC (mc.name).
