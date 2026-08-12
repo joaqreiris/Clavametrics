@@ -886,7 +886,7 @@ let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = 'strength'
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,muscle_group,category,complexity,equipment,equipment_tags,media_type,media_ref,video_url')
+    .select('id,name,muscle_group,muscle_groups,category,primary_purpose,purposes,complexity,equipment,equipment_tags,media_type,media_ref,video_url')
     .eq('club_id', _gpClubId).order('name');
   _gpLib = data || [];
   return _gpLib;
@@ -1082,14 +1082,47 @@ function gpBuildLibModal() {
   document.body.appendChild(ov);
   ov.querySelector('#gpLibSearch').addEventListener('input', gpRenderLibList);
 }
+// Picker facets read the modern array tags (purposes[]/muscle_groups[]) and fall
+// back to the legacy singular columns so older libraries still filter. Exercises
+// are tagged with taxonomy slugs; category defaults to 'strength' club-wide, so
+// filtering on it alone left the picker stuck — purpose/muscle are the real axes.
+function gpExPurposes(e){
+  const s = new Set();
+  if (e.primary_purpose) s.add(e.primary_purpose);
+  (e.purposes||[]).forEach(p => { if (p) s.add(p); });
+  if (!s.size && e.category) s.add(e.category);
+  return [...s];
+}
+function gpExMuscles(e){
+  const s = new Set();
+  (e.muscle_groups||[]).forEach(m => { if (m) s.add(m); });
+  if (!s.size && e.muscle_group) s.add(e.muscle_group);
+  return [...s];
+}
+// Order present tokens by the canonical taxonomy, then any legacy/custom extras.
+function gpFacetTokens(dim, values){
+  const present = new Set(values);
+  const ordered = (window.CMTaxonomy ? CMTaxonomy.tokens(dim) : []).filter(t => present.has(t));
+  const extras = [...present].filter(t => !ordered.includes(t)).sort();
+  return [...ordered, ...extras];
+}
+// Localized label: tt('taxonomy.<dim>.<token>') → taxonomy English → prettified slug.
+function gpFacetLabel(dim, token){
+  if (!token) return token;
+  const eng = window.CMTaxonomy ? CMTaxonomy.label(dim, token) : token;
+  const localized = tt('taxonomy.' + dim + '.' + token, eng);
+  if (localized && localized !== eng) return localized;
+  return (eng === token) ? (token[0].toUpperCase() + token.slice(1)) : eng;
+}
 function gpRenderLibChips() {
   const wrap = document.getElementById('gpLibChips'); if (!wrap) return;
-  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
-  const cats = [...new Set((_gpLib||[]).map(e => e.category).filter(Boolean))].sort();
-  const muscles = [...new Set((_gpLib||[]).filter(e => !_gpLibCat || e.category === _gpLibCat).map(e => e.muscle_group).filter(Boolean))].sort();
-  const chip = (label, val, on, kind) => `<button class="gp-lib-chip${on?' is-on':''}" data-kind="${kind}" data-val="${(val||'').replace(/"/g,'&quot;')}">${label}</button>`;
-  let html = `<div class="gp-lib-chiprow">${chip(tt('common.all','All'), '', _gpLibCat==='', 'cat')}${cats.map(c => chip(cap(c), c, _gpLibCat===c, 'cat')).join('')}</div>`;
-  if (muscles.length) html += `<div class="gp-lib-chiprow">${chip(tt('gym_planner.all_muscles','All muscles'), '', _gpLibMuscle==='', 'muscle')}${muscles.map(m => chip(cap(m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
+  const lib = _gpLib || [];
+  const purpTokens = gpFacetTokens('purpose', lib.flatMap(gpExPurposes));
+  const inCat = lib.filter(e => !_gpLibCat || gpExPurposes(e).includes(_gpLibCat));
+  const musTokens = gpFacetTokens('muscle_group', inCat.flatMap(gpExMuscles));
+  const chip = (label, val, on, kind) => `<button class="gp-lib-chip${on?' is-on':''}" data-kind="${kind}" data-val="${(val||'').replace(/"/g,'&quot;')}">${esc(label)}</button>`;
+  let html = `<div class="gp-lib-chiprow">${chip(tt('common.all','All'), '', _gpLibCat==='', 'cat')}${purpTokens.map(t => chip(gpFacetLabel('purpose',t), t, _gpLibCat===t, 'cat')).join('')}</div>`;
+  if (musTokens.length) html += `<div class="gp-lib-chiprow">${chip(tt('gym_planner.all_muscles','All muscles'), '', _gpLibMuscle==='', 'muscle')}${musTokens.map(m => chip(gpFacetLabel('muscle_group',m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
   wrap.innerHTML = html;
   wrap.querySelectorAll('.gp-lib-chip').forEach(b => b.onclick = () => {
     if (b.dataset.kind === 'cat') { _gpLibCat = b.dataset.val; _gpLibMuscle = ''; }
@@ -1100,13 +1133,18 @@ function gpRenderLibChips() {
 function gpRenderLibList() {
   const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
   const q = (document.getElementById('gpLibSearch').value || '').toLowerCase().trim();
-  const items = (_gpLib || []).filter(e =>
-    (!_gpLibCat || e.category === _gpLibCat) &&
-    (!_gpLibMuscle || e.muscle_group === _gpLibMuscle) &&
-    (!q || (`${e.name} ${e.muscle_group||''} ${e.category||''}`).toLowerCase().includes(q)));
+  const items = (_gpLib || []).filter(e => {
+    if (_gpLibCat && !gpExPurposes(e).includes(_gpLibCat)) return false;
+    if (_gpLibMuscle && !gpExMuscles(e).includes(_gpLibMuscle)) return false;
+    if (!q) return true;
+    const hay = `${e.name||''} ${gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m)).join(' ')} ${gpExPurposes(e).map(p => gpFacetLabel('purpose',p)).join(' ')}`.toLowerCase();
+    return hay.includes(q);
+  });
   if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_exercises_found','No exercises found.')}</div>`; foot.textContent = tt('gym_planner.n_exercises_count', '0 exercises', { count:0 }); return; }
   list.innerHTML = items.map(e => {
-    const meta = [e.muscle_group, e.category, e.complexity].filter(Boolean).join(' · ');
+    const muscleLabel = gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m))[0];
+    const purposeLabel = gpExPurposes(e).map(p => gpFacetLabel('purpose',p))[0];
+    const meta = [muscleLabel, purposeLabel, e.complexity].filter(Boolean).join(' · ');
     return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
       <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
       ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
@@ -1125,9 +1163,9 @@ async function gpOpenLib(ctx) {
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
   document.getElementById('gpLibFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpLibList').innerHTML = '';
-  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : 'strength'; _gpLibMuscle = '';
+  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : ''; _gpLibMuscle = '';
   await gpEnsureLib();
-  if (_gpLibCat && !(_gpLib||[]).some(e => e.category === _gpLibCat)) _gpLibCat = '';
+  if (_gpLibCat && !(_gpLib||[]).some(e => gpExPurposes(e).includes(_gpLibCat))) _gpLibCat = '';
   gpRenderLibChips(); gpRenderLibList();
 }
 function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
