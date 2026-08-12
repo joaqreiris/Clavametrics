@@ -808,6 +808,53 @@ CREATE INDEX idx_gps_rm_report ON public.gps_report_metrics USING btree (report_
 CREATE INDEX idx_gps_rm_club_metric ON public.gps_report_metrics USING btree (club_id, metric_key);
 CREATE INDEX idx_gps_rm_club_key_report ON public.gps_report_metrics USING btree (club_id, metric_key, report_id);
 
+-- ── Load Planner ─────────────────────────────────────────────────────────────
+-- player_match_refs: manual per-player, per-metric MATCH REFERENCE override.
+-- The Load Planner computes best-5 and last-5(/90) references live from gps_reports;
+-- when a coach types/edits a reference (e.g. after importing the Catapult "Athlete
+-- Thresholds" CSV) it is stored here and wins over the computed values for that metric.
+-- metric = app metric key (a gps_reports core column, or a gps_report_metrics EAV key).
+create table if not exists public.player_match_refs (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  metric text not null,
+  ref_value numeric,                       -- absolute match reference (display/native units)
+  updated_at timestamp with time zone default now(),
+  updated_by uuid,
+  constraint player_match_refs_pkey primary key (id),
+  constraint player_match_refs_uq UNIQUE (club_id, player_id, metric)
+);
+CREATE INDEX idx_pmr_club_player ON public.player_match_refs USING btree (club_id, player_id);
+
+alter table public.player_match_refs enable row level security;
+create policy "club members manage player_match_refs" on public.player_match_refs as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+
+-- load_plan: planned load per team/day/metric, expressed as a PERCENTAGE of the match
+-- reference (0–300+). Keyed by date (not session_id) so future/unplanned days can be
+-- planned before a training_sessions row exists. Each player's absolute target for a day
+-- = pct × that player's match reference for the metric.
+create table if not exists public.load_plan (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  plan_date date not null,
+  metric text not null,
+  pct numeric,                             -- % of match reference (e.g. 45 = 45%)
+  updated_at timestamp with time zone default now(),
+  updated_by uuid,
+  constraint load_plan_pkey primary key (id),
+  constraint load_plan_uq UNIQUE (club_id, team_id, plan_date, metric)
+);
+CREATE INDEX idx_load_plan_team_date ON public.load_plan USING btree (club_id, team_id, plan_date);
+
+alter table public.load_plan enable row level security;
+create policy "club members manage load_plan" on public.load_plan as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+
 create table if not exists public.gps_reports (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,

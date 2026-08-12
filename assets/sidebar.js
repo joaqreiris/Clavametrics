@@ -224,6 +224,7 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Wellness.html',          icon: 'ti-heartbeat',        label: 'Wellness',         key: 'wellness' },
       { href: 'RPE.html',               icon: 'ti-activity',         label: 'RPE',              key: 'rpe' },
       { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor',     key: 'load-monitor' },
+      { href: 'Load%20Planner.html',    icon: 'ti-chart-histogram',  label: 'Load planner',     key: 'load-planner' },
       { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis',     key: 'gps' },
       { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner',      key: 'gym-planner' },
       { href: 'Individual%20Planner.html', icon: 'ti-user-cog',       label: 'Individual S&C',   key: 'individual-sc' },

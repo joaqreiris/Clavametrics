@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="load_planner.title_tab">Load Planner — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<script src="assets/gps-baseline.js"></script>
+<style>
+  .lp-doc{padding:22px 26px 60px;max-width:1240px;margin:0 auto;font-family:var(--cm-font-sans)}
+  .lp-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .lp-head h1{font-size:22px;font-weight:700;color:var(--cm-fg-strong);margin:0}
+  .lp-sub{font-size:13px;color:var(--cm-fg-muted);margin-top:3px}
+  .lp-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .lp-seg{display:inline-flex;background:var(--cm-bg-sunk);border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-3);padding:2px}
+  .lp-seg button{border:0;background:transparent;color:var(--cm-fg-muted);font:600 12px/1 var(--cm-font-sans);padding:7px 12px;border-radius:calc(var(--cm-r-3) - 2px);cursor:pointer;white-space:nowrap}
+  .lp-seg button.on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
+  .lp-select{height:34px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);color:var(--cm-fg);font:600 13px var(--cm-font-sans);padding:0 30px 0 12px;cursor:pointer;
+    appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+  .lp-card{background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);margin-bottom:18px;overflow:hidden}
+  .lp-card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--cm-border-soft)}
+  .lp-card-h .t{font-size:14px;font-weight:700;color:var(--cm-fg-strong)}
+  .lp-card-h .m{font-size:12px;color:var(--cm-fg-muted);font-weight:600}
+  .lp-weeknav{display:inline-flex;align-items:center;gap:6px}
+  .lp-weeknav button{width:28px;height:28px;border:1px solid var(--cm-border);background:var(--cm-surface);border-radius:8px;color:var(--cm-fg-muted);cursor:pointer;display:grid;place-items:center}
+  .lp-weeknav button:hover{color:var(--cm-fg-strong)}
+  /* microcycle strip */
+  .lp-strip{display:flex;gap:8px;padding:14px 16px;overflow-x:auto}
+  .lp-day{flex:1 0 96px;min-width:96px;border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-3);padding:9px 9px 10px;background:var(--cm-bg-soft);position:relative}
+  .lp-day.today{outline:2px solid var(--cm-accent);outline-offset:-1px}
+  .lp-day.future{background:var(--cm-surface)}
+  .lp-day .md{font-size:11px;font-weight:800;color:var(--cm-fg-strong);letter-spacing:.02em}
+  .lp-day .dt{font-size:10px;color:var(--cm-fg-faint);margin-bottom:6px}
+  .lp-tag{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px}
+  .t-training{background:var(--cm-info-bg,#e0f2fe);color:var(--cm-info,#0369a1)}
+  .t-match{background:var(--cm-danger-bg,#fee2e2);color:var(--cm-danger,#b91c1c)}
+  .t-gym{background:#ede9fe;color:#6d28d9}
+  .t-recovery{background:var(--cm-success-bg,#dcfce7);color:var(--cm-success,#15803d)}
+  .t-off,.t-none{background:var(--cm-bg-sunk);color:var(--cm-fg-faint)}
+  .lp-pct{display:flex;align-items:center;gap:3px}
+  .lp-pct input{width:44px;height:26px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-surface);color:var(--cm-fg-strong);font:700 12px var(--cm-font-mono);text-align:right;padding:0 4px}
+  .lp-pct input:disabled{opacity:.5;background:var(--cm-bg-sunk)}
+  .lp-pct .u{font-size:11px;color:var(--cm-fg-faint);font-weight:700}
+  .lp-day .real{font-size:10.5px;color:var(--cm-fg-muted);margin-top:6px;font-weight:600}
+  .lp-day .real b{color:var(--cm-fg-strong)}
+  .lp-strip-foot{display:flex;gap:22px;padding:10px 16px 14px;border-top:1px dashed var(--cm-border-soft);font-size:12px;color:var(--cm-fg-muted);flex-wrap:wrap}
+  .lp-strip-foot b{color:var(--cm-fg-strong)}
+  /* KPIs */
+  .lp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+  .lp-kpi{background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);padding:14px 16px}
+  .lp-kpi .k{font-size:11.5px;color:var(--cm-fg-muted);font-weight:600;margin-bottom:6px}
+  .lp-kpi .v{font-size:24px;font-weight:800;color:var(--cm-fg-strong);font-family:var(--cm-font-mono);line-height:1}
+  .lp-kpi .s{font-size:11px;color:var(--cm-fg-faint);margin-top:5px}
+  /* table */
+  .lp-tblwrap{overflow-x:auto}
+  .lp-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .lp-tbl th{text-align:right;font-size:11px;font-weight:700;color:var(--cm-fg-muted);padding:10px 12px;border-bottom:1px solid var(--cm-border-soft);white-space:nowrap;cursor:pointer;user-select:none}
+  .lp-tbl th:first-child{text-align:left}
+  .lp-tbl td{text-align:right;padding:9px 12px;border-bottom:1px solid var(--cm-border-soft);color:var(--cm-fg);white-space:nowrap}
+  .lp-tbl td:first-child{text-align:left}
+  .lp-tbl tr:last-child td{border-bottom:0}
+  .lp-pl{display:flex;align-items:center;gap:9px}
+  .lp-av{width:28px;height:28px;border-radius:50%;background:var(--cm-bg-sunk);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--cm-fg-muted);flex:none}
+  .lp-pl .nm{font-weight:600;color:var(--cm-fg-strong);font-size:13px}
+  .lp-pl .po{font-size:11px;color:var(--cm-fg-faint)}
+  .lp-mono{font-family:var(--cm-font-mono)}
+  .lp-ref{cursor:pointer;border-bottom:1px dashed var(--cm-border);padding-bottom:1px}
+  .lp-ref:hover{color:var(--cm-accent)}
+  .lp-badge{display:inline-block;font-size:9px;font-weight:800;padding:1px 4px;border-radius:4px;margin-left:5px;vertical-align:middle;background:#ede9fe;color:#6d28d9}
+  .lp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
+  .d-high{background:var(--cm-success)}.d-med{background:var(--cm-warning)}.d-none{background:var(--cm-border-strong,#cbd5e1)}
+  .lp-x{font-weight:800;font-family:var(--cm-font-mono)}
+  .lp-bar{position:relative;height:8px;width:120px;background:var(--cm-bg-sunk);border-radius:999px;overflow:hidden;display:inline-block;vertical-align:middle}
+  .lp-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px}
+  .x-under i{background:var(--cm-info,#0ea5e9)}
+  .x-ok i{background:var(--cm-success,#16a34a)}
+  .x-over i{background:var(--cm-danger,#dc2626)}
+  .lp-empty{padding:40px;text-align:center;color:var(--cm-fg-faint);font-size:13px}
+  /* modal */
+  .lp-modal{position:fixed;inset:0;z-index:200;background:rgba(15,17,21,.5);display:flex;align-items:center;justify-content:center;padding:20px}
+  .lp-modal[hidden]{display:none}
+  .lp-modal .box{background:var(--cm-surface);border-radius:var(--cm-r-4);width:min(920px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .lp-modal .mh{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--cm-border-soft)}
+  .lp-modal .mh h3{font-size:16px;font-weight:700;color:var(--cm-fg-strong);margin:0}
+  .lp-modal .mb{padding:18px 20px;overflow:auto}
+  .lp-modal .mf{padding:14px 20px;border-top:1px solid var(--cm-border-soft);display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .lp-drop{border:2px dashed var(--cm-border);border-radius:var(--cm-r-3);padding:26px;text-align:center;color:var(--cm-fg-muted);cursor:pointer}
+  .lp-drop:hover{border-color:var(--cm-accent);color:var(--cm-fg)}
+  .lp-map{display:grid;grid-template-columns:1fr auto 1fr;gap:8px 12px;align-items:center;margin-top:6px}
+  .lp-map .csvh{font-size:12px;font-weight:600;color:var(--cm-fg-strong);background:var(--cm-bg-soft);padding:7px 10px;border-radius:7px}
+  .lp-map .arw{color:var(--cm-fg-faint)}
+  .lp-note{font-size:12px;color:var(--cm-fg-muted);line-height:1.5}
+  .lp-mini{font-size:11px;color:var(--cm-fg-faint)}
+  .lp-imptbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  .lp-imptbl th,.lp-imptbl td{padding:6px 8px;border-bottom:1px solid var(--cm-border-soft);text-align:right}
+  .lp-imptbl th:first-child,.lp-imptbl td:first-child{text-align:left}
+  .lp-imptbl input{width:80px;height:26px;border:1px solid var(--cm-border);border-radius:6px;text-align:right;padding:0 5px;font-family:var(--cm-font-mono);background:var(--cm-surface);color:var(--cm-fg)}
+  .lp-unmatched{color:var(--cm-danger);font-weight:600}
+  .lp-loading{padding:50px;text-align:center;color:var(--cm-fg-faint)}
+</style>
+</head>
+<body class="cm">
+<div class="hub-shell" data-screen-label="Load Planner">
+  <div id="hub-side-root"></div>
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="shell.group.performance">Performance</span>
+        <span class="sep">/</span><span data-i18n="load_planner.nav">Load planner</span></div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="load_planner.search_ph" placeholder="Search…"></div>
+      <div class="actions">
+        <select id="lpTeamSelect" class="lp-select" style="margin-right:8px"></select>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="lp-doc">
+      <div class="lp-head">
+        <div>
+          <h1 data-i18n="load_planner.title">Load planner</h1>
+          <p class="lp-sub" id="lpMcSub" data-i18n="load_planner.subtitle">Weekly load preview vs. match reference</p>
+        </div>
+        <div class="lp-head-actions">
+          <div class="lp-seg" id="lpModeSeg">
+            <button data-mode="best5" class="on" data-i18n="load_planner.mode_best5">Best 5</button>
+            <button data-mode="last90" data-i18n="load_planner.mode_last90">Last 5 · /90</button>
+          </div>
+          <select id="lpMetricSel" class="lp-select"></select>
+          <button id="lpImportBtn" class="cm-btn is-outline is-sm"><i class="ti ti-upload"></i> <span data-i18n="load_planner.import_csv">Import CSV</span></button>
+        </div>
+      </div>
+
+      <div id="lpBody">
+        <div class="lp-loading" data-i18n="load_planner.loading">Loading…</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Import / references modal -->
+<div class="lp-modal" id="lpModal" hidden>
+  <div class="box">
+    <div class="mh">
+      <h3 data-i18n="load_planner.import_title">Import match references (Catapult CSV)</h3>
+      <button class="cm-icon-btn" id="lpModalClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="mb" id="lpModalBody"></div>
+    <div class="mf">
+      <span class="lp-mini" id="lpModalHint"></span>
+      <div style="display:flex;gap:8px">
+        <button class="cm-btn is-ghost is-sm" id="lpModalCancel" data-i18n="load_planner.cancel">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="lpModalSave" data-i18n="load_planner.save_refs" disabled>Save references</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="lib/day-context.js"></script>
+<script src="assets/gps-reader.js"></script>
+<script>
+(function(){
+'use strict';
+
+// ── i18n helper ────────────────────────────────────────────────
+function tt(key, fb, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fb!=null?fb:key); }
+
+// ── metric metadata (fallback when catalog is empty) ───────────
+const META = {
+  total_distance:          {label:'Total distance',          unit:'m',    dec:0, kind:'accum'},
+  high_speed_distance:     {label:'High speed running',       unit:'m',    dec:0, kind:'accum'},
+  very_high_speed_distance:{label:'Very high speed running',   unit:'m',    dec:0, kind:'accum'},
+  sprint_distance:         {label:'Sprint distance',          unit:'m',    dec:0, kind:'accum'},
+  hmld:                    {label:'HMLD',                     unit:'m',    dec:0, kind:'accum'},
+  player_load:             {label:'Player load',              unit:'AU',   dec:0, kind:'accum'},
+  accelerations:           {label:'Accelerations',            unit:'',     dec:0, kind:'accum'},
+  decelerations:           {label:'Decelerations',            unit:'',     dec:0, kind:'accum'},
+  sprint_count:            {label:'Sprints',                  unit:'',     dec:0, kind:'accum'},
+  distance_per_minute:     {label:'Distance / min',           unit:'m/min',dec:1, kind:'peak'},
+  max_speed:               {label:'Max speed',                unit:'km/h', dec:1, kind:'peak'},
+  avg_speed:               {label:'Avg speed',                unit:'km/h', dec:1, kind:'peak'},
+  time_played:             {label:'Time played',              unit:'min',  dec:0, kind:'accum'},
+};
+const PEAK = new Set(['max_speed','avg_speed','distance_per_minute']);
+const ACCUM_METRICS = Object.keys(META).filter(k=>!PEAK.has(k) && k!=='time_played');
+// Weekly Exposure:Performance bands (× match) — fallback = CM_DEFAULT_FLAGS.gps_ep_ratio defaults
+const BANDS = {
+  total_distance:[2.5,3.5], high_speed_distance:[2.0,2.5], very_high_speed_distance:[2.0,2.5],
+  sprint_distance:[1.5,2.5], accelerations:[2.6,3.05], decelerations:[2.6,3.05],
+  player_load:[2.5,3.5], hmld:[2.0,2.5],
+};
+// Guess map: Catapult CSV header (lowercased) → app metric
+const CSV_GUESS = {
+  'total distance':'total_distance',
+  'velocity distance band 3':'high_speed_distance',
+  'velocity distance band 4':'very_high_speed_distance',
+  'velocity distance band 5':'sprint_distance',
+  'high speed distance':'high_speed_distance',
+  'very high speed distance':'very_high_speed_distance',
+  'sprint distance':'sprint_distance',
+  'hmld (gen 2)':'hmld','hmld':'hmld','high metabolic load distance':'hmld',
+  'acceleration bands 2-3 efforts':'accelerations','accelerations':'accelerations',
+  'deceleration bands 2-3 efforts':'decelerations','decelerations':'decelerations',
+  'player load':'player_load','max velocity':'max_speed','max speed':'max_speed',
+};
+
+// ── state ──────────────────────────────────────────────────────
+let CLUB=null, PROFILE=null, TEAM=null;
+let METRIC='total_distance', MODE='best5';
+let META_BY_KEY = Object.assign({}, META);   // enriched from catalog
+let ACTIVE_METRICS = null;                     // club_gps_settings.active_metrics
+let ROSTER=[];                                 // [{id,name,pos,number,ext}]
+let MANUAL={};                                 // pid → {metric → value}
+let MC=null, DAYS=[], PLAN={};                 // microcycle + day list + load_plan
+let ANCHOR=null;                               // date used to locate the week
+let REFS={}, ACCRUED={};                       // pid → number (for current METRIC)
+let sortK='proj', sortD=-1;
+
+const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString('en-US'));
+const cap=s=>s?s[0].toUpperCase()+s.slice(1):'';
+const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0,kind:'accum'};
+const isPeak=k=>metaOf(k).kind==='peak'||PEAK.has(k);
+
+// ─────────────────────────────────────────────────────────────
+async function init(){
+  CLUB = await window.getClubId();
+  PROFILE = await window.getProfile();
+  if(!CLUB){ document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.no_club','No club found.')+'</div>'; return; }
+  await initTeamSwitch();
+  await loadCatalogMeta();
+  buildMetricSelect();
+  wireControls();
+  ANCHOR = window.cmToday();
+  await reload();
+}
+
+async function initTeamSwitch(){
+  const bucket=(PROFILE?.role||PROFILE?.club_role||'').toLowerCase();
+  let full = bucket==='admin'||bucket==='owner';
+  if(!full && window.isSuperAdmin){ try{ full=await window.isSuperAdmin(); }catch(e){} }
+  let teams=await window.getTeams(CLUB)||[];
+  if(!full){ let mine=[]; try{ mine=(await window.sb.rpc('my_team_ids')).data||[]; }catch(e){} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+  const sel=document.getElementById('lpTeamSelect');
+  if(!teams.length){ sel.innerHTML='<option>'+tt('load_planner.no_teams','No teams')+'</option>'; sel.disabled=true; return; }
+  const saved=sessionStorage.getItem('cal_active_team');
+  TEAM=(saved&&teams.some(t=>t.id===saved))?saved:teams[0].id;
+  sel.innerHTML=teams.map(t=>`<option value="${t.id}"${t.id===TEAM?' selected':''}>${t.name||'Team'}</option>`).join('');
+  sel.onchange=()=>{ TEAM=sel.value; sessionStorage.setItem('cal_active_team',TEAM); ANCHOR=window.cmToday(); reload(); };
+}
+
+async function loadCatalogMeta(){
+  try{
+    const cat = window.getCatalog ? await window.getCatalog(CLUB) : [];
+    (cat||[]).forEach(m=>{ META_BY_KEY[m.key]={ label:m.label||(META[m.key]?.label)||m.key, unit:m.unit||META[m.key]?.unit||'', dec:(m.decimals!=null?m.decimals:(META[m.key]?.dec||0)), kind:(META[m.key]?.kind)|| (PEAK.has(m.key)?'peak':'accum') }; });
+  }catch(e){}
+  try{
+    const {data}=await window.sb.from('club_gps_settings').select('active_metrics').eq('club_id',CLUB).maybeSingle();
+    ACTIVE_METRICS = data?.active_metrics||null;
+  }catch(e){}
+}
+
+function buildMetricSelect(){
+  // Only accumulable metrics for v1 (×match accrual applies to volume metrics).
+  let keys = (ACTIVE_METRICS&&ACTIVE_METRICS.length? ACTIVE_METRICS : ACCUM_METRICS).filter(k=>!isPeak(k));
+  keys = keys.filter(k=>META_BY_KEY[k]||META[k]);
+  if(!keys.length) keys=['total_distance'];
+  if(!keys.includes(METRIC)) METRIC=keys[0];
+  const sel=document.getElementById('lpMetricSel');
+  sel.innerHTML=keys.map(k=>`<option value="${k}"${k===METRIC?' selected':''}>${metaOf(k).label}</option>`).join('');
+}
+
+function wireControls(){
+  document.getElementById('lpMetricSel').onchange=e=>{ METRIC=e.target.value; reload(); };
+  document.getElementById('lpModeSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#lpModeSeg button').forEach(x=>x.classList.toggle('on',x===b)); MODE=b.dataset.mode; reload(); };
+  document.getElementById('lpImportBtn').onclick=openImport;
+  document.getElementById('lpModalClose').onclick=closeImport;
+  document.getElementById('lpModalCancel').onclick=closeImport;
+  document.addEventListener('cm:langchanged',()=>{ buildMetricSelect(); render(); });
+}
+
+// ── load a week's worth of data & compute ──────────────────────
+async function reload(){
+  document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
+  await Promise.all([ loadRoster(), loadManual() ]);
+  await loadMicrocycle();          // sets MC + DAYS + PLAN
+  await Promise.all([ computeRefs(), loadAccrued() ]);
+  render();
+}
+
+async function loadRoster(){
+  const {data,error}=await window.sb.from('players')
+    .select('id,first_name,last_name,number,position,external_gps_id,player_teams!inner(team_id)')
+    .eq('club_id',CLUB).is('archived_at',null).eq('player_teams.team_id',TEAM)
+    .order('number',{ascending:true,nullsFirst:false});
+  if(error) console.warn('[lp] roster',error.message);
+  ROSTER=(data||[]).map(p=>({ id:p.id, name:((p.first_name||'')+' '+(p.last_name||'')).trim()||'Player',
+    pos:p.position||'', number:p.number, ext:p.external_gps_id||null }));
+}
+
+async function loadManual(){
+  MANUAL={};
+  const {data}=await window.sb.from('player_match_refs').select('player_id,metric,ref_value').eq('club_id',CLUB);
+  (data||[]).forEach(r=>{ (MANUAL[r.player_id]=MANUAL[r.player_id]||{})[r.metric]=r.ref_value; });
+}
+
+async function loadMicrocycle(){
+  // microcycle covering ANCHOR for this team
+  MC=null;
+  try{
+    let q=window.sb.from('microcycles')
+      .select('id,name,start_date,end_date,match_date,rival,home_away,md_overrides,team_id')
+      .eq('club_id',CLUB).lte('start_date',ANCHOR).gte('end_date',ANCHOR);
+    if(TEAM) q=q.eq('team_id',TEAM);
+    const {data}=await q.limit(1);
+    MC=(data&&data[0])||null;
+  }catch(e){}
+  let start,end;
+  if(MC){ start=MC.start_date; end=MC.end_date; }
+  else { // fallback: Mon–Sun week containing ANCHOR
+    const d=new Date(ANCHOR+'T12:00:00'); const dow=(d.getDay()+6)%7; // 0=Mon
+    const mon=new Date(d); mon.setDate(d.getDate()-dow);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    start=window.cmYMD(mon); end=window.cmYMD(sun);
+  }
+  // sessions in range
+  const {data:sess}=await window.sb.from('training_sessions')
+    .select('session_date,session_type,session_time,duration,estimated_rpe,match_day_offset')
+    .eq('club_id',CLUB).eq('team_id',TEAM).gte('session_date',start).lte('session_date',end).eq('is_historical',false);
+  const byDate={}; (sess||[]).forEach(s=>{ (byDate[s.session_date]=byDate[s.session_date]||[]).push(s); });
+  // load_plan in range
+  PLAN={};
+  const {data:plan}=await window.sb.from('load_plan').select('plan_date,metric,pct')
+    .eq('club_id',CLUB).eq('team_id',TEAM).gte('plan_date',start).lte('plan_date',end);
+  (plan||[]).forEach(r=>{ (PLAN[r.plan_date]=PLAN[r.plan_date]||{})[r.metric]=r.pct; });
+  // build day list
+  DAYS=[];
+  const today=window.cmToday();
+  let cur=new Date(start+'T12:00:00'); const last=new Date(end+'T12:00:00');
+  while(cur<=last){
+    const ds=window.cmYMD(cur);
+    const list=byDate[ds]||[];
+    const type = list.find(s=>s.session_type==='match')?'match'
+      : list.find(s=>['training','tactical'].includes(s.session_type))?'training'
+      : list.find(s=>s.session_type==='gym')?'gym'
+      : list.find(s=>['recovery','rehab'].includes(s.session_type))?'recovery'
+      : (list[0]?.session_type||'none');
+    DAYS.push({ date:ds, md:mdLabel(ds,MC,list[0]), type, isMatch:type==='match',
+      isPast:ds<today, isToday:ds===today, isFuture:ds>today, hasSess:list.length>0 });
+    cur.setDate(cur.getDate()+1);
+  }
+}
+
+function mdLabel(ds, mc, sess){
+  if(sess && sess.match_day_offset) return sess.match_day_offset.replace('-','−');
+  if(mc && mc.md_overrides && mc.md_overrides[ds]) return mc.md_overrides[ds];
+  if(mc && mc.match_date){
+    const a=new Date(ds+'T12:00:00'), b=new Date(mc.match_date+'T12:00:00');
+    const diff=Math.round((b-a)/86400000);
+    if(diff===0) return 'MD';
+    if(diff>0&&diff<=10) return 'MD−'+diff;
+    if(diff<0&&diff>=-3) return 'MD+'+Math.abs(diff);
+  }
+  return '';
+}
+
+// ── references (best5 / last90) with manual overrides ──────────
+async function computeRefs(){
+  REFS={};
+  const pids=ROSTER.map(p=>p.id);
+  if(!pids.length) return;
+  let base={};
+  if(MODE==='last90'){ base=await computeLast90(pids,METRIC); }
+  else { const b=await window.getMatchBaselineBatch(pids,METRIC,CLUB); Object.keys(b||{}).forEach(pid=>{ base[pid]={value:b[pid].baseline, count:b[pid].count, conf:b[pid].confidence}; }); }
+  ROSTER.forEach(p=>{
+    const man = MANUAL[p.id]&&MANUAL[p.id][METRIC];
+    const b=base[p.id]||{};
+    REFS[p.id]= (man!=null&&man!=='')
+      ? {value:+man, count:null, conf:'manual', manual:true}
+      : {value:b.value??null, count:b.count??0, conf:b.conf||'none', manual:false};
+  });
+}
+
+async function computeLast90(pids, metric){
+  const out={};
+  const peak=isPeak(metric);
+  try{
+    const set=await window.gpsGetMatchDates(CLUB);
+    if(!set||!set.size) return out;
+    const dates=[...set];
+    const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
+      .select(`player_id,${metric},time_played,training_sessions!inner(session_date)`)
+      .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false)
+      .in('training_sessions.session_date',dates).not(metric,'is',null),{label:'lp-last90'});
+    const by={};
+    (rows||[]).forEach(r=>{ const ts=Array.isArray(r.training_sessions)?r.training_sessions[0]:r.training_sessions;
+      (by[r.player_id]=by[r.player_id]||[]).push({v:+(r[metric]||0), tp:+(r.time_played||0), d:ts&&ts.session_date}); });
+    Object.keys(by).forEach(pid=>{
+      const recent=by[pid].filter(r=>r.d).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:0).slice(0,5);
+      const vals=recent.map(r=>peak?r.v:(r.tp>0?r.v/r.tp*90:null)).filter(v=>v!=null);
+      const value= vals.length? +(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2):null;
+      out[pid]={ value, count:vals.length, conf: vals.length>=3?'high':(vals.length?'med':'none') };
+    });
+  }catch(e){ console.warn('[lp] last90',e); }
+  return out;
+}
+
+async function loadAccrued(){
+  ACCRUED={};
+  const pids=ROSTER.map(p=>p.id);
+  if(!pids.length||!DAYS.length) return;
+  const today=window.cmToday();
+  const start=DAYS[0].date;
+  const end = DAYS.filter(d=>!d.isFuture).slice(-1)[0]?.date || today; // up to today within the week
+  if(end<start) return;
+  const peak=isPeak(METRIC);
+  const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
+    .select(`player_id,${METRIC},training_sessions!inner(session_date,team_id)`)
+    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false)
+    .eq('training_sessions.team_id',TEAM)
+    .gte('training_sessions.session_date',start).lte('training_sessions.session_date',end)
+    .not(METRIC,'is',null),{label:'lp-accrued'}).catch(()=>[]);
+  (rows||[]).forEach(r=>{ const v=+(r[METRIC]||0); if(peak) ACCRUED[r.player_id]=Math.max(ACCRUED[r.player_id]||0,v); else ACCRUED[r.player_id]=(ACCRUED[r.player_id]||0)+v; });
+}
+
+// planned remaining (× match) = Σ pct(day)/100 over future days
+function plannedRemainingX(){
+  return DAYS.filter(d=>d.isFuture||d.isToday).reduce((s,d)=>{ const p=(PLAN[d.date]||{})[METRIC]; return s+(p?+p/100:0); },0);
+}
+function weekPlannedX(){ return DAYS.reduce((s,d)=>{ const p=(PLAN[d.date]||{})[METRIC]; return s+(p?+p/100:0); },0); }
+
+// ── render ─────────────────────────────────────────────────────
+function render(){
+  const m=metaOf(METRIC);
+  document.getElementById('lpMcSub').textContent = MC
+    ? `${MC.name||tt('load_planner.microcycle','Microcycle')} · ${DAYS[0]?.date} → ${DAYS[DAYS.length-1]?.date}` + (MC.rival?` · vs ${MC.rival}`:'')
+    : tt('load_planner.no_mc','No microcycle for this week — showing Mon–Sun');
+  const html = `
+    ${stripHTML()}
+    ${kpiHTML()}
+    <div class="lp-card">
+      <div class="lp-card-h"><span class="t">${tt('load_planner.player_breakdown','Player breakdown')}</span>
+        <span class="m">${m.label} · ${MODE==='best5'?tt('load_planner.ref_best5','best-5 match'):tt('load_planner.ref_last90','last-5 match /90')}</span></div>
+      <div class="lp-tblwrap">${tableHTML()}</div>
+    </div>`;
+  document.getElementById('lpBody').innerHTML=html;
+  wireStrip(); wireTable();
+}
+
+function stripHTML(){
+  const m=metaOf(METRIC);
+  const cells=DAYS.map((d,i)=>{
+    const pct=(PLAN[d.date]||{})[METRIC];
+    const cls=d.isToday?'today':(d.isFuture?'future':'');
+    const dd=new Date(d.date+'T12:00:00');
+    const dtxt=dd.toLocaleDateString('en-GB',{weekday:'short',day:'numeric'});
+    // team avg real (accrued that day) — approximate: show planned control for future, real hint for past
+    let realLine='';
+    if(!d.isFuture && d.hasSess){ realLine=`<div class="real">${tt('load_planner.real','real')}</div>`; }
+    const disabled = d.isPast && d.hasSess ? '' : ''; // allow editing any day's plan
+    return `<div class="lp-day ${cls}" data-date="${d.date}">
+      <div class="md">${d.md||'·'}</div><div class="dt">${dtxt}</div>
+      <span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span>
+      <div class="lp-pct"><input type="number" min="0" max="400" step="5" value="${pct!=null?pct:''}" data-date="${d.date}" placeholder="—"><span class="u">%</span></div>
+    </div>`;
+  }).join('');
+  const wk=weekPlannedX();
+  const nextDay=DAYS.find(d=>d.isFuture);
+  const nextPct=nextDay?((PLAN[nextDay.date]||{})[METRIC]):null;
+  return `<div class="lp-card">
+    <div class="lp-card-h"><span class="t">${tt('load_planner.week_shape','Week shape — planned % of match')}</span>
+      <span class="m">${m.label}</span></div>
+    <div class="lp-strip">${cells}</div>
+    <div class="lp-strip-foot">
+      <span>${tt('load_planner.week_total','Week total')}: <b>${(wk*100).toFixed(0)}%</b> · <b>${wk.toFixed(2)}×</b> ${tt('load_planner.match','match')}</span>
+      ${nextDay?`<span>${tt('load_planner.next_day','Next day')}: <b>${nextDay.md||nextDay.date}</b> — ${nextPct!=null?`<b>${nextPct}%</b>`:tt('load_planner.unplanned','unplanned')}</span>`:''}
+      <span class="lp-mini">${tt('load_planner.strip_hint','Type a % per day to plan the load relative to each player\'s match reference.')}</span>
+    </div>
+  </div>`;
+}
+function tagLabel(t){ return tt('load_planner.tag_'+t, ({training:'Training',match:'Match',gym:'Gym',recovery:'Recovery',off:'Off',none:'—'})[t]||t); }
+
+function kpiHTML(){
+  const rows=ROSTER.map(p=>rowData(p)).filter(r=>r.ref);
+  const projs=rows.map(r=>r.projX).filter(v=>v!=null);
+  const avg=projs.length?projs.reduce((s,v)=>s+v,0)/projs.length:null;
+  const band=BANDS[METRIC];
+  const over=band?rows.filter(r=>r.projX!=null&&r.projX>band[1]).length:0;
+  const under=band?rows.filter(r=>r.projX!=null&&r.projX<band[0]).length:0;
+  const nextDay=DAYS.find(d=>d.isFuture);
+  const nextPct=nextDay?((PLAN[nextDay.date]||{})[METRIC]):null;
+  return `<div class="lp-kpis">
+    <div class="lp-kpi"><div class="k">${tt('load_planner.kpi_projavg','Squad proj. week')}</div><div class="v">${avg!=null?avg.toFixed(2)+'×':'—'}</div><div class="s">${band?`${tt('load_planner.target_band','target')} ${band[0]}–${band[1]}×`:tt('load_planner.no_band','no reference band')}</div></div>
+    <div class="lp-kpi"><div class="k">${tt('load_planner.kpi_over','Over band')}</div><div class="v" style="color:${over?'var(--cm-danger)':'var(--cm-fg-strong)'}">${over}</div><div class="s">${tt('load_planner.players_projected','players projected over')}</div></div>
+    <div class="lp-kpi"><div class="k">${tt('load_planner.kpi_under','Under band')}</div><div class="v" style="color:${under?'var(--cm-info)':'var(--cm-fg-strong)'}">${under}</div><div class="s">${tt('load_planner.players_projected_under','players projected under')}</div></div>
+    <div class="lp-kpi"><div class="k">${tt('load_planner.kpi_next','Next day plan')}</div><div class="v">${nextPct!=null?nextPct+'%':'—'}</div><div class="s">${nextDay?(nextDay.md||nextDay.date):tt('load_planner.week_done','week complete')}</div></div>
+  </div>`;
+}
+
+function rowData(p){
+  const ref=REFS[p.id]||{};
+  const refV=ref.value;
+  const acc=ACCRUED[p.id]||0;
+  const accX= refV? acc/refV : null;
+  const planX=plannedRemainingX();
+  const projX= refV? (accX!=null?accX:0)+planX : null;
+  return { p, ref:refV, conf:ref.conf, manual:ref.manual, acc, accX, planX, projX };
+}
+
+function statusOf(projX){
+  const band=BANDS[METRIC]; if(!band||projX==null) return {cls:'',pctW:Math.min(100,(projX||0)/4*100)};
+  const cls= projX<band[0]?'x-under':projX<=band[1]?'x-ok':'x-over';
+  const pctW=Math.min(100,projX/(band[1]*1.3)*100);
+  return {cls,pctW};
+}
+
+function tableHTML(){
+  if(!ROSTER.length) return '<div class="lp-empty">'+tt('load_planner.no_players','No players in this team.')+'</div>';
+  const m=metaOf(METRIC);
+  let rows=ROSTER.map(rowData);
+  rows.sort((a,b)=>{
+    let av,bv;
+    if(sortK==='name'){ return sortD*a.p.name.localeCompare(b.p.name); }
+    if(sortK==='ref'){ av=a.ref||-1; bv=b.ref||-1; }
+    else if(sortK==='now'){ av=a.accX==null?-1:a.accX; bv=b.accX==null?-1:b.accX; }
+    else { av=a.projX==null?-1:a.projX; bv=b.projX==null?-1:b.projX; }
+    return sortD*(av-bv);
+  });
+  const head=`<tr id="lpThRow">
+    <th data-k="name">${tt('load_planner.col_player','Player')}</th>
+    <th data-k="ref">${tt('load_planner.col_ref','Match ref')} (${m.unit||m.label})</th>
+    <th data-k="acc">${tt('load_planner.col_week','This week')}</th>
+    <th data-k="now">${tt('load_planner.col_now','×match now')}</th>
+    <th data-k="plan">${tt('load_planner.col_planleft','Planned left')}</th>
+    <th data-k="proj">${tt('load_planner.col_proj','Proj. ×match')}</th>
+    <th data-k="none">${tt('load_planner.col_status','Status')}</th></tr>`;
+  const body=rows.map(r=>{
+    const st=statusOf(r.projX);
+    const dot= r.manual?'':`<span class="lp-dot ${r.conf==='high'?'d-high':r.conf==='med'||r.conf==='medium'?'d-med':'d-none'}" title="${r.conf}"></span>`;
+    const refTxt = r.ref!=null? fmtN(r.ref,m.dec) : '<span class="lp-mini">'+tt('load_planner.set','set')+'</span>';
+    return `<tr>
+      <td><div class="lp-pl"><span class="lp-av">${(r.p.name.split(' ').pop()||'').slice(0,2).toUpperCase()}</span><div><div class="nm">${r.p.name}</div><div class="po">${r.p.pos||''}${r.p.number!=null?' · #'+r.p.number:''}</div></div></div></td>
+      <td><span class="lp-ref lp-mono" data-pid="${r.p.id}">${refTxt}</span>${r.manual?'<span class="lp-badge">'+tt('load_planner.manual','manual')+'</span>':dot}</td>
+      <td class="lp-mono">${r.ref!=null?fmtN(r.acc,m.dec):'—'}</td>
+      <td class="lp-x">${r.accX!=null?r.accX.toFixed(2)+'×':'—'}</td>
+      <td class="lp-mono" style="color:var(--cm-fg-muted)">${r.ref!=null?'+'+r.planX.toFixed(2)+'×':'—'}</td>
+      <td class="lp-x">${r.projX!=null?r.projX.toFixed(2)+'×':'—'}</td>
+      <td><span class="lp-bar ${st.cls}"><i style="width:${st.pctW}%"></i></span></td>
+    </tr>`;
+  }).join('');
+  return `<table class="lp-tbl"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function wireStrip(){
+  document.querySelectorAll('.lp-strip input').forEach(inp=>{
+    inp.onchange=async()=>{
+      const date=inp.dataset.date; let v=inp.value===''?null:Math.max(0,+inp.value);
+      (PLAN[date]=PLAN[date]||{})[METRIC]=v;
+      try{
+        if(v==null){ await window.sb.from('load_plan').delete().eq('club_id',CLUB).eq('team_id',TEAM).eq('plan_date',date).eq('metric',METRIC); }
+        else { await window.sb.from('load_plan').upsert({club_id:CLUB,team_id:TEAM,plan_date:date,metric:METRIC,pct:v,updated_by:PROFILE?.id},{onConflict:'club_id,team_id,plan_date,metric'}); }
+      }catch(e){ console.warn('[lp] save plan',e); }
+      // re-render footer + table (projections change) but keep focus flow simple
+      render();
+    };
+  });
+}
+
+function wireTable(){
+  const th=document.getElementById('lpThRow');
+  if(th) th.querySelectorAll('th').forEach(t=>t.onclick=()=>{ const k=t.dataset.k; if(k==='none')return; if(sortK===k)sortD*=-1; else{sortK=k; sortD=k==='name'?1:-1;} render(); });
+  document.querySelectorAll('.lp-ref').forEach(el=>el.onclick=()=>editRef(el.dataset.pid));
+}
+
+async function editRef(pid){
+  const p=ROSTER.find(x=>x.id===pid); if(!p)return;
+  const m=metaOf(METRIC);
+  const cur=(REFS[pid]&&REFS[pid].value)||'';
+  const val=window.prompt(tt('load_planner.edit_ref_prompt','Match reference for {name} · {metric} ({unit}):',{name:p.name,metric:m.label,unit:m.unit||'—'}), cur);
+  if(val==null) return;
+  const num=val.trim()===''?null:+val;
+  try{
+    if(num==null){ await window.sb.from('player_match_refs').delete().eq('club_id',CLUB).eq('player_id',pid).eq('metric',METRIC); if(MANUAL[pid])delete MANUAL[pid][METRIC]; }
+    else { await window.sb.from('player_match_refs').upsert({club_id:CLUB,player_id:pid,metric:METRIC,ref_value:num,updated_by:PROFILE?.id},{onConflict:'club_id,player_id,metric'}); (MANUAL[pid]=MANUAL[pid]||{})[METRIC]=num; }
+  }catch(e){ console.warn('[lp] save ref',e); alert(tt('load_planner.save_failed','Could not save. Check connection.')); return; }
+  await computeRefs(); render();
+}
+
+// ── CSV import ─────────────────────────────────────────────────
+let IMP=null; // {headers, mapping:{header→metric}, rows:[{ext,name,cells:{header→value},pid}]}
+function openImport(){
+  document.getElementById('lpModal').hidden=false;
+  document.getElementById('lpModalSave').disabled=true;
+  document.getElementById('lpModalHint').textContent='';
+  document.getElementById('lpModalBody').innerHTML=`
+    <p class="lp-note">${tt('load_planner.import_intro','Import the Catapult <b>Athlete Thresholds</b> CSV. Players are matched by their Catapult Athlete ID. Then set/confirm the match reference per player and metric — these override the computed best-5.')}</p>
+    <div class="lp-drop" id="lpDrop"><i class="ti ti-file-spreadsheet" style="font-size:26px"></i><div style="margin-top:6px">${tt('load_planner.drop','Click to choose a .csv file')}</div></div>
+    <input type="file" id="lpFile" accept=".csv,text/csv" hidden>`;
+  const drop=document.getElementById('lpDrop'), file=document.getElementById('lpFile');
+  drop.onclick=()=>file.click();
+  file.onchange=()=>{ if(file.files[0]) readCSV(file.files[0]); };
+  document.getElementById('lpModalSave').onclick=saveImport;
+}
+function closeImport(){ document.getElementById('lpModal').hidden=true; IMP=null; }
+
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const rows=[]; let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"')q=true; else if(c===','){row.push(cur);cur='';} else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur='';} else if(c==='\r'){} else cur+=c; }
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+
+async function readCSV(f){
+  const text=await f.text();
+  const rows=parseCSV(text);
+  if(rows.length<2){ alert(tt('load_planner.csv_empty','CSV looks empty.')); return; }
+  const headers=rows[0].map(h=>h.trim());
+  // locate id / name / position columns
+  const li=headers.findIndex(h=>/athlete id/i.test(h));
+  const ln=headers.findIndex(h=>/athlete name|name/i.test(h));
+  const lp=headers.findIndex(h=>/position/i.test(h));
+  const metricHeaders=headers.filter((h,idx)=>idx!==li&&idx!==ln&&idx!==lp&&h!=='');
+  // load saved mapping for this club
+  let saved={};
+  try{ const {data}=await window.sb.from('gps_column_mappings').select('source_column_name,target_metric').eq('club_id',CLUB).eq('source_label','catapult_threshold_csv'); (data||[]).forEach(r=>saved[r.source_column_name]=r.target_metric); }catch(e){}
+  const mapping={};
+  metricHeaders.forEach(h=>{ mapping[h]= saved[h] || CSV_GUESS[h.toLowerCase()] || ''; });
+  // parse data rows + match players by external_gps_id
+  const extIndex={}; ROSTER.forEach(p=>{ if(p.ext) extIndex[String(p.ext).toLowerCase()]=p; });
+  const nameIndex={}; ROSTER.forEach(p=>{ nameIndex[normName(p.name)]=p; });
+  const data=rows.slice(1).map(r=>{
+    const ext=li>=0?(r[li]||'').trim():''; const name=ln>=0?(r[ln]||'').trim():'';
+    let p = ext&&extIndex[ext.toLowerCase()] ? extIndex[ext.toLowerCase()] : (name?nameIndex[normName(catapultName(name))]:null);
+    const cells={}; metricHeaders.forEach(h=>{ const idx=headers.indexOf(h); const v=(r[idx]||'').trim(); cells[h]= v===''?null:+v.replace(/[^0-9.\-]/g,''); });
+    return { ext, name, cells, pid:p?p.id:null, pname:p?p.name:null };
+  });
+  IMP={ headers, metricHeaders, mapping, data };
+  renderImport();
+}
+function normName(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim(); }
+function catapultName(s){ // "BORA, San" → "San BORA"
+  if(s.includes(',')){ const [a,b]=s.split(','); return (b+' '+a).trim(); } return s;
+}
+
+function renderImport(){
+  const mapKeys=Object.keys(META).filter(k=>!isPeak(k)||k==='distance_per_minute');
+  const opts=(sel)=>`<option value="">${tt('load_planner.ignore','— ignore —')}</option>`+Object.keys(META).map(k=>`<option value="${k}"${k===sel?' selected':''}>${metaOf(k).label}</option>`).join('');
+  const matched=IMP.data.filter(d=>d.pid).length, total=IMP.data.length;
+  const mapHTML=IMP.metricHeaders.map(h=>`
+    <div class="csvh">${h}</div><div class="arw">→</div>
+    <select class="lp-select" data-h="${h}" style="width:100%">${opts(IMP.mapping[h])}</select>`).join('');
+  // editable grid: rows = matched players, cols = mapped metrics
+  const cols=IMP.metricHeaders.filter(h=>IMP.mapping[h]);
+  const gridHead=`<tr><th>${tt('load_planner.col_player','Player')}</th>${cols.map(h=>`<th>${metaOf(IMP.mapping[h]).label}</th>`).join('')}</tr>`;
+  const gridBody=IMP.data.map((d,i)=>{
+    const nm = d.pid? `${d.pname}` : `<span class="lp-unmatched" title="${tt('load_planner.unmatched_hint','No matching player — assign the Catapult ID in Squad')}">${d.name||d.ext} ⚠</span>`;
+    return `<tr data-i="${i}"><td>${nm}<div class="lp-mini">${d.ext||''}</div></td>${cols.map(h=>{
+      const cur = d.pid && MANUAL[d.pid] && MANUAL[d.pid][IMP.mapping[h]];
+      const val = d.cells[h]!=null?d.cells[h]:(cur!=null?cur:'');
+      return `<td><input type="number" step="any" data-i="${i}" data-h="${h}" value="${val}" ${d.pid?'':'disabled'}></td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  document.getElementById('lpModalBody').innerHTML=`
+    <div class="lp-note" style="margin-bottom:10px">${tt('load_planner.map_intro','Map each Catapult column to a ClavaMetrics metric (saved for next time). Then set the match reference per player.')}</div>
+    <div class="lp-map">${mapHTML}</div>
+    <div style="margin-top:14px" class="lp-note"><b>${matched}/${total}</b> ${tt('load_planner.players_matched','players matched by Catapult ID')}</div>
+    <div style="overflow:auto;max-height:38vh"><table class="lp-imptbl"><thead>${gridHead}</thead><tbody>${gridBody}</tbody></table></div>`;
+  document.getElementById('lpModalHint').textContent = tt('load_planner.import_hint','Empty cells are skipped. Values overwrite the manual reference for that metric.');
+  document.getElementById('lpModalSave').disabled=false;
+  // rewire mapping selects to re-render grid columns
+  document.querySelectorAll('#lpModalBody select[data-h]').forEach(s=>s.onchange=()=>{ IMP.mapping[s.dataset.h]=s.value; renderImport(); });
+}
+
+async function saveImport(){
+  if(!IMP) return;
+  const btn=document.getElementById('lpModalSave'); btn.disabled=true; btn.textContent=tt('load_planner.saving','Saving…');
+  // 1) persist column mapping for this club
+  const mapRows=IMP.metricHeaders.filter(h=>IMP.mapping[h]).map(h=>({club_id:CLUB,source_label:'catapult_threshold_csv',source_column_name:h,target_metric:IMP.mapping[h]}));
+  if(mapRows.length){ try{ await window.sb.from('gps_column_mappings').upsert(mapRows,{onConflict:'club_id,source_label,source_column_name'}); }catch(e){ console.warn('[lp] map save',e); } }
+  // 2) read current input values → upsert player_match_refs
+  const refRows=[];
+  document.querySelectorAll('#lpModalBody input[data-h]').forEach(inp=>{
+    const d=IMP.data[+inp.dataset.i]; if(!d||!d.pid) return;
+    const metric=IMP.mapping[inp.dataset.h]; if(!metric) return;
+    const v=inp.value.trim(); if(v==='') return;
+    refRows.push({club_id:CLUB,player_id:d.pid,metric,ref_value:+v,updated_by:PROFILE?.id});
+  });
+  if(refRows.length){ try{ await window.sb.from('player_match_refs').upsert(refRows,{onConflict:'club_id,player_id,metric'}); }catch(e){ console.warn('[lp] refs save',e); alert(tt('load_planner.save_failed','Could not save. Check connection.')); btn.disabled=false; btn.textContent=tt('load_planner.save_refs','Save references'); return; } }
+  window.invalidateBaselineCache && window.invalidateBaselineCache();
+  closeImport();
+  await loadManual(); await computeRefs(); render();
+  btn.textContent=tt('load_planner.save_refs','Save references');
+}
+
+// go
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})();
+</script>
+</body>
+</html>
