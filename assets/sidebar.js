@@ -913,7 +913,35 @@ html.cm-rail .hub-nav-grip{display:none}
     _applyI18n(list);
   }
 
+  // Tono corto sintetizado con Web Audio (mismo que el chat) — así una notificación
+  // de mensaje suena en CUALQUIER página, no solo con Chat & Tasks abierto. El
+  // AudioContext se crea/reanuda perezosamente; requiere un gesto previo del usuario,
+  // que en la práctica siempre existe (navegó por la app) antes del primer mensaje.
+  let _chatAudioCtx = null;
+  function _playChatChime() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!_chatAudioCtx) _chatAudioCtx = new AC();
+      const ctx = _chatAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.34);
+    } catch (_) { /* audio bloqueado / no soportado: silencioso */ }
+  }
+
   function _showChatToast(msg, senderName) {
+    _playChatChime();
     const root = document.getElementById('cm-toast-root');
     if (!root) return;
     const ini = (senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
@@ -990,11 +1018,14 @@ html.cm-rail .hub-nav-grip{display:none}
       window.sb.from('profiles').select('id, full_name, first_name, last_name, email, avatar_url')
         .eq('club_id', clubId)
     ]);
-    if (readsRes.error || msgsRes.error) return;
     _chatProfiles = {};
     (profsRes && profsRes.data || []).forEach(p => { _chatProfiles[p.id] = p; });
-    const reads = readsRes.data;
-    const recentMsgs = msgsRes.data;
+    // Si la carga inicial de contadores falla, NO abortamos: seguimos hasta suscribirnos
+    // al realtime. El badge arranca vacío, pero las notificaciones (toast + sonido) de
+    // mensajes entrantes siguen llegando en cualquier página.
+    const _initOk = !readsRes.error && !msgsRes.error;
+    const reads = _initOk ? readsRes.data : [];
+    const recentMsgs = _initOk ? msgsRes.data : [];
     const readMap = {};
     (reads || []).forEach(r => { readMap[r.channel_key] = r.last_read_at; });
     for (const msg of (recentMsgs || [])) {
