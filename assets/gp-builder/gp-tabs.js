@@ -418,14 +418,17 @@
     const canDelete    = !isPredefined && _dashboards.length > 1 && canManage(dash);
     const canRename    = canManage(dash);
 
+    _menuEl.classList.remove('gpt-icon-menu');   // in case it was left in icon-picker mode
     _menuEl.innerHTML = `
       ${canRename ? '<button class="gpt-menu-item" data-act="rename"><i class="ti ti-pencil"></i>Rename</button>' : ''}
+      <button class="gpt-menu-item" data-act="icon"><i class="ti ti-mood-smile"></i>${tt('gps_analysis.dash_change_icon', 'Change icon')}</button>
       <button class="gpt-menu-item" data-act="duplicate"><i class="ti ti-copy"></i>Duplicate</button>
       ${canDelete ? '<div class="gpt-menu-div"></div><button class="gpt-menu-item danger" data-act="delete"><i class="ti ti-trash"></i>Delete dashboard</button>' : ''}
     `;
     _menuEl.querySelectorAll('[data-act]').forEach(b => {
       b.addEventListener('click', () => {
         const act = b.dataset.act;
+        if (act === 'icon') { openIconPicker(trigger, dash); return; }   // keeps the popover open
         closeMenu();
         if (act === 'rename')    startRenameFromDash(dash);
         else if (act === 'duplicate') duplicateFlow(dash);
@@ -693,6 +696,62 @@
     });
   }
 
+  // ── Personal tab icons (per-user, localStorage) ───────────────
+  // Same rationale as the order: a tab's icon is a personal preference, saved locally per
+  // user+club and applied over the tab's default icon (predefined or custom). No DB, no
+  // permissions — uniform for the 5 fixed tabs and custom dashboards alike.
+  const TAB_ICONS = [
+    'ti-user', 'ti-users-group', 'ti-ball-football', 'ti-activity-heartbeat', 'ti-arrows-diff', 'ti-layout-dashboard',
+    'ti-chart-bar', 'ti-chart-line', 'ti-route', 'ti-run', 'ti-gauge', 'ti-brand-speedtest',
+    'ti-bolt', 'ti-flame', 'ti-heart', 'ti-target', 'ti-clock', 'ti-stopwatch',
+    'ti-calendar', 'ti-clipboard-data', 'ti-table', 'ti-map-pin', 'ti-shield-check', 'ti-star',
+  ];
+  function _tabIconsKey() { return `cm_gp_tabicons_${_userId || '?'}_${_clubId || '?'}`; }
+  function _loadTabIcons() {
+    try { const v = JSON.parse(localStorage.getItem(_tabIconsKey()) || '{}'); return (v && typeof v === 'object') ? v : {}; }
+    catch (_) { return {}; }
+  }
+  function _saveTabIcon(viewKey, icon) {
+    const all = _loadTabIcons();
+    if (icon) all[viewKey] = icon; else delete all[viewKey];
+    try { localStorage.setItem(_tabIconsKey(), JSON.stringify(all)); } catch (_) {}
+  }
+  function applyTabIcons() {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl) return;
+    const icons = _loadTabIcons();
+    sectionsEl.querySelectorAll('.gp-sec[data-view]').forEach(tab => {
+      const ic = icons[tab.dataset.view];
+      if (!ic) return;
+      const iEl = tab.querySelector('.row > i.ti');   // the tab's own icon (not the kebab's ti-dots)
+      if (iEl) iEl.className = 'ti ' + ic;
+    });
+  }
+  function openIconPicker(trigger, dash) {
+    ensureMenuEl();
+    closeMenu();
+    const viewKey = REPORT_TYPE_TO_VIEW[dash.report_type] || `db-${dash.id}`;
+    const cur = _loadTabIcons()[viewKey] || '';
+    _menuEl.classList.add('gpt-icon-menu');
+    _menuEl.innerHTML = `<div class="gpt-icon-grid">${
+      TAB_ICONS.map(ic => `<button class="gpt-icon-opt${ic === cur ? ' is-on' : ''}" data-icon="${esc(ic)}" title="${esc(ic.replace('ti-', ''))}"><i class="ti ${ic}"></i></button>`).join('')
+    }</div>`;
+    _menuEl.querySelectorAll('[data-icon]').forEach(b => b.addEventListener('click', () => {
+      _saveTabIcon(viewKey, b.dataset.icon); applyTabIcons(); closeMenu();
+    }));
+    _menuBkEl.classList.add('is-on');
+    _menuEl.style.visibility = 'hidden';
+    _menuEl.classList.add('is-open');
+    const r = trigger.getBoundingClientRect();
+    let left = r.left, top = r.bottom + 4;
+    if (left + 240 > innerWidth - 12) left = innerWidth - 244;
+    if (top + 180 > innerHeight - 12) top = Math.max(12, r.top - 180);
+    _menuEl.style.left = left + 'px';
+    _menuEl.style.top  = top  + 'px';
+    _menuEl.style.visibility = '';
+    _menuOwner = trigger;
+  }
+
   // ── Re-render all tab decorations ─────────────────────────────
 
   function reRender() {
@@ -700,6 +759,7 @@
     renderCustomTabs(_dashboards);
     renderAddTabButton();
     applyTabOrder();
+    applyTabIcons();
     wireTabDrag();
     wireAllGridDrags();
   }
