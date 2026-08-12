@@ -1055,8 +1055,9 @@
     const shareSession = document.getElementById('shareSession');
     let currentUrl = '';
 
-    shareTeam.innerHTML = (state.fullAccess ? `<option value="">${T.escape(tt('rpe.wholeClub','Whole club'))}</option>` : '') +
-      state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
+    shareTeam.innerHTML = state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
+    const curTeam = activeTeamId();
+    if (curTeam && [...shareTeam.options].some(o => o.value === curTeam)) shareTeam.value = curTeam;
     shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','No session (linked by date)'))}</option>` +
       mergedRecentList().map(o => `<option value="${o.value}">${T.escape(o.label)}</option>`).join('');
     const curSess = document.getElementById('rmSessionSelect').value;
