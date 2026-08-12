@@ -5001,6 +5001,14 @@
       const rich       = config.style?.richTooltip !== false;   // undefined (cards viejas) → true
       const sparks     = opts.scatterSparks || null;
       const sparkCache = new Map();                             // pid → HTML del sparkline (por render)
+      // "vs avg" = última sesión vs promedio POR-SESIÓN. Solo tiene sentido si el valor X del punto
+      // está en escala por-sesión (avg/max/median/…). Con agg acumulativa (total/count) el punto es
+      // una suma/conteo sobre el rango → comparar una sesión contra ese acumulado es apples-to-oranges,
+      // así que ocultamos el "vs avg" (el sparkline sí se mantiene: la evolución por sesión sigue siendo útil).
+      let _xAgg = null;
+      try { const _xId = resolveEncodings('scatter', config.metrics, config.dimensions).x?.[0] ?? null;
+            _xAgg = config.metrics?.find(m => m.id === _xId)?.agg ?? null; } catch (_) {}
+      const _vsAvgOk = _xAgg !== 'total' && _xAgg !== 'count';
       const _extTooltip = (context) => {
         const el = _scatterTtEl(body, wrap);                   // idempotente (reusa o crea 1)
         const tt = context.tooltip;
@@ -5012,7 +5020,7 @@
           if (sparkCache.has(pid)) extra = sparkCache.get(pid);
           else {
             const s = sparks.get(pid);
-            extra = s ? _scatterVsAvg(s) + _miniSpark(s, config.style?.color) : '';
+            extra = s ? (_vsAvgOk ? _scatterVsAvg(s) : '') + _miniSpark(s, config.style?.color) : '';
             sparkCache.set(pid, extra);                        // re-hover mismo jugador → sin recomputar
           }
         }
