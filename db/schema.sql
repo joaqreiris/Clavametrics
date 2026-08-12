@@ -6084,6 +6084,157 @@ create policy "nutrition_targets_plan_gate" on public.nutrition_targets as restr
   using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'))
   with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'nutrition'));
 
+-- ── Plan-gate del resto de features pagas (Bloque B, Parte 2) ──────────────
+-- Mismo patrón restrictivo que nutrition. Solo tablas 100% del feature pago y
+-- club-confinadas (no se gatean tablas compartidas con features gratis: injuries,
+-- gym_exercises, lineups, gps_period_reports, tablas de calendario/librería).
+-- Features sin tabla propia (drill_designer, load_monitor, lineup, wellness_analysis)
+-- quedan solo con el gating de navegador.
+
+-- gps_analysis
+create policy "gps_reports_plan_gate" on public.gps_reports as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_report_metrics_plan_gate" on public.gps_report_metrics as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_dashboard_layouts_plan_gate" on public.gps_dashboard_layouts as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "club_gps_settings_plan_gate" on public.club_gps_settings as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_column_mappings_plan_gate" on public.gps_column_mappings as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_drill_map_plan_gate" on public.gps_drill_map as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_metric_definitions_plan_gate" on public.gps_metric_definitions as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_integrations_plan_gate" on public.gps_integrations as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+create policy "gps_sync_jobs_plan_gate" on public.gps_sync_jobs as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gps_analysis'));
+
+-- annual_planner
+create policy "macrocycles_plan_gate" on public.macrocycles as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'));
+create policy "mesocycles_plan_gate" on public.mesocycles as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'));
+create policy "load_templates_plan_gate" on public.load_templates as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'annual_planner'));
+
+-- gym
+create policy "gym_session_templates_plan_gate" on public.gym_session_templates as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gym'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gym'));
+create policy "club_equipment_plan_gate" on public.club_equipment as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gym'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'gym'));
+
+-- evaluations
+create policy "evaluations_plan_gate" on public.evaluations as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'));
+create policy "force_tests_plan_gate" on public.force_tests as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'));
+create policy "force_test_metrics_plan_gate" on public.force_test_metrics as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'));
+create policy "force_column_mappings_plan_gate" on public.force_column_mappings as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'));
+create policy "assessment_column_maps_plan_gate" on public.assessment_column_maps as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'evaluations'));
+
+-- injuries (solo el hijo; injuries lo lee Availability/Physio gratis → no se gatea)
+create policy "injury_phases_plan_gate" on public.injury_phases as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'injuries'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'injuries'));
+
+-- individual_planner
+create policy "individual_plans_plan_gate" on public.individual_plans as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'));
+create policy "individual_plan_phases_plan_gate" on public.individual_plan_phases as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'));
+create policy "individual_plan_blocks_plan_gate" on public.individual_plan_blocks as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'));
+create policy "individual_block_completions_plan_gate" on public.individual_block_completions as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'));
+create policy "player_individual_assignments_plan_gate" on public.player_individual_assignments as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'individual_planner'));
+
+-- rehab_planner
+create policy "rehab_plans_plan_gate" on public.rehab_plans as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "rehab_sessions_plan_gate" on public.rehab_sessions as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "rehab_plan_owners_plan_gate" on public.rehab_plan_owners as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "rehab_protocols_plan_gate" on public.rehab_protocols as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "preventive_routines_plan_gate" on public.preventive_routines as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "protocol_blocks_plan_gate" on public.protocol_blocks as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "programme_phases_plan_gate" on public.programme_phases as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+create policy "player_preventive_assignments_plan_gate" on public.player_preventive_assignments as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'rehab_planner'));
+
+-- match_reports
+create policy "match_reports_plan_gate" on public.match_reports as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'));
+create policy "match_results_plan_gate" on public.match_results as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'));
+create policy "match_shots_plan_gate" on public.match_shots as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'));
+create policy "player_match_stats_plan_gate" on public.player_match_stats as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'match_reports'));
+
+-- video_room
+create policy "videos_plan_gate" on public.videos as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_folders_plan_gate" on public.video_folders as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_matches_plan_gate" on public.video_matches as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_players_plan_gate" on public.video_players as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_sessions_plan_gate" on public.video_sessions as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+
 alter table public.opponent_branding enable row level security;
 create policy "opponent_branding_all" on public.opponent_branding as permissive for all to authenticated
   using ((club_id IN ( SELECT profiles.club_id
