@@ -3765,7 +3765,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,objects_json,preview_svg,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,objects_json,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -3806,7 +3806,7 @@
       orientation: src.orientation, match_day: src.match_day, intensity: src.intensity,
       focus: src.focus, game_type_enabled: src.game_type_enabled, game_type: src.game_type,
       objective: src.objective, description: src.description,
-      source_type: src.source_type, objects_json: src.objects_json, preview_svg: src.preview_svg,
+      source_type: src.source_type, objects_json: src.objects_json,
       preview_png: src.preview_png || null, visible_teams: src.visible_teams,
       origin_team_id: src.origin_team_id || null,   // a copy keeps the source's origin team
       video_url: src.video_url || null
@@ -4193,37 +4193,9 @@
     });
     _oj._coord = 'field1';
     _oj.field = _plField;   // pitch sport/variant/orient (ignored by loadFromJSON)
-    let _previewSvg = null;
-    try {
-      const W = fc.getWidth(), H = fc.getHeight();
-      // objects layer (Fabric) — strip its xml/doctype preamble, keep the <svg>…</svg>
-      let objSvg = fc.toSVG({ viewBox:{x:0,y:0,width:W,height:H}, width:W, height:H, suppressPreamble:true });
-      // pitch layer — the live CMField svg currently in #plPitch (grass + lines), as drawn
-      const pitchEl = document.querySelector('#plPitch svg');
-      const pitchMarkup = pitchEl ? new XMLSerializer().serializeToString(pitchEl) : '';
-      // composite: pitch first (full-bleed, preserveAspectRatio like on screen), objects on top at canvas size
-      _previewSvg =
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
-          `<g>` +
-            // pitch stretched to the canvas box (it letterboxes via its own preserveAspectRatio)
-            (pitchMarkup
-              ? `<svg x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice">${stripSvgWrapperInner(pitchMarkup)}</svg>`
-              : `<rect width="${W}" height="${H}" fill="#1f7a36"/>`) +
-          `</g>` +
-          // objects overlay (already a full <svg> sized to W×H)
-          objSvg +
-        `</svg>`;
-    } catch(_) { _previewSvg = null; }
-
-    // helper: keep a pitch <svg>'s inner content + its viewBox, so we can re-wrap it
-    function stripSvgWrapperInner(markup){
-      try {
-        const doc = new DOMParser().parseFromString(markup, 'image/svg+xml');
-        const s = doc.documentElement; const vb = s.getAttribute('viewBox');
-        // wrap inner in a nested svg that carries the original viewBox so coordinates stay correct
-        return `<svg viewBox="${vb||'0 0 1050 680'}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">${s.innerHTML}</svg>`;
-      } catch(_) { return markup; }
-    }
+    // preview_svg retired: nothing renders it (the PNG in the drill-previews bucket is
+    // the real thumbnail). Serializing the whole pitch+objects SVG into the row made the
+    // POST body huge and dropped it on iPad Safari ("TypeError: Load failed").
     let _previewBlob = null;
     try {
       fc.discardActiveObject(); fc.renderAll();              // no selection handles
@@ -4295,21 +4267,29 @@
       // overwrite the uploaded preview with an empty pitch.
       source_type:       _curSourceType || 'canvas',
       objects_json:      _curSourceType === 'image' ? null : _oj,
-      preview_svg:       _curSourceType === 'image' ? null : _previewSvg,
       visible_teams:     _plComputeVisibleTeams(),
       folder_id:         document.getElementById('plExFolder')?.value || null,
       is_goalkeeper:     !!document.getElementById('plExGk')?.checked
     };
 
+    // Transient mobile-network drops (iPad Safari surfaces them as "TypeError: Load
+    // failed") shouldn't lose the coach's work — retry the write once before giving up.
+    const _isNetErr = (e) => /load failed|failed to fetch|networkerror/i.test(e?.message || '');
     let error;
     if (currentExerciseId) {
       ({ error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId));
+      if (error && _isNetErr(error)) {
+        ({ error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId));
+      }
     } else {
       // First save: INSERT the draft (canvas + meta) and adopt the new row.
       const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
       const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null, origin_team_id: _activeTeam || null };
       if (insertPayload.visible_teams == null && _activeTeam) insertPayload.visible_teams = [_activeTeam];
-      const res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
+      let res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
+      if (res.error && _isNetErr(res.error)) {
+        res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
+      }
       error = res.error;
       if (!error && res.data) currentExerciseId = res.data.id;
     }
