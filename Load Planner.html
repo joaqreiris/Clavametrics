@@ -135,6 +135,7 @@
           <p class="lp-sub" id="lpMcSub" data-i18n="load_planner.subtitle">Weekly load preview vs. match reference</p>
         </div>
         <div class="lp-head-actions">
+          <select id="lpMcSel" class="lp-select" title="Microcycle"></select>
           <select id="lpMetricSel" class="lp-select"></select>
           <button id="lpExportBtn" class="cm-btn is-outline is-sm"><i class="ti ti-download"></i> <span data-i18n="load_planner.export_csv">Export CSV</span></button>
           <button id="lpImportBtn" class="cm-btn is-outline is-sm"><i class="ti ti-upload"></i> <span data-i18n="load_planner.import_csv">Import CSV</span></button>
@@ -212,6 +213,7 @@ let METRICS=[], FOCUS='total_distance';
 let META_BY_KEY=Object.assign({},META), ACTIVE_METRICS=null;
 let ROSTER=[], MANUAL={};
 let MC=null, PREVMC=null, DAYS=[], PLAN={}, ANCHOR=null;
+let SELMC=null, ALLMCS=[];   // selected microcycle id + team microcycle list
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, PREV={};
 let sortK='proj', sortD=-1;
 
@@ -239,7 +241,7 @@ async function initTeamSwitch(){
   const saved=sessionStorage.getItem('cal_active_team');
   TEAM=(saved&&teams.some(t=>t.id===saved))?saved:teams[0].id;
   sel.innerHTML=teams.map(t=>`<option value="${t.id}"${t.id===TEAM?' selected':''}>${t.name||'Team'}</option>`).join('');
-  sel.onchange=()=>{ TEAM=sel.value; sessionStorage.setItem('cal_active_team',TEAM); ANCHOR=window.cmToday(); reload(); };
+  sel.onchange=()=>{ TEAM=sel.value; sessionStorage.setItem('cal_active_team',TEAM); ANCHOR=window.cmToday(); SELMC=null; reload(); };
 }
 
 async function loadCatalogMeta(){
@@ -247,6 +249,14 @@ async function loadCatalogMeta(){
     (cat||[]).forEach(m=>{ META_BY_KEY[m.key]={ label:m.label||META[m.key]?.label||m.key, unit:m.unit||META[m.key]?.unit||'', dec:(m.decimals!=null?m.decimals:(META[m.key]?.dec||0)) }; });
   }catch(e){}
   try{ const {data}=await window.sb.from('club_gps_settings').select('active_metrics').eq('club_id',CLUB).maybeSingle(); ACTIVE_METRICS=data?.active_metrics||null; }catch(e){}
+}
+
+function buildMcSelect(){
+  const sel=document.getElementById('lpMcSel'); if(!sel) return;
+  if(!ALLMCS.length){ sel.innerHTML=`<option>${tt('load_planner.no_mc_short','No microcycles')}</option>`; sel.disabled=true; return; }
+  sel.disabled=false;
+  sel.innerHTML=ALLMCS.slice().reverse().map(m=>`<option value="${m.id}"${m.id===(MC&&MC.id)?' selected':''}>${m.name||m.start_date}</option>`).join('');
+  sel.onchange=()=>{ SELMC=sel.value; reload(); };
 }
 
 function buildMetrics(){
@@ -299,10 +309,16 @@ async function loadManual(){
 }
 
 async function loadMicrocycle(){
+  // fetch ALL microcycles for the team, pick current: explicit selection → covering today → latest
+  ALLMCS=[];
+  try{ let q=window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,home_away,md_overrides,team_id').eq('club_id',CLUB);
+    if(TEAM) q=q.eq('team_id',TEAM); const {data}=await q.order('start_date',{ascending:true}); ALLMCS=data||[]; }catch(e){}
   MC=null;
-  try{ let q=window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival,home_away,md_overrides,team_id')
-      .eq('club_id',CLUB).lte('start_date',ANCHOR).gte('end_date',ANCHOR); if(TEAM) q=q.eq('team_id',TEAM);
-    const {data}=await q.limit(1); MC=(data&&data[0])||null; }catch(e){}
+  if(SELMC) MC=ALLMCS.find(m=>m.id===SELMC)||null;
+  if(!MC) MC=ALLMCS.find(m=>m.start_date<=ANCHOR&&m.end_date>=ANCHOR)||null;   // covers today
+  if(!MC && ALLMCS.length){ const past=ALLMCS.filter(m=>m.start_date<=ANCHOR); MC = past.length? past[past.length-1] : ALLMCS[ALLMCS.length-1]; }
+  SELMC = MC? MC.id : null;
+  buildMcSelect();
   let start,end;
   if(MC){ start=MC.start_date; end=MC.end_date; }
   else { const d=new Date(ANCHOR+'T12:00:00'); const dow=(d.getDay()+6)%7; const mon=new Date(d); mon.setDate(d.getDate()-dow); const sun=new Date(mon); sun.setDate(mon.getDate()+6); start=window.cmYMD(mon); end=window.cmYMD(sun); }
@@ -372,10 +388,9 @@ async function loadAccrued(){
 }
 
 async function loadPrevMC(){
-  PREV={}; PREVMC=null; if(!MC) return;
-  try{ const {data}=await window.sb.from('microcycles').select('id,name,start_date,end_date')
-      .eq('club_id',CLUB).eq('team_id',TEAM).lt('end_date',MC.start_date).order('end_date',{ascending:false}).limit(1);
-    PREVMC=(data&&data[0])||null; }catch(e){}
+  PREV={}; PREVMC=null; if(!MC||!ALLMCS.length) return;
+  const idx=ALLMCS.findIndex(m=>m.id===MC.id);
+  PREVMC = idx>0 ? ALLMCS[idx-1] : null;   // immediately preceding microcycle (e.g. MC 01 when in MC 02)
   if(!PREVMC) return;
   const pids=ROSTER.map(p=>p.id); const cols=METRICS.join(',');
   const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
