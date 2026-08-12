@@ -972,31 +972,42 @@ html.cm-rail .hub-nav-grip{display:none}
     const clubId = profile?.club_id;
     if (!clubId) return;
 
-    // Inject chat button before the bell
+    // El chrome de chat (botón + panel) se ancla junto a la campana. En páginas con
+    // header propio (Dossier, Rehab Planner) no hay campana: NO abortamos — dejamos el
+    // chrome sin inyectar pero igual nos suscribimos al realtime para que el toast y el
+    // sonido lleguen. Garantizamos también que exista el cm-toast-root (que normalmente
+    // crea _initNotifications, y que también depende de la campana).
     const bellBtn = [...document.querySelectorAll('.cm-icon-btn')].find(b => b.querySelector('.ti-bell'));
-    if (!bellBtn) return;
-    const chatBtn = document.createElement('button');
-    chatBtn.className = 'cm-icon-btn';
-    chatBtn.title = 'Messages';
-    chatBtn.setAttribute('aria-label', 'Messages');
-    chatBtn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-    const wrap = document.createElement('div');
-    wrap.className = 'cm-cb';
-    bellBtn.parentNode.insertBefore(wrap, bellBtn);
-    wrap.appendChild(chatBtn);
-    const badge = document.createElement('span');
-    badge.id = 'cm-cbadge';
-    badge.className = 'cm-cbadge';
-    wrap.appendChild(badge);
-    const panel = document.createElement('div');
-    panel.id = 'cm-cp';
-    panel.className = 'cm-cp';
-    panel.innerHTML = `
-      <div class="cm-cp-h"><span class="ttl" data-i18n="shell.messages">Messages</span></div>
-      <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
-      <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>`;
-    wrap.appendChild(panel);
-    _applyI18n(panel);
+    if (!document.getElementById('cm-toast-root')) {
+      const tr = document.createElement('div');
+      tr.id = 'cm-toast-root';
+      document.body.appendChild(tr);
+    }
+    let chatBtn = null, wrap = null, panel = null;
+    if (bellBtn) {
+      chatBtn = document.createElement('button');
+      chatBtn.className = 'cm-icon-btn';
+      chatBtn.title = 'Messages';
+      chatBtn.setAttribute('aria-label', 'Messages');
+      chatBtn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+      wrap = document.createElement('div');
+      wrap.className = 'cm-cb';
+      bellBtn.parentNode.insertBefore(wrap, bellBtn);
+      wrap.appendChild(chatBtn);
+      const badge = document.createElement('span');
+      badge.id = 'cm-cbadge';
+      badge.className = 'cm-cbadge';
+      wrap.appendChild(badge);
+      panel = document.createElement('div');
+      panel.id = 'cm-cp';
+      panel.className = 'cm-cp';
+      panel.innerHTML = `
+        <div class="cm-cp-h"><span class="ttl" data-i18n="shell.messages">Messages</span></div>
+        <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
+        <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>`;
+      wrap.appendChild(panel);
+      _applyI18n(panel);
+    }
 
     // Expose mark-read for Chat & Tasks to call
     window.cmChatMarkRead = key => {
@@ -1102,6 +1113,9 @@ html.cm-rail .hub-nav-grip{display:none}
       })
       .subscribe();
 
+    // Los listeners del popover solo aplican si el chrome se inyectó (hay campana).
+    // En páginas sin campana, el toast + sonido ya funcionan sin nada de esto.
+    if (!chatBtn || !panel || !wrap) return;
     chatBtn.addEventListener('click', e => {
       e.stopPropagation();
       panel.classList.toggle('is-open');
