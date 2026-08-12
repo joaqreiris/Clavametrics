@@ -3383,19 +3383,27 @@
       chart.data.datasets.forEach((ds, di) => {
         if (ds._isLine) {
           // Línea de Δ% (variación vs MC anterior): etiquetamos el % con signo sobre cada
-          // punto, verde si sube / rojo si baja. El resto de las líneas combo (p. ej.
-          // INTENSITY) siguen sin etiqueta para no ensuciar.
+          // punto, verde si sube / rojo si baja, con un fondito blanco para que se lea sobre
+          // las barras. El resto de las líneas combo (p. ej. INTENSITY) siguen sin etiqueta.
           if (!ds._rel) return;
           const lmeta = chart.getDatasetMeta(di);
           if (lmeta.hidden) return;
+          ctx.save();
+          ctx.font = '700 10.5px Geist, Inter, sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
           lmeta.data.forEach((pt, i) => {
             const v = ds.data[i];
             if (v == null || !pt) return;
             const up = v >= 0;
+            const txt = `${up ? '+' : ''}${Math.round(v)}%`;
+            const tw  = ctx.measureText(txt).width;
+            const ly  = pt.y - 9;   // encima del punto
+            ctx.fillStyle = 'rgba(255,255,255,.85)';   // halo/fondo para contraste
+            ctx.fillRect(pt.x - tw / 2 - 3, ly - 12, tw + 6, 14);
             ctx.fillStyle = up ? _upCol : _dnCol;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-            ctx.fillText(`${up ? '+' : ''}${Math.round(v * 10) / 10}%`, pt.x, pt.y - 5);
+            ctx.fillText(txt, pt.x, ly);
           });
+          ctx.restore();
           return;
         }
         const meta = chart.getDatasetMeta(di);
@@ -3749,10 +3757,16 @@
         if (isLine[i]) {                            // combo: line on the secondary axis
           const lc = config.style?.colors?.[s.label] || lineCol;
           refMetricMap.set(s.label, { vals, isLine: true, color: lc });
+          const isRel = !!s._rel;
+          // Δ%: puntos más grandes y coloreados por signo (verde sube / rojo baja) para que
+          // se lean incluso cuando quedan aislados (un solo MC con anterior por grupo).
+          const upC = _cssVar('--cm-success', '#16A34A'), dnC = _cssVar('--cm-danger', '#DC2626');
+          const ptCol = isRel ? data.map(v => v == null ? lc : (v >= 0 ? upC : dnC)) : lc;
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
-            borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
-            pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true, _rel: !!s._rel };
+            borderWidth: 2.4, tension: 0.25,
+            pointRadius: isRel ? 4.5 : 3.5, pointHoverRadius: isRel ? 6.5 : 5.5,
+            pointBackgroundColor: ptCol, pointBorderColor: '#fff', pointBorderWidth: isRel ? 1.6 : 1.2, _isLine: true, _rel: isRel };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
         refMetricMap.set(s.label, { vals, isLine: false, color: col });
