@@ -50,14 +50,17 @@
   .gp-card.equip .gp-card-h h3{color:var(--cm-accent)}
   /* Equipment section */
   .gp-eq-add{height:28px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;outline:none;max-width:170px}
-  .gp-eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
-  .gp-eq-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:9px;background:var(--cm-bg-soft)}
-  .gp-eq-item .gp-eq-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-  .gp-eq-item .gp-eq-name{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:6px}
-  .gp-eq-item .gp-eq-name .gp-eq-manual{font:600 8.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px}
-  .gp-eq-item .gp-eq-ex{font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .gp-eq-item.is-band{grid-column:1/-1;flex-wrap:wrap}
-  .gp-eq-item.is-band .gp-eq-main{flex:0 0 auto}
+  .gp-eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;align-items:start}
+  .gp-eq-item{display:flex;flex-direction:column;gap:8px;padding:9px 11px;border:1px solid var(--cm-border);border-radius:9px;background:var(--cm-bg-soft)}
+  .gp-eq-item .gp-eq-top{display:flex;align-items:center;gap:8px}
+  .gp-eq-item .gp-eq-grow{flex:1 1 auto}
+  .gp-eq-item .gp-eq-name{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .gp-eq-item .gp-eq-count{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--cm-bg-subtle);border:1px solid var(--cm-border-soft);font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .gp-eq-item .gp-eq-manual{flex:none;font:600 8.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px}
+  .gp-eq-item .gp-eq-chips{display:flex;flex-wrap:wrap;gap:4px}
+  .gp-eq-item .gp-eq-chip{max-width:100%;padding:2px 7px;border-radius:5px;background:var(--cm-surface);border:1px solid var(--cm-border-soft);font:500 10px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gp-eq-item.is-band{grid-column:1/-1}
+  .gp-eq-item.is-band .gp-eq-name{flex:0 0 auto}
   .gp-eq-item .gp-eq-levels{flex:1 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 10px;margin:0}
   .gp-eq-item .gp-eq-blvl-f{display:flex;align-items:center;gap:5px;font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
   .gp-eq-item .gp-eq-blvl{width:40px;height:24px;padding:0 5px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none}
@@ -76,6 +79,14 @@
   .gp-card-h .sub{font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px}
   .gp-card-h .right{margin-left:auto;display:flex;gap:6px;align-items:center}
   .gp-card-b{padding:14px 16px}
+  /* Hideable sections (plyo / main / adaptations): collapse body + trim header, keep only the eye toggle. */
+  .gp-sec-toggle{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);cursor:pointer;font-size:14px}
+  .gp-sec-toggle:hover{color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
+  .gp-sec-toggle.is-off{color:var(--cm-accent);border-color:var(--cm-accent);background:var(--cm-accent-soft)}
+  .gp-card.gp-section-off .gp-card-b{display:none}
+  .gp-card.gp-section-off .gp-card-h{border-bottom:0}
+  .gp-card.gp-section-off .gp-card-h h3,.gp-card.gp-section-off .gp-card-h .ct,.gp-card.gp-section-off .gp-card-h .sub{opacity:.45}
+  .gp-card.gp-section-off .gp-card-h .right > *:not(.gp-sec-toggle){display:none}
 
   /* Warm-up sub-blocks (activation / strength / mobility / myofascial / custom) */
   .gp-wu-block{border:1px solid var(--cm-border-soft);border-left:3px solid var(--cm-fg-faint);border-radius:9px;margin-bottom:10px;overflow:hidden;background:var(--cm-bg-soft)}
@@ -388,12 +399,13 @@
       </div>
 
       <!-- ===== PLYOMETRICS (before Main work) ===== -->
-      <div class="gp-card plyo">
+      <div class="gp-card plyo" data-gp-sec="plyo">
         <div class="gp-card-h">
           <h3 data-i18n="gym_planner.plyometrics_power">Plyometrics &amp; power</h3>
           <span class="ct" id="gpPlyCt">—</span>
           <span class="sub" data-i18n="gym_planner.track_contact_type">Track contact type (extensive / intensive)</span>
           <div class="right">
+            <button class="gp-sec-toggle no-print" title="Hide section" onclick="gpToggleSection('plyo', this)"><i class="ti ti-eye"></i></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpPlyoMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
             <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
@@ -415,12 +427,13 @@
       </div>
 
       <!-- ===== MAIN WORK ===== -->
-      <div class="gp-card">
+      <div class="gp-card" data-gp-sec="main">
         <div class="gp-card-h">
           <h3 data-i18n="gym_planner.main_work">Main work</h3>
           <span class="ct" id="gpMainCt">—</span>
           <span class="sub" data-i18n="gym_planner.mode_toggle_hint">Mode toggle per row: SR = sets×reps · VBT = velocity-based</span>
           <div class="right">
+            <button class="gp-sec-toggle no-print" title="Hide section" onclick="gpToggleSection('main', this)"><i class="ti ti-eye"></i></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
             <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
@@ -442,12 +455,12 @@
       </div>
 
       <!-- ===== ADAPTATIONS ===== -->
-      <div class="gp-card adapt">
+      <div class="gp-card adapt" data-gp-sec="adapt">
         <div class="gp-card-h">
           <h3 data-i18n="gym_planner.individual_adaptations">Individual adaptations</h3>
           <span class="ct" id="gpAdaptCt">—</span>
           <span class="sub" data-i18n="gym_planner.from_physio_today">From Physio · today</span>
-          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_adaptation">Add adaptation</span></button></div>
+          <div class="right no-print"><button class="gp-sec-toggle" title="Hide section" onclick="gpToggleSection('adapt', this)"><i class="ti ti-eye"></i></button><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_adaptation">Add adaptation</span></button></div>
         </div>
         <div class="gp-card-b">
           <table class="gp-tbl">
@@ -821,7 +834,8 @@ function gpCollectContent() {
     roster: [..._gpRoster],
     loadGroups: _gpGrpSavedCfg,
     equipment: gpCollectEquipment(),
-    bandQty: gpCollectBandQty()
+    bandQty: gpCollectBandQty(),
+    hiddenSections: [..._gpHiddenSections]
   };
 }
 // Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
@@ -837,6 +851,30 @@ function gpFillRow(tr, vals, exId, libName) {
   (vals || []).forEach((val, i) => { if (inputs[i]) inputs[i].value = val; });
   if (exId) tr.dataset.exId = exId;
   if (libName != null) tr.dataset.libName = libName;
+}
+// ── Hideable sections (plyo / main / adaptations) ──
+// A hidden section collapses in the editor and is dropped from the print sheet, so an
+// activation-only session can keep just the warm-up blocks. State persists in gym_content.
+let _gpHiddenSections = new Set();
+function gpToggleSection(sec, btn) {
+  if (_gpHiddenSections.has(sec)) _gpHiddenSections.delete(sec);
+  else _gpHiddenSections.add(sec);
+  gpApplySectionVisibility();
+  gpRenderPrintSheet();
+  gpScheduleSave();
+}
+function gpApplySectionVisibility() {
+  document.querySelectorAll('.gp-card[data-gp-sec]').forEach(card => {
+    const sec = card.dataset.gpSec;
+    const off = _gpHiddenSections.has(sec);
+    card.classList.toggle('gp-section-off', off);
+    const btn = card.querySelector('.gp-sec-toggle');
+    if (btn) {
+      btn.classList.toggle('is-off', off);
+      const ic = btn.querySelector('i'); if (ic) ic.className = off ? 'ti ti-eye-off' : 'ti ti-eye';
+      btn.title = off ? tt('gym_planner.show_section','Show section') : tt('gym_planner.hide_section','Hide section');
+    }
+  });
 }
 function gpApplyContent(content) {
   content = content || {};
@@ -879,6 +917,8 @@ function gpApplyContent(content) {
   gpRenderEquipment();
   _gpGrpSavedCfg = content.loadGroups || null;
   gpRenderSavedGroups();
+  _gpHiddenSections = new Set(content.hiddenSections || []);
+  gpApplySectionVisibility();
 }
 
 // ── Exercise library picker ──
@@ -1005,10 +1045,15 @@ async function gpRenderEquipment(){
     body.innerHTML = `<div class="gp-eq-empty">${esc(tt('gym_planner.no_equipment','No equipment yet — it appears automatically as you add exercises tagged with materials.'))}</div>`;
     return;
   }
-  const head = (t, isManual, exNames) => `<div class="gp-eq-main">
-      <span class="gp-eq-name">${esc(gpEqLabel(t))}${isManual ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>` : ''}</span>
-      ${exNames.length ? `<span class="gp-eq-ex" title="${esc(exNames.join(', '))}">${esc(exNames.join(' · '))}</span>` : ''}
-    </div>`;
+  // Name + badges (a count of how many exercises need it, or a "manual" tag).
+  const nameCell = (t, isManual, exNames) => `<span class="gp-eq-name">${esc(gpEqLabel(t))}</span>
+      ${isManual
+        ? `<span class="gp-eq-manual">${esc(tt('gym_planner.manual','manual'))}</span>`
+        : (exNames.length ? `<span class="gp-eq-count" title="${esc(tt('gym_planner.used_in','Used in exercises'))}">${exNames.length}</span>` : '')}`;
+  // Exercise names as wrapping chips instead of one truncated line → reads clean at any width.
+  const chips = exNames => exNames.length
+    ? `<div class="gp-eq-chips">${exNames.map(n => `<span class="gp-eq-chip" title="${esc(n)}">${esc(n)}</span>`).join('')}</div>`
+    : '';
   const rmBtn = isManual => isManual ? `<button type="button" class="gp-eq-rm no-print" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-x" style="font-size:14px"></i></button>` : '';
   body.innerHTML = `<div class="gp-eq-grid">${tokens.map(t => {
     const exNames = detected.has(t) ? [...detected.get(t)] : [];
@@ -1019,16 +1064,23 @@ async function gpRenderEquipment(){
       const levels = gpBandLevels().map(([v, l]) => `<label class="gp-eq-blvl-f"><span>${esc(l)}</span>
           <input class="gp-eq-blvl" type="number" min="0" inputmode="numeric" data-level="${v}" value="${esc(bq[v] != null ? bq[v] : '')}" placeholder="—"></label>`).join('');
       return `<div class="gp-eq-item is-band" data-token="${esc(t)}">
-        ${head(t, isManual, exNames)}
-        <div class="gp-eq-levels">${levels}</div>
-        ${rmBtn(isManual)}
+        <div class="gp-eq-top">
+          ${nameCell(t, isManual, exNames)}
+          <div class="gp-eq-levels">${levels}</div>
+          ${rmBtn(isManual)}
+        </div>
+        ${chips(exNames)}
       </div>`;
     }
     const qty = _gpEquipQty[t] != null ? _gpEquipQty[t] : '';
     return `<div class="gp-eq-item" data-token="${esc(t)}">
-      ${head(t, isManual, exNames)}
-      <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" title="${esc(tt('gym_planner.qty','Quantity'))}">
-      ${rmBtn(isManual)}
+      <div class="gp-eq-top">
+        ${nameCell(t, isManual, exNames)}
+        <span class="gp-eq-grow"></span>
+        <input class="gp-eq-qty" type="number" min="0" inputmode="numeric" value="${esc(qty)}" placeholder="—" title="${esc(tt('gym_planner.qty','Quantity'))}">
+        ${rmBtn(isManual)}
+      </div>
+      ${chips(exNames)}
     </div>`;
   }).join('')}</div>`;
 }
@@ -2495,8 +2547,9 @@ function gpRenderPrintSheet() {
       </div>`).join('')}
     </div>` : '';
 
-    // 3) KPI strip
-    const kpis = [[tt('gym_planner.warmup','Warm-up'),kv(g('gpTotWarmup'))],[tt('gym_planner.contacts','Contacts'),kv(g('gpTotPlyo'))],[tt('gym_planner.main_sets','Main sets'),kv(g('gpTotMain'))],[tt('gym_planner.tonnage','Tonnage'),kv(g('gpTotTonnage'))],[tt('gym_planner.athletes','Athletes'),kv(g('gpTotAthletes'))],[tt('gym_planner.planned_au','Planned AU'),kv(g('gpTotAu')),true]];
+    // 3) KPI strip — hidden sections report '—' so an activation-only sheet stays clean.
+    const _plyHidden = _gpHiddenSections.has('plyo'), _mainHidden = _gpHiddenSections.has('main');
+    const kpis = [[tt('gym_planner.warmup','Warm-up'),kv(g('gpTotWarmup'))],[tt('gym_planner.contacts','Contacts'),_plyHidden?'—':kv(g('gpTotPlyo'))],[tt('gym_planner.main_sets','Main sets'),_mainHidden?'—':kv(g('gpTotMain'))],[tt('gym_planner.tonnage','Tonnage'),_mainHidden?'—':kv(g('gpTotTonnage'))],[tt('gym_planner.athletes','Athletes'),kv(g('gpTotAthletes'))],[tt('gym_planner.planned_au','Planned AU'),kv(g('gpTotAu')),true]];
     const kpiStrip = `<div class="gsp-brk" style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
       ${kpis.map(([l,v,acc])=>`<div style="background:#fff;padding:10px 6px;text-align:center">
         <div style="font:700 18px ${MONO};color:${acc?'var(--club-accent)':'#15181D'}">${esc(v)}</div>
@@ -2593,7 +2646,7 @@ function gpRenderPrintSheet() {
     // PLYOMETRICS — cards
     const plyoRows = readRows('gpPlyoBody').filter(r=>r.name);
     const plyContacts = kv(g('gpTotPlyo'));
-    const plyoBlock = plyoRows.length ? `<div style="margin-bottom:16px">
+    const plyoBlock = (!_plyHidden && plyoRows.length) ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.plyometrics','Plyometrics')} · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} ${tt('gym_planner.contacts_word','contacts')}`:''}`)}
       <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${plyoRows.map(r=>{
         const params=[]; if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.contacts','Contacts'),v:r.c4});
@@ -2628,7 +2681,7 @@ function gpRenderPrintSheet() {
       if (r.link && nx && nx.link === r.link) { mainCells.push(supersetWrap(mainCardHtml(r)+mainCardHtml(nx))); i++; }
       else mainCells.push(mainCardHtml(r));
     }
-    const mainBlock = mainRows.length ? `<div style="margin-bottom:16px">
+    const mainBlock = (!_mainHidden && mainRows.length) ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
       <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${mainCells.join('')}</div>
     </div>` : '';
