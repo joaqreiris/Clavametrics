@@ -882,7 +882,7 @@ function gpApplyContent(content) {
 }
 
 // ── Exercise library picker ──
-let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = 'strength', _gpLibMuscle = '';
+let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = '', _gpLibMuscle = '', _gpLibEquip = '', _gpLibComplexity = '';
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
@@ -1071,9 +1071,10 @@ function gpBuildLibModal() {
         <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <style>
-        .gp-lib-chiprow{display:flex;flex-wrap:wrap;gap:5px;padding:0 18px 8px}
-        .gp-lib-chip{height:24px;padding:0 10px;border-radius:12px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 11px/1 var(--cm-font-sans);cursor:pointer}
-        .gp-lib-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-accent);border-color:var(--cm-accent)}
+        .gp-lib-filterrow{display:flex;flex-wrap:wrap;gap:6px;padding:8px 18px}
+        .gp-lib-sel{height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:600 11px/1 var(--cm-font-sans);cursor:pointer;outline:none;max-width:150px}
+        .gp-lib-sel:hover{border-color:var(--cm-border-strong)}
+        .gp-lib-sel:focus{border-color:var(--cm-accent)}
       </style>
       <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
@@ -1099,6 +1100,7 @@ function gpExMuscles(e){
   if (!s.size && e.muscle_group) s.add(e.muscle_group);
   return [...s];
 }
+function gpExEquip(e){ return [...new Set((e.equipment_tags||[]).filter(Boolean))]; }
 // Order present tokens by the canonical taxonomy, then any legacy/custom extras.
 function gpFacetTokens(dim, values){
   const present = new Set(values);
@@ -1114,20 +1116,33 @@ function gpFacetLabel(dim, token){
   if (localized && localized !== eng) return localized;
   return (eng === token) ? (token[0].toUpperCase() + token.slice(1)) : eng;
 }
+// Filter row: dropdowns (purpose / muscle / equipment / complexity), options drawn
+// from what's actually in the club library and ordered by the canonical taxonomy.
 function gpRenderLibChips() {
   const wrap = document.getElementById('gpLibChips'); if (!wrap) return;
   const lib = _gpLib || [];
-  const purpTokens = gpFacetTokens('purpose', lib.flatMap(gpExPurposes));
-  const inCat = lib.filter(e => !_gpLibCat || gpExPurposes(e).includes(_gpLibCat));
-  const musTokens = gpFacetTokens('muscle_group', inCat.flatMap(gpExMuscles));
-  const chip = (label, val, on, kind) => `<button class="gp-lib-chip${on?' is-on':''}" data-kind="${kind}" data-val="${(val||'').replace(/"/g,'&quot;')}">${esc(label)}</button>`;
-  let html = `<div class="gp-lib-chiprow">${chip(tt('common.all','All'), '', _gpLibCat==='', 'cat')}${purpTokens.map(t => chip(gpFacetLabel('purpose',t), t, _gpLibCat===t, 'cat')).join('')}</div>`;
-  if (musTokens.length) html += `<div class="gp-lib-chiprow">${chip(tt('gym_planner.all_muscles','All muscles'), '', _gpLibMuscle==='', 'muscle')}${musTokens.map(m => chip(gpFacetLabel('muscle_group',m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
-  wrap.innerHTML = html;
-  wrap.querySelectorAll('.gp-lib-chip').forEach(b => b.onclick = () => {
-    if (b.dataset.kind === 'cat') { _gpLibCat = b.dataset.val; _gpLibMuscle = ''; }
-    else { _gpLibMuscle = b.dataset.val; }
-    gpRenderLibChips(); gpRenderLibList();
+  const purpOpts = gpFacetTokens('purpose', lib.flatMap(gpExPurposes));
+  const musOpts  = gpFacetTokens('muscle_group', lib.flatMap(gpExMuscles));
+  const eqOpts   = gpFacetTokens('equipment', lib.flatMap(gpExEquip));
+  const cxOpts   = ['Low','Medium','High'].filter(c => lib.some(e => e.complexity === c));
+  const sel = (f, cur, allLabel, opts, labelFn) =>
+    `<select class="gp-lib-sel" data-f="${f}">
+      <option value="">${esc(allLabel)}</option>
+      ${opts.map(t => `<option value="${esc(t)}"${cur===t?' selected':''}>${esc(labelFn(t))}</option>`).join('')}
+    </select>`;
+  wrap.innerHTML = `<div class="gp-lib-filterrow">
+    ${sel('cat', _gpLibCat, tt('gym_library.all_purposes','All purposes'), purpOpts, t => gpFacetLabel('purpose', t))}
+    ${musOpts.length ? sel('muscle', _gpLibMuscle, tt('gym_planner.all_muscles','All muscles'), musOpts, t => gpFacetLabel('muscle_group', t)) : ''}
+    ${eqOpts.length ? sel('equip', _gpLibEquip, tt('gym_library.all_equipment','All equipment'), eqOpts, t => gpEqLabel(t)) : ''}
+    ${cxOpts.length ? sel('cx', _gpLibComplexity, tt('gym_library.all_complexity','All complexity'), cxOpts, c => tt('gym_library.complexity_' + c.toLowerCase(), c)) : ''}
+  </div>`;
+  wrap.querySelectorAll('.gp-lib-sel').forEach(s => s.onchange = () => {
+    const f = s.dataset.f, v = s.value;
+    if (f === 'cat') _gpLibCat = v;
+    else if (f === 'muscle') _gpLibMuscle = v;
+    else if (f === 'equip') _gpLibEquip = v;
+    else if (f === 'cx') _gpLibComplexity = v;
+    gpRenderLibList();
   });
 }
 function gpRenderLibList() {
@@ -1136,6 +1151,8 @@ function gpRenderLibList() {
   const items = (_gpLib || []).filter(e => {
     if (_gpLibCat && !gpExPurposes(e).includes(_gpLibCat)) return false;
     if (_gpLibMuscle && !gpExMuscles(e).includes(_gpLibMuscle)) return false;
+    if (_gpLibEquip && !gpExEquip(e).includes(_gpLibEquip)) return false;
+    if (_gpLibComplexity && e.complexity !== _gpLibComplexity) return false;
     if (!q) return true;
     const hay = `${e.name||''} ${gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m)).join(' ')} ${gpExPurposes(e).map(p => gpFacetLabel('purpose',p)).join(' ')}`.toLowerCase();
     return hay.includes(q);
@@ -1163,7 +1180,7 @@ async function gpOpenLib(ctx) {
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
   document.getElementById('gpLibFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpLibList').innerHTML = '';
-  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : ''; _gpLibMuscle = '';
+  _gpLibCat = (ctx && ctx.libCat != null) ? ctx.libCat : ''; _gpLibMuscle = ''; _gpLibEquip = ''; _gpLibComplexity = '';
   await gpEnsureLib();
   if (_gpLibCat && !(_gpLib||[]).some(e => gpExPurposes(e).includes(_gpLibCat))) _gpLibCat = '';
   gpRenderLibChips(); gpRenderLibList();
@@ -2781,7 +2798,32 @@ async function gpExportPDF() {
 
   const urlDate  = new URLSearchParams(window.location.search).get('date');
   const today    = cmToday();
-  const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
+  let   initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
+
+  // Land on the first upcoming day that has a gym session and hasn't already finished.
+  // Mirrors Daily Planning's "today's session is over → next day", and additionally skips
+  // days with no gym session at all (so an empty today jumps to the next planned gym day).
+  // Only when no explicit ?date= was requested.
+  if (!urlDate) {
+    try {
+      const { data: _up } = await window.sb.from('training_sessions')
+        .select('session_date,session_time,end_time')
+        .eq('club_id', clubId).eq('team_id', _gpTeamId)
+        .eq('session_type', 'gym').eq('is_historical', false)
+        .gte('session_date', today)
+        .order('session_date', { ascending: true }).order('session_time', { ascending: true, nullsFirst: true });
+      const _now   = new Date();
+      const _nowHM = String(_now.getHours()).padStart(2, '0') + ':' + String(_now.getMinutes()).padStart(2, '0');
+      for (const s of (_up || [])) {
+        if (s.session_date === today) {
+          // A gym session today counts as "still open" until its end (or start, if no end) passes.
+          const endHM = String(s.end_time || s.session_time || '').slice(0, 5);
+          if (!endHM || _nowHM <= endHM) { initDate = today; break; }
+          // else: today's gym session already finished → keep scanning forward
+        } else { initDate = s.session_date; break; }   // next future day that has a gym session
+      }
+    } catch (_) { /* stay on today if the pre-check fails */ }
+  }
 
   const [playersRes, mcRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id)').eq('club_id', clubId).eq('player_teams.team_id', _gpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
