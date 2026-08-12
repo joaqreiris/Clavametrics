@@ -310,10 +310,14 @@ function wireControls(){
 // ── load a week's worth of data & compute ──────────────────────
 async function reload(){
   document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
-  await Promise.all([ loadRoster(), loadManual() ]);
-  await loadMicrocycle();          // sets MC + DAYS + PLAN
-  await Promise.all([ computeRefs(), loadAccrued() ]);
-  render();
+  try{
+    await Promise.all([ loadRoster(), loadManual() ]);
+    await loadMicrocycle();          // sets MC + DAYS + PLAN
+    await Promise.all([ computeRefs(), loadAccrued() ]);
+  }catch(e){ console.error('[lp] reload failed:', e); }
+  try{ render(); }
+  catch(e){ console.error('[lp] render failed:', e);
+    document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.render_error','Something went wrong rendering the page.')+'<br><span class="lp-mini">'+((e&&e.message)||e)+'</span></div>'; }
 }
 
 async function loadRoster(){
@@ -400,10 +404,11 @@ async function computeRefs(){
   let base={};   // metric → pid → {value,count,conf}
   if(MODE==='last90'){ base=await computeLast90(pids,METRICS); }
   else {
-    for(const m of METRICS){
-      const b=await window.getMatchBaselineBatch(pids,m,CLUB); base[m]={};
-      Object.keys(b||{}).forEach(pid=>{ base[m][pid]={value:b[pid].baseline,count:b[pid].count,conf:b[pid].confidence}; });
-    }
+    // parallel + per-metric catch: a single metric failing must not blank the whole grid
+    const results=await Promise.all(METRICS.map(m=>
+      window.getMatchBaselineBatch(pids,m,CLUB).then(b=>({m,b})).catch(e=>{ console.warn('[lp] baseline',m,e); return {m,b:{}}; })));
+    results.forEach(({m,b})=>{ base[m]={};
+      Object.keys(b||{}).forEach(pid=>{ base[m][pid]={value:b[pid].baseline,count:b[pid].count,conf:b[pid].confidence}; }); });
   }
   ROSTER.forEach(p=>METRICS.forEach(m=>{
     const man=MANUAL[p.id]&&MANUAL[p.id][m];
