@@ -347,10 +347,14 @@
     _clubIdPromise = null; _clubPromise = null; _profilePromise = null;
     _modPromise = null;
     _flagsMap = null; _flagsPromise = null;
+    _planPromise = null;
+    try { Object.keys(sessionStorage).forEach(k => { if (k.indexOf('cm_pf_') === 0) sessionStorage.removeItem(k); }); } catch (_) {}
   };
 
   // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──
   window.CM_SECTIONS = [
+    { key:'calendar',         href:'Calendar.html',            icon:'ti-calendar-stats',    name:'Calendar',              feature:'calendar' },
+    { key:'chat-tasks',       href:'Chat & Tasks.html',        icon:'ti-message-circle',    name:'Chat & tasks',          feature:'chat_tasks' },
     { key:'planner',          href:'Planner.html',             icon:'ti-clipboard-list',    name:'Drill Designer',        feature:'drill_designer' },
     { key:'sessions-lib',     href:'Exercises Library.html',    icon:'ti-list-tree',         name:'Exercises Library',     feature:'sessions_library' },
     { key:'daily-planning',   href:'Daily Planning.html',      icon:'ti-soccer-field',      name:'Daily planning',        feature:'daily_planning' },
@@ -367,7 +371,7 @@
     { key:'gps',              href:'GPS Analysis.html',        icon:'ti-radar-2',           name:'GPS analysis',          feature:'gps_analysis' },
     { key:'gym-planner',      href:'Gym Planner.html',         icon:'ti-barbell',           name:'Gym planner',           feature:'gym' },
     { key:'individual-sc',    href:'Individual Planner.html',  icon:'ti-user-cog',          name:'Individual S&C',        feature:'individual_planner' },
-    { key:'top-up',           href:'Top-Up.html',              icon:'ti-run',               name:'Top-Up',                feature:null },
+    { key:'top-up',           href:'Top-Up.html',              icon:'ti-run',               name:'Top-Up',                feature:'topup' },
     { key:'gym-library',      href:'Gym Library.html',         icon:'ti-books',             name:'Gym library',           feature:'gym' },
     { key:'nutrition',        href:'Nutrition.html',           icon:'ti-apple',             name:'Nutrition',             feature:'nutrition' },
     { key:'clinical',         href:'Clinical Records.html',    icon:'ti-clipboard-heart',   name:'Clinical records',      feature:null },
@@ -431,8 +435,14 @@
   };
 
   let _planPromise = null;
-  // Set de features a las que el club del usuario tiene derecho. Fail-open:
-  // ante error devuelve null = "desconocido" → planAllows permite todo.
+  // Clave de caché de features por equipo activo (o club si no hay equipo).
+  function _pfCacheKey() {
+    try { return 'cm_pf_' + ((window.getActiveTeamId && window.getActiveTeamId()) || 'club'); }
+    catch (_) { return 'cm_pf_club'; }
+  }
+  // Set de features a las que el club del usuario tiene derecho. FAIL-CLOSED:
+  // ante error, usa el último set conocido (cache de sesión) si existe; si no,
+  // devuelve Set vacío → planAllows niega los módulos pagos (no los abre).
   window.getPlanFeatures = function () {
     if (_planPromise) return _planPromise;
     _planPromise = (async () => {
@@ -445,10 +455,15 @@
           // sin equipo activo (ej. página sin selector y storage vacío) → rollup del club
           ({ data, error } = await window.sb.rpc('my_plan_features'));
         }
-        if (error || !Array.isArray(data)) return null; // fail-open
+        if (error || !Array.isArray(data)) {
+          try { const c = sessionStorage.getItem(_pfCacheKey()); if (c) return new Set(JSON.parse(c)); } catch (_) {}
+          return new Set(); // fail-closed
+        }
+        try { sessionStorage.setItem(_pfCacheKey(), JSON.stringify(data)); } catch (_) {}
         return new Set(data);
       } catch (e) {
-        return null; // ante error, no gatear
+        try { const c = sessionStorage.getItem(_pfCacheKey()); if (c) return new Set(JSON.parse(c)); } catch (_) {}
+        return new Set(); // fail-closed
       }
     })();
     return _planPromise;
@@ -462,10 +477,9 @@
       const feat = sec ? sec.feature : null;
       if (!feat) return true;                            // sin feature = always-on
       const feats = await window.getPlanFeatures();
-      if (!feats) return true;                           // fail-open
-      return feats.has(feat);
+      return !!(feats && feats.has(feat));               // fail-closed: sin set → niega
     } catch (e) {
-      return true;                                       // fail-open
+      return false;                                      // fail-closed
     }
   };
 

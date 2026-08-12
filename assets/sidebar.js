@@ -204,9 +204,9 @@ html.cm-rail .hub-nav-grip{display:none}
   const NAV_GROUPS = [
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub',        i18n: 'shell.nav.hub' },
-      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar' },
+      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar', key: 'calendar', planOnly: true },
       { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
-      { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks' },
+      { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks', key: 'chat-tasks', planOnly: true },
     ]},
     { label: 'Technical', items: [
       { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Drill Designer',   key: 'planner' },
@@ -287,9 +287,10 @@ html.cm-rail .hub-nav-grip{display:none}
           const adm    = item.adminOnly ? ' data-admin-only' : '';
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
           const plt    = item.platformOnly ? ' data-platform-only' : '';
+          const po     = item.planOnly ? ' data-plan-only' : '';   // gatea por plan, NO por RBAC
           const i18nKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
           const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt}${po} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -565,6 +566,7 @@ html.cm-rail .hub-nav-grip{display:none}
         ? await window.getMyModules() : { all: true, keys: new Set() };
       if (!_mods.all) {
         document.querySelectorAll('[data-mod]').forEach(el => {
+          if (el.hasAttribute('data-plan-only')) return;   // gate por plan, no por RBAC
           if (!_mods.keys.has(el.dataset.mod)) el.remove();
         });
       }
