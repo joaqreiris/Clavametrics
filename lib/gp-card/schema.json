@@ -10,12 +10,13 @@
     "schema": { "const": "gp.card/v1" },
     "title": { "type": "string", "maxLength": 120 },
     "sort": {
-      "$comment": "Optional presentation-only column sort (table viz). Does not change the data.",
+      "$comment": "Optional presentation-only sort. Table: { col, dir } per column. Bars: { by:'value'|'label', dir } reorders the categories. Does not change the data.",
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["col", "dir"],
+      "required": ["dir"],
       "properties": {
-        "col": { "type": "string" },
+        "col": { "type": "string", "$comment": "Table viz: id of the column to sort by." },
+        "by": { "type": "string", "enum": ["value", "label"], "$comment": "Bars viz: sort categories by the primary bar value or by the category label." },
         "dir": { "type": "string", "enum": ["asc", "desc"] }
       }
     },

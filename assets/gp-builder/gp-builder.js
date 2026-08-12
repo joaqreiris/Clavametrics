@@ -463,8 +463,9 @@
                // unset → cards without formatting stay byte-identical to today.
                ...(_normFmt(S.titleFormat)    ? { titleFormat:    _normFmt(S.titleFormat) }    : {}),
                ...(_normFmt(S.subtitleFormat) ? { subtitleFormat: _normFmt(S.subtitleFormat) } : {}) },
-      // Presentation-only column sort (table viz). Persisted so the order survives reload.
-      ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
+      // Presentation-only sort. Table: { col, dir } por columna. Bars: { by:'value'|'label', dir }
+      // que reordena las categorías. Persistido para que el orden sobreviva al reload.
+      ...((S.type === 'table' || S.type === 'bars') && S.sort ? { sort: S.sort } : {}),
       // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
       // conditionally (same pattern as `sort`) so a card without lines stays byte-identical to today.
       ...(S.referenceLines?.length ? { referenceLines: S.referenceLines.map(r => ({ ...r })) } : {}),
@@ -3839,14 +3840,36 @@
       catDims.forEach(a => { const k = String(a[0]); _c0.set(k, (_c0.get(k) || 0) + 1); });
       if ([..._c0.values()].some(n => n >= 2)) nDims = 2;
     }
+    // ── ORDEN DE CATEGORÍAS ───────────────────────────────────────────────────
+    // El botón de orden de la card fija config.sort = { by:'value'|'label', dir }.
+    //   · sin sort  → orden original (con 2 niveles se agrupa alfabético para los corchetes)
+    //   · by:'value'→ por el valor de la métrica de barras primaria (grupo, si hay 2 niveles)
+    //   · by:'label'→ alfabético por la etiqueta de categoría
+    // Con 2 niveles el orden respeta la jerarquía: se reordenan los GRUPOS (nivel-1) y adentro
+    // se mantiene el detalle contiguo, para que los corchetes no se partan.
+    const _barSort  = (config.sort && config.sort.by) ? config.sort : null;
+    const _sign     = _barSort && _barSort.dir === 'asc' ? 1 : -1;
+    const _primData = (datasets.find(d => !d._isLine) || {}).data || [];
+    const _val      = i => { const v = Number(_primData[i]); return isNaN(v) ? -Infinity : v; };
+    let order = null;
     if (nDims >= 2) {
-      // Los corchetes agrupan índices CONSECUTIVOS (dos períodos separados NO deben fusionarse),
-      // así que las categorías del mismo nivel-1 tienen que quedar juntas. Ordenamos por
-      // (nivel1, nivel2) y permutamos TODO lo alineado por índice. Sólo ocurre con jerarquía
-      // real → una card de 1 dimensión nunca cambia de orden.
-      const order = cats.map((_, i) => i).sort((a, b) =>
-        String(catDims[a][0]).localeCompare(String(catDims[b][0])) ||
-        String(catDims[a][1]).localeCompare(String(catDims[b][1])));
+      // valor de grupo (nivel-1) = suma de la métrica primaria; se ordenan grupos, no barras sueltas.
+      const gv = new Map();
+      cats.forEach((_, i) => { const k = String(catDims[i][0]); gv.set(k, (gv.get(k) || 0) + _val(i)); });
+      order = cats.map((_, i) => i).sort((a, b) => {
+        if (_barSort && _barSort.by === 'value') {
+          const d = (gv.get(String(catDims[a][0])) - gv.get(String(catDims[b][0]))) * _sign;
+          if (d) return d;
+        }
+        return String(catDims[a][0]).localeCompare(String(catDims[b][0])) ||
+               String(catDims[a][1]).localeCompare(String(catDims[b][1]));
+      });
+    } else if (_barSort) {
+      order = cats.map((_, i) => i).sort((a, b) =>
+        _barSort.by === 'value' ? (_val(a) - _val(b)) * _sign
+                                : String(cats[a]).localeCompare(String(cats[b])) * _sign);
+    }
+    if (order) {
       const _snap = order.map(i => ({ c: cats[i], f: catFids[i], d: catDims[i] }));
       _snap.forEach((o, i) => { cats[i] = o.c; catFids[i] = o.f; catDims[i] = o.d; });
       datasets.forEach(ds => { if (Array.isArray(ds.data)) ds.data = order.map(i => ds.data[i]); });
@@ -3906,6 +3929,54 @@
     chip.innerHTML = `<i class="ti ti-zoom-in-area"></i><span class="g"></span>`
       + `<button class="x" title="${esc(_tt('gps_analysis.builder_zoom_exit', 'Exit zoom'))}" aria-label="${esc(_tt('gps_analysis.builder_zoom_exit', 'Exit zoom'))}"><i class="ti ti-x"></i></button>`;
     chip.querySelector('.g').textContent = String(group);
+  }
+
+  // ── Orden de barras (chip in-card) ─────────────────────────────────────────
+  // Estados del ciclo: original → mayor→menor → menor→mayor → A→Z → original.
+  // Devuelve el ícono/etiqueta del estado ACTUAL (según sortObj) y el `next` al que salta.
+  function _barSortState(sortObj) {
+    const by = sortObj && sortObj.by, dir = sortObj && sortObj.dir;
+    if (by === 'value' && dir === 'desc') return { key:'vd', icon:'ti-sort-descending-2', label:_tt('gps_analysis.builder_sort_val_desc', 'High → low'), next:{ by:'value', dir:'asc' } };
+    if (by === 'value' && dir === 'asc')  return { key:'va', icon:'ti-sort-ascending-2',  label:_tt('gps_analysis.builder_sort_val_asc',  'Low → high'), next:{ by:'label', dir:'asc' } };
+    if (by === 'label')                   return { key:'az', icon:'ti-sort-a-z',           label:_tt('gps_analysis.builder_sort_alpha',    'A → Z'),      next:null };
+    return { key:'orig', icon:'ti-arrows-sort', label:_tt('gps_analysis.builder_sort_original', 'Original'), next:{ by:'value', dir:'desc' } };
+  }
+
+  function _renderSortChip(body, config) {
+    let chip = body.querySelector(':scope > .gp-sort-chip');
+    if (config.viz !== 'bars') { if (chip) chip.remove(); return; }
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'gp-sort-chip';
+      chip.setAttribute('role', 'button'); chip.tabIndex = 0;
+      body.appendChild(chip);
+      chip.addEventListener('click', e => { e.stopPropagation(); _cycleBarsSort(body); });
+      chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _cycleBarsSort(body); } });
+    }
+    const st = _barSortState(config.sort);
+    chip.title = _tt('gps_analysis.builder_sort_tooltip', 'Sort — click to cycle');
+    chip.innerHTML = `<i class="ti ${st.icon}"></i><span class="g">${esc(st.label)}</span>`;
+    chip.classList.toggle('is-on', st.key !== 'orig');
+  }
+
+  /** Avanza el orden de una card de barras al siguiente estado del ciclo y persiste.
+   *  En el editor muta S.sort; en una card guardada, config.sort + updateDashboardCard. */
+  function _cycleBarsSort(body) {
+    const cardEl = body.closest('.gp-c'); if (!cardEl) return;
+    if (draftCard && cardEl === draftCard) {
+      S.sort = _barSortState(S.sort).next;   // el editor persiste al guardar la card
+      renderCard();
+      return;
+    }
+    const config = cardEl.__config; if (!config) return;
+    const next = _barSortState(config.sort).next;
+    if (next) config.sort = next; else delete config.sort;
+    if (cardEl.__cfg) cardEl.__cfg.sort = next || null;
+    resolveAndRenderCard(cardEl, config);
+    const cardId = cardEl.dataset.cardId;
+    if (_isUuid(cardId) && typeof window.updateDashboardCard === 'function') {
+      window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('gpb: bars sort persist failed:', e));
+    }
   }
 
   function mountBarsChart(body, config, series, mcNames) {
@@ -4068,6 +4139,7 @@
       // Zoom (Fase B): el handler lo lee para saber si esta card zoomea, y con qué grupo.
       body.__chart.$gpNested  = !!_nested;
       _renderZoomChip(body, d.zoomGroup);
+      _renderSortChip(body, config);
     };
     mount();
   }
