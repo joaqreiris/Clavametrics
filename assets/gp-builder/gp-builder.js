@@ -3378,8 +3378,26 @@
       const horizontal = !!opts.horizontal, stacked = !!opts.stacked;
       ctx.save();
       ctx.font = '600 9px Geist, Inter, sans-serif';
+      const _upCol = _cssVar('--cm-success', '#16A34A');
+      const _dnCol = _cssVar('--cm-danger',  '#DC2626');
       chart.data.datasets.forEach((ds, di) => {
-        if (ds._isLine) return;                     // combo line: leave unlabelled (keeps it clean)
+        if (ds._isLine) {
+          // Línea de Δ% (variación vs MC anterior): etiquetamos el % con signo sobre cada
+          // punto, verde si sube / rojo si baja. El resto de las líneas combo (p. ej.
+          // INTENSITY) siguen sin etiqueta para no ensuciar.
+          if (!ds._rel) return;
+          const lmeta = chart.getDatasetMeta(di);
+          if (lmeta.hidden) return;
+          lmeta.data.forEach((pt, i) => {
+            const v = ds.data[i];
+            if (v == null || !pt) return;
+            const up = v >= 0;
+            ctx.fillStyle = up ? _upCol : _dnCol;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(`${up ? '+' : ''}${Math.round(v * 10) / 10}%`, pt.x, pt.y - 5);
+          });
+          return;
+        }
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
         meta.data.forEach((bar, i) => {
@@ -3734,7 +3752,7 @@
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
-            pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
+            pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true, _rel: !!s._rel };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
         refMetricMap.set(s.label, { vals, isLine: false, color: col });
