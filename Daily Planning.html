@@ -327,6 +327,7 @@
           <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>…</span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
           <button class="cm-btn is-outline is-sm" onclick="dpPrint()"><i class="ti ti-printer" style="font-size:14px"></i><span data-i18n="common.print">Print</span></button>
           <button class="cm-btn is-outline is-sm" onclick="dpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="daily_planning.export_pdf">Export PDF</span></button>
+          <button class="cm-btn is-outline is-sm" id="dpDuplicateBtn" onclick="dpOpenDuplicate()" style="display:none"><i class="ti ti-copy" style="font-size:14px"></i><span data-i18n="daily_planning.duplicate">Duplicate</span></button>
           <button class="cm-btn is-outline is-sm" id="dpDeleteBtn" onclick="dpDeletePlan()" style="display:none;color:var(--cm-danger,#DC2626);border-color:var(--cm-border)"><i class="ti ti-trash" style="font-size:14px"></i><span data-i18n="plan_delete.cta">Delete plan</span></button>
           <button class="cm-btn is-primary is-sm" id="dpPublishBtn" onclick="dpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i><span data-i18n="daily_planning.publish">Publish</span></button>
         </div>
@@ -2848,9 +2849,11 @@ function _dpUpdatePublishBtn() {
     btn.innerHTML = `<i class="ti ti-share-2" style="font-size:14px"></i><span data-i18n="daily_planning.publish">${tt('daily_planning.publish','Publish')}</span>`;
     btn.classList.remove('is-success'); btn.classList.add('is-primary');
   }
-  // Delete only makes sense once a session row exists for this date.
+  // Delete / Duplicate only make sense once a session row exists for this date.
   const del = document.getElementById('dpDeleteBtn');
   if (del) del.style.display = _dpCurrentSessionId ? '' : 'none';
+  const dup = document.getElementById('dpDuplicateBtn');
+  if (dup) dup.style.display = _dpCurrentSessionId ? '' : 'none';
 }
 
 // ── Multi-session day switcher ──
@@ -2881,13 +2884,19 @@ function _dpRenderSessionSwitch() {
   host.style.display = '';
   // Render a tab per existing session when there are ≥2, or while creating on top of ≥1 existing.
   const showTabs = list.length >= 2 || (list.length >= 1 && creating);
+  const dupTitle = tt('daily_planning.duplicate', 'Duplicate');
   const tabs = showTabs ? list.map((s, i) => {
     const time = s.session_time ? String(s.session_time).slice(0, 5) : '';
     const name = s.title || tt('daily_planning.session_n', 'Session {n}', { n: i + 1 });
     const on   = s.id === _dpCurrentSessionId ? ' is-on' : '';
-    return `<button type="button" class="dp-sess-tab${on}" data-sess="${_dpEsc(s.id)}" title="${_dpEsc(name)}">`
+    // Gym sessions are planned in the Gym Planner, not here — don't offer to duplicate them.
+    const isGym = (s.session_type || '') === 'gym';
+    return `<span style="display:inline-flex;align-items:stretch;gap:2px">`
+      + `<button type="button" class="dp-sess-tab${on}" data-sess="${_dpEsc(s.id)}" title="${_dpEsc(name)}">`
       + (time ? `<span class="tm">${_dpEsc(time)}</span>` : '')
-      + `<span class="nm">${_dpEsc(name)}</span></button>`;
+      + `<span class="nm">${_dpEsc(name)}</span></button>`
+      + (isGym ? '' : `<button type="button" class="dp-sess-tab" data-dup="${_dpEsc(s.id)}" title="${_dpEsc(dupTitle)}" style="padding-inline:7px;color:var(--cm-fg-muted)"><i class="ti ti-copy" style="font-size:12px"></i></button>`)
+      + `</span>`;
   }).join('') : '';
   const newLabel = tt('daily_planning.new_session', 'New session');
   const newBtn = `<button type="button" class="dp-sess-tab dp-sess-new${creating ? ' is-on' : ''}" data-new="1" title="${_dpEsc(newLabel)}"><i class="ti ti-plus"></i><span class="nm">${_dpEsc(newLabel)}</span></button>`;
@@ -2907,6 +2916,10 @@ function _dpRenderSessionSwitch() {
       history.replaceState(null, '', u);
     } catch (_) {}
     loadDay(_dpCurrentDate);
+  }));
+  host.querySelectorAll('[data-dup]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    dpOpenDuplicate(b.dataset.dup);
   }));
   const nb = host.querySelector('[data-new]');
   if (nb) nb.addEventListener('click', () => { if (!creating) _dpNewSession(); });
@@ -2939,6 +2952,159 @@ function _dpEsc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => (
 // ── Delete plan ──
 // Delegates to the shared flow (assets/plan-delete.js): it confirms, and never destroys the
 // session's own GPS / RPE / video records — those are independent of the plan sheet.
+// ── Duplicate session ──────────────────────────────────────────────────────
+// Copies a session (its planning fields + every session_exercises row across all
+// phases) to another date. A training_sessions row IS the Calendar training block,
+// so inserting the copy also creates the Calendar event on the target date — no
+// separate calendar_events write is needed. The coach can instead pick a session
+// already created on that date, which OVERWRITES its plan (confirmed first).
+let _dpDupSourceId = null;
+
+function _dpAddMin(hhmm, min) {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  let tot = ((h * 60 + m + (min || 0)) % 1440 + 1440) % 1440;
+  return String(Math.floor(tot / 60)).padStart(2, '0') + ':' + String(tot % 60).padStart(2, '0');
+}
+
+async function dpOpenDuplicate(sessionId) {
+  const srcId = sessionId || _dpCurrentSessionId;
+  if (!srcId) { dpToast(tt('daily_planning.dup_no_session', 'No session to duplicate yet.')); return; }
+  _dpDupSourceId = srcId;
+  const src = (_dpDaySessions || []).find(s => s.id === srcId) || {};
+  const srcName = src.title || tt('daily_planning.session', 'Session');
+  const srcTime = src.session_time ? String(src.session_time).slice(0, 5) : '';
+  // Default target = same session one week later (the common "reuse next week" case).
+  const defDate = (() => { try { const d = new Date(_dpCurrentDate + 'T12:00:00'); d.setDate(d.getDate() + 7); return cmYMD(d); } catch (_) { return _dpCurrentDate; } })();
+
+  document.getElementById('dpDupModal')?.remove();
+  const fieldCss = 'width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg,#fff);color:var(--cm-fg);font:var(--cm-body-sm)';
+  const labCss = 'display:block;font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted);margin-bottom:5px';
+  const ov = document.createElement('div');
+  ov.id = 'dpDupModal';
+  ov.className = 'no-print';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--cm-surface,#fff);color:var(--cm-fg,#15181D);border:1px solid var(--cm-border);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:min(460px,94vw);max-height:90vh;overflow:auto;font:var(--cm-body-sm)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+        <h3 style="margin:0;font:700 15px/1.2 var(--cm-font-sans)"><i class="ti ti-copy" style="font-size:16px;vertical-align:-2px;margin-right:6px"></i>${_dpEsc(tt('daily_planning.dup_title', 'Duplicate session'))}</h3>
+        <button type="button" onclick="dpCloseDuplicate()" style="background:none;border:none;cursor:pointer;color:var(--cm-fg-muted);font-size:18px;line-height:1"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+        <div style="color:var(--cm-fg-muted)">${_dpEsc(tt('daily_planning.dup_copying', 'Copying'))}: <strong style="color:var(--cm-fg)">${_dpEsc(srcName)}${srcTime ? ` · ${_dpEsc(srcTime)}` : ''}</strong></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <label style="flex:1;min-width:150px"><span style="${labCss}">${_dpEsc(tt('daily_planning.dup_target_date', 'Target date'))}</span>
+            <input type="date" id="dpDupDate" value="${defDate}" onchange="dpDupLoadTargets()" style="${fieldCss}"></label>
+          <label style="flex:1;min-width:120px"><span style="${labCss}">${_dpEsc(tt('daily_planning.start_time', 'Start time'))}</span>
+            <input type="time" id="dpDupTime" value="${srcTime}" style="${fieldCss}"></label>
+        </div>
+        <div>
+          <span style="${labCss}">${_dpEsc(tt('daily_planning.dup_destination', 'Destination'))}</span>
+          <div id="dpDupTargets" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border)">
+        <button type="button" class="cm-btn is-ghost is-sm" onclick="dpCloseDuplicate()">${_dpEsc(tt('common.cancel', 'Cancel'))}</button>
+        <button type="button" class="cm-btn is-primary is-sm" id="dpDupConfirm" onclick="dpConfirmDuplicate()"><i class="ti ti-copy" style="font-size:14px"></i>${_dpEsc(tt('daily_planning.dup_cta', 'Duplicate'))}</button>
+      </div>
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) dpCloseDuplicate(); });
+  document.body.appendChild(ov);
+  await dpDupLoadTargets();
+}
+
+function dpCloseDuplicate() { document.getElementById('dpDupModal')?.remove(); }
+
+async function dpDupLoadTargets() {
+  const host = document.getElementById('dpDupTargets');
+  if (!host) return;
+  const dateStr = document.getElementById('dpDupDate')?.value;
+  let existing = [];
+  if (dateStr) {
+    const { data } = await window.sb.from('training_sessions')
+      .select('id,title,session_time,session_type')
+      .eq('club_id', _dpClubId).eq('team_id', _dpTeamId)
+      .eq('session_date', dateStr).eq('is_historical', false).neq('session_type', 'gym')
+      .order('session_time', { ascending: true, nullsFirst: true });
+    existing = (data || []).filter(s => s.id !== _dpDupSourceId);
+  }
+  const row = (val, checked, main, sub) => `<label style="display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--cm-border);border-radius:8px;cursor:pointer">
+      <input type="radio" name="dpDupTarget" value="${_dpEsc(val)}"${checked ? ' checked' : ''} style="margin-top:2px">
+      <span style="flex:1;min-width:0"><span style="display:block;font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${_dpEsc(main)}</span>${sub ? `<span style="display:block;font:400 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)">${_dpEsc(sub)}</span>` : ''}</span>
+    </label>`;
+  let html = row('new', true, tt('daily_planning.dup_new_session', 'Create a new session'), tt('daily_planning.dup_new_hint', 'Adds a new training block to the calendar on that date.'));
+  existing.forEach(s => {
+    const tm = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    const nm = s.title || tt('daily_planning.session', 'Session');
+    html += row(s.id, false, (tm ? `${tm} · ` : '') + nm, tt('daily_planning.dup_overwrite_hint', "Overwrites this session's plan."));
+  });
+  host.innerHTML = html;
+}
+
+async function dpConfirmDuplicate() {
+  const btn = document.getElementById('dpDupConfirm');
+  const dateStr = document.getElementById('dpDupDate')?.value;
+  const startVal = document.getElementById('dpDupTime')?.value || null;
+  const mode = document.querySelector('input[name="dpDupTarget"]:checked')?.value || 'new';
+  if (!dateStr) { dpToast(tt('daily_planning.dup_need_date', 'Pick a target date.')); return; }
+  if (mode === 'new' && !startVal) { dpToast(tt('daily_planning.need_start_time', 'Set a start time to save the session')); return; }
+  if (mode !== 'new' && !confirm(tt('daily_planning.dup_confirm_overwrite', 'This replaces the whole plan of the selected session. Continue?'))) return;
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  const fail = () => { dpToast(tt('daily_planning.dup_error', 'Could not duplicate. Try again.')); if (btn) { btn.disabled = false; btn.style.opacity = ''; } };
+
+  // 1. Read the source session's planning fields.
+  const { data: srcRows, error: e1 } = await window.sb.from('training_sessions')
+    .select('title,session_type,session_time,end_time,duration,orientation,focus,match_day_offset,notes,estimated_rpe,microcycle_id,gps_targets,gym_content')
+    .eq('id', _dpDupSourceId).eq('club_id', _dpClubId).limit(1);
+  const src = srcRows?.[0];
+  if (e1 || !src) return fail();
+
+  // 2. Resolve the target session row (new insert, or overwrite an existing one).
+  let targetId = null;
+  if (mode === 'new') {
+    const endVal = (startVal && src.duration) ? _dpAddMin(startVal, src.duration) : src.end_time;
+    const payload = {
+      title: src.title,
+      session_type: (src.session_type && src.session_type !== 'gym') ? src.session_type : 'training',
+      session_date: dateStr, session_time: startVal, end_time: endVal, duration: src.duration,
+      orientation: src.orientation, focus: src.focus, match_day_offset: src.match_day_offset,
+      notes: src.notes, estimated_rpe: src.estimated_rpe, microcycle_id: src.microcycle_id,
+      gps_targets: src.gps_targets, gym_content: src.gym_content,
+      published: false, is_historical: false,
+      club_id: _dpClubId, team_id: _dpTeamId, coach_id: _dpProfile?.id || null
+    };
+    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    if (error || !data?.id) return fail();
+    targetId = data.id;
+  } else {
+    targetId = mode;
+    // Overwrite the plan but keep the target's own date/time/type so it stays put on the calendar.
+    const upd = {
+      title: src.title, orientation: src.orientation, focus: src.focus, match_day_offset: src.match_day_offset,
+      notes: src.notes, estimated_rpe: src.estimated_rpe, microcycle_id: src.microcycle_id,
+      gps_targets: src.gps_targets, gym_content: src.gym_content
+    };
+    const { error: eU } = await window.sb.from('training_sessions').update(upd).eq('id', targetId).eq('club_id', _dpClubId);
+    if (eU) return fail();
+    await window.sb.from('session_exercises').delete().eq('session_id', targetId).eq('club_id', _dpClubId);
+  }
+
+  // 3. Copy every exercise/activity (all phases: main / activation / goalkeepers).
+  const { data: exRows } = await window.sb.from('session_exercises')
+    .select('name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation')
+    .eq('session_id', _dpDupSourceId).eq('club_id', _dpClubId).order('position');
+  if (exRows && exRows.length) {
+    const copies = exRows.map(r => ({ ...r, session_id: targetId, club_id: _dpClubId }));
+    const { error: eE } = await window.sb.from('session_exercises').insert(copies);
+    if (eE) console.warn('Duplicate exercises error:', eE.message);
+  }
+
+  dpCloseDuplicate();
+  dpToast(tt('daily_planning.dup_done', 'Session duplicated ✓'));
+  _dpPreferredSessionId = targetId;
+  await loadDay(dateStr);
+}
+
 async function dpDeletePlan() {
   if (!_dpCurrentSessionId) return;
   const dateLabel = (() => {
