@@ -1906,7 +1906,50 @@ const _STATIC_CARD_OWNER = (() => {
 // 'ind' pero es una comparación de microciclos → también válida en 'mc'.
 const _EXTRA_CARD_OWNERS = { 'weekly-bars': new Set(['ind', 'mc']) };
 
+// Custom dashboards (viewKey "db-<uuid>") store their layout GLOBALLY on the dashboard: the
+// {x,y,w,h,size} of each card is written into that card's own config in dashboard_cards. That way
+// the arrangement is shared by everyone who opens the dashboard, travels on duplicate (the config
+// is copied verbatim), and survives reloads — unlike the per-user gps_dashboard_layouts table that
+// only backs the 5 fixed dashboards. Non-editors' writes are blocked by RLS and swallowed quietly.
+async function _saveCustomDashboardLayout(viewKey) {
+  if (!window.sb) return;
+  if (window._gpLayoutReady === false) return;   // don't cement provisional coords mid-load
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+  const cards = [...grid.querySelectorAll('.gp-c[data-card-id]')];
+  if (!cards.length) return;
+  const _coord = (el, key) => {
+    const d = parseInt(el.dataset[key], 10);
+    if (Number.isFinite(d)) return d;
+    const v = parseInt(el.style.getPropertyValue('--gp-' + key), 10);
+    return Number.isFinite(v) ? v : NaN;
+  };
+  try {
+    await Promise.all(cards.map((el, idx) => {
+      // Never write a card whose live config we don't hold — that would clobber its metrics/config
+      // with a style-only object. All builder-mounted cards carry __config (gp-tabs _buildCardElement,
+      // builder save); a card without it is skipped (its coords persist on the next reload).
+      if (!el.__config || typeof el.__config !== 'object') return Promise.resolve();
+      const cfg = { ...el.__config };
+      const style = { ...(cfg.style || {}) };
+      const size = el.dataset.size || 'md';
+      const x = _coord(el, 'x'), y = _coord(el, 'y'), w = _coord(el, 'w'), h = _coord(el, 'h');
+      if ([x, y, w, h].every(Number.isFinite)) {
+        style.canvas = { x, y, w, h, size };
+        style.span = Math.max(1, Math.min(12, w));   // keep legacy width in sync
+      }
+      style.size = size;
+      cfg.style = style;
+      el.__config = cfg;
+      // RLS enforces edit permission; a viewer's update just returns an error we ignore.
+      return window.sb.from('dashboard_cards').update({ config: cfg, size, position: idx }).eq('id', el.dataset.cardId);
+    }));
+  } catch (err) { console.warn(`saveLayout(${viewKey}): custom layout save failed:`, err); }
+}
+
 async function saveLayout(viewKey, overrideDid) {
+  // Custom dashboards keep a global, per-card layout (see _saveCustomDashboardLayout).
+  if (!overrideDid && typeof viewKey === 'string' && viewKey.startsWith('db-')) return _saveCustomDashboardLayout(viewKey);
   const did = overrideDid || _DASHBOARD_IDS[viewKey];
   if (!did) { console.warn(`saveLayout(${viewKey}): unknown viewKey`); return; }
   if (!window.sb) { console.warn(`saveLayout(${viewKey}): Supabase not ready`); return; }

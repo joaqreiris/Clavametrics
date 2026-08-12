@@ -581,6 +581,16 @@
     const _span = config.style?.span
       || (window.gpSpanFromSize ? window.gpSpanFromSize(el.dataset.size, false) : null);
     if (_span) el.dataset.span = String(_span);
+    // Free-canvas coordinates persisted GLOBALLY with the card (config.style.canvas). Seeding the
+    // dataset + CSS vars here makes gp-canvas freeze this exact placement instead of auto-flowing,
+    // so a custom dashboard reproduces its arrangement on reload, on duplicate (config is copied),
+    // and for every user who opens a shared club dashboard.
+    const _cv = config.style?.canvas;
+    if (_cv && ['x','y','w','h'].every(k => Number.isFinite(_cv[k]))) {
+      el.dataset.x = _cv.x; el.dataset.y = _cv.y; el.dataset.w = _cv.w; el.dataset.h = _cv.h;
+      el.style.setProperty('--gp-x', _cv.x); el.style.setProperty('--gp-y', _cv.y);
+      el.style.setProperty('--gp-w', _cv.w); el.style.setProperty('--gp-h', _cv.h);
+    }
     el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
     const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
     // Make the comparison explicit on the header when set, so raw-value cards (comparison

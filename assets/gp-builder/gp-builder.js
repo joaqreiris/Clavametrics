@@ -512,6 +512,15 @@
     distance:1000, speed:28.5, acceleration:4.2, load:1200, time:85, count:45, custom:10,
   };
 
+  // Curated, GPS-relevant icons the user can pick for a KPI/gauge card's reference icon
+  // (config.style.icon). Empty string = "Auto" (derive from the metric category, legacy behaviour).
+  const CARD_ICONS = [
+    'ti-route', 'ti-run', 'ti-walk', 'ti-brand-speedtest', 'ti-gauge', 'ti-bolt',
+    'ti-flame', 'ti-heart', 'ti-activity', 'ti-trending-up', 'ti-trending-down', 'ti-arrows-up-down',
+    'ti-battery-3', 'ti-clock', 'ti-stopwatch', 'ti-target', 'ti-ruler', 'ti-map-pin',
+    'ti-hash', 'ti-ball-football', 'ti-chart-bar',
+  ];
+
   // ── Runtime state ──────────────────────────────────────────
 
   let _initStarted = false; // prevents double-init (defer fires + DOMContentLoaded listener)
@@ -600,7 +609,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -803,6 +812,10 @@
               <div class="lab" data-i18n="gps_analysis.builder_accent_color">Accent color</div>
               <div class="es-swatches" id="gpbColors"></div>
             </div>
+            <div class="es-sec" data-only="kpi,gauge">
+              <div class="lab" data-i18n="gps_analysis.builder_icon">Reference icon</div>
+              <div class="es-swatches" id="gpbIcons"></div>
+            </div>
             <div class="es-sec" data-only="bars,line">
               <div class="lab" data-i18n="gps_analysis.builder_series_colors">Series colors</div>
               <div id="gpbSeriesColors"></div>
@@ -987,7 +1000,7 @@
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
-             size:'md', color:'#15803D', palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
+             size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
@@ -1392,6 +1405,7 @@
       S.refWindow     = rawConfig.comparison?.refWindow || { type:'season' };
       S.size    = rawConfig.style?.size          || 'md';
       S.color   = rawConfig.style?.color         || '#15803D';
+      S.icon    = rawConfig.style?.icon          || null;
       S.palette = rawConfig.style?.palette       || 'pitch';
       S.colors  = rawConfig.style?.colors ? { ...rawConfig.style.colors } : {};
       S.relBands = rawConfig.style?.relBands ? { ...rawConfig.style.relBands, colors: [...(rawConfig.style.relBands.colors || [])] } : null;
@@ -1485,6 +1499,18 @@
     document.getElementById('gpbColors').querySelectorAll('[data-color]').forEach(b =>
       b.onclick = () => { if (!S) return; S.color = b.dataset.color; syncStyle(); renderCard(); }
     );
+
+    // Reference icon (KPI/gauge) — curated GPS icons + an "Auto" option (derive from metric).
+    const _iconAuto = _tt('gps_analysis.builder_icon_auto', 'Auto');
+    const _iconBtn = (ic, label) =>
+      `<button class="es-sw es-sw-ic" data-icon="${esc(ic)}" title="${esc(label)}" style="display:inline-flex;align-items:center;justify-content:center;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font-size:15px"><i class="ti ${ic ? esc(ic) : 'ti-circle-off'}"></i></button>`;
+    const _iconsHost = document.getElementById('gpbIcons');
+    if (_iconsHost) {
+      _iconsHost.innerHTML = _iconBtn('', _iconAuto) + CARD_ICONS.map(ic => _iconBtn(ic, ic.replace('ti-', ''))).join('');
+      _iconsHost.querySelectorAll('[data-icon]').forEach(b =>
+        b.onclick = () => { if (!S) return; S.icon = b.dataset.icon || null; syncStyle(); renderCard(); }
+      );
+    }
 
     // Per-series colors (replaces the old fixed "Chart palette"). Rendered dynamically per card
     // in renderSeriesColors() (called from syncStyle) because the rows depend on S.metrics.
@@ -2039,6 +2065,9 @@
     if (!S) return;
     document.getElementById('gpbColors').querySelectorAll('[data-color]').forEach(b =>
       b.classList.toggle('is-on', b.dataset.color === S.color)
+    );
+    document.getElementById('gpbIcons')?.querySelectorAll('[data-icon]').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.icon === (S.icon || ''))
     );
     renderSeriesColors();
     document.getElementById('gpbSize').querySelectorAll('button').forEach(b =>
@@ -5389,7 +5418,11 @@
       const name    = s?.name || m.id || '';
       const aggName = m.agg ? _aggName(m.agg) : '';
       const cat     = catalogMap.get(m.id);
-      const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
+      // User-picked reference icon (config.style.icon) overrides the auto category icon on
+      // single-metric cards; multi-metric KPIs keep each metric's own icon.
+      const icon    = (config.style?.icon && (series?.length || 0) <= 1)
+        ? config.style.icon
+        : (cat ? metIcon(cat) : VIZ_TYPES.kpi.icon);
       let delta = null, refVal = null;
       if (p.diff != null && isFinite(p.diff)) {                    // vs microciclo
         delta = { dir: p.diff >= 0 ? 'up' : 'down', pct: p.diff };
@@ -5671,7 +5704,7 @@
     body.classList.toggle('gp-gauge-single', !!d.single);
     const showSub = config.style?.showSub !== false;
     const header = (d.single && d.head)
-      ? `<div class="l"><i class="ti ti-gauge"></i>${esc(d.head)}</div>${(showSub && d.subtitle) ? `<div class="sb">${esc(d.subtitle)}</div>` : ''}`
+      ? `<div class="l"><i class="ti ${esc(config.style?.icon || 'ti-gauge')}"></i>${esc(d.head)}</div>${(showSub && d.subtitle) ? `<div class="sb">${esc(d.subtitle)}</div>` : ''}`
       : '';
     body.innerHTML = header + `<div class="gp-gauges-row">${
       d.items.map(it => `<div class="gp-gauge-wrap">${_gaugeSvg(it)}${d.single ? _gaugeDeltaLine(it) : ''}</div>`).join('')
