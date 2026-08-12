@@ -497,7 +497,7 @@
 
 <!-- From Library Modal -->
 <div id="libBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px" onclick="if(event.target===this)closeLibModal()">
-  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:640px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
     <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
       <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
       <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)" data-i18n="daily_planning.exercises_library">Exercises Library</div>
@@ -520,7 +520,7 @@
 
 <!-- Strength (Gym) Library Modal -->
 <div id="gymLibBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px" onclick="if(event.target===this)closeGymLibModal()">
-  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:640px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
     <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
       <i class="ti ti-barbell" style="font-size:16px;color:var(--cm-accent)"></i>
       <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)" data-i18n="daily_planning.strength_library">Strength Library</div>
@@ -2314,14 +2314,14 @@ function filterLib() {
     const fieldStr = (e.field_width && e.field_height) ? `${e.field_width}×${e.field_height}m` : null;
     const meta2   = [players ? tt('daily_planning.players_meta', `${players} players`, {count: players}) : null, m2 ? `${m2} ${tt('daily_planning.m2_p','m²/p')}` : null, fieldStr].filter(Boolean).join(' · ');
     const img = e._previewImg || e.preview_png || null;
-    return `<div onclick="addPlannerExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
-      <div style="flex-shrink:0;position:relative;width:44px;height:44px;border-radius:7px;overflow:hidden;background:#2f7d4c;border:1px solid var(--cm-border-soft);display:flex;align-items:center;justify-content:center">
-        ${img ? `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<i class="ti ti-vector-triangle" style="font-size:18px;color:rgba(255,255,255,.55)"></i>`}
-        <span class="dp-ex-tag ${tagCls}" style="position:absolute;left:2px;bottom:2px;transform:none;font-size:8.5px;line-height:1;padding:2px 3px;border-radius:3px">${tagLbl}</span>
+    return `<div onclick="addPlannerExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
+      <div style="flex-shrink:0;width:64px;height:64px;border-radius:8px;overflow:hidden;background:#2f7d4c;border:1px solid var(--cm-border-soft);display:flex;align-items:center;justify-content:center">
+        ${img ? `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<i class="ti ti-vector-triangle" style="font-size:22px;color:rgba(255,255,255,.55)"></i>`}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name || tt('daily_planning.untitled','Untitled')}</div>
-        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="dp-ex-tag ${tagCls}" style="position:static;transform:none;font-size:9.5px">${tagLbl}</span>
           ${dur    ? `<span><i class="ti ti-clock" style="font-size:10px"></i> ${dur}</span>` : ''}
           ${blocks ? `<span>${blocks}</span>` : ''}
           ${meta2  ? `<span style="color:var(--cm-fg-faint)">${meta2}</span>` : ''}
