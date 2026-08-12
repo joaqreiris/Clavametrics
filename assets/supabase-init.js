@@ -353,7 +353,6 @@
 
   // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──
   window.CM_SECTIONS = [
-    { key:'calendar',         href:'Calendar.html',            icon:'ti-calendar-stats',    name:'Calendar',              feature:'calendar' },
     { key:'chat-tasks',       href:'Chat & Tasks.html',        icon:'ti-message-circle',    name:'Chat & tasks',          feature:'chat_tasks' },
     { key:'planner',          href:'Planner.html',             icon:'ti-clipboard-list',    name:'Drill Designer',        feature:'drill_designer' },
     { key:'sessions-lib',     href:'Exercises Library.html',    icon:'ti-list-tree',         name:'Exercises Library',     feature:'sessions_library' },

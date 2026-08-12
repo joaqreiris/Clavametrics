@@ -204,7 +204,7 @@ html.cm-rail .hub-nav-grip{display:none}
   const NAV_GROUPS = [
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub',        i18n: 'shell.nav.hub' },
-      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar', key: 'calendar', planOnly: true },
+      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar' },
       { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks', key: 'chat-tasks', planOnly: true },
     ]},

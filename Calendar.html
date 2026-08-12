@@ -6483,10 +6483,6 @@ document.addEventListener('DOMContentLoaded', () => {
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
-  // Gate por plan (Calendar = Basic+). Solo plan, no RBAC.
-  if (window.CM_PLAN_GATING_ENABLED && !(await window.planAllows('calendar'))) {
-    window.location.replace('Plan Picker.html'); return;
-  }
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   window._calClub = club;
