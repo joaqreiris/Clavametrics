@@ -88,6 +88,10 @@
   .gp-wu-block .gp-tbl{padding:0 4px}
   .gp-wu-block .gp-tbl input,.gp-wu-block .gp-tbl select{background:var(--cm-surface)}
   .gp-wu-block .gp-add-row{margin:2px 10px 10px;width:auto;padding:7px}
+  .gp-wu-grip{color:var(--cm-fg-muted);opacity:.4;cursor:grab;font-size:15px;line-height:1;flex:none;display:inline-flex}
+  .gp-wu-block-h:hover .gp-wu-grip{opacity:.8}
+  .gp-wu-grip:active{cursor:grabbing}
+  .gp-wu-block.gp-block-dragging{opacity:.55;box-shadow:0 0 0 1px var(--cm-accent)}
   .gp-wu-add{position:relative;margin-top:2px}
   .gp-wu-menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:210px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;box-shadow:var(--cm-shadow-2);padding:5px;display:none;flex-direction:column;gap:1px}
   .gp-wu-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:0;background:transparent;border-radius:6px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;text-align:left}
@@ -1394,10 +1398,10 @@ function gpAddWarmupBlock(type, label, focus) {
   bl.style.borderLeftColor = t.color;
   bl.innerHTML = `
     <div class="gp-wu-block-h">
+      <i class="ti ti-grip-vertical gp-wu-grip no-print" title="${tt('gym_planner.drag_reorder','Drag to reorder')}"></i>
       <span class="gp-wu-dot" style="background:${t.color}"></span>
       <input class="gp-wu-title" value="${String(title).replace(/"/g,'&quot;')}" placeholder="${tt('gym_planner.block_name_ph','Block name')}" oninput="gpScheduleSave()">
       <div class="right">
-        <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenWuLib(this)"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">${tt('gym_planner.from_library','From library')}</span></button>
         <button class="btn-x no-print" title="${tt('gym_planner.remove_block','Remove block')}" onclick="gpDeleteWuBlock(this)"><i class="ti ti-x"></i></button>
       </div>
     </div>
@@ -1410,9 +1414,61 @@ function gpAddWarmupBlock(type, label, focus) {
     </table>
     <button class="gp-add-row no-print" onclick="gpAddWarmupRow(this.closest('.gp-wu-block').querySelector('tbody'))"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_exercise">${tt('gym_planner.add_exercise','Add exercise')}</span></button>`;
   wrap.appendChild(bl);
+  gpWireBlockDnD(bl, wrap);
   if (focus) bl.querySelector('.gp-wu-title').focus();
   gpRecalcTotals();
   return bl;
+}
+
+// ── Drag-to-reorder warm-up sub-blocks (grip in the block header) ──
+// Mirrors the row DnD: a block is only draggable while its grip is held, so the
+// title input and inner row tables keep their normal drag/select behaviour.
+let _gpBlockDrag = { block: null, wrap: null };
+function gpBlockDragAfter(wrap, y) {
+  const blocks = [...wrap.querySelectorAll('.gp-wu-block:not(.gp-block-dragging)')];
+  let best = { off: -Infinity, el: null };
+  for (const b of blocks) {
+    const r = b.getBoundingClientRect();
+    const off = y - r.top - r.height / 2;
+    if (off < 0 && off > best.off) best = { off, el: b };
+  }
+  return best.el;
+}
+function gpWireWarmupDnD(wrap) {
+  if (wrap._gpBlockSortWired) return; wrap._gpBlockSortWired = true;
+  wrap.addEventListener('dragover', e => {
+    const drag = _gpBlockDrag.block;
+    if (!drag || _gpBlockDrag.wrap !== wrap) return; // ignore row drags bubbling up
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const after = gpBlockDragAfter(wrap, e.clientY);
+    if (after == null) { if (drag !== wrap.lastElementChild) wrap.appendChild(drag); }
+    else if (after !== drag) wrap.insertBefore(drag, after);
+  });
+  wrap.addEventListener('drop', e => { if (_gpBlockDrag.block) e.preventDefault(); });
+}
+function gpWireBlockDnD(bl, wrap) {
+  gpWireWarmupDnD(wrap);
+  const grip = bl.querySelector('.gp-wu-grip');
+  if (grip) {
+    grip.addEventListener('mousedown', () => bl.setAttribute('draggable', 'true'));
+    grip.addEventListener('mouseup', () => bl.removeAttribute('draggable'));
+  }
+  bl.addEventListener('dragstart', e => {
+    // Only fire when the grip armed the block; row drags bubble here but leave bl un-armed.
+    if (bl.getAttribute('draggable') !== 'true') return;
+    e.stopPropagation();
+    _gpBlockDrag.block = bl; _gpBlockDrag.wrap = wrap;
+    bl.classList.add('gp-block-dragging');
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ''); } catch (_) {} }
+  });
+  bl.addEventListener('dragend', () => {
+    bl.classList.remove('gp-block-dragging');
+    bl.removeAttribute('draggable');
+    const moved = !!_gpBlockDrag.block;
+    _gpBlockDrag.block = null; _gpBlockDrag.wrap = null;
+    if (moved) { gpRecalcTotals(); gpScheduleSave(); }
+  });
 }
 function gpDeleteWuBlock(btn) {
   const bl = btn.closest('.gp-wu-block'); if (!bl) return;
@@ -1420,12 +1476,6 @@ function gpDeleteWuBlock(btn) {
   if (hasRows && !confirm(tt('gym_planner.remove_block_confirm','Remove this block and its exercises?'))) return;
   bl.remove();
   gpRecalcTotals(); gpRenderEquipment(); gpScheduleSave();
-}
-function gpOpenWuLib(btn) {
-  const bl = btn.closest('.gp-wu-block'); if (!bl) return;
-  const tb = bl.querySelector('tbody');
-  const cat = (GP_WU_TYPES[bl.dataset.type] || {}).libCat || '';
-  gpOpenLib({ warmupBody: tb, libCat: cat });
 }
 function gpToggleWuMenu(btn) {
   const add = btn ? btn.closest('.gp-wu-add') : null;
