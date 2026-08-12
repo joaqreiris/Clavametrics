@@ -314,6 +314,52 @@
     return m ? (m.name || (m.start_date ? `MC ${String(m.start_date).slice(0,10)}` : id)) : (id || '—');
   }
 
+  /** Δ% vs MC anterior — modo relativo de una métrica (m.rel === 'prev_mc').
+   *  Para cada métrica con el modo activo AÑADE (no reemplaza) una serie sintética
+   *  `<id>__relmc`: el % de cambio de cada punto respecto al MC inmediatamente
+   *  anterior de su MISMO grupo (mismos valores en las demás dimensiones), ordenando
+   *  por la etiqueta de MC — el mismo criterio con el que el eje ordena las barras,
+   *  así el % que se ve sobre cada barra es siempre "esta barra vs la de su izquierda".
+   *  La métrica original queda intacta (sus barras siguen), y la serie de % se dibuja
+   *  como línea en el eje secundario (unit '%', line:true). El primer MC de cada grupo
+   *  queda en null (no tiene anterior). Sólo aplica en bars y con una dimensión
+   *  `microcycle`; si no, devuelve la serie tal cual (el modo queda dormido). El label
+   *  sintético (`__relmc`) sigue la convención de `__mcdiff`/`__baseline`. */
+  function _applyRelTransform(config, series) {
+    if (config.viz !== 'bars') return series;
+    if (config.comparison?.baseline === 'mc') return series;   // no se combina con "vs microcycle"
+    const dims  = (config.dimensions || []).map(d => d.id);
+    const mcIdx = dims.indexOf('microcycle');
+    if (mcIdx < 0) return series;
+    const mcOf = p => String((p.dims || [p.x])[mcIdx] ?? '');
+    const out = [];
+    series.forEach((s, i) => {
+      out.push(s);   // la métrica original (barras) se mantiene
+      if (config.metrics?.[i]?.rel !== 'prev_mc' || !s.points?.length) return;
+      // Agrupar por todas las dimensiones MENOS la de microciclo.
+      const groups = new Map();
+      for (const p of s.points) {
+        const gk = (p.dims || [p.x]).filter((_, k) => k !== mcIdx).join(' ¦ ');
+        if (!groups.has(gk)) groups.set(gk, []);
+        groups.get(gk).push(p);
+      }
+      const pct = new Map();   // punto → % (o null)
+      for (const pts of groups.values()) {
+        const ordered = [...pts].sort((a, b) => mcOf(a).localeCompare(mcOf(b)));
+        for (let k = 0; k < ordered.length; k++) {
+          const prev = k > 0 ? ordered[k - 1].y : null;
+          const cur  = ordered[k].y;
+          pct.set(ordered[k], (prev != null && prev !== 0 && !isNaN(prev) && cur != null && !isNaN(cur))
+            ? (cur - prev) / prev * 100 : null);
+        }
+      }
+      const nm = catalogMap.get(s.label)?.name || s.name || s.label;
+      out.push({ label: `${s.label}__relmc`, name: `Δ% ${nm}`, unit: '%', line: true, _rel: 'prev_mc',
+        points: s.points.map(p => ({ ...p, y: pct.has(p) ? pct.get(p) : null, _abs: p.y })) });
+    });
+    return out;
+  }
+
   // Icon/sample value by category (for mock rendering)
   const CAT_ICON = {
     distance:'ti-route', speed:'ti-brand-speedtest', acceleration:'ti-trending-up',
@@ -404,6 +450,7 @@
         if (m.format) out.format = m.format;
         else if (S.type === 'table') out.format = _defaultFormat(cat);
         if (m.line) out.line = true;               // combo: render this metric as a line (2nd axis)
+        if (m.rel)  out.rel  = m.rel;              // relative mode (Δ% vs previous MC) → % line
         if (m.role) out.role = m.role;             // encoding role (scatter: 'x'|'y'|'size')
         return out;
       }),
@@ -429,7 +476,7 @@
   function _dataSig(config) {
     return JSON.stringify({
       viz: config.viz, scope: config.scope, range: config.range,
-      metrics: (config.metrics || []).map(m => [m.id, m.agg]),
+      metrics: (config.metrics || []).map(m => [m.id, m.agg, m.rel || null]),
       dims: (config.dimensions || []).map(d => d.id),
       cmp: config.comparison?.baseline || null,
       ref: config.comparison?.refMcId || null,
@@ -1221,7 +1268,7 @@
       S.title   = rawConfig.title || '';
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
       S.metrics = (rawConfig.metrics || [])
-        .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }))
+        .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}), ...(m.rel ? { rel: m.rel } : {}) }))
         .filter(m => catalogMap.has(m.id))
         .map(m => {
           const cat = catalogMap.get(m.id);
@@ -1409,6 +1456,9 @@
         // Bar/Line combo on a metric chip (bars only) — toggle the SAME m.line as the classic.
         const lineBtn = e.target.closest('[data-dd-line]');
         if (lineBtn) { const m = (S.metrics || []).find(x => x.id === lineBtn.dataset.ddLine); if (m) { m.line = !m.line; ddSyncFromS(); } return; }
+        // Δ% vs MC anterior — alterna el modo relativo de esa métrica.
+        const relBtn = e.target.closest('[data-dd-rel]');
+        if (relBtn) { const m = (S.metrics || []).find(x => x.id === relBtn.dataset.ddRel); if (m) { m.rel = m.rel === 'prev_mc' ? undefined : 'prev_mc'; ddSyncFromS(); } return; }
         const rmDim = e.target.closest('[data-rmdim]');
         if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
         const rmMet = e.target.closest('[data-rm]');
@@ -2416,6 +2466,10 @@
 
       // Step 4: aggregate
       let series = aggregateSeries(rows, eavMap, config, catalogMap);
+      // Modo relativo por métrica (Δ% vs MC anterior): transforma en sitio la serie
+      // de cada métrica con rel='prev_mc' → línea de % en eje secundario. No-op si
+      // ninguna métrica lo pide o si no hay dimensión de microciclo.
+      series = _applyRelTransform(config, series);
 
       // Diagnostics: prove the series is 100% real (gps_reports/Supabase) and let you
       // cross-check the total against Session Control. Silence with window.GPB_DEBUG=false.
@@ -3634,7 +3688,7 @@
     const mcOn = config.comparison?.baseline === 'mc' && ss.some(s => s.points.some(p => p.cur !== undefined));
 
     const ticks = size === 'sm' ? 4 : 5;
-    let datasets, mcDiffs = null, hasLine = false, max1 = null, step1 = null, stacked = !!config.style?.stacked;
+    let datasets, mcDiffs = null, hasLine = false, max1 = null, step1 = null, min1 = null, stacked = !!config.style?.stacked;
     // Per-metric info for reference lines: metricId → { vals (visible, post-zoom), isLine (combo →
     // y1 axis), color }. Lets an auto line (mean/median/…) be computed over — and tinted to match —
     // the metric it references, instead of always the primary bar. Populated in both branches below.
@@ -3694,8 +3748,17 @@
       datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
       hasLine = datasets.some(d => d._isLine);
       if (hasLine) {
-        const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null));
-        ({ max: max1, step: step1 } = niceScale(Math.max(0, ...lineVals), ticks));
+        const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null).map(Number));
+        const negMin = Math.min(0, ...lineVals);
+        if (negMin < 0) {
+          // Una serie de % (Δ% vs MC anterior) puede ser negativa. Eje secundario
+          // simétrico alrededor de 0 para que las caídas se vean (beginAtZero las cortaría).
+          const mag = Math.max(Math.max(0, ...lineVals), Math.abs(negMin));
+          ({ max: max1, step: step1 } = niceScale(mag, ticks));
+          min1 = -max1;
+        } else {
+          ({ max: max1, step: step1 } = niceScale(Math.max(0, ...lineVals), ticks));
+        }
       }
     }
 
@@ -3786,7 +3849,7 @@
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
-             horizontal, stacked, hasLine, max1, step1, referenceLines: refLines,
+             horizontal, stacked, hasLine, max1, step1, min1, referenceLines: refLines,
              height, color: accent };
   }
 
@@ -3892,7 +3955,8 @@
       scales[d.horizontal ? 'x' : 'y'] = valueScale;     // value axis follows orientation
       scales[d.horizontal ? 'y' : 'x'] = catScale;       // category axis
       if (d.hasLine) {                                    // combo: secondary value axis for the line
-        scales.y1 = { display: d.showAxes, position: 'right', beginAtZero: true, max: d.max1, stacked: false,
+        scales.y1 = { display: d.showAxes, position: 'right', max: d.max1, stacked: false,
+          ...(d.min1 != null ? { min: d.min1 } : { beginAtZero: true }),
           grid: { drawOnChartArea: false }, border: { display: false },
           ticks: { stepSize: d.step1, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) } };
       }
@@ -6677,11 +6741,17 @@
     const lineToggle = S && S.type === 'bars'
       ? `<button class="bdd-line${m.line ? ' is-line' : ''}" data-dd-line="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}"><i class="ti ti-chart-bar"></i><i class="ti ti-chart-line"></i></button>`
       : '';
+    // Δ% vs MC anterior — modo relativo. Sólo tiene sentido con eje temporal, así que se
+    // muestra únicamente en bars/line CON una dimensión de microciclo (si no, no hay "anterior").
+    const canRel = S && S.type === 'bars' && (S.dimensions || []).some(d => d.id === 'microcycle');
+    const relToggle = canRel
+      ? `<button class="bdd-rel${m.rel === 'prev_mc' ? ' is-on' : ''}" data-dd-rel="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_variation', 'Show as Δ% vs previous MC (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_variation', 'Show as Δ% vs previous MC (secondary axis)'))}"><i class="ti ti-percentage"></i></button>`
+      : '';
     return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(metIcon(cat))}"></i></span>
       <span class="nm">${esc(cat.name)}</span>
-      ${lineToggle}
+      ${lineToggle}${relToggle}
       <span class="bdd-agg"><select data-agg-for="${esc(m.id)}">${opts}</select><i class="ti ti-selector car"></i></span>
       <button class="x" data-rm="${esc(m.id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
@@ -7470,7 +7540,7 @@
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
     S.title   = config.title || '';
     S.titleCustom = !!config.titleCustom;      // ausente en cards viejas → false → título auto
-    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }));
+    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}), ...(m.rel ? { rel: m.rel } : {}) }));
 
     // keep only metrics that exist in catalog; fix invalid peak aggs
     S.metrics = S.metrics.filter(m => catalogMap.has(m.id)).map(m => {
