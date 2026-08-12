@@ -2234,7 +2234,7 @@ async function openLibModal(mode) {
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id,is_goalkeeper')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
     .eq('club_id', _dpClubId).order('name');
   const { data, error } = await q;
   _libFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
@@ -2254,6 +2254,18 @@ async function openLibModal(mode) {
     return;
   }
   _libExercises = data || [];
+  // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback (mirrors Drill Designer).
+  try {
+    const paths = _libExercises.filter(e => e.preview_path).map(e => e.preview_path);
+    if (paths.length) {
+      const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
+      const signed = {};
+      (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
+      _libExercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
+    } else {
+      _libExercises.forEach(e => { e._previewImg = e.preview_png || null; });
+    }
+  } catch(_) { _libExercises.forEach(e => { e._previewImg = e.preview_png || null; }); }
   if (_libMode === 'activation') {
     const isAct = e => (e.orientation || '').toUpperCase() === 'ACTIVATION';
     _libExercises = [..._libExercises].sort((a,b) => (isAct(b)?1:0) - (isAct(a)?1:0));  // activation first, order otherwise preserved
@@ -2301,9 +2313,11 @@ function filterLib() {
     const players = e.players_count || null;
     const fieldStr = (e.field_width && e.field_height) ? `${e.field_width}×${e.field_height}m` : null;
     const meta2   = [players ? tt('daily_planning.players_meta', `${players} players`, {count: players}) : null, m2 ? `${m2} ${tt('daily_planning.m2_p','m²/p')}` : null, fieldStr].filter(Boolean).join(' · ');
+    const img = e._previewImg || e.preview_png || null;
     return `<div onclick="addPlannerExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
-      <div style="flex-shrink:0">
-        <span class="dp-ex-tag ${tagCls}" style="position:static;transform:none;font-size:10px">${tagLbl}</span>
+      <div style="flex-shrink:0;position:relative;width:44px;height:44px;border-radius:7px;overflow:hidden;background:#2f7d4c;border:1px solid var(--cm-border-soft);display:flex;align-items:center;justify-content:center">
+        ${img ? `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<i class="ti ti-vector-triangle" style="font-size:18px;color:rgba(255,255,255,.55)"></i>`}
+        <span class="dp-ex-tag ${tagCls}" style="position:absolute;left:2px;bottom:2px;transform:none;font-size:8.5px;line-height:1;padding:2px 3px;border-radius:3px">${tagLbl}</span>
       </div>
       <div style="flex:1;min-width:0">
         <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name || tt('daily_planning.untitled','Untitled')}</div>
