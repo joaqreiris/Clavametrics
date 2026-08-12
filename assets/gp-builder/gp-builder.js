@@ -325,6 +325,22 @@
    *  queda en null (no tiene anterior). Sólo aplica en bars y con una dimensión
    *  `microcycle`; si no, devuelve la serie tal cual (el modo queda dormido). El label
    *  sintético (`__relmc`) sigue la convención de `__mcdiff`/`__baseline`. */
+  // Bandas de color por umbral para la variación Δ%. Modelo: { hi, lo, colors:[c1,c2,c3,c4] }
+  //   v ≥ hi → c1 · 0 ≤ v < hi → c2 · lo ≤ v < 0 → c3 · v < lo → c4
+  // Sin bandas configuradas cae al color por signo (verde sube / rojo baja).
+  const _REL_BANDS_DEFAULT = { hi: 20, lo: -20, colors: ['#166534', '#22C55E', '#F87171', '#B91C1C'] };
+  function _relBandColor(v, bands) {
+    if (v == null || isNaN(v)) return null;
+    if (!bands || !Array.isArray(bands.colors) || bands.colors.length < 4) {
+      return v >= 0 ? _cssVar('--cm-success', '#16A34A') : _cssVar('--cm-danger', '#DC2626');
+    }
+    const hi = Number(bands.hi), lo = Number(bands.lo);
+    if (v >= hi) return bands.colors[0];
+    if (v >= 0)  return bands.colors[1];
+    if (v >= lo) return bands.colors[2];
+    return bands.colors[3];
+  }
+
   function _applyRelTransform(config, series) {
     if (config.viz !== 'bars') return series;
     if (config.comparison?.baseline === 'mc') return series;   // no se combina con "vs microcycle"
@@ -457,7 +473,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
+      style: { size:S.size, color:S.color, palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -1215,6 +1231,7 @@
       S.color   = cfg.color;
       S.palette = cfg.palette;
       S.colors  = cfg.colors ? { ...cfg.colors } : {};
+      S.relBands = cfg.relBands ? { ...cfg.relBands, colors: [...(cfg.relBands.colors || [])] } : null;
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
@@ -1250,6 +1267,7 @@
       S.color   = rawConfig.style?.color         || '#15803D';
       S.palette = rawConfig.style?.palette       || 'pitch';
       S.colors  = rawConfig.style?.colors ? { ...rawConfig.style.colors } : {};
+      S.relBands = rawConfig.style?.relBands ? { ...rawConfig.style.relBands, colors: [...(rawConfig.style.relBands.colors || [])] } : null;
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
@@ -1811,7 +1829,7 @@
           </label>
         </div>
       </div>`;
-    }).join('');
+    }).join('') + _relBandsSection();
     wrap.querySelectorAll('[data-sccol]').forEach(b => b.onclick = () => {
       if (!S) return;
       const [mid, hex] = b.dataset.sccol.split('|');
@@ -1828,6 +1846,66 @@
       delete S.colors[b.dataset.scrst];
       renderSeriesColors(); renderCard();
     });
+    // Bandas de color de la variación Δ%
+    wrap.querySelector('[data-relbands-on]')?.addEventListener('change', e => {
+      if (!S) return;
+      S.relBands = e.target.checked
+        ? { hi: _REL_BANDS_DEFAULT.hi, lo: _REL_BANDS_DEFAULT.lo, colors: [..._REL_BANDS_DEFAULT.colors] }
+        : null;
+      renderSeriesColors(); renderCard();
+    });
+    wrap.querySelectorAll('[data-relband]').forEach(inp => inp.oninput = () => {
+      if (!S || !S.relBands) return;
+      S.relBands.colors[+inp.dataset.relband] = inp.value;
+      renderCard();
+    });
+    wrap.querySelector('[data-relband-hi]')?.addEventListener('change', e => {
+      if (!S || !S.relBands) return;
+      S.relBands.hi = Number(e.target.value) || 0;
+      renderSeriesColors(); renderCard();
+    });
+    wrap.querySelector('[data-relband-lo]')?.addEventListener('change', e => {
+      if (!S || !S.relBands) return;
+      S.relBands.lo = Number(e.target.value) || 0;
+      renderSeriesColors(); renderCard();
+    });
+  }
+
+  /** Sección "Colorear Δ% por bandas" en Style. Sólo aparece en bars con una métrica en
+   *  modo Δ% vs MC anterior. Off ⇒ color por signo; On ⇒ 4 bandas editables (2 umbrales). */
+  function _relBandsSection() {
+    if (!S || S.type !== 'bars' || !(S.metrics || []).some(m => m.rel === 'prev_mc')) return '';
+    const on = !!S.relBands;
+    const b  = S.relBands || _REL_BANDS_DEFAULT;
+    const hi = Number(b.hi), lo = Number(b.lo);
+    const numCss = 'width:58px;padding:3px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg);font:600 11.5px/1 var(--cm-font-sans);text-align:right';
+    const row = (idx, label) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:2px 0">
+        <label style="position:relative;width:22px;height:22px;border-radius:6px;overflow:hidden;flex:0 0 auto;cursor:pointer;box-shadow:0 0 0 1px var(--cm-border) inset;background:${esc(b.colors[idx])}">
+          <input type="color" data-relband="${idx}" value="${esc(b.colors[idx])}" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:none;padding:0">
+        </label>
+        <span style="font:500 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(label)}</span>
+      </div>`;
+    const thr = (attr, val, label) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="flex:1;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(label)}</span>
+        <input type="number" data-relband-${attr} value="${val}" style="${numCss}"><span style="color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans)">%</span>
+      </div>`;
+    return `<div style="border-top:1px solid var(--cm-border);margin-top:8px;padding-top:8px">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+        <input type="checkbox" data-relbands-on ${on ? 'checked' : ''}>${esc(_tt('gps_analysis.builder_relbands_title', 'Color Δ% by bands'))}
+      </label>
+      ${on ? `<div style="margin-top:8px">
+        ${thr('hi', hi, _tt('gps_analysis.builder_relbands_hi', 'High threshold'))}
+        ${thr('lo', lo, _tt('gps_analysis.builder_relbands_lo', 'Low threshold'))}
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:1px">
+          ${row(0, `≥ +${hi}%`)}
+          ${row(1, `0 … +${hi}%`)}
+          ${row(2, `${lo} … 0%`)}
+          ${row(3, `< ${lo}%`)}
+        </div>
+      </div>` : ''}
+    </div>`;
   }
 
   function syncStyle() {
@@ -3395,13 +3473,12 @@
           lmeta.data.forEach((pt, i) => {
             const v = ds.data[i];
             if (v == null || !pt) return;
-            const up = v >= 0;
-            const txt = `${up ? '+' : ''}${Math.round(v)}%`;
+            const txt = `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
             const tw  = ctx.measureText(txt).width;
             const ly  = pt.y - 9;   // encima del punto
             ctx.fillStyle = 'rgba(255,255,255,.85)';   // halo/fondo para contraste
             ctx.fillRect(pt.x - tw / 2 - 3, ly - 12, tw + 6, 14);
-            ctx.fillStyle = up ? _upCol : _dnCol;
+            ctx.fillStyle = _relBandColor(v, opts.relBands) || (v >= 0 ? _upCol : _dnCol);
             ctx.fillText(txt, pt.x, ly);
           });
           ctx.restore();
@@ -3759,10 +3836,9 @@
           const lc = config.style?.colors?.[s.label] || lineCol;
           refMetricMap.set(s.label, { vals, isLine: true, color: lc });
           const isRel = !!s._rel;
-          // Δ%: puntos más grandes y coloreados por signo (verde sube / rojo baja) para que
-          // se lean incluso cuando quedan aislados (un solo MC con anterior por grupo).
-          const upC = _cssVar('--cm-success', '#16A34A'), dnC = _cssVar('--cm-danger', '#DC2626');
-          const ptCol = isRel ? data.map(v => v == null ? lc : (v >= 0 ? upC : dnC)) : lc;
+          // Δ%: puntos más grandes y coloreados por BANDA de umbral (o por signo si no hay
+          // bandas configuradas) para que se lean incluso cuando quedan aislados.
+          const ptCol = isRel ? data.map(v => v == null ? lc : _relBandColor(v, config.style?.relBands)) : lc;
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25,
@@ -3904,7 +3980,7 @@
              isMcGrouped: mcOn, mcDiffs,
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
-             horizontal, stacked, hasLine, max1, step1, min1, referenceLines: refLines,
+             horizontal, stacked, hasLine, max1, step1, min1, relBands: config.style?.relBands || null, referenceLines: refLines,
              height, color: accent };
   }
 
@@ -4121,7 +4197,7 @@
                 },
               },
             },
-            gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
+            gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked, relBands: d.relBands },
             gpbMcDiff: { show: d.isMcGrouped, diffs: d.mcDiffs, horizontal: d.horizontal, upCol: d.mcUpCol, dnCol: d.mcDnCol, withValues: d.showLbl },
             gpbRefLines: { lines: d.referenceLines, horizontal: d.horizontal },
             gpbBarGroupAxis: { show: _nested, dims: d.catDims, horizontal: d.horizontal },
@@ -7631,6 +7707,7 @@
     S.color   = config.style?.color               || '#15803D';
     S.palette = config.style?.palette             || 'pitch';
     S.colors  = config.style?.colors ? { ...config.style.colors } : {};
+    S.relBands = config.style?.relBands ? { ...config.style.relBands, colors: [...(config.style.relBands.colors || [])] } : null;
     S.axes    = config.style?.axes    !== false;
     S.legend  = config.style?.legend  !== false;
     S.labels  = !!config.style?.dataLabels;

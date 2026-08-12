@@ -170,7 +170,17 @@
         "points": { "type": "boolean" },
         "area": { "type": "boolean" },
         "orientation": { "type": "string", "enum": ["vertical", "horizontal"], "$comment": "Bar chart orientation." },
-        "stacked": { "type": "boolean", "$comment": "Bar chart: stack series into one bar." }
+        "stacked": { "type": "boolean", "$comment": "Bar chart: stack series into one bar." },
+        "relBands": {
+          "type": ["object", "null"],
+          "$comment": "Δ% variation colour bands. v≥hi→colors[0], 0≤v<hi→colors[1], lo≤v<0→colors[2], v<lo→colors[3].",
+          "additionalProperties": false,
+          "properties": {
+            "hi": { "type": "number" },
+            "lo": { "type": "number" },
+            "colors": { "type": "array", "items": { "type": "string" }, "minItems": 4, "maxItems": 4 }
+          }
+        }
       }
     }
   },
