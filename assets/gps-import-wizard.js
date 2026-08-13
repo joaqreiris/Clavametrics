@@ -2193,12 +2193,25 @@
       // Match key stays (club, date, type, is_historical) — unchanged — so legitimate double
       // sessions and existing behaviour are untouched; only the missing lookup is added.
       async function _gpResolveSessionId(date, type, title) {
-        const { data: existing } = await window.sb.from('training_sessions')
-          .select('id').eq('club_id', clubId).eq('session_date', date)
-          .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
-        if (existing?.[0]?.id) return existing[0].id;
+        // Enganchar el GPS a la sesión PLANIFICADA (que trae microciclo/MD) en vez de crear una
+        // suelta: matchear por equipo activo O team-null (importadas/legacy), prefiriendo la del
+        // equipo, y ADOPTAR la team-null (setearle el equipo) para que plan y GPS converjan en una
+        // sola fila. Con equipo activo se excluyen las sesiones de OTROS equipos (aislamiento).
+        const teamId = window._gpTeamId || null;
+        let q = window.sb.from('training_sessions')
+          .select('id, team_id').eq('club_id', clubId).eq('session_date', date)
+          .eq('session_type', type).eq('is_historical', isHistorical);
+        if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
+        const { data: existing } = await q.order('team_id', { ascending: true, nullsFirst: false }).limit(1);
+        const hit = existing?.[0];
+        if (hit?.id) {
+          if (teamId && hit.team_id == null) {
+            try { await window.sb.from('training_sessions').update({ team_id: teamId }).eq('id', hit.id).eq('club_id', clubId); } catch (e) { console.warn('gps import adopt team:', e); }
+          }
+          return hit.id;
+        }
         const { data: newSess, error } = await window.sb.from('training_sessions')
-          .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
+          .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(teamId ? { team_id: teamId } : {}) })
           .select('id').single();
         if (error) throw new Error(`Could not create session for ${date}: ${error.message}`);
         return newSess.id;

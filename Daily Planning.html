@@ -2629,6 +2629,26 @@ async function dpAutoSaveSession() {
     if (statEl) statEl.textContent = tt('daily_planning.error_saving','Error saving');
     return;
   }
+
+  // Propagación GPS: las sesiones de GPS importadas quedan como filas SUELTAS (team_id NULL, sin
+  // microcycle_id ni match_day_offset), separadas de la sesión planificada. Al fijar el MD/microciclo
+  // del día acá, se los estampamos (y adoptamos el equipo) a esas filas del MISMO día, para que GPS
+  // Analysis muestre el microciclo y el MD correctos. Scope conservador: solo filas team-null (las
+  // importadas; las de otros equipos tienen su team_id), sin microciclo aún, no-gym, no-históricas,
+  // y distintas de la que acabamos de guardar. Fill-only (no pisa valores existentes).
+  if (_dpCurrentSessionId && _dpTeamId && (mcId || payload.match_day_offset)) {
+    try {
+      const patch = { team_id: _dpTeamId };
+      if (mcId)                     patch.microcycle_id    = mcId;
+      if (payload.match_day_offset) patch.match_day_offset = payload.match_day_offset;
+      await window.sb.from('training_sessions').update(patch)
+        .eq('club_id', _dpClubId).eq('session_date', date)
+        .is('team_id', null).is('microcycle_id', null)
+        .eq('is_historical', false).neq('session_type', 'gym')
+        .neq('id', _dpCurrentSessionId);
+    } catch (e) { console.warn('dp GPS MD/MC propagation:', e); }
+  }
+
   if (dotEl)  dotEl.style.background = 'var(--cm-success)';
   if (statEl) { const _sv = tt('daily_planning.saved_just_now','Saved · just now'); statEl.textContent = _sv; setTimeout(() => { if (statEl.textContent === _sv) statEl.textContent = tt('daily_planning.autosaved','Autosaved'); }, 3000); }
   // No separate calendar write needed: the Calendar training block IS this
