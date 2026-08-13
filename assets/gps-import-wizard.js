@@ -13,6 +13,9 @@
 (function () {
   'use strict';
 
+  // i18n con fallback: usa el tt() global (mismo que el resto de la app) si está; si no, el texto EN.
+  const _wt = (k, f) => { try { return (typeof tt === 'function') ? tt(k, f) : (window.tt ? window.tt(k, f) : f); } catch (e) { return f; } };
+
   // ── Constants — built from gps-aliases.js ──────────────────
   const _aliasDb = window.GPS_BUILTIN_ALIASES || [];
   const TARGET_METRICS = _aliasDb.map(e => e.metric_key);
@@ -2355,6 +2358,33 @@
         }));
       }
 
+      // ── 4b. Días con GPS pero SIN Match Day ───────────────
+      // Un día puede recibir datos GPS sin ser un entrenamiento planificado (activación, otro evento)
+      // o sin que se le haya asignado un MD. No lo forzamos: sugerimos al usuario asignarle un MD /
+      // crear la sesión en Daily Planning (o dejarlo sin MD, es su decisión). Cuando se agregue el
+      // sync de proveedor (Catapult/StatSports) puede reusar este mismo chequeo.
+      let _mdGapDays = [];
+      try {
+        const _impSids = isMultiMode ? [...new Set(Object.values(dateSessionMap))] : (singleSessionId ? [singleSessionId] : []);
+        if (_impSids.length) {
+          const { data: _sr } = await window.sb.from('training_sessions')
+            .select('id, session_date, match_day_offset').in('id', _impSids);
+          // Sin MD = la sesión GPS no tiene match_day_offset Y ningún otro registro del mismo día
+          // (misma club) lo trae (que se lo propagaría al guardar en Daily Planning).
+          const _noMd  = (_sr || []).filter(r => r.match_day_offset == null);
+          const _dates = [...new Set(_noMd.map(r => r.session_date))];
+          if (_dates.length) {
+            const { data: _sib } = await window.sb.from('training_sessions')
+              .select('session_date').eq('club_id', clubId).in('session_date', _dates)
+              .not('match_day_offset', 'is', null);
+            const _withMd = new Set((_sib || []).map(s => s.session_date));
+            _mdGapDays = _noMd.filter(r => !_withMd.has(r.session_date))
+              .map(r => ({ date: r.session_date, sessionId: r.id }))
+              .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+          }
+        }
+      } catch (e) { console.warn('gps import MD-gap detection:', e); }
+
       // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
       const sessionCount    = isMultiMode ? Object.keys(dateSessionMap).length : 1;
@@ -2383,11 +2413,24 @@
             <div style="font:600 10.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-warning);margin-bottom:5px">Warnings</div>
             ${warningLines.map(w => `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${w}</div>`).join('')}
           </div>` : ''}
+          ${_mdGapDays.length ? `
+          <div style="width:100%;padding:10px 12px;background:var(--cm-accent-bg,rgba(59,130,246,.08));border:1px solid var(--cm-accent,#3b82f6);border-radius:var(--cm-r-3);text-align:left">
+            <div style="display:flex;align-items:center;gap:6px;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px"><i class="ti ti-calendar-question" style="font-size:14px;color:var(--cm-accent,#3b82f6)"></i>${_wt('gps_import.md_gap_title','Days with GPS but no Match Day')}</div>
+            <div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${_wt('gps_import.md_gap_body','These days got GPS data but have no Match Day assigned yet. Assign one in Daily Planning, or leave them as they are.')}</div>
+            <div style="font:500 11.5px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:8px">${_mdGapDays.map(d => d.date).join(' · ')}</div>
+            <button class="cm-btn is-ghost is-sm" id="wizAssignMd" style="height:28px"><i class="ti ti-clipboard-list" style="font-size:12px"></i>${_wt('gps_import.md_gap_cta','Assign in Daily Planning')}</button>
+          </div>` : ''}
         </div>`;
       document.getElementById('wizFooter').innerHTML = `<div class="right"><button class="cm-btn is-primary is-sm" id="wizDone">Done</button></div>`;
       document.getElementById('wizDone').addEventListener('click', () => {
         document.getElementById('gpImportModal')?.remove();
         window.refreshDashboard?.({ sessionId: firstSessionId });
+      });
+      // Sugerencia: abrir Daily Planning en el primer día sin MD (con la sesión GPS ya resuelta),
+      // para que el usuario le asigne el Match Day. No fuerza nada: puede ignorarlo y cerrar.
+      document.getElementById('wizAssignMd')?.addEventListener('click', () => {
+        const g = _mdGapDays[0]; if (!g) return;
+        window.location.href = `Daily Planning.html?date=${g.date}${g.sessionId ? `&session=${g.sessionId}` : ''}`;
       });
 
       showToast(`Imported ${deduped.length} GPS reports · ${uniquePlayers} players · ${sessionCount} sessions`);
