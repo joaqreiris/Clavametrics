@@ -947,7 +947,7 @@
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
     const _seQ = window.sb.from('training_sessions').select('session_date, session_attributes, match_day_offset')
       .eq('club_id', clubId).limit(3000);
-    const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date')
+    const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,team_id')
       .eq('club_id', clubId);
     // Opponent catalog: lets the Rival dimension group by ENTITY (opponent_id / canonical
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
@@ -1071,15 +1071,24 @@
         id:    String(m.id),
         start: String(m.start_date).slice(0, 10),
         end:   m.end_date ? String(m.end_date).slice(0, 10) : null,
+        team:  m.team_id != null ? String(m.team_id) : null,
       }))
       .sort((a, b) => a.start.localeCompare(b.start));
+    // Un día puede caer dentro de un MC del equipo Y de uno club-wide (team_id NULL) con la
+    // MISMA ventana → antes se elegían ambos y el filtro mostraba «MC 01» duplicado. Regla:
+    // el MC del equipo SIEMPRE gana; el NULL solo aplica a fechas que ningún MC del equipo cubre.
+    const _gpTeamS = _gpTeam != null ? String(_gpTeam) : null;
     function _mcForDate(d) {
       if (!d) return '';
       d = String(d).slice(0, 10);
-      let hit = '';
+      let hit = '', hitTeam = false;
       for (const m of _mcRanges) {
         if (m.start > d) break;                        // orden asc → no hay match más adelante
-        if (m.end == null || d <= m.end) hit = m.id;   // mayor start <= d que aún contiene d
+        if (m.end == null || d <= m.end) {             // mayor start <= d que aún contiene d
+          const isTeam = _gpTeamS != null && m.team === _gpTeamS;
+          if (isTeam && !hitTeam) { hit = m.id; hitTeam = true; }   // el del equipo desplaza al NULL previo
+          else if (isTeam === hitTeam) hit = m.id;                  // misma prioridad → gana el de start más tardío
+        }
       }
       return hit;
     }
