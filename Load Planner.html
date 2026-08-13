@@ -575,7 +575,8 @@ function openPlayers(){
 
 function gridHTML(){
   const dayCols=DAYS.map(d=>`<th class="lp-dcol ${d.isToday?'lp-todaycol':''}"><div class="md">${d.md||'·'}</div><div class="dt">${new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div><div><span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span></div></th>`).join('');
-  const qf=DAYS.map(d=>`<td><input class="pin qf" type="number" min="0" max="400" step="5" data-qf="${d.date}" placeholder="—"></td>`).join('');
+  const qf=DAYS.map(d=>{ const vals=visMetrics().map(m=>(PLAN[d.date]||{})[m]); const allSame=vals.length&&vals.every(v=>v!=null&&v===vals[0]); const cv=allSame?vals[0]:'';
+    return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—"></td>`; }).join('');
   const rows=visMetrics().map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
     DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m]; return `<td class="${d.isToday?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—"></td>`; }).join('')
   }</tr>`).join('');
