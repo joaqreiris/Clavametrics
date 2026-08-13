@@ -355,6 +355,24 @@
   }
   .sq-modal-foot .grow { flex:1; }
   .sq-modal-saving { font:var(--cm-meta); color:var(--cm-fg-muted); }
+  /* Photo cropper */
+  .sq-crop-stage {
+    position:relative; width:280px; height:280px; margin:0 auto;
+    background:var(--cm-bg-sunk); border-radius:var(--cm-r-3); overflow:hidden;
+    touch-action:none; cursor:grab; user-select:none;
+  }
+  .sq-crop-stage.is-drag { cursor:grabbing; }
+  .sq-crop-stage canvas { display:block; width:100%; height:100%; }
+  /* circular mask overlay so the user sees the round avatar crop */
+  .sq-crop-mask {
+    position:absolute; inset:0; pointer-events:none;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.45) inset;
+    border-radius:50%;
+  }
+  .sq-crop-zoom { display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .sq-crop-zoom i { color:var(--cm-fg-muted); font-size:16px; }
+  .sq-crop-zoom input[type=range] { flex:1; accent-color:var(--cm-accent); }
+  .sq-crop-hint { text-align:center; font:var(--cm-meta); color:var(--cm-fg-muted); margin:10px 0 0; }
   .sq-toast {
     position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px);
     background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3);
@@ -1328,6 +1346,33 @@
   </div>
 </div>
 
+<!-- Photo crop modal -->
+<div class="sq-modal-backdrop" id="sqCropModal">
+  <div class="sq-modal" style="width:360px" role="dialog" aria-modal="true" aria-labelledby="sqCropTitle">
+    <div class="sq-modal-head">
+      <h2 id="sqCropTitle" data-i18n="squad.adjust_photo">Adjust photo</h2>
+      <button class="sq-modal-close" id="sqCropClose" title="Close" aria-label="Close" data-i18n-attr="title:squad.close;aria-label:squad.close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="sq-crop-stage" id="sqCropStage">
+        <canvas id="sqCropCanvas"></canvas>
+        <div class="sq-crop-mask"></div>
+      </div>
+      <div class="sq-crop-zoom">
+        <i class="ti ti-photo" style="font-size:13px"></i>
+        <input type="range" id="sqCropZoom" min="1" max="4" step="0.01" value="1">
+        <i class="ti ti-photo"></i>
+      </div>
+      <p class="sq-crop-hint" data-i18n="squad.crop_hint">Drag to reposition · slide to zoom</p>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqCropCancel" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqCropApply" data-i18n="squad.apply_photo">Apply</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // i18n helpers (runtime injected by sidebar.js; fall back to English text)
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
@@ -1459,6 +1504,117 @@ async function compressImage(file, { maxDim = 1000, maxBytes = 2 * 1024 * 1024 }
   } catch (e) { console.warn('compressImage failed, uploading original:', e); return file; }
 }
 
+// ── Photo cropper (pan + zoom → square JPEG) ──────────────────────
+// Opens a modal to reposition/zoom the picked image over a circular avatar
+// mask. Resolves with a cropped square File, or null if cancelled.
+let _cropResolve = null, _cropState = null;
+function openPhotoCropper(file) {
+  return new Promise((resolve) => {
+    const modal  = document.getElementById('sqCropModal');
+    const stage  = document.getElementById('sqCropStage');
+    const canvas = document.getElementById('sqCropCanvas');
+    const zoom   = document.getElementById('sqCropZoom');
+    if (!modal || !canvas) { resolve(file); return; }
+    _cropResolve = resolve;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const SIZE = 280;                 // stage px (matches CSS)
+      canvas.width = SIZE; canvas.height = SIZE;
+      // min scale so the image always covers the square (object-fit:cover)
+      const minScale = SIZE / Math.min(img.naturalWidth, img.naturalHeight);
+      const st = { img, url, SIZE, minScale, scale: minScale, x: 0, y: 0, srcName: file.name };
+      // center
+      st.x = (SIZE - img.naturalWidth  * minScale) / 2;
+      st.y = (SIZE - img.naturalHeight * minScale) / 2;
+      _cropState = st;
+      zoom.min = '1'; zoom.max = '4'; zoom.step = '0.01'; zoom.value = '1';
+      drawCrop();
+      modal.classList.add('is-open');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); _cropResolve = null; resolve(file); };
+    img.src = url;
+  });
+}
+function drawCrop() {
+  const st = _cropState; if (!st) return;
+  const cv = document.getElementById('sqCropCanvas');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, st.SIZE, st.SIZE);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, st.SIZE, st.SIZE);
+  ctx.drawImage(st.img, st.x, st.y, st.img.naturalWidth * st.scale, st.img.naturalHeight * st.scale);
+}
+function _cropClampOffsets() {
+  const st = _cropState; if (!st) return;
+  const w = st.img.naturalWidth * st.scale, h = st.img.naturalHeight * st.scale;
+  st.x = Math.min(0, Math.max(st.SIZE - w, st.x));
+  st.y = Math.min(0, Math.max(st.SIZE - h, st.y));
+}
+function _cropClose() {
+  const st = _cropState;
+  if (st?.url) URL.revokeObjectURL(st.url);
+  document.getElementById('sqCropModal')?.classList.remove('is-open');
+  _cropState = null;
+}
+function _cropApply() {
+  const st = _cropState; if (!st) { _cropResolve?.(null); _cropResolve = null; return; }
+  const OUT = 512;
+  const out = document.createElement('canvas'); out.width = OUT; out.height = OUT;
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#fff'; octx.fillRect(0, 0, OUT, OUT);
+  const k = OUT / st.SIZE;
+  octx.drawImage(st.img, st.x * k, st.y * k, st.img.naturalWidth * st.scale * k, st.img.naturalHeight * st.scale * k);
+  const base = (st.srcName || 'photo').replace(/\.[^.]+$/, '') || 'photo';
+  out.toBlob((blob) => {
+    const resolve = _cropResolve; _cropResolve = null;
+    _cropClose();
+    resolve?.(blob ? new File([blob], base + '.jpg', { type: 'image/jpeg' }) : null);
+  }, 'image/jpeg', 0.9);
+}
+// Wire up cropper controls once.
+(function initCropper() {
+  const stage = document.getElementById('sqCropStage');
+  const zoom  = document.getElementById('sqCropZoom');
+  if (!stage || !zoom) return;
+  zoom.addEventListener('input', () => {
+    const st = _cropState; if (!st) return;
+    const cx = st.SIZE / 2, cy = st.SIZE / 2;               // zoom toward center
+    const prev = st.scale;
+    st.scale = st.minScale * parseFloat(zoom.value);
+    const r = st.scale / prev;
+    st.x = cx - (cx - st.x) * r;
+    st.y = cy - (cy - st.y) * r;
+    _cropClampOffsets(); drawCrop();
+  });
+  let dragging = false, lastX = 0, lastY = 0;
+  const down = (e) => {
+    if (!_cropState) return;
+    dragging = true; stage.classList.add('is-drag');
+    const p = e.touches ? e.touches[0] : e;
+    lastX = p.clientX; lastY = p.clientY;
+    if (e.cancelable) e.preventDefault();
+  };
+  const move = (e) => {
+    if (!dragging || !_cropState) return;
+    const p = e.touches ? e.touches[0] : e;
+    _cropState.x += p.clientX - lastX; _cropState.y += p.clientY - lastY;
+    lastX = p.clientX; lastY = p.clientY;
+    _cropClampOffsets(); drawCrop();
+    if (e.cancelable) e.preventDefault();
+  };
+  const up = () => { dragging = false; stage.classList.remove('is-drag'); };
+  stage.addEventListener('mousedown', down);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  stage.addEventListener('touchstart', down, { passive: false });
+  stage.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('touchend', up);
+  document.getElementById('sqCropApply')?.addEventListener('click', _cropApply);
+  const cancel = () => { const r = _cropResolve; _cropResolve = null; _cropClose(); r?.(null); };
+  document.getElementById('sqCropCancel')?.addEventListener('click', cancel);
+  document.getElementById('sqCropClose')?.addEventListener('click', cancel);
+})();
+
 let _allPlayers = [];
 let _teams = [];
 let _currentTeamId = null;
@@ -1466,6 +1622,7 @@ let _activeFilter = 'All';
 let _searchQ = '';
 let _editingId = null;
 let _currentClubId = null;
+let _pendingPhotoFile = null;  // cropped photo awaiting upload (from the crop modal)
 let _currentClubName = '';
 let _currentClubLogoUrl = '';
 let _fullAccess = false;   // admin/owner/super: ve y navega todas las categorías
@@ -2053,6 +2210,7 @@ async function reloadPlayers() {
     }
     document.getElementById('sqModalSaving').style.display = 'none';
     // Photo preview
+    _pendingPhotoFile = null;
     const photoInput = document.getElementById('sqF_photo');
     if (photoInput) photoInput.value = '';
     const preview = document.getElementById('sqF_photoPreview');
@@ -2174,7 +2332,7 @@ async function reloadPlayers() {
       return;
     }
 
-    const photoFile = document.getElementById('sqF_photo')?.files?.[0] || null;
+    const photoFile = _pendingPhotoFile || document.getElementById('sqF_photo')?.files?.[0] || null;
 
     async function uploadPhoto(playerId, clubId) {
       if (!photoFile) return null;
@@ -2411,12 +2569,15 @@ async function reloadPlayers() {
     e.target.value = '';
   });
   document.getElementById('sqF_photoBtn')?.addEventListener('click', () => document.getElementById('sqF_photo').click());
-  document.getElementById('sqF_photo')?.addEventListener('change', e => {
+  document.getElementById('sqF_photo')?.addEventListener('change', async e => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const cropped = await openPhotoCropper(file);
+    if (!cropped) { e.target.value = ''; return; }   // cancelled
+    _pendingPhotoFile = cropped;
     const preview = document.getElementById('sqF_photoPreview');
     if (preview) {
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(cropped);
       preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover" alt="">`;
     }
   });
