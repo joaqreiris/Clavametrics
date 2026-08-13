@@ -433,28 +433,20 @@ async function loadMicrocycle(){
   let start,end;
   if(MC){ start=MC.start_date; end=MC.end_date; }
   else { const d=new Date(ANCHOR+'T12:00:00'); const dow=(d.getDay()+6)%7; const mon=new Date(d); mon.setDate(d.getDate()-dow); const sun=new Date(mon); sun.setDate(mon.getDate()+6); start=window.cmYMD(mon); end=window.cmYMD(sun); }
-  const {data:sess}=await window.sb.from('training_sessions')
-    .select('session_date,session_type,match_day_offset,session_time,end_time').eq('club_id',CLUB).eq('team_id',TEAM)
-    .gte('session_date',start).lte('session_date',end).eq('is_historical',false);
-  const byDate={}; (sess||[]).forEach(s=>{ (byDate[s.session_date]=byDate[s.session_date]||[]).push(s); });
-  PLAN={};
-  const {data:plan}=await window.sb.from('load_plan').select('plan_date,metric,pct')
-    .eq('club_id',CLUB).eq('team_id',TEAM).gte('plan_date',start).lte('plan_date',end);
-  (plan||[]).forEach(r=>{ if(r.metric==='__all__') return; (PLAN[r.plan_date]=PLAN[r.plan_date]||{})[r.metric]=r.pct; });
-  // Match days for THIS team (both sources + MC match_date), in an extended window so MD±
-  // labels reach a match just outside the week. A match can live as a calendar_event
-  // (Planner), a training_session type=match (GPS/assign rivals), or microcycles.match_date.
   const addDays=(d,n)=>{ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()+n); return window.cmYMD(x); };
   const wS=addDays(start,-10), wE=addDays(end,3);
+  // 4 independent queries in parallel (sessions, plan, calendar matches, session matches)
+  const [sessR,planR,ceR,msR]=await Promise.all([
+    window.sb.from('training_sessions').select('session_date,session_type,match_day_offset,session_time,end_time').eq('club_id',CLUB).eq('team_id',TEAM).gte('session_date',start).lte('session_date',end).eq('is_historical',false),
+    window.sb.from('load_plan').select('plan_date,metric,pct').eq('club_id',CLUB).eq('team_id',TEAM).gte('plan_date',start).lte('plan_date',end),
+    window.sb.from('calendar_events').select('date,team_id').eq('club_id',CLUB).eq('type','match').gte('date',wS).lte('date',wE),
+    window.sb.from('training_sessions').select('session_date,team_id').eq('club_id',CLUB).eq('session_type','match').gte('session_date',wS).lte('session_date',wE),
+  ]).catch(e=>{ console.warn('[lp] microcycle q',e); return [{},{},{},{}]; });
+  const byDate={}; (sessR.data||[]).forEach(s=>{ (byDate[s.session_date]=byDate[s.session_date]||[]).push(s); });
+  PLAN={}; (planR.data||[]).forEach(r=>{ if(r.metric==='__all__') return; (PLAN[r.plan_date]=PLAN[r.plan_date]||{})[r.metric]=r.pct; });
   const mset=new Set(); if(MC&&MC.match_date) mset.add(MC.match_date);
-  try{
-    const [ce,ms]=await Promise.all([
-      window.sb.from('calendar_events').select('date,team_id').eq('club_id',CLUB).eq('type','match').gte('date',wS).lte('date',wE),
-      window.sb.from('training_sessions').select('session_date,team_id').eq('club_id',CLUB).eq('session_type','match').gte('session_date',wS).lte('session_date',wE),
-    ]);
-    (ce.data||[]).forEach(r=>{ if(r.date && (!r.team_id || r.team_id===TEAM)) mset.add(r.date); });
-    (ms.data||[]).forEach(r=>{ if(r.session_date && (!r.team_id || r.team_id===TEAM)) mset.add(r.session_date); });
-  }catch(e){}
+  (ceR.data||[]).forEach(r=>{ if(r.date && (!r.team_id || r.team_id===TEAM)) mset.add(r.date); });
+  (msR.data||[]).forEach(r=>{ if(r.session_date && (!r.team_id || r.team_id===TEAM)) mset.add(r.session_date); });
   const matchArr=[...mset].sort();
   DAYS=[]; const today=window.cmToday();
   let cur=new Date(start+'T12:00:00'); const last=new Date(end+'T12:00:00');
