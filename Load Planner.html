@@ -308,6 +308,7 @@ const initials=n=>(n.split(' ').pop()||'').slice(0,2).toUpperCase();
 // ─────────────────────────────────────────────────────────────
 async function init(){
   CLUB=await window.getClubId(); PROFILE=await window.getProfile();
+  try{ window.applyClubTheme && window.applyClubTheme(); }catch(e){}   // club accent → --cm-accent (sidebar colors)
   if(!CLUB){ document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.no_club','No club found.')+'</div>'; return; }
   await initTeamSwitch(); await loadCatalogMeta(); buildMetrics(); wireControls();
   ANCHOR=window.cmToday(); await reload();
@@ -369,9 +370,9 @@ async function reload(){
   try{
     await Promise.all([ loadRoster(), loadManual() ]);
     restorePrefs();
+    const refsP = loadMatchRefs();   // heaviest (all match reports) — overlap with the microcycle fetch
     await loadMicrocycle();
-    await Promise.all([ loadMatchRefs(), loadAccrued(), loadAltAuto() ]);
-    await loadMcTrend();
+    await Promise.all([ refsP, loadAccrued(), loadAltAuto(), loadMcTrend() ]);
   }catch(e){ console.error('[lp] reload failed:',e); }
   try{ render(); }
   catch(e){ console.error('[lp] render failed:',e); document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.render_error','Something went wrong rendering the page.')+'<br><span class="lp-mini">'+((e&&e.message)||e)+'</span></div>'; }
