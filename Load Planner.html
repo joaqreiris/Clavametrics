@@ -43,6 +43,14 @@
   .lp-plrow .nm{font-weight:600;color:var(--cm-fg-strong);font-size:13px}
   .lp-plrow .po{font-size:11px;color:var(--cm-fg-faint);margin-left:auto}
   .lp-plrow input{width:16px;height:16px;flex:none;accent-color:var(--cm-accent)}
+  .lp-actual{font-size:9px;color:var(--cm-success);font-weight:700;margin-top:2px;font-family:var(--cm-font-mono);text-align:center}
+  .lp-plcell{cursor:pointer}
+  .lp-plcell:hover .nm{color:var(--cm-accent)}
+  .lp-pdtbl{width:100%;border-collapse:collapse;font-size:13px}
+  .lp-pdtbl th{font-size:11px;font-weight:700;color:var(--cm-fg-muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--cm-border-soft)}
+  .lp-pdtbl td{padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);color:var(--cm-fg)}
+  .lp-pdtbl th.r,.lp-pdtbl td.r{text-align:right;font-family:var(--cm-font-mono)}
+  .lp-pdtbl tr:last-child td{border-bottom:0}
   /* planning grid (metric × day) */
   .lp-gridwrap{overflow-x:auto}
   .lp-grid{border-collapse:collapse;font-size:12.5px;width:100%}
@@ -202,6 +210,16 @@
   </div>
 </div>
 
+<!-- Player detail modal -->
+<div class="lp-modal" id="lpPDModal" hidden>
+  <div class="box" style="width:min(720px,96vw)">
+    <div class="mh"><h3 id="lpPDTitle"></h3><button class="cm-icon-btn" id="lpPDClose"><i class="ti ti-x"></i></button></div>
+    <div class="mb" id="lpPDBody"></div>
+    <div class="mf"><span class="lp-mini" data-i18n="load_planner.pd_hint">×max = vs best-5 · ×avg = vs last-5/90 · proj = end-of-week projection</span>
+      <button class="cm-btn is-primary is-sm" id="lpPDDone" data-i18n="load_planner.done">Done</button></div>
+  </div>
+</div>
+
 <script src="lib/day-context.js"></script>
 <script src="assets/gps-reader.js"></script>
 <script>
@@ -248,8 +266,11 @@ let MC=null, PREVMC=null, DAYS=[], PLAN={}, ANCHOR=null;
 let SELMC=null, ALLMCS=[];   // selected microcycle id + team microcycle list
 let MCRAW={}, TREND=[];      // mcId→pid→metric→total + ordered [{id,name}] (aggregated at render time)
 let PLAYER_SEL=new Set();    // selected players (GKs off by default)
-let REF_MAX={}, REF_AVG={}, ACCRUED={}, PREV={};
+let REF_MAX={}, REF_AVG={}, ACCRUED={}, ADAY={}, PREV={};
 let sortK='proj', sortD=-1;
+// Typical MD taper (% of match per day) for the auto-plan template
+const MD_TAPER={ 'MD−6':60,'MD−5':70,'MD−4':85,'MD−3':80,'MD−2':60,'MD−1':30,'MD+1':20,'MD+2':0,'MD+3':0 };
+const bandMid=m=>{ const b=BANDS[m]; return b?(b[0]+b[1])/2:null; };
 
 const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString('en-US'));
 const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0};
@@ -326,6 +347,7 @@ async function reload(){
   document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
   try{
     await Promise.all([ loadRoster(), loadManual() ]);
+    restorePrefs();
     await loadMicrocycle();
     await Promise.all([ loadMatchRefs(), loadAccrued(), loadAltAuto() ]);
     await loadMcTrend();
@@ -345,6 +367,15 @@ async function loadRoster(){
   PLAYER_SEL = new Set(ROSTER.filter(p=>!isGK(p)).map(p=>p.id));   // GKs off by default (no match reference use)
 }
 function activePlayers(){ return displayRoster().filter(p=>PLAYER_SEL.has(p.id)); }
+// #6 — persist band/player/alternates selection per club+team
+function _prefKey(){ return 'lp:'+CLUB+':'+TEAM; }
+function savePrefs(){ try{ localStorage.setItem(_prefKey(), JSON.stringify({ bands:[...VISIBLE], players:[...PLAYER_SEL], showAlt:SHOW_ALT })); }catch(e){} }
+function restorePrefs(){ let p={}; try{ p=JSON.parse(localStorage.getItem(_prefKey())||'{}'); }catch(e){}
+  if(Array.isArray(p.bands)){ const s=new Set(p.bands.filter(m=>METRICS.includes(m))); if(s.size) VISIBLE=s; }
+  if(Array.isArray(p.players)) PLAYER_SEL=new Set(p.players.filter(id=>ROSTER.some(r=>r.id===id)));
+  if(typeof p.showAlt==='boolean') SHOW_ALT=p.showAlt;
+  if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0]||FOCUS;
+}
 // Alternates who actually train with THIS team on the next training day (explicit availability row)
 async function loadAltAuto(){
   AUTO_ALT=new Set();
@@ -456,7 +487,7 @@ async function loadMatchRefs(){
 function applyManual(){ ROSTER.forEach(p=>METRICS.forEach(m=>{ const man=MANUAL[p.id]&&MANUAL[p.id][m]; if(man!=null&&man!==''){ REF_MAX[p.id][m]={value:+man,count:null,conf:'manual',manual:true}; } })); }
 
 async function loadAccrued(){
-  ACCRUED={}; ROSTER.forEach(p=>ACCRUED[p.id]={});
+  ACCRUED={}; ADAY={}; ROSTER.forEach(p=>ACCRUED[p.id]={});
   const pids=ROSTER.map(p=>p.id); if(!pids.length||!DAYS.length||!METRICS.length) return;
   const today=window.cmToday(), start=DAYS[0].date, end=DAYS.filter(d=>!d.isFuture).slice(-1)[0]?.date||today;
   if(end<start) return;
@@ -467,8 +498,14 @@ async function loadAccrued(){
     .select(`player_id,${cols},training_sessions!inner(session_date)`)
     .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false)
     .gte('training_sessions.session_date',start).lte('training_sessions.session_date',end),{label:'lp-accrued'}).catch(()=>[]);
-  (rows||[]).forEach(r=>METRICS.forEach(m=>{ if(r[m]!=null) ACCRUED[r.player_id][m]=(ACCRUED[r.player_id][m]||0)+(+r[m]); }));
+  (rows||[]).forEach(r=>{ const ts=Array.isArray(r.training_sessions)?r.training_sessions[0]:r.training_sessions; const d=ts&&ts.session_date;
+    METRICS.forEach(m=>{ if(r[m]==null) return; ACCRUED[r.player_id][m]=(ACCRUED[r.player_id][m]||0)+(+r[m]);
+      if(d){ (ADAY[d]=ADAY[d]||{}); (ADAY[d][r.player_id]=ADAY[d][r.player_id]||{}); ADAY[d][r.player_id][m]=(ADAY[d][r.player_id][m]||0)+(+r[m]); } }); });
 }
+// team-average accrued ×match (real, whole MC so far) for a metric over active players
+function teamAccruedX(m){ const xs=activePlayers().map(p=>{ const acc=ACCRUED[p.id]&&ACCRUED[p.id][m], ref=REF_MAX[p.id]&&REF_MAX[p.id][m]&&REF_MAX[p.id][m].value; return (acc&&ref)?acc/ref:null; }).filter(v=>v!=null); return xs.length? xs.reduce((a,b)=>a+b,0)/xs.length : 0; }
+// team-average actual ×match for a single day/metric (plan-vs-actual)
+function actualDayX(date,m){ const byP=ADAY[date]||{}; const xs=activePlayers().map(p=>{ const acc=byP[p.id]&&byP[p.id][m], ref=REF_MAX[p.id]&&REF_MAX[p.id][m]&&REF_MAX[p.id][m].value; return (acc&&ref)?acc/ref:null; }).filter(v=>v!=null); return xs.length? xs.reduce((a,b)=>a+b,0)/xs.length : null; }
 
 // Team-average total per metric per microcycle across the last few MCs (for the trend chart).
 // Buckets sessions into MCs by microcycle_id or by date range; scopes GPS by roster player_ids.
@@ -552,8 +589,8 @@ function wireChips(){
   document.querySelectorAll('.lp-chip[data-m]').forEach(b=>b.onclick=()=>{ const m=b.dataset.m;
     if(VISIBLE.has(m)){ if(VISIBLE.size>1) VISIBLE.delete(m); } else VISIBLE.add(m);
     if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0];
-    render(); });
-  const at=document.getElementById('lpAltToggle'); if(at) at.onclick=()=>{ SHOW_ALT=!SHOW_ALT; render(); };
+    savePrefs(); render(); });
+  const at=document.getElementById('lpAltToggle'); if(at) at.onclick=()=>{ SHOW_ALT=!SHOW_ALT; savePrefs(); render(); };
   const pb=document.getElementById('lpPlBtn'); if(pb) pb.onclick=openPlayers;
 }
 
@@ -566,29 +603,41 @@ function openPlayers(){
       <span class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</span>
       ${isGK(p)?`<span class="lp-badge" style="background:var(--cm-bg-sunk);color:var(--cm-fg-muted)">GK</span>`:''}
       ${p.isAlt?`<span class="lp-badge">ALT</span>`:''}</label>`).join('')}</div>`;
-  document.querySelectorAll('#lpPlBody input[data-pid]').forEach(c=>c.onchange=()=>{ if(c.checked) PLAYER_SEL.add(c.dataset.pid); else PLAYER_SEL.delete(c.dataset.pid); render(); });
+  document.querySelectorAll('#lpPlBody input[data-pid]').forEach(c=>c.onchange=()=>{ if(c.checked) PLAYER_SEL.add(c.dataset.pid); else PLAYER_SEL.delete(c.dataset.pid); savePrefs(); render(); });
   document.getElementById('lpPlClose').onclick=()=>modal.hidden=true;
   document.getElementById('lpPlDone').onclick=()=>modal.hidden=true;
-  document.getElementById('lpPlAll').onclick=()=>{ ROSTER.forEach(p=>PLAYER_SEL.add(p.id)); openPlayers(); render(); };
-  document.getElementById('lpPlNone').onclick=()=>{ PLAYER_SEL=new Set(); openPlayers(); render(); };
+  document.getElementById('lpPlAll').onclick=()=>{ ROSTER.forEach(p=>PLAYER_SEL.add(p.id)); savePrefs(); openPlayers(); render(); };
+  document.getElementById('lpPlNone').onclick=()=>{ PLAYER_SEL=new Set(); savePrefs(); openPlayers(); render(); };
 }
 
 function gridHTML(){
   const dayCols=DAYS.map(d=>`<th class="lp-dcol ${d.isToday?'lp-todaycol':''}"><div class="md">${d.md||'·'}</div><div class="dt">${new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div><div><span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span></div></th>`).join('');
+  const tint=pct=> (pct!=null&&pct>0)? `background:rgba(21,128,61,${(Math.min(pct/100,1)*0.24).toFixed(3)})` : '';
   const qf=DAYS.map(d=>{ const vals=visMetrics().map(m=>(PLAN[d.date]||{})[m]); const allSame=vals.length&&vals.every(v=>v!=null&&v===vals[0]); const cv=allSame?vals[0]:'';
-    return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—"></td>`; }).join('');
+    return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—" style="${cv!==''?tint(cv):''}"></td>`; }).join('');
   const rows=visMetrics().map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
-    DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m]; return `<td class="${d.isToday?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—"></td>`; }).join('')
+    DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m];
+      let act=''; if(!d.isFuture){ const ax=actualDayX(d.date,m); if(ax!=null) act=`<div class="lp-actual" title="${tt('load_planner.actual','actual')}">✓ ${(ax*100).toFixed(0)}%</div>`; }
+      return `<td class="${d.isToday?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—" style="${v!=null?tint(v):''}">${act}</td>`; }).join('')
   }</tr>`).join('');
-  const wkFocus=plannedX(FOCUS,false);
+  const wkFocus=plannedX(FOCUS,false), projFocus=teamAccruedX(FOCUS)+plannedX(FOCUS,true), target=bandMid(FOCUS), gap=target!=null?target-projFocus:null;
   return `<div class="lp-card">
     <div class="lp-card-h"><span class="t">${tt('load_planner.plan_grid','Plan — % of match per day')}</span>
-      <span class="m">${tt('load_planner.plan_hint','white row = quick-fill all metrics · edit any cell to fine-tune')}</span></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-outline is-sm" id="lpTaper"><i class="ti ti-stairs-down"></i> ${tt('load_planner.md_taper','MD taper')}</button>
+        <button class="cm-btn is-outline is-sm" id="lpToTarget"><i class="ti ti-target"></i> ${tt('load_planner.to_target','To target')}</button>
+        <button class="cm-btn is-ghost is-sm" id="lpClearPlan"><i class="ti ti-eraser"></i> ${tt('load_planner.clear','Clear')}</button>
+      </div></div>
     <div class="lp-gridwrap"><table class="lp-grid">
       <thead><tr><th>${tt('load_planner.metric','Metric')}</th>${dayCols}</tr></thead>
       <tbody><tr class="qfrow"><td>${tt('load_planner.all_metrics','All metrics')}</td>${qf}</tr>${rows}</tbody>
     </table></div>
-    <div class="lp-grid-foot"><span>${tt('load_planner.week_total','Week total')} (${metaOf(FOCUS).label}): <b>${(wkFocus*100).toFixed(0)}%</b> · <b>${wkFocus.toFixed(2)}×</b> ${tt('load_planner.match','match')}</span></div>
+    <div class="lp-grid-foot">
+      <span>${tt('load_planner.week_total','Week total')} (${metaOf(FOCUS).label}): <b>${(wkFocus*100).toFixed(0)}%</b></span>
+      <span>${tt('load_planner.proj','proj')}: <b>${projFocus.toFixed(2)}×</b>${target!=null?` / ${tt('load_planner.target','target')} ${target.toFixed(2)}×`:''}</span>
+      ${gap!=null?`<span>${tt('load_planner.gap','gap')}: <b style="color:${Math.abs(gap)<=0.15?'var(--cm-success)':gap>0?'var(--cm-info)':'var(--cm-danger)'}">${gap>=0?'+':''}${gap.toFixed(2)}×</b></span>`:''}
+      <span class="lp-mini">${tt('load_planner.plan_hint','white row = quick-fill all metrics · edit any cell to fine-tune')}</span>
+    </div>
   </div>`;
 }
 function tagLabel(t){ return tt('load_planner.tag_'+t, ({training:'Training',match:'Match',gym:'Gym',recovery:'Recovery',off:'Off',none:'—'})[t]||t); }
@@ -673,7 +722,7 @@ function matrixHTML(){
         <span class="lp-cbar"><i style="width:${st.pctW}%"></i></span></td>`;
     }).join('');
     const altBadge=p.isAlt?` <span class="lp-badge" title="${tt('load_planner.alt_player','Alternate — primary team is another')}">ALT</span>`:'';
-    return `<tr><td><div class="lp-pl"><span class="lp-av">${initials(p.name)}</span><div><div class="nm">${p.name}${altBadge}</div><div class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
+    return `<tr><td class="lp-plcell" data-plid="${p.id}" title="${tt('load_planner.open_player','Open player detail')}"><div class="lp-pl"><span class="lp-av">${initials(p.name)}</span><div><div class="nm">${p.name}${altBadge}</div><div class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
   }).join('');
   return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.player_breakdown','Player breakdown')}</span>
       <div class="lp-legend"><span>${tt('load_planner.big_is','big = ×max (best-5) · small = ×avg (last-5/90)')}</span>
@@ -693,15 +742,61 @@ function wireGrid(){
     await savePlan(date,m,v); render();
   }; });
   document.querySelectorAll('.lp-grid input.pin[data-qf]').forEach(inp=>{ inp.onchange=async()=>{
-    const date=inp.dataset.qf; let v=inp.value===''?null:Math.max(0,+inp.value);
-    PLAN[date]=PLAN[date]||{}; METRICS.forEach(m=>{ if(v==null) delete PLAN[date][m]; else PLAN[date][m]=v; });
-    await Promise.all(METRICS.map(m=>savePlan(date,m,v))); render();
+    const date=inp.dataset.qf; let v=inp.value===''?null:Math.max(0,+inp.value); const ms=visMetrics();
+    PLAN[date]=PLAN[date]||{}; ms.forEach(m=>{ if(v==null) delete PLAN[date][m]; else PLAN[date][m]=v; });
+    await Promise.all(ms.map(m=>savePlan(date,m,v))); render();
   }; });
+  const bt=document.getElementById('lpTaper'); if(bt) bt.onclick=applyTaper;
+  const btt=document.getElementById('lpToTarget'); if(btt) btt.onclick=applyToTarget;
+  const bc=document.getElementById('lpClearPlan'); if(bc) bc.onclick=clearPlan;
+}
+const _dayW=d=>{ let w=MD_TAPER[d.md]; if(w==null) w=['training','tactical','gym','recovery'].includes(d.type)?50:(d.hasSess?30:0); return w; };
+// #4 — fill the week from the typical MD taper (% of match per day), skipping match days
+async function applyTaper(){
+  const changes=[];
+  DAYS.forEach(d=>{ if(d.isMatch) return; const w=_dayW(d);
+    visMetrics().forEach(m=>{ const v=w>0?w:null; if(v==null){ if(PLAN[d.date]) delete PLAN[d.date][m]; } else (PLAN[d.date]=PLAN[d.date]||{})[m]=v; changes.push(savePlan(d.date,m,v)); }); });
+  await Promise.all(changes); render();
+}
+// #1 — distribute the remaining load across upcoming days to hit each metric's weekly target (band mid), weighted by the MD taper
+async function applyToTarget(){
+  const remDays=DAYS.filter(d=>(d.isFuture||d.isToday)&&!d.isMatch&&_dayW(d)>0);
+  const totW=remDays.reduce((s,d)=>s+_dayW(d),0);
+  if(!remDays.length||!totW){ alert(tt('load_planner.no_days','No upcoming days available to plan.')); return; }
+  const changes=[];
+  visMetrics().forEach(m=>{ const target=bandMid(m); if(target==null) return; const needed=Math.max(0, target-teamAccruedX(m));
+    remDays.forEach(d=>{ const pct=Math.round(needed*(_dayW(d)/totW)*100); const v=pct>0?pct:null;
+      if(v==null){ if(PLAN[d.date]) delete PLAN[d.date][m]; } else (PLAN[d.date]=PLAN[d.date]||{})[m]=v; changes.push(savePlan(d.date,m,v)); }); });
+  await Promise.all(changes); render();
+}
+async function clearPlan(){
+  if(!confirm(tt('load_planner.clear_confirm','Clear the whole plan for this microcycle?'))) return;
+  const changes=[]; DAYS.forEach(d=>{ METRICS.forEach(m=>{ if(PLAN[d.date]&&PLAN[d.date][m]!=null) changes.push(savePlan(d.date,m,null)); }); delete PLAN[d.date]; });
+  await Promise.all(changes); render();
 }
 function wireMatrix(){
   const th=document.getElementById('lpThRow');
   if(th) th.querySelectorAll('th').forEach(t=>t.onclick=()=>{ const k=t.dataset.k; if(!k)return; if(k!=='name'&&METRICS.includes(k)) FOCUS=k; if(sortK===k)sortD*=-1; else{sortK=k;sortD=k==='name'?1:-1;} render(); });
   document.querySelectorAll('.lp-cell').forEach(el=>el.onclick=()=>editRef(el.dataset.pid,el.dataset.m));
+  document.querySelectorAll('.lp-plcell').forEach(el=>el.onclick=()=>openPlayer(el.dataset.plid));
+}
+function openPlayer(pid){
+  const p=ROSTER.find(x=>x.id===pid); if(!p)return; const modal=document.getElementById('lpPDModal'); modal.hidden=false;
+  document.getElementById('lpPDTitle').textContent=p.name+(p.pos?' · '+p.pos:'')+(p.number!=null?' · #'+p.number:'')+(p.isAlt?' · ALT':'');
+  const body=METRICS.map(m=>{ const c=cellData(p,m),mm=metaOf(m),st=statusOf(c.projX,m);
+    const col=st.cls==='x-over'?'var(--cm-danger)':st.cls==='x-under'?'var(--cm-info)':'var(--cm-fg-strong)';
+    return `<tr><td>${mm.label} <span class="lp-munit">${mm.unit||''}</span></td>
+      <td class="r">${fmtN(c.refMax,mm.dec)}${c.manual?' <span class="lp-badge">M</span>':''}</td>
+      <td class="r">${fmtN(c.refAvg,mm.dec)}</td>
+      <td class="r">${c.refMax!=null?fmtN(c.acc,mm.dec):'—'}</td>
+      <td class="r lp-x">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'}</td>
+      <td class="r">${c.xAvg!=null?c.xAvg.toFixed(2)+'×':'—'}</td>
+      <td class="r lp-x" style="color:${col}">${c.projX!=null?c.projX.toFixed(2)+'×':'—'}</td></tr>`; }).join('');
+  document.getElementById('lpPDBody').innerHTML=`<table class="lp-pdtbl">
+    <thead><tr><th>${tt('load_planner.metric','Metric')}</th><th class="r">${tt('load_planner.ref_max','max')}</th><th class="r">${tt('load_planner.ref_avg2','avg')}</th><th class="r">${tt('load_planner.col_week','This week')}</th><th class="r">×${tt('load_planner.ref_max','max')}</th><th class="r">×${tt('load_planner.ref_avg2','avg')}</th><th class="r">${tt('load_planner.proj','proj')}</th></tr></thead>
+    <tbody>${body}</tbody></table>`;
+  document.getElementById('lpPDClose').onclick=()=>modal.hidden=true;
+  document.getElementById('lpPDDone').onclick=()=>modal.hidden=true;
 }
 async function editRef(pid,metric){
   const p=ROSTER.find(x=>x.id===pid); if(!p||!metric)return;
