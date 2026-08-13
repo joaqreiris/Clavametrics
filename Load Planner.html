@@ -36,6 +36,13 @@
   .lp-chip:hover{border-color:var(--cm-border-strong,#cbd5e1)}
   .lp-chip.on{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
   .lp-chip.alt.on{background:var(--cm-violet,#7c3aed);border-color:var(--cm-violet,#7c3aed);color:#fff}
+  .lp-chip.pl{border-style:solid}
+  .lp-pllist{display:flex;flex-direction:column;gap:1px;max-height:60vh;overflow:auto}
+  .lp-plrow{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:8px;cursor:pointer}
+  .lp-plrow:hover{background:var(--cm-bg-soft)}
+  .lp-plrow .nm{font-weight:600;color:var(--cm-fg-strong);font-size:13px}
+  .lp-plrow .po{font-size:11px;color:var(--cm-fg-faint);margin-left:auto}
+  .lp-plrow input{width:16px;height:16px;flex:none;accent-color:var(--cm-accent)}
   /* planning grid (metric × day) */
   .lp-gridwrap{overflow-x:auto}
   .lp-grid{border-collapse:collapse;font-size:12.5px;width:100%}
@@ -180,6 +187,21 @@
   </div>
 </div>
 
+<!-- Players selection modal -->
+<div class="lp-modal" id="lpPlModal" hidden>
+  <div class="box" style="width:min(520px,96vw)">
+    <div class="mh"><h3 data-i18n="load_planner.players_title">Players in view</h3>
+      <button class="cm-icon-btn" id="lpPlClose"><i class="ti ti-x"></i></button></div>
+    <div class="mb" id="lpPlBody"></div>
+    <div class="mf"><span class="lp-mini" data-i18n="load_planner.players_hint">Goalkeepers are off by default.</span>
+      <div style="display:flex;gap:8px">
+        <button class="cm-btn is-ghost is-sm" id="lpPlNone" data-i18n="load_planner.select_none">None</button>
+        <button class="cm-btn is-ghost is-sm" id="lpPlAll" data-i18n="load_planner.select_all">All</button>
+        <button class="cm-btn is-primary is-sm" id="lpPlDone" data-i18n="load_planner.done">Done</button>
+      </div></div>
+  </div>
+</div>
+
 <script src="lib/day-context.js"></script>
 <script src="assets/gps-reader.js"></script>
 <script>
@@ -205,8 +227,10 @@ const META = {
   time_played:             {label:'Time played',            unit:'min',  dec:0},
 };
 const PEAK = new Set(['max_speed','avg_speed','distance_per_minute']);
-const ORDER = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','hmld','player_load','accelerations','decelerations','sprint_count'];
+const ORDER = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','hmld','player_load','accelerations','decelerations'];
 const ACCUM = ORDER.slice();
+const EXCLUDE = new Set(['sprint_count']);   // "número de sprints" no se usa; sprint = sprint_distance (band 5)
+const SERIES_PAL = ['#15803D','#2563EB','#7C3AED','#D97706','#DC2626','#0891B2','#DB2777','#65A30D'];
 const BANDS = { total_distance:[2.5,3.5], high_speed_distance:[2.0,2.5], very_high_speed_distance:[2.0,2.5],
   sprint_distance:[1.5,2.5], accelerations:[2.6,3.05], decelerations:[2.6,3.05], player_load:[2.5,3.5], hmld:[2.0,2.5] };
 const SHORT={ total_distance:'Dist', high_speed_distance:'HSR', very_high_speed_distance:'VHSR', sprint_distance:'Sprint', hmld:'HMLD', player_load:'PL', accelerations:'Acc', decelerations:'Dec', sprint_count:'Spr#' };
@@ -222,7 +246,8 @@ let SHOW_ALT=false, AUTO_ALT=new Set();   // alternate/guest players toggle + au
 let TREND_CHART=null;
 let MC=null, PREVMC=null, DAYS=[], PLAN={}, ANCHOR=null;
 let SELMC=null, ALLMCS=[];   // selected microcycle id + team microcycle list
-let MCTREND={}, TREND=[];    // mcId→metric→team avg total + ordered [{id,name}] for the trend chart
+let MCRAW={}, TREND=[];      // mcId→pid→metric→total + ordered [{id,name}] (aggregated at render time)
+let PLAYER_SEL=new Set();    // selected players (GKs off by default)
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, PREV={};
 let sortK='proj', sortD=-1;
 
@@ -230,6 +255,8 @@ const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString
 const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0};
 const shortLabel=m=>SHORT[m]||metaOf(m).label;
 const visMetrics=()=>METRICS.filter(m=>VISIBLE.has(m));
+const isGK=p=>/gk|goal|portero|arquero|keeper|arq/i.test(p.pos||'');
+const metricColor=m=>{ const i=METRICS.indexOf(m); return SERIES_PAL[(i<0?0:i)%SERIES_PAL.length]; };
 const initials=n=>(n.split(' ').pop()||'').slice(0,2).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────
@@ -270,7 +297,7 @@ function buildMcSelect(){
 }
 
 function buildMetrics(){
-  let keys=(ACTIVE_METRICS&&ACTIVE_METRICS.length?ACTIVE_METRICS:ACCUM).filter(k=>!PEAK.has(k)&&(META_BY_KEY[k]||META[k]));
+  let keys=(ACTIVE_METRICS&&ACTIVE_METRICS.length?ACTIVE_METRICS:ACCUM).filter(k=>!PEAK.has(k)&&!EXCLUDE.has(k)&&(META_BY_KEY[k]||META[k]));
   // keep a sensible order
   keys=ORDER.filter(k=>keys.includes(k)).concat(keys.filter(k=>!ORDER.includes(k)));
   if(!keys.length) keys=['total_distance'];
@@ -315,7 +342,9 @@ async function loadRoster(){
   if(error) console.warn('[lp] roster',error.message);
   // isAlt = the player's PRIMARY team (players.team_id) is another team (alternate/guest)
   ROSTER=(data||[]).map(p=>({ id:p.id, name:((p.first_name||'')+' '+(p.last_name||'')).trim()||'Player', pos:p.position||'', number:p.number, ext:p.external_gps_id||null, isAlt: !!(p.team_id && p.team_id!==TEAM) }));
+  PLAYER_SEL = new Set(ROSTER.filter(p=>!isGK(p)).map(p=>p.id));   // GKs off by default (no match reference use)
 }
+function activePlayers(){ return displayRoster().filter(p=>PLAYER_SEL.has(p.id)); }
 // Alternates who actually train with THIS team on the next training day (explicit availability row)
 async function loadAltAuto(){
   AUTO_ALT=new Set();
@@ -420,7 +449,7 @@ async function loadAccrued(){
 // Team-average total per metric per microcycle across the last few MCs (for the trend chart).
 // Buckets sessions into MCs by microcycle_id or by date range; scopes GPS by roster player_ids.
 async function loadMcTrend(){
-  MCTREND={}; TREND=[];
+  MCRAW={}; TREND=[];
   if(!ALLMCS.length||!ROSTER.length||!METRICS.length) return;
   const upto = MC? ALLMCS.filter(m=>m.start_date<=MC.end_date) : ALLMCS;
   const cand = upto.slice(-6);
@@ -440,8 +469,8 @@ async function loadMcTrend(){
   const acc={}; // mcId → pid → metric → sum
   (rows||[]).forEach(r=>{ const mcId=sidToMc[r.session_id]; if(!mcId)return; (acc[mcId]=acc[mcId]||{}); (acc[mcId][r.player_id]=acc[mcId][r.player_id]||{});
     METRICS.forEach(m=>{ if(r[m]!=null) acc[mcId][r.player_id][m]=(acc[mcId][r.player_id][m]||0)+(+r[m]); }); });
-  cand.forEach(mc=>{ const byP=acc[mc.id]; if(!byP)return; MCTREND[mc.id]={}; METRICS.forEach(m=>{ const vals=Object.values(byP).map(o=>o[m]).filter(v=>v!=null&&v>0); MCTREND[mc.id][m]= vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null; }); });
-  TREND=cand.filter(mc=>MCTREND[mc.id]).map(mc=>({id:mc.id,name:mc.name||mc.start_date}));
+  MCRAW=acc;   // per-player totals; team ×match is aggregated at render time over the active player set
+  TREND=cand.filter(mc=>acc[mc.id]&&Object.keys(acc[mc.id]).length).map(mc=>({id:mc.id,name:mc.name||mc.start_date}));
 }
 
 // per-metric planned remaining (× match) = Σ future/today pct[date][metric]/100
@@ -488,11 +517,12 @@ function chipsHTML(){
   const altCount=ROSTER.filter(p=>p.isAlt).length;
   const autoCount=AUTO_ALT.size;
   const altBtn=altCount? `<button class="lp-chip alt ${SHOW_ALT?'on':''}" id="lpAltToggle" title="${tt('load_planner.alt_hint','Players whose primary team is another. Auto-shown if they train with this team on the next session.')}">${tt('load_planner.show_alt','Alternates')} (${altCount})${autoCount&&!SHOW_ALT?` · +${autoCount} ↑`:''}</button>` : '';
+  const plBtn=`<button class="lp-chip pl" id="lpPlBtn"><i class="ti ti-users" style="font-size:13px;vertical-align:-2px"></i> ${tt('load_planner.players','Players')} (${activePlayers().length})</button>`;
   return `<div class="lp-chips">
     <span class="lp-mini" style="font-weight:700;color:var(--cm-fg-muted)">${tt('load_planner.bands','Bands')}:</span>
     ${METRICS.map(m=>`<button class="lp-chip ${VISIBLE.has(m)?'on':''}" data-m="${m}">${shortLabel(m)}</button>`).join('')}
     ${altBtn}
-    <span class="lp-mini" style="margin-left:auto">${tt('load_planner.bands_hint','Toggle bands to show in the table & export')}</span></div>`;
+    <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">${plBtn}</span></div>`;
 }
 function wireChips(){
   document.querySelectorAll('.lp-chip[data-m]').forEach(b=>b.onclick=()=>{ const m=b.dataset.m;
@@ -500,6 +530,23 @@ function wireChips(){
     if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0];
     render(); });
   const at=document.getElementById('lpAltToggle'); if(at) at.onclick=()=>{ SHOW_ALT=!SHOW_ALT; render(); };
+  const pb=document.getElementById('lpPlBtn'); if(pb) pb.onclick=openPlayers;
+}
+
+function openPlayers(){
+  const modal=document.getElementById('lpPlModal'); modal.hidden=false;
+  document.getElementById('lpPlBody').innerHTML = `<div class="lp-pllist">${ROSTER.map(p=>`
+    <label class="lp-plrow"><input type="checkbox" data-pid="${p.id}" ${PLAYER_SEL.has(p.id)?'checked':''}>
+      <span class="lp-av" style="width:24px;height:24px;font-size:10px">${initials(p.name)}</span>
+      <span class="nm">${p.name}</span>
+      <span class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</span>
+      ${isGK(p)?`<span class="lp-badge" style="background:var(--cm-bg-sunk);color:var(--cm-fg-muted)">GK</span>`:''}
+      ${p.isAlt?`<span class="lp-badge">ALT</span>`:''}</label>`).join('')}</div>`;
+  document.querySelectorAll('#lpPlBody input[data-pid]').forEach(c=>c.onchange=()=>{ if(c.checked) PLAYER_SEL.add(c.dataset.pid); else PLAYER_SEL.delete(c.dataset.pid); render(); });
+  document.getElementById('lpPlClose').onclick=()=>modal.hidden=true;
+  document.getElementById('lpPlDone').onclick=()=>modal.hidden=true;
+  document.getElementById('lpPlAll').onclick=()=>{ ROSTER.forEach(p=>PLAYER_SEL.add(p.id)); openPlayers(); render(); };
+  document.getElementById('lpPlNone').onclick=()=>{ PLAYER_SEL=new Set(); openPlayers(); render(); };
 }
 
 function gridHTML(){
@@ -522,7 +569,7 @@ function gridHTML(){
 function tagLabel(t){ return tt('load_planner.tag_'+t, ({training:'Training',match:'Match',gym:'Gym',recovery:'Recovery',off:'Off',none:'—'})[t]||t); }
 
 function kpiHTML(){
-  const rows=displayRoster().map(p=>cellData(p,FOCUS)).filter(r=>r.refMax);
+  const rows=activePlayers().map(p=>cellData(p,FOCUS)).filter(r=>r.refMax);
   const projs=rows.map(r=>r.projX).filter(v=>v!=null);
   const avg=projs.length?projs.reduce((s,v)=>s+v,0)/projs.length:null;
   const band=BANDS[FOCUS];
@@ -539,41 +586,47 @@ function kpiHTML(){
   </div>`;
 }
 
-// Team load by microcycle — Chart.js bars (Chart Builder style) with value tweening.
+// Team load by microcycle — grouped Chart.js bars, ALL metrics in ONE chart (× match units).
 const cssVar=(n,f)=>{ try{ const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim(); return v||f; }catch(e){ return f; } };
-const _pctCol=pct=> pct==null?cssVar('--cm-fg-muted','#6b7280'):Math.abs(pct)<=15?cssVar('--cm-success','#16a34a'):Math.abs(pct)<=25?cssVar('--cm-warning','#d97706'):cssVar('--cm-danger','#dc2626');
-const pctLabelPlugin={ id:'lpPct', afterDatasetsDraw(chart){ const pts=chart.$pts||[]; const ctx=chart.ctx; const meta=chart.getDatasetMeta(0); if(!meta)return;
-  meta.data.forEach((bar,i)=>{ const p=pts[i]; if(!p)return; const lbl=p.pct!=null?(p.pct>=0?'+':'')+p.pct+'%':tt('load_planner.base','base');
-    ctx.save(); ctx.font='600 12px Geist, ui-sans-serif, sans-serif'; ctx.fillStyle=_pctCol(p.pct); ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(lbl, bar.x, bar.y-6); ctx.restore(); }); } };
+function trendSeries(){
+  const players=activePlayers();
+  return TREND.map(t=>{ const byP=MCRAW[t.id]||{}; const row={id:t.id,name:t.name,x:{}};
+    METRICS.forEach(m=>{ const xs=[]; players.forEach(p=>{ const tot=byP[p.id]&&byP[p.id][m]; if(tot==null||tot<=0)return;
+      const ref=REF_MAX[p.id]&&REF_MAX[p.id][m]&&REF_MAX[p.id][m].value; if(ref) xs.push(tot/ref); });
+      row.x[m]= xs.length? +(xs.reduce((a,b)=>a+b,0)/xs.length).toFixed(2) : null; }); return row; });
+}
 function renderTrend(){
   const wrap=document.getElementById('lpTrendWrap'); if(!wrap) return;
-  const m=FOCUS, mm=metaOf(m);
   const tEl=document.getElementById('lpTrendTitle'), sEl=document.getElementById('lpTrendSub'), fEl=document.getElementById('lpTrendFoot');
   if(tEl) tEl.textContent=tt('load_planner.mc_trend','Team load by microcycle');
-  if(sEl) sEl.textContent=`${mm.label} · ${tt('load_planner.squad_avg','squad avg / player')}`;
-  if(fEl) fEl.textContent=tt('load_planner.mc_trend_hint','Team average per player per microcycle · % = change vs previous microcycle.');
-  const pts=TREND.map((t,i)=>{ const total=MCTREND[t.id][m]; const prev=i>0?MCTREND[TREND[i-1].id][m]:null;
-    const pct=(prev&&total!=null&&prev>0)?Math.round((total-prev)/prev*100):null; return {name:t.name,total,pct}; }).filter(p=>p.total!=null&&p.total>0);
-  if(!pts.length){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`; return; }
+  if(sEl) sEl.textContent=tt('load_planner.mc_trend_sub','× match (best-5) · squad avg / player');
+  if(fEl) fEl.textContent=tt('load_planner.mc_trend_hint2','Grouped by microcycle · tick metrics in the legend or the band chips above.');
+  const series=trendSeries(), cols=visMetrics();
+  if(!series.length || !cols.length){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`; return; }
   if(!window.Chart){ wrap.innerHTML='<div class="lp-empty">'+tt('load_planner.loading','Loading…')+'</div>'; return; }
   if(!document.getElementById('lpTrendCanvas')) wrap.innerHTML='<canvas id="lpTrendCanvas"></canvas>';
-  const cv=document.getElementById('lpTrendCanvas');
-  const labels=pts.map(p=>p.name), data=pts.map(p=>+(+p.total).toFixed(mm.dec)), colors=pts.map(p=>_pctCol(p.pct));
-  if(TREND_CHART){ TREND_CHART.data.labels=labels; TREND_CHART.data.datasets[0].data=data; TREND_CHART.data.datasets[0].backgroundColor=colors; TREND_CHART.data.datasets[0].label=mm.label; TREND_CHART.$pts=pts; TREND_CHART.update(); return; }
-  TREND_CHART=new Chart(cv,{ type:'bar',
-    data:{ labels, datasets:[{ label:mm.label, data, backgroundColor:colors, borderWidth:0, borderRadius:5, borderSkipped:'bottom', maxBarThickness:64, categoryPercentage:0.7, barPercentage:0.9 }] },
-    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:22}},
-      animation:{ duration:650, easing:'easeOutCubic', delay:ctx=> (ctx.type==='data'&&ctx.mode==='default')?ctx.dataIndex*70:0 },
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>fmtN(c.raw,mm.dec)+' '+(mm.unit||'') } } },
-      scales:{ y:{ beginAtZero:true, grid:{color:'rgba(148,163,184,0.18)',drawTicks:false}, border:{display:false}, ticks:{font:{size:10},color:'#9CA3AF',padding:6} },
-        x:{ grid:{display:false}, ticks:{font:{size:11},color:'#6B7280'} } } },
-    plugins:[pctLabelPlugin] });
-  TREND_CHART.$pts=pts;
+  const labels=series.map(s=>s.name);
+  const datasets=METRICS.map(m=>({ label:metaOf(m).label, data:series.map(s=>s.x[m]), backgroundColor:metricColor(m), borderWidth:0, borderRadius:4, borderSkipped:'bottom', maxBarThickness:40, categoryPercentage:0.82, barPercentage:0.92, hidden:!VISIBLE.has(m), $metric:m }));
+  if(TREND_CHART){ TREND_CHART.data.labels=labels; TREND_CHART.data.datasets=datasets; TREND_CHART.update(); return; }
+  TREND_CHART=new Chart(document.getElementById('lpTrendCanvas'),{ type:'bar',
+    data:{ labels, datasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      animation:{ duration:650, easing:'easeOutCubic', delay:ctx=> (ctx.type==='data'&&ctx.mode==='default')?ctx.dataIndex*60:0 },
+      plugins:{
+        legend:{ position:'bottom', labels:{ boxWidth:12, boxHeight:12, padding:12, usePointStyle:true, font:{size:11} },
+          onClick:(e,item)=>{ const ds=TREND_CHART.data.datasets[item.datasetIndex]; const m=ds&&ds.$metric; if(!m)return;
+            if(VISIBLE.has(m)){ if(VISIBLE.size>1) VISIBLE.delete(m); } else VISIBLE.add(m);
+            if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0]||FOCUS; render(); } },
+        tooltip:{ callbacks:{ label:c=>{ const m=c.dataset.$metric,v=c.raw; if(v==null) return metaOf(m).label+': —';
+          const prev=c.dataset.data[c.dataIndex-1]; const d=(prev&&prev>0)?Math.round((v-prev)/prev*100):null;
+          return `${metaOf(m).label}: ${v.toFixed(2)}×`+(d!=null?` (${d>=0?'+':''}${d}%)`:''); } } } },
+      scales:{ y:{ beginAtZero:true, grid:{color:'rgba(148,163,184,0.18)',drawTicks:false}, border:{display:false}, ticks:{font:{size:10},color:'#9CA3AF',padding:6,callback:v=>v+'×'} },
+        x:{ grid:{display:false}, ticks:{font:{size:11},color:'#6B7280'} } } } });
 }
 
 function matrixHTML(){
   if(!ROSTER.length) return '<div class="lp-card"><div class="lp-empty">'+tt('load_planner.no_players','No players in this team.')+'</div></div>';
-  let rows=displayRoster().map(p=>({p,f:cellData(p,FOCUS)}));
+  let rows=activePlayers().map(p=>({p,f:cellData(p,FOCUS)}));
   rows.sort((a,b)=>{ if(sortK==='name') return sortD*a.p.name.localeCompare(b.p.name); const av=a.f.projX==null?-1:a.f.projX,bv=b.f.projX==null?-1:b.f.projX; return sortD*(av-bv); });
   const cols=visMetrics();
   const head=`<tr id="lpThRow"><th data-k="name">${tt('load_planner.col_player','Player')}</th>${cols.map(m=>`<th data-k="${m}" title="${metaOf(m).label} (${metaOf(m).unit||'—'})">${shortLabel(m)}${m===FOCUS?' ★':''}</th>`).join('')}</tr>`;
@@ -655,7 +708,7 @@ async function doExport(){
   const headerMetrics = cols.length?cols:vis;
   const headers=['Athlete ID','Athlete Name','Position',...headerMetrics.map(m=>rev[m]||metaOf(m).label)];
   const lines=[headers.map(csvCell).join(',')];
-  displayRoster().forEach(p=>{ if(!p.ext) return;
+  activePlayers().forEach(p=>{ if(!p.ext) return;
     const row=[p.ext,p.name,p.pos];
     headerMetrics.forEach(m=>{ const pct=(PLAN[date]||{})[m]; const ref=(refKind==='avg'?REF_AVG:REF_MAX)[p.id]?.[m]?.value;
       const val=(pct!=null&&ref!=null)? Math.round(pct/100*ref) : ''; row.push(val); });
