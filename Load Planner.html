@@ -102,6 +102,12 @@
   .lp-cell .cx{font:700 15px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
   .lp-cell .cavg{font-size:10px;color:var(--cm-fg-muted);margin-top:2px;font-family:var(--cm-font-mono)}
   .lp-cell .cref{font-size:9.5px;color:var(--cm-fg-faint);margin-top:1px}
+  .lp-cell .clbl{font-size:8px;font-weight:700;color:var(--cm-fg-faint);text-transform:uppercase;letter-spacing:.02em}
+  .lp-tgtrow{display:flex;flex-wrap:wrap;gap:10px;padding:12px 16px}
+  .lp-tgt{display:inline-flex;align-items:center;gap:5px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:8px;padding:5px 8px}
+  .lp-tgt .lbl{font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .lp-tgt input{width:46px;height:24px;border:1px solid var(--cm-border);border-radius:6px;text-align:right;font:700 12px var(--cm-font-mono);background:var(--cm-surface);color:var(--cm-fg-strong);padding:0 4px}
+  .lp-tgt .x{font:700 12px var(--cm-font-mono);color:var(--cm-fg-faint)}
   .lp-cbar{display:block;height:5px;border-radius:999px;background:var(--cm-bg-sunk);margin-top:5px;overflow:hidden;position:relative}
   .lp-cbar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--cm-border-strong,#cbd5e1)}
   td.lp-cell.x-under{background:rgba(14,165,233,.08)} .lp-cell.x-under .lp-cbar i{background:var(--cm-info,#0ea5e9)}
@@ -145,7 +151,8 @@
       <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="load_planner.search_ph" placeholder="Search…"></div>
       <div class="actions">
         <select id="lpTeamSelect" class="lp-select" style="margin-right:8px"></select>
-        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" data-i18n-attr="aria-label:load_planner.notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" data-open-settings data-i18n-attr="aria-label:load_planner.settings" aria-label="Settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -157,7 +164,6 @@
         </div>
         <div class="lp-head-actions">
           <select id="lpMcSel" class="lp-select" title="Microcycle"></select>
-          <select id="lpMetricSel" class="lp-select"></select>
           <button id="lpExportBtn" class="cm-btn is-outline is-sm"><i class="ti ti-download"></i> <span data-i18n="load_planner.export_csv">Export CSV</span></button>
           <button id="lpImportBtn" class="cm-btn is-outline is-sm"><i class="ti ti-upload"></i> <span data-i18n="load_planner.import_csv">Import CSV</span></button>
         </div>
@@ -268,9 +274,11 @@ let MCRAW={}, TREND=[];      // mcId→pid→metric→total + ordered [{id,name}
 let PLAYER_SEL=new Set();    // selected players (GKs off by default)
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, ADAY={}, PREV={};
 let sortK='proj', sortD=-1;
-// Typical MD taper (% of match per day) for the auto-plan template
-const MD_TAPER={ 'MD−6':60,'MD−5':70,'MD−4':85,'MD−3':80,'MD−2':60,'MD−1':30,'MD+1':20,'MD+2':0,'MD+3':0 };
+// MD taper (% of match per day) — Periodización Integral: P-4=45, P-3=60, P-2=25, P-1=35
+const MD_TAPER={ 'MD−6':40,'MD−5':45,'MD−4':45,'MD−3':60,'MD−2':25,'MD−1':35,'MD+1':20,'MD+2':0,'MD+3':0 };
 const bandMid=m=>{ const b=BANDS[m]; return b?(b[0]+b[1])/2:null; };
+let TARGETS={};   // metric → editable weekly ×match target (defaults to band mid)
+const targetOf=m=>{ const t=TARGETS[m]; return (t!=null&&t!=='')?+t:bandMid(m); };
 
 const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString('en-US'));
 const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0};
@@ -325,13 +333,9 @@ function buildMetrics(){
   METRICS=keys; if(!METRICS.includes(FOCUS)) FOCUS=METRICS[0];
   VISIBLE = VISIBLE.size ? new Set(METRICS.filter(m=>VISIBLE.has(m))) : new Set(METRICS);
   if(!VISIBLE.size) VISIBLE=new Set(METRICS);
-  const sel=document.getElementById('lpMetricSel');
-  sel.title=tt('load_planner.focus','Focus metric (KPIs, chart & sorting)');
-  sel.innerHTML=METRICS.map(k=>`<option value="${k}"${k===FOCUS?' selected':''}>★ ${metaOf(k).label}</option>`).join('');
 }
 
 function wireControls(){
-  document.getElementById('lpMetricSel').onchange=e=>{ FOCUS=e.target.value; render(); };
   document.getElementById('lpImportBtn').onclick=openImport;
   document.getElementById('lpModalClose').onclick=closeImport;
   document.getElementById('lpModalCancel').onclick=closeImport;
@@ -369,11 +373,12 @@ async function loadRoster(){
 function activePlayers(){ return displayRoster().filter(p=>PLAYER_SEL.has(p.id)); }
 // #6 — persist band/player/alternates selection per club+team
 function _prefKey(){ return 'lp:'+CLUB+':'+TEAM; }
-function savePrefs(){ try{ localStorage.setItem(_prefKey(), JSON.stringify({ bands:[...VISIBLE], players:[...PLAYER_SEL], showAlt:SHOW_ALT })); }catch(e){} }
+function savePrefs(){ try{ localStorage.setItem(_prefKey(), JSON.stringify({ bands:[...VISIBLE], players:[...PLAYER_SEL], showAlt:SHOW_ALT, targets:TARGETS })); }catch(e){} }
 function restorePrefs(){ let p={}; try{ p=JSON.parse(localStorage.getItem(_prefKey())||'{}'); }catch(e){}
   if(Array.isArray(p.bands)){ const s=new Set(p.bands.filter(m=>METRICS.includes(m))); if(s.size) VISIBLE=s; }
   if(Array.isArray(p.players)) PLAYER_SEL=new Set(p.players.filter(id=>ROSTER.some(r=>r.id===id)));
   if(typeof p.showAlt==='boolean') SHOW_ALT=p.showAlt;
+  if(p.targets && typeof p.targets==='object') TARGETS=p.targets;
   if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0]||FOCUS;
 }
 // Alternates who actually train with THIS team on the next training day (explicit availability row)
@@ -408,7 +413,7 @@ async function loadMicrocycle(){
   if(MC){ start=MC.start_date; end=MC.end_date; }
   else { const d=new Date(ANCHOR+'T12:00:00'); const dow=(d.getDay()+6)%7; const mon=new Date(d); mon.setDate(d.getDate()-dow); const sun=new Date(mon); sun.setDate(mon.getDate()+6); start=window.cmYMD(mon); end=window.cmYMD(sun); }
   const {data:sess}=await window.sb.from('training_sessions')
-    .select('session_date,session_type,match_day_offset').eq('club_id',CLUB).eq('team_id',TEAM)
+    .select('session_date,session_type,match_day_offset,session_time,end_time').eq('club_id',CLUB).eq('team_id',TEAM)
     .gte('session_date',start).lte('session_date',end).eq('is_historical',false);
   const byDate={}; (sess||[]).forEach(s=>{ (byDate[s.session_date]=byDate[s.session_date]||[]).push(s); });
   PLAN={};
@@ -439,6 +444,15 @@ async function loadMicrocycle(){
     DAYS.push({ date:ds, md, type, isMatch, isPast:ds<today, isToday:ds===today, isFuture:ds>today, hasSess:list.length>0 });
     cur.setDate(cur.getDate()+1);
   }
+  // Active planning day = today, unless today's session already ended → the next day (the one to plan)
+  const toMin=t=>{ if(!t) return null; const p=String(t).split(':'); return (+p[0])*60+(+(p[1]||0)); };
+  const now=new Date(), nowMin=now.getHours()*60+now.getMinutes();
+  const todayEnd=(byDate[today]||[]).map(s=>toMin(s.end_time)).filter(v=>v!=null).sort((a,b)=>a-b).pop();
+  const tIdx=DAYS.findIndex(d=>d.isToday);
+  let activeDate;
+  if(tIdx>=0){ const doneToday = todayEnd!=null && nowMin>todayEnd; activeDate = doneToday ? (DAYS[tIdx+1]?.date || today) : today; }
+  else { activeDate = (DAYS.find(d=>d.isFuture)||DAYS[0])?.date; }
+  DAYS.forEach(d=>{ d.isActive = d.date===activeDate; });
 }
 // MD label from the actual match days: MD on a match, MD−n counting down to the next match
 // (within 10 days), MD+n after the last match (within 3). Nearest match wins on double weeks.
@@ -559,9 +573,9 @@ function render(){
     ? `${MC.name||tt('load_planner.microcycle','Microcycle')} · ${DAYS[0]?.date} → ${DAYS[DAYS.length-1]?.date}`+(MC.rival?` · vs ${MC.rival}`:'')
     : tt('load_planner.no_mc','No microcycle for this week — showing Mon–Sun');
   ensureLayout();
-  document.getElementById('lpTop').innerHTML = chipsHTML()+gridHTML()+kpiHTML();
+  document.getElementById('lpTop').innerHTML = chipsHTML()+targetsHTML()+gridHTML()+kpiHTML();
   document.getElementById('lpBottom').innerHTML = matrixHTML();
-  wireChips(); wireGrid(); wireMatrix();
+  wireChips(); wireTargets(); wireGrid(); wireMatrix();
   renderTrend();
 }
 function ensureLayout(){
@@ -574,6 +588,15 @@ function ensureLayout(){
      <div id="lpBottom"></div>`;
 }
 
+function targetsHTML(){
+  const cells=visMetrics().map(m=>{ const t=targetOf(m); return `<div class="lp-tgt"><span class="lbl">${shortLabel(m)}</span><input type="number" min="0" max="20" step="0.05" value="${t!=null?(+t).toFixed(2):''}" data-tm="${m}" placeholder="—"><span class="x">×</span></div>`; }).join('');
+  return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.week_target','Weekly target · × match')}</span>
+     <span class="m">${tt('load_planner.week_target_hint','the ×match each metric should reach in the week — «To target» distributes it across the days')}</span></div>
+    <div class="lp-tgtrow">${cells}</div></div>`;
+}
+function wireTargets(){
+  document.querySelectorAll('.lp-tgt input[data-tm]').forEach(inp=>inp.onchange=()=>{ const m=inp.dataset.tm, v=inp.value.trim(); if(v==='') delete TARGETS[m]; else TARGETS[m]=+v; savePrefs(); render(); });
+}
 function chipsHTML(){
   const altCount=ROSTER.filter(p=>p.isAlt).length;
   const autoCount=AUTO_ALT.size;
@@ -611,16 +634,16 @@ function openPlayers(){
 }
 
 function gridHTML(){
-  const dayCols=DAYS.map(d=>`<th class="lp-dcol ${d.isToday?'lp-todaycol':''}"><div class="md">${d.md||'·'}</div><div class="dt">${new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div><div><span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span></div></th>`).join('');
+  const dayCols=DAYS.map(d=>`<th class="lp-dcol ${d.isActive?'lp-todaycol':''}"><div class="md">${d.md||'·'}</div><div class="dt">${new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div><div><span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span></div></th>`).join('');
   const tint=pct=> (pct!=null&&pct>0)? `background:rgba(21,128,61,${(Math.min(pct/100,1)*0.24).toFixed(3)})` : '';
   const qf=DAYS.map(d=>{ const vals=visMetrics().map(m=>(PLAN[d.date]||{})[m]); const allSame=vals.length&&vals.every(v=>v!=null&&v===vals[0]); const cv=allSame?vals[0]:'';
     return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—" style="${cv!==''?tint(cv):''}"></td>`; }).join('');
   const rows=visMetrics().map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
     DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m];
       let act=''; if(!d.isFuture){ const ax=actualDayX(d.date,m); if(ax!=null) act=`<div class="lp-actual" title="${tt('load_planner.actual','actual')}">✓ ${(ax*100).toFixed(0)}%</div>`; }
-      return `<td class="${d.isToday?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—" style="${v!=null?tint(v):''}">${act}</td>`; }).join('')
+      return `<td class="${d.isActive?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—" style="${v!=null?tint(v):''}">${act}</td>`; }).join('')
   }</tr>`).join('');
-  const wkFocus=plannedX(FOCUS,false), projFocus=teamAccruedX(FOCUS)+plannedX(FOCUS,true), target=bandMid(FOCUS), gap=target!=null?target-projFocus:null;
+  const wkFocus=plannedX(FOCUS,false), projFocus=teamAccruedX(FOCUS)+plannedX(FOCUS,true), target=targetOf(FOCUS), gap=target!=null?target-projFocus:null;
   return `<div class="lp-card">
     <div class="lp-card-h"><span class="t">${tt('load_planner.plan_grid','Plan — % of match per day')}</span>
       <div style="display:flex;gap:8px;align-items:center">
@@ -649,7 +672,7 @@ function kpiHTML(){
   const band=BANDS[FOCUS];
   const over=band?rows.filter(r=>r.projX!=null&&r.projX>band[1]).length:0;
   const under=band?rows.filter(r=>r.projX!=null&&r.projX<band[0]).length:0;
-  const nextDay=DAYS.find(d=>d.isFuture);
+  const nextDay=DAYS.find(d=>d.isActive)||DAYS.find(d=>d.isFuture);
   const nextPct=nextDay?((PLAN[nextDay.date]||{})[FOCUS]):null;
   const fl=metaOf(FOCUS).label;
   return `<div class="lp-kpis">
@@ -716,8 +739,8 @@ function matrixHTML(){
       if(c.refMax==null) return `<td class="lp-cell" data-pid="${p.id}" data-m="${m}"><span class="lp-setcell">${tt('load_planner.set','set')}</span></td>`;
       const dot=c.manual?'<span class="lp-badge">M</span>':`<span class="lp-dot ${c.conf==='high'?'d-high':c.conf==='med'?'d-med':'d-none'}"></span>`;
       return `<td class="lp-cell ${st.cls}" data-pid="${p.id}" data-m="${m}" title="ref máx ${fmtN(c.refMax,mm.dec)} · ref prom ${fmtN(c.refAvg,mm.dec)} ${mm.unit} · ${tt('load_planner.now','now')} ${c.xMax!=null?c.xMax.toFixed(2):'0.00'}× · ${tt('load_planner.proj','proj')} ${c.projX!=null?c.projX.toFixed(2):'—'}×">
-        <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'}</div>
-        <div class="cavg">${c.xAvg!=null?tt('load_planner.avg_short','prom')+' '+c.xAvg.toFixed(2)+'×':'<span style="opacity:.35">'+tt('load_planner.avg_short','prom')+' —</span>'}</div>
+        <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'} <span class="clbl">${tt('load_planner.vs_max','vs máx')}</span></div>
+        <div class="cavg">${c.xAvg!=null?c.xAvg.toFixed(2)+'× <span class="clbl">'+tt('load_planner.vs_avg','vs prom')+'</span>':'<span style="opacity:.35">'+tt('load_planner.vs_avg','vs prom')+' —</span>'}</div>
         <div class="cref">${fmtN(c.refMax,mm.dec)} ${dot}</div>
         <span class="lp-cbar"><i style="width:${st.pctW}%"></i></span></td>`;
     }).join('');
@@ -764,7 +787,7 @@ async function applyToTarget(){
   const totW=remDays.reduce((s,d)=>s+_dayW(d),0);
   if(!remDays.length||!totW){ alert(tt('load_planner.no_days','No upcoming days available to plan.')); return; }
   const changes=[];
-  visMetrics().forEach(m=>{ const target=bandMid(m); if(target==null) return; const needed=Math.max(0, target-teamAccruedX(m));
+  visMetrics().forEach(m=>{ const target=targetOf(m); if(target==null) return; const needed=Math.max(0, target-teamAccruedX(m));
     remDays.forEach(d=>{ const pct=Math.round(needed*(_dayW(d)/totW)*100); const v=pct>0?pct:null;
       if(v==null){ if(PLAN[d.date]) delete PLAN[d.date][m]; } else (PLAN[d.date]=PLAN[d.date]||{})[m]=v; changes.push(savePlan(d.date,m,v)); }); });
   await Promise.all(changes); render();
