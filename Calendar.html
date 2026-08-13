@@ -5067,6 +5067,9 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
         const realIdx = _allMCs.findIndex(m => m.id === mc.id);
         if (realIdx >= 0) {
           _mcIdx = realIdx; _weekOffset = 0;
+          // Move the blue ring to the clicked chip right away (loadSessions doesn't re-render the ribbon)
+          if (cyclesEl) cyclesEl.querySelectorAll('.mc-chip').forEach(c => c.classList.remove('mc-chip--active'));
+          chip.classList.add('mc-chip--active');
           document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.dataset.view === 'microcycle'));
           switchView('microcycle');
           await loadSessions();
