@@ -1307,7 +1307,14 @@
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
     clearAll: clearAll_,
-    async reload() { try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); } },
+    // reload() recarga las opciones/rangos (p.ej. tras resolverse el equipo o mutar datos) Y
+    // re-dispara el render de las cards: si no, la agregación queda con los microciclos de la
+    // carga anterior (whole-club antes de resolver el equipo) y sesiones sin microcycle_id se
+    // bucketean por fecha al MC equivocado (ej. el «MC 01» de otro equipo con ventana solapada).
+    async reload() {
+      try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); }
+      try { fireNow(); } catch (e) { console.warn('gpFilterBar reload fire:', e); }
+    },
     _state: state,
   };
 
