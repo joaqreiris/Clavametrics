@@ -3176,10 +3176,13 @@
     // sessions rarely carry microcycle_id. Fall back to the raw id if the resolver isn't ready.
     if (!isTask && FB.microcycleIds?.length) {
       const s = new Set(FB.microcycleIds.map(String));
+      // Misma resolución que la barra: microcycle_id guardado primero, fecha como fallback.
+      const ofSession = window._gpMcOfSession;
       const forDate = window._gpMcForDate;
       out = out.filter(r => {
         const ts = r.training_sessions;
-        const mid = forDate ? forDate(ts?.session_date) : String(ts?.microcycle_id ?? '');
+        const mid = ofSession ? ofSession(ts)
+                  : (forDate ? forDate(ts?.session_date) : String(ts?.microcycle_id ?? ''));
         return s.has(String(mid));
       });
     }

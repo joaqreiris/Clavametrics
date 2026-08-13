@@ -1093,18 +1093,50 @@
       return hit;
     }
     window._gpMcForDate = _mcForDate;
-    // id → ventana [start,end] del microciclo, para que gp-builder scopee el FETCH por FECHA
-    // cuando el bar tiene microciclo(s) elegido(s) (los training_sessions casi nunca traen
-    // microcycle_id, así que scopear por id devolvería 0; la asociación real es por fecha).
+
+    // Resolución del MC de una sesión: el microcycle_id GUARDADO manda (fuente autoritativa;
+    // apunta a UN microciclo, sin ambigüedad ni duplicados) SIEMPRE que ese id exista en el
+    // scope team-or-null. Solo si viene NULL o apunta fuera de scope se cae a la ventana de
+    // fechas. Antes era 100% por fecha, y si las ventanas [start,end] no cubrían las fechas
+    // reales de los entrenamientos el filtro quedaba vacío aunque las sesiones tuvieran su MC.
+    const _validMcIds = new Set((mcs || []).map(m => String(m.id)));
+    function _mcOfSession(ts) {
+      const raw = ts && ts.microcycle_id != null ? String(ts.microcycle_id) : '';
+      if (raw && _validMcIds.has(raw)) return raw;
+      return _mcForDate(ts && ts.session_date);
+    }
+    window._gpMcOfSession = _mcOfSession;
+
+    // Microciclos SELECCIONABLES = solo los que tienen datos GPS. value = id; etiqueta REAL (mc.name).
+    // De paso registramos el rango REAL de fechas observado en las sesiones de cada MC (por
+    // microcycle_id), para ampliar su ventana de fetch más abajo.
+    const _mcWithData = new Set();
+    const _mcObs = {};   // id → { min, max } de session_date reales
+    (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).forEach(r => {
+      const ts = r.training_sessions;
+      const id = _mcOfSession(ts);
+      if (!id) return;
+      _mcWithData.add(id);
+      const d = ts && ts.session_date ? String(ts.session_date).slice(0, 10) : '';
+      if (d) {
+        const o = _mcObs[id] || (_mcObs[id] = { min: d, max: d });
+        if (d < o.min) o.min = d;
+        if (d > o.max) o.max = d;
+      }
+    });
+
+    // id → ventana [start,end] del microciclo para que gp-builder scopee el FETCH por FECHA
+    // cuando el bar tiene microciclo(s) elegido(s). Es la UNIÓN de la ventana declarada
+    // [start_date,end_date] y el rango real observado en las sesiones: si el MC se guardó con
+    // fechas que no cubren sus entrenamientos, el fetch por ventana igual los alcanza.
     window._gpMcRangeById = {};
     _mcRanges.forEach(m => { window._gpMcRangeById[m.id] = { start: m.start, end: m.end }; });
-
-    // Microciclos SELECCIONABLES = solo los que tienen datos GPS (algún session_date cae en su
-    // ventana). value = id; etiqueta REAL del MC (mc.name).
-    const _mcWithData = new Set();
-    (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).forEach(r => {
-      const id = _mcForDate(r.training_sessions?.session_date);
-      if (id) _mcWithData.add(id);
+    Object.keys(_mcObs).forEach(id => {
+      const cur = window._gpMcRangeById[id];
+      const obs = _mcObs[id];
+      if (!cur) { window._gpMcRangeById[id] = { start: obs.min, end: obs.max }; return; }
+      if (obs.min < cur.start) cur.start = obs.min;
+      if (cur.end != null && obs.max > cur.end) cur.end = obs.max;   // end null = abierto, ya cubre
     });
     const _mcLabel = m => m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : String(m.id));
     options.microcycle = (mcs || [])
@@ -1122,7 +1154,7 @@
       return {
         d:   ts.session_date || '',
         md:  _mdOf(ts),
-        mc:  _mcForDate(ts.session_date),   // por fecha, no por microcycle_id (suele venir null)
+        mc:  _mcOfSession(ts),   // microcycle_id guardado primero; fecha como fallback
         p:   r.player_id,
         pos: r.players?.position || '',
         rv:  _rivalEntity(ts.session_attributes)?.key || '',
