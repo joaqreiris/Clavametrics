@@ -1753,6 +1753,10 @@ function renderTasks(tasks, view = 'my') {
   if (!container) return;
   const isTeam = view === 'team';
 
+  // El Hub solo muestra tareas abiertas. Las completadas (o canceladas) viven en
+  // Chat & Tasks; aquí se filtran siempre, sin depender de lo que devuelva la query.
+  tasks = (tasks || []).filter(t => t.status !== 'done' && t.status !== 'cancelled');
+
   container.querySelectorAll('.task').forEach(el => el.remove());
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1822,7 +1826,17 @@ function renderTasks(tasks, view = 'my') {
         // done tasks, so this keeps the on-screen list in sync without a reload).
         el.classList.add('is-done');
         check.setAttribute('aria-checked', 'true');
-        await window.sb.from('tasks').update({ status: 'done' }).eq('id', task.id);
+        try {
+          const { error: _updErr } = await window.sb.from('tasks').update({ status: 'done' }).eq('id', task.id);
+          if (_updErr) throw _updErr;
+        } catch (e) {
+          // No se pudo guardar: revertir para no dejar una tarea tachada y colgada en el Hub.
+          el.classList.remove('is-done');
+          check.setAttribute('aria-checked', 'false');
+          _closing = false;
+          showHubToast(tt('hub.error_saving_task', 'Error saving task: ') + (e?.message || e));
+          return;
+        }
         // Drop it from the cached lists so switching tabs doesn't bring it back.
         if (Array.isArray(window._hubMyTasks))   window._hubMyTasks   = window._hubMyTasks.filter(t => t.id !== task.id);
         if (Array.isArray(window._hubTeamTasks)) window._hubTeamTasks = window._hubTeamTasks.filter(t => t.id !== task.id);
