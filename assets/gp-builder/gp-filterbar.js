@@ -960,7 +960,7 @@
     // stale-filter prune below — otherwise a single failed query aborts the whole build and a
     // phantom persisted filter (e.g. an old microcycle id) never gets cleared.
     const _safe = p => Promise.resolve(p).then(r => r, () => ({ data: [] }));
-    const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }, { data: seasons }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: _mcsRaw }, reports, { data: opponents }, { data: seasons }] = await Promise.all([
       _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false })),
@@ -973,6 +973,13 @@
       _safe(_obQ),
       _safe(_snQ),
     ]);
+    // Aislamiento por equipo (defensa en profundidad): aunque la query ya scopea con
+    // .or(team_id.eq,is.null), si _gpTeam llegara null por una race la query traería TODO el
+    // club y se colarían microciclos de OTROS equipos (mismo nombre «MC 01», ventanas de fecha
+    // solapadas → las sesiones GPS sin microcycle_id se bucketean al MC ajeno). Filtramos acá
+    // por team-or-null para que nunca aparezca un MC de otro equipo.
+    const _mcTeamOk = m => !_gpTeam || m.team_id == null || String(m.team_id) === String(_gpTeam);
+    const mcs = (_mcsRaw || []).filter(_mcTeamOk);
     // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
     _seasons = (seasons || [])
       .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
@@ -1270,6 +1277,12 @@
     if (!root) return;
     for (let i = 0; i < 50; i++) {
       if (window.sb && window.getClubId) {
+        // Aislamiento por equipo: si la página tiene selector de equipo (gpsTeamSelect) esperamos
+        // a que _gpTeamId quede resuelto ANTES de la primera carga. Sin esto, loadData corre con
+        // _gpTeamId=null → trae microciclos/datos de TODO el club (se colaban MC de otros equipos).
+        if (document.getElementById('gpsTeamSelect') && !window._gpTeamId) {
+          for (let j = 0; j < 25 && !window._gpTeamId; j++) await new Promise(r => setTimeout(r, 100));
+        }
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }
         // restaurar filtros persistidos del dashboard activo + re-render
         restore();
