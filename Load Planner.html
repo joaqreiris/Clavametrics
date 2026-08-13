@@ -588,40 +588,47 @@ function kpiHTML(){
 
 // Team load by microcycle — grouped Chart.js bars, ALL metrics in ONE chart (× match units).
 const cssVar=(n,f)=>{ try{ const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim(); return v||f; }catch(e){ return f; } };
-function trendSeries(){
-  const players=activePlayers();
-  return TREND.map(t=>{ const byP=MCRAW[t.id]||{}; const row={id:t.id,name:t.name,x:{}};
-    METRICS.forEach(m=>{ const xs=[]; players.forEach(p=>{ const tot=byP[p.id]&&byP[p.id][m]; if(tot==null||tot<=0)return;
-      const ref=REF_MAX[p.id]&&REF_MAX[p.id][m]&&REF_MAX[p.id][m].value; if(ref) xs.push(tot/ref); });
-      row.x[m]= xs.length? +(xs.reduce((a,b)=>a+b,0)/xs.length).toFixed(2) : null; }); return row; });
+function teamAvg(mcId, m){ const byP=MCRAW[mcId]||{}; const vals=activePlayers().map(p=> byP[p.id]&&byP[p.id][m]).filter(v=>v!=null&&v>0); return vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null; }
+// Δ% per metric: current microcycle vs the previous one (team average per player).
+function trendDiff(){
+  if(!TREND.length) return {cur:null,prev:null,rows:[]};
+  const curId=(MC&&TREND.some(t=>t.id===MC.id))?MC.id:TREND[TREND.length-1].id;
+  const idx=TREND.findIndex(t=>t.id===curId);
+  const cur=TREND[idx], prev=idx>0?TREND[idx-1]:null;
+  if(!prev) return {cur,prev:null,rows:[]};
+  const rows=visMetrics().map(m=>{ const c=teamAvg(cur.id,m), p=teamAvg(prev.id,m); const pct=(c!=null&&p&&p>0)?(c-p)/p*100:null; return {m,c,p,pct}; });
+  return {cur,prev,rows};
 }
+const _diffCol=pct=> pct==null?cssVar('--cm-fg-muted','#6b7280'):Math.abs(pct)<=15?cssVar('--cm-success','#16a34a'):Math.abs(pct)<=25?cssVar('--cm-warning','#d97706'):cssVar('--cm-danger','#dc2626');
+const diffLabelPlugin={ id:'lpDiff', afterDatasetsDraw(chart){ const meta=chart.getDatasetMeta(0); if(!meta)return; const ctx=chart.ctx, data=chart.data.datasets[0].data, cols=chart.data.datasets[0].backgroundColor||[];
+  meta.data.forEach((bar,i)=>{ const v=data[i]; if(v==null)return; const lbl=(v>=0?'+':'')+Math.round(v)+'%';
+    ctx.save(); ctx.font='700 11px Geist, ui-sans-serif, sans-serif'; ctx.fillStyle=cols[i]||'#374151'; ctx.textBaseline='middle'; ctx.textAlign=v>=0?'left':'right'; ctx.fillText(lbl, bar.x+(v>=0?5:-5), bar.y); ctx.restore(); }); } };
 function renderTrend(){
   const wrap=document.getElementById('lpTrendWrap'); if(!wrap) return;
   const tEl=document.getElementById('lpTrendTitle'), sEl=document.getElementById('lpTrendSub'), fEl=document.getElementById('lpTrendFoot');
-  if(tEl) tEl.textContent=tt('load_planner.mc_trend','Team load by microcycle');
-  if(sEl) sEl.textContent=tt('load_planner.mc_trend_sub','× match (best-5) · squad avg / player');
-  if(fEl) fEl.textContent=tt('load_planner.mc_trend_hint2','Grouped by microcycle · tick metrics in the legend or the band chips above.');
-  const series=trendSeries(), cols=visMetrics();
-  if(!series.length || !cols.length){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`; return; }
+  if(tEl) tEl.textContent=tt('load_planner.mc_diff','Change by metric vs previous microcycle');
+  const dd=trendDiff();
+  if(sEl) sEl.textContent= dd.prev? `${dd.cur.name} vs ${dd.prev.name}` : '';
+  if(fEl) fEl.textContent=tt('load_planner.mc_diff_hint','Team average per player · + = more load than the previous microcycle, − = less. Use it to set the next day / week.');
+  if(!dd.prev){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.need_two','Need two microcycles with GPS to compare.')}</div>`; return; }
+  const rows=dd.rows.filter(r=>r.pct!=null);
+  if(!rows.length){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`; return; }
   if(!window.Chart){ wrap.innerHTML='<div class="lp-empty">'+tt('load_planner.loading','Loading…')+'</div>'; return; }
   if(!document.getElementById('lpTrendCanvas')) wrap.innerHTML='<canvas id="lpTrendCanvas"></canvas>';
-  const labels=series.map(s=>s.name);
-  const datasets=METRICS.map(m=>({ label:metaOf(m).label, data:series.map(s=>s.x[m]), backgroundColor:metricColor(m), borderWidth:0, borderRadius:4, borderSkipped:'bottom', maxBarThickness:40, categoryPercentage:0.82, barPercentage:0.92, hidden:!VISIBLE.has(m), $metric:m }));
-  if(TREND_CHART){ TREND_CHART.data.labels=labels; TREND_CHART.data.datasets=datasets; TREND_CHART.update(); return; }
+  const labels=rows.map(r=>metaOf(r.m).label), data=rows.map(r=>+r.pct.toFixed(0)), colors=rows.map(r=>_diffCol(r.pct));
+  const apply=c=>{ c.$rows=rows; };
+  if(TREND_CHART){ TREND_CHART.data.labels=labels; TREND_CHART.data.datasets[0].data=data; TREND_CHART.data.datasets[0].backgroundColor=colors; apply(TREND_CHART); TREND_CHART.update(); return; }
   TREND_CHART=new Chart(document.getElementById('lpTrendCanvas'),{ type:'bar',
-    data:{ labels, datasets },
-    options:{ responsive:true, maintainAspectRatio:false,
-      animation:{ duration:650, easing:'easeOutCubic', delay:ctx=> (ctx.type==='data'&&ctx.mode==='default')?ctx.dataIndex*60:0 },
-      plugins:{
-        legend:{ position:'bottom', labels:{ boxWidth:12, boxHeight:12, padding:12, usePointStyle:true, font:{size:11} },
-          onClick:(e,item)=>{ const ds=TREND_CHART.data.datasets[item.datasetIndex]; const m=ds&&ds.$metric; if(!m)return;
-            if(VISIBLE.has(m)){ if(VISIBLE.size>1) VISIBLE.delete(m); } else VISIBLE.add(m);
-            if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0]||FOCUS; render(); } },
-        tooltip:{ callbacks:{ label:c=>{ const m=c.dataset.$metric,v=c.raw; if(v==null) return metaOf(m).label+': —';
-          const prev=c.dataset.data[c.dataIndex-1]; const d=(prev&&prev>0)?Math.round((v-prev)/prev*100):null;
-          return `${metaOf(m).label}: ${v.toFixed(2)}×`+(d!=null?` (${d>=0?'+':''}${d}%)`:''); } } } },
-      scales:{ y:{ beginAtZero:true, grid:{color:'rgba(148,163,184,0.18)',drawTicks:false}, border:{display:false}, ticks:{font:{size:10},color:'#9CA3AF',padding:6,callback:v=>v+'×'} },
-        x:{ grid:{display:false}, ticks:{font:{size:11},color:'#6B7280'} } } } });
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderWidth:0, borderRadius:4, maxBarThickness:26, barPercentage:0.78, categoryPercentage:0.82 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:40,left:8}},
+      animation:{ duration:600, easing:'easeOutCubic' },
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label:c=>{ const r=(c.chart.$rows||[])[c.dataIndex]; if(!r) return ''; const mm=metaOf(r.m);
+          return `${mm.label}: ${fmtN(r.p,mm.dec)} → ${fmtN(r.c,mm.dec)} ${mm.unit||''} (${(r.pct>=0?'+':'')+Math.round(r.pct)}%)`; } } } },
+      scales:{ x:{ grid:{color:'rgba(148,163,184,0.18)',drawTicks:false}, border:{display:false}, ticks:{font:{size:10},color:'#9CA3AF',callback:v=>v+'%'} },
+        y:{ grid:{display:false}, ticks:{font:{size:11.5},color:'#374151'} } } },
+    plugins:[diffLabelPlugin] });
+  apply(TREND_CHART);
 }
 
 function matrixHTML(){
