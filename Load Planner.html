@@ -73,6 +73,11 @@
   .lp-grid .qfrow td{background:var(--cm-bg-soft)}
   .lp-grid .qfrow td:first-child{font-weight:700;color:var(--cm-fg-strong)}
   .lp-mname{font-weight:600;color:var(--cm-fg-strong)}
+  .lp-acccol{min-width:104px;text-align:center;background:var(--cm-bg-soft);border-left:1px solid var(--cm-border-soft)}
+  .lp-grid th.lp-acccol{background:var(--cm-bg-soft);text-align:center}
+  .lp-acccol .av{font:700 12px/1.1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .lp-acccol .tg{font-weight:500;color:var(--cm-fg-faint)}
+  .lp-acccol .lp-cbar{margin-top:4px;height:5px;width:80%;margin-left:auto;margin-right:auto}
   .lp-munit{font-size:10px;color:var(--cm-fg-faint);margin-left:4px}
   .lp-grid-foot{display:flex;gap:22px;padding:10px 16px 12px;font-size:12px;color:var(--cm-fg-muted);flex-wrap:wrap;border-top:1px dashed var(--cm-border-soft)}
   .lp-grid-foot b{color:var(--cm-fg-strong)}
@@ -642,11 +647,13 @@ function gridHTML(){
   const tint=pct=> (pct!=null&&pct>0)? `background:rgba(21,128,61,${(Math.min(pct/100,1)*0.24).toFixed(3)})` : '';
   const qf=DAYS.map(d=>{ const vals=visMetrics().map(m=>(PLAN[d.date]||{})[m]); const allSame=vals.length&&vals.every(v=>v!=null&&v===vals[0]); const cv=allSame?vals[0]:'';
     return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—" style="${cv!==''?tint(cv):''}"></td>`; }).join('');
-  const rows=visMetrics().map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
+  const rows=visMetrics().map(m=>{ const acc=teamAccruedX(m), tgt=targetOf(m), st=statusOf(acc,m), w=(tgt&&tgt>0)?Math.min(100,acc/tgt*100):0;
+    const bcol=st.cls==='x-over'?'var(--cm-danger)':st.cls==='x-under'?'var(--cm-info)':'var(--cm-success)';
+    return `<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
     DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m];
       let act=''; if(!d.isFuture){ const ax=actualDayX(d.date,m); if(ax!=null) act=`<div class="lp-actual" title="${tt('load_planner.actual','actual')}">✓ ${(ax*100).toFixed(0)}%</div>`; }
       return `<td class="${d.isActive?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—" style="${v!=null?tint(v):''}">${act}</td>`; }).join('')
-  }</tr>`).join('');
+  }<td class="lp-acccol" title="${tt('load_planner.accrued_hint','real accumulated so far vs weekly target')}"><div class="av">${acc.toFixed(2)}×${tgt!=null?` <span class="tg">/ ${(+tgt).toFixed(1)}×</span>`:''}</div><span class="lp-cbar"><i style="width:${w.toFixed(0)}%;background:${bcol}"></i></span></td></tr>`; }).join('');
   const wkFocus=plannedX(FOCUS,false), projFocus=teamAccruedX(FOCUS)+plannedX(FOCUS,true), target=targetOf(FOCUS), gap=target!=null?target-projFocus:null;
   return `<div class="lp-card">
     <div class="lp-card-h"><span class="t">${tt('load_planner.plan_grid','Plan — % of match per day')}</span>
@@ -656,8 +663,8 @@ function gridHTML(){
         <button class="cm-btn is-ghost is-sm" id="lpClearPlan"><i class="ti ti-eraser"></i> ${tt('load_planner.clear','Clear')}</button>
       </div></div>
     <div class="lp-gridwrap"><table class="lp-grid">
-      <thead><tr><th>${tt('load_planner.metric','Metric')}</th>${dayCols}</tr></thead>
-      <tbody><tr class="qfrow"><td>${tt('load_planner.all_metrics','All metrics')}</td>${qf}</tr>${rows}</tbody>
+      <thead><tr><th>${tt('load_planner.metric','Metric')}</th>${dayCols}<th class="lp-acccol">${tt('load_planner.accrued','Real / target')}</th></tr></thead>
+      <tbody><tr class="qfrow"><td>${tt('load_planner.all_metrics','All metrics')}</td>${qf}<td class="lp-acccol"></td></tr>${rows}</tbody>
     </table></div>
     <div class="lp-grid-foot">
       <span>${tt('load_planner.week_total','Week total')} (${metaOf(FOCUS).label}): <b>${(wkFocus*100).toFixed(0)}%</b></span>
