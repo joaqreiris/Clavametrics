@@ -2633,14 +2633,27 @@ function gpRenderPrintSheet() {
     // Compact single-column list for text; 3-up grid for image cards.
     const exGridCols = textLayout ? '1fr' : 'repeat(3,1fr)';
 
-    // WARM-UP — grouped by sub-block (activation / strength / mobility / myofascial / custom), pills per block
+    // WARM-UP — grouped by sub-block (activation / strength / mobility / myofascial / custom).
+    // Each exercise prints as a pill carrying its sets×reps / time + tempo, and a note line
+    // when present — so an activation-only session keeps the full detail on the sheet.
     const wuBlocksData = [...document.querySelectorAll('#gpWarmupBlocks .gp-wu-block')].map(bl => ({
       label: (bl.querySelector('.gp-wu-title')?.value || '').trim(),
-      names: [...bl.querySelectorAll('tbody tr')].map(tr => (tr.querySelector('.name-cell input')?.value || '').trim()).filter(Boolean)
-    })).filter(b => b.names.length);
+      rows: [...bl.querySelectorAll('tbody tr')].map(tr => {
+        const cell = i => { const inp = tr.children[i]?.querySelector('input'); return inp ? (inp.value || '').trim() : ''; };
+        return { name: (tr.querySelector('.name-cell input')?.value || '').trim(), sets: cell(2), reps: cell(3), tempo: cell(4), note: cell(5) };
+      }).filter(r => r.name)
+    })).filter(b => b.rows.length);
+    const wuPill = r => {
+      const sr = (r.sets && r.reps) ? `${r.sets}×${r.reps}` : (r.reps || r.sets || '');
+      const detail = [sr, (r.tempo && r.tempo !== '—') ? r.tempo : ''].filter(Boolean).join(' · ');
+      return `<span style="display:inline-flex;align-items:baseline;gap:7px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(r.name)}${detail?`<span style="font:600 10px ${MONO};color:var(--club-accent)">${esc(detail)}</span>`:''}</span>`;
+    };
     const warmupBlock = wuBlocksData.length ? `<div class="gsp-brk" style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.warmup','Warm-up')}${wuMin?` · ${wuMin} ${tt('gym_planner.unit_min','min')}`:''}`)}
-      ${wuBlocksData.map(b=>`${b.label?`<div style="font:700 9.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin:8px 0 5px">${esc(b.label)}</div>`:''}<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px">${b.names.map(n=>`<span style="border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(n)}</span>`).join('')}</div>`).join('')}
+      ${wuBlocksData.map(b=>{
+        const notes = b.rows.filter(r=>r.note).map(r=>`${r.name}: ${r.note}`);
+        return `${b.label?`<div style="font:700 9.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin:8px 0 5px">${esc(b.label)}</div>`:''}<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${notes.length?'4px':'2px'}">${b.rows.map(wuPill).join('')}</div>${notes.length?`<div style="font:400 10px/1.5 ${MONO};color:#8A93A0;margin-bottom:2px">${notes.map(esc).join(' · ')}</div>`:''}`;
+      }).join('')}
     </div>` : '';
 
     // PLYOMETRICS — cards
