@@ -254,9 +254,12 @@
   .mc-chip__rest-tag .ti { font-size: 13px; }
 
   .mc-chip--today {
-    border-color: var(--cm-accent);
-    box-shadow: 0 0 0 1px var(--cm-accent), var(--cm-shadow-2);
     background: linear-gradient(180deg, var(--cm-accent-soft), var(--cm-surface) 60%);
+  }
+  /* Selected microcycle (the one shown in the daily plan below) gets the blue ring */
+  .mc-chip--active {
+    border-color: var(--cm-accent);
+    box-shadow: 0 0 0 2px var(--cm-accent), var(--cm-shadow-2);
   }
 
   /* ── Match band ── */
@@ -2247,9 +2250,10 @@ function renderGrid() {
           const icon = isOutdoorTrain ? EVT_ICONS[s.session_type] : (EVT_ICONS[cat] || 'ti-calendar');
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
-          // Training: generic "Training" label + no minutes (MD tag already in the day header)
+          // Training: show the custom title if the user renamed it, else the generic "Training"
+          // label. No minutes (MD tag already lives in the day header).
           const evtName   = isOutdoorTrain ? evtTypeLabel(s.session_type)
-                          : cat === 'training' ? tt('calendar.filter_training','Training')
+                          : cat === 'training' ? (s.title || tt('calendar.filter_training','Training'))
                           : (s.title || s.session_type || cat);
           const durSuffix = cat === 'training' ? '' : dur;
           // AU hidden in player view (staff-only metric)
@@ -5041,8 +5045,9 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       const { left, width } = chipGeom(mc);
       const hasMatch = !!mcMatch(mc);
       const isToday  = mc.start_date <= TODAY && mc.end_date >= TODAY;
+      const isActive = _allMCs[_mcIdx] && mc.id === _allMCs[_mcIdx].id;
       const chip = document.createElement('div');
-      chip.className = 'mc-chip' + (hasMatch ? '' : ' mc-chip--rest') + (isToday ? ' mc-chip--today' : '');
+      chip.className = 'mc-chip' + (hasMatch ? '' : ' mc-chip--rest') + (isToday ? ' mc-chip--today' : '') + (isActive ? ' mc-chip--active' : '');
       chip.style.left = left + 'px';
       chip.style.width = width + 'px';
       const mcNo = 'MC' + (ordIdx + 1);
