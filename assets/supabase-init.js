@@ -316,6 +316,106 @@
     } catch (_e) { return ''; }
   };
 
+  // ── Player photos (players.photo_url → public URL in the 'player-photos' bucket) ──────────
+  // Unlike staff avatars (profile-avatars, signed), player photos are plain public URLs. We keep a
+  // per-club id→url cache so any page can paint a face over its existing initials avatar without
+  // having to change its own DB query — just prime the cache once (cmLoadPlayerPhotos) in boot.
+  const _cmPlayerPhotoCache = new Map();      // String(playerId) → url ('' = known, no photo)
+  let _cmPlayerPhotoClub = null;
+  let _cmPlayerPhotoPromise = null;
+  // Load every player's photo_url for a club once and cache it by id. Safe to call repeatedly.
+  window.cmLoadPlayerPhotos = function (clubId) {
+    try {
+      if (!clubId || !window.sb) return Promise.resolve(_cmPlayerPhotoCache);
+      if (_cmPlayerPhotoClub === clubId && _cmPlayerPhotoPromise) return _cmPlayerPhotoPromise;
+      _cmPlayerPhotoClub = clubId;
+      _cmPlayerPhotoPromise = window.sb.from('players').select('id,photo_url').eq('club_id', clubId)
+        .then(({ data }) => {
+          (data || []).forEach(r => { if (r && r.id != null) _cmPlayerPhotoCache.set(String(r.id), (r.photo_url || '').trim()); });
+          return _cmPlayerPhotoCache;
+        })
+        .catch(() => _cmPlayerPhotoCache);
+      return _cmPlayerPhotoPromise;
+    } catch (_e) { return Promise.resolve(_cmPlayerPhotoCache); }
+  };
+  // Resolve a player's photo URL from either a player-like object (photo_url) or a bare id (cache).
+  window.cmPlayerPhotoUrl = function (x) {
+    try {
+      if (x && typeof x === 'object') {
+        const u = (x.photo_url || x.photoUrl || '').trim();
+        if (/^(https?:|data:|blob:)/i.test(u)) return u;
+        if (x.id != null && _cmPlayerPhotoCache.has(String(x.id))) return _cmPlayerPhotoCache.get(String(x.id)) || '';
+        return '';
+      }
+      if (x != null) return _cmPlayerPhotoCache.get(String(x)) || '';
+      return '';
+    } catch (_e) { return ''; }
+  };
+  // Inline CSS declarations that paint the player's photo as a cover background over an existing
+  // circular avatar element (hiding its initials via transparent text). Empty string when there's
+  // no photo → the element keeps showing its initials. Accepts an id or a player-like object.
+  // Use this for static/one-shot markup; for anything re-rendered, prefer the data-cm-photo path.
+  window.cmPlayerPhotoCss = function (x) {
+    const u = window.cmPlayerPhotoUrl(x);
+    if (!u) return '';
+    return `background-image:url('${String(u).replace(/'/g, "%27")}');background-size:cover;background-position:center center;background-repeat:no-repeat;color:transparent;`;
+  };
+
+  // Timing-proof rollout: a page just adds `data-cm-photo="<playerId>"` to its existing initials
+  // avatar element and calls cmLoadPlayerPhotos(clubId) once. The painter below fills in the face
+  // as soon as BOTH the element and the cached URL exist — order doesn't matter — and a global
+  // observer repaints avatars produced by later re-renders. The photo is preloaded first, so a
+  // broken/404 URL silently leaves the initials in place instead of an empty circle.
+  function _cmPaintPhotoEl(el) {
+    try {
+      if (!el || el.__cmPhotoDone) return;
+      const id = el.getAttribute('data-cm-photo');
+      if (id == null || id === '') return;
+      if (!_cmPlayerPhotoCache.has(String(id))) return;   // cache not loaded for this id yet
+      const url = _cmPlayerPhotoCache.get(String(id)) || '';
+      el.__cmPhotoDone = true;                             // resolved (present or absent)
+      if (!url) return;                                    // no photo → keep initials
+      const probe = new Image();
+      const keepText = el.hasAttribute('data-cm-photo-keep-text');   // e.g. pitch tokens: face + jersey number
+      probe.onload = function () {
+        el.style.backgroundImage = `url('${String(url).replace(/'/g, "%27")}')`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center center';
+        el.style.backgroundRepeat = 'no-repeat';
+        if (!keepText) { el.style.color = 'transparent'; el.style.textShadow = 'none'; }
+        el.classList.add('cm-has-photo');
+      };
+      probe.onerror = function () { el.__cmPhotoDone = false; };   // let a later pass retry
+      probe.src = url;
+    } catch (_e) { }
+  }
+  // Paint every data-cm-photo element under `root` (default: whole document).
+  window.cmPaintPlayerPhotos = function (root) {
+    try {
+      (root || document).querySelectorAll('[data-cm-photo]').forEach(_cmPaintPhotoEl);
+    } catch (_e) { }
+  };
+  let _cmPhotoObs = null, _cmPhotoObsQueued = false;
+  function _cmEnsurePhotoObserver() {
+    try {
+      if (_cmPhotoObs || typeof MutationObserver === 'undefined' || !document.body) return;
+      _cmPhotoObs = new MutationObserver(function () {
+        if (_cmPhotoObsQueued) return;
+        _cmPhotoObsQueued = true;
+        const run = function () { _cmPhotoObsQueued = false; window.cmPaintPlayerPhotos(document); };
+        (window.requestAnimationFrame || function (f) { setTimeout(f, 32); })(run);
+      });
+      _cmPhotoObs.observe(document.body, { childList: true, subtree: true });
+    } catch (_e) { }
+  }
+  // Repaint whenever the cache finishes loading, wiring the observer for future re-renders.
+  const _cmLoadPlayerPhotosRaw = window.cmLoadPlayerPhotos;
+  window.cmLoadPlayerPhotos = function (clubId) {
+    const p = _cmLoadPlayerPhotosRaw(clubId);
+    p.then(function () { _cmEnsurePhotoObserver(); window.cmPaintPlayerPhotos(document); }).catch(function () { });
+    return p;
+  };
+
   let _superAdmin = null;
   window.isSuperAdmin = function () {
     if (_superAdmin !== null) return Promise.resolve(_superAdmin);

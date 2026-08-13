@@ -824,7 +824,7 @@
           ? `<span class="av-pl-xteam" title="${tt('availability.belongsToTeam', `Belongs to ${xTeam}`, { team: xTeam }).replace(/"/g,"'")}">${xTeam}</span>`
           : '';
         html += `<tr data-player-id="${p.id}"${xTeam ? ' class="is-xteam"' : ''}>
-          <td class="col-player"><div class="av-pl"><div class="av-pl-av">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span>${xTeamBadge}</div></div></div></td>
+          <td class="col-player"><div class="av-pl"><div class="av-pl-av" data-cm-photo="${p.id}">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span>${xTeamBadge}</div></div></div></td>
           <td class="col-num"><span class="av-num">${p.number || ''}</span></td>
           ${cells}
           <td class="col-sum">${summary(statuses, MC_DATES)}</td>
@@ -999,6 +999,7 @@
       return;
     }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
+    window.cmLoadPlayerPhotos(CLUB_ID);
 
     await avInitTeamSwitch();
 

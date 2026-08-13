@@ -491,6 +491,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
+  window.cmLoadPlayerPhotos(clubId);
 
   if (club) window.applyClubTheme();
   await nuInitTeamSwitch(clubId);
@@ -1659,7 +1660,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const h2 = document.querySelector('.nu-d-head h2');
     const metaEl = document.querySelector('.nu-d-head .meta');
     const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
-    if (av) av.textContent = initials;
+    if (av) { av.textContent = initials; av.setAttribute('data-cm-photo', p.id); }
     if (h2) h2.textContent = `${p._name}${p.number ? ' · #' + p.number : ''}`;
     if (metaEl) metaEl.innerHTML = `<span class="badge">${p.position || '—'} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
 
@@ -1757,7 +1758,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       row.className = 'nu-row' + (first ? ' is-on' : '');
       if (first) { first = false; firstP = p; }
       row.innerHTML = `
-        <div class="nu-av">${initials}</div>
+        <div class="nu-av" data-cm-photo="${p.id}">${initials}</div>
         <div><div class="name">${p._name || '—'}</div><div class="meta">${num}${p.position || ''}</div></div>
         <div class="stat"><div class="v">—</div><div class="u">${tt('nutrition.no_plan', 'no plan')}</div></div>`;
       row.addEventListener('click', () => {

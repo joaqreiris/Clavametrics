@@ -1820,7 +1820,7 @@ function gpRenderRoster() {
       const pos      = _GP_POS_MAP[(p.position||'').toUpperCase()] || (p.position||'').toUpperCase() || '';
       const an       = _gpAdaptNotes[p.id];
       const adapt    = an ? ` <span title="${an.replace(/"/g,"'")}" style="color:var(--cm-warning);font-weight:700;cursor:help">·${tt('gym_planner.adapt_tag','adapt')}</span>` : '';
-      return `<span class="gp-ath-pill is-on" data-pid="${p.id}" title="${tt('gym_planner.click_to_remove','Click to remove')}"><span class="av">${initials}</span><span class="pos">${pos}</span>${surname}${num}${adapt}</span>`;
+      return `<span class="gp-ath-pill is-on" data-pid="${p.id}" title="${tt('gym_planner.click_to_remove','Click to remove')}"><span class="av" data-cm-photo="${p.id}">${initials}</span><span class="pos">${pos}</span>${surname}${num}${adapt}</span>`;
     }).join('');
     pillsEl.innerHTML = allPill + pills;
     pillsEl.querySelectorAll('.gp-ath-pill[data-pid]').forEach(el => el.addEventListener('click', () => {
@@ -2853,6 +2853,7 @@ async function gpExportPDF() {
   if (!(await window.guardModule())) return;
   const clubId = await window.getClubId();
   _gpClubId = clubId;
+  window.cmLoadPlayerPhotos?.(clubId);   // ceba caché de fotos por club (fire-and-forget)
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   window._gpClub = club;
   if (club) window.applyClubTheme();

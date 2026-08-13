@@ -1753,6 +1753,7 @@ async function savePhaseStatus(status) {
   [_profile] = await Promise.all([window.getProfile()]);
   const club = await window.getClub();
   _clubId = await window.getClubId();
+  window.cmLoadPlayerPhotos(_clubId);
   if (club) window.applyClubTheme();
   await injInitTeamSwitch();
 
@@ -2275,7 +2276,7 @@ function injCard(inj) {
   return `<div class="inj-row" data-inj-id="${inj.id}">
     <div class="inj-row-top">
       <div class="inj-player">
-        <div class="inj-av${inj.status === 'active' ? ' tinted' : ''}">${initials}</div>
+        <div class="inj-av${inj.status === 'active' ? ' tinted' : ''}" data-cm-photo="${inj.player_id}">${initials}</div>
         <div>
           <div class="name">${name}</div>
           <div class="meta"><span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px"><span style="width:6px;height:6px;border-radius:50%;background:${_tabColor}"></span><span style="font:600 9.5px/1 var(--cm-font-mono);color:${_tabColor};text-transform:uppercase;letter-spacing:0.04em">${_tabLabel}</span></span>${pos ? `<span class="inj-pos cb">${pos}</span>` : ''}${jersey}</div>
@@ -2449,7 +2450,7 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
     const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
     const sev      = inj.severity || 'moderate';
     return `<div class="bmp-item" onclick="scrollToInjury('${inj.id}')">
-      <div class="bmp-av">${initials}</div>
+      <div class="bmp-av" data-cm-photo="${inj.player_id}">${initials}</div>
       <div class="bmp-info">
         <div class="bmp-name">${name}</div>
         <div class="bmp-meta">${fmtDate(inj.start_date)} · ${inj.injury_type || '—'}</div>
@@ -2546,7 +2547,7 @@ function renderRecentlyResolved() {
       : '—';
     const retDate = i.returned_date ? ttFmtDate(i.returned_date) : '—';
     return `<div class="closed-row">
-      <div class="av">${initials}</div>
+      <div class="av" data-cm-photo="${i.player_id}">${initials}</div>
       <div class="body">
         <div class="name">${pName} · ${i.injury_type || '—'}</div>
         <div class="meta">${tt('injuries.returned_date', `Returned ${retDate}`, { date: retDate })}</div>

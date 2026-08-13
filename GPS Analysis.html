@@ -4876,7 +4876,7 @@ window.refreshDashboard = async function (opts = {}) {
       const acc  = r.accelerations != null ? window.gpFmtMetric('accelerations', r.accelerations)         : '—';
       const load = r.player_load  != null ? window.gpFmtMetric('player_load', r.player_load)               : '—';
       return `<tr>
-        <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
+        <td class="pc"><div class="gp-mini-pl"><div class="gp-mav"${p?.id?` data-cm-photo="${p.id}"`:''}>${initials}</div>
           <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
         <td><span class="gp-zc neu">${dist}</span></td>
         <td><span class="gp-zc neu">${hsr}</span></td>
@@ -5043,6 +5043,8 @@ async function _detectSmartDefault(clubId, userId) {
   if (club) window.applyClubTheme();
   window._gpClubId = clubId;
   window._gpUserId = profile?.id || null;
+  // Ceba la caché de fotos de jugador (id→foto) para pintar caras en las tablas (data-cm-photo). Fire-and-forget.
+  window.cmLoadPlayerPhotos?.(clubId);
 
   // Load per-club GPS settings (baseline N, mode, active metrics, ACWR model)
   if (typeof loadGpsSettings === 'function') {
@@ -5393,7 +5395,7 @@ function _renderOutliers(reports) {
     const dir  = f.z > 0 ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
     const col  = Math.abs(f.z) >= 3 ? 'var(--cm-danger)' : 'var(--cm-warning)';
     row.innerHTML = `
-      <div class="gp-mav" style="flex-shrink:0">${name.split(' ')[0][0]||'?'}${(p?.last_name||'?')[0]}</div>
+      <div class="gp-mav"${p?.id?` data-cm-photo="${p.id}"`:''} style="flex-shrink:0">${name.split(' ')[0][0]||'?'}${(p?.last_name||'?')[0]}</div>
       <div style="flex:1;min-width:0">
         <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div>
         <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${pos} · ${LABELS[f.metric] || f.metric}</div>
@@ -6222,7 +6224,7 @@ function _updateZTable(reports, state) {
       return `<td><span class="gp-zc ${zClass(z)}">${fmtZ}</span></td>`;
     });
     return `<tr>
-      <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
+      <td class="pc"><div class="gp-mini-pl"><div class="gp-mav"${p?.id?` data-cm-photo="${p.id}"`:''}>${initials}</div>
         <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
       ${cells.join('')}
     </tr>`;

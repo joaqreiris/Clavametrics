@@ -248,7 +248,7 @@
       spot.style.left = pos.x + '%';
       spot.style.top = pos.y + '%';
       spot.innerHTML = `
-        <div class="badge">${state.showNumbers ? p.num : (p.last[0] + (p.first[0]||''))}</div>
+        <div class="badge" data-cm-photo="${p.id}"${state.showNumbers ? ' data-cm-photo-keep-text="1"' : ''}>${state.showNumbers ? p.num : (p.last[0] + (p.first[0]||''))}</div>
         <div class="name">${p.last}</div>
       `;
       stage.appendChild(spot);
@@ -1224,6 +1224,7 @@
 
     if (!(await window.guardModule())) return;
     _clubId = await window.getClubId();
+    window.cmLoadPlayerPhotos?.(_clubId);   // ceba caché de fotos por club (fire-and-forget)
     // Must run AFTER the club is resolved: applyClubTheme() reads getClub() and bails out
     // silently when there's no club yet, which left the page on the default green.
     try { await window.applyClubTheme?.(); } catch (_) {}

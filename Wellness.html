@@ -278,6 +278,7 @@
   function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => { const k = String(a).toLowerCase(); return tt('wellness.pain.' + k, PAIN_LABELS[k] || cap(a)); }); }
   function modelFromRow(r) {
     return {
+      id: r.player_id,
       name: r.player_name || 'Player',
       hooper: numOrNull(r.hooper_index),
       readiness: numOrNull(r.readiness),
@@ -360,7 +361,7 @@
     <article class="pc" data-sev="${b.sev}">
       <div class="pc-head">
         <div class="pc-id">
-          <span class="cm-avatar is-md">${initials(p.name)}</span>
+          <span class="cm-avatar is-md" data-cm-photo="${p.id}">${initials(p.name)}</span>
           <div class="pc-who">
             <div class="pc-name">${T.escape(p.name)}</div>
             <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}</div>
@@ -405,7 +406,7 @@
     <article class="pc is-pending">
       <div class="pc-pending-head">
         <div class="pc-id">
-          <span class="cm-avatar is-md" style="opacity:.55;">${initials(p.name)}</span>
+          <span class="cm-avatar is-md" style="opacity:.55;" data-cm-photo="${p.id}">${initials(p.name)}</span>
           <div class="pc-who">
             <div class="pc-name">${T.escape(p.name)}</div>
           </div>
@@ -585,7 +586,7 @@
       listEl.innerHTML = state.pending.map((p, i) =>
         `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:10px;cursor:pointer;">
            <input type="checkbox" data-idx="${i}" checked style="width:16px;height:16px;cursor:pointer;">
-           <span class="cm-avatar is-sm" style="opacity:.55;">${initials(p.name)}</span>
+           <span class="cm-avatar is-sm" style="opacity:.55;" data-cm-photo="${p.id}">${initials(p.name)}</span>
            <span>${T.escape(p.name)}</span>
          </label>`).join('');
       allEl.checked = true;
@@ -717,6 +718,7 @@
     try {
       if (!(await window.guardModule())) return;
       state.cid = await window.getClubId();
+      if (window.cmLoadPlayerPhotos) window.cmLoadPlayerPhotos(state.cid);
       try { await Promise.all([window.getProfile(), window.getClub()]); if (window.applyClubTheme) window.applyClubTheme(); } catch (e) {}
       await initTeamSelect();
       wireShareModal();

@@ -1933,6 +1933,7 @@
   async function loadStatuses(){
     if (!window.sb || !window.getClubId){ console.warn('[ev2] supabase not ready'); return; }
     await loadTeamScope();
+    if (_clubId) window.cmLoadPlayerPhotos(_clubId);
     var ev = await loadEvaluationStatus();
     var ft = await loadForceStatus();
     var bc = await fetchBodyCompAgg();
@@ -8426,7 +8427,7 @@
       var pid = encodeURIComponent(p.id);
       var cnt = r.alerts ? '<span class="pb-cnt a">' + r.alerts + '</span>' : (r.watches ? '<span class="pb-cnt w">' + r.watches + '</span>' : '<span class="pb-cnt z">0</span>');
       return '<tr>'
-        + '<td class="stk"><div class="pb-plcell"><span class="pb-mono">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
+        + '<td class="stk"><div class="pb-plcell"><span class="pb-mono" data-cm-photo="' + pbEsc(p.id) + '">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
         + pbVisIdx.map(function(i){ return pbCellHtml(r.cells[i]); }).join('')
         + (showRatioCol ? pbRatioCellHtml(r.ratio) : '')
         + '<td class="pb-al">' + cnt + '</td>'
