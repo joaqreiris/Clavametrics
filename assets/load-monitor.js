@@ -654,8 +654,9 @@
       const riskCell = `<td><div class="lm-risk ${riskCls}"${detail?` title="${esc(detail)}"`:''}><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span>${detail?`<span class="sig">${esc(detail)}</span>`:''}</div></td>`;
 
       const name=((p.first_name||'')+' '+(p.last_name||'')).trim();
+      const ini=(((p.first_name||'')[0]||'')+((p.last_name||'')[0]||'')).toUpperCase()||'?';
       const html = `<tr>
-        <td><div class="lm-player"><div class="who"><div class="nm">${esc(name||tt('common.player','Player'))}</div>
+        <td><div class="lm-player"><div class="lm-av" data-cm-photo="${p.id}">${esc(ini)}</div><div class="who"><div class="nm">${esc(name||tt('common.player','Player'))}</div>
           <div class="role"><span class="pos-chip ${posc}">${esc((p.position||'—').toUpperCase())}</span>${p.number!=null?`#${esc(p.number)}`:''}</div>
           ${minsHtml}</div></div></td>
         <td><span class="lm-avail ${av[0]}"><span class="cm-dot"></span>${esc(avLbl)}</span></td>
@@ -783,6 +784,7 @@
         : sb().from('players').select('id,first_name,last_name,number,position,status').eq('club_id',state.clubId);
       const { data } = await q.order('number');
       state.players = data || [];
+      if(window.cmLoadPlayerPhotos) window.cmLoadPlayerPhotos(state.clubId);   // ceba caché de fotos (data-cm-photo)
     } catch { state.players = []; }
   }
 

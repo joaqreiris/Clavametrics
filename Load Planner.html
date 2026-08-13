@@ -389,6 +389,7 @@ async function loadRoster(){
   // isAlt = the player's PRIMARY team (players.team_id) is another team (alternate/guest)
   ROSTER=(data||[]).map(p=>({ id:p.id, name:((p.first_name||'')+' '+(p.last_name||'')).trim()||'Player', pos:p.position||'', number:p.number, ext:p.external_gps_id||null, isAlt: !!(p.team_id && p.team_id!==TEAM) }));
   PLAYER_SEL = new Set(ROSTER.filter(p=>!isGK(p)).map(p=>p.id));   // GKs off by default (no match reference use)
+  if(window.cmLoadPlayerPhotos) window.cmLoadPlayerPhotos(CLUB);   // ceba caché de fotos (data-cm-photo)
 }
 function activePlayers(){ return displayRoster().filter(p=>PLAYER_SEL.has(p.id)); }
 // #6 — persist band/player/alternates selection per club+team
@@ -654,7 +655,7 @@ function openPlayers(){
   const modal=document.getElementById('lpPlModal'); modal.hidden=false;
   document.getElementById('lpPlBody').innerHTML = `<div class="lp-pllist">${ROSTER.map(p=>`
     <label class="lp-plrow"><input type="checkbox" data-pid="${p.id}" ${PLAYER_SEL.has(p.id)?'checked':''}>
-      <span class="lp-av" style="width:24px;height:24px;font-size:10px">${initials(p.name)}</span>
+      <span class="lp-av" style="width:24px;height:24px;font-size:10px" data-cm-photo="${p.id}">${initials(p.name)}</span>
       <span class="nm">${p.name}</span>
       <span class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</span>
       ${isGK(p)?`<span class="lp-badge" style="background:var(--cm-bg-sunk);color:var(--cm-fg-muted)">GK</span>`:''}
