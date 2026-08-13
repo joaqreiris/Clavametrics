@@ -367,13 +367,15 @@ function wireControls(){
 async function reload(){
   if(TREND_CHART){ try{TREND_CHART.destroy();}catch(e){} TREND_CHART=null; }
   document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
+  const _T0=performance.now(), _lap=(l,s)=>console.log(`[lp] ${l}: ${Math.round(performance.now()-s)}ms`);
   try{
-    await Promise.all([ loadRoster(), loadManual() ]);
+    let s=performance.now(); await Promise.all([ loadRoster(), loadManual() ]); _lap('roster+manual',s);
     restorePrefs();
     const refsP = loadMatchRefs();   // heaviest (all match reports) — overlap with the microcycle fetch
-    await loadMicrocycle();
-    await Promise.all([ refsP, loadAccrued(), loadAltAuto(), loadMcTrend() ]);
+    s=performance.now(); await loadMicrocycle(); _lap('microcycle',s);
+    s=performance.now(); await Promise.all([ refsP, loadAccrued(), loadAltAuto(), loadMcTrend() ]); _lap('refs+accrued+alt+trend',s);
   }catch(e){ console.error('[lp] reload failed:',e); }
+  console.log(`[lp] total data load: ${Math.round(performance.now()-_T0)}ms`);
   try{ render(); }
   catch(e){ console.error('[lp] render failed:',e); document.getElementById('lpBody').innerHTML='<div class="lp-empty">'+tt('load_planner.render_error','Something went wrong rendering the page.')+'<br><span class="lp-mini">'+((e&&e.message)||e)+'</span></div>'; }
 }
@@ -487,34 +489,48 @@ function mdLabelFromSet(ds, arr){
   return cand[0].lbl;
 }
 
-// both references from ONE query over match reports
+// session_ids for an exact set of dates / a date range (clubwide; scope reports by roster later).
+// Filtering gps_reports by session_id (indexed) is far faster than an embedded date-join.
+async function _sessIds(byDates, from, to){
+  let q=window.sb.from('training_sessions').select('id,session_date').eq('club_id',CLUB);
+  q = byDates ? q.in('session_date', byDates) : q.gte('session_date',from).lte('session_date',to);
+  const {data}=await q; const sidDate={}, sids=[]; (data||[]).forEach(s=>{ sidDate[s.id]=s.session_date; sids.push(s.id); });
+  return {sids, sidDate};
+}
+const REF_TTL=10*60*1000;
+function _refKey(){ return 'lpref:'+CLUB+':'+TEAM; }
+function saveRefCache(){ try{ localStorage.setItem(_refKey(), JSON.stringify({ts:Date.now(), max:REF_MAX, avg:REF_AVG})); }catch(e){} }
+function invalidateRefCache(){ try{ localStorage.removeItem(_refKey()); }catch(e){} }
+
 async function loadMatchRefs(){
   REF_MAX={}; REF_AVG={};
   ROSTER.forEach(p=>{ REF_MAX[p.id]={}; REF_AVG[p.id]={}; METRICS.forEach(m=>{ REF_MAX[p.id][m]={value:null,count:0,conf:'none',manual:false}; REF_AVG[p.id][m]={value:null,count:0,conf:'none'}; }); });
   const pids=ROSTER.map(p=>p.id); if(!pids.length||!METRICS.length){ applyManual(); return; }
+  // cache hit → instant (manual overrides still applied on top)
+  try{ const c=JSON.parse(localStorage.getItem(_refKey())||'null'); if(c && Date.now()-c.ts<REF_TTL && c.max && c.avg){ ROSTER.forEach(p=>{ if(c.max[p.id]) REF_MAX[p.id]=c.max[p.id]; if(c.avg[p.id]) REF_AVG[p.id]=c.avg[p.id]; }); applyManual(); return; } }catch(e){}
   let set; try{ set=await window.gpsGetMatchDates(CLUB); }catch(e){ set=null; }
   if(!set||!set.size){ applyManual(); return; }
-  const dates=[...set], cols=METRICS.join(',');
+  const {sids,sidDate}=await _sessIds([...set]);
+  if(!sids.length){ applyManual(); return; }
+  const cols=METRICS.join(',');
   const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
-    .select(`player_id,${cols},time_played,training_sessions!inner(session_date)`)
-    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).in('training_sessions.session_date',dates),{label:'lp-matchrefs'}).catch(e=>{ console.warn('[lp] matchrefs',e); return []; });
+    .select(`player_id,session_id,${cols},time_played`)
+    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).in('session_id',sids),{label:'lp-matchrefs'}).catch(e=>{ console.warn('[lp] matchrefs',e); return []; });
   const by={};
-  (rows||[]).forEach(r=>{ const ts=Array.isArray(r.training_sessions)?r.training_sessions[0]:r.training_sessions;
-    (by[r.player_id]=by[r.player_id]||[]).push(Object.assign({},r,{_d:ts&&ts.session_date,_tp:+(r.time_played||0)})); });
+  (rows||[]).forEach(r=>{ (by[r.player_id]=by[r.player_id]||[]).push(Object.assign({},r,{_d:sidDate[r.session_id],_tp:+(r.time_played||0)})); });
   ROSTER.forEach(p=>{
     const arr=by[p.id]||[];
     const recent=arr.filter(r=>r._d).sort((a,b)=>a._d<b._d?1:a._d>b._d?-1:0).slice(0,REF_N);
     METRICS.forEach(m=>{
       const vals=arr.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null).sort((a,b)=>b-a).slice(0,REF_N);
       if(vals.length>=MIN_MATCHES){ REF_MAX[p.id][m]={ value:+(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2), count:vals.length, conf:vals.length>=REF_N?'high':'med', manual:false }; }
-      // avg = mean of the last-5 matches, normalised to /90 when minutes exist; else raw mean
       const nvNorm=recent.map(r=>r[m]==null?null:(r._tp>0?(+r[m])/r._tp*90:null)).filter(v=>v!=null);
       const nvRaw =recent.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null);
       const use = nvNorm.length>=MIN_MATCHES? nvNorm : (nvRaw.length>=MIN_MATCHES? nvRaw : null);
       if(use){ REF_AVG[p.id][m]={ value:+(use.reduce((s,v)=>s+v,0)/use.length).toFixed(2), count:use.length, conf:use.length>=REF_N?'high':'med', per90:nvNorm.length>=MIN_MATCHES }; }
     });
   });
-  applyManual();
+  saveRefCache(); applyManual();
 }
 function applyManual(){ ROSTER.forEach(p=>METRICS.forEach(m=>{ const man=MANUAL[p.id]&&MANUAL[p.id][m]; if(man!=null&&man!==''){ REF_MAX[p.id][m]={value:+man,count:null,conf:'manual',manual:true}; } })); }
 
@@ -523,14 +539,13 @@ async function loadAccrued(){
   const pids=ROSTER.map(p=>p.id); if(!pids.length||!DAYS.length||!METRICS.length) return;
   const today=window.cmToday(), start=DAYS[0].date, end=DAYS.filter(d=>!d.isFuture).slice(-1)[0]?.date||today;
   if(end<start) return;
+  const {sids,sidDate}=await _sessIds(null,start,end);   // clubwide sessions in range (GPS sessions often have team_id=null)
+  if(!sids.length) return;
   const cols=METRICS.join(',');
-  // Scope by ROSTER player_ids (not session.team_id): GPS-imported sessions usually carry
-  // team_id=null, so filtering by it drops everything. Same convention as GPS Analysis.
   const rows=await window.cmFetchAll(()=>window.sb.from('gps_reports')
-    .select(`player_id,${cols},training_sessions!inner(session_date)`)
-    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false)
-    .gte('training_sessions.session_date',start).lte('training_sessions.session_date',end),{label:'lp-accrued'}).catch(()=>[]);
-  (rows||[]).forEach(r=>{ const ts=Array.isArray(r.training_sessions)?r.training_sessions[0]:r.training_sessions; const d=ts&&ts.session_date;
+    .select(`player_id,session_id,${cols}`)
+    .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).in('session_id',sids),{label:'lp-accrued'}).catch(()=>[]);
+  (rows||[]).forEach(r=>{ const d=sidDate[r.session_id];
     METRICS.forEach(m=>{ if(r[m]==null) return; ACCRUED[r.player_id][m]=(ACCRUED[r.player_id][m]||0)+(+r[m]);
       if(d){ (ADAY[d]=ADAY[d]||{}); (ADAY[d][r.player_id]=ADAY[d][r.player_id]||{}); ADAY[d][r.player_id][m]=(ADAY[d][r.player_id][m]||0)+(+r[m]); } }); });
 }
