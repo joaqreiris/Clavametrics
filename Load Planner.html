@@ -146,11 +146,13 @@
   <div id="hub-side-root"></div>
   <main class="hub-main">
     <div class="hub-topbar">
-      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="shell.group.performance">Performance</span>
-        <span class="sep">/</span><span data-i18n="load_planner.nav">Load planner</span></div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="lpTeamSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option data-i18n="common.loading">Loading…</option></select>
+      </div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="shell.group.performance">Performance</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="load_planner.nav">Load planner</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="load_planner.search_ph" placeholder="Search…"></div>
       <div class="actions">
-        <select id="lpTeamSelect" class="lp-select" style="margin-right:8px"></select>
         <button class="cm-icon-btn" data-i18n-attr="aria-label:load_planner.notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
         <button class="cm-icon-btn" data-open-settings data-i18n-attr="aria-label:load_planner.settings" aria-label="Settings"><i class="ti ti-settings"></i></button>
       </div>
@@ -259,6 +261,8 @@ const BANDS = { total_distance:[2.5,3.5], high_speed_distance:[2.0,2.5], very_hi
   sprint_distance:[1.5,2.5], accelerations:[2.6,3.05], decelerations:[2.6,3.05], player_load:[2.5,3.5], hmld:[2.0,2.5] };
 const SHORT={ total_distance:'Dist', high_speed_distance:'HSR', very_high_speed_distance:'VHSR', sprint_distance:'Sprint', hmld:'HMLD', player_load:'PL', accelerations:'Acc', decelerations:'Dec', sprint_count:'Spr#' };
 const CSV_GUESS = { 'total distance':'total_distance','velocity distance band 3':'high_speed_distance','velocity distance band 4':'very_high_speed_distance','velocity distance band 5':'sprint_distance','high speed distance':'high_speed_distance','very high speed distance':'very_high_speed_distance','sprint distance':'sprint_distance','hmld (gen 2)':'hmld','hmld':'hmld','high metabolic load distance':'hmld','acceleration bands 2-3 efforts':'accelerations','accelerations':'accelerations','deceleration bands 2-3 efforts':'decelerations','decelerations':'decelerations','player load':'player_load' };
+// Canonical Catapult Athlete-Thresholds columns (order + names) — the export mirrors this exactly.
+const CATAPULT_COLS = [ ['Total Distance','total_distance'],['Velocity Distance Band 3','high_speed_distance'],['Velocity Distance Band 4','very_high_speed_distance'],['Velocity Distance Band 5','sprint_distance'],['Acceleration Bands 2-3 Efforts','accelerations'],['Deceleration Bands 2-3 Efforts','decelerations'],['HMLD (Gen 2)','hmld'] ];
 const MIN_MATCHES=3, REF_N=5;
 
 // ── state ──────────────────────────────────────────────────────
@@ -835,33 +839,32 @@ async function editRef(pid,metric){
 // ── Export CSV (Catapult thresholds) ───────────────────────────
 async function openExport(){
   const modal=document.getElementById('lpExpModal'); modal.hidden=false;
-  // day options: those with any plan, else all future days
-  const opts=DAYS.map(d=>{ const has=PLAN[d.date]&&Object.keys(PLAN[d.date]).length; return `<option value="${d.date}"${d.isToday?' selected':''}>${(d.md||'')} · ${d.date}${has?' ✓':''}</option>`; }).join('');
+  const opts=DAYS.map(d=>{ const has=PLAN[d.date]&&Object.keys(PLAN[d.date]).length; return `<option value="${d.date}"${d.isActive?' selected':''}>${(d.md||'·')} · ${d.date}${has?' ✓':''}</option>`; }).join('');
   document.getElementById('lpExpBody').innerHTML=`
-    <p class="lp-note">${tt('load_planner.export_intro','Builds a Catapult Athlete-Thresholds CSV with each player\'s target for the chosen day (planned % × their match reference). Load it into Catapult live.')}</p>
-    <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
-      <label class="lp-note">${tt('load_planner.export_day','Day')}</label>
-      <select id="lpExpDay" class="lp-select">${opts}</select>
-      <label class="lp-note">${tt('load_planner.export_ref','Reference')}</label>
-      <select id="lpExpRef" class="lp-select"><option value="max">${tt('load_planner.ref_best5','best-5 match')}</option><option value="avg">${tt('load_planner.ref_last90','last-5 match /90')}</option></select>
+    <p class="lp-note">${tt('load_planner.export_intro2','Exports the Catapult Athlete-Thresholds CSV with the SAME columns as the import, filled with what you planned for the chosen day. Load it back into Catapult.')}</p>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center;margin-top:12px">
+      <label class="lp-note">${tt('load_planner.export_day','Day')}</label><select id="lpExpDay" class="lp-select">${opts}</select>
+      <label class="lp-note">${tt('load_planner.export_value','Value')}</label><select id="lpExpVal" class="lp-select"><option value="pct">${tt('load_planner.export_val_pct','Planned % of match')}</option><option value="abs">${tt('load_planner.export_val_abs','Absolute (% × reference)')}</option></select>
+      <label class="lp-note">${tt('load_planner.export_ref','Reference (absolute)')}</label><select id="lpExpRef" class="lp-select"><option value="max">${tt('load_planner.ref_best5','best-5 match')}</option><option value="avg">${tt('load_planner.ref_last90','last-5 match /90')}</option></select>
     </div>`;
   document.getElementById('lpExpHint').textContent=tt('load_planner.export_hint','Only players with a Catapult Athlete ID are exported.');
   document.getElementById('lpExpGo').onclick=doExport;
 }
 async function doExport(){
   const date=document.getElementById('lpExpDay').value;
+  const valMode=document.getElementById('lpExpVal').value;        // 'pct' | 'abs'
   const refKind=document.getElementById('lpExpRef').value;
-  // reverse mapping metric → Catapult header (saved per club); fallback to label
-  let rev={}; try{ const {data}=await window.sb.from('gps_column_mappings').select('source_column_name,target_metric').eq('club_id',CLUB).eq('source_label','catapult_threshold_csv'); (data||[]).forEach(r=>{ if(!rev[r.target_metric]) rev[r.target_metric]=r.source_column_name; }); }catch(e){}
-  const vis=visMetrics();
-  const cols=vis.filter(m=>(PLAN[date]||{})[m]!=null);
-  const headerMetrics = cols.length?cols:vis;
-  const headers=['Athlete ID','Athlete Name','Position',...headerMetrics.map(m=>rev[m]||metaOf(m).label)];
+  // reverse mapping metric → the club's exact Catapult header (from what they imported)
+  let rev={}; try{ const {data}=await window.sb.from('gps_column_mappings').select('source_column_name,target_metric').eq('club_id',CLUB).eq('source_label','catapult_threshold_csv'); (data||[]).forEach(r=>{ if(r.target_metric&&r.target_metric!=='__ignore__'&&!rev[r.target_metric]) rev[r.target_metric]=r.source_column_name; }); }catch(e){}
+  // ALWAYS the canonical Catapult column set, in order, using the club's header names when known
+  const cols=CATAPULT_COLS.map(([h,m])=>({ header:rev[m]||h, metric:m }));
+  const headers=['Athlete ID','Athlete Name','Position',...cols.map(c=>c.header)];
   const lines=[headers.map(csvCell).join(',')];
   activePlayers().forEach(p=>{ if(!p.ext) return;
     const row=[p.ext,p.name,p.pos];
-    headerMetrics.forEach(m=>{ const pct=(PLAN[date]||{})[m]; const ref=(refKind==='avg'?REF_AVG:REF_MAX)[p.id]?.[m]?.value;
-      const val=(pct!=null&&ref!=null)? Math.round(pct/100*ref) : ''; row.push(val); });
+    cols.forEach(c=>{ const pct=(PLAN[date]||{})[c.metric]; let v='';
+      if(pct!=null){ if(valMode==='pct'){ v=pct; } else { const ref=(refKind==='avg'?REF_AVG:REF_MAX)[p.id]?.[c.metric]?.value; v=(ref!=null)?Math.round(pct/100*ref):''; } }
+      row.push(v); });
     lines.push(row.map(csvCell).join(','));
   });
   const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
