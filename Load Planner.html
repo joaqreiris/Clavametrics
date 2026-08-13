@@ -15,6 +15,7 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/gps-baseline.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   .lp-doc{padding:22px 26px 60px;max-width:1320px;margin:0 auto;font-family:var(--cm-font-sans)}
   .lp-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
@@ -30,6 +31,11 @@
   .lp-legend{display:flex;gap:14px;align-items:center;font-size:11px;color:var(--cm-fg-muted);flex-wrap:wrap}
   .lp-legend span{display:inline-flex;align-items:center;gap:5px}
   .lp-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .lp-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .lp-chip{border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);padding:6px 11px;border-radius:999px;cursor:pointer}
+  .lp-chip:hover{border-color:var(--cm-border-strong,#cbd5e1)}
+  .lp-chip.on{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
+  .lp-chip.alt.on{background:var(--cm-violet,#7c3aed);border-color:var(--cm-violet,#7c3aed);color:#fff}
   /* planning grid (metric × day) */
   .lp-gridwrap{overflow-x:auto}
   .lp-grid{border-collapse:collapse;font-size:12.5px;width:100%}
@@ -209,9 +215,11 @@ const MIN_MATCHES=3, REF_N=5;
 
 // ── state ──────────────────────────────────────────────────────
 let CLUB=null, PROFILE=null, TEAM=null;
-let METRICS=[], FOCUS='total_distance';
+let METRICS=[], FOCUS='total_distance', VISIBLE=new Set();
 let META_BY_KEY=Object.assign({},META), ACTIVE_METRICS=null;
 let ROSTER=[], MANUAL={};
+let SHOW_ALT=false, AUTO_ALT=new Set();   // alternate/guest players toggle + auto-included (train next day)
+let TREND_CHART=null;
 let MC=null, PREVMC=null, DAYS=[], PLAN={}, ANCHOR=null;
 let SELMC=null, ALLMCS=[];   // selected microcycle id + team microcycle list
 let MCTREND={}, TREND=[];    // mcId→metric→team avg total + ordered [{id,name}] for the trend chart
@@ -221,6 +229,7 @@ let sortK='proj', sortD=-1;
 const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString('en-US'));
 const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0};
 const shortLabel=m=>SHORT[m]||metaOf(m).label;
+const visMetrics=()=>METRICS.filter(m=>VISIBLE.has(m));
 const initials=n=>(n.split(' ').pop()||'').slice(0,2).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────
@@ -266,6 +275,8 @@ function buildMetrics(){
   keys=ORDER.filter(k=>keys.includes(k)).concat(keys.filter(k=>!ORDER.includes(k)));
   if(!keys.length) keys=['total_distance'];
   METRICS=keys; if(!METRICS.includes(FOCUS)) FOCUS=METRICS[0];
+  VISIBLE = VISIBLE.size ? new Set(METRICS.filter(m=>VISIBLE.has(m))) : new Set(METRICS);
+  if(!VISIBLE.size) VISIBLE=new Set(METRICS);
   const sel=document.getElementById('lpMetricSel');
   sel.title=tt('load_planner.focus','Focus metric (KPIs, chart & sorting)');
   sel.innerHTML=METRICS.map(k=>`<option value="${k}"${k===FOCUS?' selected':''}>★ ${metaOf(k).label}</option>`).join('');
@@ -284,11 +295,12 @@ function wireControls(){
 
 // ── load & compute ─────────────────────────────────────────────
 async function reload(){
+  if(TREND_CHART){ try{TREND_CHART.destroy();}catch(e){} TREND_CHART=null; }
   document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
   try{
     await Promise.all([ loadRoster(), loadManual() ]);
     await loadMicrocycle();
-    await Promise.all([ loadMatchRefs(), loadAccrued() ]);
+    await Promise.all([ loadMatchRefs(), loadAccrued(), loadAltAuto() ]);
     await loadMcTrend();
   }catch(e){ console.error('[lp] reload failed:',e); }
   try{ render(); }
@@ -297,12 +309,24 @@ async function reload(){
 
 async function loadRoster(){
   const {data,error}=await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,external_gps_id,player_teams!inner(team_id)')
+    .select('id,first_name,last_name,number,position,external_gps_id,team_id,player_teams!inner(team_id)')
     .eq('club_id',CLUB).is('archived_at',null).eq('player_teams.team_id',TEAM)
     .order('number',{ascending:true,nullsFirst:false});
   if(error) console.warn('[lp] roster',error.message);
-  ROSTER=(data||[]).map(p=>({ id:p.id, name:((p.first_name||'')+' '+(p.last_name||'')).trim()||'Player', pos:p.position||'', number:p.number, ext:p.external_gps_id||null }));
+  // isAlt = the player's PRIMARY team (players.team_id) is another team (alternate/guest)
+  ROSTER=(data||[]).map(p=>({ id:p.id, name:((p.first_name||'')+' '+(p.last_name||'')).trim()||'Player', pos:p.position||'', number:p.number, ext:p.external_gps_id||null, isAlt: !!(p.team_id && p.team_id!==TEAM) }));
 }
+// Alternates who actually train with THIS team on the next training day (explicit availability row)
+async function loadAltAuto(){
+  AUTO_ALT=new Set();
+  const alts=ROSTER.filter(p=>p.isAlt); if(!alts.length||!DAYS.length) return;
+  const nd=DAYS.find(d=>(d.isToday||d.isFuture)&&d.hasSess); if(!nd) return;
+  try{ const {data}=await window.sb.from('availability').select('player_id,status').eq('date',nd.date).in('player_id',alts.map(p=>String(p.id)));
+    const bad=new Set(['other_team','away','unavailable','injured','absent','off','national_team','loan']);
+    (data||[]).forEach(r=>{ if(r.status && !bad.has(r.status)) AUTO_ALT.add(String(r.player_id)); });
+  }catch(e){}
+}
+function displayRoster(){ return ROSTER.filter(p=> !p.isAlt || SHOW_ALT || AUTO_ALT.has(String(p.id))); }
 async function loadManual(){
   MANUAL={};
   const {data}=await window.sb.from('player_match_refs').select('player_id,metric,ref_value').eq('club_id',CLUB);
@@ -367,8 +391,11 @@ async function loadMatchRefs(){
     METRICS.forEach(m=>{
       const vals=arr.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null).sort((a,b)=>b-a).slice(0,REF_N);
       if(vals.length>=MIN_MATCHES){ REF_MAX[p.id][m]={ value:+(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2), count:vals.length, conf:vals.length>=REF_N?'high':'med', manual:false }; }
-      const nv=recent.map(r=>r[m]==null?null:(r._tp>0?(+r[m])/r._tp*90:null)).filter(v=>v!=null);
-      if(nv.length>=MIN_MATCHES){ REF_AVG[p.id][m]={ value:+(nv.reduce((s,v)=>s+v,0)/nv.length).toFixed(2), count:nv.length, conf:nv.length>=REF_N?'high':'med' }; }
+      // avg = mean of the last-5 matches, normalised to /90 when minutes exist; else raw mean
+      const nvNorm=recent.map(r=>r[m]==null?null:(r._tp>0?(+r[m])/r._tp*90:null)).filter(v=>v!=null);
+      const nvRaw =recent.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null);
+      const use = nvNorm.length>=MIN_MATCHES? nvNorm : (nvRaw.length>=MIN_MATCHES? nvRaw : null);
+      if(use){ REF_AVG[p.id][m]={ value:+(use.reduce((s,v)=>s+v,0)/use.length).toFixed(2), count:use.length, conf:use.length>=REF_N?'high':'med', per90:nvNorm.length>=MIN_MATCHES }; }
     });
   });
   applyManual();
@@ -441,14 +468,44 @@ function render(){
   document.getElementById('lpMcSub').textContent = MC
     ? `${MC.name||tt('load_planner.microcycle','Microcycle')} · ${DAYS[0]?.date} → ${DAYS[DAYS.length-1]?.date}`+(MC.rival?` · vs ${MC.rival}`:'')
     : tt('load_planner.no_mc','No microcycle for this week — showing Mon–Sun');
-  document.getElementById('lpBody').innerHTML = gridHTML()+kpiHTML()+compareHTML()+matrixHTML();
-  wireGrid(); wireMatrix();
+  ensureLayout();
+  document.getElementById('lpTop').innerHTML = chipsHTML()+gridHTML()+kpiHTML();
+  document.getElementById('lpBottom').innerHTML = matrixHTML();
+  wireChips(); wireGrid(); wireMatrix();
+  renderTrend();
+}
+function ensureLayout(){
+  if(document.getElementById('lpTop')) return;   // persistent so the chart tweens instead of re-mounting
+  document.getElementById('lpBody').innerHTML =
+    `<div id="lpTop"></div>
+     <div class="lp-card"><div class="lp-card-h"><span class="t" id="lpTrendTitle"></span><span class="m" id="lpTrendSub"></span></div>
+       <div id="lpTrendWrap" style="position:relative;height:240px;padding:10px 16px 6px"><canvas id="lpTrendCanvas"></canvas></div>
+       <div class="lp-grid-foot"><span class="lp-mini" id="lpTrendFoot"></span></div></div>
+     <div id="lpBottom"></div>`;
+}
+
+function chipsHTML(){
+  const altCount=ROSTER.filter(p=>p.isAlt).length;
+  const autoCount=AUTO_ALT.size;
+  const altBtn=altCount? `<button class="lp-chip alt ${SHOW_ALT?'on':''}" id="lpAltToggle" title="${tt('load_planner.alt_hint','Players whose primary team is another. Auto-shown if they train with this team on the next session.')}">${tt('load_planner.show_alt','Alternates')} (${altCount})${autoCount&&!SHOW_ALT?` · +${autoCount} ↑`:''}</button>` : '';
+  return `<div class="lp-chips">
+    <span class="lp-mini" style="font-weight:700;color:var(--cm-fg-muted)">${tt('load_planner.bands','Bands')}:</span>
+    ${METRICS.map(m=>`<button class="lp-chip ${VISIBLE.has(m)?'on':''}" data-m="${m}">${shortLabel(m)}</button>`).join('')}
+    ${altBtn}
+    <span class="lp-mini" style="margin-left:auto">${tt('load_planner.bands_hint','Toggle bands to show in the table & export')}</span></div>`;
+}
+function wireChips(){
+  document.querySelectorAll('.lp-chip[data-m]').forEach(b=>b.onclick=()=>{ const m=b.dataset.m;
+    if(VISIBLE.has(m)){ if(VISIBLE.size>1) VISIBLE.delete(m); } else VISIBLE.add(m);
+    if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0];
+    render(); });
+  const at=document.getElementById('lpAltToggle'); if(at) at.onclick=()=>{ SHOW_ALT=!SHOW_ALT; render(); };
 }
 
 function gridHTML(){
   const dayCols=DAYS.map(d=>`<th class="lp-dcol ${d.isToday?'lp-todaycol':''}"><div class="md">${d.md||'·'}</div><div class="dt">${new Date(d.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'})}</div><div><span class="lp-tag t-${d.type}">${tagLabel(d.type)}</span></div></th>`).join('');
   const qf=DAYS.map(d=>`<td><input class="pin qf" type="number" min="0" max="400" step="5" data-qf="${d.date}" placeholder="—"></td>`).join('');
-  const rows=METRICS.map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
+  const rows=visMetrics().map(m=>`<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
     DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m]; return `<td class="${d.isToday?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—"></td>`; }).join('')
   }</tr>`).join('');
   const wkFocus=plannedX(FOCUS,false);
@@ -465,7 +522,7 @@ function gridHTML(){
 function tagLabel(t){ return tt('load_planner.tag_'+t, ({training:'Training',match:'Match',gym:'Gym',recovery:'Recovery',off:'Off',none:'—'})[t]||t); }
 
 function kpiHTML(){
-  const rows=ROSTER.map(p=>cellData(p,FOCUS)).filter(r=>r.refMax);
+  const rows=displayRoster().map(p=>cellData(p,FOCUS)).filter(r=>r.refMax);
   const projs=rows.map(r=>r.projX).filter(v=>v!=null);
   const avg=projs.length?projs.reduce((s,v)=>s+v,0)/projs.length:null;
   const band=BANDS[FOCUS];
@@ -482,46 +539,56 @@ function kpiHTML(){
   </div>`;
 }
 
-// Team load by microcycle (bar per MC + % change vs previous) — GPS Analysis wk-on-wk model.
-function compareHTML(){
+// Team load by microcycle — Chart.js bars (Chart Builder style) with value tweening.
+const cssVar=(n,f)=>{ try{ const v=getComputedStyle(document.documentElement).getPropertyValue(n).trim(); return v||f; }catch(e){ return f; } };
+const _pctCol=pct=> pct==null?cssVar('--cm-fg-muted','#6b7280'):Math.abs(pct)<=15?cssVar('--cm-success','#16a34a'):Math.abs(pct)<=25?cssVar('--cm-warning','#d97706'):cssVar('--cm-danger','#dc2626');
+const pctLabelPlugin={ id:'lpPct', afterDatasetsDraw(chart){ const pts=chart.$pts||[]; const ctx=chart.ctx; const meta=chart.getDatasetMeta(0); if(!meta)return;
+  meta.data.forEach((bar,i)=>{ const p=pts[i]; if(!p)return; const lbl=p.pct!=null?(p.pct>=0?'+':'')+p.pct+'%':tt('load_planner.base','base');
+    ctx.save(); ctx.font='600 12px Geist, ui-sans-serif, sans-serif'; ctx.fillStyle=_pctCol(p.pct); ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText(lbl, bar.x, bar.y-6); ctx.restore(); }); } };
+function renderTrend(){
+  const wrap=document.getElementById('lpTrendWrap'); if(!wrap) return;
   const m=FOCUS, mm=metaOf(m);
+  const tEl=document.getElementById('lpTrendTitle'), sEl=document.getElementById('lpTrendSub'), fEl=document.getElementById('lpTrendFoot');
+  if(tEl) tEl.textContent=tt('load_planner.mc_trend','Team load by microcycle');
+  if(sEl) sEl.textContent=`${mm.label} · ${tt('load_planner.squad_avg','squad avg / player')}`;
+  if(fEl) fEl.textContent=tt('load_planner.mc_trend_hint','Team average per player per microcycle · % = change vs previous microcycle.');
   const pts=TREND.map((t,i)=>{ const total=MCTREND[t.id][m]; const prev=i>0?MCTREND[TREND[i-1].id][m]:null;
     const pct=(prev&&total!=null&&prev>0)?Math.round((total-prev)/prev*100):null; return {name:t.name,total,pct}; }).filter(p=>p.total!=null&&p.total>0);
-  const inner = !pts.length
-    ? `<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`
-    : (()=>{ const maxT=Math.max(...pts.map(p=>p.total),1), BAR=120;
-        const col=pct=> pct===null?'var(--cm-fg-muted)':Math.abs(pct)<=15?'var(--cm-success)':Math.abs(pct)<=25?'var(--cm-warning)':'var(--cm-danger)';
-        const bars=pts.map(p=>{ const h=Math.max(Math.round(p.total/maxT*BAR),3), c=col(p.pct);
-          const lbl=p.pct!==null?(p.pct>=0?'+':'')+p.pct+'%':tt('load_planner.base','base');
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px">
-            <div style="height:16px;display:flex;align-items:center"><span style="font:600 12px/1 var(--cm-font-sans);color:${c}">${lbl}</span></div>
-            <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:58%"><div style="background:${c};border-radius:4px 4px 0 0;height:${h}px" title="${fmtN(p.total,mm.dec)} ${mm.unit}"></div></div>
-            <div style="height:15px"><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg)">${fmtN(p.total,mm.dec)}</span></div>
-            <div style="height:16px;max-width:100%;overflow:hidden"><span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap">${p.name}</span></div>
-          </div>`; }).join('');
-        return `<div style="display:flex;gap:10px;align-items:stretch;height:200px;padding:18px 16px">${bars}</div>`; })();
-  return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.mc_trend','Team load by microcycle')}</span>
-      <span class="m">${mm.label} · ${tt('load_planner.squad_avg','squad avg / player')}</span></div>
-    ${inner}
-    <div class="lp-grid-foot"><span class="lp-mini">${tt('load_planner.mc_trend_hint','Team average per player per microcycle · % = change vs previous microcycle.')}</span></div></div>`;
+  if(!pts.length){ if(TREND_CHART){try{TREND_CHART.destroy()}catch(e){}TREND_CHART=null;} wrap.innerHTML=`<div class="lp-empty">${tt('load_planner.no_prev','No GPS data in recent microcycles for this team.')}</div>`; return; }
+  if(!window.Chart){ wrap.innerHTML='<div class="lp-empty">'+tt('load_planner.loading','Loading…')+'</div>'; return; }
+  if(!document.getElementById('lpTrendCanvas')) wrap.innerHTML='<canvas id="lpTrendCanvas"></canvas>';
+  const cv=document.getElementById('lpTrendCanvas');
+  const labels=pts.map(p=>p.name), data=pts.map(p=>+(+p.total).toFixed(mm.dec)), colors=pts.map(p=>_pctCol(p.pct));
+  if(TREND_CHART){ TREND_CHART.data.labels=labels; TREND_CHART.data.datasets[0].data=data; TREND_CHART.data.datasets[0].backgroundColor=colors; TREND_CHART.data.datasets[0].label=mm.label; TREND_CHART.$pts=pts; TREND_CHART.update(); return; }
+  TREND_CHART=new Chart(cv,{ type:'bar',
+    data:{ labels, datasets:[{ label:mm.label, data, backgroundColor:colors, borderWidth:0, borderRadius:5, borderSkipped:'bottom', maxBarThickness:64, categoryPercentage:0.7, barPercentage:0.9 }] },
+    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:22}},
+      animation:{ duration:650, easing:'easeOutCubic', delay:ctx=> (ctx.type==='data'&&ctx.mode==='default')?ctx.dataIndex*70:0 },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>fmtN(c.raw,mm.dec)+' '+(mm.unit||'') } } },
+      scales:{ y:{ beginAtZero:true, grid:{color:'rgba(148,163,184,0.18)',drawTicks:false}, border:{display:false}, ticks:{font:{size:10},color:'#9CA3AF',padding:6} },
+        x:{ grid:{display:false}, ticks:{font:{size:11},color:'#6B7280'} } } },
+    plugins:[pctLabelPlugin] });
+  TREND_CHART.$pts=pts;
 }
 
 function matrixHTML(){
   if(!ROSTER.length) return '<div class="lp-card"><div class="lp-empty">'+tt('load_planner.no_players','No players in this team.')+'</div></div>';
-  let rows=ROSTER.map(p=>({p,f:cellData(p,FOCUS)}));
+  let rows=displayRoster().map(p=>({p,f:cellData(p,FOCUS)}));
   rows.sort((a,b)=>{ if(sortK==='name') return sortD*a.p.name.localeCompare(b.p.name); const av=a.f.projX==null?-1:a.f.projX,bv=b.f.projX==null?-1:b.f.projX; return sortD*(av-bv); });
-  const head=`<tr id="lpThRow"><th data-k="name">${tt('load_planner.col_player','Player')}</th>${METRICS.map(m=>`<th data-k="${m}" title="${metaOf(m).label} (${metaOf(m).unit||'—'})">${shortLabel(m)}${m===FOCUS?' ★':''}</th>`).join('')}</tr>`;
+  const cols=visMetrics();
+  const head=`<tr id="lpThRow"><th data-k="name">${tt('load_planner.col_player','Player')}</th>${cols.map(m=>`<th data-k="${m}" title="${metaOf(m).label} (${metaOf(m).unit||'—'})">${shortLabel(m)}${m===FOCUS?' ★':''}</th>`).join('')}</tr>`;
   const body=rows.map(({p})=>{
-    const cells=METRICS.map(m=>{ const c=cellData(p,m),st=statusOf(c.projX,m),mm=metaOf(m);
+    const cells=cols.map(m=>{ const c=cellData(p,m),st=statusOf(c.projX,m),mm=metaOf(m);
       if(c.refMax==null) return `<td class="lp-cell" data-pid="${p.id}" data-m="${m}"><span class="lp-setcell">${tt('load_planner.set','set')}</span></td>`;
       const dot=c.manual?'<span class="lp-badge">M</span>':`<span class="lp-dot ${c.conf==='high'?'d-high':c.conf==='med'?'d-med':'d-none'}"></span>`;
       return `<td class="lp-cell ${st.cls}" data-pid="${p.id}" data-m="${m}" title="ref máx ${fmtN(c.refMax,mm.dec)} · ref prom ${fmtN(c.refAvg,mm.dec)} ${mm.unit} · ${tt('load_planner.now','now')} ${c.xMax!=null?c.xMax.toFixed(2):'0.00'}× · ${tt('load_planner.proj','proj')} ${c.projX!=null?c.projX.toFixed(2):'—'}×">
-        <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'0.00×'}</div>
-        <div class="cavg">${c.xAvg!=null?c.xAvg.toFixed(2)+'× '+tt('load_planner.avg_short','avg'):''}</div>
+        <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'}</div>
+        <div class="cavg">${c.xAvg!=null?tt('load_planner.avg_short','prom')+' '+c.xAvg.toFixed(2)+'×':'<span style="opacity:.35">'+tt('load_planner.avg_short','prom')+' —</span>'}</div>
         <div class="cref">${fmtN(c.refMax,mm.dec)} ${dot}</div>
         <span class="lp-cbar"><i style="width:${st.pctW}%"></i></span></td>`;
     }).join('');
-    return `<tr><td><div class="lp-pl"><span class="lp-av">${initials(p.name)}</span><div><div class="nm">${p.name}</div><div class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
+    const altBadge=p.isAlt?` <span class="lp-badge" title="${tt('load_planner.alt_player','Alternate — primary team is another')}">ALT</span>`:'';
+    return `<tr><td><div class="lp-pl"><span class="lp-av">${initials(p.name)}</span><div><div class="nm">${p.name}${altBadge}</div><div class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
   }).join('');
   return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.player_breakdown','Player breakdown')}</span>
       <div class="lp-legend"><span>${tt('load_planner.big_is','big = ×max (best-5) · small = ×avg (last-5/90)')}</span>
@@ -583,11 +650,12 @@ async function doExport(){
   const refKind=document.getElementById('lpExpRef').value;
   // reverse mapping metric → Catapult header (saved per club); fallback to label
   let rev={}; try{ const {data}=await window.sb.from('gps_column_mappings').select('source_column_name,target_metric').eq('club_id',CLUB).eq('source_label','catapult_threshold_csv'); (data||[]).forEach(r=>{ if(!rev[r.target_metric]) rev[r.target_metric]=r.source_column_name; }); }catch(e){}
-  const cols=METRICS.filter(m=>(PLAN[date]||{})[m]!=null);
-  const headerMetrics = cols.length?cols:METRICS;
+  const vis=visMetrics();
+  const cols=vis.filter(m=>(PLAN[date]||{})[m]!=null);
+  const headerMetrics = cols.length?cols:vis;
   const headers=['Athlete ID','Athlete Name','Position',...headerMetrics.map(m=>rev[m]||metaOf(m).label)];
   const lines=[headers.map(csvCell).join(',')];
-  ROSTER.forEach(p=>{ if(!p.ext) return;
+  displayRoster().forEach(p=>{ if(!p.ext) return;
     const row=[p.ext,p.name,p.pos];
     headerMetrics.forEach(m=>{ const pct=(PLAN[date]||{})[m]; const ref=(refKind==='avg'?REF_AVG:REF_MAX)[p.id]?.[m]?.value;
       const val=(pct!=null&&ref!=null)? Math.round(pct/100*ref) : ''; row.push(val); });
