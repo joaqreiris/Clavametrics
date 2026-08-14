@@ -2006,8 +2006,8 @@ function renderTasks(tasks, view = 'my') {
           .in('status', ['pending', 'in_progress'])
           .order('due_date', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    (_hubPlayerIds ? window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today).in('player_id', _hubPlayerIds.map(String))
-                   : window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today)),
+    (_hubPlayerIds ? window.sb.from('availability').select('status,team_id').eq('club_id', clubId).eq('date', today).in('player_id', _hubPlayerIds.map(String))
+                   : window.sb.from('availability').select('status,team_id').eq('club_id', clubId).eq('date', today)),
     window.sb.from('players').select('status')
       .eq('club_id', clubId).match(_teamEq).is('archived_at', null),
     window.sb.from('training_sessions')
@@ -2153,8 +2153,14 @@ function renderTasks(tasks, view = 'my') {
     }
   }
 
-  const pillSource = availRes.data?.length
-    ? availRes.data
+  // Un jugador que ese día está con OTRO equipo (fila relativa de otro team) no cuenta como
+  // disponible en la vista de ESTE equipo. Globales (lesión/enfermedad/selección, team_id NULL) sí.
+  const _HUB_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+  const _availNorm = (availRes.data || []).map(a =>
+    (_HUB_TEAM_REL.has(a.status) && a.team_id && _hubTeamId && a.team_id !== _hubTeamId)
+      ? { ...a, status: 'other_team' } : a);
+  const pillSource = _availNorm.length
+    ? _availNorm
     : (playersStatusRes.data ?? []).map(p => ({ status: p.status }));
   if (!availRes.error || !playersStatusRes.error) renderAvailabilityPills(pillSource);
 

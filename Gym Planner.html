@@ -2221,7 +2221,7 @@ function gpComputeGroups() {
 async function gpLoadAthletes(dateStr) {
   const [availRes, treatRes] = await Promise.all([
     window.sb.from('availability')
-      .select('player_id,status')
+      .select('player_id,status,team_id')
       .eq('club_id', _gpClubId).eq('date', dateStr)
       .catch(() => ({ data: [] })),
     window.sb.from('treatments')
@@ -2230,7 +2230,12 @@ async function gpLoadAthletes(dateStr) {
       .catch(() => ({ data: [] }))
   ]);
 
-  const availMap   = Object.fromEntries((availRes.data || []).map(a => [a.player_id, a.status]));
+  // Con otro equipo ese día (fila relativa de otro team) → no disponible acá. Globales (NULL) sí.
+  const _GP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+  const availMap   = Object.fromEntries((availRes.data || []).map(a => {
+    const other = _GP_TEAM_REL.has(a.status) && a.team_id && _gpTeamId && a.team_id !== _gpTeamId;
+    return [a.player_id, other ? 'other_team' : a.status];
+  }));
   const adaptNotes = Object.fromEntries(
     (treatRes.data || []).filter(t => t.adaptation_notes).map(t => [t.player_id, t.adaptation_notes])
   );

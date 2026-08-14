@@ -1495,8 +1495,15 @@
     const players = playersData || [];
 
     const availRes = await window.sb.from('availability')
-      .select('player_id,status').eq('club_id', clubId).eq('date', today);
-    const availMap = Object.fromEntries((availRes.data||[]).map(a => [a.player_id, a.status]));
+      .select('player_id,status,team_id').eq('club_id', clubId).eq('date', today);
+    // Un jugador que ese día está con OTRO equipo (fila relativa de otro team) no cuenta como
+    // disponible acá. Los estados globales (lesión/enfermedad/selección, team_id NULL) sí valen.
+    const _P_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+    const availMap = {};
+    (availRes.data||[]).forEach(a => {
+      const other = _P_TEAM_REL.has(a.status) && a.team_id && teamId && a.team_id !== teamId;
+      availMap[a.player_id] = other ? 'other_team' : a.status;
+    });
     const hasAvail = (availRes.data||[]).length > 0;
 
     pillData = hasAvail

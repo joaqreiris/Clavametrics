@@ -675,6 +675,7 @@ function dpRenderSquad(avMap) {
     let cls = '', reason = '';
     if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
     if      (av?.status === 'away')      { cls = 'away';      reason = av.notes || 'away'; }
+    else if (av?.status === 'other_team'){ cls = 'unavailable'; reason = tt('daily_planning.with_other_team','With another team'); }
     else if (av?.status === 'unavailable'){ cls = 'unavailable'; reason = av.notes || 'out'; }
     else if (av?.status === 'injured')   { cls = 'injured';   reason = av.notes || 'inj'; }
     else if (av?.status === 'sick')      { cls = 'sick';      reason = av.notes || 'sick'; }
@@ -725,6 +726,7 @@ function dpRenderSquad(avMap) {
   _dpPlayers.forEach(p => {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
     if      (av?.status === 'away')       awayCt++;
+    else if (av?.status === 'other_team') unCt++;
     else if (av?.status === 'unavailable') unCt++;
     else if (av?.status === 'injured')     injCt++;
     else if (av?.status === 'sick')        sickCt++;
@@ -1005,7 +1007,7 @@ async function loadDay(dateStr) {
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
 
   const [avResult, adaptResult, sessResult] = await Promise.all([
-    window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
@@ -1073,7 +1075,17 @@ async function loadDay(dateStr) {
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
-  (avResult.data || []).forEach(a => { avMap[a.player_id] = a; });
+  // Estados relativos al equipo (available/partial/etc) guardados para OTRO equipo → ese día el
+  // jugador está con otra categoría: acá se muestra como 'other_team' (fuera de esta sesión).
+  // Los estados globales (lesión/enfermedad/selección, team_id NULL) valen igual acá.
+  const _DP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+  (avResult.data || []).forEach(a => {
+    if (_DP_TEAM_REL.has(a.status) && a.team_id && _dpTeamId && a.team_id !== _dpTeamId) {
+      avMap[a.player_id] = { ...a, status: 'other_team' };
+    } else {
+      avMap[a.player_id] = a;
+    }
+  });
   _dpAvMap = avMap;
 
   // Team scope: show adaptations for THIS team only (legacy rows have no team_id → keep showing).
