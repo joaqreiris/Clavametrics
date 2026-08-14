@@ -897,6 +897,10 @@ CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_
 -- Índice parcial que sólo cubre las filas válidas → salta las inválidas en el índice.
 CREATE INDEX IF NOT EXISTS idx_gps_reports_club_player_valid
   ON public.gps_reports USING btree (club_id, player_id) WHERE (is_invalid = false);
+-- my_gps_session_ids() = «select distinct session_id where player_id in (...)» (RLS de
+-- training_sessions). Índice cubridor (player_id, session_id) → distinct index-only, sin heap.
+CREATE INDEX IF NOT EXISTS idx_gps_reports_player_session
+  ON public.gps_reports USING btree (player_id, session_id);
 
 create table if not exists public.gps_sync_jobs (
   id uuid default gen_random_uuid() not null,
