@@ -2600,7 +2600,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -2690,14 +2690,19 @@
       // path crudo si no aplica o si el RPC falla. rows/eavMap quedan vacíos y NO se usan río abajo
       // (los bloques que los usan — md-rel, comparación mc, diagnostics — están excluidos por el guard).
       let rows = [], eavMap = new Map(), series, _usedFastAgg = false;
-      const _paEligible = _fbPlayerAggEligible(FBcard) && canUsePlayerAgg && canUsePlayerAgg(config, catalogMap);
+      const _fbOk = _fbPlayerAggEligible(FBcard);
+      const _paEligible  = _fbOk && canUsePlayerAgg   && canUsePlayerAgg(config, catalogMap);       // jugador / KPI
+      const _pmcEligible = _fbOk && !_paEligible && canUsePlayerMcAgg && canUsePlayerMcAgg(config, catalogMap);  // jugador×microciclo
+      const _fastFn = _paEligible ? (() => resolvePlayerAggSeries(sessionIds, config, ctx, catalogMap, sb))
+                    : _pmcEligible ? (() => resolvePlayerMcAggSeries(sessionIds, config, ctx, catalogMap, sb))
+                    : null;
       // Modo AUDITORÍA (window.__gpPlayerAggAudit): corre AMBOS caminos y compara punto por punto,
       // pero RENDERIZA desde el crudo (sin riesgo). Sirve para verificar con datos reales que los
       // números del RPC son idénticos antes de prender el fast-path. No cambia lo que se muestra.
-      const _audit = _paEligible && _gpPlayerAggAudit();
-      if (!_audit && _paEligible && _gpPlayerAggOn()) {
+      const _audit = !!_fastFn && _gpPlayerAggAudit();
+      if (!_audit && _fastFn && _gpPlayerAggOn()) {
         try {
-          const fast = await resolvePlayerAggSeries(sessionIds, config, ctx, catalogMap, sb);
+          const fast = await _fastFn();
           if (stale()) return;
           if (fast) { series = fast; _usedFastAgg = true; }
         } catch (e) { console.warn('gpb player-agg fast path — raw fallback:', e); }
@@ -2722,9 +2727,10 @@
         // Step 4: aggregate
         series = aggregateSeries(rows, eavMap, config, catalogMap);
 
-        // Auditoría: compara la serie del RPC contra la cruda (que es la que se dibuja).
-        if (_audit) {
-          try { const fast = await resolvePlayerAggSeries(sessionIds, config, ctx, catalogMap, sb);
+        // Auditoría: compara la serie del RPC (player-agg o player×mc según corresponda) contra la
+        // cruda (que es la que se dibuja).
+        if (_audit && _fastFn) {
+          try { const fast = await _fastFn();
                 if (!stale()) _gpAuditPlayerAgg(config, series, fast); }
           catch (e) { console.warn('gpb player-agg audit:', e); }
         }

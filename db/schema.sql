@@ -3608,6 +3608,75 @@ AS $function$
 $function$
 ;
 
+-- Variante de gps_player_agg agrupada por JUGADOR × MICROCICLO (tabla ALL VALUES con columna MC).
+-- El microciclo lo deriva el CLIENTE (_gpMcOfSession: id guardado si vale, si no ventana de fecha;
+-- '' = sin microciclo, p. ej. datos importados de temporada pasada) y pasa el mapa session→mc como
+-- dos arrays paralelos (p_session_ids[i] ↔ p_session_mcs[i]). La DB agrupa con ese mapa → baja de
+-- jugadores×sesiones a jugadores×microciclos. mc_key='' = bucket "—" (sin microciclo): es un grupo
+-- normal, NO falla. Mismos bloques/semántica y mismo SECURITY DEFINER + acceso que gps_player_agg.
+CREATE OR REPLACE FUNCTION public.gps_player_mc_agg(p_club_id uuid, p_session_ids uuid[], p_session_mcs text[], p_player_ids uuid[] DEFAULT NULL::uuid[], p_exclude_ids uuid[] DEFAULT NULL::uuid[])
+ RETURNS TABLE(
+   player_id uuid, first_name text, last_name text, mc_key text, n_rows integer, w_sum numeric,
+   total_distance_sum numeric, total_distance_max numeric, total_distance_min numeric, total_distance_swv numeric,
+   high_speed_distance_sum numeric, high_speed_distance_max numeric, high_speed_distance_min numeric, high_speed_distance_swv numeric,
+   very_high_speed_distance_sum numeric, very_high_speed_distance_max numeric, very_high_speed_distance_min numeric, very_high_speed_distance_swv numeric,
+   sprint_distance_sum numeric, sprint_distance_max numeric, sprint_distance_min numeric, sprint_distance_swv numeric,
+   sprint_count_sum numeric, sprint_count_max numeric, sprint_count_min numeric, sprint_count_swv numeric,
+   max_speed_sum numeric, max_speed_max numeric, max_speed_min numeric, max_speed_swv numeric,
+   avg_speed_sum numeric, avg_speed_max numeric, avg_speed_min numeric, avg_speed_swv numeric,
+   accelerations_sum numeric, accelerations_max numeric, accelerations_min numeric, accelerations_swv numeric,
+   decelerations_sum numeric, decelerations_max numeric, decelerations_min numeric, decelerations_swv numeric,
+   player_load_sum numeric, player_load_max numeric, player_load_min numeric, player_load_swv numeric,
+   hmld_sum numeric, hmld_max numeric, hmld_min numeric, hmld_swv numeric,
+   time_played_sum numeric, time_played_max numeric, time_played_min numeric, time_played_swv numeric,
+   distance_per_minute_sum numeric, distance_per_minute_max numeric, distance_per_minute_min numeric, distance_per_minute_swv numeric
+ )
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with sess_mc as (
+    select u.sid, coalesce(u.mc, '') as mc from unnest(p_session_ids, p_session_mcs) as u(sid, mc)
+  )
+  select
+    r.player_id,
+    pl.first_name, pl.last_name,
+    sm.mc                                                                      as mc_key,
+    count(*)::int                                                              as n_rows,
+    sum(r.time_played) filter (where r.time_played > 0)                        as w_sum,
+    sum(coalesce(r.total_distance,0))            as total_distance_sum,            max(coalesce(r.total_distance,0))            as total_distance_max,            min(coalesce(r.total_distance,0))            as total_distance_min,            sum(coalesce(r.total_distance,0)*r.time_played)            filter (where r.time_played > 0) as total_distance_swv,
+    sum(coalesce(r.high_speed_distance,0))       as high_speed_distance_sum,       max(coalesce(r.high_speed_distance,0))       as high_speed_distance_max,       min(coalesce(r.high_speed_distance,0))       as high_speed_distance_min,       sum(coalesce(r.high_speed_distance,0)*r.time_played)       filter (where r.time_played > 0) as high_speed_distance_swv,
+    sum(coalesce(r.very_high_speed_distance,0))  as very_high_speed_distance_sum,  max(coalesce(r.very_high_speed_distance,0))  as very_high_speed_distance_max,  min(coalesce(r.very_high_speed_distance,0))  as very_high_speed_distance_min,  sum(coalesce(r.very_high_speed_distance,0)*r.time_played)  filter (where r.time_played > 0) as very_high_speed_distance_swv,
+    sum(coalesce(r.sprint_distance,0))           as sprint_distance_sum,           max(coalesce(r.sprint_distance,0))           as sprint_distance_max,           min(coalesce(r.sprint_distance,0))           as sprint_distance_min,           sum(coalesce(r.sprint_distance,0)*r.time_played)           filter (where r.time_played > 0) as sprint_distance_swv,
+    sum(coalesce(r.sprint_count,0))              as sprint_count_sum,              max(coalesce(r.sprint_count,0))              as sprint_count_max,              min(coalesce(r.sprint_count,0))              as sprint_count_min,              sum(coalesce(r.sprint_count,0)*r.time_played)              filter (where r.time_played > 0) as sprint_count_swv,
+    sum(coalesce(r.max_speed,0))                 as max_speed_sum,                 max(coalesce(r.max_speed,0))                 as max_speed_max,                 min(coalesce(r.max_speed,0))                 as max_speed_min,                 sum(coalesce(r.max_speed,0)*r.time_played)                 filter (where r.time_played > 0) as max_speed_swv,
+    sum(coalesce(r.avg_speed,0))                 as avg_speed_sum,                 max(coalesce(r.avg_speed,0))                 as avg_speed_max,                 min(coalesce(r.avg_speed,0))                 as avg_speed_min,                 sum(coalesce(r.avg_speed,0)*r.time_played)                 filter (where r.time_played > 0) as avg_speed_swv,
+    sum(coalesce(r.accelerations,0))             as accelerations_sum,             max(coalesce(r.accelerations,0))             as accelerations_max,             min(coalesce(r.accelerations,0))             as accelerations_min,             sum(coalesce(r.accelerations,0)*r.time_played)             filter (where r.time_played > 0) as accelerations_swv,
+    sum(coalesce(r.decelerations,0))             as decelerations_sum,             max(coalesce(r.decelerations,0))             as decelerations_max,             min(coalesce(r.decelerations,0))             as decelerations_min,             sum(coalesce(r.decelerations,0)*r.time_played)             filter (where r.time_played > 0) as decelerations_swv,
+    sum(coalesce(r.player_load,0))               as player_load_sum,               max(coalesce(r.player_load,0))               as player_load_max,               min(coalesce(r.player_load,0))               as player_load_min,               sum(coalesce(r.player_load,0)*r.time_played)               filter (where r.time_played > 0) as player_load_swv,
+    sum(coalesce(r.hmld,0))                      as hmld_sum,                      max(coalesce(r.hmld,0))                      as hmld_max,                      min(coalesce(r.hmld,0))                      as hmld_min,                      sum(coalesce(r.hmld,0)*r.time_played)                      filter (where r.time_played > 0) as hmld_swv,
+    sum(coalesce(r.time_played,0))               as time_played_sum,               max(coalesce(r.time_played,0))               as time_played_max,               min(coalesce(r.time_played,0))               as time_played_min,               sum(coalesce(r.time_played,0)*r.time_played)               filter (where r.time_played > 0) as time_played_swv,
+    sum(coalesce(r.distance_per_minute,0))       as distance_per_minute_sum,       max(coalesce(r.distance_per_minute,0))       as distance_per_minute_max,       min(coalesce(r.distance_per_minute,0))       as distance_per_minute_min,       sum(coalesce(r.distance_per_minute,0)*r.time_played)       filter (where r.time_played > 0) as distance_per_minute_swv
+  from public.gps_reports r
+  join public.players pl on pl.id = r.player_id
+  join sess_mc sm on sm.sid = r.session_id
+  where r.club_id = p_club_id
+    and r.is_invalid = false
+    and (p_player_ids is null or r.player_id = any(p_player_ids))
+    and (p_exclude_ids is null or not (r.player_id = any(p_exclude_ids)))
+    and (public.is_super_admin() or public.get_user_club_id() = p_club_id)
+    and (public.is_super_admin() or public.club_has_feature(p_club_id, 'gps_analysis'))
+    and (
+      public.has_full_planning_access()
+      or r.player_id in (select public.my_player_ids())
+      or exists (select 1 from public.training_sessions ts
+                 where ts.id = r.session_id and ts.team_id in (select public.my_team_ids()))
+    )
+  group by r.player_id, pl.first_name, pl.last_name, sm.mc;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.grant_comp_subscription(p_team_id uuid, p_plan_slug text DEFAULT 'full'::text)
  RETURNS uuid
  LANGUAGE plpgsql
