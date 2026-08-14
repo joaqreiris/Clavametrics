@@ -877,7 +877,10 @@
   function recalcKPIs() {
     let avCount = 0, inCount = 0, siCount = 0, naCount = 0;
     const inPlayers = [], siPlayers = [], naPlayers = [];
-    players.forEach(p => {
+    // Mismo alcance que las stats: por defecto solo el plantel principal (los invitados
+    // de otros equipos no deben contar en «X/Y disponibles»).
+    const kpiPlayers = (_avStatScope === 'all') ? players : players.filter(p => p.team_id === _avTeamId);
+    kpiPlayers.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
       let s = effStatus(p.id, todayStr, e);   // guests / con-otro-equipo → 'other_team', no cuenta como disponible
       if (s.indexOf('match:') === 0) s = 'available';   // partido = está con NOSOTROS ese día
@@ -889,7 +892,7 @@
       else if (s === 'away') { naCount++; naPlayers.push(name); }
     });
     const el = id => document.getElementById(id);
-    el('kpiAvail')        && (el('kpiAvail').innerHTML = `${avCount} <sub>/ ${players.length}</sub>`);
+    el('kpiAvail')        && (el('kpiAvail').innerHTML = `${avCount} <sub>/ ${kpiPlayers.length}</sub>`);
     el('kpiAvailInjury')  && (el('kpiAvailInjury').textContent  = inCount || '—');
     el('kpiAvailIllness') && (el('kpiAvailIllness').textContent = siCount || '—');
     el('kpiAvailNat')     && (el('kpiAvailNat').textContent     = naCount || '—');
@@ -900,7 +903,7 @@
     // Delta vs yesterday — only show if yesterday has availability records
     if (yesterdayByPlayer !== null) {
       let avYest = 0;
-      players.forEach(p => {
+      kpiPlayers.forEach(p => {
         const ye = yesterdayByPlayer[p.id];
         let s = ye ? effStatus(p.id, null, ye) : (_avGuestTeam.has(p.id) ? 'other_team' : 'available');
         if (s.indexOf('match:') === 0) s = 'available';
@@ -1569,6 +1572,10 @@
   let _avTeamId = null;
   let _avFull = false;            // acceso club-wide (admin/owner; futuro: Director deportivo / Head of performance)
   let _avSeasons = [];            // temporadas del equipo (+ club-wide) para el filtro de rango
+  // Alcance de las stats: 'primary' = solo jugadores cuyo equipo PRINCIPAL es el visto
+  // (default: un invitado del 2do equipo no debe inflar la disponibilidad del 1ro);
+  // 'all' = incluye invitados/segundos equipos del roster.
+  let _avStatScope = (() => { try { return sessionStorage.getItem('av_stat_scope') || 'primary'; } catch { return 'primary'; } })();
   let _avTeamsById = new Map();   // team_id → { name } for cross-team badges
   async function avInitTeamSwitch() {
     const clubId = CLUB_ID || await window.getClubId();
@@ -1629,6 +1636,12 @@
     _avRangePreset = v;
     _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
     if (typeof init === 'function') init();
+  };
+  window.avSetStatScope = function(v) {
+    _avStatScope = (v === 'all') ? 'all' : 'primary';
+    try { sessionStorage.setItem('av_stat_scope', _avStatScope); } catch {}
+    if (typeof avRenderStats === 'function') avRenderStats();
+    if (typeof recalcKPIs === 'function') recalcKPIs();   // el KPI "X/Y" de la matriz respeta el mismo alcance
   };
   window.avSetSeason = function(id) {
     const s = (_avSeasons || []).find(x => x.id === id); if (!s) return;
@@ -1692,8 +1705,13 @@
     if (!from || !to) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoRange','No range selected.')}</div>`; return; }
 
     const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id');
-    const { data: players } = await pq.order('last_name');
-    if (!players || !players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
+    const { data: rosterAll } = await pq.order('last_name');
+    if (!rosterAll || !rosterAll.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
+    // Invitados = jugadores del roster cuyo equipo principal es OTRO. Por defecto no
+    // cuentan (no son plantel real); el toggle 'all' los incluye.
+    const _guestCount = rosterAll.filter(p => p.team_id !== _avTeamId).length;
+    const players = (_avStatScope === 'all') ? rosterAll : rosterAll.filter(p => p.team_id === _avTeamId);
+    if (!players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
     const pids = players.map(p => p.id);
 
     const { data: availRaw } = await window.sb.from('availability')
@@ -1770,7 +1788,16 @@
         <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px">${sub||'&nbsp;'}</div>
       </div>`;
 
-    host.innerHTML = `
+    const _segStyle = (on) => `padding:6px 13px;border:none;border-radius:7px;font:600 12px/1 var(--cm-font-sans);cursor:pointer;background:${on?'var(--cm-surface)':'transparent'};color:${on?'var(--cm-fg-strong)':'var(--cm-fg-muted)'};box-shadow:${on?'0 1px 2px rgba(0,0,0,.08)':'none'};transition:background .12s`;
+    const scopeBar = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;padding:3px;gap:2px">
+          <button onclick="avSetStatScope('primary')" style="${_segStyle(_avStatScope==='primary')}">${tt('availability.scopePrimary','Primary team only')}</button>
+          <button onclick="avSetStatScope('all')" style="${_segStyle(_avStatScope==='all')}">${tt('availability.scopeAll','Include secondary')}${_guestCount?` <span style="opacity:.7">(+${_guestCount})</span>`:''}</button>
+        </div>
+        <span style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);max-width:420px">${tt('availability.scopeHint','Stats count only players whose main team is this one. Guests from other squads are excluded unless you include them.')}</span>
+      </div>`;
+    host.innerHTML = scopeBar + `
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px">
         ${kpi('ti-circle-check',tt('availability.statsAvgAvail','Avg availability'), availPct+'<span style="font-size:17px">%</span>', tt('availability.statsPlayerDays', `${tAvail} of ${tTotal} player-days`, { avail: tAvail, total: tTotal }), 'var(--cm-success)')}
         ${kpi('ti-bandage',tt('availability.statsDaysLostInjury','Days lost · injury'), tInjury, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tInjury/tTotal*100)}% of period`, { pct: Math.round(tInjury/tTotal*100) }):'', 'var(--cm-danger)')}
