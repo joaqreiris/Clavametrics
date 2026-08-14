@@ -2165,6 +2165,13 @@ create table if not exists public.seasons (
 );
 CREATE INDEX idx_seasons_club ON public.seasons USING btree (club_id);
 CREATE INDEX idx_seasons_club_team ON public.seasons USING btree (club_id, team_id);
+-- Una sola temporada por (club, equipo, nombre) para evitar duplicados como «2026/27» ×3.
+-- Dos índices partidos: en un unique normal los NULL cuentan como distintos, así que la
+-- temporada club-wide (team_id NULL) necesita su propio índice por (club_id, name).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_seasons_club_team_name
+  ON public.seasons USING btree (club_id, team_id, name) WHERE team_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_seasons_club_name_global
+  ON public.seasons USING btree (club_id, name) WHERE team_id IS NULL;
 
 create table if not exists public.session_exercises (
   id uuid default gen_random_uuid() not null,
