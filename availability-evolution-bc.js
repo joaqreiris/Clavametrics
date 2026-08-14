@@ -27,6 +27,16 @@
   ];
   const STACK = ["disp", "mod", "les", "enf", "sel", "aus", "otro"];
 
+  // i18n: etiqueta traducida por categoría (fallback al label EN de STATUS).
+  const I18N_KEY = {
+    disp: "availability.donutAvailable", mod: "availability.donutModified",
+    les:  "availability.donutInjury",    enf: "availability.donutIllness",
+    sel:  "availability.donutNatTeam",   aus: "availability.donutAbsent",
+    otro: "availability.donutOtherTeam",
+  };
+  function T(key, fb) { const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key) : null; return (v && v !== key) ? v : fb; }
+  function labelOf(key) { const m = STATUS.find((s) => s.key === key); return T(I18N_KEY[key], (m && m.label) || key); }
+
   const DOW  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const DOW1 = ["L", "M", "X", "J", "V", "S", "D"]; // lunes primero
   const MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -77,11 +87,14 @@
   }
   function hideTip() { const tip = tipEl(); if (tip) tip.classList.remove("on"); }
   function tipRows(row, keys) {
-    let h = `<div class="tc">${fFull(row.date)}${row.match ? " · partido" : ""}</div>`;
+    let h = `<div class="tc">${fFull(row.date)}${row.match ? " · " + T("availability.match", "match") : ""}</div>`;
     (keys || STACK).forEach((k) => {
       if (row[k] <= 0) return;
-      const m = STATUS.find((s) => s.key === k);
-      h += `<div class="tr"><i style="background:${colorOf(k)}"></i>${m.label}<b>${row[k]}</b></div>`;
+      // La fila "Disponible" muestra el % del día + el conteo; el resto, solo el conteo,
+      // así se ve DE UN VISTAZO por qué la disponibilidad es la que es (cuántos lesionados,
+      // enfermos, en selección, etc.).
+      const val = (k === "disp") ? `${row.pct}% · ${row[k]}/${N}` : row[k];
+      h += `<div class="tr"><i style="background:${colorOf(k)}"></i>${labelOf(k)}<b>${val}</b></div>`;
     });
     return h;
   }
@@ -157,8 +170,9 @@
       guide.setAttribute("x1", X(i)); guide.setAttribute("x2", X(i)); guide.classList.add("on");
       mk.setAttribute("cx", X(i)); mk.setAttribute("cy", Y(r.pct)); mk.classList.add("on");
       mk.setAttribute("stroke", r.pct < 85 ? colorOf("les") : "var(--cm-fg-strong)");
-      const head = `<div class="tc">${fFull(r.date)}</div><div class="tr"><i style="background:${colorOf("disp")}"></i>Available<b>${r.pct}%</b></div><div class="tr"><i style="background:var(--cm-fg-faint)"></i>Players<b>${r.disp}/${N}</b></div>`;
-      showTip(head, e.clientX, e.clientY);
+      // Tooltip con el POR QUÉ del %: disponible (% + conteo) y luego cada motivo que
+      // resta disponibilidad (lesión, enfermedad, selección, otro equipo…) con su conteo.
+      showTip(tipRows(r), e.clientX, e.clientY);
     });
     hit.addEventListener("mouseleave", () => { guide.classList.remove("on"); mk.classList.remove("on"); hideTip(); });
   }
@@ -246,7 +260,7 @@
     lg.innerHTML = "";
     STATUS.forEach((s) => {
       const it = document.createElement("span"); it.className = "it";
-      it.innerHTML = `<span class="sw" style="background:${colorOf(s.key)}"></span>${s.label}`;
+      it.innerHTML = `<span class="sw" style="background:${colorOf(s.key)}"></span>${labelOf(s.key)}`;
       lg.appendChild(it);
     });
   }
