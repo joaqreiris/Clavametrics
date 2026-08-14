@@ -7103,22 +7103,20 @@ async function openManualGpsModal() {
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
   const _dataCount = {};
   (dataRes.data || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
-  // Client filter: keep THIS team's sessions + untagged imports that actually hold GPS. Untagged
-  // empties (other teams' planning noise) are dropped. A 'This team / All' toggle reveals the rest.
-  let sessScope = 'team';
-  const _teamSessions = teamId
-    ? _rawSessions.filter(s => String(s.team_id)===String(teamId) || (s.team_id==null && _dataCount[s.id]))
-    : _rawSessions;
-  const hasHiddenSess = teamId && _teamSessions.length < _rawSessions.length;
-  const curSessions = () => (sessScope==='all' || !teamId) ? _rawSessions : _teamSessions;
-  if (!_rawSessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions found for this team.')}</div>`; return; }
+  // Client filter — only sessions that can actually receive manual GPS for THIS team:
+  //  · belong to this team (or an untagged Catapult import), never another team's session;
+  //  · already hold some GPS (dataCount > 0) — empty planning duplicates are noise here;
+  //  · are not in the future — you can't log GPS for a session that hasn't happened yet.
+  const _today = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0,10));
+  const _eligible = s => !!_dataCount[s.id]
+      && (!s.session_date || s.session_date <= _today)
+      && (!teamId || String(s.team_id)===String(teamId) || s.team_id==null);
+  const _teamSessions = _rawSessions.filter(_eligible);
+  const curSessions = () => _teamSessions;
+  if (!_teamSessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions with GPS found for this team.')}</div>`; return; }
 
   body.innerHTML = `
     <label class="mgp-lbl">${tt('gps_analysis.manual_session','Session')}</label>
-    ${hasHiddenSess ? `<div class="mgp-seg mgp-teamf" id="mgpSessScope">
-      <button type="button" data-s="team" class="is-on">${tt('gps_analysis.manual_filter_squad','This team')}</button>
-      <button type="button" data-s="all">${tt('gps_analysis.manual_sess_all','All')}</button>
-    </div>` : ''}
     <div class="mgp-pick">
       <button type="button" class="mgp-ses-btn" id="mgpSesBtn" aria-expanded="false"><span class="mgp-ses-cur" id="mgpSesCur"></span><i class="ti ti-chevron-down mgp-ses-chev"></i></button>
       <div class="mgp-list mgp-ses-list" id="mgpSesList" role="listbox" hidden></div>
@@ -7281,18 +7279,20 @@ async function openManualGpsModal() {
   body.querySelector('#mgpSesBtn').addEventListener('click', () => {
     body.querySelector('#mgpSesList').hidden ? openSesList() : closeSesList();
   });
-  body.querySelectorAll('#mgpSessScope button').forEach(b => b.addEventListener('click', () => {
-    sessScope = b.dataset.s;
-    body.querySelectorAll('#mgpSessScope button').forEach(x => x.classList.toggle('is-on', x===b));
-    setSession(body.querySelector('#mgpSession').value);   // keep selection if still visible, else first
-    if (!body.querySelector('#mgpSesList').hidden) renderSesList();
-  }));
-  // Close the session list when clicking outside it.
-  document.addEventListener('mousedown', e => {
-    if (!body.isConnected) return;
+  // Close the session list when clicking anywhere outside the picker. Scoped to the overlay so the
+  // listener dies with the modal (no leaked document handler that keeps the dropdown feeling stuck).
+  ov.addEventListener('mousedown', e => {
     const pick = body.querySelector('#mgpSesBtn')?.parentElement;
     if (pick && !pick.contains(e.target)) closeSesList();
   });
+  // Escape closes the open list first, then the whole modal. Self-removes once the modal is gone.
+  function _mgpOnKey(e) {
+    if (!ov.isConnected) { document.removeEventListener('keydown', _mgpOnKey); return; }
+    if (e.key !== 'Escape') return;
+    if (!body.querySelector('#mgpSesList').hidden) { closeSesList(); e.stopPropagation(); }
+    else ov.remove();
+  }
+  document.addEventListener('keydown', _mgpOnKey);
   body.querySelector('#mgpPlayerSearch').addEventListener('input', renderPlayerList);
   body.querySelectorAll('#mgpTeamFilter button').forEach(b=>b.addEventListener('click',()=>{
     teamFilter = b.dataset.f;
