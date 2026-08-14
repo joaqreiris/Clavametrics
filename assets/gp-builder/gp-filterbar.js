@@ -237,6 +237,9 @@
   let root = null;
   let openKey = null;        // key del panel abierto
   let _optionsLoaded = false; // true una vez que loadData construyó las opciones (habilita la poda de valores stale)
+  let _loadedTeamId = null;   // equipo con el que se completó el último loadData (null = todavía ninguno). Evita
+                              // el DOBLE barrido de gps_reports en boot: boot() y el reload() de gpsInitTeamSwitch
+                              // corrían loadData cada uno; con esto el segundo se saltea el fetch si el equipo no cambió.
   const drafts = {};         // selección provisional mientras el panel está abierto
 
   // ── Helpers de estado ───────────────────────────────────────────────────
@@ -1308,6 +1311,7 @@
     });
 
     _optionsLoaded = true;   // habilita la red de seguridad del chip (updateTrigger)
+    _loadedTeamId = _gpTeam != null ? String(_gpTeam) : '__none__';   // scope con el que quedaron cargadas las opciones
     applyChaining();   // si había filtros restaurados, deja _validCache listo
     if (_pruned) {
       try { persist(); } catch (_) {}
@@ -1385,8 +1389,24 @@
         // Aislamiento por equipo: si la página tiene selector de equipo (gpsTeamSelect) esperamos
         // a que _gpTeamId quede resuelto ANTES de la primera carga. Sin esto, loadData corre con
         // _gpTeamId=null → trae microciclos/datos de TODO el club (se colaban MC de otros equipos).
-        if (document.getElementById('gpsTeamSelect') && !window._gpTeamId) {
+        const _hasTeamSel = !!document.getElementById('gpsTeamSelect');
+        if (_hasTeamSel && !window._gpTeamId) {
           for (let j = 0; j < 25 && !window._gpTeamId; j++) await new Promise(r => setTimeout(r, 100));
+        }
+        // Si hay selector de equipo y el equipo TODAVÍA no se resolvió, NO cargamos con scope
+        // whole-club: sería un barrido pesado de gps_reports con datos de TODOS los equipos que
+        // después hay que descartar, y gpsInitTeamSwitch llamará reload() apenas resuelva el
+        // equipo → esa sería la ÚNICA carga (con el scope correcto). Dejamos los filtros
+        // restaurados y las cards en su estado "Loading…" (sin flash de datos equivocados).
+        if (_hasTeamSel && !window._gpTeamId) {
+          restore();
+          // Red de seguridad: si por lo que sea reload() nunca llega, cargamos igual a los 6s.
+          setTimeout(() => {
+            if (_loadedTeamId == null) {
+              loadData().then(() => { try { fireNow(); } catch (_) {} }).catch(e => console.warn('gpFilterBar boot-fallback:', e));
+            }
+          }, 6000);
+          return;
         }
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }
         // restaurar filtros persistidos del dashboard activo + re-render
@@ -1417,7 +1437,13 @@
     // carga anterior (whole-club antes de resolver el equipo) y sesiones sin microcycle_id se
     // bucketean por fecha al MC equivocado (ej. el «MC 01» de otro equipo con ventana solapada).
     async reload() {
-      try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); }
+      // Dedupe del doble barrido en boot: si loadData YA corrió con este mismo equipo (p. ej.
+      // boot() cargó con el equipo ya resuelto), no repetimos el fetch pesado de gps_reports —
+      // solo re-disparamos el render. Si el equipo cambió (o boot difirió), sí recargamos.
+      const _tid = window._gpTeamId != null ? String(window._gpTeamId) : '__none__';
+      if (_loadedTeamId !== _tid) {
+        try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); }
+      }
       try { fireNow(); } catch (e) { console.warn('gpFilterBar reload fire:', e); }
     },
     _state: state,
