@@ -3884,6 +3884,23 @@ AS $function$
 $function$
 ;
 
+-- SET de session_ids con GPS de MIS jugadores, en UNA sola evaluación. SECURITY DEFINER lee
+-- gps_reports directo (sin recursión de RLS). Reemplaza el uso PER-ROW de session_has_my_gps(id)
+-- en ts_scoped_select: como subconsulta NO correlacionada, el planner la materializa como InitPlan
+-- (una vez) y hace lookup por hash por fila. Con session_has_my_gps(id) se evaluaba fila por fila y
+-- sobre miles de sesiones importadas (team_id NULL) disparaba statement timeout (57014) para roles
+-- no-admin (físio) en los joins gps_reports→training_sessions!inner (filter bar Y resolver de cards).
+CREATE OR REPLACE FUNCTION public.my_gps_session_ids()
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select distinct r.session_id from public.gps_reports r
+  where r.player_id in (select public.my_player_ids());
+$function$
+;
+
 -- Same idea for a microcycle: visible if any of its sessions carries GPS for one of my players.
 CREATE OR REPLACE FUNCTION public.microcycle_has_my_gps(p_mc text)
  RETURNS boolean
@@ -6736,7 +6753,7 @@ create policy "ts_scoped_cud" on public.training_sessions as permissive for all 
 -- so team staff see Catapult-imported sessions whose team_id is NULL. Editing (ts_scoped_cud)
 -- stays team/admin-scoped — this only widens VISIBILITY.
 create policy "ts_scoped_select" on public.training_sessions as permissive for select to public
-  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR session_has_my_gps(id))));
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (id IN ( SELECT my_gps_session_ids() AS my_gps_session_ids)))));
 
 alter table public.treatment_templates enable row level security;
 create policy "treatment_templates_club_delete" on public.treatment_templates as permissive for delete to public
