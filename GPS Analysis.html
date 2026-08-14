@@ -7078,18 +7078,19 @@ async function openManualGpsModal() {
     `<div id="mgpBody"><div class="mgp-empty">${tt('common.loading','Loading…')}</div></div>`);
   const body = ov.querySelector('#mgpBody');
 
-  let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title,team_id')
+  let sQ = window.sb.from('training_sessions').select('id,session_date,session_type,title,team_id,season_id')
     .eq('club_id', clubId).order('session_date',{ascending:false}).limit(200);
   // DB pre-filter: this team's sessions + untagged ones (Catapult imports land team_id NULL).
   // Sessions tagged to ANOTHER team never come back. RLS still limits what the user can see.
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
-  const [sessRes, rosterRes, dataRes, primRes] = await Promise.all([
+  const [sessRes, rosterRes, dataRes, primRes, _seasons] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
     window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
     // Ids of players whose PRIMARY membership is this team (same is_primary filter Top-Up /
     // Evaluations use). Everyone else in the roster is an alternate training up from another team.
     teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
            : Promise.resolve({ data: [] }),
+    _gpLoadSeasons(clubId, teamId),
   ]);
   const _rawSessions = sessRes.data || [];
   const roster   = rosterRes.data || [];
@@ -7103,13 +7104,26 @@ async function openManualGpsModal() {
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
   const _dataCount = {};
   (dataRes.data || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
+  // Current season = the one whose range contains today; if today is off-season, fall back to the
+  // most recent (seasons come newest-first). Used to hide LAST season's sessions from the picker.
+  const _today = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0,10));
+  const _curSeason = (_seasons || []).find(s => String(s.start_date) <= _today && _today <= String(s.end_date))
+                  || (_seasons || [])[0] || null;
+  // A session is "this season" when tagged with its season_id, or (untagged) when its date falls
+  // inside the season range. With no seasons configured we don't over-filter.
+  const _inSeason = s => {
+    if (!_curSeason) return true;
+    if (s.season_id != null) return String(s.season_id) === String(_curSeason.id);
+    return s.session_date && String(_curSeason.start_date) <= s.session_date && s.session_date <= String(_curSeason.end_date);
+  };
   // Client filter — only sessions that can actually receive manual GPS for THIS team:
   //  · belong to this team (or an untagged Catapult import), never another team's session;
   //  · already hold some GPS (dataCount > 0) — empty planning duplicates are noise here;
-  //  · are not in the future — you can't log GPS for a session that hasn't happened yet.
-  const _today = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0,10));
+  //  · are not in the future — you can't log GPS for a session that hasn't happened yet;
+  //  · belong to the current season — last season's sessions are noise here.
   const _eligible = s => !!_dataCount[s.id]
       && (!s.session_date || s.session_date <= _today)
+      && _inSeason(s)
       && (!teamId || String(s.team_id)===String(teamId) || s.team_id==null);
   const _teamSessions = _rawSessions.filter(_eligible);
   const curSessions = () => _teamSessions;
