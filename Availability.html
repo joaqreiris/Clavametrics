@@ -1053,7 +1053,6 @@
     await avInitTeamSwitch();
 
     todayStr           = cmToday();
-    MC_DATES.length = 0;
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
 
@@ -1111,10 +1110,14 @@
       mcEnd   = new Date(mon.getTime() + 13 * 86400000).toISOString().slice(0, 10);
     }
 
-    // Build date array
+    // Build date array. Build into a LOCAL array and assign once — never push into the
+    // shared MC_DATES: a concurrent init() (visibilitychange re-run racing the initial load)
+    // would reset then push a second time, duplicating the whole window (dates shown twice).
+    const _dates = [];
     let cur = new Date(mcStart + 'T00:00:00Z');
     const end = new Date(mcEnd + 'T00:00:00Z');
-    while (cur <= end) { MC_DATES.push(cur.toISOString().slice(0, 10)); cur = new Date(cur.getTime() + 86400000); }
+    while (cur <= end) { _dates.push(cur.toISOString().slice(0, 10)); cur = new Date(cur.getTime() + 86400000); }
+    MC_DATES = _dates;
 
     // ── Barrier B — with mcStart/mcEnd known, fire the rest in parallel.
     //    seasons→season_phases stays a chain (phases needs the season ids); the rest are independent. ──
