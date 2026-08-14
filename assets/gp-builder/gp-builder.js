@@ -2600,7 +2600,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -2682,25 +2682,53 @@
         return;
       }
 
-      // Step 2: reports — then narrow rows by player / position (AND).
-      const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
-      const rows = _fbFilterRows(rawRows, FBcard, config.source);
-      if (stale()) return;
-      // PIN DEBUG: always log for a pinned card so we can see the exact stage it dies at
-      // (sessions? rows? or later at the role-baseline for the radar).
-      if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: sessionIds.length, rawRowsCount: rawRows.length, rowsAfterFbFilter: rows.length });
-      if (!rows.length) {
-        _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
-        _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
-        return;
+      // Step 2 + 4: reports + aggregate.
+      // FAST-PATH opcional (OFF por defecto — _gpPlayerAggOn): cuando el card es plantel agrupado
+      // por jugador con métricas core y agg simple, SIN filtros de bar player/position/microcycle
+      // (esos se aplican a nivel fila; md/rival/type/fecha ya están en sessionIds), agregamos POR
+      // JUGADOR en Postgres (RPC gps_player_agg) en vez de traer jugadores×sesiones crudas. Cae al
+      // path crudo si no aplica o si el RPC falla. rows/eavMap quedan vacíos y NO se usan río abajo
+      // (los bloques que los usan — md-rel, comparación mc, diagnostics — están excluidos por el guard).
+      let rows = [], eavMap = new Map(), series, _usedFastAgg = false;
+      const _paEligible = _fbPlayerAggEligible(FBcard) && canUsePlayerAgg && canUsePlayerAgg(config, catalogMap);
+      // Modo AUDITORÍA (window.__gpPlayerAggAudit): corre AMBOS caminos y compara punto por punto,
+      // pero RENDERIZA desde el crudo (sin riesgo). Sirve para verificar con datos reales que los
+      // números del RPC son idénticos antes de prender el fast-path. No cambia lo que se muestra.
+      const _audit = _paEligible && _gpPlayerAggAudit();
+      if (!_audit && _paEligible && _gpPlayerAggOn()) {
+        try {
+          const fast = await resolvePlayerAggSeries(sessionIds, config, ctx, catalogMap, sb);
+          if (stale()) return;
+          if (fast) { series = fast; _usedFastAgg = true; }
+        } catch (e) { console.warn('gpb player-agg fast path — raw fallback:', e); }
       }
+      if (!_usedFastAgg) {
+        const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+        rows = _fbFilterRows(rawRows, FBcard, config.source);
+        if (stale()) return;
+        // PIN DEBUG: always log for a pinned card so we can see the exact stage it dies at
+        // (sessions? rows? or later at the role-baseline for the radar).
+        if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: sessionIds.length, rawRowsCount: rawRows.length, rowsAfterFbFilter: rows.length });
+        if (!rows.length) {
+          _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
+          _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
+          return;
+        }
 
-      // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas) + RPE
-      const eavMap = await fetchExtraMetrics(rows, config, catalogMap, _clubId, sb);
-      if (stale()) return;
+        // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas) + RPE
+        eavMap = await fetchExtraMetrics(rows, config, catalogMap, _clubId, sb);
+        if (stale()) return;
 
-      // Step 4: aggregate
-      let series = aggregateSeries(rows, eavMap, config, catalogMap);
+        // Step 4: aggregate
+        series = aggregateSeries(rows, eavMap, config, catalogMap);
+
+        // Auditoría: compara la serie del RPC contra la cruda (que es la que se dibuja).
+        if (_audit) {
+          try { const fast = await resolvePlayerAggSeries(sessionIds, config, ctx, catalogMap, sb);
+                if (!stale()) _gpAuditPlayerAgg(config, series, fast); }
+          catch (e) { console.warn('gpb player-agg audit:', e); }
+        }
+      }
       // Modo relativo por métrica (Δ% vs MC anterior): transforma en sitio la serie
       // de cada métrica con rel='prev_mc' → línea de % en eje secundario. No-op si
       // ninguna métrica lo pide o si no hay dimensión de microciclo.
@@ -2719,7 +2747,8 @@
 
       // Diagnostics: prove the series is 100% real (gps_reports/Supabase) and let you
       // cross-check the total against Session Control. Silence with window.GPB_DEBUG=false.
-      if (window.GPB_DEBUG !== false) {
+      // Se saltea en fast-path (rows=[] → los totales crudos no aplican; la serie ya viene del RPC).
+      if (window.GPB_DEBUG !== false && !_usedFastAgg) {
         try {
           const rawTotal = mid => {
             let sum = 0, n = 0;
@@ -3149,6 +3178,49 @@
     if (d.to)   r.to   = d.to;
     return r;
   }
+  /** Fast-path por jugador ACTIVADO. OFF por defecto (para no cambiar nada sin verificar): se
+   *  prende con window.__gpPlayerAgg=true (sesión) o localStorage.cm_gp_player_agg='1' (persistente).
+   *  window.__gpPlayerAgg===false es kill-switch explícito. */
+  function _gpPlayerAggOn() {
+    if (window.__gpPlayerAgg === false) return false;
+    if (window.__gpPlayerAgg === true) return true;
+    try { return localStorage.getItem('cm_gp_player_agg') === '1'; } catch (_) { return false; }
+  }
+  /** El fast-path por jugador sólo es válido si NO hay filtros de bar player/position/microcycle
+   *  activos (esos se filtran a nivel FILA vía _fbFilterRows; md/rival/type/fecha ya están en
+   *  sessionIds, así que el RPC — que opera sobre sessionIds — sí los respeta). */
+  function _fbPlayerAggEligible(FB) {
+    return !FB || (!FB.playerIds?.length && !FB.positions?.length && !FB.microcycleIds?.length);
+  }
+  /** Modo auditoría del fast-path (window.__gpPlayerAggAudit): compara RPC vs crudo sin cambiar
+   *  el render. Prender, recargar y mirar la consola: debe decir "0 mismatches" en cada card. */
+  function _gpPlayerAggAudit() { return window.__gpPlayerAggAudit === true; }
+  /** Compara la serie del RPC (fast) contra la cruda (raw) punto por punto y loguea diferencias.
+   *  Tolerancia relativa 1e-6 (redondeo numeric/float). No lanza: sólo reporta. */
+  function _gpAuditPlayerAgg(config, rawSeries, fastSeries) {
+    const tag = `«${config.title || config.viz}»`;
+    if (!fastSeries) { console.warn(`[player-agg audit] ${tag}: RPC devolvió null (no comparado)`); return; }
+    const fByLabel = new Map(fastSeries.map(s => [s.label, s]));
+    let mismatches = 0, compared = 0;
+    for (const rs of rawSeries) {
+      const fs = fByLabel.get(rs.label);
+      if (!fs) { console.warn(`[player-agg audit] ${tag}: métrica ${rs.label} falta en RPC`); mismatches++; continue; }
+      const fPts = new Map(fs.points.map(p => [String(p.fid ?? p.x), p.y]));
+      for (const rp of rs.points) {
+        compared++;
+        const fy = fPts.get(String(rp.fid ?? rp.x));
+        const a = Number(rp.y) || 0, b = Number(fy) || 0;
+        const tol = Math.max(1e-6, Math.abs(a) * 1e-6);
+        if (fy === undefined || Math.abs(a - b) > tol) {
+          mismatches++;
+          if (mismatches <= 8) console.warn(`[player-agg audit] ${tag} · ${rs.label} · ${rp.x}: raw=${a} vs rpc=${fy}`);
+        }
+      }
+    }
+    const fn = mismatches ? console.error : console.log;
+    fn(`[player-agg audit] ${tag}: ${mismatches} mismatches / ${compared} puntos comparados`);
+  }
+
   /** Narrow report rows by the player / position / microcycle filters (AND). Shape-aware:
    *  task rows (v_gps_task_analysis) are FLAT (r.position), session rows are NESTED
    *  (r.players.position) — mirror the resolver's dual-shape dimGroup. */
