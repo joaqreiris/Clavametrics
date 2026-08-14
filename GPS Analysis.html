@@ -2095,10 +2095,15 @@ async function _loadLayoutStrict(viewKey) {
           const raw = data?.layout;
           let layout = Array.isArray(raw) ? raw : null;
           _clubSourcedViews.delete(viewKey);
-          // Fallback al DEFAULT DEL CLUB: si el usuario no tiene layout propio (null) o lo tiene VACÍO
-          // (nunca configuró nada), hereda el que dejó el admin/fitness/S&C. Un layout propio con cards
-          // (length > 0) siempre gana → "si ya lo personalizó, mantiene el suyo".
-          if (layout == null || layout.length === 0) {
+          // Fallback al DEFAULT DEL CLUB: se hereda el layout que dejó el admin/fitness/S&C cuando el
+          // usuario NO tiene una disposición propia real. "Real" = al menos una card con coordenadas
+          // (x/y/w/h) finitas. Esto cubre: sin fila (null), fila vacía ([]) Y la fila auto-sembrada en
+          // el primer load (tiene las cards pero SIN coords → se ven en auto-flow "desordenadas"). En
+          // cuanto el usuario arrastra/redimensiona una card, su fila pasa a tener coords → mantiene la
+          // suya y deja de heredar. Un layout propio con coords siempre gana.
+          const _hasRealCoords = Array.isArray(layout)
+            && layout.some(c => [c.x, c.y, c.w, c.h].every(v => Number.isFinite(v)));
+          if (!_hasRealCoords) {
             const clubLayout = await _loadClubDefaultLayout(did);
             if (clubLayout && clubLayout.length) { layout = clubLayout; _clubSourcedViews.add(viewKey); }
           }
