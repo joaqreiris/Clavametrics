@@ -893,6 +893,10 @@ CREATE INDEX gps_reports_club_id_idx ON public.gps_reports USING btree (club_id)
 CREATE INDEX gps_reports_created_idx ON public.gps_reports USING btree (created_at DESC);
 CREATE INDEX idx_gps_reports_club_session ON public.gps_reports USING btree (club_id, session_id);
 CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_id, player_id);
+-- Barrido del filterbar (corre en cada carga): club_id + in(player_id) + is_invalid=false.
+-- Índice parcial que sólo cubre las filas válidas → salta las inválidas en el índice.
+CREATE INDEX IF NOT EXISTS idx_gps_reports_club_player_valid
+  ON public.gps_reports USING btree (club_id, player_id) WHERE (is_invalid = false);
 
 create table if not exists public.gps_sync_jobs (
   id uuid default gen_random_uuid() not null,
