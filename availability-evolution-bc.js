@@ -23,8 +23,9 @@
     { key: "enf",  label: "Illness",     v: "--st-enf"  },
     { key: "sel",  label: "Nat. team",   v: "--st-sel"  },
     { key: "aus",  label: "Absent",      v: "--st-aus"  },
+    { key: "otro", label: "Other team",  v: "--st-otro" },
   ];
-  const STACK = ["disp", "mod", "les", "enf", "sel", "aus"];
+  const STACK = ["disp", "mod", "les", "enf", "sel", "aus", "otro"];
 
   const DOW  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const DOW1 = ["L", "M", "X", "J", "V", "S", "D"]; // lunes primero

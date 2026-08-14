@@ -1562,6 +1562,7 @@
   })));
 
   let _avTeamId = null;
+  let _avFull = false;            // acceso club-wide (admin/owner; futuro: Director deportivo / Head of performance)
   let _avTeamsById = new Map();   // team_id → { name } for cross-team badges
   async function avInitTeamSwitch() {
     const clubId = CLUB_ID || await window.getClubId();
@@ -1571,6 +1572,7 @@
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
     let full = bucket === 'admin' || bucket === 'owner';
     if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    _avFull = full;
     let teams = teamsAll;
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('avTeamSelect');
@@ -1661,17 +1663,20 @@
       .select('player_id, date, status, minutes, team_id')
       .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
       .gte('date', from).lte('date', to);
-    // Días en que el jugador estaba con OTRO equipo (fila relativa de otro team) no cuentan
-    // para las stats de ESTE equipo: se descartan (no era un día "con nosotros").
-    const avail = (availRaw || []).filter(r =>
-      !(TEAM_RELATIVE.has(r.status) && r.team_id && _avTeamId && r.team_id !== _avTeamId));
+    // Fila relativa cuyo team_id ≠ equipo visto = ese día el jugador entrenó con OTRO
+    // equipo (un sub-18 con el 2do, un 2do con el 1ro, etc.). Antes se descartaba y el
+    // día desaparecía de las stats; ahora se cuenta como categoría "Otro equipo" para
+    // que ese cruce entre equipos quede reflejado.
+    const isOtherRow = (r) => TEAM_RELATIVE.has(r.status) && r.team_id && _avTeamId && r.team_id !== _avTeamId;
+    const avail = (availRaw || []);
 
     const stat = {};
-    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, minutes:0, total:0 });
+    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
       if (r.date > todayStr) return;   // future pre-fills are planning, not events — don't count as elapsed
       s.total++;
+      if (isOtherRow(r)) { s.otherTeam++; return; }   // día con otro equipo: no suma minutos de ESTE equipo
       s.minutes += (r.minutes || 0);
       const st = (r.status||'').toLowerCase();
       if (st === 'available') s.avail++;
@@ -1685,8 +1690,8 @@
     const _maxMin = Math.max(1, ...Object.values(stat).map(s => s.minutes));
     Object.values(stat).forEach(s => { s.partPct = Math.round((s.minutes/_maxMin)*100); });
 
-    let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tTotal=0;
-    Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tTotal+=s.total; });
+    let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tOther=0, tTotal=0;
+    Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tOther+=s.otherTeam; tTotal+=s.total; });
     const availPct = tTotal ? Math.round((tAvail/tTotal)*100) : 0;
     window._avStatRows = Object.values(stat);
 
@@ -1705,15 +1710,16 @@
     // Retrospective trend: stop at today. Future planned days aren't "what happened", and days
     // with no row are counted as available — so including the future would inflate the line.
     const evoDays = MC_DATES.filter(dStr => dStr <= todayStr).map(dStr => {
-      const c = { disp:0, mod:0, les:0, enf:0, sel:0, aus:0 };
+      const c = { disp:0, mod:0, les:0, enf:0, sel:0, aus:0, otro:0 };
       players.forEach(p => {
         const row = evoByKey[p.id + '|' + dStr];
         if (!row) { c.disp++; return; }        // sin fila = disponible (decisión tomada)
+        if (isOtherRow(row)) { c.otro++; return; }   // ese día entrenó con otro equipo
         c[DB2CAT[(row.status||'').toLowerCase()] || 'disp']++;
       });
       return {
         date: new Date(dStr + 'T00:00:00'),     // local: fShort/getDate() del render usan hora local
-        disp:c.disp, mod:c.mod, les:c.les, enf:c.enf, sel:c.sel, aus:c.aus,
+        disp:c.disp, mod:c.mod, les:c.les, enf:c.enf, sel:c.sel, aus:c.aus, otro:c.otro,
         total: evoN,
         pct: evoN ? Math.round((c.disp / evoN) * 100) : 0,
         match: !!matchSet[dStr],
@@ -1728,11 +1734,12 @@
       </div>`;
 
     host.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px">
         ${kpi('ti-circle-check',tt('availability.statsAvgAvail','Avg availability'), availPct+'<span style="font-size:17px">%</span>', tt('availability.statsPlayerDays', `${tAvail} of ${tTotal} player-days`, { avail: tAvail, total: tTotal }), 'var(--cm-success)')}
         ${kpi('ti-bandage',tt('availability.statsDaysLostInjury','Days lost · injury'), tInjury, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tInjury/tTotal*100)}% of period`, { pct: Math.round(tInjury/tTotal*100) }):'', 'var(--cm-danger)')}
         ${kpi('ti-virus',tt('availability.statsDaysLostIllness','Days lost · illness'), tIllness, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tIllness/tTotal*100)}% of period`, { pct: Math.round(tIllness/tTotal*100) }):'', 'var(--cm-violet)')}
         ${kpi('ti-adjustments',tt('availability.statsModifiedDays','Modified days'), tPartial, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tPartial/tTotal*100)}% of period`, { pct: Math.round(tPartial/tTotal*100) }):'', 'var(--cm-warning)')}
+        ${kpi('ti-arrows-exchange',tt('availability.statsDaysOtherTeam','Days · other team'), tOther, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tOther/tTotal*100)}% of period`, { pct: Math.round(tOther/tTotal*100) }):'', '#6366F1')}
       </div>
 
       <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:18px">
@@ -1750,6 +1757,7 @@
               <th data-sort="illness" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet);cursor:pointer">${tt('availability.statsColIll','Ill.')}</th>
               <th data-sort="absent" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer">${tt('availability.statsColAbs','Abs.')}</th>
               <th data-sort="national" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer">${tt('availability.statsColNat','Nat.')}</th>
+              <th data-sort="otherTeam" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:#6366F1;cursor:pointer">${tt('availability.statsColOther','Other')}</th>
               <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">${tt('availability.statsColMin','Min')}</th>
               <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:120px">${tt('availability.statsColPctAvail','% Availability')}</th>
               <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">${tt('availability.statsColPctMin','% Minutes')}</th>
@@ -1824,7 +1832,13 @@
         </div>
       </section>
 
+      <!-- Vista club — movimiento entre equipos (solo acceso club-wide) -->
+      <div id="avClubMovement"></div>
+
       <div class="bc-tip" id="aev-tip"></div>`;
+
+    // Panel club-wide de movimiento entre equipos (asíncrono, gateado por acceso).
+    avRenderClubMovement(from, to);
 
     // Tabla ordenable con barras de progreso
     let _sortKey = 'pct', _sortDir = -1;
@@ -1848,6 +1862,7 @@
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.illness?'var(--cm-violet)':'var(--cm-fg-faint,#cbd5e1)'}">${s.illness}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.absent?'var(--cm-fg-muted)':'var(--cm-fg-faint,#cbd5e1)'}">${s.absent}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.national?'var(--cm-info,#2563eb)':'var(--cm-fg-faint,#cbd5e1)'}">${s.national}</td>
+          <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.otherTeam?'#6366F1':'var(--cm-fg-faint,#cbd5e1)'}">${s.otherTeam}</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${s.minutes}'</td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${s.partPct}%;height:100%;background:var(--cm-info,#2563eb);border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-info,#2563eb);min-width:36px;text-align:right">${s.partPct}%</span></div></td>
@@ -1878,7 +1893,8 @@
           { label:tt('availability.donutAvailable','Available'), val:tAvail, color:'#16A34A' },
           { label:tt('availability.donutModified','Modified'), val:tPartial, color:'#D97706' },
           { label:tt('availability.donutInjury','Injury'), val:tInjury, color:'#DC2626' },
-          { label:tt('availability.donutIllness','Illness'), val:tIllness, color:'#7C3AED' }
+          { label:tt('availability.donutIllness','Illness'), val:tIllness, color:'#7C3AED' },
+          { label:tt('availability.donutOtherTeam','Other team'), val:tOther, color:'#6366F1' }
         ].filter(s => s.val > 0);
         _avStatsChart = new Chart(ctx, {
           type: 'doughnut',
@@ -1895,6 +1911,91 @@
     }
   }
   window.avRenderStats = avRenderStats;
+
+  // ── Vista club: movimiento entre equipos ─────────────────────────────────────
+  // Agrega, a nivel CLUB (todos los equipos), los días en que un jugador entrenó
+  // con un equipo distinto al suyo (sub-18 con el 2do, 2do con el 1ro, etc.). Solo
+  // para acceso club-wide (admin/owner hoy; el futuro rol Director deportivo / Head
+  // of performance se sumará a este gate). Consulta propia sobre el rango activo.
+  async function avRenderClubMovement(from, to) {
+    const box = document.getElementById('avClubMovement');
+    if (!box) return;
+    if (!_avFull) { box.innerHTML = ''; return; }
+    try {
+      const [{ data: cPlayers }, { data: cRows }] = await Promise.all([
+        window.sb.from('players').select('id, first_name, last_name, team_id')
+          .eq('club_id', CLUB_ID).is('archived_at', null),
+        window.sb.from('availability').select('player_id, date, status, team_id')
+          .eq('club_id', CLUB_ID).gte('date', from).lte('date', to),
+      ]);
+      const pById = new Map((cPlayers || []).map(p => [p.id, p]));
+      // Movimiento = fila relativa cuyo team_id ≠ equipo base (players.team_id) del jugador.
+      const moves = new Map();   // player|base|to → { player, base, to, days }
+      (cRows || []).forEach(r => {
+        if (r.date > todayStr) return;
+        if (!TEAM_RELATIVE.has(r.status) || !r.team_id) return;
+        const p = pById.get(r.player_id); if (!p) return;
+        const base = p.team_id || null;
+        if (!base || r.team_id === base) return;   // sin equipo base o entrenó con el suyo → no es movimiento
+        const k = r.player_id + '|' + base + '|' + r.team_id;
+        const m = moves.get(k) || { player: `${p.last_name || ''} ${p.first_name || ''}`.trim() || '—', base, to: r.team_id, days: 0 };
+        m.days++; moves.set(k, m);
+      });
+      const list = [...moves.values()].sort((a, b) => b.days - a.days);
+      const tn = (id) => (_avTeamsById.get(id)?.name) || '—';
+      const totalDays = list.reduce((a, m) => a + m.days, 0);
+
+      if (!list.length) {
+        box.innerHTML = `
+          <section class="aev-block">
+            <div class="aev-block-h">
+              <span class="aev-tag" style="background:#6366F1">${tt('availability.clubTag','CLUB')}</span>
+              <span class="t">${tt('availability.clubMoveTitle','Cross-team movement · club')}</span>
+              <span class="d">${tt('availability.clubMoveDesc','Player-days trained with a team other than their own')}</span>
+            </div>
+            <div class="aev-card"><div class="aev-card-b" style="padding:26px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.4 var(--cm-font-sans)">${tt('availability.clubMoveEmpty','No cross-team movement in this range.')}</div></div>
+          </section>`;
+        return;
+      }
+      const rowsHTML = list.map(m => `
+        <tr style="border-bottom:1px solid var(--cm-border)">
+          <td style="padding:10px 16px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${m.player}</td>
+          <td style="padding:10px 12px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tn(m.base)}</td>
+          <td style="padding:10px 12px;text-align:center;color:#6366F1"><i class="ti ti-arrow-right"></i></td>
+          <td style="padding:10px 12px;font:600 12.5px/1 var(--cm-font-sans);color:#6366F1">${tn(m.to)}</td>
+          <td style="padding:10px 16px;text-align:right;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${m.days}</td>
+        </tr>`).join('');
+      box.innerHTML = `
+        <section class="aev-block">
+          <div class="aev-block-h">
+            <span class="aev-tag" style="background:#6366F1">${tt('availability.clubTag','CLUB')}</span>
+            <span class="t">${tt('availability.clubMoveTitle','Cross-team movement · club')}</span>
+            <span class="d">${tt('availability.clubMoveDesc','Player-days trained with a team other than their own')}</span>
+          </div>
+          <div class="aev-card" style="overflow:hidden">
+            <div class="aev-card-h">
+              <span class="ttl">${tt('availability.clubMoveCardTitle','Movement summary')}</span>
+              <span class="sub">${tt('availability.clubMovePlayerDays', `${totalDays} player-days · ${list.length} movements`, { days: totalDays, moves: list.length })}</span>
+            </div>
+            <div class="aev-card-b" style="padding:0;overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;min-width:460px">
+                <thead><tr style="background:var(--cm-bg-soft)">
+                  <th style="padding:9px 16px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">${tt('availability.colPlayer','Player')}</th>
+                  <th style="padding:9px 12px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">${tt('availability.clubColBase','Base team')}</th>
+                  <th style="padding:9px 12px"></th>
+                  <th style="padding:9px 12px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:#6366F1">${tt('availability.clubColTrainedWith','Trained with')}</th>
+                  <th style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">${tt('availability.clubColDays','Days')}</th>
+                </tr></thead>
+                <tbody>${rowsHTML}</tbody>
+              </table>
+            </div>
+          </div>
+        </section>`;
+    } catch (e) {
+      console.warn('[Availability] club movement error:', e?.message || e);
+      box.innerHTML = '';
+    }
+  }
 
   // Repintar la evolución (SVG/heatmap) al cambiar el tema: colorOf() lee los
   // tokens --st-* en cada render, los SVG ya dibujados no se actualizan solos.
