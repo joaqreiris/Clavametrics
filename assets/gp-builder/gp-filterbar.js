@@ -173,9 +173,17 @@
       if (days && days.length) {                          // specific dates → exact match
         if (!days.includes(r.d)) return false;
       } else {                                            // preset / custom range → bounds
-        const { from, to } = _dateBounds();
-        if (from && r.d < from) return false;
-        if (to   && r.d > to)   return false;
+        // Temporada = ventana de fechas ∪ season_id, IGUAL que el resolver (getSessionIds
+        // hace `date-window OR season_id`). Las GPS importadas se linkean por season_id con
+        // fecha fuera de la ventana declarada; sin esta unión la cascada las podaba y el MC de
+        // esas sesiones no aparecía como opción aunque el gráfico sí las mostraba.
+        const sid = state.date.seasonId;
+        const bySeason = sid && r.sid && String(r.sid) === String(sid);
+        if (!bySeason) {
+          const { from, to } = _dateBounds();
+          if (from && r.d < from) return false;
+          if (to   && r.d > to)   return false;
+        }
       }
     }
     if (exceptKey !== 'md_code'    && state.md_code.length    && !state.md_code.includes(r.md))    return false;
@@ -987,7 +995,7 @@
       // silently hid filter options on big clubs.
       window.cmFetchAll(() => {
         let _q = window.sb.from('gps_reports')
-          .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
+          .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type, season_id), players!inner(id, first_name, last_name, number, position)')
           .eq('club_id', clubId).eq('is_invalid', false);
         // Acotar al roster del equipo cuando lo tenemos: baja el costo RLS y hace que un usuario
         // restringido (físio) reciba SUS filas en vez de que la consulta club-wide falle y vuelva vacía.
@@ -1007,9 +1015,22 @@
     const _mcTeamOk = m => !_gpTeam || m.team_id == null || String(m.team_id) === String(_gpTeam);
     const mcs = (_mcsRaw || []).filter(_mcTeamOk);
     // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
-    _seasons = (seasons || [])
-      .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
-      .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
+    // Dedup: la tabla `seasons` NO tiene unique constraint y se crean filas con el mismo
+    // nombre desde varios lados (Annual Planner, el "New season" de GPS, o una por equipo) →
+    // «2026/27» aparecía 3 veces. Colapsamos por (nombre|inicio|fin) prefiriendo la fila del
+    // equipo sobre la club-wide (null) — misma regla "el equipo gana" que _mcForDate.
+    {
+      const _snKey = s => `${s.name}|${String(s.start_date).slice(0, 10)}|${s.end_date ? String(s.end_date).slice(0, 10) : ''}`;
+      const _isTeamSn = s => _gpTeam != null && s.team_id != null && String(s.team_id) === String(_gpTeam);
+      const _snMap = new Map();
+      (seasons || [])
+        .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
+        .forEach(s => {
+          const k = _snKey(s), prev = _snMap.get(k);
+          if (!prev || (_isTeamSn(s) && !_isTeamSn(prev))) _snMap.set(k, s);   // el del equipo desplaza al NULL
+        });
+      _seasons = [..._snMap.values()].sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
+    }
     renderSeasonBtns();
 
     // Entity resolver: opponent_id (catalog) wins; else match raw text to a catalog row
@@ -1223,6 +1244,7 @@
       const ts = r.training_sessions || {};
       return {
         d:   ts.session_date || '',
+        sid: ts.season_id != null ? String(ts.season_id) : '',   // link explícito a temporada (GPS importadas)
         md:  _mdOf(ts),
         mc:  _mcOfSession(ts),   // microcycle_id guardado primero; fecha como fallback
         p:   r.player_id,
