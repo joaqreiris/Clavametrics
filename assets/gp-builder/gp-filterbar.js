@@ -947,8 +947,15 @@
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
     const _seQ = window.sb.from('training_sessions').select('session_date, session_attributes, match_day_offset')
       .eq('club_id', clubId).limit(3000);
-    const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,team_id')
+    const _mcQ = window.sb.from('microcycles').select('id,name,start_date,end_date,team_id,match_date,md_overrides')
       .eq('club_id', clubId);
+    // Fechas de PARTIDO para derivar el MD por fecha igual que Calendar/Load Planner (el MD no se
+    // guarda por sesión: es propiedad del microciclo = partido + md_overrides). Fuentes: eventos de
+    // calendario type=match + sesiones session_type=match (∪ microcycles.match_date más abajo).
+    const _meQ = window.sb.from('calendar_events').select('date, team_id')
+      .eq('club_id', clubId).eq('type', 'match');
+    const _msQ = window.sb.from('training_sessions').select('session_date, team_id')
+      .eq('club_id', clubId).eq('session_type', 'match');
     // Opponent catalog: lets the Rival dimension group by ENTITY (opponent_id / canonical
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
     const _obQ = window.sb.from('opponent_branding').select('id, opponent_name, crest_url')
@@ -960,7 +967,7 @@
     // stale-filter prune below — otherwise a single failed query aborts the whole build and a
     // phantom persisted filter (e.g. an old microcycle id) never gets cleared.
     const _safe = p => Promise.resolve(p).then(r => r, () => ({ data: [] }));
-    const [{ data: players }, { data: sessions }, { data: _mcsRaw }, reports, { data: opponents }, { data: seasons }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: _mcsRaw }, reports, { data: opponents }, { data: seasons }, { data: matchEvents }, { data: matchSess }] = await Promise.all([
       _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false })),
@@ -972,6 +979,8 @@
         .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
       _safe(_obQ),
       _safe(_snQ),
+      _safe(_meQ),
+      _safe(_msQ),
     ]);
     // Aislamiento por equipo (defensa en profundidad): aunque la query ya scopea con
     // .or(team_id.eq,is.null), si _gpTeam llegara null por una race la query traería TODO el
@@ -1061,12 +1070,8 @@
       if (v && d && !window._gpMdForDate[d]) window._gpMdForDate[d] = v;
     });
     const _mdOf = (ts) => _mdRaw(ts) || (ts && ts.session_date ? (window._gpMdForDate[String(ts.session_date).slice(0, 10)] || '') : '');
-
-    // MD codes reales (columna/attr ∪ los derivados por fecha, para que las opciones matcheen
-    // lo que ven las filas GPS que heredan el MD del día planificado).
-    const mdSet = new Set();
-    (sessions || []).forEach(s => { const v = _mdRaw(s); if (v) mdSet.add(String(v)); });
-    options.md_code = Array.from(mdSet).sort(mdCompare).map(v => ({ value: v, label: v }));
+    // options.md_code se construye MÁS ABAJO (tras _rows), para incluir los MD DERIVADOS del
+    // microciclo (partido + md_overrides), no solo los guardados por Daily Planning.
 
     // Asociación por FECHA: los training_sessions casi nunca traen microcycle_id seteado, así
     // que un GPS pertenece al microciclo cuya ventana [start_date, end_date] contiene su
@@ -1100,6 +1105,47 @@
       return hit;
     }
     window._gpMcForDate = _mcForDate;
+
+    // ── MD derivado del microciclo (igual que Calendar/Load Planner) ──────────────
+    // El MD NO se guarda por sesión: es propiedad del microciclo = fecha(s) de partido + md_overrides
+    // (Calendar `applyMdChoice` escribe md_overrides, no la sesión). Para que el MD aparezca en GPS
+    // sin asignarlo a mano, lo derivamos por fecha: el override del microciclo que contiene el día
+    // gana; si no, se calcula por cercanía al partido con el MISMO algoritmo/umbrales que
+    // mdLabelFromSet de Load Planner. Formato ASCII ('MD-2'/'MD+1'/'MD'), consistente con lo guardado.
+    const _mcById = {}; (mcs || []).forEach(m => { _mcById[String(m.id)] = m; });
+    const _mTeamOk = tid => !_gpTeamS || tid == null || String(tid) === _gpTeamS;
+    const _matchSet = new Set();
+    (mcs || []).forEach(m => { if (m.match_date) _matchSet.add(String(m.match_date).slice(0, 10)); });
+    (matchEvents || []).forEach(r => { if (r.date && _mTeamOk(r.team_id)) _matchSet.add(String(r.date).slice(0, 10)); });
+    (matchSess   || []).forEach(r => { if (r.session_date && _mTeamOk(r.team_id)) _matchSet.add(String(r.session_date).slice(0, 10)); });
+    const _matchArr = [..._matchSet].sort();
+    const _dDiff = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+    function _mdFromMatches(ds) {
+      if (!_matchArr.length) return '';
+      if (_matchArr.indexOf(ds) >= 0) return 'MD';
+      const next = _matchArr.find(d => d > ds), prev = [..._matchArr].reverse().find(d => d < ds);
+      const cand = [];
+      if (next) { const dn = _dDiff(ds, next); if (dn >= 1 && dn <= 10) cand.push({ v: dn, lbl: 'MD-' + dn }); }
+      if (prev) { const dp = _dDiff(prev, ds); if (dp >= 1 && dp <= 3) cand.push({ v: dp, lbl: 'MD+' + dp }); }
+      if (!cand.length) return '';
+      cand.sort((a, b) => a.v - b.v);
+      return cand[0].lbl;
+    }
+    function _mdDerived(ds) {
+      if (!ds) return '';
+      ds = String(ds).slice(0, 10);
+      const mc = _mcById[_mcForDate(ds)];
+      const ov = mc && mc.md_overrides ? mc.md_overrides[ds] : null;
+      if (ov) return ov === 'OFF' ? '' : String(ov);   // override del usuario gana; OFF = sin MD
+      return _mdFromMatches(ds);
+    }
+    window._gpMdDerived = _mdDerived;
+    // Rellenar fecha→MD con el derivado donde NO haya MD guardado (las sesiones de GPS importadas
+    // no lo tienen). El guardado por Daily Planning conserva prioridad (ya está en el mapa).
+    (reports || []).forEach(r => {
+      const d = r.training_sessions && r.training_sessions.session_date ? String(r.training_sessions.session_date).slice(0, 10) : '';
+      if (d && !window._gpMdForDate[d]) { const v = _mdDerived(d); if (v) window._gpMdForDate[d] = v; }
+    });
 
     // Resolución del MC de una sesión: el microcycle_id GUARDADO manda (fuente autoritativa;
     // apunta a UN microciclo, sin ambigüedad ni duplicados) SIEMPRE que ese id exista en el
@@ -1169,6 +1215,11 @@
       };
     }).filter(x => x.d);
     _applyPosGranularity();   // fills row.posv + options.position for the active level
+
+    // MD codes de las opciones = los MD resueltos de las filas GPS (guardado ∪ derivado del
+    // microciclo), para que el filtro ofrezca lo mismo que muestran las cards.
+    options.md_code = [...new Set(_rows.map(r => r.md))].filter(Boolean)
+      .sort(mdCompare).map(v => ({ value: v, label: v }));
 
     // Session types reales (distintos, no vacíos) — value = raw type, label = traducido.
     options.session_type = [...new Set(_rows.map(r => r.st))].filter(Boolean)
