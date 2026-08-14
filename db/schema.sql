@@ -3550,7 +3550,7 @@ $function$
 -- de mis equipos). El conjunto de filas visible es idéntico al del path cliente → números idénticos.
 CREATE OR REPLACE FUNCTION public.gps_player_agg(p_club_id uuid, p_session_ids uuid[], p_player_ids uuid[] DEFAULT NULL::uuid[], p_exclude_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS TABLE(
-   player_id uuid, first_name text, last_name text, n_rows integer, w_sum numeric,
+   player_id uuid, first_name text, last_name text, n_rows integer, n_sessions integer, w_sum numeric,
    total_distance_sum numeric, total_distance_max numeric, total_distance_min numeric, total_distance_swv numeric,
    high_speed_distance_sum numeric, high_speed_distance_max numeric, high_speed_distance_min numeric, high_speed_distance_swv numeric,
    very_high_speed_distance_sum numeric, very_high_speed_distance_max numeric, very_high_speed_distance_min numeric, very_high_speed_distance_swv numeric,
@@ -3574,6 +3574,7 @@ AS $function$
     r.player_id,
     pl.first_name, pl.last_name,
     count(*)::int                                                              as n_rows,
+    count(distinct r.session_id)::int                                          as n_sessions,
     sum(r.time_played) filter (where r.time_played > 0)                        as w_sum,
     sum(coalesce(r.total_distance,0))            as total_distance_sum,            max(coalesce(r.total_distance,0))            as total_distance_max,            min(coalesce(r.total_distance,0))            as total_distance_min,            sum(coalesce(r.total_distance,0)*r.time_played)            filter (where r.time_played > 0) as total_distance_swv,
     sum(coalesce(r.high_speed_distance,0))       as high_speed_distance_sum,       max(coalesce(r.high_speed_distance,0))       as high_speed_distance_max,       min(coalesce(r.high_speed_distance,0))       as high_speed_distance_min,       sum(coalesce(r.high_speed_distance,0)*r.time_played)       filter (where r.time_played > 0) as high_speed_distance_swv,
@@ -3616,7 +3617,7 @@ $function$
 -- normal, NO falla. Mismos bloques/semántica y mismo SECURITY DEFINER + acceso que gps_player_agg.
 CREATE OR REPLACE FUNCTION public.gps_player_mc_agg(p_club_id uuid, p_session_ids uuid[], p_session_mcs text[], p_player_ids uuid[] DEFAULT NULL::uuid[], p_exclude_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS TABLE(
-   player_id uuid, first_name text, last_name text, mc_key text, n_rows integer, w_sum numeric,
+   player_id uuid, first_name text, last_name text, mc_key text, n_rows integer, n_sessions integer, w_sum numeric,
    total_distance_sum numeric, total_distance_max numeric, total_distance_min numeric, total_distance_swv numeric,
    high_speed_distance_sum numeric, high_speed_distance_max numeric, high_speed_distance_min numeric, high_speed_distance_swv numeric,
    very_high_speed_distance_sum numeric, very_high_speed_distance_max numeric, very_high_speed_distance_min numeric, very_high_speed_distance_swv numeric,
@@ -3644,6 +3645,7 @@ AS $function$
     pl.first_name, pl.last_name,
     sm.mc                                                                      as mc_key,
     count(*)::int                                                              as n_rows,
+    count(distinct r.session_id)::int                                          as n_sessions,
     sum(r.time_played) filter (where r.time_played > 0)                        as w_sum,
     sum(coalesce(r.total_distance,0))            as total_distance_sum,            max(coalesce(r.total_distance,0))            as total_distance_max,            min(coalesce(r.total_distance,0))            as total_distance_min,            sum(coalesce(r.total_distance,0)*r.time_played)            filter (where r.time_played > 0) as total_distance_swv,
     sum(coalesce(r.high_speed_distance,0))       as high_speed_distance_sum,       max(coalesce(r.high_speed_distance,0))       as high_speed_distance_max,       min(coalesce(r.high_speed_distance,0))       as high_speed_distance_min,       sum(coalesce(r.high_speed_distance,0)*r.time_played)       filter (where r.time_played > 0) as high_speed_distance_swv,
