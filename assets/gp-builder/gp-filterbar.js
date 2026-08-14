@@ -996,7 +996,18 @@
       e => { console.warn(`[gpFilterBar] ${label} rejected:`, e); return { data: [] }; }
     );
     const [{ data: players }, { data: sessions }, { data: _mcsRaw }, reports, { data: opponents }, { data: seasons }, { data: matchEvents }, { data: matchSess }] = await Promise.all([
-      _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'), 'players'),
+      // Acotar por MEMBRESÍA (_teamPlayerIds, junction player_teams), NO por players.team_id
+      // (equipo primario). Así un jugador del 2º equipo que entrena con el 1º —membresía
+      // secundaria en player_teams— aparece en la lista y no queda excluido por su team_id
+      // primario. Sus datos GPS ya llegaban (reports se acota con los mismos _teamPlayerIds);
+      // el hueco era esta lista, que alimenta _activeIds y por tanto el player picker/posiciones.
+      // Fallback a team_id primario solo si la resolución por membresía falló (RLS), para no
+      // filtrar de más ni barrer todo el club.
+      _safe((
+        _gpTeam
+          ? ((_teamPlayerIds && _teamPlayerIds.length) ? _plQ.in('id', _teamPlayerIds) : _plQ.eq('team_id', _gpTeam))
+          : _plQ
+      ).order('last_name'), 'players'),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ, 'sessions'),
       _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false }), 'microcycles'),
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
