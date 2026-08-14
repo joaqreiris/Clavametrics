@@ -5634,6 +5634,43 @@ create policy "Users read own layouts" on public.gps_dashboard_layouts as permis
 create policy "Users update own layouts" on public.gps_dashboard_layouts as permissive for update to public
   using (((user_id = auth.uid()) AND (club_id = get_user_club_id())))
   with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
+-- Layout POR DEFECTO DEL CLUB: una fila con dashboard_id = '<did>~clubdefault' que setean los
+-- roles con permiso (admin/owner/fitness/S&C) vía gps_set_club_default_layout(). Todos los miembros
+-- del club pueden LEERLA (fallback cuando el usuario no tiene layout propio). El '~' no es comodín de
+-- LIKE (sí lo es '_'), por eso el sufijo usa '~clubdefault' y no '__clubdefault__'.
+create policy "Club members read club-default layouts" on public.gps_dashboard_layouts as permissive for select to public
+  using (((dashboard_id like '%~clubdefault') AND (club_id = get_user_club_id())));
+
+-- Escribe/reemplaza el layout default del club para un dashboard. SECURITY DEFINER: valida el rol
+-- server-side (solo admin/owner/fitness_coach/sc_coach) y garantiza UNA sola fila por (club,dashboard)
+-- borrando la anterior. El front la invoca automáticamente cuando un rol con permiso guarda su layout.
+CREATE OR REPLACE FUNCTION public.gps_set_club_default_layout(p_dashboard_id text, p_layout jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_club uuid;
+  v_ok   boolean;
+  v_ns   text;
+begin
+  select club_id into v_club from public.profiles where id = auth.uid();
+  if v_club is null then raise exception 'gps_set_club_default_layout: no club for user'; end if;
+  select public.is_super_admin() or exists (
+    select 1 from public.profiles p where p.id = auth.uid()
+      and (lower(coalesce(p.role,'')) in ('admin','owner','fitness_coach','sc_coach')
+        or lower(coalesce(p.club_role,'')) in ('admin','owner','fitness_coach','sc_coach'))
+  ) into v_ok;
+  if not v_ok then raise exception 'gps_set_club_default_layout: not allowed'; end if;
+  v_ns := p_dashboard_id || '~clubdefault';
+  delete from public.gps_dashboard_layouts where club_id = v_club and dashboard_id = v_ns;
+  insert into public.gps_dashboard_layouts (user_id, club_id, dashboard_id, layout, updated_at)
+  values (auth.uid(), v_club, v_ns, p_layout, now());
+end;
+$function$
+;
+grant execute on function public.gps_set_club_default_layout(text, jsonb) to authenticated;
 
 alter table public.gps_drill_map enable row level security;
 create policy "gps_drill_map_select" on public.gps_drill_map as permissive for select to authenticated

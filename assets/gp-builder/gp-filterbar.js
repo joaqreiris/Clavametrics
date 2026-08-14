@@ -943,6 +943,17 @@
     if (!clubId || !window.sb) return;
 
     const _gpTeam = window._gpTeamId || null;
+    // Roster del equipo activo (por membresía player_teams, incluye secundarias e importados).
+    // Se usa para ACOTAR la query de gps_reports por player_id: sin esto la consulta barre TODO el
+    // club y, para un usuario con RLS restringida (p. ej. físio), evaluar las políticas anidadas
+    // (session_has_my_gps → gps_reports, my_player_ids, my_team_ids) fila por fila sobre miles de
+    // registros se vuelve pesado/lento → la query falla y el .catch la deja vacía → "No club data
+    // yet" en TODOS los desplegables aunque las cards (que sí acotan por sesión) muestren datos.
+    let _teamPlayerIds = _gpTeam ? (Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null) : null;
+    if (_gpTeam && (!_teamPlayerIds || !_teamPlayerIds.length)) {
+      try { const { data: _tp } = await window.cmTeamPlayers(_gpTeam, 'id'); _teamPlayerIds = (_tp || []).map(r => r.id); }
+      catch (_e) { _teamPlayerIds = null; }
+    }
     const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions,archived_at')
       .eq('club_id', clubId).is('archived_at', null);   // exclude ARCHIVED players (players.status has no 'inactive')
     const _seQ = window.sb.from('training_sessions').select('session_date, session_attributes, match_day_offset')
@@ -974,9 +985,15 @@
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
-      window.cmFetchAll(() => window.sb.from('gps_reports')
-        .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
-        .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
+      window.cmFetchAll(() => {
+        let _q = window.sb.from('gps_reports')
+          .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type), players!inner(id, first_name, last_name, number, position)')
+          .eq('club_id', clubId).eq('is_invalid', false);
+        // Acotar al roster del equipo cuando lo tenemos: baja el costo RLS y hace que un usuario
+        // restringido (físio) reciba SUS filas en vez de que la consulta club-wide falle y vuelva vacía.
+        if (_teamPlayerIds && _teamPlayerIds.length) _q = _q.in('player_id', _teamPlayerIds);
+        return _q;
+      }, { label: 'filterbar.reports' }).catch((e) => { console.warn('gpFilterBar reports query failed:', e); return []; }),
       _safe(_obQ),
       _safe(_snQ),
       _safe(_meQ),

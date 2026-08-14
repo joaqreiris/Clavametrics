@@ -2014,6 +2014,17 @@ async function saveLayout(viewKey, overrideDid) {
       console.error('saveLayout: Supabase error:', error);
       showToast('Failed to save layout — check the console', true);
     }
+    // Automático: si el usuario tiene permiso (admin/owner/fitness/S&C), su layout ADEMÁS se vuelve el
+    // default del club → los usuarios que no tienen layout propio lo heredan. La RPC valida el rol
+    // server-side (el chequeo de bucket acá solo evita una llamada que fallaría para el resto).
+    try {
+      const _prof = await window.getProfile?.();
+      const _buckets = window.cmRoleBuckets ? window.cmRoleBuckets(_prof) : new Set();
+      if (_buckets.has('admin') || _buckets.has('sc')) {
+        const { error: cdErr } = await window.sb.rpc('gps_set_club_default_layout', { p_dashboard_id: did, p_layout: layout });
+        if (cdErr) console.warn('saveLayout: club-default update failed:', cdErr.message);
+      }
+    } catch (e) { console.warn('saveLayout club-default:', e); }
   } catch (err) {
     console.error('saveLayout:', err);
     showToast('Failed to save layout — check the console', true);
@@ -2047,6 +2058,21 @@ async function loadLayout(viewKey) {
 // SOURCE OF TRUTH for the builder-card reorder: _mountSavedBuilderCards reads it instead of firing a
 // second loadLayout() that could return null on a cold/slow load and make the reorder silently skip.
 const _layoutStrictCache = new Map();   // viewKey → layout (array | null), last successful load
+// viewKeys cuyo layout aplicado vino del DEFAULT DEL CLUB (no del usuario). No se re-persisten como
+// fila personal (ver _reconcileLayoutWithGrid) para que los cambios futuros del admin sigan propagando.
+const _clubSourcedViews = new Set();
+// Lee el layout POR DEFECTO DEL CLUB de un dashboard (fila '<did>~clubdefault', legible por todos los
+// miembros vía RLS). Devuelve el array o null. Es el fallback cuando el usuario no tiene layout propio.
+async function _loadClubDefaultLayout(did) {
+  try {
+    const cid = await window.getClubId?.();
+    if (!cid || !window.sb || !did) return null;
+    const { data, error } = await window.sb.from('gps_dashboard_layouts')
+      .select('layout').eq('club_id', cid).eq('dashboard_id', did + '~clubdefault').maybeSingle();
+    if (error) { console.warn('_loadClubDefaultLayout: DB error:', error.message); return null; }
+    return Array.isArray(data?.layout) ? data.layout : null;
+  } catch (err) { console.warn('_loadClubDefaultLayout:', err); return null; }
+}
 async function _loadLayoutStrict(viewKey) {
   const did = _DASHBOARD_IDS[viewKey];
   if (!did || !window.sb) return { loaded: false, layout: null };
@@ -2067,7 +2093,15 @@ async function _loadLayoutStrict(viewKey) {
           // "delete every card" look identical to first-time and re-injected the default cards. Keep []
           // as a valid empty layout; return null ONLY when there is no row / no layout column at all.
           const raw = data?.layout;
-          const layout = Array.isArray(raw) ? raw : null;
+          let layout = Array.isArray(raw) ? raw : null;
+          _clubSourcedViews.delete(viewKey);
+          // Fallback al DEFAULT DEL CLUB: si el usuario no tiene layout propio (null) o lo tiene VACÍO
+          // (nunca configuró nada), hereda el que dejó el admin/fitness/S&C. Un layout propio con cards
+          // (length > 0) siempre gana → "si ya lo personalizó, mantiene el suyo".
+          if (layout == null || layout.length === 0) {
+            const clubLayout = await _loadClubDefaultLayout(did);
+            if (clubLayout && clubLayout.length) { layout = clubLayout; _clubSourcedViews.add(viewKey); }
+          }
           _layoutStrictCache.set(viewKey, layout);   // [] empty · array w/ data · null = no saved row
           return { loaded: true, layout };
         }
@@ -2129,6 +2163,7 @@ function _reorderGrid(grid, layout) {
 //     (a healthy view is already in sync → no rewrite fires at all).
 async function _reconcileLayoutWithGrid(viewKey) {
   if (!_layoutStrictCache.has(viewKey)) return;   // load failed / not ready → never rewrite
+  if (_clubSourcedViews.has(viewKey)) return;      // layout heredado del club → no capturarlo como fila personal
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
   // Grid card_ids that saveLayout WOULD keep (same ownership filter as 6b0b1d5 — skip foreign).
