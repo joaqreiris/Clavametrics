@@ -124,10 +124,17 @@ create table if not exists public.availability (
   minutes integer default 0,
   club_id uuid,
   notes text,
+  team_id uuid,
   constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
   constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text])))
 );
+-- team_id: equipo con el que el jugador está ese día (para estados relativos al equipo:
+-- available/partial/limited/unavailable/absent). NULL = estado global del jugador
+-- (injured/sick/away) que se muestra en todos sus equipos. Una sola fila por (player_id, date).
+alter table public.availability add constraint availability_team_id_fkey
+  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS availability_team_date_idx ON public.availability USING btree (team_id, date);
 
 create table if not exists public.body_composition (
   id uuid default gen_random_uuid() not null,

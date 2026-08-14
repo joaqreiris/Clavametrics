@@ -621,7 +621,12 @@
   // 'unavailable' = the "No disponible" category (not-with-team, no clinical reason) — its own
   // slate colour, distinct from injury red. 'injured' stays red.
   const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'un', away:'na', injured:'in', sick:'si', other_team:'ot' };
-  function statusKey(s) { return STATUS_CSS[s] || s; }
+  function statusKey(s) { if (s && s.indexOf('other_team') === 0) return 'ot'; return STATUS_CSS[s] || s; }
+  // Estados RELATIVOS al equipo: sólo valen en el equipo con el que el jugador está ese día
+  // (availability.team_id). En cualquier otro equipo se muestran como 'other_team' ("entrena con…").
+  const TEAM_RELATIVE  = new Set(['available', 'partial', 'limited', 'unavailable', 'absent']);
+  // Estados GLOBALES del jugador: valen en TODOS sus equipos (team_id NULL). No se redirigen.
+  const GLOBAL_STATUS  = new Set(['injured', 'sick', 'away']);
   // Status to show for a cell with NO stored record. Injury is global (shows in every
   // team); a guest with no record defaults to 'other_team' (with their own squad);
   // everyone else defaults to 'available'. 'other_team' is view-only — never stored.
@@ -635,6 +640,20 @@
     if (injuredIds.has(pid) && (!date || date >= todayStr)) return 'injured';
     if (_avGuestTeam.has(pid)) return 'other_team';
     return 'available';
+  }
+
+  // Token de estado A MOSTRAR para (pid, date) según la fila guardada `e` (o ninguna), en la
+  // vista del equipo actual (_avTeamId). Una fila con estado relativo al equipo guardada para
+  // OTRO equipo se muestra como 'other_team#<eseTeamId>' ("entrena con ese equipo"). Los estados
+  // globales (lesión/enfermedad/selección, team_id NULL) se muestran igual en todos los equipos.
+  function effStatus(pid, date, e) {
+    if (!e) return avDefaultStatus(pid, date);
+    if (e.minutes > 0) return 'match:' + e.minutes;
+    const s = e.status || 'available';
+    if (TEAM_RELATIVE.has(s) && e.team_id && _avTeamId && e.team_id !== _avTeamId) {
+      return 'other_team#' + e.team_id;
+    }
+    return s;
   }
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
@@ -674,10 +693,12 @@
       const min = parseInt(status.split(':')[1], 10);
       return `<td class="${cls} av-cell-match"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
     }
-    if (status === 'other_team') {
-      const tn = (pid && _avGuestTeam.get(pid)) || '';
+    if (status.indexOf('other_team') === 0) {
+      // 'other_team#<teamId>' → nombre de ESE equipo; 'other_team' pelado → equipo primario del guest.
+      const tid = status.indexOf('#') >= 0 ? status.slice(status.indexOf('#') + 1) : null;
+      const tn = tid ? (_avTeamsById.get(tid)?.name || '') : ((pid && _avGuestTeam.get(pid)) || '');
       const title = tn ? tt('availability.trainsWithTeam', `Training with ${tn}`, { team: tn }).replace(/"/g,"'") : tt('availability.trainsWithOther','With another team');
-      return `<td class="${cls} is-otherteam"${data} title="${title}">${dotEl(status)}</td>`;
+      return `<td class="${cls} is-otherteam"${data} title="${title}">${dotEl('other_team')}</td>`;
     }
     return `<td class="${cls}"${data}>${dotEl(status)}</td>`;
   }
@@ -735,7 +756,7 @@
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
         return avDefaultStatus(playerId, date);
       }
-      return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
+      return effStatus(playerId, date, e);
     });
     const sumCell = row.querySelector('.col-sum');
     if (sumCell) sumCell.innerHTML = summary(statuses, MC_DATES);
@@ -814,7 +835,7 @@
             if (!dayCountable(date)) return null;           // not planned → neutral/blank
             return avDefaultStatus(p.id, date);
           }
-          return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
+          return effStatus(p.id, date, e);
         });
         const cells = statuses.map((s, i) => cellHTML(s, i, p.id, MC_DATES[i])).join('');
         // Cross-team: this player's PRIMARY team is not the one we're viewing → they
@@ -853,7 +874,8 @@
     const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
-      const s = e ? (e.status || 'available') : avDefaultStatus(p.id, todayStr);   // guests → 'other_team', not counted as available
+      let s = effStatus(p.id, todayStr, e);   // guests / con-otro-equipo → 'other_team', no cuenta como disponible
+      if (s.indexOf('match:') === 0) s = 'available';   // partido = está con NOSOTROS ese día
       // "Nombre Apellido" — first name + first surname only
       const name = `${p.first_name || ''} ${(p.last_name || '').split(' ')[0]}`.trim();
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
@@ -875,7 +897,8 @@
       let avYest = 0;
       players.forEach(p => {
         const ye = yesterdayByPlayer[p.id];
-        const s = ye ? (ye.status || 'available') : (_avGuestTeam.has(p.id) ? 'other_team' : 'available');
+        let s = ye ? effStatus(p.id, null, ye) : (_avGuestTeam.has(p.id) ? 'other_team' : 'available');
+        if (s.indexOf('match:') === 0) s = 'available';
         if (s === 'available' || s === 'partial' || s === 'limited') avYest++;
       });
       const delta = avCount - avYest;
@@ -931,7 +954,9 @@
       // Guests stay derived ('with their own team') — don't persist an 'available' row
       // that would silently override it. Injured guests still get filled below via injury.
       if (_avGuestTeam.has(p.id) && !injuredIds.has(p.id)) return;
-      rows.push({ player_id: p.id, date: todayStr, status: injuredIds.has(p.id) ? 'injured' : 'available', minutes: 0, club_id: CLUB_ID });
+      const injured = injuredIds.has(p.id);
+      // 'available' es relativo al equipo activo → team_id = _avTeamId. 'injured' es global → NULL.
+      rows.push({ player_id: p.id, date: todayStr, status: injured ? 'injured' : 'available', minutes: 0, club_id: CLUB_ID, team_id: injured ? null : (_avTeamId || null) });
     });
     if (!rows.length) return;
     const { error } = await window.sb.from('availability')
@@ -954,7 +979,7 @@
       MC_DATES.forEach(date => {
         if (date < inj.start_date || date > end) return;
         if (avMap[inj.player_id + '|' + date]) return; // don't overwrite manual edits
-        rows.push({ player_id: inj.player_id, date, status: 'injured', minutes: 0, club_id: CLUB_ID });
+        rows.push({ player_id: inj.player_id, date, status: 'injured', minutes: 0, club_id: CLUB_ID, team_id: null }); // lesión = global
       });
     });
     if (!rows.length) return;
@@ -967,9 +992,20 @@
   // ── Save cell to Supabase ──
   async function saveAvailability(pid, date, status, minutes = 0) {
     if (!CLUB_ID) return;
+    // Estados globales (lesión/enfermedad/selección) → team_id NULL (se ven en todos los equipos).
+    // El resto es relativo al equipo activo → team_id = _avTeamId ("está con este equipo ese día").
+    const team_id = GLOBAL_STATUS.has(status) ? null : (_avTeamId || null);
     const { error } = await window.sb.from('availability')
-      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID }, { onConflict: 'player_id,date' });
+      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID, team_id }, { onConflict: 'player_id,date' });
     if (error) console.warn('[Availability] save error:', error.message);
+  }
+
+  // Borrar la fila del día SÓLO si es de este equipo o global (team_id NULL). Nunca pisa el
+  // estado que otro equipo guardó para el mismo jugador/fecha (una sola fila por player+date).
+  function _delAvailRow(pid, date) {
+    let q = window.sb.from('availability').delete().eq('player_id', pid).eq('date', date);
+    if (_avTeamId) q = q.or(`team_id.is.null,team_id.eq.${_avTeamId}`);
+    return q;
   }
 
   // ── Init ──
@@ -1090,9 +1126,9 @@
           return data || [];
         } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); return []; }
       })(),
-      window.sb.from('availability').select('player_id, date, status, minutes')
+      window.sb.from('availability').select('player_id, date, status, minutes, team_id')
         .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
-      window.sb.from('availability').select('player_id, status')
+      window.sb.from('availability').select('player_id, status, minutes, team_id')
         .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
       window.sb.from('calendar_events').select('date, opponent, title')
         .eq('club_id', CLUB_ID).eq('type', 'match')
@@ -1286,7 +1322,7 @@
         if (!dayCountable(date)) return null;             // not planned → neutral/blank
         return avDefaultStatus(pid, date);
       }
-      return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
+      return effStatus(pid, date, ent);
     });
     const html = summaryTooltip(statuses, MC_DATES);
     if (!html) return;
@@ -1381,7 +1417,7 @@
         td.className = cellBaseCls(date);
         td.innerHTML = dotEl('available');
       }
-      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n };
+      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n, team_id: _avTeamId || null };
       saveAvailability(pid, date, 'available', n);
       updateRowSummary(pid);
       recalcKPIs();
@@ -1437,12 +1473,12 @@
             td.className = cellBaseCls(date);
             delete avMap[pid + '|' + date];
             updated.add(pid);
-            window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
+            _delAvailRow(pid, date)
               .then(({ error }) => { if (error) console.warn('[Availability] delete error:', error.message); });
           } else {
             td.innerHTML = dotEl(fullStatus);
             td.className = cellBaseCls(date);
-            avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0 };
+            avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0, team_id: GLOBAL_STATUS.has(fullStatus) ? null : (_avTeamId || null) };
             updated.add(pid);
             saveAvailability(pid, date, fullStatus);
           }
@@ -1464,7 +1500,7 @@
       if (pid && date) {
         td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
         td.className = cellBaseCls(date) + ' av-cell-match';
-        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90 };
+        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90, team_id: _avTeamId || null };
         updated.add(pid);
         saveAvailability(pid, date, 'available', 90);
       }
@@ -1486,7 +1522,7 @@
         td.className = cellBaseCls(date);
         delete avMap[pid + '|' + date];
         updated.add(pid);
-        window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
+        _delAvailRow(pid, date)
           .then(({ error }) => { if (error) console.warn('[Availability] delete error:', error.message); });
       }
     });
@@ -1621,10 +1657,14 @@
     if (!players || !players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
     const pids = players.map(p => p.id);
 
-    const { data: avail } = await window.sb.from('availability')
-      .select('player_id, date, status, minutes')
+    const { data: availRaw } = await window.sb.from('availability')
+      .select('player_id, date, status, minutes, team_id')
       .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
       .gte('date', from).lte('date', to);
+    // Días en que el jugador estaba con OTRO equipo (fila relativa de otro team) no cuentan
+    // para las stats de ESTE equipo: se descartan (no era un día "con nosotros").
+    const avail = (availRaw || []).filter(r =>
+      !(TEAM_RELATIVE.has(r.status) && r.team_id && _avTeamId && r.team_id !== _avTeamId));
 
     const stat = {};
     players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, minutes:0, total:0 });
