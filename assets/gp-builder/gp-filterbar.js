@@ -985,11 +985,17 @@
     // Each query is made rejection-proof: if ANY fails, loadData still completes and reaches the
     // stale-filter prune below — otherwise a single failed query aborts the whole build and a
     // phantom persisted filter (e.g. an old microcycle id) never gets cleared.
-    const _safe = p => Promise.resolve(p).then(r => r, () => ({ data: [] }));
+    // AUDIT: una query Supabase con error RLS NO rechaza — resuelve con { data:null, error:{...} }.
+    // Antes ese .error se descartaba en silencio → no se sabía cuál lectura dejaba vacío el filter bar
+    // para un rol restringido (físio). Ahora _safe loguea el .error con su etiqueta.
+    const _safe = (p, label) => Promise.resolve(p).then(
+      r => { if (r && r.error) console.warn(`[gpFilterBar] ${label} error:`, r.error.message || r.error); return r; },
+      e => { console.warn(`[gpFilterBar] ${label} rejected:`, e); return { data: [] }; }
+    );
     const [{ data: players }, { data: sessions }, { data: _mcsRaw }, reports, { data: opponents }, { data: seasons }, { data: matchEvents }, { data: matchSess }] = await Promise.all([
-      _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name')),
-      _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
-      _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false })),
+      _safe((_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'), 'players'),
+      _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ, 'sessions'),
+      _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false }), 'microcycles'),
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
@@ -1001,12 +1007,21 @@
         // restringido (físio) reciba SUS filas en vez de que la consulta club-wide falle y vuelva vacía.
         if (_teamPlayerIds && _teamPlayerIds.length) _q = _q.in('player_id', _teamPlayerIds);
         return _q;
-      }, { label: 'filterbar.reports' }).catch((e) => { console.warn('gpFilterBar reports query failed:', e); return []; }),
-      _safe(_obQ),
-      _safe(_snQ),
-      _safe(_meQ),
-      _safe(_msQ),
+      }, { label: 'filterbar.reports' }).catch((e) => { console.warn('[gpFilterBar] reports query failed:', e); return []; }),
+      _safe(_obQ, 'opponents'),
+      _safe(_snQ, 'seasons'),
+      _safe(_meQ, 'matchEvents'),
+      _safe(_msQ, 'matchSess'),
     ]);
+    // AUDIT: resumen de lo que cada lectura trajo. Con el físio logueado + consola abierta, esta línea
+    // dice EXACTAMENTE dónde está el vacío (p. ej. teamPlayers:0 → cmTeamPlayers/RLS de players/player_teams;
+    // reports:0 con teamPlayers>0 → RLS de gps_reports; seasons:0 → RLS de seasons). Quitar tras diagnosticar.
+    console.info('[gpFilterBar] diag', {
+      clubId, team: _gpTeam, teamPlayers: (_teamPlayerIds || []).length,
+      players: (players || []).length, sessions: (sessions || []).length,
+      microcycles: (_mcsRaw || []).length, reports: (reports || []).length,
+      seasons: (seasons || []).length, opponents: (opponents || []).length,
+    });
     // Aislamiento por equipo (defensa en profundidad): aunque la query ya scopea con
     // .or(team_id.eq,is.null), si _gpTeam llegara null por una race la query traería TODO el
     // club y se colarían microciclos de OTROS equipos (mismo nombre «MC 01», ventanas de fecha
