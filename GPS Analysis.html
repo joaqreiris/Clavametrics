@@ -664,6 +664,11 @@
   .mgp-opt-team { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; margin-left:auto; font:600 9.5px/1 var(--cm-font-sans); color:var(--cm-accent,#2563EB); background:color-mix(in srgb, var(--cm-accent,#2563EB) 12%, transparent); border:1px solid color-mix(in srgb, var(--cm-accent,#2563EB) 30%, transparent); border-radius:5px; padding:3px 6px; max-width:110px; overflow:hidden; }
   .mgp-opt-team i { font-size:12px; }
   .mgp-opt-team span, .mgp-opt-team { white-space:nowrap; text-overflow:ellipsis; }
+  /* Availability reason pill (why a player has no GPS): colour set inline per status. */
+  .mgp-reason { display:inline-flex; align-items:center; flex-shrink:0; margin-left:auto; font:600 9.5px/1 var(--cm-font-sans); border:1px solid transparent; border-radius:5px; padding:3px 6px; white-space:nowrap; text-transform:capitalize; }
+  .mgp-opt-team + .mgp-reason, .mgp-reason + .mgp-opt-team { margin-left:6px; }
+  .mgp-status-rz { display:inline-flex; flex-wrap:wrap; gap:5px; width:100%; margin-top:2px; }
+  .mgp-status-rz .mgp-reason { margin-left:0; }
   .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
   .gp-wiz-step     { padding:10px 14px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); border-bottom:2px solid transparent; cursor:default; }
   .gp-wiz-step.is-on   { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
@@ -7116,21 +7121,29 @@ async function openManualGpsModal() {
     if (s.season_id != null) return String(s.season_id) === String(_curSeason.id);
     return s.session_date && String(_curSeason.start_date) <= s.session_date && s.session_date <= String(_curSeason.end_date);
   };
-  // Client filter — only sessions that can actually receive manual GPS for THIS team:
-  //  · belong to this team (or an untagged Catapult import), never another team's session;
-  //  · already hold some GPS (dataCount > 0) — empty planning duplicates are noise here;
-  //  · are not in the future — you can't log GPS for a session that hasn't happened yet;
-  //  · belong to the current season — last season's sessions are noise here.
-  const _eligible = s => !!_dataCount[s.id]
-      && (!s.session_date || s.session_date <= _today)
+  // Base scope — sessions that CAN receive manual GPS for THIS team: this team's (or an untagged
+  // Catapult import), never in the future, current season only. Last season / other teams / future
+  // planning placeholders are all dropped here.
+  const _base = s => (!s.session_date || s.session_date <= _today)
       && _inSeason(s)
       && (!teamId || String(s.team_id)===String(teamId) || s.team_id==null);
-  const _teamSessions = _rawSessions.filter(_eligible);
-  const curSessions = () => _teamSessions;
-  if (!_teamSessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions with GPS found for this team.')}</div>`; return; }
+  // Two views over that base: 'data' = only sessions that already hold GPS (clean default, hides
+  // empty planning duplicates); 'all' = every base session, including days with no GPS yet so you
+  // can still start one from scratch (e.g. a match whose devices failed). Toggle appears only when
+  // there actually are empty sessions to reveal.
+  const _dataSessions = _rawSessions.filter(s => _base(s) && !!_dataCount[s.id]);
+  const _allSessions  = _rawSessions.filter(_base);
+  const hasEmptySess  = _allSessions.length > _dataSessions.length;
+  let sessScope = _dataSessions.length ? 'data' : 'all';
+  const curSessions = () => sessScope==='all' ? _allSessions : _dataSessions;
+  if (!_allSessions.length) { body.innerHTML = `<div class="mgp-empty">${tt('gps_analysis.manual_no_sessions','No sessions with GPS found for this team.')}</div>`; return; }
 
   body.innerHTML = `
     <label class="mgp-lbl">${tt('gps_analysis.manual_session','Session')}</label>
+    ${hasEmptySess ? `<div class="mgp-seg mgp-teamf" id="mgpSessScope">
+      <button type="button" data-s="data" class="${sessScope==='data'?'is-on':''}">${tt('gps_analysis.manual_sess_with_data','With data')}</button>
+      <button type="button" data-s="all" class="${sessScope==='all'?'is-on':''}">${tt('gps_analysis.manual_sess_all','All')}</button>
+    </div>` : ''}
     <div class="mgp-pick">
       <button type="button" class="mgp-ses-btn" id="mgpSesBtn" aria-expanded="false"><span class="mgp-ses-cur" id="mgpSesCur"></span><i class="ti ti-chevron-down mgp-ses-chev"></i></button>
       <div class="mgp-list mgp-ses-list" id="mgpSesList" role="listbox" hidden></div>
@@ -7167,6 +7180,34 @@ async function openManualGpsModal() {
   const selPos = () => posByPlayer[selPid()] || '';
   const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
   const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
+
+  // ── Availability reasons: WHY a player has no GPS this session (Availability page data) ──
+  // availability rows for the session's date, keyed by player. Global statuses (injury/illness/
+  // selección) apply anywhere; team-relative ones stored for ANOTHER team read as 'other_team'.
+  let availByPid = {};
+  const _TEAM_REL_AV = new Set(['available','partial','limited','unavailable','absent']);
+  const _AV_REASON = {
+    injured:     ['availability.tipInjured',    'injured',            'var(--cm-danger,#DC2626)'],
+    sick:        ['availability.tipIllness',    'illness',            'var(--cm-violet,#7C3AED)'],
+    away:        ['availability.tipAway',       'away',               'var(--cm-info,#2563EB)'],
+    unavailable: ['availability.tipUnavailable','unavailable',        '#475569'],
+    absent:      ['availability.tipAbsent',     'absent',             'var(--cm-fg-muted,#64748B)'],
+    partial:     ['availability.tipPartial',    'partial',            'var(--cm-warning,#D97706)'],
+    limited:     ['availability.tipPartial',    'partial',            'var(--cm-warning,#D97706)'],
+    other_team:  ['availability.tipOtherTeam',  'with another team',  '#6366F1'],
+  };
+  function availReason(pid) {
+    const e = availByPid[pid];
+    if (!e) return null;
+    let s = e.status;
+    if (!s || s === 'available') return null;
+    if (_TEAM_REL_AV.has(s) && e.team_id && teamId && String(e.team_id) !== String(teamId)) s = 'other_team';
+    const d = _AV_REASON[s];
+    return d ? { status: s, label: tt(d[0], d[1]), color: d[2] } : null;
+  }
+  function _reasonPill(rz, prefix) {
+    return `<span class="mgp-reason" style="color:${rz.color};background:color-mix(in srgb,${rz.color} 12%,transparent);border-color:color-mix(in srgb,${rz.color} 32%,transparent)">${prefix?_esc(prefix)+' ':''}${_esc(rz.label)}</span>`;
+  }
 
   // ── Session picker (custom dropdown replacing the OS-rendered <select>) ──────
   function _sesRowHTML(s, selId) {
@@ -7216,10 +7257,22 @@ async function openManualGpsModal() {
     const vis  = visibleRoster();
     const miss = vis.filter(p=>statusOf(p.id)==='missing').length;
     const est  = vis.filter(p=>statusOf(p.id)==='est').length;
+    // Break the players WITHOUT real data down by their availability reason, so "5 missing" also
+    // tells you WHY (2 selección · 1 lesionado · …). Players with no availability record are just
+    // missing with no explanation.
+    const rzCounts = {};
+    vis.forEach(p => {
+      if (statusOf(p.id) === 'real') return;
+      const rz = availReason(p.id);
+      if (!rz) return;
+      (rzCounts[rz.status] = rzCounts[rz.status] || { n:0, label:rz.label, color:rz.color }).n++;
+    });
+    const rzHTML = Object.values(rzCounts).map(r => _reasonPill(r, r.n)).join(' ');
     body.querySelector('#mgpStatus').innerHTML =
       `<span class="mgp-chip real">${vis.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
       + (est?` <span class="mgp-chip est">${est} ${tt('gps_analysis.manual_st_est','estimated')}</span>`:'')
-      + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'');
+      + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'')
+      + (rzHTML?`<span class="mgp-status-rz">${rzHTML}</span>`:'');
   }
   function renderPlayerList() {
     const listEl = body.querySelector('#mgpPlayerList'), sel = body.querySelector('#mgpPlayer');
@@ -7227,13 +7280,17 @@ async function openManualGpsModal() {
     const rows = _sortedVisible().filter(({p})=> !term ||
       `${p.number||''} ${p.position||''} ${p.first_name||''} ${p.last_name||''}`.toLowerCase().includes(term));
     if (!rows.length) { listEl.innerHTML = `<div class="mgp-list-empty">${tt('gps_analysis.manual_no_players','No players match.')}</div>`; return; }
-    listEl.innerHTML = rows.map(({p,st})=>`<button type="button" class="mgp-opt${p.id===sel.value?' is-sel':''}" data-pid="${_esc(p.id)}" role="option">`
+    listEl.innerHTML = rows.map(({p,st})=>{
+      const rz = st!=='real' ? availReason(p.id) : null;   // only explain players without real data
+      return `<button type="button" class="mgp-opt${p.id===sel.value?' is-sel':''}" data-pid="${_esc(p.id)}" role="option">`
       + `<span class="mgp-dot st-${st}"></span>`
       + `<span class="mgp-opt-num">${p.number?('#'+_esc(p.number)):''}</span>`
       + (p.position?`<span class="mgp-opt-pos">${_esc(p.position)}</span>`:'')
       + `<span class="mgp-opt-name">${_esc((p.last_name||'')+' '+(p.first_name||''))}</span>`
+      + (rz?_reasonPill(rz):'')
       + (isGuest(p)?`<span class="mgp-opt-team" title="${_esc(guestLabel)}"><i class="ti ti-arrows-exchange"></i>${_esc(guestLabel)}</span>`:'')
-      + `</button>`).join('');
+      + `</button>`;
+    }).join('');
     listEl.querySelectorAll('.mgp-opt').forEach(el=>el.addEventListener('click',()=>{
       sel.value = el.dataset.pid; sel.dispatchEvent(new Event('change')); renderPlayerList();
     }));
@@ -7281,10 +7338,24 @@ async function openManualGpsModal() {
   }
   async function loadSession() {
     const sid = body.querySelector('#mgpSession').value;
-    const { data } = await window.sb.from('gps_reports')
-      .select('player_id,source,is_invalid,'+metricKeys.join(','))
-      .eq('session_id', sid).eq('club_id', clubId);
-    sessionReports = data || [];
+    const sDate = curSessions().find(s => s.id === sid)?.session_date || null;
+    const [gpsRes, avRes] = await Promise.all([
+      window.sb.from('gps_reports')
+        .select('player_id,source,is_invalid,'+metricKeys.join(','))
+        .eq('session_id', sid).eq('club_id', clubId),
+      // Availability for THIS session's date → drives the "why no GPS" reasons.
+      sDate ? window.sb.from('availability').select('player_id,status,team_id')
+                .eq('club_id', clubId).eq('date', sDate).in('player_id', roster.map(p=>p.id))
+            : Promise.resolve({ data: [] }),
+    ]);
+    sessionReports = gpsRes.data || [];
+    // One row per player/date is the norm; if several exist, keep the one that carries a real reason
+    // (a global injury/illness/selección) over a plain 'available'.
+    availByPid = {};
+    (avRes.data || []).forEach(r => {
+      const cur = availByPid[r.player_id];
+      if (!cur || (cur.status === 'available' && r.status !== 'available')) availByPid[r.player_id] = r;
+    });
     realReports = sessionReports.filter(r=>!r.is_invalid && !EST_SOURCES.includes(r.source));
     teamAvg = _avg(realReports);
     renderStatus(); renderPlayers(); renderFields();
@@ -7293,6 +7364,14 @@ async function openManualGpsModal() {
   body.querySelector('#mgpSesBtn').addEventListener('click', () => {
     body.querySelector('#mgpSesList').hidden ? openSesList() : closeSesList();
   });
+  // 'With data' (default, clean) ↔ 'All' (also shows sessions with no GPS yet, e.g. a match whose
+  // devices failed) — both already scoped to this team + current season + past.
+  body.querySelectorAll('#mgpSessScope button').forEach(b => b.addEventListener('click', () => {
+    sessScope = b.dataset.s;
+    body.querySelectorAll('#mgpSessScope button').forEach(x => x.classList.toggle('is-on', x===b));
+    setSession(body.querySelector('#mgpSession').value);   // keep selection if still visible, else first
+    if (!body.querySelector('#mgpSesList').hidden) renderSesList();
+  }));
   // Close the session list when clicking anywhere outside the picker. Scoped to the overlay so the
   // listener dies with the modal (no leaked document handler that keeps the dropdown feeling stuck).
   ov.addEventListener('mousedown', e => {
