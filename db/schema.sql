@@ -3979,6 +3979,26 @@ AS $function$
 $function$
 ;
 
+-- ¿La sesión pertenece a uno de MIS equipos? SECURITY DEFINER a propósito: usado dentro de la
+-- policy gps_reports_scoped_select, reemplaza al EXISTS inline que consultaba training_sessions
+-- BAJO su RLS (ts_scoped_select → my_gps_session_ids() → re-escaneaba gps_reports = explosión
+-- anidada, ~6s). Como DEFINER, el EXISTS interno NO dispara la RLS de training_sessions → una
+-- simple búsqueda por PK. Visibilidad idéntica al EXISTS original: ese ya filtraba por
+-- team_id ∈ my_team_ids(), rama que ts_scoped_select permite igual → mismo conjunto de filas.
+CREATE OR REPLACE FUNCTION public.session_in_my_teams(p_session_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.training_sessions ts
+    where ts.id = p_session_id
+      and ts.team_id in (select public.my_team_ids())
+  );
+$function$
+;
+
 -- Same idea for a microcycle: visible if any of its sessions carries GPS for one of my players.
 CREATE OR REPLACE FUNCTION public.microcycle_has_my_gps(p_mc text)
  RETURNS boolean
@@ -5824,12 +5844,14 @@ create policy "gps_reports_scoped_insert" on public.gps_reports as permissive fo
 -- SESSION belongs to one of my teams (training_sessions.team_id — set by the Catapult sync).
 -- The session branch covers athletes synced from Catapult that were never assigned to a team
 -- in player_teams, so a team's staff still see that team's session data.
+-- La rama de "sesión de mi equipo" va por session_in_my_teams() (SECURITY DEFINER) en vez de un
+-- EXISTS inline: el EXISTS inline consultaba training_sessions BAJO su RLS → my_gps_session_ids()
+-- re-escaneaba gps_reports (explosión anidada, ~6s/timeout). El helper hace la misma comprobación
+-- sin disparar esa RLS. Visibilidad idéntica.
 create policy "gps_reports_scoped_select" on public.gps_reports as permissive for select to public
   using ((is_super_admin()
     OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))
-    OR (EXISTS ( SELECT 1 FROM training_sessions ts
-                 WHERE ((ts.id = gps_reports.session_id)
-                   AND (ts.team_id IN ( SELECT my_team_ids() AS my_team_ids)))))));
+    OR public.session_in_my_teams(session_id)));
 create policy "gps_reports_scoped_update" on public.gps_reports as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
