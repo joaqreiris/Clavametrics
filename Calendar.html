@@ -6565,6 +6565,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const evtDate = _urlDate.slice(0, 7); // YYYY-MM
     const idx = _allMCs.findIndex(m => m.start_date && m.start_date.slice(0, 7) <= evtDate && m.end_date && m.end_date.slice(0, 7) >= evtDate);
     if (idx >= 0) _mcIdx = idx;
+  } else if (_urlDate) {
+    // Solo ?date= (ej. desde el import de GPS: «este día no está en ningún microciclo»): saltar al
+    // microciclo que contiene esa fecha si existe; si no, dejar la vista por defecto para crear uno.
+    const idx = _allMCs.findIndex(m => m.start_date && m.end_date && m.start_date <= _urlDate && m.end_date >= _urlDate);
+    if (idx >= 0) _mcIdx = idx;
   }
 
   if (_allMCs.length === 0) {

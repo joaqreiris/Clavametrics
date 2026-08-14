@@ -2358,32 +2358,42 @@
         }));
       }
 
-      // ── 4b. Días con GPS pero SIN Match Day ───────────────
-      // Un día puede recibir datos GPS sin ser un entrenamiento planificado (activación, otro evento)
-      // o sin que se le haya asignado un MD. No lo forzamos: sugerimos al usuario asignarle un MD /
-      // crear la sesión en Daily Planning (o dejarlo sin MD, es su decisión). Cuando se agregue el
-      // sync de proveedor (Catapult/StatSports) puede reusar este mismo chequeo.
-      let _mdGapDays = [];
+      // ── 4b. Días con GPS sin Match Day / fuera de todo microciclo ─────────
+      // Un día puede recibir datos GPS sin estar en un microciclo, o estando en uno pero sin un MD
+      // derivable (sin partido ni override). No lo forzamos: sugerimos (a) crear/extender el MC en
+      // Calendar si el día no cae en ninguno, o (b) asignar el MD en Daily Planning si cae en un MC
+      // pero no hay MD. Dejarlo sin MD es decisión del usuario. El MD se DERIVA por fecha del MC
+      // (mismo criterio que las cards): reusamos window._gpMcForDate / _gpMdDerived del filter bar.
+      // Cuando se agregue el sync de proveedor (Catapult/StatSports) puede reusar este chequeo.
+      let _mdGapDays = [], _noMcDays = [];
       try {
         const _impSids = isMultiMode ? [...new Set(Object.values(dateSessionMap))] : (singleSessionId ? [singleSessionId] : []);
         if (_impSids.length) {
           const { data: _sr } = await window.sb.from('training_sessions')
             .select('id, session_date, match_day_offset').in('id', _impSids);
-          // Sin MD = la sesión GPS no tiene match_day_offset Y ningún otro registro del mismo día
-          // (misma club) lo trae (que se lo propagaría al guardar en Daily Planning).
           const _noMd  = (_sr || []).filter(r => r.match_day_offset == null);
           const _dates = [...new Set(_noMd.map(r => r.session_date))];
           if (_dates.length) {
+            // MD guardado por un sibling del mismo día (Daily Planning) → ya cubierto.
             const { data: _sib } = await window.sb.from('training_sessions')
               .select('session_date').eq('club_id', clubId).in('session_date', _dates)
               .not('match_day_offset', 'is', null);
             const _withMd = new Set((_sib || []).map(s => s.session_date));
-            _mdGapDays = _noMd.filter(r => !_withMd.has(r.session_date))
-              .map(r => ({ date: r.session_date, sessionId: r.id }))
-              .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+            const _mcFn = (typeof window !== 'undefined' && typeof window._gpMcForDate === 'function') ? window._gpMcForDate : null;
+            const _mdFn = (typeof window !== 'undefined' && typeof window._gpMdDerived === 'function') ? window._gpMdDerived : null;
+            _noMd.filter(r => !_withMd.has(r.session_date)).forEach(r => {
+              const d = String(r.session_date).slice(0, 10);
+              const md = _mdFn ? _mdFn(d) : '';
+              if (md) return;                              // MD derivable del MC → ya aparece, no molestar
+              const hasMc = _mcFn ? !!_mcFn(d) : null;     // null = no pudimos determinar (sin filter bar)
+              if (hasMc === false) _noMcDays.push({ date: d, sessionId: r.id });   // fuera de todo MC
+              else _mdGapDays.push({ date: d, sessionId: r.id });                  // en un MC (o desconocido), sin MD
+            });
+            _noMcDays.sort((a, b) => a.date.localeCompare(b.date));
+            _mdGapDays.sort((a, b) => a.date.localeCompare(b.date));
           }
         }
-      } catch (e) { console.warn('gps import MD-gap detection:', e); }
+      } catch (e) { console.warn('gps import MD/MC-gap detection:', e); }
 
       // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
@@ -2413,6 +2423,13 @@
             <div style="font:600 10.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-warning);margin-bottom:5px">Warnings</div>
             ${warningLines.map(w => `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${w}</div>`).join('')}
           </div>` : ''}
+          ${_noMcDays.length ? `
+          <div style="width:100%;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3);text-align:left">
+            <div style="display:flex;align-items:center;gap:6px;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px"><i class="ti ti-calendar-off" style="font-size:14px;color:var(--cm-warning)"></i>${_wt('gps_import.mc_gap_title','Days not in any microcycle')}</div>
+            <div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${_wt('gps_import.mc_gap_body','These days got GPS data but are not inside any microcycle, so no Match Day can be derived. Create or extend a microcycle in the Calendar to give them their MD.')}</div>
+            <div style="font:500 11.5px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:8px">${_noMcDays.map(d => d.date).join(' · ')}</div>
+            <button class="cm-btn is-ghost is-sm" id="wizCreateMc" style="height:28px"><i class="ti ti-calendar-plus" style="font-size:12px"></i>${_wt('gps_import.mc_gap_cta','Open Calendar')}</button>
+          </div>` : ''}
           ${_mdGapDays.length ? `
           <div style="width:100%;padding:10px 12px;background:var(--cm-accent-bg,rgba(59,130,246,.08));border:1px solid var(--cm-accent,#3b82f6);border-radius:var(--cm-r-3);text-align:left">
             <div style="display:flex;align-items:center;gap:6px;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px"><i class="ti ti-calendar-question" style="font-size:14px;color:var(--cm-accent,#3b82f6)"></i>${_wt('gps_import.md_gap_title','Days with GPS but no Match Day')}</div>
@@ -2431,6 +2448,11 @@
       document.getElementById('wizAssignMd')?.addEventListener('click', () => {
         const g = _mdGapDays[0]; if (!g) return;
         window.location.href = `Daily Planning.html?date=${g.date}${g.sessionId ? `&session=${g.sessionId}` : ''}`;
+      });
+      // Sugerencia: abrir Calendar en el mes del primer día sin microciclo, para crear/extender el MC.
+      document.getElementById('wizCreateMc')?.addEventListener('click', () => {
+        const g = _noMcDays[0]; if (!g) return;
+        window.location.href = `Calendar.html?date=${g.date}`;
       });
 
       showToast(`Imported ${deduped.length} GPS reports · ${uniquePlayers} players · ${sessionCount} sessions`);
