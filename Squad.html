@@ -336,7 +336,9 @@
   .sq-multi-btn:focus { border-color:var(--cm-accent); }
   .sq-multi-btn::after { content:'⌄'; position:absolute; right:10px; top:50%; transform:translateY(-60%); color:var(--cm-fg-muted); pointer-events:none; }
   .sq-multi.is-ro .sq-multi-btn { opacity:.6; cursor:default; }
-  .sq-multi-tag { display:inline-flex; font:600 11px/1 var(--cm-font-mono); padding:4px 6px; border-radius:6px; background:var(--cm-accent-soft); border:1px solid var(--cm-accent); color:var(--cm-fg-strong); }
+  .sq-multi-tag { display:inline-flex; align-items:center; gap:4px; font:600 11px/1 var(--cm-font-mono); padding:4px 6px; border-radius:6px; background:var(--cm-accent-soft); border:1px solid var(--cm-accent); color:var(--cm-fg-strong); }
+  .sq-multi-tag.is-primary { background:var(--cm-warning-soft, #fef3c7); border-color:var(--cm-warning, #f59e0b); }
+  .sq-multi-tag.is-primary .ti { color:var(--cm-warning, #f59e0b); font-size:12px; }
   .sq-multi-ph { color:var(--cm-fg-faint); }
   .sq-multi-menu {
     display:none; position:absolute; z-index:30; top:calc(100% + 4px); left:0; right:0;
@@ -347,8 +349,17 @@
   .sq-multi.is-open .sq-multi-menu { display:block; }
   .sq-multi-opt { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; cursor:pointer; font:var(--cm-body-sm); color:var(--cm-fg); }
   .sq-multi-opt:hover { background:var(--cm-bg-soft); }
-  .sq-multi-opt input { width:15px; height:15px; accent-color:var(--cm-accent); cursor:pointer; }
+  .sq-multi-opt input[type=checkbox] { width:15px; height:15px; accent-color:var(--cm-accent); cursor:pointer; }
+  .sq-multi-opt > span { flex:1; min-width:0; }
+  /* Estrella para fijar el equipo principal (1er equipo). Sólo visible cuando el equipo está tildado. */
+  .sq-multi-star { display:none; align-items:center; gap:4px; flex:none; border:0; background:none; padding:2px 4px; border-radius:5px; cursor:pointer; color:var(--cm-fg-faint); font:600 10px/1 var(--cm-font-mono); }
+  .sq-multi-star .ti { font-size:15px; }
+  .sq-multi-star:hover { background:var(--cm-bg); color:var(--cm-fg); }
+  .sq-multi-opt.is-checked .sq-multi-star { display:inline-flex; }
+  .sq-multi-star.is-primary { color:var(--cm-warning, #f59e0b); }
+  .sq-multi-star:disabled { cursor:default; opacity:.5; }
   .sq-multi-empty { padding:8px; color:var(--cm-fg-faint); font:var(--cm-body-sm); }
+  .sq-multi-hint { margin:6px 2px 0; font:var(--cm-meta); color:var(--cm-fg-muted); line-height:1.4; }
   .sq-modal-foot {
     display:flex; align-items:center; gap:8px;
     padding:14px 20px 18px; border-top:1px solid var(--cm-border);
@@ -1131,6 +1142,7 @@
             <button type="button" class="sq-multi-btn" id="sqF_teamsBtn" aria-haspopup="listbox" aria-expanded="false"></button>
             <div class="sq-multi-menu" id="sqF_teamsMenu" role="listbox" aria-multiselectable="true"></div>
           </div>
+          <p class="sq-multi-hint" data-i18n="squad.primary_team_hint">The starred team is the primary one — where the player shows as available by default. In the other teams he appears as “training with” the primary.</p>
         </div>
       </div>
     </div>
@@ -1629,6 +1641,7 @@ let _fullAccess = false;   // admin/owner/super: ve y navega todas las categorí
 let _canEditTeams = false; // + head coach (role 'coach'): puede asignar a cualquier equipo del club
 let _myTeamIds = new Set(); // equipos propios del staff (para elegir primario válido con la RLS de players)
 let _modalTeams = [];      // categorías que el rol puede asignar en el modal
+let _modalPrimaryTeamId = null; // equipo PRINCIPAL elegido en el modal (donde el jugador aparece "verde" por defecto)
 
 // ── Row actions kebab menu (shared popover; state + actions bound once) ──
 let _menuPid = null;
@@ -1785,19 +1798,58 @@ function renderTeamCheckboxes() {
     menu.innerHTML = `<div class="sq-multi-empty">${tt('squad.no_categories_available','No categories available.')}</div>`;
     return;
   }
+  const primTip = tt('squad.set_primary_team','Set as primary team').replace(/"/g,"'");
   menu.innerHTML = _modalTeams.map(t =>
-    `<label class="sq-multi-opt"><input type="checkbox" value="${t.id}" ${_canEditTeams ? '' : 'disabled'}><span>${t.name}</span></label>`
+    `<label class="sq-multi-opt" data-team-id="${t.id}">
+       <input type="checkbox" value="${t.id}" ${_canEditTeams ? '' : 'disabled'}>
+       <span>${t.name}</span>
+       <button type="button" class="sq-multi-star" data-star="${t.id}" title="${primTip}" ${_canEditTeams ? '' : 'disabled'}><i class="ti ti-star"></i></button>
+     </label>`
   ).join('');
   menu.querySelectorAll('input[type=checkbox]').forEach(cb =>
-    cb.addEventListener('change', updateTeamsBtnLabel));
+    cb.addEventListener('change', onTeamCheckChange));
+  // Estrella: fija el equipo principal (y lo tilda si no lo estaba).
+  menu.querySelectorAll('.sq-multi-star').forEach(star =>
+    star.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      if (!_canEditTeams) return;
+      const id = star.dataset.star;
+      const cb = menu.querySelector(`input[value="${id}"]`);
+      if (cb && !cb.checked) cb.checked = true;
+      _modalPrimaryTeamId = id;
+      syncPrimaryState();
+    }));
+}
+// Cuando cambia un checkbox: si se destildó el primario, elegí el primero que quede; refrescá todo.
+function onTeamCheckChange() {
+  syncPrimaryState();
 }
 function getSelectedTeamIds() {
-  // En orden de _modalTeams (estable) → el primero es candidato a primario.
-  return Array.from(document.querySelectorAll('#sqF_teamsMenu input:checked')).map(cb => cb.value);
+  // Primario primero, luego el resto en orden de _modalTeams (estable).
+  const ids = Array.from(document.querySelectorAll('#sqF_teamsMenu input:checked')).map(cb => cb.value);
+  if (_modalPrimaryTeamId && ids.includes(_modalPrimaryTeamId)) {
+    return [_modalPrimaryTeamId, ...ids.filter(id => id !== _modalPrimaryTeamId)];
+  }
+  return ids;
 }
-function setSelectedTeamIds(ids) {
+function setSelectedTeamIds(ids, primaryId) {
   const set = new Set(ids || []);
   document.querySelectorAll('#sqF_teamsMenu input[type=checkbox]').forEach(cb => { cb.checked = set.has(cb.value); });
+  if (primaryId !== undefined) _modalPrimaryTeamId = primaryId;
+  syncPrimaryState();
+}
+// Mantiene _modalPrimaryTeamId coherente (siempre uno de los tildados) y refresca estrellas + estado visual.
+function syncPrimaryState() {
+  const checked = Array.from(document.querySelectorAll('#sqF_teamsMenu input:checked')).map(cb => cb.value);
+  if (!checked.length) _modalPrimaryTeamId = null;
+  else if (!_modalPrimaryTeamId || !checked.includes(_modalPrimaryTeamId)) _modalPrimaryTeamId = checked[0];
+  document.querySelectorAll('#sqF_teamsMenu .sq-multi-opt').forEach(opt => {
+    const id = opt.dataset.teamId;
+    const isChecked = checked.includes(id);
+    opt.classList.toggle('is-checked', isChecked);
+    const star = opt.querySelector('.sq-multi-star');
+    if (star) star.classList.toggle('is-primary', id === _modalPrimaryTeamId);
+  });
   updateTeamsBtnLabel();
 }
 function updateTeamsBtnLabel() {
@@ -1807,7 +1859,8 @@ function updateTeamsBtnLabel() {
   if (!ids.length) { btn.innerHTML = `<span class="sq-multi-ph">${tt('squad.select_teams','— Select teams —')}</span>`; return; }
   btn.innerHTML = ids.map(id => {
     const t = _modalTeams.find(x => x.id === id);
-    return `<span class="sq-multi-tag">${t ? t.name : '—'}</span>`;
+    const isPrim = id === _modalPrimaryTeamId;
+    return `<span class="sq-multi-tag${isPrim ? ' is-primary' : ''}">${isPrim ? '<i class="ti ti-star-filled"></i>' : ''}${t ? t.name : '—'}</span>`;
   }).join('');
 }
 (function wireTeamsMultiSelect() {
@@ -2189,14 +2242,21 @@ async function reloadPlayers() {
     // Teams / Categories multi-select: pre-seleccionar las membresías del player.
     document.getElementById('sqF_teamsWrap')?.classList.toggle('is-ro', !_fullAccess);
     // Pre-selección inmediata (sincrónica) para que el modal no parpadee vacío.
-    setSelectedTeamIds(player?.team_id ? [player.team_id] : (_editingId ? [] : (_currentTeamId ? [_currentTeamId] : [])));
-    // Carga real de todas las membresías desde la junction (puede ser >1 equipo).
+    // El primario arranca en players.team_id (equipo principal denormalizado); si es alta, el equipo activo.
+    setSelectedTeamIds(
+      player?.team_id ? [player.team_id] : (_editingId ? [] : (_currentTeamId ? [_currentTeamId] : [])),
+      player?.team_id || (_editingId ? null : _currentTeamId || null)
+    );
+    // Carga real de todas las membresías desde la junction (puede ser >1 equipo) + cuál es la primaria.
     // Fire-and-forget para no demorar la apertura del modal; scoped al player editado.
     if (_editingId) {
       const _pid = _editingId;
-      window.sb.from('player_teams').select('team_id').eq('player_id', _pid)
+      window.sb.from('player_teams').select('team_id, is_primary').eq('player_id', _pid)
         .then(({ data: memberships }) => {
-          if (memberships && _editingId === _pid) setSelectedTeamIds(memberships.map(m => m.team_id));
+          if (memberships && _editingId === _pid) {
+            const primary = memberships.find(m => m.is_primary)?.team_id || player?.team_id || null;
+            setSelectedTeamIds(memberships.map(m => m.team_id), primary);
+          }
         });
     }
     const _arBtn = document.getElementById('sqModalDelete');
@@ -2304,10 +2364,10 @@ async function reloadPlayers() {
       saving.style.display = 'none'; saveBtn.disabled = false;
       return;
     }
-    // PRIMARIO = el actual si sigue elegido; si no, el primero seleccionado (orden de la lista).
-    const curPrimary = _editingId ? (_allPlayers.find(p => p.id === _editingId)?.team_id || null) : null;
-    let primaryTeamId = (curPrimary && selectedTeamIds.includes(curPrimary))
-      ? curPrimary
+    // PRIMARIO = el que el usuario marcó con la estrella en el modal; si por lo que sea no es
+    // válido, caemos al primero seleccionado (getSelectedTeamIds ya lo pone primero).
+    let primaryTeamId = (_modalPrimaryTeamId && selectedTeamIds.includes(_modalPrimaryTeamId))
+      ? _modalPrimaryTeamId
       : (selectedTeamIds[0] || null);
     // Un head coach puede asignar a equipos ajenos, pero la RLS de `players` exige que el
     // equipo PRIMARIO sea uno propio → si el primario elegido no es suyo, preferí uno que sí.
