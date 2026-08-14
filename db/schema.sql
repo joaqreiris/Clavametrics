@@ -3537,8 +3537,13 @@ $function$
 -- CLAVE de igualdad con el JS: rowVal hace Number(x ?? null) → NULL cuenta como 0 (no se descarta),
 -- por eso acá coalesce(x,0) y n_rows = count(*) (todas las filas), no count(x). w = time_played (>0),
 -- filtro idéntico al !(w>0) de applyAgg. p_player_ids = roster (null = sin filtro), p_exclude_ids =
--- archivados (null = ninguno) — replican el .in()/.not(in) del fetch. SECURITY INVOKER (default) →
--- la RLS de gps_reports aplica igual que el path cliente, así los números coinciden.
+-- archivados (null = ninguno) — replican el .in()/.not(in) del fetch.
+-- SECURITY DEFINER (a propósito): la RLS de gps_reports es CARA (gps_reports_scoped_select tiene un
+-- EXISTS a training_sessions → dispara la RLS de training_sessions → my_gps_session_ids() re-escanea
+-- gps_reports = explosión anidada; medido en ~6 s con RLS invoker). Como DEFINER bypassa la RLS y
+-- REPLICA la visibilidad con predicados baratos (InitPlan una vez): pertenencia al club + feature
+-- gate + la MISMA lógica de gps_reports_scoped_select (super/admin-owner ∨ mis jugadores ∨ sesiones
+-- de mis equipos). El conjunto de filas visible es idéntico al del path cliente → números idénticos.
 CREATE OR REPLACE FUNCTION public.gps_player_agg(p_club_id uuid, p_session_ids uuid[], p_player_ids uuid[] DEFAULT NULL::uuid[], p_exclude_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS TABLE(
    player_id uuid, first_name text, last_name text, n_rows integer, w_sum numeric,
@@ -3558,6 +3563,7 @@ CREATE OR REPLACE FUNCTION public.gps_player_agg(p_club_id uuid, p_session_ids u
  )
  LANGUAGE sql
  STABLE
+ SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
   select
@@ -3585,6 +3591,15 @@ AS $function$
     and r.session_id = any(p_session_ids)
     and (p_player_ids is null or r.player_id = any(p_player_ids))
     and (p_exclude_ids is null or not (r.player_id = any(p_exclude_ids)))
+    -- ACCESO (DEFINER bypassa RLS → chequeo explícito que replica las policies):
+    and (public.is_super_admin() or public.get_user_club_id() = p_club_id)                 -- pertenencia al club
+    and (public.is_super_admin() or public.club_has_feature(p_club_id, 'gps_analysis'))     -- plan_gate (feature)
+    and (                                                                                   -- = gps_reports_scoped_select
+      public.has_full_planning_access()                                                     --   super/admin/owner → todo el club
+      or r.player_id in (select public.my_player_ids())                                     --   mis jugadores
+      or exists (select 1 from public.training_sessions ts                                  --   sesiones de mis equipos
+                 where ts.id = r.session_id and ts.team_id in (select public.my_team_ids()))
+    )
   group by r.player_id, pl.first_name, pl.last_name;
 $function$
 ;
