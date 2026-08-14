@@ -359,6 +359,11 @@
   }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* ── Stats: pulido de la tabla de ranking ── */
+  #avStatsTable tbody tr { transition: background .12s; }
+  #avStatsTable tbody tr:hover { background: var(--cm-bg-soft); }
+  #avStatsTable th[data-sort]:hover { color: var(--cm-fg-strong); }
 </style>
 </head>
 <body class="cm">
@@ -1601,6 +1606,16 @@
       _avSeasons = seas || [];
     } catch { _avSeasons = []; }
     avRenderSeasonOpts();
+    // Default: arrancar con la temporada en curso (si el usuario no eligió un rango).
+    if (!_avRangeUserSet) {
+      const today = cmToday();
+      const inRange = s => s.status !== 'archived' && s.start_date <= today && s.end_date >= today;
+      const active = _avSeasons.find(s => inRange(s) && s.team_id === _avTeamId) || _avSeasons.find(inRange);
+      if (active) {
+        _avRangePreset = 'season';
+        _avRangeOverride = { start: active.start_date, end: (active.end_date < today ? active.end_date : today) };
+      }
+    }
   }
   function avRenderSeasonOpts() {
     const wrap = document.getElementById('avSeasonSection');
@@ -1619,6 +1634,7 @@
 
   let _avRangeOverride = null; // {start, end} o null = microciclo
   let _avRangePreset   = 'mc'; // preset activo del filtro de fecha (refleja segmentos en Stats)
+  let _avRangeUserSet  = false; // el usuario eligió un rango explícito → no pisar con el default de temporada
   function avComputeRange(preset) {
     const today = cmToday();
     const d = new Date(today + 'T00:00:00Z');
@@ -1633,6 +1649,7 @@
   };
   window.avSetPreset = function(v) {
     document.getElementById('avRangeMenu').style.display = 'none';
+    _avRangeUserSet = true;
     _avRangePreset = v;
     _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
     if (typeof init === 'function') init();
@@ -1650,6 +1667,7 @@
     // Cap el fin al día de hoy: sin sentido arrastrar días futuros de la temporada.
     let end = (s.end_date && s.end_date < today) ? s.end_date : today;
     if (end < s.start_date) end = s.start_date;   // temporada íntegramente futura
+    _avRangeUserSet = true;
     _avRangePreset = 'season';
     _avRangeOverride = { start: s.start_date, end };
     if (typeof init === 'function') init();
@@ -1661,6 +1679,7 @@
     const spanDays = MC_DATES.length;
     const ms = new Date(start + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
     const me = new Date(end   + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
+    _avRangeUserSet = true;
     _avRangePreset = 'custom';
     _avRangeOverride = {
       start: new Date(ms).toISOString().slice(0,10),
@@ -1673,6 +1692,7 @@
     let t = document.getElementById('avDateTo').value;
     if (!f || !t) return;
     if (f > t) { const _x = f; f = t; t = _x; }
+    _avRangeUserSet = true;
     _avRangePreset = 'custom';
     _avRangeOverride = { start: f, end: t };
     document.getElementById('avRangeMenu').style.display = 'none';
@@ -1745,8 +1765,18 @@
     const _maxMin = Math.max(1, ...Object.values(stat).map(s => s.minutes));
     Object.values(stat).forEach(s => { s.partPct = Math.round((s.minutes/_maxMin)*100); });
 
-    let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tOther=0, tTotal=0;
-    Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tOther+=s.otherTeam; tTotal+=s.total; });
+    let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tOther=0, tNat=0, tAbs=0, tTotal=0;
+    Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tOther+=s.otherTeam; tNat+=s.national; tAbs+=s.absent; tTotal+=s.total; });
+    // Desglose compartido por el donut y la leyenda (mismos colores que la matriz/evolución).
+    const breakdown = [
+      { label: tt('availability.donutAvailable','Available'),  val: tAvail,   color: '#16A34A' },
+      { label: tt('availability.donutModified','Modified'),    val: tPartial, color: '#D97706' },
+      { label: tt('availability.donutInjury','Injury'),        val: tInjury,  color: '#DC2626' },
+      { label: tt('availability.donutIllness','Illness'),      val: tIllness, color: '#7C3AED' },
+      { label: tt('availability.donutNatTeam','Nat. team'),    val: tNat,     color: '#2563EB' },
+      { label: tt('availability.donutAbsent','Absent'),        val: tAbs,     color: '#64748B' },
+      { label: tt('availability.donutOtherTeam','Other team'), val: tOther,   color: '#6366F1' },
+    ].filter(m => m.val > 0);
     const availPct = tTotal ? Math.round((tAvail/tTotal)*100) : 0;
     window._avStatRows = Object.values(stat);
 
@@ -1782,7 +1812,7 @@
     });
 
     const kpi = (icon, label, value, sub, color) => `
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;position:relative;overflow:hidden">
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-left:3px solid ${color};border-radius:14px;padding:18px;position:relative;overflow:hidden">
         <div style="display:flex;align-items:center;gap:7px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:12px"><i class="ti ${icon}" style="font-size:15px;color:${color}"></i>${label}</div>
         <div style="font:700 30px/1 var(--cm-font-sans);color:${color};letter-spacing:-0.02em">${value}</div>
         <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px">${sub||'&nbsp;'}</div>
@@ -1806,7 +1836,7 @@
         ${kpi('ti-arrows-exchange',tt('availability.statsDaysOtherTeam','Days · other team'), tOther, tTotal?tt('availability.statsPctOfPeriod', `${Math.round(tOther/tTotal*100)}% of period`, { pct: Math.round(tOther/tTotal*100) }):'', '#6366F1')}
       </div>
 
-      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:18px">
+      <div style="display:grid;grid-template-columns:1fr;gap:18px">
         <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;overflow:hidden">
           <div style="padding:15px 18px;border-bottom:1px solid var(--cm-border);display:flex;align-items:center;justify-content:space-between">
             <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('availability.statsPlayerRanking','Player ranking')}</span>
@@ -1831,13 +1861,25 @@
           </table>
           </div>
         </div>
-        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px">
-          <div style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">${tt('availability.statsTeamBreakdown','Team breakdown')}</div>
-          <div style="position:relative;height:240px;display:flex;align-items:center;justify-content:center">
-            <canvas id="avStatsDonut"></canvas>
-            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
-              <div style="font:700 34px/1 var(--cm-font-sans);color:var(--cm-fg-strong);letter-spacing:-0.02em">${availPct}%</div>
-              <div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">${tt('availability.statsAvailable','available')}</div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:20px 24px">
+          <div style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:16px">${tt('availability.statsTeamBreakdown','Team breakdown')}</div>
+          <div style="display:flex;align-items:center;gap:36px;flex-wrap:wrap">
+            <div style="position:relative;width:190px;height:190px;flex:0 0 auto">
+              <canvas id="avStatsDonut"></canvas>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+                <div style="font:700 34px/1 var(--cm-font-sans);color:var(--cm-fg-strong);letter-spacing:-0.02em">${availPct}%</div>
+                <div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">${tt('availability.statsAvailable','available')}</div>
+              </div>
+            </div>
+            <div style="flex:1;min-width:260px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:11px 28px">
+              ${breakdown.map(m => { const p = tTotal?Math.round(m.val/tTotal*100):0; return `
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="width:11px;height:11px;border-radius:3px;background:${m.color};flex:0 0 auto"></span>
+                  <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.label}</span>
+                  <span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${m.val}</span>
+                  <div style="width:60px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden;flex:0 0 auto"><div style="width:${p}%;height:100%;background:${m.color};border-radius:3px"></div></div>
+                  <span style="font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:34px;text-align:right">${p}%</span>
+                </div>`; }).join('')}
             </div>
           </div>
         </div>
@@ -1955,20 +1997,14 @@
       if (_avStatsChart) { _avStatsChart.destroy(); _avStatsChart = null; }
       const ctx = document.getElementById('avStatsDonut');
       if (ctx) {
-        const segs = [
-          { label:tt('availability.donutAvailable','Available'), val:tAvail, color:'#16A34A' },
-          { label:tt('availability.donutModified','Modified'), val:tPartial, color:'#D97706' },
-          { label:tt('availability.donutInjury','Injury'), val:tInjury, color:'#DC2626' },
-          { label:tt('availability.donutIllness','Illness'), val:tIllness, color:'#7C3AED' },
-          { label:tt('availability.donutOtherTeam','Other team'), val:tOther, color:'#6366F1' }
-        ].filter(s => s.val > 0);
+        const segs = breakdown;   // ya filtrado a val>0; leyenda propia al costado
         _avStatsChart = new Chart(ctx, {
           type: 'doughnut',
           data: { labels: segs.map(s=>s.label), datasets: [{ data: segs.map(s=>s.val), backgroundColor: segs.map(s=>s.color), borderWidth:2, borderColor:'var(--cm-surface)', hoverOffset:6 }] },
           options: {
-            responsive:true, maintainAspectRatio:false, cutout:'72%',
+            responsive:true, maintainAspectRatio:false, cutout:'74%',
             plugins:{
-              legend:{ position:'bottom', labels:{ font:{size:11.5}, padding:14, usePointStyle:true, pointStyle:'circle' } },
+              legend:{ display:false },
               tooltip:{ callbacks:{ label: (c)=>{ const pct = tTotal?Math.round(c.parsed/tTotal*100):0; return ` ${c.label}: ${c.parsed} (${pct}%)`; } } }
             }
           }
