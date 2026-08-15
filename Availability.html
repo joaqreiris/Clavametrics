@@ -189,9 +189,11 @@
   }
   .av-matrix thead th.col-sum { position:sticky; top:0; z-index:5; }
   .av-matrix thead th.day b { display:block; font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.01em; margin-bottom:2px; }
-  .av-matrix thead th.day.is-today { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  /* OPAQUE backgrounds: header is sticky, so a translucent tint would let the body dots show
+     through as you scroll under the highlighted today/match columns. color-mix over surface keeps the tint but is solid. */
+  .av-matrix thead th.day.is-today { background:color-mix(in srgb, var(--cm-accent) 12%, var(--cm-surface)); color:var(--cm-accent); }
   .av-matrix thead th.day.is-today b { color:var(--cm-accent); }
-  .av-matrix thead th.day.is-match { background:rgba(220,38,38,0.06); color:var(--cm-danger); }
+  .av-matrix thead th.day.is-match { background:color-mix(in srgb, var(--cm-danger) 7%, var(--cm-surface)); color:var(--cm-danger); }
   .av-matrix thead th.day.is-match b { color:var(--cm-danger); }
   .av-matrix thead th.day .md-tag { font:600 9px/1 var(--cm-font-mono); letter-spacing:0; text-transform:uppercase; margin-top:2px; color:var(--cm-fg-faint); display:block; }
   .av-matrix thead th.day.is-today .md-tag { color:var(--cm-accent); }
@@ -895,10 +897,14 @@
   function avSizeScroll() {
     const sc = document.querySelector('.av-matrix-scroll');
     if (!sc || sc.offsetParent === null) return;   // oculto (vista Stats) → sin tocar
-    const h = window.innerHeight - sc.getBoundingClientRect().top - 16;
+    // Llena hasta el borde inferior del viewport. Con la página scrolleada, el tope de la caja
+    // sube (clamp a 0) → la caja usa todo el alto y el scroll interno toma el relevo.
+    const top = Math.max(0, sc.getBoundingClientRect().top);
+    const h = window.innerHeight - top - 8;
     sc.style.maxHeight = Math.max(320, h) + 'px';
   }
   window.addEventListener('resize', avSizeScroll);
+  window.addEventListener('scroll', avSizeScroll, { passive: true });
 
   // ── KPI player name list: first 3 visible, "+N more" expands the rest ──
   function playerListHTML(names) {

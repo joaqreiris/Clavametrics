@@ -130,7 +130,7 @@
       el("rect", { class: "annot-band", x: x1, width: Math.max(2, x2 - x1), y: pad.t, height: plotH }, svg);
       el("line", { class: "annot-line", x1, x2: x1, y1: pad.t, y2: pad.t + plotH }, svg);
       el("line", { class: "annot-line", x1: x2, x2, y1: pad.t, y2: pad.t + plotH }, svg);
-      if (!compact) el("text", { class: "annot-txt", x: (x1 + x2) / 2, y: pad.t + 11, "text-anchor": "middle" }, svg).textContent = "Parón selecciones";
+      if (!compact) el("text", { class: "annot-txt", x: (x1 + x2) / 2, y: pad.t + 11, "text-anchor": "middle" }, svg).textContent = T("availability.natBreak", "Nat. team break");
     }
 
     const ticks = compact ? [70, 85, 100] : [60, 70, 80, 85, 90, 100];
@@ -139,7 +139,7 @@
       if (!compact) el("text", { class: "axis-txt", x: pad.l - 6, y: Y(p) + 3, "text-anchor": "end" }, svg).textContent = p;
     });
     el("line", { class: "thresh", x1: pad.l, x2: pad.l + plotW, y1: Y(85), y2: Y(85) }, svg);
-    if (!compact) el("text", { class: "thresh-lbl", x: pad.l + plotW - 2, y: Y(85) - 5, "text-anchor": "end" }, svg).textContent = "85% objetivo";
+    if (!compact) el("text", { class: "thresh-lbl", x: pad.l + plotW - 2, y: Y(85) - 5, "text-anchor": "end" }, svg).textContent = T("availability.thresholdTarget", "85% target");
 
     if (!compact) {
       const step = n <= 14 ? 2 : n <= 30 ? 5 : n <= 60 ? 7 : n <= 100 ? 14 : Math.ceil(n / 8);
