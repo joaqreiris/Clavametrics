@@ -272,6 +272,9 @@
   }
   function fireNow() {
     clearTimeout(_fireT); _fireT = null;
+    // El filtro ya tiene estado confiable (equipo resuelto + opciones cargadas): habilita a las
+    // cards del builder a resolver (esperan este flag para no renderizar con estado provisional).
+    if (typeof window !== 'undefined') window._gpFiltersReady = true;
     const snap = getState();
     persist();                                   // recuerda los filtros por dashboard
     listeners.forEach(fn => { try { fn(snap); } catch (e) { console.warn('gpFilterBar listener:', e); } });
