@@ -1457,8 +1457,11 @@
       const _tid = window._gpTeamId != null ? String(window._gpTeamId) : '__none__';
       if (_loadedTeamId !== _tid) {
         try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); }
+        // fireNow SOLO si recargamos: si loadData ya había corrido con este equipo, boot() ya
+        // disparó el render con este mismo estado → un fireNow acá sería una SEGUNDA pasada
+        // (el «carga doble»). Reload existe para renderizar cuando boot difirió o el equipo cambió.
+        try { fireNow(); } catch (e) { console.warn('gpFilterBar reload fire:', e); }
       }
-      try { fireNow(); } catch (e) { console.warn('gpFilterBar reload fire:', e); }
     },
     _state: state,
   };
