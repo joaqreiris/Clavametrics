@@ -681,12 +681,21 @@
   // MD label anchored to a date's microcycle match_date (mirrors Calendar.html)
   function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
   function mdLabelFor(date) {
-    const mc = MC_RANGES.find(m => m.start_date <= date && date <= m.end_date);
-    if (!mc) return '';
-    const ov = mc.md_overrides && mc.md_overrides[date];
-    if (ov) return ov;                       // manual override wins
-    if (!mc.match_date) return '';
-    const diff = daysBetween(date, mc.match_date);
+    // Un día puede caer en más de un microciclo (se solapan: el que cierra con un partido y
+    // el que abre el siguiente). El .find ingenuo tomaba uno arbitrario → la primera semana
+    // quedaba sin MD (partido a >10 días). Elegimos el partido MÁS RELEVANTE: el próximo
+    // (diff>0) más cercano; si no hay próximo, el más reciente. Así cuenta MD-7…MD-1 al partido.
+    const cover = MC_RANGES.filter(m => m.start_date <= date && date <= m.end_date);
+    if (!cover.length) return '';
+    for (const m of cover) { const ov = m.md_overrides && m.md_overrides[date]; if (ov) return ov; } // override manual gana
+    const scored = cover.filter(m => m.match_date).map(m => ({ diff: daysBetween(date, m.match_date) }));
+    if (!scored.length) return '';
+    scored.sort((a, b) => {
+      const au = a.diff >= 0, bu = b.diff >= 0;
+      if (au !== bu) return au ? -1 : 1;           // próximos antes que pasados
+      return Math.abs(a.diff) - Math.abs(b.diff);  // el más cercano
+    });
+    const diff = scored[0].diff;
     if (diff === 0) return 'MD';
     if (diff > 0 && diff <= 10) return `MD−${diff}`;
     if (diff < 0 && diff >= -3) return `MD+${Math.abs(diff)}`;
@@ -1167,8 +1176,10 @@
     const [phs, availRes, yesterdayRes, matchRes, mcRangesData, dayoffData, plannedData] = await Promise.all([
       (async () => {   // seasons → season_phases (chain)
         try {
-          let sq = window.sb.from('seasons').select('id');
-          if (_avTeamId) sq = sq.eq('team_id', _avTeamId); else sq = sq.eq('club_id', CLUB_ID);
+          // Scope siempre por club; con equipo activo incluye su temporada propia + la del club
+          // (team_id NULL = temporada club-wide que aplica a todos los equipos).
+          let sq = window.sb.from('seasons').select('id').eq('club_id', CLUB_ID);
+          if (_avTeamId) sq = sq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
           const { data: seas } = await sq;
           const seasonIds = (seas || []).map(s => s.id);
           if (!seasonIds.length) return [];
@@ -1185,9 +1196,16 @@
         .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
       window.sb.from('availability').select('player_id, status, minutes, team_id')
         .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
-      window.sb.from('calendar_events').select('date, opponent, title')
-        .eq('club_id', CLUB_ID).eq('type', 'match')
-        .gte('date', mcStart).lte('date', mcEnd),
+      (async () => {   // matches (red MD indicators) — scoped al equipo activo, no a todo el club
+        try {
+          let cq = window.sb.from('calendar_events').select('date, opponent, title')
+            .eq('club_id', CLUB_ID).eq('type', 'match')
+            .gte('date', mcStart).lte('date', mcEnd);
+          if (_avTeamId) cq = cq.eq('team_id', _avTeamId);
+          const { data } = await cq;
+          return { data: data || [] };
+        } catch (e) { console.warn('[Availability] matches skipped:', e?.message); return { data: [] }; }
+      })(),
       (async () => {   // microcycle ranges (MD labels)
         try {
           let mq = window.sb.from('microcycles')
