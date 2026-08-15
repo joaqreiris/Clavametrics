@@ -3685,7 +3685,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.gps_filter_rows(p_club_id uuid, p_player_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS TABLE(
    player_id uuid, session_id uuid, session_date date, session_type text,
-   microcycle_id text, season_id uuid, team_id uuid, match_day_offset integer,
+   microcycle_id text, season_id uuid, team_id uuid, match_day_offset text,
    session_attributes jsonb, player_position text, first_name text, last_name text, number integer
  )
  LANGUAGE sql
