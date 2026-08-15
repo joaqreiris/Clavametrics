@@ -3267,12 +3267,21 @@
     return out;
   }
   /** Re-render every builder card in the active dashboard (called on filter change). */
-  function rerenderActiveCards() {
+  // COALESCE: en el boot esto se dispara varias veces (mount + boot del filterbar + reload del
+  // team-switch) y cada llamada re-resuelve TODAS las cards → parpadeo (fetch+redibujo repetido).
+  // Un debounce corto junta las llamadas seguidas en UN solo pase, leyendo el estado más reciente.
+  // No cambia qué se renderiza; nadie awaitea esta función (todos los callers son fire-and-forget).
+  let _rerenderT = null;
+  function _rerenderActiveCardsNow() {
     const grid = document.querySelector('.gp-view.is-on .gp-grid');
     if (!grid) return;
     grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
       if (el.__config) resolveAndRenderCard(el, el.__config);
     });
+  }
+  function rerenderActiveCards() {
+    if (_rerenderT) return;                        // ya hay un pase encolado → coalescer
+    _rerenderT = setTimeout(() => { _rerenderT = null; _rerenderActiveCardsNow(); }, 90);
   }
 
   function _bodyClassFromViz(viz) {
