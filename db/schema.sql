@@ -3679,6 +3679,40 @@ AS $function$
 $function$
 ;
 
+-- PERF: filas planas para poblar los DROPDOWNS del filterbar en UNA query (sin embed anidado
+-- ni paginación, sin RLS anidada). Reemplaza el barrido paginado gps_reports+training_sessions!inner
+-- +players!inner que tardaba ~40s. SECURITY DEFINER con la MISMA visibilidad que gps_reports_scoped_select.
+CREATE OR REPLACE FUNCTION public.gps_filter_rows(p_club_id uuid, p_player_ids uuid[] DEFAULT NULL::uuid[])
+ RETURNS TABLE(
+   player_id uuid, session_id uuid, session_date date, session_type text,
+   microcycle_id text, season_id uuid, team_id uuid, match_day_offset integer,
+   session_attributes jsonb, position text, first_name text, last_name text, number integer
+ )
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select
+    r.player_id, r.session_id, ts.session_date, ts.session_type,
+    ts.microcycle_id, ts.season_id, ts.team_id, ts.match_day_offset,
+    ts.session_attributes, pl.position, pl.first_name, pl.last_name, pl.number
+  from public.gps_reports r
+  join public.training_sessions ts on ts.id = r.session_id
+  join public.players pl on pl.id = r.player_id
+  where r.club_id = p_club_id
+    and r.is_invalid = false
+    and (p_player_ids is null or r.player_id = any(p_player_ids))
+    and (public.is_super_admin() or public.get_user_club_id() = p_club_id)
+    and (public.is_super_admin() or public.club_has_feature(p_club_id, 'gps_analysis'))
+    and (
+      public.has_full_planning_access()
+      or r.player_id in (select public.my_player_ids())
+      or ts.team_id in (select public.my_team_ids())
+    );
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.grant_comp_subscription(p_team_id uuid, p_plan_slug text DEFAULT 'full'::text)
  RETURNS uuid
  LANGUAGE plpgsql

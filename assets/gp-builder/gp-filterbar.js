@@ -1027,15 +1027,37 @@
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
-      window.cmFetchAll(() => {
-        let _q = window.sb.from('gps_reports')
-          .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type, season_id), players!inner(id, first_name, last_name, number, position)')
-          .eq('club_id', clubId).eq('is_invalid', false);
-        // Acotar al roster del equipo cuando lo tenemos: baja el costo RLS y hace que un usuario
-        // restringido (físio) reciba SUS filas en vez de que la consulta club-wide falle y vuelva vacía.
-        if (_teamPlayerIds && _teamPlayerIds.length) _q = _q.in('player_id', _teamPlayerIds);
-        return _q;
-      }, { label: 'filterbar.reports' }).catch((e) => { console.warn('[gpFilterBar] reports query failed:', e); return []; }),
+      (async () => {
+        // RPC gps_filter_rows: UNA query DEFINER (sin embed anidado ni paginación, sin RLS anidada)
+        // que reemplaza el barrido paginado de ~40s. Se reshapea a la forma anidada que espera el
+        // mapeo de abajo. Fallback al barrido crudo si el RPC no está desplegado o falla.
+        if (!(window.__cmRpcAvail && window.__cmRpcAvail.gps_filter_rows === false)) {
+          try {
+            const { data, error } = await window.sb.rpc('gps_filter_rows', {
+              p_club_id: clubId, p_player_ids: (_teamPlayerIds && _teamPlayerIds.length) ? _teamPlayerIds : null,
+            });
+            if (error) throw error;
+            window.__cmRpcAvail = window.__cmRpcAvail || {}; window.__cmRpcAvail.gps_filter_rows = true;
+            return (data || []).map(r => ({
+              player_id: r.player_id,
+              training_sessions: { id: r.session_id, session_date: r.session_date, session_attributes: r.session_attributes,
+                match_day_offset: r.match_day_offset, microcycle_id: r.microcycle_id, team_id: r.team_id,
+                session_type: r.session_type, season_id: r.season_id },
+              players: { id: r.player_id, first_name: r.first_name, last_name: r.last_name, number: r.number, position: r.position },
+            }));
+          } catch (e) {
+            window.__cmRpcAvail = window.__cmRpcAvail || {}; window.__cmRpcAvail.gps_filter_rows = false;
+            console.warn('[gpFilterBar] gps_filter_rows RPC unavailable — raw fallback:', e?.message || e);
+          }
+        }
+        return window.cmFetchAll(() => {
+          let _q = window.sb.from('gps_reports')
+            .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type, season_id), players!inner(id, first_name, last_name, number, position)')
+            .eq('club_id', clubId).eq('is_invalid', false);
+          if (_teamPlayerIds && _teamPlayerIds.length) _q = _q.in('player_id', _teamPlayerIds);
+          return _q;
+        }, { label: 'filterbar.reports' }).catch((e) => { console.warn('[gpFilterBar] reports query failed:', e); return []; });
+      })(),
       _safe(_obQ, 'opponents'),
       _safe(_snQ, 'seasons'),
       _safe(_meQ, 'matchEvents'),
