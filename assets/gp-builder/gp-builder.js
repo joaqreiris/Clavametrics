@@ -2593,14 +2593,9 @@
       // Supabase so the FIRST render uses the SAME context as a later filter re-render.
       // A card that mounts early is never left stuck on an empty result: it resolves
       // as soon as the context is ready (just like a filter change would).
-      // Espera club + Supabase + FILTRO LISTO (window._gpFiltersReady, seteado por el primer
-      // fireNow del filterbar tras resolver equipo+opciones). Sin esperar al filtro, una card que
-      // monta temprano resuelve con estado provisional y después re-resuelve al disparar el filtro
-      // = parpadeo. Con esto resuelve UNA vez, con el estado correcto (spinner mientras tanto).
-      // Cap de 8s (80×100ms) = fallback si el filtro nunca dispara → igual resuelve.
       for (let i = 0; i < 80; i++) {
         if (stale()) return;
-        if ((_clubId || window._gpClubId) && window.sb && window._gpFiltersReady) break;
+        if ((_clubId || window._gpClubId) && window.sb) break;
         await new Promise(r => setTimeout(r, 100));
       }
       if (stale()) return;
