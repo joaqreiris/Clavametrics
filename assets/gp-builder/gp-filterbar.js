@@ -952,7 +952,18 @@
   }
 
   // ── Carga de opciones REALES desde Supabase ─────────────────────────────
-  async function loadData() {
+  // SINGLE-FLIGHT: boot() (fallback de 6s) y reload() (team-switch) pueden llamar loadData casi a
+  // la vez; como la query de opciones es lenta, arrancaban DOS cargas en paralelo y cada una
+  // disparaba fireNow → doble render separado en el tiempo. Si ya hay una carga en curso, se
+  // reusa la misma promesa: una sola loadData, y los fireNow de ambos callers caen juntos (el
+  // debounce de rerenderActiveCards los coalesce en un solo pase).
+  let _loadDataP = null;
+  function loadData() {
+    if (_loadDataP) return _loadDataP;
+    _loadDataP = _loadDataImpl().finally(() => { _loadDataP = null; });
+    return _loadDataP;
+  }
+  async function _loadDataImpl() {
     const clubId = await window.getClubId?.();
     if (!clubId || !window.sb) return;
 
