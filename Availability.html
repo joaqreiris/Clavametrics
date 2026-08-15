@@ -148,7 +148,9 @@
     border-radius:0 0 var(--cm-r-4) var(--cm-r-4); overflow:hidden;
     box-shadow:var(--cm-shadow-1);
   }
-  .av-matrix-scroll { overflow-x:auto; }
+  /* Scrolls both axes so the day header (sticky top) and the player/# columns (sticky left)
+     stay pinned. max-height is sized to the viewport by JS (avSizeScroll); this is the fallback. */
+  .av-matrix-scroll { overflow:auto; max-height:calc(100vh - 120px); }
 
   table.av-matrix { border-collapse:separate; border-spacing:0; width:100%; min-width:1100px; font:var(--cm-body-sm); }
   table.av-matrix.is-dense { min-width:0; }
@@ -183,8 +185,9 @@
     letter-spacing:0.04em; text-transform:uppercase;
     color:var(--cm-fg-muted);
     width:46px; min-width:46px;
-    position:relative;
+    position:sticky; top:0; z-index:5;
   }
+  .av-matrix thead th.col-sum { position:sticky; top:0; z-index:5; }
   .av-matrix thead th.day b { display:block; font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.01em; margin-bottom:2px; }
   .av-matrix thead th.day.is-today { background:var(--cm-accent-soft); color:var(--cm-accent); }
   .av-matrix thead th.day.is-today b { color:var(--cm-accent); }
@@ -205,7 +208,7 @@
     padding:8px 12px;
     width:220px; min-width:220px;
   }
-  .av-matrix thead th.col-player { background:var(--cm-bg-soft); z-index:4; }
+  .av-matrix thead th.col-player { background:var(--cm-bg-soft); top:0; z-index:6; }
   .av-matrix thead th.col-num,
   .av-matrix td.col-num {
     position:sticky; left:220px; z-index:3;
@@ -215,7 +218,7 @@
     width:46px; min-width:46px;
     padding:8px 6px;
   }
-  .av-matrix thead th.col-num { background:var(--cm-bg-soft); z-index:4; }
+  .av-matrix thead th.col-num { background:var(--cm-bg-soft); top:0; z-index:6; }
   .av-matrix thead th.col-num,
   .av-matrix thead th.col-player {
     font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted);
@@ -267,6 +270,12 @@
      base .cell:hover outline applies). */
   .av-matrix td.cell.is-future-plan { background:color-mix(in srgb, var(--cm-accent) 8%, var(--cm-surface)); cursor:pointer; }
   .av-matrix tr:hover td.cell.is-future-plan { background:color-mix(in srgb, var(--cm-accent) 13%, var(--cm-surface)); }
+  /* Reason-note marker: a small corner fold on cells that carry a note (absence reason, etc.). */
+  .av-matrix td.cell .av-note-flag {
+    position:absolute; top:2px; right:2px; width:0; height:0;
+    border-top:6px solid var(--cm-warning); border-left:6px solid transparent;
+    border-top-right-radius:2px; pointer-events:none;
+  }
   .av-matrix td.cell.is-off { background:repeating-linear-gradient(45deg, var(--cm-bg-soft) 0 4px, transparent 4px 8px); cursor:default; }
   .av-matrix td.cell.is-off::before { content:""; }
   .av-matrix td.cell.is-off:hover { outline:none; }
@@ -522,7 +531,7 @@
         <span class="it"><span class="d" style="background:var(--cm-neutral)"></span><span data-i18n="availability.statusAbsent">Absent</span></span>
         <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
         <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">match minutes</span></span>
-        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · drag to multi-select · ⌘+A all</span>
+        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · drag to multi-select · ⌘+A all · double-click for reason</span>
       </div>
 
       <!-- VIEWS -->
@@ -667,6 +676,7 @@
   }
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
+  function avEscAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   // MD label anchored to a date's microcycle match_date (mirrors Calendar.html)
   function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
@@ -695,6 +705,11 @@
     const isFuture = isFutureDate(date);
     let cls = cellBaseCls(date);
     const data = pid ? ` data-pid="${pid}" data-date="${date}"` : '';
+    // Reason note attached to this cell's record (if any) → corner flag + native tooltip.
+    const note = pid ? (avMap[pid + '|' + date]?.notes || '') : '';
+    const noteCls  = note ? ' has-note' : '';
+    const noteFlag = note ? '<span class="av-note-flag"></span>' : '';
+    const noteTitle = note ? ` title="${avEscAttr(note)}"` : '';
     // Planned day off → crossed-out, empty, non-editable (blocked via isBlockedCell)
     if (DAYOFF_DATES.has(date)) return `<td class="${cls} is-dayoff"${data}></td>`;
     // Future with no record → blank (not striped day-off pattern)
@@ -708,9 +723,9 @@
       const tid = status.indexOf('#') >= 0 ? status.slice(status.indexOf('#') + 1) : null;
       const tn = tid ? (_avTeamsById.get(tid)?.name || '') : ((pid && _avGuestTeam.get(pid)) || '');
       const title = tn ? tt('availability.trainsWithTeam', `Training with ${tn}`, { team: tn }).replace(/"/g,"'") : tt('availability.trainsWithOther','With another team');
-      return `<td class="${cls} is-otherteam"${data} title="${title}">${dotEl('other_team')}</td>`;
+      return `<td class="${cls} is-otherteam${noteCls}"${data} title="${title}">${dotEl('other_team')}${noteFlag}</td>`;
     }
-    return `<td class="${cls}"${data}>${dotEl(status)}</td>`;
+    return `<td class="${cls}${noteCls}"${data}${noteTitle}>${dotEl(status)}${noteFlag}</td>`;
   }
 
   // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
@@ -863,7 +878,18 @@
       });
     });
     document.getElementById('avBody').innerHTML = html;
+    avSizeScroll();
   }
+
+  // Fija la altura del área de scroll para que llegue al borde inferior del viewport: así la
+  // fila de fechas (sticky top) y las columnas jugador/# (sticky left) quedan ancladas al scrollear.
+  function avSizeScroll() {
+    const sc = document.querySelector('.av-matrix-scroll');
+    if (!sc || sc.offsetParent === null) return;   // oculto (vista Stats) → sin tocar
+    const h = window.innerHeight - sc.getBoundingClientRect().top - 16;
+    sc.style.maxHeight = Math.max(320, h) + 'px';
+  }
+  window.addEventListener('resize', avSizeScroll);
 
   // ── KPI player name list: first 3 visible, "+N more" expands the rest ──
   function playerListHTML(names) {
@@ -1008,9 +1034,22 @@
     // Estados globales (lesión/enfermedad/selección) → team_id NULL (se ven en todos los equipos).
     // El resto es relativo al equipo activo → team_id = _avTeamId ("está con este equipo ese día").
     const team_id = GLOBAL_STATUS.has(status) ? null : (_avTeamId || null);
+    // Un (re)asignado de estado limpia la nota: el motivo pertenece al estado que se marcó,
+    // no se arrastra a uno nuevo. La nota se agrega/edita aparte vía saveNote() (update).
     const { error } = await window.sb.from('availability')
-      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID, team_id }, { onConflict: 'player_id,date' });
+      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID, team_id, notes: null }, { onConflict: 'player_id,date' });
     if (error) console.warn('[Availability] save error:', error.message);
+  }
+
+  // Guarda/limpia la nota (motivo) de un día ya registrado. Update por (player_id, date) —
+  // no toca status/minutes/team_id. Requiere que exista la fila (el motivo se agrega sobre un
+  // estado ya marcado, p. ej. "no disponible").
+  async function saveNote(pid, date, notes) {
+    if (!CLUB_ID) return;
+    const { error } = await window.sb.from('availability')
+      .update({ notes: notes || null })
+      .eq('player_id', pid).eq('date', date);
+    if (error) console.warn('[Availability] note save error:', error.message);
   }
 
   // Borrar la fila del día SÓLO si es de este equipo o global (team_id NULL). Nunca pisa el
@@ -1142,7 +1181,7 @@
           return data || [];
         } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); return []; }
       })(),
-      window.sb.from('availability').select('player_id, date, status, minutes, team_id')
+      window.sb.from('availability').select('player_id, date, status, minutes, team_id, notes')
         .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
       window.sb.from('availability').select('player_id, status, minutes, team_id')
         .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
@@ -1450,6 +1489,71 @@
       if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
       else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
     });
+  });
+
+  // ── Double-click a recorded cell (non-match) → edit its reason/note ──
+  let _notePop = null;
+  function avApplyNoteToCell(td, note) {
+    td.querySelector('.av-note-flag')?.remove();
+    if (note) {
+      td.classList.add('has-note');
+      td.insertAdjacentHTML('beforeend', '<span class="av-note-flag"></span>');
+      if (!td.classList.contains('is-otherteam')) td.setAttribute('title', note);
+    } else {
+      td.classList.remove('has-note');
+      if (!td.classList.contains('is-otherteam')) td.removeAttribute('title');
+    }
+  }
+  function openNoteEditor(td, pid, date) {
+    if (_notePop) _notePop.remove();
+    const ent = avMap[pid + '|' + date] || {};
+    const pop = document.createElement('div');
+    _notePop = pop;
+    pop.style.cssText = 'position:fixed;z-index:210;width:250px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-pop,0 12px 40px rgba(0,0,0,.18));padding:10px';
+    pop.innerHTML = `
+      <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:7px">${tt('availability.noteTitle','Reason / note')}</div>
+      <textarea class="av-note-ta" rows="3" placeholder="${tt('availability.notePlaceholder','e.g. personal reason, permit, load management…')}" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--cm-border);border-radius:7px;padding:7px 8px;font:500 13px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong);background:var(--cm-bg-soft)"></textarea>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px">
+        <button class="av-note-clear" style="border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);border-radius:7px;padding:5px 10px;font:600 12px/1 var(--cm-font-sans);cursor:pointer">${tt('availability.noteClear','Clear')}</button>
+        <button class="av-note-save" style="border:0;background:var(--cm-accent);color:#fff;border-radius:7px;padding:5px 12px;font:600 12px/1 var(--cm-font-sans);cursor:pointer">${tt('availability.noteSave','Save')}</button>
+      </div>`;
+    document.body.appendChild(pop);
+    const r = td.getBoundingClientRect();
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8)) + 'px';
+    pop.style.top  = (r.bottom + ph + 8 > window.innerHeight ? r.top - ph - 6 : r.bottom + 6) + 'px';
+    const ta = pop.querySelector('.av-note-ta');
+    ta.value = ent.notes || '';
+    ta.focus();
+    const close = () => { if (_notePop === pop) _notePop = null; pop.remove(); };
+    const commitNote = (val) => {
+      const v = (val || '').trim();
+      if (ent) ent.notes = v || null;
+      avApplyNoteToCell(td, v);
+      saveNote(pid, date, v);
+      close();
+    };
+    pop.querySelector('.av-note-save').addEventListener('click', () => commitNote(ta.value));
+    pop.querySelector('.av-note-clear').addEventListener('click', () => commitNote(''));
+    pop.addEventListener('mousedown', ev => ev.stopPropagation());
+    ta.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+      else if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); commitNote(ta.value); }
+    });
+    setTimeout(() => document.addEventListener('mousedown', function onDoc(ev) {
+      if (_notePop !== pop) { document.removeEventListener('mousedown', onDoc); return; }
+      if (!pop.contains(ev.target)) { document.removeEventListener('mousedown', onDoc); close(); }
+    }), 0);
+  }
+  matrix.addEventListener('dblclick', e => {
+    if (e.target.closest('td.av-cell-match')) return;   // match cell → minutes editor above
+    const td = e.target.closest('td.cell');
+    if (!td || isBlockedCell(td)) return;
+    const { pid, date } = td.dataset;
+    if (!pid || !date) return;
+    if (!avMap[pid + '|' + date]) return;                // need a recorded status to attach a reason to
+    e.preventDefault();
+    openNoteEditor(td, pid, date);
   });
 
   document.getElementById('clearSel').addEventListener('click', () => {
