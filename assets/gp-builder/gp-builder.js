@@ -2787,7 +2787,6 @@
 
       // Step 5: render
       if (stale()) return;
-      try { if (localStorage.getItem('gp_render_log') === '1') console.log('[card DRAW]', config?.title || config?.viz, Math.round(performance.now()) + 'ms', _usedFastAgg ? '(rpc)' : '(raw)'); } catch (_) {}
       const hasData = series.some(s => s.points.length > 0);
       if (!hasData) {
         if (_isPinned) console.log('[PIN DEBUG] died at hasData (series has no points)', { seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
@@ -3281,7 +3280,6 @@
     });
   }
   function rerenderActiveCards() {
-    try { if (localStorage.getItem('gp_render_log') === '1') console.log('[rerenderActiveCards]', Math.round(performance.now()) + 'ms ←', (new Error().stack || '').split('\n')[2]?.trim()); } catch (_) {}
     if (_rerenderT) return;                        // ya hay un pase encolado → coalescer
     _rerenderT = setTimeout(() => { _rerenderT = null; _rerenderActiveCardsNow(); }, 90);
   }
