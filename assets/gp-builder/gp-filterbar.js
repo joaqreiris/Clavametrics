@@ -1043,7 +1043,7 @@
               training_sessions: { id: r.session_id, session_date: r.session_date, session_attributes: r.session_attributes,
                 match_day_offset: r.match_day_offset, microcycle_id: r.microcycle_id, team_id: r.team_id,
                 session_type: r.session_type, season_id: r.season_id },
-              players: { id: r.player_id, first_name: r.first_name, last_name: r.last_name, number: r.number, position: r.position },
+              players: { id: r.player_id, first_name: r.first_name, last_name: r.last_name, number: r.number, position: r.player_position },
             }));
           } catch (e) {
             window.__cmRpcAvail = window.__cmRpcAvail || {}; window.__cmRpcAvail.gps_filter_rows = false;
