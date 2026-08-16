@@ -744,6 +744,7 @@
       case 'sc_coach': case 'fitness_coach': return 'sc';
       case 'coach': case 'assistant_coach': case 'gk_coach': return 'coach';
       case 'analyst': return 'analyst';
+      case 'director_football': case 'head_performance': case 'methodology_director': case 'team_manager': return 'direction';
       default: return 'staff';
     }
   };
@@ -760,6 +761,19 @@
   window.cmHasBucket  = function (profile, bucket) { return window.cmRoleBuckets(profile).has(bucket); };
   // Full (admin/owner) access if EITHER role maps to the admin bucket.
   window.cmFullAccess = function (profile) { return window.cmRoleBuckets(profile).has('admin'); };
+  // ── GPS provider sync (daily API pull) permission ────────────────────────────
+  // Who may TRIGGER a "Sync now" against the club's GPS provider (Catapult, etc.).
+  // Buckets: 'admin' (owner/admin) + 'sc' (sc_coach/fitness_coach). This is ONLY the
+  // day-to-day pull — CONFIGURATION (connect/verify/map athletes, saving the API token)
+  // stays admin-only in Admin.html. Single source of truth for both UI and (mirrored)
+  // the gps-sync START gate in supabase/functions/gps-sync/index.ts.
+  // ⚠️ When the "Head of performance" role ships: map its slug to the 'sc' bucket in
+  //    cmRoleBucket() above (or add its bucket to the check here) AND add the slug to the
+  //    _SYNC_ROLES set in gps-sync/index.ts. Otherwise it will NOT be able to sync.
+  window.cmCanImportGps = function (profile) {
+    var b = window.cmRoleBuckets(profile);
+    return b.has('admin') || b.has('sc');
+  };
   // Club staff profiles whose bucket ∈ `buckets`, as [{id, role}]. Excludes platform
   // super-admins AND any 'player' profile — players are not auth users, so their id
   // would break the notifications.user_id → auth.users FK and fail the whole

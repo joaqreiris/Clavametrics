@@ -824,6 +824,19 @@ Deno.serve(async (req: Request) => {
     if (integration.provider !== 'catapult') return json({ ok: false, message: 'Not supported for this provider yet' });
     const clubId = integration.club_id as string;
 
+    // ── Role gate: who may TRIGGER a sync ────────────────────────────────────
+    // Mirrors window.cmCanImportGps in the client: admin/owner + S&C (sc_coach/
+    // fitness_coach). Config (connect/verify/map/token) stays admin-only in the UI;
+    // this is the daily pull, opened to S&C so they aren't blocked on an admin.
+    // Super-admins always pass. ⚠️ When "Head of performance" ships, add its slug here.
+    const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach']);
+    const { data: _isSuper } = await userClient.rpc('is_super_admin');
+    const { data: _prof } = await adminClient.from('profiles').select('role, club_role').eq('id', user.id).single();
+    const _role = String(_prof?.role || '').toLowerCase(), _clubRole = String(_prof?.club_role || '').toLowerCase();
+    if (!_isSuper && !_SYNC_ROLES.has(_role) && !_SYNC_ROLES.has(_clubRole)) {
+      return json({ ok: false, error: 'Forbidden', message: 'Not allowed to sync GPS data' }, 403);
+    }
+
     // Range defaults MATCH the old client: empty picker → all-time (2010 → today).
     const range_from = from || '2010-01-01';
     const range_to   = to   || new Date().toISOString().slice(0, 10);
