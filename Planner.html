@@ -558,6 +558,14 @@
     z-index:20; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
     white-space:nowrap; pointer-events:all;
   }
+  .pl-prop-grip {
+    display:inline-flex; align-items:center; justify-content:center;
+    margin:-6px 2px -6px -8px; padding:0 4px; align-self:stretch;
+    color:var(--cm-fg-muted); cursor:grab; border-radius:8px 0 0 8px;
+  }
+  .pl-prop-grip:hover { color:var(--cm-fg-strong); background:var(--cm-bg-soft); }
+  .pl-prop-grip:active { cursor:grabbing; }
+  .pl-prop-grip .ti { font-size:16px; }
   #plPropBar input[type=color] {
     width:26px; height:26px; border:1.5px solid var(--cm-border);
     border-radius:5px; padding:1px; cursor:pointer; background:none;
@@ -1101,6 +1109,10 @@
             <button id="plRedoBtn" data-i18n-attr="title:planner.redo" title="Redo"><i class="ti ti-arrow-forward-up"></i></button>
           </div>
           <div class="sep"></div>
+          <div class="group">
+            <button id="plFabClear" data-i18n-attr="title:planner.clear_canvas" title="Clear canvas"><i class="ti ti-trash"></i></button>
+          </div>
+          <div class="sep"></div>
           <span class="stat" id="plCanvasStat" data-i18n="planner.no_exercise_selected">No exercise selected</span>
           <div style="flex:1"></div>
           <div class="group">
@@ -1135,6 +1147,7 @@
 
           <!-- Properties panel — shown when arrow or zone is selected -->
           <div id="plPropBar">
+            <span class="pl-prop-grip" id="plPropGrip" data-i18n-attr="title:planner.drag_bar" title="Drag to move"><i class="ti ti-grip-vertical"></i></span>
             <div id="plPropArrow" style="display:none;align-items:center;gap:8px">
               <span data-i18n="planner.prop_stroke">Stroke</span>
               <input type="color" id="plPropArrowColor" value="#000000" data-i18n-attr="title:planner.prop_arrow_color" title="Arrow color">
@@ -1205,9 +1218,6 @@
           <div id="plAngleBadge"></div>
 
           <div class="pl-field-fab">
-            <button id="plFabText"   data-i18n-attr="title:planner.add_label" title="Add label"><i class="ti ti-typography"></i></button>
-            <button id="plFabDraw"   data-i18n-attr="title:planner.draw_mode" title="Draw mode"><i class="ti ti-pencil"></i></button>
-            <button id="plFabClear"  data-i18n-attr="title:planner.clear_canvas" title="Clear canvas"><i class="ti ti-trash"></i></button>
             <button id="plFabFull"   data-i18n-attr="title:planner.fullscreen" title="Fullscreen"><i class="ti ti-maximize"></i></button>
           </div>
         </div>
@@ -2705,8 +2715,54 @@
     } else {
       _propBar.style.display='none';
     }
+    if (_propBar.style.display==='flex') _positionPropBar(obj);
   }
-  function _hidePropBar() { if (_propBar) _propBar.style.display='none'; }
+  // The bar defaults to bottom-centre, which overlaps text/objects placed low on
+  // the pitch. Flip it to the top when the selected object sits in the lower half;
+  // a manual drag (via the grip) overrides this until the bar is hidden again.
+  let _propBarDragged = false;
+  function _positionPropBar(obj) {
+    if (!_propBar || _propBarDragged || !obj) return;
+    const vpt = fc.viewportTransform || [1,0,0,1,0,0];
+    const cy  = (obj.top || 0) * vpt[3] + vpt[5];        // object centre, screen px
+    const low = cy > fc.getHeight() * 0.5;
+    _propBar.style.left = '50%';
+    _propBar.style.transform = 'translateX(-50%)';
+    if (low) { _propBar.style.top = '14px';  _propBar.style.bottom = 'auto'; }
+    else     { _propBar.style.bottom = '14px'; _propBar.style.top = 'auto'; }
+  }
+  function _hidePropBar() {
+    if (!_propBar) return;
+    _propBar.style.display='none';
+    _propBarDragged = false;                              // next selection re-centres
+    _propBar.style.top=''; _propBar.style.bottom=''; _propBar.style.left=''; _propBar.style.transform='';
+  }
+  // Drag the properties bar out of the way by its grip handle.
+  (() => {
+    const grip = document.getElementById('plPropGrip');
+    if (!grip || !_propBar) return;
+    let sx=0, sy=0, startL=0, startT=0;
+    const onMove = (e) => {
+      const parent = _propBar.offsetParent || _propBar.parentElement;
+      let nl = startL + (e.clientX - sx), nt = startT + (e.clientY - sy);
+      nl = Math.max(0, Math.min(nl, parent.clientWidth  - _propBar.offsetWidth));
+      nt = Math.max(0, Math.min(nt, parent.clientHeight - _propBar.offsetHeight));
+      _propBar.style.left = nl+'px'; _propBar.style.top = nt+'px';
+      _propBar.style.bottom='auto'; _propBar.style.transform='none';
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    grip.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      _propBarDragged = true;
+      const r  = _propBar.getBoundingClientRect();
+      const pr = (_propBar.offsetParent || _propBar.parentElement).getBoundingClientRect();
+      startL = r.left - pr.left; startT = r.top - pr.top;
+      _propBar.style.transform='none'; _propBar.style.left=startL+'px'; _propBar.style.top=startT+'px'; _propBar.style.bottom='auto';
+      sx = e.clientX; sy = e.clientY;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  })();
 
   _propArrowColor?.addEventListener('input', () => {
     const a=fc.getActiveObject(); if (!a||a._type!=='arrow') return;
@@ -3383,15 +3439,9 @@
   });
   loadCustomObjects();
 
-  // FAB
-  document.getElementById('plFabText')?.addEventListener('click', ()=>{
-    const t=new fabric.IText(tt('planner.annotation', 'Annotation'),{...center(),originX:'center',originY:'center',fill:'rgba(255,255,255,0.9)',fontSize:13,fontFamily:'sans-serif',_type:'text'});
-    fc.add(t); fc.setActiveObject(t); t.enterEditing(); fc.renderAll();
-  });
-  document.getElementById('plFabDraw')?.addEventListener('click', ()=>{
-    const on=currentTool==='draw'; setTool(on?'select':'draw');
-    document.getElementById('plFabDraw').style.color=on?'':'var(--cm-accent)';
-  });
+  // Canvas actions — Clear now lives in the top toolbar; "Add label" is in the
+  // bottom Text dock and free-draw is the top toolbar pencil, so those two FAB
+  // buttons were removed. Fullscreen stays as the lone bottom-right FAB.
   document.getElementById('plFabClear')?.addEventListener('click', ()=>{
     if (!confirm(tt('planner.confirm_clear_canvas', 'Clear the canvas? This cannot be undone.'))) return;
     fc.clear(); fc.renderAll();
