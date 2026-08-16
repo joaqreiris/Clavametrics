@@ -288,7 +288,7 @@ async function loadContext(adminClient: Admin, integrationId: string): Promise<C
 }
 
 interface ChunkResult {
-  act: number; rows: number; per: number; skip: number; flagged: number;
+  act: number; rows: number; per: number; skip: number; flagged: number; pending: number;
   errs: string[]; unmapped: string[];
 }
 
@@ -400,7 +400,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
     return !isNaN(ms) && ms >= fromMsRange && ms < toMsRange;   // [from 00:00, to+1day 00:00)
   });
 
-  let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0;
+  let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0, pendingActivities = 0;
   const errors: string[] = [];
 
   // Per-activity worker: returns its OWN counters (no shared-counter mutation under concurrency)
@@ -410,9 +410,9 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   // scoped by session_id; upsert by unique key), so two activities in flight never touch the same
   // row. Within an activity the flow stays SEQUENTIAL (unchanged) to preserve the "no recs → skip
   // periods" semantics; the win comes from running SEVERAL activities at once.
-  type ActRes = { act: number; rows: number; per: number; skip: number; flagged: number; errs: string[] };
+  type ActRes = { act: number; rows: number; per: number; skip: number; flagged: number; pending: number; errs: string[] };
   async function processActivity(act: Record<string, unknown>): Promise<ActRes> {
-    const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, errs: [] };
+    const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, pending: 0, errs: [] };
     const activityId = String(act.id ?? act.activity_id ?? '');
     if (!activityId) return r;
     const date = toDate(act.start_time ?? act.startTime ?? act.start);
@@ -448,22 +448,26 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
             .eq('id', sessionId);
         }
       }
-      // 2c. Nothing to adopt — create a fresh session.
+      // Si resolvimos sesión (2a/2b), limpiar cualquier pendiente previo de esta actividad
+      // (el usuario ya creó/planificó la sesión → deja de estar "sin sesión").
+      if (sessionId) {
+        await adminClient.from('gps_pending_activities')
+          .delete().eq('club_id', clubId).eq('external_activity_id', activityId);
+      }
+      // 2c. Nada que adoptar — OPCIÓN A: NO auto-crear un evento fantasma. Registrar la actividad
+      //     como PENDIENTE (solo la referencia) para que el usuario cree la sesión + MD en GPS
+      //     Analysis; un re-sync dirigido bajará después los gps_reports. No importamos nada ahora.
       if (!sessionId) {
-        const { data: newSess, error: sErr } = await adminClient
-          .from('training_sessions')
-          .insert({
-            club_id: clubId,
-            title: `Training · ${date}`,
-            session_date: date,
-            session_type: 'training',
-            is_historical: isHistorical,
-            external_activity_id: activityId,
-            ...(teamId ? { team_id: teamId } : {}),
-          })
-          .select('id').single();
-        if (sErr || !newSess) { r.errs.push(`session ${date}: ${sErr?.message || 'insert failed'}`); return r; }
-        sessionId = newSess.id as string;
+        await adminClient.from('gps_pending_activities').upsert({
+          club_id: clubId,
+          team_id: teamId || null,
+          session_date: date,
+          external_activity_id: activityId,
+          source: 'catapult',
+          activity_name: act.name ? String(act.name) : null,
+        }, { onConflict: 'club_id,external_activity_id' });
+        r.pending = 1;
+        return r;   // sin sesión → no se crea evento ni gps_reports; queda en la bandeja
       }
 
       // ── 3. Per-athlete stats (one /stats call, all mapped params — see fetchStats) ──
@@ -586,13 +590,13 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
     const results = await Promise.all(activities.slice(i, i + BATCH_SIZE).map(processActivity));
     for (const rr of results) {
       syncedActivities += rr.act; syncedRows += rr.rows; syncedPeriods += rr.per;
-      skippedUnmapped += rr.skip; flaggedPeriods += rr.flagged;
+      skippedUnmapped += rr.skip; flaggedPeriods += rr.flagged; pendingActivities += rr.pending;
       if (rr.errs.length) errors.push(...rr.errs);
     }
   }
 
   console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, ${_statsCalls} /stats calls, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods`);
-  return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, errs: errors, unmapped: [...unmappedParams] };
+  return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, pending: pendingActivities, errs: errors, unmapped: [...unmappedParams] };
 }
 
 // ── job helpers ─────────────────────────────────────────────────────────────
@@ -636,6 +640,7 @@ function mergeTotals(prev: Record<string, unknown> | null, p: ChunkResult): Reco
     periods:           n('periods') + p.per,
     skipped_unmapped:  n('skipped_unmapped') + p.skip,
     flagged_periods:   n('flagged_periods') + p.flagged,
+    pending_activities: n('pending_activities') + p.pending,
     errors:            [...a('errors'), ...p.errs].slice(0, 200),   // cap the log
     unmapped_params:   [...new Set([...a('unmapped_params'), ...p.unmapped])],
   };
