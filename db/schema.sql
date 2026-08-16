@@ -794,12 +794,18 @@ create table if not exists public.gps_period_reports (
   updated_at timestamp with time zone default now() not null,
   is_flagged boolean default false not null,
   flag_reason text,
+  work_context text default 'team' not null,  -- 'team' | 'rehab' | 'individual' | 'topup' (contexto de ESTE período; los no-'team' se restan del total de sesión en las medias — Fase 2b)
   constraint gps_period_reports_pkey primary key (id),
-  constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id)
+  constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id),
+  constraint gps_period_reports_work_context_check CHECK ((work_context = ANY (ARRAY['team'::text, 'rehab'::text, 'individual'::text, 'topup'::text])))
 );
 CREATE INDEX idx_gps_period_reports_session ON public.gps_period_reports USING btree (club_id, session_id);
 CREATE INDEX idx_gps_period_reports_player ON public.gps_period_reports USING btree (club_id, player_id);
 CREATE INDEX idx_gps_period_reports_period ON public.gps_period_reports USING btree (club_id, period_id);
+-- Índice parcial para la RESTA de Fase 2b (media = total sesión − períodos no-team): solo cubre
+-- las (pocas) filas de períodos rehab/individual/top-up, que es lo que el join de resta necesita.
+CREATE INDEX IF NOT EXISTS idx_gps_period_reports_nonteam
+  ON public.gps_period_reports USING btree (session_id, player_id) WHERE (work_context <> 'team');
 
 create table if not exists public.gps_report_metrics (
   id uuid default gen_random_uuid() not null,
