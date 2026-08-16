@@ -2874,6 +2874,10 @@
   document.addEventListener('keydown', e => {
     const tag = document.activeElement?.tagName;
     if (tag==='INPUT'||tag==='TEXTAREA') return;
+    // Normalise the letter so Caps Lock or a stray Shift can't make Cmd+C/X/V
+    // silently no-op (e.key arrives as 'C'/'V'/'X' then, and the branches below
+    // only matched lowercase). Modifier/arrow keys have multi-char names → left as-is.
+    const _k = (e.key && e.key.length === 1) ? e.key.toLowerCase() : e.key;
     if (e.key==='Escape') {
       if (currentTool === 'free_polygon') { setTool('select'); return; }
       if (_editingPlayer) {
@@ -2908,12 +2912,12 @@
     // Clipboard — clone with the FULL custom-prop list (ARROW_PROPS) so colours,
     // types, teams and arrow geometry survive the round-trip. Every branch is
     // wrapped so a single bad clone can never wedge the editor.
-    if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
+    if ((e.ctrlKey||e.metaKey)&&_k==='c') {
       const active=fc.getActiveObject();
       if (active) _copyToClipboard(active);
       return;
     }
-    if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
+    if ((e.ctrlKey||e.metaKey)&&_k==='x') {
       const active=fc.getActiveObject(); if (!active) return;
       // Capture the objects up front: _copyToClipboard discards the selection,
       // after which active.getObjects() would be empty and nothing would be cut.
@@ -2924,7 +2928,7 @@
       });
       return;
     }
-    if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
+    if ((e.ctrlKey||e.metaKey)&&_k==='v') {
       _pasteClipboard();
       return;
     }
