@@ -1146,7 +1146,7 @@ create table if not exists public.invitations (
   team_ids uuid[],
   constraint invitations_pkey primary key (id),
   constraint invitations_club_id_email_key UNIQUE (club_id, email),
-  constraint invitations_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
+  constraint invitations_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text, 'director_football'::text, 'head_performance'::text, 'methodology_director'::text, 'team_manager'::text])))
 );
 
 create table if not exists public.invoices (
@@ -1974,8 +1974,8 @@ create table if not exists public.profiles (
   timezone text,
   onboarded boolean default false not null,
   constraint profiles_pkey primary key (id),
-  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text]))),
-  constraint profiles_club_role_check CHECK (((club_role IS NULL) OR (club_role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))),
+  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text, 'director_football'::text, 'head_performance'::text, 'methodology_director'::text, 'team_manager'::text]))),
+  constraint profiles_club_role_check CHECK (((club_role IS NULL) OR (club_role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text, 'director_football'::text, 'head_performance'::text, 'methodology_director'::text, 'team_manager'::text])))),
   constraint profiles_preferred_lang_check CHECK (((preferred_lang IS NULL) OR (preferred_lang = ANY (ARRAY['en'::text, 'es'::text, 'pt'::text]))))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
@@ -2313,7 +2313,7 @@ create table if not exists public.tasks (
   constraint tasks_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text]))),
   constraint tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'cancelled'::text]))),
   constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text]))),
-  constraint tasks_assigned_roles_check CHECK (((assigned_roles IS NULL) OR (assigned_roles <@ ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
+  constraint tasks_assigned_roles_check CHECK (((assigned_roles IS NULL) OR (assigned_roles <@ ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text, 'director_football'::text, 'head_performance'::text, 'methodology_director'::text, 'team_manager'::text])))
 );
 CREATE INDEX tasks_club_idx ON public.tasks USING btree (club_id);
 CREATE INDEX tasks_assigned_idx ON public.tasks USING btree (assigned_to);
@@ -3682,21 +3682,22 @@ $function$
 -- PERF: filas planas para poblar los DROPDOWNS del filterbar en UNA query (sin embed anidado
 -- ni paginación, sin RLS anidada). Reemplaza el barrido paginado gps_reports+training_sessions!inner
 -- +players!inner que tardaba ~40s. SECURITY DEFINER con la MISMA visibilidad que gps_reports_scoped_select.
+-- Devuelve UN jsonb (array de objetos): una función que RETURNS TABLE queda capada a 1000 filas por
+-- el max-rows de PostgREST → truncaba los dropdowns en clubes con >1000 gps_reports. Como jsonb es
+-- UNA fila, no hay tope: el cliente recibe TODAS las filas en una sola llamada.
 CREATE OR REPLACE FUNCTION public.gps_filter_rows(p_club_id uuid, p_player_ids uuid[] DEFAULT NULL::uuid[])
- RETURNS TABLE(
-   player_id uuid, session_id uuid, session_date date, session_type text,
-   microcycle_id text, season_id uuid, team_id uuid, match_day_offset text,
-   session_attributes jsonb, player_position text, first_name text, last_name text, number integer
- )
+ RETURNS jsonb
  LANGUAGE sql
  STABLE
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  select
-    r.player_id, r.session_id, ts.session_date, ts.session_type,
-    ts.microcycle_id, ts.season_id, ts.team_id, ts.match_day_offset,
-    ts.session_attributes, pl.position, pl.first_name, pl.last_name, pl.number
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'player_id', r.player_id, 'session_id', r.session_id, 'session_date', ts.session_date,
+    'session_type', ts.session_type, 'microcycle_id', ts.microcycle_id, 'season_id', ts.season_id,
+    'team_id', ts.team_id, 'match_day_offset', ts.match_day_offset, 'session_attributes', ts.session_attributes,
+    'player_position', pl.position, 'first_name', pl.first_name, 'last_name', pl.last_name, 'number', pl.number
+  )), '[]'::jsonb)
   from public.gps_reports r
   join public.training_sessions ts on ts.id = r.session_id
   join public.players pl on pl.id = r.player_id
@@ -3797,7 +3798,8 @@ AS $function$
   select public.is_super_admin()
       or exists (select 1 from public.profiles p
                  where p.id = auth.uid()
-                   and lower(coalesce(p.role,'')) in ('admin','owner'));
+                   and (public.role_bucket(p.role) in ('admin','direction')
+                     or public.role_bucket(p.club_role) in ('admin','direction')));
 $function$
 ;
 
@@ -4399,6 +4401,8 @@ AS $function$
     when 'sc_coach' then 'sc' when 'fitness_coach' then 'sc'
     when 'coach' then 'coach' when 'assistant_coach' then 'coach' when 'gk_coach' then 'coach'
     when 'analyst' then 'analyst'
+    when 'director_football' then 'direction' when 'head_performance' then 'direction'
+    when 'methodology_director' then 'direction' when 'team_manager' then 'direction'
     else 'staff' end;
 $function$
 ;
@@ -5524,7 +5528,7 @@ create policy "availability_cud" on public.availability as permissive for all to
   using ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))));
 create policy "availability_scoped_select" on public.availability as permissive for select to public
-  using ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))));
+  using ((is_super_admin() OR has_full_planning_access() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))));
 
 alter table public.body_composition enable row level security;
 create policy "body_composition_rw" on public.body_composition as permissive for all to authenticated
@@ -6711,7 +6715,7 @@ create policy "players_scoped_insert" on public.players as permissive for insert
    FROM profiles p
   WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "players_scoped_select" on public.players as permissive for select to public
-  using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (EXISTS ( SELECT 1
    FROM profiles p
   WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (EXISTS ( SELECT 1
    FROM player_teams pt
@@ -6843,7 +6847,7 @@ alter table public.rpe enable row level security;
 create policy "rpe_scoped_insert" on public.rpe as permissive for insert to authenticated
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "rpe_scoped_select" on public.rpe as permissive for select to public
-  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+  using ((is_super_admin() OR has_full_planning_access() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 
 alter table public.season_phases enable row level security;
 create policy "season_phases_all" on public.season_phases as permissive for all to authenticated
