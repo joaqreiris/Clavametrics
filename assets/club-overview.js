@@ -88,12 +88,15 @@
     let lpQ = sb().from('load_plan').select('plan_date,metric,pct').eq('club_id', cid).gte('plan_date', from).lte('plan_date', to);
     if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); matchQ = matchQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);
-    const avQ = sb().from('availability').select('player_id,status,team_id').eq('club_id', cid).eq('date', today);
+    const avQ = sb().from('availability').select('player_id,status,team_id,notes').eq('club_id', cid).eq('date', today);
     const rpeQ = sb().from('rpe').select('session_id,player_id,load,session_date').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
+    const plQ = sb().from('players').select('id,first_name,last_name,position,team_id').eq('club_id', cid).is('archived_at', null);
 
-    const [sessions, matches, micros, pteams, avail, rpe, lplan] = await Promise.all([run(sessQ), run(matchQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ)]);
-    state.data = { sessions, matches, micros, pteams, avail, rpe, lplan, today };
+    const [sessions, matches, micros, pteams, avail, rpe, lplan, players] = await Promise.all([run(sessQ), run(matchQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ)]);
+    const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
+    state.data = { sessions, matches, micros, pteams, avail, rpe, lplan, players, pmap, today };
   }
+  function playerName(id) { const p = state.data && state.data.pmap ? state.data.pmap[String(id)] : null; if (!p) return ''; return [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ''; }
 
   // ── KPIs ──
   function computeKpis() {
@@ -112,6 +115,7 @@
     const outSet = new Set(), injSet = new Set();
     (D.avail || []).forEach(a => { const pid = String(a.player_id); if (!roster.has(pid)) return; const st = (a.status || '').toLowerCase(); if (OUT.has(st)) outSet.add(pid); if (INJ.has(st)) injSet.add(pid); });
     const out = outSet.size, injured = injSet.size, available = Math.max(0, total - out);
+    const injIds = [...injSet], otherIds = [...outSet].filter(id => !injSet.has(id));
 
     let ep = '—', epPct = 0;
     if ((D.lplan || []).length) { const avg = D.lplan.reduce((a, r) => a + (Number(r.pct) || 0), 0) / D.lplan.length; ep = (avg / 100).toFixed(2); epPct = Math.max(0, Math.min(100, Math.round(avg))); }
@@ -125,7 +129,7 @@
     });
     const comp = exp ? Math.round(got / exp * 100) : null;
 
-    return { sessions: events, noPlan, avgLoad, total, available, out, injured, ep, epPct, comp };
+    return { sessions: events, noPlan, avgLoad, total, available, out, injured, injIds, otherIds, ep, epPct, comp };
   }
 
   function renderPulse() {
@@ -245,24 +249,63 @@
   }
 
   // ── ALERTS ──
+  function statusLabel(st) { st = (st || '').toLowerCase(); const m = { unavailable: tt('club_overview.st_unavailable', 'Unavailable'), away: tt('club_overview.st_away', 'National team / away'), sick: tt('club_overview.st_sick', 'Sick'), injured: tt('club_overview.injured_one', 'Injured') }; return m[st] || (st ? st.charAt(0).toUpperCase() + st.slice(1) : tt('club_overview.st_unavailable', 'Unavailable')); }
+  function playerTeamName(id) { const p = state.data.pmap ? state.data.pmap[String(id)] : null; return p ? ((state.teams.find(t => t.id === p.team_id) || {}).name || '') : ''; }
+  // RPE del día por equipo: cuántos jugadores lo rellenaron vs. plantel (solo días con sesión).
+  function rpeTodayByTeam() {
+    const D = state.data, today = D.today, res = [];
+    scopeTeams().forEach(t => {
+      const daySess = (D.sessions || []).filter(s => s.team_id === t.id && s.session_date === today && evClass(s.session_type) !== 'match');
+      if (!daySess.length) return;
+      const sids = new Set(daySess.map(s => s.id)), roster = new Set();
+      (D.pteams || []).forEach(p => { if (p.team_id === t.id) roster.add(String(p.player_id)); });
+      const sub = new Set();
+      (D.rpe || []).forEach(r => { const pid = String(r.player_id); if (!roster.has(pid)) return; if (r.session_date === today || (r.session_id && sids.has(r.session_id))) sub.add(pid); });
+      res.push({ team: t, sub: sub.size, total: roster.size });
+    });
+    return res;
+  }
   function renderAlerts() {
     const items = [], k = state.kpi || computeKpis();
-    if (k.out > 0) items.push({ k: 'info', i: 'ti-user-exclamation', t: k.out + ' ' + tt('club_overview.players_out', 'players unavailable today'), d: k.injured + ' ' + tt('club_overview.injured', 'injured') + ' · ' + (k.out - k.injured) + ' ' + tt('club_overview.other', 'other'), time: tt('common.today', 'today') });
-    scopeTeams().forEach(t => state.week.forEach(d => {
-      if (!cellEvents(t.id, d.ymd).length && isPlanExpected(t.id, d.ymd)) items.push({ k: 'warn', i: 'ti-alert-triangle', t: t.name + ' · ' + shortDate(d.ymd) + ' — ' + tt('club_overview.no_plan', 'No plan yet'), d: (mdFor(t.id, d.ymd) || '') + ' · ' + tt('club_overview.no_plan', 'No session created yet.'), time: relDay(d.ymd) });
-    }));
+    (k.injIds || []).slice(0, 5).forEach(id => { const p = state.data.pmap[String(id)]; items.push({ k: 'bad', i: 'ti-bandage', t: playerName(id) || tt('club_overview.a_player', 'Player'), d: [tt('club_overview.injured_one', 'Injured'), p && p.position ? p.position : '', playerTeamName(id)].filter(Boolean).join(' · '), time: tt('common.today', 'today') }); });
+    if ((k.injIds || []).length > 5) items.push({ k: 'bad', i: 'ti-bandage', t: '+' + (k.injIds.length - 5) + ' ' + tt('club_overview.more_injured', 'more injured'), d: '', time: tt('common.today', 'today') });
+    (k.otherIds || []).slice(0, 3).forEach(id => { const p = state.data.pmap[String(id)]; const st = ((state.data.avail || []).find(a => String(a.player_id) === String(id)) || {}).status || ''; items.push({ k: 'warn', i: 'ti-user-off', t: playerName(id) || tt('club_overview.a_player', 'Player'), d: [statusLabel(st), p && p.position ? p.position : '', playerTeamName(id)].filter(Boolean).join(' · '), time: tt('common.today', 'today') }); });
+    rpeTodayByTeam().forEach(r => { if (r.total === 0 || r.sub >= r.total) return; const pct = Math.round(r.sub / r.total * 100); items.push({ k: pct < 70 ? 'warn' : 'info', i: 'ti-activity', t: r.team.name + ' · ' + tt('club_overview.rpe_today', 'RPE today') + ' ' + r.sub + '/' + r.total, d: (r.total - r.sub) + ' ' + tt('club_overview.rpe_pending', 'still to submit'), time: tt('common.today', 'today') }); });
+    scopeTeams().forEach(t => state.week.forEach(d => { if (!cellEvents(t.id, d.ymd).length && isPlanExpected(t.id, d.ymd)) items.push({ k: 'warn', i: 'ti-alert-triangle', t: t.name + ' · ' + shortDate(d.ymd) + ' — ' + tt('club_overview.no_plan', 'No plan yet'), d: (mdFor(t.id, d.ymd) || '') + ' · ' + tt('club_overview.no_session_yet', 'No session created yet.'), time: relDay(d.ymd) }); }));
     const el = document.getElementById('coAlerts');
     if (!items.length) { el.innerHTML = '<div class="co-muted">' + tt('club_overview.no_alerts', 'All clear.') + '</div>'; return; }
-    el.innerHTML = items.slice(0, 6).map(a => '<div class="co-alert ' + a.k + '"><div class="ai"><i class="ti ' + a.i + '"></i></div><div class="ab"><div class="at">' + esc(a.t) + '</div><div class="ad">' + esc(a.d) + '</div></div><div class="atime">' + esc(a.time || '') + '</div></div>').join('');
+    el.innerHTML = items.slice(0, 10).map(a => '<div class="co-alert ' + a.k + '"><div class="ai"><i class="ti ' + a.i + '"></i></div><div class="ab"><div class="at">' + esc(a.t) + '</div>' + (a.d ? '<div class="ad">' + esc(a.d) + '</div>' : '') + '</div><div class="atime">' + esc(a.time || '') + '</div></div>').join('');
   }
 
   // ── ACTIVITY ──
+  function humanAction(a) {
+    const map = {
+      'rpe.submitted': tt('club_overview.act_rpe', 'submitted an RPE'),
+      'wellness.submitted': tt('club_overview.act_wellness', 'submitted a wellness check'),
+      'session.created': tt('club_overview.act_session_new', 'created a session'),
+      'session.updated': tt('club_overview.act_session_upd', 'updated a session'),
+      'session.published': tt('club_overview.act_session_pub', 'published a session'),
+      'availability.updated': tt('club_overview.act_avail', 'updated availability'),
+      'injury.created': tt('club_overview.act_injury', 'logged an injury'),
+      'gym.updated': tt('club_overview.act_gym', 'updated a gym session')
+    };
+    if (map[a]) return map[a];
+    const p = String(a || '').split('.');
+    return p.length === 2 ? (p[1].replace(/_/g, ' ') + ' ' + p[0].replace(/_/g, ' ')) : String(a || '');
+  }
+  function actIcon(a) { a = String(a || ''); if (a.indexOf('rpe') === 0 || a.indexOf('wellness') === 0) return 'ti-activity'; if (a.indexOf('session') === 0 || a.indexOf('gym') === 0) return 'ti-calendar-event'; if (a.indexOf('availab') === 0 || a.indexOf('injur') === 0) return 'ti-bandage'; return 'ti-point'; }
   async function renderActivity() {
     const el = document.getElementById('coActivity'), cid = state.clubId;
     let rows = [];
-    try { const { data } = await sb().from('activity_log').select('*').eq('club_id', cid).order('created_at', { ascending: false }).limit(6); rows = data || []; } catch (_) {}
+    try { const { data } = await sb().from('activity_log').select('actor_label,action,team_id,player_id,created_at').eq('club_id', cid).order('created_at', { ascending: false }).limit(8); rows = data || []; } catch (_) {}
     if (rows.length) {
-      el.innerHTML = rows.map(r => { const who = r.actor_name || r.user_name || r.actor || ''; const act = r.action || r.description || r.summary || r.event || r.type || ''; return '<div class="co-act"><div class="av">' + esc(initials(who || '•')) + '</div><div class="tx">' + (who ? '<b>' + esc(who) + '</b> ' : '') + esc(String(act)) + '</div><div class="atime">' + relTime(r.created_at) + '</div></div>'; }).join('');
+      el.innerHTML = rows.map(r => {
+        const who = r.actor_label || playerName(r.player_id) || '';
+        const team = (state.teams.find(t => t.id === r.team_id) || {}).name || '';
+        const av = who ? esc(initials(who)) : '<i class="ti ' + actIcon(r.action) + '" style="font-size:13px"></i>';
+        const txt = (who ? '<b>' + esc(who) + '</b> ' : '') + esc([humanAction(r.action), team].filter(Boolean).join(' · '));
+        return '<div class="co-act"><div class="av">' + av + '</div><div class="tx">' + txt + '</div><div class="atime">' + relTime(r.created_at) + '</div></div>';
+      }).join('');
       return;
     }
     let s = [];
