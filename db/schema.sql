@@ -807,6 +807,64 @@ CREATE INDEX idx_gps_period_reports_period ON public.gps_period_reports USING bt
 CREATE INDEX IF NOT EXISTS idx_gps_period_reports_nonteam
   ON public.gps_period_reports USING btree (session_id, player_id) WHERE (work_context <> 'team');
 
+-- ── Auto-etiquetado de contexto por NOMBRE de período (Fase 2 · auto) ──────────────────
+-- Reglas por club: period_name (ILIKE) → contexto. Un trigger BEFORE INSERT las aplica a las
+-- filas de período NUEVAS que trae el sync diario → "Rehab PISETH"/"Top-up" quedan etiquetadas
+-- solas. Sirve para top-ups de VARIOS jugadores a la vez: un solo nombre de período etiqueta a
+-- todos. Manual sigue mandando: el trigger es solo INSERT y solo pisa el default 'team'; las
+-- ediciones manuales (UPDATE) y el re-sync (upsert sin work_context) se preservan. Los períodos
+-- no-team los RESTA gps_session_agg / resolver (Fase 2b).
+create table if not exists public.gps_context_rules (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  pattern text not null,                    -- ILIKE sobre period_name: 'Rehab PISETH' | '%rehab%' | '%top%up%'
+  work_context text not null,               -- 'rehab' | 'individual' | 'topup' (sin regla = 'team')
+  created_at timestamp with time zone default now() not null,
+  constraint gps_context_rules_pkey primary key (id),
+  constraint gps_context_rules_context_check CHECK ((work_context = ANY (ARRAY['rehab'::text, 'individual'::text, 'topup'::text]))),
+  constraint gps_context_rules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_gps_context_rules_club ON public.gps_context_rules USING btree (club_id);
+
+CREATE OR REPLACE FUNCTION public.apply_gps_context_rule()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_ctx text;
+begin
+  -- Solo autocompleta el default: respeta cualquier contexto ya seteado (manual/explícito).
+  if (NEW.work_context is null or NEW.work_context = 'team') and NEW.period_name is not null then
+    select r.work_context into v_ctx
+      from public.gps_context_rules r
+      where r.club_id = NEW.club_id and NEW.period_name ilike r.pattern
+      order by length(r.pattern) desc   -- patrón más específico gana
+      limit 1;
+    if v_ctx is not null then NEW.work_context := v_ctx; end if;
+  end if;
+  return NEW;
+end;
+$function$;
+
+drop trigger if exists trg_apply_gps_context_rule on public.gps_period_reports;
+create trigger trg_apply_gps_context_rule
+  before insert on public.gps_period_reports
+  for each row execute function public.apply_gps_context_rule();
+
+alter table public.gps_context_rules enable row level security;
+create policy "gps_context_rules_club_select" on public.gps_context_rules as permissive for select to authenticated
+  using (public.is_super_admin() or (club_id = public.get_user_club_id()));
+create policy "gps_context_rules_staff_write" on public.gps_context_rules as permissive for all to authenticated
+  using (public.is_super_admin() or (club_id = public.get_user_club_id() and exists (
+    select 1 from public.profiles p where p.id = auth.uid()
+      and (lower(coalesce(p.role,'')) in ('admin','owner','sc_coach','fitness_coach')
+        or lower(coalesce(p.club_role,'')) in ('admin','owner','sc_coach','fitness_coach')))))
+  with check (public.is_super_admin() or (club_id = public.get_user_club_id() and exists (
+    select 1 from public.profiles p where p.id = auth.uid()
+      and (lower(coalesce(p.role,'')) in ('admin','owner','sc_coach','fitness_coach')
+        or lower(coalesce(p.club_role,'')) in ('admin','owner','sc_coach','fitness_coach')))));
+
 create table if not exists public.gps_report_metrics (
   id uuid default gen_random_uuid() not null,
   report_id uuid not null,
