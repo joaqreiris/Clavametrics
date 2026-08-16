@@ -194,10 +194,16 @@
       const name = (v[0] != null ? String(v[0]) : '').trim() || (r && r.libName) || '';
       if (!name) return;
       const params = v.slice(1).map(x => x == null ? '' : String(x).trim()).filter(Boolean).join(' · ');
-      out.push({ section: pair[1], name: name, params: params, exId: (r && r.exId) || null });
+      out.push({ secKey: pair[0], section: pair[1], name: name, params: params, exId: (r && r.exId) || null });
     }));
     return out;
   }
+  // Secciones de campo (por training_sessions phase). GK siempre al final.
+  const FIELD_PHASES = [['warmup', 'gym_warmup', 'Warm-up'], ['activation', 'ph_activation', 'Activation'], ['main', 'gym_main', 'Main work'], ['cooldown', 'cooldown', 'Cooldown'], ['goalkeepers', 'gk', 'GKs']];
+  function fieldPhase(ph) { ph = (ph || 'main').toLowerCase(); return FIELD_PHASES.find(p => p[0] === ph) || FIELD_PHASES[2]; }
+  function fieldSecKey(ph) { return fieldPhase(ph)[0]; }
+  function fieldPhaseLabel(ph) { const p = fieldPhase(ph); return tt('club_overview.' + p[1], p[2]); }
+  const FIELD_ORDER = { warmup: 0, activation: 1, main: 2, cooldown: 3, goalkeepers: 4 };
   function teamWeekMaxAu(teamId) { let mx = 0; state.week.forEach(d => cellEvents(teamId, d.ymd).forEach(e => { if (e.au > mx) mx = e.au; })); return mx || 1; }
   function meterHtml(au, teamId) { const pct = Math.min(100, Math.round(au / teamWeekMaxAu(teamId) * 100)); return '<div class="co-meter"><div class="mr"><span class="ml">' + tt('club_overview.planned_load', 'Planned session load') + '</span><span class="mv">' + au + ' AU</span></div><div class="co-mtrack"><span style="width:' + pct + '%"></span></div></div>'; }
 
@@ -240,10 +246,11 @@
     try { const { data } = await sb().from('session_exercises').select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,intensity,field_width,field_height,players_count,planner_exercise_id').eq('session_id', sid).order('position', { ascending: true }); rows = data || []; } catch (_) {}
     if (state._sid !== sid) return;
     if (!rows.length) { list.innerHTML = '<div class="co-muted" style="padding:8px">' + tt('club_overview.no_exercises', 'No exercises in this session yet.') + '</div>'; document.getElementById('coExParams').innerHTML = ''; return; }
+    rows.forEach(r => { r.secKey = fieldSecKey(r.phase); r.section = fieldPhaseLabel(r.phase); });
+    rows.sort((a, b) => (FIELD_ORDER[a.secKey] - FIELD_ORDER[b.secKey]));   // Array.sort estable → mantiene position dentro de cada fase
     state._ex = rows; state._exKind = 'field';
     resolveDrillPngs(rows.map(r => r.planner_exercise_id));
-    list.innerHTML = rows.map((r, i) => exRow(i, r.name || ('Drill ' + (i + 1)), drillParams(r))).join('');
-    selectFieldDrill(0);
+    renderExList();
   }
   function selectFieldDrill(i) {
     const r = (state._ex || [])[i]; if (!r) return;
@@ -262,14 +269,35 @@
     ]);
   }
   function renderGymEx(gc) {
-    const rows = gymRowsFlat(gc), list = document.getElementById('coExList');
-    if (!rows.length) { list.innerHTML = '<div class="co-muted" style="padding:8px">' + tt('club_overview.gym_planned', 'Gym session planned') + '</div>'; document.getElementById('coExParams').innerHTML = ''; return; }
+    const rows = gymRowsFlat(gc);
+    if (!rows.length) { document.getElementById('coExList').innerHTML = '<div class="co-muted" style="padding:8px">' + tt('club_overview.gym_planned', 'Gym session planned') + '</div>'; document.getElementById('coExParams').innerHTML = ''; return; }
     state._ex = rows; state._exKind = 'gym';
     resolveGymImgs(rows.map(r => r.exId)).then(() => { if (state._exKind === 'gym' && state._exSel != null) selectGymEx(state._exSel); });
-    let cur = null, idx = 0, h = '';
-    rows.forEach(r => { if (r.section !== cur) { cur = r.section; h += '<div class="co-exsec">' + esc(cur) + '</div>'; } h += exRow(idx, r.name, r.params); idx++; });
-    list.innerHTML = h;
-    selectGymEx(0);
+    renderExList();
+  }
+  // Lista agrupada por sección + barra de filtro + scroll. Común a campo y gimnasio.
+  function loadHiddenSecs() { try { return new Set(JSON.parse(localStorage.getItem('co_hide_sec') || '[]')); } catch (_) { return new Set(); } }
+  function saveHiddenSecs(set) { try { localStorage.setItem('co_hide_sec', JSON.stringify([...set])); } catch (_) {} }
+  function renderExList() {
+    const list = document.getElementById('coExList'); if (!list) return;
+    const rows = state._ex || [];
+    if (!rows.length) { list.innerHTML = ''; return; }
+    const hidden = loadHiddenSecs(), order = [], lbl = {};
+    rows.forEach(r => { if (!(r.secKey in lbl)) { lbl[r.secKey] = r.section; order.push(r.secKey); } });
+    let bar = '';
+    if (order.length > 1) bar = '<div class="co-secbar">' + order.map(k => '<button class="co-secchip' + (hidden.has(k) ? '' : ' on') + '" data-sec="' + esc(k) + '">' + esc(lbl[k]) + '</button>').join('') + '</div>';
+    let cur = null, h = '';
+    rows.forEach((r, i) => { if (hidden.has(r.secKey)) return; if (r.secKey !== cur) { cur = r.secKey; h += '<div class="co-exsec">' + esc(r.section) + '</div>'; } h += exRow(i, r.name || ('Drill ' + (i + 1)), state._exKind === 'gym' ? r.params : drillParams(r)); });
+    if (!h) h = '<div class="co-muted" style="padding:8px">' + tt('club_overview.section_hidden', 'All sections hidden.') + '</div>';
+    list.innerHTML = bar + '<div class="co-exscroll">' + h + '</div>';
+    const first = rows.findIndex(r => !hidden.has(r.secKey));
+    if (first >= 0) { state._exKind === 'gym' ? selectGymEx(first) : selectFieldDrill(first); }
+    else { document.getElementById('coExParams').innerHTML = ''; const pv = document.getElementById('coPreview'); if (pv) pv.innerHTML = state._exKind === 'gym' ? '<div class="co-pvph"><i class="ti ti-barbell"></i></div>' : pitchHtml(); }
+  }
+  function toggleSection(secKey) {
+    const hidden = loadHiddenSecs();
+    if (hidden.has(secKey)) hidden.delete(secKey); else hidden.add(secKey);
+    saveHiddenSecs(hidden); renderExList();
   }
   function selectGymEx(i) {
     const r = (state._ex || [])[i]; if (!r) return;
@@ -444,7 +472,11 @@
 
     document.getElementById('coSched').addEventListener('click', e => { const card = e.target.closest('.co-ev[data-key]'); if (!card) return; const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
     const detailPanel = document.querySelector('.co-detail');
-    if (detailPanel) detailPanel.addEventListener('click', e => { const row = e.target.closest('.co-exrow[data-i]'); if (!row) return; const i = parseInt(row.dataset.i, 10); if (state._exKind === 'gym') selectGymEx(i); else selectFieldDrill(i); });
+    if (detailPanel) detailPanel.addEventListener('click', e => {
+      const chip = e.target.closest('.co-secchip[data-sec]'); if (chip) { toggleSection(chip.dataset.sec); return; }
+      const row = e.target.closest('.co-exrow[data-i]'); if (!row) return;
+      const i = parseInt(row.dataset.i, 10); if (state._exKind === 'gym') selectGymEx(i); else selectFieldDrill(i);
+    });
     document.getElementById('coPrevWeek').onclick = () => { state.refDate = addDays(mondayOf(state.refDate), -7); state.sel = null; refresh(); };
     document.getElementById('coNextWeek').onclick = () => { state.refDate = addDays(mondayOf(state.refDate), 7); state.sel = null; refresh(); };
     document.getElementById('coToday').onclick = () => { state.refDate = new Date(); state.sel = null; refresh(); };
