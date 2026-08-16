@@ -96,6 +96,27 @@
   // Real seasons rows (team-scoped), for a "pick a specific season" section in the date panel.
   let _seasons = [];
 
+  // ── DEFAULT AUTOMÁTICO DE FECHA ──────────────────────────────────────────────
+  // Producto: NO arrancar en "All time" (barre toda la historia → todas las cards lentas). El
+  // default es la TEMPORADA actual (si existe) o los últimos 90 días. Acota el volumen → cualquier
+  // card (cubierta o no por RPC) va rápida. Sólo aplica si el usuario NO fijó fecha (_dateUserSet):
+  // una elección guardada (incluido "All time" explícito) manda.
+  let _dateUserSet = false;
+  function _dateIsSet(d) {
+    return !!(d && (d.preset || d.seasonId || (Array.isArray(d.days) && d.days.length) || d.from || d.to));
+  }
+  function _defaultDateState() {
+    const today = (typeof window !== 'undefined' && window.cmToday) ? window.cmToday() : new Date().toISOString().slice(0, 10);
+    // Temporada que contiene HOY; si ninguna, la más reciente (_seasons ya viene ordenado desc).
+    const s = (_seasons || []).find(x => {
+      const st = String(x.start_date).slice(0, 10), en = x.end_date ? String(x.end_date).slice(0, 10) : null;
+      return st <= today && (!en || today <= en);
+    }) || (_seasons || [])[0];
+    if (s) return { preset: 'season', from: String(s.start_date).slice(0, 10),
+                    to: s.end_date ? String(s.end_date).slice(0, 10) : null, days: [], seasonId: s.id, seasonName: s.name };
+    return { preset: '90', from: null, to: null, days: [] };   // sin temporadas → últimos 90 días
+  }
+
   // 'YYYY-MM-DD' → '25 Apr 2026' (consistent, human-readable date label).
   const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function _fmtDateLabel(iso) {
@@ -295,7 +316,10 @@
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
-        microcycle: state.microcycle, rival: state.rival, session_type: state.session_type, date: state.date,
+        microcycle: state.microcycle, rival: state.rival, session_type: state.session_type,
+        // NO persistir el default automático de fecha (temporada/90d): sólo la elección real del
+        // usuario. Así el default se recalcula cada carga (temporada ACTUAL) y no queda pegado.
+        date: _dateUserSet ? state.date : { preset: null, from: null, to: null, days: [] },
         posGranularity: state.posGranularity,
         visibleFilters: state.visibleFilters,
       }));
@@ -310,6 +334,7 @@
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
     resetStateSilent();
+    _dateUserSet = false;
     try {
       const raw = localStorage.getItem(storeKey());
       if (raw) {
@@ -321,15 +346,19 @@
         state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
         state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
-        state.date     = (s.date && typeof s.date === 'object')
-          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [],
-              seasonId: s.date.seasonId || null, seasonName: s.date.seasonName || null }
-          : { preset: null, from: null, to: null, days: [] };
+        // Fecha guardada por el usuario (incluido "All time" explícito) manda; si no hay, default abajo.
+        if (s.date && typeof s.date === 'object' && _dateIsSet(s.date)) {
+          state.date = { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [],
+            seasonId: s.date.seasonId || null, seasonName: s.date.seasonName || null };
+          _dateUserSet = true;
+        }
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
           : DROPS.map(d => d.key);
       }
     } catch (e) { /* ignore */ }
+    // Sin fecha elegida por el usuario → default inteligente (temporada actual o 90 días).
+    if (!_dateUserSet) state.date = _defaultDateState();
     if (root) {
       DROPS.forEach(d => updateTrigger(d.key));
       DROPS.forEach(d => root.querySelector(`.fb-drop[data-key="${d.key}"]`)?.classList.toggle('fb-hidden', !isFilterVisible(d.key)));
@@ -611,6 +640,7 @@
         } else {
           state.date = { preset: null, from: null, to: null, days: [] };
         }
+        _dateUserSet = true;   // el usuario eligió/deseleccionó fecha → su elección manda
         _afterChange();
         renderDateList();
       });
@@ -718,6 +748,7 @@
       : days.length
         ? { preset: null, from: days[days.length - 1], to: days[0], days }
         : { preset: null, from, to, days: [] };
+    _dateUserSet = true;   // el usuario aplicó una fecha (preset/rango/días) → su elección manda
     _afterChange();   // date also narrows MD/player/position/microcycle/rival (symmetric cascade)
   }
 
@@ -787,7 +818,7 @@
 
   // ── Limpiar ─────────────────────────────────────────────────────────────
   function clearOne(key) {
-    if (key === 'date') state.date = { preset: null, from: null, to: null, days: [] };
+    if (key === 'date') { state.date = { preset: null, from: null, to: null, days: [] }; _dateUserSet = true; }   // limpiar = all-time explícito (esta sesión)
     else state[key] = [];
     drafts[key] = new Set();
     applyChaining();                                  // recalcula opciones válidas (al limpiar, se amplían)
@@ -798,7 +829,7 @@
   }
   function clearAll_() {
     DROPS.forEach(d => {
-      if (d.key === 'date') state.date = { preset: null, from: null, to: null, days: [] };
+      if (d.key === 'date') { state.date = { preset: null, from: null, to: null, days: [] }; _dateUserSet = true; }
       else state[d.key] = [];
       drafts[d.key] = new Set();
     });
@@ -1097,6 +1128,10 @@
       _seasons = [..._snMap.values()].sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
     }
     renderSeasonBtns();
+    // Con las temporadas ya cargadas, (re)aplicar el default de fecha si el usuario no fijó una.
+    // Cubre el path deferred (restore corrió antes de tener temporadas → default cayó a 90d) →
+    // acá se hace upgrade a la temporada actual. Si el usuario eligió fecha, _dateUserSet manda.
+    if (!_dateUserSet) state.date = _defaultDateState();
 
     // Entity resolver: opponent_id (catalog) wins; else match raw text to a catalog row
     // by name; else fall back to the normalized text. Returns a stable { key, label, crest }
