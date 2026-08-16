@@ -3452,10 +3452,12 @@ gpGearBtn?.addEventListener('click', e => {
     { label: tt('gps_analysis.metrics_catalog','Metrics catalog'), icon: 'ti-list',                   act: 'gpCatalogBtn' },
     { label: tt('gps_analysis.assign_rivals','Assign rivals & seasons') + (oc ? ` · ${tt('gps_analysis.n_need_season','{n} need a season',{n:oc})}` : ''),   icon: 'ti-ball-football',          act: oc ? 'rivals_outside' : 'rivals' },
     { sep: true },
+    { label: tt('gps_analysis.ctx_menu','Rehab / individual / top-up'), icon: 'ti-tag', act: 'context' },
     { label: tt('gps_analysis.flagged_periods','Flagged periods') + (fc ? ` · ${tt('gps_analysis.n_need_review','{n} need review',{n:fc})}` : ''), icon: 'ti-flag', act: 'flagged' },
     { label: tt('gps_analysis.es_title','Clean up empty sessions'), icon: 'ti-trash', act: 'empty_sessions' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
+    else if (item.act === 'context') _gpOpenContextPanel();
     else if (item.act === 'rivals') _gpOpenAssignRivals();
     else if (item.act === 'rivals_outside') _gpOpenAssignRivals({ onlyOutside: true });
     else if (item.act === 'empty_sessions') _gpOpenEmptySessions();
@@ -3555,6 +3557,89 @@ async function _gpFlagAction(clubId, body, ov, ids, mode) {
   } catch (e) { showToast(`Action failed: ${e.message}`, true); return; }
   await _gpRenderFlagged(clubId, body, ov);          // re-query → reflects the change
   try { window.refreshDashboard?.(); } catch {}      // un-flagged data re-enters the analysis
+}
+
+// ── Training context (rehab / individual / top-up) ───────────────────────────
+// Marca por jugador×sesión (una fila de gps_reports). El default es 'team'; todo lo
+// que NO sea 'team' se excluye de las medias de plantel (gps_session_agg filtra
+// work_context='team'), así rehab/individual/top-up no ensucian el promedio del equipo.
+// Los datos del jugador NO se borran: cambiar el contexto solo los saca de la media.
+const _CTX_VALUES = ['team', 'rehab', 'individual', 'topup'];
+function _ctxLabel(v) { return tt('gps_analysis.ctx_' + v, ({ team: 'Team', rehab: 'Rehab', individual: 'Individual', topup: 'Top-up' })[v] || v); }
+
+async function _gpOpenContextPanel() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  const teamId = window._gpTeamId || null;
+  if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
+  const ov = makeModal(tt('gps_analysis.ctx_title', 'Training context'),
+    `<div id="ctxBody" style="min-width:680px;max-width:920px"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+  await _gpRenderContext(clubId, teamId, ov.querySelector('#ctxBody'), ov);
+}
+
+async function _gpRenderContext(clubId, teamId, body, ov) {
+  let rows;
+  try {
+    // Team isolation: only the active team's roster (gps_reports has no team_id → scope via player_teams).
+    let pids = null;
+    if (teamId) {
+      const { data: pt } = await window.sb.from('player_teams').select('player_id').eq('team_id', teamId);
+      pids = (pt || []).map(x => x.player_id);
+      if (!pids.length) pids = ['00000000-0000-0000-0000-000000000000'];   // roster empty → no rows
+    }
+    // Date scoping: last 60 days of sessions (keeps the list manageable).
+    const from = window.cmYMD(new Date(Date.now() - 60 * 86400 * 1000));
+    const { data: sess } = await window.sb.from('training_sessions')
+      .select('id, session_date, session_type').eq('club_id', clubId).gte('session_date', from)
+      .order('session_date', { ascending: false });
+    const sids = (sess || []).map(s => s.id);
+    const sById = {}; (sess || []).forEach(s => sById[s.id] = s);
+    if (!sids.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.ctx_empty', 'No GPS data in the last 60 days.')}</div>`; return; }
+    rows = await window.cmFetchAll(() => {
+      let q = window.sb.from('gps_reports')
+        .select('id, player_id, session_id, work_context, total_distance, players(first_name,last_name)')
+        .eq('club_id', clubId).in('session_id', sids);
+      if (pids) q = q.in('player_id', pids);
+      return q;
+    }, { label: 'ctx-rows' });
+    rows.forEach(r => { r._date = sById[r.session_id]?.session_date || ''; r._st = sById[r.session_id]?.session_type || ''; });
+    rows.sort((a, b) => (b._date || '').localeCompare(a._date || ''));
+  } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
+  if (!rows.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.ctx_empty', 'No GPS data in the last 60 days.')}</div>`; return; }
+
+  const num = 'text-align:right;font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums';
+  const opts = v => _CTX_VALUES.map(x => `<option value="${x}" ${x === v ? 'selected' : ''}>${_ctxLabel(x)}</option>`).join('');
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap">
+      <span style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);max-width:560px">${tt('gps_analysis.ctx_sub', 'Mark player-sessions that are NOT team training. Anything other than “Team” is excluded from squad averages, so rehab / individual / top-up work doesn’t skew the mean.')}</span>
+      <input id="ctxSearch" placeholder="${tt('gps_analysis.ctx_search', 'Search player…')}" style="margin-left:auto;height:30px;padding:0 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+    </div>
+    <div class="gp-imp-preview" style="max-height:56vh;overflow:auto"><table>
+      <thead><tr><th>${tt('gps_analysis.ctx_date', 'Date')}</th><th>${tt('gps_analysis.ctx_player', 'Player')}</th><th>${tt('gps_analysis.ctx_session', 'Session')}</th><th style="text-align:right">${tt('gps_analysis.ctx_td', 'Total (m)')}</th><th>${tt('gps_analysis.ctx_col', 'Context')}</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr data-crow data-name="${([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '').toLowerCase()}">
+          <td style="font-family:var(--cm-font-mono)">${r._date || '—'}</td>
+          <td>${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
+          <td style="color:var(--cm-fg-muted)">${r._st || '—'}</td>
+          <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
+          <td><select class="ctx-sel" data-id="${r.id}" style="height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${opts(r.work_context || 'team')}</select></td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
+  body.querySelectorAll('.ctx-sel').forEach(sel => sel.addEventListener('change', () => _gpSetContext(clubId, sel.dataset.id, sel.value)));
+  const search = body.querySelector('#ctxSearch');
+  search?.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    body.querySelectorAll('[data-crow]').forEach(tr => { tr.style.display = (!q || tr.dataset.name.includes(q)) ? '' : 'none'; });
+  });
+}
+
+async function _gpSetContext(clubId, id, ctx) {
+  try {
+    const { error } = await window.sb.from('gps_reports').update({ work_context: ctx }).eq('club_id', clubId).eq('id', id);
+    if (error) throw error;
+    showToast(tt('gps_analysis.ctx_saved', 'Context updated'));
+    window.cmInvalidateGpsCache?.();
+    try { window.refreshDashboard?.(); } catch {}   // recompute means without the reclassified row
+  } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); }
 }
 
 // ── 1. Export button ──────────────────────────────────────────

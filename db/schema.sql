@@ -884,8 +884,10 @@ create table if not exists public.gps_reports (
   updated_at timestamp with time zone default now(),
   is_invalid boolean default false not null,
   source text default 'catapult' not null,   -- 'catapult' | 'csv' | 'manual' | 'avg' | 'avg_pos' | 'partial' (origin of the row)
+  work_context text default 'team' not null,  -- 'team' | 'rehab' | 'individual' | 'topup' (training context of this player-session; non-'team' is EXCLUDED from squad/team means so rehab/individual/top-up don't skew the average)
   constraint gps_reports_pkey primary key (id),
-  constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
+  constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id),
+  constraint gps_reports_work_context_check CHECK ((work_context = ANY (ARRAY['team'::text, 'rehab'::text, 'individual'::text, 'topup'::text])))
 );
 CREATE INDEX gps_reports_player_id_idx ON public.gps_reports USING btree (player_id);
 CREATE INDEX gps_reports_session_id_idx ON public.gps_reports USING btree (session_id);
@@ -3528,6 +3530,7 @@ AS $function$
   from public.gps_reports r
   where r.club_id = p_club_id
     and r.is_invalid = false
+    and r.work_context = 'team'          -- rehab/individual/top-up NO cuentan en la media del plantel
     and r.session_id = any(p_session_ids)
     and (p_player_ids is null or r.player_id = any(p_player_ids))
   group by r.session_id;
