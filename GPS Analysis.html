@@ -3456,13 +3456,16 @@ gpGearBtn?.addEventListener('click', e => {
   const n  = window._gpSessionCount;
   const fc = window._gpFlaggedN || 0;   // cached — open the menu NOW; don't block on a DB count
   const oc = window._gpOutsideN || 0;   // cached "imported days without a season" count
+  const pc = window._gpPendingN || 0;   // cached "GPS activities without a session" count
   Promise.resolve(_gpFlaggedCount()).catch(() => {});   // refresh the count in the background for next open
   Promise.resolve(_gpOutsideSeasonCount()).catch(() => {});
+  Promise.resolve(_gpPendingCount()).catch(() => {});
   makePopover(gpGearBtn, [
     { label: tt('gps_analysis.data_sources','Data sources') + (Number.isFinite(n) ? ` · ${tt('gps_analysis.n_gps_sessions','{n} GPS sessions',{n})}` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
     { label: tt('gps_analysis.gps_settings','GPS settings'),    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
     { label: tt('gps_analysis.metrics_catalog','Metrics catalog'), icon: 'ti-list',                   act: 'gpCatalogBtn' },
     { label: tt('gps_analysis.assign_rivals','Assign rivals & seasons') + (oc ? ` · ${tt('gps_analysis.n_need_season','{n} need a season',{n:oc})}` : ''),   icon: 'ti-ball-football',          act: oc ? 'rivals_outside' : 'rivals' },
+    { label: tt('gps_analysis.pending_menu','GPS days without a session') + (pc ? ` · ${tt('gps_analysis.n_pending','{n} pending',{n:pc})}` : ''), icon: 'ti-calendar-plus', act: 'pending' },
     { sep: true },
     { label: tt('gps_analysis.ctx_menu','Rehab / individual / top-up'), icon: 'ti-tag', act: 'context' },
     { label: tt('gps_analysis.pctx_menu','Tag periods (drills / top-up)'), icon: 'ti-timeline-event', act: 'pcontext' },
@@ -3470,6 +3473,7 @@ gpGearBtn?.addEventListener('click', e => {
     { label: tt('gps_analysis.es_title','Clean up empty sessions'), icon: 'ti-trash', act: 'empty_sessions' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
+    else if (item.act === 'pending') _gpOpenPendingPanel();
     else if (item.act === 'context') _gpOpenContextPanel();
     else if (item.act === 'pcontext') _gpOpenPeriodPanel();
     else if (item.act === 'rivals') _gpOpenAssignRivals();
@@ -3478,6 +3482,113 @@ gpGearBtn?.addEventListener('click', e => {
     else document.getElementById(item.act)?.click();
   });
 });
+
+// ── GPS days without a session (Opción A · Etapa 3) ──────────────────────────────
+// La sync ya NO crea sesiones fantasma para la temporada actual: un día con GPS pero sin
+// sesión planificada queda en gps_pending_activities. Acá el usuario CREA la sesión (+ MD) →
+// dispara un re-sync dirigido de ese día → la sync ADOPTA la sesión, baja los gps_reports y
+// borra el pendiente solo. El team_id de la sesión creada debe coincidir con el del pendiente
+// para que la sync la adopte (mismo criterio que gps-sync 2a/2b).
+window._gpPendingN = window._gpPendingN || 0;
+async function _gpPendingCount() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (!clubId || !window.sb) return 0;
+  const { count } = await window.sb.from('gps_pending_activities')
+    .select('id', { count: 'exact', head: true }).eq('club_id', clubId);
+  window._gpPendingN = count || 0;
+  return window._gpPendingN;
+}
+const _GP_MD_OPTS = ['', 'MD-5', 'MD-4', 'MD-3', 'MD-2', 'MD-1', 'MD0', 'MD+1', 'MD+2'];
+function _gpMdLabel(v) { return v === '' ? tt('gps_analysis.pending_not_md', '— Not a match day —') : (v === 'MD0' ? 'MD' : v); }
+
+async function _gpOpenPendingPanel() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
+  const ov = makeModal(tt('gps_analysis.pending_title', 'GPS days without a session'),
+    `<div id="pendBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 900px)';
+  await _gpRenderPending(clubId, ov.querySelector('#pendBody'), ov);
+}
+
+async function _gpRenderPending(clubId, body, ov) {
+  let rows; const teams = {};
+  try {
+    rows = await window.cmFetchAll(() => window.sb.from('gps_pending_activities')
+      .select('id, session_date, external_activity_id, activity_name, team_id, n_athletes')
+      .eq('club_id', clubId), { label: 'pending-activities' });
+    rows.sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
+    const { data: ts } = await window.sb.from('teams').select('id, name').eq('club_id', clubId);
+    (ts || []).forEach(t => teams[t.id] = t.name);
+  } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
+  window._gpPendingN = rows.length;
+  if (!rows.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.pending_empty', 'No GPS days waiting for a session. 🎉')}</div>`; return; }
+
+  const inp = 'height:30px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit';
+  const stOpts = `<option value="training">${tt('filterbar.type_training', 'Training')}</option><option value="match">${tt('filterbar.type_match', 'Match')}</option>`;
+  const mdOpts = _GP_MD_OPTS.map(v => `<option value="${v}">${_gpMdLabel(v)}</option>`).join('');
+  body.innerHTML = `
+    <div style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">${tt('gps_analysis.pending_sub', 'These days have GPS imported but no planned session, so they are not shown yet. Create a session (with its matchday) and the GPS will download and attach to it automatically.')}</div>
+    <div class="gp-imp-preview" style="max-height:56vh;overflow-y:auto;overflow-x:hidden"><table style="width:100%">
+      <thead><tr><th>${tt('gps_analysis.ctx_date', 'Date')}</th><th>${tt('gps_analysis.pending_activity', 'Activity')}</th><th>${tt('gps_analysis.pending_team', 'Team')}</th><th>${tt('gps_analysis.pending_type', 'Type')}</th><th>MD</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${r.external_activity_id || ''}">
+          <td style="font-family:var(--cm-font-mono);white-space:nowrap">${r.session_date || '—'}</td>
+          <td style="white-space:normal;word-break:break-word">${r.activity_name || '—'}</td>
+          <td style="white-space:nowrap">${r.team_id ? (teams[r.team_id] || '—') : '<span style="color:var(--cm-fg-muted)">—</span>'}</td>
+          <td><select class="pend-st" style="${inp}">${stOpts}</select></td>
+          <td><select class="pend-md" style="${inp}">${mdOpts}</select></td>
+          <td style="text-align:right;white-space:nowrap"><button class="cm-btn is-primary is-sm pend-go" style="height:30px"><i class="ti ti-calendar-plus" style="font-size:14px"></i>${tt('gps_analysis.pending_create', 'Create + sync')}</button></td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
+  body.querySelectorAll('.pend-go').forEach(btn => btn.addEventListener('click', () => {
+    const tr = btn.closest('[data-pend]');
+    _gpCreateSessionForPending(clubId, {
+      pendId: tr.dataset.pend, date: tr.dataset.date, teamId: tr.dataset.team || null, activityId: tr.dataset.aid || null,
+      sessionType: tr.querySelector('.pend-st').value, md: tr.querySelector('.pend-md').value,
+    }, body, ov, btn);
+  }));
+}
+
+async function _gpCreateSessionForPending(clubId, p, body, ov, btn) {
+  btn.disabled = true; const _lbl = btn.innerHTML; btn.textContent = tt('gps_analysis.pending_creating', 'Creating…');
+  try {
+    // 1) Crear la sesión (is_historical=false; team_id EXACTO del pendiente para que la sync la adopte).
+    const ins = {
+      club_id: clubId, session_date: p.date, session_type: p.sessionType, is_historical: false,
+      title: `${p.sessionType === 'match' ? 'Match' : 'Training'} · ${p.date}`,
+      ...(p.teamId ? { team_id: p.teamId } : {}),
+      ...(p.md ? { match_day_offset: p.md } : {}),
+    };
+    const { error: sErr } = await window.sb.from('training_sessions').insert(ins);
+    if (sErr) throw sErr;
+    // 2) Re-sync dirigido: START acotado a ese día → la sync adopta la sesión, baja gps_reports y
+    //    borra el pendiente. Necesita la integración catapult del club.
+    btn.textContent = tt('gps_analysis.pending_syncing', 'Syncing…');
+    const { data: intgs } = await window.sb.from('gps_integrations').select('id').eq('provider', 'catapult').limit(1);
+    const intId = intgs && intgs[0] && intgs[0].id;
+    if (intId) {
+      await window.sb.functions.invoke('gps-sync', { body: { mode: 'start', integration_id: intId, from: p.date, to: p.date } });
+      const gone = await _gpPollPendingGone(clubId, p.pendId);   // ~40s
+      if (!gone) showToast(tt('gps_analysis.pending_slow', 'Session created — the GPS is still syncing; it will attach shortly.'));
+    } else {
+      // Sin integración catapult: la sesión queda creada; el próximo sync la adoptará. Limpio el pendiente.
+      await window.sb.from('gps_pending_activities').delete().eq('club_id', clubId).eq('id', p.pendId);
+    }
+    showToast(tt('gps_analysis.pending_done', 'Session created — GPS attached'));
+    window.cmInvalidateGpsCache?.();
+    try { window.refreshDashboard?.(); } catch {}
+    await _gpRenderPending(clubId, body, ov);
+  } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); btn.disabled = false; btn.innerHTML = _lbl; }
+}
+
+async function _gpPollPendingGone(clubId, pendId) {
+  for (let i = 0; i < 20; i++) {   // ~40s (20 × 2s): el worker encadenado suele terminar un día de una
+    await new Promise(r => setTimeout(r, 2000));
+    const { data } = await window.sb.from('gps_pending_activities').select('id').eq('id', pendId).maybeSingle();
+    if (!data) return true;
+  }
+  return false;
+}
 
 // ── Flagged periods — review panel (Fase 3·B) ────────────────────────────────
 // Periods the importer marked is_flagged (speed_outlier) are EXCLUDED from analysis
