@@ -4623,7 +4623,8 @@ begin
   if not caller_super and target_club <> caller_club then raise exception 'Target not in your club'; end if;
 
   if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff',
-                      'sc_coach','fitness_coach','gk_coach','assistant_coach') then
+                      'sc_coach','fitness_coach','gk_coach','assistant_coach',
+                      'director_football','head_performance','methodology_director','team_manager') then
     raise exception 'Invalid role';
   end if;
   if new_role = 'owner' and not (caller_is_owner or caller_super) then
@@ -4657,7 +4658,8 @@ begin
 
   norm := nullif(trim(coalesce(new_role,'')), '');
   if norm is not null and norm not in ('admin','coach','physio','analyst','nutritionist','staff',
-                      'sc_coach','fitness_coach','gk_coach','assistant_coach') then
+                      'sc_coach','fitness_coach','gk_coach','assistant_coach',
+                      'director_football','head_performance','methodology_director','team_manager') then
     raise exception 'Invalid role';
   end if;
 
