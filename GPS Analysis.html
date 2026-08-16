@@ -3657,9 +3657,62 @@ async function _gpOpenPeriodPanel() {
   await _gpRenderPeriods(clubId, teamId, ov.querySelector('#pctxBody'), ov);
 }
 
-async function _gpRenderPeriods(clubId, teamId, body, ov) {
-  let rows;
+// Barra de reglas de auto-etiquetado: chips (patrón → contexto, borrable) + alta inline.
+// El nombre que escribís se guarda como '%nombre%' (contains) salvo que ya pongas %.
+function _gpRulesBarHTML(rules) {
+  const esc = s => String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const chips = (rules || []).map(r => `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--cm-border);border-radius:99px;font-size:11.5px;background:var(--cm-bg)"><b>${esc(r.pattern)}</b> → ${_ctxLabel(r.work_context)} <button class="rule-del" data-rule="${r.id}" title="${tt('common.delete','Delete')}" style="border:0;background:none;color:var(--cm-fg-muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button></span>`).join('');
+  const ctxOpts = ['rehab', 'individual', 'topup'].map(c => `<option value="${c}">${_ctxLabel(c)}</option>`).join('');
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--cm-border);border-radius:10px;margin-bottom:12px;background:var(--cm-surface)">
+    <span style="font:600 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gps_analysis.rules_title', 'Auto-tag by period name')}</span>
+    ${chips || `<span style="font-size:11.5px;color:var(--cm-fg-muted)">${tt('gps_analysis.rules_empty', 'No rules yet')}</span>`}
+    <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">
+      <input id="ruleName" placeholder="${tt('gps_analysis.rules_name_ph', 'name contains… e.g. Rehab')}" style="height:28px;padding:0 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:190px">
+      <select id="ruleCtx" style="height:28px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${ctxOpts}</select>
+      <button class="cm-btn is-outline is-sm" id="ruleAdd" style="height:28px">${tt('gps_analysis.rules_add', 'Add rule')}</button>
+    </span>
+  </div>`;
+}
+function _gpWireRulesBar(body, clubId, teamId, ov) {
+  body.querySelectorAll('.rule-del').forEach(b => b.addEventListener('click', () => _gpDelContextRule(clubId, teamId, b.dataset.rule, body, ov)));
+  const add = body.querySelector('#ruleAdd');
+  add?.addEventListener('click', async () => {
+    const name = (body.querySelector('#ruleName')?.value || '').trim();
+    const ctx = body.querySelector('#ruleCtx')?.value || 'topup';
+    if (!name) { showToast(tt('gps_analysis.rules_need_name', 'Type a name first'), true); return; }
+    const pat = /%/.test(name) ? name : '%' + name + '%';   // "Rehab" → "%Rehab%" (contains)
+    await _gpAddContextRule(clubId, teamId, pat, ctx, body, ov);
+  });
+}
+async function _gpAddContextRule(clubId, teamId, pattern, ctx, body, ov) {
   try {
+    const { error } = await window.sb.from('gps_context_rules').insert({ club_id: clubId, pattern, work_context: ctx });
+    if (error) throw error;
+    // Back-fill: aplicar a los períodos YA importados que matchean y siguen en 'team'.
+    await window.sb.from('gps_period_reports').update({ work_context: ctx })
+      .eq('club_id', clubId).eq('work_context', 'team').ilike('period_name', pattern);
+    showToast(tt('gps_analysis.rules_added', 'Rule added'));
+    window.cmInvalidateGpsCache?.();
+    try { window.refreshDashboard?.(); } catch {}
+    await _gpRenderPeriods(clubId, teamId, body, ov);   // refresca chips + tabla
+  } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); }
+}
+async function _gpDelContextRule(clubId, teamId, id, body, ov) {
+  try {
+    // Borra la regla (los períodos ya etiquetados quedan como están; solo corta el auto a futuro).
+    const { error } = await window.sb.from('gps_context_rules').delete().eq('club_id', clubId).eq('id', id);
+    if (error) throw error;
+    showToast(tt('gps_analysis.rules_removed', 'Rule removed'));
+    await _gpRenderPeriods(clubId, teamId, body, ov);
+  } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); }
+}
+
+async function _gpRenderPeriods(clubId, teamId, body, ov) {
+  let rows = [], rules = [];
+  try {
+    const { data: rl } = await window.sb.from('gps_context_rules')
+      .select('id, pattern, work_context').eq('club_id', clubId).order('created_at', { ascending: true });
+    rules = rl || [];
     let pids = null;
     if (teamId) {
       const { data: pt } = await window.sb.from('player_teams').select('player_id').eq('team_id', teamId);
@@ -3672,22 +3725,29 @@ async function _gpRenderPeriods(clubId, teamId, body, ov) {
       .order('session_date', { ascending: false });
     const sids = (sess || []).map(s => s.id);
     const sById = {}; (sess || []).forEach(s => sById[s.id] = s);
-    if (!sids.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.pctx_empty', 'No periods in the last 60 days.')}</div>`; return; }
-    rows = await window.cmFetchAll(() => {
-      let q = window.sb.from('gps_period_reports')
-        .select('id, player_id, session_id, period_name, work_context, duration_seconds, total_distance, players(first_name,last_name)')
-        .eq('club_id', clubId).in('session_id', sids);
-      if (pids) q = q.in('player_id', pids);
-      return q;
-    }, { label: 'pctx-rows' });
-    rows.forEach(r => { r._date = sById[r.session_id]?.session_date || ''; });
-    rows.sort((a, b) => (b._date || '').localeCompare(a._date || '') || (a.period_name || '').localeCompare(b.period_name || ''));
+    if (sids.length) {
+      rows = await window.cmFetchAll(() => {
+        let q = window.sb.from('gps_period_reports')
+          .select('id, player_id, session_id, period_name, work_context, duration_seconds, total_distance, players(first_name,last_name)')
+          .eq('club_id', clubId).in('session_id', sids);
+        if (pids) q = q.in('player_id', pids);
+        return q;
+      }, { label: 'pctx-rows' });
+      rows.forEach(r => { r._date = sById[r.session_id]?.session_date || ''; });
+      rows.sort((a, b) => (b._date || '').localeCompare(a._date || '') || (a.period_name || '').localeCompare(b.period_name || ''));
+    }
   } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
-  if (!rows.length) { body.innerHTML = `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.pctx_empty', 'No periods in the last 60 days.')}</div>`; return; }
+
+  const rulesBar = _gpRulesBarHTML(rules);
+  if (!rows.length) {
+    body.innerHTML = rulesBar + `<div style="padding:24px;color:var(--cm-fg-muted)">${tt('gps_analysis.pctx_empty', 'No periods in the last 60 days.')}</div>`;
+    _gpWireRulesBar(body, clubId, teamId, ov);
+    return;
+  }
 
   const num = 'text-align:right;font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums';
   const opts = v => _CTX_VALUES.map(x => `<option value="${x}" ${x === v ? 'selected' : ''}>${_ctxLabel(x)}</option>`).join('');
-  body.innerHTML = `
+  body.innerHTML = rulesBar + `
     <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap">
       <span style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);max-width:600px">${tt('gps_analysis.pctx_sub', 'Mark a PERIOD (drill) as rehab / individual / top-up — e.g. a top-up done after the match in the SAME session. Non-team periods are subtracted from the team mean.')}</span>
       <input id="pctxSearch" placeholder="${tt('gps_analysis.pctx_search', 'Search player or period…')}" style="margin-left:auto;height:30px;padding:0 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
@@ -3710,6 +3770,7 @@ async function _gpRenderPeriods(clubId, teamId, body, ov) {
     const q = search.value.trim().toLowerCase();
     body.querySelectorAll('[data-prow]').forEach(tr => { tr.style.display = (!q || tr.dataset.name.includes(q)) ? '' : 'none'; });
   });
+  _gpWireRulesBar(body, clubId, teamId, ov);
 }
 
 async function _gpSetPeriodContext(clubId, id, ctx) {
