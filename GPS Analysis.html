@@ -3574,7 +3574,8 @@ async function _gpOpenContextPanel() {
   const teamId = window._gpTeamId || null;
   if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
   const ov = makeModal(tt('gps_analysis.ctx_title', 'Training context'),
-    `<div id="ctxBody" style="min-width:680px;max-width:920px"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+    `<div id="ctxBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 940px)';   // el modal base es 560px → ampliarlo
   await _gpRenderContext(clubId, teamId, ov.querySelector('#ctxBody'), ov);
 }
 
@@ -3655,7 +3656,8 @@ async function _gpOpenPeriodPanel() {
   if (!clubId) { showToast(tt('gps_analysis.no_club_selected', 'No club selected'), true); return; }
   _pctxFrom = null; _pctxTo = null;   // reset al abrir → default últimos 60 días
   const ov = makeModal(tt('gps_analysis.pctx_title', 'Period context'),
-    `<div id="pctxBody" style="width:min(92vw,860px)"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+    `<div id="pctxBody" style="width:100%"><div style="padding:24px;color:var(--cm-fg-muted)">${tt('common.loading', 'Loading…')}</div></div>`);
+  const _m = ov.querySelector('.gp-modal'); if (_m) _m.style.width = 'min(96vw, 940px)';   // el modal base es 560px → ampliarlo
   await _gpRenderPeriods(clubId, teamId, ov.querySelector('#pctxBody'), ov);
 }
 
@@ -3776,8 +3778,8 @@ async function _gpRenderPeriods(clubId, teamId, body, ov) {
       <tbody>${rows.map(r => `
         <tr data-prow data-name="${([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') + ' ' + (r.period_name || '')).toLowerCase()}">
           <td style="font-family:var(--cm-font-mono);white-space:nowrap">${r._date || '—'}</td>
-          <td style="word-break:break-word">${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
-          <td style="word-break:break-word">${r.period_name || '—'}</td>
+          <td style="white-space:normal;word-break:break-word">${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
+          <td style="white-space:normal;word-break:break-word">${r.period_name || '—'}</td>
           <td style="${num}">${r.duration_seconds != null ? Math.round(r.duration_seconds) : '—'}</td>
           <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
           <td><select class="pctx-sel" data-id="${r.id}" style="height:30px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${opts(r.work_context || 'team')}</select></td>
