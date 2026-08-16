@@ -237,7 +237,9 @@
     return true;
   }
   function _computeValidSets() {
-    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set(), session_type: new Set(), date: new Set() };
+    // OJO: TODA key de _FIELD debe tener su Set acá, si no `out[key].add` explota y rompe la cascada
+    // (→ todos los filtros). work_context se agregó a _FIELD (filtro Contexto) pero faltaba acá.
+    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set(), session_type: new Set(), work_context: new Set(), date: new Set() };
     for (const r of _rows) {
       for (const key in _FIELD) if (_rowMatches(r, key)) out[key].add(r[_FIELD[key]]);
       // Date valid-set: the dates possible under the OTHER active filters → prunes the
@@ -1416,7 +1418,7 @@
     // opciones actuales (p. ej. un id de microciclo viejo o sin datos). Si no, el chip muestra
     // el id crudo (UUID) y filtra todo → "No data".
     let _pruned = false;
-    ['md_code','player','position','microcycle','rival','session_type'].forEach(k => {
+    ['md_code','player','position','microcycle','rival','session_type','work_context'].forEach(k => {
       if (!Array.isArray(state[k]) || !state[k].length) return;
       const valid = new Set((options[k] || []).map(o => String(o.value)));
       const before = state[k].length;
