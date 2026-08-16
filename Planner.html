@@ -2869,6 +2869,22 @@
   fc.on('selection:cleared', ()=>{ _hideAllArrowHandles(); _hidePropBar(); });
   fc.on('mouse:up', ()=>{ if (_handleDragging){_handleDragging=false;pushHistory();} });
 
+  // Clicking the board must hand keyboard focus back to the canvas. The Fabric
+  // canvas isn't focusable, so clicking an object does NOT blur a text field you
+  // touched earlier (exercise name, search, a property box). With focus parked
+  // there, the keydown handler below bails on INPUT/TEXTAREA and Cmd+C/X/V/Delete
+  // silently do nothing — the "copy/paste sometimes does nothing" bug. Blur the
+  // stray field on any board click, but never while editing a canvas text label
+  // (that hidden textarea IS the active element — blurring it would exit editing).
+  fc.on('mouse:down', () => {
+    if (fc.getActiveObject()?.isEditing) return;
+    const ae = document.activeElement;
+    if (!ae || ae === document.body) return;
+    if (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable) {
+      try { ae.blur(); } catch(_) {}
+    }
+  });
+
   // ── Keyboard handlers ───────────────────────────────────────────
   let _clipboard = null;
   document.addEventListener('keydown', e => {
