@@ -454,20 +454,40 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
         await adminClient.from('gps_pending_activities')
           .delete().eq('club_id', clubId).eq('external_activity_id', activityId);
       }
-      // 2c. Nada que adoptar — OPCIÓN A: NO auto-crear un evento fantasma. Registrar la actividad
+      // 2c. Nada que adoptar. Gateado por is_historical:
+      //   · HISTÓRICO (import de temporada pasada): NO hay planificación ni la va a haber → la
+      //     sesión GPS-only ES la representación correcta → se crea como siempre.
+      //   · ACTUAL (temporada en curso): OPCIÓN A → NO crear evento fantasma; registrar la actividad
       //     como PENDIENTE (solo la referencia) para que el usuario cree la sesión + MD en GPS
-      //     Analysis; un re-sync dirigido bajará después los gps_reports. No importamos nada ahora.
+      //     Analysis; un re-sync dirigido bajará después los gps_reports.
       if (!sessionId) {
-        await adminClient.from('gps_pending_activities').upsert({
-          club_id: clubId,
-          team_id: teamId || null,
-          session_date: date,
-          external_activity_id: activityId,
-          source: 'catapult',
-          activity_name: act.name ? String(act.name) : null,
-        }, { onConflict: 'club_id,external_activity_id' });
-        r.pending = 1;
-        return r;   // sin sesión → no se crea evento ni gps_reports; queda en la bandeja
+        if (isHistorical) {
+          const { data: newSess, error: sErr } = await adminClient
+            .from('training_sessions')
+            .insert({
+              club_id: clubId,
+              title: `Training · ${date}`,
+              session_date: date,
+              session_type: 'training',
+              is_historical: true,
+              external_activity_id: activityId,
+              ...(teamId ? { team_id: teamId } : {}),
+            })
+            .select('id').single();
+          if (sErr || !newSess) { r.errs.push(`session ${date}: ${sErr?.message || 'insert failed'}`); return r; }
+          sessionId = newSess.id as string;
+        } else {
+          await adminClient.from('gps_pending_activities').upsert({
+            club_id: clubId,
+            team_id: teamId || null,
+            session_date: date,
+            external_activity_id: activityId,
+            source: 'catapult',
+            activity_name: act.name ? String(act.name) : null,
+          }, { onConflict: 'club_id,external_activity_id' });
+          r.pending = 1;
+          return r;   // actual sin sesión → no se crea evento ni gps_reports; queda en la bandeja
+        }
       }
 
       // ── 3. Per-athlete stats (one /stats call, all mapped params — see fetchStats) ──
