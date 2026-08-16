@@ -145,6 +145,8 @@
   .sl-thumb.has-img::after{ display:none; }
   .sl-thumb-img{ display:block; width:100%; height:auto; }
   .sl-import-badge{ position:absolute; bottom:6px; left:6px; z-index:2; display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(0,0,0,0.55); color:#fff; font:600 9px/1 var(--cm-font-mono); letter-spacing:.04em; text-transform:uppercase; }
+  .sl-gps-badge{ position:absolute; bottom:8px; right:8px; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:999px; background:var(--cm-success,#16a34a); color:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.35); }
+  .sl-gps-badge .ti{ font-size:13px; }
   .sl-thumb .focus, .sl-thumb .dur, .sl-thumb .md-badge{ z-index:2; }
   .sl-thumb .focus {
     position:absolute; top:10px; left:10px;
@@ -534,6 +536,17 @@
 
   let allExercises = data || [];
 
+  // Which exercises have associated GPS data (v_exercise_gps_profile) → green tick on the card.
+  // One batch query; the set is read live inside _cardHtml.
+  let gpsExSet = new Set();
+  try {
+    const ids = allExercises.map(e => e.id);
+    if (ids.length) {
+      const { data: gps } = await window.sb.from('v_exercise_gps_profile').select('exercise_id').in('exercise_id', ids);
+      gpsExSet = new Set((gps||[]).map(r => r.exercise_id));
+    }
+  } catch(_) {}
+
   // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback.
   try {
     const paths = (allExercises||[]).filter(e => e.preview_path).map(e => e.preview_path);
@@ -763,6 +776,7 @@
         <div class="sl-thumb${ex._previewImg ? ' has-img' : ''}">
           <button class="sl-check" data-check="${ex.id}" title="${tt('exlib.select','Select')}" aria-label="${tt('exlib.select','Select')}"><i class="ti ti-check"></i></button>
           ${focusBadge}${durBadge}${mdBadgeThumb}
+          ${gpsExSet.has(ex.id) ? `<span class="sl-gps-badge" title="${tt('exlib.has_gps','Has associated GPS data')}"><i class="ti ti-check"></i></span>` : ''}
           ${ex.source_type === 'image' ? `<span class="sl-import-badge"><i class="ti ti-photo"></i>${tt('exlib.imported','Imported')}</span>` : ''}
           ${ex._previewImg ? `<img class="sl-thumb-img" src="${ex._previewImg}" alt="" loading="lazy" decoding="async">` : ''}
           ${ex.video_url ? `<span class="sl-video-badge" title="${tt('exlib.has_video','Has video')}"><span><i class="ti ti-player-play-filled"></i></span></span>` : ''}
@@ -1417,6 +1431,10 @@
       <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
         ${tt('exlib.map_drills_help','Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Tick cards to <b>merge</b> them, or <b>Edit names</b> to split out / move individual period names. Unmapped groups are shown first.')}
       </div>
+      <div style="padding:10px 18px 0;display:flex;gap:6px;align-items:center">
+        <button data-tab="active" class="cm-btn is-sm" style="border-radius:8px">${tt('exlib.tab_active','Active')}</button>
+        <button data-tab="ignored" class="cm-btn is-ghost is-sm" style="border-radius:8px">${tt('exlib.tab_ignored','Ignored')} <span data-ignct style="opacity:.7"></span></button>
+      </div>
       <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <input data-search type="text" placeholder="${tt('exlib.search_drills','Search drills…')}" style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
         <button data-merge class="cm-btn is-outline is-sm" style="display:none">${tt('exlib.merge_selected','Merge selected')}</button>
@@ -1424,6 +1442,7 @@
         <span data-daterange></span>
       </div>
       <div data-list style="overflow:auto;padding:6px 18px"></div>
+      <div data-empty style="display:none;padding:36px;text-align:center;color:var(--cm-fg-muted);font-size:12.5px"></div>
       <div style="padding:12px 18px;border-top:1px solid var(--cm-border);display:flex;justify-content:space-between;align-items:center">
         <span data-msg style="font-size:12px;color:var(--cm-fg-muted)"></span>
         <div style="display:flex;gap:8px">
@@ -1434,6 +1453,7 @@
     document.body.appendChild(ov);
     const listEl = ov.querySelector('[data-list]');
     const modalMsg = ov.querySelector('[data-msg]');
+    let activeTab = 'active';        // 'active' | 'ignored' — which groups the list shows
 
     // Human label for the current choice, shown on the picker trigger button.
     function choiceLabel(choice){
@@ -1559,7 +1579,7 @@
       const n = groups.filter(g=>g.msel).length;
       const btn = ov.querySelector('[data-merge]');
       if (!btn) return;
-      btn.style.display = n>=2 ? '' : 'none';
+      btn.style.display = (n>=2 && activeTab !== 'ignored') ? '' : 'none';
       btn.textContent = tt('exlib.merge_selected_n','Merge selected ({count})',{count:n});
     }
     // A) Merge ticked cards into one; destination = first explicit choice among them.
@@ -1675,19 +1695,52 @@
         paint();
       }));
       updateMergeBar();
+      updateTabs();
       applyFilter();
     }
 
     function applyFilter(){
       const q = (ov.querySelector('[data-search]').value || '').trim().toLowerCase();
+      let shown = 0;
       listEl.querySelectorAll('[data-search-row]').forEach(el => {
         const g = groups[+el.dataset.gi];
+        const isIgn = g && g.choice === '__ignore__';
+        // Tab filter: 'active' hides ignored groups, 'ignored' shows only them.
+        const tabOk = activeTab === 'ignored' ? isIgn : !isIgn;
         const textOk = !q || el.dataset.searchRow.includes(q);
         // Date filter: keep groups that have ≥1 period name with an instance in range.
         const dateOk = !inRangeNames || (g && g.names.some(n => inRangeNames.has(n.period_name)));
-        el.style.display = (textOk && dateOk) ? '' : 'none';
+        const show = tabOk && textOk && dateOk;
+        el.style.display = show ? '' : 'none';
+        if (show) shown++;
+      });
+      // Empty-state for the current tab (distinct from "no period data at all").
+      const emptyEl = ov.querySelector('[data-empty]');
+      if (groups.length && !shown) {
+        emptyEl.style.display = '';
+        emptyEl.textContent = activeTab === 'ignored'
+          ? tt('exlib.no_ignored','No ignored periods. Set a group to “Ignore” to hide it from here.')
+          : tt('exlib.no_match','No drills match.');
+      } else {
+        emptyEl.style.display = 'none';
+      }
+    }
+    // Tab switch (Active / Ignored) + ignored-count badge.
+    function updateTabs(){
+      const ignN = groups.filter(g => g.choice === '__ignore__').length;
+      const badge = ov.querySelector('[data-ignct]');
+      if (badge) badge.textContent = ignN ? `(${ignN})` : '';
+      ov.querySelectorAll('[data-tab]').forEach(b => {
+        const on = b.dataset.tab === activeTab;
+        b.classList.toggle('is-ghost', !on);
       });
     }
+    ov.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+      activeTab = b.dataset.tab;
+      // The merge bar only makes sense in the Active tab.
+      const mb = ov.querySelector('[data-merge]'); if (mb && activeTab === 'ignored') mb.style.display = 'none';
+      updateTabs(); applyFilter();
+    }));
     ov.querySelector('[data-search]').addEventListener('input', applyFilter);
 
     // Date-range filter — acota la lista a períodos cuya SESIÓN cae en el rango.

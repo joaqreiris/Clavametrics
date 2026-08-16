@@ -223,6 +223,8 @@
   .dp-ex-thumb-content{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:8px}
   .dp-ex-thumb-content svg{width:60%;height:60%;opacity:0.85}
   /* Video preview badge (centred play button over the drill/gym thumbnail) */
+  .dp-ex-gps{position:absolute;bottom:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--cm-success,#16a34a);color:#fff;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+  .dp-ex-gps .ti{font-size:13px}
   .dp-ex-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3;width:40px;height:40px;border-radius:999px;border:1.5px solid rgba(255,255,255,0.7);background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:transform .12s ease,background .12s ease}
   .dp-ex-play:hover{background:rgba(0,0,0,0.72);transform:translate(-50%,-50%) scale(1.08)}
   .dp-ex-play .ti{font-size:18px;margin-left:2px}
@@ -597,6 +599,7 @@ let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
 let _libExercises = [], _libFolders = [], _libOrient = '', _dpMicrocycles = [], _dpPublished = false;
+let _dpGpsExSet = null;         // Set of exercise_ids with a GPS profile (library picker tick), or null until loaded
 let _dpCalFields = new Set();
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpGkTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
@@ -1306,6 +1309,7 @@ function renderExerciseList(exercises) {
     ct.textContent = exercises.length ? `${exercises.length} · ${tt('daily_planning.min_count', `${totalMin} min`, {count: totalMin})}` : '0';
   }
   dpInitReorder();
+  dpPaintGpsBadges();
 }
 
 // Next position = end of the list (max existing position + 1) so new cards always
@@ -1368,6 +1372,7 @@ function dpPaintActStrip(){
   strip.innerHTML = field.map(dpExerciseCardHTML).join('') + addBtn;
   const strEl = document.getElementById('dpActStrength');
   if (strEl) strEl.innerHTML = dpStrengthSectionHTML(strength, 'activation');
+  dpPaintGpsBadges();
 }
 // Repaint the goalkeeper strip from window._dpGkItems (mirrors loadGoalkeeperActivities).
 function dpPaintGkStrip(){
@@ -1375,6 +1380,39 @@ function dpPaintGkStrip(){
   const gks = window._dpGkItems || [];
   const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
   strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+  dpPaintGpsBadges();
+}
+// Green tick on field cards whose exercise has associated GPS data (v_exercise_gps_profile).
+// DOM-patched (not baked into the card HTML) so it survives async profile loading without
+// re-rendering cards mid-drag. Helps the coach see which blocks feed the GPS projection.
+async function dpPaintGpsBadges(){
+  const blocks = [...(_dpFieldExercises||[]), ...((window._dpActItems)||[]), ...((window._dpGkItems)||[])];
+  const bySeid = new Map();
+  blocks.forEach(e => { if (e.planner_exercise_id) bySeid.set(String(e.id), e.planner_exercise_id); });
+  // Fetch any profiles we don't have cached yet (shared cache with renderGpsProjection).
+  const need = [...new Set([...bySeid.values()].filter(id => !(id in _dpGpsProfiles)))];
+  if (need.length) {
+    const { data } = await window.sb.from('v_exercise_gps_profile').select('exercise_id,n_instances').in('exercise_id', need);
+    const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
+    need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });
+  }
+  document.querySelectorAll('.dp-ex[data-seid]').forEach(card => {
+    const pid  = bySeid.get(card.dataset.seid);
+    const prof = pid ? _dpGpsProfiles[pid] : null;
+    let badge = card.querySelector('.dp-ex-gps');
+    if (prof) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'dp-ex-gps';
+        badge.innerHTML = '<i class="ti ti-check"></i>';
+        (card.querySelector('.dp-ex-thumb') || card).appendChild(badge);
+      }
+      const n = prof.n_instances || 0;
+      badge.title = tt('daily_planning.has_gps', `Has GPS data · ${n} sessions`, { count: n });
+    } else if (badge) {
+      badge.remove();
+    }
+  });
 }
 async function dpReorderExercise(dragSeid, targetSeid, after, kind){
   const arr = kind === 'activation' ? (window._dpActItems || [])
@@ -2266,6 +2304,17 @@ async function openLibModal(mode) {
     return;
   }
   _libExercises = data || [];
+  // Which library exercises have associated GPS data → green tick in the picker.
+  // One batch query over the club's exercises; cached for the session.
+  if (_dpGpsExSet === null) {
+    try {
+      const ids = _libExercises.map(e => e.id);
+      const { data: gps } = ids.length
+        ? await window.sb.from('v_exercise_gps_profile').select('exercise_id').in('exercise_id', ids)
+        : { data: [] };
+      _dpGpsExSet = new Set((gps||[]).map(r => r.exercise_id));
+    } catch(_) { _dpGpsExSet = new Set(); }
+  }
   // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback (mirrors Drill Designer).
   try {
     const paths = _libExercises.filter(e => e.preview_path).map(e => e.preview_path);
@@ -2331,7 +2380,7 @@ function filterLib() {
         ${img ? `<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">` : `<i class="ti ti-vector-triangle" style="font-size:22px;color:rgba(255,255,255,.55)"></i>`}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name || tt('daily_planning.untitled','Untitled')}</div>
+        <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:6px">${e.name || tt('daily_planning.untitled','Untitled')}${(_dpGpsExSet && _dpGpsExSet.has(e.id)) ? `<i class="ti ti-circle-check-filled" title="${tt('daily_planning.has_gps_short','Has GPS data')}" style="font-size:14px;color:var(--cm-success,#16a34a);flex-shrink:0"></i>` : ''}</div>
         <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="dp-ex-tag ${tagCls}" style="position:static;transform:none;font-size:9.5px">${tagLbl}</span>
           ${dur    ? `<span><i class="ti ti-clock" style="font-size:10px"></i> ${dur}</span>` : ''}
