@@ -177,26 +177,37 @@
     const turf = dark ? '#0e2417' : '#e7f4ec', line = dark ? 'rgba(255,255,255,.35)' : 'rgba(21,128,61,.5)';
     return '<div class="co-pitch"><svg viewBox="0 0 100 62" preserveAspectRatio="none" style="width:100%;height:100%;background:' + turf + '"><g stroke="' + line + '" stroke-width="0.8" fill="none"><rect x="2" y="2" width="96" height="58"/><line x1="50" y1="2" x2="50" y2="60"/><circle cx="50" cy="31" r="9"/><rect x="2" y="16" width="14" height="30"/><rect x="84" y="16" width="14" height="30"/><rect x="2" y="24" width="6" height="14"/><rect x="92" y="24" width="6" height="14"/></g></svg></div>';
   }
+  // gym_content real: { warmup:{min,blocks:[{label,rows}]}, plyo:{min,rows}, main:{min,rows} }.
+  // Cada row es {v:[name,...], exId, libName} (o array legacy). v[0] = nombre del ejercicio.
+  function gymRowName(r) { const v = Array.isArray(r) ? r : (r && r.v) || []; const nm = (v[0] != null ? String(v[0]) : '').trim(); return nm || (r && r.libName) || ''; }
+  function gymSectionRows(sec) { if (!sec) return []; if (Array.isArray(sec.blocks)) { const out = []; sec.blocks.forEach(b => (b.rows || []).forEach(r => out.push(r))); return out; } return sec.rows || []; }
+  function emptyGym() { return '<div class="co-list"><div class="co-li gym"><span class="n"><i class="ti ti-barbell" style="font-size:11px"></i></span><span class="lt">' + tt('club_overview.gym_planned', 'Gym session planned') + '</span></div></div>'; }
   function gymBlocksHtml(gc) {
-    let blocks = [];
-    if (gc) { if (Array.isArray(gc.blocks)) blocks = gc.blocks; else if (Array.isArray(gc)) blocks = gc; else if (Array.isArray(gc.sections)) blocks = gc.sections; }
-    if (!blocks.length) return '<div class="co-li gym"><span class="n"><i class="ti ti-barbell" style="font-size:11px"></i></span><span class="lt">' + tt('club_overview.leg_gym', 'Gym') + ' — ' + tt('club_overview.planned_load', 'session planned') + '</span></div>';
-    return '<div class="co-list">' + blocks.slice(0, 6).map((b, i) => {
-      const name = b.title || b.name || b.label || ('Block ' + (i + 1));
-      const items = Array.isArray(b.exercises) ? b.exercises : Array.isArray(b.items) ? b.items : [];
-      const sub = items.map(x => (typeof x === 'string' ? x : (x.name || x.title || x.exercise || ''))).filter(Boolean).slice(0, 4).join(' · ');
-      return '<div class="co-li gym"><span class="n">' + (i + 1) + '</span><span class="lt">' + esc(name) + (sub ? ' — <span style="color:var(--cm-fg-muted)">' + esc(sub) + '</span>' : '') + '</span></div>';
-    }).join('') + '</div>';
+    if (!gc || typeof gc !== 'object') return emptyGym();
+    const secs = [
+      { key: 'warmup', label: tt('club_overview.gym_warmup', 'Warm-up') },
+      { key: 'plyo', label: tt('club_overview.gym_plyo', 'Plyometrics') },
+      { key: 'main', label: tt('club_overview.gym_main', 'Main work') }
+    ];
+    const parts = [];
+    secs.forEach(s => {
+      const names = gymSectionRows(gc[s.key]).map(gymRowName).filter(Boolean);
+      if (!names.length) return;
+      const min = (gc[s.key] && gc[s.key].min) ? (' · ' + gc[s.key].min + '′') : '';
+      parts.push('<div class="co-li gym"><span class="n">' + (parts.length + 1) + '</span><span class="lt"><b>' + esc(s.label) + '</b>' + esc(min) + ' — <span style="color:var(--cm-fg-muted)">' + esc(names.slice(0, 6).join(' · ')) + '</span></span></div>');
+    });
+    return parts.length ? '<div class="co-list">' + parts.join('') + '</div>' : emptyGym();
   }
   function teamWeekMaxAu(teamId) { let mx = 0; state.week.forEach(d => cellEvents(teamId, d.ymd).forEach(e => { if (e.au > mx) mx = e.au; })); return mx || 1; }
   function meterHtml(au, teamId) { const pct = Math.min(100, Math.round(au / teamWeekMaxAu(teamId) * 100)); return '<div class="co-meter"><div class="mr"><span class="ml">' + tt('club_overview.planned_load', 'Planned session load') + '</span><span class="mv">' + au + ' AU</span></div><div class="co-mtrack"><span style="width:' + pct + '%"></span></div></div>'; }
 
   async function loadDrills(sid) {
     let rows = [];
-    try { const { data } = await sb().from('session_exercises').select('*').eq('session_id', sid).order('sort_order', { ascending: true }); rows = data || []; } catch (_) {}
+    try { const { data } = await sb().from('session_exercises').select('name,phase,duration,position,exercise_id').eq('session_id', sid).order('position', { ascending: true }); rows = data || []; } catch (_) {}
     const el = document.getElementById('coDrills'); if (!el) return;
     if (!rows.length) { el.innerHTML = ''; return; }
-    el.innerHTML = rows.slice(0, 8).map((r, i) => { const t = r.title || r.name || r.exercise_name || r.phase || ('Drill ' + (i + 1)); const dur = r.duration ? r.duration + '′' : ''; return '<div class="co-li"><span class="n">' + (i + 1) + '</span><span class="lt">' + esc(t) + '</span>' + (dur ? '<span class="ld">' + dur + '</span>' : '') + '</div>'; }).join('');
+    const PH = { warmup: tt('club_overview.gym_warmup', 'Warm-up'), activation: tt('club_overview.gym_warmup', 'Warm-up'), main: '', cooldown: tt('club_overview.cooldown', 'Cooldown'), goalkeepers: tt('club_overview.gk', 'GKs') };
+    el.innerHTML = rows.slice(0, 10).map((r, i) => { const t = r.name || (PH[r.phase] || ('Drill ' + (i + 1))); const dur = r.duration ? r.duration + '′' : ''; return '<div class="co-li"><span class="n">' + (i + 1) + '</span><span class="lt">' + esc(t) + '</span>' + (dur ? '<span class="ld">' + dur + '</span>' : '') + '</div>'; }).join('');
   }
 
   function renderDetail(teamId, y) {
