@@ -1854,10 +1854,26 @@
 
   function pushHistory() {
     if (_suppressHistory) return;
+    // An active multi-selection stores each child's left/top RELATIVE to the
+    // selection centre. Serialising in that state and later reloading the objects
+    // flat (on undo) drops them at those near-zero coords → the top-left corner,
+    // "fuera del plano". Discard the selection so toJSON captures ABSOLUTE coords,
+    // then rebuild it so the user's selection isn't lost.
+    const _sel = fc.getActiveObject();
+    const _selObjs = (_sel && _sel.type === 'activeSelection') ? _sel.getObjects().slice() : null;
+    if (_selObjs) { _suppressHistory = true; fc.discardActiveObject(); _suppressHistory = false; }
+
     _historyStack.push(JSON.stringify(fc.toJSON(ARROW_PROPS)));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
     _redoStack.length = 0;                 // a fresh change invalidates the redo timeline
     _syncUndoRedoButtons();
+
+    if (_selObjs && _selObjs.length) {
+      _suppressHistory = true;
+      const _re = new fabric.ActiveSelection(_selObjs, { canvas: fc });
+      fc.setActiveObject(_re); fc.requestRenderAll();
+      _suppressHistory = false;
+    }
   }
   // Reload a serialized canvas state WITHOUT letting the reload re-enter history
   // (object:added/removed would otherwise re-push the state we're restoring).
@@ -2894,52 +2910,104 @@
     // wrapped so a single bad clone can never wedge the editor.
     if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
       const active=fc.getActiveObject();
-      if (active) {
-        try { active.clone(c=>{_clipboard=c;}, ARROW_PROPS); }
-        catch(err){ console.error('[copy] failed', err); _toast(tt('planner.copy_failed','Could not copy the selection. Try again.'), true); }
-      }
+      if (active) _copyToClipboard(active);
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
       const active=fc.getActiveObject(); if (!active) return;
-      try {
-        active.clone(c=>{_clipboard=c;}, ARROW_PROPS);
-        if (active.type==='activeSelection') active.getObjects().forEach(o=>fc.remove(o));
-        else fc.remove(active);
+      // Capture the objects up front: _copyToClipboard discards the selection,
+      // after which active.getObjects() would be empty and nothing would be cut.
+      const victims = active.type==='activeSelection' ? active.getObjects().slice() : [active];
+      _copyToClipboard(active, () => {
+        victims.forEach(o=>fc.remove(o));
         fc.discardActiveObject(); fc.renderAll();
-      } catch(err){ console.error('[cut] failed', err); _toast(tt('planner.copy_failed','Could not copy the selection. Try again.'), true); }
+      });
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
-      // Nothing in the (internal) clipboard: tell the user instead of no-op'ing
-      // silently — the #1 confusion behind "paste stopped working".
-      if (!_clipboard) { _toast(tt('planner.nothing_to_paste','Nothing to paste — copy an object first (Ctrl/Cmd+C).')); return; }
-      const OFF = 20;
-      try {
-        _clipboard.clone(cloned=>{
-          try {
-            fc.discardActiveObject();
-            cloned.set({ left:(cloned.left||0)+OFF, top:(cloned.top||0)+OFF, evented:true });
-            const pasted = [];
-            if (cloned.type==='activeSelection') {
-              cloned.canvas = fc;
-              cloned.forEachObject(o=>{ o.set({evented:true}); fc.add(o); o.setCoords(); pasted.push(o); });
-              cloned.setCoords();
-            } else {
-              fc.add(cloned); cloned.setCoords(); pasted.push(cloned);
-            }
-            // Re-register any pasted arrows (fresh id + shifted geometry) so they
-            // stay editable and never share an id with the source arrow.
-            pasted.forEach(o=>{ if (o._type==='arrow') _registerPastedArrow(o, OFF, OFF); });
-            // advance the source offset so repeated pastes cascade
-            _clipboard.left=(_clipboard.left||0)+OFF; _clipboard.top=(_clipboard.top||0)+OFF;
-            fc.setActiveObject(cloned); fc.requestRenderAll();
-          } catch(err){ console.error('[paste] apply failed', err); fc.discardActiveObject(); fc.requestRenderAll(); _toast(tt('planner.paste_failed','Could not paste. Copy the object again (Ctrl/Cmd+C).'), true); }
-        }, ARROW_PROPS);
-      } catch(err){ console.error('[paste] clone failed', err); _toast(tt('planner.paste_failed','Could not paste. Copy the object again (Ctrl/Cmd+C).'), true); }
+      _pasteClipboard();
       return;
     }
   });
+
+  // Copy/paste on Fabric 5 has two traps: (1) an activeSelection stores each
+  // child's left/top RELATIVE to the group centre, so cloning the selection
+  // whole and re-adding the children drops them in the top-left corner; (2)
+  // cloning a group that reloads an image from a src (crest / custom object)
+  // is async and can silently NEVER fire its callback if that src is expired or
+  // tainted → paste appears "hung" for that clipboard until a reload. We sidestep
+  // both by storing an array of independent per-object clones taken with ABSOLUTE
+  // coords, and by rescuing the pending counter so a stuck image can't wedge things.
+  function _copyToClipboard(active, done) {
+    const isMulti = active.type === 'activeSelection';
+    const objs = isMulti ? active.getObjects().slice() : [active];
+    if (!objs.length) return;
+    // Discard the selection first so each child reports absolute left/top.
+    if (isMulti) { _suppressHistory = true; fc.discardActiveObject(); _suppressHistory = false; }
+    let pending = objs.length;
+    const clones = [];
+    let settled = false;
+    const finish = () => {
+      if (settled) return; settled = true;
+      _clipboard = clones.length ? clones : null;
+      if (!_clipboard) _toast(tt('planner.copy_failed','Could not copy the selection. Try again.'), true);
+      // Re-select the originals so copying doesn't visually deselect the user's work.
+      if (isMulti && objs.length) {
+        _suppressHistory = true;
+        fc.setActiveObject(new fabric.ActiveSelection(objs, { canvas: fc })); fc.requestRenderAll();
+        _suppressHistory = false;
+      }
+      done && done();
+    };
+    // Safety net: an image clone whose callback never fires would leave `pending`
+    // stuck forever — force a settle so a later copy/paste still works.
+    const rescue = setTimeout(finish, 3000);
+    objs.forEach(o => {
+      const tick = () => { if (--pending === 0) { clearTimeout(rescue); finish(); } };
+      try { o.clone(c => { if (c) clones.push(c); tick(); }, ARROW_PROPS); }
+      catch(err){ console.error('[copy] failed', err); tick(); }
+    });
+  }
+
+  function _pasteClipboard() {
+    // Nothing in the (internal) clipboard: tell the user instead of no-op'ing
+    // silently — the #1 confusion behind "paste stopped working".
+    if (!_clipboard || !_clipboard.length) { _toast(tt('planner.nothing_to_paste','Nothing to paste — copy an object first (Ctrl/Cmd+C).')); return; }
+    const OFF = 20;
+    const src = _clipboard;                 // snapshot: a fresh copy could swap it mid-paste
+    fc.discardActiveObject();
+    let pending = src.length;
+    const added = [];
+    let settled = false;
+    const finish = () => {
+      if (settled) return; settled = true;
+      if (!added.length) { fc.requestRenderAll(); _toast(tt('planner.paste_failed','Could not paste. Copy the object again (Ctrl/Cmd+C).'), true); return; }
+      // Advance the source offset so repeated pastes cascade instead of stacking.
+      src.forEach(s => { s.left = (s.left||0)+OFF; s.top = (s.top||0)+OFF; });
+      if (added.length === 1) fc.setActiveObject(added[0]);
+      else fc.setActiveObject(new fabric.ActiveSelection(added, { canvas: fc }));
+      fc.requestRenderAll();
+    };
+    const rescue = setTimeout(finish, 3000);
+    src.forEach(o => {
+      const tick = () => { if (--pending === 0) { clearTimeout(rescue); finish(); } };
+      try {
+        o.clone(c => {
+          try {
+            if (c) {
+              c.set({ left:(c.left||0)+OFF, top:(c.top||0)+OFF, evented:true });
+              fc.add(c); c.setCoords();
+              // Re-register pasted arrows (fresh id + shifted geometry) so they
+              // stay editable and never share an id with the source arrow.
+              if (c._type==='arrow') _registerPastedArrow(c, OFF, OFF);
+              added.push(c);
+            }
+          } catch(err){ console.error('[paste] apply failed', err); }
+          finally { tick(); }
+        }, ARROW_PROPS);
+      } catch(err){ console.error('[paste] clone failed', err); tick(); }
+    });
+  }
 
   // ── Team crests ─────────────────────────────────────────────────
   function addCrest(url, opacity = 0.45, label = '') {
