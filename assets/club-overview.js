@@ -148,9 +148,10 @@
   }
 
   // ── SCHEDULE GRID ──
+  function evKey(e) { return e.sid ? ('s:' + e.sid) : (e.mid ? ('m:' + e.mid) : ''); }
   function evHtml(e) {
     const meta = e.kind === 'match' ? [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ') : [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
-    return '<div class="co-ev ' + e.cls + '"><div class="et"><i class="ti ' + evIcon(e.cls) + '"></i>' + esc(e.title) + '</div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
+    return '<div class="co-ev ' + e.cls + '" data-key="' + evKey(e) + '" role="button" tabindex="0"><div class="et"><i class="ti ' + evIcon(e.cls) + '"></i>' + esc(e.title) + '</div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
   }
   function renderGrid() {
     const teams = scopeTeams();
@@ -182,58 +183,127 @@
     return '<div class="co-pitch"><svg viewBox="0 0 100 62" preserveAspectRatio="none" style="width:100%;height:100%;background:' + turf + '"><g stroke="' + line + '" stroke-width="0.8" fill="none"><rect x="2" y="2" width="96" height="58"/><line x1="50" y1="2" x2="50" y2="60"/><circle cx="50" cy="31" r="9"/><rect x="2" y="16" width="14" height="30"/><rect x="84" y="16" width="14" height="30"/><rect x="2" y="24" width="6" height="14"/><rect x="92" y="24" width="6" height="14"/></g></svg></div>';
   }
   // gym_content real: { warmup:{min,blocks:[{label,rows}]}, plyo:{min,rows}, main:{min,rows} }.
-  // Cada row es {v:[name,...], exId, libName} (o array legacy). v[0] = nombre del ejercicio.
-  function gymRowName(r) { const v = Array.isArray(r) ? r : (r && r.v) || []; const nm = (v[0] != null ? String(v[0]) : '').trim(); return nm || (r && r.libName) || ''; }
+  // Cada row {v:[name,sets,reps,load,rest,...], exId}. v[0] = nombre.
   function gymSectionRows(sec) { if (!sec) return []; if (Array.isArray(sec.blocks)) { const out = []; sec.blocks.forEach(b => (b.rows || []).forEach(r => out.push(r))); return out; } return sec.rows || []; }
-  function emptyGym() { return '<div class="co-list"><div class="co-li gym"><span class="n"><i class="ti ti-barbell" style="font-size:11px"></i></span><span class="lt">' + tt('club_overview.gym_planned', 'Gym session planned') + '</span></div></div>'; }
-  function gymBlocksHtml(gc) {
-    if (!gc || typeof gc !== 'object') return emptyGym();
-    const secs = [
-      { key: 'warmup', label: tt('club_overview.gym_warmup', 'Warm-up') },
-      { key: 'plyo', label: tt('club_overview.gym_plyo', 'Plyometrics') },
-      { key: 'main', label: tt('club_overview.gym_main', 'Main work') }
-    ];
-    const parts = [];
-    secs.forEach(s => {
-      const names = gymSectionRows(gc[s.key]).map(gymRowName).filter(Boolean);
-      if (!names.length) return;
-      const min = (gc[s.key] && gc[s.key].min) ? (' · ' + gc[s.key].min + '′') : '';
-      parts.push('<div class="co-li gym"><span class="n">' + (parts.length + 1) + '</span><span class="lt"><b>' + esc(s.label) + '</b>' + esc(min) + ' — <span style="color:var(--cm-fg-muted)">' + esc(names.slice(0, 6).join(' · ')) + '</span></span></div>');
-    });
-    return parts.length ? '<div class="co-list">' + parts.join('') + '</div>' : emptyGym();
+  function gymRowsFlat(gc) {
+    if (!gc || typeof gc !== 'object') return [];
+    const secs = [['warmup', tt('club_overview.gym_warmup', 'Warm-up')], ['plyo', tt('club_overview.gym_plyo', 'Plyometrics')], ['main', tt('club_overview.gym_main', 'Main work')]];
+    const out = [];
+    secs.forEach(pair => gymSectionRows(gc[pair[0]]).forEach(r => {
+      const v = Array.isArray(r) ? r : (r && r.v) || [];
+      const name = (v[0] != null ? String(v[0]) : '').trim() || (r && r.libName) || '';
+      if (!name) return;
+      const params = v.slice(1).map(x => x == null ? '' : String(x).trim()).filter(Boolean).join(' · ');
+      out.push({ section: pair[1], name: name, params: params, exId: (r && r.exId) || null });
+    }));
+    return out;
   }
   function teamWeekMaxAu(teamId) { let mx = 0; state.week.forEach(d => cellEvents(teamId, d.ymd).forEach(e => { if (e.au > mx) mx = e.au; })); return mx || 1; }
   function meterHtml(au, teamId) { const pct = Math.min(100, Math.round(au / teamWeekMaxAu(teamId) * 100)); return '<div class="co-meter"><div class="mr"><span class="ml">' + tt('club_overview.planned_load', 'Planned session load') + '</span><span class="mv">' + au + ' AU</span></div><div class="co-mtrack"><span style="width:' + pct + '%"></span></div></div>'; }
 
-  async function loadDrills(sid) {
+  // ── preview images (drills → bucket drill-previews; gym → gym-exercise-media) ──
+  const _pngCache = {}, _gxCache = {}, _gymImg = {};
+  async function resolveDrillPngs(ids) {
+    const need = [...new Set((ids || []).filter(id => id && !(id in _pngCache)))];
+    if (!need.length) return;
+    try {
+      const { data: rows } = await sb().from('exercises').select('id,preview_path,preview_png').eq('club_id', state.clubId).in('id', need);
+      const paths = (rows || []).filter(r => r.preview_path).map(r => r.preview_path);
+      let signed = {};
+      if (paths.length) { const { data: urls } = await sb().storage.from('drill-previews').createSignedUrls(paths, 3600); (urls || []).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; }); }
+      (rows || []).forEach(r => { _pngCache[r.id] = r.preview_path ? (signed[r.preview_path] || null) : (r.preview_png || null); });
+    } catch (_) {}
+    need.forEach(id => { if (!(id in _pngCache)) _pngCache[id] = null; });
+  }
+  async function resolveGymImgs(exIds) {
+    const need = [...new Set((exIds || []).filter(id => id && !(id in _gxCache)))];
+    if (need.length) { try { const { data } = await sb().from('gym_exercises').select('id,name,media_type,media_ref,video_id').in('id', need); (data || []).forEach(g => { _gxCache[g.id] = g; }); } catch (_) {} need.forEach(id => { if (!(id in _gxCache)) _gxCache[id] = null; }); }
+    const refs = [...new Set((exIds || []).map(id => _gxCache[id]).filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _gymImg)).map(g => g.media_ref))];
+    if (refs.length) { try { const { data: urls } = await sb().storage.from('gym-exercise-media').createSignedUrls(refs, 3600); (urls || []).forEach(u => { if (u && u.path) _gymImg[u.path] = u.signedUrl; }); } catch (_) {} }
+  }
+  function gymImgFor(exId) { const g = _gxCache[exId]; if (!g) return null; if (g.media_type === 'image' && g.media_ref) return _gymImg[g.media_ref] || null; if (g.video_id) return 'https://img.youtube.com/vi/' + g.video_id + '/mqdefault.jpg'; return null; }
+  function imgHtml(src) { return '<img src="' + src + '" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--cm-bg-sunk)">'; }
+  function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s); }
+
+  function drillParams(r) {
+    if (r.series && r.work_time) return r.series + '×' + r.work_time + ' ' + tt('club_overview.work', 'work') + ' + ' + (r.rest_time || '—') + ' ' + tt('club_overview.rest', 'rest');
+    if ((r.dose_mode === 'reps') || (r.series && r.reps != null && r.reps !== '')) return (r.series || '') + '×' + (r.reps || '') + ' ' + tt('club_overview.reps', 'reps') + (r.duration ? (' · ' + r.duration + '′') : '');
+    return r.duration ? (r.duration + '′') : '';
+  }
+  function paramPanel(pairs) { const list = pairs.filter(p => p[1] != null && p[1] !== ''); if (!list.length) return ''; return '<div class="co-params">' + list.map(p => '<div class="pp"><span class="k">' + esc(p[0]) + '</span><span class="v">' + esc(p[1]) + '</span></div>').join('') + '</div>'; }
+  function exRow(i, name, params) { return '<button class="co-exrow" data-i="' + i + '"><span class="rn">' + (i + 1) + '</span><span class="rl"><b>' + esc(name) + '</b>' + (params ? '<span class="pm">' + esc(params) + '</span>' : '') + '</span><i class="ti ti-chevron-right rc"></i></button>'; }
+
+  async function loadFieldEx(sid) {
+    const list = document.getElementById('coExList'); if (!list) return;
+    list.innerHTML = '<div class="co-muted" style="padding:8px">' + tt('common.loading', 'Loading…') + '</div>';
     let rows = [];
-    try { const { data } = await sb().from('session_exercises').select('name,phase,duration,position,exercise_id').eq('session_id', sid).order('position', { ascending: true }); rows = data || []; } catch (_) {}
-    const el = document.getElementById('coDrills'); if (!el) return;
-    if (!rows.length) { el.innerHTML = ''; return; }
-    const PH = { warmup: tt('club_overview.gym_warmup', 'Warm-up'), activation: tt('club_overview.gym_warmup', 'Warm-up'), main: '', cooldown: tt('club_overview.cooldown', 'Cooldown'), goalkeepers: tt('club_overview.gk', 'GKs') };
-    el.innerHTML = rows.slice(0, 10).map((r, i) => { const t = r.name || (PH[r.phase] || ('Drill ' + (i + 1))); const dur = r.duration ? r.duration + '′' : ''; return '<div class="co-li"><span class="n">' + (i + 1) + '</span><span class="lt">' + esc(t) + '</span>' + (dur ? '<span class="ld">' + dur + '</span>' : '') + '</div>'; }).join('');
+    try { const { data } = await sb().from('session_exercises').select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,intensity,field_width,field_height,players_count,planner_exercise_id').eq('session_id', sid).order('position', { ascending: true }); rows = data || []; } catch (_) {}
+    if (state._sid !== sid) return;
+    if (!rows.length) { list.innerHTML = '<div class="co-muted" style="padding:8px">' + tt('club_overview.no_exercises', 'No exercises in this session yet.') + '</div>'; document.getElementById('coExParams').innerHTML = ''; return; }
+    state._ex = rows; state._exKind = 'field';
+    resolveDrillPngs(rows.map(r => r.planner_exercise_id));
+    list.innerHTML = rows.map((r, i) => exRow(i, r.name || ('Drill ' + (i + 1)), drillParams(r))).join('');
+    selectFieldDrill(0);
+  }
+  function selectFieldDrill(i) {
+    const r = (state._ex || [])[i]; if (!r) return;
+    state._exSel = i;
+    document.querySelectorAll('.co-exrow.on').forEach(x => x.classList.remove('on'));
+    const btn = document.querySelector('.co-exrow[data-i="' + i + '"]'); if (btn) btn.classList.add('on');
+    const pv = document.getElementById('coPreview'), pid = r.planner_exercise_id, png = pid ? _pngCache[pid] : null;
+    if (png) pv.innerHTML = imgHtml(png);
+    else if (pid && !(pid in _pngCache)) { pv.innerHTML = pitchHtml(); resolveDrillPngs([pid]).then(() => { if (state._exSel === i) { const u = _pngCache[pid]; if (u) pv.innerHTML = imgHtml(u); } }); }
+    else pv.innerHTML = pitchHtml();
+    const fld = (r.field_width && r.field_height) ? (r.field_width + '×' + r.field_height + 'm') : '';
+    document.getElementById('coExParams').innerHTML = paramPanel([
+      [tt('club_overview.series', 'Series'), r.series], [tt('club_overview.work', 'Work'), r.work_time], [tt('club_overview.rest', 'Rest'), r.rest_time],
+      [tt('club_overview.reps', 'Reps'), (r.reps != null && r.reps !== '') ? r.reps : ''], [tt('common.duration', 'Duration'), r.duration ? r.duration + '′' : ''],
+      [tt('club_overview.intensity', 'Intensity'), r.intensity], [tt('club_overview.players_n', 'Players'), r.players_count], [tt('club_overview.area', 'Area'), fld]
+    ]);
+  }
+  function renderGymEx(gc) {
+    const rows = gymRowsFlat(gc), list = document.getElementById('coExList');
+    if (!rows.length) { list.innerHTML = '<div class="co-muted" style="padding:8px">' + tt('club_overview.gym_planned', 'Gym session planned') + '</div>'; document.getElementById('coExParams').innerHTML = ''; return; }
+    state._ex = rows; state._exKind = 'gym';
+    resolveGymImgs(rows.map(r => r.exId)).then(() => { if (state._exKind === 'gym' && state._exSel != null) selectGymEx(state._exSel); });
+    let cur = null, idx = 0, h = '';
+    rows.forEach(r => { if (r.section !== cur) { cur = r.section; h += '<div class="co-exsec">' + esc(cur) + '</div>'; } h += exRow(idx, r.name, r.params); idx++; });
+    list.innerHTML = h;
+    selectGymEx(0);
+  }
+  function selectGymEx(i) {
+    const r = (state._ex || [])[i]; if (!r) return;
+    state._exSel = i;
+    document.querySelectorAll('.co-exrow.on').forEach(x => x.classList.remove('on'));
+    const btn = document.querySelector('.co-exrow[data-i="' + i + '"]'); if (btn) btn.classList.add('on');
+    const pv = document.getElementById('coPreview'), img = r.exId ? gymImgFor(r.exId) : null;
+    pv.innerHTML = img ? imgHtml(img) : '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
+    document.getElementById('coExParams').innerHTML = r.params ? paramPanel([[r.section, r.params]]) : '';
   }
 
-  function renderDetail(teamId, y) {
-    state.sel = { teamId, ymd: y };
-    const team = state.teams.find(t => t.id === teamId);
-    const evs = cellEvents(teamId, y), md = mdFor(teamId, y);
+  function renderSession(e, teamId, y) {
+    const team = state.teams.find(t => t.id === teamId), md = mdFor(teamId, y);
     document.getElementById('coDetailTitle').textContent = (team ? team.name : '') + ' · ' + longDate(y);
     const mdEl = document.getElementById('coDetailMd');
     if (md) { mdEl.style.display = ''; mdEl.textContent = md; mdEl.className = 'mdtag' + (md === 'MD' ? ' md0' : ''); } else mdEl.style.display = 'none';
     const body = document.getElementById('coDetailBody'), foot = document.getElementById('coDetailFoot');
-    if (!evs.length) { body.innerHTML = '<div class="co-muted">' + tt('club_overview.empty_day', 'No sessions planned') + '</div>'; foot.style.display = 'none'; return; }
-    const field = evs.find(e => e.cls === 'field'), gym = evs.find(e => e.cls === 'gym'), match = evs.find(e => e.cls === 'match'), rec = evs.find(e => e.cls === 'recovery');
-    let html = '', totalAu = 0;
-    if (match) html += sh('var(--cm-danger-bg)', 'var(--cm-danger)', 'ti-ball-football', tt('club_overview.matchday', 'Matchday') + ' — ' + match.title, [fmtHomeAway(match.meta), match.time].filter(Boolean).join(' · '));
-    if (field) { html += sh('var(--cm-accent-soft)', 'var(--cm-accent)', 'ti-soccer-field', tt('club_overview.leg_field', 'Field') + ' · ' + field.title, [field.time, field.dur ? field.dur + '′' : '', field.au ? field.au + ' AU' : ''].filter(Boolean).join(' · ')); html += pitchHtml(); html += '<div class="co-list" id="coDrills"><div class="co-muted" style="padding:6px">' + tt('common.loading', 'Loading…') + '</div></div>'; totalAu += field.au || 0; }
-    if (gym) { html += sh('var(--cm-info-bg)', 'var(--cm-info)', 'ti-barbell', tt('club_overview.leg_gym', 'Gym') + ' · ' + gym.title, [gym.time, gym.dur ? gym.dur + '′' : '', gym.au ? gym.au + ' AU' : ''].filter(Boolean).join(' · ')); html += gymBlocksHtml(gym.gym); totalAu += gym.au || 0; }
-    if (rec) { html += sh('var(--cm-violet-bg)', 'var(--cm-violet)', 'ti-heart', tt('club_overview.leg_recovery', 'Recovery') + ' · ' + rec.title, [rec.time, rec.dur ? rec.dur + '′' : ''].filter(Boolean).join(' · ')); totalAu += rec.au || 0; }
-    html += meterHtml(totalAu, teamId);
+    if (!e) { body.innerHTML = '<div class="co-muted">' + tt('club_overview.empty_day', 'No sessions planned') + '</div>'; foot.style.display = 'none'; return; }
+    const cls = e.cls;
+    const bg = cls === 'match' ? 'var(--cm-danger-bg)' : cls === 'gym' ? 'var(--cm-info-bg)' : cls === 'recovery' ? 'var(--cm-violet-bg)' : 'var(--cm-accent-soft)';
+    const col = cls === 'match' ? 'var(--cm-danger)' : cls === 'gym' ? 'var(--cm-info)' : cls === 'recovery' ? 'var(--cm-violet)' : 'var(--cm-accent)';
+    const label = cls === 'match' ? tt('club_overview.matchday', 'Matchday') : cls === 'gym' ? tt('club_overview.leg_gym', 'Gym') : cls === 'recovery' ? tt('club_overview.leg_recovery', 'Recovery') : tt('club_overview.leg_field', 'Field');
+    const meta = e.kind === 'match' ? [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ') : [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
+    let html = sh(bg, col, evIcon(cls), label + ' · ' + e.title, meta);
+    html += '<div class="co-preview" id="coPreview">' + (cls === 'gym' ? '<div class="co-pvph"><i class="ti ti-barbell"></i></div>' : pitchHtml()) + '</div>';
+    html += '<div class="co-exlist" id="coExList"></div><div id="coExParams"></div>';
+    html += meterHtml(e.au || 0, teamId);
     body.innerHTML = html;
     foot.style.display = '';
     wireFoot(teamId, y);
-    if (field && field.sid) loadDrills(field.sid);
+    state._sid = e.sid || null; state._ex = []; state._exSel = null; state._exKind = null;
+    if (cls === 'gym') renderGymEx(e.gym);
+    else if (e.sid) loadFieldEx(e.sid);
+    else { document.getElementById('coExList').innerHTML = ''; }
   }
   function wireFoot(teamId, y) {
     const go = page => { try { sessionStorage.setItem('cal_active_team', teamId); localStorage.setItem('cal_active_team', teamId); } catch (_) {} location.href = page + '?date=' + y; };
@@ -315,17 +385,24 @@
   }
 
   // ── selección + navegación ──
-  function selectCell(teamId, y) {
-    document.querySelectorAll('.co-cell.sel').forEach(x => x.classList.remove('sel'));
-    const c = document.querySelector('.co-cell[data-team="' + (window.CSS && CSS.escape ? CSS.escape(teamId) : teamId) + '"][data-ymd="' + y + '"]');
-    if (c) c.classList.add('sel');
-    renderDetail(teamId, y);
+  function findEvOf(teamId, y, key) {
+    const evs = cellEvents(teamId, y);
+    if (key && key.indexOf('s:') === 0) return evs.find(x => x.sid === key.slice(2)) || evs[0] || null;
+    if (key && key.indexOf('m:') === 0) return evs.find(x => x.mid === key.slice(2)) || evs[0] || null;
+    return evs[0] || null;
+  }
+  function selectEvent(teamId, y, key) {
+    document.querySelectorAll('.co-ev.sel').forEach(x => x.classList.remove('sel'));
+    const cell = document.querySelector('.co-cell[data-team="' + cssEsc(teamId) + '"][data-ymd="' + y + '"]');
+    if (cell && key) { const card = cell.querySelector('.co-ev[data-key="' + key + '"]'); if (card) card.classList.add('sel'); }
+    state.sel = { team: teamId, ymd: y, key: key };
+    renderSession(findEvOf(teamId, y, key), teamId, y);
   }
   function autoSelect() {
     const teams = scopeTeams(); if (!teams.length) { resetDetail(); return; }
     const today = todayY();
-    for (const t of teams) if (cellEvents(t.id, today).length && state.week.some(w => w.ymd === today)) { selectCell(t.id, today); return; }
-    for (const t of teams) for (const d of state.week) if (cellEvents(t.id, d.ymd).length) { selectCell(t.id, d.ymd); return; }
+    for (const t of teams) { const evs = cellEvents(t.id, today); if (evs.length && state.week.some(w => w.ymd === today)) { selectEvent(t.id, today, evKey(evs[0])); return; } }
+    for (const t of teams) for (const d of state.week) { const evs = cellEvents(t.id, d.ymd); if (evs.length) { selectEvent(t.id, d.ymd, evKey(evs[0])); return; } }
     resetDetail();
   }
 
@@ -365,7 +442,9 @@
     document.getElementById('coSeasonLbl').textContent = seas ? (tt('common.season', 'Season') + ' ' + seas) : '';
     renderTeamSelect();
 
-    document.getElementById('coSched').addEventListener('click', e => { const c = e.target.closest('.co-cell.clk'); if (c) selectCell(c.dataset.team, c.dataset.ymd); });
+    document.getElementById('coSched').addEventListener('click', e => { const card = e.target.closest('.co-ev[data-key]'); if (!card) return; const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
+    const detailPanel = document.querySelector('.co-detail');
+    if (detailPanel) detailPanel.addEventListener('click', e => { const row = e.target.closest('.co-exrow[data-i]'); if (!row) return; const i = parseInt(row.dataset.i, 10); if (state._exKind === 'gym') selectGymEx(i); else selectFieldDrill(i); });
     document.getElementById('coPrevWeek').onclick = () => { state.refDate = addDays(mondayOf(state.refDate), -7); state.sel = null; refresh(); };
     document.getElementById('coNextWeek').onclick = () => { state.refDate = addDays(mondayOf(state.refDate), 7); state.sel = null; refresh(); };
     document.getElementById('coToday').onclick = () => { state.refDate = new Date(); state.sel = null; refresh(); };
@@ -373,7 +452,7 @@
     await refresh();
     await renderActivity();
 
-    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderPulse(); renderGrid(); renderAlerts(); if (state.sel) selectCell(state.sel.teamId, state.sel.ymd); else autoSelect(); });
+    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderPulse(); renderGrid(); renderAlerts(); if (state.sel) selectEvent(state.sel.team, state.sel.ymd, state.sel.key); else autoSelect(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
