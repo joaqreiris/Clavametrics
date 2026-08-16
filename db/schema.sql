@@ -3543,24 +3543,39 @@ CREATE OR REPLACE FUNCTION public.gps_session_agg(p_club_id uuid, p_session_ids 
  STABLE
  SET search_path TO 'public'
 AS $function$
+  -- np = suma de los PERÍODOS no-team (rehab/individual/top-up) por (sesión, jugador). Se RESTA
+  -- del total de sesión para métricas de VOLUMEN (aditivas). Fase 2b. Las no-aditivas (max/avg
+  -- velocidad, m/min) quedan como el valor de sesión. El CASE preserva EXACTO el comportamiento
+  -- cuando no hay período no-team (np.player_id null → r.x tal cual, incl. el skip de nulls de avg).
   select
     r.session_id,
     count(*)::int                       as n_players,
-    avg(r.total_distance)               as total_distance_avg,
-    avg(r.high_speed_distance)          as high_speed_distance_avg,
-    avg(r.very_high_speed_distance)     as very_high_speed_distance_avg,
-    avg(r.sprint_distance)              as sprint_distance_avg,
-    avg(r.sprint_count)                 as sprint_count_avg,
+    avg(case when np.player_id is null then r.total_distance          else greatest(coalesce(r.total_distance,0)          - coalesce(np.total_distance,0), 0) end)          as total_distance_avg,
+    avg(case when np.player_id is null then r.high_speed_distance      else greatest(coalesce(r.high_speed_distance,0)      - coalesce(np.high_speed_distance,0), 0) end)      as high_speed_distance_avg,
+    avg(case when np.player_id is null then r.very_high_speed_distance else greatest(coalesce(r.very_high_speed_distance,0) - coalesce(np.very_high_speed_distance,0), 0) end) as very_high_speed_distance_avg,
+    avg(case when np.player_id is null then r.sprint_distance          else greatest(coalesce(r.sprint_distance,0)          - coalesce(np.sprint_distance,0), 0) end)          as sprint_distance_avg,
+    avg(case when np.player_id is null then r.sprint_count             else greatest(coalesce(r.sprint_count,0)             - coalesce(np.sprint_count,0), 0) end)             as sprint_count_avg,
     avg(r.max_speed)                    as max_speed_avg,
     max(r.max_speed)                    as max_speed_max,
     avg(r.avg_speed)                    as avg_speed_avg,
-    avg(r.accelerations)                as accelerations_avg,
-    avg(r.decelerations)                as decelerations_avg,
-    avg(r.player_load)                  as player_load_avg,
-    avg(r.hmld)                         as hmld_avg,
-    avg(r.time_played)                  as time_played_avg,
+    avg(case when np.player_id is null then r.accelerations            else greatest(coalesce(r.accelerations,0)            - coalesce(np.accelerations,0), 0) end)            as accelerations_avg,
+    avg(case when np.player_id is null then r.decelerations            else greatest(coalesce(r.decelerations,0)            - coalesce(np.decelerations,0), 0) end)            as decelerations_avg,
+    avg(case when np.player_id is null then r.player_load              else greatest(coalesce(r.player_load,0)              - coalesce(np.player_load,0), 0) end)              as player_load_avg,
+    avg(case when np.player_id is null then r.hmld                     else greatest(coalesce(r.hmld,0)                     - coalesce(np.hmld,0), 0) end)                     as hmld_avg,
+    avg(case when np.player_id is null then r.time_played              else greatest(coalesce(r.time_played,0)              - coalesce(np.time_played,0), 0) end)              as time_played_avg,
     avg(r.distance_per_minute)          as distance_per_minute_avg
   from public.gps_reports r
+  left join (
+    select session_id, player_id,
+      sum(total_distance) as total_distance, sum(high_speed_distance) as high_speed_distance,
+      sum(very_high_speed_distance) as very_high_speed_distance, sum(sprint_distance) as sprint_distance,
+      sum(sprint_count) as sprint_count, sum(accelerations) as accelerations,
+      sum(decelerations) as decelerations, sum(player_load) as player_load,
+      sum(hmld) as hmld, sum(time_played) as time_played
+    from public.gps_period_reports
+    where work_context <> 'team'
+    group by session_id, player_id
+  ) np on np.session_id = r.session_id and np.player_id = r.player_id
   where r.club_id = p_club_id
     and r.is_invalid = false
     and r.work_context = 'team'          -- rehab/individual/top-up NO cuentan en la media del plantel

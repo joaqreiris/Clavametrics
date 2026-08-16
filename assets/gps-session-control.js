@@ -368,6 +368,22 @@
 
   function _buildCompareOptions(sessionId) {}
 
+  // ── Fase 2b: restar períodos no-team del total de la sesión (top-up/rehab en la misma
+  //    actividad), in-place, solo volumen. Una sola sesión → clave por player_id.
+  const _SC_ADD_COLS = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld','time_played'];
+  async function _scSubtractNonTeamPeriods(rows, clubId, sessionId) {
+    try {
+      if (!rows || !rows.length || !sessionId) return;
+      const { data: np } = await window.sb.from('gps_period_reports')
+        .select('player_id,' + _SC_ADD_COLS.join(','))
+        .eq('club_id', clubId).neq('work_context', 'team').eq('session_id', sessionId);
+      if (!np || !np.length) return;
+      const m = new Map();
+      for (const p of np) { let a = m.get(p.player_id); if (!a) { a = {}; m.set(p.player_id, a); } for (const c of _SC_ADD_COLS) a[c] = (a[c] || 0) + (Number(p[c]) || 0); }
+      for (const r of rows) { const s = m.get(r.player_id); if (!s) continue; for (const c of _SC_ADD_COLS) { if (r[c] == null) continue; const adj = Number(r[c]) - (s[c] || 0); r[c] = adj > 0 ? adj : 0; } }
+    } catch (_e) { /* no romper la card por la resta */ }
+  }
+
   // ── load session data ─────────────────────────────────────────
   async function _loadSessionData(sessionId) {
     if (!sessionId) return;
@@ -391,6 +407,10 @@
         return _wcSc.length ? q.in('work_context', _wcSc) : q.eq('work_context', 'team');
       }, { label: 'session-report' })
         .catch(e => { console.error('[session report] query failed:', e); return []; });
+
+      // Fase 2b: restar los períodos no-team (top-up/rehab en la misma actividad) del total de
+      // esta sesión, para que no ensucien la media de equipo. Solo volumen (aditivas).
+      await _scSubtractNonTeamPeriods(reports, clubId, sessionId);
 
       const { data: players } = await _gpRoster(clubId, window._gpTeamId);
 

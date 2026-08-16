@@ -219,6 +219,23 @@
     return { from: d.from || null, to: d.to || null };
   }
 
+  // ── Fase 2b: restar períodos no-team (top-up/rehab en la misma actividad) del total de
+  //    sesión, in-place, solo métricas de volumen. Grano (session_id, player_id). No rompe la
+  //    card si falla. Espejo de _nonTeamPeriodSums/_subtractPeriods del resolver.
+  const _MP_ADD_COLS = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld','time_played'];
+  async function _mpSubtractNonTeamPeriods(rows, clubId, sessIds) {
+    try {
+      if (!rows || !rows.length || !sessIds || !sessIds.length) return;
+      const np = await window.cmFetchAll(() => window.sb.from('gps_period_reports')
+        .select('session_id,player_id,' + _MP_ADD_COLS.join(','))
+        .eq('club_id', clubId).neq('work_context', 'team').in('session_id', sessIds), { label: 'mp-nonteam' });
+      if (!np || !np.length) return;
+      const m = new Map();
+      for (const p of np) { const k = p.session_id + '|' + p.player_id; let a = m.get(k); if (!a) { a = {}; m.set(k, a); } for (const c of _MP_ADD_COLS) a[c] = (a[c] || 0) + (Number(p[c]) || 0); }
+      for (const r of rows) { const s = m.get(r.session_id + '|' + r.player_id); if (!s) continue; for (const c of _MP_ADD_COLS) { if (r[c] == null) continue; const adj = Number(r[c]) - (s[c] || 0); r[c] = adj > 0 ? adj : 0; } }
+    } catch (_e) { /* no romper la card por la resta */ }
+  }
+
   // ── KPIs de partido: alcance intrínseco = sesiones de PARTIDO; el ÚNICO filtrado
   //    del usuario es la barra de desplegables (player/posición/MD/microciclo/fecha).
   async function _mpLoad() {
@@ -260,6 +277,9 @@
         .catch(e => { console.error('[pos report] query failed:', e); return []; });
 
       let rows = reports || [];
+      // Fase 2b: restar los períodos no-team (top-up/rehab hechos en la MISMA actividad) del total
+      // de sesión, para que solo el partido cuente en la media. Solo volumen (aditivas).
+      await _mpSubtractNonTeamPeriods(rows, clubId, sessIds);
       if (FB?.playerIds?.length) { const p = new Set(FB.playerIds);  rows = rows.filter(r => p.has(r.player_id)); }
       if (FB?.positions?.length) { const ps = new Set(FB.positions); rows = rows.filter(r => ps.has(r.players?.position)); }
 
