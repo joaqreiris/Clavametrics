@@ -478,6 +478,7 @@
     { key:'treatments',       href:'Physio.html',              icon:'ti-stethoscope',       name:'Treatments',            feature:'physio' },
     { key:'rehab',            href:'Rehab & Preventives.html', icon:'ti-activity-heartbeat',name:'Rehab & preventives',   feature:'rehab_planner' },
     { key:'video-room',       href:'Video Room.html',          icon:'ti-video',             name:'Video Room',            feature:'video_room' },
+    { key:'club-overview',    href:'Club Overview.html',       icon:'ti-layout-dashboard',  name:'Club overview',         feature:'club_overview' },
   ];
 
   let _modPromise = null;

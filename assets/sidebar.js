@@ -205,7 +205,7 @@ html.cm-rail .hub-nav-grip{display:none}
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub',        i18n: 'shell.nav.hub' },
       { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar' },
-      { href: 'Club%20Overview.html',   icon: 'ti-layout-dashboard', label: 'Club overview',    i18n: 'shell.nav.club-overview', directionOnly: true },
+      { href: 'Club%20Overview.html',   icon: 'ti-layout-dashboard', label: 'Club overview',    i18n: 'shell.nav.club-overview', directionOnly: true, key: 'club-overview', planOnly: true },
       { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks', key: 'chat-tasks', planOnly: true },
     ]},

@@ -485,6 +485,16 @@
     try { const b = window.cmRoleBuckets ? window.cmRoleBuckets(profile) : new Set(); allowed = b.has('admin') || b.has('direction'); if (!allowed && window.isSuperAdmin) allowed = await window.isSuperAdmin(); } catch (_) {}
     if (!allowed) { location.replace('Hub.html'); return; }
 
+    // Gate de plan: Club Overview es feature del plan Full. Super-admin exento
+    // (planAllows ya devuelve true si el gating maestro está OFF).
+    try {
+      if (window.planAllows && !(await window.planAllows('club-overview'))) {
+        let _isSuper = false;
+        try { _isSuper = window.isSuperAdmin ? await window.isSuperAdmin() : false; } catch (_) {}
+        if (!_isSuper) { location.replace('Plan Picker.html'); return; }
+      }
+    } catch (_) {}
+
     if (club && club.name) document.getElementById('coClubName').textContent = club.name;
     if (!clubId) { document.getElementById('coSched').innerHTML = '<div class="co-muted" style="padding:24px">' + tt('club_overview.no_teams', 'No teams found for this club.') + '</div>'; return; }
 
