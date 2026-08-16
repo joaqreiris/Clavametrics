@@ -205,6 +205,7 @@ html.cm-rail .hub-nav-grip{display:none}
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub',        i18n: 'shell.nav.hub' },
       { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar' },
+      { href: 'Club%20Overview.html',   icon: 'ti-layout-dashboard', label: 'Club overview',    i18n: 'shell.nav.club-overview', directionOnly: true },
       { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks', key: 'chat-tasks', planOnly: true },
     ]},
@@ -286,12 +287,13 @@ html.cm-rail .hub-nav-grip{display:none}
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
+          const dir    = item.directionOnly ? ' data-direction-only' : '';   // solo dirección + admin/owner
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
           const plt    = item.platformOnly ? ' data-platform-only' : '';
           const po     = item.planOnly ? ' data-plan-only' : '';   // gatea por plan, NO por RBAC
           const i18nKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
           const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt}${po} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -572,6 +574,16 @@ html.cm-rail .hub-nav-grip{display:none}
         });
       }
     }
+    // Club overview: visible solo para dirección (director/head of performance/…),
+    // admin/owner y super-admin. Gating propio (NO usa data-mod para no fail-open a todos).
+    try {
+      const _buckets = window.cmRoleBuckets ? window.cmRoleBuckets(profile) : new Set([_role]);
+      let _isSuperDir = false;
+      try { _isSuperDir = (typeof window.isSuperAdmin === 'function') ? await window.isSuperAdmin() : false; } catch (_) {}
+      if (!_isSuperDir && !_buckets.has('admin') && !_buckets.has('direction')) {
+        document.querySelectorAll('[data-direction-only]').forEach(el => el.remove());
+      }
+    } catch (_) {}
     // Gating de plan: NO se quita el ítem; candado + CTA de upgrade (esconder no convierte).
     if (typeof window.planAllows === 'function') {
       const items = [...document.querySelectorAll('.hub-nav-item[data-mod]')];

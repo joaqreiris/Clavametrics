@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="club_overview.page_title">Club overview — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+/* ── Club Overview — page-scoped styles (usa tokens --cm-* del design system) ── */
+.co-topbar{display:flex;align-items:center;gap:12px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);
+  background:color-mix(in srgb,var(--cm-bg) 92%,transparent);backdrop-filter:saturate(140%) blur(8px);
+  position:sticky;top:0;z-index:var(--cm-z-sticky)}
+.co-teamsel{display:flex;align-items:center;gap:7px}
+.co-teamsel > i{font-size:16px;color:var(--cm-fg-muted)}
+.co-teamsel select{height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);
+  border:1px solid var(--cm-border);border-radius:var(--cm-r-3);font:600 13px/1 var(--cm-font-sans);cursor:pointer;max-width:220px}
+.co-crumb{display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+.co-crumb .sep{color:var(--cm-fg-faint)}
+.co-crumb .cur{color:var(--cm-fg-strong);font-weight:600}
+.co-grow{flex:1}
+.actions{display:flex;align-items:center;gap:8px}
+
+.co-page{padding:24px 28px 64px;max-width:1400px;margin:0 auto;width:100%}
+.co-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.co-head h1{font:var(--cm-h1);letter-spacing:-.02em;color:var(--cm-fg-strong);margin:0}
+.co-head p{font:var(--cm-body);color:var(--cm-fg-muted);margin:5px 0 0;max-width:60ch}
+.co-eyebrow{font:var(--cm-eyebrow);letter-spacing:var(--cm-tr-eyebrow);text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px}
+.co-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.co-weeknav{display:inline-flex;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);height:36px;overflow:hidden}
+.co-weeknav button{width:34px;height:100%;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.co-weeknav button:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
+.co-weeknav button i{font-size:16px}
+.co-weeknav .lbl{padding:0 12px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);border-left:1px solid var(--cm-border);border-right:1px solid var(--cm-border);height:100%;display:flex;align-items:center;white-space:nowrap;min-width:96px;justify-content:center}
+
+/* KPI pulse */
+.co-pulse{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.co-kpi{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);padding:16px 16px 14px;box-shadow:var(--cm-shadow-1)}
+.co-kpi .kt{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.co-kpi .ki{width:26px;height:26px;border-radius:var(--cm-r-2);display:flex;align-items:center;justify-content:center}
+.co-kpi .ki i{font-size:15px}
+.co-kpi .kl{font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)}
+.co-kpi .kv{font:600 26px/1 var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong);font-variant-numeric:tabular-nums}
+.co-kpi .kv small{font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
+.co-kpi .ks{margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.co-track{height:5px;border-radius:var(--cm-r-pill);background:var(--cm-bg-sunk);overflow:hidden;margin-top:10px}
+.co-track > span{display:block;height:100%;border-radius:var(--cm-r-pill)}
+.co-chip{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:var(--cm-r-pill);font:600 11px/1 var(--cm-font-sans);border:1px solid transparent;white-space:nowrap}
+.co-chip i{font-size:12px}
+.co-chip.good{background:var(--cm-success-bg);color:var(--cm-success);border-color:var(--cm-success-bd)}
+.co-chip.warn{background:var(--cm-warning-bg);color:var(--cm-warning);border-color:var(--cm-warning-bd)}
+.co-chip.bad{background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)}
+.co-chip.info{background:var(--cm-info-bg);color:var(--cm-info);border-color:var(--cm-info-bd)}
+.co-chip.neutral{background:var(--cm-neutral-bg);color:var(--cm-neutral);border-color:var(--cm-neutral-bd)}
+.co-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+.co-grid2{display:grid;grid-template-columns:1fr 380px;gap:18px;align-items:start}
+.co-panel{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-6);box-shadow:var(--cm-shadow-1);overflow:hidden}
+.co-phead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)}
+.co-phead h2{font:var(--cm-title);color:var(--cm-fg-strong);margin:0}
+.co-legend{display:flex;align-items:center;gap:12px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap}
+.co-legend span{display:inline-flex;align-items:center;gap:5px}
+
+/* schedule */
+.co-sched{overflow-x:auto}
+.co-sched-inner{min-width:840px}
+.co-row{display:grid;grid-template-columns:160px repeat(7,1fr);border-bottom:1px solid var(--cm-border-soft)}
+.co-row:last-child{border-bottom:0}
+.co-row.head{background:var(--cm-bg-soft)}
+.co-row.head .dc{padding:9px 8px;text-align:center}
+.co-dc .dn{font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+.co-dc .dd{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px}
+.co-rl{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:10px 12px;border-right:1px solid var(--cm-border-soft)}
+.co-rl .tn{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+.co-rl .tm{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
+.co-cell{border-right:1px solid var(--cm-border-soft);min-height:80px;padding:6px;position:relative}
+.co-cell:last-child{border-right:0}
+.co-cell.clk{cursor:pointer;transition:background var(--cm-dur-1)}
+.co-cell.clk:hover{background:var(--cm-bg-soft)}
+.co-cell.sel{background:var(--cm-accent-soft);box-shadow:inset 0 0 0 1.5px var(--cm-accent)}
+.co-md{position:absolute;top:5px;right:6px;font:600 9px/1 var(--cm-font-mono);letter-spacing:.03em;color:var(--cm-fg-muted);
+  background:var(--cm-bg-sunk);border-radius:var(--cm-r-pill);padding:3px 5px;pointer-events:none}
+.co-md.md0{color:var(--cm-danger);background:var(--cm-danger-bg)}
+.co-ev{display:block;border-radius:var(--cm-r-2);padding:5px 7px;margin-bottom:4px;border:1px solid var(--cm-border);border-left-width:3px;background:var(--cm-surface-2)}
+.co-ev:last-child{margin-bottom:0}
+.co-ev .et{font:600 11px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:5px}
+.co-ev .et i{font-size:12px;flex-shrink:0}
+.co-ev .em{font:500 10px/1.2 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px}
+.co-ev.field{border-left-color:var(--cm-accent)}
+.co-ev.gym{border-left-color:var(--cm-info)}
+.co-ev.match{border-left-color:var(--cm-danger);background:var(--cm-danger-bg)}
+.co-ev.recovery{border-left-color:var(--cm-violet)}
+.co-noplan{display:flex;align-items:center;justify-content:center;gap:6px;min-height:64px;border:1px dashed var(--cm-warning-bd);border-radius:var(--cm-r-2);color:var(--cm-warning);font:500 10.5px/1.2 var(--cm-font-sans);text-align:center;background:var(--cm-warning-bg)}
+.co-noplan i{font-size:13px}
+.co-empty-cell{min-height:64px}
+
+/* detail */
+.co-detail .co-phead .mdtag{margin-left:auto;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:var(--cm-bg-sunk);border:1px solid var(--cm-border);border-radius:var(--cm-r-pill);padding:4px 9px}
+.co-detail .co-phead .mdtag.md0{color:var(--cm-danger);background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)}
+.co-dbody{padding:16px 18px;display:flex;flex-direction:column;gap:16px;min-height:120px}
+.co-sblock{display:flex;flex-direction:column;gap:8px}
+.co-sh{display:flex;align-items:center;gap:8px}
+.co-sh .si{width:22px;height:22px;border-radius:var(--cm-r-2);display:flex;align-items:center;justify-content:center}
+.co-sh .si i{font-size:13px}
+.co-sh .st{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;min-width:0}
+.co-sh .sd{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+.co-pitch{width:100%;aspect-ratio:16/10;border-radius:var(--cm-r-3);overflow:hidden;border:1px solid var(--cm-border)}
+.co-list{display:flex;flex-direction:column;gap:4px}
+.co-li{display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--cm-bg-soft);border-radius:var(--cm-r-2)}
+.co-li .n{width:18px;height:18px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);display:flex;align-items:center;justify-content:center;font:700 10px/1 var(--cm-font-mono);flex-shrink:0}
+.co-li .lt{flex:1;min-width:0;font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)}
+.co-li .ld{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex-shrink:0}
+.co-li.gym .n{background:var(--cm-info-bg);color:var(--cm-info)}
+.co-meter{background:var(--cm-bg-soft);border-radius:var(--cm-r-3);padding:12px 14px}
+.co-meter .mr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.co-meter .ml{font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+.co-meter .mv{font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+.co-mtrack{height:8px;border-radius:var(--cm-r-pill);background:var(--cm-bg-sunk);overflow:hidden}
+.co-mtrack > span{display:block;height:100%;border-radius:var(--cm-r-pill);background:linear-gradient(90deg,var(--cm-accent),var(--cm-success))}
+.co-dfoot{display:flex;gap:8px;padding:0 18px 18px}
+.co-dfoot .cm-btn{flex:1}
+.co-muted{color:var(--cm-fg-muted);font:var(--cm-body-sm);text-align:center;padding:24px 8px}
+
+/* strip */
+.co-strip{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.co-alist{padding:8px}
+.co-alert{display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border-radius:var(--cm-r-3);transition:background var(--cm-dur-1)}
+.co-alert:hover{background:var(--cm-bg-soft)}
+.co-alert .ai{width:30px;height:30px;border-radius:var(--cm-r-2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.co-alert .ai i{font-size:16px}
+.co-alert.bad .ai{background:var(--cm-danger-bg);color:var(--cm-danger)}
+.co-alert.warn .ai{background:var(--cm-warning-bg);color:var(--cm-warning)}
+.co-alert.info .ai{background:var(--cm-info-bg);color:var(--cm-info)}
+.co-alert.good .ai{background:var(--cm-success-bg);color:var(--cm-success)}
+.co-alert .ab{flex:1;min-width:0}
+.co-alert .at{font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+.co-alert .ad{font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px}
+.co-alert .atime{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);flex-shrink:0;margin-top:3px}
+.co-act{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--cm-r-3)}
+.co-act:hover{background:var(--cm-bg-soft)}
+.co-act .av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 10px/1 var(--cm-font-sans);color:#fff;flex-shrink:0;background:var(--cm-accent)}
+.co-act .tx{flex:1;min-width:0;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-fg)}
+.co-act .tx b{color:var(--cm-fg-strong);font-weight:600}
+.co-act .atime{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);flex-shrink:0}
+
+@media (max-width:1080px){
+  .co-grid2{grid-template-columns:1fr}
+  .co-pulse{grid-template-columns:repeat(2,1fr)}
+  .co-strip{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body class="cm">
+<div class="hub-shell" data-screen-label="Club Overview">
+  <div id="hub-side-root"></div>
+  <main class="hub-main">
+    <!-- Top bar -->
+    <div class="co-topbar">
+      <div class="co-teamsel">
+        <i class="ti ti-users-group"></i>
+        <select id="coTeamSelect" aria-label="Team scope">
+          <option value="" data-i18n="common.loading">Loading…</option>
+        </select>
+      </div>
+      <div class="co-crumb">
+        <i class="ti ti-home"></i><span id="coClubName">Club</span><span class="sep">/</span>
+        <span class="cur" data-i18n="club_overview.crumb">Club overview</span>
+      </div>
+      <div class="co-grow"></div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help" aria-label="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" data-open-settings title="Settings" data-i18n-attr="title:common.settings" aria-label="Settings"><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <!-- Page -->
+    <div class="co-page">
+      <div class="co-head">
+        <div>
+          <div class="co-eyebrow" id="coSeasonLbl">Season</div>
+          <h1 data-i18n="club_overview.title">Club Overview</h1>
+          <p data-i18n="club_overview.subtitle">The whole club's plan, week by week.</p>
+        </div>
+        <div class="co-grow"></div>
+        <div class="co-controls">
+          <div class="co-weeknav">
+            <button id="coPrevWeek" aria-label="Previous week"><i class="ti ti-chevron-left"></i></button>
+            <span class="lbl" id="coWeekLbl">—</span>
+            <button id="coNextWeek" aria-label="Next week"><i class="ti ti-chevron-right"></i></button>
+          </div>
+          <button class="cm-btn is-outline is-sm" id="coToday" data-i18n="common.today">Today</button>
+        </div>
+      </div>
+
+      <div class="co-pulse" id="coPulse"></div>
+
+      <div class="co-grid2">
+        <div class="co-panel">
+          <div class="co-phead">
+            <h2 data-i18n="club_overview.weekly_schedule">Weekly schedule</h2>
+            <div class="co-grow"></div>
+            <div class="co-legend">
+              <span><span class="co-dot" style="background:var(--cm-accent)"></span><span data-i18n="club_overview.leg_field">Field</span></span>
+              <span><span class="co-dot" style="background:var(--cm-info)"></span><span data-i18n="club_overview.leg_gym">Gym</span></span>
+              <span><span class="co-dot" style="background:var(--cm-violet)"></span><span data-i18n="club_overview.leg_recovery">Recovery</span></span>
+              <span><span class="co-dot" style="background:var(--cm-danger)"></span><span data-i18n="club_overview.leg_match">Match</span></span>
+            </div>
+          </div>
+          <div class="co-sched"><div class="co-sched-inner" id="coSched"></div></div>
+        </div>
+
+        <div class="co-panel co-detail">
+          <div class="co-phead">
+            <h2 id="coDetailTitle" data-i18n="club_overview.weekly_schedule">Session detail</h2>
+            <span class="mdtag" id="coDetailMd" style="display:none"></span>
+          </div>
+          <div class="co-dbody" id="coDetailBody">
+            <div class="co-muted" data-i18n="club_overview.empty_day">Select a day to see its plan.</div>
+          </div>
+          <div class="co-dfoot" id="coDetailFoot" style="display:none">
+            <a class="cm-btn is-ghost is-sm" id="coOpenField"><i class="ti ti-eye"></i><span data-i18n="club_overview.open_field">Open Daily Planning</span></a>
+            <a class="cm-btn is-ghost is-sm" id="coOpenGym"><i class="ti ti-barbell"></i><span data-i18n="club_overview.open_gym">Open Gym Planner</span></a>
+          </div>
+        </div>
+      </div>
+
+      <div class="co-strip">
+        <div class="co-panel">
+          <div class="co-phead"><h2 data-i18n="club_overview.attention">Attention needed</h2></div>
+          <div class="co-alist" id="coAlerts"></div>
+        </div>
+        <div class="co-panel">
+          <div class="co-phead"><h2 data-i18n="club_overview.activity">Staff activity</h2></div>
+          <div class="co-alist" id="coActivity"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+<script src="assets/club-overview.js"></script>
+</body>
+</html>
