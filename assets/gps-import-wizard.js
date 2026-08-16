@@ -2197,16 +2197,27 @@
       // sessions and existing behaviour are untouched; only the missing lookup is added.
       async function _gpResolveSessionId(date, type, title) {
         // Enganchar el GPS a la sesión PLANIFICADA (que trae microciclo/MD) en vez de crear una
-        // suelta: matchear por equipo activo O team-null (importadas/legacy), prefiriendo la del
-        // equipo, y ADOPTAR la team-null (setearle el equipo) para que plan y GPS converjan en una
-        // sola fila. Con equipo activo se excluyen las sesiones de OTROS equipos (aislamiento).
+        // suelta. Matchea por equipo activo O team-null (importadas/legacy), prefiriendo la del
+        // equipo, y ADOPTA la team-null (setea el equipo) para que plan y GPS converjan en una fila.
+        // ETAPA 1 (no duplicar): match en 2 pasos, tolerante a diferencias de tipo/is_historical:
+        //  1) exacto por tipo (ignora is_historical: un import marcado "histórico" no debe crear una
+        //     2da sesión si la planificada del día no es histórica);
+        //  2) si no hay exacto → adoptar la sesión planificada del día (misma fecha+equipo, NO gym;
+        //     y NO el partido si el GPS es de entreno) en vez de insertar un duplicado por tipo.
         const teamId = window._gpTeamId || null;
-        let q = window.sb.from('training_sessions')
-          .select('id, team_id').eq('club_id', clubId).eq('session_date', date)
-          .eq('session_type', type).eq('is_historical', isHistorical);
-        if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
-        const { data: existing } = await q.order('team_id', { ascending: true, nullsFirst: false }).limit(1);
-        const hit = existing?.[0];
+        const _pick = async (build) => {
+          let q = build(window.sb.from('training_sessions')
+            .select('id, team_id').eq('club_id', clubId).eq('session_date', date));
+          if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
+          const { data } = await q.order('team_id', { ascending: true, nullsFirst: false })
+            .order('created_at', { ascending: true }).limit(1);
+          return data?.[0] || null;
+        };
+        let hit = await _pick(q => q.eq('session_type', type));                       // 1) exacto por tipo
+        if (!hit) hit = await _pick(q => {                                            // 2) adoptar planificada del día
+          q = q.neq('session_type', 'gym');
+          return type !== 'match' ? q.neq('session_type', 'match') : q;
+        });
         if (hit?.id) {
           if (teamId && hit.team_id == null) {
             try { await window.sb.from('training_sessions').update({ team_id: teamId }).eq('id', hit.id).eq('club_id', clubId); } catch (e) { console.warn('gps import adopt team:', e); }
