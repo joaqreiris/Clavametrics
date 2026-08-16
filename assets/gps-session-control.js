@@ -378,12 +378,18 @@
     try {
       const clubId = await window.getClubId?.();
       _scCurrentClubId = clubId;
-      const reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-        .from('gps_reports')
-        .select('id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
-        .eq('club_id', clubId)
-        .eq('is_invalid', false)
-        .eq('session_id', sessionId)), { label: 'session-report' })
+      // Training context: default 'team' only (rehab/individual/top-up no ensucian la media de
+      // la sesión de equipo); el filtro "Context" del bar lo puede ensanchar.
+      const _wcSc = window.gpFilterBar?.getState?.().workContexts || [];
+      const reports = await window.cmFetchAll(() => {
+        let q = _scopeTeam(window.sb
+          .from('gps_reports')
+          .select('id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
+          .eq('club_id', clubId)
+          .eq('is_invalid', false)
+          .eq('session_id', sessionId));
+        return _wcSc.length ? q.in('work_context', _wcSc) : q.eq('work_context', 'team');
+      }, { label: 'session-report' })
         .catch(e => { console.error('[session report] query failed:', e); return []; });
 
       const { data: players } = await _gpRoster(clubId, window._gpTeamId);

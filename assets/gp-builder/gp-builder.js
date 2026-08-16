@@ -3198,7 +3198,13 @@
    *  activos (esos se filtran a nivel FILA vía _fbFilterRows; md/rival/type/fecha ya están en
    *  sessionIds, así que el RPC — que opera sobre sessionIds — sí los respeta). */
   function _fbPlayerAggEligible(FB) {
-    return !FB || (!FB.playerIds?.length && !FB.positions?.length && !FB.microcycleIds?.length);
+    if (!FB) return true;
+    // El fast-path RPC (gps_player_agg/mc_agg) filtra work_context='team'. Si el bar pide otro
+    // contexto (rehab/individual/top-up), hay que caer al path crudo — fetchReports honra
+    // getState().workContexts — para que esos registros se puedan ver aislados.
+    const wc = FB.workContexts || [];
+    const ctxDefault = !wc.length || (wc.length === 1 && wc[0] === 'team');
+    return ctxDefault && !FB.playerIds?.length && !FB.positions?.length && !FB.microcycleIds?.length;
   }
   /** Modo auditoría del fast-path (window.__gpPlayerAggAudit): compara RPC vs crudo sin cambiar
    *  el render. Prender, recargar y mirar la consola: debe decir "0 mismatches" en cada card. */

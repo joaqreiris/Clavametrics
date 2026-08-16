@@ -245,12 +245,18 @@
       if (!matchSessions.length) { _mpCurrentRows = []; kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No matches for the active filters.</div>'; return; }
 
       const sessIds = matchSessions.map(s => s.id);
-      const reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-        .from('gps_reports')
-        .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
-        .eq('club_id', clubId)
-        .eq('is_invalid', false)
-        .in('session_id', sessIds)), { label: 'pos-report' })
+      // Training context: default 'team' only (rehab/individual/top-up NO cuentan en la media
+      // de partido); el filtro "Context" del bar lo puede ensanchar.
+      const _wcMp = FB?.workContexts || [];
+      const reports = await window.cmFetchAll(() => {
+        let q = _scopeTeam(window.sb
+          .from('gps_reports')
+          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
+          .eq('club_id', clubId)
+          .eq('is_invalid', false)
+          .in('session_id', sessIds));
+        return _wcMp.length ? q.in('work_context', _wcMp) : q.eq('work_context', 'team');
+      }, { label: 'pos-report' })
         .catch(e => { console.error('[pos report] query failed:', e); return []; });
 
       let rows = reports || [];

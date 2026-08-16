@@ -24,13 +24,25 @@
     { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'All microcycles', multi: true },
     { key: 'rival',      icon: 'ti-ball-football',   placeholder: 'All rivals',      multi: true },
     { key: 'session_type', icon: 'ti-run',           placeholder: 'All types',       multi: true },
+    { key: 'work_context', icon: 'ti-tag',           placeholder: 'All contexts',    multi: true },
   ];
 
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
   const FILTER_LABELS = {
     md_code: 'Matchday', date: 'Date', player: 'Players',
     position: 'Positions', microcycle: 'Microcycle', rival: 'Rival', session_type: 'Session type',
+    work_context: 'Context',
   };
+
+  // Training-context value → i18n label (gps_reports.work_context). Raw value stays the filter
+  // key (what the resolver matches); only the display label is translated. Reuses the ctx_*
+  // keys from the manual tagging panel so both read identically.
+  const _WC_EN = { team: 'Team', rehab: 'Rehab', individual: 'Individual', topup: 'Top-up' };
+  function _wcLabel(v) {
+    const en = _WC_EN[v] || v, k = 'gps_analysis.ctx_' + v;
+    const t = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(k) : null;
+    return (t && t !== k) ? t : en;
+  }
 
   // Session-type value → i18n label (training_sessions.session_type). Raw value stays the
   // filter key (what the resolver matches); only the display label is translated.
@@ -59,7 +71,7 @@
   // ── i18n: solo LABELS de UI (los key/id/valores de lógica quedan en inglés) ──
   const _FB_I18N = {
     'All MD':'filterbar.all_md','All time':'filterbar.all_time','All players':'filterbar.all_players',
-    'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals','All types':'filterbar.all_types',
+    'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals','All types':'filterbar.all_types','All contexts':'filterbar.all_contexts',
     'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
     'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
     'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
@@ -83,16 +95,19 @@
     microcycle: [],                            // ids de microciclo
     rival:      [],                            // nombres de rival (session_attributes.rival)
     session_type: [],                          // training_sessions.session_type (match/training/rehab/…)
+    work_context: [],                          // gps_reports.work_context (team/rehab/individual/topup). [] = solo 'team'
     posGranularity: 'detailed',                // 'detailed' | 'basic' | 'group' — analysis roll-up
     // date: preset (Last 7/30/…) XOR days (specific real dates, multi-select) XOR a manual
     // from/to custom range. `days` is the primary picker; from/to are also set to the
     // days' min/max as a compat bound for consumers that only read from/to.
     date:       { preset: null, from: null, to: null, days: [] },
-    visibleFilters: DROPS.map(d => d.key),     // qué filtros se muestran en la barra
+    // work_context arranca OCULTO (default = solo 'team'): la mayoría nunca lo toca; quien
+    // quiera ver rehab/individual/top-up aislados lo agrega desde el menú "Add filter".
+    visibleFilters: DROPS.filter(d => d.key !== 'work_context').map(d => d.key),
   };
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], date: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], work_context: [], date: [] };
   // Real seasons rows (team-scoped), for a "pick a specific season" section in the date panel.
   let _seasons = [];
 
@@ -132,7 +147,7 @@
   let _validCache = null;    // { md_code:Set, microcycle:Set, player:Set, position:Set } | null (sin filtros)
   // position points at `posv` — the position already PROJECTED onto the active granularity —
   // so matching, the cascade and the valid-sets all work unchanged, with zero special-casing.
-  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'posv', rival: 'rv', session_type: 'st' };
+  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'posv', rival: 'rv', session_type: 'st', work_context: 'wc' };
 
   let _posRaw = [];   // every distinct raw position seen (primary + secondary), pre-projection
   function _posAt(raw) {
@@ -164,7 +179,7 @@
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
-      || state.rival.length || state.session_type.length
+      || state.rival.length || state.session_type.length || state.work_context.length
       || state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
   }
   // Keep from/to = min/max of the selected days, so consumers that only read from/to get
@@ -213,6 +228,12 @@
     if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.pos))  return false;
     if (exceptKey !== 'rival'      && state.rival.length      && !state.rival.includes(r.rv))      return false;
     if (exceptKey !== 'session_type' && state.session_type.length && !state.session_type.includes(r.st)) return false;
+    // work_context: default (sin selección) = SOLO 'team' (rehab/individual/top-up ocultos);
+    // con selección, los contextos elegidos. Espeja el default del resolver (empty → team).
+    if (exceptKey !== 'work_context') {
+      if (state.work_context.length) { if (!state.work_context.includes(r.wc)) return false; }
+      else if (r.wc && r.wc !== 'team') return false;
+    }
     return true;
   }
   function _computeValidSets() {
@@ -279,6 +300,7 @@
       microcycleIds: state.microcycle.slice(),
       rivals:        state.rival.slice(),
       sessionTypes:  state.session_type.slice(),
+      workContexts:  state.work_context.slice(),   // [] = solo 'team' (default); resolver excluye no-team
       posGranularity: state.posGranularity,
       date:          { ...state.date },
       activeCount: activeCount(),
@@ -317,6 +339,7 @@
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
         microcycle: state.microcycle, rival: state.rival, session_type: state.session_type,
+        work_context: state.work_context,
         // NO persistir el default automático de fecha (temporada/90d): sólo la elección real del
         // usuario. Así el default se recalcula cada carga (temporada ACTUAL) y no queda pegado.
         date: _dateUserSet ? state.date : { preset: null, from: null, to: null, days: [] },
@@ -326,10 +349,10 @@
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
-    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = [];
+    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = []; state.work_context = [];
     state.date = { preset: null, from: null, to: null, days: [] };
     state.posGranularity = 'detailed';
-    state.visibleFilters = DROPS.map(d => d.key);
+    state.visibleFilters = DROPS.filter(d => d.key !== 'work_context').map(d => d.key);
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
@@ -345,6 +368,7 @@
         state.microcycle = Array.isArray(s.microcycle) ? s.microcycle : [];
         state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
+        state.work_context = Array.isArray(s.work_context) ? s.work_context : [];
         state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
         // Fecha guardada por el usuario (incluido "All time" explícito) manda; si no hay, default abajo.
         if (s.date && typeof s.date === 'object' && _dateIsSet(s.date)) {
@@ -354,7 +378,7 @@
         }
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
-          : DROPS.map(d => d.key);
+          : DROPS.filter(d => d.key !== 'work_context').map(d => d.key);
       }
     } catch (e) { /* ignore */ }
     // Sin fecha elegida por el usuario → default inteligente (temporada actual o 90 días).
@@ -1071,6 +1095,7 @@
             window.__cmRpcAvail = window.__cmRpcAvail || {}; window.__cmRpcAvail.gps_filter_rows = true;
             return (data || []).map(r => ({
               player_id: r.player_id,
+              work_context: r.work_context || 'team',
               training_sessions: { id: r.session_id, session_date: r.session_date, session_attributes: r.session_attributes,
                 match_day_offset: r.match_day_offset, microcycle_id: r.microcycle_id, team_id: r.team_id,
                 session_type: r.session_type, season_id: r.season_id },
@@ -1083,7 +1108,7 @@
         }
         return window.cmFetchAll(() => {
           let _q = window.sb.from('gps_reports')
-            .select('player_id, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type, season_id), players!inner(id, first_name, last_name, number, position)')
+            .select('player_id, work_context, training_sessions!inner(session_date, session_attributes, match_day_offset, microcycle_id, team_id, session_type, season_id), players!inner(id, first_name, last_name, number, position)')
             .eq('club_id', clubId).eq('is_invalid', false);
           if (_teamPlayerIds && _teamPlayerIds.length) _q = _q.in('player_id', _teamPlayerIds);
           return _q;
@@ -1351,6 +1376,7 @@
         pos: r.players?.position || '',
         rv:  _rivalEntity(ts.session_attributes)?.key || '',
         st:  ts.session_type || '',
+        wc:  r.work_context || 'team',   // contexto del dato (team/rehab/individual/topup), por registro
       };
     }).filter(x => x.d);
     _applyPosGranularity();   // fills row.posv + options.position for the active level
@@ -1364,6 +1390,12 @@
     options.session_type = [...new Set(_rows.map(r => r.st))].filter(Boolean)
       .sort((a, b) => _stLabel(a).localeCompare(_stLabel(b)))
       .map(v => ({ value: v, label: _stLabel(v) }));
+
+    // Training context real (team/rehab/individual/topup) presente en los datos. 'team' se
+    // ordena primero; el resto alfabético. value = raw, label = traducido.
+    options.work_context = [...new Set(_rows.map(r => r.wc))].filter(Boolean)
+      .sort((a, b) => (a === 'team' ? -1 : b === 'team' ? 1 : _wcLabel(a).localeCompare(_wcLabel(b))))
+      .map(v => ({ value: v, label: _wcLabel(v) }));
 
     // Real dates with data → the date filter's list (distinct, newest first).
     options.date = [...new Set(_rows.map(r => r.d))].filter(Boolean)

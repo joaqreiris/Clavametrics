@@ -928,6 +928,33 @@ create table if not exists public.gps_sync_jobs (
 CREATE INDEX gps_sync_jobs_club_idx ON public.gps_sync_jobs USING btree (club_id, created_at DESC);
 CREATE UNIQUE INDEX gps_sync_jobs_one_active ON public.gps_sync_jobs USING btree (integration_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
 
+-- GPS con datos pero SIN sesión planificada: en vez de auto-crear un evento fantasma, la sync
+-- (y el wizard) registran la actividad acá. El usuario la revisa en GPS Analysis, crea la sesión
+-- + asigna MD, y un re-sync dirigido baja los gps_reports. Guarda solo la REFERENCIA (no los stats):
+-- external_activity_id permite el re-sync a Catapult. Idempotente por (club_id, external_activity_id).
+create table if not exists public.gps_pending_activities (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  session_date date not null,
+  external_activity_id text,
+  source text default 'catapult'::text not null,
+  n_athletes integer,
+  activity_name text,
+  created_at timestamp with time zone default now() not null,
+  constraint gps_pending_activities_pkey primary key (id),
+  constraint gps_pending_activities_uq UNIQUE (club_id, external_activity_id)
+);
+CREATE INDEX idx_gps_pending_club ON public.gps_pending_activities USING btree (club_id, session_date);
+alter table public.gps_pending_activities enable row level security;
+-- Leer: miembros del club. Escribir (borrar al confirmar): staff con full planning access. La sync
+-- usa service_role (bypassa RLS) para insertar/limpiar.
+create policy "gps_pending_club_select" on public.gps_pending_activities as permissive for select to public
+  using ((club_id = public.get_user_club_id()) or public.is_super_admin());
+create policy "gps_pending_staff_write" on public.gps_pending_activities as permissive for all to authenticated
+  using (((club_id = public.get_user_club_id()) and public.has_full_planning_access()) or public.is_super_admin())
+  with check (((club_id = public.get_user_club_id()) and public.has_full_planning_access()) or public.is_super_admin());
+
 create table if not exists public.gym_exercises (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -3596,6 +3623,7 @@ AS $function$
   join public.players pl on pl.id = r.player_id
   where r.club_id = p_club_id
     and r.is_invalid = false
+    and r.work_context = 'team'          -- rehab/individual/top-up NO cuentan en la media del plantel
     and r.session_id = any(p_session_ids)
     and (p_player_ids is null or r.player_id = any(p_player_ids))
     and (p_exclude_ids is null or not (r.player_id = any(p_exclude_ids)))
@@ -3668,6 +3696,7 @@ AS $function$
   join sess_mc sm on sm.sid = r.session_id
   where r.club_id = p_club_id
     and r.is_invalid = false
+    and r.work_context = 'team'          -- rehab/individual/top-up NO cuentan en la media del plantel
     and (p_player_ids is null or r.player_id = any(p_player_ids))
     and (p_exclude_ids is null or not (r.player_id = any(p_exclude_ids)))
     and (public.is_super_admin() or public.get_user_club_id() = p_club_id)
@@ -3699,7 +3728,8 @@ AS $function$
     'player_id', r.player_id, 'session_id', r.session_id, 'session_date', ts.session_date,
     'session_type', ts.session_type, 'microcycle_id', ts.microcycle_id, 'season_id', ts.season_id,
     'team_id', ts.team_id, 'match_day_offset', ts.match_day_offset, 'session_attributes', ts.session_attributes,
-    'player_position', pl.position, 'first_name', pl.first_name, 'last_name', pl.last_name, 'number', pl.number
+    'player_position', pl.position, 'first_name', pl.first_name, 'last_name', pl.last_name, 'number', pl.number,
+    'work_context', r.work_context
   )), '[]'::jsonb)
   from public.gps_reports r
   join public.training_sessions ts on ts.id = r.session_id
