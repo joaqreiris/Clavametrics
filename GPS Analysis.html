@@ -2553,6 +2553,19 @@ async function renderKpiCard(cardEl, metricKey, sel) {
 // attributes if missing, never overwriting session_id / type / is_historical. A
 // day whose reports have NO session gets a historical 'match' container created
 // and its reports linked. Historical containers are excluded from Calendar/Planner.
+// ¿Qué sesiones del club tienen GPS? Vía RPC liviana (distinct server-side). Antes se bajaban
+// TODOS los gps_reports del club bajo la RLS por-fila → el panel se colgaba en "Loading GPS days…".
+// Fallback al fetch viejo si la RPC todavía no está deployada. Devuelve [{session_id, n}].
+async function _arGpsCounts(clubId) {
+  try {
+    const { data, error } = await window.sb.rpc('gps_session_ids_with_data', { p_club_id: clubId });
+    if (!error && Array.isArray(data)) return data;
+  } catch (_e) { /* RPC ausente → fallback */ }
+  const rows = await window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id').eq('club_id', clubId), { label: 'assign-rivals.reports' });
+  const m = new Map();
+  (rows || []).forEach(r => { if (r.session_id) m.set(r.session_id, (m.get(r.session_id) || 0) + 1); });
+  return [...m.entries()].map(([session_id, n]) => ({ session_id, n }));
+}
 async function _gpOpenAssignRivals(opts) {
   const onlyOutsideDefault = !!(opts && opts.onlyOutside);
   const clubId = window._gpClubId || (await window.getClubId?.());
@@ -2565,20 +2578,19 @@ async function _gpOpenAssignRivals(opts) {
     // reports of THIS club" (cnt.has below) + "no rival yet". Imported / container
     // sessions often have team_id null or a different team — filtering by the active
     // team hid exactly the days that need a rival. Club-scoped only.
-    const [sessions, reps, { data: opps }] = await Promise.all([
+    const [sessions, gpsCnt, { data: opps }] = await Promise.all([
       // Paginated (server caps at ~1000): big clubs would otherwise lose sessions here too.
       window.cmFetchAll(() => window.sb.from('training_sessions')
         .select('id, session_date, session_type, is_historical, season_id, session_attributes')
         .eq('club_id', clubId), { label: 'assign-rivals.sessions' }),
-      // PRESENCE check only: a day that has ANY GPS row needs a rival, even if some rows
-      // are flagged invalid (outliers). Validity matters for value reads, not "has GPS?".
-      // Paginated: the server caps at ~1000 rows (3720 here → only 68 of 203 days showed).
-      window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id').eq('club_id', clubId), { label: 'assign-rivals.reports' }),
+      // ¿Qué sesiones tienen GPS? RPC liviana (distinct server-side) en vez de bajar miles de
+      // gps_reports bajo la RLS por-fila (lo que colgaba el panel). Ver _arGpsCounts.
+      _arGpsCounts(clubId),
       window.sb.from('opponent_branding').select('id, opponent_name, crest_url').eq('club_id', clubId).order('opponent_name'),
     ]);
     await _gpLoadSeasons(clubId, teamId);
     const cnt = new Map();
-    (reps || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, (cnt.get(r.session_id) || 0) + 1); });
+    (gpsCnt || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, r.n || 1); });
     const gpsDays = (sessions || []).filter(s => cnt.has(s.id));                              // sessions w/ valid GPS
     const _rivalOf = s => s.session_attributes?.rival || s.session_attributes?.opponent || null;
     const _haOf = s => s.session_attributes?.home_away || null;

@@ -3826,6 +3826,27 @@ AS $function$
 $function$
 ;
 
+-- PERF: qué sesiones del club tienen GPS (+ cuántas filas), para el panel «Assign rivals».
+-- El panel bajaba TODOS los gps_reports del club bajo la RLS por-fila (session_in_my_teams)
+-- y se colgaba. Acá agregamos server-side (distinct por sesión, un solo pase, índice club_id),
+-- SECURITY DEFINER para saltar la RLS anidada. Scope = club (el panel es club-wide a propósito).
+CREATE OR REPLACE FUNCTION public.gps_session_ids_with_data(p_club_id uuid)
+ RETURNS TABLE(session_id uuid, n integer)
+ LANGUAGE sql
+ STABLE
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select r.session_id, count(*)::int as n
+  from public.gps_reports r
+  where r.club_id = p_club_id
+    and (public.is_super_admin() or public.get_user_club_id() = p_club_id)
+    and (public.is_super_admin() or public.club_has_feature(p_club_id, 'gps_analysis'))
+  group by r.session_id;
+$function$
+;
+grant execute on function public.gps_session_ids_with_data(uuid) to authenticated;
+
 CREATE OR REPLACE FUNCTION public.grant_comp_subscription(p_team_id uuid, p_plan_slug text DEFAULT 'full'::text)
  RETURNS uuid
  LANGUAGE plpgsql
