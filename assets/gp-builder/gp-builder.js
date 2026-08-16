@@ -3185,12 +3185,14 @@
     return r;
   }
   /** Fast-path por jugador ACTIVADO. OFF por defecto (para no cambiar nada sin verificar): se
-   *  prende con window.__gpPlayerAgg=true (sesión) o localStorage.cm_gp_player_agg='1' (persistente).
-   *  window.__gpPlayerAgg===false es kill-switch explícito. */
+   *  ON POR DEFECTO para todos los clientes (el RPC scopea por club_id + sesiones/roster del equipo
+   *  activo → aislamiento club+equipo garantizado; el fallback crudo intacto si el RPC no está).
+   *  Opt-out: window.__gpPlayerAgg=false (kill-switch de sesión) o localStorage.cm_gp_player_agg='0'. */
   function _gpPlayerAggOn() {
-    if (window.__gpPlayerAgg === false) return false;
+    if (window.__gpPlayerAgg === false) return false;   // kill-switch explícito
     if (window.__gpPlayerAgg === true) return true;
-    try { return localStorage.getItem('cm_gp_player_agg') === '1'; } catch (_) { return false; }
+    try { if (localStorage.getItem('cm_gp_player_agg') === '0') return false; } catch (_) {}   // opt-out persistente
+    return true;                                        // default: prendido
   }
   /** El fast-path por jugador sólo es válido si NO hay filtros de bar player/position/microcycle
    *  activos (esos se filtran a nivel FILA vía _fbFilterRows; md/rival/type/fecha ya están en
