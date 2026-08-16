@@ -223,11 +223,30 @@
   }
   async function resolveGymImgs(exIds) {
     const need = [...new Set((exIds || []).filter(id => id && !(id in _gxCache)))];
-    if (need.length) { try { const { data } = await sb().from('gym_exercises').select('id,name,media_type,media_ref,video_id').in('id', need); (data || []).forEach(g => { _gxCache[g.id] = g; }); } catch (_) {} need.forEach(id => { if (!(id in _gxCache)) _gxCache[id] = null; }); }
+    if (need.length) { try { const { data } = await sb().from('gym_exercises').select('id,name,media_type,media_ref,video_id,video_url').in('id', need); (data || []).forEach(g => { _gxCache[g.id] = g; }); } catch (_) {} need.forEach(id => { if (!(id in _gxCache)) _gxCache[id] = null; }); }
     const refs = [...new Set((exIds || []).map(id => _gxCache[id]).filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _gymImg)).map(g => g.media_ref))];
     if (refs.length) { try { const { data: urls } = await sb().storage.from('gym-exercise-media').createSignedUrls(refs, 3600); (urls || []).forEach(u => { if (u && u.path) _gymImg[u.path] = u.signedUrl; }); } catch (_) {} }
   }
-  function gymImgFor(exId) { const g = _gxCache[exId]; if (!g) return null; if (g.media_type === 'image' && g.media_ref) return _gymImg[g.media_ref] || null; if (g.video_id) return 'https://img.youtube.com/vi/' + g.video_id + '/mqdefault.jpg'; return null; }
+  function videoEmbed(url) {
+    const u = String(url || '').trim(); if (!u) return null;
+    let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (m) return { embed: 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1&mute=1&rel=0&playsinline=1', yt: m[1] };
+    m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (m) return { embed: 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1&muted=1' };
+    if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return { embed: u, file: true };
+    return null;
+  }
+  // Media de un ejercicio de gym: preferimos VIDEO si hay; si no, imagen.
+  function gymMediaFor(exId) {
+    const g = _gxCache[exId]; if (!g) return null;
+    let emb = null, yt = null, file = false;
+    if (g.video_url) { const v = videoEmbed(g.video_url); if (v) { emb = v.embed; yt = v.yt || null; file = !!v.file; } }
+    if (!emb && g.video_id) { emb = 'https://www.youtube.com/embed/' + g.video_id + '?autoplay=1&mute=1&rel=0&playsinline=1'; yt = g.video_id; }
+    const imgSrc = (g.media_type === 'image' && g.media_ref) ? (_gymImg[g.media_ref] || null) : null;
+    if (emb) return { type: 'video', embed: emb, file: file, thumb: yt ? ('https://img.youtube.com/vi/' + yt + '/mqdefault.jpg') : imgSrc };
+    if (imgSrc) return { type: 'image', src: imgSrc };
+    return null;
+  }
   function imgHtml(src) { return '<img src="' + src + '" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--cm-bg-sunk)">'; }
   function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s); }
 
@@ -304,8 +323,12 @@
     state._exSel = i;
     document.querySelectorAll('.co-exrow.on').forEach(x => x.classList.remove('on'));
     const btn = document.querySelector('.co-exrow[data-i="' + i + '"]'); if (btn) btn.classList.add('on');
-    const pv = document.getElementById('coPreview'), img = r.exId ? gymImgFor(r.exId) : null;
-    pv.innerHTML = img ? imgHtml(img) : '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
+    const pv = document.getElementById('coPreview'), media = r.exId ? gymMediaFor(r.exId) : null;
+    if (media && media.type === 'video') {
+      const poster = media.thumb ? '<img src="' + media.thumb + '" alt="">' : '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
+      pv.innerHTML = '<div class="co-vidwrap" data-embed="' + encodeURIComponent(media.embed) + '" data-file="' + (media.file ? 1 : 0) + '">' + poster + '<button class="co-play" aria-label="' + esc(tt('club_overview.play', 'Play video')) + '"><i class="ti ti-player-play-filled"></i></button></div>';
+    } else if (media && media.type === 'image') { pv.innerHTML = imgHtml(media.src); }
+    else pv.innerHTML = '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
     document.getElementById('coExParams').innerHTML = r.params ? paramPanel([[r.section, r.params]]) : '';
   }
 
@@ -473,6 +496,8 @@
     document.getElementById('coSched').addEventListener('click', e => { const card = e.target.closest('.co-ev[data-key]'); if (!card) return; const cell = card.closest('.co-cell'); if (cell) selectEvent(cell.dataset.team, cell.dataset.ymd, card.dataset.key); });
     const detailPanel = document.querySelector('.co-detail');
     if (detailPanel) detailPanel.addEventListener('click', e => {
+      const play = e.target.closest('.co-play');
+      if (play) { const w = play.closest('.co-vidwrap'); if (w) { const emb = decodeURIComponent(w.dataset.embed || ''); const pv = document.getElementById('coPreview'); pv.innerHTML = w.dataset.file === '1' ? ('<video src="' + emb + '" controls autoplay muted playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>') : ('<iframe src="' + emb + '" allow="autoplay; encrypted-media; fullscreen" allowfullscreen style="width:100%;height:100%;border:0;background:#000"></iframe>'); } return; }
       const chip = e.target.closest('.co-secchip[data-sec]'); if (chip) { toggleSection(chip.dataset.sec); return; }
       const row = e.target.closest('.co-exrow[data-i]'); if (!row) return;
       const i = parseInt(row.dataset.i, 10); if (state._exKind === 'gym') selectGymEx(i); else selectFieldDrill(i);
