@@ -6171,6 +6171,58 @@ function dsApplyTmpl(t){
   if (t.format) _dsState.format = t.format;
   if (t.lang) _dsState.lang = t.lang;
 }
+
+// ── Named saved plannings ──────────────────────────────────────
+// Beyond the single per-team auto-save above, the coach can store as many
+// reusable plannings as they want (e.g. "Home matchday", "MD-1"), load any of
+// them on any day and tweak from there. A named plan snapshots the manual parts
+// PLUS the timeline; the date / MD tag / match / logo still refresh on open.
+let _dsPlans = [], _dsCurrentPlanId = null, _dsPlanName = '';
+function dsPlansKey(){ return `cm_daysheet_plans_${_clubId||''}_${_activeTeamId||''}`; }
+function dsPlansPersistLocal(){ try { localStorage.setItem(dsPlansKey(), JSON.stringify(_dsPlans)); } catch(_){} }
+function dsPlanData(){ return { ...dsTmplData(), tl:(_dsState.tl||[]).map(r => ({ ...r })) }; }
+function dsApplyPlan(t){ if (!t) return; dsApplyTmpl(t); if (Array.isArray(t.tl)) _dsState.tl = t.tl.map(r => ({ ...r })); }
+async function dsLoadPlans(){
+  try { const r = localStorage.getItem(dsPlansKey()); if (r) _dsPlans = JSON.parse(r) || []; } catch(_){}
+  try {
+    const { data } = await window.sb.from('day_sheet_plans').select('id,name,data,updated_at').eq('club_id',_clubId).eq('team_id',_activeTeamId).order('updated_at',{ ascending:false });
+    if (Array.isArray(data)){ _dsPlans = data; dsPlansPersistLocal(); }
+  } catch(_){}
+}
+function dsLoadPlanById(id){
+  if (!id){ _dsCurrentPlanId = null; return; }
+  const p = _dsPlans.find(x => x.id === id); if (!p) return;
+  dsApplyPlan(p.data); _dsCurrentPlanId = id; _dsPlanName = p.name || '';
+  dsSyncDate(); dsRenderEditor(); dsRenderSheet(); dsSaveTmpl();
+  dsRegenQr().then(() => dsRenderSheet());
+  showCalToast(tt('calendar.daysheet.plan_loaded','Template loaded'));
+}
+async function dsSavePlan(){
+  const name = (_dsPlanName||'').trim();
+  if (!name){ showCalToast(tt('calendar.daysheet.plan_need_name','Give the template a name first')); return; }
+  const data = dsPlanData(), now = new Date().toISOString();
+  const ex = _dsPlans.find(p => (p.name||'').trim().toLowerCase() === name.toLowerCase());
+  if (ex){
+    ex.data = data; ex.name = name; ex.updated_at = now; _dsCurrentPlanId = ex.id;
+    try { window.sb && await window.sb.from('day_sheet_plans').update({ data, name, updated_at:now }).eq('id', ex.id); } catch(_){}
+  } else {
+    let id = null;
+    try { const { data:ins } = await window.sb.from('day_sheet_plans').insert({ club_id:_clubId, team_id:_activeTeamId, name, data }).select('id').maybeSingle(); id = ins && ins.id; } catch(_){}
+    if (!id){ try { id = crypto.randomUUID(); } catch(_){ id = 'loc-'+now; } }
+    _dsPlans.unshift({ id, name, data, updated_at:now }); _dsCurrentPlanId = id;
+  }
+  dsPlansPersistLocal(); dsRenderEditor();
+  showCalToast(tt('calendar.daysheet.plan_saved','Template saved'));
+}
+async function dsDeletePlan(id){
+  if (!id) return;
+  if (!confirm(tt('calendar.daysheet.plan_delete_confirm','Delete this saved template?'))) return;
+  _dsPlans = _dsPlans.filter(p => p.id !== id);
+  if (_dsCurrentPlanId === id){ _dsCurrentPlanId = null; _dsPlanName = ''; }
+  try { window.sb && await window.sb.from('day_sheet_plans').delete().eq('id', id); } catch(_){}
+  dsPlansPersistLocal(); dsRenderEditor();
+  showCalToast(tt('calendar.daysheet.plan_deleted','Template deleted'));
+}
 async function dsRegenQr(){
   const url = (_dsState.venueUrl||'').trim(); _dsState.venueQr = '';
   if (!url) return;
@@ -6196,6 +6248,7 @@ async function openDaySheet(){
     ],
     tl: [], match: null, venueUrl:'', venueQr:'', format:'a4', lang:'auto',
   };
+  _dsCurrentPlanId = null; _dsPlanName = '';
   dsApplyTmpl(dsLoadTmplLocal());   // instant paint from local cache
   dsSyncDate();
   document.getElementById('dsBackdrop').classList.add('is-open');
@@ -6205,6 +6258,7 @@ async function openDaySheet(){
   dsSyncDate();
   _dsState.logo = await dsInlineImg(club.logo_url || null);
   dsApplyTmpl(await dsLoadTmplDB());  // authoritative (shared across staff/devices)
+  await dsLoadPlans();                // named reusable plannings for this team
   await dsPrefillFromEvents();
   await dsRegenQr();
   dsSyncDate();
@@ -6325,7 +6379,22 @@ function dsRenderEditor(){
       </div>
       <button class="del" data-del="tl" data-i="${ix}" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-trash"></i></button>
     </div>`).join('');
+  const planOpts = (_dsPlans||[]).map(p => `<option value="${esc(p.id)}" ${_dsCurrentPlanId===p.id?'selected':''}>${esc(p.name||'—')}</option>`).join('');
   document.getElementById('dsEditor').innerHTML = `
+    <div class="ds-grp">
+      <h3>${esc(tt('calendar.daysheet.grp_plans','Saved templates'))}</h3>
+      <div class="ds-hint">${esc(tt('calendar.daysheet.plans_hint','Save this plan with a name to reuse it any day — load it and tweak from there.'))}</div>
+      ${(_dsPlans||[]).length ? `<div class="ds-fld"><label>${esc(tt('calendar.daysheet.plan_load','Load a saved template'))}</label>
+        <select class="ds-in" data-k="planpick">
+          <option value="">${esc(tt('calendar.daysheet.plan_pick','— Choose —'))}</option>
+          ${planOpts}
+        </select></div>` : ''}
+      <div class="ds-fld"><label>${esc(tt('calendar.daysheet.plan_name','Template name'))}</label><input class="ds-in" id="dsPlanName" placeholder="${esc(tt('calendar.daysheet.plan_name_ph','e.g. Home matchday, MD-1…'))}" value="${esc(_dsPlanName||'')}"></div>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        <button class="ds-add" type="button" data-plan="save" style="margin:0;flex:1"><i class="ti ti-device-floppy"></i> ${esc(tt('calendar.daysheet.plan_save','Save template'))}</button>
+        ${_dsCurrentPlanId ? `<button class="ds-add" type="button" data-plan="delete" style="margin:0;flex:none;color:#C81E3A" title="${esc(tt('calendar.daysheet.plan_delete','Delete template'))}"><i class="ti ti-trash"></i></button>` : ''}
+      </div>
+    </div>
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_header','Header'))}</h3>
       <div class="ds-fld"><label>${esc(tt('calendar.daysheet.date','Day'))}</label><input class="ds-in" type="date" data-k="date" value="${esc(s.date)}"></div>
@@ -6384,6 +6453,7 @@ function dsBindOnce(){
   const ed = document.getElementById('dsEditor');
   ed.addEventListener('input', e => {
     const t = e.target; if (t.type === 'checkbox' || t.tagName === 'SELECT' || t.type === 'file' || t.type === 'date') return;
+    if (t.id === 'dsPlanName'){ _dsPlanName = t.value; return; }
     if (t.dataset.k){
       if (t.dataset.k === 'accent'){ _dsState.accent = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
       if (t.dataset.k === 'venueUrl'){ _dsState.venueUrl = t.value; dsSaveTmpl(); clearTimeout(_dsQrTimer); _dsQrTimer = setTimeout(async () => { await dsRegenQr(); dsRenderSheet(); }, 500); return; }
@@ -6397,8 +6467,11 @@ function dsBindOnce(){
     if (t.dataset.scope && t.dataset.f === 'kit'){ _dsState[t.dataset.scope][+t.dataset.i].kit = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     if (t.dataset.scope && t.dataset.f === 'type'){ _dsState[t.dataset.scope][+t.dataset.i].type = t.value; dsRenderSheet(); }
     if (t.dataset.k === 'lang'){ _dsState.lang = t.value; dsSyncDate(); dsRenderSheet(); dsSaveTmpl(); }
+    if (t.dataset.k === 'planpick'){ dsLoadPlanById(t.value); return; }
   });
   ed.addEventListener('click', e => {
+    const pl = e.target.closest('[data-plan]');
+    if (pl){ if (pl.dataset.plan === 'save') dsSavePlan(); else if (pl.dataset.plan === 'delete') dsDeletePlan(_dsCurrentPlanId); return; }
     const cb = e.target.closest('[data-colbtn]');
     if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
     const swk = e.target.closest('[data-swkit]');

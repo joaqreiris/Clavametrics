@@ -280,6 +280,23 @@ create policy "day_sheet_templates club members" on public.day_sheet_templates a
   using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
   with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
 
+-- Named, reusable day-sheet plannings (many per team; the coach loads one and tweaks from there)
+create table if not exists public.day_sheet_plans (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  name text not null,
+  data jsonb default '{}'::jsonb not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint day_sheet_plans_pkey primary key (id)
+);
+CREATE INDEX idx_day_sheet_plans_club_team ON public.day_sheet_plans USING btree (club_id, team_id);
+alter table public.day_sheet_plans enable row level security;
+create policy "day_sheet_plans club members" on public.day_sheet_plans as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+
 create table if not exists public.chat_group_members (
   group_id uuid not null,
   profile_id uuid not null,
