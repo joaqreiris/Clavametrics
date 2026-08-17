@@ -3639,6 +3639,9 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     }
     showToast(p.create ? tt('gps_analysis.pending_done', 'Session created — GPS attached') : tt('gps_analysis.pending_assoc_done', 'GPS attached to the session'));
     window.cmInvalidateGpsCache?.();
+    // Recargar las OPCIONES del filterbar (fechas/sesiones) — cargaron al abrir la página, antes
+    // del attach, así que la fecha recién enganchada no aparecía en el selector hasta recargarlas.
+    try { await window.gpFilterBar?.reload?.(); } catch {}
     try { window.refreshDashboard?.(); } catch {}
     await _gpRenderPending(clubId, body, ov);
   } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); btn.disabled = false; btn.innerHTML = _lbl; }
