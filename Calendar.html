@@ -6443,6 +6443,7 @@ function dsRenderEditor(){
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_timeline','Timeline'))}</h3>
       <div class="ds-hint">${esc(tt('calendar.daysheet.tl_hint','Timed moments — pulled from the calendar (bus departure, meals, kick-off…).'))}</div>
+      <button class="ds-add" type="button" data-tlrefresh style="margin:0 0 8px"><i class="ti ti-refresh"></i> ${esc(tt('calendar.daysheet.tl_reload','Re-read from calendar'))}</button>
       ${tlRows}
       <button class="ds-add" data-add="tl" type="button"><i class="ti ti-plus"></i> ${esc(tt('calendar.daysheet.add_tl','Add timeline row'))}</button>
     </div>`;
@@ -6472,6 +6473,8 @@ function dsBindOnce(){
   ed.addEventListener('click', e => {
     const pl = e.target.closest('[data-plan]');
     if (pl){ if (pl.dataset.plan === 'save') dsSavePlan(); else if (pl.dataset.plan === 'delete') dsDeletePlan(_dsCurrentPlanId); return; }
+    const tlr = e.target.closest('[data-tlrefresh]');
+    if (tlr){ dsPrefillFromEvents().then(() => { dsSyncDate(); dsRenderEditor(); dsRenderSheet(); showCalToast(tt('calendar.daysheet.tl_reloaded','Timeline reloaded from the calendar')); }); return; }
     const cb = e.target.closest('[data-colbtn]');
     if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
     const swk = e.target.closest('[data-swkit]');
