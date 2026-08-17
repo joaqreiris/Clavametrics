@@ -3618,24 +3618,34 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
         .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym').limit(1);
       sessionId = (pl && pl[0] && pl[0].id) || null;
     }
-    if (!sessionId) throw new Error('no session');
-    // MODO DIRIGIDO: gps-sync baja SOLO esta actividad (por su id, sin rango → sin problema de
-    // zona horaria) y la escribe en ESTA sesión, server-side y síncrono. Es lo que garantiza el
-    // enganche (el team-match del sync normal fallaba con integraciones team-less). from/to=date
-    // es red de seguridad: si el gps-sync desplegado aún no tiene el modo 'attach', cae a START
-    // acotado a ese día (no all-time).
-    btn.textContent = tt('gps_analysis.pending_syncing', 'Syncing…');
+    if (!sessionId) throw new Error(tt('gps_analysis.pending_no_session', 'No session for that day'));
+    // Actividad del pendiente: del dataset o RE-FETCH (robusto ante HTML viejo cacheado sin data-aid).
+    let activityId = p.activityId || null;
+    if (!activityId && p.pendId) {
+      const { data: pend } = await window.sb.from('gps_pending_activities').select('external_activity_id').eq('id', p.pendId).maybeSingle();
+      activityId = (pend && pend.external_activity_id) || null;
+    }
     const { data: intgs } = await window.sb.from('gps_integrations').select('id').eq('provider', 'catapult').limit(1);
     const intId = intgs && intgs[0] && intgs[0].id;
-    if (intId && p.activityId) {
-      const { data: res, error: aErr } = await window.sb.functions.invoke('gps-sync', {
-        body: { mode: 'attach', integration_id: intId, external_activity_id: p.activityId, session_id: sessionId, from: p.date, to: p.date },
-      });
-      if (aErr) { let msg = aErr.message || 'error'; try { const b = await aErr.context?.json?.(); if (b && (b.error || b.message)) msg = b.error || b.message; } catch (_) {} throw new Error(msg); }
-      if (res && res.ok === false) throw new Error(res.message || 'attach failed');
-    } else if (sessionId) {
-      // Sin integración / sin actividad: la sesión queda; limpio el pendiente (el próximo sync baja el GPS).
-      await window.sb.from('gps_pending_activities').delete().eq('club_id', clubId).eq('id', p.pendId);
+    if (!intId) throw new Error(tt('gps_analysis.pending_no_integration', 'No provider connected — a re-sync is needed to attach the GPS.'));
+    if (!activityId) throw new Error(tt('gps_analysis.pending_no_activity', 'Missing activity reference — re-sync to re-create it.'));
+    // MODO DIRIGIDO: gps-sync baja SOLO esta actividad (por su id, sin rango → sin problema de zona
+    // horaria) y la escribe en ESTA sesión, server-side y síncrono. NO borramos el pendiente acá:
+    // lo borra el SERVER recién tras bajar los datos → nunca se pierde el pendiente sin haber bajado.
+    btn.textContent = tt('gps_analysis.pending_syncing', 'Syncing…');
+    const { data: res, error: aErr } = await window.sb.functions.invoke('gps-sync', {
+      body: { mode: 'attach', integration_id: intId, external_activity_id: activityId, session_id: sessionId, from: p.date, to: p.date },
+    });
+    if (aErr) { let msg = aErr.message || 'error'; try { const b = await aErr.context?.json?.(); if (b && (b.error || b.message)) msg = b.error || b.message; } catch (_) {} throw new Error(msg); }
+    if (res && res.ok === false) throw new Error(res.message || 'attach failed');
+    // El modo 'attach' devuelve {rows}. Si vuelve {job_id} en su lugar → el gps-sync desplegado NO
+    // tiene el modo dirigido (cayó a START) → avisar que falta deployar (y NO tocar el pendiente).
+    if (res && res.job_id != null && res.rows == null) {
+      showToast(tt('gps_analysis.pending_deploy', 'Deploy the GPS sync on the server (supabase functions deploy gps-sync) — the direct attach is not live yet.'), true);
+      btn.disabled = false; btn.innerHTML = _lbl; return;
+    }
+    if (res && Number(res.rows) === 0) {
+      showToast(tt('gps_analysis.pending_zero', 'Linked, but 0 GPS rows came down — check the metric mapping or that the activity has data.'), true);
     }
     showToast(p.create ? tt('gps_analysis.pending_done', 'Session created — GPS attached') : tt('gps_analysis.pending_assoc_done', 'GPS attached to the session'));
     window.cmInvalidateGpsCache?.();
