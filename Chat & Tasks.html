@@ -1108,7 +1108,7 @@ async function boot() {
   // Loading them in parallel raced — messages rendered against an empty list, fell back to the
   // stored sender_name (the pre-onboarding email handle) and cached that via renderedIds.
   await loadMembers();
-  await Promise.all([loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles(), loadGroups()]);
+  await Promise.all([loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles(), loadGroups(), loadAllStaff()]);
   await loadDmPreviews();
   // Abrir conversación específica si viene de ?conv= (del panel de notificaciones)
   const _convParam = new URLSearchParams(location.search).get('conv');
@@ -1209,6 +1209,10 @@ async function loadMessages() {
     q = q.is('recipient_id', null).is('group_id', null);
     const teamId = ctResolveTeamId();
     if (teamId) q = q.or(`team_id.eq.${teamId},team_id.is.null`);
+  } else if (activeConv === 'club') {
+    // Club-wide channel: recipient_id IS NULL AND group_id IS NULL AND team_id IS NULL.
+    // These messages reach everyone in the club regardless of team.
+    q = q.is('recipient_id', null).is('group_id', null).is('team_id', null);
   } else if (isCg(activeConv)) {
     q = q.eq('group_id', cgId(activeConv));
   } else {
@@ -1241,8 +1245,8 @@ async function loadReadState() {
   readState = {};
   if (!currentUser || !window.sb) return;
   let q = window.sb.from('channel_reads').select('user_id,last_read_at').eq('club_id', currentUser.clubId);
-  if (activeConv === 'group' || isCg(activeConv)) {
-    q = q.eq('channel_key', activeChannelKey());          // team / custom-group channel
+  if (activeConv === 'group' || activeConv === 'club' || isCg(activeConv)) {
+    q = q.eq('channel_key', activeChannelKey());          // team / club / custom-group channel
   } else {
     q = q.eq('channel_key', currentUser.id).eq('user_id', activeConv);  // DM: peer's marker keyed by my id
   }
@@ -1257,7 +1261,9 @@ function expectedReaders(msg) {
     const g = groups.find(x => x.id === msg.group_id);
     ids = g ? g.members.slice() : [];
   } else if (!msg.recipient_id) {
-    ids = members.map(m => m.id);                          // team channel: all club members
+    // Club channel expects the whole club to read; team channel expects the team roster.
+    const roster = activeConv === 'club' ? (allStaff.length ? allStaff : members) : members;
+    ids = roster.map(m => m.id);
   } else {
     ids = [msg.recipient_id];                              // DM
   }
@@ -1899,7 +1905,7 @@ async function deliverMessage(ctx) {
   const last = (data || [])[data.length - 1];
   if (last) {
     if (isCg(conv)) { groupLastMsg[cgId(conv)] = last; renderConvList(); }
-    else if (conv !== 'group') { dmLastMsg[conv] = last; renderConvList(); }
+    else if (conv !== 'group' && conv !== 'club') { dmLastMsg[conv] = last; renderConvList(); }
   }
 }
 
@@ -1936,7 +1942,7 @@ async function sendMessage() {
     club_id:      currentUser.clubId,
     sender_id:    currentUser.id,
     sender_name:  currentUser.name,
-    recipient_id: (activeConv === 'group' || isCg(activeConv)) ? null : activeConv,
+    recipient_id: (activeConv === 'group' || activeConv === 'club' || isCg(activeConv)) ? null : activeConv,
     team_id:      activeConv === 'group' ? groupTeamId : null,
     group_id:     isCg(activeConv) ? cgId(activeConv) : null,
   };
@@ -1992,8 +1998,20 @@ function renderConvList() {
   const groupPreview = lastGroup
     ? `${lastGroup.sender_name}: ${(lastGroup.content || '').slice(0, 40)}`
     : tt('chat_tasks.team_channel', 'Team channel');
+  const clubActive = activeConv === 'club';
+  const lastClub = messages.length && clubActive ? messages[messages.length - 1] : null;
+  const clubPreview = lastClub
+    ? `${lastClub.sender_name}: ${(lastClub.content || '').slice(0, 40)}`
+    : tt('chat_tasks.club_channel', 'All club members');
 
   let html = `<div class="chat-list-label">${esc(tt('chat_tasks.channels', 'Channels'))}</div>
+    <div class="conv${clubActive ? ' is-on' : ''}" onclick="selectConv('club')">
+      <div class="av g"><i class="ti ti-building"></i></div>
+      <div class="body">
+        <div class="name-row"><span class="name">${esc(tt('chat_tasks.club_channel_name', '# club'))}</span></div>
+        <div class="preview">${esc(clubPreview)}</div>
+      </div>
+    </div>
     <div class="conv${groupActive ? ' is-on' : ''}" onclick="selectConv('group')">
       <div class="av g"><i class="ti ti-hash"></i></div>
       <div class="body">
@@ -2078,7 +2096,19 @@ async function selectConv(id) {
 function updateChatHeader() {
   const el = document.getElementById('chatHeader');
   if (!el) return;
-  if (activeConv === 'group') {
+  if (activeConv === 'club') {
+    const clubCount = allStaff.length || members.length;
+    el.innerHTML = `
+      <div class="av"><i class="ti ti-building"></i></div>
+      <div class="info">
+        <div class="name">${esc(tt('chat_tasks.club_channel_name', '# club'))}</div>
+        <div class="meta"><span class="dot"></span>${esc(tt('chat_tasks.n_members_club', `${clubCount} members · Club channel`, { n: clubCount }))}</div>
+      </div>
+      <div class="right">
+        <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+      </div>`;
+  } else if (activeConv === 'group') {
     el.innerHTML = `
       <div class="av"><i class="ti ti-hash"></i></div>
       <div class="info">
@@ -2912,7 +2942,7 @@ function subscribeRealtime() {
 function handleReadReceipt(payload) {
   const r = payload.new;
   if (!r || r.user_id === currentUser.id) return;
-  const relevant = (activeConv === 'group' || isCg(activeConv))
+  const relevant = (activeConv === 'group' || activeConv === 'club' || isCg(activeConv))
     ? r.channel_key === activeChannelKey()
     : (r.channel_key === currentUser.id && r.user_id === activeConv);
   if (!relevant) return;
@@ -2938,7 +2968,8 @@ function handleNewMessage(payload) {
   const msg = payload.new;
   if (!msg) return;
   const isCgMsg = !!msg.group_id;                       // custom group message
-  const isTeam  = !msg.recipient_id && !msg.group_id;   // team channel
+  const isTeam  = !msg.recipient_id && !msg.group_id;   // team / club channel
+  const isClub  = isTeam && !msg.team_id;               // club-wide (no team)
   const isDm    = !!msg.recipient_id;                   // 1:1 DM
 
   // Ignore custom-group messages for groups I'm not a member of (defensive: covers the case
@@ -2946,6 +2977,7 @@ function handleNewMessage(payload) {
   if (isCgMsg && !groups.some(g => g.id === msg.group_id)) return;
 
   const inActive =
+    (activeConv === 'club' && isClub) ||
     (activeConv === 'group' && isTeam) ||
     (isCg(activeConv) && isCgMsg && cgId(activeConv) === msg.group_id) ||
     (isDm && !isCg(activeConv) && activeConv !== 'group' && (msg.sender_id === activeConv || msg.recipient_id === activeConv));
