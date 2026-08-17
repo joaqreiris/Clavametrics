@@ -3610,6 +3610,14 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
       if (sErr) throw sErr;
       sessionId = newSess?.id || null;
     }
+    // Fallback (asociar): si no vino el id de la sesión (HTML viejo cacheado), re-buscar la sesión
+    // planificada adoptable de ese día → nunca falla con "no session" por un data-attr vacío.
+    if (!sessionId && !p.create) {
+      const { data: pl } = await window.sb.from('training_sessions')
+        .select('id').eq('club_id', clubId).eq('session_date', p.date)
+        .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym').limit(1);
+      sessionId = (pl && pl[0] && pl[0].id) || null;
+    }
     if (!sessionId) throw new Error('no session');
     // MODO DIRIGIDO: gps-sync baja SOLO esta actividad (por su id, sin rango → sin problema de
     // zona horaria) y la escribe en ESTA sesión, server-side y síncrono. Es lo que garantiza el
