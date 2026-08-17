@@ -34,7 +34,27 @@
 
   // ── session type → clase visual + icono ──
   function evClass(t) { t = (t || '').toLowerCase(); if (t === 'match') return 'match'; if (t === 'gym') return 'gym'; if (t === 'recovery') return 'recovery'; return 'field'; }
-  function evIcon(cls) { return cls === 'match' ? 'ti-ball-football' : cls === 'gym' ? 'ti-barbell' : cls === 'recovery' ? 'ti-heart' : 'ti-soccer-field'; }
+  function evIcon(cls) { return cls === 'match' ? 'ti-ball-football' : cls === 'gym' ? 'ti-barbell' : cls === 'recovery' ? 'ti-heart' : cls === 'travel' ? 'ti-plane' : cls === 'other' ? 'ti-calendar-event' : 'ti-soccer-field'; }
+
+  // ── calendar_events (no-partido) → bucket visual + icono + etiqueta ──
+  // Bucket agrupa para color/leyenda; el icono es específico del tipo real.
+  function calBucket(t) {
+    t = (t || '').toLowerCase();
+    if (t === 'recovery') return 'recovery';
+    if (t === 'gym') return 'gym';
+    if (t === 'tactical' || t === 'beach' || t === 'outdoor') return 'field';
+    if (t === 'travel' || t === 'bus_departure' || t === 'bus_arrival' || t === 'hotel_checkin' || t === 'hotel_checkout') return 'travel';
+    return 'other'; // meeting, meals, day_off, press, medical_check, video_session, walkthrough, scouting, evaluation, other
+  }
+  const CAL_ICONS = {
+    travel: 'ti-plane', bus_departure: 'ti-bus', bus_arrival: 'ti-bus', hotel_checkin: 'ti-bed', hotel_checkout: 'ti-bed',
+    meeting: 'ti-users', evaluation: 'ti-clipboard-list', video_session: 'ti-device-desktop',
+    breakfast: 'ti-coffee', lunch: 'ti-soup', dinner: 'ti-tools-kitchen',
+    press: 'ti-microphone', medical_check: 'ti-stethoscope', walkthrough: 'ti-walk', scouting: 'ti-binoculars',
+    day_off: 'ti-beach', recovery: 'ti-heart-rate-monitor', gym: 'ti-barbell', tactical: 'ti-soccer-field', beach: 'ti-beach', outdoor: 'ti-run'
+  };
+  function calIcon(t) { t = (t || '').toLowerCase(); return CAL_ICONS[t] || 'ti-calendar-event'; }
+  function calLabel(t) { t = (t || '').toLowerCase(); return tt('calendar.type_' + t, t.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())); } // reusa etiquetas del Calendar
   function defaultTitle(cls) { return cls === 'gym' ? tt('club_overview.leg_gym', 'Gym') : cls === 'recovery' ? tt('club_overview.leg_recovery', 'Recovery') : cls === 'match' ? tt('club_overview.leg_match', 'Match') : tt('club_overview.leg_field', 'Field session'); }
   function fmtTime(t) { return t ? String(t).slice(0, 5) : ''; }
   function auOf(s) { return (s.duration && s.estimated_rpe) ? Math.round(s.duration * s.estimated_rpe) : 0; }
@@ -69,10 +89,17 @@
     (state.data.sessions || []).filter(s => s.team_id === teamId && s.session_date === y).forEach(s => {
       const cls = evClass(s.session_type);
       if (cls === 'match' && hasCal) return;
-      evs.push({ cls, kind: 'session', title: s.title || defaultTitle(cls), time: fmtTime(s.session_time), dur: s.duration, au: auOf(s), sid: s.id, stype: s.session_type, gym: s.gym_content });
+      evs.push({ cls, kind: 'session', icon: evIcon(cls), title: s.title || defaultTitle(cls), time: fmtTime(s.session_time), dur: s.duration, au: auOf(s), sid: s.id, stype: s.session_type, gym: s.gym_content });
     });
-    cM.forEach(m => evs.push({ cls: 'match', kind: 'match', title: m.opponent ? ('vs ' + m.opponent) : (m.title || tt('club_overview.leg_match', 'Match')), time: fmtTime(m.start_time), meta: m.home_away || '', mid: m.id }));
-    evs.sort((a, b) => (a.cls === 'match' ? 1 : 0) - (b.cls === 'match' ? 1 : 0));
+    // Resto de eventos del calendario: viajes, comidas, reuniones, día libre, etc.
+    (state.data.calevents || []).filter(c => c.team_id === teamId && c.date === y).forEach(c => {
+      const cls = calBucket(c.type);
+      evs.push({ cls, kind: 'cal', info: true, icon: calIcon(c.type), title: c.title || calLabel(c.type), time: fmtTime(c.start_time), endTime: fmtTime(c.end_time), etype: c.type, loc: c.location || '', notes: c.notes || '', dur: c.duration_minutes || null, cid: c.id });
+    });
+    cM.forEach(m => evs.push({ cls: 'match', kind: 'match', info: true, icon: 'ti-ball-football', title: m.opponent ? ('vs ' + m.opponent) : (m.title || tt('club_overview.leg_match', 'Match')), time: fmtTime(m.start_time), meta: m.home_away || '', loc: m.location || '', mid: m.id }));
+    // Orden: entrenamientos → logística → partido al final.
+    const rank = e => e.kind === 'match' ? 2 : e.kind === 'cal' ? 1 : 0;
+    evs.sort((a, b) => rank(a) - rank(b));
     return evs;
   }
   function rosterCount(teamId) { const s = new Set(); (state.data.pteams || []).forEach(p => { if (p.team_id === teamId) s.add(String(p.player_id)); }); return s.size; }
@@ -83,10 +110,11 @@
     const run = p => p.then(r => (r && r.data) ? r.data : []).catch(() => []);
 
     let sessQ = sb().from('training_sessions').select('id,team_id,title,session_type,session_date,session_time,duration,estimated_rpe,match_day_offset,gym_content').eq('club_id', cid).eq('is_historical', false).gte('session_date', from).lte('session_date', to);
-    let matchQ = sb().from('calendar_events').select('id,team_id,date,start_time,title,opponent,home_away,competition').eq('club_id', cid).eq('type', 'match').gte('date', from).lte('date', to);
+    // Todos los eventos del calendario (no solo partidos): viajes, comidas, reuniones, día libre, etc.
+    let calQ = sb().from('calendar_events').select('id,team_id,date,start_time,end_time,title,opponent,home_away,competition,type,location,notes,duration_minutes').eq('club_id', cid).gte('date', from).lte('date', to);
     let mcQ = sb().from('microcycles').select('id,team_id,match_date,md_overrides,start_date,end_date').eq('club_id', cid).lte('start_date', to).gte('end_date', from);
     let lpQ = sb().from('load_plan').select('plan_date,metric,pct').eq('club_id', cid).gte('plan_date', from).lte('plan_date', to);
-    if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); matchQ = matchQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
+    if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); calQ = calQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);
     const avQ = sb().from('availability').select('player_id,status,team_id,notes').eq('club_id', cid).eq('date', today);
     const rpeQ = sb().from('rpe').select('session_id,player_id,load,session_date').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
@@ -97,9 +125,12 @@
     const tzoff = new Date().getTimezoneOffset();
     const wellQ = sb().rpc('wellness_status', { p_club_id: cid, p_team_id: state.scopeTeam || null, p_date: today, p_tz_offset: tzoff });
 
-    const [sessions, matches, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), run(matchQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
+    const [sessions, cal, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), run(calQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
+    const isMatch = e => (e.type || '').toLowerCase() === 'match';
+    const matches = (cal || []).filter(isMatch);       // subconjunto de partidos (dedup + mdFor)
+    const calevents = (cal || []).filter(e => !isMatch(e)); // resto: viajes, comidas, reuniones, etc.
     const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
-    state.data = { sessions, matches, micros, pteams, avail, rpe, lplan, players, injuries, wellness, pmap, today };
+    state.data = { sessions, matches, calevents, micros, pteams, avail, rpe, lplan, players, injuries, wellness, pmap, today };
   }
   function playerName(id) { const p = state.data && state.data.pmap ? state.data.pmap[String(id)] : null; if (!p) return ''; return [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ''; }
 
@@ -108,7 +139,7 @@
     const D = state.data, teams = scopeTeams(), ids = new Set(teams.map(t => t.id));
     let events = 0, auSum = 0, auN = 0, noPlan = 0;
     teams.forEach(t => state.week.forEach(d => {
-      const evs = cellEvents(t.id, d.ymd); events += evs.length;
+      const evs = cellEvents(t.id, d.ymd); events += evs.filter(e => e.kind !== 'cal').length; // logística no cuenta como sesión
       evs.forEach(e => { if (e.au) { auSum += e.au; auN++; } });
       if (!evs.length && isPlanExpected(t.id, d.ymd)) noPlan++;
     }));
@@ -171,10 +202,15 @@
   }
 
   // ── SCHEDULE GRID ──
-  function evKey(e) { return e.sid ? ('s:' + e.sid) : (e.mid ? ('m:' + e.mid) : ''); }
+  function evKey(e) { return e.sid ? ('s:' + e.sid) : (e.mid ? ('m:' + e.mid) : (e.cid ? ('c:' + e.cid) : '')); }
+  function evMeta(e) {
+    if (e.kind === 'match') return [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ');
+    if (e.kind === 'cal') return [e.time, e.loc].filter(Boolean).join(' · ');
+    return [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
+  }
   function evHtml(e) {
-    const meta = e.kind === 'match' ? [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ') : [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
-    return '<div class="co-ev ' + e.cls + '" data-key="' + evKey(e) + '" role="button" tabindex="0"><div class="et"><i class="ti ' + evIcon(e.cls) + '"></i>' + esc(e.title) + '</div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
+    const meta = evMeta(e);
+    return '<div class="co-ev ' + e.cls + '" data-key="' + evKey(e) + '" role="button" tabindex="0"><div class="et"><i class="ti ' + (e.icon || evIcon(e.cls)) + '"></i>' + esc(e.title) + '</div>' + (meta ? '<div class="em">' + esc(meta) + '</div>' : '') + '</div>';
   }
   function renderGrid() {
     const teams = scopeTeams();
@@ -355,6 +391,31 @@
     document.getElementById('coExParams').innerHTML = r.params ? paramPanel([[r.section, r.params]]) : '';
   }
 
+  function evColors(cls) {
+    if (cls === 'match') return ['var(--cm-danger-bg)', 'var(--cm-danger)'];
+    if (cls === 'gym') return ['var(--cm-info-bg)', 'var(--cm-info)'];
+    if (cls === 'recovery') return ['var(--cm-violet-bg)', 'var(--cm-violet)'];
+    if (cls === 'travel') return ['var(--cm-warning-bg)', 'var(--cm-warning)'];
+    if (cls === 'other') return ['var(--cm-neutral-bg)', 'var(--cm-neutral)'];
+    return ['var(--cm-accent-soft)', 'var(--cm-accent)'];
+  }
+  // Detalle de un evento sin ejercicios (partido / logística): lugar, horario, notas.
+  function infoEventHtml(e) {
+    const [bg, col] = evColors(e.cls);
+    const isMatch = e.kind === 'match';
+    const label = isMatch ? tt('club_overview.matchday', 'Matchday') : calLabel(e.etype);
+    const timeStr = [e.time, e.endTime].filter(Boolean).join(' – ');
+    const metaTop = isMatch ? [fmtHomeAway(e.meta), timeStr].filter(Boolean).join(' · ') : timeStr;
+    let html = sh(bg, col, e.icon || evIcon(e.cls), label + ' · ' + e.title, metaTop);
+    const rows = [];
+    if (isMatch && e.meta) rows.push([tt('club_overview.venue', 'Venue'), fmtHomeAway(e.meta)]);
+    if (e.loc) rows.push([tt('common.location', 'Location'), e.loc]);
+    if (!isMatch && e.dur) rows.push([tt('common.duration', 'Duration'), e.dur + '′']);
+    let list = rows.length ? '<div class="co-list">' + rows.map(r => '<div class="co-li"><span class="lt">' + esc(r[0]) + '</span><span class="ld">' + esc(r[1]) + '</span></div>').join('') + '</div>' : '';
+    if (e.notes) list += '<div class="co-evnote">' + esc(e.notes) + '</div>';
+    if (!list) list = '<div class="co-muted" style="padding:12px">' + tt('club_overview.no_detail', 'No extra detail for this event.') + '</div>';
+    return html + list;
+  }
   function renderSession(e, teamId, y) {
     const team = state.teams.find(t => t.id === teamId), md = mdFor(teamId, y);
     document.getElementById('coDetailTitle').textContent = (team ? team.name : '') + ' · ' + longDate(y);
@@ -362,6 +423,8 @@
     if (md) { mdEl.style.display = ''; mdEl.textContent = md; mdEl.className = 'mdtag' + (md === 'MD' ? ' md0' : ''); } else mdEl.style.display = 'none';
     const body = document.getElementById('coDetailBody'), foot = document.getElementById('coDetailFoot');
     if (!e) { body.innerHTML = '<div class="co-muted">' + tt('club_overview.empty_day', 'No sessions planned') + '</div>'; foot.style.display = 'none'; return; }
+    // Partido / logística: ficha de info (sin cancha ni ejercicios).
+    if (e.info) { body.innerHTML = infoEventHtml(e); foot.style.display = ''; wireCalFoot(teamId, y); state._sid = null; state._ex = []; state._exSel = null; state._exKind = null; return; }
     const cls = e.cls;
     const bg = cls === 'match' ? 'var(--cm-danger-bg)' : cls === 'gym' ? 'var(--cm-info-bg)' : cls === 'recovery' ? 'var(--cm-violet-bg)' : 'var(--cm-accent-soft)';
     const col = cls === 'match' ? 'var(--cm-danger)' : cls === 'gym' ? 'var(--cm-info)' : cls === 'recovery' ? 'var(--cm-violet)' : 'var(--cm-accent)';
@@ -379,11 +442,24 @@
     else if (e.sid) loadFieldEx(e.sid);
     else { document.getElementById('coExList').innerHTML = ''; }
   }
+  function goCal(page, teamId, y) { try { sessionStorage.setItem('cal_active_team', teamId); localStorage.setItem('cal_active_team', teamId); } catch (_) {} location.href = page + '?date=' + y; }
   function wireFoot(teamId, y) {
-    const go = page => { try { sessionStorage.setItem('cal_active_team', teamId); localStorage.setItem('cal_active_team', teamId); } catch (_) {} location.href = page + '?date=' + y; };
     const f = document.getElementById('coOpenField'), g = document.getElementById('coOpenGym');
-    f.onclick = e => { e.preventDefault(); go('Daily%20Planning.html'); };
-    g.onclick = e => { e.preventDefault(); go('Gym%20Planner.html'); };
+    g.style.display = ''; // restaurar tras un evento de logística
+    const fi = f.querySelector('i'), fs = f.querySelector('span');
+    if (fi) fi.className = 'ti ti-eye';
+    if (fs) fs.textContent = tt('club_overview.open_field', 'Open Daily Planning');
+    f.onclick = e => { e.preventDefault(); goCal('Daily%20Planning.html', teamId, y); };
+    g.onclick = e => { e.preventDefault(); goCal('Gym%20Planner.html', teamId, y); };
+  }
+  // Pie para partidos/logística: un solo botón hacia el Calendar.
+  function wireCalFoot(teamId, y) {
+    const f = document.getElementById('coOpenField'), g = document.getElementById('coOpenGym');
+    g.style.display = 'none';
+    const fi = f.querySelector('i'), fs = f.querySelector('span');
+    if (fi) fi.className = 'ti ti-calendar';
+    if (fs) fs.textContent = tt('club_overview.open_calendar', 'Open Calendar');
+    f.onclick = e => { e.preventDefault(); goCal('Calendar.html', teamId, y); };
   }
   function resetDetail() {
     document.getElementById('coDetailTitle').textContent = tt('club_overview.weekly_schedule', 'Session detail');
@@ -494,6 +570,7 @@
     const evs = cellEvents(teamId, y);
     if (key && key.indexOf('s:') === 0) return evs.find(x => x.sid === key.slice(2)) || evs[0] || null;
     if (key && key.indexOf('m:') === 0) return evs.find(x => x.mid === key.slice(2)) || evs[0] || null;
+    if (key && key.indexOf('c:') === 0) return evs.find(x => x.cid === key.slice(2)) || evs[0] || null;
     return evs[0] || null;
   }
   function selectEvent(teamId, y, key) {
