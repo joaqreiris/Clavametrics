@@ -338,7 +338,7 @@ async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response>
   throw new Error('Catapult request failed');   // unreachable (loop returns/throws), keeps TS happy
 }
 
-async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string): Promise<ChunkResult> {
+async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string, onlyActivityId?: string): Promise<ChunkResult> {
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs, seasonStart } = ctx;
   const unmappedParams = new Set<string>();
   let _statsCalls = 0;   // TEMP: count /stats requests this chunk (logged at chunk end; remove after)
@@ -396,6 +396,9 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string)
   }
   const allActivities = (await actRes.json().catch(() => [])) as Record<string, unknown>[];
   const activities = (Array.isArray(allActivities) ? allActivities : []).filter(a => {
+    // Modo dirigido (attach): filtrar por ID de actividad, sin rango de fecha → no depende de la
+    // zona horaria (una actividad "del 17/08 local" puede ser 16/08 UTC y caer fuera del rango).
+    if (onlyActivityId) return String(a.id ?? a.activity_id ?? '') === onlyActivityId;
     const ms = toMs(a.start_time ?? a.startTime ?? a.start);
     return !isNaN(ms) && ms >= fromMsRange && ms < toMsRange;   // [from 00:00, to+1day 00:00)
   });
@@ -817,6 +820,57 @@ Deno.serve(async (req: Request) => {
         .select('id').maybeSingle();
       console.log('[gps-sync] cancel', { jobId: job.id, cancelled: !!updated });
       return json({ ok: true, cancelled: !!updated, job_id: job.id, status: 'cancelled' }, 200);
+    }
+
+    // ══ ATTACH MODE (client) — bajar UNA actividad y engancharla a UNA sesión ══════════
+    // Para la bandeja "GPS sin sesión": el usuario creó/eligió la sesión; acá bajamos SOLO esa
+    // actividad (filtrada por su ID, sin rango de fecha → sin problema de zona horaria) y la
+    // escribimos en esa sesión. Pre-linkeamos server-side (service-role, sin RLS) para que
+    // processActivity la adopte por external_activity_id (2a), saltando el team-match (2b) que
+    // falla con integraciones team-less. Síncrono (una actividad) → el cliente no polea.
+    if (body.mode === 'attach') {
+      const userClient = createClient(
+        Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: 'Not authenticated' }, 401);
+      const integrationId = body.integration_id as string | undefined;
+      const activityId = body.external_activity_id as string | undefined;
+      const sessionId = body.session_id as string | undefined;
+      if (!integrationId || !activityId || !sessionId) return json({ error: 'integration_id, external_activity_id and session_id are required' }, 400);
+
+      const { data: callerClub } = await userClient.rpc('get_user_club_id');
+      const { data: isSuper } = await userClient.rpc('is_super_admin');
+      if (!callerClub && !isSuper) return json({ error: 'No club found for caller' }, 403);
+
+      const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+      // Role gate (igual que START): admin/owner + S&C.
+      const _SYNC_ROLES = new Set(['admin', 'owner', 'sc_coach', 'fitness_coach']);
+      const { data: prof } = await adminClient.from('profiles').select('role, club_role').eq('id', user.id).single();
+      const role = String(prof?.role || '').toLowerCase(), clubRole = String(prof?.club_role || '').toLowerCase();
+      if (!isSuper && !_SYNC_ROLES.has(role) && !_SYNC_ROLES.has(clubRole)) return json({ error: 'Forbidden' }, 403);
+
+      const { data: integration } = await adminClient.from('gps_integrations').select('id, club_id, provider').eq('id', integrationId).single();
+      if (!integration || (integration.club_id !== callerClub && !isSuper)) return json({ error: 'Integration not found' }, 404);
+      if (integration.provider !== 'catapult') return json({ ok: false, message: 'Not supported for this provider yet' });
+      const clubId = integration.club_id as string;
+      const { data: sess } = await adminClient.from('training_sessions').select('id, club_id, session_date').eq('id', sessionId).single();
+      if (!sess || sess.club_id !== clubId) return json({ error: 'Session not found' }, 404);
+
+      // Pre-linkear la sesión a la actividad (service-role → sin RLS) para que 2a la adopte.
+      await adminClient.from('training_sessions').update({ external_activity_id: activityId }).eq('id', sessionId);
+
+      // Bajar SOLO esa actividad (filtro por id) y escribirla en la sesión.
+      const ctx = await loadContext(adminClient, integrationId);
+      const result = await syncRange(adminClient, ctx, String(sess.session_date), String(sess.session_date), activityId);
+
+      // Limpiar el pendiente por si processActivity no lo hizo (ej. la actividad no vino en la lista).
+      await adminClient.from('gps_pending_activities').delete().eq('club_id', clubId).eq('external_activity_id', activityId);
+
+      console.log('[gps-sync] attach', { activityId, sessionId, rows: result.rows, errs: result.errs });
+      return json({ ok: true, rows: result.rows, periods: result.per, errs: result.errs }, 200);
     }
 
     // ══ START MODE (client) ═══════════════════════════════════════════════
