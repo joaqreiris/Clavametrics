@@ -338,11 +338,162 @@
     return { total: Math.round(total), band };
   }
 
+  // ── Continuous (steady-state) running block ────────────────────────────
+  // Fills a VOLUME deficit (total distance) with laps of the marked pitch, the
+  // aerobic complement to the intermittent HIIT block. Two anchors:
+  //   model 'vmax'  → speed = pct × Vmax (km/h): exact lap time, metres & total time.
+  //   model 'fcmax' → prescribe a HR ZONE (lo–hi % of HRmax in bpm); the laps are the
+  //                   volume container and the athlete self-regulates speed to hold the
+  //                   zone, so we DON'T fake a speed/lap-time from heart rate.
+  // Continuous aerobic running sits LOW on the Vmax scale (Vmax = peak sprint), hence
+  // the low default %. Zones are configurable per club in the UI.
+  const CONT_ZONES = {
+    vmax: [
+      { id: 'reg', label: 'Regenerativa', lo: 0.40, hi: 0.50 },
+      { id: 'ext', label: 'Extensiva',    lo: 0.50, hi: 0.60 },
+      { id: 'int', label: 'Intensiva',    lo: 0.60, hi: 0.70 },
+    ],
+    fcmax: [
+      { id: 'reg', label: 'Regenerativa', lo: 0.60, hi: 0.70 },
+      { id: 'ext', label: 'Extensiva',    lo: 0.70, hi: 0.80 },
+      { id: 'int', label: 'Intensiva',    lo: 0.80, hi: 0.88 },
+    ],
+  };
+
+  // Perimeter (one lap) of a rectangular field. Both sides in metres.
+  function fieldPerimeter(lengthM, widthM) {
+    const L = +lengthM, W = +widthM;
+    if (!(L > 0) || !(W > 0)) return null;
+    return Math.round(2 * (L + W));
+  }
+
+  // opts: { deficitM, lapM, model:'vmax'|'fcmax', blocks, restSec,
+  //         vmax, pctVmax(0-1),            // vmax model
+  //         hrmax, hrLoPct(0-1), hrHiPct(0-1) }  // fcmax model
+  // Returns a prescription, or a { need:'vmax'|'fcmax'|'lap'|'deficit' } stub when a
+  // required input is missing so the UI can show a precise hint. null on bad args.
+  function prescribeContinuous(opts) {
+    const o = opts || {};
+    const lapM     = +o.lapM > 0 ? Math.round(+o.lapM) : 0;
+    const deficitM = clamp0(+o.deficitM || 0);
+    const blocks   = Math.max(1, Math.round(+o.blocks || 1));
+    const restSec  = clamp0(+o.restSec || 0);
+    if (lapM <= 0)     return { need: 'lap' };
+    if (deficitM <= 0) return { need: 'deficit' };
+
+    const laps         = Math.max(1, Math.ceil(deficitM / lapM));
+    const totalM       = laps * lapM;
+    const lapsPerBlock = Math.ceil(laps / blocks);
+    const base = { model: o.model, lapM, deficitM: Math.round(deficitM), laps, totalM, blocks, lapsPerBlock };
+
+    if (o.model === 'fcmax') {
+      if (!o.hrmax || o.hrmax <= 0) return { ...base, need: 'fcmax' };
+      const loP = o.hrLoPct != null ? o.hrLoPct : 0.70;
+      const hiP = o.hrHiPct != null ? o.hrHiPct : 0.80;
+      return {
+        ...base,
+        hr: {
+          lo: Math.round(o.hrmax * loP), hi: Math.round(o.hrmax * hiP),
+          loPct: Math.round(loP * 100), hiPct: Math.round(hiP * 100), hrmax: +o.hrmax,
+        },
+        speedKmh: null, lapSec: null, runMin: null, totalMin: null, pctVmax: null,
+      };
+    }
+    // vmax model
+    if (!o.vmax || o.vmax <= 0) return { ...base, need: 'vmax' };
+    const pct      = o.pctVmax != null ? o.pctVmax : 0.55;
+    const speedKmh = +(o.vmax * pct).toFixed(1);
+    const ms       = speedKmh / 3.6;
+    const lapSec   = Math.round(lapM / ms);
+    const runSec   = totalM / ms;
+    return {
+      ...base,
+      speedKmh, lapSec,
+      mPerMin: Math.round(ms * 60),
+      runMin:  +(runSec / 60).toFixed(1),
+      totalMin: +((runSec + restSec * (blocks - 1)) / 60).toFixed(1),
+      pctVmax: Math.round(pct * 100),
+      hr: null,
+    };
+  }
+
+  // ── HRmax (max heart rate) metric resolver — CONFIGURABLE BY NAME ──────
+  // HRmax is not a core column; clubs import it as a CUSTOM metric under any name
+  // ('max_hr', 'fc_max', label 'FC Máx' / 'HR Max' / 'Pulso máximo' …). We recognise
+  // it by matching the catalog (gps_metric_definitions) label+key: a token that means
+  // heart-rate AND a token that means max. The UI can also pin a key explicitly.
+  const HRMAX_HR_HINTS  = ['hr', 'fc', 'bpm', 'ppm', 'lpm', 'heart', 'heartrate', 'pulso', 'pulse',
+                           'frecuencia', 'cardiaca', 'cardiac', 'latido', 'latidos'];
+  const HRMAX_MAX_HINTS = ['max', 'maxi', 'maxima', 'maximo', 'maximum', 'peak', 'pico'];
+  function _normTokens(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  }
+  function looksLikeHRmax(label, key) {
+    const toks = _normTokens(label).concat(_normTokens(key));
+    if (!toks.length) return false;
+    const anyHR  = toks.some(t => HRMAX_HR_HINTS.includes(t) || /^heart/.test(t) || /^pulso/.test(t) || /^frecuenc/.test(t) || /^cardiac/.test(t) || /^latido/.test(t));
+    const anyMax = toks.some(t => HRMAX_MAX_HINTS.includes(t) || /^max/.test(t) || /^pico/.test(t) || /^peak/.test(t));
+    return anyHR && anyMax;
+  }
+  // Returns { key, label } of the club's HRmax metric, or null. Best-effort, cached.
+  async function resolveHRmaxMetric(clubId) {
+    if (!clubId) return null;
+    try {
+      const { data } = await window.sb
+        .from('gps_metric_definitions')
+        .select('key, label')
+        .eq('club_id', clubId);
+      const hit = (data || []).find(d => looksLikeHRmax(d.label, d.key));
+      return hit ? { key: hit.key, label: hit.label } : null;
+    } catch { return null; }
+  }
+  // Player's HRmax (bpm): peak of the HRmax metric across all their sessions (peak-of-
+  // session-peaks ≈ true max). metricKey from resolveHRmaxMetric (or a UI override).
+  async function getPlayerHRmax(playerId, clubId, metricKey) {
+    if (!playerId || !clubId || !metricKey) return null;
+    try {
+      const { data: reps } = await window.sb
+        .from('gps_reports').select('id')
+        .eq('player_id', playerId).eq('club_id', clubId);
+      const ids = (reps || []).map(r => r.id);
+      if (!ids.length) return null;
+      const { data } = await window.sb
+        .from('gps_report_metrics')
+        .select('value')
+        .eq('club_id', clubId)
+        .eq('metric_key', metricKey)
+        .in('report_id', ids)
+        .not('value', 'is', null)
+        .order('value', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data && data.value ? +data.value : null;
+    } catch { return null; }
+  }
+
+  // Validate/normalise a user-defined interval preset (custom "formato de piques").
+  // Returns a clean preset object or null if unusable.
+  function normalizePreset(p) {
+    if (!p) return null;
+    const run  = Math.round(+p.run || 0);
+    const rest = Math.round(+p.rest || 0);
+    const pct  = Math.round(+p.pct || 0);
+    if (run <= 0 || pct <= 0) return null;
+    const id = p.id || `c-${run}-${rest}-${pct}`;
+    const label = p.label && String(p.label).trim()
+      ? String(p.label).trim()
+      : `${run}-${rest} · ${pct}% VIFT`;
+    return { id, label, run, rest, pct, custom: true };
+  }
+
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
-    DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS,
+    DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS, CONT_ZONES,
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
+    prescribeContinuous, fieldPerimeter, normalizePreset,
+    resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax,
     bandTargetSpeed, anaerobicSpeedReserve, pctASR, speedProfile,
     // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
     setFallbackThresholds(hsr, sprint) {

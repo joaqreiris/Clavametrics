@@ -142,6 +142,14 @@
   .tu-defchips span.hi b{color:var(--cm-danger,#dc2626)}
   .tu-defchips span.mid b{color:var(--cm-warning,#b45309)}
   .hide{display:none!important}
+  .tu-switch{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer}
+  .tu-switch input{width:15px;height:15px;accent-color:var(--cm-accent);cursor:pointer}
+  label .dim, label>.dim{color:var(--cm-fg-faint);font-weight:500}
+  .tu-preset-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px}
+  .tu-preset-row .tu-input{max-width:74px}
+  .tu-preset-row .lbl-in{max-width:150px}
+  .tu-mini{font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint);margin-bottom:3px}
+  .tu-del{background:none;border:0;color:var(--cm-danger,#dc2626);cursor:pointer;font-size:16px;padding:6px}
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -227,9 +235,65 @@
             <select id="tu-preset" class="tu-select"></select>
           </div>
         </div>
-        <button class="tu-linkbtn" id="tu-bands-toggle" style="margin-top:8px;padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+          <button class="tu-linkbtn" id="tu-bands-toggle" style="padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
+          <button class="tu-linkbtn" id="tu-presets-toggle" style="padding-left:0" data-i18n="topup.edit_presets">⚙ Editar formatos</button>
+        </div>
         <div id="tu-bands-editor" class="hide"></div>
+        <div id="tu-presets-editor" class="hide"></div>
         <div id="tu-source-hint" class="tu-note"></div>
+      </div>
+
+      <!-- 1b · Continuous running block -->
+      <div class="tu-card">
+        <h3 style="display:flex;align-items:center;justify-content:space-between">
+          <span style="display:flex;align-items:center;gap:8px"><i class="ti ti-run"></i><span data-i18n="topup.cont_title">Carrera continua</span></span>
+          <label class="tu-switch"><input type="checkbox" id="tu-cont-on"><span data-i18n="topup.cont_enable">Prescribir</span></label>
+        </h3>
+        <p class="tu-note" data-i18n="topup.cont_help">Compensa el déficit de distancia total con vueltas al campo. %Vmax da tiempo de vuelta; FCmax prescribe zona de pulso.</p>
+        <div id="tu-cont-body">
+          <div class="tu-row">
+            <div class="tu-field" style="max-width:150px">
+              <label data-i18n="topup.cont_field_len">Largo campo (m)</label>
+              <input id="tu-cont-len" class="tu-input" type="number" min="0" max="150" inputmode="numeric" placeholder="105">
+            </div>
+            <div class="tu-field" style="max-width:150px">
+              <label data-i18n="topup.cont_field_wid">Ancho campo (m)</label>
+              <input id="tu-cont-wid" class="tu-input" type="number" min="0" max="100" inputmode="numeric" placeholder="68">
+            </div>
+            <div class="tu-field" style="max-width:170px">
+              <label data-i18n="topup.cont_lap">Vuelta (m) <span class="dim" data-i18n="topup.cont_lap_hint">o a mano</span></label>
+              <input id="tu-cont-lap" class="tu-input" type="number" min="0" inputmode="numeric" placeholder="—">
+            </div>
+          </div>
+          <div class="tu-row" style="margin-top:12px">
+            <div class="tu-field">
+              <label data-i18n="topup.cont_anchor">Ancla</label>
+              <div class="tu-seg" id="tu-cont-model">
+                <button data-cm="vmax" class="on" data-i18n="topup.cont_vmax">%Vmax</button>
+                <button data-cm="fcmax" data-i18n="topup.cont_fcmax">FCmax</button>
+              </div>
+            </div>
+            <div class="tu-field">
+              <label data-i18n="topup.cont_zone">Zona</label>
+              <select id="tu-cont-zone" class="tu-select"></select>
+            </div>
+          </div>
+          <div class="tu-row" style="margin-top:12px">
+            <div class="tu-field" style="max-width:120px">
+              <label data-i18n="topup.cont_blocks">Bloques</label>
+              <input id="tu-cont-blocks" class="tu-input" type="number" min="1" max="10" inputmode="numeric" value="1">
+            </div>
+            <div class="tu-field" style="max-width:150px">
+              <label data-i18n="topup.cont_rest">Pausa entre bloques (s)</label>
+              <input id="tu-cont-rest" class="tu-input" type="number" min="0" max="600" inputmode="numeric" value="120">
+            </div>
+          </div>
+          <div class="tu-field hide" id="tu-cont-hr-field" style="margin-top:12px">
+            <label data-i18n="topup.cont_hrmetric">Métrica de FC máx</label>
+            <select id="tu-cont-hrmetric" class="tu-select"></select>
+          </div>
+        </div>
       </div>
 
       <!-- 2 · Target metrics -->
@@ -304,15 +368,41 @@
     bandsPct: Array.isArray(prefs.bandsPct) && prefs.bandsPct.length ? prefs.bandsPct : TU.DEFAULT_BANDS_PCT.bands.map(b => ({...b})),
     bandsAbs: Array.isArray(prefs.bandsAbs) && prefs.bandsAbs.length ? prefs.bandsAbs : TU.DEFAULT_BANDS_ABS.bands.map(b => ({...b})),
     bandsOpen: false,
+    // user-defined interval formats (merged after the built-in TU.PRESETS)
+    customPresets: (Array.isArray(prefs.customPresets) ? prefs.customPresets.map(TU.normalizePreset).filter(Boolean) : []),
+    presetsOpen: false,
+    // continuous-running block config
+    cont: Object.assign({
+      on: false, len: null, wid: null, lap: null,
+      model: 'vmax', zoneId: 'ext', blocks: 1, rest: 120, hrmaxKey: null,
+    }, (prefs.cont && typeof prefs.cont === 'object') ? prefs.cont : {}),
+    hrmaxAuto: null,   // { key, label } auto-detected once per club
   };
   const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({
     duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics,
     speedModel: state.speedModel, aim: state.aim, targetBand: state.targetBand, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
+    customPresets: state.customPresets, cont: state.cont,
   })); } catch {} };
 
   const BLOCK_METRICS = ['high_speed_distance','accelerations','decelerations'];
-  const neededMetrics = () => Array.from(new Set(state.metrics.concat(BLOCK_METRICS)));
-  const preset = () => TU.PRESETS.find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
+  const neededMetrics = () => Array.from(new Set(
+    state.metrics.concat(BLOCK_METRICS, state.cont.on ? ['total_distance'] : [])
+  ));
+  // built-in formats + the club's custom ones (deduped by id, custom last)
+  const allPresets = () => {
+    const seen = new Set(); const out = [];
+    TU.PRESETS.concat(state.customPresets || []).forEach(p => { if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); } });
+    return out;
+  };
+  const preset = () => allPresets().find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
+  // continuous: active zone + effective lap distance (perimeter unless a manual lap is set)
+  const contZones = () => TU.CONT_ZONES[state.cont.model === 'fcmax' ? 'fcmax' : 'vmax'];
+  const contZone  = () => contZones().find(z => z.id === state.cont.zoneId) || contZones()[1] || contZones()[0];
+  const contLapM  = () => {
+    const manual = +state.cont.lap;
+    if (manual > 0) return Math.round(manual);
+    return TU.fieldPerimeter(state.cont.len, state.cont.wid);
+  };
   // Active band set for the current speed model (pct/abs). Only bands whose metric
   // is a known GPS metric — so a club with just HSR+Sprint (or custom) never breaks.
   const activeBands = () => (state.speedModel === 'abs' ? state.bandsAbs : state.bandsPct).filter(b => TU.METRIC_DEFS[b.metric]);
@@ -378,22 +468,32 @@
 
   function initPlayer(pid){
     const p = state.players.find(x => x.id === pid);
-    state.pdata[pid] = { player: p, vift: null, vmax: null, ref: null, refAll: null, minutes: 0, actual: {}, lastMatch: null, manualRef: {}, loading: true };
+    state.pdata[pid] = { player: p, vift: null, vmax: null, hrmax: null, ref: null, refAll: null, minutes: 0, actual: {}, lastMatch: null, manualRef: {}, loading: true };
     loadPlayerData(pid);
+  }
+
+  // Resolve the club's HRmax metric key once (manual override wins over auto-detect).
+  const hrmaxKey = () => state.cont.hrmaxKey || (state.hrmaxAuto && state.hrmaxAuto.key) || null;
+  async function ensureHRmaxMeta(){
+    if (state.hrmaxAuto !== null) return;         // already resolved (or resolved to a value)
+    state.hrmaxAuto = await TU.resolveHRmaxMetric(clubId) || { key: null, label: null };
   }
 
   async function loadPlayerData(pid){
     const pd = state.pdata[pid]; if (!pd) return;
     pd.loading = true;
-    const [vift, vmax, ref, refAll] = await Promise.all([
+    await ensureHRmaxMeta();
+    const [vift, vmax, ref, refAll, hrmax] = await Promise.all([
       TU.getLatestVift(pid, clubId),
       TU.getPlayerVmax(pid, clubId),
       TU.getReference(pid, clubId, neededMetrics(), state.mode),
       TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
+      TU.getPlayerHRmax(pid, clubId, hrmaxKey()),
     ]);
     if (!state.pdata[pid]) return;   // deselected while loading
     pd.vift = vift ? vift.vift : null;
     pd.vmax = vmax;
+    pd.hrmax = hrmax;
     pd.ref = ref;
     pd.refAll = refAll;
     if (state.source === 'measured') await loadMeasured(pid);
@@ -516,6 +616,80 @@
     }));
   }
 
+  // ── custom interval formats (presets) ──
+  function renderPresetSelect(){
+    const sel = $('tu-preset');
+    if (!allPresets().some(p => p.id === state.presetId)) state.presetId = TU.DEFAULT_PRESET.id;
+    sel.innerHTML = allPresets().map(p => `<option value="${p.id}" ${p.id===state.presetId?'selected':''}>${esc(p.label)}</option>`).join('');
+  }
+  function renderPresetsEditor(){
+    const box = $('tu-presets-editor');
+    if (!state.presetsOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const rows = state.customPresets.map((p, i) => `<div class="tu-preset-row" data-cp="${i}">
+      <div><div class="tu-mini">${tt('topup.pfmt_run','Trote (s)')}</div><input class="tu-input" type="number" min="1" inputmode="numeric" data-cpf="run" value="${p.run}"></div>
+      <div><div class="tu-mini">${tt('topup.pfmt_rest','Pausa (s)')}</div><input class="tu-input" type="number" min="0" inputmode="numeric" data-cpf="rest" value="${p.rest}"></div>
+      <div><div class="tu-mini">${tt('topup.pfmt_pct','% VIFT')}</div><input class="tu-input" type="number" min="1" inputmode="numeric" data-cpf="pct" value="${p.pct}"></div>
+      <div style="flex:1;min-width:120px"><div class="tu-mini">${tt('topup.pfmt_label','Nombre')}</div><input class="tu-input lbl-in" style="max-width:none" type="text" data-cpf="label" value="${esc(p.label)}" placeholder="${p.run}-${p.rest} · ${p.pct}%"></div>
+      <button class="tu-del" data-cpdel="${i}" title="${tt('common.delete','Borrar')}"><i class="ti ti-trash"></i></button>
+    </div>`).join('');
+    box.innerHTML = rows + `<button class="tu-linkbtn" id="tu-preset-add" style="padding-left:0;margin-top:6px">＋ ${tt('topup.pfmt_add','Agregar formato')}</button>
+      <div class="tu-note">${tt('topup.pfmt_hint','Se suman a los formatos fijos. Velocidad = % del VIFT del jugador.')}</div>`;
+    box.querySelectorAll('input[data-cpf]').forEach(inp => inp.addEventListener('input', () => {
+      const i = +inp.closest('[data-cp]').dataset.cp, f = inp.dataset.cpf;
+      state.customPresets[i][f] = f === 'label' ? inp.value : (+inp.value || 0);
+      const norm = TU.normalizePreset(state.customPresets[i]);
+      if (norm) state.customPresets[i] = Object.assign(state.customPresets[i], { id: norm.id });
+      savePrefs(); renderPresetSelect(); renderResults();
+    }));
+    box.querySelector('#tu-preset-add')?.addEventListener('click', () => {
+      state.customPresets.push({ id: 'c-'+state.customPresets.length+'-'+Date.now(), run: 20, rest: 20, pct: 100, label: '', custom: true });
+      savePrefs(); renderPresetsEditor(); renderPresetSelect();
+    });
+    box.querySelectorAll('[data-cpdel]').forEach(b => b.addEventListener('click', () => {
+      state.customPresets.splice(+b.dataset.cpdel, 1);
+      savePrefs(); renderPresetsEditor(); renderPresetSelect(); renderResults();
+    }));
+  }
+
+  // ── continuous-running config UI ──
+  let _metricDefsList = null;   // cached club metric catalog for the HRmax picker
+  async function renderHrMetricSelect(){
+    const sel = $('tu-cont-hrmetric'); if (!sel) return;
+    if (_metricDefsList == null){
+      try { const { data } = await window.sb.from('gps_metric_definitions').select('key,label').eq('club_id', clubId).order('label'); _metricDefsList = data || []; }
+      catch { _metricDefsList = []; }
+    }
+    const autoLbl = state.hrmaxAuto && state.hrmaxAuto.key
+      ? `${tt('topup.cont_hr_auto','Auto')}: ${esc(state.hrmaxAuto.label || state.hrmaxAuto.key)}`
+      : tt('topup.cont_hr_auto_none','Auto (no detectada)');
+    sel.innerHTML = `<option value="">${autoLbl}</option>` +
+      _metricDefsList.map(m => `<option value="${esc(m.key)}" ${m.key===state.cont.hrmaxKey?'selected':''}>${esc(m.label||m.key)}</option>`).join('');
+  }
+  function renderContZones(){
+    const sel = $('tu-cont-zone');
+    if (!contZones().some(z => z.id === state.cont.zoneId)) state.cont.zoneId = 'ext';
+    sel.innerHTML = contZones().map(z => {
+      const rng = state.cont.model === 'fcmax'
+        ? `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}% FCmax`
+        : `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}% Vmax`;
+      return `<option value="${z.id}" ${z.id===state.cont.zoneId?'selected':''}>${esc(tt('topup.contzone_'+z.id, z.label))} · ${rng}</option>`;
+    }).join('');
+  }
+  function renderContUI(){
+    $('tu-cont-on').checked = !!state.cont.on;
+    $('tu-cont-body').classList.toggle('hide', !state.cont.on);
+    $('tu-cont-len').value = state.cont.len ?? '';
+    $('tu-cont-wid').value = state.cont.wid ?? '';
+    $('tu-cont-lap').value = state.cont.lap ?? '';
+    $('tu-cont-blocks').value = state.cont.blocks ?? 1;
+    $('tu-cont-rest').value = state.cont.rest ?? 120;
+    $('tu-cont-model').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cm === state.cont.model));
+    $('tu-cont-hr-field').classList.toggle('hide', state.cont.model !== 'fcmax');
+    renderContZones();
+    if (state.cont.model === 'fcmax') renderHrMetricSelect();
+  }
+
   // ── deficit + prescription per player ──
   function deficitFor(pd, resolved){
     if (!resolved) return null;
@@ -601,6 +775,36 @@
     return line;
   }
 
+  // Continuous-running line — fills the total-distance (volume) deficit with pitch laps.
+  const CONT_IC = `<span class="ic"><i class="ti ti-refresh"></i></span>`;
+  function contLine(pd, def){
+    const lapM = contLapM();
+    const deficitM = (def['total_distance']||{}).deficit || 0;
+    const zone = contZone();
+    const rx = TU.prescribeContinuous({
+      deficitM, lapM, model: state.cont.model,
+      blocks: state.cont.blocks, restSec: state.cont.rest,
+      vmax: pd.vmax, pctVmax: (zone.lo + zone.hi) / 2,
+      hrmax: pd.hrmax, hrLoPct: zone.lo, hrHiPct: zone.hi,
+    });
+    const zLabel = tt('topup.contzone_'+zone.id, zone.label);
+    const laps = tt('topup.cont_laps','vueltas');
+    const muted = (msg) => `<div class="tu-line muted">${CONT_IC}<span class="main">${msg}</span></div>`;
+    if (!rx || rx.need === 'lap')     return muted(tt('topup.cont_need_field','Cargá dimensiones del campo o una vuelta a mano.'));
+    if (rx.need === 'deficit')        return muted(tt('topup.cont_no_deficit','Sin déficit de distancia total.'));
+    if (rx.need === 'vmax')           return muted(tt('topup.cont_need_vmax','Sin Vmax: cargá GPS o usá FCmax.'));
+    if (rx.need === 'fcmax')          return muted(tt('topup.cont_need_hr','Sin FC máx del jugador. Revisá la métrica configurada.'));
+    const blk = rx.blocks > 1 ? `${rx.blocks}×${rx.lapsPerBlock} · ` : '';
+    if (state.cont.model === 'fcmax'){
+      return `<div class="tu-line">${CONT_IC}
+        <span class="main"><b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.hr.lo}-${rx.hr.hi} bpm <span class="dim">(${rx.hr.loPct}-${rx.hr.hiPct}% FCmax · ${esc(zLabel)})</span></span>
+        <span class="meta">${blk}${(rx.totalM/1000).toFixed(1)} km</span></div>`;
+    }
+    return `<div class="tu-line">${CONT_IC}
+      <span class="main"><b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${rx.pctVmax}% Vmax · ${esc(zLabel)} · ${rx.lapSec}s/${tt('topup.cont_lap_word','vuelta')})</span></span>
+      <span class="meta">${blk}${rx.totalMin}′</span></div>`;
+  }
+
   function playerCardHTML(pid){
     const pd = state.pdata[pid]; if (!pd) return '';
     const badge = pd.loading ? '' : refBadgeFor(pd);
@@ -642,6 +846,9 @@
     const p2 = preset();
     const hiit = state.speedModel === 'vift' ? runLineVIFT(pd, def, p2) : runLineBand(pd, def, p2);
 
+    // Continuous-running block (volume) — only when enabled in config.
+    const cont = state.cont.on ? contLine(pd, def) : '';
+
     // COD line
     const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
     const cod = TU.prescribeCOD(accDef, decDef);
@@ -657,7 +864,7 @@
       return `<span class="${cls}">${esc(mLabel(k))} <b>${fmtNum(d.deficit,u)}</b><small>/${fmtNum(d.reference,u)}</small></span>`;
     }).join('');
 
-    return pre + hiit + codLine + `<div class="tu-defchips">${chips}</div>`;
+    return pre + hiit + cont + codLine + `<div class="tu-defchips">${chips}</div>`;
   }
 
   function renderResults(){
@@ -712,8 +919,9 @@
   }
 
   // ── wire global controls ──
-  $('tu-preset').innerHTML = TU.PRESETS.map(p => `<option value="${p.id}" ${p.id===state.presetId?'selected':''}>${esc(p.label)}</option>`).join('');
+  renderPresetSelect();
   $('tu-preset').addEventListener('change', (e) => { state.presetId = e.target.value; savePrefs(); renderResults(); });
+  $('tu-presets-toggle').addEventListener('click', () => { state.presetsOpen = !state.presetsOpen; renderPresetsEditor(); });
   $('tu-duration').value = state.duration;
   $('tu-duration').addEventListener('input', (e) => { state.duration = +e.target.value || 90; savePrefs(); renderResults(); });
   $('tu-search').addEventListener('input', (e) => { state.filter = e.target.value; renderPicker(); });
@@ -735,15 +943,47 @@
   $('tu-targetband').addEventListener('change', (e) => { state.targetBand = e.target.value; savePrefs(); renderResults(); });
   $('tu-bands-toggle').addEventListener('click', () => { state.bandsOpen = !state.bandsOpen; renderBandsEditor(); });
 
+  // ── continuous-running controls ──
+  // Reload HRmax for every selected player (metric key changed) and re-render.
+  async function reloadHRmax(){
+    await ensureHRmaxMeta();
+    await Promise.all(state.selected.map(async pid => {
+      const pd = state.pdata[pid]; if (!pd) return;
+      pd.hrmax = await TU.getPlayerHRmax(pid, clubId, hrmaxKey());
+    }));
+    renderResults();
+  }
+  $('tu-cont-on').addEventListener('change', async (e) => {
+    state.cont.on = e.target.checked; savePrefs(); renderContUI();
+    if (state.cont.on){ await reloadRefs(); if (state.cont.model === 'fcmax') await reloadHRmax(); }
+    renderResults();
+  });
+  const contNum = (id, key, def) => $(id).addEventListener('input', (e) => {
+    const v = e.target.value.trim(); state.cont[key] = v === '' ? (def===undefined?null:def) : +v; savePrefs(); renderResults();
+  });
+  contNum('tu-cont-len', 'len'); contNum('tu-cont-wid', 'wid'); contNum('tu-cont-lap', 'lap');
+  contNum('tu-cont-blocks', 'blocks', 1); contNum('tu-cont-rest', 'rest', 120);
+  $('tu-cont-model').querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+    state.cont.model = b.dataset.cm; savePrefs(); renderContUI();
+    if (state.cont.on && state.cont.model === 'fcmax') await reloadHRmax(); else renderResults();
+  }));
+  $('tu-cont-zone').addEventListener('change', (e) => { state.cont.zoneId = e.target.value; savePrefs(); renderResults(); });
+  $('tu-cont-hrmetric').addEventListener('change', async (e) => {
+    state.cont.hrmaxKey = e.target.value || null; savePrefs();
+    if (state.cont.on) await reloadHRmax();
+  });
+
   // ── boot ──
   wireResultsDelegation();   // once — survives body re-renders
   renderSpeedModelUI();
   renderMetricChips();
+  renderContUI();
+  ensureHRmaxMeta().then(() => { if (state.cont.model === 'fcmax') renderHrMetricSelect(); });
   await initTeams();
   await loadPlayers();
   renderPicker();
   renderResults();
-  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPicker(); renderResults(); });
+  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPresetSelect(); renderContUI(); renderPicker(); renderResults(); });
 })();
 </script>
 
