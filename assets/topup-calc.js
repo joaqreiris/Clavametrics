@@ -201,6 +201,11 @@
   // ── Player maximal velocity (km/h) — peak max_speed across all sessions ─
   // Used to individualise the HSR/sprint thresholds (% of Vmax). Peak, not mean,
   // because "maximal velocity" is the best sprint the player has hit on record.
+  // GUARD: GPS imports occasionally carry a garbage spike (e.g. 16 000 000) that,
+  // taken as the peak, blows up every downstream number. Ignore anything above a
+  // human ceiling so the query returns the highest PLAUSIBLE speed. Human 100 m WR
+  // peak ≈ 44.7 km/h; football GPS peaks ~36 → 50 km/h is safe headroom.
+  const MAX_PLAUSIBLE_KMH = 50;
   async function getPlayerVmax(playerId, clubId) {
     if (!playerId || !clubId) return null;
     try {
@@ -210,21 +215,44 @@
         .eq('player_id', playerId)
         .eq('club_id', clubId)
         .not('max_speed', 'is', null)
+        .lt('max_speed', MAX_PLAUSIBLE_KMH)
         .order('max_speed', { ascending: false })
         .limit(1)
         .maybeSingle();
-      return data && data.max_speed ? +data.max_speed : null;
+      const v = data && data.max_speed ? +data.max_speed : null;
+      return (v && v > 0 && v < MAX_PLAUSIBLE_KMH) ? v : null;
     } catch { return null; }
   }
 
   // ── Reference load per metric (best-5 or typical-match average) ────────
   // metrics: array of metric keys. mode: 'best' | 'avg'.
+  // PERF: one round-trip for ALL metrics (fetch the player's match-day rows once,
+  // reduce every metric client-side) instead of one getMatchBaseline query per
+  // metric (~6 round-trips). Same best-5/avg + MIN=3 logic as getAllGpsReference.
   async function getReference(playerId, clubId, metrics, mode) {
     const out = {};
-    await Promise.all(metrics.map(async (m) => {
-      const r = await window.getMatchBaseline(playerId, m, clubId, { mode: mode === 'avg' ? 'avg' : 'best' });
-      out[m] = r; // { baseline, count, confidence, source, warning }
-    }));
+    const core = Array.from(new Set(metrics.filter(m => METRIC_DEFS[m])));
+    metrics.forEach(m => out[m] = { baseline: null, count: 0, source: 'personal' });
+    if (!playerId || !clubId || !core.length) return out;
+    try {
+      const matchDates = window.gpsGetMatchDates ? await window.gpsGetMatchDates(clubId) : null;
+      if (!matchDates || !matchDates.size) return out;   // no tagged matches → let gps/position fallbacks fill in
+      const { data } = await window.sb
+        .from('gps_reports')
+        .select(core.join(',') + ',is_invalid, training_sessions!inner(session_date)')
+        .eq('player_id', playerId)
+        .eq('club_id', clubId)
+        .in('training_sessions.session_date', [...matchDates]);
+      const rows = (data || []).filter(r => !r.is_invalid);
+      const n = 5, MIN = 3;
+      core.forEach(m => {
+        const vals = rows.map(r => r[m]).filter(v => v != null).map(Number);
+        if (vals.length < MIN) { out[m] = { baseline: null, count: vals.length, source: 'personal' }; return; }
+        const used = mode === 'avg' ? vals : vals.slice().sort((a, b) => b - a).slice(0, n);
+        const mean = used.reduce((s, v) => s + v, 0) / used.length;
+        out[m] = { baseline: +mean.toFixed(1), count: used.length, source: 'personal' };
+      });
+    } catch { /* degrade to nulls → gps/position/manual fallbacks */ }
     return out;
   }
 

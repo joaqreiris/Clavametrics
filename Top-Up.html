@@ -587,21 +587,25 @@
   async function loadPlayerData(pid){
     const pd = state.pdata[pid]; if (!pd) return;
     pd.loading = true;
-    const [vift, vmax, ref, refAll] = await Promise.all([
+    const need = neededMetrics();
+    const [vift, vmax, ref] = await Promise.all([
       TU.getLatestVift(pid, clubId),
       TU.getPlayerVmax(pid, clubId),
-      TU.getReference(pid, clubId, neededMetrics(), state.mode),
-      TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
+      TU.getReference(pid, clubId, need, state.mode),
     ]);
     if (!state.pdata[pid]) return;   // deselected while loading
     pd.vift = vift ? vift.vift : null;
     pd.vmax = vmax;
     pd.ref = ref;
-    pd.refAll = refAll;
+    // The all-sessions fallback scans every session (heaviest query) — only run it
+    // when personal match data is missing on some needed metric.
+    const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
+    pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode) : {};
+    if (!state.pdata[pid]) return;
     if (state.source === 'measured') await loadMeasured(pid);
     pd.loading = false;
     // Still missing on any needed metric after personal + all-GPS → warm positional.
-    const needsPos = neededMetrics().some(m => (!ref[m] || ref[m].baseline == null) && (!refAll[m] || refAll[m].baseline == null));
+    const needsPos = need.some(m => (!ref[m] || ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
     if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     renderResults();
   }
@@ -649,14 +653,17 @@
       const pd = state.pdata[pid]; if (!pd) return;
       // Refresh VIFT + Vmax too: both are read live from evaluations / gps_reports,
       // so any new GPS import (Vmax) or test load (VIFT) is reflected here.
-      const [ref, refAll, vift, vmax] = await Promise.all([
-        TU.getReference(pid, clubId, neededMetrics(), state.mode),
-        TU.getAllGpsReference(pid, clubId, neededMetrics(), state.mode),
+      const need = neededMetrics();
+      const [ref, vift, vmax] = await Promise.all([
+        TU.getReference(pid, clubId, need, state.mode),
         TU.getLatestVift(pid, clubId),
         TU.getPlayerVmax(pid, clubId),
       ]);
-      pd.ref = ref; pd.refAll = refAll; pd.vift = vift ? vift.vift : null; pd.vmax = vmax;
-      const needsPos = neededMetrics().some(m => (!pd.ref[m] || pd.ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
+      pd.ref = ref; pd.vift = vift ? vift.vift : null; pd.vmax = vmax;
+      // Heavy all-sessions fallback only when personal match data is missing.
+      const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
+      pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode) : {};
+      const needsPos = need.some(m => (!pd.ref[m] || pd.ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
       if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     }));
     renderResults();
