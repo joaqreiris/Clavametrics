@@ -2353,6 +2353,31 @@ CREATE INDEX idx_subscriptions_team ON public.subscriptions USING btree (team_id
 CREATE INDEX idx_subscriptions_club ON public.subscriptions USING btree (club_id);
 CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status);
 
+-- Alertas de churn/pagos para el super admin (ventas + recuperación). Las llena
+-- el webhook de Paddle cuando un equipo agenda un downgrade, agenda cancelación
+-- (→ Free) o entra en past_due (pago fallido). Solo super admin las ve/gestiona.
+create table if not exists public.billing_alerts (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  kind text not null,                       -- 'downgrade' | 'cancel' | 'payment_failed'
+  from_plan text,
+  to_plan text,
+  effective_at timestamp with time zone,
+  status text default 'open'::text not null, -- 'open' | 'resolved'
+  note text,
+  created_at timestamp with time zone default now() not null,
+  resolved_at timestamp with time zone,
+  resolved_by uuid,
+  constraint billing_alerts_pkey primary key (id)
+);
+CREATE INDEX idx_billing_alerts_status ON public.billing_alerts USING btree (status, created_at DESC);
+alter table public.billing_alerts add constraint billing_alerts_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.billing_alerts add constraint billing_alerts_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.billing_alerts enable row level security;
+create policy "billing_alerts_super_all" on public.billing_alerts for all to public
+  using (public.is_super_admin()) with check (public.is_super_admin());
+
 create table if not exists public.surgeries (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,

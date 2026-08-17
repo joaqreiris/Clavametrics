@@ -58,6 +58,7 @@
     <p class="pf-sub" data-i18n="platform.subtitle">Manage plans, pricing and quotes. Changes here affect all clubs.</p>
     <div class="pf-tabs">
       <button class="pf-tab is-active" data-tab="plans" data-i18n="platform.tab_plans">Plans</button>
+      <button class="pf-tab" data-tab="recovery" data-i18n="platform.tab_recovery">Recovery</button>
       <button class="pf-tab" data-tab="calculator" data-i18n="platform.tab_calculator">Budget calculator</button>
     </div>
     <section class="pf-panel is-active" id="pfPlans">
@@ -83,6 +84,13 @@
       </div>
       <div id="pfPlansMatrix"><div class="pf-loading" data-i18n="platform.plans_editor_soon">Plans editor — coming next.</div></div>
     </section>
+    <section class="pf-panel" id="pfRecovery">
+      <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;background:var(--cm-bg)">
+        <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.recovery_title">Downgrades &amp; cancellations</h3>
+        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.recovery_desc">Clubs that scheduled a downgrade, cancellation (→ Free) or had a failed payment. Reach out to recover the account, then mark as resolved.</p>
+        <div id="pfAlerts" style="font-size:13px" data-i18n="common.loading">Loading…</div>
+      </div>
+    </section>
     <section class="pf-panel" id="pfCalculator"><div class="pf-loading" data-i18n="platform.calc_soon">Budget calculator — coming next.</div></section>
   </div>
   <div class="pf-loading" id="pfGate" data-i18n="platform.checking_access">Checking access…</div>
@@ -103,8 +111,10 @@
       document.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('is-active'));
       document.querySelectorAll('.pf-panel').forEach(x=>x.classList.remove('is-active'));
       t.classList.add('is-active');
-      document.getElementById(t.dataset.tab==='plans'?'pfPlans':'pfCalculator').classList.add('is-active');
+      const _panels={ plans:'pfPlans', recovery:'pfRecovery', calculator:'pfCalculator' };
+      document.getElementById(_panels[t.dataset.tab]||'pfPlans').classList.add('is-active');
       if(t.dataset.tab==='calculator' && !_calcDrawn){ window.pfRenderCalc(); _calcDrawn=true; }
+      if(t.dataset.tab==='recovery' && window.pfLoadAlerts){ window.pfLoadAlerts(); }
     });
   });
   document.addEventListener('cm:langchanged', ()=>{
@@ -308,6 +318,54 @@
     function init(){ if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant);
       document.addEventListener('cm:langchanged', ()=>{ try{ loadComps(); }catch(e){} }); }
     if(document.readyState!=='loading') init(); else document.addEventListener('DOMContentLoaded', init);
+  })();
+  </script>
+  <script>
+  // ── Recovery: downgrades / cancelaciones / pagos fallidos (billing_alerts) ──
+  (function(){
+    const sb = window.sb, $ = id => document.getElementById(id);
+    const KIND = {
+      downgrade:      { i:'ti-arrow-down-right',  c:'#d4a14a',          k:'platform.alert_downgrade', f:'Downgrade' },
+      cancel:         { i:'ti-x',                 c:'var(--cm-danger)', k:'platform.alert_cancel',    f:'Cancellation → Free' },
+      payment_failed: { i:'ti-credit-card-off',   c:'var(--cm-danger)', k:'platform.alert_payment',   f:'Payment failed' },
+    };
+    const fmtDate = d => { if(!d) return ''; try{ return new Date(d).toLocaleDateString((window.CM_I18N&&CM_I18N.current)||'en',{year:'numeric',month:'short',day:'numeric'}); }catch(_){ return ''; } };
+    async function load(){
+      const host=$('pfAlerts'); if(!host) return;
+      host.textContent = tt('common.loading','Loading…');
+      try{
+        const { data, error } = await sb.from('billing_alerts')
+          .select('id, kind, from_plan, to_plan, effective_at, created_at, clubs(name), teams(name)')
+          .eq('status','open').order('created_at',{ascending:false});
+        if(error) throw error;
+        if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">'+tt('platform.recovery_none','No open alerts. 🎉')+'</span>'; return; }
+        host.innerHTML = data.map(a=>{
+          const m = KIND[a.kind] || { i:'ti-alert-triangle', c:'var(--cm-fg-muted)', f:a.kind };
+          const club = a.clubs?.name||'—', team = a.teams?.name||'';
+          const label = tt(m.k||('platform.alert_'+a.kind), m.f);
+          const change = a.to_plan ? ((a.from_plan||'?')+' → '+a.to_plan) : (a.from_plan||'');
+          const when = a.effective_at ? tt('platform.alert_effective','effective {date}',{date:fmtDate(a.effective_at)}) : '';
+          return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--cm-border-soft)">
+            <i class="ti ${m.i}" style="font-size:18px;color:${m.c}"></i>
+            <div style="flex:1;min-width:0">
+              <div><strong>${club}</strong>${team?(' · '+team):''} — <span style="color:${m.c}">${label}</span></div>
+              <div style="color:var(--cm-fg-muted);font-size:12px">${change}${change&&when?' · ':''}${when} · ${fmtDate(a.created_at)}</div>
+            </div>
+            <button class="pf-mini" data-resolve="${a.id}">${tt('platform.alert_resolve','Resolve')}</button>
+          </div>`;
+        }).join('');
+        host.querySelectorAll('[data-resolve]').forEach(b=>b.addEventListener('click',()=>resolve(b.dataset.resolve)));
+      }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">'+tt('platform.cannot_load','Cannot load.')+'</span>'; }
+    }
+    async function resolve(id){
+      try{
+        const { data:{ user } } = await sb.auth.getUser();
+        const { error } = await sb.from('billing_alerts').update({ status:'resolved', resolved_at:new Date().toISOString(), resolved_by:user?.id||null }).eq('id', id);
+        if(error) throw error; await load();
+      }catch(e){ alert(tt('platform.failed','Failed: '+(e.message||e),{msg:(e.message||e)})); }
+    }
+    window.pfLoadAlerts = load;
+    document.addEventListener('cm:langchanged', ()=>{ try{ if($('pfRecovery')?.classList.contains('is-active')) load(); }catch(e){} });
   })();
   </script>
 </body>

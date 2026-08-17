@@ -153,22 +153,25 @@ Deno.serve(async (req: Request) => {
     // el ciclo avanza (renovación) caemos al camino normal y se aplica el menor.
     let scheduledPlanId: string | null = null;
     let scheduledChangeAt: string | null = null;
+    let scheduledSlug: string | null = null;       // slug del plan agendado (para la alerta)
     let effectivePlan = plan;
-    if (isActive) {
-      const { data: existing } = await supabase.from('subscriptions')
-        .select('plan_id, current_period_start')
-        .eq('provider_subscription_id', subId).maybeSingle();
-      if (existing?.plan_id && existing.plan_id !== plan.id) {
-        const { data: curPlan } = await supabase.from('plans')
-          .select('id, slug, sort_order, price_monthly, price_yearly').eq('id', existing.plan_id).maybeSingle();
-        const samePeriod = !!(periodStart && existing.current_period_start
-          && new Date(periodStart).getTime() === new Date(existing.current_period_start).getTime());
-        const isDowngrade = curPlan && (plan.sort_order ?? 0) < (curPlan.sort_order ?? 0);
-        if (isDowngrade && samePeriod) {
-          scheduledPlanId = plan.id;          // plan menor: se aplica al renovar
-          scheduledChangeAt = periodEnd;
-          effectivePlan = curPlan;            // features del plan alto siguen vigentes
-        }
+
+    // Estado previo de ESTA sub (para agendado y para dedup de alertas).
+    const { data: existing } = await supabase.from('subscriptions')
+      .select('plan_id, status, current_period_start, scheduled_plan_id')
+      .eq('provider_subscription_id', subId).maybeSingle();
+
+    if (isActive && existing?.plan_id && existing.plan_id !== plan.id) {
+      const { data: curPlan } = await supabase.from('plans')
+        .select('id, slug, sort_order, price_monthly, price_yearly').eq('id', existing.plan_id).maybeSingle();
+      const samePeriod = !!(periodStart && existing.current_period_start
+        && new Date(periodStart).getTime() === new Date(existing.current_period_start).getTime());
+      const isDowngrade = curPlan && (plan.sort_order ?? 0) < (curPlan.sort_order ?? 0);
+      if (isDowngrade && samePeriod) {
+        scheduledPlanId = plan.id;          // plan menor: se aplica al renovar
+        scheduledChangeAt = periodEnd;
+        scheduledSlug = plan.slug;
+        effectivePlan = curPlan;            // features del plan alto siguen vigentes
       }
     }
 
@@ -181,6 +184,7 @@ Deno.serve(async (req: Request) => {
       if (freePlan?.id) {
         scheduledPlanId = freePlan.id;
         scheduledChangeAt = schedChange.effective_at ?? periodEnd;
+        scheduledSlug = 'initiation';
       }
     }
 
@@ -227,6 +231,39 @@ Deno.serve(async (req: Request) => {
       updated_at: new Date().toISOString(),
     }).eq('id', clubId);
     if (clubErr) console.error('clubs update failed (non-fatal)', clubErr);
+
+    // ── Alerta de churn/pago para el super admin (ventas + recuperación) ──────
+    // Deduplicada contra el estado previo (existing) para no repetir en cada
+    // reenvío del mismo evento. No fatal si falla.
+    try {
+      let alert: { kind: string; from_plan: string | null; to_plan: string | null; effective_at: string | null } | null = null;
+      const prevSched = existing?.scheduled_plan_id ?? null;
+      const prevStatus = existing?.status ?? null;
+
+      if (scheduledPlanId && scheduledPlanId !== prevSched) {
+        // Nuevo cambio agendado: downgrade o cancelación (→ Free).
+        alert = {
+          kind: scheduledSlug === 'initiation' ? 'cancel' : 'downgrade',
+          from_plan: effectivePlan.slug,
+          to_plan: scheduledSlug,
+          effective_at: scheduledChangeAt,
+        };
+      } else if (status === 'past_due' && prevStatus !== 'past_due') {
+        // Pago fallido → oportunidad de recuperar el pago.
+        alert = { kind: 'payment_failed', from_plan: effectivePlan.slug, to_plan: null, effective_at: periodEnd };
+      } else if (status === 'canceled' && prevStatus && prevStatus !== 'canceled' && !prevSched) {
+        // Cancelación efectiva no anticipada por un agendado (ej. dunning agotado).
+        alert = { kind: 'cancel', from_plan: effectivePlan.slug, to_plan: 'initiation', effective_at: null };
+      }
+
+      if (alert) {
+        const { error: alErr } = await supabase.from('billing_alerts').insert({
+          club_id: clubId, team_id: teamId, kind: alert.kind,
+          from_plan: alert.from_plan, to_plan: alert.to_plan, effective_at: alert.effective_at,
+        });
+        if (alErr) console.error('billing_alerts insert failed (non-fatal)', alErr);
+      }
+    } catch (e) { console.error('billing_alerts block error (non-fatal)', e); }
 
     return json({ ok: true, type, sub: subId, team: teamId, status });
   } catch (e) {
