@@ -3554,7 +3554,7 @@ async function _gpRenderPending(clubId, body, ov) {
     const dateTd = `<td style="font-family:var(--cm-font-mono);white-space:nowrap;vertical-align:top">${r.session_date || '—'}</td>`;
     if (plan) {   // ── Ya hay sesión planificada → ASOCIAR ──
       const md = plan.match_day_offset ? ` · ${_gpMdLabel(plan.match_day_offset)}` : '';
-      return `<tr data-pend="${r.id}" data-date="${r.session_date}">
+      return `<tr data-pend="${r.id}" data-date="${r.session_date}" data-aid="${r.external_activity_id || ''}" data-sid="${plan.id}">
         ${dateTd}
         <td style="white-space:normal;word-break:break-word;vertical-align:top">${name}<div style="font-size:10.5px;color:var(--cm-fg-muted)">${team}</div></td>
         <td colspan="2" style="vertical-align:top"><span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--cm-success,#16a34a);border-radius:99px;color:var(--cm-success,#16a34a);font-size:11px"><i class="ti ti-link"></i>${tt('gps_analysis.pending_plan_found', 'Planned session')}: <b>${_gpEsc(plan.title || _gpStLabel(plan.session_type))}</b>${md}</span></td>
@@ -3565,7 +3565,7 @@ async function _gpRenderPending(clubId, body, ov) {
     const isMatch = !!mEvt;
     const stOpts = _GP_ST_LIST.map(t => `<option value="${t}" ${(isMatch && t === 'match') ? 'selected' : ''}>${_gpStLabel(t)}</option>`).join('');
     const hint = mEvt ? `<div style="font-size:10.5px;color:var(--cm-accent)"><i class="ti ti-ball-football"></i> ${tt('gps_analysis.pending_match_found', 'Match in calendar')}${mEvt.opponent ? ' vs ' + _gpEsc(mEvt.opponent) : ''}</div>` : '';
-    return `<tr data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}">
+    return `<tr data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${r.external_activity_id || ''}">
       ${dateTd}
       <td style="white-space:normal;word-break:break-word;vertical-align:top">${name}<div style="font-size:10.5px;color:var(--cm-fg-muted)">${team}</div>${hint}</td>
       <td style="vertical-align:top"><select class="pend-st" style="${inp}">${stOpts}</select></td>
@@ -3582,12 +3582,12 @@ async function _gpRenderPending(clubId, body, ov) {
     </table></div>`;
   body.querySelectorAll('.pend-go').forEach(btn => btn.addEventListener('click', () => {
     const tr = btn.closest('[data-pend]');
-    _gpResolvePending(clubId, { pendId: tr.dataset.pend, date: tr.dataset.date, teamId: tr.dataset.team || null,
+    _gpResolvePending(clubId, { pendId: tr.dataset.pend, date: tr.dataset.date, teamId: tr.dataset.team || null, activityId: tr.dataset.aid || null,
       sessionType: tr.querySelector('.pend-st').value, md: tr.querySelector('.pend-md').value, create: true }, body, ov, btn);
   }));
   body.querySelectorAll('.pend-assoc').forEach(btn => btn.addEventListener('click', () => {
     const tr = btn.closest('[data-pend]');
-    _gpResolvePending(clubId, { pendId: tr.dataset.pend, date: tr.dataset.date, create: false }, body, ov, btn);
+    _gpResolvePending(clubId, { pendId: tr.dataset.pend, date: tr.dataset.date, sessionId: tr.dataset.sid || null, activityId: tr.dataset.aid || null, create: false }, body, ov, btn);
   }));
 }
 
@@ -3597,6 +3597,7 @@ async function _gpRenderPending(clubId, body, ov) {
 async function _gpResolvePending(clubId, p, body, ov, btn) {
   btn.disabled = true; const _lbl = btn.innerHTML;
   try {
+    let sessionId = p.sessionId || null;   // ASOCIAR → id de la sesión planificada detectada
     if (p.create) {
       btn.textContent = tt('gps_analysis.pending_creating', 'Creating…');
       const ins = {
@@ -3605,22 +3606,32 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
         ...(p.teamId ? { team_id: p.teamId } : {}),
         ...(p.md ? { match_day_offset: p.md } : {}),
       };
-      const { error: sErr } = await window.sb.from('training_sessions').insert(ins);
+      const { data: newSess, error: sErr } = await window.sb.from('training_sessions').insert(ins).select('id').single();
       if (sErr) throw sErr;
+      sessionId = newSess?.id || null;
     }
-    // Re-sync dirigido: la sync adopta la sesión (creada o ya existente) y baja el GPS.
+    // CLAVE: pre-linkear la sesión a la actividad del pendiente. Así el re-sync la adopta por
+    // coincidencia EXACTA (paso 2a de gps-sync: external_activity_id) y NO por el team-match
+    // estricto (2b) que fallaba → el GPS se engancha a ESTA sesión, garantizado.
+    if (sessionId && p.activityId) {
+      const { error: lErr } = await window.sb.from('training_sessions')
+        .update({ external_activity_id: p.activityId }).eq('id', sessionId);
+      if (lErr && !/duplicate|unique/i.test(lErr.message || '')) throw lErr;
+    }
+    // Re-sync dirigido: baja los gps_reports de ese día y los escribe en la sesión ya linkeada.
     btn.textContent = tt('gps_analysis.pending_syncing', 'Syncing…');
     const { data: intgs } = await window.sb.from('gps_integrations').select('id').eq('provider', 'catapult').limit(1);
     const intId = intgs && intgs[0] && intgs[0].id;
     if (intId) {
-      await window.sb.functions.invoke('gps-sync', { body: { mode: 'start', integration_id: intId, from: p.date, to: p.date } });
-      const gone = await _gpPollPendingGone(clubId, p.pendId);   // ~40s
+      // supabase-js marca el 409 (ya hay un sync corriendo) como error; no es fatal → seguimos y
+      // el poll espera igual a que ese job procese el día.
+      const { error: syncErr } = await window.sb.functions.invoke('gps-sync', { body: { mode: 'start', integration_id: intId, from: p.date, to: p.date } });
+      if (syncErr && !/409|already|running/i.test(syncErr.message || '')) { try { const b = await syncErr.context?.json?.(); if (!(b && (b.already_running || b.job_id))) throw syncErr; } catch (_) { /* seguimos al poll */ } }
+      const gone = await _gpPollPendingGone(clubId, p.pendId);   // ~60s
       if (!gone) showToast(tt('gps_analysis.pending_slow', 'Session ready — the GPS is still syncing; it will attach shortly.'));
-    } else if (p.create) {
-      // Sin integración catapult: la sesión queda creada; el próximo sync la adoptará. Limpio el pendiente.
+    } else if (sessionId) {
+      // Sin integración catapult: la sesión queda linkeada; el próximo sync bajará el GPS. Limpio el pendiente.
       await window.sb.from('gps_pending_activities').delete().eq('club_id', clubId).eq('id', p.pendId);
-    } else {
-      showToast(tt('gps_analysis.pending_no_integration', 'No provider connected — a re-sync is needed to attach the GPS.'), true);
     }
     showToast(p.create ? tt('gps_analysis.pending_done', 'Session created — GPS attached') : tt('gps_analysis.pending_assoc_done', 'GPS attached to the session'));
     window.cmInvalidateGpsCache?.();
@@ -3630,7 +3641,7 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
 }
 
 async function _gpPollPendingGone(clubId, pendId) {
-  for (let i = 0; i < 20; i++) {   // ~40s (20 × 2s): el worker encadenado suele terminar un día de una
+  for (let i = 0; i < 30; i++) {   // ~60s (30 × 2s): el worker encadenado suele terminar un día de una
     await new Promise(r => setTimeout(r, 2000));
     const { data } = await window.sb.from('gps_pending_activities').select('id').eq('id', pendId).maybeSingle();
     if (!data) return true;
