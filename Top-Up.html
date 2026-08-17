@@ -155,14 +155,14 @@
   .tu-zonechip .zn{font:700 12px/1.1 var(--cm-font-sans)}
   .tu-zonechip .zr{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
   .tu-zonechip::before{content:"";width:100%;height:4px;border-radius:99px;margin-bottom:2px;background:var(--zc,#94a3b8)}
-  .tu-zonechip.low{--zc:#15803D}.tu-zonechip.mid{--zc:#f59e0b}.tu-zonechip.high{--zc:#dc2626}
-  .tu-zonechip.on{border-color:var(--zc);background:color-mix(in srgb,var(--zc) 10%,transparent)}
+  .tu-zonechip.z1{--zc:#9ca3af}.tu-zonechip.z2{--zc:#0ea5e9}.tu-zonechip.z3{--zc:#16a34a}.tu-zonechip.z4{--zc:#f97316}.tu-zonechip.z5{--zc:#dc2626}
+  .tu-zonechip.on{border-color:var(--zc);background:color-mix(in srgb,var(--zc) 12%,transparent)}
   .tu-zonechip.on .zn{color:var(--zc)}
   .tu-zpill{font:700 10px/1 var(--cm-font-sans);padding:3px 7px;border-radius:99px;color:#fff}
-  .tu-zpill.low{background:#15803D}.tu-zpill.mid{background:#f59e0b}.tu-zpill.high{background:#dc2626}
+  .tu-zpill.z1{background:#9ca3af}.tu-zpill.z2{background:#0ea5e9}.tu-zpill.z3{background:#16a34a}.tu-zpill.z4{background:#f97316}.tu-zpill.z5{background:#dc2626}
   .tu-zrow{display:flex;align-items:center;gap:8px;padding:6px 0}
   .tu-zrow .zdot{width:10px;height:10px;border-radius:99px;flex:none}
-  .tu-zrow .zdot.low{background:#15803D}.tu-zrow .zdot.mid{background:#f59e0b}.tu-zrow .zdot.high{background:#dc2626}
+  .tu-zrow .zdot.z1{background:#9ca3af}.tu-zrow .zdot.z2{background:#0ea5e9}.tu-zrow .zdot.z3{background:#16a34a}.tu-zrow .zdot.z4{background:#f97316}.tu-zrow .zdot.z5{background:#dc2626}
   .tu-zrow .zname{flex:1;font:600 12px/1 var(--cm-font-sans)}
   .tu-zrow input{max-width:64px}
   .tu-zrow .bsep{color:var(--cm-fg-faint);font:600 12px/1 var(--cm-font-mono)}
@@ -395,7 +395,7 @@
     // continuous-running block config
     cont: Object.assign({
       on: false, len: null, wid: null, lap: null,
-      model: 'vmax', zoneId: 'ext', blocks: 1, rest: 120, hrmaxKey: null,
+      model: 'vmax', zoneId: TU.CONT_DEFAULT_ZONE, blocks: 1, rest: 120, hrmaxKey: null,
       zonesVmax: TU.CONT_ZONES.vmax.map(z => ({...z})),
       zonesFcmax: TU.CONT_ZONES.fcmax.map(z => ({...z})),
       zonesOpen: false,
@@ -432,7 +432,8 @@
   const preset = () => allPresets().find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
   // continuous: active zone + effective lap distance (perimeter unless a manual lap is set)
   const contZones = () => state.cont[state.cont.model === 'fcmax' ? 'zonesFcmax' : 'zonesVmax'];
-  const contZone  = () => contZones().find(z => z.id === state.cont.zoneId) || contZones()[1] || contZones()[0];
+  const contZone  = () => contZones().find(z => z.id === state.cont.zoneId)
+    || contZones().find(z => z.id === TU.CONT_DEFAULT_ZONE) || contZones()[0];
   const contLapM  = () => {
     const manual = +state.cont.lap;
     if (manual > 0) return Math.round(manual);
@@ -703,7 +704,7 @@
   }
   function renderContZones(){
     const box = $('tu-cont-zone');
-    if (!contZones().some(z => z.id === state.cont.zoneId)) state.cont.zoneId = 'ext';
+    if (!contZones().some(z => z.id === state.cont.zoneId)) state.cont.zoneId = TU.CONT_DEFAULT_ZONE;
     box.innerHTML = contZones().map(z => {
       const rng = `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}%`;
       return `<button type="button" class="tu-zonechip ${z.tone} ${z.id===state.cont.zoneId?'on':''}" data-zone="${z.id}">

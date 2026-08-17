@@ -347,17 +347,25 @@
   //                   zone, so we DON'T fake a speed/lap-time from heart rate.
   // Continuous aerobic running sits LOW on the Vmax scale (Vmax = peak sprint), hence
   // the low default %. Zones are configurable per club in the UI.
-  // tone drives the UI colour: low=green · mid=amber · high=red (rising intensity).
+  // Standard 5-zone HR model (todomountainbike.net reference). tone drives the UI
+  // colour: z1 gris · z2 celeste · z3 verde · z4 naranja · z5 rojo (rising intensity).
+  // fcmax = the canonical %HRmax table; vmax = sane %Vmax defaults for the same named
+  // zones (Vmax = peak sprint, so lower %). Both are editable per club in the UI.
+  const CONT_DEFAULT_ZONE = 'z3';   // Moderada — aerobic by excellence
   const CONT_ZONES = {
     vmax: [
-      { id: 'reg', label: 'Regenerativa', lo: 0.40, hi: 0.50, tone: 'low'  },
-      { id: 'ext', label: 'Extensiva',    lo: 0.50, hi: 0.60, tone: 'mid'  },
-      { id: 'int', label: 'Intensiva',    lo: 0.60, hi: 0.70, tone: 'high' },
+      { id: 'z1', label: 'Muy suave', lo: 0.45, hi: 0.55, tone: 'z1' },
+      { id: 'z2', label: 'Suave',     lo: 0.55, hi: 0.62, tone: 'z2' },
+      { id: 'z3', label: 'Moderada',  lo: 0.62, hi: 0.70, tone: 'z3' },
+      { id: 'z4', label: 'Intensa',   lo: 0.70, hi: 0.80, tone: 'z4' },
+      { id: 'z5', label: 'Máxima',    lo: 0.80, hi: 0.90, tone: 'z5' },
     ],
     fcmax: [
-      { id: 'reg', label: 'Regenerativa', lo: 0.60, hi: 0.70, tone: 'low'  },
-      { id: 'ext', label: 'Extensiva',    lo: 0.70, hi: 0.80, tone: 'mid'  },
-      { id: 'int', label: 'Intensiva',    lo: 0.80, hi: 0.88, tone: 'high' },
+      { id: 'z1', label: 'Muy suave', lo: 0.50, hi: 0.60, tone: 'z1' },
+      { id: 'z2', label: 'Suave',     lo: 0.60, hi: 0.70, tone: 'z2' },
+      { id: 'z3', label: 'Moderada',  lo: 0.70, hi: 0.80, tone: 'z3' },
+      { id: 'z4', label: 'Intensa',   lo: 0.80, hi: 0.90, tone: 'z4' },
+      { id: 'z5', label: 'Máxima',    lo: 0.90, hi: 1.00, tone: 'z5' },
     ],
   };
 
@@ -490,7 +498,7 @@
 
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
-    DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS, CONT_ZONES,
+    DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS, CONT_ZONES, CONT_DEFAULT_ZONE,
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
     prescribeContinuous, fieldPerimeter, normalizePreset,
