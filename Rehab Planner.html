@@ -234,6 +234,9 @@
           <span class="label">Week 4 <span class="sub">May 26 – Jun 01</span></span>
           <button><i class="ti ti-chevron-right"></i></button>
         </div>
+        <button class="cm-btn is-outline is-sm" id="rp-copy-week" data-i18n-attr="title:rehab_planner.copy_week_hint" title="Copy every block of this week to another week">
+          <i class="ti ti-copy"></i> <span data-i18n="rehab_planner.copy_week">Copy week</span> <i class="ti ti-chevron-right" style="font-size:14px;opacity:.6"></i>
+        </button>
         <div class="spacer"></div>
         <span class="meta"><span class="cm-kbd" id="rp-kbd-mod">⌘</span><span class="cm-kbd">K</span> &nbsp;<span data-i18n="rehab_planner.to_add_block">to add block</span></span>
       </div>
@@ -859,6 +862,78 @@ function tt(key, fallbackEN, vars) {
       }
     });
   }
+
+  // ─── Copy whole week → chosen destination week ───
+  // rehab_sessions are just date-keyed rows, so cloning a week = re-insert every block shifted by N*7 days.
+  // Clones as-is (no load progression) — edit the copies afterwards with the block editor / library.
+  (function initCopyWeek() {
+    const btn = document.getElementById('rp-copy-week');
+    if (!btn) return;
+    const CLONE_FIELDS = ['name','color','duration_min','block_count','block_type','owner','rpe_target','volume_sets','au','notes','context_note','exercises'];
+    const DAY_MS = 86400000;
+    let menu = null;
+
+    const closeMenu = () => { if (menu) { menu.remove(); menu = null; document.removeEventListener('click', onDocClick, true); } };
+    const onDocClick = (e) => { if (menu && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) closeMenu(); };
+
+    async function copyWeekTo(offsetWeeks) {
+      closeMenu();
+      const ws = currentWeekStart;
+      const we = new Date(ws.getTime() + 6 * DAY_MS);
+      const { data: sessions, error } = await window.sb
+        .from('rehab_sessions').select('*')
+        .eq('plan_id', planId)
+        .gte('date', window.cmYMD(ws)).lte('date', window.cmYMD(we))
+        .order('date');
+      if (error) { rpToast(tt('rehab_planner.copy_week_failed', 'Could not copy the week')); return; }
+      if (!sessions || !sessions.length) { rpToast(tt('rehab_planner.copy_week_empty', 'This week has no blocks to copy')); return; }
+      const rows = sessions.map(s => {
+        const d = new Date(s.date + 'T00:00:00');
+        d.setDate(d.getDate() + offsetWeeks * 7);
+        const row = { plan_id: planId, club_id: clubId, date: window.cmYMD(d) };
+        CLONE_FIELDS.forEach(k => { if (s[k] != null) row[k] = s[k]; });
+        return row;
+      });
+      const { error: insErr } = await window.sb.from('rehab_sessions').insert(rows);
+      if (insErr) { console.warn('[copy-week] insert', insErr); rpToast(tt('rehab_planner.copy_week_failed', 'Could not copy the week')); return; }
+      rpToast(tt('rehab_planner.copy_week_done', '{n} blocks copied', { n: rows.length }));
+      currentWeekStart = new Date(currentWeekStart.getTime() + offsetWeeks * 7 * DAY_MS);
+      await loadWeek(currentWeekStart);
+    }
+
+    function openMenu() {
+      if (menu) { closeMenu(); return; }
+      menu = document.createElement('div');
+      menu.className = 'rp-copy-week-menu';
+      menu.style.cssText = 'position:absolute;z-index:60;min-width:230px;background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:var(--cm-r-2);box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;font:var(--cm-body-sm)';
+      const head = document.createElement('div');
+      head.style.cssText = 'padding:6px 8px;color:var(--cm-fg-muted);font:var(--cm-caption)';
+      head.textContent = tt('rehab_planner.copy_week_to', 'Copy this week to…');
+      menu.appendChild(head);
+      const fmtD = d => { try { return d.toLocaleDateString((window.CM_I18N && CM_I18N.current) || 'en-US', { month: 'short', day: 'numeric' }); } catch (_) { return ''; } };
+      for (let n = 1; n <= 8; n++) {
+        const ws = new Date(currentWeekStart.getTime() + n * 7 * DAY_MS);
+        const we = new Date(ws.getTime() + 6 * DAY_MS);
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'rp-copy-week-item';
+        item.style.cssText = 'display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;border-radius:var(--cm-r-1);cursor:pointer;color:var(--cm-fg)';
+        item.onmouseenter = () => item.style.background = 'var(--cm-bg-soft)';
+        item.onmouseleave = () => item.style.background = 'transparent';
+        const lbl = n === 1 ? tt('rehab_planner.copy_week_next', 'Next week') : tt('rehab_planner.copy_week_in_n', 'In {n} weeks', { n });
+        item.innerHTML = `<span>${lbl} · ${tt('common.week','Week')} ${rpWeekNum(ws)}</span><span style="color:var(--cm-fg-muted)">${fmtD(ws)} – ${fmtD(we)}</span>`;
+        item.onclick = () => copyWeekTo(n);
+        menu.appendChild(item);
+      }
+      document.body.appendChild(menu);
+      const r = btn.getBoundingClientRect();
+      menu.style.top = (r.bottom + window.scrollY + 4) + 'px';
+      menu.style.left = (r.left + window.scrollX) + 'px';
+      setTimeout(() => document.addEventListener('click', onDocClick, true), 0);
+    }
+
+    btn.addEventListener('click', openMenu);
+  })();
 
   // ── Block click → side panel ──
   const TYPE_LABEL_MAP = {
