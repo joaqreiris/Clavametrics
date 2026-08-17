@@ -1120,6 +1120,7 @@ function gpBuildLibModal() {
         <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
         <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.exercises_library','Exercises Library')}</div>
         <input id="gpLibSearch" type="text" placeholder="${tt('gym_planner.search_exercises_ph','Search exercises…')}" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
+        <button onclick="gpOpenExCreate()" title="${tt('gym_planner.new_exercise','New exercise')}" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:var(--cm-accent);border:0;border-radius:6px;cursor:pointer;color:#fff;font-size:16px"><i class="ti ti-plus"></i></button>
         <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <style>
@@ -1127,6 +1128,8 @@ function gpBuildLibModal() {
         .gp-lib-sel{height:28px;padding:0 8px;border-radius:6px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:600 11px/1 var(--cm-font-sans);cursor:pointer;outline:none;max-width:150px}
         .gp-lib-sel:hover{border-color:var(--cm-border-strong)}
         .gp-lib-sel:focus{border-color:var(--cm-accent)}
+        .gp-lib-item{display:flex;align-items:center;gap:10px}
+        .gp-lib-thumb{width:46px;height:34px;border-radius:5px;overflow:hidden;flex:0 0 auto;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center}
       </style>
       <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
@@ -1214,9 +1217,12 @@ function gpRenderLibList() {
     const muscleLabel = gpExMuscles(e).map(m => gpFacetLabel('muscle_group',m))[0];
     const purposeLabel = gpExPurposes(e).map(p => gpFacetLabel('purpose',p))[0];
     const meta = [muscleLabel, purposeLabel, e.complexity].filter(Boolean).join(' · ');
-    return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
-      <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
-      ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
+    return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
+      <span class="gp-lib-thumb" data-ex="${e.id}">${gpLibThumbHtml(e.id)}</span>
+      <span style="min-width:0;flex:1">
+        <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
+        ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
+      </span>
     </button>`;
   }).join('');
   foot.textContent = tt('gym_planner.n_exercises_count', `${items.length} exercise${items.length>1?'s':''}`, { count:items.length });
@@ -1225,6 +1231,33 @@ function gpRenderLibList() {
     b.onmouseleave = () => b.style.background = 'transparent';
     b.onclick = () => gpPickLib(b.dataset.id, b.dataset.name);
   });
+  gpResolveLibMedia().then(gpPatchLibThumbs);
+}
+// Thumbnail for a library row: signed image/GIF > YouTube poster > barbell placeholder.
+function gpLibThumbHtml(exId){
+  const src = gpExThumbSrc(exId);
+  return src
+    ? `<img src="${src}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">`
+    : `<i class="ti ti-barbell" style="font-size:15px;color:var(--cm-fg-muted)"></i>`;
+}
+// Resolve media for every library exercise once (signed URLs batched), populating
+// _gpMediaCache so both the picker thumbs and per-row thumbs share it. Cheap after first run.
+let _gpLibMediaDone = false;
+async function gpResolveLibMedia(){
+  if (_gpLibMediaDone) return;
+  const lib = _gpLib || [];
+  const paths = [], exByPath = {};
+  lib.forEach(e => { if (e.media_type==='image' && e.media_ref && !(e.id in _gpMediaCache)) { paths.push(e.media_ref); exByPath[e.media_ref]=e.id; } });
+  for (let i=0;i<paths.length;i+=100){
+    try{ const { data:urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths.slice(i,i+100),3600);
+      (urls||[]).forEach(u => { if (u&&u.path&&u.signedUrl) _gpMediaCache[exByPath[u.path]]={type:'image',src:u.signedUrl}; }); }catch(_){}
+  }
+  lib.forEach(e => { if (e.id in _gpMediaCache) return; const yt=gpYoutubeId(e.video_url);
+    _gpMediaCache[e.id]= yt ? {type:'youtube',src:`https://img.youtube.com/vi/${yt}/mqdefault.jpg`} : null; });
+  _gpLibMediaDone = true;
+}
+function gpPatchLibThumbs(){
+  document.querySelectorAll('#gpLibList .gp-lib-thumb[data-ex]').forEach(el => { el.innerHTML = gpLibThumbHtml(el.dataset.ex); });
 }
 async function gpOpenLib(ctx) {
   _gpLibCtx = ctx; gpBuildLibModal();
@@ -1267,6 +1300,129 @@ function gpPickLib(id, name) {
     }
   }
   gpCloseLib();
+}
+
+// ── Quick-create an exercise without leaving the planner ──
+// Minimal form (name + primary purpose + muscle group required); writes to gym_exercises
+// with the same shape the Gym Library uses, then links it into the row that opened the picker.
+let _gpExCreateBuilt = false;
+function gpBuildExCreateModal(){
+  if (_gpExCreateBuilt) return; _gpExCreateBuilt = true;
+  const T = window.CMTaxonomy;
+  const opt = (arr, ph) => `<option value="">${esc(ph)}</option>` +
+    (arr||[]).map(it => `<option value="${esc(it.token)}">${esc(it.label)}</option>`).join('');
+  const eqList = (T ? (T.LISTS.equipment || []) : []).filter(it => it.token !== 'bodyweight')
+    .map(it => ({ token: it.token, label: gpEqLabel(it.token) }));
+  const ov = document.createElement('div');
+  ov.id = 'gpExCreateOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:960;align-items:flex-start;justify-content:center;padding-top:70px';
+  ov.onclick = e => { if (e.target === ov) gpCloseExCreate(); };
+  const fieldCss = 'width:100%;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none';
+  const lblCss = 'font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px;display:block';
+  ov.innerHTML = `
+    <div style="width:460px;max-width:92vw;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 24px 80px rgba(0,0,0,.25);padding:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <i class="ti ti-plus" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.new_exercise','New exercise')}</div>
+        <button onclick="gpCloseExCreate()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label style="${lblCss}">${tt('gym_library.field_name','Name')} *</label>
+          <input id="gpExcName" type="text" placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}" style="${fieldCss}">
+        </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <label style="${lblCss}">${tt('gym_library.primary_purpose','Primary purpose')} *</label>
+            <select id="gpExcPurpose" style="${fieldCss};cursor:pointer">${opt(T?T.PURPOSE:[], tt('gym_planner.select_ph','Select…'))}</select>
+          </div>
+          <div style="flex:1">
+            <label style="${lblCss}">${tt('gym_library.muscle_groups','Muscle group')} *</label>
+            <select id="gpExcMuscle" style="${fieldCss};cursor:pointer">${opt(T?T.MUSCLE_GROUP:[], tt('gym_planner.select_ph','Select…'))}</select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <label style="${lblCss}">${tt('gym_library.complexity','Complexity')}</label>
+            <select id="gpExcComplexity" style="${fieldCss};cursor:pointer">
+              <option value="Low">${tt('gym_library.complexity_low','Low')}</option>
+              <option value="Medium">${tt('gym_library.complexity_medium','Medium')}</option>
+              <option value="High">${tt('gym_library.complexity_high','High')}</option>
+            </select>
+          </div>
+          <div style="flex:1">
+            <label style="${lblCss}">${tt('gym_library.equipment','Equipment')}</label>
+            <select id="gpExcEquip" style="${fieldCss};cursor:pointer">${opt(eqList, tt('gym_planner.equip_bodyweight','Bodyweight'))}</select>
+          </div>
+        </div>
+        <div>
+          <label style="${lblCss}">${tt('gym_library.video_url','Video URL')}</label>
+          <input id="gpExcVideo" type="text" placeholder="https://youtube.com/…" style="${fieldCss}">
+        </div>
+      </div>
+      <div id="gpExcStatus" style="margin-top:10px;font:var(--cm-body-sm);color:var(--cm-danger);min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="cm-btn is-ghost is-sm" onclick="gpCloseExCreate()">${tt('common.cancel','Cancel')}</button>
+        <button class="cm-btn is-primary is-sm" id="gpExcSaveBtn" onclick="gpSaveExCreate()">${tt('gym_planner.create_and_add','Create & add')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+function gpOpenExCreate(){
+  gpBuildExCreateModal();
+  document.getElementById('gpExCreateOv').style.display = 'flex';
+  const n = document.getElementById('gpExcName');
+  n.value=''; document.getElementById('gpExcPurpose').value=''; document.getElementById('gpExcMuscle').value='';
+  document.getElementById('gpExcComplexity').value='Low'; document.getElementById('gpExcEquip').value='';
+  document.getElementById('gpExcVideo').value=''; document.getElementById('gpExcStatus').textContent='';
+  // Prefill purpose from the picker's active facet if one is set.
+  if (_gpLibCat) document.getElementById('gpExcPurpose').value = _gpLibCat;
+  n.focus();
+}
+function gpCloseExCreate(){ const ov=document.getElementById('gpExCreateOv'); if (ov) ov.style.display='none'; }
+async function gpSaveExCreate(){
+  const status = document.getElementById('gpExcStatus');
+  const name = document.getElementById('gpExcName').value.trim();
+  const purpose = document.getElementById('gpExcPurpose').value;
+  const muscle = document.getElementById('gpExcMuscle').value;
+  if (!name)    { status.textContent = tt('gym_planner.name_required','Enter a name.'); document.getElementById('gpExcName').focus(); return; }
+  if (!purpose) { status.textContent = tt('gym_library.pick_primary_purpose','Pick a primary purpose.'); return; }
+  if (!muscle)  { status.textContent = tt('gym_library.pick_muscle_group','Pick at least one muscle group.'); return; }
+  const equip = document.getElementById('gpExcEquip').value;
+  const video = document.getElementById('gpExcVideo').value.trim();
+  const T = window.CMTaxonomy;
+  const payload = {
+    club_id: _gpClubId,
+    name,
+    category: 'strength',
+    complexity: document.getElementById('gpExcComplexity').value,
+    usable_in: ['gym'],
+    video_url: video || null,
+    primary_purpose: purpose,
+    purposes: [purpose],
+    muscle_groups: [muscle],
+    equipment_tags: equip ? [equip] : ['bodyweight'],
+    muscle_group: T ? T.label('muscle_group', muscle) : muscle,
+    equipment: equip ? gpEqLabel(equip) : null,
+  };
+  const btn = document.getElementById('gpExcSaveBtn');
+  btn.disabled = true; status.style.color = 'var(--cm-fg-muted)'; status.textContent = tt('gym_library.creating','Creating…');
+  try {
+    const { data: row, error } = await window.sb.from('gym_exercises').insert(payload).select('id').single();
+    if (error) throw error;
+    // Insert into the loaded library (keeps sort by name) so the picker + name-sync see it.
+    const ex = { id: row.id, name, muscle_group: payload.muscle_group, muscle_groups: [muscle], category: 'strength',
+      primary_purpose: purpose, purposes: [purpose], complexity: payload.complexity, equipment: payload.equipment,
+      equipment_tags: payload.equipment_tags, media_type: null, media_ref: null, video_url: video || null };
+    if (!_gpLib) _gpLib = [];
+    _gpLib.push(ex); _gpLib.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    _gpLibMediaDone = false;   // let the YouTube poster resolve on next render
+    gpCloseExCreate();
+    gpPickLib(row.id, name);   // links it into the row that opened the picker + closes the library
+  } catch (e) {
+    btn.disabled = false; status.style.color = 'var(--cm-danger)';
+    status.textContent = tt('gym_library.error_saving', 'Error saving exercise: ' + (e.message||''), { msg: e.message||'' });
+  }
 }
 
 // ── Session templates (Load template) ──
