@@ -516,7 +516,7 @@
           <div class="pp-tier-name"><i class="ti ti-crown"></i>Full</div>
           <div class="pp-tier-tag" data-i18n="plan_picker.tag_full">Unlimited players · everything, for senior pro setups.</div>
           <div class="pp-tier-price">
-            <span class="amt" data-slug="full" data-amt="200">$200</span>
+            <span class="amt" data-slug="full" data-amt="150">$150</span>
             <span class="cur">USD</span>
             <span class="per" data-i18n="plan_picker.per_mo">/ mo</span>
           </div>
@@ -699,7 +699,7 @@
     free:  { name: 'Initiation',   amt: 0,   curAmt: 60 },
     basic: { name: 'Basic',        amt: 60,  curAmt: 60 },
     pro:   { name: 'Professional', amt: 120, curAmt: 60 },
-    full:  { name: 'Full',         amt: 200, curAmt: 60 }
+    full:  { name: 'Full',         amt: 150, curAmt: 60 }
   };
   let cycle = 'monthly';
   let selected = 'pro';
@@ -925,6 +925,21 @@
     const curPrice = Number(curPlan.price_monthly||0);
     const limit = curPlan.max_players;
     const sub = subRes.data;
+
+    // Sincronizar el footer (tierData/render) con los precios REALES de la DB,
+    // para que no muestre montos hardcodeados (ej. Full $200 cuando son $150) ni
+    // asuma que el plan actual es Basic ($60).
+    try{
+      const SLUG2TIER = { initiation:'free', basic:'basic', professional:'pro', full:'full' };
+      if (typeof tierData === 'object' && tierData){
+        Object.entries(plans).forEach(([slug,p])=>{
+          const tier = SLUG2TIER[slug]; if(!tier || !tierData[tier]) return;
+          tierData[tier].amt = Number(p.price_monthly||0);
+        });
+        Object.keys(tierData).forEach(k=> tierData[k].curAmt = curPrice);
+        if (typeof render==='function') render();
+      }
+    }catch(_){}
 
     const setTxt = (id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
     const title = clubName ? `${clubName} · ${teamName}` : teamName;
