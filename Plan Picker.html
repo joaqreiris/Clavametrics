@@ -811,6 +811,50 @@
       clubId = prof?.club_id || null;
     }catch(_){}
 
+    // ── Cambio de plan sobre una suscripción de Paddle YA existente ──────────
+    // Abrir un checkout nuevo cobraría el plan entero (sin crédito por lo no
+    // usado). Si el equipo ya tiene una sub de Paddle activa (no comp), el
+    // upgrade/downgrade va por la Edge Function con prorrateo → Paddle cobra
+    // solo la diferencia. Sin sub activa (o comp) caemos al checkout de abajo.
+    let activeSub = null;
+    try{
+      const { data } = await sb.from('subscriptions')
+        .select('provider_subscription_id, is_comp, status')
+        .eq('team_id', teamId).eq('status','active').maybeSingle();
+      activeSub = data;
+    }catch(_){}
+    if (teamId && activeSub && !activeSub.is_comp && activeSub.provider_subscription_id){
+      confirmBtn.disabled = true;
+      try{
+        // 1) Preview: cuánto se cobra/acredita prorrateado
+        const { data:prev, error:pErr } = await sb.functions.invoke('paddle-change-plan', {
+          body: { team_id: teamId, plan_slug: slug, cycle, preview: true }
+        });
+        if (pErr || prev?.error){
+          if (prev?.needs_checkout) { /* sin sub real → seguí al checkout */ }
+          else { alert(tt('plan_picker.change_error','No pude preparar el cambio de plan. Probá de nuevo o avisá al admin.')); return; }
+        } else {
+          const r = prev?.update_summary?.result;
+          let msg = tt('plan_picker.change_confirm','¿Confirmás el cambio de plan? Se prorrateará la diferencia con tu plan actual.');
+          if (r && r.amount != null){
+            const amt = Number(r.amount)/100, cur = r.currency_code || 'USD';
+            const money = cur + ' ' + Math.abs(amt).toFixed(2);
+            msg = amt >= 0
+              ? tt('plan_picker.change_charge','Se cobrará hoy {amt} (prorrateado). ¿Confirmás el cambio de plan?', { amt: money })
+              : tt('plan_picker.change_credit','Recibirás un crédito de {amt} (prorrateado). ¿Confirmás el cambio de plan?', { amt: money });
+          }
+          if (!confirm(msg)) return;
+          // 2) Aplicar
+          const { data:appl, error:aErr } = await sb.functions.invoke('paddle-change-plan', {
+            body: { team_id: teamId, plan_slug: slug, cycle }
+          });
+          if (aErr || appl?.error){ alert(tt('plan_picker.change_error','No pude aplicar el cambio de plan. Probá de nuevo o avisá al admin.')); return; }
+          window.location.href = 'Admin.html';
+          return;
+        }
+      } finally { confirmBtn.disabled = false; }
+    }
+
     Paddle.Checkout.open({
       items: [{ priceId, quantity: 1 }],
       customer: email ? { email } : undefined,
