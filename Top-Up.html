@@ -150,6 +150,23 @@
   .tu-preset-row .lbl-in{max-width:150px}
   .tu-mini{font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint);margin-bottom:3px}
   .tu-del{background:none;border:0;color:var(--cm-danger,#dc2626);cursor:pointer;font-size:16px;padding:6px}
+  .tu-zonechips{display:flex;gap:6px;flex-wrap:wrap}
+  .tu-zonechip{flex:1;min-width:96px;display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:8px 10px;border-radius:9px;border:1.5px solid var(--cm-border);background:var(--cm-surface);cursor:pointer;transition:border-color .12s,background .12s}
+  .tu-zonechip .zn{font:700 12px/1.1 var(--cm-font-sans)}
+  .tu-zonechip .zr{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-zonechip::before{content:"";width:100%;height:4px;border-radius:99px;margin-bottom:2px;background:var(--zc,#94a3b8)}
+  .tu-zonechip.low{--zc:#15803D}.tu-zonechip.mid{--zc:#f59e0b}.tu-zonechip.high{--zc:#dc2626}
+  .tu-zonechip.on{border-color:var(--zc);background:color-mix(in srgb,var(--zc) 10%,transparent)}
+  .tu-zonechip.on .zn{color:var(--zc)}
+  .tu-zpill{font:700 10px/1 var(--cm-font-sans);padding:3px 7px;border-radius:99px;color:#fff}
+  .tu-zpill.low{background:#15803D}.tu-zpill.mid{background:#f59e0b}.tu-zpill.high{background:#dc2626}
+  .tu-zrow{display:flex;align-items:center;gap:8px;padding:6px 0}
+  .tu-zrow .zdot{width:10px;height:10px;border-radius:99px;flex:none}
+  .tu-zrow .zdot.low{background:#15803D}.tu-zrow .zdot.mid{background:#f59e0b}.tu-zrow .zdot.high{background:#dc2626}
+  .tu-zrow .zname{flex:1;font:600 12px/1 var(--cm-font-sans)}
+  .tu-zrow input{max-width:64px}
+  .tu-zrow .bsep{color:var(--cm-fg-faint);font:600 12px/1 var(--cm-font-mono)}
+  .tu-zrow .bunit{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -275,8 +292,12 @@
               </div>
             </div>
             <div class="tu-field">
-              <label data-i18n="topup.cont_zone">Zona</label>
-              <select id="tu-cont-zone" class="tu-select"></select>
+              <label style="display:flex;align-items:center;justify-content:space-between">
+                <span data-i18n="topup.cont_zone">Zona</span>
+                <button class="tu-linkbtn" id="tu-cont-zones-toggle" style="padding:0" data-i18n="topup.cont_edit_zones">⚙ Editar rangos</button>
+              </label>
+              <div id="tu-cont-zone" class="tu-zonechips"></div>
+              <div id="tu-cont-zones-editor" class="hide"></div>
             </div>
           </div>
           <div class="tu-row" style="margin-top:12px">
@@ -375,6 +396,9 @@
     cont: Object.assign({
       on: false, len: null, wid: null, lap: null,
       model: 'vmax', zoneId: 'ext', blocks: 1, rest: 120, hrmaxKey: null,
+      zonesVmax: TU.CONT_ZONES.vmax.map(z => ({...z})),
+      zonesFcmax: TU.CONT_ZONES.fcmax.map(z => ({...z})),
+      zonesOpen: false,
     }, (prefs.cont && typeof prefs.cont === 'object') ? prefs.cont : {}),
     hrmaxAuto: null,   // { key, label } auto-detected once per club
   };
@@ -383,6 +407,17 @@
     speedModel: state.speedModel, aim: state.aim, targetBand: state.targetBand, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
     customPresets: state.customPresets, cont: state.cont,
   })); } catch {} };
+
+  // Reconcile persisted continuous zones onto current defaults (inherit tone/label/id,
+  // keep saved lo/hi) so older prefs still get colours and any new zone appears.
+  ['vmax','fcmax'].forEach(m => {
+    const k = m === 'vmax' ? 'zonesVmax' : 'zonesFcmax';
+    const saved = Array.isArray(state.cont[k]) ? state.cont[k] : [];
+    state.cont[k] = TU.CONT_ZONES[m].map(def => {
+      const s = saved.find(z => z && z.id === def.id) || {};
+      return { ...def, lo: s.lo != null ? +s.lo : def.lo, hi: s.hi != null ? +s.hi : def.hi };
+    });
+  });
 
   const BLOCK_METRICS = ['high_speed_distance','accelerations','decelerations'];
   const neededMetrics = () => Array.from(new Set(
@@ -396,7 +431,7 @@
   };
   const preset = () => allPresets().find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
   // continuous: active zone + effective lap distance (perimeter unless a manual lap is set)
-  const contZones = () => TU.CONT_ZONES[state.cont.model === 'fcmax' ? 'fcmax' : 'vmax'];
+  const contZones = () => state.cont[state.cont.model === 'fcmax' ? 'zonesFcmax' : 'zonesVmax'];
   const contZone  = () => contZones().find(z => z.id === state.cont.zoneId) || contZones()[1] || contZones()[0];
   const contLapM  = () => {
     const manual = +state.cont.lap;
@@ -667,14 +702,37 @@
       _metricDefsList.map(m => `<option value="${esc(m.key)}" ${m.key===state.cont.hrmaxKey?'selected':''}>${esc(m.label||m.key)}</option>`).join('');
   }
   function renderContZones(){
-    const sel = $('tu-cont-zone');
+    const box = $('tu-cont-zone');
     if (!contZones().some(z => z.id === state.cont.zoneId)) state.cont.zoneId = 'ext';
-    sel.innerHTML = contZones().map(z => {
-      const rng = state.cont.model === 'fcmax'
-        ? `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}% FCmax`
-        : `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}% Vmax`;
-      return `<option value="${z.id}" ${z.id===state.cont.zoneId?'selected':''}>${esc(tt('topup.contzone_'+z.id, z.label))} · ${rng}</option>`;
+    box.innerHTML = contZones().map(z => {
+      const rng = `${Math.round(z.lo*100)}-${Math.round(z.hi*100)}%`;
+      return `<button type="button" class="tu-zonechip ${z.tone} ${z.id===state.cont.zoneId?'on':''}" data-zone="${z.id}">
+        <span class="zn">${esc(tt('topup.contzone_'+z.id, z.label))}</span>
+        <span class="zr">${rng} ${state.cont.model==='fcmax'?'FCmax':'Vmax'}</span></button>`;
     }).join('');
+    box.querySelectorAll('[data-zone]').forEach(b => b.addEventListener('click', () => {
+      state.cont.zoneId = b.dataset.zone; savePrefs(); renderContZones(); renderResults();
+    }));
+  }
+  function renderContZonesEditor(){
+    const box = $('tu-cont-zones-editor');
+    if (!state.cont.zonesOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const suffix = state.cont.model === 'fcmax' ? 'FCmax' : 'Vmax';
+    box.innerHTML = contZones().map((z, i) => `<div class="tu-zrow" data-zi="${i}">
+      <span class="zdot ${z.tone}"></span>
+      <span class="zname">${esc(tt('topup.contzone_'+z.id, z.label))}</span>
+      <input class="tu-input" type="number" min="0" max="100" inputmode="numeric" data-ze="lo" value="${Math.round(z.lo*100)}">
+      <span class="bsep">–</span>
+      <input class="tu-input" type="number" min="0" max="100" inputmode="numeric" data-ze="hi" value="${Math.round(z.hi*100)}">
+      <span class="bunit">% ${suffix}</span></div>`).join('') +
+      `<div class="tu-note">${tt('topup.cont_zones_hint','% del ancla (Vmax o FCmax). La carrera continua corre en el punto medio del rango.')}</div>`;
+    box.querySelectorAll('input[data-ze]').forEach(inp => inp.addEventListener('input', () => {
+      const i = +inp.closest('[data-zi]').dataset.zi, edge = inp.dataset.ze;
+      const v = inp.value.trim();
+      if (v !== '') contZones()[i][edge] = Math.max(0, Math.min(100, +v)) / 100;
+      savePrefs(); renderContZones(); renderResults();
+    }));
   }
   function renderContUI(){
     $('tu-cont-on').checked = !!state.cont.on;
@@ -687,6 +745,7 @@
     $('tu-cont-model').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.cm === state.cont.model));
     $('tu-cont-hr-field').classList.toggle('hide', state.cont.model !== 'fcmax');
     renderContZones();
+    renderContZonesEditor();
     if (state.cont.model === 'fcmax') renderHrMetricSelect();
   }
 
@@ -788,6 +847,7 @@
       hrmax: pd.hrmax, hrLoPct: zone.lo, hrHiPct: zone.hi,
     });
     const zLabel = tt('topup.contzone_'+zone.id, zone.label);
+    const zPill = `<span class="tu-zpill ${zone.tone}">${esc(zLabel)}</span>`;
     const laps = tt('topup.cont_laps','vueltas');
     const muted = (msg) => `<div class="tu-line muted">${CONT_IC}<span class="main">${msg}</span></div>`;
     if (!rx || rx.need === 'lap')     return muted(tt('topup.cont_need_field','Cargá dimensiones del campo o una vuelta a mano.'));
@@ -797,11 +857,11 @@
     const blk = rx.blocks > 1 ? `${rx.blocks}×${rx.lapsPerBlock} · ` : '';
     if (state.cont.model === 'fcmax'){
       return `<div class="tu-line">${CONT_IC}
-        <span class="main"><b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.hr.lo}-${rx.hr.hi} bpm <span class="dim">(${rx.hr.loPct}-${rx.hr.hiPct}% FCmax · ${esc(zLabel)})</span></span>
+        <span class="main">${zPill} <b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.hr.lo}-${rx.hr.hi} bpm <span class="dim">(${rx.hr.loPct}-${rx.hr.hiPct}% FCmax)</span></span>
         <span class="meta">${blk}${(rx.totalM/1000).toFixed(1)} km</span></div>`;
     }
     return `<div class="tu-line">${CONT_IC}
-      <span class="main"><b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${rx.pctVmax}% Vmax · ${esc(zLabel)} · ${rx.lapSec}s/${tt('topup.cont_lap_word','vuelta')})</span></span>
+      <span class="main">${zPill} <b>${rx.laps} ${laps} × ${rx.lapM} m</b> @ ${rx.speedKmh} km/h <span class="dim">(${rx.pctVmax}% Vmax · ${rx.lapSec}s/${tt('topup.cont_lap_word','vuelta')})</span></span>
       <span class="meta">${blk}${rx.totalMin}′</span></div>`;
   }
 
@@ -967,7 +1027,7 @@
     state.cont.model = b.dataset.cm; savePrefs(); renderContUI();
     if (state.cont.on && state.cont.model === 'fcmax') await reloadHRmax(); else renderResults();
   }));
-  $('tu-cont-zone').addEventListener('change', (e) => { state.cont.zoneId = e.target.value; savePrefs(); renderResults(); });
+  $('tu-cont-zones-toggle').addEventListener('click', () => { state.cont.zonesOpen = !state.cont.zonesOpen; renderContZonesEditor(); });
   $('tu-cont-hrmetric').addEventListener('change', async (e) => {
     state.cont.hrmaxKey = e.target.value || null; savePrefs();
     if (state.cont.on) await reloadHRmax();

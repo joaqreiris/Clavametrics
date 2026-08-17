@@ -347,16 +347,17 @@
   //                   zone, so we DON'T fake a speed/lap-time from heart rate.
   // Continuous aerobic running sits LOW on the Vmax scale (Vmax = peak sprint), hence
   // the low default %. Zones are configurable per club in the UI.
+  // tone drives the UI colour: low=green · mid=amber · high=red (rising intensity).
   const CONT_ZONES = {
     vmax: [
-      { id: 'reg', label: 'Regenerativa', lo: 0.40, hi: 0.50 },
-      { id: 'ext', label: 'Extensiva',    lo: 0.50, hi: 0.60 },
-      { id: 'int', label: 'Intensiva',    lo: 0.60, hi: 0.70 },
+      { id: 'reg', label: 'Regenerativa', lo: 0.40, hi: 0.50, tone: 'low'  },
+      { id: 'ext', label: 'Extensiva',    lo: 0.50, hi: 0.60, tone: 'mid'  },
+      { id: 'int', label: 'Intensiva',    lo: 0.60, hi: 0.70, tone: 'high' },
     ],
     fcmax: [
-      { id: 'reg', label: 'Regenerativa', lo: 0.60, hi: 0.70 },
-      { id: 'ext', label: 'Extensiva',    lo: 0.70, hi: 0.80 },
-      { id: 'int', label: 'Intensiva',    lo: 0.80, hi: 0.88 },
+      { id: 'reg', label: 'Regenerativa', lo: 0.60, hi: 0.70, tone: 'low'  },
+      { id: 'ext', label: 'Extensiva',    lo: 0.70, hi: 0.80, tone: 'mid'  },
+      { id: 'int', label: 'Intensiva',    lo: 0.80, hi: 0.88, tone: 'high' },
     ],
   };
 
