@@ -168,6 +168,108 @@
   .tu-zrow .bsep{color:var(--cm-fg-faint);font:600 12px/1 var(--cm-font-mono)}
   .tu-zrow .bunit{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+  /* ── top-level tabs (match vs complementary) ── */
+  .tu-tabs{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:11px;padding:3px;gap:3px;margin:0 0 16px}
+  .tu-tabs button{border:0;background:transparent;color:var(--cm-fg-muted);font:600 13px/1 var(--cm-font-sans);padding:9px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:7px}
+  .tu-tabs button .ti{font-size:16px}
+  .tu-tabs button.on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  /* ── modal (config editors, "desplegable") ── */
+  .tu-modal-back{position:fixed;inset:0;z-index:900;background:rgba(15,18,22,.42);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .tu-modal{width:100%;max-width:480px;max-height:82vh;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.28);padding:0}
+  .tu-modal-head{display:flex;align-items:center;gap:10px;padding:15px 16px 11px;border-bottom:1px solid var(--cm-border);position:sticky;top:0;background:var(--cm-surface);border-radius:16px 16px 0 0}
+  .tu-modal-head .mt{font:700 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1}
+  .tu-modal-head .mx{background:none;border:0;color:var(--cm-fg-muted);cursor:pointer;font-size:20px;line-height:1;padding:4px;border-radius:8px}
+  .tu-modal-head .mx:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .tu-modal-body{padding:14px 16px 18px}
+  /* config launcher row */
+  .tu-cfg-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .tu-cfg-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:10px;color:var(--cm-fg-strong);font:600 12.5px/1 var(--cm-font-sans);cursor:pointer}
+  .tu-cfg-btn:hover{border-color:var(--cm-accent)}
+  .tu-cfg-btn .ti{font-size:16px;color:var(--cm-fg-muted)}
+  /* ── complementary: session targets ── */
+  .tu-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+  .tu-targets .tu-field label{display:flex;align-items:center;gap:5px}
+  .tu-tgt-dot{width:9px;height:9px;border-radius:99px;flex:none}
+  .tu-tgt-dot.dt{background:#6b7280}.tu-tgt-dot.hsr{background:#16a34a}.tu-tgt-dot.vhsr{background:#f97316}.tu-tgt-dot.sprint{background:#dc2626}.tu-tgt-dot.cod{background:#2563eb}
+  /* ── complementary: block builder ── */
+  .tu-palette{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+  .tu-palette button{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px dashed var(--cm-border);border-radius:9px;background:var(--cm-surface);color:var(--cm-fg-strong);font:600 12px/1 var(--cm-font-sans);cursor:pointer}
+  .tu-palette button:hover{border-style:solid;border-color:var(--cm-accent)}
+  .tu-palette button .ti{font-size:15px;color:var(--cm-fg-muted)}
+  .tu-blocks{display:flex;flex-direction:column;gap:9px}
+  .tu-blk{border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-surface);padding:10px 10px 10px 6px;display:flex;gap:8px;align-items:flex-start}
+  .tu-blk.tu-dragging{opacity:.45}
+  .tu-blk.tu-over{border-color:var(--cm-accent);box-shadow:0 0 0 2px rgba(21,128,61,.18)}
+  .tu-blk .grip{cursor:grab;color:var(--cm-fg-faint);padding:6px 2px;flex:none;font-size:16px;align-self:center}
+  .tu-blk .grip:active{cursor:grabbing}
+  .tu-blk .bmain{flex:1;min-width:0}
+  .tu-blk .btag{display:inline-flex;align-items:center;gap:6px;font:700 11px/1 var(--cm-font-sans);padding:5px 9px;border-radius:99px;margin-bottom:9px}
+  .tu-blk .btag.cont{background:rgba(107,114,128,.14);color:#4b5563}
+  .tu-blk .btag.hsr{background:rgba(22,163,74,.13);color:#15803d}
+  .tu-blk .btag.vhsr{background:rgba(249,115,22,.14);color:#c2410c}
+  .tu-blk .btag.sprint{background:rgba(220,38,38,.12);color:#b91c1c}
+  .tu-blk .btag.cod{background:rgba(37,99,235,.12);color:#2563eb}
+  .tu-blk .btag.pause{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .tu-blk-fields{display:flex;flex-wrap:wrap;gap:8px}
+  .tu-blk-fields .f{display:flex;flex-direction:column;gap:3px}
+  .tu-blk-fields .f label{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tu-blk-fields input,.tu-blk-fields select{height:34px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);width:76px}
+  .tu-blk-fields input:focus,.tu-blk-fields select:focus{outline:none;border-color:var(--cm-accent)}
+  .tu-blk-fields select{width:auto;min-width:96px}
+  .tu-blk-x{background:none;border:0;color:var(--cm-danger,#dc2626);cursor:pointer;font-size:15px;padding:6px;flex:none}
+  .tu-dt-tally{font:600 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:11px;padding-top:10px;border-top:1px dashed var(--cm-border)}
+  .tu-dt-tally b{color:var(--cm-fg-strong)}
+  .tu-dt-tally.warn b{color:var(--cm-warning,#b45309)}
+  .tu-dt-tally.ok b{color:var(--cm-accent)}
+  /* ── complementary: per-player preview table ── */
+  .tu-prev{border:1px solid var(--cm-border);border-radius:12px;overflow:hidden;margin-bottom:12px}
+  .tu-prev-head{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--cm-bg-soft);border-bottom:1px solid var(--cm-border)}
+  .tu-prev-head .av{width:30px;height:30px;flex:none;border-radius:50%;background:var(--cm-surface);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans)}
+  .tu-prev-head .nm{font:700 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-prev-head .rf{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px}
+  .tu-prev-head .rf .warn{color:var(--cm-warning,#b45309)}
+  .tu-ptbl{width:100%;border-collapse:collapse;font:500 12.5px/1.35 var(--cm-font-sans)}
+  .tu-ptbl th{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);text-align:left;padding:8px 10px;background:var(--cm-surface);border-bottom:1px solid var(--cm-border)}
+  .tu-ptbl td{padding:8px 10px;border-bottom:1px solid var(--cm-border);color:var(--cm-fg-strong);vertical-align:top}
+  .tu-ptbl td.num{font:600 12px/1.3 var(--cm-font-mono);white-space:nowrap}
+  .tu-ptbl tr.pause td{color:var(--cm-fg-muted);font-style:italic}
+  .tu-ptbl tr:last-child td{border-bottom:0}
+  .tu-ptbl .cn{font:700 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-verif{padding:9px 13px;background:var(--cm-bg-soft);font:600 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);border-top:1px solid var(--cm-border)}
+  .tu-verif b{color:var(--cm-fg-strong)}
+  .tu-verif .off{color:var(--cm-warning,#b45309)}
+  .tu-genbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:4px}
+  .tu-btn{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px;border-radius:11px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-strong);font:600 13px/1 var(--cm-font-sans);cursor:pointer}
+  .tu-btn:hover{border-color:var(--cm-accent)}
+  .tu-btn.primary{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
+  .tu-btn .ti{font-size:17px}
+  /* ── printable document (off-screen, rasterised to PDF) ── */
+  #tu-doc-host{position:fixed;left:-9999px;top:0;width:794px;background:#fff}
+  .tu-doc{width:794px;background:#fff;color:#1f2937;font-family:var(--cm-font-sans),system-ui,sans-serif;padding:34px 40px 40px}
+  .tu-doc-head{display:flex;align-items:center;gap:16px;border-bottom:3px solid #d4a017;padding-bottom:16px;margin-bottom:14px}
+  .tu-doc-head img{width:60px;height:60px;object-fit:contain;flex:none}
+  .tu-doc-head .t{flex:1}
+  .tu-doc-head .t h1{margin:0;font:800 22px/1.1 var(--cm-font-sans);color:#1e293b;letter-spacing:.5px;text-transform:uppercase}
+  .tu-doc-head .t .sub{margin:3px 0 0;font:700 13px/1.2 var(--cm-font-sans);color:#d4a017;text-transform:uppercase;letter-spacing:1px}
+  .tu-doc-head .t .club{margin:6px 0 0;font:600 11px/1.2 var(--cm-font-sans);color:#64748b}
+  .tu-doc-intro{font:400 11.5px/1.5 var(--cm-font-sans);color:#475569;margin:0 0 18px}
+  .tu-doc-player{margin:0 0 22px;break-inside:avoid}
+  .tu-doc-pbar{background:#1e293b;color:#fff;font:700 13px/1.2 var(--cm-font-sans);padding:9px 14px;border-radius:6px 6px 0 0}
+  .tu-doc-pmeta{font:400 10.5px/1.4 var(--cm-font-sans);color:#475569;padding:8px 2px 10px}
+  .tu-doc-tbl{width:100%;border-collapse:collapse;font:400 11px/1.4 var(--cm-font-sans)}
+  .tu-doc-tbl th{background:#1e293b;color:#fff;text-align:left;padding:7px 9px;font:700 10.5px/1.2 var(--cm-font-sans)}
+  .tu-doc-tbl td{padding:7px 9px;border:1px solid #e2e8f0;color:#334155;vertical-align:top}
+  .tu-doc-tbl td.c{font-weight:700;color:#1e293b}
+  .tu-doc-tbl td.n{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .tu-doc-tbl tr.pause td{background:#fef9ec;color:#92600a}
+  .tu-doc-tbl tr.pause td.c{color:#b45309}
+  .tu-doc-verif{font:700 11px/1.4 var(--cm-font-sans);color:#15803d;padding:9px 2px 0}
+  .tu-doc-notes{font:italic 400 10px/1.5 var(--cm-font-sans);color:#94a3b8;border-top:1px solid #e2e8f0;margin-top:18px;padding-top:12px}
+  @media print{
+    body.cm .hub-shell,body.cm .hub-topbar,body.cm #hub-side-root,body.cm #tweaks-root,body.cm .tu-modal-back{display:none!important}
+    #tu-doc-host{position:static!important;left:0!important;width:auto}
+    .tu-doc{box-shadow:none;padding:0}
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -209,6 +311,12 @@
       <h1 class="tu-h" data-i18n="topup.heading">Complemento post-partido</h1>
       <p class="tu-sub" data-i18n="topup.subtitle">Prescribe tareas complementarias según los minutos jugados y la referencia de partido.</p>
 
+      <div class="tu-tabs" id="tu-tabs">
+        <button data-tab="match" class="on"><i class="ti ti-ball-football"></i><span data-i18n="topup.tab_match">Top-up de partido</span></button>
+        <button data-tab="compl"><i class="ti ti-run"></i><span data-i18n="topup.tab_compl">Complementario</span></button>
+      </div>
+
+      <div id="tu-tab-match-cfg">
       <!-- 1 · Global setup -->
       <div class="tu-card">
         <div class="tu-row">
@@ -256,8 +364,6 @@
           <button class="tu-linkbtn" id="tu-bands-toggle" style="padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
           <button class="tu-linkbtn" id="tu-presets-toggle" style="padding-left:0" data-i18n="topup.edit_presets">⚙ Editar formatos</button>
         </div>
-        <div id="tu-bands-editor" class="hide"></div>
-        <div id="tu-presets-editor" class="hide"></div>
         <div id="tu-source-hint" class="tu-note"></div>
       </div>
 
@@ -297,7 +403,6 @@
                 <button class="tu-linkbtn" id="tu-cont-zones-toggle" style="padding:0" data-i18n="topup.cont_edit_zones">⚙ Editar rangos</button>
               </label>
               <div id="tu-cont-zone" class="tu-zonechips"></div>
-              <div id="tu-cont-zones-editor" class="hide"></div>
             </div>
           </div>
           <div class="tu-row" style="margin-top:12px">
@@ -323,7 +428,28 @@
         <div class="tu-chips" id="tu-metrics"></div>
       </div>
 
-      <!-- 3 · Player multi-select -->
+      </div><!-- /tu-tab-match-cfg -->
+
+      <!-- Complementary config: manual session targets + drag&drop block builder -->
+      <div id="tu-tab-compl-cfg" class="hide">
+        <div class="tu-card">
+          <h3><i class="ti ti-target-arrow"></i><span data-i18n="topup.compl_targets">Objetivos de la sesión</span></h3>
+          <p class="tu-note" data-i18n="topup.compl_targets_help">Trabajo complementario, separado del partido. Definí los objetivos y aplican a los jugadores seleccionados; cada bloque se calcula con el Vmax de cada uno.</p>
+          <div class="tu-targets" id="tu-compl-targets"></div>
+          <div class="tu-cfg-row">
+            <button class="tu-cfg-btn" id="tu-compl-cfg-btn"><i class="ti ti-adjustments"></i><span data-i18n="topup.compl_settings_btn">Ajustes (campo · ritmo · pasadas)</span></button>
+          </div>
+        </div>
+        <div class="tu-card">
+          <h3><i class="ti ti-stack-2"></i><span data-i18n="topup.builder_title">Bloques de trabajo</span></h3>
+          <p class="tu-note" data-i18n="topup.builder_help">Agregá bloques y arrastralos desde ⠿ para ordenarlos. Se intercalan como en la sesión real.</p>
+          <div class="tu-palette" id="tu-palette"></div>
+          <div class="tu-blocks" id="tu-blocks"></div>
+          <div class="tu-dt-tally" id="tu-dt-tally"></div>
+        </div>
+      </div>
+
+      <!-- 3 · Player multi-select (shared by both tabs) -->
       <div class="tu-card">
         <h3><i class="ti ti-users"></i><span data-i18n="topup.select_players">Jugadores</span></h3>
         <div class="tu-pick-top">
@@ -334,13 +460,40 @@
         <div class="tu-pick-list" id="tu-pick-list"></div>
       </div>
 
-      <!-- results -->
+      <!-- results (match tab) -->
       <div id="tu-results">
         <div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i><span data-i18n="topup.pick_prompt_multi">Seleccioná uno o más jugadores para ver sus prescripciones.</span></div></div>
+      </div>
+
+      <!-- output (complementary tab): per-player preview + document export -->
+      <div id="tu-compl-out" class="hide">
+        <div id="tu-compl-preview"></div>
+        <div class="tu-card">
+          <div class="tu-genbar">
+            <button class="tu-btn primary" id="tu-doc-pdf"><i class="ti ti-file-download"></i><span data-i18n="topup.gen_pdf">Descargar PDF</span></button>
+            <button class="tu-btn" id="tu-doc-print"><i class="ti ti-printer"></i><span data-i18n="topup.gen_print">Imprimir</span></button>
+            <button class="tu-btn" id="tu-doc-share"><i class="ti ti-share"></i><span data-i18n="topup.gen_share">Compartir</span></button>
+          </div>
+        </div>
       </div>
     </div>
   </main>
 </div>
+
+<!-- Config modal (desplegable) — hosts the bands / formats / zones editors -->
+<div id="tu-modal-back" class="tu-modal-back hide">
+  <div class="tu-modal">
+    <div class="tu-modal-head"><span class="mt" id="tu-modal-title"></span><button class="mx" id="tu-modal-close" aria-label="Cerrar">×</button></div>
+    <div class="tu-modal-body">
+      <div id="tu-bands-editor" class="hide"></div>
+      <div id="tu-presets-editor" class="hide"></div>
+      <div id="tu-cont-zones-editor" class="hide"></div>
+      <div id="tu-compl-settings" class="hide"></div>
+    </div>
+  </div>
+</div>
+<!-- Off-screen printable document, rasterised to PDF -->
+<div id="tu-doc-host"></div>
 
 <script>
 (async () => {
@@ -370,8 +523,17 @@
   const PK = 'tu_prefs.' + clubId;
   const DEFAULT_METRICS = ['high_speed_distance','sprint_distance','accelerations','decelerations','total_distance'];
   let prefs; try { prefs = JSON.parse(localStorage.getItem(PK) || '{}') || {}; } catch { prefs = {}; }
+  const _cpl = (prefs.compl && typeof prefs.compl === 'object') ? prefs.compl : {};
   const state = {
     teamId: null,
+    tab: prefs.tab === 'compl' ? 'compl' : 'match',
+    // Complementary (stand-alone) session: manual targets + drag-ordered blocks.
+    compl: {
+      targets: Object.assign({ dt: 6000, hsr: 400, vhsr: 120, sprint: 0, cod: 0 }, _cpl.targets || {}),
+      cfg: Object.assign({ lapM: null, len: 105, wid: 68, pctVmax: 0.55, model: 'pct', viftPct: 100, passDist: 30, recoverySec: 25 }, _cpl.cfg || {}),
+      blocks: Array.isArray(_cpl.blocks) ? _cpl.blocks.slice() : [],
+      settingsOpen: false,
+    },
     players: [],           // squad list
     selected: [],          // player ids, in selection order
     pdata: {},             // pid → { player, vift, vmax, ref, minutes, actual, lastMatch, manualRef, loading }
@@ -406,6 +568,7 @@
     duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics,
     speedModel: state.speedModel, aim: state.aim, targetBand: state.targetBand, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
     customPresets: state.customPresets, cont: state.cont,
+    tab: state.tab, compl: { targets: state.compl.targets, cfg: state.compl.cfg, blocks: state.compl.blocks },
   })); } catch {} };
 
   // Reconcile persisted continuous zones onto current defaults (inherit tone/label/id,
@@ -615,6 +778,7 @@
     $('tu-speedmodel').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.sm === state.speedModel));
     // target band only applies to band models (pct/abs)
     $('tu-band-field').style.display = state.speedModel === 'vift' ? 'none' : '';
+    const bt = $('tu-bands-toggle'); if (bt) bt.style.display = state.speedModel === 'vift' ? 'none' : '';
     renderTargetBand();
     renderBandsEditor();
   }
@@ -930,6 +1094,7 @@
 
   function renderResults(){
     sourceHint();
+    if (state.tab === 'compl') renderComplPreview();
     const box = $('tu-results');
     if (!state.selected.length){
       box.innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i>${tt('topup.pick_prompt_multi','Seleccioná uno o más jugadores para ver sus prescripciones.')}</div></div>`;
@@ -979,10 +1144,335 @@
     else { el.className = 'tu-note'; el.textContent = tt('topup.hint_manual','Ingresá a mano lo que hizo cada jugador. Déficit = referencia − hecho.'); }
   }
 
+  // ═══════════════════ CONFIG MODAL (desplegable) ═══════════════════
+  const MODAL_TITLES = {
+    bands:   () => tt('topup.edit_bands','Editar bandas'),
+    presets: () => tt('topup.edit_presets','Editar formatos'),
+    zones:   () => tt('topup.cont_edit_zones','Editar rangos'),
+    compl:   () => tt('topup.compl_settings','Ajustes de la sesión'),
+  };
+  function closeModal(){
+    state.bandsOpen = false; state.presetsOpen = false; state.cont.zonesOpen = false; state.compl.settingsOpen = false;
+    ['tu-bands-editor','tu-presets-editor','tu-cont-zones-editor','tu-compl-settings'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
+    $('tu-modal-back').classList.add('hide');
+  }
+  function openModal(which){
+    closeModal();
+    if (which === 'bands'){ state.bandsOpen = true; renderBandsEditor(); }
+    else if (which === 'presets'){ state.presetsOpen = true; renderPresetsEditor(); }
+    else if (which === 'zones'){ state.cont.zonesOpen = true; renderContZonesEditor(); }
+    else if (which === 'compl'){ state.compl.settingsOpen = true; renderComplSettings(); }
+    $('tu-modal-title').textContent = MODAL_TITLES[which] ? MODAL_TITLES[which]() : '';
+    $('tu-modal-back').classList.remove('hide');
+  }
+
+  // ═══════════════════ COMPLEMENTARY TAB ═══════════════════
+  const complCfg = () => state.compl.cfg;
+  let _blkSeq = 1, _club = null, _blkDrag = null;
+
+  const BLOCK_TYPES = [
+    { type:'cont',   i18n:'block_cont',   en:'Carrera continua', icon:'ti-refresh' },
+    { type:'hsr',    i18n:'block_hsr',    en:'HSR (pasadas)',    icon:'ti-run' },
+    { type:'vhsr',   i18n:'block_vhsr',   en:'VHSR (pasadas)',   icon:'ti-run' },
+    { type:'sprint', i18n:'block_sprint', en:'Sprint (pasadas)', icon:'ti-bolt' },
+    { type:'cod',    i18n:'block_cod',    en:'COD',              icon:'ti-arrows-shuffle' },
+    { type:'pause',  i18n:'block_pause',  en:'Pausa',            icon:'ti-player-pause' },
+  ];
+  const blkLabel = (t) => { const d = BLOCK_TYPES.find(x => x.type === t); return d ? tt('topup.'+d.i18n, d.en) : t; };
+
+  function newBlock(type){
+    const id = 'b' + (_blkSeq++) + '-' + type, t = state.compl.targets;
+    if (type === 'cont')   return { id, type, metersM: 1800, pctVmax: complCfg().pctVmax, blocks: 1, restSec: 0, lapM: null };
+    if (type === 'hsr')    return { id, type, targetM: t.hsr || 0,    passDist: complCfg().passDist, recoverySec: complCfg().recoverySec };
+    if (type === 'vhsr')   return { id, type, targetM: t.vhsr || 0,   passDist: 22, recoverySec: 40 };
+    if (type === 'sprint') return { id, type, targetM: t.sprint || 0, passDist: 20, recoverySec: 45 };
+    if (type === 'cod')    return { id, type, accCount: Math.round((t.cod || 0)/2), decCount: Math.round((t.cod || 0)/2), timeMin: 6 };
+    if (type === 'pause')  return { id, type, minutes: 2, note: '' };
+    return { id, type };
+  }
+
+  function renderComplTargets(){
+    const box = $('tu-compl-targets'); if (!box) return;
+    const t = state.compl.targets;
+    const F = [
+      { k:'dt',     dot:'dt',     lbl: tt('topup.tgt_dt','Distancia total'), u:'m' },
+      { k:'hsr',    dot:'hsr',    lbl: tt('topup.band_hsr','HSR'),           u:'m' },
+      { k:'vhsr',   dot:'vhsr',   lbl: tt('topup.band_vhsr','VHSR'),         u:'m' },
+      { k:'sprint', dot:'sprint', lbl: tt('topup.band_sprint','Sprint'),     u:'m' },
+      { k:'cod',    dot:'cod',    lbl: tt('topup.tgt_cod','COD (acc+dec)'),  u:'n' },
+    ];
+    box.innerHTML = F.map(f => `<div class="tu-field"><label><span class="tu-tgt-dot ${f.dot}"></span>${esc(f.lbl)} <span class="dim">(${f.u})</span></label>
+      <input class="tu-input" type="number" min="0" inputmode="numeric" data-tgt="${f.k}" value="${t[f.k] != null ? t[f.k] : 0}"></div>`).join('');
+    box.querySelectorAll('input[data-tgt]').forEach(inp => inp.addEventListener('input', () => {
+      state.compl.targets[inp.dataset.tgt] = +inp.value || 0; savePrefs(); renderTally(); renderComplPreview();
+    }));
+  }
+
+  function renderPalette(){
+    const box = $('tu-palette'); if (!box) return;
+    box.innerHTML = BLOCK_TYPES.map(d => `<button data-add="${d.type}"><i class="ti ${d.icon}"></i>${esc(blkLabel(d.type))}</button>`).join('');
+    box.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
+      state.compl.blocks.push(newBlock(b.dataset.add)); savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
+    }));
+  }
+
+  function blkFieldsHTML(b, i){
+    const num = (key, lbl, val, extra='') => `<div class="f"><label>${esc(lbl)}</label><input type="number" min="0" inputmode="numeric" data-bf="${i}:${key}" value="${val == null ? '' : val}" ${extra}></div>`;
+    if (b.type === 'cont') return num('metersM', tt('topup.bf_meters','Metros'), b.metersM)
+      + `<div class="f"><label>${tt('topup.bf_pct','% Vmax')}</label><input type="number" min="1" max="100" inputmode="numeric" data-bf="${i}:pctVmax" value="${Math.round((b.pctVmax != null ? b.pctVmax : complCfg().pctVmax) * 100)}"></div>`
+      + num('blocks', tt('topup.bf_blocks','Bloques'), b.blocks)
+      + num('restSec', tt('topup.bf_rest','Pausa s'), b.restSec);
+    if (b.type === 'hsr' || b.type === 'vhsr' || b.type === 'sprint') return num('targetM', tt('topup.bf_target','Objetivo m'), b.targetM)
+      + num('passDist', tt('topup.bf_pass','Pasada m'), b.passDist)
+      + num('recoverySec', tt('topup.bf_recovery','Recup s'), b.recoverySec);
+    if (b.type === 'cod') return num('accCount', tt('topup.bf_acc','Acc'), b.accCount) + num('decCount', tt('topup.bf_dec','Dec'), b.decCount);
+    if (b.type === 'pause') return num('minutes', tt('topup.bf_min','Minutos'), b.minutes)
+      + `<div class="f" style="flex:1"><label>${tt('topup.bf_note','Nota')}</label><input type="text" data-bf="${i}:note" value="${esc(b.note || '')}" style="width:auto;min-width:120px"></div>`;
+    return '';
+  }
+
+  function renderBlocks(){
+    const box = $('tu-blocks'); if (!box) return;
+    const arr = state.compl.blocks;
+    if (!arr.length){ box.innerHTML = `<div class="tu-empty" style="padding:16px"><i class="ti ti-stack-2"></i>${tt('topup.builder_empty','Agregá bloques desde arriba.')}</div>`; return; }
+    box.innerHTML = arr.map((b, i) => `<div class="tu-blk" data-bi="${i}">
+      <span class="grip" draggable="true" title="${tt('topup.drag_hint','Arrastrá para ordenar')}">⠿</span>
+      <div class="bmain"><span class="btag ${b.type}">${esc(blkLabel(b.type))}</span>
+        <div class="tu-blk-fields">${blkFieldsHTML(b, i)}</div></div>
+      <button class="tu-blk-x" data-bx="${i}" title="${tt('common.delete','Borrar')}"><i class="ti ti-trash"></i></button>
+    </div>`).join('');
+    box.querySelectorAll('input[data-bf]').forEach(inp => inp.addEventListener('input', () => {
+      const [i, key] = inp.dataset.bf.split(':'); const b = state.compl.blocks[+i]; if (!b) return;
+      if (key === 'note') b[key] = inp.value;
+      else if (key === 'pctVmax') b[key] = Math.max(1, Math.min(100, +inp.value || 55)) / 100;
+      else b[key] = +inp.value || 0;
+      savePrefs(); renderTally(); renderComplPreview();
+    }));
+    box.querySelectorAll('[data-bx]').forEach(x => x.addEventListener('click', () => {
+      state.compl.blocks.splice(+x.dataset.bx, 1); savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
+    }));
+    // drag reorder (grip only → editable inputs stay usable), same idiom as the Day sheet
+    box.querySelectorAll('.tu-blk').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        const g = e.target.closest('.grip'); if (!g){ e.preventDefault(); return; }
+        _blkDrag = +el.dataset.bi; el.classList.add('tu-dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); } catch(_){}
+      });
+      el.addEventListener('dragover', e => { if (_blkDrag == null) return; e.preventDefault(); el.classList.add('tu-over'); });
+      el.addEventListener('dragleave', () => el.classList.remove('tu-over'));
+      el.addEventListener('drop', e => {
+        e.preventDefault(); el.classList.remove('tu-over');
+        if (_blkDrag == null) return; const to = +el.dataset.bi, a = state.compl.blocks;
+        if (to !== _blkDrag){ const [m] = a.splice(_blkDrag, 1); a.splice(to, 0, m); }
+        _blkDrag = null; savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
+      });
+      el.addEventListener('dragend', () => { _blkDrag = null; el.classList.remove('tu-dragging'); box.querySelectorAll('.tu-over').forEach(x => x.classList.remove('tu-over')); });
+    });
+  }
+
+  function renderTally(){
+    const box = $('tu-dt-tally'); if (!box) return;
+    const dt = state.compl.blocks.filter(b => b.type === 'cont').reduce((s, b) => s + (+b.metersM || 0), 0);
+    const tgt = +state.compl.targets.dt || 0, diff = dt - tgt;
+    box.className = 'tu-dt-tally ' + (tgt <= 0 ? '' : (Math.abs(diff) <= Math.max(50, tgt * 0.03) ? 'ok' : 'warn'));
+    box.innerHTML = `${tt('topup.tally_dt','Distancia continua acumulada')}: <b>${dt.toLocaleString()} m</b> / ${tgt.toLocaleString()} m ${tgt > 0 ? `· <b>${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</b>` : ''}`;
+  }
+
+  function renderComplSettings(){
+    const box = $('tu-compl-settings'); if (!box) return;
+    if (!state.compl.settingsOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const c = complCfg();
+    box.innerHTML = `
+      <div class="tu-row">
+        <div class="tu-field" style="max-width:120px"><label>${tt('topup.cont_field_len','Largo campo (m)')}</label><input class="tu-input" type="number" data-cf="len" value="${c.len ?? ''}" placeholder="105"></div>
+        <div class="tu-field" style="max-width:120px"><label>${tt('topup.cont_field_wid','Ancho campo (m)')}</label><input class="tu-input" type="number" data-cf="wid" value="${c.wid ?? ''}" placeholder="68"></div>
+        <div class="tu-field" style="max-width:130px"><label>${tt('topup.cont_lap','Vuelta (m)')}</label><input class="tu-input" type="number" data-cf="lapM" value="${c.lapM ?? ''}" placeholder="${TU.fieldPerimeter(c.len, c.wid) || '—'}"></div>
+      </div>
+      <div class="tu-row" style="margin-top:12px">
+        <div class="tu-field"><label>${tt('topup.speed_model','Velocidad de carrera')}</label>
+          <div class="tu-seg" id="tu-cpl-model">
+            <button data-cm="pct" class="${c.model === 'pct' ? 'on' : ''}">${tt('topup.sm_pct','%Vmax')}</button>
+            <button data-cm="abs" class="${c.model === 'abs' ? 'on' : ''}">${tt('topup.sm_abs','Absoluto')}</button>
+            <button data-cm="vift" class="${c.model === 'vift' ? 'on' : ''}">${tt('topup.sm_vift','%VIFT')}</button>
+          </div></div>
+      </div>
+      <div class="tu-row" style="margin-top:12px">
+        <div class="tu-field" style="max-width:150px"><label>${tt('topup.cont_pct','Carrera continua %Vmax')}</label><input class="tu-input" type="number" min="30" max="90" data-cf="pctVmax" value="${Math.round((c.pctVmax || 0.55) * 100)}"></div>
+        <div class="tu-field" style="max-width:130px"><label>${tt('topup.def_pass','Pasada def. (m)')}</label><input class="tu-input" type="number" data-cf="passDist" value="${c.passDist || 30}"></div>
+        <div class="tu-field" style="max-width:130px"><label>${tt('topup.def_recovery','Recup. def. (s)')}</label><input class="tu-input" type="number" data-cf="recoverySec" value="${c.recoverySec || 25}"></div>
+      </div>
+      ${c.model === 'vift' ? `<div class="tu-row" style="margin-top:12px"><div class="tu-field" style="max-width:150px"><label>${tt('topup.vift_pct','% VIFT pasadas')}</label><input class="tu-input" type="number" data-cf="viftPct" value="${c.viftPct || 100}"></div></div>` : ''}
+      <div class="tu-note" style="margin-top:12px">${tt('topup.compl_settings_hint','El ritmo de cada pasada y vuelta se calcula con el Vmax (o VIFT) de cada jugador.')}</div>`;
+    box.querySelectorAll('input[data-cf]').forEach(inp => inp.addEventListener('input', () => {
+      const k = inp.dataset.cf, v = inp.value.trim();
+      if (k === 'pctVmax') c.pctVmax = Math.max(0.3, Math.min(0.9, (+v || 55) / 100));
+      else if (['len','wid','lapM'].includes(k)) c[k] = v === '' ? null : +v;
+      else c[k] = +v || 0;
+      savePrefs(); renderComplPreview();
+    }));
+    box.querySelector('#tu-cpl-model')?.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      c.model = b.dataset.cm; savePrefs(); renderComplSettings(); renderComplPreview();
+    }));
+  }
+
+  // ── shared block → display view (used by both the preview and the PDF doc) ──
+  function fmtTime(sec){
+    if (!sec || sec <= 0) return '—';
+    const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+    return s ? `${m}'${String(s).padStart(2,'0')}"` : `${m}'`;
+  }
+  function complBlockView(r){
+    const meters = r.metersM > 0 ? `${Math.round(r.metersM).toLocaleString()} m` : '—';
+    const time = fmtTime(r.timeSec);
+    if (r.type === 'pause') return { content: tt('topup.block_pause','Pausa'), detail: (r.note || tt('topup.pause_detail','Transición / hidratación')), meters: '—', time };
+    if (r.need){
+      const msg = { vmax: tt('topup.need_vmax_short','falta Vmax'), speed: tt('topup.need_speed_short','falta ritmo'), lap: tt('topup.need_lap_short','falta vuelta'), passDist: tt('topup.need_pass_short','falta pasada'), target: tt('topup.need_target_short','sin objetivo'), deficit: tt('topup.need_target_short','sin objetivo'), input: tt('topup.need_input_short','faltan datos') }[r.need] || tt('topup.need_input_short','faltan datos');
+      return { content: blkLabel(r.type), detail: `— (${msg})`, meters: '—', time: '—' };
+    }
+    if (r.type === 'cod') return { content: tt('topup.block_cod','COD'), detail: tt('topup.cod_'+r.band.id, r.band.reps + ' · ' + r.band.detail), meters: '—', time };
+    if (r.type === 'cont'){
+      const blk = r.blocks > 1 ? `${r.blocks} × ${r.lapsPerBlock} ${tt('topup.cont_laps','vueltas')} · ` : '';
+      return { content: tt('topup.block_cont','Carrera continua'),
+        detail: `${blk}${r.laps} ${tt('topup.cont_laps','vueltas')} × ${r.lapM} m @ ${r.pctVmax}% Vmax (${r.speedKmh} km/h · ${r.lapSec}s/${tt('topup.cont_lap_word','vuelta')})`,
+        meters, time };
+    }
+    return { content: blkLabel(r.type),
+      detail: `${r.reps} × ${r.passDist} m @ ${r.speedKmh} km/h (~${r.paceSec}"/${tt('topup.pass_word','pasada')}, recup ${r.recoverySec}")`,
+      meters, time };
+  }
+
+  function renderComplPreview(){
+    const box = $('tu-compl-preview'); if (!box) return;
+    if (!state.selected.length){ box.innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i>${tt('topup.pick_prompt_compl','Seleccioná jugadores para ver y generar el documento.')}</div></div>`; return; }
+    if (!state.compl.blocks.length){ box.innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-stack-2"></i>${tt('topup.builder_empty','Agregá bloques desde arriba.')}</div></div>`; return; }
+    const chk = (val, target) => target > 0 ? `<b class="${Math.abs(val - target) > Math.max(40, target * 0.05) ? 'off' : ''}">${Math.round(val).toLocaleString()}</b>/${target.toLocaleString()}` : `<b>${Math.round(val).toLocaleString()}</b>`;
+    box.innerHTML = state.selected.map(pid => {
+      const pd = state.pdata[pid]; if (!pd) return '';
+      if (pd.loading) return `<div class="tu-prev"><div class="tu-prev-head"><div><div class="nm">${esc(pd.player.name)}</div></div></div><div class="tu-note" style="padding:12px">${tt('common.loading','Cargando…')}</div></div>`;
+      const doc = TU.buildComplDoc(pd, state.compl.blocks, complCfg());
+      let n = 0;
+      const trs = doc.rows.map(r => {
+        const v = complBlockView(r), isPause = r.type === 'pause';
+        return `<tr class="${isPause ? 'pause' : ''}"><td class="cn">${isPause ? '·' : (++n)}</td><td>${esc(v.content)}</td><td>${esc(v.detail)}</td><td class="num">${esc(v.meters)}</td><td class="num">${esc(v.time)}</td></tr>`;
+      }).join('');
+      const t = doc.totals, tg = state.compl.targets;
+      const verif = `DT ${chk(t.dt, tg.dt)} m · HSR ${chk(t.hsr, tg.hsr)} m${(tg.vhsr > 0 || t.vhsr > 0) ? ` · VHSR ${chk(t.vhsr, tg.vhsr)} m` : ''}${(tg.sprint > 0 || t.sprint > 0) ? ` · Sprint ${chk(t.sprint, tg.sprint)} m` : ''} · ${fmtTime(t.timeSec)}`;
+      return `<div class="tu-prev">
+        <div class="tu-prev-head"><span class="av">${esc(initials(pd.player.name))}</span>
+          <div><div class="nm">${pd.player.number != null ? ('#' + pd.player.number + ' ') : ''}${esc(pd.player.name)}</div>
+          <div class="rf">${pd.vmax ? `Vmax ${pd.vmax.toFixed(1)} km/h` : `<span class="warn">${tt('topup.no_vmax','Sin Vmax')}</span>`}${pd.vift ? ` · VIFT ${pd.vift.toFixed(1)}` : ''}${pd.player.position ? ' · ' + esc(pd.player.position) : ''}</div></div>
+        </div>
+        <table class="tu-ptbl"><thead><tr><th>N°</th><th>${tt('topup.doc_col_content','Contenido')}</th><th>${tt('topup.doc_col_detail','Detalle')}</th><th>${tt('topup.doc_col_meters','Metros')}</th><th>${tt('topup.doc_col_time','Tiempo')}</th></tr></thead><tbody>${trs}</tbody></table>
+        <div class="tu-verif">${tt('topup.doc_verif','Verificación')}: ${verif}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── printable document (rasterised to PDF, same html2canvas+jsPDF idiom as Day sheet) ──
+  function loadScript(src){ return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+  async function ensureDocLibs(){
+    if (!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+  async function imgToDataUri(url){
+    if (!url) return null;
+    try {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth || 120; c.height = img.naturalHeight || 120;
+      c.getContext('2d').drawImage(img, 0, 0); return c.toDataURL('image/png');
+    } catch { return null; }
+  }
+  function buildDocHTML(logo){
+    const club = _club || {};
+    const players = state.selected.map(pid => {
+      const pd = state.pdata[pid]; if (!pd || pd.loading) return '';
+      const doc = TU.buildComplDoc(pd, state.compl.blocks, complCfg());
+      let n = 0;
+      const rows = doc.rows.map(r => {
+        const v = complBlockView(r), isPause = r.type === 'pause';
+        return `<tr class="${isPause ? 'pause' : ''}"><td class="c">${isPause ? '·' : (++n)}</td><td class="c">${esc(v.content)}</td><td>${esc(v.detail)}</td><td class="n">${esc(v.meters)}</td><td class="n">${esc(v.time)}</td></tr>`;
+      }).join('');
+      const t = doc.totals;
+      const meta = `${pd.player.position ? esc(pd.player.position) + ' · ' : ''}Vmax ${pd.vmax ? pd.vmax.toFixed(2) + ' km/h' : '—'}${pd.vift ? ' · VIFT ' + pd.vift.toFixed(1) : ''}`;
+      const verif = `DT ${Math.round(t.dt).toLocaleString()} m · HSR ${Math.round(t.hsr).toLocaleString()} m${t.vhsr > 0 ? ` · VHSR ${Math.round(t.vhsr).toLocaleString()} m` : ''}${t.sprint > 0 ? ` · Sprint ${Math.round(t.sprint).toLocaleString()} m` : ''} · ${fmtTime(t.timeSec)}`;
+      return `<div class="tu-doc-player">
+        <div class="tu-doc-pbar">${pd.player.number != null ? ('#' + pd.player.number + ' ') : ''}${esc(pd.player.name)}</div>
+        <div class="tu-doc-pmeta">${meta}</div>
+        <table class="tu-doc-tbl"><thead><tr><th>N°</th><th>${tt('topup.doc_col_content','Contenido')}</th><th>${tt('topup.doc_col_detail','Detalle')}</th><th>${tt('topup.doc_col_meters','Metros')}</th><th>${tt('topup.doc_col_time','Tiempo')}</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="tu-doc-verif">${tt('topup.doc_verif','Verificación')}: ${verif}</div>
+      </div>`;
+    }).join('');
+    return `<div class="tu-doc">
+      <div class="tu-doc-head">${logo ? `<img src="${logo}">` : ''}<div class="t">
+        <h1>${tt('topup.doc_title','Trabajo complementario')}</h1>
+        <div class="sub">${tt('topup.doc_subtitle','Departamento de Strength & Conditioning')}</div>
+        <div class="club">${esc(club.name || '')}</div></div></div>
+      <p class="tu-doc-intro">${tt('topup.doc_intro','Sesión complementaria individual, separada del partido. Objetivo: igualar los volúmenes de referencia manteniendo el estímulo de alta y muy alta velocidad, con el ritmo individualizado por jugador.')}</p>
+      ${players}
+      <div class="tu-doc-notes">${tt('topup.doc_notes','Notas: pasadas de HSR/VHSR en línea recta para lectura limpia del GPS. Estructura intercalada para distribuir el estímulo de velocidad y evitar concentración de fatiga en un solo tramo. Monitoreo en vivo recomendado para ajustar ritmos.')}</div>
+    </div>`;
+  }
+  async function prepDoc(){
+    if (!_club){ try { _club = await window.getClub(); } catch { _club = {}; } }
+    const logo = await imgToDataUri(_club && _club.logo_url);
+    $('tu-doc-host').innerHTML = buildDocHTML(logo);
+  }
+  async function exportDocPDF(){
+    if (!state.selected.length || !state.compl.blocks.length){ return; }
+    await prepDoc(); await ensureDocLibs();
+    const node = $('tu-doc-host').querySelector('.tu-doc');
+    const canvas = await window.html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
+    const sliceH = Math.floor(canvas.width * (ph / pw));
+    const pageCanvas = document.createElement('canvas'); pageCanvas.width = canvas.width;
+    const ctx = pageCanvas.getContext('2d');
+    let sy = 0, first = true;
+    while (sy < canvas.height){
+      const h = Math.min(sliceH, canvas.height - sy);
+      pageCanvas.height = h; ctx.clearRect(0, 0, pageCanvas.width, h);
+      ctx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      if (!first) pdf.addPage();
+      pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, pw, h * (pw / canvas.width));
+      sy += h; first = false;
+    }
+    pdf.save('trabajo-complementario.pdf');
+  }
+  async function shareDoc(){
+    if (!state.selected.length || !state.compl.blocks.length){ return; }
+    await prepDoc(); await ensureDocLibs();
+    const node = $('tu-doc-host').querySelector('.tu-doc');
+    const canvas = await window.html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], 'trabajo-complementario.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })){
+        try { await navigator.share({ files: [file], title: tt('topup.doc_title','Trabajo complementario') }); return; } catch(_){}
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'trabajo-complementario.png'; a.click();
+    }, 'image/png');
+  }
+  async function printDoc(){ if (!state.selected.length || !state.compl.blocks.length) return; await prepDoc(); window.print(); }
+
+  // ── tab switch ──
+  function showTab(tab){
+    state.tab = tab === 'compl' ? 'compl' : 'match'; savePrefs();
+    $('tu-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+    const isC = state.tab === 'compl';
+    $('tu-tab-match-cfg').classList.toggle('hide', isC);
+    $('tu-tab-compl-cfg').classList.toggle('hide', !isC);
+    $('tu-results').classList.toggle('hide', isC);
+    $('tu-compl-out').classList.toggle('hide', !isC);
+    if (isC){ renderComplTargets(); renderPalette(); renderBlocks(); renderTally(); renderComplPreview(); }
+  }
+
   // ── wire global controls ──
   renderPresetSelect();
   $('tu-preset').addEventListener('change', (e) => { state.presetId = e.target.value; savePrefs(); renderResults(); });
-  $('tu-presets-toggle').addEventListener('click', () => { state.presetsOpen = !state.presetsOpen; renderPresetsEditor(); });
+  $('tu-presets-toggle').addEventListener('click', () => openModal('presets'));
   $('tu-duration').value = state.duration;
   $('tu-duration').addEventListener('input', (e) => { state.duration = +e.target.value || 90; savePrefs(); renderResults(); });
   $('tu-search').addEventListener('input', (e) => { state.filter = e.target.value; renderPicker(); });
@@ -1002,7 +1492,7 @@
     state.speedModel = b.dataset.sm; savePrefs(); renderSpeedModelUI(); renderResults();
   }));
   $('tu-targetband').addEventListener('change', (e) => { state.targetBand = e.target.value; savePrefs(); renderResults(); });
-  $('tu-bands-toggle').addEventListener('click', () => { state.bandsOpen = !state.bandsOpen; renderBandsEditor(); });
+  $('tu-bands-toggle').addEventListener('click', () => openModal('bands'));
 
   // ── continuous-running controls ──
   // Reload HRmax for every selected player (metric key changed) and re-render.
@@ -1028,7 +1518,19 @@
     state.cont.model = b.dataset.cm; savePrefs(); renderContUI();
     if (state.cont.on && state.cont.model === 'fcmax') await reloadHRmax(); else renderResults();
   }));
-  $('tu-cont-zones-toggle').addEventListener('click', () => { state.cont.zonesOpen = !state.cont.zonesOpen; renderContZonesEditor(); });
+  $('tu-cont-zones-toggle').addEventListener('click', () => openModal('zones'));
+
+  // ── modal close (backdrop click · × · Esc) ──
+  $('tu-modal-close').addEventListener('click', closeModal);
+  $('tu-modal-back').addEventListener('click', (e) => { if (e.target === $('tu-modal-back')) closeModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('tu-modal-back').classList.contains('hide')) closeModal(); });
+
+  // ── complementary tab wiring ──
+  $('tu-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  $('tu-compl-cfg-btn').addEventListener('click', () => openModal('compl'));
+  $('tu-doc-pdf').addEventListener('click', exportDocPDF);
+  $('tu-doc-print').addEventListener('click', printDoc);
+  $('tu-doc-share').addEventListener('click', shareDoc);
   $('tu-cont-hrmetric').addEventListener('change', async (e) => {
     state.cont.hrmaxKey = e.target.value || null; savePrefs();
     if (state.cont.on) await reloadHRmax();
@@ -1040,11 +1542,12 @@
   renderMetricChips();
   renderContUI();
   ensureHRmaxMeta().then(() => { if (state.cont.model === 'fcmax') renderHrMetricSelect(); });
+  showTab(state.tab);
   await initTeams();
   await loadPlayers();
   renderPicker();
   renderResults();
-  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPresetSelect(); renderContUI(); renderPicker(); renderResults(); });
+  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPresetSelect(); renderContUI(); renderPicker(); renderResults(); showTab(state.tab); });
 })();
 </script>
 

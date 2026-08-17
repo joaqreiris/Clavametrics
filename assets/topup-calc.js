@@ -496,8 +496,128 @@
     return { id, label, run, rest, pct, custom: true };
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // COMPLEMENTARY (stand-alone) session builder — NOT match-deficit driven.
+  // The coach sets manual targets per session (DT / HSR / VHSR / sprint) and
+  // assembles a drag-ordered sequence of work blocks (continuous laps · HSR/VHSR
+  // /sprint passes · COD · pauses). Each block is computed PER PLAYER from their
+  // Vmax (and VIFT when the %VIFT model is used), so three players sharing the
+  // same structure get their own metres/times — exactly the PDF handoff format.
+  // Pure logic; the HTML layer localises the display strings.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Which %Vmax band each pass metric runs in (midpoint = target speed by default).
+  const COMPL_BANDS = {
+    high_speed_distance:      { id: 'hsr',    lo: 0.60, hi: 0.75 },
+    very_high_speed_distance: { id: 'vhsr',   lo: 0.75, hi: 0.90 },
+    sprint_distance:          { id: 'sprint', lo: 0.90, hi: 1.00 },
+  };
+
+  // Target running speed (km/h) for a pass block. pct model needs Vmax; vift model
+  // anchors to the 30-15 IFT; abs is a fixed km/h. Returns null if unresolvable.
+  function complPassSpeed(opts) {
+    const o = opts || {};
+    const model = o.model || 'pct';
+    const aim   = o.aim == null ? 0.5 : o.aim;
+    if (model === 'vift') {
+      if (!o.vift || o.vift <= 0) return null;
+      const pct = o.viftPct != null ? o.viftPct : 100;
+      return +(o.vift * pct / 100).toFixed(1);
+    }
+    if (model === 'abs') {
+      return o.absKmh > 0 ? +(+o.absKmh).toFixed(1) : null;
+    }
+    // pct: % of Vmax, midpoint of the band unless a custom aim is given
+    const band = o.band || COMPL_BANDS[o.metric] || COMPL_BANDS.high_speed_distance;
+    if (!o.vmax || o.vmax <= 0) return null;
+    const hi = band.hi == null ? 1.0 : band.hi;
+    return +(o.vmax * (band.lo + aim * (hi - band.lo))).toFixed(1);
+  }
+
+  // ── Straight-line "passes" block (pasadas) to hit a distance target in a zone.
+  // opts: { targetM, passDist, speedKmh, recoverySec }
+  // reps = ceil(target/passDist) · pace = passDist / speed · time = reps·(pace+recovery).
+  function prescribePasses(opts) {
+    const o = opts || {};
+    const passDist = +o.passDist > 0 ? +o.passDist : 0;
+    const target   = clamp0(+o.targetM || 0);
+    const speed    = +o.speedKmh;
+    const recovery = clamp0(+o.recoverySec || 0);
+    if (!(speed > 0)) return { need: 'speed' };
+    if (passDist <= 0) return { need: 'passDist' };
+    if (target <= 0)   return { need: 'target' };
+    const reps    = Math.max(1, Math.ceil(target / passDist));
+    const totalM  = reps * passDist;
+    const paceSec = +(passDist / (speed / 3.6)).toFixed(1);
+    const timeSec = Math.round(reps * (paceSec + recovery));
+    return { reps, passDist, speedKmh: speed, paceSec, recoverySec: recovery, totalM, timeSec };
+  }
+
+  // ── Compute one complementary block for one player → structured numbers.
+  // block: { id, type:'cont'|'hsr'|'vhsr'|'sprint'|'cod'|'pause', ...fields }
+  // cfg:   { lapM, model, aim, viftPct, absBy:{metric:kmh}, passDist(default), recoverySec }
+  // pd:    { vmax, vift }
+  // Returns { type, metersM, timeSec, ... } where metersM feeds the DT/HSR/... totals.
+  const PASS_METRIC = { hsr: 'high_speed_distance', vhsr: 'very_high_speed_distance', sprint: 'sprint_distance' };
+  function computeComplBlock(block, pd, cfg) {
+    const b = block || {}, c = cfg || {}, p = pd || {};
+    if (b.type === 'pause') {
+      const sec = +b.seconds > 0 ? +b.seconds : (+b.minutes > 0 ? +b.minutes * 60 : 0);
+      return { type: 'pause', metersM: 0, timeSec: Math.round(sec), note: b.note || '' };
+    }
+    if (b.type === 'cod') {
+      const cod = prescribeCOD(+b.accCount || 0, +b.decCount || 0);
+      // rough time: series × (~work 20s + rest) — informational only
+      const timeSec = Math.round((+b.timeMin || 0) * 60);
+      return { type: 'cod', metersM: 0, timeSec, total: cod.total, band: cod.band };
+    }
+    if (b.type === 'cont') {
+      const lapM = +b.lapM > 0 ? +b.lapM : (+c.lapM > 0 ? +c.lapM : 0);
+      const pct  = b.pctVmax != null ? +b.pctVmax : 0.55;
+      const rx = prescribeContinuous({
+        deficitM: +b.metersM || 0, lapM, model: 'vmax',
+        blocks: +b.blocks || 1, restSec: +b.restSec || 0,
+        vmax: p.vmax, pctVmax: pct,
+      });
+      if (!rx || rx.need) return { type: 'cont', need: rx ? rx.need : 'input', metersM: 0, timeSec: 0 };
+      return {
+        type: 'cont', metersM: rx.totalM, timeSec: Math.round((rx.runMin || 0) * 60),
+        laps: rx.laps, lapM: rx.lapM, speedKmh: rx.speedKmh, lapSec: rx.lapSec,
+        pctVmax: rx.pctVmax, blocks: rx.blocks, lapsPerBlock: rx.lapsPerBlock,
+      };
+    }
+    // passes: hsr / vhsr / sprint
+    const metric   = PASS_METRIC[b.type] || 'high_speed_distance';
+    const passDist = +b.passDist > 0 ? +b.passDist : (+c.passDist > 0 ? +c.passDist : 30);
+    const recovery = +b.recoverySec != null && +b.recoverySec >= 0 ? +b.recoverySec : (c.recoverySec != null ? +c.recoverySec : 25);
+    const speedKmh = complPassSpeed({
+      metric, band: COMPL_BANDS[metric], model: c.model, aim: c.aim,
+      vmax: p.vmax, vift: p.vift, viftPct: c.viftPct,
+      absKmh: (c.absBy && c.absBy[metric]) || null,
+    });
+    const rx = prescribePasses({ targetM: +b.targetM || 0, passDist, speedKmh, recoverySec: recovery });
+    if (rx.need) return { type: b.type, metric, need: rx.need, metersM: 0, timeSec: 0, passDist, speedKmh };
+    return { type: b.type, metric, ...rx, metersM: rx.totalM };
+  }
+
+  // ── Whole session for one player → rows + verification totals ──────────────
+  // Returns { rows:[computeComplBlock result...], totals:{ dt, hsr, vhsr, sprint, timeSec } }.
+  function buildComplDoc(pd, blocks, cfg) {
+    const rows = (blocks || []).map(b => computeComplBlock(b, pd, cfg));
+    const totals = { dt: 0, hsr: 0, vhsr: 0, sprint: 0, timeSec: 0 };
+    rows.forEach(r => {
+      totals.timeSec += r.timeSec || 0;
+      if (r.type === 'cont') totals.dt += r.metersM || 0;
+      else if (r.type === 'hsr') totals.hsr += r.metersM || 0;
+      else if (r.type === 'vhsr') totals.vhsr += r.metersM || 0;
+      else if (r.type === 'sprint') totals.sprint += r.metersM || 0;
+    });
+    return { rows, totals };
+  }
+
   window.TopUp = {
     METRIC_DEFS, PRESETS, DEFAULT_PRESET, COD_BANDS, BAND_PCT,
+    COMPL_BANDS, PASS_METRIC, complPassSpeed, prescribePasses, computeComplBlock, buildComplDoc,
     DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS, CONT_ZONES, CONT_DEFAULT_ZONE,
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
