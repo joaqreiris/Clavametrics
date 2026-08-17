@@ -1408,6 +1408,8 @@
   .ds-head h2{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0;display:flex;align-items:center;gap:9px}
   .ds-head h2 .ti{color:var(--cm-accent);font-size:19px}
   .ds-head .sp{flex:1}
+  .ds-flash{animation:dsFlash 1.4s ease}
+  @keyframes dsFlash{0%,100%{box-shadow:none}20%,60%{box-shadow:0 0 0 3px color-mix(in srgb, var(--cm-accent) 45%, transparent);border-color:var(--cm-accent)}}
   .ds-close{width:30px;height:30px;border-radius:7px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
   .ds-close:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
   .ds-body{display:grid;grid-template-columns:340px 1fr;min-height:0;flex:1}
@@ -1479,6 +1481,7 @@
     <div class="ds-head">
       <h2 id="dsHeadTitle"><i class="ti ti-clipboard-text"></i><span data-i18n="calendar.daysheet.title">Day sheet</span></h2>
       <div class="sp"></div>
+      <button class="cm-btn is-primary is-sm" id="dsSaveTop"><i class="ti ti-device-floppy" style="font-size:14px"></i><span data-i18n="calendar.daysheet.plan_save">Save template</span></button>
       <button class="cm-btn is-outline is-sm" id="dsShare"><i class="ti ti-brand-whatsapp" style="font-size:14px"></i><span data-i18n="calendar.daysheet.share">Share</span></button>
       <button class="cm-btn is-outline is-sm" id="dsExportPng"><i class="ti ti-photo" style="font-size:14px"></i><span data-i18n="calendar.daysheet.png">PNG</span></button>
       <button class="cm-btn is-primary is-sm" id="dsExportPdf"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="calendar.daysheet.pdf">PDF</span></button>
@@ -6197,9 +6200,17 @@ function dsLoadPlanById(id){
   dsRegenQr().then(() => dsRenderSheet());
   showCalToast(tt('calendar.daysheet.plan_loaded','Template loaded'));
 }
+function dsFocusPlanName(){
+  const inp = document.getElementById('dsPlanName');
+  if (!inp){ return; }
+  try { inp.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(_){ inp.scrollIntoView(); }
+  inp.focus();
+  inp.classList.add('ds-flash');
+  setTimeout(() => inp.classList.remove('ds-flash'), 1400);
+}
 async function dsSavePlan(){
   const name = (_dsPlanName||'').trim();
-  if (!name){ showCalToast(tt('calendar.daysheet.plan_need_name','Give the template a name first')); return; }
+  if (!name){ showCalToast(tt('calendar.daysheet.plan_need_name','Give the template a name first')); dsFocusPlanName(); return; }
   const data = dsPlanData(), now = new Date().toISOString();
   const ex = _dsPlans.find(p => (p.name||'').trim().toLowerCase() === name.toLowerCase());
   if (ex){
@@ -6391,10 +6402,9 @@ function dsRenderEditor(){
           ${planOpts}
         </select></div>` : ''}
       <div class="ds-fld"><label>${esc(tt('calendar.daysheet.plan_name','Template name'))}</label><input class="ds-in" id="dsPlanName" placeholder="${esc(tt('calendar.daysheet.plan_name_ph','e.g. Home matchday, MD-1…'))}" value="${esc(_dsPlanName||'')}"></div>
-      <div style="display:flex;gap:8px;margin-top:2px">
-        <button class="ds-add" type="button" data-plan="save" style="margin:0;flex:1"><i class="ti ti-device-floppy"></i> ${esc(tt('calendar.daysheet.plan_save','Save template'))}</button>
-        ${_dsCurrentPlanId ? `<button class="ds-add" type="button" data-plan="delete" style="margin:0;flex:none;color:#C81E3A" title="${esc(tt('calendar.daysheet.plan_delete','Delete template'))}"><i class="ti ti-trash"></i></button>` : ''}
-      </div>
+      ${_dsCurrentPlanId ? `<div style="display:flex;gap:8px;margin-top:2px">
+        <button class="ds-add" type="button" data-plan="delete" style="margin:0;flex:1;color:#C81E3A"><i class="ti ti-trash"></i> ${esc(tt('calendar.daysheet.plan_delete','Delete template'))}</button>
+      </div>` : ''}
     </div>
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_header','Header'))}</h3>
@@ -6493,6 +6503,7 @@ function dsBindOnce(){
   ed.addEventListener('dragover', e => { if (!_dsDrag) return; const it = e.target.closest('.ds-item'); if (!it || it.dataset.scope !== _dsDrag.scope) return; e.preventDefault(); ed.querySelectorAll('.ds-over').forEach(n => n.classList.remove('ds-over')); it.classList.add('ds-over'); });
   ed.addEventListener('drop', e => { if (!_dsDrag) return; const it = e.target.closest('.ds-item'); if (!it || it.dataset.scope !== _dsDrag.scope){ _dsDrag = null; return; } e.preventDefault(); const to = +it.dataset.i, arr = _dsState[_dsDrag.scope]; const [moved] = arr.splice(_dsDrag.i, 1); arr.splice(to, 0, moved); _dsDrag = null; dsRenderEditor(); dsRenderSheet(); if (arr === _dsState.info) dsSaveTmpl(); });
   ed.addEventListener('dragend', () => { _dsDrag = null; ed.querySelectorAll('.ds-dragging,.ds-over').forEach(n => n.classList.remove('ds-dragging','ds-over')); });
+  document.getElementById('dsSaveTop')?.addEventListener('click', dsSavePlan);
   document.getElementById('dsShare')?.addEventListener('click', dsShare);
   document.getElementById('dsClose')?.addEventListener('click', closeDaySheet);
   document.getElementById('dsBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeDaySheet(); });
