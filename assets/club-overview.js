@@ -91,10 +91,15 @@
     const avQ = sb().from('availability').select('player_id,status,team_id,notes').eq('club_id', cid).eq('date', today);
     const rpeQ = sb().from('rpe').select('session_id,player_id,load,session_date').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
     const plQ = sb().from('players').select('id,first_name,last_name,position,team_id').eq('club_id', cid).is('archived_at', null);
+    // Lesiones abiertas (para el panel de regreso): club-wide, no acotadas a la semana; scope por equipo client-side.
+    const injQ = sb().from('injuries').select('player_id,injury_type,body_area,severity,status,expected_return,start_date').eq('club_id', cid).in('status', ['active', 'returning']);
+    // Wellness de hoy vía RPC: ya excluye a quien no se esperaba que responda (enfermo/no disponible/selección).
+    const tzoff = new Date().getTimezoneOffset();
+    const wellQ = sb().rpc('wellness_status', { p_club_id: cid, p_team_id: state.scopeTeam || null, p_date: today, p_tz_offset: tzoff });
 
-    const [sessions, matches, micros, pteams, avail, rpe, lplan, players] = await Promise.all([run(sessQ), run(matchQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ)]);
+    const [sessions, matches, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), run(matchQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
     const pmap = {}; (players || []).forEach(p => { pmap[String(p.id)] = p; });
-    state.data = { sessions, matches, micros, pteams, avail, rpe, lplan, players, pmap, today };
+    state.data = { sessions, matches, micros, pteams, avail, rpe, lplan, players, injuries, wellness, pmap, today };
   }
   function playerName(id) { const p = state.data && state.data.pmap ? state.data.pmap[String(id)] : null; if (!p) return ''; return [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ''; }
 
@@ -132,8 +137,25 @@
     return { sessions: events, noPlan, avgLoad, total, available, out, injured, injIds, otherIds, ep, epPct, comp };
   }
 
+  // ── Wellness de hoy (readiness = estado; distinto del cumplimiento de RPE) ──
+  function wellnessStats() {
+    const W = state.data && state.data.wellness ? state.data.wellness : [];
+    const responded = W.filter(w => w.responded);
+    const rd = responded.map(w => Number(w.readiness)).filter(n => !isNaN(n));
+    const avg = rd.length ? (rd.reduce((a, b) => a + b, 0) / rd.length) : null;
+    const flags = responded.filter(w => w.readiness != null && Number(w.readiness) <= 4);
+    return { total: W.length, respN: responded.length, avg: avg, flags: flags };
+  }
+
   function renderPulse() {
     const k = state.kpi || (state.kpi = computeKpis());
+    const w = wellnessStats();
+    const wSub = (w.respN === 0
+      ? '<span class="co-chip neutral">' + tt('club_overview.no_wellness', 'No check-ins') + '</span>'
+      : (w.flags.length > 0
+        ? '<span class="co-chip bad"><i class="ti ti-alert-triangle"></i>' + w.flags.length + ' ' + tt('club_overview.w_flags', 'in the red') + '</span>'
+        : '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.w_ok', 'All green') + '</span>')
+      ) + '<span class="co-chip neutral">' + w.respN + '/' + w.total + '</span>';
     const availSub = k.out === 0
       ? '<span class="co-chip good"><i class="ti ti-check"></i>' + tt('club_overview.all_available', 'All available') + '</span>'
       : (k.injured > 0 ? '<span class="co-chip warn">' + k.injured + ' ' + tt('club_overview.injured', 'injured') + '</span>' : '') + ((k.out - k.injured) > 0 ? '<span class="co-chip neutral">' + (k.out - k.injured) + ' ' + tt('club_overview.other', 'other') + '</span>' : '');
@@ -142,7 +164,8 @@
       { ic: 'ti-users-group', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_available', 'Squad available'), val: k.available + '<small>/' + k.total + '</small>', sub: availSub },
       { ic: 'ti-chart-line', col: 'var(--cm-violet)', bg: 'var(--cm-violet-bg)', lbl: tt('club_overview.k_load', 'Avg session load'), val: k.avgLoad + '<small> AU</small>', bar: { p: Math.min(100, k.avgLoad ? Math.round(k.avgLoad / 900 * 100) : 0), c: 'var(--cm-violet)' } },
       { ic: 'ti-chart-histogram', col: 'var(--cm-accent)', bg: 'var(--cm-accent-soft)', lbl: tt('club_overview.k_ep', 'Weekly E:P ratio'), val: k.ep, bar: k.ep !== '—' ? { p: k.epPct, c: 'var(--cm-accent)' } : null },
-      { ic: 'ti-activity', col: 'var(--cm-danger)', bg: 'var(--cm-danger-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'), val: (k.comp == null ? '—' : k.comp + '<small>%</small>'), bar: k.comp == null ? null : { p: k.comp, c: k.comp >= 85 ? 'var(--cm-success)' : 'var(--cm-warning)' } }
+      { ic: 'ti-activity', col: 'var(--cm-danger)', bg: 'var(--cm-danger-bg)', lbl: tt('club_overview.k_rpe', 'RPE compliance'), val: (k.comp == null ? '—' : k.comp + '<small>%</small>'), bar: k.comp == null ? null : { p: k.comp, c: k.comp >= 85 ? 'var(--cm-success)' : 'var(--cm-warning)' } },
+      { ic: 'ti-battery-charging', col: 'var(--cm-info)', bg: 'var(--cm-info-bg)', lbl: tt('club_overview.k_wellness', 'Wellness / readiness'), val: (w.avg == null ? '—' : w.avg.toFixed(1) + '<small>/10</small>'), sub: wSub, bar: w.avg == null ? null : { p: Math.round(w.avg * 10), c: w.avg >= 6 ? 'var(--cm-success)' : w.avg >= 4 ? 'var(--cm-warning)' : 'var(--cm-danger)' } }
     ];
     document.getElementById('coPulse').innerHTML = cards.map(c => '<div class="co-kpi"><div class="kt"><div class="ki" style="background:' + c.bg + ';color:' + c.col + '"><i class="ti ' + c.ic + '"></i></div><div class="kl">' + c.lbl + '</div></div><div class="kv">' + c.val + '</div>' + (c.sub ? '<div class="ks">' + c.sub + '</div>' : '') + (c.bar ? '<div class="co-track"><span style="width:' + c.bar.p + '%;background:' + c.bar.c + '"></span></div>' : '') + '</div>').join('');
   }
@@ -388,6 +411,11 @@
   }
   function renderAlerts() {
     const items = [], k = state.kpi || computeKpis();
+    // Rojos de wellness hoy (lo más accionable → primero).
+    wellnessStats().flags.slice(0, 4).forEach(f => {
+      const extra = (f.soreness != null && Number(f.soreness) >= 7) ? (' · ' + tt('club_overview.w_sore', 'high soreness')) : '';
+      items.push({ k: 'bad', i: 'ti-battery-1', t: f.player_name || tt('club_overview.a_player', 'Player'), d: tt('club_overview.w_low_readiness', 'Low readiness') + ' · ' + f.readiness + '/10' + extra, time: tt('common.today', 'today') });
+    });
     (k.injIds || []).slice(0, 5).forEach(id => { const p = state.data.pmap[String(id)]; items.push({ k: 'bad', i: 'ti-bandage', t: playerName(id) || tt('club_overview.a_player', 'Player'), d: [tt('club_overview.injured_one', 'Injured'), p && p.position ? p.position : '', playerTeamName(id)].filter(Boolean).join(' · '), time: tt('common.today', 'today') }); });
     if ((k.injIds || []).length > 5) items.push({ k: 'bad', i: 'ti-bandage', t: '+' + (k.injIds.length - 5) + ' ' + tt('club_overview.more_injured', 'more injured'), d: '', time: tt('common.today', 'today') });
     (k.otherIds || []).slice(0, 3).forEach(id => { const p = state.data.pmap[String(id)]; const st = ((state.data.avail || []).find(a => String(a.player_id) === String(id)) || {}).status || ''; items.push({ k: 'warn', i: 'ti-user-off', t: playerName(id) || tt('club_overview.a_player', 'Player'), d: [statusLabel(st), p && p.position ? p.position : '', playerTeamName(id)].filter(Boolean).join(' · '), time: tt('common.today', 'today') }); });
@@ -396,6 +424,32 @@
     const el = document.getElementById('coAlerts');
     if (!items.length) { el.innerHTML = '<div class="co-muted">' + tt('club_overview.no_alerts', 'All clear.') + '</div>'; return; }
     el.innerHTML = items.slice(0, 10).map(a => '<div class="co-alert ' + a.k + '"><div class="ai"><i class="ti ' + a.i + '"></i></div><div class="ab"><div class="at">' + esc(a.t) + '</div>' + (a.d ? '<div class="ad">' + esc(a.d) + '</div>' : '') + '</div><div class="atime">' + esc(a.time || '') + '</div></div>').join('');
+  }
+
+  // ── RETURN TO PLAY (regreso de lesionados) ──
+  function daysUntil(y) { if (!y) return null; return Math.round((parseYMD(y) - parseYMD(todayY())) / 86400000); }
+  function sevLabel(s) { s = (s || '').toLowerCase(); return tt('club_overview.sev_' + s, s === 'minor' ? 'Minor' : s === 'moderate' ? 'Moderate' : s === 'severe' ? 'Severe' : s); }
+  function renderReturns() {
+    const el = document.getElementById('coReturns'); if (!el) return;
+    const cnt = document.getElementById('coReturnsCount');
+    const inScope = pid => { if (!state.scopeTeam) return true; return (state.data.pteams || []).some(p => p.team_id === state.scopeTeam && String(p.player_id) === String(pid)); };
+    const inj = (state.data.injuries || []).filter(x => inScope(x.player_id)).slice();
+    inj.sort((a, b) => { const da = a.expected_return || '9999-99-99', db = b.expected_return || '9999-99-99'; return da < db ? -1 : da > db ? 1 : 0; });
+    if (!inj.length) { el.innerHTML = '<div class="co-muted">' + tt('club_overview.no_returns', 'No active injuries. Full squad healthy.') + '</div>'; if (cnt) cnt.textContent = ''; return; }
+    if (cnt) cnt.textContent = inj.length + ' ' + tt('club_overview.out_count', 'out');
+    el.innerHTML = inj.map(x => {
+      const d = daysUntil(x.expected_return);
+      let cls, chip;
+      if (x.status === 'returning') { cls = 'good'; chip = '<i class="ti ti-run"></i>' + tt('club_overview.rtp_returning', 'Returning'); }
+      else if (d == null) { cls = 'neutral'; chip = tt('club_overview.rtp_none', 'No ETA'); }
+      else if (d < 0) { cls = 'bad'; chip = '<i class="ti ti-alert-triangle"></i>' + tt('club_overview.rtp_overdue', 'Overdue'); }
+      else if (d === 0) { cls = 'info'; chip = tt('common.today', 'Today'); }
+      else if (d <= 7) { cls = 'info'; chip = tt('club_overview.rtp_in', 'In') + ' ' + d + 'd'; }
+      else { cls = 'neutral'; chip = shortDate(x.expected_return); }
+      const meta = [x.body_area, sevLabel(x.severity), playerTeamName(x.player_id)].filter(Boolean).join(' · ');
+      const nm = playerName(x.player_id) || tt('club_overview.a_player', 'Player');
+      return '<div class="co-ret"><div class="rn2">' + esc(initials(nm)) + '</div><div class="rb"><div class="rt">' + esc(nm) + '</div><div class="rd">' + esc(meta) + '</div></div><span class="co-chip ' + cls + '">' + chip + '</span></div>';
+    }).join('');
   }
 
   // ── ACTIVITY ──
@@ -469,7 +523,7 @@
     document.getElementById('coWeekLbl').textContent = weekLabel();
     await fetchWeek();
     state.kpi = computeKpis();
-    renderPulse(); renderGrid(); renderAlerts();
+    renderPulse(); renderGrid(); renderAlerts(); renderReturns();
     autoSelect();
   }
 
@@ -519,7 +573,7 @@
     await refresh();
     await renderActivity();
 
-    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderPulse(); renderGrid(); renderAlerts(); if (state.sel) selectEvent(state.sel.team, state.sel.ymd, state.sel.key); else autoSelect(); });
+    window.addEventListener('cm:langchanged', () => { renderTeamSelect(); renderPulse(); renderGrid(); renderAlerts(); renderReturns(); if (state.sel) selectEvent(state.sel.team, state.sel.ymd, state.sel.key); else autoSelect(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
