@@ -1174,6 +1174,7 @@ function gpFacetLabel(dim, token){
 // Filter row: dropdowns (purpose / muscle / equipment / complexity), options drawn
 // from what's actually in the club library and ordered by the canonical taxonomy.
 function gpRenderLibChips() {
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const wrap = document.getElementById('gpLibChips'); if (!wrap) return;
   const lib = _gpLib || [];
   const purpOpts = gpFacetTokens('purpose', lib.flatMap(gpExPurposes));
@@ -1308,6 +1309,7 @@ function gpPickLib(id, name) {
 let _gpExCreateBuilt = false;
 function gpBuildExCreateModal(){
   if (_gpExCreateBuilt) return; _gpExCreateBuilt = true;
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const T = window.CMTaxonomy;
   const opt = (arr, ph) => `<option value="">${esc(ph)}</option>` +
     (arr||[]).map(it => `<option value="${esc(it.token)}">${esc(it.label)}</option>`).join('');
@@ -1363,7 +1365,8 @@ function gpBuildExCreateModal(){
       <div id="gpExcStatus" style="margin-top:10px;font:var(--cm-body-sm);color:var(--cm-danger);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
         <button class="cm-btn is-ghost is-sm" onclick="gpCloseExCreate()">${tt('common.cancel','Cancel')}</button>
-        <button class="cm-btn is-primary is-sm" id="gpExcSaveBtn" onclick="gpSaveExCreate()">${tt('gym_planner.create_and_add','Create & add')}</button>
+        <button class="cm-btn is-ghost is-sm" id="gpExcSaveMoreBtn" onclick="gpSaveExCreate(true)">${tt('gym_planner.create_and_another','Create & add another')}</button>
+        <button class="cm-btn is-primary is-sm" id="gpExcSaveBtn" onclick="gpSaveExCreate(false)">${tt('gym_planner.create_and_add','Create & add')}</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -1380,14 +1383,16 @@ function gpOpenExCreate(){
   n.focus();
 }
 function gpCloseExCreate(){ const ov=document.getElementById('gpExCreateOv'); if (ov) ov.style.display='none'; }
-async function gpSaveExCreate(){
+// keepOpen=false → create, link into the row that opened the picker, close everything.
+// keepOpen=true  → create into the library and stay open to add more (form resets, list refreshes).
+async function gpSaveExCreate(keepOpen){
   const status = document.getElementById('gpExcStatus');
   const name = document.getElementById('gpExcName').value.trim();
   const purpose = document.getElementById('gpExcPurpose').value;
   const muscle = document.getElementById('gpExcMuscle').value;
-  if (!name)    { status.textContent = tt('gym_planner.name_required','Enter a name.'); document.getElementById('gpExcName').focus(); return; }
-  if (!purpose) { status.textContent = tt('gym_library.pick_primary_purpose','Pick a primary purpose.'); return; }
-  if (!muscle)  { status.textContent = tt('gym_library.pick_muscle_group','Pick at least one muscle group.'); return; }
+  if (!name)    { status.style.color='var(--cm-danger)'; status.textContent = tt('gym_planner.name_required','Enter a name.'); document.getElementById('gpExcName').focus(); return; }
+  if (!purpose) { status.style.color='var(--cm-danger)'; status.textContent = tt('gym_library.pick_primary_purpose','Pick a primary purpose.'); return; }
+  if (!muscle)  { status.style.color='var(--cm-danger)'; status.textContent = tt('gym_library.pick_muscle_group','Pick at least one muscle group.'); return; }
   const equip = document.getElementById('gpExcEquip').value;
   const video = document.getElementById('gpExcVideo').value.trim();
   const T = window.CMTaxonomy;
@@ -1405,8 +1410,8 @@ async function gpSaveExCreate(){
     muscle_group: T ? T.label('muscle_group', muscle) : muscle,
     equipment: equip ? gpEqLabel(equip) : null,
   };
-  const btn = document.getElementById('gpExcSaveBtn');
-  btn.disabled = true; status.style.color = 'var(--cm-fg-muted)'; status.textContent = tt('gym_library.creating','Creating…');
+  const btn = document.getElementById('gpExcSaveBtn'), btnMore = document.getElementById('gpExcSaveMoreBtn');
+  btn.disabled = true; btnMore.disabled = true; status.style.color = 'var(--cm-fg-muted)'; status.textContent = tt('gym_library.creating','Creating…');
   try {
     const { data: row, error } = await window.sb.from('gym_exercises').insert(payload).select('id').single();
     if (error) throw error;
@@ -1417,10 +1422,20 @@ async function gpSaveExCreate(){
     if (!_gpLib) _gpLib = [];
     _gpLib.push(ex); _gpLib.sort((a,b) => (a.name||'').localeCompare(b.name||''));
     _gpLibMediaDone = false;   // let the YouTube poster resolve on next render
-    gpCloseExCreate();
-    gpPickLib(row.id, name);   // links it into the row that opened the picker + closes the library
+    btn.disabled = false; btnMore.disabled = false;
+    if (keepOpen) {
+      // Refresh the library behind the modal so the new exercise is there, reset the form, keep going.
+      gpRenderLibChips(); gpRenderLibList();
+      document.getElementById('gpExcName').value=''; document.getElementById('gpExcVideo').value='';
+      status.style.color = 'var(--cm-success,var(--cm-accent))';
+      status.textContent = tt('gym_planner.exercise_created', `“${name}” created ✓`, { name });
+      document.getElementById('gpExcName').focus();
+    } else {
+      gpCloseExCreate();
+      gpPickLib(row.id, name);   // links it into the row that opened the picker + closes the library
+    }
   } catch (e) {
-    btn.disabled = false; status.style.color = 'var(--cm-danger)';
+    btn.disabled = false; btnMore.disabled = false; status.style.color = 'var(--cm-danger)';
     status.textContent = tt('gym_library.error_saving', 'Error saving exercise: ' + (e.message||''), { msg: e.message||'' });
   }
 }
