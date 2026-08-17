@@ -495,6 +495,11 @@
             <button class="av-range-opt" onclick="avSetPreset('7')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer" data-i18n="availability.rangeLastWeek">Last week</button>
             <button class="av-range-opt" onclick="avSetPreset('14')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer" data-i18n="availability.rangeLast2Weeks">Last 2 weeks</button>
             <button class="av-range-opt" onclick="avSetPreset('30')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer" data-i18n="availability.rangeLastMonth">Last month</button>
+            <div id="avMcSection" style="display:none">
+              <div style="border-top:1px solid var(--cm-border);margin:5px 0"></div>
+              <label style="display:block;padding:2px 10px 4px;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)" data-i18n="availability.rangeMicrocycles">Microcycles</label>
+              <div id="avMcOpts" style="max-height:224px;overflow-y:auto"></div>
+            </div>
             <div id="avSeasonSection" style="display:none">
               <div style="border-top:1px solid var(--cm-border);margin:5px 0"></div>
               <label style="display:block;padding:2px 10px 4px;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)" data-i18n="availability.rangeSeason">Season</label>
@@ -1151,9 +1156,15 @@
       mcStart = _avRangeOverride.start;
       mcEnd   = _avRangeOverride.end;
       const nameEl = document.getElementById('avMcName');
-      if (nameEl) nameEl.textContent = tt('availability.rangeCustomName','Custom range');
       const pickerEl = document.getElementById('avMcPickerName');
-      if (pickerEl) pickerEl.textContent = tt('availability.rangeShort','Range');
+      if (_avRangePreset === 'mc-pick' && _avSelectedMc) {
+        const nm = _avSelectedMc.name || tt('availability.mcCurrent','Current MC');
+        if (nameEl) nameEl.textContent = nm;
+        if (pickerEl) pickerEl.textContent = nm;
+      } else {
+        if (nameEl) nameEl.textContent = tt('availability.rangeCustomName','Custom range');
+        if (pickerEl) pickerEl.textContent = tt('availability.rangeShort','Range');
+      }
     }
     // Fallback: current Monday → following Sunday (14 days)
     if (!mcStart) {
@@ -1737,6 +1748,16 @@
       _avSeasons = seas || [];
     } catch { _avSeasons = []; }
     avRenderSeasonOpts();
+    // Microciclos de Calendar del equipo activo → filtro semana a semana en el selector de rango.
+    try {
+      let mq = window.sb.from('microcycles')
+        .select('id, name, start_date, end_date, match_date, rival')
+        .eq('club_id', clubId);
+      if (_avTeamId) mq = mq.eq('team_id', _avTeamId);
+      const { data: mcs } = await mq.order('start_date', { ascending: false });
+      _avMicrocycles = mcs || [];
+    } catch { _avMicrocycles = []; }
+    avRenderMcOpts();
     // Default: arrancar con la temporada en curso (si el usuario no eligió un rango).
     if (!_avRangeUserSet) {
       const today = cmToday();
@@ -1760,12 +1781,28 @@
       return `<button class="av-range-opt" onclick="avSetSeason('${s.id}')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">${s.name || '—'}${scope}</button>`;
     }).join('');
   }
+  function avRenderMcOpts() {
+    const wrap = document.getElementById('avMcSection');
+    const opts = document.getElementById('avMcOpts');
+    if (!wrap || !opts) return;
+    const list = _avMicrocycles || [];
+    if (!list.length) { wrap.style.display = 'none'; opts.innerHTML = ''; return; }
+    wrap.style.display = '';
+    const fmt = d => { const [, m, day] = String(d).split('-'); return `${day}/${m}`; };
+    opts.innerHTML = list.map(m => {
+      const on = (_avSelectedMc && _avSelectedMc.id === m.id) ? 'background:var(--cm-bg-soft)' : '';
+      const meta = `${fmt(m.start_date)}–${fmt(m.end_date)}${m.rival ? ` · ${m.rival}` : ''}`;
+      return `<button class="av-range-opt" onclick="avSetMc('${m.id}')" title="${meta}" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;${on}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name || '—'}</span><span style="color:var(--cm-fg-faint);font:500 11px/1 var(--cm-font-mono);white-space:nowrap">${meta}</span></button>`;
+    }).join('');
+  }
   function avOnTeamChange(){ _avTeamId=document.getElementById('avTeamSelect').value; sessionStorage.setItem('cal_active_team',_avTeamId); location.reload(); }
   window.avOnTeamChange = avOnTeamChange;
 
   let _avRangeOverride = null; // {start, end} o null = microciclo
   let _avRangePreset   = 'mc'; // preset activo del filtro de fecha (refleja segmentos en Stats)
   let _avRangeUserSet  = false; // el usuario eligió un rango explícito → no pisar con el default de temporada
+  let _avMicrocycles   = [];   // microciclos de Calendar del equipo, ordenados desc por start_date
+  let _avSelectedMc    = null; // microciclo elegido en el selector (para etiqueta + navegación con flechas)
   function avComputeRange(preset) {
     const today = cmToday();
     const d = new Date(today + 'T00:00:00Z');
@@ -1782,7 +1819,18 @@
     document.getElementById('avRangeMenu').style.display = 'none';
     _avRangeUserSet = true;
     _avRangePreset = v;
+    _avSelectedMc = null;
     _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
+    if (typeof init === 'function') init();
+  };
+  window.avSetMc = function(id) {
+    const m = (_avMicrocycles || []).find(x => x.id === id); if (!m) return;
+    document.getElementById('avRangeMenu').style.display = 'none';
+    _avRangeUserSet = true;
+    _avRangePreset = 'mc-pick';
+    _avSelectedMc = m;
+    _avRangeOverride = { start: m.start_date, end: m.end_date };
+    avRenderMcOpts();   // refleja la selección resaltada
     if (typeof init === 'function') init();
   };
   window.avSetStatScope = function(v) {
@@ -1800,10 +1848,19 @@
     if (end < s.start_date) end = s.start_date;   // temporada íntegramente futura
     _avRangeUserSet = true;
     _avRangePreset = 'season';
+    _avSelectedMc = null;
     _avRangeOverride = { start: s.start_date, end };
     if (typeof init === 'function') init();
   };
   window.avShiftRange = function(dir) {
+    // Con un microciclo elegido, las flechas saltan al microciclo anterior/siguiente (semana a semana).
+    if (_avRangePreset === 'mc-pick' && _avSelectedMc && _avMicrocycles.length) {
+      const idx = _avMicrocycles.findIndex(m => m.id === _avSelectedMc.id);
+      // Lista ordenada desc por start_date → avanzar en el tiempo (dir +1) = índice menor.
+      const next = (idx !== -1) ? _avMicrocycles[idx - dir] : null;
+      if (next) { avSetMc(next.id); }
+      return;   // no hay más microciclos en esa dirección → no salir del modo microciclo
+    }
     // calcula el rango actual visible y lo desplaza su mismo tamaño
     if (!MC_DATES.length) return;
     const start = MC_DATES[0], end = MC_DATES[MC_DATES.length - 1];
@@ -1812,6 +1869,7 @@
     const me = new Date(end   + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
     _avRangeUserSet = true;
     _avRangePreset = 'custom';
+    _avSelectedMc = null;
     _avRangeOverride = {
       start: new Date(ms).toISOString().slice(0,10),
       end:   new Date(me).toISOString().slice(0,10)
@@ -1825,6 +1883,7 @@
     if (f > t) { const _x = f; f = t; t = _x; }
     _avRangeUserSet = true;
     _avRangePreset = 'custom';
+    _avSelectedMc = null;
     _avRangeOverride = { start: f, end: t };
     document.getElementById('avRangeMenu').style.display = 'none';
     if (typeof init === 'function') init();
