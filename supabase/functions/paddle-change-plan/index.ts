@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
     const { team_id, plan_slug, cycle, preview, action } = await req.json();
-    const act = action === 'cancel' ? 'cancel' : 'change';
+    const act = ['cancel', 'undo'].includes(action) ? action : 'change';
     if (!team_id) return json({ error: 'Falta team_id' }, 400);
     if (act === 'change' && !plan_slug) return json({ error: 'Falta plan_slug' }, 400);
 
@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
 
     // ── Suscripción de Paddle activa del equipo (no comp) ──
     const { data: sub } = await admin.from('subscriptions')
-      .select('provider_subscription_id, is_comp, status, plan_id, current_period_end')
+      .select('id, provider_subscription_id, is_comp, status, plan_id, billing_cycle, current_period_end, scheduled_plan_id, scheduled_change_at')
       .eq('team_id', team_id).eq('status', 'active').maybeSingle();
     if (!sub || sub.is_comp || !sub.provider_subscription_id) {
       // No hay sub de Paddle que modificar → el cliente debe abrir checkout nuevo.
@@ -108,6 +108,39 @@ Deno.serve(async (req) => {
         return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
       }
       return json({ ok: true, cancel: true, effective_at: payload?.data?.scheduled_change?.effective_at ?? sub.current_period_end });
+    }
+
+    // ── Deshacer un cambio agendado (downgrade programado o cancelación) ──
+    if (act === 'undo') {
+      const { data: schedPlan } = sub.scheduled_plan_id
+        ? await admin.from('plans').select('id, slug').eq('id', sub.scheduled_plan_id).maybeSingle()
+        : { data: null } as any;
+      const isCancel = !sub.scheduled_plan_id || schedPlan?.slug === 'initiation';
+      let res: Response;
+      if (isCancel) {
+        // Quitar la cancelación programada.
+        res = await paddle(`/subscriptions/${subId}`, 'PATCH', { scheduled_change: null });
+      } else {
+        // Downgrade programado: volver al plan ALTO actual, sin cobro (aún dentro
+        // del período ya pago).
+        const { data: curPlan } = await admin.from('plans')
+          .select('provider_price_monthly_id, provider_price_yearly_id').eq('id', sub.plan_id).maybeSingle();
+        const priceId = sub.billing_cycle === 'yearly' ? curPlan?.provider_price_yearly_id : curPlan?.provider_price_monthly_id;
+        if (!priceId) return json({ error: 'Sin price_id del plan actual' }, 422);
+        res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
+          items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: 'do_not_bill',
+        });
+      }
+      const payload = await res.json();
+      if (!res.ok) {
+        console.error('Paddle undo failed', res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      }
+      // Limpiar el agendado en nuestra DB (el webhook también lo hará al reflejar el evento).
+      await admin.from('subscriptions')
+        .update({ scheduled_plan_id: null, scheduled_change_at: null, updated_at: new Date().toISOString() })
+        .eq('id', sub.id);
+      return json({ ok: true, undo: true });
     }
 
     // ── Cambio de plan (upgrade / downgrade) ──

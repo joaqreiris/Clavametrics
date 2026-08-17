@@ -445,6 +445,9 @@
         </div>
       </div>
 
+      <!-- Cambio agendado (downgrade a fin de período o cancelación) -->
+      <div id="ppSchedBanner" style="display:none"></div>
+
       <!-- ───── Tier cards ───── -->
       <div class="pp-tiers" id="pp-tiers">
 
@@ -708,7 +711,7 @@
 
   function render() {
     const t = tierData[selected];
-    const factor = cycle === 'annual' ? 0.84 : 1;
+    const factor = cycle === 'annual' ? (window.__ppAnnualFactor || 0.84) : 1;
     const amt = Math.round(t.amt * factor);
     const cur = t.curAmt;
     const delta = amt - cur;
@@ -934,7 +937,7 @@
     const [teamRes, planRes, plansRes, cntRes, subRes] = await Promise.all([
       sb.from('teams').select('name, created_at, clubs(name)').eq('id', teamId).single(),
       sb.rpc('team_plan_slug', { p_team_id: teamId }),
-      sb.from('plans').select('slug, name, price_monthly, max_players, sort_order'),
+      sb.from('plans').select('id, slug, name, price_monthly, price_yearly, max_players, sort_order'),
       sb.from('players').select('id', { count:'exact', head:true }).eq('team_id', teamId).is('archived_at', null),
       sb.from('subscriptions').select('is_comp, current_period_end, provider_subscription_id, scheduled_plan_id, scheduled_change_at').eq('team_id', teamId).eq('status','active').maybeSingle()
     ]);
@@ -944,11 +947,43 @@
     const teamName = team.name || '';
     const curSlug = planRes.data || 'initiation';
     const plans = {}; (plansRes.data||[]).forEach(p=> plans[p.slug]=p);
+    const plansById = {}; (plansRes.data||[]).forEach(p=> plansById[p.id]=p);
     const playerCount = cntRes.count ?? null;
     const curPlan = plans[curSlug] || {};
     const curPrice = Number(curPlan.price_monthly||0);
     const limit = curPlan.max_players;
     const sub = subRes.data;
+
+    // Descuento anual REAL desde la DB (deja de estar hardcodeado en −16% / factor 0.84).
+    // Se calcula con el plan de referencia (professional) y se aplica a todas las tarjetas.
+    try{
+      const ref = plans['professional'] || plans['full'] || plans['basic'];
+      if (ref && ref.price_yearly && ref.price_monthly){
+        const factor = Number(ref.price_yearly) / (Number(ref.price_monthly) * 12);
+        if (factor > 0 && factor < 1){
+          window.__ppAnnualFactor = factor;
+          const pct = Math.round((1 - factor) * 100);
+          document.querySelectorAll('#pp-toggle .save').forEach(el => el.textContent = '−' + pct + '%');
+          if (typeof render === 'function') render();
+        }
+      }
+    }catch(_){}
+
+    // Fila "Players" de la tabla comparativa desde max_players (null = ilimitado).
+    try{
+      const order = ['initiation','basic','professional','full'];
+      const cells = document.querySelectorAll('.pp-compare tbody tr .label[data-i18n-html="plan_picker.row_players"]');
+      const row = cells.length ? cells[0].closest('tr') : null;
+      if (row){
+        const tds = row.querySelectorAll('td.cell');
+        order.forEach((slug,i)=>{
+          const td = tds[i]; if(!td) return;
+          const mx = (plans[slug]||{}).max_players;
+          const txt = (mx==null) ? tt('plan_picker.unlimited','Unlimited') : String(mx);
+          td.innerHTML = (slug===curSlug) ? ('<strong>'+txt+'</strong>') : txt;
+        });
+      }
+    }catch(_){}
 
     // Estado que consume el handler del botón (plan actual + planes con sort_order + sub).
     window.__ppState = { curSlug, plans, sub };
@@ -1009,6 +1044,39 @@
       }
 
       setTxt('ppCurBadge', `${(curPlan.name||curSlug)} · $${curPrice}/mo`);
+
+      // ── Banner de cambio agendado (downgrade a fin de período o cancelación) ──
+      const banner = document.getElementById('ppSchedBanner');
+      if (banner){
+        if (sub && sub.scheduled_plan_id && sub.scheduled_change_at){
+          const sp = plansById[sub.scheduled_plan_id] || {};
+          const when = new Date(sub.scheduled_change_at).toLocaleDateString(lang,{year:'numeric',month:'short',day:'numeric'});
+          const isCancel = sp.slug === 'initiation';
+          const msg = isCancel
+            ? _tt('plan_picker.sched_cancel','Tu suscripción se cancela el {date}. Sigues con {plan} hasta entonces y después pasas a Free.',{date:when, plan:(curPlan.name||curSlug)})
+            : _tt('plan_picker.sched_downgrade','Bajas al plan {plan} el {date}. Sigues con {cur} hasta entonces.',{plan:(sp.name||sp.slug), date:when, cur:(curPlan.name||curSlug)});
+          banner.innerHTML =
+            '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;margin:0 0 18px;border:1px solid color-mix(in srgb,#d4a14a 45%,transparent);background:color-mix(in srgb,#d4a14a 8%,transparent);border-radius:12px;font:500 13px/1.4 var(--cm-font)">'
+            + '<i class="ti ti-clock-hour-4" style="font-size:18px;color:#d4a14a"></i>'
+            + '<span style="flex:1;min-width:200px">'+ msg +'</span>'
+            + '<button id="ppUndoBtn" class="cm-btn is-ghost" style="white-space:nowrap">'+ _tt('plan_picker.sched_undo','Deshacer') +'</button>'
+            + '</div>';
+          banner.style.display = '';
+          const ub = document.getElementById('ppUndoBtn');
+          if (ub) ub.onclick = async () => {
+            if (!confirm(_tt('plan_picker.undo_confirm','¿Deshacer el cambio agendado y seguir con tu plan actual?'))) return;
+            ub.disabled = true;
+            try{
+              const { data:r, error } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'undo' } });
+              if (error || r?.error){ alert(_tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.')); ub.disabled = false; return; }
+              window.location.reload();
+            }catch(_){ ub.disabled = false; }
+          };
+        } else {
+          banner.style.display = 'none';
+          banner.innerHTML = '';
+        }
+      }
 
       // footer billing: honesto según el plan
       if(document.getElementById('ppFootCycle')){

@@ -172,6 +172,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Cancelación programada (Paddle scheduled_change action='cancel'): el equipo
+    // sigue con su plan hasta effective_at y luego cae a Free. Lo reflejamos como
+    // un cambio agendado hacia el plan 'initiation' para mostrarlo en la UI.
+    const schedChange = (data as any).scheduled_change ?? null;
+    if (isActive && schedChange && schedChange.action === 'cancel') {
+      const { data: freePlan } = await supabase.from('plans').select('id').eq('slug', 'initiation').maybeSingle();
+      if (freePlan?.id) {
+        scheduledPlanId = freePlan.id;
+        scheduledChangeAt = schedChange.effective_at ?? periodEnd;
+      }
+    }
+
     const amount = cycle === 'yearly' ? (effectivePlan.price_yearly ?? effectivePlan.price_monthly) : effectivePlan.price_monthly;
 
     // ── Upsert the subscription (keyed by provider_subscription_id) ──
