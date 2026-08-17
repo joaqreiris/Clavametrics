@@ -1436,7 +1436,17 @@
   .ds-item .del:hover{color:var(--cm-danger);background:var(--cm-danger-bg)}
   .ds-mini{border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg);font:400 12.5px var(--cm-font-sans);padding:6px 8px;border-radius:6px;width:100%}
   .ds-mini:focus{outline:none;border-color:var(--cm-accent)}
-  .ds-timerow{display:grid;grid-template-columns:78px 1fr;gap:6px}
+  .ds-timerow{display:grid;grid-template-columns:72px 1fr auto;gap:6px}
+  .ds-icowrap{position:relative}
+  .ds-icobtn{width:34px;height:100%;min-height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);border-radius:6px;cursor:pointer;padding:0}
+  .ds-icobtn:hover{border-color:var(--cm-accent);color:var(--cm-fg)}
+  .ds-icobtn.on{border-color:var(--cm-accent);color:var(--cm-accent)}
+  .ds-icopop{position:absolute;z-index:6;top:calc(100% + 5px);right:0;display:grid;grid-template-columns:repeat(6,28px);gap:5px;padding:9px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;box-shadow:0 10px 26px rgba(0,0,0,.16)}
+  .ds-icopop[hidden]{display:none}
+  .ds-icom{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-muted);cursor:pointer;padding:0}
+  .ds-icom:hover{color:var(--cm-fg);border-color:var(--cm-border)}
+  .ds-icom.on{border-color:var(--cm-accent);color:var(--cm-accent);background:color-mix(in srgb, var(--cm-accent) 12%, transparent)}
+  .ds-icom .ti{font-size:15px}
   .ds-add{width:100%;border:1px dashed var(--cm-border);background:none;color:var(--cm-fg-muted);font:500 12px var(--cm-font-sans);padding:9px;border-radius:var(--cm-r-3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
   .ds-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
 
@@ -6066,8 +6076,31 @@ const DS_ICONS = {
   recovery:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15 5 17 3 17 3c1 4 .5 12-6 17M5 14c2 0 4 1 5 3"/>',
   meds:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
   custom:'<circle cx="12" cy="12" r="3"/>',
+  // --- extra glyphs, pickable per timeline row (override the type icon) ---
+  bus:'<path d="M5 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M4 11h16"/><path d="M7 15v2M17 15v2"/><circle cx="8" cy="17.5" r="1.3"/><circle cx="16" cy="17.5" r="1.3"/>',
+  car:'<path d="M5 11l1.5-4A2 2 0 0 1 8.4 5.7h7.2a2 2 0 0 1 1.9 1.3L19 11M4 11h16v5H4zM4 16v2M20 16v2"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/>',
+  train:'<rect x="6" y="4" width="12" height="12" rx="3"/><path d="M6 11h12M8 20l-2 2M16 20l2 2"/><circle cx="9" cy="13.5" r="1"/><circle cx="15" cy="13.5" r="1"/>',
+  hotel:'<path d="M3 20v-6h13a4 4 0 0 1 4 4v2M3 20h18M3 14V6"/><circle cx="7.5" cy="10" r="1.8"/>',
+  coffee:'<path d="M5 8h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8Z"/><path d="M16 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M11.5 3v2"/><path d="M5 20h11"/>',
+  water:'<path d="M9 3h6M9.5 7h5M9.5 7l-.5 2.5M14.5 7l.5 2.5M9 9.5h6v9a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-9Z"/>',
+  snack:'<path d="M12 7c.8-1.8 3-2.6 4.8-1.6 2 1.7 1.2 7.4-1.8 10.6-1 1-2 1-3 0-1 1-2 1-3 0C6 12.8 5.2 7.1 7.2 5.4 9 4.4 11.2 5.2 12 7Z"/><path d="M12 7V4.5c.5-1 1.8-1.2 2.5-1"/>',
+  ice:'<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5 4.2 16.5"/>',
+  pitch:'<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 12h16M12 5v14"/><circle cx="12" cy="12" r="2"/>',
+  run:'<circle cx="14" cy="5" r="1.8"/><path d="M13.5 8l-3.5 3 2 3.5.5 5.5M12 14.5l-3.5 1.2M10 11 6.2 12.4M13.5 8l4 1.8"/>',
+  stretch:'<circle cx="12" cy="4.5" r="1.8"/><path d="M12 6.5v6M12 12.5l-3.5 6M12 12.5l3.5 6M7 9.5l5 1 5-1"/>',
+  bolt:'<path d="M13 3 5 13h6l-1 8 8-11h-6l1-7Z"/>',
+  tactics:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v3h6V3M8 11h8M8 15h5"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/>',
+  flag:'<path d="M6 21V4M6 4h11l-2.2 3.2L17 10.5H6"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>',
+  moon:'<path d="M20 13.5A8 8 0 1 1 10.5 4a6 6 0 0 0 9.5 9.5Z"/>',
+  clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.2l3 1.8"/>',
 };
 const DS_TYPES = ['departure','arrival','activation','training','gym','meal','meeting','video','travel','kickoff','recovery','meds','custom'];
+// Icon picker: order shown in the per-moment popover ('' = follow the type).
+const DS_ICON_CHOICES = ['bus','car','train','travel','hotel','meal','coffee','water','snack','ice','training','pitch','gym','kickoff','run','stretch','bolt','activation','recovery','meds','meeting','video','tactics','mic','flag','sun','moon','clock','departure','arrival','custom'];
+function dsGlyph(key){ return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DS_ICONS[key]||DS_ICONS.custom}</svg>`; }
+function dsRowIcon(r){ return dsGlyph(r.icon || (r.match ? 'kickoff' : r.type)); }
 const DS_SWATCHES = ['#2F5FD0','#8AC4EA','#12833E','#C81E3A','#0E1C3F','#E8820C','#111827','#7A2AA8'];
 
 function dsTypeLabel(t){ return tt('calendar.daysheet.type_'+t, ({departure:'Departure',arrival:'Arrival',activation:'Activation',training:'Training',gym:'Gym',meal:'Meal',meeting:'Meeting',video:'Video',travel:'Travel',kickoff:'Kick-off',recovery:'Recovery',meds:'Medical',custom:'Other'})[t] || t); }
@@ -6296,7 +6329,7 @@ function dsRenderSheet(){
     </div>`;
   }).join('');
   const tl = (s.tl||[]).map(r => {
-    const ico = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9">${DS_ICONS[r.match?'kickoff':r.type]||DS_ICONS.custom}</svg>`;
+    const ico = dsRowIcon(r);
     if (r.match) return `<div style="display:grid;grid-template-columns:52px 34px 1fr;align-items:center;gap:9px;padding:9px 8px;margin:4px 0;position:relative;background:${dsTint(s.accent,.09)};border-radius:12px">
       <div style="font:700 13px ${MONO};color:${s.accent};text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.02em">${esc(r.t)}</div>
       <div style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${s.accent};color:${onAcc};z-index:1;box-shadow:0 0 0 4px ${paper}">${ico}</div>
@@ -6384,6 +6417,13 @@ function dsRenderEditor(){
         <div class="ds-timerow">
           <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="t" placeholder="08:30" value="${esc(r.t)}">
           <select class="ds-mini" data-scope="tl" data-i="${ix}" data-f="type">${typeOpts(r.type)}</select>
+          <div class="ds-icowrap">
+            <button class="ds-icobtn${r.icon?' on':''}" type="button" data-icobtn="${ix}" title="${esc(tt('calendar.daysheet.pick_icon','Change icon'))}">${dsGlyph(r.icon || (r.match?'kickoff':r.type))}</button>
+            <div class="ds-icopop" data-icopop="${ix}" hidden>
+              <button type="button" class="ds-icom ds-icoauto${!r.icon?' on':''}" data-icoset="__auto" data-i="${ix}" title="${esc(tt('calendar.daysheet.icon_auto','Automatic (by type)'))}"><i class="ti ti-wand"></i></button>
+              ${DS_ICON_CHOICES.map(k => `<button type="button" class="ds-icom${r.icon===k?' on':''}" data-icoset="${k}" data-i="${ix}" title="${esc(k)}">${dsGlyph(k)}</button>`).join('')}
+            </div>
+          </div>
         </div>
         <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="label" placeholder="${esc(tt('calendar.daysheet.ph_moment','What happens'))}" value="${esc(r.label)}">
         <input class="ds-mini" data-scope="tl" data-i="${ix}" data-f="sub" placeholder="${esc(tt('calendar.daysheet.ph_detail','Detail (optional)'))}" value="${esc(r.sub)}">
@@ -6477,7 +6517,7 @@ function dsBindOnce(){
     const t = e.target;
     if (t.dataset.k === 'date'){ _dsState.date = t.value; dsSyncDate(); dsRenderEditor(); dsRenderSheet(); await dsPrefillFromEvents(); dsRenderEditor(); dsRenderSheet(); return; }
     if (t.dataset.scope && t.dataset.f === 'kit'){ _dsState[t.dataset.scope][+t.dataset.i].kit = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
-    if (t.dataset.scope && t.dataset.f === 'type'){ _dsState[t.dataset.scope][+t.dataset.i].type = t.value; dsRenderSheet(); }
+    if (t.dataset.scope && t.dataset.f === 'type'){ const row = _dsState[t.dataset.scope][+t.dataset.i]; row.type = t.value; if (!row.icon) dsRenderEditor(); dsRenderSheet(); }
     if (t.dataset.k === 'lang'){ _dsState.lang = t.value; dsSyncDate(); dsRenderSheet(); dsSaveTmpl(); }
     if (t.dataset.k === 'planpick'){ dsLoadPlanById(t.value); return; }
   });
@@ -6487,7 +6527,11 @@ function dsBindOnce(){
     const tlr = e.target.closest('[data-tlrefresh]');
     if (tlr){ dsPrefillFromEvents().then(() => { dsSyncDate(); dsRenderEditor(); dsRenderSheet(); showCalToast(tt('calendar.daysheet.tl_reloaded','Timeline reloaded from the calendar')); }); return; }
     const cb = e.target.closest('[data-colbtn]');
-    if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
+    if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop,.ds-icopop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
+    const icb = e.target.closest('[data-icobtn]');
+    if (icb){ const ix = icb.dataset.icobtn; const pop = ed.querySelector(`.ds-icopop[data-icopop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop,.ds-icopop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
+    const ics = e.target.closest('[data-icoset]');
+    if (ics){ const row = _dsState.tl[+ics.dataset.i]; row.icon = ics.dataset.icoset === '__auto' ? null : ics.dataset.icoset; dsRenderEditor(); dsRenderSheet(); return; }
     const swk = e.target.closest('[data-swkit]');
     if (swk){ const it = _dsState.info[+swk.dataset.i]; it.kit = swk.dataset.swkit === '__none' ? null : swk.dataset.swkit; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     const sw = e.target.closest('[data-sw]'); if (sw){ _dsState.accent = sw.dataset.sw; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
