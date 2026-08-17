@@ -330,33 +330,51 @@
       payment_failed: { i:'ti-credit-card-off',   c:'var(--cm-danger)', k:'platform.alert_payment',   f:'Payment failed' },
     };
     const fmtDate = d => { if(!d) return ''; try{ return new Date(d).toLocaleDateString((window.CM_I18N&&CM_I18N.current)||'en',{year:'numeric',month:'short',day:'numeric'}); }catch(_){ return ''; } };
+    const escAttr = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     async function load(){
       const host=$('pfAlerts'); if(!host) return;
       host.textContent = tt('common.loading','Loading…');
       try{
         const { data, error } = await sb.from('billing_alerts')
-          .select('id, kind, from_plan, to_plan, effective_at, created_at, clubs(name), teams(name)')
+          .select('id, kind, from_plan, to_plan, effective_at, created_at, note, club_id, clubs(name), teams(name)')
           .eq('status','open').order('created_at',{ascending:false});
         if(error) throw error;
         if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">'+tt('platform.recovery_none','No open alerts. 🎉')+'</span>'; return; }
+        // Contacto del club (owner de preferencia; si no, admin) para la gestión.
+        const clubIds=[...new Set(data.map(a=>a.club_id).filter(Boolean))];
+        const contacts={};
+        if(clubIds.length){
+          try{
+            const { data:ps } = await sb.from('profiles').select('club_id, email, phone, full_name, role').in('club_id', clubIds).in('role',['owner','admin']);
+            (ps||[]).forEach(p=>{ const cur=contacts[p.club_id]; if(!cur || (p.role==='owner' && cur.role!=='owner')) contacts[p.club_id]=p; });
+          }catch(_){}
+        }
         host.innerHTML = data.map(a=>{
           const m = KIND[a.kind] || { i:'ti-alert-triangle', c:'var(--cm-fg-muted)', f:a.kind };
           const club = a.clubs?.name||'—', team = a.teams?.name||'';
           const label = tt(m.k||('platform.alert_'+a.kind), m.f);
           const change = a.to_plan ? ((a.from_plan||'?')+' → '+a.to_plan) : (a.from_plan||'');
           const when = a.effective_at ? tt('platform.alert_effective','effective {date}',{date:fmtDate(a.effective_at)}) : '';
-          return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--cm-border-soft)">
-            <i class="ti ${m.i}" style="font-size:18px;color:${m.c}"></i>
+          const c = contacts[a.club_id];
+          const contactHtml = c
+            ? `<i class="ti ti-mail" style="font-size:13px"></i> <a href="mailto:${escAttr(c.email)}" style="color:var(--cm-accent)">${escAttr(c.email)}</a>${c.phone?(' · '+escAttr(c.phone)):''}${c.full_name?(' · '+escAttr(c.full_name)):''}`
+            : `<span style="color:var(--cm-fg-muted)">${tt('platform.no_contact','No contact on file')}</span>`;
+          return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--cm-border-soft)">
+            <i class="ti ${m.i}" style="font-size:18px;color:${m.c};margin-top:2px"></i>
             <div style="flex:1;min-width:0">
               <div><strong>${club}</strong>${team?(' · '+team):''} — <span style="color:${m.c}">${label}</span></div>
               <div style="color:var(--cm-fg-muted);font-size:12px">${change}${change&&when?' · ':''}${when} · ${fmtDate(a.created_at)}</div>
+              <div style="font-size:12px;margin-top:3px">${contactHtml}</div>
+              <input class="pf-note" data-note="${a.id}" value="${escAttr(a.note)}" placeholder="${tt('platform.alert_note_ph','Add a note (saved automatically)…')}" style="margin-top:7px;width:100%;max-width:440px;padding:5px 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font-size:12px">
             </div>
             <button class="pf-mini" data-resolve="${a.id}">${tt('platform.alert_resolve','Resolve')}</button>
           </div>`;
         }).join('');
         host.querySelectorAll('[data-resolve]').forEach(b=>b.addEventListener('click',()=>resolve(b.dataset.resolve)));
+        host.querySelectorAll('[data-note]').forEach(inp=>inp.addEventListener('change',()=>saveNote(inp.dataset.note, inp.value)));
       }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">'+tt('platform.cannot_load','Cannot load.')+'</span>'; }
     }
+    async function saveNote(id, note){ try{ await sb.from('billing_alerts').update({ note }).eq('id', id); }catch(_){} }
     async function resolve(id){
       try{
         const { data:{ user } } = await sb.auth.getUser();
