@@ -1190,7 +1190,7 @@
     MC_RANGES = [];
     DAYOFF_DATES = new Set();
     PLANNED_DATES = new Set();
-    const [phs, availRes, yesterdayRes, matchRes, mcRangesData, dayoffData, plannedData] = await Promise.all([
+    const [phs, availRes, yesterdayRes, matchRes, mcRangesData, dayoffData, plannedData, eventsData] = await Promise.all([
       (async () => {   // seasons → season_phases (chain)
         try {
           // Scope siempre por club; con equipo activo incluye su temporada propia + la del club
@@ -1261,6 +1261,16 @@
           return data || [];
         } catch (e) { console.warn('[Availability] planned sessions skipped:', e?.message); return []; }
       })(),
+      (async () => {   // any team calendar event (except day-off) also makes the day trackable
+        try {          // viaje, recuperación, evaluación, reunión… — no solo entrenos/partidos
+          let eq = window.sb.from('calendar_events').select('date')
+            .eq('club_id', CLUB_ID).neq('type', 'day_off')
+            .gte('date', mcStart).lte('date', mcEnd);
+          if (_avTeamId) eq = eq.eq('team_id', _avTeamId);
+          const { data } = await eq;
+          return data || [];
+        } catch (e) { console.warn('[Availability] calendar events skipped:', e?.message); return []; }
+      })(),
     ]);
     const availData = availRes.data;
     const yesterdayData = yesterdayRes.data;
@@ -1293,6 +1303,8 @@
     // Planned days: a real training session (not a day-off) or a match. Only these are tracked.
     (plannedData || []).forEach(s => s.session_date && PLANNED_DATES.add(String(s.session_date).slice(0, 10)));
     Object.keys(matchDates).forEach(d => PLANNED_DATES.add(d)); // matches also count as planned
+    // Cualquier evento de equipo (viaje, recuperación, evaluación, reunión…) hace el día rastreable.
+    (eventsData || []).forEach(e => e.date && PLANNED_DATES.add(String(e.date).slice(0, 10)));
 
     renderHeader(matchDates);
 
@@ -1394,7 +1406,15 @@
   }
 
   function isBlockedCell(td) {
-    return td.classList.contains('is-off') || td.classList.contains('is-future') || td.classList.contains('is-dayoff');
+    if (td.classList.contains('is-off') || td.classList.contains('is-dayoff')) return true;
+    // Día futuro sin plan: bloqueado, SALVO que ya tenga un estado guardado (p.ej. una fila
+    // 'injured' auto-rellenada por la lesión). Ahí hay que poder corregirlo (marcarlo 'Nat. team',
+    // limpiarlo, etc.) aunque el día no esté planificado — si no, queda rojo y trabado.
+    if (td.classList.contains('is-future')) {
+      const { pid, date } = td.dataset;
+      return !(pid && date && avMap[pid + '|' + date]);
+    }
+    return false;
   }
 
   // ── Summary tooltip ──
