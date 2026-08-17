@@ -1,32 +1,38 @@
 /**
  * Supabase Edge Function — paddle-change-plan
  *
- * Cambia el plan de una suscripción de Paddle YA EXISTENTE (upgrade/downgrade),
- * con PRORRATEO. Esto NO se puede hacer desde el cliente: `Paddle.Checkout.open`
- * solo CREA transacciones nuevas (cobra el plan entero). Para pasar de Professional
- * a Full (o viceversa) hay que actualizar la suscripción vía la API server-side:
+ * Gestiona cambios sobre una suscripción de Paddle YA existente. Esto NO se puede
+ * hacer desde el cliente (`Paddle.Checkout.open` solo CREA transacciones nuevas y
+ * cobraría el plan entero). Acciones:
  *
- *   PATCH /subscriptions/{id}  { items:[{price_id,quantity}], proration_billing_mode }
+ *   action:'change' (default)
+ *     · UPGRADE  (plan destino > actual): PATCH con proration_billing_mode
+ *       'prorated_immediately' → Paddle cobra solo la diferencia ahora.
+ *     · DOWNGRADE (plan destino < actual): Paddle NO difiere cambios de plan de
+ *       forma nativa (todos los modos cambian el ítem al instante). Usamos
+ *       'do_not_bill' → Paddle cobra el plan menor recién en la próxima
+ *       renovación, sin cargo/crédito ahora. El webhook mantiene las features del
+ *       plan alto hasta fin de período (ve baja de plan dentro del mismo ciclo →
+ *       lo agenda) y recién al renovar aplica el plan menor.
+ *   action:'cancel'
+ *     · POST /subscriptions/{id}/cancel { effective_from:'next_billing_period' } →
+ *       la sub sigue activa hasta fin del período pago y luego cae a Free.
  *
- * Paddle acredita lo no usado del plan anterior y cobra solo la diferencia. Luego
- * dispara `subscription.updated` → paddle-webhook espeja el nuevo plan en la DB.
- *
- * Entrada (POST JSON): { team_id, plan_slug, cycle, preview? }
- *   preview=true  → NO aplica; devuelve el resumen prorrateado (para confirmar monto).
- *   preview=false → aplica el cambio (cobro/crédito inmediato).
+ * Entrada (POST JSON): { team_id, plan_slug?, cycle?, preview?, action? }
+ *   preview=true  → NO aplica; devuelve el resumen (monto prorrateado en upgrades,
+ *                   o la fecha efectiva en downgrades).
  *
  * Seguridad: exige JWT de un admin/owner del club del equipo (o super-admin).
  *
  * Secrets requeridos:
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY  (ya seteados)
- *   PADDLE_API_KEY   (Paddle → Developer tools → Authentication, `pdl_sdbx_...` en sandbox)
+ *   PADDLE_API_KEY   (Paddle → Developer tools → Authentication, `pdl_sdbx_...`)
  *   PADDLE_API_BASE  (opcional; default https://sandbox-api.paddle.com;
- *                     en producción: https://api.paddle.com)
+ *                     prod: https://api.paddle.com)
  *
  * Deploy:
  *   supabase functions deploy paddle-change-plan
  *   supabase secrets set PADDLE_API_KEY=pdl_sdbx_xxx
- *   # (opcional prod) supabase secrets set PADDLE_API_BASE=https://api.paddle.com
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -49,7 +55,7 @@ Deno.serve(async (req) => {
     const API_BASE = (Deno.env.get('PADDLE_API_BASE') || 'https://sandbox-api.paddle.com').replace(/\/+$/, '');
     if (!API_KEY) return json({ error: 'PADDLE_API_KEY no configurado' }, 500);
 
-    // ── Auth: el que llama tiene que ser admin/owner del club (o super-admin) ──
+    // ── Auth: admin/owner del club (o super-admin) ──
     const userClient = createClient(URL, ANON, {
       global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
     });
@@ -65,8 +71,10 @@ Deno.serve(async (req) => {
       (['admin', 'owner'].includes(caller.role) || ['admin', 'owner'].includes(caller.club_role));
     if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
-    const { team_id, plan_slug, cycle, preview } = await req.json();
-    if (!team_id || !plan_slug) return json({ error: 'Faltan team_id / plan_slug' }, 400);
+    const { team_id, plan_slug, cycle, preview, action } = await req.json();
+    const act = action === 'cancel' ? 'cancel' : 'change';
+    if (!team_id) return json({ error: 'Falta team_id' }, 400);
+    if (act === 'change' && !plan_slug) return json({ error: 'Falta plan_slug' }, 400);
 
     // El equipo tiene que pertenecer al club del que llama (salvo super-admin).
     const { data: team } = await admin.from('teams').select('id, club_id').eq('id', team_id).maybeSingle();
@@ -75,44 +83,78 @@ Deno.serve(async (req) => {
 
     // ── Suscripción de Paddle activa del equipo (no comp) ──
     const { data: sub } = await admin.from('subscriptions')
-      .select('provider_subscription_id, is_comp, status')
+      .select('provider_subscription_id, is_comp, status, plan_id, current_period_end')
       .eq('team_id', team_id).eq('status', 'active').maybeSingle();
     if (!sub || sub.is_comp || !sub.provider_subscription_id) {
-      // No hay nada que actualizar → el cliente debe abrir un checkout nuevo.
+      // No hay sub de Paddle que modificar → el cliente debe abrir checkout nuevo.
       return json({ needs_checkout: true }, 409);
     }
+    const subId = sub.provider_subscription_id;
 
-    // ── Price id del plan destino ──
-    const { data: plan } = await admin.from('plans')
-      .select('slug, provider_price_monthly_id, provider_price_yearly_id')
-      .eq('slug', plan_slug).maybeSingle();
-    if (!plan) return json({ error: 'Plan not found' }, 404);
-    const priceId = cycle === 'annual' ? plan.provider_price_yearly_id : plan.provider_price_monthly_id;
-    if (!priceId) return json({ error: 'El plan no tiene price_id de Paddle para este ciclo' }, 422);
+    const paddle = (path: string, method: string, body?: unknown) =>
+      fetch(`${API_BASE}${path}`, {
+        method,
+        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
 
-    // ── Paddle: preview o update ──
-    // Ambos usan PATCH y el mismo body; /preview NO aplica el cambio.
-    const path = preview
-      ? `/subscriptions/${sub.provider_subscription_id}/preview`
-      : `/subscriptions/${sub.provider_subscription_id}`;
-    const res = await fetch(`${API_BASE}${path}`, {
-      method: 'PATCH',
-      headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: [{ price_id: priceId, quantity: 1 }],
-        proration_billing_mode: 'prorated_immediately',
-      }),
+    // ── Cancelar → Free (a fin de período) ──
+    if (act === 'cancel') {
+      if (preview) return json({ ok: true, preview: true, cancel: true, effective_at: sub.current_period_end });
+      const res = await paddle(`/subscriptions/${subId}/cancel`, 'POST', { effective_from: 'next_billing_period' });
+      const payload = await res.json();
+      if (!res.ok) {
+        console.error('Paddle cancel failed', res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      }
+      return json({ ok: true, cancel: true, effective_at: payload?.data?.scheduled_change?.effective_at ?? sub.current_period_end });
+    }
+
+    // ── Cambio de plan (upgrade / downgrade) ──
+    const { data: plansRows } = await admin.from('plans')
+      .select('id, slug, sort_order, provider_price_monthly_id, provider_price_yearly_id');
+    const plans: Record<string, any> = {};
+    (plansRows || []).forEach((p) => { plans[p.slug] = p; plans[p.id] = p; });
+    const target = plans[plan_slug];
+    const current = plans[sub.plan_id];
+    if (!target) return json({ error: 'Plan destino no encontrado' }, 404);
+
+    const priceId = cycle === 'annual' ? target.provider_price_yearly_id : target.provider_price_monthly_id;
+    if (!priceId) return json({ error: 'El plan destino no tiene price_id de Paddle para este ciclo' }, 422);
+
+    const curSort = current?.sort_order ?? 0;
+    const tgtSort = target.sort_order ?? 0;
+    if (current && target.id === current.id) return json({ error: 'same_plan' }, 400);
+    const isDowngrade = tgtSort < curSort;
+    const mode = isDowngrade ? 'do_not_bill' : 'prorated_immediately';
+
+    if (preview) {
+      // En downgrade no hay cargo ahora: informamos la fecha efectiva (fin de período).
+      if (isDowngrade) return json({ ok: true, preview: true, downgrade: true, effective_at: sub.current_period_end });
+      // Upgrade: preview real del prorrateo.
+      const res = await paddle(`/subscriptions/${subId}/preview`, 'PATCH', {
+        items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: mode,
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        console.error('Paddle preview failed', res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      }
+      return json({ ok: true, preview: true, downgrade: false, update_summary: payload?.data?.update_summary ?? null });
+    }
+
+    // Aplicar
+    const res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
+      items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: mode,
     });
     const payload = await res.json();
     if (!res.ok) {
       console.error('Paddle change-plan failed', res.status, JSON.stringify(payload));
       return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
     }
-
-    // update_summary = { credit, charge, result:{ amount, currency_code } } (minor units string)
-    return json({ ok: true, preview: !!preview, update_summary: payload?.data?.update_summary ?? null });
+    return json({ ok: true, downgrade: isDowngrade, effective_at: isDowngrade ? sub.current_period_end : null });
   } catch (e) {
     console.error(e);
-    return json({ error: String(e?.message ?? e) }, 500);
+    return json({ error: String((e as any)?.message ?? e) }, 500);
   }
 });

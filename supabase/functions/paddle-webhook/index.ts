@@ -116,17 +116,19 @@ Deno.serve(async (req: Request) => {
 
     // ── Resolve the plan row (need plan_id; subscriptions.plan_id is NOT NULL) ──
     let plan: any = null;
-    if (custom.plan_slug) {
+    // Fallback por price id: es lo que refleja el PLAN REAL vigente en Paddle tras
+    // un update (custom.plan_slug queda "pegado" al slug de la compra original, así
+    // que para detectar upgrade/downgrade priorizamos el price del evento).
+    if (priceId) {
       const { data: p } = await supabase.from('plans')
-        .select('id, slug, price_monthly, price_yearly').eq('slug', custom.plan_slug).maybeSingle();
-      plan = p;
-    }
-    if (!plan && priceId) {
-      // fall back: match by the price id we stored on the plan
-      const { data: p } = await supabase.from('plans')
-        .select('id, slug, price_monthly, price_yearly')
+        .select('id, slug, sort_order, price_monthly, price_yearly')
         .or(`provider_price_monthly_id.eq.${priceId},provider_price_yearly_id.eq.${priceId}`)
         .maybeSingle();
+      plan = p;
+    }
+    if (!plan && custom.plan_slug) {
+      const { data: p } = await supabase.from('plans')
+        .select('id, slug, sort_order, price_monthly, price_yearly').eq('slug', custom.plan_slug).maybeSingle();
       plan = p;
     }
     if (!plan) { console.error('No plan resolved', { subId, priceId, custom }); return json({ error: 'plan_not_found' }, 422); }
@@ -140,8 +142,37 @@ Deno.serve(async (req: Request) => {
     }
     if (!teamId || !clubId) { console.error('Missing team/club', { subId, custom }); return json({ error: 'missing_ids' }, 422); }
 
-    const amount = cycle === 'yearly' ? (plan.price_yearly ?? plan.price_monthly) : plan.price_monthly;
     const isActive = ['active', 'trialing', 'past_due', 'paused'].includes(status);
+
+    // ── Downgrade AGENDADO (a fin de período) ──────────────────────────────
+    // Paddle no difiere cambios de plan: un downgrade (vía do_not_bill desde
+    // paddle-change-plan) cambia el ítem al instante y factura el plan menor
+    // recién en la próxima renovación. Para NO bajar las features antes de tiempo:
+    // si vemos una baja de plan DENTRO del mismo ciclo (no una renovación),
+    // dejamos plan_id en el plan ALTO y guardamos el cambio como agendado. Cuando
+    // el ciclo avanza (renovación) caemos al camino normal y se aplica el menor.
+    let scheduledPlanId: string | null = null;
+    let scheduledChangeAt: string | null = null;
+    let effectivePlan = plan;
+    if (isActive) {
+      const { data: existing } = await supabase.from('subscriptions')
+        .select('plan_id, current_period_start')
+        .eq('provider_subscription_id', subId).maybeSingle();
+      if (existing?.plan_id && existing.plan_id !== plan.id) {
+        const { data: curPlan } = await supabase.from('plans')
+          .select('id, slug, sort_order, price_monthly, price_yearly').eq('id', existing.plan_id).maybeSingle();
+        const samePeriod = !!(periodStart && existing.current_period_start
+          && new Date(periodStart).getTime() === new Date(existing.current_period_start).getTime());
+        const isDowngrade = curPlan && (plan.sort_order ?? 0) < (curPlan.sort_order ?? 0);
+        if (isDowngrade && samePeriod) {
+          scheduledPlanId = plan.id;          // plan menor: se aplica al renovar
+          scheduledChangeAt = periodEnd;
+          effectivePlan = curPlan;            // features del plan alto siguen vigentes
+        }
+      }
+    }
+
+    const amount = cycle === 'yearly' ? (effectivePlan.price_yearly ?? effectivePlan.price_monthly) : effectivePlan.price_monthly;
 
     // ── Upsert the subscription (keyed by provider_subscription_id) ──
     // The partial unique index allows only ONE active sub per team, so if THIS
@@ -157,12 +188,14 @@ Deno.serve(async (req: Request) => {
     const row = {
       team_id: teamId,
       club_id: clubId,
-      plan_id: plan.id,
+      plan_id: effectivePlan.id,
       status,
       billing_cycle: cycle,
       provider_subscription_id: subId,
       current_period_start: periodStart,
       current_period_end: periodEnd,
+      scheduled_plan_id: scheduledPlanId,     // null salvo downgrade agendado
+      scheduled_change_at: scheduledChangeAt,
       canceled_at: status === 'canceled' ? (data.canceled_at ?? new Date().toISOString()) : null,
       updated_at: new Date().toISOString(),
     };
@@ -175,10 +208,10 @@ Deno.serve(async (req: Request) => {
       billing_provider: 'paddle',
       billing_provider_customer_id: customerId,
       billing_status: status,
-      billing_plan: plan.slug,
+      billing_plan: effectivePlan.slug,
       billing_amount: amount,
       billing_next_date: periodEnd ? String(periodEnd).slice(0, 10) : null,
-      plan: plan.slug,
+      plan: effectivePlan.slug,
       updated_at: new Date().toISOString(),
     }).eq('id', clubId);
     if (clubErr) console.error('clubs update failed (non-fatal)', clubErr);

@@ -2341,6 +2341,8 @@ create table if not exists public.subscriptions (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   is_comp boolean default false not null,
+  scheduled_plan_id uuid,
+  scheduled_change_at timestamp with time zone,
   constraint subscriptions_pkey primary key (id),
   constraint subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id),
   constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
