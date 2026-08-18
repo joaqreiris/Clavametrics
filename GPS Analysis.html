@@ -3637,7 +3637,7 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     // lo borra el SERVER recién tras bajar los datos → nunca se pierde el pendiente sin haber bajado.
     btn.textContent = tt('gps_analysis.pending_syncing', 'Syncing…');
     const { data: res, error: aErr } = await window.sb.functions.invoke('gps-sync', {
-      body: { mode: 'attach', integration_id: intId, external_activity_id: activityId, session_id: sessionId, from: p.date, to: p.date },
+      body: { mode: 'attach', integration_id: intId, external_activity_id: activityId, session_id: sessionId, from: p.date, to: p.date, tz_offset: -new Date().getTimezoneOffset() },
     });
     if (aErr) { let msg = aErr.message || 'error'; try { const b = await aErr.context?.json?.(); if (b && (b.error || b.message)) msg = b.error || b.message; } catch (_) {} throw new Error(msg); }
     if (res && res.ok === false) throw new Error(res.message || 'attach failed');

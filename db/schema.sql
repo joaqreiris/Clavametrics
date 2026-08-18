@@ -999,6 +999,7 @@ create table if not exists public.gps_sync_jobs (
   totals jsonb default '{}'::jsonb not null,
   error text,
   created_by uuid,
+  tz_offset integer default 0 not null,   -- minutos al ESTE de UTC del que sincroniza; el rango from/to se interpreta en su hora local (no UTC)
   started_at timestamp with time zone,
   heartbeat_at timestamp with time zone,
   finished_at timestamp with time zone,

@@ -338,9 +338,14 @@ async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response>
   throw new Error('Catapult request failed');   // unreachable (loop returns/throws), keeps TS happy
 }
 
-async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string, onlyActivityId?: string): Promise<ChunkResult> {
+async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string, onlyActivityId?: string, tzOffsetMin = 0): Promise<ChunkResult> {
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs, seasonStart } = ctx;
   const unmappedParams = new Set<string>();
+  // Zona horaria del que sincroniza (minutos al ESTE de UTC; +420 = UTC+7). El rango que elige el
+  // usuario ("18/08") es un día LOCAL, no UTC → convertimos las fronteras y la fecha de la sesión a
+  // su hora local para que "hoy" siempre entre (Catapult indexa en UTC). 0 = UTC (retrocompatible).
+  const _offMs = (Number(tzOffsetMin) || 0) * 60000;
+  const _localDate = (v: unknown): string => { const ms = toMs(v); return isNaN(ms) ? '' : new Date(ms + _offMs).toISOString().slice(0, 10); };
   let _statsCalls = 0;   // TEMP: count /stats requests this chunk (logged at chunk end; remove after)
 
   // ONE /stats request per grain: ask for ALL mapped parameters at once. The earlier 5-param
@@ -383,8 +388,10 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
   // activity on the `to` day — i.e. TODAY's sessions — falls after 00:00 UTC and is
   // dropped, so a same-day sync imports nothing.
   const DAY_MS      = 86400000;
-  const fromMsRange = toMs(from);
-  const toMsRange   = toMs(to) + DAY_MS;
+  // Fronteras del rango en UTC pero interpretando from/to como días LOCALES: medianoche local =
+  // medianoche UTC − offset. Así "18/08 local" cubre la actividad aunque en UTC caiga el 17.
+  const fromMsRange = toMs(from) - _offMs;
+  const toMsRange   = toMs(to) + DAY_MS - _offMs;
 
   // ── 1. Fetch activities and filter to the range by start_time ───────────
   const actRes = await fetchCatapult(`${baseUrl}/activities`, { headers: authH });
@@ -418,7 +425,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
     const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, pending: 0, errs: [] };
     const activityId = String(act.id ?? act.activity_id ?? '');
     if (!activityId) return r;
-    const date = toDate(act.start_time ?? act.startTime ?? act.start);
+    const date = _localDate(act.start_time ?? act.startTime ?? act.start);   // fecha LOCAL del club, no UTC
     if (!date) { r.errs.push(`activity ${activityId}: unparseable start_time`); return r; }
 
     try {
@@ -728,7 +735,7 @@ async function processChunk(adminClient: Admin, jobId: string) {
 
   console.log('[gps-sync] processing chunk', { jobId, idx, chunk });
   let partial: ChunkResult;
-  try { partial = await syncRange(adminClient, ctx, chunk[0], chunk[1]); }
+  try { partial = await syncRange(adminClient, ctx, chunk[0], chunk[1], undefined, (job.tz_offset as number) || 0); }
   catch (e) { await failJob(adminClient, jobId, `chunk ${chunk[0]}..${chunk[1]}: ${String((e as Error)?.message || e)}`); return; }
 
   const totals = mergeTotals(job.totals as Record<string, unknown>, partial);
@@ -872,7 +879,7 @@ Deno.serve(async (req: Request) => {
 
       // Bajar SOLO esa actividad (filtro por id) y escribirla en la sesión.
       const ctx = await loadContext(adminClient, integrationId);
-      const result = await syncRange(adminClient, ctx, String(sess.session_date), String(sess.session_date), activityId);
+      const result = await syncRange(adminClient, ctx, String(sess.session_date), String(sess.session_date), activityId, Number(body.tz_offset) || 0);
 
       // Limpiar el pendiente por si processActivity no lo hizo (ej. la actividad no vino en la lista).
       await adminClient.from('gps_pending_activities').delete().eq('club_id', clubId).eq('external_activity_id', activityId);
@@ -894,6 +901,7 @@ Deno.serve(async (req: Request) => {
     const integration_id = body.integration_id as string | undefined;
     const from = body.from as string | undefined;
     const to = body.to as string | undefined;
+    const tzOffset = Number(body.tz_offset) || 0;   // minutos al este de UTC (browser del que sincroniza)
     if (!integration_id) return json({ error: 'integration_id is required' }, 400);
 
     const { data: callerClub } = await userClient.rpc('get_user_club_id');
@@ -961,7 +969,7 @@ Deno.serve(async (req: Request) => {
     const { data: job, error: jErr } = await adminClient.from('gps_sync_jobs').insert({
       club_id: clubId, integration_id, status: 'running',
       range_from, range_to, cursor_from: first[0], cursor_to: first[1],
-      chunks_total: chunks.length, chunks_done: 0, totals: {},
+      chunks_total: chunks.length, chunks_done: 0, totals: {}, tz_offset: tzOffset,
       created_by: user.id, started_at: nowISO(), heartbeat_at: nowISO(),
     }).select('id').single();
 

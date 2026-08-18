@@ -371,7 +371,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
   // Fire "start"; supabase-js flags a 409 (already-running lock) as an error whose JSON
   // body lives in error.context — parse it so we can still latch onto the existing job.
   async function _invokeStart(intId, from, to){
-    const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ mode:'start', integration_id:intId, from, to } });
+    const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ mode:'start', integration_id:intId, from, to, tz_offset: -new Date().getTimezoneOffset() } });
     if(!error) return data;
     try{ const p=await error.context?.json?.(); if(p) return p; }catch(_){}
     throw error;
