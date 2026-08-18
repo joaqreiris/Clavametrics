@@ -459,6 +459,14 @@
   window.applyClubTheme?.();
 
   const TU = window.TopUp;
+
+  // Club's HRmax GPS metric (for the %FCmax continuous model) — resolved once, cached.
+  let _hrmaxMetric;   // undefined = not resolved · null = none found · { key, label }
+  async function clubHRmaxMetric(){
+    if (_hrmaxMetric !== undefined) return _hrmaxMetric;
+    _hrmaxMetric = await TU.resolveHRmaxMetric(clubId);
+    return _hrmaxMetric;
+  }
   const mLabel = (k) => tt('topup.m.' + k, (TU.METRIC_DEFS[k] || {}).label || k);
   const fmtNum = (v, unit) => unit === 'm' ? Math.round(v).toLocaleString() : (unit === 'n' ? Math.round(v) : (Math.round(v * 10) / 10));
   const initials = (n) => (n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
@@ -597,6 +605,9 @@
     pd.vift = vift ? vift.vift : null;
     pd.vmax = vmax;
     pd.ref = ref;
+    // HRmax (bpm) for the %FCmax continuous model — best-effort, only if the club has the metric
+    const hm = await clubHRmaxMetric();
+    if (hm){ const hr = await TU.getPlayerHRmax(pid, clubId, hm.key); if (state.pdata[pid]) pd.hrmax = hr; }
     // The all-sessions fallback scans every session (heaviest query) — only run it
     // when personal match data is missing on some needed metric.
     const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
@@ -994,7 +1005,7 @@
 
   function newBlock(type){
     const id = 'b' + (_blkSeq++) + '-' + type, t = state.compl.targets;
-    if (type === 'cont')   return { id, type, metersM: 1800, pctVmax: complCfg().pctVmax, blocks: 1, restSec: 0, lapM: null };
+    if (type === 'cont')   return { id, type, metersM: 1800, model: 'vmax', pctVmax: complCfg().pctVmax, hrLoPct: 0.70, hrHiPct: 0.80, blocks: 1, restSec: 0, lapM: null };
     if (type === 'hsr')    return { id, type, targetM: t.hsr || 0,    passDist: complCfg().passDist, recoverySec: complCfg().recoverySec };
     if (type === 'vhsr')   return { id, type, targetM: t.vhsr || 0,   passDist: 22, recoverySec: 40 };
     if (type === 'sprint') return { id, type, targetM: t.sprint || 0, passDist: 20, recoverySec: 45 };
@@ -1030,10 +1041,17 @@
 
   function blkFieldsHTML(b, i){
     const num = (key, lbl, val, extra='') => `<div class="f"><label>${esc(lbl)}</label><input type="number" min="0" inputmode="numeric" data-bf="${i}:${key}" value="${val == null ? '' : val}" ${extra}></div>`;
-    if (b.type === 'cont') return num('metersM', tt('topup.bf_meters','Metros'), b.metersM)
-      + `<div class="f"><label>${tt('topup.bf_pct','% Vmax')}</label><input type="number" min="1" max="100" inputmode="numeric" data-bf="${i}:pctVmax" value="${Math.round((b.pctVmax != null ? b.pctVmax : complCfg().pctVmax) * 100)}"></div>`
-      + num('blocks', tt('topup.bf_blocks','Bloques'), b.blocks)
-      + num('restSec', tt('topup.bf_rest','Pausa s'), b.restSec);
+    if (b.type === 'cont'){
+      const model = b.model === 'fcmax' ? 'fcmax' : 'vmax';
+      const modelSel = `<div class="f"><label>${tt('topup.bf_model','Anclaje')}</label><select class="tu-blk-sel" data-bf="${i}:model"><option value="vmax" ${model==='vmax'?'selected':''}>${tt('topup.sm_pct','%Vmax')}</option><option value="fcmax" ${model==='fcmax'?'selected':''}>${tt('topup.sm_fcmax','%FCmax')}</option></select></div>`;
+      const speedFld = model === 'fcmax'
+        ? `<div class="f"><label>${tt('topup.bf_hrlo','% FCmax lo')}</label><input type="number" min="30" max="100" inputmode="numeric" data-bf="${i}:hrLoPct" value="${Math.round((b.hrLoPct != null ? b.hrLoPct : 0.70) * 100)}"></div>`
+          + `<div class="f"><label>${tt('topup.bf_hrhi','% FCmax hi')}</label><input type="number" min="30" max="100" inputmode="numeric" data-bf="${i}:hrHiPct" value="${Math.round((b.hrHiPct != null ? b.hrHiPct : 0.80) * 100)}"></div>`
+        : `<div class="f"><label>${tt('topup.bf_pct','% Vmax')}</label><input type="number" min="1" max="100" inputmode="numeric" data-bf="${i}:pctVmax" value="${Math.round((b.pctVmax != null ? b.pctVmax : complCfg().pctVmax) * 100)}"></div>`;
+      return num('metersM', tt('topup.bf_meters','Metros'), b.metersM) + modelSel + speedFld
+        + num('blocks', tt('topup.bf_blocks','Bloques'), b.blocks)
+        + num('restSec', tt('topup.bf_rest','Pausa s'), b.restSec);
+    }
     if (b.type === 'hsr' || b.type === 'vhsr' || b.type === 'sprint') return num('targetM', tt('topup.bf_target','Objetivo m'), b.targetM)
       + num('passDist', tt('topup.bf_pass','Pasada m'), b.passDist)
       + num('recoverySec', tt('topup.bf_recovery','Recup s'), b.recoverySec);
@@ -1051,17 +1069,28 @@
       <span class="grip" draggable="true" title="${tt('topup.drag_hint','Arrastrá para ordenar')}">⠿</span>
       <div class="bmain"><span class="btag ${b.type}">${esc(blkLabel(b.type))}</span>
         <div class="tu-blk-fields">${blkFieldsHTML(b, i)}</div></div>
+      <button class="tu-blk-x" data-bdup="${i}" title="${tt('common.duplicate','Duplicar')}"><i class="ti ti-copy"></i></button>
       <button class="tu-blk-x" data-bx="${i}" title="${tt('common.delete','Borrar')}"><i class="ti ti-trash"></i></button>
     </div>`).join('');
     box.querySelectorAll('input[data-bf]').forEach(inp => inp.addEventListener('input', () => {
       const [i, key] = inp.dataset.bf.split(':'); const b = state.compl.blocks[+i]; if (!b) return;
       if (key === 'note') b[key] = inp.value;
       else if (key === 'pctVmax') b[key] = Math.max(1, Math.min(100, +inp.value || 55)) / 100;
+      else if (key === 'hrLoPct' || key === 'hrHiPct') b[key] = Math.max(30, Math.min(100, +inp.value || 70)) / 100;
       else b[key] = +inp.value || 0;
       savePrefs(); renderTally(); renderComplPreview();
     }));
+    box.querySelectorAll('select[data-bf]').forEach(sel => sel.addEventListener('change', () => {
+      const [i, key] = sel.dataset.bf.split(':'); const b = state.compl.blocks[+i]; if (!b) return;
+      b[key] = sel.value; savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
+    }));
     box.querySelectorAll('[data-bx]').forEach(x => x.addEventListener('click', () => {
       state.compl.blocks.splice(+x.dataset.bx, 1); savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
+    }));
+    box.querySelectorAll('[data-bdup]').forEach(d => d.addEventListener('click', () => {
+      const at = +d.dataset.bdup, src = state.compl.blocks[at]; if (!src) return;
+      const copy = { ...src, id: 'b' + (_blkSeq++) + '-' + src.type };
+      state.compl.blocks.splice(at + 1, 0, copy); savePrefs(); renderBlocks(); renderTally(); renderComplPreview();
     }));
     // drag reorder (grip only → editable inputs stay usable), same idiom as the Day sheet
     box.querySelectorAll('.tu-blk').forEach(el => {
@@ -1139,14 +1168,17 @@
     const time = fmtTime(r.timeSec);
     if (r.type === 'pause') return { content: tt('topup.block_pause','Pausa'), detail: (r.note || tt('topup.pause_detail','Transición / hidratación')), meters: '—', time };
     if (r.need){
-      const msg = { vmax: tt('topup.need_vmax_short','falta Vmax'), speed: tt('topup.need_speed_short','falta ritmo'), lap: tt('topup.need_lap_short','falta vuelta'), passDist: tt('topup.need_pass_short','falta pasada'), target: tt('topup.need_target_short','sin objetivo'), deficit: tt('topup.need_target_short','sin objetivo'), input: tt('topup.need_input_short','faltan datos') }[r.need] || tt('topup.need_input_short','faltan datos');
+      const msg = { vmax: tt('topup.need_vmax_short','falta Vmax'), fcmax: tt('topup.need_fcmax_short','falta FCmax'), speed: tt('topup.need_speed_short','falta ritmo'), lap: tt('topup.need_lap_short','falta vuelta'), passDist: tt('topup.need_pass_short','falta pasada'), target: tt('topup.need_target_short','sin objetivo'), deficit: tt('topup.need_target_short','sin objetivo'), input: tt('topup.need_input_short','faltan datos') }[r.need] || tt('topup.need_input_short','faltan datos');
       return { content: blkLabel(r.type), detail: `— (${msg})`, meters: '—', time: '—' };
     }
     if (r.type === 'cod') return { content: tt('topup.block_cod','COD'), detail: tt('topup.cod_'+r.band.id, r.band.reps + ' · ' + r.band.detail), meters: '—', time };
     if (r.type === 'cont'){
       const blk = r.blocks > 1 ? `${r.blocks} × ${r.lapsPerBlock} ${tt('topup.cont_laps','vueltas')} · ` : '';
+      const eng = r.hr
+        ? `${r.hr.loPct}-${r.hr.hiPct}% FCmax (${r.hr.lo}-${r.hr.hi} ppm)`
+        : `${r.pctVmax}% Vmax (${r.speedKmh} km/h · ${r.lapSec}s/${tt('topup.cont_lap_word','vuelta')})`;
       return { content: tt('topup.block_cont','Carrera continua'),
-        detail: `${blk}${r.laps} ${tt('topup.cont_laps','vueltas')} × ${r.lapM} m @ ${r.pctVmax}% Vmax (${r.speedKmh} km/h · ${r.lapSec}s/${tt('topup.cont_lap_word','vuelta')})`,
+        detail: `${blk}${r.laps} ${tt('topup.cont_laps','vueltas')} × ${r.lapM} m @ ${eng}`,
         meters, time };
     }
     return { content: blkLabel(r.type),
@@ -1173,7 +1205,7 @@
       return `<div class="tu-prev">
         <div class="tu-prev-head"><span class="av">${esc(initials(pd.player.name))}</span>
           <div><div class="nm">${pd.player.number != null ? ('#' + pd.player.number + ' ') : ''}${esc(pd.player.name)}</div>
-          <div class="rf">${pd.vmax ? `Vmax ${pd.vmax.toFixed(1)} km/h` : `<span class="warn">${tt('topup.no_vmax','Sin Vmax')}</span>`}${pd.vift ? ` · VIFT ${pd.vift.toFixed(1)}` : ''}${pd.player.position ? ' · ' + esc(pd.player.position) : ''}</div></div>
+          <div class="rf">${pd.vmax ? `Vmax ${pd.vmax.toFixed(1)} km/h` : `<span class="warn">${tt('topup.no_vmax','Sin Vmax')}</span>`}${pd.vift ? ` · VIFT ${pd.vift.toFixed(1)}` : ''}${pd.hrmax ? ` · FCmax ${Math.round(pd.hrmax)} ppm` : ''}${pd.player.position ? ' · ' + esc(pd.player.position) : ''}</div></div>
         </div>
         <table class="tu-ptbl"><thead><tr><th>N°</th><th>${tt('topup.doc_col_content','Contenido')}</th><th>${tt('topup.doc_col_detail','Detalle')}</th><th>${tt('topup.doc_col_meters','Metros')}</th><th>${tt('topup.doc_col_time','Tiempo')}</th></tr></thead><tbody>${trs}</tbody></table>
         <div class="tu-verif">${tt('topup.doc_verif','Verificación')}: ${verif}</div>

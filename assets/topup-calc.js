@@ -606,15 +606,17 @@
       const lapM = +b.lapM > 0 ? +b.lapM : (+c.lapM > 0 ? +c.lapM : 0);
       const pct  = b.pctVmax != null ? +b.pctVmax : 0.55;
       const rx = prescribeContinuous({
-        deficitM: +b.metersM || 0, lapM, model: 'vmax',
+        deficitM: +b.metersM || 0, lapM, model: b.model === 'fcmax' ? 'fcmax' : 'vmax',
         blocks: +b.blocks || 1, restSec: +b.restSec || 0,
         vmax: p.vmax, pctVmax: pct,
+        hrmax: p.hrmax, hrLoPct: b.hrLoPct != null ? +b.hrLoPct : null, hrHiPct: b.hrHiPct != null ? +b.hrHiPct : null,
       });
       if (!rx || rx.need) return { type: 'cont', need: rx ? rx.need : 'input', metersM: 0, timeSec: 0 };
       return {
         type: 'cont', metersM: rx.totalM, timeSec: Math.round((rx.runMin || 0) * 60),
         laps: rx.laps, lapM: rx.lapM, speedKmh: rx.speedKmh, lapSec: rx.lapSec,
         pctVmax: rx.pctVmax, blocks: rx.blocks, lapsPerBlock: rx.lapsPerBlock,
+        model: rx.model, hr: rx.hr,
       };
     }
     // passes: hsr / vhsr / sprint
