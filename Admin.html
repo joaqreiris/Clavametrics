@@ -431,19 +431,19 @@
         <div class="ad-kpi">
           <div class="ad-kpi-l"><i class="ti ti-users"></i><span data-i18n="admin.kpi_total_members">Total members</span></div>
           <div class="ad-kpi-v" id="adKpiMembers">14 <sub data-i18n="admin.active">active</sub></div>
-          <div class="ad-kpi-t"><span class="ad-kpi-d up"><i class="ti ti-arrow-up-right"></i>+2</span> <span data-i18n="admin.last_30d">last 30d</span></div>
+          <div class="ad-kpi-t" style="display:none"><span class="ad-kpi-d up"><i class="ti ti-arrow-up-right"></i>+2</span> <span data-i18n="admin.last_30d">last 30d</span></div>
         </div>
         <div class="ad-kpi">
           <div class="ad-kpi-l"><i class="ti ti-mail"></i><span data-i18n="admin.kpi_pending_invites">Pending invites</span></div>
           <div class="ad-kpi-v" id="adKpiInvites">0</div>
-          <div class="ad-kpi-t"><span class="ad-kpi-d warn"><i class="ti ti-clock"></i>4d</span> <span data-i18n="admin.avg_time_to_accept">avg time to accept</span></div>
+          <div class="ad-kpi-t" style="display:none"><span class="ad-kpi-d warn"><i class="ti ti-clock"></i>4d</span> <span data-i18n="admin.avg_time_to_accept">avg time to accept</span></div>
         </div>
         <div class="ad-kpi">
           <div class="ad-kpi-l"><i class="ti ti-credit-card"></i><span data-i18n="admin.kpi_plan">Plan</span></div>
           <div class="ad-kpi-v" id="adKpiPlan">—</div>
           <div class="ad-kpi-t" id="adKpiPlanSub"></div>
         </div>
-        <div class="ad-kpi">
+        <div class="ad-kpi" style="display:none"><!-- Storage: placeholder oculto hasta tener uso real del bucket -->
           <div class="ad-kpi-l"><i class="ti ti-database"></i><span data-i18n="admin.kpi_storage">Storage</span></div>
           <div class="ad-kpi-v">8.4 <sub>/ 50 GB</sub></div>
           <div class="ad-kpi-t"><span data-i18n="admin.storage_used_note">17% used · session videos &amp; reports</span></div>
@@ -728,8 +728,8 @@
               <div class="amount" style="font-size:22px" id="adSubAmount">—</div>
               <div class="next" id="adSubNext" style="color:var(--cm-fg-muted);font-size:12px" data-i18n="admin.billing_stripe_note">Billing managed via Stripe. Connect webhook to sync billing data.</div>
               <div class="actions">
-                <a href="Billing.html" class="cm-btn is-outline is-sm"><i class="ti ti-credit-card" style="font-size:14px"></i><span data-i18n="admin.card">Card</span></a>
-                <a href="Billing.html" class="cm-btn is-outline is-sm"><i class="ti ti-file-invoice" style="font-size:14px"></i><span data-i18n="admin.invoices">Invoices</span></a>
+                <a href="Plan%20Picker.html" class="cm-btn is-outline is-sm"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span data-i18n="admin.change_plan">Change plan</span></a>
+                <button id="adSubUpdatePay" class="cm-btn is-outline is-sm" style="display:none"><i class="ti ti-credit-card" style="font-size:14px"></i><span data-i18n="admin.update_payment">Update payment method</span></button>
               </div>
               <div style="margin-top:10px">
                 <a href="Billing.html" style="display:inline-flex;align-items:center;gap:5px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none">
@@ -932,7 +932,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       if (teamId) {
         const [psR, subR, tR] = await Promise.all([
           window.sb.rpc('team_plan_slug', { p_team_id: teamId }),
-          window.sb.from('subscriptions').select('status,is_comp,current_period_end').eq('team_id', teamId).eq('status','active').maybeSingle(),
+          window.sb.from('subscriptions').select('status,is_comp,current_period_end,provider_subscription_id').eq('team_id', teamId).eq('status','active').maybeSingle(),
           window.sb.from('teams').select('name').eq('id', teamId).maybeSingle(),
         ]);
         planSlug = psR?.data || 'initiation'; sub = subR?.data; teamName = tR?.data?.name || '';
@@ -952,6 +952,35 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       }
       const ht = document.getElementById('adHeadTeam'); if (ht) ht.textContent = '· ' + clubName + (teamName ? ' · ' + teamName : '');
       const sp = document.getElementById('adSubPlan'); if (sp) sp.textContent = planName;
+
+      // ── Tab Subscription (columna derecha): monto, próximo cobro, acciones ──
+      const isPaid = planSlug !== 'initiation' && price > 0 && sub && !sub.is_comp && sub.provider_subscription_id;
+      const amtEl = document.getElementById('adSubAmount');
+      if (amtEl) amtEl.textContent = (planSlug === 'initiation' || price === 0)
+        ? tt('admin.free','Free')
+        : (sub?.is_comp ? tt('admin.complimentary','Complimentary') : `$${price}/mo`);
+      const nextEl = document.getElementById('adSubNext');
+      if (nextEl) {
+        nextEl.removeAttribute('data-i18n');
+        if (planSlug === 'initiation' || price === 0) nextEl.textContent = tt('admin.plan_free','Free · no billing');
+        else if (sub?.is_comp) nextEl.textContent = tt('admin.plan_comp','Complimentary · no billing');
+        else if (sub?.current_period_end) nextEl.textContent = tt('admin.next_bill','next bill {date}',{ date: fmtD(sub.current_period_end) });
+        else nextEl.textContent = '';
+      }
+      const upBtn = document.getElementById('adSubUpdatePay');
+      if (upBtn) {
+        if (isPaid) {
+          upBtn.style.display = '';
+          upBtn.onclick = async (e) => {
+            e.preventDefault(); upBtn.disabled = true;
+            try {
+              const { data: r, error } = await window.sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'manage' } });
+              if (error || r?.error || !r?.update_payment_method) { alert(tt('admin.pay_update_err','No pude abrir la página para actualizar el pago. Probá de nuevo.')); return; }
+              window.open(r.update_payment_method, '_blank', 'noopener');
+            } finally { upBtn.disabled = false; }
+          };
+        } else { upBtn.style.display = 'none'; }
+      }
     } catch(_){}
   })();
 

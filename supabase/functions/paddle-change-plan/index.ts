@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
     const { team_id, plan_slug, cycle, preview, action } = await req.json();
-    const act = ['cancel', 'undo'].includes(action) ? action : 'change';
+    const act = ['cancel', 'undo', 'manage'].includes(action) ? action : 'change';
     if (!team_id) return json({ error: 'Falta team_id' }, 400);
     if (act === 'change' && !plan_slug) return json({ error: 'Falta plan_slug' }, 400);
 
@@ -109,6 +109,18 @@ Deno.serve(async (req) => {
         return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
       }
       return json({ ok: true, cancel: true, effective_at: payload?.data?.scheduled_change?.effective_at ?? sub.current_period_end });
+    }
+
+    // ── Portal de gestión: URL de Paddle para actualizar el método de pago ──
+    if (act === 'manage') {
+      const res = await paddle(`/subscriptions/${subId}`, 'GET');
+      const payload = await res.json();
+      if (!res.ok) {
+        console.error('Paddle get sub failed', res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      }
+      const mu = payload?.data?.management_urls ?? {};
+      return json({ ok: true, update_payment_method: mu.update_payment_method ?? null, cancel_url: mu.cancel ?? null });
     }
 
     // ── Deshacer un cambio agendado (downgrade programado o cancelación) ──
