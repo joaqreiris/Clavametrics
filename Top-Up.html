@@ -181,6 +181,13 @@
   .tu-modal-head .mx{background:none;border:0;color:var(--cm-fg-muted);cursor:pointer;font-size:20px;line-height:1;padding:4px;border-radius:8px}
   .tu-modal-head .mx:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
   .tu-modal-body{padding:14px 16px 18px}
+  .tu-hrlist{display:flex;flex-direction:column;gap:6px}
+  .tu-hrrow{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;width:100%;padding:9px 11px;border:1.5px solid var(--cm-border);border-radius:10px;background:var(--cm-surface);cursor:pointer;transition:border-color .12s,background .12s}
+  .tu-hrrow:hover{border-color:var(--cm-accent)}
+  .tu-hrrow.on{border-color:var(--cm-accent);background:color-mix(in srgb,var(--cm-accent) 10%,transparent)}
+  .tu-hrrow .hrl{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-hrrow .hrk{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-hrrow .hrsug{font:700 9px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.04em;color:#15803d;background:rgba(22,163,74,.13);padding:2px 6px;border-radius:99px;vertical-align:middle}
   /* config launcher row */
   .tu-cfg-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   .tu-cfg-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:10px;color:var(--cm-fg-strong);font:600 12.5px/1 var(--cm-font-sans);cursor:pointer}
@@ -436,6 +443,7 @@
       <div id="tu-bands-editor" class="hide"></div>
       <div id="tu-presets-editor" class="hide"></div>
       <div id="tu-compl-settings" class="hide"></div>
+      <div id="tu-hrmax-picker" class="hide"></div>
     </div>
   </div>
 </div>
@@ -463,12 +471,25 @@
 
   const TU = window.TopUp;
 
-  // Club's HRmax GPS metric (for the %FCmax continuous model) — resolved once, cached.
-  let _hrmaxMetric;   // undefined = not resolved · null = none found · { key, label }
+  // Club's HRmax GPS metric (for the %FCmax continuous model). A manual pin in the
+  // config wins; otherwise auto-detect by name (resolved once, cached).
+  let _hrmaxMetric;         // undefined = not resolved · null = none found · { key, label }
+  let _hrmaxCandidates = null;   // metric list for the picker (lazy)
   async function clubHRmaxMetric(){
+    const c = state.compl.cfg;
+    if (c.hrmaxKey) return { key: c.hrmaxKey, label: c.hrmaxLabel || c.hrmaxKey };
     if (_hrmaxMetric !== undefined) return _hrmaxMetric;
     _hrmaxMetric = await TU.resolveHRmaxMetric(clubId);
     return _hrmaxMetric;
+  }
+  // Reload every selected player's HRmax with the current metric, then refresh the preview.
+  async function refreshAllHRmax(){
+    const hm = await clubHRmaxMetric();
+    await Promise.all(state.selected.map(async pid => {
+      const pd = state.pdata[pid]; if (!pd) return;
+      pd.hrmax = hm ? await TU.getPlayerHRmax(pid, clubId, hm.key) : null;
+    }));
+    renderComplPreview();
   }
   const mLabel = (k) => tt('topup.m.' + k, (TU.METRIC_DEFS[k] || {}).label || k);
   const fmtNum = (v, unit) => unit === 'm' ? Math.round(v).toLocaleString() : (unit === 'n' ? Math.round(v) : (Math.round(v * 10) / 10));
@@ -485,7 +506,7 @@
     // Complementary (stand-alone) session: manual targets + drag-ordered blocks.
     compl: {
       targets: Object.assign({ dt: 6000, hsr: 400, vhsr: 120, sprint: 0, cod: 0 }, _cpl.targets || {}),
-      cfg: Object.assign({ lapM: null, len: 105, wid: 68, pctVmax: 0.55, model: 'pct', viftPct: 100, passDist: 30, recoverySec: 25 }, _cpl.cfg || {}),
+      cfg: Object.assign({ lapM: null, len: 105, wid: 68, pctVmax: 0.55, model: 'pct', viftPct: 100, passDist: 30, recoverySec: 25, hrmaxKey: null, hrmaxLabel: null }, _cpl.cfg || {}),
       blocks: Array.isArray(_cpl.blocks) ? _cpl.blocks.slice() : [],
       settingsOpen: false,
     },
@@ -977,10 +998,11 @@
     bands:   () => tt('topup.edit_bands','Editar bandas'),
     presets: () => tt('topup.edit_presets','Editar formatos'),
     compl:   () => tt('topup.compl_settings','Ajustes de la sesión'),
+    hrmax:   () => tt('topup.hr_metric','Métrica de FCmax'),
   };
   function closeModal(){
-    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false;
-    ['tu-bands-editor','tu-presets-editor','tu-compl-settings'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
+    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false;
+    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
     $('tu-modal-back').classList.add('hide');
   }
   function openModal(which){
@@ -988,8 +1010,43 @@
     if (which === 'bands'){ state.bandsOpen = true; renderBandsEditor(); }
     else if (which === 'presets'){ state.presetsOpen = true; renderPresetsEditor(); }
     else if (which === 'compl'){ state.compl.settingsOpen = true; renderComplSettings(); }
+    else if (which === 'hrmax'){ state.hrmaxOpen = true; renderHRmaxPicker(); }
     $('tu-modal-title').textContent = MODAL_TITLES[which] ? MODAL_TITLES[which]() : '';
     $('tu-modal-back').classList.remove('hide');
+  }
+  // Metric picker for the HRmax source (ranked by similarity, searchable).
+  async function openHRmaxPicker(){
+    state.hrmaxQuery = '';
+    openModal('hrmax');
+    if (_hrmaxCandidates == null){ _hrmaxCandidates = await TU.listClubMetrics(clubId); if (state.hrmaxOpen) renderHRmaxPicker(); }
+  }
+  function renderHRmaxPicker(){
+    const box = $('tu-hrmax-picker'); if (!box) return;
+    if (!state.hrmaxOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const c = state.compl.cfg;
+    if (_hrmaxCandidates == null){ box.innerHTML = `<div class="tu-note">${tt('common.loading','Cargando…')}</div>`; return; }
+    const q = (state.hrmaxQuery || '').toLowerCase().trim();
+    const list = _hrmaxCandidates.filter(m => !q || (m.label + ' ' + m.key).toLowerCase().includes(q));
+    const rowHTML = (k, label, sub, sug, on) => `<button type="button" class="tu-hrrow ${on?'on':''}" data-hk="${esc(k)}" data-hl="${esc(k ? label : '')}"><span class="hrl">${esc(label)}${sug?` <span class="hrsug">${tt('topup.hr_suggested','sugerida')}</span>`:''}</span>${sub?`<span class="hrk">${esc(sub)}</span>`:''}</button>`;
+    const autoRow = rowHTML('', tt('topup.hr_auto','Automático (detectar por nombre)'), '', false, !c.hrmaxKey);
+    const rows = list.map(m => rowHTML(m.key, m.label, m.key + (m.unit ? ' · ' + m.unit : ''), TU.hrmaxScore(m.label, m.key) >= 60, c.hrmaxKey === m.key)).join('')
+      || `<div class="tu-note">${tt('topup.hr_none','No se encontraron métricas de GPS para este club.')}</div>`;
+    box.innerHTML =
+      `<p class="tu-note" style="margin-top:0">${tt('topup.hr_pick_help','Elegí la métrica de GPS que guarda la frecuencia cardíaca máxima. Marcamos las que se parecen por el nombre.')}</p>`
+      + `<input id="tu-hrmax-q" class="tu-input" type="text" placeholder="${tt('common.search','Buscar')}…" value="${esc(state.hrmaxQuery || '')}" style="margin-bottom:10px">`
+      + `<div class="tu-hrlist">` + autoRow + rows + `</div>`;
+    const qi = $('tu-hrmax-q');
+    if (qi) qi.addEventListener('input', () => { state.hrmaxQuery = qi.value; renderHRmaxPicker(); const n = $('tu-hrmax-q'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
+    box.querySelectorAll('[data-hk]').forEach(r => r.addEventListener('click', async () => {
+      const k = r.dataset.hk || '', l = r.dataset.hl || '';
+      state.compl.cfg.hrmaxKey = k || null;
+      state.compl.cfg.hrmaxLabel = k ? (l || k) : null;
+      _hrmaxMetric = undefined;   // reset auto-detect cache
+      savePrefs();
+      openModal('compl');         // back to the session settings
+      await refreshAllHRmax();
+    }));
   }
 
   // ═══════════════════ COMPLEMENTARY TAB ═══════════════════
@@ -1151,7 +1208,15 @@
         <div class="tu-field" style="max-width:130px"><label>${tt('topup.def_recovery','Recup. def. (s)')}</label><input class="tu-input" type="number" data-cf="recoverySec" value="${c.recoverySec || 25}"></div>
       </div>
       ${c.model === 'vift' ? `<div class="tu-row" style="margin-top:12px"><div class="tu-field" style="max-width:150px"><label>${tt('topup.vift_pct','% VIFT pasadas')}</label><input class="tu-input" type="number" data-cf="viftPct" value="${c.viftPct || 100}"></div></div>` : ''}
+      <div class="tu-row" style="margin-top:12px">
+        <div class="tu-field" style="flex:1;min-width:220px"><label>${tt('topup.hr_metric','Métrica de FCmax (para %FCmax)')}</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="tu-note" style="flex:1;margin:0">${c.hrmaxKey ? esc(c.hrmaxLabel || c.hrmaxKey) : tt('topup.hr_auto','Automático (detectar por nombre)')}</span>
+            <button type="button" class="tu-cfg-btn" id="tu-hrmax-pick">${tt('topup.hr_choose','Elegir')}</button>
+          </div></div>
+      </div>
       <div class="tu-note" style="margin-top:12px">${tt('topup.compl_settings_hint','El ritmo de cada pasada y vuelta se calcula con el Vmax (o VIFT) de cada jugador.')}</div>`;
+    const hpk = $('tu-hrmax-pick'); if (hpk) hpk.addEventListener('click', openHRmaxPicker);
     box.querySelectorAll('input[data-cf]').forEach(inp => inp.addEventListener('input', () => {
       const k = inp.dataset.cf, v = inp.value.trim();
       if (k === 'pctVmax') c.pctVmax = Math.max(0.3, Math.min(0.9, (+v || 55) / 100));

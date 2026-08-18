@@ -478,31 +478,57 @@
   // ('max_hr', 'fc_max', label 'FC Máx' / 'HR Max' / 'Pulso máximo' …). We recognise
   // it by matching the catalog (gps_metric_definitions) label+key: a token that means
   // heart-rate AND a token that means max. The UI can also pin a key explicitly.
-  const HRMAX_HR_HINTS  = ['hr', 'fc', 'bpm', 'ppm', 'lpm', 'heart', 'heartrate', 'pulso', 'pulse',
-                           'frecuencia', 'cardiaca', 'cardiac', 'latido', 'latidos'];
-  const HRMAX_MAX_HINTS = ['max', 'maxi', 'maxima', 'maximo', 'maximum', 'peak', 'pico'];
+  // Substring markers so GLUED names match too ('hrmax','fcmax','maxhr' → hr + max).
+  const HRMAX_HR_HINTS  = ['heartrate', 'heart', 'frecuencia', 'cardiaca', 'cardiac', 'latido',
+                           'pulso', 'pulse', 'hr', 'fc', 'bpm', 'ppm', 'lpm'];
+  const HRMAX_MAX_HINTS = ['maximum', 'maxima', 'maximo', 'maxim', 'maxi', 'max', 'peak', 'pico'];
+  const HRMAX_AVG_HINTS = ['avg', 'average', 'mean', 'prom', 'promedio', 'media', 'min', 'minimo', 'minima'];
   function _normTokens(s) {
     return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
   }
-  function looksLikeHRmax(label, key) {
+  // Similarity score (0-110) that a metric is the player's MAX heart rate. 100 = both an
+  // HR and a MAX marker present; +10 if a single token carries both (hrmax/fcmax); an
+  // avg/min marker demotes it (it's not a MAX). Used to auto-pick AND to rank the picker.
+  function hrmaxScore(label, key) {
     const toks = _normTokens(label).concat(_normTokens(key));
-    if (!toks.length) return false;
-    const anyHR  = toks.some(t => HRMAX_HR_HINTS.includes(t) || /^heart/.test(t) || /^pulso/.test(t) || /^frecuenc/.test(t) || /^cardiac/.test(t) || /^latido/.test(t));
-    const anyMax = toks.some(t => HRMAX_MAX_HINTS.includes(t) || /^max/.test(t) || /^pico/.test(t) || /^peak/.test(t));
-    return anyHR && anyMax;
+    if (!toks.length) return 0;
+    const hr    = toks.some(t => HRMAX_HR_HINTS.some(m => t === m || t.includes(m)));
+    const mx    = toks.some(t => HRMAX_MAX_HINTS.some(m => t === m || t.includes(m)));
+    const avg   = toks.some(t => HRMAX_AVG_HINTS.includes(t));
+    const glued = toks.some(t => HRMAX_HR_HINTS.some(m => t.includes(m)) && HRMAX_MAX_HINTS.some(m => t.includes(m)));
+    let s = 0;
+    if (hr && mx) s = 100;
+    else if (hr)  s = avg ? 15 : 45;
+    else if (mx)  s = 5;
+    if (glued) s += 10;
+    if (avg && !glued) s = Math.max(0, s - 30);
+    return s;
   }
-  // Returns { key, label } of the club's HRmax metric, or null. Best-effort, cached.
-  async function resolveHRmaxMetric(clubId) {
-    if (!clubId) return null;
+  function looksLikeHRmax(label, key) { return hrmaxScore(label, key) >= 60; }
+  // Every GPS metric the club has (catalog + any that only exist in imported data),
+  // ranked by hrmaxScore so the likely HRmax metric floats to the top. [{key,label,unit}].
+  async function listClubMetrics(clubId) {
+    if (!clubId) return [];
+    const out = new Map();
     try {
-      const { data } = await window.sb
-        .from('gps_metric_definitions')
-        .select('key, label')
-        .eq('club_id', clubId);
-      const hit = (data || []).find(d => looksLikeHRmax(d.label, d.key));
-      return hit ? { key: hit.key, label: hit.label } : null;
-    } catch { return null; }
+      const { data } = await window.sb.from('gps_metric_definitions')
+        .select('key, label, unit').eq('club_id', clubId);
+      (data || []).forEach(d => { if (d.key) out.set(d.key, { key: d.key, label: d.label || d.key, unit: d.unit || '' }); });
+    } catch {}
+    try {   // metrics present in the data but with no catalog row
+      const { data } = await window.sb.from('gps_report_metrics')
+        .select('metric_key').eq('club_id', clubId).limit(5000);
+      (data || []).forEach(r => { if (r.metric_key && !out.has(r.metric_key)) out.set(r.metric_key, { key: r.metric_key, label: r.metric_key, unit: '' }); });
+    } catch {}
+    return [...out.values()].sort((a, b) =>
+      hrmaxScore(b.label, b.key) - hrmaxScore(a.label, a.key) || String(a.label).localeCompare(String(b.label)));
+  }
+  // Returns { key, label } of the club's best-guess HRmax metric, or null.
+  async function resolveHRmaxMetric(clubId) {
+    const list = await listClubMetrics(clubId);
+    const best = list.find(m => hrmaxScore(m.label, m.key) >= 60);
+    return best ? { key: best.key, label: best.label } : null;
   }
   // Player's HRmax (bpm): peak of the HRmax metric across all their sessions (peak-of-
   // session-peaks ≈ true max). metricKey from resolveHRmaxMetric (or a UI override).
@@ -679,7 +705,7 @@
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
     prescribeContinuous, fieldPerimeter, normalizePreset,
-    resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax,
+    resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax, hrmaxScore, listClubMetrics,
     bandTargetSpeed, anaerobicSpeedReserve, pctASR, speedProfile,
     // Override the fallback km/h thresholds used only when a player's Vmax is unknown.
     setFallbackThresholds(hsr, sprint) {
