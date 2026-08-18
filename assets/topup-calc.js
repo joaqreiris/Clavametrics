@@ -430,14 +430,30 @@
       if (!o.hrmax || o.hrmax <= 0) return { ...base, need: 'fcmax' };
       const loP = o.hrLoPct != null ? o.hrLoPct : 0.70;
       const hiP = o.hrHiPct != null ? o.hrHiPct : 0.80;
-      return {
+      const out = {
         ...base,
         hr: {
           lo: Math.round(o.hrmax * loP), hi: Math.round(o.hrmax * hiP),
           loPct: Math.round(loP * 100), hiPct: Math.round(hiP * 100), hrmax: +o.hrmax,
         },
-        speedKmh: null, lapSec: null, runMin: null, totalMin: null, pctVmax: null,
+        speedKmh: null, lapSec: null, mPerMin: null, runMin: null, totalMin: null, pctVmax: null,
       };
+      // Reference running pace to SIT IN this HR zone, derived from the aligned %Vmax of
+      // the same named zone (HR is the master; the pace is a starting cue the athlete
+      // adjusts to hold the zone). Only when Vmax is known.
+      const pacePct = o.pacePct != null ? +o.pacePct : null;
+      if (o.vmax > 0 && pacePct > 0) {
+        const speedKmh = +(o.vmax * pacePct).toFixed(1);
+        const ms       = speedKmh / 3.6;
+        const runSec   = totalM / ms;
+        out.speedKmh = speedKmh;
+        out.lapSec   = Math.round(lapM / ms);
+        out.mPerMin  = Math.round(ms * 60);
+        out.runMin   = +(runSec / 60).toFixed(1);
+        out.totalMin = +((runSec + restSec * (blocks - 1)) / 60).toFixed(1);
+        out.pctVmax  = Math.round(pacePct * 100);
+      }
+      return out;
     }
     // vmax model
     if (!o.vmax || o.vmax <= 0) return { ...base, need: 'vmax' };
@@ -603,20 +619,28 @@
       return { type: 'cod', metersM: 0, timeSec, total: cod.total, band: cod.band };
     }
     if (b.type === 'cont') {
-      const lapM = +b.lapM > 0 ? +b.lapM : (+c.lapM > 0 ? +c.lapM : 0);
-      const pct  = b.pctVmax != null ? +b.pctVmax : 0.55;
+      // Lap = manual override → global lap → derived from the pitch perimeter (L×W).
+      const lapM  = +b.lapM > 0 ? +b.lapM : (+c.lapM > 0 ? +c.lapM : (fieldPerimeter(c.len, c.wid) || 0));
+      const model = b.model === 'fcmax' ? 'fcmax' : 'vmax';
+      // Intensity comes from a named 5-zone (z1..z5). The HR band uses the %HRmax table;
+      // the lap pace uses the SAME zone's %Vmax so both models talk about the same zone.
+      const zoneId = b.zoneId || CONT_DEFAULT_ZONE;
+      const hrZones = CONT_ZONES.fcmax, vZones = CONT_ZONES.vmax;
+      const hz = hrZones.find(z => z.id === zoneId) || hrZones.find(z => z.id === CONT_DEFAULT_ZONE) || hrZones[0];
+      const vz = vZones.find(z => z.id === zoneId) || vZones.find(z => z.id === CONT_DEFAULT_ZONE) || vZones[0];
+      const paceMid = (vz.lo + vz.hi) / 2;   // representative %Vmax for the lap pace
       const rx = prescribeContinuous({
-        deficitM: +b.metersM || 0, lapM, model: b.model === 'fcmax' ? 'fcmax' : 'vmax',
+        deficitM: +b.metersM || 0, lapM, model,
         blocks: +b.blocks || 1, restSec: +b.restSec || 0,
-        vmax: p.vmax, pctVmax: pct,
-        hrmax: p.hrmax, hrLoPct: b.hrLoPct != null ? +b.hrLoPct : null, hrHiPct: b.hrHiPct != null ? +b.hrHiPct : null,
+        vmax: p.vmax, pctVmax: paceMid,
+        hrmax: p.hrmax, hrLoPct: hz.lo, hrHiPct: hz.hi, pacePct: paceMid,
       });
       if (!rx || rx.need) return { type: 'cont', need: rx ? rx.need : 'input', metersM: 0, timeSec: 0 };
       return {
         type: 'cont', metersM: rx.totalM, timeSec: Math.round((rx.runMin || 0) * 60),
         laps: rx.laps, lapM: rx.lapM, speedKmh: rx.speedKmh, lapSec: rx.lapSec,
         pctVmax: rx.pctVmax, blocks: rx.blocks, lapsPerBlock: rx.lapsPerBlock,
-        model: rx.model, hr: rx.hr,
+        model: rx.model, hr: rx.hr, zoneId, zoneLabel: (model === 'fcmax' ? hz : vz).label,
       };
     }
     // passes: hsr / vhsr / sprint
