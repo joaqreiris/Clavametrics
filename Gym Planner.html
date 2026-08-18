@@ -212,6 +212,8 @@
   .gp-mode{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:5px;padding:2px;gap:1px}
   .gp-mode button{border:0;background:transparent;padding:0 7px;height:20px;border-radius:3px;color:var(--cm-fg-muted);cursor:pointer;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:0.04em}
   .gp-mode button.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1)}
+  .gp-mode:has(select){padding:0;background:transparent;border:0}
+  .gp-mode select{height:22px;border:1px solid var(--cm-border-soft);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:600 9.5px/1 var(--cm-font-mono);letter-spacing:0.04em;padding:0 4px;cursor:pointer;outline:none}
 
   /* Add row */
   .gp-add-row{margin:10px 0 0;width:100%;padding:9px;border:1.5px dashed var(--cm-border-strong);border-radius:7px;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px}
@@ -431,7 +433,7 @@
         <div class="gp-card-h">
           <h3 data-i18n="gym_planner.main_work">Main work</h3>
           <span class="ct" id="gpMainCt">—</span>
-          <span class="sub" data-i18n="gym_planner.mode_toggle_hint">Mode toggle per row: SR = sets×reps · VBT = velocity-based</span>
+          <span class="sub" data-i18n="gym_planner.mode_toggle_hint">Per-row mode: SR=load · VBT=velocity · ISO=isometric · HIIT=intervals · CARD=cardio</span>
           <div class="right">
             <button class="gp-sec-toggle no-print" title="Hide section" onclick="gpToggleSection('main', this)"><i class="ti ti-eye"></i></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
@@ -543,11 +545,11 @@ function gpRecalcTotals() {
       const srVal   = cells[3]?.querySelector('input')?.value || '';
       const loadVal = (cells[4]?.querySelector('input')?.value || '').trim();
 
-      // VBT rows: reps are open (velocity-based) → count sets only, no tonnage/%1RM.
-      const isVbt = tr.querySelector('.gp-mode button.is-on')?.textContent.trim() === 'VBT';
-      if (isVbt) {
-        const sm = srVal.match(/^(\d+)/);
-        if (sm) mainSets += parseInt(sm[1]);
+      // Only SR (load) rows contribute tonnage & %1RM. VBT/ISO/HIIT have open reps →
+      // count leading sets/rounds; CARDIO has no discrete sets. Keeps totals meaningful.
+      const mode = gpGetMode(tr);
+      if (mode !== 'SR') {
+        if (mode !== 'CARDIO') { const sm = srVal.match(/(\d+)/); if (sm) mainSets += parseInt(sm[1]); }
         return;
       }
 
@@ -817,9 +819,8 @@ function gpCollectRows(tbodyRef, withMode) {
     const libName = tr.dataset.libName != null ? tr.dataset.libName : undefined;
     const link = tr.dataset.link || null;
     if (withMode) {
-      const on = tr.querySelector('.gp-mode button.is-on');
       const vloss = tr.querySelector('.gp-vbt-loss')?.value || '';
-      return { v, exId, libName, mode: on ? on.textContent.trim() : 'SR', vloss, link };
+      return { v, exId, libName, mode: gpGetMode(tr), vloss, link };
     }
     return { v, exId, libName };
   });
@@ -1815,29 +1816,45 @@ function gpAddPlyoRow() {
   gpRecalcTotals();
 }
 
-// Reconfigure a main-work row for SR (sets×reps) or VBT (velocity-based) WITHOUT
-// changing the cell/input structure — keeps save/restore/totals/print by-index intact.
-// SR:  Sets×Reps · Load (kg) · %1RM span
-// VBT: Sets (open reps) · Target velocity (m/s) · Velocity-loss % (set-stop)
+// Current prescription mode of a main-work row (SR | VBT | ISO | HIIT | CARDIO).
+function gpGetMode(tr) { return tr.querySelector('.gp-mode select')?.value || 'SR'; }
+
+// Per-mode layout of a main-work row. Every mode reuses the SAME cells/inputs (only
+// placeholders / unit / visibility change) so save/restore/totals/print stay index-stable.
+//   SR     Sets×Reps · Load (kg) · %1RM span
+//   VBT    Sets · Target velocity (m/s) · Velocity-loss % + zone bar
+//   ISO    Sets × hold (s) · Load (kg) · %1RM span   (isometric time-under-tension)
+//   HIIT   Rounds · Work (s) · Rest (s) [stored in the loss input] (interval work:rest)
+//   CARDIO Duration / distance · Pace / zone
+function gpModeCfg(mode) {
+  const M = {
+    SR:     { srPh:'3 × 8',                               loadPh:'—',    unit:'kg',  pct:true,  loss:false, vzone:false },
+    VBT:    { srPh:tt('gym_planner.sets_ph','sets'),      loadPh:'0.75', unit:'m/s', pct:false, loss:true,  vzone:true,  lossPh:tt('gym_planner.vloss_ph','VL %'), lossTitle:tt('gym_planner.vel_loss','Vel loss')+' %' },
+    ISO:    { srPh:tt('gym_planner.iso_sr_ph','3 × 30s'), loadPh:'—',    unit:'kg',  pct:true,  loss:false, vzone:false },
+    HIIT:   { srPh:tt('gym_planner.rounds_ph','× 8'),     loadPh:tt('gym_planner.work_ph','30s'), unit:'s', pct:false, loss:true, vzone:false, lossPh:tt('gym_planner.rest_ph','rest s'), lossTitle:tt('gym_planner.rest','Rest')+' (s)' },
+    CARDIO: { srPh:tt('gym_planner.cardio_sr_ph','20 min · 5 km'), loadPh:tt('gym_planner.pace_ph','Z2 · 4:30/km'), unit:'', pct:false, loss:false, vzone:false },
+  };
+  return M[mode] || M.SR;
+}
 function gpApplyRowMode(tr, mode) {
-  const isVbt = mode === 'VBT';
-  tr.querySelectorAll('.gp-mode button').forEach(b =>
-    b.classList.toggle('is-on', b.textContent.trim() === (isVbt ? 'VBT' : 'SR')));
+  const cfg = gpModeCfg(mode);
+  const sel = tr.querySelector('.gp-mode select'); if (sel && sel.value !== mode) sel.value = mode;
   const inputs    = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
-  const srInput   = inputs[1];   // sets×reps  → sets
-  const loadInput = inputs[2];   // load (kg)  → target velocity (m/s)
+  const srInput   = inputs[1];   // sets×reps → sets / rounds / duration
+  const loadInput = inputs[2];   // load (kg) → velocity / work-s / pace
   const unitEl    = tr.querySelector('.gp-unit');
   const pctEl     = tr.querySelector('.pct');
   const lossEl    = tr.querySelector('.gp-vbt-loss');
-  if (srInput)   srInput.placeholder   = isVbt ? tt('gym_planner.sets_ph', 'sets') : '3 × 8';
-  if (loadInput) loadInput.placeholder = isVbt ? '0.75' : '—';
-  if (unitEl)    unitEl.textContent    = isVbt ? 'm/s' : 'kg';
-  if (pctEl)     pctEl.style.display   = isVbt ? 'none' : '';
-  if (lossEl)    lossEl.style.display  = isVbt ? '' : 'none';
-  const vzoneEl = tr.querySelector('.gp-vzone');
-  if (vzoneEl)   vzoneEl.style.display = isVbt ? '' : 'none';
-  tr.classList.toggle('is-vbt', isVbt);
-  if (isVbt) gpUpdateVZone(tr);
+  const vzoneEl   = tr.querySelector('.gp-vzone');
+  if (srInput)   srInput.placeholder   = cfg.srPh;
+  if (loadInput) loadInput.placeholder = cfg.loadPh;
+  if (unitEl)    unitEl.textContent    = cfg.unit;
+  if (pctEl)     pctEl.style.display   = cfg.pct ? '' : 'none';
+  if (lossEl)  { lossEl.style.display  = cfg.loss ? '' : 'none';
+                 if (cfg.loss) { lossEl.placeholder = cfg.lossPh; lossEl.title = cfg.lossTitle; } }
+  if (vzoneEl)   vzoneEl.style.display = cfg.vzone ? '' : 'none';
+  tr.classList.toggle('is-vbt', mode === 'VBT');
+  if (cfg.vzone) gpUpdateVZone(tr);
 }
 
 // General VBT velocity training zones (mean concentric velocity, m/s). These are a
@@ -1856,7 +1873,7 @@ function gpVelZone(v) {
 // Position the marker on the velocity-zone bar from the row's target-velocity input.
 function gpUpdateVZone(tr) {
   const vz = tr.querySelector('.gp-vzone'); if (!vz) return;
-  const isVbt = tr.querySelector('.gp-mode button.is-on')?.textContent.trim() === 'VBT';
+  const isVbt = gpGetMode(tr) === 'VBT';
   if (!isVbt) { vz.style.display = 'none'; return; }
   vz.style.display = '';
   const inputs = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
@@ -1881,7 +1898,7 @@ function gpAddMainRow() {
   const tr    = document.createElement('tr');
   tr.innerHTML = `${gpNumCell(num)}
     <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
-    <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
+    <td><div class="gp-mode"><select title="${tt('gym_planner.prescription_mode','Prescription mode')}">${['SR','VBT','ISO','HIIT','CARDIO'].map(m=>`<option value="${m}">${m==='CARDIO'?'CARD':m}</option>`).join('')}</select></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
     <td><div class="gp-load-cell"><input class="num-input" placeholder="—" oninput="gpUpdateVZone(this.closest('tr'))"><span class="gp-unit" style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span><div class="gp-vzone" style="display:none"><span class="mk" style="left:0%;display:none"></span></div><span class="gp-vzone-lbl" style="display:none;font:600 9.5px/1 var(--cm-font-sans);white-space:nowrap"></span></div></td>
     <td><span class="pct">—</span><input class="gp-vbt-loss num-input" placeholder="${tt('gym_planner.vloss_ph','VL %')}" title="${tt('gym_planner.vel_loss','Vel loss')} %" style="display:none;width:56px" oninput="gpScheduleSave()"></td>
@@ -1891,13 +1908,13 @@ function gpAddMainRow() {
     <td style="white-space:nowrap"><button class="btn-link" onclick="gpToggleLink(this)" title="${tt('gym_planner.link_exercise','Link into a superset')}"><i class="ti ti-link"></i></button><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
   gpWireRowDnD(tr, tbody);
-  // Wire SR/VBT toggle for the new row
-  const modeEl = tr.querySelector('.gp-mode');
-  modeEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    gpApplyRowMode(tr, b.textContent.trim());
+  // Wire the per-row prescription-mode selector
+  const modeSel = tr.querySelector('.gp-mode select');
+  modeSel.addEventListener('change', () => {
+    gpApplyRowMode(tr, modeSel.value);
     gpRecalcTotals();
     gpScheduleSave();
-  }));
+  });
   tr.querySelector('.name-cell input').focus();
   gpRecalcTotals();
 }
@@ -2673,7 +2690,7 @@ function gpRenderPrintSheet() {
       return [...rows].map(tr => {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
-        const mode = (tr.querySelector('.gp-mode button.is-on')?.textContent || '').trim();
+        const mode = tr.querySelector('.gp-mode select') ? gpGetMode(tr) : '';
         return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
       });
     };
@@ -2847,17 +2864,32 @@ function gpRenderPrintSheet() {
     const mainRows = readRows('gpMainBody').filter(r=>r.name);
     const mSets = kv(g('gpTotMain')), mTon = kv(g('gpTotTonnage'));
     const mainCardHtml = r => {
-      const isVbt = r.mode === 'VBT';
+      const m = r.mode || 'SR';
       const params=[];
-      if (isVbt) {
+      let tag='STR', tagColor='#B91C1C';
+      if (m === 'VBT') {
+        tag='VBT'; tagColor='#2563EB';
         if(r.c3)params.push({l:tt('gym_planner.sets_label','Sets'),v:r.c3});
         if(r.c4)params.push({l:tt('gym_planner.target_vel','Target vel'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' m/s'});
         if(r.c5 && r.c5!=='—')params.push({l:tt('gym_planner.vel_loss','Vel loss'),v:/%/.test(r.c5)?r.c5:r.c5+'%'});
+      } else if (m === 'ISO') {
+        tag='ISO'; tagColor='#0D9488';
+        if(r.c3)params.push({l:tt('gym_planner.sets_hold','Sets × hold'),v:r.c3});
+        if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4});
+      } else if (m === 'HIIT') {
+        tag='HIIT'; tagColor='#EA580C';
+        if(r.c3)params.push({l:tt('gym_planner.rounds','Rounds'),v:r.c3});
+        if(r.c4)params.push({l:tt('gym_planner.work','Work'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' s'});
+        if(r.c5)params.push({l:tt('gym_planner.rest','Rest'),v:/[a-z]/i.test(r.c5)?r.c5:r.c5+' s'});
+      } else if (m === 'CARDIO') {
+        tag='CARD'; tagColor='#0891B2';
+        if(r.c3)params.push({l:tt('gym_planner.duration_dist','Duration / dist'),v:r.c3});
+        if(r.c4)params.push({l:tt('gym_planner.pace_zone','Pace / zone'),v:r.c4});
       } else {
         if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
       }
       const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
-      return exCard({name:r.name, params, note, tag:isVbt?'VBT':'STR', tagColor:isVbt?'#2563EB':'#B91C1C', exId:r.exId});
+      return exCard({name:r.name, params, note, tag, tagColor, exId:r.exId});
     };
     // A superset = two adjacent rows sharing a link id → wrap them as one accented block.
     const supersetWrap = inner => `<div class="gsp-brk" style="grid-column:span ${textLayout?'1':'2'};break-inside:avoid;border:1px solid var(--club-accent);border-radius:${textLayout?'8px':'12px'};padding:${textLayout?'7px 8px 8px':'8px'}">
