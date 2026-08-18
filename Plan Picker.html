@@ -872,7 +872,14 @@
       confirmBtn.disabled = true;
       try{
         const { data:prev, error:pErr } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, plan_slug: slug, cycle, preview:true } });
-        if (!(pErr || prev?.error)){
+        if (prev?.needs_checkout){
+          // el server confirma que NO hay sub real → recién ahí cae al checkout de abajo
+        } else if (pErr || prev?.error){
+          // Hay sub activa pero el cambio/preview falló → NO abrir un checkout de precio
+          // completo (cobraría todo de nuevo). Avisar y frenar.
+          alert(tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.'));
+          return;
+        } else {
           let msg;
           if (prev?.downgrade){
             const when = prev?.effective_at ? fmtDate(prev.effective_at) : '';
@@ -1125,14 +1132,10 @@
         const meta = card.querySelector('.pp-tier-meta');
         if(slug===curSlug){
           card.classList.add('is-current');                 // activa el estilo ámbar del CSS
-          let badge = card.querySelector('.pp-tier-badge');
-          const recTxt = String(_tt('plan_picker.badge_recommended','Recommended')).trim().toLowerCase();
-          if(badge){
-            const bt=(badge.textContent||'').trim().toLowerCase();
-            // no pisar el Recommended si justo el current fuera Pro: creamos otro
-            if(bt==='recommended' || bt===recTxt) badge = null;
-          }
-          if(!badge){ badge=document.createElement('span'); badge.className='pp-tier-badge'; card.appendChild(badge); }
+          // La tarjeta actual muestra SOLO "Current": sacamos cualquier otro badge
+          // (ej. el "Recommended" hardcodeado de Professional) para que no se solapen.
+          card.querySelectorAll('.pp-tier-badge').forEach(b=>b.remove());
+          const badge=document.createElement('span'); badge.className='pp-tier-badge'; card.appendChild(badge);
           badge.textContent=_tt('plan_picker.badge_current','Current');
           if(meta) meta.textContent=_tt('plan_picker.meta_current_plain','your current tier · no change');
         } else if(meta){

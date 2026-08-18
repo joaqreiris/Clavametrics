@@ -87,7 +87,8 @@ Deno.serve(async (req) => {
       .eq('team_id', team_id).eq('status', 'active').maybeSingle();
     if (!sub || sub.is_comp || !sub.provider_subscription_id) {
       // No hay sub de Paddle que modificar → el cliente debe abrir checkout nuevo.
-      return json({ needs_checkout: true }, 409);
+      // 200 (no 409) para que el cliente pueda leer el flag en `data`.
+      return json({ needs_checkout: true }, 200);
     }
     const subId = sub.provider_subscription_id;
 
