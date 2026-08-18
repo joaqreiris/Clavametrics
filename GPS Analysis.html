@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="assets/gp-builder/gp-builder.css">
 <link rel="stylesheet" href="assets/gp-builder/gp-filterbar.css">
 <link rel="stylesheet" href="assets/chart-reference/add-chart.css">
+<link rel="stylesheet" href="assets/gps-integrations.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/positions.js"></script>
@@ -28,6 +29,8 @@
 <script defer src="assets/gps-reader.js"></script>
 <script defer src="assets/gps-acwr.js"></script>
 <script defer src="assets/gps-matcher.js"></script>
+<script defer src="assets/cm-daterange.js"></script>
+<script defer src="assets/gps-integrations.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -8469,140 +8472,35 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   document.getElementById('srcClose').addEventListener('click', closeSrc);
   srcOverlay.addEventListener('click', closeSrc);
 
-// ── Provider sync (daily API pull) — admin + S&C (+ future Head of performance) ──────
-// Historically the "pull GPS from the provider" button lived ONLY in Admin (admin-only
-// page), so the S&C who runs it daily was blocked waiting on an admin. Here it's available
-// to whoever window.cmCanImportGps() allows. CONFIG (connect / verify / map athletes /
-// save the API token) stays admin-only in Admin.html — this is JUST the day-to-day pull.
-// Reuses the exact same server flow: gps-sync 'start' mode + Realtime on gps_sync_jobs.
-// Sync is club-wide (the Catapult account is per club); each team sees only its athletes
-// when filtering (mapping is players.external_gps_id), so no per-team leakage.
+// ── Provider integrations panel (SHARED module) — full config in GPS Analysis ─────────
+// El panel completo (conectar/verificar/región/mapear métricas/mapear atletas/sync) vive en
+// assets/gps-integrations.js (compartido con Admin) y se monta acá en el drawer Data sources.
+// canConfig (región/verificar/mapear/sync) = admin + S&C (cmCanImportGps).
+// canConnect (token connect/disconnect) = admin/owner solamente.
 (function () {
   const host = document.getElementById('gpSyncHost');
   if (!host) return;
-  const _SUPPORTED = 'catapult';
-  let _ints = [], _canSync = false, _job = null, _rt = null, _clubId = null, _loading = null;
-
-  function _msg(t, err){ const el=document.getElementById('gpSyncMsg'); if(el){ el.textContent=t||''; el.style.color=err?'var(--cm-danger)':'var(--cm-fg-muted)'; } }
-  function _setBtn(busy){ const b=document.getElementById('gpSyncBtn'); if(!b) return; b.disabled=!!busy; const s=b.querySelector('span'); if(s) s.textContent=busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now'); }
-  function _dot(col, txt){ return `<span class="gp-conn-status av"><span class="d" style="background:${col}"></span>${txt}</span>`; }
-
-  function render(){
-    const intg = _ints.find(i => i.provider === _SUPPORTED) || null;
-    const connected = intg && (intg.status === 'connected' || intg.status === 'configured');
-    // Not connected → configuration is admin-only, so just point there.
-    if (!connected){
-      host.innerHTML = `<div class="gp-conn" style="cursor:default"><span class="logo csv"><i class="ti ti-plug-connected"></i></span>
-        <div class="info"><h5>Catapult · StatSports</h5>
-          <div class="desc">${tt('gps_analysis.direct_provider_sync_desc','StatSports · Catapult · Polar · WIMU · GPSports — API &amp; webhook import')}</div>
-          ${_dot('var(--cm-fg-muted)', tt('gps_analysis.sync_not_configured','Not connected — an admin can set it up in Admin → Integrations'))}</div></div>`;
-      return;
-    }
-    // Connected but this user can't trigger a sync → read-only status.
-    if (!_canSync){
-      host.innerHTML = `<div class="gp-conn" style="cursor:default"><span class="logo csv"><i class="ti ti-plug-connected"></i></span>
-        <div class="info"><h5>Catapult</h5>
-          <div class="desc">${tt('gps_analysis.sync_admin_managed','Provider sync is managed by your admin.')}</div>
-          ${_dot('var(--cm-success,#16a34a)', tt('admin.gps_connected','Connected'))}</div></div>`;
-      return;
-    }
-    // Connected + permitted → the real "Sync now" control (default range: last 30 days).
-    const to = window.cmToday();
-    const from = window.cmYMD(new Date(Date.now() - 30*86400*1000));
-    const inp = 'height:32px;padding:0 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit';
-    const lbl = 'display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--cm-fg-muted)';
-    host.innerHTML = `<div class="gp-conn" style="cursor:default;display:block">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <span class="logo csv"><i class="ti ti-plug-connected"></i></span>
-        <div class="info" style="flex:1"><h5>Catapult</h5>${_dot('var(--cm-success,#16a34a)', tt('admin.gps_connected','Connected'))}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
-        <label style="${lbl}">${tt('gps_analysis.sync_from','From')}<input type="date" id="gpSyncFrom" value="${from}" max="${to}" style="${inp}"></label>
-        <label style="${lbl}">${tt('gps_analysis.sync_to','To')}<input type="date" id="gpSyncTo" value="${to}" max="${to}" style="${inp}"></label>
-        <button class="cm-btn is-primary is-sm" id="gpSyncBtn" style="height:32px"><i class="ti ti-cloud-download" style="font-size:14px"></i><span>${tt('admin.gps_sync_now','Sync now')}</span></button>
-      </div>
-      <div id="gpSyncMsg" style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px"></div>
-      <div id="gpSyncBar" style="display:none;height:6px;border-radius:99px;background:var(--cm-border);overflow:hidden;margin-top:6px"><div id="gpSyncBarFill" style="height:100%;width:0;background:var(--cm-accent);transition:width .3s"></div></div>
-    </div>`;
-    host.querySelector('#gpSyncBtn').addEventListener('click', () => _doSync(intg.id));
-    _paint();
+  let _mounted = false, _mounting = null;
+  async function load() {
+    if (_mounted) return;
+    if (_mounting) return _mounting;
+    if (!window.cmMountGpsIntegrations) return;   // módulo aún no cargó → reintenta al próximo open
+    _mounting = (async () => {
+      const prof = await window.getProfile?.();
+      const buckets = window.cmRoleBuckets ? window.cmRoleBuckets(prof) : new Set();
+      const canConfig  = window.cmCanImportGps ? window.cmCanImportGps(prof) : buckets.has('admin');
+      const canConnect = buckets.has('admin');   // token/credencial: solo admin/owner
+      if (!canConfig) {
+        host.innerHTML = `<div class="gp-conn" style="cursor:default"><div class="info"><h5>Catapult</h5><div class="desc">${tt('gps_analysis.sync_admin_managed', 'Provider sync is managed by your admin.')}</div></div></div>`;
+        _mounted = true; return;
+      }
+      host.innerHTML = '';   // saca la card fallback "Coming soon"
+      window.cmMountGpsIntegrations(host, { canConfig, canConnect });
+      _mounted = true;
+    })().finally(() => { _mounting = null; });
+    return _mounting;
   }
-
-  // supabase-js flags a 409 (already-running lock) as an error whose JSON body lives in
-  // error.context — parse it so we can still latch onto the existing job.
-  async function _startSync(intId, from, to){
-    const { data, error } = await window.sb.functions.invoke('gps-sync', { body:{ mode:'start', integration_id:intId, from, to } });
-    if (!error) return data;
-    try { const p = await error.context?.json?.(); if (p) return p; } catch(_){}
-    throw error;
-  }
-  async function _doSync(intId){
-    const from = document.getElementById('gpSyncFrom')?.value || '2010-01-01';
-    const to   = document.getElementById('gpSyncTo')?.value   || window.cmToday();
-    if (from > to){ _msg(tt('admin.gps_from_before_to','"From" must be before "To".'), true); return; }
-    _msg(''); _setBtn(true);
-    try {
-      const p = await _startSync(intId, from, to);
-      if (p?.already_running) _msg(tt('admin.gps_sync_already_running','A sync is already in progress.'));
-      if (p?.job_id){ await _track(p.job_id); }
-      else if (p && p.ok === false){ _msg(p.message || tt('admin.gps_sync_failed','Sync failed'), true); _setBtn(false); }
-      else { _setBtn(false); }
-    } catch(e){ _msg(tt('admin.gps_failed_x','Failed: {msg}',{ msg:(e.message||e) }), true); _setBtn(false); }
-  }
-  async function _track(jobId){
-    try { const { data } = await window.sb.from('gps_sync_jobs').select('*').eq('id', jobId).maybeSingle(); if (data){ _job = data; _paint(); } } catch(_){}
-    _ensureRT();
-  }
-  function _paint(){
-    const bar = document.getElementById('gpSyncBar'), fill = document.getElementById('gpSyncBarFill');
-    if (!bar || !fill) return;
-    if (!_job){ bar.style.display='none'; _setBtn(false); return; }
-    const total=_job.chunks_total||0, done=_job.chunks_done||0;
-    const pct = total>0 ? Math.min(100, Math.round(done/total*100)) : (_job.status==='done'?100:0);
-    const running = _job.status==='running' || _job.status==='queued';
-    bar.style.display='block'; fill.style.width = pct + '%'; _setBtn(running);
-    if (running){ _msg(tt('gps_analysis.sync_progress','Syncing… {pct}%',{ pct })); }
-    else if (_job.status==='done'){ _msg(tt('gps_analysis.sync_done','Sync complete ✓')); window.cmInvalidateGpsCache?.(); }
-    else if (_job.status==='error'){ _msg(_job.error || tt('admin.gps_sync_failed','Sync failed'), true); }
-    else if (_job.status==='cancelled'){ _msg(tt('gps_analysis.sync_cancelled','Sync cancelled')); }
-  }
-  async function _ensureRT(){
-    if (_rt) return;
-    const cid = _clubId || (_clubId = await window.getClubId?.());
-    if (!cid) return;
-    _rt = window.sb.channel('gps-analysis-sync-'+cid)
-      .on('postgres_changes', { event:'*', schema:'public', table:'gps_sync_jobs', filter:`club_id=eq.${cid}` }, ({ new:nw }) => {
-        if (!nw) return;
-        if (!_job || nw.id===_job.id || new Date(nw.created_at) >= new Date(_job.created_at)){ _job = nw; _paint(); }
-      })
-      .subscribe();
-  }
-  async function _hydrate(){
-    const cid = _clubId || (_clubId = await window.getClubId?.());
-    const intg = _ints.find(i => i.provider === _SUPPORTED);
-    if (!cid || !intg) return;
-    try {
-      const { data } = await window.sb.from('gps_sync_jobs').select('*')
-        .eq('club_id', cid).eq('integration_id', intg.id).order('created_at',{ ascending:false }).limit(1).maybeSingle();
-      if (data){ _job = data; _paint(); if (data.status==='running'||data.status==='queued') _ensureRT(); }
-    } catch(_){}
-  }
-  async function load(){
-    if (_loading) return _loading;
-    _loading = (async () => {
-      try {
-        _clubId = await window.getClubId?.();
-        const prof = await window.getProfile?.();
-        _canSync = window.cmCanImportGps ? window.cmCanImportGps(prof) : false;
-        const { data } = await window.sb.from('gps_integrations').select('id, provider, status');
-        _ints = data || [];
-      } catch(e){ _ints = []; }
-      render();
-      await _hydrate();
-    })().finally(() => { _loading = null; });
-    return _loading;
-  }
-  window._gpSyncLoad = load;
+  window._gpSyncLoad = load;   // el drawer (openSrc) llama esto al abrir
 })();
 </script>
 
