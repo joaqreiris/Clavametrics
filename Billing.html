@@ -321,7 +321,7 @@
                 <th class="r" style="width:100px"></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="blCatBody">
               <tr>
                 <td>
                   <div class="cat-cell">
@@ -422,7 +422,7 @@
             <tfoot>
               <tr>
                 <td colspan="4" data-i18n="billing.combined_monthly">Combined monthly · billed May 28</td>
-                <td class="r">$485.00</td>
+                <td class="r" id="blCatTotal">$485.00</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -670,6 +670,62 @@ function ttLocale() {
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
     });
   }
+</script>
+
+<script>
+// ── Tabla de categorías con datos REALES (una fila por equipo del club) ──
+// Cada fila muestra el plan/estado/próximo cobro reales y un botón "Cambiar plan"
+// que lleva al Plan Picker apuntando a ESA categoría (?team=<id>).
+(async function(){
+  const T = (k,f,v)=> (typeof tt==='function') ? tt(k,f,v) : f;
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  try{
+    if(!window.sb) return;
+    const clubId = await window.getClubId(); if(!clubId) return;
+    const tbody = document.getElementById('blCatBody'); if(!tbody) return;
+    const [teamsR, subsR] = await Promise.all([
+      window.sb.from('teams').select('id,name').eq('club_id', clubId).order('name'),
+      window.sb.from('subscriptions').select('team_id,status,is_comp,current_period_end,plans(slug,name,price_monthly)').eq('club_id', clubId).in('status',['active','trialing','past_due','paused']),
+    ]);
+    const teams = teamsR.data || [];
+    if(!teams.length) return;   // deja el fallback si no hay equipos
+    const subByTeam = {}; (subsR.data||[]).forEach(s=>{ subByTeam[s.team_id] = s; });
+    const lang = (window.CM_I18N && CM_I18N.current) || 'en';
+    const fmtD = d => { try{ return new Date(d).toLocaleDateString(lang,{month:'short',day:'numeric'}); }catch(_){ return '—'; } };
+    const pillClass = slug => (slug==='full'||slug==='professional') ? 't-pro' : slug==='basic' ? 't-basic' : 't-free';
+    let total = 0;
+    tbody.innerHTML = teams.map(t=>{
+      const s = subByTeam[t.id];
+      const plan = s && s.plans ? s.plans : null;
+      const slug = plan?.slug || 'initiation';
+      const name = plan?.name || T('billing.free_plan','Free');
+      const price = Number(plan?.price_monthly || 0);
+      const isComp = !!(s && s.is_comp);
+      if (s && !isComp && price) total += price;
+      const statusHtml = !s
+        ? `<span class="status"><span class="dot"></span>${T('billing.status_free','Free')}</span>`
+        : isComp ? `<span class="status ok"><span class="dot"></span>${T('billing.status_comp','Complimentary')}</span>`
+        : s.status==='past_due' ? `<span class="status danger"><span class="dot"></span>${T('billing.status_past_due','Payment failed')}</span>`
+        : `<span class="status ok"><span class="dot"></span>${T('billing.status_active','Active')}</span>`;
+      const next = (s && !isComp && s.current_period_end) ? fmtD(s.current_period_end) : '—';
+      const amt = (isComp || !price) ? '$0.00' : '$'+price.toFixed(2);
+      const action = isComp
+        ? `<button class="cm-btn is-ghost is-sm" disabled title="${esc(T('billing.comp_note','Cortesía — gestionada por ClavaMetrics'))}"><i class="ti ti-gift"></i></button>`
+        : `<a class="cm-btn is-outline is-sm" href="Plan%20Picker.html?team=${encodeURIComponent(t.id)}"><i class="ti ${s?'ti-arrows-exchange':'ti-arrow-up'}" style="font-size:13px"></i><span>${s?T('billing.change','Change'):T('billing.upgrade','Upgrade')}</span></a>`;
+      return `<tr>
+        <td><div class="cat-cell"><div class="ic"><i class="ti ti-ball-football"></i></div><div><div class="name">${esc(t.name||'')}</div></div></div></td>
+        <td><span class="pill ${pillClass(slug)}">${esc(name)}</span></td>
+        <td>${statusHtml}</td>
+        <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${next}</span></td>
+        <td class="r">${amt}</td>
+        <td class="r"><div class="actions-cell">${action}</div></td>
+      </tr>`;
+    }).join('');
+    const totalEl = document.getElementById('blCatTotal'); if(totalEl) totalEl.textContent = '$'+total.toFixed(2);
+    const subEl = document.querySelector('.bl-card .sub[data-i18n="billing.card_categories_sub"]');
+    if(subEl){ subEl.removeAttribute('data-i18n'); subEl.textContent = T('billing.cats_count','{n} categories · billed separately',{ n: teams.length }); }
+  }catch(e){ /* si algo falla, queda el contenido de fallback */ }
+})();
 </script>
 </body>
 </html>
