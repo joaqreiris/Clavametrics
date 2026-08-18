@@ -575,10 +575,10 @@ function gpRecalcTotals() {
         if (mode === 'CARDIO') return;
         const n = parseInt((srVal.match(/(\d+)/) || [])[1] || '0');   // sets / rounds
         if (n) mainSets += n;
-        // HIIT time = rounds × (work + rest), including rests. Rest lives in the loss input.
+        // HIIT time = rounds × (work + rest), including rests. Work = Load col, Rest = Rest col.
         if (mode === 'HIIT' && n) {
           const work = gpParseSec(loadVal);
-          const rest = gpParseSec(tr.querySelector('.gp-vbt-loss')?.value || '');
+          const rest = gpParseSec(cells[6]?.querySelector('input')?.value || '');
           if (work || rest) hiitSec += n * (work + rest);
         }
         return;
@@ -1873,14 +1873,14 @@ function gpGetMode(tr) { return tr.querySelector('.gp-mode select')?.value || 'S
 //   SR     Sets×Reps · Load (kg) · %1RM span
 //   VBT    Sets · Target velocity (m/s) · Velocity-loss % + zone bar
 //   ISO    Sets × hold (s) · Load (kg) · %1RM span   (isometric time-under-tension)
-//   HIIT   Rounds · Work (s) · Rest (s) [stored in the loss input] (interval work:rest)
+//   HIIT   Rounds · Work (s) · Rest (s) in the REST column (interval work:rest)
 //   CARDIO Duration / distance · Pace / zone
 function gpModeCfg(mode) {
   const M = {
     SR:     { srPh:'3 × 8',                               loadPh:'—',    unit:'kg',  pct:true,  loss:false, vzone:false },
     VBT:    { srPh:tt('gym_planner.sets_ph','sets'),      loadPh:'0.75', unit:'m/s', pct:false, loss:true,  vzone:true,  lossPh:tt('gym_planner.vloss_ph','VL %'), lossTitle:tt('gym_planner.vel_loss','Vel loss')+' %' },
     ISO:    { srPh:tt('gym_planner.iso_sr_ph','3 × 30s'), loadPh:'—',    unit:'kg',  pct:true,  loss:false, vzone:false },
-    HIIT:   { srPh:tt('gym_planner.rounds_ph','× 8'),     loadPh:tt('gym_planner.work_ph','30s'), unit:'s', pct:false, loss:true, vzone:false, lossPh:tt('gym_planner.rest_ph','rest s'), lossTitle:tt('gym_planner.rest','Rest')+' (s)' },
+    HIIT:   { srPh:tt('gym_planner.rounds_ph','rounds'),  loadPh:tt('gym_planner.work_ph','work'), unit:'s', pct:false, loss:false, vzone:false, restPh:tt('gym_planner.rest_ph','30s') },
     CARDIO: { srPh:tt('gym_planner.cardio_sr_ph','20 min · 5 km'), loadPh:tt('gym_planner.pace_ph','Z2 · 4:30/km'), unit:'', pct:false, loss:false, vzone:false },
   };
   return M[mode] || M.SR;
@@ -1891,12 +1891,14 @@ function gpApplyRowMode(tr, mode) {
   const inputs    = [...tr.querySelectorAll('input')].filter(i => !i.classList.contains('gp-vbt-loss'));
   const srInput   = inputs[1];   // sets×reps → sets / rounds / duration
   const loadInput = inputs[2];   // load (kg) → velocity / work-s / pace
+  const restInput = inputs[3];   // rest column → also the HIIT round rest (seconds)
   const unitEl    = tr.querySelector('.gp-unit');
   const pctEl     = tr.querySelector('.pct');
   const lossEl    = tr.querySelector('.gp-vbt-loss');
   const vzoneEl   = tr.querySelector('.gp-vzone');
   if (srInput)   srInput.placeholder   = cfg.srPh;
   if (loadInput) loadInput.placeholder = cfg.loadPh;
+  if (restInput) restInput.placeholder = cfg.restPh || '2 min';
   if (unitEl)    unitEl.textContent    = cfg.unit;
   if (pctEl)     pctEl.style.display   = cfg.pct ? '' : 'none';
   if (lossEl)  { lossEl.style.display  = cfg.loss ? '' : 'none';
@@ -2730,7 +2732,7 @@ function gpRenderPrintSheet() {
     const today = cmToday();
     const dateLabel = _gpFmt(_gpCurrentDate || today);
 
-    // read block rows: cell[1] name, cell[3], cell[4], cell[5] (span.pct), cell[7]
+    // read block rows: cell[1] name, cell[3], cell[4], cell[5] (span.pct), cell[6] rest, cell[7]
     const readRows = tbodyId => {
       const tb = document.getElementById(tbodyId);
       if (!tb) return [];
@@ -2740,7 +2742,7 @@ function gpRenderPrintSheet() {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
         const mode = tr.querySelector('.gp-mode select') ? gpGetMode(tr) : '';
-        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
+        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c6: cell(6), c7: cell(7), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
       });
     };
 
@@ -2916,7 +2918,7 @@ function gpRenderPrintSheet() {
     const mainHiitSec = mainRows.reduce((s,r)=>{
       if (r.mode !== 'HIIT') return s;
       const n = parseInt((r.c3.match(/\d+/) || [])[0] || '0'); if (!n) return s;
-      const w = gpParseSec(r.c4), rst = gpParseSec(r.c5);
+      const w = gpParseSec(r.c4), rst = gpParseSec(r.c6);
       return s + ((w||rst) ? n*(w+rst) : 0);
     }, 0);
     const mainCardHtml = r => {
@@ -2936,7 +2938,7 @@ function gpRenderPrintSheet() {
         tag='HIIT'; tagColor='#EA580C';
         if(r.c3)params.push({l:tt('gym_planner.rounds','Rounds'),v:r.c3});
         if(r.c4)params.push({l:tt('gym_planner.work','Work'),v:/[a-z]/i.test(r.c4)?r.c4:r.c4+' s'});
-        if(r.c5)params.push({l:tt('gym_planner.rest','Rest'),v:/[a-z]/i.test(r.c5)?r.c5:r.c5+' s'});
+        if(r.c6)params.push({l:tt('gym_planner.rest','Rest'),v:/[a-z]/i.test(r.c6)?r.c6:r.c6+' s'});
       } else if (m === 'CARDIO') {
         tag='CARD'; tagColor='#0891B2';
         if(r.c3)params.push({l:tt('gym_planner.duration_dist','Duration / dist'),v:r.c3});
