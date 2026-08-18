@@ -567,6 +567,25 @@
   }
   .mc-md-opt:hover { background: var(--cm-bg-sunk); }
   .mc-md-opt.is-active { background: var(--cm-accent-soft); color: var(--cm-accent); border-color: var(--cm-accent); }
+  /* Right-click / Ctrl+click context menu (copy/paste events) */
+  .cal-ctxmenu {
+    position: absolute; z-index: 2000;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 5px; min-width: 172px;
+    background: var(--cm-surface); border: 1px solid var(--cm-border);
+    border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  }
+  .cal-ctx-opt {
+    display: flex; align-items: center; gap: 8px;
+    font: 600 12px/1 var(--cm-font-sans); color: var(--cm-fg);
+    background: transparent; border: 0; border-radius: 6px;
+    padding: 8px 9px; cursor: pointer; text-align: left; width: 100%;
+  }
+  .cal-ctx-opt i { font-size: 14px; color: var(--cm-fg-muted); flex-shrink: 0; }
+  .cal-ctx-opt:hover:not(:disabled) { background: var(--cm-bg-sunk); }
+  .cal-ctx-opt:disabled { opacity: 0.4; cursor: default; }
+  .cal-ctx-opt .ctx-sub { font: 500 10.5px/1 var(--cm-font-mono); color: var(--cm-fg-faint); margin-left: auto; }
+  .cal-ctx-sep { height: 1px; background: var(--cm-border-soft); margin: 3px 2px; }
   .mc-day.is-today {
     background:color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface));
   }
@@ -2148,6 +2167,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
 let _dragId = null, _dragDate = null, _dragHasTime = false, _dropTargetId = null, _dropTargetDate = null;
+// Copy/paste clipboard for events (right-click / Ctrl+click). Holds the merged session object.
+let _clipEvt = null;
 
 // Cancel drag with ESC
 document.addEventListener('keydown', e => {
@@ -2304,6 +2325,7 @@ function renderGrid() {
   }
   grid.innerHTML = html;
   ensureMdMenu(grid);
+  ensureCtxMenu(grid);
 
   // Wire event clicks — open popover (not modal directly)
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
@@ -2482,6 +2504,121 @@ function openMdMenu(anchorEl, dateStr) {
 }
 
 function closeMdMenu() { if (_mdMenu) _mdMenu.style.display = 'none'; }
+
+// ── Copy/paste context menu (right-click on Windows / Ctrl+click on Mac) ────────
+// The `contextmenu` DOM event fires for both a Windows right-click and a macOS
+// Ctrl+click, so a single handler covers both. Right-clicking an event offers
+// «Copy»; right-clicking a day column offers «Paste here» when something's copied.
+let _ctxMenu = null, _ctxMenuWired = false;
+
+function ensureCtxMenu(grid) {
+  if (_ctxMenuWired) return;
+  _ctxMenuWired = true;
+  _ctxMenu = document.createElement('div');
+  _ctxMenu.className = 'cal-ctxmenu';
+  _ctxMenu.style.display = 'none';
+  document.body.appendChild(_ctxMenu);
+
+  // Delegated on the stable grid (innerHTML is rebuilt each render).
+  grid.addEventListener('contextmenu', e => {
+    if (_calView === 'player') return;   // players can't edit the plan
+    const evtEl = e.target.closest('.mc-evt[data-id]');
+    const dayEl = e.target.closest('.mc-day');
+    if (!evtEl && !dayEl) return;
+    e.preventDefault();
+
+    const items = [];
+    if (evtEl) {
+      const s = _sessions.find(x => x.id === evtEl.dataset.id);
+      if (s) items.push({ icon: 'ti-copy', label: tt('calendar.ctx_copy','Copy event'),
+        onClick: () => { _clipEvt = s; showCalToast(tt('calendar.ctx_copied','Event copied — right-click a day to paste.')); } });
+    }
+    const targetDate = (dayEl || evtEl?.closest('.mc-day'))?.dataset.date;
+    if (targetDate) {
+      if (items.length) items.push({ sep: true });
+      const clipName = _clipEvt ? (_clipEvt.title || evtTypeLabel(_clipEvt.session_type) || tt('calendar.filter_training','Training')) : '';
+      items.push({ icon: 'ti-clipboard-plus',
+        label: _clipEvt ? tt('calendar.ctx_paste_named','Paste «{name}» here',{name:clipName}) : tt('calendar.ctx_paste_empty','Paste here'),
+        sub: _clipEvt ? '' : tt('calendar.ctx_nothing_copied','nothing copied'),
+        disabled: !_clipEvt,
+        onClick: () => { if (_clipEvt) pasteEvtToDate(_clipEvt, targetDate); } });
+    }
+    if (!items.length) return;
+    openCtxMenu(e.pageX, e.pageY, items);
+  });
+
+  document.addEventListener('click', e => {
+    if (_ctxMenu.style.display !== 'none' && !_ctxMenu.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener('scroll', () => closeCtxMenu(), true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtxMenu(); });
+}
+
+function openCtxMenu(pageX, pageY, items) {
+  _ctxMenu.innerHTML = items.map((it, i) => it.sep
+    ? '<div class="cal-ctx-sep"></div>'
+    : `<button type="button" class="cal-ctx-opt" data-i="${i}"${it.disabled ? ' disabled' : ''}>
+        <i class="ti ${it.icon}"></i><span>${_esc(it.label)}</span>${it.sub ? `<span class="ctx-sub">${_esc(it.sub)}</span>` : ''}
+      </button>`
+  ).join('');
+  _ctxMenu.querySelectorAll('.cal-ctx-opt').forEach(b => {
+    const it = items[parseInt(b.dataset.i, 10)];
+    if (it && !it.disabled) b.addEventListener('click', ev => { ev.stopPropagation(); closeCtxMenu(); it.onClick(); });
+  });
+  _ctxMenu.style.display = 'block';
+  const mw = _ctxMenu.offsetWidth, mh = _ctxMenu.offsetHeight;
+  let left = pageX, top = pageY;
+  if (left + mw > window.scrollX + window.innerWidth)  left = window.scrollX + window.innerWidth - mw - 8;
+  if (top + mh > window.scrollY + window.innerHeight)  top  = window.scrollY + window.innerHeight - mh - 8;
+  _ctxMenu.style.left = Math.max(window.scrollX + 4, left) + 'px';
+  _ctxMenu.style.top  = Math.max(window.scrollY + 4, top) + 'px';
+}
+
+function closeCtxMenu() { if (_ctxMenu) _ctxMenu.style.display = 'none'; }
+
+// Paste = insert a standalone copy of the source row on `newDate`. Re-fetches the
+// full row so every column carries over faithfully; strips identity/link/feedback
+// columns and detaches from any recurrence series.
+async function pasteEvtToDate(clip, newDate) {
+  if (!clip || !newDate) return;
+  const clubId = _clubId || await window.getClubId();
+  try {
+    if (clip.source === 'event') {
+      const { data: row, error: fe } = await window.sb.from('calendar_events').select('*').eq('id', clip.id).single();
+      if (fe || !row) throw new Error(fe?.message || 'Source not found.');
+      const payload = { ...row };
+      delete payload.id; delete payload.created_at; delete payload.updated_at;
+      payload.date = newDate;
+      payload.recurrence_group_id = null;
+      payload.published = false;
+      payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
+      payload.sort_order = payload.start_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
+      const { error } = await window.sb.from('calendar_events').insert(payload);
+      if (error) throw error;
+    } else {
+      const { data: row, error: fe } = await window.sb.from('training_sessions').select('*').eq('id', clip.id).single();
+      if (fe || !row) throw new Error(fe?.message || 'Source not found.');
+      const payload = { ...row };
+      delete payload.id; delete payload.created_at; delete payload.updated_at;
+      delete payload.external_activity_id;  // GPS link is 1:1 (unique) — never copy it
+      delete payload.rpe_avg;               // real feedback belongs to the original session
+      payload.session_date = newDate;
+      payload.recurrence_group_id = null;
+      payload.published = false;
+      payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
+      payload.sort_order = payload.session_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
+      const { error } = await window.sb.from('training_sessions').insert(payload);
+      if (error) throw error;
+    }
+    showCalToast(tt('calendar.ctx_pasted','Event pasted.'));
+    await loadSessions();
+    await refreshRibbonMatches();
+  } catch (e) {
+    showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:e.message || e}));
+  }
+}
 
 // Remove a day_off marker on a date (calendar_events or training_sessions, by source)
 async function removeDayOffOnDate(dateStr) {
