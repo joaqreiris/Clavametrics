@@ -557,23 +557,27 @@ function ttLocale() {
   const [club, clubId] = await Promise.all([window.getClub(), window.getClubId()]);
   if (club) window.applyClubTheme();
 
+  const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
   const { data: pms } = await window.sb.from('payment_methods')
     .select('brand,last4,exp_month,exp_year,is_default')
     .eq('club_id', clubId)
     .order('is_default', { ascending: false })
-    .limit(2);
+    .limit(4);
 
-  const { data: subs } = await window.sb.from('subscriptions')
-    .select('status,billing_cycle,current_period_end,plans(name,price_monthly)')
+  const { data: teams } = await window.sb.from('teams')
+    .select('id,name').eq('club_id', clubId).order('name');
+
+  const { data: allSubs } = await window.sb.from('subscriptions')
+    .select('team_id,status,is_comp,current_period_end,plans(slug,name,price_monthly)')
     .eq('club_id', clubId)
-    .limit(1)
-    .maybeSingle();
+    .in('status', ['active', 'trialing', 'past_due', 'paused']);
 
   const { data: invs } = await window.sb.from('invoices')
     .select('invoice_number,amount,status,paid_at,created_at')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(6);
 
   function render() {
     const loc = ttLocale();
@@ -584,71 +588,121 @@ function ttLocale() {
       ctxEl.innerHTML = `<strong>${club.name}</strong> ${tt('billing.ctx_overview', 'billing overview')}`;
     }
 
-    // ── KPIs from clubs.billing_* ────────────────────────────
-    if (club) {
-      const amtEl  = document.querySelector('.bl-kpis .bl-kpi:nth-child(1) .bl-kpi-v');
-      const dateEl = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-v');
-      const dateT  = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-t');
+    // ── Agregados reales (por categoría) ──────────────────────
+    const teamList = teams || [];
+    const subByTeam = {}; (allSubs || []).forEach(s => { subByTeam[s.team_id] = s; });
+    const paid = (allSubs || []).filter(s => !s.is_comp && s.plans && Number(s.plans.price_monthly) > 0);
+    const total = paid.reduce((a, s) => a + Number(s.plans.price_monthly || 0), 0);
+    const nextEnd = paid.map(s => s.current_period_end).filter(Boolean).sort()[0] || null;
+    const pm = (pms || [])[0];
+    const fmtD  = d => { try { return new Date(d).toLocaleDateString(loc, { month:'short', day:'numeric' }); } catch(_) { return '—'; } };
+    const fmtDL = d => { try { return new Date(d).toLocaleDateString(loc, { year:'numeric', month:'short', day:'numeric' }); } catch(_) { return '—'; } };
+    const money = n => '$' + Number(n||0).toLocaleString(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const pillClass = slug => (slug==='full'||slug==='professional') ? 't-pro' : slug==='basic' ? 't-basic' : 't-free';
 
-      if (amtEl && club.billing_amount != null) {
-        amtEl.innerHTML = `$${(+club.billing_amount).toLocaleString(loc, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}<sub>USD</sub>`;
-      }
-      if (dateEl && club.billing_next_date) {
-        const d = new Date(club.billing_next_date);
-        const label = d.toLocaleDateString(loc, { month: 'short', day: 'numeric' });
-        dateEl.textContent = label;
-        const daysLeft = Math.round((d - new Date()) / 86400000);
-        if (dateT && daysLeft >= 0) dateT.textContent = tt('billing.in_days', `in ${daysLeft} days · auto-charged`, { count: daysLeft });
-      }
+    // Banner near-limit: sin lógica real → ocultar
+    const banner = document.querySelector('.bl-banner'); if (banner) banner.style.display = 'none';
+    // Contadores inventados de los tabs (38 / 2 / $120) → quitar
+    document.querySelectorAll('.bl-tabs .ct').forEach(e => e.remove());
+
+    // ── KPI 1: Monthly total (real) ──
+    const k1v = document.querySelector('.bl-kpis .bl-kpi:nth-child(1) .bl-kpi-v');
+    const k1t = document.querySelector('.bl-kpis .bl-kpi:nth-child(1) .bl-kpi-t');
+    if (k1v) k1v.innerHTML = `$${Math.round(total)}<sub>USD</sub>`;
+    if (k1t) k1t.style.display = 'none';                    // sin dato de "vs last month"
+
+    // ── KPI 2: Next invoice (real) ──
+    const k2v = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-v');
+    const k2t = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-t');
+    if (k2v) k2v.textContent = nextEnd ? fmtD(nextEnd) : '—';
+    if (k2t) { k2t.removeAttribute('data-i18n'); k2t.textContent = nextEnd ? tt('billing.next_hint_real','auto-charged') : tt('billing.no_upcoming','No upcoming charges'); }
+
+    // ── KPI 3: Method (real payment_methods) ──
+    const k3v = document.querySelector('.bl-kpis .bl-kpi:nth-child(3) .bl-kpi-v');
+    const k3t = document.querySelector('.bl-kpis .bl-kpi:nth-child(3) .bl-kpi-t');
+    if (k3v) k3v.textContent = pm ? `${(pm.brand||'Card')} ··${pm.last4||'——'}` : tt('billing.no_card','No card on file');
+    if (k3t) {
+      k3t.removeAttribute('data-i18n');
+      if (pm && pm.exp_month) { const mo=String(pm.exp_month).padStart(2,'0'), yr=String(pm.exp_year).slice(-2); k3t.textContent = tt('billing.expires_short',`expires ${mo} / ${yr}`,{ mo, yr }); }
+      else k3t.style.display = 'none';
     }
 
-    // ── Payment method ────────────────────────────────────────
-    if (pms?.length) {
-      const pm = pms[0];
-      const brand = (pm.brand || 'CARD').toUpperCase();
-      const mo = String(pm.exp_month || '').padStart(2, '0');
-      const yr = String(pm.exp_year || '').slice(-2);
-      document.querySelector('.bl-pm-brand')         && (document.querySelector('.bl-pm-brand').textContent = brand);
-      document.querySelector('.bl-pm-info .num')     && (document.querySelector('.bl-pm-info .num').textContent = `···· ···· ···· ${pm.last4 || '——'}`);
-      document.querySelector('.bl-pm-info .exp')     && (document.querySelector('.bl-pm-info .exp').textContent = tt('billing.expires_short', `expires ${mo} / ${yr}`, { mo, yr }));
-      const kpiMethod = document.querySelector('.bl-kpis .bl-kpi:nth-child(3) .bl-kpi-v');
-      if (kpiMethod) kpiMethod.textContent = `${brand} ··${pm.last4 || '——'}`;
+    // ── KPI 4: Credits → ocultar (sin fuente real) ──
+    const k4 = document.querySelector('.bl-kpis .bl-kpi:nth-child(4)'); if (k4) k4.style.display = 'none';
+
+    // ── Tabla de categorías (una fila por equipo, datos reales) ──
+    const tbody = document.getElementById('blCatBody');
+    if (tbody && teamList.length) {
+      tbody.innerHTML = teamList.map(t => {
+        const s = subByTeam[t.id]; const plan = s && s.plans ? s.plans : null;
+        const slug = plan?.slug || 'initiation';
+        const name = plan?.name || tt('billing.free_plan','Free');
+        const price = Number(plan?.price_monthly || 0);
+        const isComp = !!(s && s.is_comp);
+        const statusHtml = !s
+          ? `<span class="status"><span class="dot"></span>${tt('billing.status_free','Free')}</span>`
+          : isComp ? `<span class="status ok"><span class="dot"></span>${tt('billing.status_comp','Complimentary')}</span>`
+          : s.status==='past_due' ? `<span class="status danger"><span class="dot"></span>${tt('billing.status_past_due','Payment failed')}</span>`
+          : `<span class="status ok"><span class="dot"></span>${tt('billing.status_active','Active')}</span>`;
+        const next = (s && !isComp && s.current_period_end) ? fmtD(s.current_period_end) : '—';
+        const amt = (isComp || !price) ? '$0.00' : money(price);
+        const action = isComp
+          ? `<button class="cm-btn is-ghost is-sm" disabled title="${_esc(tt('billing.comp_note','Complimentary — managed by ClavaMetrics'))}"><i class="ti ti-gift"></i></button>`
+          : `<a class="cm-btn is-outline is-sm" href="Plan%20Picker.html?team=${encodeURIComponent(t.id)}"><i class="ti ${s?'ti-arrows-exchange':'ti-arrow-up'}" style="font-size:13px"></i><span>${s?tt('billing.change','Change'):tt('billing.upgrade','Upgrade')}</span></a>`;
+        return `<tr>
+          <td><div class="cat-cell"><div class="ic"><i class="ti ti-ball-football"></i></div><div><div class="name">${_esc(t.name||'')}</div></div></div></td>
+          <td><span class="pill ${pillClass(slug)}">${_esc(name)}</span></td>
+          <td>${statusHtml}</td>
+          <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${next}</span></td>
+          <td class="r">${amt}</td>
+          <td class="r"><div class="actions-cell">${action}</div></td>
+        </tr>`;
+      }).join('');
+      const totalEl = document.getElementById('blCatTotal'); if (totalEl) totalEl.textContent = money(total);
+      const subEl = document.querySelector('.bl-card .sub[data-i18n="billing.card_categories_sub"]');
+      if (subEl) { subEl.removeAttribute('data-i18n'); subEl.textContent = tt('billing.cats_count','{n} categories · billed separately',{ n: teamList.length }); }
+      const combEl = document.querySelector('.bl-cats tfoot td[data-i18n="billing.combined_monthly"]');
+      if (combEl) { combEl.removeAttribute('data-i18n'); combEl.textContent = tt('billing.combined_monthly_real','Combined monthly'); }
     }
 
-    // ── Subscription + plan (plan name is canonical data) ─────
-    if (subs?.plans) {
-      const planBadge = document.querySelector('.pill.t-pro, .pill.t-basic, .pill.t-free');
-      if (planBadge) {
-        const n = subs.plans.name || '';
-        const cls = n.toLowerCase().includes('pro') ? 't-pro' : n.toLowerCase().includes('basic') ? 't-basic' : 't-free';
-        planBadge.className = `pill ${cls}`;
-        planBadge.textContent = n;
-      }
+    // ── Next invoice card (derecha) ──
+    const niSub = document.querySelector('.bl-card .sub[data-i18n="billing.next_invoice_sub"]');
+    if (niSub) { niSub.removeAttribute('data-i18n'); niSub.textContent = nextEnd ? tt('billing.auto_renews','auto-renews {date}',{ date: fmtD(nextEnd) }) : tt('billing.no_upcoming','No upcoming charges'); }
+    const niAmt = document.querySelector('.bl-next-amt'); if (niAmt) niAmt.innerHTML = `${money(total)}<sub>USD</sub>`;
+    const niDate = document.querySelector('.bl-next-date');
+    if (niDate) niDate.innerHTML = nextEnd ? `${tt('billing.next_due','due')} <strong>${fmtDL(nextEnd)}</strong>` : `<span style="color:var(--cm-fg-muted)">${tt('billing.no_upcoming','No upcoming charges')}</span>`;
+    const niLines = document.querySelector('.bl-next-lines');
+    if (niLines) niLines.innerHTML =
+      `<div class="bl-next-line"><span><strong>${tt('billing.cats_count','{n} categories',{ n: teamList.length })}</strong> <span>${tt('billing.next_line_renewal','· subscription renewal')}</span></span><span class="v">${money(total)}</span></div>`
+      + `<div class="bl-next-line total"><span>${tt('billing.estimated_total','Estimated total')}</span><span class="v">${money(total)}</span></div>`;
+
+    // ── Payment method card ──
+    const pmBrandEl = document.querySelector('.bl-pm-brand');
+    const pmCard = pmBrandEl ? pmBrandEl.closest('.bl-card') : null;
+    if (pm) {
+      const mo = String(pm.exp_month || '').padStart(2, '0'); const yr = String(pm.exp_year || '').slice(-2);
+      if (pmBrandEl) pmBrandEl.textContent = (pm.brand || 'CARD').toUpperCase();
+      const nu = document.querySelector('.bl-pm-info .num'); if (nu) nu.textContent = `···· ···· ···· ${pm.last4 || '——'}`;
+      const ex = document.querySelector('.bl-pm-info .exp'); if (ex) { ex.removeAttribute('data-i18n'); ex.textContent = tt('billing.expires_short', `expires ${mo} / ${yr}`, { mo, yr }); }
+      const ho = document.querySelector('.bl-pm-info .holder'); if (ho) ho.style.display = 'none';   // sin dato real del titular
+      if (pmCard) { const bk = pmCard.querySelector('[data-i18n="billing.pm_backup"]'); if (bk && bk.parentElement) bk.parentElement.style.display = 'none'; }
+    } else if (pmCard) {
+      pmCard.style.display = 'none';   // sin tarjeta → ocultar la card
     }
 
-    // ── Recent invoices ───────────────────────────────────────
-    if (invs?.length) {
-      const feed = document.querySelector('.bl-act');
-      if (feed) {
-        const fmtDate = s => new Date(s).toLocaleDateString(loc, { month: 'short', day: 'numeric' });
+    // ── Activity feed (invoices reales; si no hay, estado vacío) ──
+    const feed = document.querySelector('.bl-act');
+    if (feed) {
+      if (invs && invs.length) {
         feed.innerHTML = invs.map(inv => {
           const isPaid = inv.status === 'paid';
           const icCls  = isPaid ? 'ok' : inv.status === 'failed' ? 'warn' : '';
           const icon   = isPaid ? 'ti-check' : inv.status === 'failed' ? 'ti-x' : 'ti-clock';
-          const label  = isPaid
-            ? `<strong>${tt('billing.act_invoice_paid', 'Invoice paid')}</strong>`
-            : `<strong>${tt('billing.act_invoice_status', `Invoice ${inv.status}`, { status: inv.status })}</strong>`;
-          const date   = fmtDate(inv.paid_at || inv.created_at);
-          const amt    = '$' + (+inv.amount).toLocaleString(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-          return `<div class="bl-act-item">
-            <div class="bl-act-ic ${icCls}"><i class="ti ${icon}"></i></div>
-            <div class="bl-act-body">
-              <div class="l">${label} · ${inv.invoice_number || '—'}</div>
-              <div class="meta">${date}</div>
-            </div>
-            <div class="bl-act-amt">−${amt}</div>
-          </div>`;
+          const label  = isPaid ? `<strong>${tt('billing.act_invoice_paid','Invoice paid')}</strong>` : `<strong>${tt('billing.act_invoice_status','Invoice {status}',{ status: inv.status })}</strong>`;
+          return `<div class="bl-act-item"><div class="bl-act-ic ${icCls}"><i class="ti ${icon}"></i></div><div class="bl-act-body"><div class="l">${label} · ${inv.invoice_number || '—'}</div><div class="meta">${fmtD(inv.paid_at || inv.created_at)}</div></div><div class="bl-act-amt">−${money(inv.amount)}</div></div>`;
         }).join('');
+      } else {
+        feed.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font-size:13px">${tt('billing.activity_none','No recent billing activity.')}</div>`;
       }
     }
   }
@@ -672,60 +726,5 @@ function ttLocale() {
   }
 </script>
 
-<script>
-// ── Tabla de categorías con datos REALES (una fila por equipo del club) ──
-// Cada fila muestra el plan/estado/próximo cobro reales y un botón "Cambiar plan"
-// que lleva al Plan Picker apuntando a ESA categoría (?team=<id>).
-(async function(){
-  const T = (k,f,v)=> (typeof tt==='function') ? tt(k,f,v) : f;
-  const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  try{
-    if(!window.sb) return;
-    const clubId = await window.getClubId(); if(!clubId) return;
-    const tbody = document.getElementById('blCatBody'); if(!tbody) return;
-    const [teamsR, subsR] = await Promise.all([
-      window.sb.from('teams').select('id,name').eq('club_id', clubId).order('name'),
-      window.sb.from('subscriptions').select('team_id,status,is_comp,current_period_end,plans(slug,name,price_monthly)').eq('club_id', clubId).in('status',['active','trialing','past_due','paused']),
-    ]);
-    const teams = teamsR.data || [];
-    if(!teams.length) return;   // deja el fallback si no hay equipos
-    const subByTeam = {}; (subsR.data||[]).forEach(s=>{ subByTeam[s.team_id] = s; });
-    const lang = (window.CM_I18N && CM_I18N.current) || 'en';
-    const fmtD = d => { try{ return new Date(d).toLocaleDateString(lang,{month:'short',day:'numeric'}); }catch(_){ return '—'; } };
-    const pillClass = slug => (slug==='full'||slug==='professional') ? 't-pro' : slug==='basic' ? 't-basic' : 't-free';
-    let total = 0;
-    tbody.innerHTML = teams.map(t=>{
-      const s = subByTeam[t.id];
-      const plan = s && s.plans ? s.plans : null;
-      const slug = plan?.slug || 'initiation';
-      const name = plan?.name || T('billing.free_plan','Free');
-      const price = Number(plan?.price_monthly || 0);
-      const isComp = !!(s && s.is_comp);
-      if (s && !isComp && price) total += price;
-      const statusHtml = !s
-        ? `<span class="status"><span class="dot"></span>${T('billing.status_free','Free')}</span>`
-        : isComp ? `<span class="status ok"><span class="dot"></span>${T('billing.status_comp','Complimentary')}</span>`
-        : s.status==='past_due' ? `<span class="status danger"><span class="dot"></span>${T('billing.status_past_due','Payment failed')}</span>`
-        : `<span class="status ok"><span class="dot"></span>${T('billing.status_active','Active')}</span>`;
-      const next = (s && !isComp && s.current_period_end) ? fmtD(s.current_period_end) : '—';
-      const amt = (isComp || !price) ? '$0.00' : '$'+price.toFixed(2);
-      const action = isComp
-        ? `<button class="cm-btn is-ghost is-sm" disabled title="${esc(T('billing.comp_note','Cortesía — gestionada por ClavaMetrics'))}"><i class="ti ti-gift"></i></button>`
-        : `<a class="cm-btn is-outline is-sm" href="Plan%20Picker.html?team=${encodeURIComponent(t.id)}"><i class="ti ${s?'ti-arrows-exchange':'ti-arrow-up'}" style="font-size:13px"></i><span>${s?T('billing.change','Change'):T('billing.upgrade','Upgrade')}</span></a>`;
-      return `<tr>
-        <td><div class="cat-cell"><div class="ic"><i class="ti ti-ball-football"></i></div><div><div class="name">${esc(t.name||'')}</div></div></div></td>
-        <td><span class="pill ${pillClass(slug)}">${esc(name)}</span></td>
-        <td>${statusHtml}</td>
-        <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${next}</span></td>
-        <td class="r">${amt}</td>
-        <td class="r"><div class="actions-cell">${action}</div></td>
-      </tr>`;
-    }).join('');
-    const totalEl = document.getElementById('blCatTotal'); if(totalEl) totalEl.textContent = '$'+total.toFixed(2);
-    const subEl = document.querySelector('.bl-card .sub[data-i18n="billing.card_categories_sub"]');
-    if(subEl){ subEl.removeAttribute('data-i18n'); subEl.textContent = T('billing.cats_count','{n} categories · billed separately',{ n: teams.length }); }
-  }catch(e){ /* si algo falla, queda el contenido de fallback */ }
-})();
-</script>
 </body>
 </html>
