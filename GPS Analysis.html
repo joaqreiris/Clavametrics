@@ -947,6 +947,7 @@
             <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i><span data-i18n="gps_analysis.gps_settings">GPS settings</span></button>
             <button class="cm-btn is-ghost is-sm" id="gpCatalogBtn"><i class="ti ti-list" style="font-size:14px"></i><span data-i18n="gps_analysis.metrics_catalog">Metrics catalog</span></button>
           </div>
+          <button class="cm-btn is-ghost is-sm" id="gpRefreshBtn" title="Refresh data" data-i18n-attr="title:gps_analysis.refresh_hint"><i class="ti ti-refresh" style="font-size:14px"></i><span data-i18n="gps_analysis.refresh">Refresh</span></button>
           <button class="cm-btn is-ghost is-sm" id="gpGearBtn" title="Setup & configuration" data-i18n-attr="title:gps_analysis.setup_configuration"><i class="ti ti-settings" style="font-size:14px"></i><span data-i18n="gps_analysis.settings">Settings</span></button>
           <button class="cm-btn is-ghost is-sm" id="gpManualBtn" data-i18n-attr="title:gps_analysis.manual_gps_hint" title="Add missing GPS data manually or from the team average"><i class="ti ti-pencil-plus" style="font-size:14px"></i><span data-i18n="gps_analysis.manual_gps">Manual data</span></button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="common.export">Export</span></button>
@@ -3452,6 +3453,23 @@ document.querySelectorAll('.gp-view').forEach(view => {
 
 // ── 0. Settings (⚙) menu — consolidates the setup actions (data sources, GPS settings,
 //       metrics catalog). Items delegate to the hidden buttons so handlers stay intact.
+// ── Refresh: re-trae los datos GPS sin recargar el navegador ─────────────────────────
+// Invalida el cache del resolver + recarga las opciones del filterbar (fechas/sesiones que
+// hayan entrado por un sync) + re-renderiza las cards. Ícono girando mientras corre.
+const gpRefreshBtn = document.getElementById('gpRefreshBtn');
+gpRefreshBtn?.addEventListener('click', async () => {
+  if (gpRefreshBtn.disabled) return;
+  const ic = gpRefreshBtn.querySelector('i');
+  gpRefreshBtn.disabled = true; if (ic) ic.style.animation = 'gp-spin 1s linear infinite';
+  try {
+    window.cmInvalidateGpsCache?.();
+    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.refreshDashboard?.(); } catch {}
+    showToast(tt('gps_analysis.refreshed', 'Data refreshed'));
+  } catch (e) { showToast(tt('gps_analysis.refresh_failed', 'Refresh failed'), true); }
+  finally { gpRefreshBtn.disabled = false; if (ic) ic.style.animation = ''; }
+});
+
 const gpGearBtn = document.getElementById('gpGearBtn');
 gpGearBtn?.addEventListener('click', e => {
   e.stopPropagation();
