@@ -438,6 +438,7 @@
             <button class="gp-sec-toggle no-print" title="Hide section" onclick="gpToggleSection('main', this)"><i class="ti ti-eye"></i></button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
+            <span id="gpMainAutoDur" title="" style="display:none;font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-accent);white-space:nowrap"></span>
             <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
           </div>
         </div>
@@ -517,6 +518,28 @@ function _gpAddDays(dateStr, n) {
   return d.toISOString().split('T')[0];
 }
 
+// Parse a work/rest field to seconds. Accepts "30" / "30s" (seconds, the default),
+// "2 min" / "2m" / "2'" (minutes) and "1:30" (mm:ss). Non-numeric → 0.
+function gpParseSec(str) {
+  if (!str) return 0;
+  const s = ('' + str).trim().toLowerCase().replace(',', '.');
+  const mmss = s.match(/^(\d+):(\d{1,2})$/);
+  if (mmss) return parseInt(mmss[1]) * 60 + parseInt(mmss[2]);
+  const num = parseFloat((s.match(/-?\d+(?:\.\d+)?/) || [])[0]);
+  if (!isFinite(num) || num < 0) return 0;
+  const isMin = (/min|'/.test(s) || /\dm$/.test(s)) && !/\ds/.test(s);
+  return Math.round(num * (isMin ? 60 : 1));
+}
+// Format a duration in seconds as "Xm Ys" / "X min" / "Ys".
+function gpFmtDur(sec) {
+  if (!sec) return '';
+  const u = tt('gym_planner.unit_min', 'min');
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m && s) return `${m} ${u} ${s}s`;
+  if (m) return `${m} ${u}`;
+  return `${s}s`;
+}
+
 // ── Totals recalc (derived live from DOM table rows + duration inputs) ───
 function gpRecalcTotals() {
   const warmupBody = document.getElementById('gpWarmupBlocks');
@@ -537,7 +560,7 @@ function gpRecalcTotals() {
   // Reps "/leg" are doubled (both legs counted). "22 kg·DB" → 22 kg.
   // Avg %1RM: mean of .pct spans whose text matches "\d+%".
   const mainRows = mainBody ? mainBody.querySelectorAll('tr').length : 0;
-  let mainSets = 0, tonnage = 0;
+  let mainSets = 0, tonnage = 0, hiitSec = 0;
   const pctValues = [];
   if (mainBody) {
     [...mainBody.querySelectorAll('tr')].forEach(tr => {
@@ -549,7 +572,15 @@ function gpRecalcTotals() {
       // count leading sets/rounds; CARDIO has no discrete sets. Keeps totals meaningful.
       const mode = gpGetMode(tr);
       if (mode !== 'SR') {
-        if (mode !== 'CARDIO') { const sm = srVal.match(/(\d+)/); if (sm) mainSets += parseInt(sm[1]); }
+        if (mode === 'CARDIO') return;
+        const n = parseInt((srVal.match(/(\d+)/) || [])[1] || '0');   // sets / rounds
+        if (n) mainSets += n;
+        // HIIT time = rounds × (work + rest), including rests. Rest lives in the loss input.
+        if (mode === 'HIIT' && n) {
+          const work = gpParseSec(loadVal);
+          const rest = gpParseSec(tr.querySelector('.gp-vbt-loss')?.value || '');
+          if (work || rest) hiitSec += n * (work + rest);
+        }
         return;
       }
 
@@ -585,6 +616,23 @@ function gpRecalcTotals() {
     ? Math.round(pctValues.reduce((a, b) => a + b, 0) / pctValues.length)
     : null;
   const mainMin = parseInt(document.getElementById('gpMainMin')?.value) || 0;
+  // HIIT-derived duration (rounds × work+rest). Auto-fills the Main-work duration when the
+  // coach hasn't typed one; a manual value always wins. Stays live (never written to the input).
+  const hiitMin = hiitSec ? Math.max(1, Math.round(hiitSec / 60)) : 0;
+  const effMainMin = mainMin || hiitMin;
+  const mainAutoEl = document.getElementById('gpMainAutoDur');
+  if (mainAutoEl) {
+    if (hiitSec) {
+      mainAutoEl.style.display = '';
+      mainAutoEl.textContent = '≈ ' + gpFmtDur(hiitSec);
+      mainAutoEl.title = tt('gym_planner.hiit_time_hint', 'HIIT total time (work + rests)');
+    } else {
+      mainAutoEl.style.display = 'none';
+      mainAutoEl.textContent = '';
+    }
+  }
+  const mainMinInput = document.getElementById('gpMainMin');
+  if (mainMinInput) mainMinInput.placeholder = hiitMin ? String(hiitMin) : '—';
 
   // ── Plyometrics: row count, sum Contacts col (col 4) ──
   const plyoRows     = plyoBody ? plyoBody.querySelectorAll('tr').length : 0;
@@ -613,7 +661,7 @@ function gpRecalcTotals() {
   if (elPl)  elPl.innerHTML  = plyoMin ? `${plyoMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (plyoRows ? `${plyoRows}` : '—');
   if (elPlD) elPlD.textContent = plyoRows ? `${tt('gym_planner.n_jumps', `${plyoRows} jumps`, { count:plyoRows })} · ${tt('gym_planner.n_contacts', `${plyoContacts} contacts`, { count:plyoContacts })}` : '';
 
-  if (elMw)  elMw.innerHTML  = mainMin ? `${mainMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (mainRows ? `${mainRows}` : '—');
+  if (elMw)  elMw.innerHTML  = effMainMin ? `${effMainMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (mainRows ? `${mainRows}` : '—');
   if (elMwD) elMwD.textContent = mainRows ? `${tt('gym_planner.n_exercises', `${mainRows} exercises`, { count:mainRows })} · ${tt('gym_planner.n_sets', `${mainSets} sets`, { count:mainSets })}` : '';
 
   if (elTon)  elTon.innerHTML  = tonnage ? `${Math.round(tonnage).toLocaleString(numLoc)}<sub>kg</sub>` : '—<sub>kg</sub>';
@@ -634,6 +682,7 @@ function gpRecalcTotals() {
 
   const _mwParts = [tt('gym_planner.n_exercises', `${mainRows} exercises`, { count:mainRows }), tt('gym_planner.n_sets', `${mainSets} sets`, { count:mainSets })];
   if (mainMin) _mwParts.push(_min(mainMin));
+  else if (hiitMin) _mwParts.push(_min(hiitMin) + ' ' + tt('gym_planner.auto_suffix', '(auto)'));
   if (mainCt) mainCt.textContent = mainRows ? _mwParts.join(' · ') : '—';
 
   gpUpdateAu();
@@ -2863,6 +2912,13 @@ function gpRenderPrintSheet() {
     // MAIN WORK — cards. Linked rows (tr.dataset.link) render as one superset block.
     const mainRows = readRows('gpMainBody').filter(r=>r.name);
     const mSets = kv(g('gpTotMain')), mTon = kv(g('gpTotTonnage'));
+    // HIIT total time (rounds × work+rest) for the section title.
+    const mainHiitSec = mainRows.reduce((s,r)=>{
+      if (r.mode !== 'HIIT') return s;
+      const n = parseInt((r.c3.match(/\d+/) || [])[0] || '0'); if (!n) return s;
+      const w = gpParseSec(r.c4), rst = gpParseSec(r.c5);
+      return s + ((w||rst) ? n*(w+rst) : 0);
+    }, 0);
     const mainCardHtml = r => {
       const m = r.mode || 'SR';
       const params=[];
@@ -2903,7 +2959,7 @@ function gpRenderPrintSheet() {
       else mainCells.push(mainCardHtml(r));
     }
     const mainBlock = (!_mainHidden && mainRows.length) ? `<div style="margin-bottom:16px">
-      ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
+      ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}${mainHiitSec?` · ${gpFmtDur(mainHiitSec)}`:''}`)}
       <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${mainCells.join('')}</div>
     </div>` : '';
 
