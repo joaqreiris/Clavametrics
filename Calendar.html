@@ -5358,8 +5358,12 @@ function showMatchPopover(anchor, items) {
     const editEvtBtn = item.id
       ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${item.id}"><i class="ti ti-edit" style="font-size:11px"></i>${tt('calendar.edit_event_btn','Edit event')}</button>`
       : '';
+    const rowCrest = item.crestUrl
+      ? `<img src="${item.crestUrl}" style="width:18px;height:18px;border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--cm-bg-soft)" onerror="this.style.display='none'" alt="">`
+      : `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--cm-bg-soft);flex-shrink:0"><i class="ti ti-ball-football" style="font-size:11px;color:var(--cm-fg-faint)"></i></span>`;
     return `<div style="padding:10px 12px;${border}">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+        ${rowCrest}
         <span style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">vs ${_esc(item.rival)}</span>
         <span style="display:inline-flex;align-items:center;gap:3px;height:17px;padding:0 5px;border-radius:3px;font:600 9px/1 var(--cm-font-mono);background:${haBg};color:${haClr};border:1px solid ${haBd}"><i class="ti ${haIcon}" style="font-size:9px"></i>${haLbl}</span>
       </div>
