@@ -692,9 +692,66 @@
   </main>
 </div>
 
+<!-- Modal de confirmación ClavaMetrics (reemplaza al confirm() del navegador) -->
+<style>
+  .pp-modal{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:20px}
+  .pp-modal-card{background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:18px;max-width:440px;width:100%;padding:26px;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+  .pp-modal-icon{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--cm-accent) 15%,transparent);color:var(--cm-accent);font-size:24px;margin-bottom:14px}
+  .pp-modal-icon.is-danger{background:color-mix(in srgb,var(--cm-danger) 14%,transparent);color:var(--cm-danger)}
+  .pp-modal-card h3{margin:0 0 6px;font:700 18px/1.25 var(--cm-font-sans,inherit);color:var(--cm-fg-strong)}
+  .pp-modal-card p{margin:0;font-size:13.5px;line-height:1.5;color:var(--cm-fg-muted)}
+  .pp-modal-amt{margin:16px 0 2px;padding:12px 14px;border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-bg-soft,color-mix(in srgb,var(--cm-fg-strong) 4%,transparent));display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .pp-modal-amt .k{font-size:12px;color:var(--cm-fg-muted)}
+  .pp-modal-amt .v{font:700 20px/1 var(--cm-font-mono,monospace);color:var(--cm-fg-strong)}
+  .pp-modal-actions{display:flex;gap:10px;margin-top:20px}
+  .pp-modal-actions .cm-btn{flex:1;justify-content:center}
+</style>
+<div id="ppModal" class="pp-modal">
+  <div class="pp-modal-card" role="dialog" aria-modal="true">
+    <div class="pp-modal-icon" id="ppModalIcon"><i class="ti ti-arrow-up-right"></i></div>
+    <h3 id="ppModalTitle"></h3>
+    <p id="ppModalBody"></p>
+    <div class="pp-modal-amt" id="ppModalAmt" style="display:none">
+      <span class="k" id="ppModalAmtK"></span><span class="v" id="ppModalAmtV"></span>
+    </div>
+    <div class="pp-modal-actions">
+      <button class="cm-btn is-ghost" id="ppModalCancel" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary" id="ppModalOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ── i18n helper ─────────────────────────────────────
   function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+
+  // ── Modal de confirmación (reemplaza confirm() del navegador) ──────────────
+  // Devuelve Promise<boolean>. opts: { title, body, confirmText, danger, icon,
+  // amountLabel, amount }.
+  function ppConfirm(opts){
+    opts = opts || {};
+    return new Promise(resolve=>{
+      const m=document.getElementById('ppModal'); if(!m){ resolve(window.confirm(opts.body||'')); return; }
+      const iconWrap=document.getElementById('ppModalIcon');
+      iconWrap.className='pp-modal-icon'+(opts.danger?' is-danger':'');
+      iconWrap.innerHTML='<i class="ti '+(opts.icon||'ti-arrow-up-right')+'"></i>';
+      document.getElementById('ppModalTitle').textContent = opts.title||'';
+      document.getElementById('ppModalBody').textContent = opts.body||'';
+      const amt=document.getElementById('ppModalAmt');
+      if(opts.amount){ document.getElementById('ppModalAmtK').textContent=opts.amountLabel||''; document.getElementById('ppModalAmtV').textContent=opts.amount; amt.style.display=''; }
+      else { amt.style.display='none'; }
+      const ok=document.getElementById('ppModalOk'), cancel=document.getElementById('ppModalCancel');
+      ok.textContent=opts.confirmText||tt('common.confirm','Confirm');
+      cancel.textContent=tt('common.cancel','Cancel');
+      ok.className='cm-btn '+(opts.danger?'is-danger':'is-primary');
+      const close=(val)=>{ m.style.display='none'; ok.onclick=cancel.onclick=m.onclick=onKey=null; document.removeEventListener('keydown',onKeyRef); resolve(val); };
+      let onKey; const onKeyRef=(e)=>{ if(e.key==='Escape') close(false); else if(e.key==='Enter') close(true); };
+      ok.onclick=()=>close(true); cancel.onclick=()=>close(false);
+      m.onclick=(e)=>{ if(e.target===m) close(false); };
+      document.addEventListener('keydown',onKeyRef);
+      m.style.display='flex'; ok.focus();
+    });
+  }
 
   // ── Tier selection ──────────────────────────────────
   const tiers = document.querySelectorAll('#pp-tiers .pp-tier');
@@ -857,7 +914,8 @@
         const msg = when
           ? tt('plan_picker.cancel_confirm_date','Vas a cancelar la suscripción. Sigues con tu plan actual hasta el {date} y después pasas a Free. ¿Confirmas?', { date: when })
           : tt('plan_picker.cancel_confirm','Vas a cancelar la suscripción. Sigues con tu plan actual hasta fin del período pago y después pasas a Free. ¿Confirmas?');
-        if (!confirm(msg)) return;
+        const okC = await ppConfirm({ danger:true, icon:'ti-ban', title: tt('plan_picker.modal_cancel_title','Cancelar suscripción'), body: msg, confirmText: tt('plan_picker.cta_cancel','Cancel → Free') });
+        if (!okC) return;
         const { data:appl, error:aErr } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'cancel' } });
         if (aErr || appl?.error){ alert(tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.')); return; }
         window.location.href = 'Admin.html';
@@ -880,25 +938,31 @@
           alert(tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.'));
           return;
         } else {
-          let msg;
+          let copts;
           if (prev?.downgrade){
             const when = prev?.effective_at ? fmtDate(prev.effective_at) : '';
-            msg = when
-              ? tt('plan_picker.downgrade_confirm_date','Vas a bajar de plan. Sigues con tu plan actual hasta el {date} y ahí baja al nuevo (sin cargo ahora). ¿Confirmas?', { date: when })
-              : tt('plan_picker.downgrade_confirm','Vas a bajar de plan. El cambio se aplica a fin del período pago (sin cargo ahora). ¿Confirmas?');
+            copts = {
+              icon:'ti-arrow-down-right',
+              title: tt('plan_picker.modal_downgrade_title','Bajar de plan'),
+              body: when
+                ? tt('plan_picker.downgrade_confirm_date','Vas a bajar de plan. Sigues con tu plan actual hasta el {date} y ahí baja al nuevo (sin cargo ahora). ¿Confirmas?', { date: when })
+                : tt('plan_picker.downgrade_confirm','Vas a bajar de plan. El cambio se aplica a fin del período pago (sin cargo ahora). ¿Confirmas?'),
+              confirmText: tt('plan_picker.cta_downgrade','Schedule downgrade'),
+            };
           } else {
             const r = prev?.update_summary?.result;
+            const base = { icon:'ti-arrow-up-right', title: tt('plan_picker.modal_upgrade_title','Cambio de plan'), confirmText: tt('plan_picker.confirm_change','Confirm change') };
             if (r && r.amount != null){
               const amt = Number(r.amount)/100, curc = r.currency_code || 'USD';
               const money = curc + ' ' + Math.abs(amt).toFixed(2);
-              msg = amt >= 0
-                ? tt('plan_picker.change_charge','Se cobrará hoy {amt} (prorrateado). ¿Confirmas el cambio de plan?', { amt: money })
-                : tt('plan_picker.change_credit','Recibirás un crédito de {amt} (prorrateado). ¿Confirmas el cambio de plan?', { amt: money });
+              copts = amt >= 0
+                ? { ...base, body: tt('plan_picker.modal_charge_body','Se cobra hoy la diferencia prorrateada con tu plan actual. El cambio se aplica al instante.'), amountLabel: tt('plan_picker.due_today','A pagar hoy').replace(/\s*·\s*$/,''), amount: money }
+                : { ...base, body: tt('plan_picker.modal_credit_body','Se acredita este monto a tu próxima factura. El cambio se aplica al instante.'), amountLabel: tt('plan_picker.modal_credit_label','Crédito'), amount: money };
             } else {
-              msg = tt('plan_picker.change_confirm','¿Confirmas el cambio de plan? Se prorrateará la diferencia con tu plan actual.');
+              copts = { ...base, body: tt('plan_picker.change_confirm','¿Confirmas el cambio de plan? Se prorrateará la diferencia con tu plan actual.') };
             }
           }
-          if (!confirm(msg)) return;
+          if (!(await ppConfirm(copts))) return;
           const { data:appl, error:aErr } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, plan_slug: slug, cycle } });
           if (aErr || appl?.error){ alert(tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.')); return; }
           // Upgrade = plan activo YA: mostramos bienvenida. Downgrade = agendado, no.
@@ -1095,7 +1159,10 @@
           banner.style.display = '';
           const ub = document.getElementById('ppUndoBtn');
           if (ub) ub.onclick = async () => {
-            if (!confirm(_tt('plan_picker.undo_confirm','¿Deshacer el cambio agendado y seguir con tu plan actual?'))) return;
+            const okU = (typeof ppConfirm==='function')
+              ? await ppConfirm({ icon:'ti-arrow-back-up', title: _tt('plan_picker.modal_undo_title','Deshacer cambio'), body: _tt('plan_picker.undo_confirm','¿Deshacer el cambio agendado y seguir con tu plan actual?'), confirmText: _tt('plan_picker.sched_undo','Deshacer') })
+              : window.confirm(_tt('plan_picker.undo_confirm','¿Deshacer el cambio agendado y seguir con tu plan actual?'));
+            if (!okU) return;
             ub.disabled = true;
             try{
               const { data:r, error } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'undo' } });
