@@ -252,9 +252,13 @@
           <i class="ti ti-shield-check"></i>One-time token · expires in 12h
         </div>
       </div>
+      <div id="shareMsgWrap" style="display:none;">
+        <div class="tr-field-lab" data-i18n="rpe.shareMsgLabel">Message</div>
+        <textarea class="cm-textarea" id="shareMsg" rows="4" data-i18n-ph="rpe.shareMsgPh" placeholder="Write a message to send with the link…"></textarea>
+      </div>
     </div>
     <div class="tr-modal-foot">
-      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i><span data-i18n="rpe.copyLink">Copy link</span></button>
+      <button class="cm-btn is-outline" id="btnCopy" data-copy="#shareMsg" disabled><i class="ti ti-copy"></i><span data-i18n="rpe.copyMessage">Copy message</span></button>
       <button class="cm-btn" id="btnTg" style="background:#229ED9;border-color:#229ED9;color:#fff;" disabled><i class="ti ti-brand-telegram"></i><span data-i18n="rpe.shareViaTelegram">Telegram</span></button>
       <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i><span data-i18n="rpe.shareViaWhatsapp">WhatsApp</span></button>
     </div>
@@ -1054,7 +1058,17 @@
     const btnTg = document.getElementById('btnTg');
     const shareTeam = document.getElementById('shareTeam');
     const shareSession = document.getElementById('shareSession');
+    const shareMsg = document.getElementById('shareMsg');
+    const shareMsgWrap = document.getElementById('shareMsgWrap');
     let currentUrl = '';
+
+    // Pre-fill the editable message with the generated link (staff can tweak before sharing)
+    function composeMsg() {
+      if (!shareMsg) return '';
+      return tt('rpe.shareMsgBody',
+        'Good morning, here is the link to rate the session effort (RPE), from 1 to 10. If there is anything important to note, please describe it. Thanks.\n{url}',
+        { url: currentUrl });
+    }
 
     shareTeam.innerHTML = state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     const curTeam = activeTeamId();
@@ -1080,6 +1094,7 @@
         const sessLabel = shareSession.options[shareSession.selectedIndex].text;
         const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', 'linked by date, assign later');
         tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('rpe.secureLinkValid', 'Secure link · valid until revoked · ' + att, { att }));
+        if (shareMsg) { shareMsg.value = composeMsg(); shareMsgWrap.style.display = ''; }
         btnCopy.disabled = false; btnWa.disabled = false; btnTg.disabled = false;
       } catch (e) {
         console.warn('[RPE] share:', e && e.message);
@@ -1089,8 +1104,12 @@
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
     shareSession.addEventListener('change', () => { if (currentUrl) gen(); });
-    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp(tt('rpe.waShareLink', 'RPE: ' + currentUrl, { url: currentUrl })); });
-    btnTg.addEventListener('click', () => { if (currentUrl) window.open('https://t.me/share/url?url=' + encodeURIComponent(currentUrl) + '&text=' + encodeURIComponent(tt('rpe.tgShareLink', 'Session RPE')), '_blank'); });
+    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp((shareMsg && shareMsg.value.trim()) || tt('rpe.waShareLink', 'RPE: ' + currentUrl, { url: currentUrl })); });
+    btnTg.addEventListener('click', () => {
+      if (!currentUrl) return;
+      const body = ((shareMsg && shareMsg.value.trim().split(currentUrl).join('').trim()) || tt('rpe.tgShareLink', 'Session RPE'));
+      window.open('https://t.me/share/url?url=' + encodeURIComponent(currentUrl) + '&text=' + encodeURIComponent(body), '_blank');
+    });
   }
 
   /* ── Boot: auth guard → club → sessions/teams → wire → load ── */

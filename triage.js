@@ -149,7 +149,11 @@
       btn.addEventListener('click', () => {
         const sel = btn.getAttribute('data-copy');
         let text = sel;
-        if (sel.startsWith('#')) { const t = document.querySelector(sel); text = t ? t.textContent.trim() : ''; }
+        if (sel.startsWith('#')) {
+          const t = document.querySelector(sel);
+          const editable = t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT');
+          text = t ? (editable ? t.value : t.textContent).trim() : '';
+        }
         Triage.copy(text);
       });
     });
