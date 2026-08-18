@@ -2042,6 +2042,7 @@
     const rawAttrsBySess = {}; // session_id → { attrKey → [values seen] }
     let skippedCells = 0;
     let outlierCount = 0;
+    let speedSpikeCount = 0;
     const warnings   = [];
     const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const _rowKey    = r => `${r.player_id ?? '_'}__${r.session_id}`;
@@ -2130,6 +2131,12 @@
       const _maxM = window.GpsUnits?.OUTLIER_MAX_M ?? 25000;
       if (rec.total_distance != null && rec.total_distance > _maxM) { rec.is_invalid = true; outlierCount++; }
 
+      // Speed spike defense: max_speed (canonical km/h) at/above the human ceiling is
+      // a GPS glitch, not a sprint. NULL just that metric — the row's distance/accel
+      // are usually fine — so it never shows nor feeds Vmax.
+      const _maxKmh = window.GpsUnits?.MAX_SPEED_KMH ?? 40;
+      if (rec.max_speed != null && rec.max_speed >= _maxKmh) { rec.max_speed = null; speedSpikeCount++; }
+
       insertable.push(rec);
       // Overwrite on duplicate key (same as dedup keeps last row)
       if (extras.length) extrasMap[_rowKey(rec)] = extras;
@@ -2155,8 +2162,9 @@
     }
 
     if (outlierCount) warnings.push(`${outlierCount} row${outlierCount === 1 ? '' : 's'} flagged invalid (total_distance > ${((window.GpsUnits?.OUTLIER_MAX_M ?? 25000) / 1000)} km) — inserted but excluded from aggregates`);
+    if (speedSpikeCount) warnings.push(`${speedSpikeCount} row${speedSpikeCount === 1 ? '' : 's'} had an impossible max_speed (≥ ${(window.GpsUnits?.MAX_SPEED_KMH ?? 40)} km/h) — that value was cleared, the rest of the row was kept`);
 
-    return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount };
+    return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount, speedSpikeCount };
   }
 
   // ── Main import function ───────────────────────────────────

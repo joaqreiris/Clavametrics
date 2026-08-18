@@ -512,6 +512,12 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
         // canonical metres above the physical session max = noise. Insert but flag.
         const OUTLIER_MAX_M = 25000; // keep in sync with assets/gps-units.js
         const is_invalid = typeof core.total_distance === 'number' && core.total_distance > OUTLIER_MAX_M;
+        // Speed spike defense: max_speed (km/h) at/above the human ceiling is a GPS
+        // glitch (Catapult emits 45–82 km/h, or millions). NULL just that metric —
+        // the rest of the row is usually fine — so it never feeds Vmax. Keep in sync
+        // with assets/gps-units.js MAX_SPEED_KMH.
+        const MAX_SPEED_KMH = 40;
+        if (typeof core.max_speed === 'number' && core.max_speed >= MAX_SPEED_KMH) core.max_speed = null;
         recs.push({ club_id: clubId, session_id: sessionId, player_id: playerId, ...core, is_invalid });
         if (extras.length) extrasByPlayer.set(playerId, extras);
       }
@@ -573,6 +579,8 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
             const _mps = (_td != null && durationSeconds != null && durationSeconds > 0) ? _td / durationSeconds : null;
             const isSpeedOutlier = _mps != null && _mps > 13;
             if (isSpeedOutlier) r.flagged++;
+            // Same max_speed spike guard as the session level (keep in sync with 40 km/h).
+            if (typeof core.max_speed === 'number' && core.max_speed >= 40) core.max_speed = null;
 
             periodRecs.push({
               club_id: clubId, session_id: sessionId, player_id: playerId,

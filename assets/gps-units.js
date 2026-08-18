@@ -54,6 +54,14 @@
   // Such rows are still inserted but flagged is_invalid and excluded from aggregates.
   const OUTLIER_MAX_M = 25000; // 25 km
 
+  // max_speed (canonical km/h) at/above this is a GPS spike, not a real sprint
+  // (fastest footballer ever ≈ 38 km/h; 100 m WR peak ≈ 44.7). Catapult occasionally
+  // emits corrupt peaks (45–82 km/h, or millions). Unlike total_distance we do NOT
+  // invalidate the whole row — the distance/accel metrics are usually fine — we just
+  // NULL the bad max_speed so it neither shows nor feeds Vmax. Mirrored in
+  // assets/topup-calc.js (getPlayerVmax read-guard) and the two import paths.
+  const MAX_SPEED_KMH = 40;
+
   function kindOf(key) { return KIND[key] || null; }
 
   // Factor (× to canonical) for a declared source unit, by metric kind.
@@ -89,7 +97,7 @@
 
   const API = {
     KIND, DISTANCE_UNITS, SPEED_UNITS, DISTANCE_UNIT_LABELS, SPEED_UNIT_LABELS,
-    DISPLAY, OUTLIER_MAX_M,
+    DISPLAY, OUTLIER_MAX_M, MAX_SPEED_KMH,
     kindOf, factorFor, unitForFactor, suggestDistanceUnit, suggestSpeedUnit,
   };
   root.GpsUnits = API;
