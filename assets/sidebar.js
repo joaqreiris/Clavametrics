@@ -831,6 +831,10 @@ html.cm-rail .hub-nav-grip{display:none}
   let _chatUnread = {};
   let _chatRecent = {};
   let _chatProfiles = {};   // profile id → profile row, so the panel can show real names + photos
+  let _chatGroups = {};     // custom chat group id → { name }, so 'cg:<id>' convs show the group name
+
+  // Icono de canal/grupo (hash-bubble), reutilizado en todas las conversaciones no-DM.
+  const _HASH_AV = '<div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>';
 
   // Resolve a conversation peer by their profile id (DM keys ARE the sender's profile id).
   // Falls back to the message's stored sender_name (pre-onboarding email handle) when unknown.
@@ -848,6 +852,15 @@ html.cm-rail .hub-nav-grip{display:none}
     return `<div class="cm-ci-av">${_escHtml(ini)}</div>`;
   }
 
+  // Nombre + avatar de una conversación según su tipo. Los 4 tipos espejan a Chat & Tasks:
+  // canal club ('club'), canal equipo ('group'), grupo custom ('cg:<id>') y DM (profile id).
+  function _convDisplay(key, kind, fallback) {
+    if (kind === 'club') return { name: '# club', av: _HASH_AV };
+    if (kind === 'team') return { name: '# team', av: _HASH_AV };
+    if (kind === 'cg')   { const g = _chatGroups[String(key).slice(3)]; return { name: '# ' + (g ? g.name : 'group'), av: _HASH_AV }; }
+    return { name: _chatName(key, fallback), av: _chatAvHtml(key, fallback) };
+  }
+
   function _escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -863,66 +876,36 @@ html.cm-rail .hub-nav-grip{display:none}
   function _renderChatPanel() {
     const list = document.getElementById('cm-cp-list');
     if (!list) return;
-    const entries = Object.entries(_chatUnread).sort((a, b) => (b[1].lastAt || '') > (a[1].lastAt || '') ? 1 : -1);
-    // (sin return temprano: el historial se muestra debajo aunque no haya no leídos)
-    const dmEntries = entries.filter(([k]) => k !== 'group');
-    const grpEntry  = entries.find(([k]) => k === 'group');
-    let html = '';
-    if (dmEntries.length) {
-      html += `<div class="cm-cp-sect-lbl">Direct messages</div>`;
-      for (const [_k, d] of dmEntries) {
-        d._key = _k;
-        html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(d._key || '')}">
-          ${_chatAvHtml(_k, d.senderName)}
-          <div class="cm-ci-body">
-            <div class="cm-ci-name"><span>${_escHtml(_chatName(_k, d.senderName))}</span><span class="time">${_relTime(d.lastAt)}</span></div>
-            <div class="cm-ci-preview">${_escHtml((d.lastMsg || '').slice(0,40))}</div>
-          </div>
-          <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
-        </button>`;
-      }
+    // Una sola lista con TODAS las conversaciones (canal club, canal equipo, grupos custom
+    // y DMs), ordenada por recencia. _chatRecent tiene una entrada por conversación; el
+    // contador de no-leídos se toma de _chatUnread por la misma key.
+    const convs = Object.values(_chatRecent || {})
+      .map(r => ({ ...r, count: (_chatUnread[r.key] && _chatUnread[r.key].count) || 0 }))
+      .sort((a, b) => (b.lastAt || '') > (a.lastAt || '') ? 1 : -1)
+      .slice(0, 8);
+    if (!convs.length) {
+      list.innerHTML = '<div class="cm-cp-empty" data-i18n="shell.no_convs">No conversations</div>';
+      _applyI18n(list);
+      return;
     }
-    if (grpEntry) {
-      const d = grpEntry[1];
-      html += `<div class="cm-cp-sect-lbl">Team channel</div>`;
-      html += `<button class="cm-ci" data-chat-nav="1" data-conv="group">
-        <div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+    let html = `<div class="cm-cp-sect-lbl" data-i18n="shell.recent">Recent</div>`;
+    for (const r of convs) {
+      // For a thread I started, the stored sender_name is MINE — don't use it as the peer's
+      // fallback name; the key already points at the other person.
+      const fb = r.mine ? '' : r.senderName;
+      const d  = _convDisplay(r.key, r.kind, fb);
+      // Prefijo del preview: "You: " si es mío; en canales/grupos, el nombre de quién escribió.
+      let who = '';
+      if (r.mine) who = _ttx('shell.you_prefix', 'You: ');
+      else if (r.kind !== 'dm' && r.senderId) who = _chatName(r.senderId, r.senderName) + ': ';
+      html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(r.key)}">
+        ${d.av}
         <div class="cm-ci-body">
-          <div class="cm-ci-name"><span># team</span><span class="time">${_relTime(d.lastAt)}</span></div>
-          <div class="cm-ci-preview">${(d.senderId || d.senderName) ? _escHtml(_chatName(d.senderId, d.senderName))+': ' : ''}${_escHtml((d.lastMsg||'').slice(0,40))}</div>
+          <div class="cm-ci-name"><span>${_escHtml(d.name)}</span><span class="time">${_relTime(r.lastAt)}</span></div>
+          <div class="cm-ci-preview">${_escHtml(who)}${_escHtml((r.lastMsg || '').slice(0,40))}</div>
         </div>
-        <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
+        ${r.count ? `<div class="cm-ci-count">${r.count > 9 ? '9+' : r.count}</div>` : ''}
       </button>`;
-    }
-    // ── Historial de conversaciones recientes (además de los no leídos) ──
-    const recentArr = Object.values(_chatRecent || {})
-      .sort((a, b) => (b.lastAt || '') > (a.lastAt || '') ? 1 : -1);
-    // Excluir las que ya están como no leídas (no repetir)
-    const unreadKeys = new Set(Object.keys(_chatUnread));
-    const recentToShow = recentArr.filter(r => !unreadKeys.has(r.key)).slice(0, 4);
-    if (recentToShow.length) {
-      html += `<div class="cm-cp-sect-lbl" data-i18n="shell.recent">Recent</div>`;
-      for (const r of recentToShow) {
-        // For a thread I started, the stored sender_name is MINE — don't use it as the peer's
-        // fallback name; the key already points at the other person.
-        const fb = r.mine ? '' : r.senderName;
-        const av = r.isGroup
-          ? `<div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>`
-          : _chatAvHtml(r.key, fb);
-        const name   = r.isGroup ? '# team' : _chatName(r.key, fb);
-        const prefix = r.mine ? _ttx('shell.you_prefix', 'You: ') : '';
-        html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(r.key)}">
-          ${av}
-          <div class="cm-ci-body">
-            <div class="cm-ci-name"><span>${_escHtml(name)}</span><span class="time">${_relTime(r.lastAt)}</span></div>
-            <div class="cm-ci-preview">${_escHtml(prefix)}${_escHtml((r.lastMsg || '').slice(0,40))}</div>
-          </div>
-        </button>`;
-      }
-    }
-    // Si no hay nada (ni no leídos ni recientes)
-    if (!entries.length && !recentToShow.length) {
-      html = '<div class="cm-cp-empty">No conversations</div>';
     }
     list.innerHTML = html;
     _applyI18n(list);
@@ -955,19 +938,18 @@ html.cm-rail .hub-nav-grip{display:none}
     } catch (_) { /* audio bloqueado / no soportado: silencioso */ }
   }
 
-  function _showChatToast(msg, senderName) {
+  function _showChatToast(msg, senderName, label) {
     _playChatChime();
     const root = document.getElementById('cm-toast-root');
     if (!root) return;
     const ini = (senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-    const isGroup = !msg.recipient_id;
     const t = document.createElement('div');
     t.className = 'cm-toast';
     t.style.cursor = 'pointer';
     t.innerHTML = `
       <div class="cm-toast-ico" style="background:rgba(99,102,241,.12);color:#4f46e5;border-radius:50%;font:600 11px/1 var(--cm-font-sans,sans-serif)">${_escHtml(ini)}</div>
       <div class="cm-toast-body">
-        <div class="cm-toast-ttl">${_escHtml(senderName || 'Message')}${isGroup ? ' · #team' : ''}</div>
+        <div class="cm-toast-ttl">${_escHtml(senderName || 'Message')}${label ? ' · ' + _escHtml(label) : ''}</div>
         <div class="cm-toast-desc">${_escHtml((msg.content || '').slice(0,60))}</div>
       </div>
       <button class="cm-toast-x" aria-label="Dismiss"><i class="ti ti-x"></i></button>`;
@@ -1032,20 +1014,38 @@ html.cm-rail .hub-nav-grip{display:none}
     };
 
     // Initial unread counts — bail silently if either table doesn't exist yet
-    const [readsRes, msgsRes, profsRes] = await Promise.all([
+    const [readsRes, msgsRes, profsRes, grpsRes] = await Promise.all([
       window.sb.from('channel_reads').select('channel_key,last_read_at').eq('user_id', user.id).eq('club_id', clubId),
       // NOTE: own messages are included on purpose — a DM you started must show up in
       // "Recent" even if nobody replied yet. The unread loop below skips them explicitly.
-      window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name')
+      // group_id/team_id son necesarios para separar canal club / canal equipo / grupo custom.
+      window.sb.from('messages').select('id,sender_id,recipient_id,group_id,team_id,content,created_at,sender_name')
         .eq('club_id', clubId)
         .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
         .order('created_at', { ascending: false }).limit(200),
       // Real names + photos for the panel (the stored sender_name is the old email handle).
       window.sb.from('profiles').select('id, full_name, first_name, last_name, email, avatar_url')
-        .eq('club_id', clubId)
+        .eq('club_id', clubId),
+      // Grupos custom del usuario (RLS devuelve solo a los que pertenezco/creé) → nombre + filtro
+      // de membresía para no listar mensajes de grupos ajenos.
+      window.sb.from('chat_groups').select('id,name').eq('club_id', clubId)
     ]);
     _chatProfiles = {};
     (profsRes && profsRes.data || []).forEach(p => { _chatProfiles[p.id] = p; });
+    _chatGroups = {};
+    (grpsRes && grpsRes.data || []).forEach(g => { _chatGroups[g.id] = { name: g.name }; });
+
+    // Tipo de conversación de un mensaje (espeja la clasificación de Chat & Tasks).
+    const _msgKind = m => m.group_id ? 'cg' : (!m.recipient_id ? (m.team_id ? 'team' : 'club') : 'dm');
+    // Key de conversación (== ?conv= y == channel_key). Devuelve null si el mensaje no me
+    // corresponde: DM de terceros, o grupo custom del que no soy miembro.
+    const _convKey = (m, uid) => {
+      if (m.group_id) return _chatGroups[m.group_id] ? 'cg:' + m.group_id : null;
+      if (!m.recipient_id) return m.team_id ? 'group' : 'club';
+      const mine = m.sender_id === uid;
+      if (!mine && m.recipient_id !== uid) return null;
+      return mine ? m.recipient_id : m.sender_id;
+    };
     // Si la carga inicial de contadores falla, NO abortamos: seguimos hasta suscribirnos
     // al realtime. El badge arranca vacío, pero las notificaciones (toast + sonido) de
     // mensajes entrantes siguen llegando en cualquier página.
@@ -1056,9 +1056,8 @@ html.cm-rail .hub-nav-grip{display:none}
     (reads || []).forEach(r => { readMap[r.channel_key] = r.last_read_at; });
     for (const msg of (recentMsgs || [])) {
       if (msg.sender_id === user.id) continue;          // never unread from yourself
-      const isGroup = !msg.recipient_id;
-      if (!isGroup && msg.recipient_id !== user.id) continue;
-      const key = isGroup ? 'group' : msg.sender_id;
+      const key = _convKey(msg, user.id);
+      if (!key) continue;                               // DM ajeno o grupo del que no soy miembro
       const lr = readMap[key];
       if (lr && msg.created_at <= lr) continue;
       if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
@@ -1073,16 +1072,12 @@ html.cm-rail .hub-nav-grip{display:none}
     // Historial: agrupar por conversación (reusa recentMsgs ya cargado)
     _chatRecent = {};
     for (const msg of (recentMsgs || [])) {
-      const isGroup = !msg.recipient_id;
-      const mine    = msg.sender_id === user.id;
-      // DMs: keep the ones involving me in EITHER direction (so a thread I started shows up).
-      if (!isGroup && !mine && msg.recipient_id !== user.id) continue;
-      // Conversation key = the OTHER person (for a DM I sent, that's the recipient).
-      const key = isGroup ? 'group' : (mine ? msg.recipient_id : msg.sender_id);
+      const mine = msg.sender_id === user.id;
+      const key  = _convKey(msg, user.id);
       if (!key) continue;
       if (!_chatRecent[key] || msg.created_at > _chatRecent[key].lastAt) {
         _chatRecent[key] = {
-          key, isGroup, mine,
+          key, kind: _msgKind(msg), mine,
           lastMsg: msg.content || '',
           lastAt: msg.created_at,
           senderName: msg.sender_name || '',
@@ -1099,23 +1094,25 @@ html.cm-rail .hub-nav-grip{display:none}
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${clubId}` }, payload => {
         const msg = payload.new;
         if (!msg) return;
-        const isGroup = !msg.recipient_id;
+        const key = _convKey(msg, user.id);
+        if (!key) return;                       // DM ajeno o grupo del que no soy miembro
+        const kind = _msgKind(msg);
         if (msg.sender_id === user.id) {
           // My own message: never unread, but the thread must show up in "Recent" right away
           // (a DM I just started, before any reply).
-          const own = isGroup ? 'group' : msg.recipient_id;
-          if (own) {
-            _chatRecent[own] = {
-              key: own, isGroup, mine: true,
-              lastMsg: msg.content || '', lastAt: msg.created_at,
-              senderName: msg.sender_name || '', senderId: msg.sender_id || null
-            };
-            _renderChatPanel();
-          }
+          _chatRecent[key] = {
+            key, kind, mine: true,
+            lastMsg: msg.content || '', lastAt: msg.created_at,
+            senderName: msg.sender_name || '', senderId: msg.sender_id || null
+          };
+          _renderChatPanel();
           return;
         }
-        if (!isGroup && msg.recipient_id !== user.id) return;
-        const key = isGroup ? 'group' : msg.sender_id;
+        _chatRecent[key] = {
+          key, kind, mine: false,
+          lastMsg: msg.content || '', lastAt: msg.created_at,
+          senderName: msg.sender_name || '', senderId: msg.sender_id || null
+        };
         if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
         _chatUnread[key].count += 1;
         _chatUnread[key].lastMsg    = msg.content || '';
@@ -1124,7 +1121,9 @@ html.cm-rail .hub-nav-grip{display:none}
         _chatUnread[key].senderId   = msg.sender_id || null;
         _updateChatBadge();
         _renderChatPanel();
-        _showChatToast(msg, _chatName(msg.sender_id, msg.sender_name));
+        const label = kind === 'club' ? '#club' : kind === 'team' ? '#team'
+                    : kind === 'cg' ? ('#' + (_chatGroups[msg.group_id] ? _chatGroups[msg.group_id].name : 'group')) : '';
+        _showChatToast(msg, _chatName(msg.sender_id, msg.sender_name), label);
       })
       .subscribe();
 
