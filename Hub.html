@@ -542,6 +542,47 @@
     .kpis { grid-template-columns: 1fr !important; }
     .hub-topbar .hub-search { display: none; }
   }
+
+  /* ───── Redesign layer ───── */
+
+  /* Staggered entrance */
+  @keyframes hubRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes hubDash { to { stroke-dashoffset: 0; } }
+  .hub-rise { opacity: 0; animation: hubRise .5s cubic-bezier(.2,.8,.2,1) both; }
+
+  /* Segmented availability bar (replaces flat pills in the greeting meta) */
+  .hub-avail { display: flex; flex-direction: column; gap: 9px; min-width: 208px; }
+  .hub-avail-bar {
+    display: flex; gap: 2px; height: 8px;
+    border-radius: 5px; overflow: hidden;
+    background: var(--cm-bg-sunk);
+  }
+  .hub-avail-bar i { display: block; height: 100%; border-radius: 2px; transition: flex-grow .7s cubic-bezier(.2,.8,.2,1); }
+  .hub-avail-bar .s-good { background: var(--cm-success); }
+  .hub-avail-bar .s-warn { background: var(--cm-warning); }
+  .hub-avail-bar .s-crit { background: var(--cm-danger); }
+  .hub-avail-legend { display: flex; gap: 14px; font: 500 11.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .hub-avail-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .hub-avail-legend b { color: var(--cm-fg-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hub-avail-sw { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+  .hub-avail-sw.s-good { background: var(--cm-success); }
+  .hub-avail-sw.s-warn { background: var(--cm-warning); }
+  .hub-avail-sw.s-crit { background: var(--cm-danger); }
+
+  /* Modal polish — blur backdrop + scale-in */
+  .kpi-modal-backdrop { backdrop-filter: saturate(140%) blur(6px); -webkit-backdrop-filter: saturate(140%) blur(6px); }
+  .kpi-modal-backdrop.open .kpi-modal { animation: hubPop .22s cubic-bezier(.2,.85,.25,1); }
+  .hub-modal-backdrop { backdrop-filter: saturate(140%) blur(6px); -webkit-backdrop-filter: saturate(140%) blur(6px); }
+  .hub-modal-backdrop .hub-modal { transform: translateY(10px) scale(.97); }
+  .hub-modal-backdrop.is-open .hub-modal { transform: none; }
+  @keyframes hubPop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hub-rise { opacity: 1; animation: none; }
+    .hub-avail-bar i { transition: none; }
+    .kpi-modal-backdrop.open .kpi-modal { animation: none; }
+    .kpi-spark path[style] { animation: none !important; stroke-dasharray: none !important; stroke-dashoffset: 0 !important; }
+  }
 </style>
 </head>
 <body class="cm">
@@ -1114,6 +1155,8 @@ document.addEventListener('DOMContentLoaded', () => {
       showHubToast(tt('hub.no_access_page', "You don't have access to that page."));
     }
   } catch (_) {}
+  // Entrada escalonada de las tarjetas de módulo al cargar.
+  try { _hubStagger(document.querySelectorAll('.modules .module'), 35); } catch (_) {}
 });
 
 // ── Task toggle (with accessibility) ─────────────────────────────────────────
@@ -1699,6 +1742,18 @@ async function renderActivity() {
   }
 }
 
+// Entrada escalonada: aplica .hub-rise con un delay incremental (cap a ~10 items
+// para no arrastrar la última tarjeta). Respeta prefers-reduced-motion vía CSS.
+function _hubStagger(nodes, step = 40, base = 0) {
+  const els = Array.from(nodes || []);
+  els.forEach((el, i) => {
+    el.style.animationDelay = (base + Math.min(i, 10) * step) + 'ms';
+    el.classList.remove('hub-rise');   // reinicia si se re-renderiza (cambio de equipo)
+    void el.offsetWidth;               // fuerza reflow para relanzar la animación
+    el.classList.add('hub-rise');
+  });
+}
+
 function renderAvailabilityPills(records) {
   const meta = document.querySelector('.hub-greet .meta');
   if (!meta) return;
@@ -1713,10 +1768,23 @@ function renderAvailabilityPills(records) {
     else if (s === 'modified' || s === 'partial' || s === 'limited') partial++;
     else                                                              out++;
   });
+  // Barra segmentada: la composición del plantel de un vistazo. Solo se renderizan
+  // los tramos con cuenta > 0 para que el gap de 2px no deje huecos fantasma.
+  const segs = [
+    { n: avail,   cls: 's-good' },
+    { n: partial, cls: 's-warn' },
+    { n: out,     cls: 's-crit' },
+  ].filter(s => s.n > 0)
+   .map(s => `<i class="${s.cls}" style="flex-grow:${s.n}"></i>`).join('');
   meta.innerHTML =
-    `<span class="cm-pill is-success"><span class="cm-dot"></span>${avail} ${tt('hub.available_suffix','available')}</span>` +
-    `<span class="cm-pill is-warning"><span class="cm-dot"></span>${partial} ${tt('hub.partial_suffix','partial')}</span>` +
-    `<span class="cm-pill is-danger"><span class="cm-dot"></span>${out} ${tt('hub.out_suffix','out')}</span>`;
+    `<div class="hub-avail">` +
+      `<div class="hub-avail-bar">${segs}</div>` +
+      `<div class="hub-avail-legend">` +
+        `<span><i class="hub-avail-sw s-good"></i><b>${avail}</b> ${tt('hub.available_suffix','available')}</span>` +
+        `<span><i class="hub-avail-sw s-warn"></i><b>${partial}</b> ${tt('hub.partial_suffix','partial')}</span>` +
+        `<span><i class="hub-avail-sw s-crit"></i><b>${out}</b> ${tt('hub.out_suffix','out')}</span>` +
+      `</div>` +
+    `</div>`;
 }
 
 // Notify everyone involved when a task is completed, minus the person who completed it.
@@ -2410,11 +2478,47 @@ function renderTasks(tasks, view = 'my') {
     }).filter(Boolean).join(' ');
   }
 
-  function _renderSpark(svgId, values) {
+  function _renderSpark(svgId, values, opts) {
     const svg = document.getElementById(svgId);
     if (!svg) return;
-    const pts = _buildSparkPoints(values);
-    if (pts) svg.querySelector('polyline')?.setAttribute('points', pts);
+    opts = opts || {};
+    const W = 76, H = 32, pad = 4;
+    const vals = (values || []).map(v => (v == null || isNaN(v)) ? null : +v);
+    const present = vals.filter(v => v != null);
+    if (present.length < 2) { return; }
+    const n = vals.length;
+    const mn = Math.min(...present), mx = Math.max(...present), rng = (mx - mn) || 1;
+    const coords = [];
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      const x = pad + i * (W - 2 * pad) / (n - 1);
+      const y = H - pad - (v - mn) / rng * (H - 2 * pad);
+      coords.push([x, y]);
+    });
+    if (coords.length < 2) return;
+    const toneVar = { good: '--cm-success', danger: '--cm-danger', warning: '--cm-warning', neutral: '--cm-fg-faint' }[opts.tone] || '--cm-fg-faint';
+    const stroke = getComputedStyle(document.documentElement).getPropertyValue(toneVar).trim() || 'currentColor';
+    const line = 'M' + coords.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L');
+    const area = line + ` L${coords[coords.length - 1][0].toFixed(1)},${H - pad} L${coords[0][0].toFixed(1)},${H - pad} Z`;
+    const gid = 'sg_' + svgId;
+    let band = '';
+    if (opts.band) {
+      const yb = v => Math.max(0, Math.min(H, H - pad - (v - mn) / rng * (H - 2 * pad)));
+      const y1 = yb(opts.band[1]), y2 = yb(opts.band[0]); // [lo, hi]
+      if (y2 - y1 > 0.5) band = `<rect x="0" y="${y1.toFixed(1)}" width="${W}" height="${(y2 - y1).toFixed(1)}" fill="var(--cm-success)" opacity="0.13"/>`;
+    }
+    const end = coords[coords.length - 1];
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const dash = reduce ? '' : ' pathLength="1" style="stroke-dasharray:1;stroke-dashoffset:1;animation:hubDash .9s ease forwards"';
+    svg.innerHTML =
+      `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="${stroke}" stop-opacity="0.24"/>` +
+      `<stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs>` +
+      band +
+      `<path d="${area}" fill="url(#${gid})"/>` +
+      `<path d="${line}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${dash}/>` +
+      `<circle cx="${end[0].toFixed(1)}" cy="${end[1].toFixed(1)}" r="2.5" fill="${stroke}"/>` +
+      `<circle cx="${end[0].toFixed(1)}" cy="${end[1].toFixed(1)}" r="5" fill="${stroke}" opacity="0.16"/>`;
   }
 
   const [_squadSparkRes, _wellSparkRes, _injSparkRes] = await Promise.all([
@@ -2435,7 +2539,7 @@ function renderTasks(tasks, view = 'my') {
       const s = (r.status || '').toLowerCase();
       if (s === 'available' || s === 'fit') _byD[r.date]++;
     });
-    _renderSpark('sparkSquad', last7days.map(d => _byD[d] ?? null));
+    _renderSpark('sparkSquad', last7days.map(d => _byD[d] ?? null), { tone: 'good' });
   }
 
   if (!_wellSparkRes.error && _wellSparkRes.data) {
@@ -2446,7 +2550,7 @@ function renderTasks(tasks, view = 'my') {
       _byD[d].s += ((r.sleep_quality||0)+(r.mood||0)+(r.fatigue||0)+(r.stress||0)+(r.soreness||0))/5;
       _byD[d].n++;
     });
-    _renderSpark('sparkWellness', last7days.map(d => _byD[d] ? _byD[d].s / _byD[d].n : null));
+    _renderSpark('sparkWellness', last7days.map(d => _byD[d] ? _byD[d].s / _byD[d].n : null), { tone: 'good' });
   }
 
   if (!_injSparkRes.error && _injSparkRes.data) {
@@ -2455,11 +2559,11 @@ function renderTasks(tasks, view = 'my') {
         const ret = inj.returned_date;
         return inj.start_date <= dayStr && (!ret || ret > dayStr);
       }).length
-    ));
+    ), { tone: 'danger' });
   }
 
   if (!rpeRes.error && rpeRes.data?.length) {
-    _renderSpark('sparkAcwr', last7days.map(dayStr => {
+    const _acwrSeries = last7days.map(dayStr => {
       const d7s  = new Date(dayStr); d7s.setDate(d7s.getDate() - 6);
       const d28s = new Date(dayStr); d28s.setDate(d28s.getDate() - 27);
       const s7  = d7s.toISOString().split('T')[0];
@@ -2476,7 +2580,11 @@ function renderTasks(tasks, view = 'my') {
       });
       const av = Object.values(_ld).map(({ a, c }) => c > 0 ? a / (c / 4) : null).filter(v => v !== null);
       return av.length ? av.reduce((x, y) => x + y, 0) / av.length : null;
-    }));
+    });
+    // Tono por el último valor real: fuera de la banda óptima 0.8–1.3 = riesgo.
+    const _lastAcwr = [..._acwrSeries].reverse().find(v => v != null);
+    const _acwrTone = _lastAcwr == null ? 'neutral' : (_lastAcwr > 1.3 || _lastAcwr < 0.8) ? 'danger' : 'good';
+    _renderSpark('sparkAcwr', _acwrSeries, { tone: _acwrTone, band: [0.8, 1.3] });
   }
 
   // ── KPI Customization ─────────────────────────────────────────────────────
@@ -2509,7 +2617,10 @@ function renderTasks(tasks, view = 'my') {
       el.style.display = _kpiSel.includes(el.dataset.kpiId) ? '' : 'none';
     });
     const strip = document.getElementById('kpiStrip');
-    if (strip) strip.style.visibility = 'visible';   // reveal once a resolved set is applied
+    if (strip) {
+      strip.style.visibility = 'visible';   // reveal once a resolved set is applied
+      _hubStagger(strip.querySelectorAll('.kpi[data-kpi-id]:not([style*="display: none"])'));
+    }
     if (_kpiSel.includes('weather')) _loadWeather();
     _populateExtras();
   }
