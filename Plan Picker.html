@@ -676,7 +676,7 @@
         </div>
         <span class="sep"></span>
         <div class="pp-proration">
-          <span data-i18n="plan_picker.prorated_today">Prorated today ·</span> <strong id="pp-foot-pro">$38.71</strong><br>
+          <span id="ppFootProLbl" data-i18n="plan_picker.due_today">Due today ·</span> <strong id="pp-foot-pro">$0.00</strong><br>
           <span style="color:var(--cm-fg-faint)" id="ppFootCycle">19 days left in this cycle · next bill <strong style="color:var(--cm-fg-muted)">Jun 14</strong></span>
         </div>
       </div>
@@ -731,16 +731,39 @@
       dEl.style.color = 'var(--cm-fg-muted)';
     }
 
-    // Prorate over remaining days of the current month
-    // Estimación visual; la proración real la maneja Paddle cuando se conecte billing
-    const _now = new Date();
-    const _daysInMonth = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
-    const _daysLeft = _daysInMonth - _now.getDate();
-    const proration = Math.max(0, Math.round((delta * _daysLeft / _daysInMonth) * 100) / 100);
-    document.getElementById('pp-foot-pro').textContent =
-      delta > 0 ? '$' + proration.toFixed(2) :
-      delta < 0 ? tt('plan_picker.pro_credit', '−${amt} credit', { amt: Math.abs(proration).toFixed(2) }) :
-      '$0.00';
+    // ── "Due today" honesto según la acción real ──────────────────────────
+    //  · compra nueva (sin sub de Paddle)  → primer período COMPLETO
+    //  · upgrade de una sub existente      → estimación prorrateada (el monto real
+    //                                         se muestra en el confirm, vía preview)
+    //  · downgrade / cancelar / mismo plan → $0 hoy (no se cobra ahora)
+    // La proración exacta la calcula Paddle; acá solo mostramos algo que NO mienta.
+    const _pp = window.__ppState || {};
+    const _sub = _pp.sub || null;
+    const _hasPaid = !!(_sub && !_sub.is_comp && _sub.provider_subscription_id);
+    const _curSlug = _pp.curSlug || null;
+    const _tgtSlug = ({ free:'initiation', basic:'basic', pro:'professional', full:'full' })[selected] || selected;
+    const proLbl = document.getElementById('ppFootProLbl');
+    const proVal = document.getElementById('pp-foot-pro');
+    let dueLabel = tt('plan_picker.due_today', 'Due today ·');
+    let dueVal = '$0.00';
+    if (_curSlug && _tgtSlug === _curSlug){ dueVal = '$0.00'; }              // mismo plan
+    else if (_tgtSlug === 'initiation'){ dueVal = '$0.00'; }                // cancelar → Free
+    else if (!_hasPaid){ dueVal = fmt(cycle === 'annual' ? amt * 12 : amt); } // compra nueva (+ IVA en el checkout)
+    else {
+      const _curSort = Number(((_pp.plans||{})[_curSlug]||{}).sort_order || 0);
+      const _tgtSort = Number(((_pp.plans||{})[_tgtSlug]||{}).sort_order || 0);
+      if (_tgtSort < _curSort){ dueVal = '$0.00'; }                        // downgrade agendado
+      else {                                                               // upgrade → estimación
+        const _now = new Date();
+        const _dim = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
+        const _dl = _dim - _now.getDate();
+        const _pro = Math.max(0, Math.round((delta * _dl / _dim) * 100) / 100);
+        dueVal = '$' + _pro.toFixed(2);
+        dueLabel = tt('plan_picker.prorated_est', 'Prorated today (est.) ·');
+      }
+    }
+    if (proLbl){ proLbl.textContent = dueLabel; proLbl.removeAttribute('data-i18n'); }
+    if (proVal) proVal.textContent = dueVal;
 
     // Update card amounts for billing cycle
     document.querySelectorAll('.pp-tier .amt').forEach(el => {
