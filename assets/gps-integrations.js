@@ -469,10 +469,20 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     else if(job.status==='cancelled'){ label=tt('admin.gps_sync_cancelled','Cancelled'); }
     else if(job.status==='error'){ label=tt('admin.gps_sync_failed_x','Sync failed: {msg}',{ msg: job.error||'unknown' }); cls='s-error'; retry=true; }
 
-    const sum = (t.activities!=null)
-      ? tt('admin.gps_sync_totals','{a} sessions · {r} reports · {p} periods',{ a:t.activities||0, r:t.rows||0, p:t.periods||0 })
-        + ((t.pending_activities||0) > 0 ? ' · ' + tt('admin.gps_sync_pending','{n} awaiting a session (see “GPS days without a session”)',{ n:t.pending_activities||0 }) : '')
-      : '';
+    // Construcción del totalizador. Si NADA bajó pero hay pendientes, mostramos SOLO el mensaje de
+    // pendientes (los "0·0·0" al lado del pendiente confunden — parece que no pasó nada).
+    let sum = '';
+    if (t.activities != null) {
+      const a = t.activities || 0, pend = t.pending_activities || 0;
+      if (a > 0) {
+        sum = tt('admin.gps_sync_totals','{a} sessions · {r} reports · {p} periods',{ a, r:t.rows||0, p:t.periods||0 });
+        if (pend > 0) sum += ' · ' + tt('admin.gps_sync_pending','{n} awaiting a session (see “GPS days without a session”)',{ n:pend });
+      } else if (pend > 0) {
+        sum = tt('admin.gps_sync_all_pending','{n} activity has no session yet — create it in “GPS days without a session” to download the data|{n} activities have no session yet — create them in “GPS days without a session” to download the data',{ n:pend, count:pend });
+      } else {
+        sum = tt('admin.gps_sync_totals','{a} sessions · {r} reports · {p} periods',{ a:0, r:t.rows||0, p:t.periods||0 });
+      }
+    }
     const fillPct = running ? Math.max(pct, 6) : pct;   // show a sliver while starting
 
     bar.style.display='';
