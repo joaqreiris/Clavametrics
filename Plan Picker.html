@@ -894,7 +894,8 @@
           if (!confirm(msg)) return;
           const { data:appl, error:aErr } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, plan_slug: slug, cycle } });
           if (aErr || appl?.error){ alert(tt('plan_picker.change_error','No pude completar el cambio de plan. Intenta de nuevo o avisa al admin.')); return; }
-          window.location.href = 'Admin.html';
+          // Upgrade = plan activo YA: mostramos bienvenida. Downgrade = agendado, no.
+          window.location.href = prev?.downgrade ? 'Admin.html' : ('Admin.html?welcome=' + encodeURIComponent(slug));
           return;
         }
         // prev.needs_checkout → cae al checkout nuevo de abajo
@@ -909,7 +910,7 @@
       items: [{ priceId, quantity: 1 }],
       customer: email ? { email } : undefined,
       customData: { team_id: teamId, club_id: clubId, plan_slug: slug, cycle },
-      settings: { displayMode:'overlay', theme:'light', successUrl: window.location.origin + '/Admin.html' }
+      settings: { displayMode:'overlay', theme:'light', successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(slug) }
     });
   });
 

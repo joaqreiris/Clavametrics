@@ -2323,5 +2323,52 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   if (tab) tab.addEventListener('click', mount);
 })();
 </script>
+
+<!-- Bienvenida al plan nuevo (llega desde el Plan Picker: Admin.html?welcome=<slug>) -->
+<div id="planWelcome" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:18px;max-width:460px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:2px">
+      <div style="width:44px;height:44px;border-radius:12px;background:color-mix(in srgb,var(--cm-accent) 15%,transparent);display:flex;align-items:center;justify-content:center;flex:0 0 auto"><i class="ti ti-rosette-discount-check" style="font-size:24px;color:var(--cm-accent)"></i></div>
+      <div>
+        <div id="pwTitle" style="font:700 18px/1.2 var(--cm-font-sans,inherit);color:var(--cm-fg-strong)"></div>
+        <div id="pwSub" style="font-size:12.5px;color:var(--cm-fg-muted);margin-top:2px"></div>
+      </div>
+    </div>
+    <div id="pwFeats" style="margin:18px 0 2px;display:grid;gap:9px"></div>
+    <button id="pwClose" class="cm-btn is-primary" style="width:100%;margin-top:16px;justify-content:center"><span></span></button>
+  </div>
+</div>
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const slug = params.get('welcome');
+  if(!slug) return;
+  try{ history.replaceState({}, '', location.pathname); }catch(_){}   // no reaparecer al recargar
+  const root = document.getElementById('planWelcome'); if(!root) return;
+  // feature slug → nombre lindo desde CM_SECTIONS (fuente única) + extras sin sección propia
+  const featName = {};
+  (window.CM_SECTIONS||[]).forEach(s=>{ if(s.feature) featName[s.feature]=s.name; });
+  Object.assign(featName, { load_monitor:'Load monitor', lineup:'Lineup', drill_designer:'Drill Designer', wellness_analysis:'Wellness analysis' });
+  const pretty = f => featName[f] || String(f).replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+  (async ()=>{
+    let plan=null;
+    try{ const { data } = await window.sb.from('plans').select('name, features').eq('slug', slug).maybeSingle(); plan=data; }catch(_){}
+    const name = plan?.name || slug;
+    document.getElementById('pwTitle').textContent = tt('plan_welcome.title','Welcome to {plan}!',{plan:name});
+    document.getElementById('pwSub').textContent = tt('plan_welcome.sub','Here’s what’s now unlocked for your team.');
+    const feats = Array.isArray(plan?.features) ? plan.features : [];
+    const shown = feats.slice(0, 8);
+    const host = document.getElementById('pwFeats');
+    host.innerHTML = shown.length
+      ? shown.map(f=>`<div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--cm-fg-strong)"><i class="ti ti-check" style="color:var(--cm-accent);font-size:16px"></i>${pretty(f)}</div>`).join('')
+        + (feats.length>shown.length ? `<div style="font-size:12.5px;color:var(--cm-fg-muted);padding-left:25px">${tt('plan_welcome.more','+{n} more',{n:feats.length-shown.length})}</div>` : '')
+      : `<div style="color:var(--cm-fg-muted);font-size:13px">${tt('plan_welcome.enjoy','Enjoy your new plan.')}</div>`;
+    const btn=document.getElementById('pwClose'); btn.querySelector('span').textContent = tt('plan_welcome.cta','Let’s go');
+    btn.onclick=()=>{ root.style.display='none'; };
+    root.addEventListener('click', e=>{ if(e.target===root) root.style.display='none'; });
+    root.style.display='flex';
+  })();
+})();
+</script>
 </body>
 </html>
