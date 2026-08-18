@@ -385,7 +385,6 @@
       <button class="ad-tab is-on" data-panel="members"><i class="ti ti-users"></i><span data-i18n="admin.tab_members">Members</span><span class="ct" id="adTabMembers">14</span></button>
       <button class="ad-tab" data-panel="roles"><i class="ti ti-shield-check"></i><span data-i18n="admin.tab_roles">Roles</span><span class="ct">7</span></button>
       <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i><span data-i18n="admin.tab_sections">Sections</span><span class="ct">14</span></button>
-      <button class="ad-tab" data-panel="subscription"><i class="ti ti-credit-card"></i><span data-i18n="admin.tab_subscription">Subscription</span></button>
       <button class="ad-tab" data-panel="notifications"><i class="ti ti-bell-cog"></i><span data-i18n="common.notifications">Notifications</span></button>
       <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i><span data-i18n="admin.tab_integrations">Integrations</span></button>
       <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i><span data-i18n="admin.tab_security">Security &amp; SSO</span></button>
@@ -705,42 +704,6 @@
         </div>
       </div>
 
-      <div class="ad-panel" data-panel="subscription">
-        <div class="ad-card" style="margin-top:16px">
-          <div class="ad-card-h">
-            <h3 data-i18n="admin.subscription_billing">Subscription &amp; billing</h3>
-            <span class="sub" id="adSubSub">—</span>
-          </div>
-          <div class="ad-sub">
-            <div class="ad-sub-l">
-              <h2 id="adSubPlan">—</h2>
-              <p data-i18n="admin.sub_intro">Workspace-level subscription. Includes GPS &amp; analytics, predictive injury alerts, and all modules.</p>
-              <ul class="features">
-                <li><i class="ti ti-check"></i><span data-i18n="admin.sub_feat_gps">Players · GPS live (Catapult, StatSports)</span></li>
-                <li><i class="ti ti-check"></i><span data-i18n="admin.sub_feat_alerts">Predictive injury alerts &amp; custom reports</span></li>
-                <li><i class="ti ti-check"></i><span data-i18n="admin.sub_feat_modules">All modules · unlimited microcycles · history</span></li>
-                <li><i class="ti ti-check"></i><span data-i18n="admin.sub_feat_mobile">Mobile player surfaces (Wellness · RPE)</span></li>
-                <li><i class="ti ti-check"></i><span data-i18n="admin.sub_feat_storage">Storage · email support</span></li>
-              </ul>
-            </div>
-            <div class="ad-sub-r" id="adSubRight">
-              <div class="billed" data-i18n="admin.billing">Billing</div>
-              <div class="amount" style="font-size:22px" id="adSubAmount">—</div>
-              <div class="next" id="adSubNext" style="color:var(--cm-fg-muted);font-size:12px" data-i18n="admin.billing_stripe_note">Billing managed via Stripe. Connect webhook to sync billing data.</div>
-              <div class="actions">
-                <a id="adSubChangePlan" href="Plan%20Picker.html" class="cm-btn is-outline is-sm"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span data-i18n="admin.change_plan">Change plan</span></a>
-                <button id="adSubUpdatePay" class="cm-btn is-outline is-sm" style="display:none"><i class="ti ti-credit-card" style="font-size:14px"></i><span data-i18n="admin.update_payment">Update payment method</span></button>
-              </div>
-              <div style="margin-top:10px">
-                <a href="Billing.html" style="display:inline-flex;align-items:center;gap:5px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none">
-                  <span data-i18n="admin.view_full_billing">View full billing</span> <i class="ti ti-arrow-right" style="font-size:12px"></i>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="ad-panel" data-panel="notifications">
         <div class="ad-card" style="margin-top:16px">
           <div class="ad-card-h">
@@ -920,11 +883,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     tt('admin.org_meta','<strong>{staff}</strong> staff · <strong>{players}</strong> players · created {year}',{ staff:count, players:playerCount, year:yearCreated });
 
 
-  // ── Subscription card ────────────────────────────────────────────
-  document.getElementById('adSubSub').textContent  = clubName;
-  document.getElementById('adSubPlan').textContent = '—';
-
-  // ── Plan REAL (por equipo activo) — reemplaza el card "Pro" hardcodeado ──
+  // ── KPI "Plan" (solo lectura) + título con el club/equipo real ──
+  // La gestión de facturación (cambiar plan, actualizar pago) vive en Billing.
   (async () => {
     try {
       const teamId = window.getActiveTeamId && window.getActiveTeamId();
@@ -932,7 +892,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       if (teamId) {
         const [psR, subR, tR] = await Promise.all([
           window.sb.rpc('team_plan_slug', { p_team_id: teamId }),
-          window.sb.from('subscriptions').select('status,is_comp,current_period_end,provider_subscription_id').eq('team_id', teamId).eq('status','active').maybeSingle(),
+          window.sb.from('subscriptions').select('is_comp,current_period_end').eq('team_id', teamId).eq('status','active').maybeSingle(),
           window.sb.from('teams').select('name').eq('id', teamId).maybeSingle(),
         ]);
         planSlug = psR?.data || 'initiation'; sub = subR?.data; teamName = tR?.data?.name || '';
@@ -951,37 +911,6 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         else ks.textContent = `$${price}/mo`;
       }
       const ht = document.getElementById('adHeadTeam'); if (ht) ht.textContent = '· ' + clubName + (teamName ? ' · ' + teamName : '');
-      const sp = document.getElementById('adSubPlan'); if (sp) sp.textContent = planName;
-      const cp = document.getElementById('adSubChangePlan'); if (cp && teamId) cp.href = 'Plan%20Picker.html?team=' + encodeURIComponent(teamId);
-
-      // ── Tab Subscription (columna derecha): monto, próximo cobro, acciones ──
-      const isPaid = planSlug !== 'initiation' && price > 0 && sub && !sub.is_comp && sub.provider_subscription_id;
-      const amtEl = document.getElementById('adSubAmount');
-      if (amtEl) amtEl.textContent = (planSlug === 'initiation' || price === 0)
-        ? tt('admin.free','Free')
-        : (sub?.is_comp ? tt('admin.complimentary','Complimentary') : `$${price}/mo`);
-      const nextEl = document.getElementById('adSubNext');
-      if (nextEl) {
-        nextEl.removeAttribute('data-i18n');
-        if (planSlug === 'initiation' || price === 0) nextEl.textContent = tt('admin.plan_free','Free · no billing');
-        else if (sub?.is_comp) nextEl.textContent = tt('admin.plan_comp','Complimentary · no billing');
-        else if (sub?.current_period_end) nextEl.textContent = tt('admin.next_bill','next bill {date}',{ date: fmtD(sub.current_period_end) });
-        else nextEl.textContent = '';
-      }
-      const upBtn = document.getElementById('adSubUpdatePay');
-      if (upBtn) {
-        if (isPaid) {
-          upBtn.style.display = '';
-          upBtn.onclick = async (e) => {
-            e.preventDefault(); upBtn.disabled = true;
-            try {
-              const { data: r, error } = await window.sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'manage' } });
-              if (error || r?.error || !r?.update_payment_method) { alert(tt('admin.pay_update_err','No pude abrir la página para actualizar el pago. Probá de nuevo.')); return; }
-              window.open(r.update_payment_method, '_blank', 'noopener');
-            } finally { upBtn.disabled = false; }
-          };
-        } else { upBtn.style.display = 'none'; }
-      }
     } catch(_){}
   })();
 
@@ -2174,12 +2103,12 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 <script>
   // ── ORG INVOICE MODAL ──
   function openOrgInvoiceModal() {
-    const plan   = document.getElementById('adSubPlan')?.textContent   || '—';
-    const amount = document.getElementById('adSubAmount')?.textContent || '—';
-    const next   = document.getElementById('adSubNext')?.textContent   || '—';
+    // Facturación consolidada en Billing; acá solo un resumen del plan actual.
+    const plan   = document.getElementById('adKpiPlan')?.textContent    || '—';
+    const detail = document.getElementById('adKpiPlanSub')?.textContent || '—';
     document.getElementById('invModalPlan').textContent   = plan;
-    document.getElementById('invModalAmount').textContent = amount;
-    document.getElementById('invModalNext').textContent   = next;
+    document.getElementById('invModalAmount').textContent = detail;
+    document.getElementById('invModalNext').textContent   = tt('admin.manage_in_billing','Full billing & invoices are in the Billing section.');
     document.getElementById('orgInvoiceBackdrop').style.display = 'flex';
   }
   function closeOrgInvoiceModal() {

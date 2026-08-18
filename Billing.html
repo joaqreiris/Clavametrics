@@ -459,7 +459,7 @@
               <h3 data-i18n="billing.pm_title">Primary payment method</h3>
               <span class="sub" data-i18n="billing.pm_sub">used for all categories</span>
               <div class="right">
-                <button class="cm-btn is-ghost is-sm" data-i18n="billing.manage">Manage</button>
+                <button id="blManagePay" class="cm-btn is-ghost is-sm" data-i18n="billing.manage">Manage</button>
               </div>
             </div>
             <div class="bl-pm">
@@ -688,6 +688,26 @@ function ttLocale() {
       if (pmCard) { const bk = pmCard.querySelector('[data-i18n="billing.pm_backup"]'); if (bk && bk.parentElement) bk.parentElement.style.display = 'none'; }
     } else if (pmCard) {
       pmCard.style.display = 'none';   // sin tarjeta → ocultar la card
+    }
+
+    // Botón "Manage" → abre la página de Paddle para actualizar el método de pago
+    // (usa la primera suscripción paga real del club).
+    const manageBtn = document.getElementById('blManagePay');
+    if (manageBtn) {
+      const payTeam = (paid[0] || {}).team_id;
+      if (payTeam) {
+        manageBtn.style.display = '';
+        manageBtn.onclick = async () => {
+          manageBtn.disabled = true;
+          try {
+            const { data: r, error } = await window.sb.functions.invoke('paddle-change-plan', { body: { team_id: payTeam, action: 'manage' } });
+            if (error || r?.error || !r?.update_payment_method) { alert(tt('billing.pay_update_err','No pude abrir la página para actualizar el pago. Inténtalo de nuevo.')); return; }
+            window.open(r.update_payment_method, '_blank', 'noopener');
+          } finally { manageBtn.disabled = false; }
+        };
+      } else {
+        manageBtn.style.display = 'none';   // sin sub paga → nada que gestionar
+      }
     }
 
     // ── Activity feed (invoices reales; si no hay, estado vacío) ──

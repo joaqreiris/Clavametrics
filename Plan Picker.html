@@ -398,13 +398,11 @@
     <div class="hub-topbar">
       <div class="hub-crumb">
         <i class="ti ti-home"></i>
-        <a href="Admin.html" data-i18n="plan_picker.crumb_workspace">Workspace</a>
+        <a href="Hub.html" data-i18n="plan_picker.crumb_workspace">Workspace</a>
         <span class="sep">/</span>
-        <a href="Admin.html" data-i18n="plan_picker.crumb_admin">Admin</a>
+        <a href="Billing.html" data-i18n="plan_picker.crumb_billing">Billing</a>
         <span class="sep">/</span>
-        <a href="Admin.html" data-i18n="plan_picker.crumb_subscription">Subscription</a>
-        <span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="plan_picker.crumb_change_plan">Change plan · U-17</span>
+        <span id="ppCrumbChange" style="color:var(--cm-fg-strong);font-weight:600" data-i18n="plan_picker.crumb_change_plan_generic">Change plan</span>
       </div>
       <div class="actions">
         <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
@@ -1133,6 +1131,7 @@
       const lang = (window.CM_I18N && CM_I18N.current) || 'en';
       setTxt('ppHdrTitle', title);
       setTxt('ppFootCat', title);
+      if (teamName) { const cc = document.getElementById('ppCrumbChange'); if (cc) { cc.removeAttribute('data-i18n'); cc.textContent = _tt('plan_picker.crumb_change_plan_generic','Change plan') + ' · ' + teamName; } }
 
       if(document.getElementById('ppHdrMeta')){
         const created = team.created_at ? new Date(team.created_at).toLocaleDateString(lang,{month:'short',year:'numeric'}) : '';
