@@ -201,11 +201,13 @@
   // ── Player maximal velocity (km/h) — peak max_speed across all sessions ─
   // Used to individualise the HSR/sprint thresholds (% of Vmax). Peak, not mean,
   // because "maximal velocity" is the best sprint the player has hit on record.
-  // GUARD: GPS imports occasionally carry a garbage spike (e.g. 16 000 000) that,
-  // taken as the peak, blows up every downstream number. Ignore anything above a
-  // human ceiling so the query returns the highest PLAUSIBLE speed. Human 100 m WR
-  // peak ≈ 44.7 km/h; football GPS peaks ~36 → 50 km/h is safe headroom.
-  const MAX_PLAUSIBLE_KMH = 50;
+  // GUARD: GPS imports carry garbage max_speed spikes — either huge (e.g. 16 000 000)
+  // or "merely" impossible (45–49 km/h). Taken as the peak they blow up every
+  // downstream number. Football GPS peaks top out ~36–38 km/h (fastest ever ≈ 38),
+  // so 40 km/h is an "impossible" ceiling: ignore anything at/above it AND anything
+  // flagged is_invalid, so the query returns the highest PLAUSIBLE speed and manual
+  // flagging (mark a report invalid) is respected. See the diagnostic SQL in chat.
+  const MAX_PLAUSIBLE_KMH = 40;
   async function getPlayerVmax(playerId, clubId) {
     if (!playerId || !clubId) return null;
     try {
@@ -214,6 +216,7 @@
         .select('max_speed')
         .eq('player_id', playerId)
         .eq('club_id', clubId)
+        .eq('is_invalid', false)
         .not('max_speed', 'is', null)
         .lt('max_speed', MAX_PLAUSIBLE_KMH)
         .order('max_speed', { ascending: false })
