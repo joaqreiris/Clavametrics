@@ -471,6 +471,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
 
     const sum = (t.activities!=null)
       ? tt('admin.gps_sync_totals','{a} sessions · {r} reports · {p} periods',{ a:t.activities||0, r:t.rows||0, p:t.periods||0 })
+        + ((t.pending_activities||0) > 0 ? ' · ' + tt('admin.gps_sync_pending','{n} awaiting a session (see “GPS days without a session”)',{ n:t.pending_activities||0 }) : '')
       : '';
     const fillPct = running ? Math.max(pct, 6) : pct;   // show a sliver while starting
 
