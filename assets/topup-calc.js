@@ -525,27 +525,32 @@
       hrmaxScore(b.label, b.key) - hrmaxScore(a.label, a.key) || String(a.label).localeCompare(String(b.label)));
   }
   // Returns { key, label } of the club's best-guess HRmax metric, or null.
+  // CHEAP: only the catalog (small), so it can run on the player-load path. The heavy
+  // data scan (listClubMetrics) is reserved for the manual picker.
   async function resolveHRmaxMetric(clubId) {
-    const list = await listClubMetrics(clubId);
-    const best = list.find(m => hrmaxScore(m.label, m.key) >= 60);
-    return best ? { key: best.key, label: best.label } : null;
+    if (!clubId) return null;
+    try {
+      const { data } = await window.sb.from('gps_metric_definitions')
+        .select('key, label').eq('club_id', clubId);
+      const best = (data || [])
+        .map(d => ({ key: d.key, label: d.label || d.key, s: hrmaxScore(d.label, d.key) }))
+        .sort((a, b) => b.s - a.s)[0];
+      return best && best.s >= 60 ? { key: best.key, label: best.label } : null;
+    } catch { return null; }
   }
   // Player's HRmax (bpm): peak of the HRmax metric across all their sessions (peak-of-
   // session-peaks ≈ true max). metricKey from resolveHRmaxMetric (or a UI override).
   async function getPlayerHRmax(playerId, clubId, metricKey) {
     if (!playerId || !clubId || !metricKey) return null;
     try {
-      const { data: reps } = await window.sb
-        .from('gps_reports').select('id')
-        .eq('player_id', playerId).eq('club_id', clubId);
-      const ids = (reps || []).map(r => r.id);
-      if (!ids.length) return null;
+      // One round-trip: filter metrics by (club, key) — indexed — and inner-join the
+      // player's reports, taking the peak. Beats fetching all report ids then a second .in().
       const { data } = await window.sb
         .from('gps_report_metrics')
-        .select('value')
+        .select('value, gps_reports!inner(player_id)')
         .eq('club_id', clubId)
         .eq('metric_key', metricKey)
-        .in('report_id', ids)
+        .eq('gps_reports.player_id', playerId)
         .not('value', 'is', null)
         .order('value', { ascending: false })
         .limit(1)

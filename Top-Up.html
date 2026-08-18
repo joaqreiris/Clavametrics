@@ -629,9 +629,6 @@
     pd.vift = vift ? vift.vift : null;
     pd.vmax = vmax;
     pd.ref = ref;
-    // HRmax (bpm) for the %FCmax continuous model — best-effort, only if the club has the metric
-    const hm = await clubHRmaxMetric();
-    if (hm){ const hr = await TU.getPlayerHRmax(pid, clubId, hm.key); if (state.pdata[pid]) pd.hrmax = hr; }
     // The all-sessions fallback scans every session (heaviest query) — only run it
     // when personal match data is missing on some needed metric.
     const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
@@ -643,6 +640,16 @@
     const needsPos = need.some(m => (!ref[m] || ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
     if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     renderResults();
+    loadPlayerHRmax(pid);   // HRmax is only for the %FCmax block — fetch it off the critical path
+  }
+
+  // HRmax (bpm) for the %FCmax continuous model. Loaded in the background so the player
+  // card paints immediately; re-renders when it arrives.
+  async function loadPlayerHRmax(pid){
+    const pd = state.pdata[pid]; if (!pd || pd.hrmax != null) return;
+    const hm = await clubHRmaxMetric(); if (!hm) return;
+    const hr = await TU.getPlayerHRmax(pid, clubId, hm.key);
+    if (state.pdata[pid] && hr != null){ pd.hrmax = hr; renderResults(); }
   }
 
   // Positional fallback reference, cached per position.
