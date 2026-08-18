@@ -813,7 +813,11 @@
         buckets.get(key).push(ex);
       });
       const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const headHtml = (key, label, n, depth, collapsed) => `<div class="sl-folder-head" data-folder="${esc(key)}" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:${depth?10:2}px 0 2px;padding-left:${(depth||0)*14}px;font:700 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);cursor:pointer;user-select:none"><i class="ti ti-chevron-${collapsed?'right':'down'}" style="font-size:13px;transition:transform .12s"></i><i class="ti ti-folder" style="font-size:13px"></i>${esc(label)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
+      const actBtn = (act, key, icon, title) => `<button type="button" class="sl-folder-act" data-fact="${act}" data-folder="${esc(key)}" title="${esc(title)}" aria-label="${esc(title)}" style="background:none;border:0;padding:3px;margin:0;cursor:pointer;color:var(--cm-fg-muted);display:inline-flex;line-height:1;border-radius:4px"><i class="ti ti-${icon}" style="font-size:13px"></i></button>`;
+      const headHtml = (key, label, n, depth, collapsed) => {
+        const acts = key ? `<span class="sl-folder-acts" style="margin-left:auto;display:inline-flex;gap:1px;align-items:center">${actBtn('new', key, 'folder-plus', tt('folders.new_sub','New subfolder'))}${actBtn('rename', key, 'pencil', tt('folders.rename','Rename'))}${actBtn('delete', key, 'trash', tt('folders.delete','Delete'))}</span>` : '';
+        return `<div class="sl-folder-head" data-folder="${esc(key)}" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:${depth?10:2}px 0 2px;padding-left:${(depth||0)*14}px;font:700 11px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);cursor:pointer;user-select:none"><i class="ti ti-chevron-${collapsed?'right':'down'}" style="font-size:13px;transition:transform .12s"></i><i class="ti ti-folder" style="font-size:13px"></i>${esc(label)}<span style="font-weight:500;opacity:.7">${n}</span>${acts}</div>`;
+      };
       const groups = [];
       const none = buckets.get('');
       if (none && none.length) groups.push({ key: '', label: window.CMFolders.noneLabel(), depth: 0, items: none });
@@ -828,6 +832,37 @@
         const key = head.dataset.folder;
         if (_slCollapsed.has(key)) _slCollapsed.delete(key); else _slCollapsed.add(key);
         _slSaveCollapsed();
+        renderCards();
+      });
+    });
+
+    // Per-folder actions on each header: create a subfolder inside it, rename it, or delete it.
+    grid.querySelectorAll('.sl-folder-act').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!window.CMFolders) return;
+        const act = btn.dataset.fact;
+        const fid = btn.dataset.folder;
+        const folder = (window._slFolders || []).find(f => f.id === fid);
+        if (act === 'new') {
+          const row = await window.CMFolders.promptCreate({ kind: 'field', parentId: fid, teamId: folder ? folder.team_id : null });
+          if (!row) return;
+          _slCollapsed.delete(fid); // reveal the parent so the new subfolder is visible
+          _slSaveCollapsed();
+        } else if (act === 'rename') {
+          const name = window.prompt(tt('folders.rename_prompt', 'Rename folder'), folder ? folder.name : '');
+          if (name == null || !name.trim()) return;
+          const { error } = await window.CMFolders.rename(fid, name);
+          if (error) { alert(error.message); return; }
+        } else if (act === 'delete') {
+          const msg = tt('folders.delete_confirm', 'Delete folder "{name}"? Its subfolders are removed too; the exercises inside are kept and left unfiled.', { name: folder ? folder.name : '' });
+          if (!confirm(msg)) return;
+          const { error } = await window.CMFolders.remove(fid);
+          if (error) { alert(error.message); return; }
+          _slCollapsed.delete(fid);
+          _slSaveCollapsed();
+        }
+        window._slFolders = await window.CMFolders.load('field');
         renderCards();
       });
     });

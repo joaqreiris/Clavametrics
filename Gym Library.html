@@ -674,14 +674,17 @@ function renderGrid(exercises) {
     exercises.forEach(e => { const k = (e.folder_id && known.has(e.folder_id)) ? e.folder_id : ''; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e); });
     const groups = [];
     const none = buckets.get('');
-    if (none && none.length) groups.push({ label: window.CMFolders.noneLabel(), depth: 0, items: none });
-    order.forEach(x => { const items = buckets.get(x.id); if (items && items.length) groups.push({ label: x.name, depth: x.depth || 0, items }); });
+    if (none && none.length) groups.push({ key: '', label: window.CMFolders.noneLabel(), depth: 0, items: none });
+    order.forEach(x => { const items = buckets.get(x.id); if (items && items.length) groups.push({ key: x.id, label: x.name, depth: x.depth || 0, items }); });
     if (groups.length > 1) {
-      grid.innerHTML = groups.map(g =>
-        `<div class="gl-group-sep" style="padding-left:${(g.depth||0)*14}px">${esc(g.label)} <span class="ct">${g.items.length}</span></div>` + g.items.map(cardHTML).join('')
-      ).join('');
+      const gmActBtn = (act, key, icon, title) => `<button type="button" class="gl-folder-act" data-fact="${act}" data-folder="${esc(key)}" title="${esc(title)}" aria-label="${esc(title)}" style="background:none;border:0;padding:3px;margin:0;cursor:pointer;color:inherit;display:inline-flex;line-height:1;border-radius:4px;opacity:.7"><i class="ti ti-${icon}" style="font-size:13px"></i></button>`;
+      grid.innerHTML = groups.map(g => {
+        const acts = g.key ? `<span style="margin-left:auto;display:inline-flex;gap:1px;align-items:center">${gmActBtn('new', g.key, 'folder-plus', tt('folders.new_sub','New subfolder'))}${gmActBtn('rename', g.key, 'pencil', tt('folders.rename','Rename'))}${gmActBtn('delete', g.key, 'trash', tt('folders.delete','Delete'))}</span>` : '';
+        return `<div class="gl-group-sep" data-folder="${esc(g.key)}" style="padding-left:${(g.depth||0)*14}px">${esc(g.label)} <span class="ct">${g.items.length}</span>${acts}</div>` + g.items.map(cardHTML).join('');
+      }).join('');
       appendAddCard(grid);
       attachCardListeners();
+      gmAttachFolderActions(grid);
       highlightFromURL();
       return;
     }
@@ -932,6 +935,35 @@ window.gmNewFolder = async function() {
   FOLDERS_GYM = await window.CMFolders.load('gym');
   gmRenderFolderSelect(row.id);
 };
+
+// Per-folder header actions in the grid: new subfolder inside it, rename, or delete.
+function gmAttachFolderActions(grid) {
+  grid.querySelectorAll('.gl-folder-act').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!window.CMFolders) return;
+      const act = btn.dataset.fact;
+      const fid = btn.dataset.folder;
+      const folder = (FOLDERS_GYM || []).find(f => f.id === fid);
+      if (act === 'new') {
+        const row = await window.CMFolders.promptCreate({ kind: 'gym', parentId: fid, teamId: null });
+        if (!row) return;
+      } else if (act === 'rename') {
+        const name = window.prompt(tt('folders.rename_prompt', 'Rename folder'), folder ? folder.name : '');
+        if (name == null || !name.trim()) return;
+        const { error } = await window.CMFolders.rename(fid, name);
+        if (error) { alert(error.message); return; }
+      } else if (act === 'delete') {
+        const msg = tt('folders.delete_confirm', 'Delete folder "{name}"? Its subfolders are removed too; the exercises inside are kept and left unfiled.', { name: folder ? folder.name : '' });
+        if (!confirm(msg)) return;
+        const { error } = await window.CMFolders.remove(fid);
+        if (error) { alert(error.message); return; }
+      }
+      FOLDERS_GYM = await window.CMFolders.load('gym');
+      applyFilters();
+    });
+  });
+}
 
 async function aiTagOpenExercise() {
   const name = document.getElementById('gm-name').value.trim();
