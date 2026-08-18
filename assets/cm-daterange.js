@@ -206,6 +206,11 @@
       function setOpen(v) {
         open = v; popEl.hidden = !v;
         if (v) {
+          // Portal el popover a <body>: un ancestro con transform (ej. drawer que hace
+          // translateX para el slide-in) redefine el "position:fixed" y lo posiciona relativo
+          // al ancestro → el calendario aparecía fuera de pantalla. En <body> queda relativo al
+          // viewport. Neutral donde no hay transform (Admin).
+          if (popEl.parentElement !== document.body) document.body.appendChild(popEl);
           vY = (to || from || today).getFullYear(); vM = (to || from || today).getMonth();
           renderCal();
           positionPop();
@@ -217,7 +222,7 @@
         }
       }
 
-      function onDocClick(e) { if (open && !container.contains(e.target)) setOpen(false); }
+      function onDocClick(e) { if (open && !container.contains(e.target) && !popEl.contains(e.target)) setOpen(false); }   // popEl portaleado a body → chequear ambos
 
       triggerEl.addEventListener('click', e => { e.stopPropagation(); setOpen(!open); });
       document.addEventListener('click', onDocClick);
@@ -229,7 +234,7 @@
         setRange(f, t) { from = parse(f); to = parse(t); refreshLabel(); if (open) renderCal(); },
         open() { setOpen(true); },
         close() { setOpen(false); },
-        destroy() { document.removeEventListener('click', onDocClick); window.removeEventListener('scroll', positionPop, true); window.removeEventListener('resize', positionPop); container.innerHTML = ''; container.classList.remove('cmdr'); },
+        destroy() { document.removeEventListener('click', onDocClick); window.removeEventListener('scroll', positionPop, true); window.removeEventListener('resize', positionPop); try { popEl.remove(); } catch (_) {} container.innerHTML = ''; container.classList.remove('cmdr'); },
       };
       return api;
     },
