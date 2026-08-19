@@ -814,6 +814,21 @@
     if (sumCell) sumCell.innerHTML = summary(statuses, MC_DATES);
   }
 
+  // ── Repinta EN VIVO la celda de un día (usado por el realtime) ──
+  // updateRowSummary sólo refrescaba la columna de resumen; los puntos del día no se
+  // actualizaban solos (había que recargar). Esto reemplaza el <td> del día con su estado
+  // recalculado. Los clicks están delegados en `matrix`, así que reemplazar el td es seguro.
+  function updateRowCell(playerId, date) {
+    const idx = MC_DATES.indexOf(date);
+    if (idx < 0) return;
+    const td = matrix && matrix.querySelector(`td[data-pid="${playerId}"][data-date="${date}"]`);
+    if (!td) return;
+    const tmp = document.createElement('template');
+    tmp.innerHTML = cellHTML(cellStatus(playerId, date), idx, playerId, date);
+    const fresh = tmp.content.firstElementChild;
+    if (fresh) td.replaceWith(fresh);
+  }
+
   // ── Render header ──
   // matchDates: { [dateStr]: opponentName } for match-day indicators
   function renderHeader(matchDates) {
@@ -1372,6 +1387,7 @@
           avMap[newRow.player_id + '|' + newRow.date] = newRow;
         }
 
+        updateRowCell(row.player_id, date);   // repinta el punto del día EN VIVO (verde/anillo azul)
         updateRowSummary(row.player_id);
         if (date === todayStr) recalcKPIs();
       })
