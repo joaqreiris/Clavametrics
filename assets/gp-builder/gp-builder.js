@@ -329,6 +329,16 @@
   //   v ≥ hi → c1 · 0 ≤ v < hi → c2 · lo ≤ v < 0 → c3 · v < lo → c4
   // Sin bandas configuradas cae al color por signo (verde sube / rojo baja).
   const _REL_BANDS_DEFAULT = { hi: 20, lo: -20, colors: ['#166534', '#22C55E', '#F87171', '#B91C1C'] };
+  // Tope de outliers para Δ%: una subida desde una base ~0 dispara el % (+4400%) y revienta
+  // la escala del eje. Se topa la magnitud a este valor; el punto topado se marca (_capped)
+  // para que la etiqueta muestre «≥» en vez de un número engañoso. Los descensos ya están
+  // acotados naturalmente a −100% (una métrica de volumen no baja de 0).
+  const _REL_PCT_CAP = 300;
+  function _capPct(v) {
+    if (v == null || isNaN(v)) return { v: null, capped: false };
+    if (Math.abs(v) > _REL_PCT_CAP) return { v: v > 0 ? _REL_PCT_CAP : -_REL_PCT_CAP, capped: true };
+    return { v, capped: false };
+  }
   function _relBandColor(v, bands) {
     if (v == null || isNaN(v)) return null;
     if (!bands || !Array.isArray(bands.colors) || bands.colors.length < 4) {
@@ -359,19 +369,20 @@
         if (!groups.has(gk)) groups.set(gk, []);
         groups.get(gk).push(p);
       }
-      const pct = new Map();   // punto → % (o null)
+      const pct = new Map();   // punto → { v, capped } (o v null)
       for (const pts of groups.values()) {
         const ordered = [...pts].sort((a, b) => mcOf(a).localeCompare(mcOf(b)));
         for (let k = 0; k < ordered.length; k++) {
           const prev = k > 0 ? ordered[k - 1].y : null;
           const cur  = ordered[k].y;
-          pct.set(ordered[k], (prev != null && prev !== 0 && !isNaN(prev) && cur != null && !isNaN(cur))
-            ? (cur - prev) / prev * 100 : null);
+          const raw = (prev != null && prev !== 0 && !isNaN(prev) && cur != null && !isNaN(cur))
+            ? (cur - prev) / prev * 100 : null;
+          pct.set(ordered[k], _capPct(raw));
         }
       }
       const nm = catalogMap.get(s.label)?.name || s.name || s.label;
       out.push({ label: `${s.label}__relmc`, name: `Δ% ${nm}`, unit: '%', line: true, _rel: 'prev_mc',
-        points: s.points.map(p => ({ ...p, y: pct.has(p) ? pct.get(p) : null, _abs: p.y })) });
+        points: s.points.map(p => { const e = pct.get(p); return { ...p, y: e ? e.v : null, _abs: p.y, _capped: !!(e && e.capped) }; }) });
     });
     return out;
   }
@@ -496,8 +507,9 @@
           const dv = p.dims || [p.x];
           const groupKey = [...dv.filter((_, i) => i !== tIdx), mdOfDate(dv[tIdx])].join('¦');
           const ref = refVal(s.label, groupKey, mode);
-          const pct = (ref != null && ref !== 0 && !isNaN(ref) && p.y != null && !isNaN(p.y)) ? (p.y - ref) / ref * 100 : null;
-          return { ...p, y: pct, _abs: p.y };
+          const raw = (ref != null && ref !== 0 && !isNaN(ref) && p.y != null && !isNaN(p.y)) ? (p.y - ref) / ref * 100 : null;
+          const e = _capPct(raw);
+          return { ...p, y: e.v, _abs: p.y, _capped: e.capped };
         }) });
     });
     return out;
@@ -3759,7 +3771,9 @@
           lmeta.data.forEach((pt, i) => {
             const v = ds.data[i];
             if (v == null || !pt) return;
-            const txt = `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
+            // Punto topado (outlier de base ~0): «≥/≤» en vez de un número que engaña.
+            const capped = ds._capFlags && ds._capFlags[i];
+            const txt = capped ? `${v >= 0 ? '≥' : '≤'}${Math.round(v)}%` : `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
             const tw  = ctx.measureText(txt).width;
             const ly  = pt.y - 9;   // encima del punto
             ctx.fillStyle = 'rgba(255,255,255,.85)';   // halo/fondo para contraste
@@ -4125,11 +4139,13 @@
           // Δ%: puntos más grandes y coloreados por BANDA de umbral (o por signo si no hay
           // bandas configuradas) para que se lean incluso cuando quedan aislados.
           const ptCol = isRel ? data.map(v => v == null ? lc : _relBandColor(v, config.style?.relBands)) : lc;
+          // Flags de tope (Δ% desde base ~0) por categoría → la etiqueta muestra «≥».
+          const capFlags = isRel ? cats.map(c => { const p = s.points.find(q => q.x === c); return !!(p && p._capped); }) : null;
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25,
             pointRadius: isRel ? 4.5 : 3.5, pointHoverRadius: isRel ? 6.5 : 5.5,
-            pointBackgroundColor: ptCol, pointBorderColor: '#fff', pointBorderWidth: isRel ? 1.6 : 1.2, _isLine: true, _rel: isRel };
+            pointBackgroundColor: ptCol, pointBorderColor: '#fff', pointBorderWidth: isRel ? 1.6 : 1.2, _isLine: true, _rel: isRel, _capFlags: capFlags };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
         refMetricMap.set(s.label, { vals, isLine: false, color: col });
