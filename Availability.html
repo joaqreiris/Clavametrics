@@ -632,6 +632,7 @@
   let players           = [];   // current club players
   let injuredIds        = new Set(); // player IDs with active injury
   let _avGuestTeam      = new Map(); // guest player id → their primary team name (viewing another squad here)
+  let _avPlayerTeams    = new Map(); // player id → [team_id, …] todas sus membresías (para «otro equipo»)
   let todayStr          = '';   // YYYY-MM-DD, set in init()
   let yesterdayByPlayer = null; // { [player_id]: row } for delta KPI
   let _realtimeSub      = null; // Supabase realtime channel
@@ -1067,11 +1068,14 @@
   }
 
   // ── Save cell to Supabase ──
-  async function saveAvailability(pid, date, status, minutes = 0) {
+  async function saveAvailability(pid, date, status, minutes = 0, teamIdOverride) {
     if (!CLUB_ID) return;
     // Estados globales (lesión/enfermedad/selección) → team_id NULL (se ven en todos los equipos).
     // El resto es relativo al equipo activo → team_id = _avTeamId ("está con este equipo ese día").
-    const team_id = GLOBAL_STATUS.has(status) ? null : (_avTeamId || null);
+    // teamIdOverride: para «entrena con el OTRO equipo» se fuerza el team_id de ese equipo
+    // (available con ese team_id → verde allá, anillo azul acá).
+    const team_id = teamIdOverride !== undefined ? teamIdOverride
+                  : (GLOBAL_STATUS.has(status) ? null : (_avTeamId || null));
     // Un (re)asignado de estado limpia la nota: el motivo pertenece al estado que se marcó,
     // no se arrastra a uno nuevo. La nota se agrega/edita aparte vía saveNote() (update).
     const { error } = await window.sb.from('availability')
@@ -1136,7 +1140,7 @@
     // ── Barrier A — window-independent, fire together: active microcycle (which defines the
     //    date window) + players + active injuries. ──
     let mcMatchDate = null, mcRival = null;
-    const [mcs, playersRes, injuriesRes] = await Promise.all([
+    const [mcs, playersRes, injuriesRes, ptRes] = await Promise.all([
       (async () => {
         try {
           let _mcq = window.sb.from('microcycles')
@@ -1153,9 +1157,17 @@
       window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id').order('last_name'),
       window.sb.from('injuries').select('player_id, start_date, expected_return, returned_date')
         .eq('club_id', CLUB_ID).eq('status', 'active'),
+      // Todas las membresías de equipo por jugador (para el botón «entrena con el OTRO equipo»)
+      window.sb.from('player_teams').select('player_id, team_id').eq('club_id', CLUB_ID),
     ]);
     const playersData = playersRes.data, playersErr = playersRes.error;
     const injuriesData = injuriesRes.data;
+    // player_id → [team_id, …] con todos sus equipos (para resolver «el otro equipo»)
+    _avPlayerTeams = new Map();
+    (ptRes.data || []).forEach(r => {
+      if (!_avPlayerTeams.has(r.player_id)) _avPlayerTeams.set(r.player_id, []);
+      _avPlayerTeams.get(r.player_id).push(r.team_id);
+    });
     console.log('[Availability] currentClubId en Availability:', CLUB_ID);
     console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
 
@@ -1651,10 +1663,25 @@
       matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
         const { pid, date } = td.dataset;
         if (pid && date) {
-          // "Other team" on a GUEST: they already derive to other_team per-view, so just
-          // clear any stored record — keeps their OWN team showing the real status and
-          // avoids the global-status side effect. Non-guests store it explicitly.
-          if (fullStatus === 'other_team' && _avGuestTeam.has(pid)) {
+          // ── "Other team" = «entrena con el OTRO equipo» ──
+          // Si el jugador pertenece a EXACTAMENTE otro equipo (aparte del que estás viendo),
+          // se guarda 'available' con el team_id de ESE equipo → verde allá, anillo azul acá.
+          // Es la vía para marcar el alterné desde cualquiera de los dos equipos, sin cambiar de vista.
+          const others = (fullStatus === 'other_team')
+            ? (_avPlayerTeams.get(pid) || []).filter(t => t && t !== _avTeamId)
+            : [];
+          if (fullStatus === 'other_team' && others.length === 1) {
+            const otherTid = others[0];
+            const tn = _avTeamsById.get(otherTid)?.name || '';
+            td.innerHTML = dotEl('other_team');
+            td.className = cellBaseCls(date) + ' is-otherteam';
+            if (tn) td.title = tt('availability.trainsWithTeam', `Training with ${tn}`, { team: tn }).replace(/"/g,"'");
+            avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 0, team_id: otherTid };
+            updated.add(pid);
+            saveAvailability(pid, date, 'available', 0, otherTid);
+          } else if (fullStatus === 'other_team' && _avGuestTeam.has(pid)) {
+            // Invitado sin un único «otro equipo» claro: ya deriva a other_team por vista →
+            // basta con limpiar el registro (evita el side-effect de estado global).
             td.innerHTML = dotEl('other_team');
             td.className = cellBaseCls(date);
             delete avMap[pid + '|' + date];
