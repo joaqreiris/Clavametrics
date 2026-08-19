@@ -1388,7 +1388,7 @@
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
       S.referenceLines = Array.isArray(cfg.referenceLines) ? cfg.referenceLines.map(r => ({ ...r })) : [];
-      S.title   = cfg.title || '';
+      S.title   = cfg.titleCustom ? (cfg.title || '') : '';   // no-custom → vacío: el auto se deriva fresco (no se congela)
       S.titleCustom = !!cfg.titleCustom;      // ausente en cards viejas → false → título auto
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
       S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) }));
@@ -1425,7 +1425,7 @@
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
       S.referenceLines = Array.isArray(rawConfig.referenceLines) ? rawConfig.referenceLines.map(r => ({ ...r })) : [];
-      S.title   = rawConfig.title || '';
+      S.title   = rawConfig.titleCustom ? (rawConfig.title || '') : '';   // ver nota en el otro load: evita congelar el auto
       S.titleCustom = !!rawConfig.titleCustom;   // ausente en cards viejas → false → título auto
       S.metrics = (rawConfig.metrics || [])
         .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}), ...(m.rel ? { rel: m.rel } : {}) }))
@@ -7356,7 +7356,7 @@
         </div>
         <div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_title', 'Title')}</span>
-          <input class="es-input bdd-cfg-input" id="gpbDDTitle" type="text" placeholder="${esc(_tt('gps_analysis.builder_title_placeholder', 'Chart title'))}" value="${esc(S.title || '')}">
+          <input class="es-input bdd-cfg-input" id="gpbDDTitle" type="text" placeholder="${esc(autoTitle({ ...S, title: '' }) || _tt('gps_analysis.builder_title_placeholder', 'Chart title'))}" value="${esc(S.titleCustom ? (S.title || '') : '')}">
         </div>
         <div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_scope', 'Scope')}</span>
@@ -8019,7 +8019,7 @@
     S.referenceLines = Array.isArray(config.referenceLines) ? config.referenceLines.map(r => ({ ...r })) : [];
     S.titleFormat    = config.style?.titleFormat    ? { ...config.style.titleFormat }    : {};
     S.subtitleFormat = config.style?.subtitleFormat ? { ...config.style.subtitleFormat } : {};
-    S.title   = config.title || '';
+    S.title   = config.titleCustom ? (config.title || '') : '';   // ver nota en el otro load: evita congelar el auto
     S.titleCustom = !!config.titleCustom;      // ausente en cards viejas → false → título auto
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}), ...(m.rel ? { rel: m.rel } : {}) }));
 
