@@ -6059,7 +6059,10 @@
       case 'heat': {
         const t  = max > min ? (value - min) / (max - min) : 0.5;
         const bg = _heatColor(t, f.heatScale || 'gyr');
-        return `<span class="tf-c heat heat-cell" style="background:${bg};color:${_textOn(bg)}">${valTxt}</span>`;
+        // Chip de tinte suave (no bloque saturado): conserva escala y dirección de la config,
+        // pero baja la saturación para que la tabla no sea un muro de rojo. El color se pasa por
+        // --hc y el fondo/texto se derivan con color-mix (legible en claro y oscuro).
+        return `<span class="tf-c heat heat-cell soft" style="--hc:${bg}">${valTxt}</span>`;
       }
       case 'icon': {
         const thr = f.thr || stats.thr;
