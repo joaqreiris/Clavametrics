@@ -3543,14 +3543,18 @@ async function _gpOpenPendingPanel() {
 }
 
 async function _gpRenderPending(clubId, body, ov) {
-  // AISLAMIENTO POR EQUIPO: solo pendientes/sesiones/partidos del equipo activo (o sin equipo, que
-  // es como caen los imports de Catapult). Sin esto, estando en un equipo se veían y se podían
-  // asociar sesiones de OTRO equipo del club.
+  // AISLAMIENTO POR EQUIPO. El modal puede abrirse antes de que el dashboard resuelva _gpTeamId →
+  // sin equipo activo las queries quedaban sin filtro = cross-team. Aseguramos el equipo primero.
+  if (!window._gpTeamId && typeof window.gpsInitTeamSwitch === 'function') { try { await window.gpsInitTeamSwitch(); } catch {} }
   const tId = window._gpTeamId || null;
-  const _scopeT = q => tId ? q.or(`team_id.eq.${tId},team_id.is.null`) : q;
+  // Pendientes: equipo activo O sin equipo (los imports de Catapult caen con team_id null).
+  const _teamOrNull = q => tId ? q.or(`team_id.eq.${tId},team_id.is.null`) : q;
+  // Sesiones/partidos PLANIFICADOS: siempre pertenecen a un equipo (el Calendar filtra por team_id) →
+  // filtro ESTRICTO, para no colar sesiones de otra categoría del club.
+  const _teamStrict = q => tId ? q.eq('team_id', tId) : q;
   let rows; const teams = {}; let plans = [], matches = [];
   try {
-    rows = await window.cmFetchAll(() => _scopeT(window.sb.from('gps_pending_activities')
+    rows = await window.cmFetchAll(() => _teamOrNull(window.sb.from('gps_pending_activities')
       .select('id, session_date, external_activity_id, activity_name, team_id, n_athletes')
       .eq('club_id', clubId)), { label: 'pending-activities' });
     rows.sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
@@ -3559,13 +3563,14 @@ async function _gpRenderPending(clubId, body, ov) {
     if (rows.length) {
       const dates = [...new Set(rows.map(r => r.session_date))];
       // Sesiones planificadas ADOPTABLES (no gym, sin GPS aún) esos días → sugerir ASOCIAR.
-      const { data: ps } = await _scopeT(window.sb.from('training_sessions')
-        .select('id, session_date, session_type, match_day_offset, team_id, title')
+      // Traemos session_attributes para poder mostrar el rival fresco en las de tipo 'match'.
+      const { data: ps } = await _teamStrict(window.sb.from('training_sessions')
+        .select('id, session_date, session_type, match_day_offset, team_id, title, session_attributes')
         .eq('club_id', clubId).in('session_date', dates)
         .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym'));
       plans = ps || [];
       // Partidos del Calendar (calendar_events type=match) esos días → sugerir crear 'match'.
-      const { data: ms } = await _scopeT(window.sb.from('calendar_events')
+      const { data: ms } = await _teamStrict(window.sb.from('calendar_events')
         .select('date, opponent, home_away, team_id, title').eq('club_id', clubId)
         .in('date', dates).eq('type', 'match'));
       matches = ms || [];
@@ -3577,39 +3582,69 @@ async function _gpRenderPending(clubId, body, ov) {
   const _teamOk = (a, b) => !a || !b || String(a) === String(b);
   const _findPlans = r => plans.filter(p => p.session_date === r.session_date && _teamOk(p.team_id, r.team_id));
   const _findMatch = r => matches.find(m => m.date === r.session_date && _teamOk(m.team_id, r.team_id));
-  const inp = 'height:30px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit';
+  // Nombre del rival de una sesión 'match': el title está congelado (snapshot); la verdad fresca es
+  // calendar_events.opponent (renombrable) y, si no, session_attributes.rival.
+  const _rivalOf = s => s?.session_attributes?.rival || s?.session_attributes?.opponent || null;
+  const _planLabel = (p, mEvt) => {
+    if (p.session_type === 'match') {
+      const riv = (mEvt && mEvt.opponent) || _rivalOf(p);
+      return riv ? `${_gpStLabel('match')} · ${riv}` : (p.title || _gpStLabel('match'));
+    }
+    return p.title || _gpStLabel(p.session_type);
+  };
 
   const rowHtml = (r) => {
     const cands = _findPlans(r), mEvt = _findMatch(r);
     const name = _gpEsc(r.activity_name || '—');
-    const team = r.team_id ? _gpEsc(teams[r.team_id] || '—') : '—';
-    const dateTd = `<td style="font-family:var(--cm-font-mono);white-space:nowrap;vertical-align:top">${r.session_date || '—'}</td>`;
+    const teamNm = r.team_id ? _gpEsc(teams[r.team_id] || '—') : tt('gps_analysis.pending_no_team', 'No team');
+    const nAth = r.n_athletes ? ` · ${r.n_athletes} ${tt('gps_analysis.pending_athletes', 'players')}` : '';
     const isMatch = !!mEvt;
     // Selector unificado: ASOCIAR a cualquiera de las sesiones planificadas del día (menos gym, ya
-    // filtradas), o CREAR una sesión nueva por tipo. Pre-selecciona 'match' si hay partido en Calendar
-    // y no hay candidatas a asociar. Así un día con partido + compensatorio deja elegir a cuál va el GPS.
+    // filtradas por equipo), o CREAR una sesión nueva por tipo. Pre-selecciona 'match' si hay partido
+    // en Calendar y no hay candidatas. Así un día con partido + compensatorio deja elegir a cuál va el GPS.
     const assocOpts = cands.map(p => {
       const md = p.match_day_offset ? ` · ${_gpMdLabel(p.match_day_offset)}` : '';
-      return `<option value="s:${p.id}">${_gpEsc(p.title || _gpStLabel(p.session_type))}${md}</option>`;
+      return `<option value="s:${p.id}">${_gpEsc(_planLabel(p, mEvt))}${md}</option>`;
     }).join('');
     const createOpts = _GP_ST_LIST.map(t => `<option value="c:${t}" ${(!cands.length && isMatch && t === 'match') ? 'selected' : ''}>+ ${_gpStLabel(t)}</option>`).join('');
-    const targetSel = `<select class="pend-target" style="${inp}">${assocOpts ? `<optgroup label="${tt('gps_analysis.pending_assoc_group', 'Associate to session')}">${assocOpts}</optgroup>` : ''}<optgroup label="${tt('gps_analysis.pending_create_group', 'Create new session')}">${createOpts}</optgroup></select>`;
-    const hint = mEvt ? `<div style="font-size:10.5px;color:var(--cm-accent)"><i class="ti ti-ball-football"></i> ${tt('gps_analysis.pending_match_found', 'Match in calendar')}${mEvt.opponent ? ' vs ' + _gpEsc(mEvt.opponent) : ''}</div>` : '';
-    return `<tr data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${r.external_activity_id || ''}">
-      ${dateTd}
-      <td style="white-space:normal;word-break:break-word;vertical-align:top">${name}<div style="font-size:10.5px;color:var(--cm-fg-muted)">${team}</div>${hint}</td>
-      <td style="vertical-align:top">${targetSel}</td>
-      <td style="vertical-align:top"><select class="pend-md" style="${inp}">${_gpMdOptsSel(isMatch && !cands.length ? 'MD0' : '')}</select></td>
-      <td style="text-align:right;white-space:nowrap;vertical-align:top"><button class="cm-btn is-primary is-sm pend-go" style="height:30px"></button></td>
-    </tr>`;
+    const targetSel = `<select class="pend-target gp-pend-sel">${assocOpts ? `<optgroup label="${tt('gps_analysis.pending_assoc_group', 'Associate to session')}">${assocOpts}</optgroup>` : ''}<optgroup label="${tt('gps_analysis.pending_create_group', 'Create new session')}">${createOpts}</optgroup></select>`;
+    const matchChip = mEvt ? `<span class="gp-pend-match"><i class="ti ti-ball-football"></i> ${tt('gps_analysis.pending_match_found', 'Match in calendar')}${mEvt.opponent ? ' · ' + _gpEsc(mEvt.opponent) : ''}</span>` : '';
+    return `<div class="gp-pend-row" data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${r.external_activity_id || ''}">
+      <div class="gp-pend-when"><i class="ti ti-satellite"></i><b>${r.session_date || '—'}</b></div>
+      <div class="gp-pend-body">
+        <div class="gp-pend-name">${name}</div>
+        <div class="gp-pend-meta">${teamNm}${nAth}</div>
+        ${matchChip}
+      </div>
+      <div class="gp-pend-actions">
+        ${targetSel}
+        <select class="pend-md gp-pend-sel" style="max-width:150px">${_gpMdOptsSel(isMatch && !cands.length ? 'MD0' : '')}</select>
+        <button class="cm-btn is-primary is-sm pend-go"></button>
+      </div>
+    </div>`;
   };
 
   body.innerHTML = `
-    <div style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">${tt('gps_analysis.pending_sub2', 'These days have GPS but no linked session. If a planned session/match already exists that day, associate the GPS to it; otherwise create the session (matchday / training / outdoor).')}</div>
-    <div class="gp-imp-preview" style="max-height:56vh;overflow-y:auto;overflow-x:hidden"><table style="width:100%">
-      <thead><tr><th>${tt('gps_analysis.ctx_date', 'Date')}</th><th>${tt('gps_analysis.pending_activity', 'Activity')}</th><th>${tt('gps_analysis.pending_type', 'Type')}</th><th>MD</th><th></th></tr></thead>
-      <tbody>${rows.map(rowHtml).join('')}</tbody>
-    </table></div>`;
+    <style>
+      .gp-pend{display:flex;flex-direction:column;gap:8px;padding:2px}
+      .gp-pend-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-bg-subtle,var(--cm-bg));transition:border-color .15s ease,box-shadow .15s ease}
+      .gp-pend-row:hover{border-color:var(--cm-accent,#6366f1);box-shadow:0 1px 6px rgba(0,0,0,.05)}
+      .gp-pend-when{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:104px;padding:8px 10px;border-radius:10px;background:var(--cm-bg);border:1px solid var(--cm-border);color:var(--cm-fg-muted)}
+      .gp-pend-when i{font-size:14px;opacity:.7}
+      .gp-pend-when b{font-family:var(--cm-font-mono);font-size:12px;color:var(--cm-fg-strong);white-space:nowrap;letter-spacing:-.2px}
+      .gp-pend-body{flex:1 1 200px;min-width:160px;display:flex;flex-direction:column;gap:3px}
+      .gp-pend-name{font-weight:600;font-size:13px;color:var(--cm-fg-strong);word-break:break-word}
+      .gp-pend-meta{font-size:11px;color:var(--cm-fg-muted)}
+      .gp-pend-match{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;margin-top:1px;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:500;color:var(--cm-accent,#6366f1);background:color-mix(in srgb,var(--cm-accent,#6366f1) 13%,transparent)}
+      .gp-pend-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
+      .gp-pend-sel{height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:9px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:12.5px;max-width:230px;cursor:pointer;transition:border-color .12s ease,box-shadow .12s ease}
+      .gp-pend-sel:hover{border-color:var(--cm-fg-muted)}
+      .gp-pend-sel:focus{outline:none;border-color:var(--cm-accent,#6366f1);box-shadow:0 0 0 3px color-mix(in srgb,var(--cm-accent,#6366f1) 22%,transparent)}
+      .gp-pend-sel:disabled{opacity:.4;cursor:not-allowed}
+      .gp-pend-row .pend-go{height:34px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+    </style>
+    <div style="font:500 12px/1.55 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 14px">${tt('gps_analysis.pending_sub2', 'These days have GPS but no linked session. If a planned session/match already exists that day, associate the GPS to it; otherwise create the session (matchday / training / outdoor).')}</div>
+    <div class="gp-pend" style="max-height:56vh;overflow-y:auto;overflow-x:hidden">${rows.map(rowHtml).join('')}</div>`;
   // Sincroniza label del botón (Asociar vs Crear) y habilita el MD solo al crear.
   body.querySelectorAll('.pend-target').forEach(sel => {
     const sync = () => {
@@ -3630,7 +3665,7 @@ async function _gpRenderPending(clubId, body, ov) {
     if (val.startsWith('s:')) {
       _gpResolvePending(clubId, { ...base, sessionId: val.slice(2), create: false }, body, ov, btn);
     } else {
-      _gpResolvePending(clubId, { ...base, teamId: tr.dataset.team || null, sessionType: val.slice(2), md: tr.querySelector('.pend-md').value, create: true }, body, ov, btn);
+      _gpResolvePending(clubId, { ...base, teamId: tr.dataset.team || window._gpTeamId || null, sessionType: val.slice(2), md: tr.querySelector('.pend-md').value, create: true }, body, ov, btn);
     }
   }));
 }
@@ -3665,7 +3700,7 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
       let fq = window.sb.from('training_sessions')
         .select('id').eq('club_id', clubId).eq('session_date', p.date)
         .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym');
-      const tId = window._gpTeamId; if (tId) fq = fq.or(`team_id.eq.${tId},team_id.is.null`);
+      const tId = window._gpTeamId; if (tId) fq = fq.eq('team_id', tId);
       const { data: pl } = await fq.limit(1);
       sessionId = (pl && pl[0] && pl[0].id) || null;
     }
