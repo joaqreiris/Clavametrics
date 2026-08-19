@@ -569,9 +569,12 @@ function ttLocale() {
     .select('id,name').eq('club_id', clubId).order('name');
 
   const { data: allSubs } = await window.sb.from('subscriptions')
-    .select('team_id,status,is_comp,current_period_end,plans(slug,name,price_monthly)')
+    .select('team_id,status,is_comp,current_period_end,scheduled_plan_id,scheduled_change_at,plans(slug,name,price_monthly)')
     .eq('club_id', clubId)
     .in('status', ['active', 'trialing', 'past_due', 'paused']);
+
+  const { data: allPlans } = await window.sb.from('plans').select('id,slug,name');
+  const planById = {}; (allPlans || []).forEach(p => { planById[p.id] = p; });
 
   const { data: invs } = await window.sb.from('invoices')
     .select('invoice_number,amount,status,paid_at,created_at')
@@ -646,11 +649,20 @@ function ttLocale() {
           : `<span class="status ok"><span class="dot"></span>${tt('billing.status_active','Active')}</span>`;
         const next = (s && !isComp && s.current_period_end) ? fmtD(s.current_period_end) : '—';
         const amt = (isComp || !price) ? '$0.00' : money(price);
+        // Cambio agendado (downgrade/cancelación a fin de período) → nota con días restantes
+        let schedNote = '';
+        if (s && s.scheduled_plan_id && s.scheduled_change_at) {
+          const tgt = planById[s.scheduled_plan_id] || {};
+          const days = Math.max(0, Math.ceil((new Date(s.scheduled_change_at) - new Date()) / 86400000));
+          schedNote = `<div class="sub" style="color:#d4a14a">${ tgt.slug === 'initiation'
+            ? tt('billing.sched_cancel_row','cancels in {n}d',{ n: days })
+            : tt('billing.sched_downgrade_row','→ {plan} in {n}d',{ plan: (tgt.name||tgt.slug), n: days }) }</div>`;
+        }
         const action = isComp
           ? `<button class="cm-btn is-ghost is-sm" disabled title="${_esc(tt('billing.comp_note','Complimentary — managed by ClavaMetrics'))}"><i class="ti ti-gift"></i></button>`
           : `<a class="cm-btn is-outline is-sm" href="Plan%20Picker.html?team=${encodeURIComponent(t.id)}"><i class="ti ${s?'ti-arrows-exchange':'ti-arrow-up'}" style="font-size:13px"></i><span>${s?tt('billing.change','Change'):tt('billing.upgrade','Upgrade')}</span></a>`;
         return `<tr>
-          <td><div class="cat-cell"><div class="ic"><i class="ti ti-ball-football"></i></div><div><div class="name">${_esc(t.name||'')}</div></div></div></td>
+          <td><div class="cat-cell"><div class="ic"><i class="ti ti-ball-football"></i></div><div><div class="name">${_esc(t.name||'')}</div>${schedNote}</div></div></td>
           <td><span class="pill ${pillClass(slug)}">${_esc(name)}</span></td>
           <td>${statusHtml}</td>
           <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${next}</span></td>
