@@ -3633,8 +3633,13 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     let sessionId = p.sessionId || null;   // ASOCIAR → id de la sesión planificada detectada
     if (p.create) {
       btn.textContent = tt('gps_analysis.pending_creating', 'Creating…');
+      // is_historical:true → la sesión sostiene el GPS (gps_reports.session_id la necesita) y aparece
+      // en GPS Analysis / Sessions history, pero NO se dibuja en el Calendar de planificación (que
+      // filtra is_historical=false). Es un registro retroactivo de un día ya jugado, no un evento
+      // planificado: no ensucia el calendario. Si querés que SÍ aparezca, planificalo en el Calendar
+      // y usá "Asociar" en vez de "Crear".
       const ins = {
-        club_id: clubId, session_date: p.date, session_type: p.sessionType, is_historical: false,
+        club_id: clubId, session_date: p.date, session_type: p.sessionType, is_historical: true,
         title: `${_GP_ST_EN[p.sessionType] || 'Session'} · ${p.date}`,
         ...(p.teamId ? { team_id: p.teamId } : {}),
         ...(p.md ? { match_day_offset: p.md } : {}),
