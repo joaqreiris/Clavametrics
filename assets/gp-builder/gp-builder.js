@@ -4291,7 +4291,11 @@
     if (order) {
       const _snap = order.map(i => ({ c: cats[i], f: catFids[i], d: catDims[i] }));
       _snap.forEach((o, i) => { cats[i] = o.c; catFids[i] = o.f; catDims[i] = o.d; });
-      datasets.forEach(ds => { if (Array.isArray(ds.data)) ds.data = order.map(i => ds.data[i]); });
+      // Al reordenar hay que permutar TODO lo que es por-barra, no solo data: si no, el color
+      // por signo y la etiqueta Δ% quedan pegados a la barra equivocada (bug: el % de MC03
+      // aparecía sobre MC02 al ordenar High→low).
+      const _perBar = ['data', 'backgroundColor', 'borderColor', 'pointBackgroundColor', '_relPct', '_relCap'];
+      datasets.forEach(ds => { _perBar.forEach(k => { if (Array.isArray(ds[k])) ds[k] = order.map(i => ds[k][i]); }); });
       if (mcDiffs) { const _md = mcDiffs; mcDiffs = order.map(i => _md[i]); }
     }
     // Con 2 niveles el eje muestra SOLO el detalle (dims[1]); el nivel 1 lo dibuja el plugin
