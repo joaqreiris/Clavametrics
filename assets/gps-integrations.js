@@ -485,6 +485,14 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     }
     const fillPct = running ? Math.max(pct, 6) : pct;   // show a sliver while starting
 
+    // Aviso de atletas sin vincular: el server SALTEA (no importa) las filas de atletas Catapult que
+    // no están mapeados a un jugador (players.external_gps_id). skipped_unmapped cuenta esas filas.
+    // Sin este aviso, un atleta nuevo sin matchear se perdía en silencio. El botón abre "Map athletes".
+    const _unm = t.skipped_unmapped || 0;
+    const warnUnlinked = (isDone && _unm > 0)
+      ? `<span class="gps-sync-warn" style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-warning,#d97706)"><i class="ti ti-alert-triangle-filled"></i>${_esc(tt('admin.gps_sync_unmapped_warn','Some GPS was skipped — Catapult athletes not linked yet. Their data won\'t import until you map them and re-sync.'))}</span><button class="gps-int-btn ghost" data-syncmap="${prov}">${tt('admin.gps_map_athletes','Map athletes')}</button>`
+      : '';
+
     bar.style.display='';
     bar.innerHTML=`
       <div class="gps-sync-row">
@@ -495,12 +503,14 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
         ${isDone?'<i class="ti ti-circle-check-filled"></i>':''}
         <span>${_esc(label)}</span>
         ${sum?`<span>· ${_esc(sum)}</span>`:''}
+        ${warnUnlinked}
         ${running?`<button class="gps-int-btn ghost gps-sync-cancel" data-synccancel="${prov}">${tt('admin.gps_cancel','Cancel')}</button>`:''}
         ${retry?`<button class="gps-int-btn ghost gps-sync-retry" data-syncretry="${prov}">${tt('admin.gps_retry','Retry')}</button>`:''}
         ${isDone?`<button class="gps-int-btn ghost gps-sync-dismiss" data-syncdismiss="${prov}">${tt('common.dismiss','Dismiss')}</button>`:''}
       </div>`;
     const rb=bar.querySelector('[data-syncretry]'); if(rb) rb.addEventListener('click',()=>syncNow(prov));
     const cb=bar.querySelector('[data-synccancel]'); if(cb) cb.addEventListener('click',()=>_cancelSync(prov));
+    const mb=bar.querySelector('[data-syncmap]'); if(mb) mb.addEventListener('click',()=>mapAthletes(prov));
     const db=bar.querySelector('[data-syncdismiss]'); if(db) db.addEventListener('click',()=>{ const iid=INTS[prov]?.id; if(iid) delete _syncJobs[iid]; _paintSyncBar(prov); });
 
     if(btn){ const busy=running && !stale; btn.disabled=busy; btn.textContent = busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now'); }

@@ -4132,13 +4132,29 @@ async function saveEvt() {
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
 
-  // Keep a materialized RPE match-session (if one was linked) in sync with the edited
-  // duration, so its sRPE load tracks the game's real minutes. No-op when no session exists.
+  // Keep the materialized match-session (linked via GPS/RPE) in sync with the edited event:
+  //  · duration → su sRPE sigue los minutos reales del partido.
+  //  · title + session_attributes.rival/home_away/crest → propaga el RENAME del rival. Sin esto la
+  //    sesión-espejo quedaba con el nombre viejo (ej. "Shada FC") aunque el evento se renombrara a
+  //    "DG & BASIC FC" (session_attributes.rival es la fuente de verdad del rival en GPS Analysis).
+  // No-op cuando no existe la sesión.
   if (type === 'match' && date) {
-    let mq = window.sb.from('training_sessions').update({ duration })
+    const _opp = document.getElementById('calEvtF_opponent').value.trim() || null;
+    const _ha  = document.getElementById('calEvtF_homeaway').value || null;
+    let _sq = window.sb.from('training_sessions').select('id, session_attributes')
       .eq('club_id', clubId).eq('session_date', date).eq('session_type', 'match');
-    mq = _activeTeamId ? mq.eq('team_id', _activeTeamId) : mq.is('team_id', null);
-    try { await mq; } catch (e) { console.warn('match-session duration sync:', e); }
+    _sq = _activeTeamId ? _sq.eq('team_id', _activeTeamId) : _sq.is('team_id', null);
+    try {
+      const { data: _msess } = await _sq;
+      for (const _ms of (_msess || [])) {
+        const _attrs = { ...(_ms.session_attributes || {}) };
+        if (_opp) _attrs.rival = _opp;
+        if (_ha)  _attrs.home_away = _ha;
+        if (_pendingCrestUrl) _attrs.rival_crest_url = _pendingCrestUrl;
+        await window.sb.from('training_sessions')
+          .update({ duration, title, session_attributes: _attrs }).eq('id', _ms.id);
+      }
+    } catch (e) { console.warn('match-session rival/title sync:', e); }
   }
 
   // Ensure the rival is in the club's opponent catalog (opponent_branding). Case-insensitive lookup +
