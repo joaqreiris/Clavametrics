@@ -905,7 +905,7 @@
     // ¿Tiene una suscripción de Paddle activa (no cortesía)?
     let activeSub = st.sub || null;
     if (!activeSub){
-      try{ const { data } = await sb.from('subscriptions').select('provider_subscription_id, is_comp, status').eq('team_id', teamId).eq('status','active').maybeSingle(); activeSub = data; }catch(_){}
+      try{ const { data } = await sb.from('subscriptions').select('provider_subscription_id, is_comp, status, billing_cycle').eq('team_id', teamId).eq('status','active').maybeSingle(); activeSub = data; }catch(_){}
     }
     const hasPaddleSub = !!(teamId && activeSub && !activeSub.is_comp && activeSub.provider_subscription_id);
     const isComp = !!(activeSub && activeSub.is_comp);
@@ -918,26 +918,31 @@
       confirmBtn.disabled = true;
       try{
         // 1) Oferta de retención: 30% off × 3 meses antes de cancelar.
-        const curName = ((st.plans && st.plans[curSlug]) || {}).name || curSlug;
-        const offer = await ppConfirm({
-          icon:'ti-rosette-discount',
-          title: tt('plan_picker.save_title','¿Te quedas con 30% off?'),
-          body: tt('plan_picker.save_body','Te aplicamos un 30% de descuento en {plan} durante los próximos 3 meses. Después vuelve al precio normal.',{ plan: curName }),
-          confirmText: tt('plan_picker.save_confirm','Aplicar 30% off × 3 meses'),
-          cancelText: tt('plan_picker.save_back','Volver'),
-          altText: tt('plan_picker.save_cancel_anyway','Cancelar de todas formas'),
-          altValue: 'cancel',
-        });
-        if (offer === true){
-          const { data:r, error } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'apply_discount' } });
-          if (error || r?.error){ alert(tt('plan_picker.save_error','No pude aplicar el descuento. Intenta de nuevo o avisa al admin.')); return; }
-          await ppConfirm({ singleButton:true, icon:'ti-discount-check', title: tt('plan_picker.save_done_title','¡Descuento aplicado!'), body: tt('plan_picker.save_done_body','Se aplicó el 30% off por 3 meses. Tu plan sigue activo.'), confirmText: tt('common.ok','OK') });
-          window.location.href = 'Admin.html';
-          return;
+        //    Solo para MENSUALES: el discount es recurrente por 3 ciclos, así que en
+        //    anual serían 3 años (y el discount de Paddle no cubre precios anuales).
+        const isMonthly = ((activeSub && activeSub.billing_cycle) || 'monthly') === 'monthly';
+        if (isMonthly){
+          const curName = ((st.plans && st.plans[curSlug]) || {}).name || curSlug;
+          const offer = await ppConfirm({
+            icon:'ti-rosette-discount',
+            title: tt('plan_picker.save_title','¿Te quedas con 30% off?'),
+            body: tt('plan_picker.save_body','Te aplicamos un 30% de descuento en {plan} durante los próximos 3 meses. Después vuelve al precio normal.',{ plan: curName }),
+            confirmText: tt('plan_picker.save_confirm','Aplicar 30% off × 3 meses'),
+            cancelText: tt('plan_picker.save_back','Volver'),
+            altText: tt('plan_picker.save_cancel_anyway','Cancelar de todas formas'),
+            altValue: 'cancel',
+          });
+          if (offer === true){
+            const { data:r, error } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'apply_discount' } });
+            if (error || r?.error){ alert(tt('plan_picker.save_error','No pude aplicar el descuento. Intenta de nuevo o avisa al admin.')); return; }
+            await ppConfirm({ singleButton:true, icon:'ti-discount-check', title: tt('plan_picker.save_done_title','¡Descuento aplicado!'), body: tt('plan_picker.save_done_body','Se aplicó el 30% off por 3 meses. Tu plan sigue activo.'), confirmText: tt('common.ok','OK') });
+            window.location.href = 'Admin.html';
+            return;
+          }
+          if (offer !== 'cancel') return;   // "Volver" o descartado → no hacer nada
         }
-        if (offer !== 'cancel') return;   // "Volver" o descartado → no hacer nada
 
-        // 2) Cancelar de verdad.
+        // 2) Cancelar de verdad (los anuales llegan directo acá).
         const { data:prev } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'cancel', preview:true } });
         const when = prev?.effective_at ? fmtDate(prev.effective_at) : '';
         const msg = when
@@ -1063,7 +1068,7 @@
       sb.rpc('team_plan_slug', { p_team_id: teamId }),
       sb.from('plans').select('id, slug, name, price_monthly, price_yearly, max_players, sort_order'),
       sb.from('players').select('id', { count:'exact', head:true }).eq('team_id', teamId).is('archived_at', null),
-      sb.from('subscriptions').select('is_comp, current_period_end, provider_subscription_id, scheduled_plan_id, scheduled_change_at').eq('team_id', teamId).eq('status','active').maybeSingle()
+      sb.from('subscriptions').select('is_comp, current_period_end, provider_subscription_id, scheduled_plan_id, scheduled_change_at, billing_cycle').eq('team_id', teamId).eq('status','active').maybeSingle()
     ]);
 
     const team = teamRes.data || {};
