@@ -2856,10 +2856,14 @@ async function _gpOpenEmptySessions() {
   try {
     const today = window.cmToday ? window.cmToday() : new Date().toISOString().slice(0, 10);
     const [sessions, reps, rpes] = await Promise.all([
-      window.cmFetchAll(() => window.sb.from('training_sessions')
-        .select('id, session_date, session_type, is_historical, external_activity_id, title, session_attributes')
-        .eq('club_id', clubId), { label: 'empty-sessions.sessions' }),
-      window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id, total_distance').eq('club_id', clubId), { label: 'empty-sessions.reports' }),
+      window.cmFetchAll(() => {
+        let q = window.sb.from('training_sessions')
+          .select('id, session_date, session_type, is_historical, external_activity_id, title, session_attributes')
+          .eq('club_id', clubId);
+        const tId = window._gpTeamId; if (tId) q = q.or(`team_id.eq.${tId},team_id.is.null`);
+        return q;
+      }, { label: 'empty-sessions.sessions' }),
+      window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_reports').select('session_id, total_distance').eq('club_id', clubId)), { label: 'empty-sessions.reports' }),
       window.cmFetchAll(() => window.sb.from('rpe').select('session_id').eq('club_id', clubId), { label: 'empty-sessions.rpe' }),
     ]);
     const repCount = new Map(), anyData = new Set();
@@ -3514,8 +3518,10 @@ window._gpPendingN = window._gpPendingN || 0;
 async function _gpPendingCount() {
   const clubId = window._gpClubId || await window.getClubId?.();
   if (!clubId || !window.sb) return 0;
-  const { count } = await window.sb.from('gps_pending_activities')
+  let cq = window.sb.from('gps_pending_activities')
     .select('id', { count: 'exact', head: true }).eq('club_id', clubId);
+  const tId = window._gpTeamId; if (tId) cq = cq.or(`team_id.eq.${tId},team_id.is.null`);
+  const { count } = await cq;
   window._gpPendingN = count || 0;
   return window._gpPendingN;
 }
@@ -3537,26 +3543,31 @@ async function _gpOpenPendingPanel() {
 }
 
 async function _gpRenderPending(clubId, body, ov) {
+  // AISLAMIENTO POR EQUIPO: solo pendientes/sesiones/partidos del equipo activo (o sin equipo, que
+  // es como caen los imports de Catapult). Sin esto, estando en un equipo se veían y se podían
+  // asociar sesiones de OTRO equipo del club.
+  const tId = window._gpTeamId || null;
+  const _scopeT = q => tId ? q.or(`team_id.eq.${tId},team_id.is.null`) : q;
   let rows; const teams = {}; let plans = [], matches = [];
   try {
-    rows = await window.cmFetchAll(() => window.sb.from('gps_pending_activities')
+    rows = await window.cmFetchAll(() => _scopeT(window.sb.from('gps_pending_activities')
       .select('id, session_date, external_activity_id, activity_name, team_id, n_athletes')
-      .eq('club_id', clubId), { label: 'pending-activities' });
+      .eq('club_id', clubId)), { label: 'pending-activities' });
     rows.sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
     const { data: ts } = await window.sb.from('teams').select('id, name').eq('club_id', clubId);
     (ts || []).forEach(t => teams[t.id] = t.name);
     if (rows.length) {
       const dates = [...new Set(rows.map(r => r.session_date))];
       // Sesiones planificadas ADOPTABLES (no gym, sin GPS aún) esos días → sugerir ASOCIAR.
-      const { data: ps } = await window.sb.from('training_sessions')
+      const { data: ps } = await _scopeT(window.sb.from('training_sessions')
         .select('id, session_date, session_type, match_day_offset, team_id, title')
         .eq('club_id', clubId).in('session_date', dates)
-        .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym');
+        .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym'));
       plans = ps || [];
       // Partidos del Calendar (calendar_events type=match) esos días → sugerir crear 'match'.
-      const { data: ms } = await window.sb.from('calendar_events')
+      const { data: ms } = await _scopeT(window.sb.from('calendar_events')
         .select('date, opponent, home_away, team_id, title').eq('club_id', clubId)
-        .in('date', dates).eq('type', 'match');
+        .in('date', dates).eq('type', 'match'));
       matches = ms || [];
     }
   } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
@@ -3651,9 +3662,11 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     // Fallback (asociar): si no vino el id de la sesión (HTML viejo cacheado), re-buscar la sesión
     // planificada adoptable de ese día → nunca falla con "no session" por un data-attr vacío.
     if (!sessionId && !p.create) {
-      const { data: pl } = await window.sb.from('training_sessions')
+      let fq = window.sb.from('training_sessions')
         .select('id').eq('club_id', clubId).eq('session_date', p.date)
-        .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym').limit(1);
+        .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym');
+      const tId = window._gpTeamId; if (tId) fq = fq.or(`team_id.eq.${tId},team_id.is.null`);
+      const { data: pl } = await fq.limit(1);
       sessionId = (pl && pl[0] && pl[0].id) || null;
     }
     if (!sessionId) throw new Error(tt('gps_analysis.pending_no_session', 'No session for that day'));
@@ -3739,9 +3752,10 @@ async function _gpOpenFlaggedPanel() {
 async function _gpRenderFlagged(clubId, body, ov) {
   let rows;
   try {
-    rows = await window.cmFetchAll(() => window.sb.from('gps_period_reports')
+    // Aislar por equipo: solo periodos de jugadores del roster activo (gps_period_reports tiene player_id).
+    rows = await window.cmFetchAll(() => _scopeTeam(window.sb.from('gps_period_reports')
       .select('id, period_name, duration_seconds, total_distance, flag_reason, training_sessions(session_date), players(first_name,last_name)')
-      .eq('club_id', clubId).eq('is_flagged', true), { label: 'flagged-periods' });
+      .eq('club_id', clubId).eq('is_flagged', true)), { label: 'flagged-periods' });
   } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
   if (!rows.length) {
     body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">No flagged periods. 🎉</div>';
