@@ -1468,6 +1468,13 @@
   .ds-icom .ti{font-size:15px}
   .ds-add{width:100%;border:1px dashed var(--cm-border);background:none;color:var(--cm-fg-muted);font:500 12px var(--cm-font-sans);padding:9px;border-radius:var(--cm-r-3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
   .ds-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+  .ds-planlist{display:flex;flex-direction:column;gap:5px}
+  .ds-planrow{display:flex;gap:6px;align-items:stretch}
+  .ds-planrow.is-active .ds-planpick{border-color:var(--cm-accent);color:var(--cm-fg);font-weight:600}
+  .ds-planpick{flex:1;min-width:0;text-align:left;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg);font:400 13px var(--cm-font-sans);padding:8px 10px;border-radius:var(--cm-r-3);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ds-planpick:hover{border-color:var(--cm-accent)}
+  .ds-plandel{flex:0 0 auto;width:36px;border:1px solid var(--cm-border);background:none;color:#C81E3A;border-radius:var(--cm-r-3);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .ds-plandel:hover{background:color-mix(in srgb,#C81E3A 10%,transparent);border-color:#C81E3A}
 
   /* segmented control (format) */
   .ds-seg{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;padding:2px;gap:2px}
@@ -6572,20 +6579,18 @@ function dsRenderEditor(){
       <button class="del" data-dup="tl" data-i="${ix}" title="${esc(tt('common.duplicate','Duplicate'))}"><i class="ti ti-copy"></i></button>
       <button class="del" data-del="tl" data-i="${ix}" title="${esc(tt('common.remove','Remove'))}"><i class="ti ti-trash"></i></button>
     </div>`).join('');
-  const planOpts = (_dsPlans||[]).map(p => `<option value="${esc(p.id)}" ${_dsCurrentPlanId===p.id?'selected':''}>${esc(p.name||'—')}</option>`).join('');
   document.getElementById('dsEditor').innerHTML = `
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_plans','Saved templates'))}</h3>
       <div class="ds-hint">${esc(tt('calendar.daysheet.plans_hint','Save this plan with a name to reuse it any day — load it and tweak from there.'))}</div>
       ${(_dsPlans||[]).length ? `<div class="ds-fld"><label>${esc(tt('calendar.daysheet.plan_load','Load a saved template'))}</label>
-        <select class="ds-in" data-k="planpick">
-          <option value="">${esc(tt('calendar.daysheet.plan_pick','— Choose —'))}</option>
-          ${planOpts}
-        </select></div>` : ''}
+        <div class="ds-planlist">
+          ${(_dsPlans||[]).map(p => `<div class="ds-planrow${_dsCurrentPlanId===p.id?' is-active':''}">
+            <button type="button" class="ds-planpick" data-planload="${esc(p.id)}" title="${esc(p.name||'—')}">${esc(p.name||'—')}</button>
+            <button type="button" class="ds-plandel" data-plan="delete" data-id="${esc(p.id)}" aria-label="${esc(tt('calendar.daysheet.plan_delete','Delete template'))}" title="${esc(tt('calendar.daysheet.plan_delete','Delete template'))}"><i class="ti ti-trash"></i></button>
+          </div>`).join('')}
+        </div></div>` : ''}
       <div class="ds-fld"><label>${esc(tt('calendar.daysheet.plan_name','Template name'))}</label><input class="ds-in" id="dsPlanName" placeholder="${esc(tt('calendar.daysheet.plan_name_ph','e.g. Home matchday, MD-1…'))}" value="${esc(_dsPlanName||'')}"></div>
-      ${_dsCurrentPlanId ? `<div style="display:flex;gap:8px;margin-top:2px">
-        <button class="ds-add" type="button" data-plan="delete" style="margin:0;flex:1;color:#C81E3A"><i class="ti ti-trash"></i> ${esc(tt('calendar.daysheet.plan_delete','Delete template'))}</button>
-      </div>` : ''}
     </div>
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_header','Header'))}</h3>
@@ -6660,11 +6665,12 @@ function dsBindOnce(){
     if (t.dataset.scope && t.dataset.f === 'kit'){ _dsState[t.dataset.scope][+t.dataset.i].kit = t.value; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     if (t.dataset.scope && t.dataset.f === 'type'){ const row = _dsState[t.dataset.scope][+t.dataset.i]; row.type = t.value; if (!row.icon) dsRenderEditor(); dsRenderSheet(); }
     if (t.dataset.k === 'lang'){ _dsState.lang = t.value; dsSyncDate(); dsRenderSheet(); dsSaveTmpl(); }
-    if (t.dataset.k === 'planpick'){ dsLoadPlanById(t.value); return; }
   });
   ed.addEventListener('click', e => {
+    const plld = e.target.closest('[data-planload]');
+    if (plld){ dsLoadPlanById(plld.dataset.planload); return; }
     const pl = e.target.closest('[data-plan]');
-    if (pl){ if (pl.dataset.plan === 'save') dsSavePlan(); else if (pl.dataset.plan === 'delete') dsDeletePlan(_dsCurrentPlanId); return; }
+    if (pl){ if (pl.dataset.plan === 'save') dsSavePlan(); else if (pl.dataset.plan === 'delete') dsDeletePlan(pl.dataset.id || _dsCurrentPlanId); return; }
     const tlr = e.target.closest('[data-tlrefresh]');
     if (tlr){ dsPrefillFromEvents().then(() => { dsSyncDate(); dsRenderEditor(); dsRenderSheet(); showCalToast(tt('calendar.daysheet.tl_reloaded','Timeline reloaded from the calendar')); }); return; }
     const cb = e.target.closest('[data-colbtn]');
