@@ -577,6 +577,45 @@
   .hub-modal-backdrop.is-open .hub-modal { transform: none; }
   @keyframes hubPop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
 
+  /* Action strip — urgent-first, only renders chips with a count > 0 */
+  .hub-actionstrip { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; }
+  .hub-actionstrip:empty { display: none; }
+  .hub-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 12px 8px 9px;
+    border: 1px solid var(--cm-border);
+    background: var(--cm-surface);
+    border-radius: var(--cm-r-3);
+    font: 500 12.5px/1 var(--cm-font-sans);
+    color: var(--cm-fg); text-decoration: none; cursor: pointer;
+    box-shadow: var(--cm-shadow-1);
+    transition: border-color var(--cm-dur-1), transform var(--cm-dur-1), box-shadow var(--cm-dur-1);
+  }
+  .hub-chip:hover { border-color: var(--cm-border-strong); transform: translateY(-1px); box-shadow: var(--cm-shadow-2); }
+  .hub-chip .lead {
+    min-width: 22px; height: 22px; padding: 0 5px;
+    border-radius: 7px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 12px/1 var(--cm-font-mono);
+  }
+  .hub-chip .lead .ti { font-size: 13px; }
+  .hub-chip.is-danger  .lead { background: var(--cm-danger-bg);  color: var(--cm-danger); }
+  .hub-chip.is-warning .lead { background: var(--cm-warning-bg); color: var(--cm-warning); }
+  .hub-chip.is-success .lead { background: var(--cm-success-bg); color: var(--cm-success); }
+  .hub-chip .lbl { color: var(--cm-fg-strong); font-weight: 600; }
+  .hub-chip .sub { color: var(--cm-fg-muted); }
+  .hub-chip .arw { color: var(--cm-fg-faint); display: inline-flex; margin-left: 2px; transition: color var(--cm-dur-1), transform var(--cm-dur-1); }
+  .hub-chip .arw .ti { font-size: 14px; }
+  .hub-chip:hover .arw { color: var(--cm-fg); transform: translateX(2px); }
+
+  /* Variable-density modules — 2 hero cards + compact grid */
+  .module.is-feature { grid-column: span 2; background: var(--cm-surface-2); }
+  .module.is-feature .module-icon { width: 40px; height: 40px; }
+  .module.is-feature .module-icon .ti { font-size: 20px; }
+  .module.is-feature .module-title { font-size: 15px; }
+  .module.is-feature .module-desc { font-size: 12.5px; }
+  @media (max-width: 768px) { .module.is-feature { grid-column: 1 / -1; } }
+
   @media (prefers-reduced-motion: reduce) {
     .hub-rise { opacity: 1; animation: none; }
     .hub-avail-bar i { transition: none; }
@@ -633,6 +672,9 @@
              cuando no había registros, esos números falsos quedaban en pantalla. -->
         <div class="meta"></div>
       </header>
+
+      <!-- Action strip — lo urgente primero; lo llena _renderActionStrip() con datos reales -->
+      <div class="hub-actionstrip" id="hubActionStrip"></div>
 
       <!-- KPI strip -->
       <div class="kpi-section-header">
@@ -777,7 +819,7 @@
 
       <div class="modules">
 
-        <a class="module" href="Planner.html">
+        <a class="module is-feature" style="order:-2" href="Planner.html">
           <div class="module-top">
             <div class="module-icon is-info"><i class="ti ti-clipboard-list"></i></div>
             <div>
@@ -807,7 +849,7 @@
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="Daily%20Planning.html">
+        <a class="module is-feature" style="order:-1" href="Daily%20Planning.html">
           <div class="module-top">
             <div class="module-icon is-success"><i class="ti ti-soccer-field"></i></div>
             <div>
@@ -1502,6 +1544,8 @@ function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount
     modDP.textContent = todaySession?.session_time
       ? tt('hub.time_today','{time} today',{time:todaySession.session_time.slice(0, 5)})
       : tt('hub.no_session_today','No session today');
+
+  _renderActionStrip({ notAvailableCount, acwrWarningCount, injuryCount, wellnessCount, wellnessTotal });
 }
 
 function renderGreetSub(microcycle, session, today, nextMatch) {
@@ -1751,6 +1795,65 @@ function _hubStagger(nodes, step = 40, base = 0) {
     el.classList.remove('hub-rise');   // reinicia si se re-renderiza (cambio de equipo)
     void el.offsetWidth;               // fuerza reflow para relanzar la animación
     el.classList.add('hub-rise');
+  });
+}
+
+// Franja de acción: lo urgente primero. Solo renderiza los chips con cuenta > 0.
+// Todas las señales ya vienen calculadas por renderBadgesAndStats — sin queries nuevas.
+function _renderActionStrip({ notAvailableCount = 0, acwrWarningCount = 0, injuryCount = 0, wellnessCount = null, wellnessTotal = null }) {
+  const el = document.getElementById('hubActionStrip');
+  if (!el) return;
+  const wellPending = (wellnessTotal != null && wellnessCount != null) ? Math.max(0, wellnessTotal - wellnessCount) : 0;
+  const items = [];
+  if (notAvailableCount > 0) items.push({ n: notAvailableCount, tone: 'is-danger',  href: 'Availability.html', lbl: tt('hub.chip_unavailable','unavailable'),  sub: tt('hub.chip_unavailable_sub','availability') });
+  if (acwrWarningCount > 0)  items.push({ n: acwrWarningCount,  tone: 'is-danger',  href: 'Load Monitor.html', lbl: tt('hub.chip_red_zone','in red zone'),   sub: tt('hub.chip_red_zone_sub','ACWR fatigue') });
+  if (injuryCount > 0)       items.push({ n: injuryCount,       tone: 'is-warning', href: 'Injuries.html',     lbl: tt('hub.chip_injured','injured'),        sub: tt('hub.chip_injured_sub','return-to-play') });
+  if (wellPending > 0)       items.push({ n: wellPending,       tone: 'is-warning', href: 'Wellness.html',     lbl: tt('hub.chip_no_checkin','no check-in'),  sub: tt('hub.chip_no_checkin_sub','wellness') });
+
+  if (!items.length) {
+    el.innerHTML =
+      `<span class="hub-chip is-success" style="cursor:default">` +
+        `<span class="lead"><i class="ti ti-check"></i></span>` +
+        `<span class="lbl">${tt('hub.chip_all_clear','All clear')}</span> ` +
+        `<span class="sub">${tt('hub.chip_all_clear_sub','no alerts today')}</span>` +
+      `</span>`;
+    return;
+  }
+  el.innerHTML = items.map(it =>
+    `<a class="hub-chip ${it.tone}" href="${it.href}">` +
+      `<span class="lead">${it.n}</span>` +
+      `<span class="lbl">${it.lbl}</span> <span class="sub">${it.sub}</span>` +
+      `<span class="arw" aria-hidden="true"><i class="ti ti-arrow-right"></i></span>` +
+    `</a>`
+  ).join('');
+  _hubStagger(el.querySelectorAll('.hub-chip'), 40);
+}
+
+// Count-up: anima el número principal de cada KPI visible de 0 → valor final. Preserva el
+// <sub> (unidad). Idempotente vía data-counted (no re-anima al cambiar de equipo).
+function _hubCountUp() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('#kpiStrip .kpi:not([style*="display: none"]) .kpi-value').forEach(el => {
+    if (el.dataset.counted) return;
+    const first = el.childNodes[0];
+    const raw = (first && first.nodeType === 3) ? first.textContent : el.textContent;
+    const m = String(raw).match(/^(\s*)(-?\d+(?:\.\d+)?)(.*)$/);
+    if (!m) return;
+    const lead = m[1], numStr = m[2], suffix = m[3];   // ej. "24 " → lead="", num="24", suffix=" "
+    const to = parseFloat(numStr);
+    if (!isFinite(to)) return;
+    const dec = (numStr.split('.')[1] || '').length;
+    el.dataset.counted = '1';
+    const tnode = document.createTextNode(lead + numStr + suffix);
+    if (first && first.nodeType === 3) el.replaceChild(tnode, first);
+    else el.insertBefore(tnode, el.firstChild);
+    const dur = 650, t0 = performance.now();
+    (function tick(t) {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      tnode.textContent = lead + (to * e).toFixed(dec) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+      else tnode.textContent = lead + numStr + suffix;
+    })(t0);
   });
 }
 
@@ -2623,6 +2726,8 @@ function renderTasks(tasks, view = 'my') {
     }
     if (_kpiSel.includes('weather')) _loadWeather();
     _populateExtras();
+    // Count-up una vez que el set visible está resuelto y poblado (base + extras).
+    requestAnimationFrame(_hubCountUp);
   }
 
   async function _saveKpiPrefs() {
