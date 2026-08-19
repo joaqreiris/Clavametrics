@@ -6518,10 +6518,14 @@ document.addEventListener('gpfilter:change', () => {
 // microcycle / player / baseline pills change
 // ══════════════════════════════════════════════════════════════
 
-// Limita una query de gps_reports al equipo activo (window._gpPlayerIds). No-op si no hay equipo.
+// Limita una query de gps_reports al roster del equipo activo (window._gpPlayerIds).
+//  · null  → roster NO resuelto todavía → no-op (no romper el primer render).
+//  · []    → equipo resuelto SIN jugadores → devolver NADA (aislamiento estricto: si el equipo no
+//            tiene datos, no se muestra el club entero). Antes esto hacía no-op = fuga cross-team.
 function _scopeTeam(q) {
-  return (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length)
-    ? q.in('player_id', window._gpPlayerIds) : q;
+  if (!Array.isArray(window._gpPlayerIds)) return q;
+  if (!window._gpPlayerIds.length) return q.in('player_id', ['00000000-0000-0000-0000-000000000000']);
+  return q.in('player_id', window._gpPlayerIds);
 }
 window._scopeTeam = _scopeTeam;
 
@@ -6565,6 +6569,10 @@ async function _fetchReports(state) {
   } else {
     qry = qry.gte('session_date', from).lte('session_date', to);
   }
+  // AISLAMIENTO POR EQUIPO: la tabla/gauges deben reflejar SOLO las sesiones del equipo activo,
+  // igual que el contador del subtítulo (.eq('team_id')). Sin esto se agregaban gps_reports de
+  // sesiones de OTRAS categorías del club para jugadores compartidos entre equipos.
+  if (window._gpTeamId) qry = qry.eq('team_id', window._gpTeamId);
   qry = qry.order('session_date', { ascending: false }).limit(200);
 
   if (!s.includeHistorical) qry = qry.eq('is_historical', false);
