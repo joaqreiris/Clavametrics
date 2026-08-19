@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
     const { team_id, plan_slug, cycle, preview, action } = await req.json();
-    const act = ['cancel', 'undo', 'manage'].includes(action) ? action : 'change';
+    const act = ['cancel', 'undo', 'manage', 'apply_discount'].includes(action) ? action : 'change';
     if (!team_id) return json({ error: 'Falta team_id' }, 400);
     if (act === 'change' && !plan_slug) return json({ error: 'Falta plan_slug' }, 400);
 
@@ -109,6 +109,23 @@ Deno.serve(async (req) => {
         return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
       }
       return json({ ok: true, cancel: true, effective_at: payload?.data?.scheduled_change?.effective_at ?? sub.current_period_end });
+    }
+
+    // ── Oferta de retención: aplica un discount de Paddle a la suscripción ──
+    // El discount (%, duración en ciclos) se crea en Paddle y su id va en el secret
+    // PADDLE_RETENTION_DISCOUNT_ID (dsc_...). Paddle lo aplica y lo saca solo al vencer.
+    if (act === 'apply_discount') {
+      const discountId = Deno.env.get('PADDLE_RETENTION_DISCOUNT_ID');
+      if (!discountId) return json({ error: 'PADDLE_RETENTION_DISCOUNT_ID no configurado' }, 500);
+      const res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
+        discount: { id: discountId, effective_from: 'immediately' },
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        console.error('Paddle apply_discount failed', res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      }
+      return json({ ok: true, discount_applied: true });
     }
 
     // ── Portal de gestión: URL de Paddle para actualizar el método de pago ──

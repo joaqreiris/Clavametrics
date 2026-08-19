@@ -716,6 +716,7 @@
       <button class="cm-btn is-ghost" id="ppModalCancel" data-i18n="common.cancel">Cancel</button>
       <button class="cm-btn is-primary" id="ppModalOk">Confirm</button>
     </div>
+    <button class="cm-btn is-ghost" id="ppModalAlt" style="display:none;width:100%;margin-top:8px;justify-content:center;color:var(--cm-fg-muted)"></button>
   </div>
 </div>
 
@@ -743,13 +744,17 @@
       const amt=document.getElementById('ppModalAmt');
       if(opts.amount){ document.getElementById('ppModalAmtK').textContent=opts.amountLabel||''; document.getElementById('ppModalAmtV').textContent=opts.amount; amt.style.display=''; }
       else { amt.style.display='none'; }
-      const ok=document.getElementById('ppModalOk'), cancel=document.getElementById('ppModalCancel');
+      const ok=document.getElementById('ppModalOk'), cancel=document.getElementById('ppModalCancel'), alt=document.getElementById('ppModalAlt');
       ok.textContent=opts.confirmText||tt('common.confirm','Confirm');
-      cancel.textContent=tt('common.cancel','Cancel');
+      cancel.textContent=opts.cancelText||tt('common.cancel','Cancel');
+      cancel.style.display=opts.singleButton?'none':'';
       ok.className='cm-btn '+(opts.danger?'is-danger':'is-primary');
-      const close=(val)=>{ m.style.display='none'; ok.onclick=cancel.onclick=m.onclick=onKey=null; document.removeEventListener('keydown',onKeyRef); resolve(val); };
-      let onKey; const onKeyRef=(e)=>{ if(e.key==='Escape') close(false); else if(e.key==='Enter') close(true); };
+      // Tercer botón opcional (ej. "cancelar de todas formas") → resuelve opts.altValue
+      if (alt){ if(opts.altText){ alt.style.display=''; alt.textContent=opts.altText; } else { alt.style.display='none'; } }
+      const close=(val)=>{ m.style.display='none'; ok.onclick=cancel.onclick=m.onclick=null; if(alt) alt.onclick=null; document.removeEventListener('keydown',onKeyRef); resolve(val); };
+      const onKeyRef=(e)=>{ if(e.key==='Escape') close(false); else if(e.key==='Enter') close(true); };
       ok.onclick=()=>close(true); cancel.onclick=()=>close(false);
+      if (alt) alt.onclick=()=>close(opts.altValue!==undefined?opts.altValue:'alt');
       m.onclick=(e)=>{ if(e.target===m) close(false); };
       document.addEventListener('keydown',onKeyRef);
       m.style.display='flex'; ok.focus();
@@ -912,6 +917,27 @@
       if (!hasPaddleSub){ alert(tt('plan_picker.already_free','Ya estás en el plan Free.')); return; }
       confirmBtn.disabled = true;
       try{
+        // 1) Oferta de retención: 30% off × 3 meses antes de cancelar.
+        const curName = ((st.plans && st.plans[curSlug]) || {}).name || curSlug;
+        const offer = await ppConfirm({
+          icon:'ti-rosette-discount',
+          title: tt('plan_picker.save_title','¿Te quedas con 30% off?'),
+          body: tt('plan_picker.save_body','Te aplicamos un 30% de descuento en {plan} durante los próximos 3 meses. Después vuelve al precio normal.',{ plan: curName }),
+          confirmText: tt('plan_picker.save_confirm','Aplicar 30% off × 3 meses'),
+          cancelText: tt('plan_picker.save_back','Volver'),
+          altText: tt('plan_picker.save_cancel_anyway','Cancelar de todas formas'),
+          altValue: 'cancel',
+        });
+        if (offer === true){
+          const { data:r, error } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'apply_discount' } });
+          if (error || r?.error){ alert(tt('plan_picker.save_error','No pude aplicar el descuento. Intenta de nuevo o avisa al admin.')); return; }
+          await ppConfirm({ singleButton:true, icon:'ti-discount-check', title: tt('plan_picker.save_done_title','¡Descuento aplicado!'), body: tt('plan_picker.save_done_body','Se aplicó el 30% off por 3 meses. Tu plan sigue activo.'), confirmText: tt('common.ok','OK') });
+          window.location.href = 'Admin.html';
+          return;
+        }
+        if (offer !== 'cancel') return;   // "Volver" o descartado → no hacer nada
+
+        // 2) Cancelar de verdad.
         const { data:prev } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, action:'cancel', preview:true } });
         const when = prev?.effective_at ? fmtDate(prev.effective_at) : '';
         const msg = when
