@@ -3786,9 +3786,38 @@
         }
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
+        const relPct = ds._relPct, relCap = ds._relCap;
         meta.data.forEach((bar, i) => {
           const v = ds.data[i];
           if (v == null) return;
+          // Barra en modo Δ%: sobre la barra va el % de cambio (color por signo / banda), no el
+          // valor crudo — el valor ya se lee en el eje. Halo blanco para contraste.
+          if (relPct) {
+            const pv = relPct[i];
+            if (pv == null || !bar) return;
+            const cap  = relCap && relCap[i];
+            const ptxt = cap ? `${pv >= 0 ? '≥' : '≤'}${Math.round(pv)}%` : `${pv >= 0 ? '+' : ''}${Math.round(pv)}%`;
+            const pcol = _relBandColor(pv, opts.relBands) || (pv >= 0 ? _upCol : _dnCol);
+            ctx.save();   // aísla font/estilo para no filtrarlo a las etiquetas de valor
+            ctx.font = '700 10px Geist, Inter, sans-serif';
+            if (horizontal) {
+              ctx.fillStyle = pcol; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.fillText(ptxt, bar.x + 4, bar.y);
+            } else {
+              const tw = ctx.measureText(ptxt).width, ly = bar.y - 4;
+              const top = chart.chartArea ? chart.chartArea.top : 0;
+              if (ly - 11 < top + 1) {   // barra alta, sin lugar arriba → % dentro de la barra, en blanco
+                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                ctx.fillText(ptxt, bar.x, bar.y + 4);
+              } else {
+                ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(bar.x - tw / 2 - 3, ly - 11, tw + 6, 13);
+                ctx.fillStyle = pcol; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+                ctx.fillText(ptxt, bar.x, ly);
+              }
+            }
+            ctx.restore();
+            return;
+          }
           const txt = fmt(Math.round(v * 10) / 10);
           if (stacked) {
             // centre each segment, white for contrast; skip segments too small to fit
@@ -4128,34 +4157,46 @@
       const isLine  = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
       const barCols = barColors(config, isLine.filter(f => !f).length || 1);
       const lineCol = _cssVar('--cm-warning', '#D97706');
+      // Δ% (modo relativo): YA NO se dibuja como línea en un 2º eje (eje dual). Se pinta SOBRE
+      // la barra hermana → color por signo (sube verde / baja rojo) + etiqueta % arriba. Acá
+      // armamos el mapa label-de-barra → {pct, cap} por categoría desde su serie __rel*.
+      const relUp = _cssVar('--cm-success', '#16A34A'), relDn = _cssVar('--cm-danger', '#DC2626');
+      const relByBar = {};
+      ss.forEach(s => {
+        if (!s._rel) return;
+        const barLabel = s.label.replace(/__rel(mc|md)$/, '');
+        relByBar[barLabel] = {
+          pct: cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; }),
+          cap: cats.map(c => { const p = s.points.find(q => q.x === c); return !!(p && p._capped); }),
+        };
+      });
       let bi = 0;
       datasets = ss.map((s, i) => {
+        if (isLine[i] && s._rel) return null;   // el Δ% ya no es línea: se pinta en su barra hermana
         const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
         const vals = data.filter(v => v != null).map(Number);
-        if (isLine[i]) {                            // combo: line on the secondary axis
+        if (isLine[i]) {                            // combo: línea REAL (no Δ%) en el eje secundario
           const lc = config.style?.colors?.[s.label] || lineCol;
           refMetricMap.set(s.label, { vals, isLine: true, color: lc });
-          const isRel = !!s._rel;
-          // Δ%: puntos más grandes y coloreados por BANDA de umbral (o por signo si no hay
-          // bandas configuradas) para que se lean incluso cuando quedan aislados.
-          const ptCol = isRel ? data.map(v => v == null ? lc : _relBandColor(v, config.style?.relBands)) : lc;
-          // Flags de tope (Δ% desde base ~0) por categoría → la etiqueta muestra «≥».
-          const capFlags = isRel ? cats.map(c => { const p = s.points.find(q => q.x === c); return !!(p && p._capped); }) : null;
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
-            borderWidth: 2.4, tension: 0.25,
-            pointRadius: isRel ? 4.5 : 3.5, pointHoverRadius: isRel ? 6.5 : 5.5,
-            pointBackgroundColor: ptCol, pointBorderColor: '#fff', pointBorderWidth: isRel ? 1.6 : 1.2, _isLine: true, _rel: isRel, _capFlags: capFlags };
+            borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
+            pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true, _rel: false };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
         refMetricMap.set(s.label, { vals, isLine: false, color: col });
         if (primaryMetricId == null) primaryMetricId = s.label;
+        // Δ% activo en esta métrica → color por signo (o por banda si está configurada; misma
+        // lógica que la etiqueta). Barra sin dato de cambio (primer MC) = color de la métrica.
+        const rel = relByBar[s.label];
+        const bg = rel ? rel.pct.map(v => v == null ? col : (_relBandColor(v, config.style?.relBands) || (v >= 0 ? relUp : relDn))) : col;
         return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
-          backgroundColor: col, borderColor: col, borderWidth: 0,
+          backgroundColor: bg, borderColor: bg, borderWidth: 0,
           borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
           maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
-          stack: stacked ? 'stk' : undefined };
-      });
+          stack: stacked ? 'stk' : undefined,
+          _relPct: rel ? rel.pct : null, _relCap: rel ? rel.cap : null };
+      }).filter(Boolean);
       datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
       hasLine = datasets.some(d => d._isLine);
       if (hasLine) {
