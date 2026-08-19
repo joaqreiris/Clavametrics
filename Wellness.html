@@ -245,6 +245,27 @@
   </div>
 </div>
 
+<!-- ── Delete / reset check-in modal ── -->
+<div class="tr-overlay" id="wmDeleteModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+    <div class="tr-modal-head">
+      <span class="ic" style="background:var(--cm-danger-bg);color:var(--cm-danger);"><i class="ti ti-trash"></i></span>
+      <div>
+        <h3 id="delTitle" data-i18n="wellness.delTitle">Delete check-in so the player can re-fill it</h3>
+        <p data-i18n="wellness.delSub">This clears today's answer. The player can then reopen the same link and fill it in again.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <p id="delBody" style="font:var(--cm-body); color:var(--cm-fg-muted); margin:2px 0;"></p>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="wellness.cancel">Cancel</span></button>
+      <button class="cm-btn" id="btnDelConfirm" style="background:var(--cm-danger);border-color:var(--cm-danger);color:#fff;"><i class="ti ti-trash"></i><span data-i18n="wellness.delConfirm">Delete answer</span></button>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -396,6 +417,7 @@
             <div class="pc-det-actions">
               <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('wellness.message','Message')}</button>
               <button class="cm-btn is-ghost is-sm" disabled title="${tt('wellness.comingSoon','Coming soon')}"><i class="ti ti-history"></i>${tt('wellness.history7d','7-day history')}</button>
+              <button class="cm-btn is-ghost is-sm" data-del-wellness="${p.id}" data-del-name="${T.escape(p.name)}" style="color:var(--cm-danger);margin-left:auto;" title="${tt('wellness.delTitle','Delete check-in so the player can re-fill it')}"><i class="ti ti-trash"></i>${tt('wellness.delReset','Reset')}</button>
             </div>
           </div>
         </div>
@@ -644,6 +666,52 @@
     tgBtn.addEventListener('click', () => send('tg'));
   }
 
+  /* ── Delete / reset a check-in so the player can fill it in again ── */
+  function wireDeleteWellness() {
+    const modal = document.getElementById('wmDeleteModal');
+    const body  = document.getElementById('delBody');
+    const btn   = document.getElementById('btnDelConfirm');
+    let target  = null; // { id, name }
+
+    // Card button → open confirm modal (delegated: cards re-render on every load)
+    document.addEventListener('click', e => {
+      const b = e.target.closest('[data-del-wellness]');
+      if (!b) return;
+      target = { id: b.getAttribute('data-del-wellness'), name: b.getAttribute('data-del-name') || '' };
+      body.textContent = tt('wellness.delBody', `Delete ${target.name}'s wellness for today?`, { name: target.name });
+      modal.classList.add('is-open');
+    });
+
+    btn.addEventListener('click', async () => {
+      if (!target) return;
+      btn.disabled = true;
+      try {
+        // Match the board's "today" window: local calendar day expressed as UTC instants,
+        // so we remove exactly the row the RPC surfaced (submitted_at::date in viewer-local time).
+        const now = new Date();
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const dayEnd   = new Date(dayStart.getTime() + 86400000);
+        // .select() so a 0-row delete (e.g. blocked by RLS) surfaces instead of faking success.
+        const { data: deleted, error } = await window.sb.from('wellness').delete()
+          .eq('player_id', target.id).eq('club_id', state.cid)
+          .gte('submitted_at', dayStart.toISOString()).lt('submitted_at', dayEnd.toISOString())
+          .select('id');
+        if (error) throw error;
+        if (!deleted || !deleted.length) {
+          T.toast(tt('wellness.delBlocked', "Couldn't delete — you may not have permission."), 'ti-alert-triangle');
+          return;
+        }
+        modal.classList.remove('is-open');
+        T.toast(tt('wellness.delDone', `${target.name}'s check-in cleared — they can fill it in again`, { name: target.name }), 'ti-trash');
+        target = null;
+        await loadWellness();
+      } catch (e) {
+        console.warn('[Wellness] delete:', e && e.message);
+        T.toast(tt('wellness.delError', "Couldn't delete the check-in"), 'ti-alert-triangle');
+      } finally { btn.disabled = false; }
+    });
+  }
+
   /* ── Live refresh: focus + visibility + 60s poll (each wired once) ── */
   function wireLiveRefresh() {
     function reloadIfReady() { if (state.inited) loadWellness(); }
@@ -742,6 +810,7 @@
       await initTeamSelect();
       wireShareModal();
       wireRemind();
+      wireDeleteWellness();
       wireRefresh();
       wireLiveRefresh();
       state.inited = true;

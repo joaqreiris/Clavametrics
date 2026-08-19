@@ -7255,3 +7255,5 @@ create policy "wellness_scoped_select" on public.wellness as permissive for sele
 create policy "wellness_scoped_update" on public.wellness as permissive for update to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "wellness_scoped_delete" on public.wellness as permissive for delete to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
