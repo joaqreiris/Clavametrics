@@ -680,6 +680,12 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
                   number, status:'available', external_gps_id:r.a.athlete_id };
       const { data, error }=await window.sb.from('players').insert(rec).select('id').single();
       if(error){ alert(tt('admin.gps_failed_to_add','Failed to add: {msg}',{ msg:error.message })); return; }
+      // Membresía de equipo: sin fila en player_teams el jugador queda huérfano/invisible en el roster
+      // de GPS Analysis y Squad (ambos filtran por la junction player_teams, NO por players.team_id).
+      // Es su único equipo → is_primary:true. (El alta normal de Squad ya hace esto; el modal GPS no lo hacía.)
+      const { error:ptErr }=await window.sb.from('player_teams')
+        .upsert({ club_id:clubId, player_id:data.id, team_id:teamId, is_primary:true }, { onConflict:'player_id,team_id', ignoreDuplicates:true });
+      if(ptErr){ alert(tt('admin.gps_failed_to_add','Failed to add: {msg}',{ msg:ptErr.message })); return; }
       squad.push({ id:data.id, first_name:fn, last_name:ln, number:rec.number, position:rec.position, external_gps_id:r.a.athlete_id });
       r.done=true; r.wasAdded=true; r.cat='matched'; added++;
     }
