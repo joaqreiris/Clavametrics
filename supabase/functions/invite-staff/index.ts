@@ -39,6 +39,14 @@ Deno.serve(async (req) => {
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) return json({ error: 'Invalid email' }, 400);
     const cleanRole = String(role || 'staff');
+    // Validar el rol contra la whitelist (mismo set que set_member_role): evita fabricar
+    // roles arbitrarios ('owner', basura) que rompan la lógica de RLS.
+    const ALLOWED_ROLES = ['admin','coach','physio','analyst','nutritionist','staff','sc_coach',
+      'fitness_coach','gk_coach','assistant_coach','director_football','head_performance',
+      'methodology_director','team_manager','owner'];
+    if (!ALLOWED_ROLES.includes(cleanRole)) return json({ error: 'Invalid role' }, 400);
+    const callerIsOwner = isSuper || ['owner'].includes(caller?.role) || ['owner'].includes(caller?.club_role);
+    if (cleanRole === 'owner' && !callerIsOwner) return json({ error: 'Only an owner can invite an owner' }, 403);
 
     // Keep only team ids that actually belong to the target club (drop anything else).
     let cleanTeamIds: string[] | null = null;
@@ -64,6 +72,7 @@ Deno.serve(async (req) => {
     let existingId: string | null = null;
     let joinerName: string | null = null;
     let autoJoined = false;
+    let existingInAnotherClub = false;
     if (already) {
       // 1. Resolve the existing user's id by email (case-insensitive), paging users.
       try {
@@ -78,31 +87,40 @@ Deno.serve(async (req) => {
       } catch (_) { /* fall through → keep today's pending fallback */ }
 
       if (existingId) {
-        // 2a. Upsert the profile onto the target club (reassign club/role — auto-join
-        //     always wins), preserving any existing full_name so we don't null it.
         const { data: prevProfile } = await admin.from('profiles')
-          .select('full_name').eq('id', existingId).maybeSingle();
+          .select('full_name, club_id').eq('id', existingId).maybeSingle();
         joinerName = prevProfile?.full_name ?? null;
-        await admin.from('profiles').upsert({
-          id: existingId, club_id: targetClub, role: cleanRole,
-          email: cleanEmail, full_name: joinerName,
-        }, { onConflict: 'id' });
 
-        // 2b. Assign the chosen teams (skip duplicates).
-        if (cleanTeamIds?.length) {
-          await admin.from('member_teams').upsert(
-            cleanTeamIds.map(t => ({ profile_id: existingId, team_id: t, club_id: targetClub })),
-            { onConflict: 'profile_id,team_id', ignoreDuplicates: true });
+        // SEGURIDAD (audit 2026-08): NO reasignar el club de un usuario que ya pertenece a
+        // OTRO club — sería secuestro de cuenta cross-tenant (lo arranca de su club sin
+        // consentimiento). En ese caso no tocamos su perfil y dejamos la invitación pendiente;
+        // el usuario deberá aceptarla/cambiarse él mismo. Solo auto-unimos si no tiene club
+        // (o ya está en este mismo club).
+        if (prevProfile?.club_id && prevProfile.club_id !== targetClub) {
+          existingInAnotherClub = true;
+        } else {
+          // 2a. Upsert the profile onto the target club, preserving any existing full_name.
+          await admin.from('profiles').upsert({
+            id: existingId, club_id: targetClub, role: cleanRole,
+            email: cleanEmail, full_name: joinerName,
+          }, { onConflict: 'id' });
+
+          // 2b. Assign the chosen teams (skip duplicates).
+          if (cleanTeamIds?.length) {
+            await admin.from('member_teams').upsert(
+              cleanTeamIds.map(t => ({ profile_id: existingId, team_id: t, club_id: targetClub })),
+              { onConflict: 'profile_id,team_id', ignoreDuplicates: true });
+          }
+
+          // 2c. Apply the role's permission template (normal flow does this via
+          //     accept_invitation → apply_role_template; auto-join must do it too).
+          //     Best-effort: default permissions are secondary to the join itself.
+          try {
+            await admin.rpc('apply_role_template', { p_club: targetClub, p_profile: existingId, p_role: cleanRole });
+          } catch (e) { console.warn('apply_role_template failed:', e?.message || e); }
+
+          autoJoined = true;
         }
-
-        // 2c. Apply the role's permission template (normal flow does this via
-        //     accept_invitation → apply_role_template; auto-join must do it too).
-        //     Best-effort: default permissions are secondary to the join itself.
-        try {
-          await admin.rpc('apply_role_template', { p_club: targetClub, p_profile: existingId, p_role: cleanRole });
-        } catch (e) { console.warn('apply_role_template failed:', e?.message || e); }
-
-        autoJoined = true;
       }
     }
 
@@ -141,7 +159,7 @@ Deno.serve(async (req) => {
       } catch (_) { /* best-effort */ }
     }
 
-    return json({ invitation: row, alreadyRegistered: !!already, autoJoined });
+    return json({ invitation: row, alreadyRegistered: !!already, autoJoined, existingInAnotherClub });
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }
