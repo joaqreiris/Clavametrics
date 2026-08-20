@@ -3610,7 +3610,7 @@ declare
 begin
   select scope, club_id into v_scope, v_club
   from share_links
-  where token = p_token and (expires_at is null or expires_at > now())
+  where token = p_token and revoked = false and (expires_at is null or expires_at > now())
   limit 1;
 
   if v_scope is null then return jsonb_build_object('error','invalid_token'); end if;
