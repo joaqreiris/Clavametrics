@@ -1468,6 +1468,8 @@
   if (!(await window.guardModule())) return;
 
   function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+  // Escape HTML de scope superior para datos de DB (nombres/objetivos de ejercicio, logo) → innerHTML/print.
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
@@ -1535,9 +1537,9 @@
       return `<div class="avail-pill ${p.cls}${placed ? ' is-placed' : ''}"
         draggable="${!placed}"
         data-player-id="${p.id}"
-        data-player-label="${p.lastName}"
+        data-player-label="${escH(p.lastName)}"
         data-player-number="${p.number ?? ''}">
-        <span class="avail-dot"></span>${p.label}
+        <span class="avail-dot"></span>${escH(p.label)}
       </div>`;
     }).join('');
     pillsEl.querySelectorAll('.avail-pill:not(.is-placed)').forEach(pill => {
@@ -4021,11 +4023,11 @@
       const meta  = dispO ? ORIENT_META[dispO] : null;
       return `
         <div class="pl-ex${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
-          <div class="pl-ex-thumb" style="position:relative">${(ex._previewImg||ex.preview_png) ? `<img src="${ex._previewImg||ex.preview_png}" alt="">` : `<span class="pl-ex-n">${i+1}</span>`}${ex.source_type === 'image' ? `<span class="pl-ex-imgtag" title="${tt('planner.imported_image','Imported image')}"><i class="ti ti-photo"></i></span>` : ''}</div>
+          <div class="pl-ex-thumb" style="position:relative">${(ex._previewImg||ex.preview_png) ? `<img src="${escH(ex._previewImg||ex.preview_png)}" alt="">` : `<span class="pl-ex-n">${i+1}</span>`}${ex.source_type === 'image' ? `<span class="pl-ex-imgtag" title="${tt('planner.imported_image','Imported image')}"><i class="ti ti-photo"></i></span>` : ''}</div>
           <div class="pl-ex-body">
-            <div class="pl-ex-title">${ex.name || tt('planner.untitled','Untitled')}</div>
+            <div class="pl-ex-title">${escH(ex.name || tt('planner.untitled','Untitled'))}</div>
             <div class="pl-ex-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}</div>
-            ${ex.objective ? `<div style="font:400 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px">${ex.objective}</div>` : ''}
+            ${ex.objective ? `<div style="font:400 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px">${escH(ex.objective)}</div>` : ''}
           </div>
           <span class="pl-ex-badge ${meta ? 'o-' + meta.short.toLowerCase() : 'o-none'}">${meta ? meta.short : '—'}</span>
           <button class="pl-ex-dup" data-dup-ex="${ex.id}" title="${tt('planner.duplicate_exercise','Duplicate')}"><i class="ti ti-copy" style="font-size:13px"></i></button>
@@ -4050,8 +4052,8 @@
         const ex = exercises.find(e => e.id === el.dataset.exId);
         if (!ex) return;
         const area = (ex.players_count>0 && ex.field_width>0 && ex.field_height>0) ? Math.round((ex.field_width*ex.field_height)/ex.players_count) : null;
-        hv.innerHTML = ((ex._previewImg||ex.preview_png) ? `<img class="ph-img" src="${ex._previewImg||ex.preview_png}" alt="">` : `<div class="ph-empty">${tt('planner.no_preview_yet','No preview yet')}</div>`)
-          + `<div class="ph-meta"><div class="ph-name">${ex.name||tt('planner.untitled','Untitled')}</div>`
+        hv.innerHTML = ((ex._previewImg||ex.preview_png) ? `<img class="ph-img" src="${escH(ex._previewImg||ex.preview_png)}" alt="">` : `<div class="ph-empty">${tt('planner.no_preview_yet','No preview yet')}</div>`)
+          + `<div class="ph-meta"><div class="ph-name">${escH(ex.name||tt('planner.untitled','Untitled'))}</div>`
           + `<div class="ph-sub">${ex.players_count?ex.players_count+' pl':'—'}${area?' · '+area+' m²/p':''}${ex.duration?' · '+ex.duration+'′':''}</div></div>`;
         hv.classList.add('is-on');
       });
@@ -4509,12 +4511,12 @@
       const focusStr     = currentFocus.length ? currentFocus.join(', ') : '—';
       const gameTypeStr  = currentGameTypeOn ? (currentGameType || tt('planner.on','On')) : '—';
       const orientStr    = currentManualOrient ? (ORIENT_META[currentManualOrient]?.label || currentManualOrient) : '—';
-      const logoHtml     = club?.logo_url ? `<img src="${club.logo_url}" style="height:48px;object-fit:contain" alt="${tt('planner.club_logo_alt','Club logo')}">` : '';
+      const logoHtml     = club?.logo_url ? `<img src="${escH(club.logo_url)}" style="height:48px;object-fit:contain" alt="${tt('planner.club_logo_alt','Club logo')}">` : '';
 
       const pw = window.open('', '_blank');
       if (!pw) { alert(tt('planner.allow_popups','Allow pop-ups to use Print.')); return; }
       pw.document.write(`<!DOCTYPE html><html><head>
-        <title>${exName}</title>
+        <title>${escH(exName)}</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: sans-serif; color: #111; background: #fff; }
@@ -4532,7 +4534,7 @@
         </style>
       </head><body>
         <div class="header">
-          <h1>${exName}</h1>
+          <h1>${escH(exName)}</h1>
           ${logoHtml}
         </div>
         <img class="field-img" src="${imageData}" alt="${tt('planner.exercise_field_alt','Exercise field')}">
@@ -4543,7 +4545,7 @@
           <div class="meta-item"><div class="meta-label">${tt('planner.match_day','Match Day')}</div><div class="meta-value">${mdStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.orientation','Orientation')}</div><div class="meta-value">${orientStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.intensity','Intensity')}</div><div class="meta-value">${intensityStr}</div></div>
-          <div class="meta-item"><div class="meta-label">${tt('planner.focus','Focus')}</div><div class="meta-value">${focusStr}</div></div>
+          <div class="meta-item"><div class="meta-label">${tt('planner.focus','Focus')}</div><div class="meta-value">${escH(focusStr)}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.game_type','Game Type')}</div><div class="meta-value">${gameTypeStr}</div></div>
         </div>
       </body></html>`);
@@ -4681,10 +4683,10 @@
     wrap.innerHTML = _plTeams.map(t => {
       const blocked = ruleOn && t.id === _plPrimaryTeamId;
       if (blocked) {
-        return `<button type="button" disabled title="${tt('planner.share_blocked_first_team','Lower-category exercises can’t be shared with the first team.')}" style="padding:6px 12px;border-radius:999px;border:1px dashed var(--cm-border);background:transparent;color:var(--cm-fg-faint);font:500 12px/1 var(--cm-font-sans);cursor:not-allowed;opacity:.55">${t.name}</button>`;
+        return `<button type="button" disabled title="${tt('planner.share_blocked_first_team','Lower-category exercises can’t be shared with the first team.')}" style="padding:6px 12px;border-radius:999px;border:1px dashed var(--cm-border);background:transparent;color:var(--cm-fg-faint);font:500 12px/1 var(--cm-font-sans);cursor:not-allowed;opacity:.55">${escH(t.name)}</button>`;
       }
       const on = _plVisibleTeams.includes(t.id);
-      return `<button type="button" onclick="plToggleVisTeam('${t.id}')" style="padding:6px 12px;border-radius:999px;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'};font:500 12px/1 var(--cm-font-sans);cursor:pointer">${t.name}</button>`;
+      return `<button type="button" onclick="plToggleVisTeam('${t.id}')" style="padding:6px 12px;border-radius:999px;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'};font:500 12px/1 var(--cm-font-sans);cursor:pointer">${escH(t.name)}</button>`;
     }).join('');
   }
   window.plToggleVisAll = function() {

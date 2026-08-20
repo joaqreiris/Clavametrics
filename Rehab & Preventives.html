@@ -168,6 +168,8 @@ function tt(key, fallbackEN, vars) {
   const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
   return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
 }
+// Escape HTML para datos de DB (el esc() de más abajo es un quoter de CSV, no sirve acá).
+const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 (async () => {
   if (!(await window.guardModule())) return;
   const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme()]);
@@ -248,13 +250,13 @@ function tt(key, fallbackEN, vars) {
   const rehabRows = rehab.map(p => {
     const inj = p.injuries, d = dayN(inj), rd = rtpDays(inj);
     const near = rd != null && rd <= 7;
-    return `<tr data-kind="rehab" data-name="${full(p.players).toLowerCase()}" data-status="${p.status}" data-rtp="${rd ?? 9999}" data-near="${near?'1':'0'}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
-      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
-        <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
+    return `<tr data-kind="rehab" data-name="${escH(full(p.players).toLowerCase())}" data-status="${escH(p.status)}" data-rtp="${rd ?? 9999}" data-near="${near?'1':'0'}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${escH(ini(full(p.players)))}</div>
+        <div class="who"><div class="name">${escH(full(p.players))}</div><div class="pos">${escH(p.players?.position||'')}</div></div></div></td>
       <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>${tt('rehab.rehab','Rehab')}</span></td>
-      <td><div class="po-ctx"><div class="line1">${dxOf(inj)}</div>
+      <td><div class="po-ctx"><div class="line1">${escH(dxOf(inj))}</div>
         <div class="line2">${d!=null?`<span>${tt('rehab.day','Day')} <strong>${d}</strong></span><span class="sep">·</span>`:''}
-          <span class="po-phase-pill ${p.phase_type||''}">${p.phase||''}</span></div></div></td>
+          <span class="po-phase-pill ${escH(p.phase_type||'')}">${escH(p.phase||'')}</span></div></div></td>
       <td><div class="po-rtp ${near?'is-near':''}">
         <div class="v">${fmt(inj?.expected_return)}${p.rtp_window_days?`<sub>±${p.rtp_window_days}d</sub>`:''}</div>
         <div class="meta">${rd!=null?tt('rehab.in_n_days',`in ${rd} days`,{count:rd}):'—'}</div></div></td>
@@ -267,13 +269,13 @@ function tt(key, fallbackEN, vars) {
   // ── render preventive ──
   const prevRows = prev.map(p => {
     const left = (p.programme_total_weeks||0) - (p.programme_week||0);
-    return `<tr data-kind="preventive" data-name="${full(p.players).toLowerCase()}" data-status="${p.status}" data-rtp="${left}" data-near="0" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
-      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
-        <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
+    return `<tr data-kind="preventive" data-name="${escH(full(p.players).toLowerCase())}" data-status="${escH(p.status)}" data-rtp="${left}" data-near="0" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${escH(ini(full(p.players)))}</div>
+        <div class="who"><div class="name">${escH(full(p.players))}</div><div class="pos">${escH(p.players?.position||'')}</div></div></div></td>
       <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>${tt('rehab.preventive','Preventive')}</span></td>
-      <td><div class="po-ctx"><div class="line1">${p.diagnosis||'—'}</div>
-        <div class="line2"><span class="po-phase-pill ${p.phase_type||''}">${p.phase||''}</span>
-          ${p.source_label?`<span class="sep">·</span><span>${p.source_label}</span>`:''}</div></div></td>
+      <td><div class="po-ctx"><div class="line1">${escH(p.diagnosis||'—')}</div>
+        <div class="line2"><span class="po-phase-pill ${escH(p.phase_type||'')}">${escH(p.phase||'')}</span>
+          ${p.source_label?`<span class="sep">·</span><span>${escH(p.source_label)}</span>`:''}</div></div></td>
       <td><div class="po-rtp"><div class="v">W${p.programme_week||'—'} / ${p.programme_total_weeks||'—'}</div>
         <div class="meta">${left>0?tt('rehab.weeks_left',`${left} weeks left`,{count:left}):'—'}</div></div></td>
       <td><div class="po-owners">${ownersHtml(p.rehab_plan_owners)}</div></td>
@@ -298,8 +300,8 @@ function tt(key, fallbackEN, vars) {
     const b = c[i].querySelector('.break'); if (b && brk!=null) b.innerHTML = brk;
   };
   setKpi(0, rehab.length, `<strong>${byType('subacute')}</strong> ${tt('rehab.kpi_acute','acute')} · <strong>${byType('strength')}</strong> ${tt('rehab.kpi_strength','strength')} · <strong>${byType('field')}</strong> ${tt('rehab.kpi_onfield','on-field')}`);
-  setKpi(1, nearRTP.length, nearRTP.map(p=>full(p.players)).join(' · ') || '—');
-  setKpi(2, blocked.length, blocked.map(p=>`<strong>${full(p.players)}</strong>`).join(' · ') || '—');
+  setKpi(1, nearRTP.length, nearRTP.map(p=>escH(full(p.players))).join(' · ') || '—');
+  setKpi(2, blocked.length, blocked.map(p=>`<strong>${escH(full(p.players))}</strong>`).join(' · ') || '—');
   (async () => {
     const m0 = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     let _rpvCountQ = window.sb.from('rehab_plans')
@@ -488,7 +490,7 @@ function tt(key, fallbackEN, vars) {
           const st = h.status === 'cleared'
             ? `<span class="po-status ok"><span class="dot"></span><span class="lbl">${tt('rehab.cleared','Cleared')}</span></span>`
             : `<span class="po-status" style="opacity:.5"><span class="dot"></span><span class="lbl">${tt('rehab.archived','Archived')}</span></span>`;
-          return `<tr><td style="padding:8px 16px">${name}</td><td>${badge}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${h.phase||'—'}</td><td>${st}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${date}</td></tr>`;
+          return `<tr><td style="padding:8px 16px">${escH(name)}</td><td>${badge}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${escH(h.phase||'—')}</td><td>${st}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${date}</td></tr>`;
         }).join('');
         panel.innerHTML = hdr + `<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>`;
       }
@@ -679,7 +681,7 @@ function tt(key, fallbackEN, vars) {
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('injuries.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
     _rpvTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_rpvTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${escH(t.id)}" ${t.id===_rpvTeamId?'selected':''}>${escH(t.name)}</option>`).join('');
     if (_rpvTeamId) {
       const { data } = await window.sb.from('players').select('id').eq('club_id', clubId).eq('team_id', _rpvTeamId).is('archived_at', null);
       _rpvPlayerIds = (data||[]).map(r => r.id);

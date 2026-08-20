@@ -389,6 +389,7 @@
 <script>
 (async () => {
   function tt(key, en, vars){ return (window.CM_I18N&&CM_I18N.tt)?CM_I18N.tt(key,en,vars):(en!=null?en:key); }
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   const ok = await window.guardModule('individual-sc'); // gate + auth (inherits parent module permission)
   if (!ok) return;
@@ -548,12 +549,12 @@
       return `<button class="ip-plan-card" data-i="${i}">
         <span class="ip-card-del" data-del="${pl.id}" title="${tt('individual_planner.delete_plan','Delete plan')}"><i class="ti ti-trash"></i></span>
         <div class="top">
-          <div class="av">${initials(name)}</div>
-          <div class="who"><div class="name">${name}</div><div class="pos">${[num,pos].filter(Boolean).join(' · ')}</div></div>
+          <div class="av">${esc(initials(name))}</div>
+          <div class="who"><div class="name">${esc(name)}</div><div class="pos">${esc([num,pos].filter(Boolean).join(' · '))}</div></div>
         </div>
-        <div class="plan"><strong>${pl.name || '—'}</strong></div>
+        <div class="plan"><strong>${esc(pl.name || '—')}</strong></div>
         <div class="meta">
-          ${pl.focus ? `<span class="chip">${pl.focus}</span>` : ''}
+          ${pl.focus ? `<span class="chip">${esc(pl.focus)}</span>` : ''}
           <span class="chip">${wk}</span>
           <span class="chip status-${pl.status}">${st}</span>
         </div>
@@ -750,7 +751,7 @@
         <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_from','From wk')}</label><input class="cm-input" data-k="week_start" type="number" min="1" value="${p.week_start||1}"></div>
         <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_to','To wk')}</label><input class="cm-input" data-k="week_end" type="number" min="1" value="${p.week_end||1}"></div>
         <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_load','Load')}</label><select class="cm-select" data-k="load_level">${LOAD_LEVELS.map(l => `<option value="${l}"${p.load_level===l?' selected':''}>${tt('individual_planner.load_'+l, LOAD_EN[l])}</option>`).join('')}</select></div>
-        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_color','Color')}</label><input class="cm-input" data-k="color" type="color" value="${p.color||'#16A34A'}" style="padding:2px;height:38px"></div>
+        <div class="ip-form-row" style="margin:0"><label>${tt('individual_planner.ph_color','Color')}</label><input class="cm-input" data-k="color" type="color" value="${esc(p.color||'#16A34A')}" style="padding:2px;height:38px"></div>
         <button class="rm" title="${tt('individual_planner.ph_remove','Remove')}"><i class="ti ti-trash"></i></button>
       </div>`).join('');
     root.querySelectorAll('.ip-phase-row').forEach(rowEl => {

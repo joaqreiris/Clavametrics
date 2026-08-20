@@ -419,6 +419,8 @@ function tt(key, fallbackEN, vars) {
   const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
   return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
 }
+// Escape HTML de scope superior para datos clínicos de DB (diagnosis, notas, criterios).
+const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 (async () => {
   // This planner is opened per-plan (?plan=<id>) from the Rehab & Preventives list
   // (the create/browse landing). No ?plan → go back to that list; the picker type
@@ -487,16 +489,16 @@ function tt(key, fallbackEN, vars) {
     if (plan.kind === 'rehab') {
       const dx = [inj?.injury_type, inj?.body_area, inj?.severity].filter(Boolean).join(' · ') || plan.diagnosis || '—';
       ctxEl.innerHTML =
-        `<span><strong>${pl?.position||'—'}</strong></span>
-         <span class="sep">·</span><span>${dx}</span>
+        `<span><strong>${escH(pl?.position||'—')}</strong></span>
+         <span class="sep">·</span><span>${escH(dx)}</span>
          ${inj?.start_date?`<span class="sep">·</span><span>Sustained <strong>${fmt(inj.start_date)}</strong></span>`:''}
          ${dayN!=null?`<span class="sep">·</span><span>Day <strong>${dayN}</strong> of rehab</span>`:''}`;
     } else {
       ctxEl.innerHTML =
-        `<span><strong>${pl?.position||'—'}</strong></span>
-         <span class="sep">·</span><span>${plan.diagnosis||plan.source_label||'—'}</span>
-         <span class="sep">·</span><span>Programme week <strong>${plan.programme_week||'—'}</strong> of ${plan.programme_total_weeks||'—'}</span>
-         ${plan.risk_metric?`<span class="sep">·</span><span>Risk: <strong>${plan.risk_metric}</strong></span>`:''}`;
+        `<span><strong>${escH(pl?.position||'—')}</strong></span>
+         <span class="sep">·</span><span>${escH(plan.diagnosis||plan.source_label||'—')}</span>
+         <span class="sep">·</span><span>Programme week <strong>${escH(plan.programme_week||'—')}</strong> of ${escH(plan.programme_total_weeks||'—')}</span>
+         ${plan.risk_metric?`<span class="sep">·</span><span>Risk: <strong>${escH(plan.risk_metric)}</strong></span>`:''}`;
     }
   }
 
@@ -985,26 +987,26 @@ function tt(key, fallbackEN, vars) {
             const setCount = Array.isArray(ex.sets) ? ex.sets.length : 0;
             const first    = ex.sets?.[0];
             const meta     = [setCount ? setCount+'×'+(first?.reps||'') : '', first?.load||'', ex.side||''].filter(Boolean).join(' · ');
-            return `<div class="rp-bd-ex"><span class="n">${i+1}</span><div class="rp-bd-ex-body"><div class="nm">${ex.name||'—'}</div><div class="rp-bd-ex-sub">${meta}${ex.flag?` <span class="rp-bd-ex-flag">${ex.flag}</span>`:''}</div></div></div>`;
+            return `<div class="rp-bd-ex"><span class="n">${i+1}</span><div class="rp-bd-ex-body"><div class="nm">${escH(ex.name||'—')}</div><div class="rp-bd-ex-sub">${escH(meta)}${ex.flag?` <span class="rp-bd-ex-flag">${escH(ex.flag)}</span>`:''}</div></div></div>`;
           }).join('')}
         </div>
       </div>` : '';
 
     panelB.innerHTML = `
       <div class="rp-bd-title">
-        <span class="swatch" style="background:${TYPE_COLOR_MAP[type]||'#64748B'}"></span>${name}
+        <span class="swatch" style="background:${TYPE_COLOR_MAP[type]||'#64748B'}"></span>${escH(name)}
       </div>
       <div class="rp-bd-sub">
-        <span>${dayLabel}</span><span class="sep">·</span>
+        <span>${escH(dayLabel)}</span><span class="sep">·</span>
         <span>${typeLabel(type)}</span><span class="sep">·</span>
         <span>${dur} ${tt('rehab_planner.unit_min','min')}</span>
-        ${owner ? `<span class="sep">·</span><span>${owner}</span>` : ''}
+        ${owner ? `<span class="sep">·</span><span>${escH(owner)}</span>` : ''}
       </div>
       <div class="rp-bd-metrics">${metricHtml}</div>
       ${ctx  ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('rehab_planner.col_notes','Notes')}</div>
-        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${ctx}</div></div>` : ''}
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${escH(ctx)}</div></div>` : ''}
       ${notes && notes !== ctx ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('rehab_planner.athlete_notes','Athlete notes')}</div>
-        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${notes}</div></div>` : ''}
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${escH(notes)}</div></div>` : ''}
       ${exHtml}
       ${!sid ? `<div style="margin-top:12px;padding:10px 12px;background:var(--cm-bg-soft);border-radius:var(--cm-r-2);font:var(--cm-body-sm);color:var(--cm-fg-muted)">
         <i class="ti ti-info-circle"></i> ${tt('rehab_planner.demo_block_hint','Demo block — add a real session to enable edit &amp; delete.')}</div>` : ''}
@@ -1402,7 +1404,7 @@ async function _rpBuildTrainbarAsync(plan) {
   const sumEl = document.querySelector('.rp-trainbar-h .summary');
   if (sumEl) sumEl.innerHTML = tt('rehab_planner.trainbar_summary',
     '{total}-week block · <strong>Week {cur} of {total}</strong> · risk flag: <strong>{risk}</strong>',
-    { total: (plan.programme_total_weeks||'—'), cur: (plan.programme_week||'—'), risk: (plan.risk_metric||plan.diagnosis||'—') });
+    { total: (plan.programme_total_weeks||'—'), cur: (plan.programme_week||'—'), risk: escH(plan.risk_metric||plan.diagnosis||'—') });
 
   const track = document.querySelector('.rp-train-track');
   if (!track) return;
@@ -1607,10 +1609,10 @@ function rpBuildGate(phases, injuryId, refresh) {
   // Criteria list
   const listHtml = items.length ? items.map(it => {
     const met = !!completed[it.id];
-    return `<li class="rp-criterion${met?' is-met':''}" data-id="${it.id}">
+    return `<li class="rp-criterion${met?' is-met':''}" data-id="${escH(it.id)}">
       <div class="check">${met ? '<i class="ti ti-check"></i>' : ''}</div>
       <div class="body">
-        <div class="name">${it.label}</div>
+        <div class="name">${escH(it.label)}</div>
         <div class="target${met?' is-met':''}">${met ? '<strong>'+tt('rehab_planner.crit_met','Met')+'</strong>' : it.required===false?tt('rehab_planner.crit_optional','Optional'):tt('rehab_planner.crit_pending','Pending')}</div>
       </div>
     </li>`;

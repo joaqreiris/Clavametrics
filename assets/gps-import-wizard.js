@@ -12,6 +12,8 @@
 
 (function () {
   'use strict';
+  // Escape HTML para datos del CSV subido y de DB (headers, celdas, nombres, catálogo) → innerHTML.
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   // i18n con fallback: usa el tt() global (mismo que el resto de la app) si está; si no, el texto EN.
   const _wt = (k, f) => { try { return (typeof tt === 'function') ? tt(k, f) : (window.tt ? window.tt(k, f) : f); } catch (e) { return f; } };
@@ -308,7 +310,7 @@
 
     body.innerHTML = `
       <div class="gp-imp-info">
-        <div class="gp-imp-info-cell"><div class="l">File</div><div class="v" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${file.name}">${file.name}</div></div>
+        <div class="gp-imp-info-cell"><div class="l">File</div><div class="v" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(file.name)}">${esc(file.name)}</div></div>
         <div class="gp-imp-info-cell"><div class="l">Size</div><div class="v">${(file.size/1024).toFixed(0)} KB</div></div>
         <div class="gp-imp-info-cell"><div class="l">Rows</div><div class="v" id="nRows">${nRows}</div></div>
         <div class="gp-imp-info-cell"><div class="l">Columns</div><div class="v">${nCols}</div></div>
@@ -335,7 +337,7 @@
       </div>
       <div style="margin-bottom:14px">
         <label style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px">Provider / source label</label>
-        <input type="text" id="wizSourceLabel" value="${sourceLabel}"
+        <input type="text" id="wizSourceLabel" value="${esc(sourceLabel)}"
           placeholder="e.g. Catapult Vector, StatSports CSV…"
           style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
       </div>
@@ -451,7 +453,7 @@
       </button>`;
 
       const labelRow = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px">
-        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-strong)'}">${label}</div>
+        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-strong)'}">${esc(label)}</div>
         ${EXCL_BTN}
       </div>`;
 
@@ -507,7 +509,7 @@
     function renderCell(ci, value) {
       const ct = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
       if (ct.excluded) {
-        return `<td style="opacity:0.45;background:var(--cm-bg-soft);color:var(--cm-fg-muted)">${String(value ?? '')}</td>`;
+        return `<td style="opacity:0.45;background:var(--cm-bg-soft);color:var(--cm-fg-muted)">${esc(String(value ?? ''))}</td>`;
       }
       const disp = (typeof gpFmtDisplay === 'function')
         ? gpFmtDisplay(ct.type, value, ct.format)
@@ -517,7 +519,7 @@
         if (ct.type === 'date')     invalid = window.gpParseDate?.(value, ct.format)?.invalid ?? false;
         if (ct.type === 'duration') invalid = window.gpParseDuration?.(value, ct.format)?.invalid ?? false;
       }
-      return `<td${invalid ? ' style="color:var(--cm-danger)"' : ''}>${disp}</td>`;
+      return `<td${invalid ? ' style="color:var(--cm-danger)"' : ''}>${esc(disp)}</td>`;
     }
 
     wrap.innerHTML = `<table>
@@ -731,7 +733,7 @@
     const custMetrics = catalog.filter(d => !d.is_core);
 
     const opt = (key, label) =>
-      `<option value="${key}"${key === selectedVal ? ' selected' : ''}>${label}</option>`;
+      `<option value="${esc(key)}"${key === selectedVal ? ' selected' : ''}>${esc(label)}</option>`;
 
     // Fallback to _aliasDb core entries when catalog hasn't been seeded yet
     const coreHtml = coreMetrics.length
@@ -832,7 +834,7 @@
         <tbody>${rows.map(([i, c]) => {
           if (c.excluded) {
             return `<tr data-ci="${i}" style="opacity:0.45">
-              <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${c.sourceCol}
+              <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(c.sourceCol)}
                 <span style="margin-left:6px;padding:1px 4px;border:1px solid var(--cm-border);border-radius:3px;font:600 9px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">excluded in preview</span>
               </td>
               <td><select disabled style="opacity:0.5;padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-mono)">
@@ -851,7 +853,7 @@
             ? `Possible match · score ${Math.round((c.score || 0) * 100)}%`
             : 'No match — ignored by default';
           return `<tr class="${rowCls}" data-ci="${i}">
-            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${c.sourceCol}</td>
+            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${esc(c.sourceCol)}</td>
             <td>
               <select class="gp-map-sel ${selCls}" data-ci="${i}" title="${tooltip}">
                 ${_buildSelOptions(selected)}
@@ -944,7 +946,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
             <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Label *</label>
-            <input id="nmLabel${ci}" type="text" value="${colName}" placeholder="e.g. Player Load Slow"
+            <input id="nmLabel${ci}" type="text" value="${esc(colName)}" placeholder="e.g. Player Load Slow"
               style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
             <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">key: <span id="nmKeyPrev${ci}">${suggestedKey}</span></div>
           </div>
@@ -1097,7 +1099,7 @@
             suggs.map(k =>
               `<button type="button"
                 style="padding:2px 8px;border:1px solid var(--cm-info);border-radius:12px;background:var(--cm-info-bg);color:var(--cm-info);font:600 10.5px/1.4 var(--cm-font-mono);cursor:pointer"
-                data-key="${k}">${k}</button>`
+                data-key="${esc(k)}">${esc(k)}</button>`
             ).join('');
           suggDiv.querySelectorAll('button[data-key]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1284,16 +1286,16 @@
     let matchColHtml;
     if (cat === 'unmatched') {
       const closest = p
-        ? `<button class="gp-closest-toggle" data-key="${rawKey}"
+        ? `<button class="gp-closest-toggle" data-key="${esc(rawKey)}"
              style="background:none;border:none;font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer;text-decoration:underline;padding:0;text-align:left">
              View closest match (${pctStr})</button>
            <div class="gp-closest-detail" style="display:none;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)">
-             ${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}
+             ${esc(p.first_name)} ${esc(p.last_name)} · #${esc(p.number || '?')} · ${esc(p.position || '—')}
            </div>`
         : '';
       matchColHtml = `<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">No match found in squad</span>${closest}`;
     } else {
-      const pLabel = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : '—';
+      const pLabel = p ? `${esc(p.first_name)} ${esc(p.last_name)} · #${esc(p.number || '?')} · ${esc(p.position || '—')}` : '—';
       const prefix = cat === 'verify'
         ? `<span style="font:600 9px/1 var(--cm-font-mono);text-transform:uppercase;color:#b45309;letter-spacing:.04em">Possible match — verify</span>`
         : '';
@@ -1306,10 +1308,10 @@
       actionsHtml = `<span class="gp-match-badge high">Auto-matched</span>`;
     } else if (cat === 'verify' && p) {
       actionsHtml = `
-        <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm</button>
-        <button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add as new</button>`;
+        <button class="gp-match-confirm" data-key="${esc(rawKey)}" data-pid="${p.id}">Confirm</button>
+        <button class="gp-match-confirm" data-key="${esc(rawKey)}" data-create="1">Add as new</button>`;
     } else {
-      actionsHtml = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
+      actionsHtml = `<button class="gp-match-confirm" data-key="${esc(rawKey)}" data-create="1">Add to squad</button>`;
     }
 
     const row = document.createElement('div');
@@ -1318,8 +1320,8 @@
     row.dataset.cat = cat;
     row.innerHTML = `
       <div class="s3-cell">
-        <span style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${nameLine}</span>
-        ${subLine ? `<span style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${subLine}</span>` : ''}
+        <span style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${esc(nameLine)}</span>
+        ${subLine ? `<span style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(subLine)}</span>` : ''}
       </div>
       <div class="s3-cell" style="align-items:center;justify-content:center">
         <span class="gp-match-badge ${badgeCls}">${pctStr}</span>
@@ -1596,9 +1598,9 @@
     const warn = document.createElement('div');
     warn.className = 'gp-pos-warn';
     warn.style.cssText = 'margin-top:5px;padding:5px 8px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:5px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap';
-    warn.innerHTML = `<span><i class="ti ti-alert-triangle" style="color:var(--cm-warning)"></i> Squad: <strong>${squadPos}</strong> · File says <strong>${csvPos}</strong></span>
-      <button class="gp-pos-keep gp-match-confirm" data-key="${key}" style="padding:2px 7px;font-size:10.5px">Keep ${squadPos}</button>
-      <button class="gp-pos-update gp-match-confirm" data-key="${key}" data-pos="${csvPos}" style="padding:2px 7px;font-size:10.5px">Update to ${csvPos}</button>`;
+    warn.innerHTML = `<span><i class="ti ti-alert-triangle" style="color:var(--cm-warning)"></i> Squad: <strong>${esc(squadPos)}</strong> · File says <strong>${esc(csvPos)}</strong></span>
+      <button class="gp-pos-keep gp-match-confirm" data-key="${esc(key)}" style="padding:2px 7px;font-size:10.5px">Keep ${esc(squadPos)}</button>
+      <button class="gp-pos-update gp-match-confirm" data-key="${esc(key)}" data-pos="${esc(csvPos)}" style="padding:2px 7px;font-size:10.5px">Update to ${esc(csvPos)}</button>`;
     actionsEl.appendChild(warn);
   }
 
@@ -1628,11 +1630,11 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
           <div>
             <label style="${LBL}">First name *</label>
-            <input class="cp-fn" placeholder="First" value="${fnGuess}" style="${INP}">
+            <input class="cp-fn" placeholder="First" value="${esc(fnGuess)}" style="${INP}">
           </div>
           <div>
             <label style="${LBL}">Last name *</label>
-            <input class="cp-ln" placeholder="Last" value="${lnGuess}" style="${INP}">
+            <input class="cp-ln" placeholder="Last" value="${esc(lnGuess)}" style="${INP}">
           </div>
           <div>
             <label style="${LBL}">Position</label>
@@ -1643,7 +1645,7 @@
           </div>
           <div>
             <label style="${LBL}">Jersey #</label>
-            <input class="cp-num" type="number" placeholder="—" min="1" value="${numGuess}" style="${INP}">
+            <input class="cp-num" type="number" placeholder="—" min="1" value="${esc(numGuess)}" style="${INP}">
           </div>
         </div>
         <div id="cpErr" style="display:none;margin-bottom:10px;padding:7px 10px;background:var(--cm-danger-bg);border:1px solid var(--cm-danger);border-radius:var(--cm-r-3);font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
@@ -1831,7 +1833,7 @@
         </div>
         <div style="margin-bottom:12px">
           <label style="${LBL}">Session title (optional)</label>
-          <input type="text" id="s4Title" value="${si.title}" placeholder="Leave blank to auto-generate" style="${INP}">
+          <input type="text" id="s4Title" value="${esc(si.title)}" placeholder="Leave blank to auto-generate" style="${INP}">
         </div>
         <div id="s4SessionBanner" style="margin-top:4px"></div>`;
 
@@ -1856,7 +1858,7 @@
             <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-success-bg);border:1px solid var(--cm-success);border-radius:var(--cm-r-3)">
               <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
               <div style="flex:1">
-                <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.title || s.session_type} · ${s.session_date}</div>
+                <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${esc(s.title || s.session_type)} · ${s.session_date}</div>
                 <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">Existing session — data will be added to it</div>
               </div>
             </div>`;
@@ -1944,7 +1946,7 @@
           const canon = _wizState.typeMap[rt] || 'training';
           const _topts = SESSION_TYPES.map(t => `<option value="${t}"${t === canon ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('');
           return `<tr>
-            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg);padding:5px 8px">"${rt}"</td>
+            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg);padding:5px 8px">"${esc(rt)}"</td>
             <td style="padding:5px 4px;color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans)">→</td>
             <td style="padding:5px 8px;display:flex;align-items:center;gap:6px">
               <select class="gp-typemap-sel" data-raw="${rt.replace(/"/g,'&quot;')}"

@@ -337,6 +337,9 @@
   }
   const $  = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  // Para url() de CSS, esc() no alcanza (el navegador decodifica el atributo antes de parsear CSS y
+  // restaura la comilla). Solo aceptamos http(s)/ruta sin comillas, paréntesis ni backslash.
+  const safeCssUrl = u => { const s = String(u ?? '').trim(); return /^(https?:\/\/|\/)[^\s'"()\\]*$/i.test(s) ? s : ''; };
   const grid = $('#vrGrid');
 
   function toast(msg) {
@@ -476,7 +479,7 @@
                : v.links.some(l => l.type === 'session') ? tt('video_room.type_training', 'Training')
                : v.links.some(l => l.type === 'player') ? tt('video_room.type_player', 'Player') : tt('video_room.type_video', 'Video');
     const thumb = v.thumbnail_url
-      ? `style="background-image:url('${esc(v.thumbnail_url)}')"`
+      ? `style="background-image:url('${safeCssUrl(v.thumbnail_url)}')"`
       : `style="background-image:${pitchFor(v.id)}"`;
 
     const shown = v.links.slice(0, 3);
