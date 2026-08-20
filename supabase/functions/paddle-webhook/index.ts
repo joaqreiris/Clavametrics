@@ -46,12 +46,12 @@ const json = (body: unknown, status = 200) =>
 // ── Signature verification ───────────────────────────────
 // Paddle-Signature: "ts=1700000000;h1=<hex hmac-sha256>"
 // The signed payload is `${ts}:${rawBody}` HMAC'd with the destination secret.
-async function verifyPaddleSignature(rawBody: string, header: string | null, secret: string): Promise<boolean> {
-  if (!header) return false;
+async function verifyPaddleSignature(rawBody: string, header: string | null, secret: string): Promise<{ ok: boolean; ts: number }> {
+  if (!header) return { ok: false, ts: 0 };
   const parts = Object.fromEntries(header.split(';').map((kv) => kv.split('=') as [string, string]));
   const ts = parts['ts'];
   const h1 = parts['h1'];
-  if (!ts || !h1) return false;
+  if (!ts || !h1) return { ok: false, ts: 0 };
 
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(secret),
@@ -61,10 +61,10 @@ async function verifyPaddleSignature(rawBody: string, header: string | null, sec
   const expected = [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
   // constant-time-ish compare
-  if (expected.length !== h1.length) return false;
+  if (expected.length !== h1.length) return { ok: false, ts: 0 };
   let diff = 0;
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ h1.charCodeAt(i);
-  return diff === 0;
+  return { ok: diff === 0, ts: Number(ts) || 0 };
 }
 
 // Paddle status → our enum (they already line up, but guard unknowns).
@@ -82,8 +82,14 @@ Deno.serve(async (req: Request) => {
 
   // Read the RAW body first — the signature is over these exact bytes.
   const raw = await req.text();
-  const ok = await verifyPaddleSignature(raw, req.headers.get('paddle-signature'), secret);
+  const { ok, ts } = await verifyPaddleSignature(raw, req.headers.get('paddle-signature'), secret);
   if (!ok) { console.warn('Invalid Paddle signature'); return json({ error: 'bad_signature' }, 401); }
+
+  // Replay guard: Paddle re-firma cada intento de entrega con un ts fresco, así que un
+  // webhook capturado y reenviado más tarde (para revertir estado) llega con ts viejo.
+  // Ventana amplia (15 min) para tolerar reintentos legítimos y skew de reloj.
+  const ageSec = Math.abs(Date.now() / 1000 - ts);
+  if (ts && ageSec > 900) { console.warn('Stale Paddle signature (replay?)', { ts, ageSec }); return json({ error: 'stale_signature' }, 400); }
 
   let evt: any;
   try { evt = JSON.parse(raw); } catch { return json({ error: 'bad_json' }, 400); }
@@ -103,7 +109,9 @@ Deno.serve(async (req: Request) => {
     const subId       = data.id as string;                         // sub_...
     const customerId  = data.customer_id as string | null;
     const paddleStat  = String(data.status ?? '');
-    const status      = STATUS_MAP[paddleStat] ?? 'active';
+    // Estado desconocido → ackear e ignorar (antes caía en 'active' por default y regalaba acceso).
+    if (!STATUS_MAP[paddleStat]) { console.warn('Unknown Paddle status, ignoring', { subId, paddleStat }); return json({ ok: true, ignored: 'unknown_status' }); }
+    const status      = STATUS_MAP[paddleStat];
     const custom      = data.custom_data ?? {};
     const periodStart = data.current_billing_period?.starts_at ?? null;
     const periodEnd   = data.current_billing_period?.ends_at ?? null;
@@ -133,16 +141,38 @@ Deno.serve(async (req: Request) => {
     }
     if (!plan) { console.error('No plan resolved', { subId, priceId, custom }); return json({ error: 'plan_not_found' }, 422); }
 
-    // ── Resolve team_id / club_id (custom_data first, derive if missing) ──
-    let teamId = custom.team_id ?? null;
-    let clubId = custom.club_id ?? null;
-    if (teamId && !clubId) {
-      const { data: t } = await supabase.from('teams').select('club_id').eq('id', teamId).maybeSingle();
-      clubId = t?.club_id ?? null;
-    }
-    if (!teamId || !clubId) { console.error('Missing team/club', { subId, custom }); return json({ error: 'missing_ids' }, 422); }
+    // ── Resolve team_id / club_id ──
+    // team_id sale de custom_data, que el CLIENTE setea en el checkout. NUNCA confiar en el
+    // club_id del cliente: derivar el club SIEMPRE desde el team en nuestra DB (evita escribir
+    // filas team/club inconsistentes o apuntadas a otro club).
+    const teamId = custom.team_id ?? null;
+    if (!teamId) { console.error('Missing team_id', { subId, custom }); return json({ error: 'missing_ids' }, 422); }
+    const { data: teamRow } = await supabase.from('teams').select('club_id').eq('id', teamId).maybeSingle();
+    const clubId = teamRow?.club_id ?? null;
+    if (!clubId) { console.error('Team not found / no club', { subId, teamId }); return json({ error: 'missing_ids' }, 422); }
 
     const isActive = ['active', 'trialing', 'past_due', 'paused'].includes(status);
+
+    // SEGURIDAD (audit): el team_id viene de custom_data controlado por el cliente. Impedir que un
+    // checkout ajeno (otro customer de Paddle) tome el control de un team que YA tiene una sub activa
+    // de OTRO customer — si no, se podría cancelar/pisar la suscripción de otro club con un checkout
+    // barato legítimo. Permitido: mismo customer (cambios normales) y customer nuevo sobre un team sin
+    // sub activa (alta genuina tras churn).
+    if (isActive && customerId) {
+      const { data: clubBill } = await supabase.from('clubs')
+        .select('billing_provider_customer_id').eq('id', clubId).maybeSingle();
+      const clubCustomer = clubBill?.billing_provider_customer_id ?? null;
+      if (clubCustomer && clubCustomer !== customerId) {
+        const { data: otherActive } = await supabase.from('subscriptions')
+          .select('id').eq('team_id', teamId)
+          .neq('provider_subscription_id', subId)
+          .in('status', ['active', 'trialing', 'past_due', 'paused']).maybeSingle();
+        if (otherActive) {
+          console.warn('Rejected foreign Paddle checkout for team with active sub', { subId, teamId, clubCustomer, customerId });
+          return json({ ok: true, ignored: 'customer_mismatch' });
+        }
+      }
+    }
 
     // ── Downgrade AGENDADO (a fin de período) ──────────────────────────────
     // Paddle no difiere cambios de plan: un downgrade (vía do_not_bill desde
