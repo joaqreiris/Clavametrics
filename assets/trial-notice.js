@@ -63,6 +63,25 @@
     try { clubId = await window.getClubId(); } catch (_) { clubId = null; }
     if (!clubId) return;
 
+    // ── Aviso de PAGO FALLIDO (past_due) — prioridad sobre el de prueba ──
+    // Corre siempre (incluso en clubs que ya pagan, que no tienen trial). Una vez
+    // por día por club. CTA abre la página de Paddle para actualizar la tarjeta.
+    try {
+      const { data: pd } = await window.sb.from('subscriptions')
+        .select('team_id, current_period_end, plans(name)')
+        .eq('club_id', clubId).eq('status', 'past_due')
+        .order('current_period_end', { ascending: false }).limit(1).maybeSingle();
+      if (pd) {
+        const key = 'cm_pastdue_' + clubId + '_' + ymd();
+        if (!lsGet(key)) {
+          lsSet(key, '1');
+          const graceDays = Math.ceil((new Date(pd.current_period_end).getTime() + 7 * DAY_MS - Date.now()) / DAY_MS);
+          showPastDue({ teamId: pd.team_id, planName: (pd.plans && pd.plans.name) || '', graceDays });
+        }
+        return;   // no encimar el aviso de prueba
+      }
+    } catch (_) {}
+
     let club;
     try {
       const { data } = await window.sb.from('clubs')
@@ -104,18 +123,9 @@
     showModal({ expired: false, daysLeft });
   }
 
-  function showModal({ expired, daysLeft }) {
-    if (document.getElementById('cm-trial-overlay')) return;
-
-    const title = expired
-      ? tt('trial.expired_title', 'Tu prueba terminó')
-      : tt('trial.warn_title', 'Tu prueba está por vencer');
-    const msg = expired
-      ? tt('trial.expired_msg', 'Tu prueba de 15 días venció. Elegí un plan para seguir con todas las funciones.')
-      : (daysLeft === 1
-          ? tt('trial.warn_1day', 'Te queda 1 día de prueba con todas las funciones.')
-          : tt('trial.warn_days', 'Te quedan {days} días de prueba con todas las funciones.', { days: daysLeft }));
-
+  // Inyecta el CSS compartido del modal (una sola vez).
+  function ensureStyle() {
+    if (document.getElementById('cm-trial-style')) return;
     const style = document.createElement('style');
     style.id = 'cm-trial-style';
     style.textContent = `
@@ -142,6 +152,20 @@
       #cm-trial-card .cm-trial-later:hover{color:var(--cm-fg-muted,#5b6472);text-decoration:underline;}
     `;
     document.head.appendChild(style);
+  }
+
+  function showModal({ expired, daysLeft }) {
+    if (document.getElementById('cm-trial-overlay')) return;
+    ensureStyle();
+
+    const title = expired
+      ? tt('trial.expired_title', 'Tu prueba terminó')
+      : tt('trial.warn_title', 'Tu prueba está por vencer');
+    const msg = expired
+      ? tt('trial.expired_msg', 'Tu prueba de 15 días venció. Elegí un plan para seguir con todas las funciones.')
+      : (daysLeft === 1
+          ? tt('trial.warn_1day', 'Te queda 1 día de prueba con todas las funciones.')
+          : tt('trial.warn_days', 'Te quedan {days} días de prueba con todas las funciones.', { days: daysLeft }));
 
     const overlay = document.createElement('div');
     overlay.id = 'cm-trial-overlay';
@@ -172,6 +196,59 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.addEventListener('keydown', function esc(e) {
       if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+
+    document.body.appendChild(overlay);
+  }
+
+  // ── Modal de pago fallido (reusa el estilo/overlay del de prueba) ──
+  function showPastDue({ teamId, planName, graceDays }) {
+    if (document.getElementById('cm-trial-overlay')) return;
+    ensureStyle();
+    const expired = graceDays <= 0;
+    const title = tt('pastdue.title', 'No pudimos procesar tu pago');
+    const msg = expired
+      ? tt('pastdue.msg_expired', 'Tu plan {plan} quedó en pausa por un pago fallido. Actualizá tu tarjeta para reactivarlo.', { plan: planName })
+      : (graceDays === 1
+          ? tt('pastdue.msg_1day', 'No pudimos cobrar tu tarjeta. Te queda 1 día para actualizarla y no perder tu plan {plan}.', { plan: planName })
+          : tt('pastdue.msg_days', 'No pudimos cobrar tu tarjeta. Te quedan {days} días para actualizarla y no perder tu plan {plan}.', { days: graceDays, plan: planName }));
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cm-trial-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `
+      <div id="cm-trial-card">
+        <div class="cm-trial-ico" style="background:rgba(220,90,90,.12);color:#dc5a5a"><i class="ti ti-credit-card-off"></i></div>
+        <h3 data-cm-title></h3>
+        <p data-cm-msg></p>
+        <a class="cm-trial-cta" href="Billing.html"><i class="ti ti-credit-card"></i><span data-cm-cta></span></a>
+        <div><button type="button" class="cm-trial-later" data-cm-later></button></div>
+      </div>`;
+    overlay.querySelector('[data-cm-title]').textContent = title;
+    overlay.querySelector('[data-cm-msg]').textContent = msg;
+    overlay.querySelector('[data-cm-cta]').textContent = tt('pastdue.cta', 'Actualizar pago');
+    overlay.querySelector('[data-cm-later]').textContent = tt('trial.later', 'Más tarde');
+
+    function close() {
+      overlay.remove();
+      const st = document.getElementById('cm-trial-style');
+      if (st) st.remove();
+    }
+    overlay.querySelector('.cm-trial-later').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+    // CTA: abrir la página de Paddle para actualizar el pago; fallback a Billing.
+    overlay.querySelector('.cm-trial-cta').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const cta = overlay.querySelector('.cm-trial-cta'); cta.style.pointerEvents = 'none';
+      try {
+        const { data: r, error } = await window.sb.functions.invoke('paddle-change-plan', { body: { team_id: teamId, action: 'manage' } });
+        if (!error && r && r.update_payment_method) { window.open(r.update_payment_method, '_blank', 'noopener'); close(); return; }
+      } catch (_) {}
+      window.location.href = 'Billing.html';   // fallback
     });
 
     document.body.appendChild(overlay);
