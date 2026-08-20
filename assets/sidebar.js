@@ -213,7 +213,7 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Drill Designer',   key: 'planner' },
       { href: 'Exercises%20Library.html',icon: 'ti-list-tree',         label: 'Exercises Library', key: 'sessions-lib' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
-      { href: 'Tactical%20Planning.html', icon: 'ti-target',         label: 'Tactical planning', key: 'tactical-planning' },
+      { href: 'Tactical%20Planning.html', icon: 'ti-target',         label: 'Tactical planning', key: 'tactical-planning', buckets: ['admin','coach','sc','direction'] },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
       { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room',       key: 'video-room' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
@@ -292,9 +292,10 @@ html.cm-rail .hub-nav-grip{display:none}
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
           const plt    = item.platformOnly ? ' data-platform-only' : '';
           const po     = item.planOnly ? ' data-plan-only' : '';   // gatea por plan, NO por RBAC
+          const bks    = item.buckets ? ` data-buckets="${item.buckets.join(',')}"` : '';   // visible solo para estos buckets de rol
           const i18nKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
           const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po}${bks} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -583,6 +584,20 @@ html.cm-rail .hub-nav-grip{display:none}
       try { _isSuperDir = (typeof window.isSuperAdmin === 'function') ? await window.isSuperAdmin() : false; } catch (_) {}
       if (!_isSuperDir && !_buckets.has('admin') && !_buckets.has('direction')) {
         document.querySelectorAll('[data-direction-only]').forEach(el => el.remove());
+      }
+    } catch (_) {}
+    // Gating por bucket de rol (data-buckets="a,b,…"): el ítem se quita si NINGÚN rol
+    // del miembro (role + club_role) cae en la lista. Igual que Club overview: gating
+    // propio, NO usa data-mod para no fail-open. Super admin siempre lo ve.
+    try {
+      const _bk2 = window.cmRoleBuckets ? window.cmRoleBuckets(profile) : new Set();
+      let _isSuperBk = false;
+      try { _isSuperBk = (typeof window.isSuperAdmin === 'function') ? await window.isSuperAdmin() : false; } catch (_) {}
+      if (!_isSuperBk) {
+        document.querySelectorAll('[data-buckets]').forEach(el => {
+          const ok = el.dataset.buckets.split(',').some(b => _bk2.has(b.trim()));
+          if (!ok) el.remove();
+        });
       }
     } catch (_) {}
     // Gating de plan: NO se quita el ítem; candado + CTA de upgrade (esconder no convierte).

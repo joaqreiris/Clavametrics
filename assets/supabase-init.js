@@ -763,6 +763,16 @@
   window.cmHasBucket  = function (profile, bucket) { return window.cmRoleBuckets(profile).has(bucket); };
   // Full (admin/owner) access if EITHER role maps to the admin bucket.
   window.cmFullAccess = function (profile) { return window.cmRoleBuckets(profile).has('admin'); };
+  // ── Tactical Planning access ─────────────────────────────────────────────────
+  // Visible SOLO para cuerpo técnico (coach/assistant_coach/gk_coach), preparación
+  // física (sc_coach/fitness_coach), dirección (director deportivo / heads) y
+  // admin/owner. Medical, analyst y staff: oculto. Única fuente de verdad para el
+  // sidebar (data-buckets), el guard de Tactical Planning.html y el bloque de
+  // objetivos tácticos en Daily Planning.
+  window.cmTacticalAccess = function (profile) {
+    var b = window.cmRoleBuckets(profile);
+    return b.has('admin') || b.has('coach') || b.has('sc') || b.has('direction');
+  };
   // ── GPS provider sync (daily API pull) permission ────────────────────────────
   // Who may TRIGGER a "Sync now" against the club's GPS provider (Catapult, etc.).
   // Buckets: 'admin' (owner/admin) + 'sc' (sc_coach/fitness_coach). This is ONLY the

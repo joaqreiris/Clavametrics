@@ -2429,7 +2429,32 @@ create table if not exists public.task_reminders (
 );
 CREATE INDEX task_reminders_due_idx ON public.task_reminders USING btree (remind_at) WHERE (sent_at IS NULL);
 
--- Tactical Planning: objetivos tácticos por día/equipo (vinculados a Daily Planning por club+team+fecha)
+-- Tactical Planning: catálogo de objetivos/subobjetivos por equipo (preparación previa del año).
+-- Dos niveles: raíz (parent_id NULL, con category) y subobjetivo (parent_id → raíz, category NULL).
+create table if not exists public.tactical_catalog (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  parent_id uuid,
+  category text,
+  name text not null,
+  position integer default 0 not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint tactical_catalog_pkey primary key (id),
+  constraint tactical_catalog_parent_fk FOREIGN KEY (parent_id) REFERENCES public.tactical_catalog(id) ON DELETE CASCADE,
+  constraint tactical_catalog_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text]))))
+);
+CREATE INDEX idx_tactical_catalog_club_team ON public.tactical_catalog USING btree (club_id, team_id);
+alter table public.tactical_catalog enable row level security;
+create policy "tactical_catalog_scoped" on public.tactical_catalog as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "tactical_catalog_super_all" on public.tactical_catalog as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
+-- Tactical Planning: objetivos tácticos por día/equipo (vinculados a Daily Planning por club+team+fecha).
+-- title es SNAPSHOT (sobrevive renombres/borrados del catálogo); catalog_* solo guardan procedencia.
 create table if not exists public.tactical_objectives (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2440,11 +2465,15 @@ create table if not exists public.tactical_objectives (
   notes text,
   done boolean default false not null,
   position integer default 0 not null,
+  catalog_objective_id uuid,
+  catalog_sub_id uuid,
   created_by uuid,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   constraint tactical_objectives_pkey primary key (id),
-  constraint tactical_objectives_category_check CHECK ((category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text])))
+  constraint tactical_objectives_category_check CHECK ((category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text]))),
+  constraint tactical_objectives_cat_obj_fk FOREIGN KEY (catalog_objective_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL,
+  constraint tactical_objectives_cat_sub_fk FOREIGN KEY (catalog_sub_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL
 );
 CREATE INDEX idx_tactical_objectives_club_team_date ON public.tactical_objectives USING btree (club_id, team_id, date);
 alter table public.tactical_objectives enable row level security;

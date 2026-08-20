@@ -145,6 +145,38 @@
   .tp-form input:focus,.tp-form textarea:focus{outline:none;border-color:var(--cm-accent)}
   .tp-form .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
   .tp-banner{display:none;margin-bottom:14px;padding:11px 14px;border:1px solid var(--cm-warning-bd);background:var(--cm-warning-bg);color:var(--cm-warning);border-radius:10px;font:600 12px/1.4 var(--cm-font-sans)}
+
+  /* top-level tabs (Planning | Catalog) — same pattern as Top-Up */
+  .tp-tabs{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:11px;padding:3px;gap:3px;margin:0 0 16px}
+  .tp-tabs button{border:0;background:transparent;color:var(--cm-fg-muted);font:600 13px/1 var(--cm-font-sans);padding:9px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:7px}
+  .tp-tabs button .ti{font-size:16px}
+  .tp-tabs button.on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  /* objectives catalog */
+  .tp-cat-group{margin-bottom:18px}
+  .tp-cat-group:last-child{margin-bottom:0}
+  .tp-cat-group .gh{display:flex;align-items:center;gap:8px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px}
+  .tp-cat-group .gh .dot{width:9px;height:9px;border-radius:99px;flex:none}
+  .tp-cat-obj{border:1px solid var(--cm-border);border-radius:12px;background:var(--cm-surface);padding:10px 12px;margin-bottom:8px;display:flex;gap:10px}
+  .tp-cat-obj .cbar{width:4px;border-radius:99px;flex:none;align-self:stretch}
+  .tp-cat-obj .main{flex:1;min-width:0}
+  .tp-cat-obj .nm{font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);overflow-wrap:anywhere}
+  .tp-cat-obj .acts{display:flex;gap:2px;flex:none;align-self:flex-start}
+  .tp-cat-obj .mini{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:14px;padding:4px;border-radius:6px}
+  .tp-cat-obj .mini:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .tp-cat-obj .mini.del:hover{color:var(--cm-danger)}
+  .tp-cat-subs{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .tp-cat-sub{display:flex;align-items:center;gap:8px;font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg);padding:5px 8px;border-radius:8px;background:var(--cm-bg-soft)}
+  .tp-cat-sub .bull{width:5px;height:5px;border-radius:99px;background:var(--cm-fg-faint);flex:none}
+  .tp-cat-sub .t{flex:1;min-width:0;overflow-wrap:anywhere}
+  .tp-cat-addsub{display:flex;gap:6px;margin-top:8px}
+  .tp-cat-addsub input{flex:1;min-width:0;height:32px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px dashed var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-sans)}
+  .tp-cat-addsub input:focus{outline:none;border-color:var(--cm-accent);border-style:solid}
+  /* picker selects in the day modal */
+  .tp-pick-row{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+  .tp-pick-row select{width:100%;height:40px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:9px;font:600 13px/1 var(--cm-font-sans);cursor:pointer}
+  .tp-pick-row select:focus{outline:none;border-color:var(--cm-accent)}
+  .tp-pick-row label{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:-3px}
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -187,8 +219,13 @@
 
       <div class="tp-banner" id="tpSqlBanner"><i class="ti ti-alert-triangle"></i> <span data-i18n="tactical.table_missing">This section's table is not in the database yet — apply the pending SQL in Supabase.</span></div>
 
+      <div class="tp-tabs" id="tpTabs">
+        <button data-tab="plan" class="on"><i class="ti ti-calendar-month"></i><span data-i18n="tactical.tab_plan">Planning</span></button>
+        <button data-tab="catalog"><i class="ti ti-list-tree"></i><span data-i18n="tactical.tab_catalog">Objectives catalog</span></button>
+      </div>
+
       <!-- ===== MONTH CALENDAR ===== -->
-      <div class="tp-card">
+      <div class="tp-card" data-view="plan">
         <div class="tp-card-h">
           <h3><i class="ti ti-calendar-month"></i><span data-i18n="tactical.month_view">Objectives calendar</span></h3>
           <div class="right">
@@ -204,7 +241,7 @@
       </div>
 
       <!-- ===== GLOBAL PICTURE ===== -->
-      <div class="tp-card">
+      <div class="tp-card" data-view="plan">
         <div class="tp-card-h">
           <h3><i class="ti ti-chart-pie"></i><span data-i18n="tactical.stats_title">Global picture</span></h3>
           <div class="right">
@@ -221,6 +258,25 @@
         </div>
         <div class="tp-card-b" id="tpStatsBody">
           <div class="tp-empty"><i class="ti ti-chart-bar"></i><span data-i18n="common.loading">Loading…</span></div>
+        </div>
+      </div>
+
+      <!-- ===== OBJECTIVES CATALOG (preparación previa del año) ===== -->
+      <div class="tp-card" data-view="catalog" style="display:none">
+        <div class="tp-card-h">
+          <h3><i class="ti ti-list-tree"></i><span data-i18n="tactical.catalog_title">Objectives catalog</span></h3>
+        </div>
+        <div class="tp-card-b">
+          <p class="tp-sub" style="margin-bottom:14px" data-i18n="tactical.catalog_hint">Prepare here the objectives and sub-objectives you want to work on during the year. When planning a day you will just pick them and add the day's detail.</p>
+          <div id="tpCatList"></div>
+          <div class="tp-form" style="margin-top:14px">
+            <div class="fl"><i class="ti ti-plus"></i><span data-i18n="tactical.catalog_add">New objective</span></div>
+            <div class="tp-catpick" id="tpCatCatPick"></div>
+            <input type="text" id="tpCatName" maxlength="200" placeholder="e.g. Defensive block" data-i18n-ph="tactical.catalog_name_ph">
+            <div class="btns">
+              <button class="cm-btn is-primary is-sm" id="tpCatAddBtn" data-i18n="tactical.add">Add</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -240,8 +296,22 @@
       <div class="tp-obj-list" id="tpObjList"></div>
       <div class="tp-form">
         <div class="fl" id="tpFormTitle"><i class="ti ti-plus"></i><span data-i18n="tactical.add_objective">Add objective</span></div>
-        <div class="tp-catpick" id="tpCatPick"></div>
-        <input type="text" id="tpObjTitle" maxlength="200" placeholder="e.g. Mid block &amp; breaking the press" data-i18n-ph="tactical.objective_ph">
+        <div class="tp-seg" id="tpFormMode" style="margin-bottom:10px;display:none">
+          <button data-m="catalog" data-i18n="tactical.from_catalog">From the catalog</button>
+          <button data-m="free" data-i18n="tactical.free_text">Free text</button>
+        </div>
+        <div id="tpFormCatalog" style="display:none">
+          <div class="tp-pick-row">
+            <label data-i18n="tactical.pick_objective">Objective</label>
+            <select id="tpPickObj"></select>
+            <label data-i18n="tactical.pick_sub">Sub-objective</label>
+            <select id="tpPickSub"></select>
+          </div>
+        </div>
+        <div id="tpFormFree">
+          <div class="tp-catpick" id="tpCatPick"></div>
+          <input type="text" id="tpObjTitle" maxlength="200" placeholder="e.g. Mid block &amp; breaking the press" data-i18n-ph="tactical.objective_ph">
+        </div>
         <textarea id="tpObjNotes" maxlength="2000" placeholder="Details, corrections, observations…" data-i18n-ph="tactical.notes_ph"></textarea>
         <div class="btns">
           <button class="cm-btn is-outline is-sm" id="tpFormCancel" style="display:none" data-i18n="common.cancel">Cancel</button>
@@ -280,6 +350,8 @@ let _tpMatches = {};                         // date -> opponent
 let _tpRange = 'month', _tpOnlyDone = false;
 let _tpSeason = null;                        // {start_date,end_date} | null
 let _tpModalDay = null, _tpEditId = null, _tpFormCat = 'offensive';
+let _tpCatalog = [];                         // catálogo objetivos + subobjetivos (2 niveles, por equipo)
+let _tpFormMode = 'free', _tpCatFormCat = 'offensive';
 let _tpTableMissing = false;
 
 // ── date helpers (local, never toISOString — see cmYMD) ─────────────
@@ -536,6 +608,121 @@ function tpWeeklySvg(weeks, wk){
   return s;
 }
 
+// ── objectives catalog (preparación previa del año) ─────────────────
+const catIdx = c => { const i = TP_CATS.findIndex(x => x.id === c); return i < 0 ? 99 : i; };
+const catSortRoots = (a, b) => (catIdx(a.category) - catIdx(b.category)) || (a.position - b.position) || a.name.localeCompare(b.name);
+const catRoots = () => _tpCatalog.filter(r => !r.parent_id).sort(catSortRoots);
+const catSubs = id => _tpCatalog.filter(r => r.parent_id === id).sort((a, b) => (a.position - b.position) || a.name.localeCompare(b.name));
+
+async function tpLoadCatalog(){
+  try {
+    const { data, error } = await window.sb.from('tactical_catalog')
+      .select('id,parent_id,category,name,position')
+      .eq('club_id', _tpClubId).eq('team_id', _tpTeamId)
+      .order('position').order('name');
+    if (error) throw error;
+    _tpCatalog = data || [];
+  } catch (e) { tpMissingTable(e); _tpCatalog = []; }
+  tpRenderCatalog();
+}
+
+function tpRenderCatalog(){
+  const box = document.getElementById('tpCatList');
+  const roots = catRoots();
+  if (!roots.length) {
+    box.innerHTML = `<div class="tp-empty"><i class="ti ti-list-tree"></i>${esc(tt('tactical.catalog_empty','No objectives in the catalog yet. Create the first one below.'))}</div>`;
+  } else {
+    let html = '';
+    TP_CATS.forEach(c => {
+      const objs = roots.filter(r => (r.category || 'other') === c.id);
+      if (!objs.length) return;
+      html += `<div class="tp-cat-group"><div class="gh"><span class="dot" style="background:${catColor(c.id)}"></span>${esc(catLabel(c.id))}</div>`;
+      objs.forEach(o => {
+        const subs = catSubs(o.id);
+        html += `<div class="tp-cat-obj">
+          <span class="cbar" style="background:${catColor(c.id)}"></span>
+          <div class="main">
+            <div class="nm">${esc(o.name)}</div>
+            ${subs.length ? `<div class="tp-cat-subs">${subs.map(s => `
+              <div class="tp-cat-sub"><span class="bull"></span><span class="t">${esc(s.name)}</span>
+                <button class="mini" data-cat-act="rename" data-id="${s.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
+                <button class="mini del" data-cat-act="del-sub" data-id="${s.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
+              </div>`).join('')}</div>` : ''}
+            <div class="tp-cat-addsub">
+              <input type="text" maxlength="200" data-addsub="${o.id}" placeholder="${esc(tt('tactical.catalog_sub_ph','New sub-objective…'))}">
+              <button class="cm-btn is-outline is-sm" data-cat-act="add-sub" data-id="${o.id}"><i class="ti ti-plus" style="font-size:13px"></i></button>
+            </div>
+          </div>
+          <div class="acts">
+            <button class="mini" data-cat-act="rename" data-id="${o.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
+            <button class="mini del" data-cat-act="del-obj" data-id="${o.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    box.innerHTML = html;
+  }
+  box.querySelectorAll('[data-cat-act]').forEach(b => b.addEventListener('click', () => tpCatAction(b.getAttribute('data-cat-act'), b.getAttribute('data-id'))));
+  box.querySelectorAll('input[data-addsub]').forEach(inp => inp.addEventListener('keydown', e => { if (e.key === 'Enter') tpCatAction('add-sub', inp.getAttribute('data-addsub')); }));
+  tpRenderCatFormPick();
+}
+
+function tpRenderCatFormPick(){
+  const el = document.getElementById('tpCatCatPick');
+  el.innerHTML = TP_CATS.map(c => `<button type="button" data-cat="${c.id}" class="${c.id === _tpCatFormCat ? 'on' : ''}" style="--cc:${catColor(c.id)}"><span class="dot" style="background:${catColor(c.id)}"></span>${esc(catLabel(c.id))}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _tpCatFormCat = b.getAttribute('data-cat'); tpRenderCatFormPick(); }));
+}
+
+async function tpCatAction(act, id){
+  try {
+    if (act === 'add-sub') {
+      const inp = document.querySelector(`input[data-addsub="${id}"]`);
+      const name = (inp && inp.value.trim()) || '';
+      if (!name) { if (inp) inp.focus(); return; }
+      const pos = catSubs(id).length;
+      const { data, error } = await window.sb.from('tactical_catalog')
+        .insert({ club_id: _tpClubId, team_id: _tpTeamId, parent_id: id, name, position: pos, created_by: _tpProfile?.id || null })
+        .select().single();
+      if (error) throw error;
+      _tpCatalog.push(data);
+    } else if (act === 'rename') {
+      const row = _tpCatalog.find(r => r.id === id); if (!row) return;
+      const name = prompt(tt('tactical.catalog_rename','New name:'), row.name);
+      if (!name || !name.trim() || name.trim() === row.name) return;
+      const { error } = await window.sb.from('tactical_catalog').update({ name: name.trim() }).eq('id', id);
+      if (error) throw error;
+      row.name = name.trim();
+    } else if (act === 'del-obj' || act === 'del-sub') {
+      const msg = act === 'del-obj' ? tt('tactical.catalog_delete_confirm','Delete this objective and all its sub-objectives?') : tt('tactical.catalog_sub_delete_confirm','Delete this sub-objective?');
+      if (!confirm(msg)) return;
+      const { error } = await window.sb.from('tactical_catalog').delete().eq('id', id);
+      if (error) throw error;
+      _tpCatalog = _tpCatalog.filter(r => r.id !== id && r.parent_id !== id);
+    }
+    tpRenderCatalog();
+  } catch (e) { if (!tpMissingTable(e)) alert(e.message || e); }
+}
+
+async function tpCatAddObjective(){
+  const inp = document.getElementById('tpCatName');
+  const name = inp.value.trim();
+  if (!name) { inp.focus(); return; }
+  const btn = document.getElementById('tpCatAddBtn');
+  btn.disabled = true;
+  try {
+    const pos = catRoots().filter(r => (r.category || 'other') === _tpCatFormCat).length;
+    const { data, error } = await window.sb.from('tactical_catalog')
+      .insert({ club_id: _tpClubId, team_id: _tpTeamId, parent_id: null, category: _tpCatFormCat, name, position: pos, created_by: _tpProfile?.id || null })
+      .select().single();
+    if (error) throw error;
+    _tpCatalog.push(data);
+    inp.value = '';
+    tpRenderCatalog();
+  } catch (e) { if (!tpMissingTable(e)) alert(e.message || e); }
+  finally { btn.disabled = false; }
+}
+
 // ── day modal ────────────────────────────────────────────────────────
 function tpOpenDay(ds){
   _tpModalDay = ds;
@@ -552,7 +739,7 @@ function tpOpenDay(ds){
   tpResetForm();
   tpRenderModalList();
   document.getElementById('tpModalBack').classList.add('open');
-  setTimeout(() => document.getElementById('tpObjTitle').focus(), 60);
+  setTimeout(() => document.getElementById(_tpFormMode === 'catalog' ? 'tpPickObj' : 'tpObjTitle').focus(), 60);
 }
 function tpCloseModal(){ document.getElementById('tpModalBack').classList.remove('open'); _tpModalDay = null; _tpEditId = null; }
 
@@ -602,6 +789,42 @@ function tpResetForm(){
   document.getElementById('tpFormSave').innerHTML = esc(tt('tactical.add','Add'));
   document.getElementById('tpFormTitle').innerHTML = `<i class="ti ti-plus"></i>${esc(tt('tactical.add_objective','Add objective'))}`;
   tpRenderCatPick();
+  _tpFormMode = catRoots().length ? 'catalog' : 'free';   // con catálogo preparado, elegir es el camino corto
+  tpApplyFormMode();
+}
+
+// Alterna entre "del catálogo" (objetivo → subobjetivo → detalle) y texto libre.
+function tpApplyFormMode(){
+  const hasCat = catRoots().length > 0;
+  const seg = document.getElementById('tpFormMode');
+  if (!hasCat || _tpEditId) _tpFormMode = 'free';   // editar siempre en modo libre (no re-linkea catálogo)
+  seg.style.display = (hasCat && !_tpEditId) ? '' : 'none';
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.getAttribute('data-m') === _tpFormMode));
+  document.getElementById('tpFormCatalog').style.display = _tpFormMode === 'catalog' ? '' : 'none';
+  document.getElementById('tpFormFree').style.display = _tpFormMode === 'free' ? '' : 'none';
+  if (_tpFormMode === 'catalog') tpFillObjPicker();
+}
+
+function tpFillObjPicker(){
+  const sel = document.getElementById('tpPickObj');
+  const prev = sel.value;
+  let html = '';
+  TP_CATS.forEach(c => {
+    const objs = catRoots().filter(r => (r.category || 'other') === c.id);
+    if (!objs.length) return;
+    html += `<optgroup label="${esc(catLabel(c.id))}">` + objs.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('') + `</optgroup>`;
+  });
+  sel.innerHTML = html;
+  if (prev && _tpCatalog.some(r => r.id === prev && !r.parent_id)) sel.value = prev;
+  tpFillSubPicker();
+}
+
+function tpFillSubPicker(){
+  const objId = document.getElementById('tpPickObj').value;
+  const subs = objId ? catSubs(objId) : [];
+  document.getElementById('tpPickSub').innerHTML =
+    `<option value="">${esc(tt('tactical.pick_sub_none','— Objective only —'))}</option>` +
+    subs.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 
 function tpStartEdit(id){
@@ -615,13 +838,27 @@ function tpStartEdit(id){
   document.getElementById('tpFormSave').innerHTML = esc(tt('common.save','Save'));
   document.getElementById('tpFormTitle').innerHTML = `<i class="ti ti-pencil"></i>${esc(tt('tactical.edit_objective','Edit objective'))}`;
   tpRenderCatPick();
+  tpApplyFormMode();
   document.getElementById('tpObjTitle').focus();
 }
 
 async function tpSubmitForm(){
-  const title = document.getElementById('tpObjTitle').value.trim();
   const notes = document.getElementById('tpObjNotes').value.trim() || null;
-  if (!title || !_tpModalDay) return;
+  if (!_tpModalDay) return;
+  // Resolver título/categoría según el modo (catálogo: objetivo → subobjetivo; libre: input)
+  let title, category = _tpFormCat, catObjId = null, catSubId = null;
+  if (!_tpEditId && _tpFormMode === 'catalog') {
+    catObjId = document.getElementById('tpPickObj').value || null;
+    const obj = catObjId ? _tpCatalog.find(r => r.id === catObjId) : null;
+    if (!obj) return;
+    catSubId = document.getElementById('tpPickSub').value || null;
+    const sub = catSubId ? _tpCatalog.find(r => r.id === catSubId) : null;
+    category = obj.category || 'other';
+    title = sub ? `${obj.name} · ${sub.name}` : obj.name;   // snapshot: sobrevive renombres/borrados del catálogo
+  } else {
+    title = document.getElementById('tpObjTitle').value.trim();
+    if (!title) return;
+  }
   const btn = document.getElementById('tpFormSave');
   btn.disabled = true;
   try {
@@ -634,7 +871,7 @@ async function tpSubmitForm(){
     } else {
       const pos = _tpObjs.filter(o => o.date === _tpModalDay).length;
       const { data, error } = await window.sb.from('tactical_objectives')
-        .insert({ club_id: _tpClubId, team_id: _tpTeamId, date: _tpModalDay, category: _tpFormCat, title, notes, position: pos, created_by: _tpProfile?.id || null })
+        .insert({ club_id: _tpClubId, team_id: _tpTeamId, date: _tpModalDay, category, title, notes, position: pos, created_by: _tpProfile?.id || null, catalog_objective_id: catObjId, catalog_sub_id: catSubId })
         .select().single();
       if (error) throw error;
       _tpObjs.push(data);
@@ -681,7 +918,7 @@ async function tpInitTeams(){
     _tpTeamId = sel.value;
     sessionStorage.setItem('cal_active_team', _tpTeamId);
     await tpResolveSeason();
-    await tpLoadMonth();
+    await Promise.all([tpLoadMonth(), tpLoadCatalog()]);
     tpLoadStats();
   });
 }
@@ -693,6 +930,10 @@ async function tpInitTeams(){
   _tpClubId = await window.getClubId();
   const [club, profile] = await Promise.all([window.getClub(), window.getProfile()]);
   _tpProfile = profile;
+  // Solo cuerpo técnico / PF / dirección / admin (cmTacticalAccess). Super admin pasa.
+  let _allowed = window.cmTacticalAccess ? window.cmTacticalAccess(profile) : true;
+  if (!_allowed) { try { _allowed = await window.isSuperAdmin(); } catch (_) {} }
+  if (!_allowed) { location.replace('Hub.html'); return; }
   if (club) window.applyClubTheme();
   await tpInitTeams();
   if (!_tpTeamId) return;
@@ -723,13 +964,24 @@ async function tpInitTeams(){
     document.querySelectorAll('#tpDoneSeg button').forEach(x => x.classList.toggle('on', x === b));
     tpLoadStats();
   }));
+  // tabs Planificación | Catálogo
+  document.getElementById('tpTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    const v = b.getAttribute('data-tab');
+    document.querySelectorAll('#tpTabs button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.tp-card[data-view]').forEach(c => { c.style.display = c.getAttribute('data-view') === v ? '' : 'none'; });
+  }));
+  // catálogo: alta de objetivo + modo del formulario del modal
+  document.getElementById('tpCatAddBtn').addEventListener('click', tpCatAddObjective);
+  document.getElementById('tpCatName').addEventListener('keydown', e => { if (e.key === 'Enter') tpCatAddObjective(); });
+  document.getElementById('tpPickObj').addEventListener('change', tpFillSubPicker);
+  document.getElementById('tpFormMode').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _tpFormMode = b.getAttribute('data-m'); tpApplyFormMode(); }));
 
   await tpResolveSeason();
-  await tpLoadMonth();
+  await Promise.all([tpLoadMonth(), tpLoadCatalog()]);
   tpLoadStats();
   if (openDate) tpOpenDay(openDate);
 
-  const rerender = () => { tpRenderMonth(); tpLoadStats(); if (_tpModalDay) { const d = _tpModalDay; tpOpenDay(d); } };
+  const rerender = () => { tpRenderMonth(); tpLoadStats(); tpRenderCatalog(); if (_tpModalDay) { const d = _tpModalDay; tpOpenDay(d); } };
   window.CM_I18N?.ready?.then(() => rerender());
   document.addEventListener('cm:langchanged', rerender);
 })();

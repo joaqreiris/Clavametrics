@@ -1017,6 +1017,8 @@ async function dpChangeStatus(playerId, newStatus) {
 async function dpLoadTactical(dateStr) {
   const card = document.getElementById('dpTacticalCard');
   if (!card) return;
+  // Mismo gating que la sección Tactical Planning: solo técnico/PF/dirección/admin.
+  if (window.cmTacticalAccess && !window.cmTacticalAccess(_dpProfile)) { card.style.display = 'none'; return; }
   try {
     const { data, error } = await window.sb.from('tactical_objectives')
       .select('id,category,title,done')
