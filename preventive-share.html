@@ -125,6 +125,8 @@
     return s;
   }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // Bloquea javascript:/data: en href — solo permite http(s) o rutas relativas.
+  function safeUrl(u){ var s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
   function initials(n){ return String(n||'—').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || '—'; }
 
   var TYPE_COLOR = { warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E', str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D', cond:'#EA580C', cool:'#64748B', assess:'#0EA5E9' };
@@ -202,7 +204,7 @@
     var tags = [];
     if (ex.side)  tags.push('<span class="badge">'+esc(String(ex.side).toUpperCase())+'</span>');
     if (ex.flag)  tags.push('<span class="badge">'+esc(ex.flag)+'</span>');
-    var watch = ex.videoUrl ? '<a class="watch" href="'+esc(ex.videoUrl)+'" target="_blank" rel="noopener">'+YT_SVG+' '+tt('prev_share.watch_demo','Watch demo')+'</a>' : '';
+    var watch = ex.videoUrl ? '<a class="watch" href="'+esc(safeUrl(ex.videoUrl))+'" target="_blank" rel="noopener">'+YT_SVG+' '+tt('prev_share.watch_demo','Watch demo')+'</a>' : '';
     return '<div class="ex'+(isDone?' done':'')+'" data-id="'+esc(id)+'">'+
       '<div class="ex-top">'+thumb+
         '<div style="flex:1;min-width:0"><div class="ex-name">'+esc(ex.name||'—')+'</div>'+

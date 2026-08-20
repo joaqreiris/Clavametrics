@@ -122,13 +122,15 @@ const SB_URL='https://xesrumijvdmqjrufgeka.supabase.co';
 const SB_KEY='sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const app=document.getElementById('app');
+// Escapa datos de DB (nombres de jugador) y mensajes de error antes de innerHTML — página pública.
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const token=new URLSearchParams(location.search).get('token');
 let players=[],picked=null,scope='wellness';
 const state={sleepQ:4,mood:4,fatigue:4,stress:4,soreness:4,rpe:6,body:new Set(),note:''};
 const today=new Date().toLocaleDateString(L===T.en?'en-GB':'es-ES',{weekday:'long',day:'numeric',month:'short'});
 
-function show404(msg){app.innerHTML=`<div class="center"><i class="ti ti-link-off big"></i><div class="t">${L.invalid}</div><div>${msg||L.expired}</div></div>`;}
-function header(){return `<div class="ph-header"><span class="date">${today}</span>${picked?`<span class="avatar">${(picked.name[0]||'?').toUpperCase()}</span>`:''}</div>`;}
+function show404(msg){app.innerHTML=`<div class="center"><i class="ti ti-link-off big"></i><div class="t">${L.invalid}</div><div>${esc(msg||L.expired)}</div></div>`;}
+function header(){return `<div class="ph-header"><span class="date">${today}</span>${picked?`<span class="avatar">${esc((picked.name[0]||'?').toUpperCase())}</span>`:''}</div>`;}
 
 async function init(){
   if(!token){show404(L.notoken);return;}
@@ -142,7 +144,7 @@ async function init(){
 function renderPick(){
   app.innerHTML=header()+
     `<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.who}</h1><p>${L.whoSub}</p></div>`+
-    `<div class="players">`+players.map((p,i)=>`<button class="player-btn" data-i="${i}"><span class="av">${(p.name[0]||'?').toUpperCase()}</span>${p.name}</button>`).join('')+`</div>`;
+    `<div class="players">`+players.map((p,i)=>`<button class="player-btn" data-i="${i}"><span class="av">${esc((p.name[0]||'?').toUpperCase())}</span>${esc(p.name)}</button>`).join('')+`</div>`;
   app.querySelectorAll('.player-btn').forEach(b=>b.onclick=()=>{picked=players[+b.dataset.i];renderForm();});
 }
 function scaleHtml(key,icon,label,ends,max=10){
@@ -168,8 +170,8 @@ function renderForm(){
          scaleHtml('soreness','ti-bandage',L.soreness,L.e_soreness,7)+
          scaleHtml('mood','ti-mood-smile',L.mood,L.e_mood,7)+bodyHtml()+noteHtml();
   }
-  app.innerHTML=`<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
-    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(picked.name.split(' ')[0])}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p></div>`+
+  app.innerHTML=`<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(esc(picked.name))}</button>`+
+    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(esc(picked.name.split(' ')[0]))}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p></div>`+
     body+`<div class="ph-cta"><button id="submitBtn" onclick="submitForm()">${L.send}</button></div>`;
 }
 window.setScale=(k,v)=>{state[k]=v;document.getElementById('v_'+k).textContent=v;
@@ -190,7 +192,7 @@ window.submitForm=async()=>{
   renderDone(hist, already);
 };
 function renderDone(hist, already){
-  const name=picked.name.split(' ')[0];
+  const name=esc(picked.name.split(' ')[0]);
   const isRpe=(scope==='rpe');
   const hl=already?(isRpe?L.alreadyRpe:L.already):L.done(name);
   const sub=already?(isRpe?L.alreadyRpeSub:L.alreadySub):L.doneSub;

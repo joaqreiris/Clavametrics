@@ -29,7 +29,9 @@
     function showError(msg) {
       spinner.style.display = 'none';
       msgEl.className = 'err';
-      msgEl.innerHTML = msg + '<br><a href="Login.html">← Back to sign in</a>';
+      // msg puede venir de la query string (error_description) → texto, nunca innerHTML.
+      msgEl.textContent = msg;
+      msgEl.insertAdjacentHTML('beforeend', '<br><a href="Login.html">← Back to sign in</a>');
     }
 
     // 1. Supabase may forward OAuth errors in the query string

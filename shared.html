@@ -247,6 +247,8 @@
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  // Escapa datos de DB (títulos/rival/ubicación) antes de inyectar a innerHTML — página pública.
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   function show404(msg) {
     document.title = 'Schedule not found — ClavaMetrics';
@@ -298,12 +300,12 @@
   let mcBannerHtml = '';
   if (mc) {
     const matchLabel = mc.match_date
-      ? `MD: ${new Date(mc.match_date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}` + (mc.rival ? ` vs ${mc.rival}` : '')
+      ? `MD: ${new Date(mc.match_date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}` + (mc.rival ? ` vs ${esc(mc.rival)}` : '')
       : '';
     mcBannerHtml = `<div class="sh-mc-banner">
       <div class="ic"><i class="ti ti-calendar-stats"></i></div>
       <div>
-        <div class="sh-mc-name">${mc.name || 'Microcycle'}</div>
+        <div class="sh-mc-name">${esc(mc.name || 'Microcycle')}</div>
         ${matchLabel ? `<div class="sh-mc-sub">${matchLabel}</div>` : ''}
       </div>
     </div>`;
@@ -367,16 +369,16 @@
     const dur  = e.duration_minutes ? `${e.duration_minutes}′` : '';
     const titleText = e.title || typeLabel(e.event_type);
     const oppLine = e.opponent
-      ? `<span>vs ${e.opponent}${e.home_away ? ' · ' + (e.home_away === 'home' ? 'Home' : e.home_away === 'away' ? 'Away' : 'Neutral') : ''}</span>`
+      ? `<span>vs ${esc(e.opponent)}${e.home_away ? ' · ' + (e.home_away === 'home' ? 'Home' : e.home_away === 'away' ? 'Away' : 'Neutral') : ''}</span>`
       : '';
     return `<div class="sh-evt ${cat}">
       <div class="sh-evt-icon"><i class="ti ${icon}"></i></div>
       <div class="sh-evt-body">
-        <div class="sh-evt-title">${titleText}</div>
+        <div class="sh-evt-title">${esc(titleText)}</div>
         <div class="sh-evt-meta">
-          <span class="sh-evt-type-badge">${typeLabel(e.event_type)}</span>
+          <span class="sh-evt-type-badge">${esc(typeLabel(e.event_type))}</span>
           ${timeStr ? `<span class="sh-evt-time"><i class="ti ti-clock"></i>${timeStr}${dur ? ' · ' + dur : ''}</span>` : dur ? `<span class="sh-evt-time">${dur}</span>` : ''}
-          ${e.location ? `<span class="sh-evt-loc"><i class="ti ti-map-pin"></i>${e.location}</span>` : ''}
+          ${e.location ? `<span class="sh-evt-loc"><i class="ti ti-map-pin"></i>${esc(e.location)}</span>` : ''}
           ${oppLine}
         </div>
       </div>

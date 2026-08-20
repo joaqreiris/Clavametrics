@@ -663,11 +663,11 @@ html.cm-rail .hub-nav-grip{display:none}
       return;
     }
     list.innerHTML = visible.map(n => `
-      <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${n.id}" href="${n.link || '#'}">
+      <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${_escHtml(n.id)}" href="${_escHtml(_safeLink(n.link))}">
         ${_notifIcon(n.type)}
         <div class="cm-ni-body">
-          <div class="cm-ni-title">${n.title}</div>
-          ${n.body ? `<div class="cm-ni-desc">${n.body}</div>` : ''}
+          <div class="cm-ni-title">${_escHtml(n.title)}</div>
+          ${n.body ? `<div class="cm-ni-desc">${_escHtml(n.body)}</div>` : ''}
           <div class="cm-ni-time">${_relTime(n.created_at)}</div>
         </div>
         ${n.read ? '' : '<div class="cm-ni-dot"></div>'}
@@ -688,8 +688,8 @@ html.cm-rail .hub-nav-grip{display:none}
     toast.innerHTML = `
       <div class="cm-toast-ico cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>
       <div class="cm-toast-body">
-        <div class="cm-toast-ttl">${notif.title}</div>
-        ${notif.body ? `<div class="cm-toast-desc">${notif.body}</div>` : ''}
+        <div class="cm-toast-ttl">${_escHtml(notif.title)}</div>
+        ${notif.body ? `<div class="cm-toast-desc">${_escHtml(notif.body)}</div>` : ''}
       </div>
       <button class="cm-toast-x" aria-label="Dismiss"><i class="ti ti-x"></i></button>`;
     toast.querySelector('.cm-toast-x').addEventListener('click', () => toast.remove());
@@ -793,9 +793,10 @@ html.cm-rail .hub-nav-grip{display:none}
         _updateNotifBadge();
         await window.sb.from('notifications').update({ read: true }).eq('id', nid);
       }
-      if (notif?.link && notif.link !== '#') {
+      const safe = _safeLink(notif?.link);
+      if (safe && safe !== '#') {
         e.preventDefault();
-        window.location.href = notif.link;
+        window.location.href = safe;
       }
     });
 
@@ -862,7 +863,14 @@ html.cm-rail .hub-nav-grip{display:none}
   }
 
   function _escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  // Solo rutas relativas o http(s); bloquea javascript:/data:/vbscript: en href de notificaciones.
+  function _safeLink(u) {
+    const s = String(u == null ? '' : u).trim();
+    if (!s) return '#';
+    return /^(https?:\/\/|\/|#|\.\/)/i.test(s) ? s : '#';
   }
 
   function _updateChatBadge() {
