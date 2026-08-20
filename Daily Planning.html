@@ -389,6 +389,14 @@
         .dp-tacchip.done{background:var(--cm-bg-soft)}
         .dp-tacchip.done .t{color:var(--cm-fg-muted);text-decoration:line-through}
         .dp-tacchip.done .ti{color:var(--cm-accent)}
+        .dp-tacchip.is-ro{cursor:default}
+        .dp-tacchip.is-ro:hover{border-color:var(--cm-border)}
+        /* ── modo solo lectura (body.dp-ro): esconder controles de edición ── */
+        body.dp-ro .dp-ex-add, body.dp-ro .dp-str-add,
+        body.dp-ro #dpPublishBtn, body.dp-ro #dpDuplicateBtn, body.dp-ro #dpDeleteBtn,
+        body.dp-ro [onclick^="dpMarkDayOff"], body.dp-ro [onclick^="dpRemoveDayOff"], body.dp-ro [onclick^="dpCreateSession"]{display:none!important}
+        body.dp-ro [oninput^="dpEdit"], body.dp-ro [onchange^="dpStrSetUnit"], body.dp-ro [oninput^="dpExRenameGroup"],
+        body.dp-ro #dpProjBody input, body.dp-ro #dpProjBody select{pointer-events:none;opacity:.75}
       </style>
       <div class="dp-card no-print" id="dpTacticalCard" style="display:none">
         <div class="dp-card-h">
@@ -816,7 +824,7 @@ function _dpPlayerById(id){ return _dpPlayers.find(p => String(p.id) === String(
 function _dpPlayerShort(p){ return (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '—'; }
 const _DP_EXG_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2'];
 function _dpExGroups(e){ return Array.isArray(e?.player_groups) ? e.player_groups : []; }
-function _dpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _dpEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // Inline groups row inside an exercise card: several named groups, each a multi-select.
 function dpExGroupsRow(e){
@@ -1017,8 +1025,9 @@ async function dpChangeStatus(playerId, newStatus) {
 async function dpLoadTactical(dateStr) {
   const card = document.getElementById('dpTacticalCard');
   if (!card) return;
-  // Mismo gating que la sección Tactical Planning: solo técnico/PF/dirección/admin.
-  if (window.cmTacticalAccess && !window.cmTacticalAccess(_dpProfile)) { card.style.display = 'none'; return; }
+  // Visible para todos los que ven Daily Planning; editable (toggle + link) solo
+  // para técnico/PF/dirección/admin — mismo criterio que el modo solo lectura.
+  const canEditTac = !window._dpReadOnly;
   try {
     const { data, error } = await window.sb.from('tactical_objectives')
       .select('id,category,title,done')
@@ -1028,15 +1037,15 @@ async function dpLoadTactical(dateStr) {
     if (dateStr !== _dpCurrentDate) return;   // el usuario ya cambió de día
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const link = document.getElementById('dpTacticalLink');
-    if (link) link.href = 'Tactical Planning.html?date=' + dateStr;
+    if (link) { link.href = 'Tactical Planning.html?date=' + dateStr; link.style.display = canEditTac ? '' : 'none'; }
     const box = document.getElementById('dpTacticalChips');
     const rows = data || [];
     if (!rows.length) {
       box.innerHTML = '<span style="font:500 12px var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="daily_planning.no_tactical">No tactical objectives for this day.</span>';
       if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(box);
     } else {
-      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:var(--dpt-${esc(o.category)})"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
-      box.querySelectorAll('.dp-tacchip').forEach(b => b.addEventListener('click', async () => {
+      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}${canEditTac ? '' : ' is-ro'}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:var(--dpt-${esc(o.category)})"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
+      if (canEditTac) box.querySelectorAll('.dp-tacchip').forEach(b => b.addEventListener('click', async () => {
         const row = rows.find(r => r.id === b.getAttribute('data-id')); if (!row) return;
         row.done = !row.done;
         b.classList.toggle('done', row.done);
@@ -2355,7 +2364,7 @@ async function openLibModal(mode) {
   (function () {
     const fsel = document.getElementById('libFolder');
     if (!fsel) return;
-    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const list = window.CMFolders ? window.CMFolders.flatten(_libFolders) : [];
     fsel.innerHTML = `<option value="">${esc(tt('folders.all_folders','All folders'))}</option>`
       + `<option value="__none__">${esc(window.CMFolders ? window.CMFolders.noneLabel() : 'No folder')}</option>`
@@ -2462,7 +2471,7 @@ function filterLib() {
   const known = new Set(order.map(x => x.id));
   const buckets = new Map();
   fil.forEach(e => { const k = (e.folder_id && known.has(e.folder_id)) ? e.folder_id : ''; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(e); });
-  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const head = (lbl, n, depth) => `<div style="display:flex;align-items:center;gap:6px;margin:${depth?8:2}px 0 2px;padding:2px 12px 2px ${12+(depth||0)*12}px;font:700 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)"><i class="ti ti-folder" style="font-size:12px"></i>${esc(lbl)}<span style="font-weight:500;opacity:.7">${n}</span></div>`;
   const groups = [];
   const none = buckets.get('');
@@ -2578,7 +2587,7 @@ function filterGymLib() {
     list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_strength_found','No strength exercises found.')}</div>`;
     return;
   }
-  const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const card = e => {
     const cat = (e.category || 'other').toLowerCase();
     const cls = CAT_CLS[cat] || 'oth';
@@ -3110,7 +3119,7 @@ function _dpNewSession() {
   if (statEl) statEl.textContent = tt('daily_planning.need_start_time', 'Set a start time to save the session');
   const st = document.getElementById('dpStartTime'); if (st) st.focus();
 }
-function _dpEsc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function _dpEsc(s) { return String(s == null ? '' : s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ── Delete plan ──
 // Delegates to the shared flow (assets/plan-delete.js): it confirms, and never destroys the
@@ -3442,6 +3451,41 @@ async function dpExportPDF() {
   }
 }
 
+// ── MODO SOLO LECTURA ────────────────────────────────────────────────────────
+// Roles fuera de técnico/PF/dirección/admin (mismos buckets que Tactical Planning,
+// vía cmTacticalAccess) ven la planificación pero no pueden editar nada.
+// Doble capa: CSS body.dp-ro esconde los controles de edición, y las funciones
+// que escriben quedan envueltas con un guard (las automáticas en silencio, las
+// interactivas con toast). Super admin queda exento en el boot.
+function dpApplyReadOnly() {
+  document.body.classList.add('dp-ro');
+  ['dpSessionTitle','dpStartTime','dpEndTime','dpMicrocycle','dpOrientation','dpFocus','dpEstRpe','dpMatchDay','dpNotes']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+}
+(function () {
+  const wrap = (name, silent) => {
+    const orig = window[name];
+    if (typeof orig !== 'function') { console.warn('dp-ro: no existe', name); return; }
+    window[name] = function () {
+      if (window._dpReadOnly) {
+        if (!silent) dpToast(tt('daily_planning.readonly_toast', "View only — you can't edit this planning."));
+        return;
+      }
+      return orig.apply(this, arguments);
+    };
+  };
+  // Automáticas (autosave/flush al navegar): silenciosas.
+  ['dpAutoSaveSession','dpQueueSave','dpEnsureSession','_dpEditSave','_dpEditFlushOne','dpFlushTargets','dpSaveTargets']
+    .forEach(n => wrap(n, true));
+  // Interactivas: avisan con toast.
+  ['dpChangeStatus','dpToggleAdapt','dpReorderExercise','dpStrSetUnit','deleteExercise',
+   'openLibModal','openGymLibModal','openManualExModal','addPlannerExercise','addGymExercise','saveManualExercise',
+   'dpCreateSession','dpMarkDayOff','dpRemoveDayOff','dpActAdd','dpActSave','dpActDelete','dpGkAdd','dpGkSave','dpGkDelete',
+   'dpOpenDuplicate','dpConfirmDuplicate','dpDeletePlan','dpPublish',
+   'dpOpenExGroup','dpExAddGroup','dpExDelGroup','dpExRenameGroup','dpToggleExGroupPlayer','dpCopyGroupsFrom']
+    .forEach(n => wrap(n, false));
+})();
+
 (async () => {
   if (!(await window.guardModule())) return;
   const clubId = await window.getClubId();
@@ -3452,6 +3496,9 @@ async function dpExportPDF() {
   if (club) await window.applyClubTheme();
 
   _dpProfile = profile;
+  window._dpReadOnly = !!(window.cmTacticalAccess && profile && !window.cmTacticalAccess(profile));
+  if (window._dpReadOnly) { try { if (await window.isSuperAdmin()) window._dpReadOnly = false; } catch (_) {} }
+  if (window._dpReadOnly) dpApplyReadOnly();
   await dpInitTeamSwitch();
 
   const nameEl = document.getElementById('dpUserName');
