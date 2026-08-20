@@ -5041,12 +5041,17 @@ CREATE OR REPLACE FUNCTION public.team_plan_slug(p_team_id uuid)
  SET search_path TO 'public'
 AS $function$
   SELECT coalesce(
-    -- 1) suscripción paga/activa gana
+    -- 1) suscripción paga/activa gana. past_due (pago fallido) solo mantiene el
+    --    plan durante una GRACIA de 7 días desde el fin de período; pasado eso se
+    --    excluye y el equipo cae a trial/free (que no lo pague no lo use gratis).
     (SELECT pl.slug
        FROM public.subscriptions s
        JOIN public.plans pl ON pl.id = s.plan_id
       WHERE s.team_id = p_team_id
-        AND s.status IN ('active','trialing','past_due')
+        AND (
+          s.status IN ('active','trialing')
+          OR (s.status = 'past_due' AND s.current_period_end > (now() - interval '7 days'))
+        )
       ORDER BY pl.sort_order DESC   -- defensivo: si hubiera >1, la más alta
       LIMIT 1),
     -- 2) club dentro de la prueba de 15 días → full
@@ -5473,7 +5478,7 @@ end; $function$
 
 -- =========================== VISTAS ===========================
 
-create or replace view public.v_exercise_gps_profile as
+create or replace view public.v_exercise_gps_profile with (security_invoker = on) as
  SELECT r.club_id,
     m.exercise_id,
     count(*) AS n_instances,
@@ -5567,7 +5572,7 @@ create or replace view public.v_gps_task_analysis as
      JOIN players p ON p.id = r.player_id
   WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.is_flagged = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / NULLIF(r.duration_seconds, 0::numeric)) <= 13::numeric);
 
-create or replace view public.v_next_match_lineup as
+create or replace view public.v_next_match_lineup with (security_invoker = on) as
  SELECT DISTINCT ON (mc.club_id) mc.club_id,
     mc.id AS microcycle_id,
     mc.name AS microcycle_name,
@@ -5586,7 +5591,7 @@ create or replace view public.v_next_match_lineup as
   WHERE mc.match_date >= CURRENT_DATE
   ORDER BY mc.club_id, mc.match_date;
 
-create or replace view public.wellness_latest as
+create or replace view public.wellness_latest with (security_invoker = on) as
  SELECT DISTINCT ON (player_id) id,
     player_id,
     club_id,
@@ -7062,8 +7067,9 @@ create policy "session_exercises_super_all" on public.session_exercises as permi
   with check (is_super_admin());
 
 alter table public.share_links enable row level security;
-create policy "share_links_anon_read" on public.share_links as permissive for select to anon
-  using (((revoked = false) AND ((expires_at IS NULL) OR (expires_at > now()))));
+-- share_links_anon_read ELIMINADA (2026-08-20, audit de seguridad): permitía a anon enumerar
+-- todos los tokens de share de todos los clubes. Las páginas públicas usan RPC SECURITY DEFINER
+-- (get_shared_calendar / get_shared_nutrition / get_survey_*), no leen esta tabla directo.
 create policy "share_links_staff" on public.share_links as permissive for all to authenticated
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
