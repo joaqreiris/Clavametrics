@@ -879,6 +879,8 @@ function tt(key, fallbackEN, vars) {
   const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
   return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
 }
+// Escapa datos de DB (notas clínicas, criterios, tipos de lesión, nombres) antes de innerHTML.
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // Locale-aware short date (day + month) for injury/phase UI; underlying dates stay data.
 function ttFmtDate(dateStr, opts) {
   if (!dateStr) return '—';
@@ -1657,9 +1659,9 @@ function renderPhaseCriteria(ph) {
 
   container.innerHTML = items.map(item => {
     const checked = !!completed[item.id];
-    return `<label class="ph-criterion${checked?' is-checked':''}" data-item-id="${item.id}">
-      <input type="checkbox"${checked?' checked':''} onchange="onCriterionChange(this,'${item.id}')">
-      <span class="lbl">${item.label}</span>
+    return `<label class="ph-criterion${checked?' is-checked':''}" data-item-id="${esc(item.id)}">
+      <input type="checkbox"${checked?' checked':''} onchange="onCriterionChange(this,'${esc(item.id)}')">
+      <span class="lbl">${esc(item.label)}</span>
     </label>`;
   }).join('');
 
@@ -2222,11 +2224,11 @@ function injCard(inj) {
       const sTxt    = ph.status === 'done' ? tt('injuries.tile_completed','Completed')
         : ph.status === 'in_progress' ? tt('injuries.tile_day', `Day ${elapsed}`, { day: elapsed }) + (ahead ? ' · ' + tt('injuries.tile_ahead','ahead') : '')
         : dateTxt ? tt('injuries.tile_est', `est. ${dateTxt}`, { date: dateTxt }) : tt('injuries.status_pending','Pending');
-      const crTxt   = ph.criteria ? ph.criteria.slice(0,52) + (ph.criteria.length > 52 ? '…' : '') : '';
+      const crTxt   = ph.criteria ? esc(ph.criteria.slice(0,52)) + (ph.criteria.length > 52 ? '…' : '') : '';
       const tipAttr = ph.criteria ? ` title="${ph.criteria.replace(/"/g,'&quot;')}"` : ` title="${tt('injuries.click_to_advance','Click to advance')}"`;
       return `<div class="tl-phase ${cls}" data-phase-id="${ph.id}" data-inj-id="${inj.id}"${tipAttr}>
         <div class="h"><i class="ti ${icon}"></i><span class="ph">${tt('injuries.ph_abbr','Ph.')}${ph.phase_number}</span></div>
-        <div class="l">${ph.phase_name}</div>
+        <div class="l">${esc(ph.phase_name)}</div>
         <div class="s">${sTxt}</div>
         ${crTxt ? `<div class="cr">${crTxt}</div>` : ''}
       </div>`;
@@ -2278,13 +2280,13 @@ function injCard(inj) {
       <div class="inj-player">
         <div class="inj-av${inj.status === 'active' ? ' tinted' : ''}" data-cm-photo="${inj.player_id}">${initials}</div>
         <div>
-          <div class="name">${name}</div>
-          <div class="meta"><span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px"><span style="width:6px;height:6px;border-radius:50%;background:${_tabColor}"></span><span style="font:600 9.5px/1 var(--cm-font-mono);color:${_tabColor};text-transform:uppercase;letter-spacing:0.04em">${_tabLabel}</span></span>${pos ? `<span class="inj-pos cb">${pos}</span>` : ''}${jersey}</div>
+          <div class="name">${esc(name)}</div>
+          <div class="meta"><span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px"><span style="width:6px;height:6px;border-radius:50%;background:${_tabColor}"></span><span style="font:600 9.5px/1 var(--cm-font-mono);color:${_tabColor};text-transform:uppercase;letter-spacing:0.04em">${_tabLabel}</span></span>${pos ? `<span class="inj-pos cb">${esc(pos)}</span>` : ''}${jersey}</div>
         </div>
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">${tt('injuries.diagnosis','Diagnosis')}</span>
-        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${bodyAreaLabel(inj.body_area)}</small>${inj.injury_category ? `<span class="inj-cat-chip">${catLabel(inj.injury_category)}</span>` : ''}</span>
+        <span class="inj-fact-v">${esc(inj.injury_type || '—')} <small>${esc(bodyAreaLabel(inj.body_area))}</small>${inj.injury_category ? `<span class="inj-cat-chip">${esc(catLabel(inj.injury_category))}</span>` : ''}</span>
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">${tt('injuries.severity','Severity')}</span>
@@ -2308,7 +2310,7 @@ function injCard(inj) {
     const prior = getPriorInjury(inj);
     if (!prior) return '';
     const days = Math.round((new Date(inj.start_date) - new Date(prior.start_date)) / 86400000);
-    const catTxt = inj.injury_category ? catLabel(inj.injury_category) : (prior.injury_type || inj.injury_type || tt('injuries.injury_word','injury'));
+    const catTxt = esc(inj.injury_category ? catLabel(inj.injury_category) : (prior.injury_type || inj.injury_type || tt('injuries.injury_word','injury')));
     return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>${tt('injuries.reinjury_badge', `Re-injury risk — previous ${catTxt} injury ${days}d ago. Extended protocol and load monitoring recommended.`, { cat: catTxt, days })}</span></div>`;
   })()}
     ${isHistorical
@@ -2339,7 +2341,7 @@ function injCard(inj) {
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-notes"></i></div>
-        <div><div class="l">${tt('injuries.notes','Notes')}</div><div class="v">${inj.notes ? inj.notes.slice(0,60) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
+        <div><div class="l">${tt('injuries.notes','Notes')}</div><div class="v">${inj.notes ? esc(inj.notes.slice(0,60)) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
       </div>
     </div>
     ${(() => {
@@ -2395,13 +2397,13 @@ function renderBodyMap() {
     const r        = n >= 3 ? 5.5 : 4;
     const areaKey  = group.area.toLowerCase().trim();
     const pulseCls = hasActive ? ' pulse' : '';
-    const tip      = tt('injuries.bodymap_tip', `${bodyAreaLabel(group.area)} · ${group.active} active · ${group.total} total`, { area: bodyAreaLabel(group.area), active: group.active, total: group.total });
+    const tip      = esc(tt('injuries.bodymap_tip', `${bodyAreaLabel(group.area)} · ${group.active} active · ${group.total} total`, { area: bodyAreaLabel(group.area), active: group.active, total: group.total }));
 
     const dot = (cx, cy) => {
       if (n <= 1) {
-        return `<circle data-area="${areaKey}" cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot${pulseCls}"><title>${tip}</title></circle>`;
+        return `<circle data-area="${esc(areaKey)}" cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot${pulseCls}"><title>${tip}</title></circle>`;
       }
-      return `<g data-area="${areaKey}" class="hot-dot-group${pulseCls}">
+      return `<g data-area="${esc(areaKey)}" class="hot-dot-group${pulseCls}">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5"/>
         <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="5.5" font-weight="700" fill="white" pointer-events="none">${n > 9 ? '9+' : n}</text>
         <title>${tip}</title>
@@ -2452,8 +2454,8 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
     return `<div class="bmp-item" onclick="scrollToInjury('${inj.id}')">
       <div class="bmp-av" data-cm-photo="${inj.player_id}">${initials}</div>
       <div class="bmp-info">
-        <div class="bmp-name">${name}</div>
-        <div class="bmp-meta">${fmtDate(inj.start_date)} · ${inj.injury_type || '—'}</div>
+        <div class="bmp-name">${esc(name)}</div>
+        <div class="bmp-meta">${fmtDate(inj.start_date)} · ${esc(inj.injury_type || '—')}</div>
         <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
           <span style="font:600 9.5px/1 var(--cm-font-mono);color:${statusColor(inj)};text-transform:uppercase;letter-spacing:0.04em">${statusLabel(inj)}</span>
           <span class="inj-severity ${sev}" style="height:16px;font-size:9.5px;padding:0 6px"><span class="d"></span>${SEV_LABEL[sev]||sev}</span>
@@ -2520,7 +2522,7 @@ function renderTypeBreakdown() {
   const COLORS = ['var(--cm-danger)','#EA580C','var(--cm-warning)','var(--cm-info)','var(--cm-neutral)'];
   document.getElementById('typeBreakSub').textContent = tt('injuries.type_break_scope_sub', `${scoped.length} total · ${scopeLabel()}`, { count: scoped.length, scope: scopeLabel() });
   el.innerHTML = `<div class="type-bars">${sorted.map(([t,c],i) =>
-    `<div class="type-row"><span class="l">${t}</span><span class="b"><span class="bf" style="width:${Math.round(c/maxC*80)+20}%;background:${COLORS[i]||'var(--cm-neutral)'}"></span></span><span class="v">${c}</span></div>`
+    `<div class="type-row"><span class="l">${esc(t)}</span><span class="b"><span class="bf" style="width:${Math.round(c/maxC*80)+20}%;background:${COLORS[i]||'var(--cm-neutral)'}"></span></span><span class="v">${c}</span></div>`
   ).join('')}</div>`;
 }
 
@@ -2549,7 +2551,7 @@ function renderRecentlyResolved() {
     return `<div class="closed-row">
       <div class="av" data-cm-photo="${i.player_id}">${initials}</div>
       <div class="body">
-        <div class="name">${pName} · ${i.injury_type || '—'}</div>
+        <div class="name">${esc(pName)} · ${esc(i.injury_type || '—')}</div>
         <div class="meta">${tt('injuries.returned_date', `Returned ${retDate}`, { date: retDate })}</div>
       </div>
       <span class="days">${days}<sub>${tt('injuries.day_abbr','d')}</sub></span>
@@ -2564,7 +2566,7 @@ function renderBodyRegionFilter() {
   if (!dd) return;
   const areas = [...new Set(_allInjuries.map(i => i.body_area).filter(Boolean))].sort();
   dd.innerHTML = `<button class="inj-dd-item is-on" data-area="">${tt('injuries.all_regions','All regions')}</button>` +
-    areas.map(a => `<button class="inj-dd-item" data-area="${a}">${a}</button>`).join('');
+    areas.map(a => `<button class="inj-dd-item" data-area="${esc(a)}">${esc(a)}</button>`).join('');
   dd.addEventListener('click', e => {
     const btn = e.target.closest('.inj-dd-item');
     if (!btn) return;
@@ -3067,7 +3069,7 @@ async function deleteInjury(id) {
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('injuries.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _injTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_injTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${esc(t.id)}" ${t.id===_injTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
   }
   function injOnTeamChange(){ _injTeamId=document.getElementById('injTeamSelect').value; sessionStorage.setItem('cal_active_team',_injTeamId); location.reload(); }
   window.injOnTeamChange = injOnTeamChange;

@@ -851,8 +851,10 @@ function i18nLocale() { return (window.CM_I18N && CM_I18N.current) || 'en'; }
 
 // ── UTILS ──
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// Bloquea javascript:/data: en URLs que van a href/window.open (adjuntos, link previews).
+function safeUrl(u) { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
 function initials(name) {
   return (name || '').split(' ').slice(0,2).map(w => w[0] || '').join('').toUpperCase() || '?';
 }
@@ -1487,7 +1489,7 @@ function reactionChips(msgId) {
 function renderReactionsHTML(msgId) {
   const chips = reactionChips(msgId);
   if (!chips.length) return '';
-  return chips.map(c => `<button type="button" class="react-chip${c.mine ? ' is-mine' : ''}" onclick="toggleReaction('${esc(String(msgId))}','${c.emoji}')"><span class="rc-e">${c.emoji}</span><span class="rc-n">${c.count}</span></button>`).join('');
+  return chips.map(c => `<button type="button" class="react-chip${c.mine ? ' is-mine' : ''}" onclick="toggleReaction('${esc(String(msgId))}','${esc(c.emoji)}')"><span class="rc-e">${esc(c.emoji)}</span><span class="rc-n">${c.count}</span></button>`).join('');
 }
 
 function refreshReactionsUI(msgId) {
@@ -1756,11 +1758,11 @@ function refreshReadTicks() {
 
 function renderAttHTML(msg) {
   if (msg.attachment_type === 'image' && msg.attachment_url) {
-    return `<div class="att-img-wrap"><img src="${esc(msg.attachment_url)}" class="att-img" loading="lazy" alt="${esc(msg.attachment_name || '')}" onclick="window.open('${esc(msg.attachment_url)}','_blank')"></div>`;
+    return `<div class="att-img-wrap"><img src="${esc(safeUrl(msg.attachment_url))}" class="att-img" loading="lazy" alt="${esc(msg.attachment_name || '')}" onclick="window.open('${esc(safeUrl(msg.attachment_url))}','_blank')"></div>`;
   }
   const { icon, color } = fileTypeIcon(msg.attachment_type);
   const size = formatFileSize(msg.attachment_size);
-  const open = msg.attachment_url ? ` onclick="window.open('${esc(msg.attachment_url)}','_blank')"` : '';
+  const open = msg.attachment_url ? ` onclick="window.open('${esc(safeUrl(msg.attachment_url))}','_blank')"` : '';
   return `<div class="att"${open}>
     <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
     <div><div class="t">${esc(msg.attachment_name || tt('chat_tasks.file_fallback', 'File'))}</div>${size ? `<div class="s">${size}</div>` : ''}</div>
@@ -1771,20 +1773,20 @@ function renderAttHTML(msg) {
 function renderLpHTML(lp) {
   if (!lp) return '';
   if (lp.type === 'youtube') {
-    const thumb = `https://img.youtube.com/vi/${lp.videoId}/hqdefault.jpg`;
-    return `<div class="link-preview yt" onclick="window.open('${esc(lp.url)}','_blank')">
-      <div class="yt-thumb-wrap"><img src="${thumb}" class="yt-thumb" loading="lazy" alt=""><div class="yt-play"><i class="ti ti-player-play-filled"></i></div></div>
+    const thumb = `https://img.youtube.com/vi/${encodeURIComponent(lp.videoId)}/hqdefault.jpg`;
+    return `<div class="link-preview yt" onclick="window.open('${esc(safeUrl(lp.url))}','_blank')">
+      <div class="yt-thumb-wrap"><img src="${esc(thumb)}" class="yt-thumb" loading="lazy" alt=""><div class="yt-play"><i class="ti ti-player-play-filled"></i></div></div>
       <div class="lp-info"><div class="lp-domain"><i class="ti ti-brand-youtube" style="color:#FF0000;font-size:11px"></i> YouTube</div>${lp.title ? `<div class="lp-title">${esc(lp.title)}</div>` : ''}${lp.author ? `<div class="lp-desc">${esc(lp.author)}</div>` : ''}</div>
     </div>`;
   }
   if (lp.type === 'vimeo') {
-    return `<div class="link-preview" onclick="window.open('${esc(lp.url)}','_blank')">
+    return `<div class="link-preview" onclick="window.open('${esc(safeUrl(lp.url))}','_blank')">
       ${lp.thumbnail ? `<img src="${esc(lp.thumbnail)}" class="lp-img" loading="lazy" alt="">` : ''}
       <div class="lp-info"><div class="lp-domain"><i class="ti ti-brand-vimeo" style="color:#1AB7EA;font-size:11px"></i> Vimeo</div>${lp.title ? `<div class="lp-title">${esc(lp.title)}</div>` : ''}${lp.author ? `<div class="lp-desc">${esc(lp.author)}</div>` : ''}</div>
     </div>`;
   }
   const domain = (() => { try { return new URL(lp.url).hostname.replace('www.', ''); } catch { return ''; } })();
-  return `<div class="link-preview" onclick="window.open('${esc(lp.url)}','_blank')">
+  return `<div class="link-preview" onclick="window.open('${esc(safeUrl(lp.url))}','_blank')">
     ${lp.image ? `<img src="${esc(lp.image)}" class="lp-img" loading="lazy" alt="">` : ''}
     <div class="lp-info"><div class="lp-domain">${esc(domain)}</div>${lp.title ? `<div class="lp-title">${esc(lp.title)}</div>` : ''}${lp.description ? `<div class="lp-desc">${esc(lp.description.slice(0, 140))}</div>` : ''}</div>
   </div>`;
@@ -3495,7 +3497,7 @@ boot();
     if (!teams.length) { sel.innerHTML=`<option value="">${esc(tt('chat_tasks.no_teams', 'No teams'))}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     currentUser.teamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===currentUser.teamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${esc(t.id)}" ${t.id===currentUser.teamId?'selected':''}>${esc(t.name)}</option>`).join('');
   }
   window.ctOnTeamChange = function(){ currentUser.teamId=document.getElementById('ctTeamSelect').value; sessionStorage.setItem('cal_active_team',currentUser.teamId); location.reload(); };
 </script>

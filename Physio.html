@@ -1593,16 +1593,16 @@ function renderList(list) {
         <div class="av${name[0] ? ' tn' : ''}">${av.slice(0,2)}</div>
         <div class="body">
           <div class="top-row">
-            <span class="name">${name}${num ? ' · #' + num : ''}</span>
-            <span class="type-badge ${ttype}">${badgeTxt}</span>
+            <span class="name">${esc(name)}${num ? ' · #' + esc(num) : ''}</span>
+            <span class="type-badge ${ttype}">${esc(badgeTxt)}</span>
             ${t.duration_min ? `<span class="dur">${t.duration_min} ${tt('physio.min_unit','min')}</span>` : ''}
             ${statusS ? `<span class="s-badge ${statusS}">${statusLabel(statusS)}</span>` : ''}
           </div>
-          ${mods.length ? `<div class="mods">${mods.map(m=>`<span class="mod-tag">${m}</span>`).join('')}</div>` : ''}
-          ${zones.length ? `<div class="zone-tags">${zones.slice(0,6).map(z=>`<span class="zt">${z}</span>`).join('')}${zones.length>6?`<span class="zt">+${zones.length-6}</span>`:''}</div>` : ''}
-          ${(pPre !== null || pPost !== null) ? `<div class="pain-row">${tt('physio.pain_label','Pain:')} <span class="pv ${painClass(pPre)}">${pPre ?? '—'}</span> → <span class="pv ${painClass(pPost)}">${pPost ?? '—'}</span>${physioName ? ' · ' + physioName : ''}</div>` : (physioName ? `<div class="info-line">${physioName}</div>` : '')}
-          ${t.notes ? `<div class="notes">${t.notes.length > 100 ? t.notes.slice(0,100) + '…' : t.notes}</div>` : ''}
-          ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>${tt('physio.adaptation_word','Adaptation')}</strong> · ${adaptText}</span></div>` : ''}
+          ${mods.length ? `<div class="mods">${mods.map(m=>`<span class="mod-tag">${esc(m)}</span>`).join('')}</div>` : ''}
+          ${zones.length ? `<div class="zone-tags">${zones.slice(0,6).map(z=>`<span class="zt">${esc(z)}</span>`).join('')}${zones.length>6?`<span class="zt">+${zones.length-6}</span>`:''}</div>` : ''}
+          ${(pPre !== null || pPost !== null) ? `<div class="pain-row">${tt('physio.pain_label','Pain:')} <span class="pv ${painClass(pPre)}">${pPre ?? '—'}</span> → <span class="pv ${painClass(pPost)}">${pPost ?? '—'}</span>${physioName ? ' · ' + esc(physioName) : ''}</div>` : (physioName ? `<div class="info-line">${esc(physioName)}</div>` : '')}
+          ${t.notes ? `<div class="notes">${t.notes.length > 100 ? esc(t.notes.slice(0,100)) + '…' : esc(t.notes)}</div>` : ''}
+          ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>${tt('physio.adaptation_word','Adaptation')}</strong> · ${esc(adaptText)}</span></div>` : ''}
         </div>
         <div class="card-actions">
           <button class="ph-tc-menu-btn" title="${tt('physio.options','Options')}"><i class="ti ti-dots-vertical"></i></button>
@@ -2025,7 +2025,7 @@ const PROTO_TAGS = {
 };
 
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function hl(text, q) {
@@ -2369,7 +2369,7 @@ async function loadPlayerHistory() {
   if (rehab.length) {
     html += `<div><div class="hist-sec-h" style="color:#B91C1C">${tt('physio.rehabilitation_n_sessions','Rehabilitation ({count} sessions)',{count:rehab.length})}</div>`;
     for (const [, group] of Object.entries(byInjury)) {
-      html += `<div style="margin-bottom:12px"><div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">${group.label}</div>`;
+      html += `<div style="margin-bottom:12px"><div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">${esc(group.label)}</div>`;
       // Pain sparkline
       const pairsSvg = buildPainChart(group.sessions.slice().reverse());
       if (pairsSvg) html += pairsSvg;
@@ -2377,11 +2377,11 @@ async function loadPlayerHistory() {
         const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : (t.type ? (Array.isArray(t.type) ? t.type.join(', ') : t.type) : '—');
         html += `<div class="hist-card"><div class="hc-top">
           <span class="hc-date">${t.date}</span>
-          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${mods}</span>
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(mods)}</span>
           ${t.duration_min ? `<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)">${t.duration_min}${tt('physio.min_unit','min')}</span>` : ''}
           ${t.pain_pre !== null && t.pain_pre !== undefined ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('physio.pain_label','Pain:')} <strong>${t.pain_pre}→${t.pain_post??'?'}</strong></span>` : ''}
           ${t.player_status ? `<span class="s-badge ${t.player_status}">${statusLabel(t.player_status)}</span>` : ''}
-        </div>${t.notes ? `<div class="hc-notes">${t.notes}</div>` : ''}</div>`;
+        </div>${t.notes ? `<div class="hc-notes">${esc(t.notes)}</div>` : ''}</div>`;
       });
       html += `</div>`;
     }
@@ -2394,10 +2394,10 @@ async function loadPlayerHistory() {
       const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : '—';
       html += `<div class="hist-card"><div class="hc-top">
         <span class="hc-date">${t.date}</span>
-        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${t.reason || '—'}</span>
-        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${mods}</span>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(t.reason || '—')}</span>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(mods)}</span>
         ${t.duration_min ? `<span style="font:600 11px/1 var(--cm-font-mono)">${t.duration_min}${tt('physio.min_unit','min')}</span>` : ''}
-      </div>${t.notes ? `<div class="hc-notes">${t.notes}</div>` : ''}</div>`;
+      </div>${t.notes ? `<div class="hc-notes">${esc(t.notes)}</div>` : ''}</div>`;
     });
     html += `</div>`;
   }

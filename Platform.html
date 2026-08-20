@@ -277,13 +277,15 @@
   <script>
   (function(){
     const sb = window.sb, $ = id => document.getElementById(id);
+    // Escapa nombres de club/equipo de CUALQUIER tenant antes de innerHTML (consola super-admin).
+    const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     function msg(t,err){ const e=$('pfCompMsg'); if(e){ e.textContent=t; e.style.color=err?'var(--cm-danger)':'var(--cm-accent)'; } }
     async function loadClubs(){
       const sel=$('pfCompClub'); if(!sel) return;
       try{
         const { data, error }=await sb.from('clubs').select('id, name').order('name');
         if(error) throw error;
-        sel.innerHTML = (data&&data.length) ? data.map(c=>`<option value="${c.id}">${c.name||c.id}</option>`).join('') : '<option value="">'+tt('platform.no_clubs','No clubs found')+'</option>';
+        sel.innerHTML = (data&&data.length) ? data.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join('') : '<option value="">'+tt('platform.no_clubs','No clubs found')+'</option>';
       }catch(e){ sel.innerHTML='<option value="">'+tt('platform.cannot_list_clubs','Cannot list clubs')+'</option>'; }
     }
     async function loadComps(){
@@ -295,10 +297,10 @@
         if(error) throw error;
         if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">'+tt('platform.comp_none','None yet.')+'</span>'; return; }
         host.innerHTML = data.map(r=>{
-          const club=r.teams?.clubs?.name||'', team=r.teams?.name||r.team_id, plan=r.plans?.name||r.plans?.slug||'';
+          const club=esc(r.teams?.clubs?.name||''), team=esc(r.teams?.name||r.team_id), plan=esc(r.plans?.name||r.plans?.slug||'');
           return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--cm-border-soft)">
             <span>${club} · <strong>${team}</strong> — ${plan}</span>
-            <button class="pf-mini" data-revoke="${r.team_id}">${tt('platform.revoke','Revoke')}</button></div>`;
+            <button class="pf-mini" data-revoke="${esc(r.team_id)}">${tt('platform.revoke','Revoke')}</button></div>`;
         }).join('');
         host.querySelectorAll('[data-revoke]').forEach(b=>b.addEventListener('click',()=>revoke(b.dataset.revoke)));
       }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">'+tt('platform.cannot_load','Cannot load.')+'</span>'; }
@@ -351,7 +353,7 @@
         }
         host.innerHTML = data.map(a=>{
           const m = KIND[a.kind] || { i:'ti-alert-triangle', c:'var(--cm-fg-muted)', f:a.kind };
-          const club = a.clubs?.name||'—', team = a.teams?.name||'';
+          const club = esc(a.clubs?.name||'—'), team = esc(a.teams?.name||'');
           const label = tt(m.k||('platform.alert_'+a.kind), m.f);
           const change = a.to_plan ? ((a.from_plan||'?')+' → '+a.to_plan) : (a.from_plan||'');
           const when = a.effective_at ? tt('platform.alert_effective','effective {date}',{date:fmtDate(a.effective_at)}) : '';
