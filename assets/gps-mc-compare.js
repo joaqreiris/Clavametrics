@@ -7,6 +7,7 @@
 // externos); usa GpBuilder/gpsACWR/sb en runtime.
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmtN   = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d });
   const fmtPct = (v) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
 
@@ -165,7 +166,7 @@
           : `Only 1 microcycle has ${selectedMD}. Need at least 2 to compare.`;
         mcInfo.textContent = msg;
         if (metricBody) metricBody.innerHTML = tableBody.innerHTML =
-          `<div style="padding:16px;color:var(--cm-fg-muted)">${msg}</div>`;
+          `<div style="padding:16px;color:var(--cm-fg-muted)">${esc(msg)}</div>`;
         return;
       }
 
@@ -181,7 +182,7 @@
         const msg = 'Not enough historical microcycles for comparison.';
         mcInfo.textContent = msg;
         if (metricBody) metricBody.innerHTML = tableBody.innerHTML =
-          `<div style="padding:16px;color:var(--cm-fg-muted)">${msg}</div>`;
+          `<div style="padding:16px;color:var(--cm-fg-muted)">${esc(msg)}</div>`;
         return;
       }
 
@@ -388,7 +389,7 @@
       const barPct = curr != null && maxVal > 0 ? Math.round(curr/maxVal*100) : 0;
 
       return `<tr>
-        <td><strong>${name}</strong>${p.position ? `<span style="color:var(--cm-fg-muted);font-size:10.5px"> · ${p.position}</span>` : ''}</td>
+        <td><strong>${esc(name)}</strong>${p.position ? `<span style="color:var(--cm-fg-muted);font-size:10.5px"> · ${esc(p.position)}</span>` : ''}</td>
         <td>${fmtN(curr, 0)}</td>
         <td style="color:var(--cm-fg-muted)">${fmtN(ref, 0)}</td>
         <td><span class="mc-diff ${diffCls(diff)}">${fmtPct(diff)}</span></td>
@@ -546,17 +547,17 @@
       const headerInfo = `<div style="padding:10px 14px 8px;font:500 11.5px/1.8 var(--cm-font-sans);border-bottom:1px solid var(--cm-border);display:flex;flex-wrap:wrap;gap:16px">
         <span>${infoRow('Sessions', currSessTotal, refSessTotalAvg, false)}</span>
         <span>${infoRow('Matches', currMatchCount, refMatchCountAvg, true)}</span>
-        <span style="color:var(--cm-fg-muted);font-size:10.5px">Comparing: <em>${currLabel}</em> vs <em>${refLabel}</em></span>
+        <span style="color:var(--cm-fg-muted);font-size:10.5px">Comparing: <em>${esc(currLabel)}</em> vs <em>${esc(refLabel)}</em></span>
       </div>`;
 
       const bodyRows = allPids.map(pid => {
         const p    = _playerMap[pid] || {};
         const name = `${p.last_name || ''}${p.first_name ? ' ' + p.first_name[0] + '.' : ''}`.trim() || pid.slice(0,8);
-        const pos  = p.position ? `<span style="color:var(--cm-fg-muted);font-size:10px"> · ${p.position}</span>` : '';
+        const pos  = p.position ? `<span style="color:var(--cm-fg-muted);font-size:10px"> · ${esc(p.position)}</span>` : '';
         const curr = currSessCount[pid] || 0;
         const ref  = refAvgSessCount[pid] != null ? refAvgSessCount[pid] : null;
         return `<tr>
-          <td style="padding:5px 10px;white-space:nowrap"><strong>${name}</strong>${pos}</td>
+          <td style="padding:5px 10px;white-space:nowrap"><strong>${esc(name)}</strong>${pos}</td>
           <td style="padding:5px 10px;text-align:right">${_bar(curr, currSessTotal)}</td>
           <td style="padding:5px 10px;text-align:right">${ref != null ? _bar(Math.round(ref), Math.round(refSessTotalAvg)) : '—'}</td>
         </tr>`;
@@ -610,7 +611,7 @@
         const val  = r[metricKey];
         const cls  = diffCls(diff);
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--cm-border-soft)">
-          <span style="font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${name}</span>
+          <span style="font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${esc(name)}</span>
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${fmtN(val, 0)}${metaUnit ? ' ' + metaUnit : ''}</span>
             <span class="mc-diff ${cls}" style="min-width:52px;justify-content:flex-end">${fmtPct(diff)}</span>
@@ -678,8 +679,8 @@
           <thead>
             <tr>
               <th style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;padding-bottom:8px;text-align:left"></th>
-              <th style="${headerStyle}">${currLabel}</th>
-              <th style="${headerStyle}">${refLabel}</th>
+              <th style="${headerStyle}">${esc(currLabel)}</th>
+              <th style="${headerStyle}">${esc(refLabel)}</th>
               <th style="${headerStyle}">Diff</th>
             </tr>
           </thead>

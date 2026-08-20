@@ -1466,7 +1466,7 @@ function renderSecPositions() {
   const box = document.getElementById('sqF_positionsTags');
   if (!box) return;
   box.innerHTML = _secPositions.map(code =>
-    `<span class="sq-postag">${code}<button type="button" class="sq-postag-x" data-rm="${code}" aria-label="${tt('squad.remove_pos_aria', 'Remove '+code, {code})}">&times;</button></span>`).join('');
+    `<span class="sq-postag">${esc(code)}<button type="button" class="sq-postag-x" data-rm="${esc(code)}" aria-label="${tt('squad.remove_pos_aria', 'Remove '+code, {code})}">&times;</button></span>`).join('');
   box.querySelectorAll('.sq-postag-x').forEach(b => b.addEventListener('click', () => {
     _secPositions = _secPositions.filter(c => c !== b.dataset.rm); renderSecPositions();
   }));
@@ -1475,7 +1475,7 @@ function setSecPositions(arr) { _secPositions = [...new Set((arr || []).filter(B
 // Secondary-position tags shown next to the primary pill in lists.
 function secPosTags(p) {
   const sec = (p.positions || []).filter(x => x && x !== p.position);
-  return sec.length ? ' ' + sec.map(x => `<span class="sq-pos-sec">${x}</span>`).join('') : '';
+  return sec.length ? ' ' + sec.map(x => `<span class="sq-pos-sec">${esc(x)}</span>`).join('') : '';
 }
 
 function calcAge(dob) {
@@ -1725,26 +1725,26 @@ function renderTable() {
       const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
       const initials = (((p.first_name||'')[0] || '') + ((p.last_name||'')[0] || '')).toUpperCase() || fullName.slice(0,2).toUpperCase();
       const avInner = p.photo_url
-        ? `<img src="${p.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
-        : initials;
+        ? `<img src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        : esc(initials);
       const num     = p.number || '—';
       const age     = calcAge(p.date_of_birth);
       const foot    = p.dominant_foot || '—';
       const h       = p.height ? `${p.height}<span class="u">cm</span><span class="sep">·</span>` : '';
       const w       = p.weight ? `${p.weight}<span class="u">kg</span>` : '—';
-      html += `<tr data-pos="${pcfg.pill}" data-name="${fullName.toLowerCase()}" data-num="${num}" data-id="${p.id}">
+      html += `<tr data-pos="${esc(pcfg.pill)}" data-name="${esc(fullName.toLowerCase())}" data-num="${esc(num)}" data-id="${p.id}">
         <td><span class="sq-cb" data-cb></span></td>
-        <td><span class="sq-num">${num}</span></td>
+        <td><span class="sq-num">${esc(num)}</span></td>
         <td><div class="sq-player">
           <div class="sq-av">${avInner}</div>
-          <div><div class="sq-name-row"><span class="sq-name">${fullName || '—'}</span></div>
+          <div><div class="sq-name-row"><span class="sq-name">${esc(fullName || '—')}</span></div>
           <div class="sq-sub">${fmtDob(p.date_of_birth)}</div></div>
         </div></td>
-        <td><span class="sq-pos ${pcfg.css}">${p.position || '—'}</span>${secPosTags(p)}</td>
+        <td><span class="sq-pos ${pcfg.css}">${esc(p.position || '—')}</span>${secPosTags(p)}</td>
         <td class="sq-mono">${age}</td>
-        <td class="sq-mono">${foot}</td>
+        <td class="sq-mono">${esc(foot)}</td>
         <td><span class="sq-anthro">${h}${w}</span></td>
-        <td><span class="sq-role-pill">${(_teams.find(t => t.id === p.team_id)?.name) || '—'}</span></td>
+        <td><span class="sq-role-pill">${esc((_teams.find(t => t.id === p.team_id)?.name) || '—')}</span></td>
         <td class="sq-mono">${fmtDob(p.joined_date)}</td>
         <td><div class="sq-row-actions"><button class="sq-menu-btn" data-id="${p.id}" title="${tt('squad.actions','Actions')}"><i class="ti ti-dots-vertical"></i></button></div></td>
       </tr>`;
@@ -1802,7 +1802,7 @@ function renderTeamCheckboxes() {
   menu.innerHTML = _modalTeams.map(t =>
     `<label class="sq-multi-opt" data-team-id="${t.id}">
        <input type="checkbox" value="${t.id}" ${_canEditTeams ? '' : 'disabled'}>
-       <span>${t.name}</span>
+       <span>${esc(t.name)}</span>
        <button type="button" class="sq-multi-star" data-star="${t.id}" title="${primTip}" ${_canEditTeams ? '' : 'disabled'}><i class="ti ti-star"></i></button>
      </label>`
   ).join('');
@@ -1860,7 +1860,7 @@ function updateTeamsBtnLabel() {
   btn.innerHTML = ids.map(id => {
     const t = _modalTeams.find(x => x.id === id);
     const isPrim = id === _modalPrimaryTeamId;
-    return `<span class="sq-multi-tag${isPrim ? ' is-primary' : ''}">${isPrim ? '<i class="ti ti-star-filled"></i>' : ''}${t ? t.name : '—'}</span>`;
+    return `<span class="sq-multi-tag${isPrim ? ' is-primary' : ''}">${isPrim ? '<i class="ti ti-star-filled"></i>' : ''}${t ? esc(t.name) : '—'}</span>`;
   }).join('');
 }
 (function wireTeamsMultiSelect() {
@@ -1980,7 +1980,7 @@ async function reloadPlayers() {
     _modalTeams = _canEditTeams ? _teams : _myTeams;
     const _filterTeams = _fullAccess ? _teams : _myTeams;
     _filterTeams.forEach(t => {
-      teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
+      teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${esc(t.name)}</option>`);
     });
     // Vista de archivados (players con archived_at): siempre al final del selector
     teamSel?.insertAdjacentHTML('beforeend', `<option value="__archived__">${tt('squad.archived','Archived')}</option>`);
@@ -2131,7 +2131,7 @@ async function reloadPlayers() {
     const teams = await window.getTeams(_currentClubId);
     const sel = document.getElementById('sqMoveTeam');
     if (sel) sel.innerHTML = teams.length
-      ? teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+      ? teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')
       : `<option value="">${tt('squad.no_teams','No teams')}</option>`;
     const addRadio = document.querySelector('input[name="sqMoveMode"][value="add"]');
     if (addRadio) addRadio.checked = true;
@@ -2276,7 +2276,7 @@ async function reloadPlayers() {
     const preview = document.getElementById('sqF_photoPreview');
     if (preview) {
       if (player?.photo_url) {
-        preview.innerHTML = `<img src="${player.photo_url}" style="width:100%;height:100%;object-fit:cover" alt="">`;
+        preview.innerHTML = `<img src="${esc(player.photo_url)}" style="width:100%;height:100%;object-fit:cover" alt="">`;
       } else {
         preview.textContent = (((player?.first_name||'')[0]||'') + ((player?.last_name||'')[0]||'')).toUpperCase() || '?';
       }
@@ -2527,19 +2527,19 @@ async function reloadPlayers() {
       const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
       const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
       const cardAvInner = p.photo_url
-        ? `<img src="${p.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
-        : initials;
+        ? `<img src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        : esc(initials);
       const pos = (p.position||'').toUpperCase();
       const pcfg = POS_CFG[pos] || { css:'', pill: pos };
       const age = calcAge(p.date_of_birth);
       return `<div class="sq-card" data-id="${p.id}" style="position:relative">
         <button class="sq-card-edit" data-id="${p.id}" title="${tt('squad.edit_player','Edit player')}" style="position:absolute;top:6px;right:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--cm-fg-faint);border-radius:6px;cursor:pointer"><i class="ti ti-edit" style="font-size:14px"></i></button>
-        <div class="sq-card-av">${cardAvInner}<span class="sq-card-num">${p.number||'—'}</span></div>
-        <div class="sq-card-name">${fullName||'—'}</div>
+        <div class="sq-card-av">${cardAvInner}<span class="sq-card-num">${esc(p.number||'—')}</span></div>
+        <div class="sq-card-name">${esc(fullName||'—')}</div>
         <div class="sq-card-meta">
-          <span class="sq-pos ${pcfg.css}">${p.position||'—'}</span>${secPosTags(p)}
+          <span class="sq-pos ${pcfg.css}">${esc(p.position||'—')}</span>${secPosTags(p)}
           ${age !== '—' ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${age}y</span>` : ''}
-          ${p.dominant_foot ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.dominant_foot[0]}</span>` : ''}
+          ${p.dominant_foot ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(p.dominant_foot[0])}</span>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -2588,10 +2588,10 @@ async function reloadPlayers() {
         const pos = (p.position||'').toUpperCase();
         const pcfg = POS_CFG[pos] || { css:'', pill: pos };
         return `<div class="sq-depth-slot" data-id="${p.id}">
-          <div class="sq-depth-av">${initials}</div>
+          <div class="sq-depth-av">${esc(initials)}</div>
           <div class="sq-depth-info">
-            <div class="sq-depth-pname">${fullName}</div>
-            <div class="sq-depth-psub"><span class="sq-pos ${pcfg.css}" style="height:16px;font-size:10px;padding:0 5px">${p.position||'—'}</span> · #${p.number||'—'}</div>
+            <div class="sq-depth-pname">${esc(fullName)}</div>
+            <div class="sq-depth-psub"><span class="sq-pos ${pcfg.css}" style="height:16px;font-size:10px;padding:0 5px">${esc(p.position||'—')}</span> · #${esc(p.number||'—')}</div>
           </div>
         </div>`;
       }).join('');
@@ -3349,9 +3349,9 @@ async function reloadPlayers() {
     if (!player) return '';
     const initials = [player.first_name, player.last_name].map(s => (s||'')[0]||'').join('').toUpperCase() || '?';
     if (player.photo_url) {
-      return `<div class="sq-pos-dot-photo"><img src="${player.photo_url}" alt="" crossorigin="anonymous"></div>`;
+      return `<div class="sq-pos-dot-photo"><img src="${esc(player.photo_url)}" alt="" crossorigin="anonymous"></div>`;
     }
-    return `<div class="sq-pos-dot-photo"><span class="sq-pos-dot-initials">${initials}</span></div>`;
+    return `<div class="sq-pos-dot-photo"><span class="sq-pos-dot-initials">${esc(initials)}</span></div>`;
   }
 
   function renderLineupField() {
@@ -3367,8 +3367,8 @@ async function reloadPlayers() {
                    style="left:${slot.x}%;top:${effY}%">
         <span class="sq-pos-dot-label">${slot.label}</span>
         ${player ? _lPhotoInner(player) : ''}
-        <span class="sq-pos-dot-num">${player ? (player.number || '?') : ''}</span>
-        <span class="sq-pos-dot-name">${name}</span>
+        <span class="sq-pos-dot-num">${player ? esc(player.number || '?') : ''}</span>
+        <span class="sq-pos-dot-name">${esc(name)}</span>
       </div>`;
     }).join('');
     container.querySelectorAll('.sq-pos-dot').forEach(dot => {
@@ -3383,9 +3383,9 @@ async function reloadPlayers() {
     if (!player) return '';
     const initials = [player.first_name, player.last_name].map(s => (s||'')[0]||'').join('').toUpperCase() || '?';
     if (player.photo_url) {
-      return `<div class="sq-sub-dot-photo"><img src="${player.photo_url}" alt="" crossorigin="anonymous"></div>`;
+      return `<div class="sq-sub-dot-photo"><img src="${esc(player.photo_url)}" alt="" crossorigin="anonymous"></div>`;
     }
-    return `<div class="sq-sub-dot-photo" style="background:var(--cm-accent-soft);display:flex;align-items:center;justify-content:center"><span style="font:700 10px/1 var(--cm-font-mono);color:var(--cm-accent)">${initials}</span></div>`;
+    return `<div class="sq-sub-dot-photo" style="background:var(--cm-accent-soft);display:flex;align-items:center;justify-content:center"><span style="font:700 10px/1 var(--cm-font-mono);color:var(--cm-accent)">${esc(initials)}</span></div>`;
   }
 
   function renderLineSubs() {
@@ -3398,9 +3398,9 @@ async function reloadPlayers() {
       return `<div class="sq-sub-slot" data-sub="${i}">
         <div class="sq-sub-dot${filled ? ' is-filled' : ''}">
           ${filled ? _lSubPhotoInner(player) : ''}
-          <span class="sq-sub-dot-inner" style="${filled && player.photo_url ? 'position:absolute;bottom:-2px;right:-2px;background:rgba(0,0,0,0.75);border-radius:50%;width:15px;height:15px;font-size:8px;line-height:15px;text-align:center;z-index:2' : ''}">${num}</span>
+          <span class="sq-sub-dot-inner" style="${filled && player.photo_url ? 'position:absolute;bottom:-2px;right:-2px;background:rgba(0,0,0,0.75);border-radius:50%;width:15px;height:15px;font-size:8px;line-height:15px;text-align:center;z-index:2' : ''}">${esc(num)}</span>
         </div>
-        <div class="sq-sub-name">${name}</div>
+        <div class="sq-sub-name">${esc(name)}</div>
       </div>`;
     }).join('');
     container.querySelectorAll('.sq-sub-slot').forEach(slot => {
@@ -3462,10 +3462,10 @@ async function reloadPlayers() {
         const pos = (p.position || '').toUpperCase();
         const dim = compat && !compat.includes(pos) ? 'opacity:0.5;' : '';
         return `<div class="sq-picker-item" data-player-id="${p.id}" style="${dim}">
-          <div class="sq-picker-item-num">${p.number || '—'}</div>
+          <div class="sq-picker-item-num">${esc(p.number || '—')}</div>
           <div style="min-width:0">
-            <div class="sq-picker-item-name">${nm || '—'}</div>
-            <div class="sq-picker-item-pos">${p.position || '—'}</div>
+            <div class="sq-picker-item-name">${esc(nm || '—')}</div>
+            <div class="sq-picker-item-pos">${esc(p.position || '—')}</div>
           </div>
         </div>`;
       }).join('') || `<div style="padding:12px;color:var(--cm-fg-muted);font:var(--cm-meta);text-align:center">${tt('squad.no_players_found','No players found')}</div>`);

@@ -9,7 +9,8 @@
   'use strict';
   const sb = () => window.sb;
   function tt(k, fb, vars) { const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(k, vars) : null; return (v && v !== k) ? v : (fb != null ? fb : k); }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function safeUrl(u) { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
   function initials(n) { n = String(n || '').trim(); if (!n) return '•'; const p = n.split(/\s+/); return ((p[0][0] || '') + (p[1] ? p[1][0] : '')).toUpperCase(); }
 
   const state = { clubId: null, profile: null, teams: [], scopeTeam: '', refDate: new Date(), week: [], data: null, sel: null, kpi: null };
@@ -306,7 +307,7 @@
     if (imgSrc) return { type: 'image', src: imgSrc };
     return null;
   }
-  function imgHtml(src) { return '<img src="' + src + '" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--cm-bg-sunk)">'; }
+  function imgHtml(src) { return '<img src="' + esc(src) + '" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--cm-bg-sunk)">'; }
   function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s); }
 
   function drillParams(r) {
@@ -384,7 +385,7 @@
     const btn = document.querySelector('.co-exrow[data-i="' + i + '"]'); if (btn) btn.classList.add('on');
     const pv = document.getElementById('coPreview'), media = r.exId ? gymMediaFor(r.exId) : null;
     if (media && media.type === 'video') {
-      const poster = media.thumb ? '<img src="' + media.thumb + '" alt="">' : '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
+      const poster = media.thumb ? '<img src="' + esc(media.thumb) + '" alt="">' : '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
       pv.innerHTML = '<div class="co-vidwrap" data-embed="' + encodeURIComponent(media.embed) + '" data-file="' + (media.file ? 1 : 0) + '">' + poster + '<button class="co-play" aria-label="' + esc(tt('club_overview.play', 'Play video')) + '"><i class="ti ti-player-play-filled"></i></button></div>';
     } else if (media && media.type === 'image') { pv.innerHTML = imgHtml(media.src); }
     else pv.innerHTML = '<div class="co-pvph"><i class="ti ti-barbell"></i></div>';
@@ -638,7 +639,7 @@
     const detailPanel = document.querySelector('.co-detail');
     if (detailPanel) detailPanel.addEventListener('click', e => {
       const play = e.target.closest('.co-play');
-      if (play) { const w = play.closest('.co-vidwrap'); if (w) { const emb = decodeURIComponent(w.dataset.embed || ''); const pv = document.getElementById('coPreview'); pv.innerHTML = w.dataset.file === '1' ? ('<video src="' + emb + '" controls autoplay muted playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>') : ('<iframe src="' + emb + '" allow="autoplay; encrypted-media; fullscreen" allowfullscreen style="width:100%;height:100%;border:0;background:#000"></iframe>'); } return; }
+      if (play) { const w = play.closest('.co-vidwrap'); if (w) { const emb = safeUrl(decodeURIComponent(w.dataset.embed || '')); const pv = document.getElementById('coPreview'); pv.innerHTML = w.dataset.file === '1' ? ('<video src="' + esc(emb) + '" controls autoplay muted playsinline style="width:100%;height:100%;object-fit:contain;background:#000"></video>') : ('<iframe src="' + esc(emb) + '" allow="autoplay; encrypted-media; fullscreen" allowfullscreen style="width:100%;height:100%;border:0;background:#000"></iframe>'); } return; }
       const chip = e.target.closest('.co-secchip[data-sec]'); if (chip) { toggleSection(chip.dataset.sec); return; }
       const row = e.target.closest('.co-exrow[data-i]'); if (!row) return;
       const i = parseInt(row.dataset.i, 10); if (state._exKind === 'gym') selectGymEx(i); else selectFieldDrill(i);

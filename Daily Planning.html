@@ -732,14 +732,14 @@ function dpRenderSquad(avMap) {
     const amber = (cls === 'partial' || !!adaptEntry);
     const note  = adaptEntry ? (adaptEntry.adaptation_notes || '') : '';
     const tooltip = note || reason;
-    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${lastName}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
-      (note && isTrainee ? `<span class="dp-c-note">${note}</span>` : '');
+    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${_dpEsc(lastName)}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
+      (note && isTrainee ? `<span class="dp-c-note">${_dpEsc(note)}</span>` : '');
   }
   function outChip(p) {
     const { cls, reason } = statusOf(p);
     const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
     const num = p.number ?? '—';
-    return `<span class="dp-player o-pl${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"${reason ? ` title="${reason.replace(/"/g,"'")}"` : ''}>${num} ${lastName}${reason ? ` · ${reason}` : ''}</span>`;
+    return `<span class="dp-player o-pl${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"${reason ? ` title="${reason.replace(/"/g,"'")}"` : ''}>${num} ${_dpEsc(lastName)}${reason ? ` · ${_dpEsc(reason)}` : ''}</span>`;
   }
 
   const trainees = [], outs = [];
@@ -825,6 +825,7 @@ function _dpPlayerShort(p){ return (`${p.first_name||''} ${p.last_name||''}`.tri
 const _DP_EXG_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2'];
 function _dpExGroups(e){ return Array.isArray(e?.player_groups) ? e.player_groups : []; }
 function _dpEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _dpSafeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
 
 // Inline groups row inside an exercise card: several named groups, each a multi-select.
 function dpExGroupsRow(e){
@@ -891,8 +892,8 @@ function dpOpenVideo(ev, seid){
   if (!v) return;
   document.getElementById('dpVidTitle').textContent = v.name || tt('daily_planning.exercise_video','Exercise video');
   document.getElementById('dpVidBody').innerHTML = v.embed
-    ? `<div class="dp-vid-frame"><iframe src="${v.embed}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
-    : `<a class="cm-btn is-outline is-sm" href="${_dpEsc(v.url)}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:14px"></i>${tt('daily_planning.open_video','Open video')}</a>`;
+    ? `<div class="dp-vid-frame"><iframe src="${_dpEsc(_dpSafeUrl(v.embed))}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+    : `<a class="cm-btn is-outline is-sm" href="${_dpEsc(_dpSafeUrl(v.url))}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:14px"></i>${tt('daily_planning.open_video','Open video')}</a>`;
   document.getElementById('dpVidBackdrop').style.display = 'flex';
 }
 function dpCloseVideo(){
@@ -1071,7 +1072,7 @@ async function loadDay(dateStr) {
   const mcSel = document.getElementById('dpMicrocycle');
   if (mcSel) {
     mcSel.innerHTML = _dpMicrocycles.length
-      ? _dpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · ${tt('daily_planning.vs_rival', `vs ${m.rival}`, {rival: m.rival})}` : ''}</option>`).join('')
+      ? _dpMicrocycles.map(m => `<option value="${_dpEsc(m.id)}"${m.id === mc?.id ? ' selected' : ''}>${_dpEsc(m.name)}${m.rival ? ` · ${_dpEsc(tt('daily_planning.vs_rival', `vs ${m.rival}`, {rival: m.rival}))}` : ''}</option>`).join('')
       : `<option value="">${tt('daily_planning.no_microcycles', '— No microcycles —')}</option>`;
   }
   const mcMdDiff = mc?.match_date ? Math.round((new Date(mc.match_date + 'T12:00:00') - new Date(dateStr + 'T12:00:00')) / 86400000) : null;
@@ -1079,7 +1080,7 @@ async function loadDay(dateStr) {
   const mcRivalLabel = mc?.rival ? ` · ${tt('daily_planning.vs_rival', `vs ${mc.rival}`, {rival: mc.rival})}` : '';
   const mcLabel = mc ? (mc.name + mcMdLabel + mcRivalLabel) : '';
   document.getElementById('dpCrumbDate').textContent = fmt + (mcMdLabel || '');
-  document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
+  document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${_dpEsc(fmt)}${mcLabel ? `<span class="sub">${_dpEsc(mcLabel)}</span>` : subLabel ? `<span class="sub">${_dpEsc(subLabel)}</span>` : ''}`;
 
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
@@ -1214,11 +1215,11 @@ function dpRenderPhysioList() {
       actHtml = `<div class="act"><button class="dp-adapt-apply" data-treatment-id="${t.id}">${tt('daily_planning.applied','✓ Applied')}</button></div>`;
     }
     return `<div class="dp-physio-alert${applied ? ' is-applied' : ''}">
-        <div class="av">${av2}</div>
+        <div class="av">${_dpEsc(av2)}</div>
         <div class="body">
-          <div class="name">${ttDot}${name} · #${pl.number??'—'} · ${pl.position||''}</div>
-          <div class="note">${adaptText}</div>
-          ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${m}</span>`).join('')}</div>` : ''}
+          <div class="name">${ttDot}${_dpEsc(name)} · #${pl.number??'—'} · ${_dpEsc(pl.position||'')}</div>
+          <div class="note">${_dpEsc(adaptText)}</div>
+          ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${_dpEsc(m)}</span>`).join('')}</div>` : ''}
         </div>
         ${actHtml}
       </div>`;
@@ -1544,10 +1545,10 @@ function dpStrengthCardHTML(e) {
   const isVideo = !!(gx && gx.video_id && !(gx.media_type === 'image' && gx.media_ref));
   const isTime = !!e.work_time || e.dose_mode === 'interval' || e.dose_mode === 'minutes';
   const thumb = img
-    ? `<img src="${img}" alt="">${isVideo ? '<span class="dp-str-play"><i class="ti ti-player-play-filled"></i></span>' : ''}`
+    ? `<img src="${_dpEsc(img)}" alt="">${isVideo ? '<span class="dp-str-play"><i class="ti ti-player-play-filled"></i></span>' : ''}`
     : `<i class="ti ti-barbell" style="font-size:30px;color:var(--cm-fg-faint)"></i>`;
   const valueInput = isTime
-    ? `<input type="text" class="t" value="${e.work_time ?? ''}" placeholder="0:30" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}">`
+    ? `<input type="text" class="t" value="${_dpEsc(e.work_time ?? '')}" placeholder="0:30" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}">`
     : `<input type="number" min="1" value="${e.reps ?? ''}" placeholder="10" oninput="dpEditReps('${e.id}',this.value)" title="${tt('daily_planning.reps','Reps')}">`;
   return `<div class="dp-str" data-seid="${e.id}" title="${desc || nm.replace(/"/g,'&quot;')}">
     <div class="dp-str-thumb">
@@ -1634,7 +1635,7 @@ function dpExerciseCardHTML(e) {
           ${_playBadge}
         </div>`}
         <div class="dp-ex-b">
-          <div class="dp-ex-name">${e.name || '—'}</div>
+          <div class="dp-ex-name">${_dpEsc(e.name || '—')}</div>
           <div class="dp-ex-meta">
             ${players ? `<span class="it"><i class="ti ti-users"></i>${players} ${tt('daily_planning.pl','pl')}</span>` : ''}
             ${m2 ? `<span class="it"><i class="ti ti-layout-navbar"></i>${m2} ${tt('daily_planning.m2_p','m²/p')}</span>` : ''}
@@ -1649,10 +1650,10 @@ function dpExerciseCardHTML(e) {
             if (seriesMode) {
               inner = `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="${tt('daily_planning.series','Series')}" style="${EI};width:40px">
                    <span>×</span>
-                   <input type="text" value="${e.work_time ?? ''}" placeholder="3:00" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}" style="${EI};width:52px">
+                   <input type="text" value="${_dpEsc(e.work_time ?? '')}" placeholder="3:00" oninput="dpEditWork('${e.id}',this.value)" title="${tt('daily_planning.work_time_mmss','Work time (mm:ss)')}" style="${EI};width:52px">
                    <span>${tt('daily_planning.work','work')}</span>
                    <span>+</span>
-                   <input type="text" value="${e.rest_time ?? ''}" placeholder="1:30" oninput="dpEditRest('${e.id}',this.value)" title="${tt('daily_planning.rest_time_mmss','Rest time (mm:ss)')}" style="${EI};width:52px">
+                   <input type="text" value="${_dpEsc(e.rest_time ?? '')}" placeholder="1:30" oninput="dpEditRest('${e.id}',this.value)" title="${tt('daily_planning.rest_time_mmss','Rest time (mm:ss)')}" style="${EI};width:52px">
                    <span>${tt('daily_planning.rest','rest')}</span>
                    <span data-eff="${e.id}" title="${tt('daily_planning.total_series_work_rest','Total = series × (work + rest)')}" style="margin-left:auto;font-weight:600;color:var(--cm-fg-strong)">= ${Math.round(dpBlockMins(e).total_min)}′ ${tt('daily_planning.total_suffix','total')}</span>`;
             } else if (repsMode) {
@@ -1673,8 +1674,8 @@ function dpExerciseCardHTML(e) {
             const obj = dn && dn.objective ? dn.objective : '';
             const dsc = dn && dn.description ? dn.description : '';
             let h = '';
-            if (obj) h += `<div class="dp-ex-desc" title="${tt('daily_planning.objective_drill_designer','Objective (Drill Designer)')}"><b>${tt('daily_planning.objective_label','Objective')}:</b> ${obj}</div>`;
-            if (dsc) h += `<div class="dp-ex-desc" title="${tt('daily_planning.description_drill_designer','Description (Drill Designer)')}">${dsc}</div>`;
+            if (obj) h += `<div class="dp-ex-desc" title="${tt('daily_planning.objective_drill_designer','Objective (Drill Designer)')}"><b>${tt('daily_planning.objective_label','Objective')}:</b> ${_dpEsc(obj)}</div>`;
+            if (dsc) h += `<div class="dp-ex-desc" title="${tt('daily_planning.description_drill_designer','Description (Drill Designer)')}">${_dpEsc(dsc)}</div>`;
             return h;
           })()}
           <textarea class="no-print" placeholder="${tt('daily_planning.session_notes_ph','Session notes…')}" oninput="dpEditNotes('${e.id}',this.value)" title="${tt('daily_planning.notes_for_this_session_only','Notes for this session only (not saved to the Drill Designer exercise)')}" style="width:100%;margin-top:6px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;resize:vertical;min-height:30px">${(e.notes ?? '').replace(/</g,'&lt;')}</textarea>

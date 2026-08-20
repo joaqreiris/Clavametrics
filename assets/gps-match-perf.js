@@ -5,6 +5,7 @@
 // (sin consumidores externos).
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d });
 
   // ── state & DOM ──────────────────────────────────────────────
@@ -96,8 +97,8 @@
       </div>`;
     const metricHTML = `<div class="pw-km-popup-hd" style="border-top:1px solid var(--cm-border-soft);padding-top:8px;margin-top:2px">Metric</div>` +
       catalog.map(d =>
-        `<div class="pw-km-item${d.key===currentKey?' is-on':''}" data-key="${d.key}">
-          ${d.label}<span class="km-tag">${d.unit||''}</span>
+        `<div class="pw-km-item${d.key===currentKey?' is-on':''}" data-key="${esc(d.key)}">
+          ${esc(d.label)}<span class="km-tag">${esc(d.unit||'')}</span>
         </div>`).join('');
     popup.innerHTML = aggHTML + metricHTML;
     document.body.appendChild(popup);
@@ -137,7 +138,7 @@
     const val = _mpAggVal(_mpCurrentRows, def);
     chip.dataset.metricKey = def.key;
     chip.querySelector('.k-label').textContent = def.label;
-    chip.querySelector('.k-val').innerHTML = `${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${def.unit}</sub>`:''}`;
+    chip.querySelector('.k-val').innerHTML = `${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${esc(def.unit)}</sub>`:''}`;
   }
 
   // KPI layout persistence
@@ -165,8 +166,8 @@
     popup.className = 'pw-km-popup';
     popup.innerHTML = `<div class="pw-km-popup-hd">Chart metric</div>` +
       catalog.map(d =>
-        `<div class="pw-km-item${d.key===_mpTdMetric?' is-on':''}" data-key="${d.key}">
-          ${d.label}<span class="km-tag">${d.unit||''}</span>
+        `<div class="pw-km-item${d.key===_mpTdMetric?' is-on':''}" data-key="${esc(d.key)}">
+          ${esc(d.label)}<span class="km-tag">${esc(d.unit||'')}</span>
         </div>`).join('');
     document.body.appendChild(popup);
     _mpTdPopup = popup;
@@ -301,9 +302,9 @@
     const chips = _MP_DEFAULT_CHIPS.map((_, idx) => {
       const def = _mpResolveChipDef(idx);
       const val = _mpAggVal(rows, def);
-      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
-        <span class="k-label">${def.label}</span>
-        <span class="k-val">${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${def.unit}</sub>`:''}</span>
+      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${esc(def.key)}">
+        <span class="k-label">${esc(def.label)}</span>
+        <span class="k-val">${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${esc(def.unit)}</sub>`:''}</span>
         <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
       </div>`;
     });

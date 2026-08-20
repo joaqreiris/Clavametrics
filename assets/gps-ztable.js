@@ -5,6 +5,7 @@
 // window._gpScEdit/__cmRpcAvail (patrón idempotente || {}) y consumidores window.X?.().
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   function _ztN() {
     const v = parseInt(document.getElementById('sc-zt-n-sel')?.value || '10', 10);
     return isNaN(v) || v <= 0 ? Infinity : v;
@@ -139,7 +140,7 @@
 
       if (equivalents.length < _ZT_MIN) {
         body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
-          Not enough equivalent ${matchKey} sessions (found: ${equivalents.length}, minimum: ${_ZT_MIN}).
+          Not enough equivalent ${esc(matchKey)} sessions (found: ${equivalents.length}, minimum: ${_ZT_MIN}).
         </div>`;
         return;
       }
@@ -212,7 +213,7 @@
 
         if (hist.length < _ZT_MIN || cur == null) {
           return `<div class="sc-zt-row">
-            <span class="sc-zt-label">${_ztLabel(key)}</span>
+            <span class="sc-zt-label">${esc(_ztLabel(key))}</span>
             <span class="gp-zc neu" style="width:52px">—</span>
             <span class="sc-zt-text">not enough data</span>
           </div>`;
@@ -228,16 +229,16 @@
         const unit  = _ztUnit(key);
         const title = `Actual: ${_ztFmt(cur,key)}${unit?' '+unit:''} · Media equiv.: ${_ztFmt(mean,key)}${unit?' '+unit:''} (n=${hist.length})`;
 
-        return `<div class="sc-zt-row" title="${title}">
-          <span class="sc-zt-label">${_ztLabel(key)}</span>
+        return `<div class="sc-zt-row" title="${esc(title)}">
+          <span class="sc-zt-label">${esc(_ztLabel(key))}</span>
           <span class="gp-zc ${_ztZClass(z)}" style="width:52px">${zTxt}</span>
-          <span class="sc-zt-text">${_ztInterpret(z, matchKey)}</span>
+          <span class="sc-zt-text">${esc(_ztInterpret(z, matchKey))}</span>
         </div>`;
       });
 
       body.innerHTML = `
         <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          plantel · ${matchKey || 'sesión'} · N = ${equivalents.length}
+          plantel · ${esc(matchKey || 'sesión')} · N = ${equivalents.length}
         </div>
         ${rows.join('')}`;
 
@@ -258,8 +259,8 @@
     const items = keys.map(k => {
       const on = _ztMetrics.includes(k);
       return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${_ztLabel(k)}${_ztUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${_ztUnit(k)}</span>` : ''}
+        <input type="checkbox" value="${esc(k)}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
+        ${esc(_ztLabel(k))}${_ztUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${esc(_ztUnit(k))}</span>` : ''}
       </label>`;
     }).join('');
 

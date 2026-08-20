@@ -384,6 +384,8 @@
 
   const root = document.getElementById('vdRoot');
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  // XSS: only allow http(s)/relative/anchor URLs in src/href/window.open — blocks javascript: etc.
+  const safeUrl = u => { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; };
   function toast(msg) { const t = document.getElementById('vdToast'); t.textContent = msg; t.classList.add('is-show'); setTimeout(() => t.classList.remove('is-show'), 2400); }
 
   function notFound(title, sub) {
@@ -463,7 +465,7 @@
   const playerHtml = embed
     ? `<div class="vd-player">
          <span class="vd-embedbadge"><span class="dot"></span><i class="ti ${prov.icon}"></i>${esc(embedBadge)}</span>
-         <iframe src="${esc(embed)}" allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>
+         <iframe src="${esc(safeUrl(embed))}" allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>
        </div>`
     : `<div class="vd-player is-fallback">
          ${v.thumbnail_url ? `<div class="pitch" style="background-image:url('${esc(v.thumbnail_url)}')"></div>` : `<div class="pitch" style="background:radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0b3119 100%)"></div>`}
@@ -532,7 +534,7 @@
               <div class="drow"><span class="dk"><i class="ti ${isFolder ? 'ti-folder' : 'ti-file'}"></i>${isFolder ? esc(tt('video_detail.detail_folder', 'Folder')) : esc(tt('video_detail.detail_file', 'File'))}</span><span class="dv"><span class="truncate">${esc(fileLabel())}</span></span></div>
               <div class="drow"><span class="dk"><i class="ti ti-calendar"></i>${esc(tt('common.date', 'Date'))}</span><span class="dv">${fmtDate(v.created_at)}</span></div>
               <div class="drow"><span class="dk"><i class="ti ti-user-up"></i>${esc(tt('video_detail.detail_author', 'Author'))}</span><span class="dv">${v.uploaded_by_name ? `<span class="av" style="width:20px;height:20px;border-radius:50%;background:var(--cm-violet-bg);color:var(--cm-violet);display:inline-flex;align-items:center;justify-content:center;font:700 8.5px/1 var(--cm-font-sans)">${esc(initials(v.uploaded_by_name))}</span>${esc(v.uploaded_by_name)}` : '—'}</span></div>
-              <div class="drow"><span class="dk"><i class="ti ti-external-link"></i>${esc(tt('video_detail.detail_open', 'Open'))}</span><span class="dv"><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(tt('video_detail.view_in', `View in ${prov.label}`, { name:prov.label }))}</a></span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-external-link"></i>${esc(tt('video_detail.detail_open', 'Open'))}</span><span class="dv"><a href="${esc(safeUrl(v.url))}" target="_blank" rel="noopener">${esc(tt('video_detail.view_in', `View in ${prov.label}`, { name:prov.label }))}</a></span></div>
             </div>
             <div class="vd-store-note">
               <i class="ti ti-shield-check"></i>
@@ -547,7 +549,7 @@
   if (priorPlayer) { const host = document.getElementById('vdPlayerHost'); if (host) host.replaceWith(priorPlayer); }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  document.getElementById('vdOpen').addEventListener('click', () => window.open(v.url, '_blank', 'noopener'));
+  document.getElementById('vdOpen').addEventListener('click', () => window.open(safeUrl(v.url), '_blank', 'noopener'));
   document.getElementById('vdCopy').addEventListener('click', () => navigator.clipboard?.writeText(v.url).then(() => toast(tt('video_detail.link_copied', 'Link copied'))));
 
   // ── Notes save ───────────────────────────────────────────────────────────────

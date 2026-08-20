@@ -40,8 +40,8 @@
   // ── Helpers ──────────────────────────────────────────────────
 
   function esc(s) {
-    return String(s).replace(/[<>&"]/g, c =>
-      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])
+    return String(s == null ? '' : s).replace(/[<>&"']/g, c =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])
     );
   }
 
@@ -595,7 +595,7 @@
       el.style.setProperty('--gp-w', _cv.w); el.style.setProperty('--gp-h', _cv.h);
     }
     el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
-    const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    const title = esc(config.title || config.viz || '');
     // Make the comparison explicit on the header when set, so raw-value cards (comparison
     // null) are never confused with % cards. mc shows the generic label here (the builder
     // draft shows the precise MC name).
@@ -604,7 +604,7 @@
     el.innerHTML = `
       <div class="gp-c-h">
         <span class="ttl">${title}</span>
-        <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}${_cmpBadge}</span>
+        <span class="sub">${esc(config.viz || '')} · ${esc(config.scope?.level || '')}${_cmpBadge}</span>
         <div class="right">
           <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
           <button data-del title="Remove"><i class="ti ti-x"></i></button>

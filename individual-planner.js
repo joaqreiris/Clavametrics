@@ -171,7 +171,7 @@
       head.className = 'rp-day-h';
       head.innerHTML = `
         <div class="top">
-          <span class="dow">${day.dow}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</span>
+          <span class="dow">${esc(day.dow)}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</span>
           <span class="dom">${day.dom}</span>
         </div>
         <div class="pillrow">${(day.mode || []).map(m => {
@@ -195,14 +195,14 @@
         block.dataset.di = String(di); block.dataset.bi = String(bi);
         block.draggable = true;   // render-proof drag (block-actions)
         const gpsHtml = (b.gps && b.gps.length)
-          ? `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill"><span class="l">${g.l}</span><span class="v">${g.v}</span></span>`).join('')}</div>`
+          ? `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill"><span class="l">${esc(g.l)}</span><span class="v">${esc(g.v)}</span></span>`).join('')}</div>`
           : '';
         const goalHtml = b.goal
-          ? `<div class="rp-block-goal"><i class="ti ti-target"></i>${b.goal}</div>` : '';
+          ? `<div class="rp-block-goal"><i class="ti ti-target"></i>${esc(b.goal)}</div>` : '';
         block.innerHTML = `
           <div class="rp-block-stripe"></div>
           <div class="rp-block-h">
-            <div class="rp-block-name">${b.name}</div>
+            <div class="rp-block-name">${esc(b.name)}</div>
             <div class="rp-block-time">${b.dur}'</div>
           </div>
           <div class="rp-block-meta">
@@ -236,7 +236,7 @@
     weekData().forEach(day => {
       const dh = document.createElement('tr');
       dh.className = 'is-day-h';
-      dh.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
+      dh.innerHTML = `<td colspan="8">${esc(day.dow)}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
       tbody.appendChild(dh);
       if (day.rest) {
         const r = document.createElement('tr');
@@ -247,16 +247,16 @@
       day.blocks.forEach(b => {
         const r = document.createElement('tr');
         if (b.selected) r.style.background = 'var(--cm-bg-soft)';
-        const gpsStr = (b.gps || []).map(g => `${g.l} ${g.v}`).join(' · ') || '—';
+        const gpsStr = (b.gps || []).map(g => `${esc(g.l)} ${esc(g.v)}`).join(' · ') || '—';
         r.innerHTML = `
-          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
+          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${esc(b.name)}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
           <td class="mono">${b.dur}'</td>
           <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${respLabel(b.resp)}</span></td>
           <td class="mono">${b.exercises || 0} ${tt('individual_planner.ex_short', 'ex')}</td>
           <td class="mono">${b.au < 50 ? tt('individual_planner.int_low', 'Low') : b.au < 200 ? tt('individual_planner.int_mod', 'Mod') : tt('individual_planner.int_high', 'High')}</td>
           <td class="mono" style="color:var(--cm-fg-muted)">${gpsStr}</td>
           <td class="mono" style="color:var(--cm-fg-strong);font-weight:600">${b.au}</td>
-          <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.goal ? '<span style="color:#1D4ED8"><i class="ti ti-target"></i> ' + b.goal + '</span>' : (b.notes || '—')}</td>
+          <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.goal ? '<span style="color:#1D4ED8"><i class="ti ti-target"></i> ' + esc(b.goal) + '</span>' : esc(b.notes || '—')}</td>
         `;
         tbody.appendChild(r);
       });
@@ -270,7 +270,7 @@
       row.className = 'rp-tl-row';
       const dayCol = document.createElement('div');
       dayCol.className = 'day';
-      dayCol.innerHTML = `<span class="dow">${day.dow}</span> ${day.dom}<div class="since">${day.today ? tt('individual_planner.today_lower', 'today') : ''}</div>`;
+      dayCol.innerHTML = `<span class="dow">${esc(day.dow)}</span> ${day.dom}<div class="since">${day.today ? tt('individual_planner.today_lower', 'today') : ''}</div>`;
       row.appendChild(dayCol);
       const track = document.createElement('div');
       track.className = 'rp-tl-track';
@@ -283,7 +283,7 @@
           block.className = 'rp-tl-block t-' + b.type;
           block.style.flexBasis = w + '%';
           block.style.flexGrow = '0';
-          block.innerHTML = `${b.name.length > 22 ? b.name.slice(0, 21) + '…' : b.name} <span class="du">${b.dur}'</span>`;
+          block.innerHTML = `${esc(b.name.length > 22 ? b.name.slice(0, 21) + '…' : b.name)} <span class="du">${b.dur}'</span>`;
           track.appendChild(block);
         });
       }
@@ -299,7 +299,7 @@
     $('#view-timeline').classList.toggle('rp-hidden', view !== 'timeline');
   }
 
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   // Repaint the programme phase bar from __ipData.phases (mirror of rehab's trainbar).
   function renderPhasebar() {

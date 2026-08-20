@@ -67,7 +67,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
              ${canConnect ? `<button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">${tt('admin.gps_disconnect','Disconnect')}</button>` : ''}
              ${p.slug==='catapult' ? '' : `<div style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px">${tt('admin.gps_creds_saved','Credentials saved · verification pending')}</div>`}`
           : (canConnect ? `<div class="gps-int-form">
-               <input type="text" placeholder="${tt(p.acctKey,p.acctEN)}" data-field="account" data-prov="${p.slug}" value="${row?.external_account_id||''}">
+               <input type="text" placeholder="${tt(p.acctKey,p.acctEN)}" data-field="account" data-prov="${p.slug}" value="${_esc(row?.external_account_id||'')}">
                <input type="password" placeholder="${tt('admin.gps_api_token_ph','API token / key')}" data-field="token" data-prov="${p.slug}" autocomplete="off">
                <button class="gps-int-btn" data-act="connect" data-prov="${p.slug}">${tt('admin.gps_connect','Connect')}</button>
              </div>` : `<div class="gps-int-hint" style="margin-top:6px">${tt('admin.gps_ask_admin_connect','Ask an admin to connect the provider (API token).')}</div>`)}
@@ -234,7 +234,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
 
     function targetOptions(sel){
       const core=GPS_REPORT_COLS.map(c=>`<option value="${c}" ${sel===c?'selected':''}>${c}</option>`).join('');
-      const cust=custom.map(c=>`<option value="${c.key}" ${sel===c.key?'selected':''}>${_esc(c.label)} (${c.key})</option>`).join('');
+      const cust=custom.map(c=>`<option value="${_esc(c.key)}" ${sel===c.key?'selected':''}>${_esc(c.label)} (${_esc(c.key)})</option>`).join('');
       return `<option value="" ${!sel?'selected':''}>${tt('admin.gps_ignore','— Ignore —')}</option>
         <optgroup label="${tt('admin.gps_core_columns','Core columns')}">${core}</optgroup>
         ${cust?`<optgroup label="${tt('admin.gps_custom_metrics','Custom metrics')}">${cust}</optgroup>`:''}
@@ -553,7 +553,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     if(!raw) return null;
     return _MAP_POS.find(p=>p.toLowerCase()===String(raw).toLowerCase().slice(0,2)) || null;
   }
-  function _esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   async function mapAthletes(prov){
     const intId=INTS[prov]?.id; if(!intId) return;

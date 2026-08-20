@@ -7,6 +7,7 @@
 // ══════════════════════════════════════════════════════════════
 (function () {
   // ── helpers ──────────────────────────────────────────────────
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmt = (v, dec = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: dec });
 
   function calcZScores(values) {
@@ -354,12 +355,12 @@
     const mdCode = _getMdCode(sess) || '—';
     const fecha  = sess.session_date || '—';
     const title  = sess.title || mdCode;
-    leftEl.innerHTML = `Viendo: <b>${title}</b> · <b>${mdCode}</b> · ${fecha}`;
+    leftEl.innerHTML = `Viendo: <b>${esc(title)}</b> · <b>${esc(mdCode)}</b> · ${esc(fecha)}`;
     if (_st.compareSessionId) {
       const cmpSess = _allSessions.find(s => s.id === _st.compareSessionId);
       const cmpDate = cmpSess?.session_date || _st.compareSessionId.slice(0,10);
       const cmpMd   = _getMdCode(cmpSess) || '';
-      rightEl.innerHTML = `Comparando contra: <b>${cmpDate}${cmpMd ? ' · ' + cmpMd : ''}</b>`;
+      rightEl.innerHTML = `Comparando contra: <b>${esc(cmpDate)}${cmpMd ? ' · ' + esc(cmpMd) : ''}</b>`;
     } else {
       rightEl.innerHTML = '';
     }
@@ -467,9 +468,9 @@
         const def = _scResolveChipDef(idx);
         const val = _scAggVal(reports, def);
         const txt = val != null ? fmt(val, def.dec) : '—';
-        return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
-          <span class="k-label">${def.label}</span>
-          <span class="k-val">${txt}${def.unit ? `<sub>${def.unit}</sub>` : ''}</span>
+        return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${esc(def.key)}">
+          <span class="k-label">${esc(def.label)}</span>
+          <span class="k-val">${txt}${def.unit ? `<sub>${esc(def.unit)}</sub>` : ''}</span>
           <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
         </div>`;
       });
@@ -523,14 +524,14 @@
       }).join('');
 
       return `<tr data-player-id="${r.player_id}" class="${isHL ? 'is-highlighted' : ''}" style="cursor:pointer">
-        <td><div class="sc-player-cell"><div class="gp-mav">${initials}</div><div><div style="font-weight:600">${name}</div><div style="font-size:10.5px;color:var(--cm-fg-muted)">${pos}${pos && num ? ' · ' : ''}${num}</div></div></div></td>
+        <td><div class="sc-player-cell"><div class="gp-mav">${esc(initials)}</div><div><div style="font-weight:600">${esc(name)}</div><div style="font-size:10.5px;color:var(--cm-fg-muted)">${esc(pos)}${pos && num ? ' · ' : ''}${esc(num)}</div></div></div></td>
         ${cells}
       </tr>`;
     }).join('');
 
     const headers = activeCols.map(c => {
       const isSorted = _st.sortKey === c.key;
-      return `<th class="${isSorted ? 'is-sort' : ''}" data-key="${c.key}">${c.label}${isSorted ? (_st.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+      return `<th class="${isSorted ? 'is-sort' : ''}" data-key="${esc(c.key)}">${esc(c.label)}${isSorted ? (_st.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
     }).join('');
 
     tblBody.innerHTML = `<table class="sc-tbl"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -588,8 +589,8 @@
     // Section 2 — Metric
     const metricHTML = `<div class="pw-km-popup-hd" style="border-top:1px solid var(--cm-border-soft);padding-top:8px;margin-top:2px">Metric</div>` +
       catalog.map(d =>
-        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${d.key}">
-          ${d.label}<span class="km-tag">${d.unit || ''}</span>
+        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${esc(d.key)}">
+          ${esc(d.label)}<span class="km-tag">${esc(d.unit || '')}</span>
         </div>`
       ).join('');
 
@@ -667,7 +668,7 @@
     }
     chip.dataset.metricKey = def.key;
     chip.querySelector('.k-label').textContent = def.label;
-    chip.querySelector('.k-val').innerHTML = `${val != null ? fmt(val, def.dec) : '—'}${def.unit ? `<sub>${def.unit}</sub>` : ''}`;
+    chip.querySelector('.k-val').innerHTML = `${val != null ? fmt(val, def.dec) : '—'}${def.unit ? `<sub>${esc(def.unit)}</sub>` : ''}`;
   }
 
   kpiBody?.addEventListener('click', e => {
@@ -705,7 +706,7 @@
       ..._scTableMetricCols.map((c, i) =>
         `<div class="pw-col-item" draggable="true" data-col-idx="${i}">
           <i class="ti ti-grip-vertical drag-h"></i>
-          <span class="col-lbl">${c.label}</span>
+          <span class="col-lbl">${esc(c.label)}</span>
           <span class="col-tag"></span>
           <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
         </div>`),
@@ -714,9 +715,9 @@
     const renderAvailGroup = (items, title) => !items.length ? '' : `
       <div class="pw-col-sect">${title}</div>
       ${items.map(d =>
-        `<div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}">
+        `<div class="pw-col-item" data-add-key="${esc(d.key)}" data-add-label="${esc(d.label)}">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${d.label}</span>
+          <span class="col-lbl">${esc(d.label)}</span>
           <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
         </div>`).join('')}`;
 
@@ -831,7 +832,7 @@
       ..._scTableMetricCols.map((c, i) =>
         `<div class="pw-col-item" draggable="true" data-col-idx="${i}">
           <i class="ti ti-grip-vertical drag-h"></i>
-          <span class="col-lbl">${c.label}</span><span class="col-tag"></span>
+          <span class="col-lbl">${esc(c.label)}</span><span class="col-tag"></span>
           <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
         </div>`),
     ].join('');
@@ -839,9 +840,9 @@
     const renderAvailGroup = (items, title) => !items.length ? '' : `
       <div class="pw-col-sect">${title}</div>
       ${items.map(d =>
-        `<div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}">
+        `<div class="pw-col-item" data-add-key="${esc(d.key)}" data-add-label="${esc(d.label)}">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${d.label}</span>
+          <span class="col-lbl">${esc(d.label)}</span>
           <button class="col-add" title="Add"><i class="ti ti-plus" style="font-size:10px"></i></button>
         </div>`).join('')}`;
 
@@ -1021,7 +1022,7 @@
         blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
         blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp}${unit ? ' ' + unit : ''} ${conf} (${bl.count} matches)`;
       } else if (bl?.warning) {
-        blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${bl.warning}`;
+        blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${esc(bl.warning)}`;
       } else {
         blLine.innerHTML = '';
       }

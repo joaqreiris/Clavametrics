@@ -1702,7 +1702,9 @@
       el.classList.toggle('is-on', el.getAttribute(attr) === value);
     });
   }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function escS(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+  function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
   function startsWithCI(haystack, prefix){ return String(haystack||'').toLowerCase().indexOf(String(prefix||'').toLowerCase()) === 0; }
   function fmtDate(d){
     if (!d) return '';
@@ -4614,7 +4616,7 @@
   }
 
   function renderPhysForm(cfg) {
-    const opts = _ftPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const playerSel = `
       <div class="ev-frow"><label class="ev-fl">${esc(tt('evaluations.player','Player'))}</label>
         <select id="paPlayer" class="ev-finput" onchange="onPaPlayerChange()" required>
@@ -4968,11 +4970,11 @@
       }
       return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--cm-border-soft)">
         <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1">${fmtDate}</span>
-        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${e.unit ? ' ' + e.unit : ''}</span>
+        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${e.unit ? ' ' + esc(e.unit) : ''}</span>
         ${dHtml}
       </div>`;
     }).join('');
-    histEl.innerHTML = `<div class="pa-section">Previous results · ${testType}</div>
+    histEl.innerHTML = `<div class="pa-section">Previous results · ${esc(testType)}</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:4px 12px">${rows}</div>`;
   }
 
@@ -5820,7 +5822,7 @@
         const headers = res.meta.fields || [];
         const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
         const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
-        const opts = headers.map(h => `<option value="${h.replace(/"/g, '&quot;')}">${h}</option>`).join('');
+        const opts = headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
         const loadSel = document.getElementById('fvCsvLoadCol');
         const velSel  = document.getElementById('fvCsvVelCol');
         loadSel.innerHTML = opts; velSel.innerHTML = opts;
@@ -5910,7 +5912,7 @@
         const headers = res.meta.fields || [];
         const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
         const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
-        const opts = headers.map(h => `<option value="${h.replace(/"/g, '&quot;')}">${h}</option>`).join('');
+        const opts = headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
         const loadSel = document.getElementById('vbtCsvLoadCol');
         const velSel  = document.getElementById('vbtCsvVelCol');
         loadSel.innerHTML = opts; velSel.innerHTML = opts;
@@ -6644,7 +6646,7 @@
     Object.keys(byCat).sort().forEach(cat => {
       html += `<optgroup label="${cat}">`;
       byCat[cat].sort((a, b) => (a.label || a.key).localeCompare(b.label || b.key)).forEach(d => {
-        html += `<option value="${d.key}" ${d.key === selectedKey ? 'selected' : ''}>${d.label || d.key}${d.unit ? ` · ${d.unit}` : ''}</option>`;
+        html += `<option value="${esc(d.key)}" ${d.key === selectedKey ? 'selected' : ''}>${esc(d.label || d.key)}${d.unit ? ` · ${esc(d.unit)}` : ''}</option>`;
       });
       html += `</optgroup>`;
     });
@@ -7509,7 +7511,7 @@
     const { fields, metrics } = _ftState;
     const fieldsEl = document.getElementById('ftDetectedFields');
     const rows = _FT_IDENTITY.filter(d => fields[d.role]).map(d =>
-      `<div style="display:flex;justify-content:space-between;gap:8px;font:500 12px/1.3 var(--cm-font-sans)"><span style="color:var(--cm-fg-muted)">${d.label}</span><span style="color:var(--cm-fg-strong);font-family:var(--cm-font-mono);font-size:11.5px;text-align:right">${fields[d.role]}</span></div>`
+      `<div style="display:flex;justify-content:space-between;gap:8px;font:500 12px/1.3 var(--cm-font-sans)"><span style="color:var(--cm-fg-muted)">${d.label}</span><span style="color:var(--cm-fg-strong);font-family:var(--cm-font-mono);font-size:11.5px;text-align:right">${esc(fields[d.role])}</span></div>`
     ).join('');
     fieldsEl.innerHTML = rows || '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.none_detected','None detected'))+'</div>';
     document.getElementById('ftMetricCount').textContent = `(${metrics.length})`;
@@ -7535,14 +7537,14 @@
     document.getElementById('ftMatchSummary').innerHTML =
       pill(`${rows.length} tests`, 'av') + pill(`${matched} players matched`, 'ok') + pill(`${unmatched} unmatched`, unmatched ? 'av' : 'ok');
 
-    const opts = _ftPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const un = [...unmatchedNames.entries()];
     document.getElementById('ftUnmatched').innerHTML = un.length
       ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched rows to a player (kept in memory for the next step):</div>` +
         un.map(([nn, raw]) =>
           `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
-             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
-             <select class="ev-finput" style="height:30px;width:200px" onchange="assignForcePlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(raw)}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignForcePlayer('${escS(nn)}', this.value)">
                <option value="">— assign player —</option>${opts}
              </select>
            </div>`
@@ -7578,7 +7580,7 @@
       const rawName = fields.name ? String(r[fields.name] ?? '').trim() : '';
       const cellName = m.playerId
         ? `<span style="color:var(--cm-fg-strong)">${playerName(m.playerId)}</span>`
-        : `<span style="color:var(--cm-warning)" title="Unmatched">${rawName || '—'}</span>`;
+        : `<span style="color:var(--cm-warning)" title="Unmatched">${esc(rawName || '—')}</span>`;
       const tt = fields.testType ? (r[fields.testType] || '—') : '—';
       const dt = fields.date ? (r[fields.date] || '—') : '—';
       const metricCells = sampleMetrics.map(mc => {
@@ -7706,7 +7708,7 @@
   }
 
   function populateVbtMapSelects() {
-    const opts = noneFirst => `<option value="">${noneFirst}</option>` + _vbt.headers.map(h => `<option value="${h}">${h}</option>`).join('');
+    const opts = noneFirst => `<option value="">${noneFirst}</option>` + _vbt.headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
     const setSel = (id, role, noneLabel) => {
       const sel = document.getElementById(id);
       sel.innerHTML = opts(noneLabel);
@@ -7794,14 +7796,14 @@
       pill(`${profiles.length} profiles`, 'av') + pill(`${players} players`, 'ok') + pill(`${unmatched} unmatched (skipped)`, unmatched ? 'av' : 'ok');
 
     // Unmatched assign
-    const opts = _ftPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const un = [...unmatchedNames.entries()];
     document.getElementById('vbtUnmatched').innerHTML = un.length
       ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched players (kept in memory):</div>` +
         un.map(([nn, raw]) =>
           `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
-             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
-             <select class="ev-finput" style="height:30px;width:200px" onchange="assignVbtPlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(raw)}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignVbtPlayer('${escS(nn)}', this.value)">
                <option value="">— assign player —</option>${opts}
              </select>
            </div>`).join('')
@@ -7825,8 +7827,8 @@
             : `<span style="font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${p.fit.est1RM} kg</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">R² ${(+p.fit.R2).toFixed(2)}</span>`;
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 12px">
         <div style="min-width:0">
-          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
-          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${p.exercise} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
+          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${esc(p.exercise)} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
         </div>
         <div style="text-align:right;white-space:nowrap">${flag}</div>
       </div>`;

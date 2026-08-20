@@ -812,7 +812,7 @@
         if (!buckets.has(key)) buckets.set(key, []);
         buckets.get(key).push(ex);
       });
-      const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       const actBtn = (act, key, icon, title) => `<button type="button" class="sl-folder-act" data-fact="${act}" data-folder="${esc(key)}" title="${esc(title)}" aria-label="${esc(title)}" style="background:none;border:0;padding:3px;margin:0;cursor:pointer;color:var(--cm-fg-muted);display:inline-flex;line-height:1;border-radius:4px"><i class="ti ti-${icon}" style="font-size:13px"></i></button>`;
       const headHtml = (key, label, n, depth, collapsed) => {
         const acts = key ? `<span class="sl-folder-acts" style="margin-left:auto;display:inline-flex;gap:1px;align-items:center">${actBtn('new', key, 'folder-plus', tt('folders.new_sub','New subfolder'))}${actBtn('rename', key, 'pencil', tt('folders.rename','Rename'))}${actBtn('delete', key, 'trash', tt('folders.delete','Delete'))}</span>` : '';
@@ -1043,7 +1043,7 @@
     if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return u;   // direct file → <iframe> plays it
     return null;
   }
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // Shared info cells + tags (rail preview and lightbox render the same data).
   function _slCells(ex) {
@@ -1155,7 +1155,7 @@
     const menu = document.getElementById('slSelMenu'); if (!menu) return;
     const flat = (window.CMFolders && window._slFolders) ? window.CMFolders.flatten(window._slFolders) : [];
     const noneLbl = window.CMFolders ? window.CMFolders.noneLabel() : tt('folders.none', 'No folder');
-    const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     let html = `<button data-fid="__none__"><i class="ti ti-folder-off" style="font-size:15px;color:var(--cm-fg-muted)"></i>${esc(noneLbl)}</button>`;
     if (flat.length) html += `<div class="div"></div>`;
     flat.forEach(f => { html += `<button data-fid="${esc(f.id)}" style="padding-left:${10 + (f.depth || 0) * 14}px"><i class="ti ti-folder" style="font-size:15px;color:var(--cm-fg-muted)"></i>${esc(f.name)}</button>`; });
@@ -1360,7 +1360,7 @@
   if (!fullAccess) return;                // no-admin: el botón queda oculto
   btn.style.display = '';
 
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // Normalización para auto-cluster de variantes del mismo drill.
   // Cancha + jugadores DEFINEN la tarea → se conservan; sólo se normaliza su FORMATO.

@@ -428,6 +428,8 @@
   let activeFocusSet = new Set();
   let activeBandSet  = new Set();
 
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
   function tt(key, fallbackEN, vars) {
     const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
     return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
@@ -554,7 +556,7 @@
     }
     container.innerHTML = Object.entries(counts).map(([orient, n]) => {
       const o = ORIENTATION_MAP[orient] || { cls:'', label:'—' };
-      return `<div class="sh-opt is-on" data-st="${orient}">
+      return `<div class="sh-opt is-on" data-st="${esc(orient)}">
         <span class="cb"></span>
         ${o.cls ? `<span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>` : ''}
         ${orientLabel(orient)} <span class="ct">${n}</span>
@@ -718,10 +720,10 @@
       <td><div class="sh-date"><span class="d">${dateStr}</span><span class="day">${dayStr}</span></div></td>
       <td><span class="sh-md ${mdCls}">${mdLabel}</span></td>
       <td>
-        <div class="sh-title">${s.title || tt('sessions_history.untitled','(untitled)')}</div>
-        ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
+        <div class="sh-title">${esc(s.title) || tt('sessions_history.untitled','(untitled)')}</div>
+        ${s.notes ? `<div class="sh-sub">${esc(s.notes)}</div>` : ''}
       </td>
-      <td><span class="sh-tag ${focusCls}">${focusLabel(focus) || '—'}</span></td>
+      <td><span class="sh-tag ${esc(focusCls)}">${focusLabel(focus) || '—'}</span></td>
       <td><span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orientLbl}</span></td>
       <td>${durHTML}</td>
       <td>${loadHTML}</td>
@@ -772,9 +774,9 @@
       return `<div class="sh-card" data-id="${s.id}">
         <div class="sh-card-top">
           <span class="sh-card-date">${dayStr}, ${dateStr}</span>
-          <span class="sh-tag ${focusCls}" style="margin-left:auto">${focusLabel(focus) || '—'}</span>
+          <span class="sh-tag ${esc(focusCls)}" style="margin-left:auto">${focusLabel(focus) || '—'}</span>
         </div>
-        <div class="sh-card-title">${s.title || tt('sessions_history.untitled','(untitled)')}</div>
+        <div class="sh-card-title">${esc(s.title) || tt('sessions_history.untitled','(untitled)')}</div>
         <div class="sh-card-meta">
           <span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orientLbl}</span>
           ${s._mdPos ? `<span class="sh-md" style="font-size:10px">${s._mdPos}</span>` : ''}
@@ -824,7 +826,7 @@
       sessions.forEach(s => {
         const focusCls = (s.focus||'').toLowerCase() || 'tactical';
         const evtLbl = s.title || s.session_type || tt('sessions_history.session','Session');
-        html += `<div class="sh-cal-evt sh-tag ${focusCls}" data-id="${s.id}" title="${evtLbl}">${evtLbl}</div>`;
+        html += `<div class="sh-cal-evt sh-tag ${esc(focusCls)}" data-id="${s.id}" title="${esc(evtLbl)}">${esc(evtLbl)}</div>`;
       });
       html += '</div>';
     }
@@ -914,7 +916,7 @@
     const opts = filteredSessions.map(s => {
       const dt = new Date(s.session_date + 'T00:00:00');
       const label = `${fmtFullDate(dt)} — ${s.title||s.session_type||tt('sessions_history.untitled_plain','Untitled')}`;
-      return `<option value="${s.id}">${label}</option>`;
+      return `<option value="${s.id}">${esc(label)}</option>`;
     }).join('');
     const empty1 = `<option value="">${tt('sessions_history.cmp_session_1','— Session 1 —')}</option>`;
     const empty2 = `<option value="">${tt('sessions_history.cmp_session_2','— Session 2 —')}</option>`;
@@ -949,10 +951,10 @@
     ];
     const headerCols = sessions.map(s => {
       const dt = new Date(s.session_date + 'T00:00:00');
-      return `<th>${fmtDayMonth(dt)} — ${s.title||s.session_type||tt('sessions_history.untitled_plain','Untitled')}</th>`;
+      return `<th>${fmtDayMonth(dt)} — ${esc(s.title||s.session_type||tt('sessions_history.untitled_plain','Untitled'))}</th>`;
     }).join('');
     const rowsHtml = ROWS.map(([label, fn]) =>
-      `<tr><th style="text-align:left;width:130px">${label}</th>${sessions.map(s=>`<td>${fn(s)}</td>`).join('')}</tr>`
+      `<tr><th style="text-align:left;width:130px">${label}</th>${sessions.map(s=>`<td>${esc(fn(s))}</td>`).join('')}</tr>`
     ).join('');
     table.innerHTML = `<tr><th></th>${headerCols}</tr>${rowsHtml}`;
   }
@@ -1143,7 +1145,7 @@
     const row3 = isGym
       ? `<div class="sh-det-m"><div class="l">${tt('sessions_history.category','Category')}</div><div class="v">${tt('sessions_history.gym','Gym')}</div></div>
          <div class="sh-det-m"><div class="l">${tt('sessions_history.muscle_focus','Muscle focus')}</div><div class="v" id="shDetMuscleFocus">—</div></div>`
-      : `<div class="sh-det-m"><div class="l">${tt('sessions_history.type','Type')}</div><div class="v">${type}</div></div>
+      : `<div class="sh-det-m"><div class="l">${tt('sessions_history.type','Type')}</div><div class="v">${esc(type)}</div></div>
          <div class="sh-det-m"><div class="l">${tt('sessions_history.orientation','Orientation')}</div><div class="v">${orient.label}</div></div>`;
     document.getElementById('shDetBody').innerHTML = `
       <div class="sh-det-meta">
@@ -1155,7 +1157,7 @@
         <div class="sh-det-m"><div class="l">${tt('sessions_history.est_rpe','Est. RPE')}</div><div class="v">${sess.estimated_rpe ? sess.estimated_rpe + '/10' : '—'}</div></div>
         <div class="sh-det-m"><div class="l">${isGym ? tt('sessions_history.volume','Volume') : tt('sessions_history.attendance','Attendance')}</div><div class="v" id="shDetVolumeAtt">${isGym ? '—' : (attCount ? tt('sessions_history.n_players', `${attCount} players`, { count: attCount }) + attPct : '—')}</div></div>
       </div>
-      ${sess.notes ? `<div class="sh-det-sec"><h3>${tt('sessions_history.notes_objective','Notes / Objective')}</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
+      ${sess.notes ? `<div class="sh-det-sec"><h3>${tt('sessions_history.notes_objective','Notes / Objective')}</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${esc(sess.notes)}</div></div>` : ''}
       <div class="sh-det-sec">
         <h3>${isGym ? tt('sessions_history.gym_exercises','Gym exercises') : tt('sessions_history.exercises','Exercises')}</h3>
         <div id="shDetExList"><div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-loader sh-spin"></i> ${tt('common.loading','Loading…')}</div></div>
@@ -1225,17 +1227,17 @@
         const cat     = ex.gym_exercises?.category || null;
         const desc    = ex.notes || ex.gym_exercises?.description || null;
         const badges = [
-          muscle ? `<span class="sh-tag physical" style="font-size:10px">${muscle}</span>` : '',
-          cat    ? `<span class="sh-tag tactical" style="font-size:10px">${cat}</span>`    : '',
-          intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
+          muscle ? `<span class="sh-tag physical" style="font-size:10px">${esc(muscle)}</span>` : '',
+          cat    ? `<span class="sh-tag tactical" style="font-size:10px">${esc(cat)}</span>`    : '',
+          intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${esc(intens)}</span>` : '',
         ].filter(Boolean).join('');
         return `<div class="sh-det-ex">
-          <div class="sh-det-ex-name">${name}</div>
+          <div class="sh-det-ex-name">${esc(name)}</div>
           <div class="sh-det-ex-meta">
             ${dur ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${dur}</span>` : ''}
             ${badges}
           </div>
-          ${desc ? `<div style="margin-top:6px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${desc}</div>` : ''}
+          ${desc ? `<div style="margin-top:6px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(desc)}</div>` : ''}
         </div>`;
       }
 
@@ -1251,14 +1253,14 @@
       const metaItems = [dur, players, dims].filter(Boolean).join(' <span style="color:var(--cm-border-strong);margin:0 2px">·</span> ');
       const badges = [
         orientTxt ? `<span class="sh-tag tactical" style="font-size:10px">${orientTxt}</span>` : '',
-        intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
-        focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]||'tactical'}" style="font-size:10px">${focus}</span>` : '',
-        gameType ? `<span class="sh-tag ${_DET_GAME_TAG[gameType]||'positional'}" style="font-size:10px">${gameType}</span>` : '',
-        cat ? `<span class="sh-tag physical" style="font-size:10px">${cat}</span>` : '',
-        mDay ? `<span class="sh-tag individual" style="font-size:10px">${mDay}</span>` : '',
+        intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${esc(intens)}</span>` : '',
+        focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]||'tactical'}" style="font-size:10px">${esc(focus)}</span>` : '',
+        gameType ? `<span class="sh-tag ${_DET_GAME_TAG[gameType]||'positional'}" style="font-size:10px">${esc(gameType)}</span>` : '',
+        cat ? `<span class="sh-tag physical" style="font-size:10px">${esc(cat)}</span>` : '',
+        mDay ? `<span class="sh-tag individual" style="font-size:10px">${esc(mDay)}</span>` : '',
       ].filter(Boolean).join('');
       return `<div class="sh-det-ex">
-        <div class="sh-det-ex-name">${name}</div>
+        <div class="sh-det-ex-name">${esc(name)}</div>
         <div class="sh-det-ex-meta">
           ${metaItems ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${metaItems}</span>` : ''}
           ${badges}
@@ -1312,7 +1314,7 @@
         <div>
           <label style="${_LBL}">${tt('sessions_history.notes_objective','Notes / Objective')}</label>
           <textarea id="shEditNotes" rows="4" placeholder="${tt('sessions_history.notes_ph','Session objective, context, instructions…')}"
-            style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box;resize:vertical">${sess.notes||''}</textarea>
+            style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box;resize:vertical">${esc(sess.notes||'')}</textarea>
         </div>
       </div>`;
     const foot = document.getElementById('shDetFoot');
@@ -1365,7 +1367,7 @@
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('sessions_history.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     shTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===shTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===shTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
   }
   function shOnTeamChange(){ shTeamId=document.getElementById('shTeamSelect').value; sessionStorage.setItem('cal_active_team',shTeamId); location.reload(); }
   window.shOnTeamChange = shOnTeamChange;

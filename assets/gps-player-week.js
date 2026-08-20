@@ -6,6 +6,7 @@
 // bloques (science-cards); el timing plano-misma-posición preserva ese contrato.
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 
@@ -188,7 +189,7 @@
       const rival     = mc?.rival     || '';
 
       if (nextMatch) nextMatch.innerHTML = matchDate
-        ? `vs <strong>${rival || 'match'}</strong> · MD on ${matchDate}`
+        ? `vs <strong>${esc(rival || 'match')}</strong> · MD on ${esc(matchDate)}`
         : 'No match in this MC';
 
       // Sessions for this microcycle via microcycle_id FK
@@ -280,7 +281,7 @@
   }
 
   function _pwValHtml(val, def) {
-    return `${fmtN(val, def.dec)}${def.unit ? `<sub>${def.unit}</sub>` : ''}`;
+    return `${fmtN(val, def.dec)}${def.unit ? `<sub>${esc(def.unit)}</sub>` : ''}`;
   }
 
   // ── KPIs ─────────────────────────────────────────────────────
@@ -292,8 +293,8 @@
     const chips = _PW_DEFAULT_CHIPS.map((_, idx) => {
       const def = _pwResolveChipDef(idx);
       const val = _pwAggVal(reports, def);
-      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
-        <span class="k-label">${def.label}</span>
+      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${esc(def.key)}">
+        <span class="k-label">${esc(def.label)}</span>
         <span class="k-val">${_pwValHtml(val, def)}</span>
         <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
       </div>`;
@@ -318,9 +319,9 @@
     popup.className = 'pw-km-popup';
     popup.innerHTML = `<div class="pw-km-popup-hd">Change metric</div>` +
       catalog.map(d =>
-        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${d.key}">
-          ${d.label}
-          <span class="km-tag">${d.unit || ''}</span>
+        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${esc(d.key)}">
+          ${esc(d.label)}
+          <span class="km-tag">${esc(d.unit || '')}</span>
         </div>`
       ).join('');
 
@@ -402,7 +403,7 @@
     if (col.key === 'date')   return row.session.session_date;
     if (col.key === 'mdcode') {
       const code = row.mdCode || '—';
-      return `<span class="pw-md ${mdCssKey(row.mdCode)}">${code}</span>`;
+      return `<span class="pw-md ${mdCssKey(row.mdCode)}">${esc(code)}</span>`;
     }
     if (col.key === 'rpe') return row.rpe != null ? `<span class="pw-rpe ${rpeCls(row.rpe)}">${row.rpe}</span>` : '—';
     if (!r) return '—';
@@ -430,7 +431,7 @@
     const thAlign = col => (col.key === 'date' ? 'text-align:left' : col.key === 'mdcode' ? 'text-align:center' : 'text-align:right');
     const tdAlign = col => (col.key === 'date' ? 'text-align:left' : col.key === 'mdcode' ? 'text-align:center' : 'text-align:right');
 
-    const header = `<tr>${allCols.map(c => `<th style="${thAlign(c)}">${c.label}</th>`).join('')}</tr>`;
+    const header = `<tr>${allCols.map(c => `<th style="${thAlign(c)}">${esc(c.label)}</th>`).join('')}</tr>`;
 
     const body = rows.map(row => {
       const cells = allCols.map(c =>
@@ -502,13 +503,13 @@
       ..._PW_FIXED_COLS.map(c => `
         <div class="pw-col-item is-fixed">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${c.label}</span>
+          <span class="col-lbl">${esc(c.label)}</span>
           <span class="col-tag">fixed</span>
         </div>`),
       ..._pwTableMetricCols.map((c, i) => `
         <div class="pw-col-item" draggable="true" data-col-idx="${i}">
           <i class="ti ti-grip-vertical drag-h"></i>
-          <span class="col-lbl">${c.label}</span>
+          <span class="col-lbl">${esc(c.label)}</span>
           <span class="col-tag">${c.type === 'pct' ? '%' : ''}</span>
           <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
         </div>`),
@@ -517,9 +518,9 @@
     const renderAvailGroup = (items, title) => !items.length ? '' : `
       <div class="pw-col-sect">${title}</div>
       ${items.map(d => `
-        <div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}" data-add-type="${d.type}" data-add-base="${d.baseKey || ''}">
+        <div class="pw-col-item" data-add-key="${esc(d.key)}" data-add-label="${esc(d.label)}" data-add-type="${d.type}" data-add-base="${esc(d.baseKey || '')}">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${d.label}</span>
+          <span class="col-lbl">${esc(d.label)}</span>
           <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
         </div>`).join('')}`;
 
@@ -663,9 +664,9 @@
     const renderAvailGroup = (items, title) => !items.length ? '' : `
       <div class="pw-col-sect">${title}</div>
       ${items.map(d => `
-        <div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}" data-add-type="${d.type}" data-add-base="${d.baseKey || ''}">
+        <div class="pw-col-item" data-add-key="${esc(d.key)}" data-add-label="${esc(d.label)}" data-add-type="${d.type}" data-add-base="${esc(d.baseKey || '')}">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${d.label}</span>
+          <span class="col-lbl">${esc(d.label)}</span>
           <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
         </div>`).join('')}`;
 
@@ -674,13 +675,13 @@
       ..._PW_FIXED_COLS.map(c => `
         <div class="pw-col-item is-fixed">
           <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
-          <span class="col-lbl">${c.label}</span>
+          <span class="col-lbl">${esc(c.label)}</span>
           <span class="col-tag">fixed</span>
         </div>`),
       ..._pwTableMetricCols.map((c, i) => `
         <div class="pw-col-item" draggable="true" data-col-idx="${i}">
           <i class="ti ti-grip-vertical drag-h"></i>
-          <span class="col-lbl">${c.label}</span>
+          <span class="col-lbl">${esc(c.label)}</span>
           <span class="col-tag">${c.type === 'pct' ? '%' : ''}</span>
           <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
         </div>`),

@@ -799,7 +799,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (!allClubs?.length) return;
     const active = clubId; // club activo actual (ya considera override)
     sel.innerHTML = allClubs.map(c =>
-      `<option value="${c.id}"${c.id === active ? ' selected' : ''}>${c.name}</option>`).join('');
+      `<option value="${_esc(c.id)}"${c.id === active ? ' selected' : ''}>${_esc(c.name)}</option>`).join('');
     wrap.style.display = 'flex';
     // Si hay un override activo en sessionStorage, mostramos "Mi club" — sin comparar IDs
     const hasOverride = !!(window.getActiveClubOverride && window.getActiveClubOverride());
@@ -870,7 +870,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     return _TEAM_COLORS[h % _TEAM_COLORS.length];
   }
-  const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const _safeUrl = u => { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#|data:image\/)/i.test(s) ? s : '#'; };
 
   // ── Org / workspace bar ──────────────────────────────────────────
   const clubName  = club?.name || '—';
@@ -878,7 +879,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   const yearCreated = club?.created_at ? new Date(club.created_at).getFullYear() : '—';
   document.getElementById('adOrgIc').textContent   = initials;
   document.getElementById('adOrgName').innerHTML   =
-    `${clubName} <span style="color:var(--cm-fg-muted);font-weight:500;font-size:13px">${tt('admin.workspace_suffix','· workspace')}</span>`;
+    `${_esc(clubName)} <span style="color:var(--cm-fg-muted);font-weight:500;font-size:13px">${tt('admin.workspace_suffix','· workspace')}</span>`;
   document.getElementById('adOrgMeta').innerHTML   =
     tt('admin.org_meta','<strong>{staff}</strong> staff · <strong>{players}</strong> players · created {year}',{ staff:count, players:playerCount, year:yearCreated });
 
@@ -1021,13 +1022,13 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       return `<tr>
         <td><span class="ad-cb"></span></td>
         <td><div class="ad-pl">
-          <div class="ad-av${isMe ? ' tn' : ''}">${av}</div>
+          <div class="ad-av${isMe ? ' tn' : ''}">${_esc(av)}</div>
           <div>
-            <div class="name">${name}${isMe ? ` <span style="color:var(--cm-fg-muted);font-weight:500">${tt('admin.you','(you)')}</span>` : ''}</div>
-            ${email ? `<div class="email">${email}</div>` : ''}
+            <div class="name">${_esc(name)}${isMe ? ` <span style="color:var(--cm-fg-muted);font-weight:500">${tt('admin.you','(you)')}</span>` : ''}</div>
+            ${email ? `<div class="email">${_esc(email)}</div>` : ''}
           </div>
         </div></td>
-        <td><span class="ad-role ${rc}"${isMe ? '' : ` data-role-edit="${m.id}" style="cursor:pointer" title="${tt('admin.change_role','Change role')}"`}><span class="dot"></span>${rl}</span></td>
+        <td><span class="ad-role ${rc}"${isMe ? '' : ` data-role-edit="${_esc(m.id)}" style="cursor:pointer" title="${tt('admin.change_role','Change role')}"`}><span class="dot"></span>${_esc(rl)}</span></td>
         <td>${teamsCell(m)}</td>
         <td>${sectionsCell(m)}</td>
         <td><span class="ad-last">${last}</span></td>
@@ -1126,7 +1127,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       logEl.innerHTML = auditRows.map(r => {
         const who  = r.actor?.full_name || tt('admin.system','System');
         const { icon, color } = LOG_ICON[r.operation] || LOG_ICON.UPDATE;
-        const what = tt('admin.audit_what','<strong>{who}</strong> {op} <strong>{table}</strong>',{ who, op:auditOp(r.operation), table:r.table_name });
+        const what = tt('admin.audit_what','<strong>{who}</strong> {op} <strong>{table}</strong>',{ who:_esc(who), op:auditOp(r.operation), table:_esc(r.table_name) });
         const when = relTime(r.created_at);
         return `<div class="ad-log-row">
           <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
@@ -1155,10 +1156,10 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     host.innerHTML = data.map(r => {
       const who = r.actor?.full_name || tt('admin.system','System');
       const { icon, color } = LOG_ICON[r.operation] || LOG_ICON.UPDATE;
-      const det = r.changes ? `<div class="det" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${JSON.stringify(r.changes)}</div>` : '';
+      const det = r.changes ? `<div class="det" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${_esc(JSON.stringify(r.changes))}</div>` : '';
       return `<div class="ad-log-row">
         <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
-        <div class="body"><div class="what">${tt('admin.audit_what','<strong>{who}</strong> {op} <strong>{table}</strong>',{ who, op:auditOp(r.operation), table:r.table_name })}</div>${det}</div>
+        <div class="body"><div class="what">${tt('admin.audit_what','<strong>{who}</strong> {op} <strong>{table}</strong>',{ who:_esc(who), op:auditOp(r.operation), table:_esc(r.table_name) })}</div>${det}</div>
         <span class="when">${relTime(r.created_at)}</span>
       </div>`;
     }).join('');
@@ -1289,7 +1290,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const list = teams || [];
     const primary = list.find(t => t.is_primary);
     sel.innerHTML = `<option value="">${tt('admin.first_team_none','— None —')}</option>` +
-      list.map(t => `<option value="${t.id}"${primary && t.id === primary.id ? ' selected' : ''}>${t.name}</option>`).join('');
+      list.map(t => `<option value="${_esc(t.id)}"${primary && t.id === primary.id ? ' selected' : ''}>${_esc(t.name)}</option>`).join('');
     toggle.classList.toggle('is-on', !!(cs && cs.enabled));
 
     sel.onchange = async () => {
@@ -1477,11 +1478,11 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const listBlock = (title, arr, color) => arr.length ? `
       <div style="margin-top:14px">
         <div style="font:600 12px/1 var(--cm-font-sans);color:${color};margin-bottom:7px">${title} (${arr.length})</div>
-        <div style="display:flex;flex-direction:column;gap:4px">${arr.map(m => `<div style="font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${_memberName(m)}</div>`).join('')}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">${arr.map(m => `<div style="font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${_esc(_memberName(m))}</div>`).join('')}</div>
       </div>` : '';
     const overwriteNote = willOverwrite.length ? ' ' + tt('admin.tpl_overwrite_note','This will overwrite custom permissions for {n} of them.',{ n:willOverwrite.length }) : '';
     document.getElementById('roleApplyBody').innerHTML =
-      `<div style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg)">${tt('admin.tpl_apply_question','Apply the <strong>{role}</strong> template to {n} existing member|Apply the <strong>{role}</strong> template to {n} existing members',{ role:prettyRole(role), n:affected.length, count:affected.length })}?${overwriteNote}</div>`
+      `<div style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg)">${tt('admin.tpl_apply_question','Apply the <strong>{role}</strong> template to {n} existing member|Apply the <strong>{role}</strong> template to {n} existing members',{ role:_esc(prettyRole(role)), n:affected.length, count:affected.length })}?${overwriteNote}</div>`
       + listBlock(tt('admin.tpl_will_restrict','Will be restricted'), willRestrict, 'var(--cm-warning,#B45309)')
       + listBlock(tt('admin.tpl_will_overwrite','Custom permissions will be overwritten'), willOverwrite, 'var(--cm-danger,#DC2626)');
     document.getElementById('roleApplyBtnText').textContent = tt('admin.tpl_apply_btn','Apply to {n} member|Apply to {n} members',{ n:affected.length, count:affected.length });
@@ -1550,9 +1551,9 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (!_mtTeams.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">${tt('admin.no_teams_create_first','No teams yet. Create teams first in "Add club / category".')}</div>`; document.getElementById('mtModalSave').style.display='none'; return; }
     const cur = new Set((assigned || []).map(r => r.team_id));
     list.innerHTML = _mtTeams.map(t => `
-      <div class="ad-module-row" data-team="${t.id}">
+      <div class="ad-module-row" data-team="${_esc(t.id)}">
         <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-users-group"></i></div>
-        <div class="info"><div class="name">${t.name}</div></div>
+        <div class="info"><div class="name">${_esc(t.name)}</div></div>
         <div class="ad-toggle${cur.has(t.id) ? ' is-on' : ''}"></div>
       </div>`).join('');
     list.querySelectorAll('.ad-toggle').forEach(tg => tg.addEventListener('click', () => tg.classList.toggle('is-on')));
@@ -1678,8 +1679,8 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       host.innerHTML = invites.map(iv => `
         <div class="ad-pending-row">
           <div class="info">
-            <div class="em">${iv.email}</div>
-            <div class="meta">${prettyRole(iv.role || 'viewer')} · ${tt('admin.invited_ago','invited {when}',{ when:relTime(iv.created_at) })}</div>
+            <div class="em">${_esc(iv.email)}</div>
+            <div class="meta">${_esc(prettyRole(iv.role || 'viewer'))} · ${tt('admin.invited_ago','invited {when}',{ when:relTime(iv.created_at) })}</div>
           </div>
           <button class="cm-btn is-outline is-sm" data-revoke="${iv.id}"><i class="ti ti-trash" style="font-size:13px"></i>${tt('admin.revoke','Revoke')}</button>
         </div>`).join('');
@@ -1715,9 +1716,9 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       return;
     }
     list.innerHTML = teams.map(t => `
-      <div class="ad-module-row" data-team="${t.id}">
+      <div class="ad-module-row" data-team="${_esc(t.id)}">
         <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-users-group"></i></div>
-        <div class="info"><div class="name">${t.name}</div></div>
+        <div class="info"><div class="name">${_esc(t.name)}</div></div>
         <div class="ad-toggle"></div>
       </div>`).join('');
     list.querySelectorAll('.ad-toggle').forEach(tg => tg.addEventListener('click', () => tg.classList.toggle('is-on')));
@@ -1783,7 +1784,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
 
   function applyLogoToOrgIc(url) {
     orgIc.classList.add('has-logo');
-    orgIc.innerHTML = `<img src="${url}" alt="${tt('admin.club_logo','Club logo')}">` +
+    orgIc.innerHTML = `<img src="${_esc(_safeUrl(url))}" alt="${tt('admin.club_logo','Club logo')}">` +
       (canUploadLogo ? '<div class="org-ic-overlay"><i class="ti ti-camera"></i></div>' : '');
   }
 
@@ -2150,11 +2151,11 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (!data.length) { host.innerHTML = `<div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:4px 0">${tt('admin.no_teams_short','No teams yet.')}</div>`; return; }
     host.innerHTML = data.map(c => {
       const archived = !!c.archived_at;
-      const nameEsc = c.name.replace(/'/g,"\\'");
+      const nameEsc = _esc(String(c.name == null ? '' : c.name).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;${archived ? 'opacity:0.55' : ''}">
           <i class="ti ti-users-group" style="font-size:14px;color:var(--cm-fg-muted)"></i>
-          <span style="flex:1;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg)">${c.name}</span>
+          <span style="flex:1;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg)">${_esc(c.name)}</span>
           ${archived
             ? `<span style="font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em">${tt('admin.archived','Archived')}</span>
                <button onclick="restoreClubCategory('${c.id}','${nameEsc}')" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:15px" title="${tt('admin.restore','Restore')}"><i class="ti ti-arrow-back-up"></i></button>`
@@ -2334,6 +2335,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
   if(!slug) return;
   try{ history.replaceState({}, '', location.pathname); }catch(_){}   // no reaparecer al recargar
   const root = document.getElementById('planWelcome'); if(!root) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   // feature slug → nombre lindo desde CM_SECTIONS (fuente única) + extras sin sección propia
   const featName = {};
   (window.CM_SECTIONS||[]).forEach(s=>{ if(s.feature) featName[s.feature]=s.name; });
@@ -2349,7 +2351,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const shown = feats.slice(0, 8);
     const host = document.getElementById('pwFeats');
     host.innerHTML = shown.length
-      ? shown.map(f=>`<div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--cm-fg-strong)"><i class="ti ti-check" style="color:var(--cm-accent);font-size:16px"></i>${pretty(f)}</div>`).join('')
+      ? shown.map(f=>`<div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--cm-fg-strong)"><i class="ti ti-check" style="color:var(--cm-accent);font-size:16px"></i>${esc(pretty(f))}</div>`).join('')
         + (feats.length>shown.length ? `<div style="font-size:12.5px;color:var(--cm-fg-muted);padding-left:25px">${tt('plan_welcome.more','+{n} more',{n:feats.length-shown.length})}</div>` : '')
       : `<div style="color:var(--cm-fg-muted);font-size:13px">${tt('plan_welcome.enjoy','Enjoy your new plan.')}</div>`;
     const btn=document.getElementById('pwClose'); btn.querySelector('span').textContent = tt('plan_welcome.cta','Let’s go');

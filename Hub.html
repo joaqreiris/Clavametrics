@@ -1154,6 +1154,9 @@
 // ── i18n helper ───────────────────────────────────────────────────────────────
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || undefined; }
+// ── XSS: escape de datos de DB antes de inyectar a innerHTML ──────────────────
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#|data:image\/)/i.test(s) ? s : '#'; }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function showHubToast(msg) {
@@ -1656,19 +1659,19 @@ async function renderActivity() {
     const r = it.r;
     const s = r.summary || {};
     const actor = r.actor_id ? actorMap[r.actor_id] : null;
-    const player = r.player_id ? (playerMap[r.player_id] || tt('common.player','Player')) : tt('common.player','Player');
+    const player = esc(r.player_id ? (playerMap[r.player_id] || tt('common.player','Player')) : tt('common.player','Player'));
     let icon = '', color = '', who = '', role = '', what = '';
 
     switch (r.action) {
       case 'session.published':
         icon = 'ti-soccer-field';
         who = actor?.name || r.actor_label || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_published_session','Published <span class="target">{title}</span> session',{title:s.title ?? ''});
+        what = tt('hub.act_published_session','Published <span class="target">{title}</span> session',{title:esc(s.title ?? '')});
         break;
       case 'injury.logged':
         icon = 'ti-bandage'; color = 'var(--cm-danger)';
         who = actor?.name || r.actor_label || tt('hub.medical_staff','Medical staff'); role = actor?.role || tt('hub.medical','Medical');
-        what = tt('hub.act_logged_injury','Logged injury · <span class="target">{player} · {area}</span>',{player,area:s.body_area ?? ''});
+        what = tt('hub.act_logged_injury','Logged injury · <span class="target">{player} · {area}</span>',{player,area:esc(s.body_area ?? '')});
         break;
       case 'injury.cleared':
         icon = 'ti-circle-check'; color = 'var(--cm-success)';
@@ -1678,12 +1681,12 @@ async function renderActivity() {
       case 'treatment.adaptation':
         icon = 'ti-stethoscope'; color = 'var(--cm-warning)';
         who = actor?.name || r.actor_label || tt('hub.physio','Physio'); role = actor?.role || tt('hub.physio','Physio');
-        what = tt('hub.act_adaptation','Adaptation required · <span class="target">{player}</span>',{player}) + (s.adaptation ? ` — ${s.adaptation}` : '');
+        what = tt('hub.act_adaptation','Adaptation required · <span class="target">{player}</span>',{player}) + (s.adaptation ? ` — ${esc(s.adaptation)}` : '');
         break;
       case 'gps.imported':
         icon = 'ti-radar-2';
         who = tt('hub.gps_sync','GPS sync'); role = tt('hub.integration','Integration');
-        what = tt('hub.act_imported_gps','Imported <span class="target">GPS data</span>') + (sessMap[r.entity_id] ? ` ${tt('hub.from','from')} ${sessMap[r.entity_id]}` : '');
+        what = tt('hub.act_imported_gps','Imported <span class="target">GPS data</span>') + (sessMap[r.entity_id] ? ` ${tt('hub.from','from')} ${esc(sessMap[r.entity_id])}` : '');
         break;
       case 'wellness.submitted':
         icon = 'ti-heartbeat';
@@ -1703,37 +1706,37 @@ async function renderActivity() {
         if (s.mode === 'role') {
           const labels = (s.assigned_roles || []).filter(Boolean)
             .map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(', ');
-          if (labels) assignee = ` · ${tt('hub.assigned_to','assigned to {who}',{who:labels})}`;
+          if (labels) assignee = ` · ${tt('hub.assigned_to','assigned to {who}',{who:esc(labels)})}`;
         } else if (s.assigned_to_name) {
-          assignee = ` · ${tt('hub.assigned_to','assigned to {who}',{who:s.assigned_to_name})}`;
+          assignee = ` · ${tt('hub.assigned_to','assigned to {who}',{who:esc(s.assigned_to_name)})}`;
         }
-        what = tt('hub.act_created_task','Created task: <span class="target">{title}</span>',{title:s.title ?? ''}) + assignee;
+        what = tt('hub.act_created_task','Created task: <span class="target">{title}</span>',{title:esc(s.title ?? '')}) + assignee;
         break;
       }
       case 'task.completed':
         icon = 'ti-checkbox'; color = 'var(--cm-success)';
         who = actor?.name || r.actor_label || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_completed_task','Completed task: <span class="target">{title}</span>',{title:s.title ?? ''});
+        what = tt('hub.act_completed_task','Completed task: <span class="target">{title}</span>',{title:esc(s.title ?? '')});
         break;
       case 'member.joined':
         icon = 'ti-user-plus'; color = 'var(--cm-success)';
         who = actor?.name || r.actor_label || tt('hub.new_member','New member'); role = actor?.role || s.role || tt('hub.staff','Staff');
-        what = tt('hub.act_joined_club','Joined the club') + (s.role ? ` · <span class="target">${s.role}</span>` : '');
+        what = tt('hub.act_joined_club','Joined the club') + (s.role ? ` · <span class="target">${esc(s.role)}</span>` : '');
         break;
       case 'availability.changed':
         icon = 'ti-user-check';
         who = actor?.name || r.actor_label || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_availability','{player} availability: {from} → {to}', { player, from: s.from ?? s.old_status ?? s.old ?? '', to: s.to ?? s.new_status ?? s.status ?? '' });
+        what = tt('hub.act_availability','{player} availability: {from} → {to}', { player, from: esc(s.from ?? s.old_status ?? s.old ?? ''), to: esc(s.to ?? s.new_status ?? s.status ?? '') });
         break;
       case 'session.modified':
         icon = 'ti-edit';
         who = actor?.name || r.actor_label || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_session_modified','Modified session {title}', { title: s.title ?? sessMap[r.entity_id] ?? '' });
+        what = tt('hub.act_session_modified','Modified session {title}', { title: esc(s.title ?? sessMap[r.entity_id] ?? '') });
         break;
       case 'match_report.created':
         icon = 'ti-report';
         who = actor?.name || r.actor_label || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_match_report','Created match report · {date}', { date: s.match_date ?? s.date ?? '' });
+        what = tt('hub.act_match_report','Created match report · {date}', { date: esc(s.match_date ?? s.date ?? '') });
         break;
       case 'evaluation.recorded':
         icon = 'ti-clipboard-data';
@@ -1748,7 +1751,7 @@ async function renderActivity() {
       case 'microcycle.published':
         icon = 'ti-calendar-check';
         who = actor?.name || r.actor_label || tt('hub.coach','Coach'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_microcycle_pub','Published microcycle {name}', { name: s.name ?? '' });
+        what = tt('hub.act_microcycle_pub','Published microcycle {name}', { name: esc(s.name ?? '') });
         break;
       case 'lineup.published':
         icon = 'ti-users';
@@ -1758,12 +1761,12 @@ async function renderActivity() {
       case 'player.added':
         icon = 'ti-user-plus'; color = 'var(--cm-success)';
         who = actor?.name || r.actor_label || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_player_added','Added player {name}', { name: s.name ?? s.player_name ?? player });
+        what = tt('hub.act_player_added','Added player {name}', { name: s.name != null ? esc(s.name) : (s.player_name != null ? esc(s.player_name) : player) });
         break;
       case 'player.archived':
         icon = 'ti-user-minus';
         who = actor?.name || r.actor_label || tt('hub.staff','Staff'); role = actor?.role || tt('hub.staff','Staff');
-        what = tt('hub.act_player_archived','Archived player {name}', { name: s.name ?? s.player_name ?? player });
+        what = tt('hub.act_player_archived','Archived player {name}', { name: s.name != null ? esc(s.name) : (s.player_name != null ? esc(s.player_name) : player) });
         break;
       default:
         return;
@@ -1779,7 +1782,7 @@ async function renderActivity() {
     row.className = 'activity-row'; row.setAttribute('role', 'row');
     row.innerHTML =
       `<div class="ind" role="cell"><i class="ti ${icon}"${color ? ` style="color:${color}"` : ''} aria-hidden="true"></i></div>` +
-      `<div class="who" role="cell">${avHTML}<div><div class="name">${who}</div><div class="cm-meta">${role}</div></div></div>` +
+      `<div class="who" role="cell">${avHTML}<div><div class="name">${esc(who)}</div><div class="cm-meta">${esc(role)}</div></div></div>` +
       `<div class="what" role="cell">${what}</div>` +
       `<div class="when" role="cell" style="text-align:right">${formatAgo(when)}</div>`;
     feed.appendChild(row);
@@ -2433,7 +2436,7 @@ function renderTasks(tasks, view = 'my') {
         const label = diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`;
         el.innerHTML = `<i class="ti ti-calendar"></i> ${tt('hub.label_ready','{label} ready',{label})}`;
       } else if (mcRes.data) {
-        el.innerHTML = `<i class="ti ti-calendar"></i> ${mcRes.data.name}`;
+        el.innerHTML = `<i class="ti ti-calendar"></i> ${esc(mcRes.data.name)}`;
       } else {
         el.innerHTML = `<i class="ti ti-calendar"></i> —`;
       }
@@ -2458,7 +2461,7 @@ function renderTasks(tasks, view = 'my') {
       const matchDt  = src?.match_date || _hubNextMatch?.date;
       if (rival && matchDt) {
         const matchDay = new Date(matchDt).toLocaleDateString(ttLocale() || 'en-US', { weekday: 'short' });
-        el.innerHTML = `<i class="ti ti-target-arrow"></i> ${tt('hub.vs_rival','vs {rival}',{rival})} · ${matchDay}`;
+        el.innerHTML = `<i class="ti ti-target-arrow"></i> ${tt('hub.vs_rival','vs {rival}',{rival:esc(rival)})} · ${matchDay}`;
       } else {
         el.innerHTML = `<i class="ti ti-target-arrow"></i> —`;
       }
@@ -2846,11 +2849,11 @@ function renderTasks(tasks, view = 'my') {
         const haHtml     = ha ? `<div class="kpi-rival-ha">${ha}</div>` : '';
         const crestUrl   = _hubNextMatch.rival_crest_url || null;
         if (crestUrl) {
-          badgeEl.innerHTML = `<img id="kpiRivalCrestImg" src="${crestUrl}" style="width:48px;height:48px;border-radius:50%;object-fit:contain" alt="${rival}">${haHtml}`;
+          badgeEl.innerHTML = `<img id="kpiRivalCrestImg" src="${esc(safeUrl(crestUrl))}" style="width:48px;height:48px;border-radius:50%;object-fit:contain" alt="${esc(rival)}">${haHtml}`;
           const crestImg = document.getElementById('kpiRivalCrestImg');
-          if (crestImg) crestImg.onerror = () => { crestImg.outerHTML = `<div class="kpi-rival-initials">${initials}</div>`; };
+          if (crestImg) crestImg.onerror = () => { crestImg.outerHTML = `<div class="kpi-rival-initials">${esc(initials)}</div>`; };
         } else {
-          badgeEl.innerHTML = `<div class="kpi-rival-initials">${initials}</div>${haHtml}`;
+          badgeEl.innerHTML = `<div class="kpi-rival-initials">${esc(initials)}</div>${haHtml}`;
         }
       }
     }

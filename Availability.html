@@ -704,6 +704,7 @@
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
   function avEscAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   // MD label anchored to a date's microcycle match_date (mirrors Calendar.html)
   function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
@@ -858,7 +859,7 @@
       else                       tagText = label;
       let tag = '';
       if (tagText) {
-        const title = isMatch ? ` title="vs ${matchDates[date]}"` : '';
+        const title = isMatch ? ` title="vs ${esc(matchDates[date])}"` : '';
         tag = `<span class="md-tag"${title}>${tagText}</span>`;
       }
       h += `<th class="${cls}"><b>${letter}</b>${num}${tag}</th>`;
@@ -902,11 +903,11 @@
         // belong to another squad. Flag it so the coach knows they're a guest here.
         const xTeam = (p.team_id && p.team_id !== _avTeamId) ? (_avTeamsById.get(p.team_id)?.name || null) : null;
         const xTeamBadge = xTeam
-          ? `<span class="av-pl-xteam" title="${tt('availability.belongsToTeam', `Belongs to ${xTeam}`, { team: xTeam }).replace(/"/g,"'")}">${xTeam}</span>`
+          ? `<span class="av-pl-xteam" title="${tt('availability.belongsToTeam', `Belongs to ${xTeam}`, { team: xTeam }).replace(/"/g,"'")}">${esc(xTeam)}</span>`
           : '';
         html += `<tr data-player-id="${p.id}"${xTeam ? ' class="is-xteam"' : ''}>
-          <td class="col-player"><div class="av-pl"><div class="av-pl-av" data-cm-photo="${p.id}">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span>${xTeamBadge}</div></div></div></td>
-          <td class="col-num"><span class="av-num">${p.number || ''}</span></td>
+          <td class="col-player"><div class="av-pl"><div class="av-pl-av" data-cm-photo="${p.id}">${esc(initials)}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${esc(name)}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span>${xTeamBadge}</div></div></div></td>
+          <td class="col-num"><span class="av-num">${esc(p.number || '')}</span></td>
           ${cells}
           <td class="col-sum">${summary(statuses, MC_DATES)}</td>
         </tr>`;
@@ -935,7 +936,7 @@
     if (!names.length) return '';
     const top = names.slice(0, 3);
     const rest = names.slice(3);
-    const items = top.map(n => `<span>${n}</span>`).join('');
+    const items = top.map(n => `<span>${esc(n)}</span>`).join('');
     const more = rest.length
       ? `<span class="kpi-pl-more" data-rest="${rest.map(n => n.replace(/"/g,'&quot;')).join('|')}">${tt('availability.moreCount', '+' + rest.length + ' more', { count: rest.length })}</span>`
       : '';
@@ -1797,7 +1798,7 @@
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('availability.noTeams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _avTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_avTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_avTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
     // Temporadas del equipo activo + las club-wide (team_id NULL) para el filtro de rango.
     try {
       let sq = window.sb.from('seasons').select('id, name, start_date, end_date, team_id, status').eq('club_id', clubId);
@@ -1836,7 +1837,7 @@
     wrap.style.display = '';
     opts.innerHTML = list.map(s => {
       const scope = s.team_id ? '' : `<span style="color:var(--cm-fg-faint);font-size:11px"> · ${tt('availability.seasonClubWide','club')}</span>`;
-      return `<button class="av-range-opt" onclick="avSetSeason('${s.id}')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">${s.name || '—'}${scope}</button>`;
+      return `<button class="av-range-opt" onclick="avSetSeason('${s.id}')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">${esc(s.name || '—')}${scope}</button>`;
     }).join('');
   }
   function avRenderMcOpts() {
@@ -1849,8 +1850,8 @@
     const fmt = d => { const [, m, day] = String(d).split('-'); return `${day}/${m}`; };
     opts.innerHTML = list.map(m => {
       const on = (_avSelectedMc && _avSelectedMc.id === m.id) ? 'background:var(--cm-bg-soft)' : '';
-      const meta = `${fmt(m.start_date)}–${fmt(m.end_date)}${m.rival ? ` · ${m.rival}` : ''}`;
-      return `<button class="av-range-opt" onclick="avSetMc('${m.id}')" title="${meta}" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;${on}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name || '—'}</span><span style="color:var(--cm-fg-faint);font:500 11px/1 var(--cm-font-mono);white-space:nowrap">${meta}</span></button>`;
+      const meta = `${fmt(m.start_date)}–${fmt(m.end_date)}${m.rival ? ` · ${esc(m.rival)}` : ''}`;
+      return `<button class="av-range-opt" onclick="avSetMc('${m.id}')" title="${meta}" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;${on}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name || '—')}</span><span style="color:var(--cm-fg-faint);font:500 11px/1 var(--cm-font-mono);white-space:nowrap">${meta}</span></button>`;
     }).join('');
   }
   function avOnTeamChange(){ _avTeamId=document.getElementById('avTeamSelect').value; sessionStorage.setItem('cal_active_team',_avTeamId); location.reload(); }
@@ -2211,7 +2212,7 @@
         const barColor = pct>=80?'var(--cm-success)':pct>=50?'var(--cm-warning)':'var(--cm-danger)';
         const initials = s.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
         return `<tr style="border-bottom:1px solid var(--cm-border)">
-          <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:7px;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;font:700 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${initials}</span><span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.name}</span></div></td>
+          <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:7px;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;font:700 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(initials)}</span><span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${esc(s.name)}</span></div></td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:var(--cm-success)">${s.avail}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.partial?'var(--cm-warning)':'var(--cm-fg-faint,#cbd5e1)'}">${s.partial}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.injury?'var(--cm-danger)':'var(--cm-fg-faint,#cbd5e1)'}">${s.injury}</td>
@@ -2309,10 +2310,10 @@
       }
       const rowsHTML = list.map(m => `
         <tr style="border-bottom:1px solid var(--cm-border)">
-          <td style="padding:10px 16px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${m.player}</td>
-          <td style="padding:10px 12px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tn(m.base)}</td>
+          <td style="padding:10px 16px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${esc(m.player)}</td>
+          <td style="padding:10px 12px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(tn(m.base))}</td>
           <td style="padding:10px 12px;text-align:center;color:#6366F1"><i class="ti ti-arrow-right"></i></td>
-          <td style="padding:10px 12px;font:600 12.5px/1 var(--cm-font-sans);color:#6366F1">${tn(m.to)}</td>
+          <td style="padding:10px 12px;font:600 12.5px/1 var(--cm-font-sans);color:#6366F1">${esc(tn(m.to))}</td>
           <td style="padding:10px 16px;text-align:right;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${m.days}</td>
         </tr>`).join('');
       box.innerHTML = `

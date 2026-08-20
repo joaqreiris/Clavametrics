@@ -1908,7 +1908,9 @@
   let currentPeriodMs = 180 * 86400000; // default 6 months
 
   // ── Helpers ──
-  function escS(s) { return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
+  function escS(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
   function getPeriodCutoff() { return currentPeriodMs ? cmYMD(new Date(Date.now() - currentPeriodMs)) : null; }
   function fmtDelta(diff, u) {
     if (diff > 0) return `<span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">+${diff}${u?' '+u:''}</span>`;
@@ -1936,7 +1938,7 @@
     const { data } = await _evPlQ.order('last_name');
     allPlayers = data || [];
     renderRoster();
-    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = allPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     ['evalPlayer','subjPlayer','testMPlayer','indProfSelect'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = (id === 'testMPlayer' ? '<option value="">All players</option>' : '<option value="">Select player…</option>') + opts;
@@ -2597,7 +2599,7 @@
   }
 
   function renderPhysForm(cfg) {
-    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = allPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const playerSel = `
       <div class="ev-frow"><label class="ev-fl">Player</label>
         <select id="paPlayer" class="ev-finput" onchange="onPaPlayerChange()" required>
@@ -3861,7 +3863,7 @@
   function addBulkRow() {
     const tbody = document.getElementById('bulkTableBody');
     if (!tbody) return;
-    const opts = allPlayers.map(p=>`<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = allPlayers.map(p=>`<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const tr = document.createElement('tr');
     tr.style.borderBottom = '1px solid var(--cm-border-soft)';
     tr.innerHTML = `
@@ -4796,7 +4798,7 @@
   async function loadForceIndiv() {
     await ftEnsureDefs();
     const psel = document.getElementById('ft-player');
-    psel.innerHTML = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    psel.innerHTML = allPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     if (!_ftIndiv.player || !allPlayers.some(p => p.id === _ftIndiv.player)) _ftIndiv.player = allPlayers[0]?.id || null;
     psel.value = _ftIndiv.player || '';
     await loadForceIndivTests();
@@ -5021,7 +5023,7 @@
     document.getElementById('ftMatchSummary').innerHTML =
       pill(`${rows.length} tests`, 'av') + pill(`${matched} players matched`, 'ok') + pill(`${unmatched} unmatched`, unmatched ? 'av' : 'ok');
 
-    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = allPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const un = [...unmatchedNames.entries()];
     document.getElementById('ftUnmatched').innerHTML = un.length
       ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched rows to a player (kept in memory for the next step):</div>` +
@@ -5283,7 +5285,7 @@
       pill(`${profiles.length} profiles`, 'av') + pill(`${players} players`, 'ok') + pill(`${unmatched} unmatched (skipped)`, unmatched ? 'av' : 'ok');
 
     // Unmatched assign
-    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const opts = allPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
     const un = [...unmatchedNames.entries()];
     document.getElementById('vbtUnmatched').innerHTML = un.length
       ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched players (kept in memory):</div>` +

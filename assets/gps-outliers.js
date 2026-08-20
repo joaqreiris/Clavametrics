@@ -5,6 +5,7 @@
 // window._gpScEdit/__cmRpcAvail (patrón idempotente || {}) y consumidores window.X?.().
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const _OL_MIN  = 3;
   const _OL_ALL  = [
     'total_distance','high_speed_distance','very_high_speed_distance',
@@ -72,7 +73,7 @@
         return `<td class="${over ? 'is-thresh' : ''}" style="${bg ? 'background:' + bg : ''}"><div class="ol-hm-cell">${txt}</div></td>`;
       }).join('');
       return `<tr>
-        <td class="ol-pc"><div class="ol-hm-cell">${name}</div></td>
+        <td class="ol-pc"><div class="ol-hm-cell">${esc(name)}</div></td>
         ${tdCells}
       </tr>`;
     }).join('');
@@ -81,7 +82,7 @@
     const refDetail = prevCount > 0 ? ` · N equiv.=${prevCount}` : '';
     body.innerHTML = `
       <div style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:6px 10px 3px;text-transform:uppercase;letter-spacing:.04em">
-        ${mdCode}${refDetail} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
+        ${esc(mdCode)}${refDetail} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
       </div>
       <div class="ol-hm-wrap">
         <table class="ol-hm">

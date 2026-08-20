@@ -2309,12 +2309,12 @@ function renderGrid() {
             ? `<span class="mc-evt-au" style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>`
             : '';
           const leadEl = (cat === 'match' && s.rival_crest_url)
-            ? `<img src="${s.rival_crest_url}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+            ? `<img src="${_esc(s.rival_crest_url)}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
             : `<i class="ti ${icon}"></i>`;
-          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + s.session_type : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
+          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + _esc(s.session_type) : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
-            <span class="name" title="${evtName + durSuffix}">${evtName}${durSuffix}</span>${au}
+            <span class="name" title="${_esc(evtName + durSuffix)}">${_esc(evtName)}${_esc(durSuffix)}</span>${au}
           </div>`;
         }).join('') || `<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">${tt('calendar.hidden_by_filter','Hidden by filter')}</div>`;
 
@@ -2885,7 +2885,7 @@ async function renderWorkload() {
 
   const labelsHtml = mcData.map(d => {
     const isCurrent = d.mc.id === currentMcId;
-    return `<span${isCurrent ? ' class="is-current"' : ''}>${d.mc.name || 'MC'}</span>`;
+    return `<span${isCurrent ? ' class="is-current"' : ''}>${_esc(d.mc.name || 'MC')}</span>`;
   }).join('');
 
   const curPending = mcData.find(d => d.mc.id === currentMcId)?.pending || 0;
@@ -3169,7 +3169,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
   document.getElementById('calEvtF_homeaway').value    = session?.home_away   || '';
   const compSel = document.getElementById('calEvtF_competition');
   compSel.innerHTML = `<option value="">${tt('calendar.no_competition','— No competition')}</option>` +
-    _calComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('') +
+    _calComps.map(c => `<option value="${_esc(c.id)}">${_esc(c.name)}</option>`).join('') +
     `<option value="friendly">${tt('calendar.comp_friendly','Friendly')}</option>`;
   compSel.value = session?.competition_id || (session?.competition === 'friendly' ? 'friendly' : '');
   document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
@@ -3326,7 +3326,7 @@ function showEvtPopover(anchor, session) {
   // Header: crest for match, icon otherwise
   let headVisual;
   if (cat === 'match' && session.rival_crest_url) {
-    headVisual = `<img class="ep-crest" src="${session.rival_crest_url}" onerror="this.style.display='none'" alt="">`;
+    headVisual = `<img class="ep-crest" src="${_esc(session.rival_crest_url)}" onerror="this.style.display='none'" alt="">`;
   } else {
     headVisual = `<span class="ep-icon"><i class="ti ${icon}"></i></span>`;
   }
@@ -3486,7 +3486,7 @@ function showEvtPopover(anchor, session) {
 }
 
 function _esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ── Delete helpers used by popover ────────────────────────────
@@ -5023,7 +5023,7 @@ async function renderListView() {
     html += `<div class="upcoming-row">
       <div class="upcoming-date"><div class="m">${d.toLocaleString(ttLocale(),{month:'short'}).toUpperCase()}</div><div class="d">${d.getDate()}</div></div>
       <div class="upcoming-body">
-        <div class="upcoming-title">${item.title||'—'}</div>
+        <div class="upcoming-title">${_esc(item.title||'—')}</div>
         <div class="upcoming-meta"><span class="badge" style="background:${bg2};color:${cl2}">${tlabel}</span>${item.duration ? ' '+item.duration+'min' : ''}</div>
       </div>
       <div></div>
@@ -5315,11 +5315,11 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       pill.style.width = geom.width + 'px';
       pill.title = g.items.map(i => `${i.rival} · ${i.isAway ? tt('calendar.away','Away') : tt('calendar.home','Home')}`).join(' | ');
       const lead = first.crestUrl
-        ? `<img src="${first.crestUrl}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+        ? `<img src="${_esc(first.crestUrl)}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
         : `<span class="match-pill__ha">${first.isAway ? 'A' : 'H'}</span>`;
       pill.innerHTML =
         lead +
-        `<span class="match-pill__opp">${first.rival}</span>` +
+        `<span class="match-pill__opp">${_esc(first.rival)}</span>` +
         `<span class="match-pill__slot">${extra ? '+' + extra : 'vs'}</span>`;
       pill.addEventListener('click', e => { e.stopPropagation(); showMatchPopover(pill, g.items); });
       matchesEl.appendChild(pill);
@@ -5371,7 +5371,7 @@ function showMatchPopover(anchor, items) {
 
   const first = items[0];
   const headCrest = first.crestUrl
-    ? `<img class="ep-crest" src="${first.crestUrl}" onerror="this.style.display='none'" alt="">`
+    ? `<img class="ep-crest" src="${_esc(first.crestUrl)}" onerror="this.style.display='none'" alt="">`
     : `<span class="ep-icon"><i class="ti ti-ball-football"></i></span>`;
 
   const itemsHtml = items.map((item, i) => {
@@ -5389,7 +5389,7 @@ function showMatchPopover(anchor, items) {
       ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${item.id}"><i class="ti ti-edit" style="font-size:11px"></i>${tt('calendar.edit_event_btn','Edit event')}</button>`
       : '';
     const rowCrest = item.crestUrl
-      ? `<img src="${item.crestUrl}" style="width:18px;height:18px;border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--cm-bg-soft)" onerror="this.style.display='none'" alt="">`
+      ? `<img src="${_esc(item.crestUrl)}" style="width:18px;height:18px;border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--cm-bg-soft)" onerror="this.style.display='none'" alt="">`
       : `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--cm-bg-soft);flex-shrink:0"><i class="ti ti-ball-football" style="font-size:11px;color:var(--cm-fg-faint)"></i></span>`;
     return `<div style="padding:10px 12px;${border}">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
@@ -5514,14 +5514,14 @@ function _renderUpcomingFiltered() {
     const loc      = isMatch ? (item.isAway ? tt('calendar.away','Away') : tt('calendar.home','Home')) : '';
     const timeChip = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
     const crestChip = (isMatch && item.rival_crest_url)
-      ? `<img src="${item.rival_crest_url}" style="width:16px;height:16px;border-radius:50%;object-fit:contain;flex-shrink:0;margin-right:2px;vertical-align:middle" onerror="this.style.display='none'" alt="">`
+      ? `<img src="${_esc(item.rival_crest_url)}" style="width:16px;height:16px;border-radius:50%;object-fit:contain;flex-shrink:0;margin-right:2px;vertical-align:middle" onerror="this.style.display='none'" alt="">`
       : '';
     const evtIdAttr = (item.source === 'event' && item.id) ? ` data-evt-id="${item.id}"` : '';
     return `
       <div class="upcoming-row"${evtIdAttr}>
         <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
         <div class="upcoming-body">
-          <div class="upcoming-title" style="display:flex;align-items:center;gap:5px">${crestChip}${item.title}</div>
+          <div class="upcoming-title" style="display:flex;align-items:center;gap:5px">${crestChip}${_esc(item.title)}</div>
           <div class="upcoming-meta"><span class="badge" style="background:${badgeBg};color:${badgeClr}">${label}</span>${loc}${timeChip}</div>
         </div>
         <div></div>
@@ -5729,9 +5729,9 @@ async function showImportPreview(fixtures) {
     const isConflict = conflictDates.has(f.date);
     return `<tr class="${isConflict?'conflict':''}">
       <td>${f.date}</td>
-      <td>${f.opponent}</td>
+      <td>${_esc(f.opponent)}</td>
       <td><span class="badge-ha ${f.home_away}">${f.home_away==='home'?'<i class="ti ti-home" style="font-size:9px"></i> '+tt('calendar.home','Home'):'<i class="ti ti-plane" style="font-size:9px"></i> '+tt('calendar.away','Away')}</span></td>
-      <td style="color:var(--cm-fg-muted)">${f.competition||'—'}</td>
+      <td style="color:var(--cm-fg-muted)">${_esc(f.competition||'—')}</td>
       <td>${isConflict?`<span class="badge-conflict">${tt('calendar.conflict','conflict')}</span>`:''}</td>
     </tr>`;
   }).join('');
@@ -6412,7 +6412,7 @@ function dsMergeTl(dayRows, tplRows){
 // 3-way choice dialog when loading a template over a day that already shows
 // events: combine both / replace with the template / cancel.
 function dsAskLoadChoice(dayCount, tplCount, clashCount){
-  const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const esc = s => (s==null?'':String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   return new Promise(resolve => {
     const wrap = document.createElement('div');
     wrap.className = 'ds-ask-backdrop';
@@ -6537,6 +6537,7 @@ function dsRenderSheet(){
   const s = _dsState; if (!s) return;
   const FONT = "'Geist',ui-sans-serif,system-ui,sans-serif", MONO = "'Geist Mono',ui-monospace,monospace";
   const esc = calEsc, ink='#161A20', sub='#6A727E', line='#ECEDEA', paper='#FFFFFF';
+  const safeUrl = u => { const v=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(v) ? v : '#'; };
   const onAcc = dsReadableOn(s.accent);
   const crest = s.logo
     ? `<div style="width:48px;height:48px;border-radius:11px;overflow:hidden;flex:none"><img src="${esc(s.logo)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>`
@@ -6579,7 +6580,7 @@ function dsRenderSheet(){
       ${m.time?`<div style="text-align:right"><div style="font:700 8.5px/1 ${MONO};letter-spacing:.1em;text-transform:uppercase;color:${sub}">${esc(dsT('kickoff'))}</div><div style="font:800 22px ${MONO};color:${ink};margin-top:2px">${esc(m.time)}</div></div>`:''}
     </div>` : '';
   // Directions block (QR survives PNG; link is clickable in the live sheet)
-  const dirBlock = (s.venueUrl||'').trim() ? `<a href="${esc(s.venueUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:14px;text-decoration:none;border:1px solid ${line};border-radius:12px;padding:12px 14px;margin-bottom:20px">
+  const dirBlock = (s.venueUrl||'').trim() ? `<a href="${esc(safeUrl(s.venueUrl))}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:14px;text-decoration:none;border:1px solid ${line};border-radius:12px;padding:12px 14px;margin-bottom:20px">
       ${s.venueQr?`<img src="${esc(s.venueQr)}" alt="QR" style="width:66px;height:66px;flex:none;border-radius:6px">`:''}
       <div style="min-width:0">
         <div style="font:700 9px/1 ${MONO};letter-spacing:.12em;text-transform:uppercase;color:${sub}">${esc(dsT('directions'))}</div>
@@ -6980,7 +6981,7 @@ document.addEventListener('cm:langchanged', () => {
     if (!teams.length) { sel.innerHTML = `<option value="">${tt('calendar.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _activeTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===_activeTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t => `<option value="${calEsc(t.id)}" ${t.id===_activeTeamId?'selected':''}>${calEsc(t.name)}</option>`).join('');
   }
   function onTeamChange() {
     _activeTeamId = document.getElementById('calTeamSelect').value;

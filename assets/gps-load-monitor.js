@@ -5,6 +5,7 @@
 // window._gpScEdit/__cmRpcAvail (patrón idempotente || {}) y consumidores window.X?.().
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmtAcwr = v => v != null ? v.toFixed(2) : '—';
 
   // SVG semicircular gauge (value 0–2.0, zones from gpsACWR.ACWR_ZONES)
@@ -150,7 +151,7 @@
     const rows = entries.map(([pid, d]) => {
       const p    = _playerMap[pid] || {};
       const name = `${p.last_name || ''} ${(p.first_name||'')[0]||''}.`.trim();
-      const pos  = p.position ? `<span style="font-size:10px;color:var(--cm-fg-muted)"> · ${p.position}</span>` : '';
+      const pos  = p.position ? `<span style="font-size:10px;color:var(--cm-fg-muted)"> · ${esc(p.position)}</span>` : '';
       const sessWarn = d.insufficient ? ' <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:11px" title="Insufficient data"></i>' : '';
 
       const cells = metrics.map(m => {
@@ -161,7 +162,7 @@
       }).join('');
 
       return `<tr>
-        <td>${name}${pos}</td>
+        <td>${esc(name)}${pos}</td>
         <td style="text-align:right">${d.sessCount}${sessWarn}</td>
         ${cells}
       </tr>`;

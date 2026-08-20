@@ -5,6 +5,7 @@
 // window._gpScEdit/__cmRpcAvail (patrón idempotente || {}) y consumidores window.X?.().
 // ══════════════════════════════════════════════════════════════
 (function () {
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   // Peak metrics: max agg; everything else = avg (acumulable)
   const _VS_PEAK = new Set(['max_speed','avg_speed','peak_speed']);
   const _VS_CORE_COLS = new Set([
@@ -96,7 +97,7 @@
     ).slice(0, 30);
 
     if (!candidates.length) {
-      sel.innerHTML = `<option value="">No ${mdCode} sessions available</option>`;
+      sel.innerHTML = `<option value="">No ${esc(mdCode)} sessions available</option>`;
       return;
     }
     sel.innerHTML = '<option value="">' + tt('gps_analysis.compare_with','Compare with…') + '</option>';
@@ -190,7 +191,7 @@
 
         if (cur == null || ref == null) {
           return `<div class="sc-vs-row">
-            <span class="sc-vs-label">${_vsLabel(key)}</span>
+            <span class="sc-vs-label">${esc(_vsLabel(key))}</span>
             <span class="sc-vs-pct neu">—</span>
             <span class="sc-vs-vals">no data</span>
           </div>`;
@@ -202,15 +203,15 @@
         const valStr = `${_vsFmt(cur, key)}${unit ? ' '+unit : ''} vs ${_vsFmt(ref, key)}${unit ? ' '+unit : ''}`;
 
         return `<div class="sc-vs-row">
-          <span class="sc-vs-label">${_vsLabel(key)}</span>
+          <span class="sc-vs-label">${esc(_vsLabel(key))}</span>
           <span class="sc-vs-pct ${cls}">${pctStr}</span>
-          <span class="sc-vs-vals">${valStr}</span>
+          <span class="sc-vs-vals">${esc(valStr)}</span>
         </div>`;
       });
 
       body.innerHTML = `
         <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          plantel · ${mdCode} · vs ${refLabel}
+          plantel · ${esc(mdCode)} · vs ${esc(refLabel)}
         </div>
         ${rows.join('') || '<div style="padding:12px 0;color:var(--cm-fg-muted)">No metrics selected.</div>'}`;
 
@@ -227,8 +228,8 @@
     const items = keys.map(k => {
       const on = _vsMetrics.includes(k);
       return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${_vsLabel(k)}${_vsUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${_vsUnit(k)}</span>` : ''}
+        <input type="checkbox" value="${esc(k)}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
+        ${esc(_vsLabel(k))}${_vsUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${esc(_vsUnit(k))}</span>` : ''}
       </label>`;
     }).join('');
 

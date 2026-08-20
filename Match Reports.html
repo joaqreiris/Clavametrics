@@ -639,6 +639,8 @@
 
 <script>
   const POS_MAP = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', LW:'wg', RW:'wg', MF:'mf', CM:'mf', DM:'mf', AM:'mf', ST:'st', CF:'st' };
+  // XSS: escapa datos de la base antes de inyectarlos en innerHTML/etc.
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   function tt(key, fallbackEN, vars) {
     const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
@@ -789,8 +791,8 @@
       }
 
       return `<tr>
-        <td><div class="mr-player"><div class="mr-av">${init}</div><div><div class="mr-pname">${name}</div><div class="mr-pdorsal">${pos}</div></div></div></td>
-        <td><span class="mr-pos ${posCls}">${pos}</span></td>
+        <td><div class="mr-player"><div class="mr-av">${esc(init)}</div><div><div class="mr-pname">${esc(name)}</div><div class="mr-pdorsal">${esc(pos)}</div></div></div></td>
+        <td><span class="mr-pos ${posCls}">${esc(pos)}</span></td>
         <td><span class="mr-min">${min}</span></td>
         <td>${ratingCell}</td>
         <td class="num">${goalsCell}</td>
@@ -895,11 +897,11 @@
     }
     let html = '';
     goals.forEach(s => { const n = s.goals || 1;
-      html += `<div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>${mrShortName(s.players)}</strong>${n > 1 ? `<span class="min">×${n}</span>` : ''}</div>`; });
+      html += `<div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>${esc(mrShortName(s.players))}</strong>${n > 1 ? `<span class="min">×${n}</span>` : ''}</div>`; });
     yellows.forEach(s => {
-      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti yellow"></i><strong>${mrShortName(s.players)}</strong></div>`; });
+      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti yellow"></i><strong>${esc(mrShortName(s.players))}</strong></div>`; });
     reds.forEach(s => {
-      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti red"></i><strong>${mrShortName(s.players)}</strong></div>`; });
+      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti red"></i><strong>${esc(mrShortName(s.players))}</strong></div>`; });
     ours.innerHTML = html;
   }
 
@@ -917,7 +919,7 @@
     if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _mrTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_mrTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_mrTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
   }
   function mrOnTeamChange(){ _mrTeamId=document.getElementById('mrTeamSelect').value; sessionStorage.setItem('cal_active_team',_mrTeamId); location.reload(); }
   window.mrOnTeamChange = mrOnTeamChange;

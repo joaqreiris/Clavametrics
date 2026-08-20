@@ -297,6 +297,8 @@ const bandMid=m=>{ const b=BANDS[m]; return b?(b[0]+b[1])/2:null; };
 let TARGETS={};   // metric → editable weekly ×match target (defaults to band mid)
 const targetOf=m=>{ const t=TARGETS[m]; return (t!=null&&t!=='')?+t:bandMid(m); };
 
+// XSS: escapa datos de la base antes de inyectarlos en innerHTML/etc.
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const fmtN=(v,d)=> v==null?'—':(d?(+v).toFixed(d):Math.round(v).toLocaleString('en-US'));
 const metaOf=k=>META_BY_KEY[k]||META[k]||{label:k,unit:'',dec:0};
 const shortLabel=m=>SHORT[m]||metaOf(m).label;
@@ -324,7 +326,7 @@ async function initTeamSwitch(){
   if(!teams.length){ sel.innerHTML='<option>'+tt('load_planner.no_teams','No teams')+'</option>'; sel.disabled=true; return; }
   const saved=sessionStorage.getItem('cal_active_team');
   TEAM=(saved&&teams.some(t=>t.id===saved))?saved:teams[0].id;
-  sel.innerHTML=teams.map(t=>`<option value="${t.id}"${t.id===TEAM?' selected':''}>${t.name||'Team'}</option>`).join('');
+  sel.innerHTML=teams.map(t=>`<option value="${t.id}"${t.id===TEAM?' selected':''}>${esc(t.name||'Team')}</option>`).join('');
   sel.onchange=()=>{ TEAM=sel.value; sessionStorage.setItem('cal_active_team',TEAM); ANCHOR=window.cmToday(); SELMC=null; reload(); };
 }
 
@@ -339,7 +341,7 @@ function buildMcSelect(){
   const sel=document.getElementById('lpMcSel'); if(!sel) return;
   if(!ALLMCS.length){ sel.innerHTML=`<option>${tt('load_planner.no_mc_short','No microcycles')}</option>`; sel.disabled=true; return; }
   sel.disabled=false;
-  sel.innerHTML=ALLMCS.slice().reverse().map(m=>`<option value="${m.id}"${m.id===(MC&&MC.id)?' selected':''}>${m.name||m.start_date}</option>`).join('');
+  sel.innerHTML=ALLMCS.slice().reverse().map(m=>`<option value="${m.id}"${m.id===(MC&&MC.id)?' selected':''}>${esc(m.name||m.start_date)}</option>`).join('');
   sel.onchange=()=>{ SELMC=sel.value; reload(); };
 }
 
@@ -647,9 +649,9 @@ function openPlayers(){
   const modal=document.getElementById('lpPlModal'); modal.hidden=false;
   document.getElementById('lpPlBody').innerHTML = `<div class="lp-pllist">${ROSTER.map(p=>`
     <label class="lp-plrow"><input type="checkbox" data-pid="${p.id}" ${PLAYER_SEL.has(p.id)?'checked':''}>
-      <span class="lp-av" style="width:24px;height:24px;font-size:10px" data-cm-photo="${p.id}">${initials(p.name)}</span>
-      <span class="nm">${p.name}</span>
-      <span class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</span>
+      <span class="lp-av" style="width:24px;height:24px;font-size:10px" data-cm-photo="${p.id}">${esc(initials(p.name))}</span>
+      <span class="nm">${esc(p.name)}</span>
+      <span class="po">${esc(p.pos||'')}${p.number!=null?' · #'+p.number:''}</span>
       ${isGK(p)?`<span class="lp-badge" style="background:var(--cm-bg-sunk);color:var(--cm-fg-muted)">GK</span>`:''}
       ${p.isAlt?`<span class="lp-badge">ALT</span>`:''}</label>`).join('')}</div>`;
   document.querySelectorAll('#lpPlBody input[data-pid]').forEach(c=>c.onchange=()=>{ if(c.checked) PLAYER_SEL.add(c.dataset.pid); else PLAYER_SEL.delete(c.dataset.pid); savePrefs(); render(); });
@@ -773,7 +775,7 @@ function matrixHTML(){
         <span class="lp-cbar"><i style="width:${st.pctW}%"></i></span></td>`;
     }).join('');
     const altBadge=p.isAlt?` <span class="lp-badge" title="${tt('load_planner.alt_player','Alternate — primary team is another')}">ALT</span>`:'';
-    return `<tr><td class="lp-plcell" data-plid="${p.id}" title="${tt('load_planner.open_player','Open player detail')}"><div class="lp-pl"><span class="lp-av" data-cm-photo="${p.id}">${initials(p.name)}</span><div><div class="nm">${p.name}${altBadge}</div><div class="po">${p.pos||''}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
+    return `<tr><td class="lp-plcell" data-plid="${p.id}" title="${tt('load_planner.open_player','Open player detail')}"><div class="lp-pl"><span class="lp-av" data-cm-photo="${p.id}">${esc(initials(p.name))}</span><div><div class="nm">${esc(p.name)}${altBadge}</div><div class="po">${esc(p.pos||'')}${p.number!=null?' · #'+p.number:''}</div></div></div></td>${cells}</tr>`;
   }).join('');
   return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.player_breakdown','Player breakdown')}</span>
       <div class="lp-legend"><span>${tt('load_planner.big_is','big = ×max (best-5) · small = ×avg (last-5/90)')}</span>
@@ -940,7 +942,7 @@ function renderImport(){
   const mapHTML=IMP.metricHeaders.map(h=>`<div class="csvh">${h}</div><div class="arw">→</div><select class="lp-select" data-h="${h}" style="width:100%">${opts(IMP.mapping[h])}</select>`).join('');
   const cols=IMP.metricHeaders.filter(h=>IMP.mapping[h]);
   const gridHead=`<tr><th>${tt('load_planner.col_player','Player')}</th>${cols.map(h=>`<th>${metaOf(IMP.mapping[h]).label}</th>`).join('')}</tr>`;
-  const gridBody=IMP.data.map((d,i)=>{ const nm=d.pid?`${d.pname}`:`<span class="lp-unmatched" title="${tt('load_planner.unmatched_hint','No matching player — assign the Catapult ID in Squad')}">${d.name||d.ext} ⚠</span>`;
+  const gridBody=IMP.data.map((d,i)=>{ const nm=d.pid?`${esc(d.pname)}`:`<span class="lp-unmatched" title="${tt('load_planner.unmatched_hint','No matching player — assign the Catapult ID in Squad')}">${esc(d.name||d.ext)} ⚠</span>`;
     return `<tr data-i="${i}"><td>${nm}<div class="lp-mini">${d.ext||''}</div></td>${cols.map(h=>{ const cur=d.pid&&MANUAL[d.pid]&&MANUAL[d.pid][IMP.mapping[h]]; const val=d.cells[h]!=null?d.cells[h]:(cur!=null?cur:''); return `<td><input type="number" step="any" data-i="${i}" data-h="${h}" value="${val}" ${d.pid?'':'disabled'}></td>`; }).join('')}</tr>`; }).join('');
   document.getElementById('lpModalBody').innerHTML=`<div class="lp-note" style="margin-bottom:10px">${tt('load_planner.map_intro','Map each Catapult column to a ClavaMetrics metric (saved for next time). Then set the match reference per player.')}</div>
     <div class="lp-map">${mapHTML}</div>

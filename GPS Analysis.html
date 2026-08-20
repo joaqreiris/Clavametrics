@@ -1775,7 +1775,7 @@ const AC_TPLS = [
 const _AC_DASH_NAMES = { ind:'Player Week Report', grp:'Session Control',
   mind:'Match Performance', mgrp:'Load Monitoring', mc:'Microcycle Compare' };
 
-function _acEsc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+function _acEsc(s) { return String(s==null?'':s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function _acHeader(dashName) {
   return `<div class="ac-head"><span class="ic"><i class="ti ti-chart-histogram"></i></span>
@@ -2658,10 +2658,10 @@ async function _gpOpenAssignRivals(opts) {
         <table class="gp-map-table" style="width:100%">
         <thead><tr><th style="width:26px"></th><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.ar_col_rival','Rival')}</th><th>${tt('gps_analysis.ar_col_ha','H/A')}</th><th>${tt('gps_analysis.ar_col_season','Season')}</th><th style="text-align:right">${tt('gps_analysis.ar_col_action','Action')}</th></tr></thead>
         <tbody>${assignedRows.map(r => `
-          <tr data-sid="${r.id}" data-date="${r.date}" data-out="${_out(r)?'1':'0'}" data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
+          <tr data-sid="${r.id}" data-date="${r.date}" data-out="${_out(r)?'1':'0'}" data-search="${_gpEsc((r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase())}">
             <td><input type="checkbox" class="ar-check" data-sid="${r.id}" style="cursor:pointer"></td>
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
-            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${_gpEsc(r.type || '—')}</td>
             <td style="font:600 11.5px/1 var(--cm-font-sans)">${_gpEsc(r.rival || '—')}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${_haLabel(r.ha)}</td>
             <td>${_seasonCell(r)}</td>
@@ -2733,7 +2733,7 @@ async function _gpOpenAssignRivals(opts) {
 }
 
 // Minimal HTML escape for user-controlled text/attrs (no global esc in this file).
-function _gpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _gpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // ── Seasons (assign a GPS day to a season entity) ─────────────────────────────
 // Seasons scoped to the club, team-or-null (mirrors how session ids are scoped in the
@@ -2897,10 +2897,10 @@ async function _gpOpenEmptySessions() {
         <table class="gp-map-table" style="width:100%">
         <thead><tr><th style="width:26px"></th><th>${tt('gps_analysis.ar_col_date','Date')}</th><th>${tt('gps_analysis.ar_col_type','Type')}</th><th>${tt('gps_analysis.es_col_title','Title')}</th><th>${tt('gps_analysis.es_col_data','Data')}</th></tr></thead>
         <tbody>${cand.map(c => `
-          <tr data-sid="${c.id}" data-search="${(c.date + ' ' + (c.type || '') + ' ' + (c.title || '')).toLowerCase()}">
+          <tr data-sid="${c.id}" data-search="${_gpEsc((c.date + ' ' + (c.type || '') + ' ' + (c.title || '')).toLowerCase())}">
             <td>${c.rpe ? `<span title="${tt('gps_analysis.es_locked_rpe','Has RPE — kept')}" style="color:var(--cm-fg-muted)"><i class="ti ti-lock" style="font-size:14px"></i></span>` : `<input type="checkbox" class="es-check" data-sid="${c.id}" style="cursor:pointer">`}</td>
             <td style="font:600 12px/1 var(--cm-font-mono)">${c.date}</td>
-            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${c.type || '—'}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${_gpEsc(c.type || '—')}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans)">${_gpEsc(c.title || '—')}</td>
             <td style="font:500 11px/1 var(--cm-font-sans);color:${c.reports ? 'var(--cm-warn,#d97706)' : 'var(--cm-fg-muted)'}">${_dataCell(c)}${c.rpe ? ` · <span style="color:var(--cm-fg-muted)">${tt('gps_analysis.es_locked_rpe','Has RPE — kept')}</span>` : ''}</td>
           </tr>`).join('')}</tbody>
@@ -3201,7 +3201,7 @@ function _gpRemoveRivalFromDay(clubId, sessionId, rivalName) {
   const ov = makeModal('Remove rival', `
     <div style="min-width:360px;max-width:430px;display:flex;flex-direction:column;gap:14px">
       <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0">
-        Remove <strong>${(rivalName || 'the rival').replace(/</g, '&lt;')}</strong> from this day? GPS data is kept — only the rival link is removed. If the day is just an empty match container, it is deleted.
+        Remove <strong>${_gpEsc(rivalName || 'the rival')}</strong> from this day? GPS data is kept — only the rival link is removed. If the day is just an empty match container, it is deleted.
       </p>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button id="rrCancel" class="cm-btn is-outline is-sm">Cancel</button>
@@ -3380,7 +3380,7 @@ async function openChangeMetricModal(card) {
   const current = card.dataset.metricKey || 'total_distance';
   const opts = catalog
     .filter(m => m.category !== 'date')
-    .map(m => `<option value="${m.key}"${m.key === current ? ' selected' : ''}>${m.label}${m.unit ? ' (' + m.unit + ')' : ''}</option>`)
+    .map(m => `<option value="${_gpEsc(m.key)}"${m.key === current ? ' selected' : ''}>${_gpEsc(m.label)}${m.unit ? ' (' + _gpEsc(m.unit) + ')' : ''}</option>`)
     .join('');
 
   const ov = makeModal('Change metric',
@@ -3609,7 +3609,7 @@ async function _gpRenderPending(clubId, body, ov) {
     const createOpts = _GP_ST_LIST.map(t => `<option value="c:${t}" ${(!cands.length && isMatch && t === 'match') ? 'selected' : ''}>+ ${_gpStLabel(t)}</option>`).join('');
     const targetSel = `<select class="pend-target gp-pend-sel">${assocOpts ? `<optgroup label="${tt('gps_analysis.pending_assoc_group', 'Associate to session')}">${assocOpts}</optgroup>` : ''}<optgroup label="${tt('gps_analysis.pending_create_group', 'Create new session')}">${createOpts}</optgroup></select>`;
     const matchChip = mEvt ? `<span class="gp-pend-match"><i class="ti ti-ball-football"></i> ${tt('gps_analysis.pending_match_found', 'Match in calendar')}${mEvt.opponent ? ' · ' + _gpEsc(mEvt.opponent) : ''}</span>` : '';
-    return `<div class="gp-pend-row" data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${r.external_activity_id || ''}">
+    return `<div class="gp-pend-row" data-pend="${r.id}" data-date="${r.session_date}" data-team="${r.team_id || ''}" data-aid="${_gpEsc(r.external_activity_id || '')}">
       <div class="gp-pend-when"><i class="ti ti-satellite"></i><b>${r.session_date || '—'}</b></div>
       <div class="gp-pend-body">
         <div class="gp-pend-name">${name}</div>
@@ -3813,12 +3813,12 @@ async function _gpRenderFlagged(clubId, body, ov) {
       <tbody>${rows.map(r => `
         <tr data-id="${r.id}">
           <td style="font-family:var(--cm-font-mono)">${r.training_sessions?.session_date || '—'}</td>
-          <td>${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
-          <td>${r.period_name || '—'}</td>
+          <td>${_gpEsc([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—')}</td>
+          <td>${_gpEsc(r.period_name || '—')}</td>
           <td style="${num}">${r.duration_seconds != null ? Math.round(r.duration_seconds) : '—'}</td>
           <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
           <td style="${num};color:var(--cm-danger)">${mps(r)}</td>
-          <td style="color:var(--cm-fg-muted)">${r.flag_reason || '—'}</td>
+          <td style="color:var(--cm-fg-muted)">${_gpEsc(r.flag_reason || '—')}</td>
           <td style="text-align:right;white-space:nowrap">
             <button class="cm-btn is-ghost is-sm flag-keep" data-id="${r.id}" title="Un-flag · return to analysis"><i class="ti ti-check"></i>Keep</button>
             <button class="cm-btn is-ghost is-sm flag-del"  data-id="${r.id}" title="Delete this period" style="color:var(--cm-danger)"><i class="ti ti-trash"></i>Delete</button>
@@ -3950,7 +3950,7 @@ async function _gpOpenPeriodPanel() {
 // Barra de reglas de auto-etiquetado: chips (patrón → contexto, borrable) + alta inline.
 // El nombre que escribís se guarda como '%nombre%' (contains) salvo que ya pongas %.
 function _gpRulesBarHTML(rules) {
-  const esc = s => String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
   const chips = (rules || []).map(r => `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--cm-border);border-radius:99px;font-size:11.5px;background:var(--cm-bg)"><b>${esc(r.pattern)}</b> → ${_ctxLabel(r.work_context)} <button class="rule-del" data-rule="${r.id}" title="${tt('common.delete','Delete')}" style="border:0;background:none;color:var(--cm-fg-muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button></span>`).join('');
   const ctxOpts = ['rehab', 'individual', 'topup'].map(c => `<option value="${c}">${_ctxLabel(c)}</option>`).join('');
   return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--cm-border);border-radius:10px;margin-bottom:12px;background:var(--cm-surface)">
@@ -5030,7 +5030,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
           { label: 'HMLD',          metric: 'hmld' },
         ];
     makePopover(pick, RANK_OPTS.map(o => ({ label: o.label, metric: o.metric })), item => {
-      pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
+      pick.innerHTML = `${_gpEsc(item.label)} <i class="ti ti-chevron-down"></i>`;
       pick.classList.add('is-accent');
       if (pick.closest('#card-squad-rank') && window._gpReports?.length) {
         _updateSquadRanking(window._gpReports, item.metric);
@@ -5973,8 +5973,8 @@ function _renderOutliers(reports) {
     row.innerHTML = `
       <div class="gp-mav"${p?.id?` data-cm-photo="${p.id}"`:''} style="flex-shrink:0">${name.split(' ')[0][0]||'?'}${(p?.last_name||'?')[0]}</div>
       <div style="flex:1;min-width:0">
-        <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div>
-        <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${pos} · ${LABELS[f.metric] || f.metric}</div>
+        <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${_gpEsc(name)}</div>
+        <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${_gpEsc(pos)} · ${_gpEsc(LABELS[f.metric] || f.metric)}</div>
       </div>
       <div style="text-align:right">
         <div style="font:600 12px/1 var(--cm-font-mono);color:${col}"><i class="ti ${dir}" style="font-size:11px"></i>${f.z > 0 ? '+' : ''}${f.z}</div>
@@ -6230,7 +6230,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     if (_acwrChip) {
       const _lbl = (window._gpCatalog || []).find(c => c.key === acwrMetric)?.label
         || acwrMetric.replace(/_/g, ' ');
-      _acwrChip.innerHTML = `${_lbl} <i class="ti ti-chevron-down"></i>`;
+      _acwrChip.innerHTML = `${_gpEsc(_lbl)} <i class="ti ti-chevron-down"></i>`;
     }
     const accent   = _accentHex();
     // Shade the "building baseline" stretch (leading provisional points) and label it.
@@ -6772,7 +6772,7 @@ function _updateZTable(reports, state) {
   // Update thead labels from catalog
   const _ztHead = document.querySelector('.gp-view[data-view="ind"] .gp-zt thead tr');
   if (_ztHead) {
-    _ztHead.innerHTML = '<th class="pc">Player</th>' + _ztDefs.map(d => `<th>${d.label}</th>`).join('');
+    _ztHead.innerHTML = '<th class="pc">Player</th>' + _ztDefs.map(d => `<th>${_gpEsc(d.label)}</th>`).join('');
   }
   const useRole = state.baseline === 'vs Role';
   const mu_fn   = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
@@ -6837,7 +6837,7 @@ function _updateSquadRanking(reports, metric = 'high_speed_distance') {
     const name = p ? `${(p.first_name||'')[0]}. ${p.last_name||''}` : '—';
     const num  = p?.number ? ` · #${p.number}` : '';
     const pct  = Math.round(((r[metric]||0) / maxVal) * 100);
-    return `<div class="gp-rank-row"><span class="ax">${i+1}</span><span class="gp-rank-bar"><span class="gp-rank-fill${cls(pct)}" style="width:${Math.max(pct,3)}%">${name}${num}</span></span><span class="gp-rank-v">${fmt(r)}</span></div>`;
+    return `<div class="gp-rank-row"><span class="ax">${i+1}</span><span class="gp-rank-bar"><span class="gp-rank-fill${cls(pct)}" style="width:${Math.max(pct,3)}%">${_gpEsc(name)}${num}</span></span><span class="gp-rank-v">${fmt(r)}</span></div>`;
   }).join('')}</div>`;
 }
 
@@ -7147,8 +7147,8 @@ async function renderMatchMax(report) {
       track = `<span class="th" style="left:50%"></span><span class="th" style="left:75%"></span>`;
     }
     return `
-    <div class="gp-xm-row" title="${r.tooltip}">
-      <span class="gp-xm-l"><i class="ti ${r.icon}"></i>${r.label}</span>
+    <div class="gp-xm-row" title="${_gpEsc(r.tooltip)}">
+      <span class="gp-xm-l"><i class="ti ${r.icon}"></i>${_gpEsc(r.label)}</span>
       <span class="gp-xm-t${r.band ? ' ep' : ''}">
         ${track}
         ${r.hasBaseline
@@ -7187,7 +7187,7 @@ function _openXmatchMetricsEditor(card, anchor) {
         <span style="width:13px;height:13px;border-radius:3px;border:1.5px solid var(--cm-border-soft);background:${isOn ? 'var(--cm-accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">
           ${isOn ? '<i class="ti ti-check" style="font-size:9px;color:#fff"></i>' : ''}
         </span>
-        <span>${m.label}${_XM_PEAK_METRICS.has(m.key) ? ' <span style="font-size:9.5px;color:var(--cm-fg-muted)">(pico)</span>' : ''}</span>`;
+        <span>${_gpEsc(m.label)}${_XM_PEAK_METRICS.has(m.key) ? ' <span style="font-size:9.5px;color:var(--cm-fg-muted)">(pico)</span>' : ''}</span>`;
       row.addEventListener('click', e => {
         e.stopPropagation();
         if (isOn) {
@@ -7414,7 +7414,7 @@ async function renderWeeklyBars(state) {
         <span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)">${totalFmt}</span>
       </div>
       <div style="height:18px;display:flex;align-items:center;justify-content:center">
-        <span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">${p.mcName}</span>
+        <span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">${_gpEsc(p.mcName)}</span>
       </div>
     </div>`;
   }).join('');
@@ -7423,7 +7423,7 @@ async function renderWeeklyBars(state) {
   const metricPickEl = document.querySelector('[data-wb-metric-pick]');
   if (metricPickEl) {
     const _teamNote = teamMode ? ` · ${tt('gps_analysis.wkok_squad_avg', 'squad avg')}` : '';
-    metricPickEl.innerHTML = `${cat?.label || metricKey}${_teamNote} <i class="ti ti-chevron-down"></i>`;
+    metricPickEl.innerHTML = `${_gpEsc(cat?.label || metricKey)}${_teamNote} <i class="ti ti-chevron-down"></i>`;
   }
 
   // Legend: semaphore key + ACWR note
@@ -7552,9 +7552,9 @@ async function annotateKpiCards() {
       const blDisp = decs === 0 ? Math.round(blRaw) : blRaw.toFixed(decs);
       const conf = bl.confidence === 'high' ? '✓' : '~';
       blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
-      blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp}${unit ? ' ' + unit : ''} ${conf} (${bl.count} matches)`;
+      blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp}${unit ? ' ' + _gpEsc(unit) : ''} ${conf} (${bl.count} matches)`;
     } else if (bl.warning) {
-      blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${bl.warning}`;
+      blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${_gpEsc(bl.warning)}`;
     }
   }
 }
@@ -7611,7 +7611,7 @@ const _MANUAL_GPS_METRICS = [
   { k:'distance_per_minute', l:'Distance / min', u:'m/min' },
 ];
 async function openManualGpsModal() {
-  const _esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clubId = window._gpClubId || (await window.getClubId?.());
   if (!clubId) return;
   // Need a reference team, else the roster is the WHOLE club and nobody can be flagged as an
@@ -8155,13 +8155,13 @@ async function openGpsMetricsCatalog() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
           <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Label *</label>
-          <input id="mfLabel" type="text" value="${def?.label||''}" placeholder="e.g. Player Load Slow"
+          <input id="mfLabel" type="text" value="${_gpEsc(def?.label||'')}" placeholder="e.g. Player Load Slow"
             style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
-          <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${mode==='add'?`key: <span id="mfKeyPrev"></span>`:(`key: <strong>${slug}</strong> (read-only)`)}</div>
+          <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${mode==='add'?`key: <span id="mfKeyPrev"></span>`:(`key: <strong>${_gpEsc(slug)}</strong> (read-only)`)}</div>
         </div>
         <div>
           <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Unit</label>
-          <input id="mfUnit" type="text" value="${def?.unit||''}" placeholder="m, km/h, AU…"
+          <input id="mfUnit" type="text" value="${_gpEsc(def?.unit||'')}" placeholder="m, km/h, AU…"
             style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
         </div>
       </div>
@@ -8252,7 +8252,7 @@ async function openGpsMetricsCatalog() {
       <div class="gp-modal-h"><h3>Delete metric</h3></div>
       <div class="gp-modal-body">
         <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0 0 10px">
-          This will remove <strong>${def.label}</strong> (<code>${def.key}</code>) from the catalog.
+          This will remove <strong>${_gpEsc(def.label)}</strong> (<code>${_gpEsc(def.key)}</code>) from the catalog.
           Historical data linked to it will be kept but no longer visible.
         </p>
         <p style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-danger);margin:0 0 6px">Type <strong>DELETE</strong> to confirm</p>
@@ -8295,11 +8295,11 @@ async function openGpsMetricsCatalog() {
       <div class="gp-modal-h"><h3>Merge metric</h3></div>
       <div class="gp-modal-body">
         <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0 0 10px">
-          Move all data from <strong>${src.label}</strong> into another metric, then delete <strong>${src.label}</strong>.
+          Move all data from <strong>${_gpEsc(src.label)}</strong> into another metric, then delete <strong>${_gpEsc(src.label)}</strong>.
         </p>
         <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Merge into</label>
         <select id="mergeTarget" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-sans);margin-bottom:10px">
-          ${targets.map(t=>`<option value="${t.key}">${t.label} (${t.key})</option>`).join('')}
+          ${targets.map(t=>`<option value="${_gpEsc(t.key)}">${_gpEsc(t.label)} (${_gpEsc(t.key)})</option>`).join('')}
         </select>
         <div id="mergeErr" style="display:none;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -8379,22 +8379,22 @@ async function openGpsMetricsCatalog() {
               ? `<span style="display:inline-flex;height:18px;padding:0 6px;border-radius:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);font:600 9.5px/18px var(--cm-font-mono);color:var(--cm-fg-muted)">core</span>`
               : `<span style="display:inline-flex;height:18px;padding:0 6px;border-radius:3px;background:var(--cm-accent-soft);border:1px solid var(--cm-accent);font:600 9.5px/18px var(--cm-font-mono);color:var(--cm-accent)">custom</span>`;
             const actions = d.is_core ? `
-              <button class="cm-btn is-ghost cat-edit" data-key="${d.key}" style="padding:1px 7px;font-size:11px">Edit</button>` : `
-              <button class="cm-btn is-ghost cat-up" data-key="${d.key}" style="padding:1px 4px" ${isFirst?'disabled':''} title="Move up"><i class="ti ti-arrow-up" style="font-size:11px"></i></button>
-              <button class="cm-btn is-ghost cat-down" data-key="${d.key}" style="padding:1px 4px" ${isLast?'disabled':''} title="Move down"><i class="ti ti-arrow-down" style="font-size:11px"></i></button>
-              <button class="cm-btn is-ghost cat-edit" data-key="${d.key}" style="padding:1px 7px;font-size:11px">Edit</button>
-              <button class="cm-btn is-ghost cat-merge" data-key="${d.key}" style="padding:1px 7px;font-size:11px">Merge</button>
-              <button class="cm-btn is-ghost cat-delete" data-key="${d.key}" style="padding:1px 7px;font-size:11px;color:var(--cm-danger)">Delete</button>`;
-            return `<tr data-key="${d.key}">
-              <td style="font:500 12px/1 var(--cm-font-sans)">${d.label}</td>
-              <td style="font:400 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${d.key}</td>
-              <td style="font:400 11px/1 var(--cm-font-mono)">${d.unit||'—'}</td>
-              <td><span style="font:500 11px/1 var(--cm-font-sans);${CAT_COL[d.category]||''}">${d.category}</span></td>
+              <button class="cm-btn is-ghost cat-edit" data-key="${_gpEsc(d.key)}" style="padding:1px 7px;font-size:11px">Edit</button>` : `
+              <button class="cm-btn is-ghost cat-up" data-key="${_gpEsc(d.key)}" style="padding:1px 4px" ${isFirst?'disabled':''} title="Move up"><i class="ti ti-arrow-up" style="font-size:11px"></i></button>
+              <button class="cm-btn is-ghost cat-down" data-key="${_gpEsc(d.key)}" style="padding:1px 4px" ${isLast?'disabled':''} title="Move down"><i class="ti ti-arrow-down" style="font-size:11px"></i></button>
+              <button class="cm-btn is-ghost cat-edit" data-key="${_gpEsc(d.key)}" style="padding:1px 7px;font-size:11px">Edit</button>
+              <button class="cm-btn is-ghost cat-merge" data-key="${_gpEsc(d.key)}" style="padding:1px 7px;font-size:11px">Merge</button>
+              <button class="cm-btn is-ghost cat-delete" data-key="${_gpEsc(d.key)}" style="padding:1px 7px;font-size:11px;color:var(--cm-danger)">Delete</button>`;
+            return `<tr data-key="${_gpEsc(d.key)}">
+              <td style="font:500 12px/1 var(--cm-font-sans)">${_gpEsc(d.label)}</td>
+              <td style="font:400 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${_gpEsc(d.key)}</td>
+              <td style="font:400 11px/1 var(--cm-font-mono)">${_gpEsc(d.unit||'—')}</td>
+              <td><span style="font:500 11px/1 var(--cm-font-sans);${CAT_COL[d.category]||''}">${_gpEsc(d.category)}</span></td>
               <td style="text-align:center;font:500 11px/1 var(--cm-font-mono)">${d.decimals}</td>
               <td>${src}</td>
               <td style="white-space:nowrap">${actions}</td>
             </tr>
-            <tr class="cat-edit-row" data-for="${d.key}" style="display:none">
+            <tr class="cat-edit-row" data-for="${_gpEsc(d.key)}" style="display:none">
               <td colspan="7" style="padding:0"></td>
             </tr>`;
           }).join('')}</tbody>

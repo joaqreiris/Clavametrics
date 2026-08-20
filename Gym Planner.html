@@ -816,7 +816,7 @@ function gpRefreshMainLinks() {
   });
 }
 function gpOpenLinkModal(tr) {
-  const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c]));
   const tbody = document.getElementById('gpMainBody');
   const rows = [...tbody.querySelectorAll('tr')];
   const idx = i => i + 1;
@@ -2520,7 +2520,7 @@ function _gpRenderSessionSwitch(dateStr) {
     s.session_type !== 'gym' || s.id === _gpCurrentSessionId || !_gpGymSessionEmpty(s));
   if (!sessions.some(s => s.session_type !== 'gym')) { host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = '';
-  const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' }[c]));
   host.innerHTML = sessions.map(s => {
     const isGym = s.session_type === 'gym';
     const time  = s.session_time ? String(s.session_time).slice(0, 5) : '';

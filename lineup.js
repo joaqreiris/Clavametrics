@@ -7,6 +7,9 @@
 (function () {
   'use strict';
 
+  // XSS: escapa datos de la base antes de inyectarlos en innerHTML/etc.
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
   // ── Formations: positions are (x%, y%) on the poster pitch.
   //    Pitch is rendered with our team attacking UP (so y=92 = own goal,
   //    y=8 = opponent goal). GK sits at the bottom.
@@ -173,7 +176,7 @@
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('lineup.no_teams', 'No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _luTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_luTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_luTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
   }
   window.luOnTeamChange = function(){ _luTeamId=document.getElementById('luTeamSelect').value; sessionStorage.setItem('cal_active_team',_luTeamId); location.reload(); };
   let _saveTimer  = null;
@@ -248,8 +251,8 @@
       spot.style.left = pos.x + '%';
       spot.style.top = pos.y + '%';
       spot.innerHTML = `
-        <div class="badge" data-cm-photo="${p.id}"${state.showNumbers ? ' data-cm-photo-keep-text="1"' : ''}>${state.showNumbers ? p.num : (p.last[0] + (p.first[0]||''))}</div>
-        <div class="name">${p.last}</div>
+        <div class="badge" data-cm-photo="${p.id}"${state.showNumbers ? ' data-cm-photo-keep-text="1"' : ''}>${esc(state.showNumbers ? p.num : (p.last[0] + (p.first[0]||'')))}</div>
+        <div class="name">${esc(p.last)}</div>
       `;
       stage.appendChild(spot);
     });
@@ -268,9 +271,9 @@
     const filledRow = (p, idx, kind) => `
       <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click to change">
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
-        <span class="num">${p.num}</span>
+        <span class="num">${esc(p.num)}</span>
         <div class="body">
-          <div class="name">${p.last}, ${p.first}${flagHtml(p)}${p.captain ? '<span class="role-tag" style="background:rgba(217,119,6,0.12);color:#B45309">CAP</span>' : ''}${p.vice ? '<span class="role-tag" style="background:rgba(37,99,235,0.12);color:#1D4ED8">VC</span>' : ''}</div>
+          <div class="name">${esc(p.last)}, ${esc(p.first)}${flagHtml(p)}${p.captain ? '<span class="role-tag" style="background:rgba(217,119,6,0.12);color:#B45309">CAP</span>' : ''}${p.vice ? '<span class="role-tag" style="background:rgba(37,99,235,0.12);color:#1D4ED8">VC</span>' : ''}</div>
           <div class="meta">${p.role}</div>
         </div>
         <span class="role-tag ${p.role.toLowerCase()}">${p.role}</span>
@@ -323,7 +326,7 @@
     if (!band) return;
     const filled = state.subs.filter(Boolean);
     band.innerHTML = filled.map(p => `
-      <div class="pst-sub"><span class="n">${p.num}</span><span class="nm">${p.last}</span></div>
+      <div class="pst-sub"><span class="n">${esc(p.num)}</span><span class="nm">${esc(p.last)}</span></div>
     `).join('');
     const ct = document.querySelector('[data-poster-subs-count]');
     if (ct) ct.textContent = filled.length;
@@ -711,8 +714,8 @@
       }
       list.innerHTML = players.map(p => `
         <div class="lu-picker-row${p._posAll.includes(posHint) ? ' is-match' : ''}" data-id="${p.id}">
-          <span class="lu-pr-num">${p.number || '?'}</span>
-          <span class="lu-pr-name">${p.last_name}, ${(p.first_name || '')[0] || ''}.</span>
+          <span class="lu-pr-num">${esc(p.number || '?')}</span>
+          <span class="lu-pr-name">${esc(p.last_name)}, ${esc((p.first_name || '')[0] || '')}.</span>
           <span class="role-tag ${p._pos.toLowerCase()}">${p._pos}</span>
         </div>`).join('');
 
@@ -1009,7 +1012,7 @@
     setHtml('[data-match-date]',  d ? `${dateStr}<small>${yearStr}</small>` : '—');
     setHtml('[data-match-time]',  match.start_time ? match.start_time.slice(0,5) : '—');
     setHtml('[data-match-venue]', match.location
-      ? `${match.location}${homeAway ? `<small>${homeAway}</small>` : ''}`
+      ? `${esc(match.location)}${homeAway ? `<small>${homeAway}</small>` : ''}`
       : (homeAway || '—'));
     setHtml('[data-match-comp]',  fmtComp(match.competition));
 
@@ -1081,11 +1084,11 @@
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
         <span class="num">${p.role === 'coach' && i === 0 ? '<i class="ti ti-crown" style="font-size:13px;color:var(--cm-warning)"></i>' : '·'}</span>
         <div class="body">
-          <div class="name">${p.full_name || '—'}</div>
+          <div class="name">${esc(p.full_name || '—')}</div>
           <div class="meta">${roleLabel(p.role)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" class="lu-staff-check" data-pid="${p.id}" data-name="${(p.full_name || '').replace(/"/g,'&quot;')}" data-prole="${p.role}" title="${tt('lineup.include_in_lineup', 'Include in lineup')}">
+          <input type="checkbox" class="lu-staff-check" data-pid="${p.id}" data-name="${(p.full_name || '').replace(/"/g,'&quot;')}" data-prole="${esc(p.role)}" title="${tt('lineup.include_in_lineup', 'Include in lineup')}">
           <span class="role-tag" style="${p.role === 'coach' ? 'background:rgba(217,119,6,0.12);color:#B45309' : ''}">${roleTag(p.role)}</span>
         </div>
       </div>`).join('');

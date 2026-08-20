@@ -9,6 +9,9 @@
     return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
   }
 
+  // XSS: HTML-escape any DB-sourced value injected into innerHTML sinks.
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
   // ─── Data: REHAB week 4, Mon → Sun ───
   // type codes match CSS .t-* classes
   const WEEK_REHAB = [
@@ -207,7 +210,7 @@
     if (!root) return;
     const cats = [...new Set(LIBRARY.map(e => e.category).filter(Boolean))].sort();
     root.innerHTML = ['All', ...cats].map(c =>
-      `<button class="rp-lib-chip${libCat === c ? ' is-on' : ''}" data-cat="${c}">${c === 'All' ? tt('common.all', 'All') : (TYPE_LABEL[c] ? typeLabel(c) : cap(c))}</button>`
+      `<button class="rp-lib-chip${libCat === c ? ' is-on' : ''}" data-cat="${esc(c)}">${c === 'All' ? tt('common.all', 'All') : (TYPE_LABEL[c] ? typeLabel(c) : esc(cap(c)))}</button>`
     ).join('');
     $$('#lib-filters .rp-lib-chip').forEach(b => b.addEventListener('click', () => {
       libCat = b.dataset.cat;
@@ -240,11 +243,11 @@
       row.innerHTML = `
         <span class="grip"><i class="ti ti-grip-vertical"></i></span>
         <div class="body">
-          <div class="name">${ex.name}</div>
+          <div class="name">${esc(ex.name)}</div>
           <div class="meta">
-            <span>${ex.region}</span>
-            ${ex.category ? `<span class="sep">·</span><span>${cap(ex.category)}</span>` : ''}
-            ${ex.complexity ? `<span class="sep">·</span><span>${ex.complexity}</span>` : ''}
+            <span>${esc(ex.region)}</span>
+            ${ex.category ? `<span class="sep">·</span><span>${esc(cap(ex.category))}</span>` : ''}
+            ${ex.complexity ? `<span class="sep">·</span><span>${esc(ex.complexity)}</span>` : ''}
             ${ex.custom ? `<span class="tag">${tt('rehab_planner.custom_tag','Custom')}</span>` : ''}
           </div>
         </div>
@@ -302,14 +305,14 @@
           block.dataset.blockNotes = b.notes || '';
           let gpsHtml = '';
           if (b.gps && b.gps.length) {
-            gpsHtml = `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill${g.warn ? ' warn' : ''}"><span class="l">${g.l}</span><span class="v">${g.v}</span></span>`).join('')}</div>`;
+            gpsHtml = `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill${g.warn ? ' warn' : ''}"><span class="l">${esc(g.l)}</span><span class="v">${esc(g.v)}</span></span>`).join('')}</div>`;
           }
           const contraHtml = b.restr
-            ? `<div class="rp-block-contra"><i class="ti ti-alert-triangle"></i>${b.restr}</div>` : '';
+            ? `<div class="rp-block-contra"><i class="ti ti-alert-triangle"></i>${esc(b.restr)}</div>` : '';
           block.innerHTML = `
             <div class="rp-block-stripe"></div>
             <div class="rp-block-h">
-              <div class="rp-block-name">${b.name}</div>
+              <div class="rp-block-name">${esc(b.name)}</div>
               <div class="rp-block-time">${b.dur}'</div>
             </div>
             <div class="rp-block-meta">
@@ -321,7 +324,7 @@
             </div>
             ${gpsHtml}
             ${contraHtml}
-            ${b.target ? `<div class="rp-block-target"><i class="ti ti-target"></i>${tt('rehab_planner.targets_label','Targets')} · ${b.target}</div>` : ''}
+            ${b.target ? `<div class="rp-block-target"><i class="ti ti-target"></i>${tt('rehab_planner.targets_label','Targets')} · ${esc(b.target)}</div>` : ''}
           `;
           body.appendChild(block);
         });
@@ -363,16 +366,16 @@
       day.blocks.forEach(b => {
         const r = document.createElement('tr');
         if (b.selected) r.style.background = 'var(--cm-bg-soft)';
-        const gpsStr = (b.gps || []).map(g => `${g.l} ${g.v}`).join(' · ') || '—';
+        const gpsStr = (b.gps || []).map(g => `${esc(g.l)} ${esc(g.v)}`).join(' · ') || '—';
         r.innerHTML = `
-          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
+          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${esc(b.name)}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
           <td class="mono">${b.dur}'</td>
           <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${respLabel(b.resp)}</span></td>
           <td class="mono">${tt('rehab_planner.n_ex','{count} ex', { count: b.exercises })}</td>
           <td class="mono">${b.au < 50 ? tt('rehab_planner.intensity_low','Low') : b.au < 150 ? tt('rehab_planner.intensity_mod','Mod') : tt('rehab_planner.intensity_high','High')}</td>
           <td class="mono" style="color:var(--cm-fg-muted)">${gpsStr}</td>
           <td class="mono" style="color:var(--cm-fg-strong);font-weight:600">${b.au}</td>
-          <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.restr ? '<span style="color:#B91C1C"><i class="ti ti-alert-triangle"></i> ' + b.restr + '</span>' : (b.notes || '—')}</td>
+          <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.restr ? '<span style="color:#B91C1C"><i class="ti ti-alert-triangle"></i> ' + esc(b.restr) + '</span>' : esc(b.notes || '—')}</td>
         `;
         tbody.appendChild(r);
       });
@@ -402,7 +405,7 @@
           block.className = 'rp-tl-block t-' + b.type;
           block.style.flexBasis = w + '%';
           block.style.flexGrow = '0';
-          block.innerHTML = `${b.name.length > 22 ? b.name.slice(0, 21) + '…' : b.name} <span class="du">${b.dur}'</span>`;
+          block.innerHTML = `${esc(b.name.length > 22 ? b.name.slice(0, 21) + '…' : b.name)} <span class="du">${b.dur}'</span>`;
           track.appendChild(block);
         });
       }
