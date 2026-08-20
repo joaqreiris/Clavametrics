@@ -457,6 +457,7 @@
     { key:'planner',          href:'Planner.html',             icon:'ti-clipboard-list',    name:'Drill Designer',        feature:'drill_designer' },
     { key:'sessions-lib',     href:'Exercises Library.html',    icon:'ti-list-tree',         name:'Exercises Library',     feature:'sessions_library' },
     { key:'daily-planning',   href:'Daily Planning.html',      icon:'ti-soccer-field',      name:'Daily planning',        feature:'daily_planning' },
+    { key:'tactical-planning',href:'Tactical Planning.html',   icon:'ti-target',            name:'Tactical planning',     feature:null },
     { key:'sessions-history', href:'Sessions History.html',    icon:'ti-history',           name:'Sessions history',      feature:null },
     { key:'annual-planner',   href:'Annual Planner.html',      icon:'ti-calendar-stats',    name:'Annual Planner',        feature:'annual_planner' },
     { key:'squad',            href:'Squad.html',               icon:'ti-users-group',       name:'Squad',                 feature:'squad' },

@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="tactical.title_tab">Tactical Planning — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<style>
+  /* Standard topbar chrome (match Calendar/Top-Up) */
+  .hub-topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);background:color-mix(in srgb, var(--cm-bg) 92%, transparent);backdrop-filter:saturate(160%) blur(10px);position:sticky;top:0;z-index:50}
+  .hub-crumb{display:flex;align-items:center;gap:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .hub-crumb .ti{font-size:14px}
+  .hub-crumb .sep{color:var(--cm-fg-faint)}
+  .hub-crumb a{color:var(--cm-fg-muted);text-decoration:none}
+  .hub-crumb a:hover{color:var(--cm-fg-strong)}
+  .hub-crumb .now{color:var(--cm-fg-strong);font-weight:600}
+  .hub-search{margin-left:auto;width:280px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg-muted)}
+  .hub-search input{flex:1;min-width:0;border:0;outline:none;background:transparent;font:var(--cm-body-sm);color:var(--cm-fg)}
+  .hub-search .ti{font-size:16px}
+  .hub-topbar .actions{display:flex;align-items:center;gap:8px}
+
+  /* Category palette — CVD-validated in both modes (adjacency order = display order) */
+  :root{
+    --tp-offensive:#16A34A; --tp-defensive:#2563EB; --tp-transition_off:#D97706;
+    --tp-transition_def:#DB2777; --tp-set_pieces:#7C3AED; --tp-other:#0D9488;
+  }
+  [data-theme="dark"]{
+    --tp-offensive:#16A34A; --tp-defensive:#3B82F6; --tp-transition_off:#D97706;
+    --tp-transition_def:#EC4899; --tp-set_pieces:#8B5CF6; --tp-other:#0D9488;
+  }
+
+  .tp-wrap{max-width:1100px;margin:0 auto;padding:20px 16px 90px}
+  .tp-h{margin:0 0 3px;font:var(--cm-h2);color:var(--cm-fg-strong)}
+  .tp-sub{margin:0 0 18px;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
+
+  .tp-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);margin-bottom:16px;overflow:hidden}
+  .tp-card-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border)}
+  .tp-card-h h3{margin:0;font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:8px}
+  .tp-card-h h3 .ti{font-size:16px;color:var(--cm-fg-muted)}
+  .tp-card-h .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .tp-card-b{padding:14px 16px}
+
+  /* month pager */
+  .tp-pager{display:flex;align-items:center;gap:2px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;padding:2px}
+  .tp-pager button{width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-muted);border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .tp-pager button:hover{background:var(--cm-surface);color:var(--cm-fg-strong)}
+  .tp-pager .label{min-width:130px;text-align:center;font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);text-transform:capitalize}
+
+  /* segmented (range / filter) */
+  .tp-seg{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;padding:2px;gap:2px}
+  .tp-seg button{border:0;background:transparent;color:var(--cm-fg-muted);font:600 11.5px/1 var(--cm-font-sans);padding:7px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  .tp-seg button.on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  /* month grid — chips */
+  .tp-cell-chip{display:flex;align-items:center;gap:5px;font:600 10.5px/1.25 var(--cm-font-sans);color:var(--cm-fg);padding:2px 4px;border-radius:4px;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .tp-cell-chip .dot{width:7px;height:7px;border-radius:99px;flex:none}
+  .tp-cell-chip .t{overflow:hidden;text-overflow:ellipsis}
+  .tp-cell-chip.done .t{color:var(--cm-fg-muted);text-decoration:line-through}
+  .tp-cell-chip.done .dot{opacity:.45}
+  .tp-cell-more{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px}
+  .tp-cell-md{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;color:var(--cm-fg-faint)}
+  .tp-cell-match{display:inline-flex;align-items:center;gap:4px;font:700 9.5px/1 var(--cm-font-mono);color:var(--cm-danger);background:var(--cm-danger-bg);border-radius:4px;padding:2px 5px;margin-top:2px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .tp-cell-sess{color:var(--cm-accent);font-size:11px;line-height:1}
+
+  /* KPI strip */
+  .tp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+  .tp-kpi{background:var(--cm-bg-soft);border-radius:10px;padding:11px 13px}
+  .tp-kpi .k{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tp-kpi .v{font:700 22px/1.15 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:5px;display:flex;align-items:baseline;gap:6px}
+  .tp-kpi .v small{font:600 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .tp-kpi .v .cdot{width:10px;height:10px;border-radius:99px;flex:none;align-self:center}
+
+  /* distribution stacked bar */
+  .tp-dist{display:flex;gap:2px;height:16px;border-radius:8px;overflow:hidden;background:var(--cm-bg-sunk)}
+  .tp-dist span{display:block;height:100%;min-width:3px;transition:flex-grow .3s var(--cm-ease,ease)}
+  .tp-legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
+  .tp-legend .li{display:flex;align-items:center;gap:7px;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)}
+  .tp-legend .li .dot{width:9px;height:9px;border-radius:99px;flex:none}
+  .tp-legend .li b{font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .tp-legend .li small{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+
+  /* weekly chart */
+  .tp-week-scroll{overflow-x:auto;padding-bottom:4px}
+  .tp-week-svg .seg:hover{opacity:.82}
+  .tp-sec-t{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:0 0 10px}
+  .tp-sec{margin-top:20px;padding-top:16px;border-top:1px dashed var(--cm-border)}
+  .tp-sec:first-child{margin-top:0;padding-top:0;border-top:0}
+
+  /* table view (accessibility twin of the charts) */
+  .tp-details summary{cursor:pointer;font:600 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:4px 0;user-select:none}
+  .tp-details summary:hover{color:var(--cm-fg-strong)}
+  .tp-tbl-scroll{overflow-x:auto;margin-top:8px}
+  .tp-tbl{width:100%;border-collapse:collapse;font:500 12px/1.35 var(--cm-font-sans)}
+  .tp-tbl th{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);text-align:right;padding:7px 9px;background:var(--cm-bg-soft);border-bottom:1px solid var(--cm-border);white-space:nowrap}
+  .tp-tbl th:first-child,.tp-tbl td:first-child{text-align:left}
+  .tp-tbl td{padding:7px 9px;border-bottom:1px solid var(--cm-border-soft);color:var(--cm-fg);text-align:right;font-variant-numeric:tabular-nums}
+  .tp-tbl tr:last-child td{border-bottom:0;font-weight:700;color:var(--cm-fg-strong)}
+  .tp-empty{padding:28px 12px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .tp-empty .ti{display:block;font-size:30px;margin-bottom:8px;color:var(--cm-fg-faint)}
+
+  /* day modal */
+  .tp-modal-back{position:fixed;inset:0;z-index:900;background:rgba(15,18,22,.42);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:20px}
+  .tp-modal-back.open{display:flex}
+  .tp-modal{width:100%;max-width:560px;max-height:84vh;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+  .tp-modal-head{display:flex;align-items:center;gap:10px;padding:15px 16px 11px;border-bottom:1px solid var(--cm-border);position:sticky;top:0;background:var(--cm-surface);border-radius:16px 16px 0 0;z-index:2}
+  .tp-modal-head .mt{font:700 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;text-transform:capitalize}
+  .tp-modal-head .mdpill{font:700 10px/1 var(--cm-font-mono);letter-spacing:.04em;padding:4px 8px;border-radius:99px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .tp-modal-head .mx{background:none;border:0;color:var(--cm-fg-muted);cursor:pointer;font-size:20px;line-height:1;padding:4px;border-radius:8px}
+  .tp-modal-head .mx:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .tp-modal-body{padding:14px 16px 18px}
+  .tp-daylink{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none;margin-bottom:12px}
+  .tp-daylink:hover{text-decoration:underline}
+  .tp-obj-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  .tp-obj{display:flex;gap:10px;border:1px solid var(--cm-border);border-radius:11px;padding:10px 12px;background:var(--cm-surface)}
+  .tp-obj .cbar{width:4px;border-radius:99px;flex:none;align-self:stretch}
+  .tp-obj .main{flex:1;min-width:0}
+  .tp-obj .cat{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tp-obj .ttl{font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px;overflow-wrap:anywhere}
+  .tp-obj.done .ttl{color:var(--cm-fg-muted);text-decoration:line-through}
+  .tp-obj .nts{font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .tp-obj .acts{display:flex;flex-direction:column;gap:4px;flex:none;align-items:flex-end}
+  .tp-obj .acts .row{display:flex;gap:2px}
+  .tp-obj-check{width:26px;height:26px;border-radius:8px;border:1.5px solid var(--cm-border);background:var(--cm-surface);color:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+  .tp-obj-check:hover{border-color:var(--cm-accent)}
+  .tp-obj.done .tp-obj-check{background:var(--cm-accent);border-color:var(--cm-accent);color:var(--cm-fg-on-accent)}
+  .tp-obj .mini{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:14px;padding:4px;border-radius:6px}
+  .tp-obj .mini:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .tp-obj .mini.del:hover{color:var(--cm-danger)}
+  /* add / edit form */
+  .tp-form{border:1px dashed var(--cm-border);border-radius:12px;padding:12px;background:var(--cm-bg-soft)}
+  .tp-form .fl{font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .tp-catpick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .tp-catpick button{display:inline-flex;align-items:center;gap:6px;font:600 11px/1 var(--cm-font-sans);padding:7px 10px;border-radius:999px;border:1.5px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);cursor:pointer}
+  .tp-catpick button .dot{width:8px;height:8px;border-radius:99px}
+  .tp-catpick button.on{border-color:var(--cc);color:var(--cm-fg-strong);background:color-mix(in srgb,var(--cc) 10%,var(--cm-surface))}
+  .tp-form input[type=text],.tp-form textarea{width:100%;padding:9px 11px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:9px;font:500 13px/1.4 var(--cm-font-sans)}
+  .tp-form input[type=text]{height:40px;font-weight:600}
+  .tp-form textarea{min-height:56px;resize:vertical;margin-top:8px}
+  .tp-form input:focus,.tp-form textarea:focus{outline:none;border-color:var(--cm-accent)}
+  .tp-form .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+  .tp-banner{display:none;margin-bottom:14px;padding:11px 14px;border:1px solid var(--cm-warning-bd);background:var(--cm-warning-bg);color:var(--cm-warning);border-radius:10px;font:600 12px/1.4 var(--cm-font-sans)}
+  #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+</head>
+<body class="cm">
+<div id="appBoot" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
+  <div style="width:30px;height:30px;border:3px solid var(--cm-border,rgba(120,130,145,.3));border-top-color:var(--cm-accent,#16A34A);border-radius:50%;animation:appspin .7s linear infinite"></div>
+</div>
+<style>@keyframes appspin{to{transform:rotate(360deg)}}</style>
+<script>(function(){var d=false;function h(){if(d)return;d=true;var b=document.getElementById('appBoot');if(b){b.style.transition='opacity .18s';b.style.opacity='0';setTimeout(function(){b.remove();},220);}}var t=setTimeout(h,1200);if(window.MutationObserver){var mo=new MutationObserver(function(){clearTimeout(t);t=setTimeout(h,500);});document.addEventListener('DOMContentLoaded',function(){if(document.body)mo.observe(document.body,{childList:true,subtree:true});});}setTimeout(h,6000);})();</script>
+
+<div class="hub-shell">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <header class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="tpTeamSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
+      </div>
+      <div class="hub-crumb">
+        <i class="ti ti-target"></i>
+        <a href="#" data-i18n="shell.group.technical">Technical</a>
+        <span class="sep">/</span>
+        <span class="now" data-i18n="tactical.crumb">Tactical planning</span>
+      </div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="common.search" placeholder="Search…"></div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </header>
+
+    <div class="tp-wrap">
+      <h1 class="tp-h" data-i18n="tactical.heading">Tactical planning</h1>
+      <p class="tp-sub" data-i18n="tactical.subtitle">Concrete objectives per day, linked to the daily planning, with the global picture of what has been worked on.</p>
+
+      <div class="tp-banner" id="tpSqlBanner"><i class="ti ti-alert-triangle"></i> <span data-i18n="tactical.table_missing">This section's table is not in the database yet — apply the pending SQL in Supabase.</span></div>
+
+      <!-- ===== MONTH CALENDAR ===== -->
+      <div class="tp-card">
+        <div class="tp-card-h">
+          <h3><i class="ti ti-calendar-month"></i><span data-i18n="tactical.month_view">Objectives calendar</span></h3>
+          <div class="right">
+            <button class="cm-btn is-outline is-sm" id="tpTodayBtn" data-i18n="tactical.today">Today</button>
+            <div class="tp-pager">
+              <button id="tpPrevBtn"><i class="ti ti-chevron-left"></i></button>
+              <span class="label" id="tpMonthLabel">…</span>
+              <button id="tpNextBtn"><i class="ti ti-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+        <div id="tpMonthGrid" style="overflow:hidden"></div>
+      </div>
+
+      <!-- ===== GLOBAL PICTURE ===== -->
+      <div class="tp-card">
+        <div class="tp-card-h">
+          <h3><i class="ti ti-chart-pie"></i><span data-i18n="tactical.stats_title">Global picture</span></h3>
+          <div class="right">
+            <div class="tp-seg" id="tpDoneSeg">
+              <button data-f="all" class="on" data-i18n="tactical.filter_all">All planned</button>
+              <button data-f="done" data-i18n="tactical.filter_done">Worked on</button>
+            </div>
+            <div class="tp-seg" id="tpRangeSeg">
+              <button data-r="month" class="on" data-i18n="tactical.range_month">Month</button>
+              <button data-r="8w" data-i18n="tactical.range_8w">8 weeks</button>
+              <button data-r="season" data-i18n="tactical.range_season">Season</button>
+            </div>
+          </div>
+        </div>
+        <div class="tp-card-b" id="tpStatsBody">
+          <div class="tp-empty"><i class="ti ti-chart-bar"></i><span data-i18n="common.loading">Loading…</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== DAY MODAL ===== -->
+<div class="tp-modal-back" id="tpModalBack">
+  <div class="tp-modal" role="dialog" aria-modal="true">
+    <div class="tp-modal-head">
+      <span class="mt" id="tpModalDate">—</span>
+      <span class="mdpill" id="tpModalMd" style="display:none">MD</span>
+      <button class="mx" id="tpModalClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tp-modal-body">
+      <a class="tp-daylink" id="tpDailyLink" href="#" style="display:none"><i class="ti ti-soccer-field"></i><span data-i18n="tactical.open_daily">Open daily planning</span><i class="ti ti-arrow-right" style="font-size:13px"></i></a>
+      <div class="tp-obj-list" id="tpObjList"></div>
+      <div class="tp-form">
+        <div class="fl" id="tpFormTitle"><i class="ti ti-plus"></i><span data-i18n="tactical.add_objective">Add objective</span></div>
+        <div class="tp-catpick" id="tpCatPick"></div>
+        <input type="text" id="tpObjTitle" maxlength="200" placeholder="e.g. Mid block &amp; breaking the press" data-i18n-ph="tactical.objective_ph">
+        <textarea id="tpObjNotes" maxlength="2000" placeholder="Details, corrections, observations…" data-i18n-ph="tactical.notes_ph"></textarea>
+        <div class="btns">
+          <button class="cm-btn is-outline is-sm" id="tpFormCancel" style="display:none" data-i18n="common.cancel">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="tpFormSave" data-i18n="tactical.add">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || 'en-GB'; }
+
+// Display / adjacency order is fixed — it is the CVD-safety mechanism of the palette.
+const TP_CATS = [
+  { id:'offensive',       en:'Offensive' },
+  { id:'defensive',       en:'Defensive' },
+  { id:'transition_off',  en:'Offensive transition' },
+  { id:'transition_def',  en:'Defensive transition' },
+  { id:'set_pieces',      en:'Set pieces' },
+  { id:'other',           en:'Other' },
+];
+const catColor = id => `var(--tp-${id})`;
+const catLabel = id => { const c = TP_CATS.find(x => x.id === id); return tt('tactical.cat_' + id, c ? c.en : id); };
+
+let _tpClubId = null, _tpProfile = null, _tpTeamId = null;
+let _tpYear = 0, _tpMonth = 0;              // visible month (0-based month)
+let _tpObjs = [];                            // objectives of the visible month
+let _tpMcs = [];                             // microcycles overlapping the visible month (this team)
+let _tpSessDates = new Set();                // dates with a planned training session
+let _tpMatches = {};                         // date -> opponent
+let _tpRange = 'month', _tpOnlyDone = false;
+let _tpSeason = null;                        // {start_date,end_date} | null
+let _tpModalDay = null, _tpEditId = null, _tpFormCat = 'offensive';
+let _tpTableMissing = false;
+
+// ── date helpers (local, never toISOString — see cmYMD) ─────────────
+const pad2 = n => String(n).padStart(2, '0');
+const ymd = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+function addDays(ds, n){ const [y,m,d] = ds.split('-').map(Number); const dt = new Date(y, m-1, d + n); return window.cmYMD(dt); }
+function mondayOf(ds){ const [y,m,d] = ds.split('-').map(Number); const dt = new Date(y, m-1, d); const off = (dt.getDay() + 6) % 7; return addDays(ds, -off); }
+function daysBetween(a, b){ const [ya,ma,da] = a.split('-').map(Number), [yb,mb,db] = b.split('-').map(Number); return Math.round((new Date(yb,mb-1,db) - new Date(ya,ma-1,da)) / 86400000); }
+
+// Same precedence as lib/day-context.js: manual md_overrides > diff vs match_date.
+function mdLabelFor(ds){
+  const mc = _tpMcs.find(m => m.start_date <= ds && ds <= m.end_date);
+  if (!mc) return '';
+  if (mc.md_overrides && mc.md_overrides[ds]) return mc.md_overrides[ds];
+  if (mc.match_date) {
+    const diff = daysBetween(ds, mc.match_date);
+    if (diff === 0) return 'MD';
+    if (diff > 0 && diff <= 10) return 'MD−' + diff;
+    if (diff < 0 && diff >= -3) return 'MD+' + Math.abs(diff);
+  }
+  return '';
+}
+
+function tpMissingTable(err){
+  if (!err) return false;
+  if (err.code === '42P01' || /tactical_objectives/.test(err.message || '') && /does not exist|find the table|schema cache/i.test(err.message || '')) {
+    _tpTableMissing = true;
+    document.getElementById('tpSqlBanner').style.display = 'block';
+    return true;
+  }
+  return false;
+}
+
+// ── data ─────────────────────────────────────────────────────────────
+async function tpLoadMonth(){
+  const first = ymd(_tpYear, _tpMonth, 1);
+  const last  = ymd(_tpYear, _tpMonth, new Date(_tpYear, _tpMonth + 1, 0).getDate());
+  const [objsR, mcsR, sessR, evR] = await Promise.all([
+    window.sb.from('tactical_objectives').select('id,date,category,title,notes,done,position')
+      .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).gte('date', first).lte('date', last)
+      .order('date').order('position').order('created_at'),
+    window.sb.from('microcycles').select('id,start_date,end_date,match_date,md_overrides,team_id')
+      .eq('club_id', _tpClubId).lte('start_date', last).gte('end_date', first),
+    window.sb.from('training_sessions').select('session_date,session_type')
+      .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).eq('is_historical', false)
+      .gte('session_date', first).lte('session_date', last),
+    window.sb.from('calendar_events').select('date,opponent')
+      .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).eq('type', 'match')
+      .gte('date', first).lte('date', last),
+  ]);
+  if (objsR.error && tpMissingTable(objsR.error)) _tpObjs = [];
+  else _tpObjs = objsR.data || [];
+  _tpMcs = (mcsR.data || []).filter(m => m.team_id == null || m.team_id === _tpTeamId);
+  _tpSessDates = new Set((sessR.data || []).filter(s => s.session_type !== 'match').map(s => s.session_date));
+  _tpMatches = {};
+  (evR.data || []).forEach(e => { if (!_tpMatches[e.date]) _tpMatches[e.date] = e.opponent || ''; });
+  tpRenderMonth();
+}
+
+function tpRangeDates(){
+  const today = window.cmToday();
+  if (_tpRange === 'month') {
+    return [ymd(_tpYear, _tpMonth, 1), ymd(_tpYear, _tpMonth, new Date(_tpYear, _tpMonth + 1, 0).getDate())];
+  }
+  if (_tpRange === '8w') return [addDays(mondayOf(today), -49), today];
+  if (_tpSeason) return [_tpSeason.start_date, _tpSeason.end_date < today ? _tpSeason.end_date : today];
+  return [addDays(today, -180), today];   // fallback if no active season
+}
+
+async function tpResolveSeason(){
+  try {
+    const { data } = await window.sb.from('seasons').select('team_id,start_date,end_date')
+      .eq('club_id', _tpClubId).eq('status', 'active');
+    const today = window.cmToday();
+    const rows = (data || []).filter(s => s.start_date <= today && today <= s.end_date);
+    _tpSeason = rows.find(s => s.team_id === _tpTeamId) || rows.find(s => !s.team_id) || null;
+  } catch(_) { _tpSeason = null; }
+}
+
+async function tpLoadStats(){
+  const body = document.getElementById('tpStatsBody');
+  const [from, to] = tpRangeDates();
+  let rows = [];
+  if (!_tpTableMissing) {
+    const r = await window.sb.from('tactical_objectives').select('date,category,done')
+      .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).gte('date', from).lte('date', to).limit(5000);
+    if (r.error) { tpMissingTable(r.error); }
+    rows = r.data || [];
+  }
+  tpRenderStats(body, rows, from, to);
+}
+
+// ── month grid render (same visual grammar as Calendar.html month view) ──
+function tpRenderMonth(){
+  const y = _tpYear, m = _tpMonth;
+  const label = new Date(y, m, 1).toLocaleDateString(ttLocale(), { month: 'long', year: 'numeric' });
+  document.getElementById('tpMonthLabel').textContent = label;
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const firstDay = new Date(y, m, 1).getDay();
+  const today = window.cmToday();
+  const byDay = {};
+  _tpObjs.forEach(o => { (byDay[o.date] = byDay[o.date] || []).push(o); });
+
+  const dows = [0,1,2,3,4,5,6].map(i => new Date(2024, 0, 7 + i).toLocaleDateString(ttLocale(), { weekday: 'short' }));   // 2024-01-07 fue domingo
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(7,1fr)">`;
+  dows.forEach((d, i) => {
+    html += `<div style="padding:6px 8px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted);border-right:${i===6?'0':'1px solid var(--cm-border-soft)'};border-bottom:1px solid var(--cm-border-soft)">${esc(d)}</div>`;
+  });
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div style="min-height:96px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-sunk);opacity:0.4"></div>`;
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = ymd(y, m, day);
+    const col = (day + firstDay - 1) % 7;
+    const noBR = col === 6 ? ';border-right:0' : '';
+    const isToday = ds === today;
+    const bg = isToday ? 'color-mix(in srgb,var(--cm-accent) 5%,var(--cm-surface))' : 'var(--cm-surface)';
+    const md = mdLabelFor(ds);
+    const objs = byDay[ds] || [];
+    let chips = '';
+    objs.slice(0, 3).forEach(o => {
+      chips += `<div class="tp-cell-chip${o.done ? ' done' : ''}" title="${esc(o.title)}"><span class="dot" style="background:${catColor(o.category)}"></span><span class="t">${esc(o.title)}</span></div>`;
+    });
+    if (objs.length > 3) chips += `<div class="tp-cell-more">+${objs.length - 3}</div>`;
+    if (_tpMatches[ds] != null) chips = `<div class="tp-cell-match"><i class="ti ti-ball-football" style="font-size:10px"></i>${esc(_tpMatches[ds] || tt('tactical.match','Match'))}</div>` + chips;
+    const sessDot = _tpSessDates.has(ds) ? `<i class="ti ti-soccer-field tp-cell-sess" title="${esc(tt('tactical.session_planned','Session planned'))}"></i>` : '';
+    html += `<div data-date="${ds}" class="tp-cell" style="min-width:0;min-height:96px;padding:6px 8px;cursor:pointer;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${bg}">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
+        <span style="font:600 14px/1 var(--cm-font-sans);color:${isToday ? 'var(--cm-accent)' : 'var(--cm-fg-strong)'}">${day}</span>
+        ${sessDot}
+        <span class="tp-cell-md" style="margin-left:auto">${esc(md)}</span>
+      </div>${chips}</div>`;
+  }
+  html += `</div>`;
+  const grid = document.getElementById('tpMonthGrid');
+  grid.innerHTML = html;
+  grid.querySelectorAll('.tp-cell').forEach(el => el.addEventListener('click', () => tpOpenDay(el.getAttribute('data-date'))));
+}
+
+// ── stats render ─────────────────────────────────────────────────────
+function tpRenderStats(body, rows, from, to){
+  const use = _tpOnlyDone ? rows.filter(r => r.done) : rows;
+  const rangeTxt = `${fmtShort(from)} – ${fmtShort(to)}`;
+  if (!use.length) {
+    body.innerHTML = `<div class="tp-empty"><i class="ti ti-target"></i>${esc(tt('tactical.empty_stats','No objectives in this range yet.'))}<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:6px">${esc(rangeTxt)}</div></div>`;
+    return;
+  }
+  const total = use.length;
+  const doneCt = rows.filter(r => r.done).length;
+  const byCat = {}; TP_CATS.forEach(c => byCat[c.id] = 0);
+  const days = new Set();
+  use.forEach(r => { if (byCat[r.category] == null) byCat[r.category] = 0; byCat[r.category]++; days.add(r.date); });
+  const topCat = TP_CATS.map(c => c.id).sort((a, b) => byCat[b] - byCat[a])[0];
+  const pct = n => total ? Math.round(n * 100 / total) : 0;
+
+  // weekly buckets (Monday-first), covering the whole range
+  const weeks = [];
+  for (let w = mondayOf(from); w <= to; w = addDays(w, 7)) weeks.push(w);
+  const wk = {}; weeks.forEach(w => { wk[w] = {}; TP_CATS.forEach(c => wk[w][c.id] = 0); });
+  use.forEach(r => { const w = mondayOf(r.date); if (wk[w]) wk[w][r.category] = (wk[w][r.category] || 0) + 1; });
+
+  // KPI strip
+  let html = `<div class="tp-kpis">
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_total','Objectives'))}</div><div class="v">${total}</div></div>
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_done','Worked on'))}</div><div class="v">${doneCt} <small>· ${rows.length ? Math.round(doneCt * 100 / rows.length) : 0}%</small></div></div>
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_days','Days with tactical work'))}</div><div class="v">${days.size}</div></div>
+    <div class="tp-kpi"><div class="k">${esc(tt('tactical.kpi_top','Main category'))}</div><div class="v" style="font-size:15px"><span class="cdot" style="background:${catColor(topCat)}"></span>${esc(catLabel(topCat))} <small>${pct(byCat[topCat])}%</small></div></div>
+  </div>`;
+
+  // distribution — part-to-whole stacked bar + legend (values live in the legend)
+  html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.dist_title','Category distribution'))} <span style="letter-spacing:0;text-transform:none;color:var(--cm-fg-faint)">· ${esc(rangeTxt)}</span></p>`;
+  html += `<div class="tp-dist">`;
+  TP_CATS.forEach(c => { if (byCat[c.id] > 0) html += `<span style="flex-grow:${byCat[c.id]};background:${catColor(c.id)}" title="${esc(catLabel(c.id))}: ${byCat[c.id]} (${pct(byCat[c.id])}%)"></span>`; });
+  html += `</div><div class="tp-legend">`;
+  TP_CATS.forEach(c => {
+    if (!byCat[c.id]) return;
+    html += `<div class="li"><span class="dot" style="background:${catColor(c.id)}"></span>${esc(catLabel(c.id))} <b>${pct(byCat[c.id])}%</b> <small>(${byCat[c.id]})</small></div>`;
+  });
+  html += `</div></div>`;
+
+  // weekly evolution — stacked columns, SVG, theme-aware
+  html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.weekly_title','Contents per week'))}</p><div class="tp-week-scroll">${tpWeeklySvg(weeks, wk)}</div></div>`;
+
+  // table twin (accessibility)
+  html += `<div class="tp-sec"><details class="tp-details"><summary>${esc(tt('tactical.table_toggle','View as table'))}</summary><div class="tp-tbl-scroll"><table class="tp-tbl"><thead><tr><th>${esc(tt('tactical.week','Week'))}</th>`;
+  TP_CATS.forEach(c => { html += `<th>${esc(catLabel(c.id))}</th>`; });
+  html += `<th>${esc(tt('tactical.total','Total'))}</th></tr></thead><tbody>`;
+  weeks.forEach(w => {
+    const t = TP_CATS.reduce((s, c) => s + wk[w][c.id], 0);
+    if (!t) return;
+    html += `<tr><td>${esc(fmtShort(w))}</td>`;
+    TP_CATS.forEach(c => { html += `<td>${wk[w][c.id] || '—'}</td>`; });
+    html += `<td>${t}</td></tr>`;
+  });
+  html += `<tr><td>${esc(tt('tactical.total','Total'))}</td>`;
+  TP_CATS.forEach(c => { html += `<td>${byCat[c.id] || '—'}</td>`; });
+  html += `<td>${total}</td></tr></tbody></table></div></details></div>`;
+
+  body.innerHTML = html;
+}
+
+function fmtShort(ds){
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(ttLocale(), { day: 'numeric', month: 'short' });
+}
+
+// Stacked weekly columns. 2px surface gaps between segments; only the top
+// segment gets a rounded data-end (anchored stack, flat baseline).
+function tpWeeklySvg(weeks, wk){
+  const BW = 20, GAP = 16, PADL = 34, PADR = 8, PLOT_H = 150, PADT = 8, XLBL = 22;
+  const W = PADL + weeks.length * (BW + GAP) + PADR;
+  const H = PADT + PLOT_H + XLBL;
+  const maxT = Math.max(1, ...weeks.map(w => TP_CATS.reduce((s, c) => s + wk[w][c.id], 0)));
+  const yMax = Math.max(2, Math.ceil(maxT / 2) * 2);
+  const yPix = v => PADT + PLOT_H - (v / yMax) * PLOT_H;
+  let s = `<svg class="tp-week-svg" width="${Math.max(W, 320)}" height="${H}" viewBox="0 0 ${Math.max(W, 320)} ${H}" role="img" style="display:block">`;
+  // recessive solid hairline grid + tick labels
+  const steps = yMax <= 4 ? yMax : 4;
+  for (let i = 0; i <= steps; i++) {
+    const v = Math.round(yMax * i / steps), yy = yPix(v);
+    s += `<line x1="${PADL}" y1="${yy}" x2="${W - PADR}" y2="${yy}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+    s += `<text x="${PADL - 7}" y="${yy + 3}" text-anchor="end" font-family="var(--cm-font-mono)" font-size="9" fill="var(--cm-fg-faint)">${v}</text>`;
+  }
+  const lblEvery = Math.max(1, Math.ceil(weeks.length / 10));
+  weeks.forEach((w, i) => {
+    const x = PADL + i * (BW + GAP) + GAP / 2;
+    let acc = 0;
+    const totalW = TP_CATS.reduce((t, c) => t + wk[w][c.id], 0);
+    let drawn = 0;
+    TP_CATS.forEach(c => {
+      const v = wk[w][c.id];
+      if (!v) return;
+      drawn += v;
+      const y0 = yPix(acc), y1 = yPix(acc + v);
+      const gap = acc > 0 ? 2 : 0;                       // 2px surface gap between segments
+      const h = Math.max(1, y0 - y1 - gap);
+      const yTop = y1;
+      const isTop = drawn === totalW;
+      const ttl = `<title>${esc(fmtShort(w))} · ${esc(catLabel(c.id))}: ${v}</title>`;
+      if (isTop && h >= 4) {
+        const r = Math.min(4, BW / 2);
+        s += `<path class="seg" d="M${x},${y0 - gap} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} L${x + BW - r},${yTop} Q${x + BW},${yTop} ${x + BW},${yTop + r} L${x + BW},${y0 - gap} Z" fill="${catColor(c.id)}">${ttl}</path>`;
+      } else {
+        s += `<rect class="seg" x="${x}" y="${yTop}" width="${BW}" height="${Math.max(1, y0 - gap - yTop)}" fill="${catColor(c.id)}">${ttl}</rect>`;
+      }
+      acc += v;
+    });
+    if (i % lblEvery === 0) {
+      s += `<text x="${x + BW / 2}" y="${H - 7}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="9" fill="var(--cm-fg-muted)">${esc(fmtShort(w))}</text>`;
+    }
+  });
+  s += `</svg>`;
+  return s;
+}
+
+// ── day modal ────────────────────────────────────────────────────────
+function tpOpenDay(ds){
+  _tpModalDay = ds;
+  _tpEditId = null;
+  const [y, m, d] = ds.split('-').map(Number);
+  document.getElementById('tpModalDate').textContent = new Date(y, m - 1, d).toLocaleDateString(ttLocale(), { weekday: 'long', day: 'numeric', month: 'long' });
+  const md = mdLabelFor(ds);
+  const pill = document.getElementById('tpModalMd');
+  pill.style.display = md ? '' : 'none';
+  pill.textContent = md;
+  const link = document.getElementById('tpDailyLink');
+  if (_tpSessDates.has(ds)) { link.style.display = ''; link.href = 'Daily Planning.html?date=' + ds; }
+  else link.style.display = 'none';
+  tpResetForm();
+  tpRenderModalList();
+  document.getElementById('tpModalBack').classList.add('open');
+  setTimeout(() => document.getElementById('tpObjTitle').focus(), 60);
+}
+function tpCloseModal(){ document.getElementById('tpModalBack').classList.remove('open'); _tpModalDay = null; _tpEditId = null; }
+
+function tpRenderModalList(){
+  const list = document.getElementById('tpObjList');
+  const objs = _tpObjs.filter(o => o.date === _tpModalDay);
+  if (!objs.length) {
+    list.innerHTML = `<div class="tp-empty" style="padding:16px 8px"><i class="ti ti-target" style="font-size:22px;margin-bottom:5px"></i>${esc(tt('tactical.no_objectives','No objectives for this day yet. Add the first one below.'))}</div>`;
+    return;
+  }
+  list.innerHTML = objs.map(o => `
+    <div class="tp-obj${o.done ? ' done' : ''}">
+      <span class="cbar" style="background:${catColor(o.category)}"></span>
+      <div class="main">
+        <div class="cat">${esc(catLabel(o.category))}</div>
+        <div class="ttl">${esc(o.title)}</div>
+        ${o.notes ? `<div class="nts">${esc(o.notes)}</div>` : ''}
+      </div>
+      <div class="acts">
+        <button class="tp-obj-check" data-act="done" data-id="${o.id}" title="${esc(o.done ? tt('tactical.mark_undone','Mark as pending') : tt('tactical.mark_done','Mark as worked on'))}"><i class="ti ti-check"></i></button>
+        <div class="row">
+          <button class="mini" data-act="edit" data-id="${o.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
+          <button class="mini del" data-act="del" data-id="${o.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', () => {
+    const id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+    if (act === 'done') tpToggleDone(id);
+    else if (act === 'edit') tpStartEdit(id);
+    else if (act === 'del') tpDeleteObj(id);
+  }));
+}
+
+function tpRenderCatPick(){
+  const el = document.getElementById('tpCatPick');
+  el.innerHTML = TP_CATS.map(c => `<button type="button" data-cat="${c.id}" class="${c.id === _tpFormCat ? 'on' : ''}" style="--cc:${catColor(c.id)}"><span class="dot" style="background:${catColor(c.id)}"></span>${esc(catLabel(c.id))}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _tpFormCat = b.getAttribute('data-cat'); tpRenderCatPick(); }));
+}
+
+function tpResetForm(){
+  _tpEditId = null;
+  _tpFormCat = 'offensive';
+  document.getElementById('tpObjTitle').value = '';
+  document.getElementById('tpObjNotes').value = '';
+  document.getElementById('tpFormCancel').style.display = 'none';
+  document.getElementById('tpFormSave').innerHTML = esc(tt('tactical.add','Add'));
+  document.getElementById('tpFormTitle').innerHTML = `<i class="ti ti-plus"></i>${esc(tt('tactical.add_objective','Add objective'))}`;
+  tpRenderCatPick();
+}
+
+function tpStartEdit(id){
+  const o = _tpObjs.find(x => x.id === id);
+  if (!o) return;
+  _tpEditId = id;
+  _tpFormCat = o.category;
+  document.getElementById('tpObjTitle').value = o.title;
+  document.getElementById('tpObjNotes').value = o.notes || '';
+  document.getElementById('tpFormCancel').style.display = '';
+  document.getElementById('tpFormSave').innerHTML = esc(tt('common.save','Save'));
+  document.getElementById('tpFormTitle').innerHTML = `<i class="ti ti-pencil"></i>${esc(tt('tactical.edit_objective','Edit objective'))}`;
+  tpRenderCatPick();
+  document.getElementById('tpObjTitle').focus();
+}
+
+async function tpSubmitForm(){
+  const title = document.getElementById('tpObjTitle').value.trim();
+  const notes = document.getElementById('tpObjNotes').value.trim() || null;
+  if (!title || !_tpModalDay) return;
+  const btn = document.getElementById('tpFormSave');
+  btn.disabled = true;
+  try {
+    if (_tpEditId) {
+      const { error } = await window.sb.from('tactical_objectives')
+        .update({ title, notes, category: _tpFormCat, updated_at: new Date().toISOString() }).eq('id', _tpEditId);
+      if (error) throw error;
+      const o = _tpObjs.find(x => x.id === _tpEditId);
+      if (o) { o.title = title; o.notes = notes; o.category = _tpFormCat; }
+    } else {
+      const pos = _tpObjs.filter(o => o.date === _tpModalDay).length;
+      const { data, error } = await window.sb.from('tactical_objectives')
+        .insert({ club_id: _tpClubId, team_id: _tpTeamId, date: _tpModalDay, category: _tpFormCat, title, notes, position: pos, created_by: _tpProfile?.id || null })
+        .select().single();
+      if (error) throw error;
+      _tpObjs.push(data);
+      _tpObjs.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.position - b.position));
+    }
+    tpResetForm();
+    tpRenderModalList();
+    tpRenderMonth();
+    tpLoadStats();
+  } catch(e) {
+    if (!tpMissingTable(e)) alert(e.message || e);
+  } finally { btn.disabled = false; }
+}
+
+async function tpToggleDone(id){
+  const o = _tpObjs.find(x => x.id === id);
+  if (!o) return;
+  const nv = !o.done;
+  o.done = nv;                    // optimistic
+  tpRenderModalList(); tpRenderMonth();
+  const { error } = await window.sb.from('tactical_objectives').update({ done: nv, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { o.done = !nv; tpRenderModalList(); tpRenderMonth(); alert(error.message); return; }
+  tpLoadStats();
+}
+
+async function tpDeleteObj(id){
+  if (!confirm(tt('tactical.delete_confirm','Delete this objective?'))) return;
+  const { error } = await window.sb.from('tactical_objectives').delete().eq('id', id);
+  if (error) { alert(error.message); return; }
+  _tpObjs = _tpObjs.filter(x => x.id !== id);
+  if (_tpEditId === id) tpResetForm();
+  tpRenderModalList(); tpRenderMonth(); tpLoadStats();
+}
+
+// ── team switcher (shared sessionStorage key: cal_active_team) ───────
+async function tpInitTeams(){
+  const teams = await window.getTeams(_tpClubId);
+  const sel = document.getElementById('tpTeamSelect');
+  if (!teams || !teams.length) { sel.innerHTML = '<option>—</option>'; return; }
+  const saved = sessionStorage.getItem('cal_active_team');
+  _tpTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
+  sel.innerHTML = teams.map(t => `<option value="${t.id}"${t.id === _tpTeamId ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+  sel.addEventListener('change', async () => {
+    _tpTeamId = sel.value;
+    sessionStorage.setItem('cal_active_team', _tpTeamId);
+    await tpResolveSeason();
+    await tpLoadMonth();
+    tpLoadStats();
+  });
+}
+
+// ── boot ─────────────────────────────────────────────────────────────
+(async () => {
+  const ok = await window.guardModule();
+  if (!ok) return;
+  _tpClubId = await window.getClubId();
+  const [club, profile] = await Promise.all([window.getClub(), window.getProfile()]);
+  _tpProfile = profile;
+  if (club) window.applyClubTheme();
+  await tpInitTeams();
+  if (!_tpTeamId) return;
+
+  const today = window.cmToday();
+  let openDate = null;
+  const qd = new URLSearchParams(location.search).get('date');
+  if (qd && /^\d{4}-\d{2}-\d{2}$/.test(qd)) openDate = qd;
+  const ref = openDate || today;
+  _tpYear = +ref.slice(0, 4); _tpMonth = +ref.slice(5, 7) - 1;
+
+  document.getElementById('tpPrevBtn').addEventListener('click', () => { _tpMonth--; if (_tpMonth < 0) { _tpMonth = 11; _tpYear--; } tpLoadMonth().then(() => { if (_tpRange === 'month') tpLoadStats(); }); });
+  document.getElementById('tpNextBtn').addEventListener('click', () => { _tpMonth++; if (_tpMonth > 11) { _tpMonth = 0; _tpYear++; } tpLoadMonth().then(() => { if (_tpRange === 'month') tpLoadStats(); }); });
+  document.getElementById('tpTodayBtn').addEventListener('click', () => { _tpYear = +today.slice(0, 4); _tpMonth = +today.slice(5, 7) - 1; tpLoadMonth().then(() => { if (_tpRange === 'month') tpLoadStats(); }); });
+  document.getElementById('tpModalClose').addEventListener('click', tpCloseModal);
+  document.getElementById('tpModalBack').addEventListener('click', e => { if (e.target === e.currentTarget) tpCloseModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') tpCloseModal(); });
+  document.getElementById('tpFormSave').addEventListener('click', tpSubmitForm);
+  document.getElementById('tpFormCancel').addEventListener('click', tpResetForm);
+  document.getElementById('tpObjTitle').addEventListener('keydown', e => { if (e.key === 'Enter') tpSubmitForm(); });
+  document.getElementById('tpRangeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    _tpRange = b.getAttribute('data-r');
+    document.querySelectorAll('#tpRangeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    tpLoadStats();
+  }));
+  document.getElementById('tpDoneSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    _tpOnlyDone = b.getAttribute('data-f') === 'done';
+    document.querySelectorAll('#tpDoneSeg button').forEach(x => x.classList.toggle('on', x === b));
+    tpLoadStats();
+  }));
+
+  await tpResolveSeason();
+  await tpLoadMonth();
+  tpLoadStats();
+  if (openDate) tpOpenDay(openDate);
+
+  const rerender = () => { tpRenderMonth(); tpLoadStats(); if (_tpModalDay) { const d = _tpModalDay; tpOpenDay(d); } };
+  window.CM_I18N?.ready?.then(() => rerender());
+  document.addEventListener('cm:langchanged', rerender);
+})();
+})();
+</script>
+
+<div id="tweaks-root"></div>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: 'hybrid', accent: 'green' };</script>
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+</body>
+</html>

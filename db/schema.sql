@@ -2429,6 +2429,31 @@ create table if not exists public.task_reminders (
 );
 CREATE INDEX task_reminders_due_idx ON public.task_reminders USING btree (remind_at) WHERE (sent_at IS NULL);
 
+-- Tactical Planning: objetivos tácticos por día/equipo (vinculados a Daily Planning por club+team+fecha)
+create table if not exists public.tactical_objectives (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  date date not null,
+  category text not null,
+  title text not null,
+  notes text,
+  done boolean default false not null,
+  position integer default 0 not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint tactical_objectives_pkey primary key (id),
+  constraint tactical_objectives_category_check CHECK ((category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text])))
+);
+CREATE INDEX idx_tactical_objectives_club_team_date ON public.tactical_objectives USING btree (club_id, team_id, date);
+alter table public.tactical_objectives enable row level security;
+create policy "tactical_objectives_scoped" on public.tactical_objectives as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "tactical_objectives_super_all" on public.tactical_objectives as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 create table if not exists public.tasks (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,

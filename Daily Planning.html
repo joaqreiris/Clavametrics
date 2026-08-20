@@ -377,6 +377,27 @@
         </div>
       </div>
 
+      <!-- ===== TACTICAL OBJECTIVES (vinculado a Tactical Planning) ===== -->
+      <style>
+        :root{--dpt-offensive:#16A34A;--dpt-defensive:#2563EB;--dpt-transition_off:#D97706;--dpt-transition_def:#DB2777;--dpt-set_pieces:#7C3AED;--dpt-other:#0D9488}
+        [data-theme="dark"]{--dpt-defensive:#3B82F6;--dpt-transition_def:#EC4899;--dpt-set_pieces:#8B5CF6}
+        .dp-tacchip{display:inline-flex;align-items:center;gap:7px;max-width:100%;font:600 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);padding:7px 11px;border-radius:999px;border:1px solid var(--cm-border);background:var(--cm-surface);cursor:pointer}
+        .dp-tacchip .dot{width:8px;height:8px;border-radius:99px;flex:none}
+        .dp-tacchip .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .dp-tacchip .ti{font-size:13px;color:var(--cm-fg-faint)}
+        .dp-tacchip:hover{border-color:var(--cm-accent)}
+        .dp-tacchip.done{background:var(--cm-bg-soft)}
+        .dp-tacchip.done .t{color:var(--cm-fg-muted);text-decoration:line-through}
+        .dp-tacchip.done .ti{color:var(--cm-accent)}
+      </style>
+      <div class="dp-card no-print" id="dpTacticalCard" style="display:none">
+        <div class="dp-card-h">
+          <h3 data-i18n="daily_planning.tactical_objectives">Tactical objectives</h3>
+          <a id="dpTacticalLink" href="Tactical Planning.html" class="cm-btn is-ghost is-sm" style="margin-left:auto"><span data-i18n="daily_planning.open_tactical">Open tactical planning</span><i class="ti ti-arrow-right" style="font-size:14px"></i></a>
+        </div>
+        <div class="dp-card-b"><div id="dpTacticalChips" style="display:flex;flex-wrap:wrap;gap:8px"></div></div>
+      </div>
+
       <!-- ===== TOTALS BAR ===== -->
       <div class="dp-totals">
         <div class="t"><span class="l" data-i18n="daily_planning.activation">Activation</span><span class="v" id="dpTotAct">—<sub data-i18n="daily_planning.min_suffix">min</sub></span><span class="delta" id="dpTotActCt"></span></div>
@@ -992,6 +1013,39 @@ async function dpChangeStatus(playerId, newStatus) {
   dpRenderSquad(_dpAvMap);
 }
 
+// ── Objetivos tácticos del día (fuente: Tactical Planning, keyed por club+equipo+fecha) ──
+async function dpLoadTactical(dateStr) {
+  const card = document.getElementById('dpTacticalCard');
+  if (!card) return;
+  try {
+    const { data, error } = await window.sb.from('tactical_objectives')
+      .select('id,category,title,done')
+      .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', dateStr)
+      .order('position').order('created_at');
+    if (error) throw error;
+    if (dateStr !== _dpCurrentDate) return;   // el usuario ya cambió de día
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const link = document.getElementById('dpTacticalLink');
+    if (link) link.href = 'Tactical Planning.html?date=' + dateStr;
+    const box = document.getElementById('dpTacticalChips');
+    const rows = data || [];
+    if (!rows.length) {
+      box.innerHTML = '<span style="font:500 12px var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="daily_planning.no_tactical">No tactical objectives for this day.</span>';
+      if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(box);
+    } else {
+      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:var(--dpt-${esc(o.category)})"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
+      box.querySelectorAll('.dp-tacchip').forEach(b => b.addEventListener('click', async () => {
+        const row = rows.find(r => r.id === b.getAttribute('data-id')); if (!row) return;
+        row.done = !row.done;
+        b.classList.toggle('done', row.done);
+        const { error: e2 } = await window.sb.from('tactical_objectives').update({ done: row.done, updated_at: new Date().toISOString() }).eq('id', row.id);
+        if (e2) { row.done = !row.done; b.classList.toggle('done', row.done); }
+      }));
+    }
+    card.style.display = '';
+  } catch (_) { card.style.display = 'none'; }   // tabla aún no aplicada en la DB → ocultar el bloque
+}
+
 async function loadDay(dateStr) {
   dpFlushTargets();   // persist any pending gps_targets to the OLD day before switching
   dpFlushEdits();     // persist any pending per-task edits (notes/series/work/rest) to the OLD day
@@ -1081,6 +1135,7 @@ async function loadDay(dateStr) {
   } catch(_) {}
 
   _dpUpdatePublishBtn();
+  dpLoadTactical(dateStr);   // no bloquea la carga del día
 
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
 
