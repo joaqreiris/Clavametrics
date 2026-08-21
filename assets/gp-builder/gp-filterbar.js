@@ -256,6 +256,10 @@
       const v = _computeValidSets();
       let pruned = false;
       for (const key in _FIELD) {
+        // work_context NO se poda: sus valores (rehab/individual/top-up) viven en datos de PERÍODO,
+        // no en _rows (sesión, todo 'team') → la poda los borraba del estado y la selección de
+        // contextos no llegaba al resolver (bug: seleccionar los 4 no sumaba el volumen).
+        if (key === 'work_context') continue;
         const before = state[key].length;
         state[key] = state[key].filter(val => v[key].has(val));
         if (state[key].length !== before) pruned = true;
