@@ -4174,7 +4174,9 @@
       datasets = ss.map((s, i) => {
         if (isLine[i] && s._rel) return null;   // el Δ% ya no es línea: se pinta en su barra hermana
         const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
-        const vals = data.filter(v => v != null).map(Number);
+        // vals para líneas de referencia (AVG/mediana/…) = SOLO team: excluye jugadores no-team
+        // (_nonTeam) para que la media del equipo quede limpia. Las barras (data) muestran todo.
+        const vals = s.points.filter(p => p.y != null && !p._nonTeam).map(p => Number(p.y));
         if (isLine[i]) {                            // combo: línea REAL (no Δ%) en el eje secundario
           const lc = config.style?.colors?.[s.label] || lineCol;
           refMetricMap.set(s.label, { vals, isLine: true, color: lc });
