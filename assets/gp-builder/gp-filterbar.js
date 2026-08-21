@@ -1085,7 +1085,7 @@
           : _plQ
       ).order('last_name'), 'players'),
       _safe(_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ, 'sessions'),
-      _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ).order('start_date', { ascending: false }), 'microcycles'),
+      _safe((_gpTeam ? _mcQ.or(`team_id.eq.${_gpTeam},team_id.is.null`) : _mcQ.is('team_id', null)).order('start_date', { ascending: false }), 'microcycles'),
       // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
       // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
       // silently hid filter options on big clubs.
@@ -1140,7 +1140,11 @@
     // club y se colarían microciclos de OTROS equipos (mismo nombre «MC 01», ventanas de fecha
     // solapadas → las sesiones GPS sin microcycle_id se bucketean al MC ajeno). Filtramos acá
     // por team-or-null para que nunca aparezca un MC de otro equipo.
-    const _mcTeamOk = m => !_gpTeam || m.team_id == null || String(m.team_id) === String(_gpTeam);
+    // ESTRICTO: null (compartido) siempre pasa; el equipo actual pasa; otro equipo NUNCA — ni
+    // siquiera si _gpTeam llegó null por una race (antes `!_gpTeam` dejaba pasar TODOS → se
+    // colaban los «MC 01» de otros equipos). Si _gpTeam es null se ven solo los null-team hasta
+    // que reload() corra con el equipo resuelto.
+    const _mcTeamOk = m => m.team_id == null || (!!_gpTeam && String(m.team_id) === String(_gpTeam));
     const mcs = (_mcsRaw || []).filter(_mcTeamOk);
     // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
     // Dedup: la tabla `seasons` NO tiene unique constraint y se crean filas con el mismo
