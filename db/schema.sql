@@ -811,7 +811,7 @@ create table if not exists public.gps_period_reports (
   updated_at timestamp with time zone default now() not null,
   is_flagged boolean default false not null,
   flag_reason text,
-  work_context text default 'team' not null,  -- 'team' | 'rehab' | 'individual' | 'topup' (contexto de ESTE período; los no-'team' se restan del total de sesión en las medias — Fase 2b)
+  work_context text default 'team' not null,  -- 'team' | 'rehab' | 'individual' | 'topup' (contexto de ESTE período). MODELO A (2026-08-21, docs/gps-work-context.md): el trabajo no-'team' es SOLO VOLUMEN — SUMA en los totales del jugador (volumen completo siempre) pero se EXCLUYE de TODAS las medias cross-player (media del día, línea AVG, rollup); un jugador con período no-team queda fuera de esa media ENTERO. Ya NO se resta (Fase 2b muerta).
   constraint gps_period_reports_pkey primary key (id),
   constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id),
   constraint gps_period_reports_work_context_check CHECK ((work_context = ANY (ARRAY['team'::text, 'rehab'::text, 'individual'::text, 'topup'::text])))
