@@ -688,7 +688,11 @@
     const opts = options[key] || [];
     if (!opts.length) { list.innerHTML = `<div class="fb-empty">${T('No club data yet.')}</div>`; return; }
     const draft = drafts[key] || new Set();
-    const valid = _validCache && _validCache[key];   // Set de valores posibles según los OTROS filtros
+    // work_context es especial: sus valores viven en datos de PERÍODO (gps_period_reports), no en
+    // los _rows de sesión del filterbar → la cascada nunca los validaría y quedarían "ocultos".
+    // Se exime de la cascada: siempre se muestran todos los contextos sembrados.
+    const noCascade = key === 'work_context';
+    const valid = noCascade ? null : (_validCache && _validCache[key]);   // Set de valores posibles según los OTROS filtros
     // Mostrar SOLO lo elegible: las opciones imposibles no se renderizan (las ya elegidas
     // se mantienen). Se recuperan al limpiar o quitar la selección que acota.
     const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
