@@ -33,6 +33,9 @@
   const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, compareMdCode: null, sortKey: 'player_name', sortDir: 1, highlightedRow: null };
   let _allSessions = [];
   let _lastReports = [];
+  // Jugadores a EXCLUIR de las medias (avg/median): tuvieron un período no-team (rehab/topup/
+  // individual) de un contexto NO seleccionado en el filtro Context. Su volumen igual se muestra.
+  let _scExcludedMean = new Map();
   let _initialized  = false;
   let _scCurrentClubId = null;
   window._scState = _st; // expose for cards to read compareSessionId etc.
@@ -100,9 +103,15 @@
 
   function _scAggVal(reports, def) {
     if (!reports.length) return null;
+    // Media (avg/median): excluye jugadores marcados (período no-team de contexto desmarcado).
+    // Total/máx/mín: usan a todos (el volumen completo cuenta).
+    const isMean = def.agg === 'avg' || def.agg === 'median';
+    const base = (isMean && _scExcludedMean.size)
+      ? reports.filter(r => !_scExcludedMean.has(r.player_id))
+      : reports;
     const vals = def.key === 'acc_dec'
-      ? reports.map(r => (r.accelerations || 0) + (r.decelerations || 0))
-      : reports.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
+      ? base.map(r => (r.accelerations || 0) + (r.decelerations || 0))
+      : base.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
     if (!vals.length) return null;
     switch (def.agg) {
       case 'total':  return vals.reduce((s, v) => s + v, 0);
@@ -369,20 +378,25 @@
 
   function _buildCompareOptions(sessionId) {}
 
-  // ── Fase 2b: restar períodos no-team del total de la sesión (top-up/rehab en la misma
-  //    actividad), in-place, solo volumen. Una sola sesión → clave por player_id.
-  const _SC_ADD_COLS = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld','time_played'];
-  async function _scSubtractNonTeamPeriods(rows, clubId, sessionId) {
+  // Nuevo modelo (2026-08): el volumen NO se resta — se muestra completo (team + no-team). En su
+  // lugar, se marca qué jugadores tuvieron un período no-team de un contexto NO seleccionado en el
+  // filtro Context; esos se excluyen SOLO de las medias (avg/median), no de totales/máx/mín.
+  // selectedContexts = getState().workContexts. Set base = {team} + los seleccionados: un período
+  // cuyo contexto no está en ese set marca al jugador.
+  async function _scComputeExcludedMean(clubId, sessionId, selectedContexts) {
+    const out = new Map();   // player_id → contexto que lo excluyó (para el marcador de la tabla)
     try {
-      if (!rows || !rows.length || !sessionId) return;
+      if (!sessionId) return out;
+      const sel = new Set(['team', ...((selectedContexts || []))]);
       const { data: np } = await window.sb.from('gps_period_reports')
-        .select('player_id,' + _SC_ADD_COLS.join(','))
+        .select('player_id, work_context')
         .eq('club_id', clubId).neq('work_context', 'team').eq('session_id', sessionId);
-      if (!np || !np.length) return;
-      const m = new Map();
-      for (const p of np) { let a = m.get(p.player_id); if (!a) { a = {}; m.set(p.player_id, a); } for (const c of _SC_ADD_COLS) a[c] = (a[c] || 0) + (Number(p[c]) || 0); }
-      for (const r of rows) { const s = m.get(r.player_id); if (!s) continue; for (const c of _SC_ADD_COLS) { if (r[c] == null) continue; const adj = Number(r[c]) - (s[c] || 0); r[c] = adj > 0 ? adj : 0; } }
-    } catch (_e) { /* no romper la card por la resta */ }
+      for (const p of (np || [])) {
+        const wc = p.work_context || 'team';
+        if (!sel.has(wc) && !out.has(p.player_id)) out.set(p.player_id, wc);
+      }
+    } catch (_e) { /* no romper la card por esto */ }
+    return out;
   }
 
   // ── load session data ─────────────────────────────────────────
@@ -409,9 +423,9 @@
       }, { label: 'session-report' })
         .catch(e => { console.error('[session report] query failed:', e); return []; });
 
-      // Fase 2b: restar los períodos no-team (top-up/rehab en la misma actividad) del total de
-      // esta sesión, para que no ensucien la media de equipo. Solo volumen (aditivas).
-      await _scSubtractNonTeamPeriods(reports, clubId, sessionId);
+      // Volumen COMPLETO (ya no se resta): el total incluye team + no-team. En cambio, marcamos
+      // los jugadores con período no-team de contexto desmarcado para sacarlos de las medias.
+      _scExcludedMean = await _scComputeExcludedMean(clubId, sessionId, _wcSc);
 
       const { data: players } = await _gpRoster(clubId, window._gpTeamId);
 
@@ -514,6 +528,12 @@
       const pos = p.position || '';
       const num = p.number ? `#${p.number}` : '';
       const isHL = r.player_id === _st.highlightedRow;
+      // Marcador: jugador fuera de la media (tuvo período no-team de contexto desmarcado). Su
+      // volumen se ve igual en la fila; el chip aclara por qué no cuenta en el promedio.
+      const _exWc = _scExcludedMean.get(r.player_id);
+      const _exTag = _exWc
+        ? `<span title="Fuera de la media · período ${esc(_exWc)}" style="margin-left:6px;font:600 8.5px/1 var(--cm-font-mono,ui-monospace,monospace);letter-spacing:.04em;color:var(--cm-warning);background:var(--cm-warning-bg);padding:2px 5px;border-radius:4px;white-space:nowrap">${esc(({rehab:'REHAB',topup:'TOP-UP',individual:'INDIV'}[_exWc] || _exWc.toUpperCase()))}</span>`
+        : '';
 
       const cells = _scTableMetricCols.map(col => {
         const rawVal = col.computed ? col.computed(r) : r[col.key];
@@ -524,7 +544,7 @@
       }).join('');
 
       return `<tr data-player-id="${r.player_id}" class="${isHL ? 'is-highlighted' : ''}" style="cursor:pointer">
-        <td><div class="sc-player-cell"><div class="gp-mav">${esc(initials)}</div><div><div style="font-weight:600">${esc(name)}</div><div style="font-size:10.5px;color:var(--cm-fg-muted)">${esc(pos)}${pos && num ? ' · ' : ''}${esc(num)}</div></div></div></td>
+        <td><div class="sc-player-cell"><div class="gp-mav">${esc(initials)}</div><div><div style="font-weight:600">${esc(name)}${_exTag}</div><div style="font-size:10.5px;color:var(--cm-fg-muted)">${esc(pos)}${pos && num ? ' · ' : ''}${esc(num)}</div></div></div></td>
         ${cells}
       </tr>`;
     }).join('');
