@@ -101,9 +101,10 @@
     // from/to custom range. `days` is the primary picker; from/to are also set to the
     // days' min/max as a compat bound for consumers that only read from/to.
     date:       { preset: null, from: null, to: null, days: [] },
-    // work_context arranca OCULTO (default = solo 'team'): la mayoría nunca lo toca; quien
-    // quiera ver rehab/individual/top-up aislados lo agrega desde el menú "Add filter".
-    visibleFilters: DROPS.filter(d => d.key !== 'work_context').map(d => d.key),
+    // work_context VISIBLE por defecto (filtro "Context"): el usuario tiene que poder acotar
+    // por team/rehab/individual/top-up sin cavar. Sus opciones se llenan con el set conocido
+    // aunque todavía no haya datos etiquetados (ver options.work_context).
+    visibleFilters: DROPS.map(d => d.key),
   };
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
@@ -354,7 +355,7 @@
     state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = []; state.work_context = [];
     state.date = { preset: null, from: null, to: null, days: [] };
     state.posGranularity = 'detailed';
-    state.visibleFilters = DROPS.filter(d => d.key !== 'work_context').map(d => d.key);
+    state.visibleFilters = DROPS.map(d => d.key);
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
@@ -380,7 +381,7 @@
         }
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
-          : DROPS.filter(d => d.key !== 'work_context').map(d => d.key);
+          : DROPS.map(d => d.key);
       }
     } catch (e) { /* ignore */ }
     // Sin fecha elegida por el usuario → default inteligente (temporada actual o 90 días).
@@ -1393,9 +1394,10 @@
       .sort((a, b) => _stLabel(a).localeCompare(_stLabel(b)))
       .map(v => ({ value: v, label: _stLabel(v) }));
 
-    // Training context real (team/rehab/individual/topup) presente en los datos. 'team' se
-    // ordena primero; el resto alfabético. value = raw, label = traducido.
-    options.work_context = [...new Set(_rows.map(r => r.wc))].filter(Boolean)
+    // Training context: set conocido (team/rehab/individual/topup) UNIÓN lo que haya en datos,
+    // así el filtro "Context" es usable aunque todavía no se haya etiquetado nada. 'team' primero;
+    // el resto alfabético. value = raw, label = traducido.
+    options.work_context = [...new Set(['team', 'rehab', 'individual', 'topup', ..._rows.map(r => r.wc)])].filter(Boolean)
       .sort((a, b) => (a === 'team' ? -1 : b === 'team' ? 1 : _wcLabel(a).localeCompare(_wcLabel(b))))
       .map(v => ({ value: v, label: _wcLabel(v) }));
 
