@@ -1386,6 +1386,9 @@
 </div>
 
 <script>
+// Escape HTML global para datos de DB (nombres, posiciones, títulos) → innerHTML.
+// Declaración top-level en script clásico ⇒ visible en todos los bloques/funciones de la página.
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // i18n helpers (runtime injected by sidebar.js; fall back to English text)
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || 'en-GB'; }
@@ -2049,6 +2052,8 @@ async function reloadPlayers() {
 
 <script>
   // ── Modal helpers ──────────────────────────────────────────────
+
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   function showToast(msg) {
     const t = document.getElementById('sqToast');
@@ -3365,7 +3370,7 @@ async function reloadPlayers() {
       const hasPhoto = !!player;
       return `<div class="sq-pos-dot${player ? ' is-filled' : ''}${hasPhoto ? ' has-photo' : ''}" data-slot="${slot.id}"
                    style="left:${slot.x}%;top:${effY}%">
-        <span class="sq-pos-dot-label">${slot.label}</span>
+        <span class="sq-pos-dot-label">${escH(slot.label)}</span>
         ${player ? _lPhotoInner(player) : ''}
         <span class="sq-pos-dot-num">${player ? esc(player.number || '?') : ''}</span>
         <span class="sq-pos-dot-name">${esc(name)}</span>
@@ -3859,10 +3864,10 @@ async function reloadPlayers() {
         .sort((a,b) => (a.number||99) - (b.number||99));
 
       const starterRows = starters.map((p, i) =>
-        `<tr><td class="pn">${p.number||'?'}</td><td class="pl">${((p.last_name||p.first_name)||'').trim()}</td><td class="pp">${p.position||''}</td></tr>`
+        `<tr><td class="pn">${escH(p.number||'?')}</td><td class="pl">${escH(((p.last_name||p.first_name)||'').trim())}</td><td class="pp">${escH(p.position||'')}</td></tr>`
       ).join('');
       const subRows = filledSubs.map(p =>
-        `<tr><td class="pn">${p.number||'?'}</td><td class="pl">${((p.last_name||p.first_name)||'').trim()}</td><td class="pp">${p.position||''}</td></tr>`
+        `<tr><td class="pn">${escH(p.number||'?')}</td><td class="pl">${escH(((p.last_name||p.first_name)||'').trim())}</td><td class="pp">${escH(p.position||'')}</td></tr>`
       ).join('');
 
       const logoHtml = _currentClubLogoUrl
@@ -3966,7 +3971,7 @@ async function reloadPlayers() {
     listEl.innerHTML = opts.map(o =>
       `<div class="sq-share-opt${o.id === 'group' ? ' is-on' : ''}" data-recipient="${o.id}">
         <i class="ti ${o.icon}"></i>
-        <div><div class="sq-share-opt-name">${o.name}</div><div class="sq-share-opt-sub">${o.sub}</div></div>
+        <div><div class="sq-share-opt-name">${escH(o.name)}</div><div class="sq-share-opt-sub">${escH(o.sub)}</div></div>
       </div>`
     ).join('');
     listEl.querySelectorAll('.sq-share-opt').forEach(opt => {
@@ -4094,7 +4099,7 @@ async function reloadPlayers() {
       const date = new Date(l.created_at).toLocaleDateString(ttLocale(), { day:'2-digit', month:'short', year:'2-digit' });
       return `<div class="sq-lineup-history-item" data-lineup-id="${l.id}">
         <div class="sq-lineup-hi-main">
-          <div class="sq-lineup-hi-title">${l.title || l.formation}</div>
+          <div class="sq-lineup-hi-title">${escH(l.title || l.formation)}</div>
           <div class="sq-lineup-hi-meta">${l.formation} · ${date}</div>
         </div>
         <button class="sq-lineup-hi-del" data-lineup-del title="${tt('squad.delete_lineup','Delete lineup')}" aria-label="${tt('squad.delete_lineup','Delete lineup')}"><i class="ti ti-trash" style="font-size:15px"></i></button>
@@ -4163,7 +4168,7 @@ async function reloadPlayers() {
       sel.innerHTML = `<option value="">${tt('squad.no_match','— No match —')}</option>` +
         _lMatches.map(m => {
           const d = new Date(m.date + 'T12:00:00').toLocaleDateString(ttLocale(), { day:'2-digit', month:'short' });
-          return `<option value="${m.id}">${m.title || tt('squad.match_fallback','Match')} · ${d}</option>`;
+          return `<option value="${m.id}">${escH(m.title || tt('squad.match_fallback','Match'))} · ${d}</option>`;
         }).join('');
     }
   }

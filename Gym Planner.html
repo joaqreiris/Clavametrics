@@ -1078,8 +1078,9 @@ function gpComputeEquipment(){
 }
 function gpBuildEquipAddOptions(){
   const sel = document.getElementById('gpEquipAdd'); if (!sel) return;
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const ph = tt('gym_planner.add_material','+ Add material…');
-  sel.innerHTML = `<option value="">${ph}</option>` + gpAllEquip().map(o => `<option value="${o.token}">${o.label}</option>`).join('');
+  sel.innerHTML = `<option value="">${ph}</option>` + gpAllEquip().map(o => `<option value="${o.token}">${escH(o.label)}</option>`).join('');
 }
 async function gpRenderEquipment(){
   const body = document.getElementById('gpEquipBody'); if (!body) return;
@@ -1253,6 +1254,7 @@ function gpRenderLibChips() {
 }
 function gpRenderLibList() {
   const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const q = (document.getElementById('gpLibSearch').value || '').toLowerCase().trim();
   const items = (_gpLib || []).filter(e => {
     if (_gpLibCat && !gpExPurposes(e).includes(_gpLibCat)) return false;
@@ -1271,7 +1273,7 @@ function gpRenderLibList() {
     return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
       <span class="gp-lib-thumb" data-ex="${e.id}">${gpLibThumbHtml(e.id)}</span>
       <span style="min-width:0;flex:1">
-        <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
+        <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${escH(e.name||'—')}</div>
         ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
       </span>
     </button>`;
@@ -2383,6 +2385,7 @@ async function gpRenderSavedGroups() {
   const card = document.getElementById('gpGroupsCard');
   const body = document.getElementById('gpGroupsBody');
   const metaEl = document.getElementById('gpGroupsMeta');
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   if (!card || !body) return;
   if (!_gpGrpSavedCfg) { card.style.display = 'none'; return; }
   const cfg = _gpGrpSavedCfg;
@@ -2400,7 +2403,7 @@ async function gpRenderSavedGroups() {
   if (metaEl) metaEl.textContent = `${gd.variant} · ${isRM?'%RM':'VBT'} · ${_pl} · ${_gr} · ${tgt}`;
   const cards = gd.groups.map((grp, i) => {
     const color = COLORS[i % COLORS.length];
-    const chips = grp.items.map(it => `<span class="gp-grp-chip">${it.name}<span style="margin-left:5px;font:700 11px/1 var(--cm-font-mono);color:${color}">${it.load}</span></span>`).join('');
+    const chips = grp.items.map(it => `<span class="gp-grp-chip">${escH(it.name)}<span style="margin-left:5px;font:700 11px/1 var(--cm-font-mono);color:${color}">${it.load}</span></span>`).join('');
     return `<div class="gp-grp-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="width:9px;height:9px;border-radius:50%;background:${color}"></span>
@@ -2549,6 +2552,7 @@ function gpUpdateAu() {
 
 async function gpLoadDay(dateStr) {
   _gpCurrentDate = dateStr;
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmt = _gpFmt(dateStr);
   document.getElementById('gpCrumbDate').textContent = fmt;
   document.getElementById('gpDateInput').value = dateStr;
@@ -2557,7 +2561,7 @@ async function gpLoadDay(dateStr) {
   const mcSel = document.getElementById('gpMicrocycle');
   if (mcSel) {
     mcSel.innerHTML = _gpMicrocycles.length
-      ? _gpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · ${tt('gym_planner.vs','vs')} ${m.rival}` : ''}</option>`).join('')
+      ? _gpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${escH(m.name)}${m.rival ? ` · ${tt('gym_planner.vs','vs')} ${escH(m.rival)}` : ''}</option>`).join('')
       : `<option value="">${tt('gym_planner.no_microcycles','— No microcycles —')}</option>`;
   }
 
@@ -3239,13 +3243,14 @@ async function gpExportPDF() {
   // Re-render JS-generated chrome when the language changes (static tags are
   // handled by the runtime; these are computed strings/dates).
   document.addEventListener('cm:langchanged', () => {
+    const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     try {
       if (_gpCurrentDate) {
         const fmt = _gpFmt(_gpCurrentDate);
         const cr = document.getElementById('gpCrumbDate'); if (cr) cr.textContent = fmt;
         const mc = _gpMicrocycles.find(m => m.start_date <= _gpCurrentDate && _gpCurrentDate <= m.end_date);
         const pl = document.getElementById('gpPagerLabel');
-        if (pl) pl.innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mc ? `<span class="sub">${mc.name}</span>` : ''}`;
+        if (pl) pl.innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mc ? `<span class="sub">${escH(mc.name)}</span>` : ''}`;
       }
       gpRecalcTotals();
       gpRenderRoster();
@@ -3257,6 +3262,7 @@ async function gpExportPDF() {
 })().catch(console.error);
 
   async function gpInitTeamSwitch() {
+    const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     _gpClubId = _gpClubId || await window.getClubId();
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
@@ -3269,7 +3275,7 @@ async function gpExportPDF() {
     if (!teams.length) { sel.innerHTML=`<option value="">${tt('gym_planner.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_gpTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_gpTeamId?'selected':''}>${escH(t.name)}</option>`).join('');
   }
   function gpOnTeamChange(){ _gpTeamId=document.getElementById('gpTeamSelect').value; sessionStorage.setItem('cal_active_team',_gpTeamId); location.reload(); }
   window.gpOnTeamChange = gpOnTeamChange;

@@ -3905,9 +3905,9 @@ async function _gpRenderContext(clubId, teamId, body, ov) {
     <div class="gp-imp-preview" style="max-height:56vh;overflow:auto"><table>
       <thead><tr><th>${tt('gps_analysis.ctx_date', 'Date')}</th><th>${tt('gps_analysis.ctx_player', 'Player')}</th><th>${tt('gps_analysis.ctx_session', 'Session')}</th><th style="text-align:right">${tt('gps_analysis.ctx_td', 'Total (m)')}</th><th>${tt('gps_analysis.ctx_col', 'Context')}</th></tr></thead>
       <tbody>${rows.map(r => `
-        <tr data-crow data-name="${([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '').toLowerCase()}">
+        <tr data-crow data-name="${_gpEsc(([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '').toLowerCase())}">
           <td style="font-family:var(--cm-font-mono)">${r._date || '—'}</td>
-          <td>${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
+          <td>${_gpEsc([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—')}</td>
           <td style="color:var(--cm-fg-muted)">${r._st || '—'}</td>
           <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
           <td><select class="ctx-sel" data-id="${r.id}" style="height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${opts(r.work_context || 'team')}</select></td>
@@ -4062,10 +4062,10 @@ async function _gpRenderPeriods(clubId, teamId, body, ov) {
     <div class="gp-imp-preview" style="max-height:52vh;overflow-y:auto;overflow-x:hidden"><table style="width:100%;table-layout:auto">
       <thead><tr><th>${tt('gps_analysis.ctx_date', 'Date')}</th><th>${tt('gps_analysis.ctx_player', 'Player')}</th><th>${tt('gps_analysis.pctx_period', 'Period')}</th><th style="text-align:right">${tt('gps_analysis.pctx_dur', 'Dur (s)')}</th><th style="text-align:right">${tt('gps_analysis.ctx_td', 'Total (m)')}</th><th>${tt('gps_analysis.ctx_col', 'Context')}</th></tr></thead>
       <tbody>${rows.map(r => `
-        <tr data-prow data-name="${([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') + ' ' + (r.period_name || '')).toLowerCase()}">
+        <tr data-prow data-name="${_gpEsc(([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') + ' ' + (r.period_name || '')).toLowerCase())}">
           <td style="font-family:var(--cm-font-mono);white-space:nowrap">${r._date || '—'}</td>
-          <td style="white-space:normal;word-break:break-word">${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
-          <td style="white-space:normal;word-break:break-word">${r.period_name || '—'}</td>
+          <td style="white-space:normal;word-break:break-word">${_gpEsc([r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—')}</td>
+          <td style="white-space:normal;word-break:break-word">${_gpEsc(r.period_name || '—')}</td>
           <td style="${num}">${r.duration_seconds != null ? Math.round(r.duration_seconds) : '—'}</td>
           <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
           <td><select class="pctx-sel" data-id="${r.id}" style="height:30px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${opts(r.work_context || 'team')}</select></td>
@@ -5764,7 +5764,7 @@ async function _detectSmartDefault(clubId, userId) {
     if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     window._gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===window._gpTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${_gpEsc(t.id)}" ${t.id===window._gpTeamId?'selected':''}>${_gpEsc(t.name)}</option>`).join('');
     await gpsResolvePlayerIds();
     // El filterbar pudo haber cargado antes de tener la categoría: recargarlo ahora
     if (window.gpFilterBar && typeof window.gpFilterBar.reload === 'function') {
@@ -5971,7 +5971,7 @@ function _renderOutliers(reports) {
     const dir  = f.z > 0 ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
     const col  = Math.abs(f.z) >= 3 ? 'var(--cm-danger)' : 'var(--cm-warning)';
     row.innerHTML = `
-      <div class="gp-mav"${p?.id?` data-cm-photo="${p.id}"`:''} style="flex-shrink:0">${name.split(' ')[0][0]||'?'}${(p?.last_name||'?')[0]}</div>
+      <div class="gp-mav"${p?.id?` data-cm-photo="${_gpEsc(p.id)}"`:''} style="flex-shrink:0">${_gpEsc(name.split(' ')[0][0]||'?')}${_gpEsc((p?.last_name||'?')[0])}</div>
       <div style="flex:1;min-width:0">
         <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${_gpEsc(name)}</div>
         <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${_gpEsc(pos)} · ${_gpEsc(LABELS[f.metric] || f.metric)}</div>

@@ -492,6 +492,7 @@
   if (!(await window.guardModule())) return;
   window.applyClubTheme();
   function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const clubId = await window.getClubId();
   if (!clubId) return;
   // Unmapping GPS is gated like gps_drill_map RLS: admin/owner/super only.
@@ -509,7 +510,7 @@
     const wrap = document.getElementById('accTeam');
     if (!wrap || !window._slTeams) return;
     wrap.innerHTML = window._slTeams.map(t =>
-      `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span><span class="ct">—</span></div>`
+      `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${escH(t.name)}</span><span class="ct">—</span></div>`
     ).join('') + `<div class="sl-opt" data-group="team" data-val="__none__"><span class="cb"></span><span class="lbl">${tt('exlib.no_origin_team','No team')}</span><span class="ct">—</span></div>`;
     // Quick origin selector in the toolbar (single-select mirror of the panel filter).
     const sel = document.getElementById('slOriginSel');
@@ -785,12 +786,12 @@
           ${ex.video_url ? `<span class="sl-video-badge" title="${tt('exlib.has_video','Has video')}"><span><i class="ti ti-player-play-filled"></i></span></span>` : ''}
         </div>
         <div class="sl-body">
-          <div class="title">${ex.name || tt('exlib.untitled','Untitled')}</div>
+          <div class="title">${escH(ex.name) || tt('exlib.untitled','Untitled')}</div>
           ${(() => {
             const vt = ex.visible_teams;
             if (!vt || vt.length === 0) return `<div style="display:inline-flex;align-items:center;gap:4px;font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin:2px 0"><i class="ti ti-world" style="font-size:11px"></i>${tt('exlib.all_teams_short','All')}</div>`;
             const names = vt.map(id => (window._slTeamMap||{})[id]).filter(Boolean);
-            return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${names.map(n => `<span style="font:600 9.5px/1 var(--cm-font-mono);padding:2px 6px;border-radius:999px;background:var(--cm-accent-soft,rgba(34,197,94,.15));color:var(--cm-accent)">${n}</span>`).join('')}</div>`;
+            return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${names.map(n => `<span style="font:600 9.5px/1 var(--cm-font-mono);padding:2px 6px;border-radius:999px;background:var(--cm-accent-soft,rgba(34,197,94,.15));color:var(--cm-accent)">${escH(n)}</span>`).join('')}</div>`;
           })()}
           ${ex.work_time ? `<div class="desc">${ex.work_time} ${tt('exlib.work','work')} · ${ex.rest_time||'—'} ${tt('exlib.rest','rest')}</div>` : ''}
           ${metaParts.length ? `<div class="meta">${metaParts.join('')}</div>` : ''}

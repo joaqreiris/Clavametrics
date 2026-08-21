@@ -348,7 +348,7 @@
       const min   = Math.min(...diffs);
       const max   = Math.max(...diffs);
       return `<div class="mc-metric-pill">
-        <span class="mc-mp-label">${m.label}</span>
+        <span class="mc-mp-label">${esc(m.label)}</span>
         <span class="mc-mp-diff ${diffCls(avg)}">${fmtPct(avg)}</span>
         <span class="mc-mp-range">Range: ${fmtPct(min)} to ${fmtPct(max)}</span>
       </div>`;

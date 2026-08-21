@@ -1485,7 +1485,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       const lean = bc ? (bc.lean_mass_kg != null ? bc.lean_mass_kg
         : (bc.weight_kg != null && bc.body_fat_pct != null ? NC.leanMass(bc.weight_kg, bc.body_fat_pct) : null)) : null;
       return `<tr>
-        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.number ? '#' + p.number + ' · ' : ''}${p.position || ''}</span></td>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.number ? '#' + p.number + ' · ' : ''}${nuEsc(p.position || '')}</span></td>
         <td>${p.height ? p.height + ' cm' : '—'}</td>
         <td>${bc && bc.weight_kg != null ? bc.weight_kg + ' kg' : (p.weight ? p.weight + ' kg' : '—')}</td>
         <td>${bc && bc.body_fat_pct != null ? bc.body_fat_pct + '%' : '—'}</td>
@@ -1504,7 +1504,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       const pct = tgtMl && todayMl != null ? Math.round(todayMl / tgtMl * 100) : null;
       const hit = pct != null && pct >= 95;
       return `<tr>
-        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${nuEsc(p.position || '')}</span></td>
         <td>${tgtMl ? (tgtMl / 1000).toFixed(1) + ' L' : '—'}<span class="mut">${p.weight && !(t && t.hydration_ml) ? ' · 35 ml/kg' : ''}</span></td>
         <td>${todayMl != null ? (todayMl / 1000).toFixed(1) + ' L' : '—'}</td>
         <td>${pct != null ? pct + '%' : '—'}</td>
@@ -1526,7 +1526,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
         }));
         chips = sup.length ? sup.join('') : '<span class="mut">' + tt('nutrition.none_in_plan', 'none in plan') + '</span>';
       } else chips = '<span class="mut">' + tt('nutrition.no_plan_label', 'no plan') + '</span>';
-      return `<tr><td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td><td>${chips}</td></tr>`;
+      return `<tr><td class="pn">${nuEsc(p._name)} <span class="mut">${nuEsc(p.position || '')}</span></td><td>${chips}</td></tr>`;
     }).join('');
     return tabShell(tt('nutrition.sup_title', 'Supplements'), tt('nutrition.sup_sub', "Supplements present in each player's assigned plan (daily, scaled)"),
       '<table class="nu-tbl"><thead><tr><th>' + tt('common.player', 'Player') + '</th><th>' + tt('nutrition.th_supplements', 'Supplements') + '</th></tr></thead><tbody>' + rows + '</tbody></table>');
@@ -1537,7 +1537,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       const t = sq.tMap[p.id], bc = sq.bcMap[p.id], a = pickAssignment(sq.asgMap[p.id], sq.today);
       const flags = computeFlags(p, t || null, bc || null, sq.nuMap[p.id] || null).filter(f => f.sev === 'high' || f.sev === 'warn').length;
       return `<tr>
-        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${nuEsc(p.position || '')}</span></td>
         <td>${t && t.kcal_target ? Math.round(t.kcal_target).toLocaleString() + ' kcal' : '<span class="mut">' + tt('nutrition.no_target', 'no target') + '</span>'}</td>
         <td>${bc && bc.body_fat_pct != null ? bc.body_fat_pct + '%' : '—'}</td>
         <td>${a && a.template ? nuEsc(a.template.name) : '<span class="mut">' + tt('common.none', 'none') + '</span>'}</td>
@@ -1662,7 +1662,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
     if (av) { av.textContent = initials; av.setAttribute('data-cm-photo', p.id); }
     if (h2) h2.textContent = `${p._name}${p.number ? ' · #' + p.number : ''}`;
-    if (metaEl) metaEl.innerHTML = `<span class="badge">${p.position || '—'} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
+    if (metaEl) metaEl.innerHTML = `<span class="badge">${nuEsc(p.position || '—')} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
 
     // Today's date label
     const today = cmToday();
@@ -1759,7 +1759,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
       if (first) { first = false; firstP = p; }
       row.innerHTML = `
         <div class="nu-av" data-cm-photo="${p.id}">${initials}</div>
-        <div><div class="name">${p._name || '—'}</div><div class="meta">${num}${p.position || ''}</div></div>
+        <div><div class="name">${nuEsc(p._name || '—')}</div><div class="meta">${num}${nuEsc(p.position || '')}</div></div>
         <div class="stat"><div class="v">—</div><div class="u">${tt('nutrition.no_plan', 'no plan')}</div></div>`;
       row.addEventListener('click', () => {
         nuList.querySelectorAll('.nu-row').forEach(o => o.classList.remove('is-on'));
@@ -1838,7 +1838,7 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
     _nuTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_nuTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_nuTeamId?'selected':''}>${nuEsc(t.name)}</option>`).join('');
   }
   window.nuOnTeamChange = function(){ _nuTeamId=document.getElementById('nuTeamSelect').value; sessionStorage.setItem('cal_active_team',_nuTeamId); localStorage.setItem('cal_active_team',_nuTeamId); location.reload(); };
 </script>

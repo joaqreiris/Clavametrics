@@ -668,7 +668,7 @@ function gridHTML(){
     return `<td><input class="pin qf" type="number" min="0" max="400" step="5" value="${cv}" data-qf="${d.date}" placeholder="—" style="${cv!==''?tint(cv):''}"></td>`; }).join('');
   const rows=visMetrics().map(m=>{ const acc=teamAccruedX(m), tgt=targetOf(m), st=statusOf(acc,m), w=(tgt&&tgt>0)?Math.min(100,acc/tgt*100):0;
     const bcol=st.cls==='x-over'?'var(--cm-danger)':st.cls==='x-under'?'var(--cm-info)':'var(--cm-success)';
-    return `<tr><td><span class="lp-mname">${metaOf(m).label}</span><span class="lp-munit">${metaOf(m).unit||''}</span></td>${
+    return `<tr><td><span class="lp-mname">${esc(metaOf(m).label)}</span><span class="lp-munit">${esc(metaOf(m).unit||'')}</span></td>${
     DAYS.map(d=>{ const v=(PLAN[d.date]||{})[m];
       let act=''; if(!d.isFuture){ const ax=actualDayX(d.date,m); if(ax!=null) act=`<div class="lp-actual" title="${tt('load_planner.actual','actual')}">✓ ${(ax*100).toFixed(0)}%</div>`; }
       return `<td class="${d.isActive?'lp-todaycol':''}"><input class="pin" type="number" min="0" max="400" step="5" value="${v!=null?v:''}" data-date="${d.date}" data-m="${m}" placeholder="—" style="${v!=null?tint(v):''}">${act}</td>`; }).join('')
@@ -686,7 +686,7 @@ function gridHTML(){
       <tbody><tr class="qfrow"><td>${tt('load_planner.all_metrics','All metrics')}</td>${qf}<td class="lp-acccol"></td></tr>${rows}</tbody>
     </table></div>
     <div class="lp-grid-foot">
-      <span>${tt('load_planner.week_total','Week total')} (${metaOf(FOCUS).label}): <b>${(wkFocus*100).toFixed(0)}%</b></span>
+      <span>${tt('load_planner.week_total','Week total')} (${esc(metaOf(FOCUS).label)}): <b>${(wkFocus*100).toFixed(0)}%</b></span>
       <span>${tt('load_planner.proj','proj')}: <b>${projFocus.toFixed(2)}×</b>${target!=null?` / ${tt('load_planner.target','target')} ${target.toFixed(2)}×`:''}</span>
       ${gap!=null?`<span>${tt('load_planner.gap','gap')}: <b style="color:${Math.abs(gap)<=0.15?'var(--cm-success)':gap>0?'var(--cm-info)':'var(--cm-danger)'}">${gap>=0?'+':''}${gap.toFixed(2)}×</b></span>`:''}
       <span class="lp-mini">${tt('load_planner.plan_hint','white row = quick-fill all metrics · edit any cell to fine-tune')}</span>
@@ -763,12 +763,12 @@ function matrixHTML(){
   let rows=activePlayers().map(p=>({p,f:cellData(p,FOCUS)}));
   rows.sort((a,b)=>{ if(sortK==='name') return sortD*a.p.name.localeCompare(b.p.name); const av=a.f.projX==null?-1:a.f.projX,bv=b.f.projX==null?-1:b.f.projX; return sortD*(av-bv); });
   const cols=visMetrics();
-  const head=`<tr id="lpThRow"><th data-k="name">${tt('load_planner.col_player','Player')}</th>${cols.map(m=>`<th data-k="${m}" title="${metaOf(m).label} (${metaOf(m).unit||'—'})">${shortLabel(m)}${m===FOCUS?' ★':''}</th>`).join('')}</tr>`;
+  const head=`<tr id="lpThRow"><th data-k="name">${tt('load_planner.col_player','Player')}</th>${cols.map(m=>`<th data-k="${m}" title="${esc(metaOf(m).label)} (${esc(metaOf(m).unit||'—')})">${esc(shortLabel(m))}${m===FOCUS?' ★':''}</th>`).join('')}</tr>`;
   const body=rows.map(({p})=>{
     const cells=cols.map(m=>{ const c=cellData(p,m),st=statusOf(c.projX,m),mm=metaOf(m);
       if(c.refMax==null) return `<td class="lp-cell" data-pid="${p.id}" data-m="${m}"><span class="lp-setcell">${tt('load_planner.set','set')}</span></td>`;
       const dot=c.manual?'<span class="lp-badge">M</span>':`<span class="lp-dot ${c.conf==='high'?'d-high':c.conf==='med'?'d-med':'d-none'}"></span>`;
-      return `<td class="lp-cell ${st.cls}" data-pid="${p.id}" data-m="${m}" title="ref máx ${fmtN(c.refMax,mm.dec)} · ref prom ${fmtN(c.refAvg,mm.dec)} ${mm.unit} · ${tt('load_planner.now','now')} ${c.xMax!=null?c.xMax.toFixed(2):'0.00'}× · ${tt('load_planner.proj','proj')} ${c.projX!=null?c.projX.toFixed(2):'—'}×">
+      return `<td class="lp-cell ${st.cls}" data-pid="${p.id}" data-m="${m}" title="ref máx ${fmtN(c.refMax,mm.dec)} · ref prom ${fmtN(c.refAvg,mm.dec)} ${esc(mm.unit)} · ${tt('load_planner.now','now')} ${c.xMax!=null?c.xMax.toFixed(2):'0.00'}× · ${tt('load_planner.proj','proj')} ${c.projX!=null?c.projX.toFixed(2):'—'}×">
         <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'} <span class="clbl">${tt('load_planner.vs_max','vs máx')}</span></div>
         <div class="cavg">${c.xAvg!=null?c.xAvg.toFixed(2)+'× <span class="clbl">'+tt('load_planner.vs_avg','vs prom')+'</span>':'<span style="opacity:.35">'+tt('load_planner.vs_avg','vs prom')+' —</span>'}</div>
         <div class="cref">${fmtN(c.refMax,mm.dec)} ${dot}</div>
@@ -838,7 +838,7 @@ function openPlayer(pid){
   document.getElementById('lpPDTitle').textContent=p.name+(p.pos?' · '+p.pos:'')+(p.number!=null?' · #'+p.number:'')+(p.isAlt?' · ALT':'');
   const body=METRICS.map(m=>{ const c=cellData(p,m),mm=metaOf(m),st=statusOf(c.projX,m);
     const col=st.cls==='x-over'?'var(--cm-danger)':st.cls==='x-under'?'var(--cm-info)':'var(--cm-fg-strong)';
-    return `<tr><td>${mm.label} <span class="lp-munit">${mm.unit||''}</span></td>
+    return `<tr><td>${esc(mm.label)} <span class="lp-munit">${esc(mm.unit||'')}</span></td>
       <td class="r">${fmtN(c.refMax,mm.dec)}${c.manual?' <span class="lp-badge">M</span>':''}</td>
       <td class="r">${fmtN(c.refAvg,mm.dec)}</td>
       <td class="r">${c.refMax!=null?fmtN(c.acc,mm.dec):'—'}</td>
@@ -937,11 +937,11 @@ async function readCSV(f){
 function normName(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim(); }
 function catapultName(s){ if(s.includes(',')){ const [a,b]=s.split(','); return (b+' '+a).trim(); } return s; }
 function renderImport(){
-  const opts=sel=>`<option value="">${tt('load_planner.ignore','— ignore —')}</option>`+Object.keys(META).map(k=>`<option value="${k}"${k===sel?' selected':''}>${metaOf(k).label}</option>`).join('');
+  const opts=sel=>`<option value="">${tt('load_planner.ignore','— ignore —')}</option>`+Object.keys(META).map(k=>`<option value="${k}"${k===sel?' selected':''}>${esc(metaOf(k).label)}</option>`).join('');
   const matched=IMP.data.filter(d=>d.pid).length,total=IMP.data.length;
   const mapHTML=IMP.metricHeaders.map(h=>`<div class="csvh">${h}</div><div class="arw">→</div><select class="lp-select" data-h="${h}" style="width:100%">${opts(IMP.mapping[h])}</select>`).join('');
   const cols=IMP.metricHeaders.filter(h=>IMP.mapping[h]);
-  const gridHead=`<tr><th>${tt('load_planner.col_player','Player')}</th>${cols.map(h=>`<th>${metaOf(IMP.mapping[h]).label}</th>`).join('')}</tr>`;
+  const gridHead=`<tr><th>${tt('load_planner.col_player','Player')}</th>${cols.map(h=>`<th>${esc(metaOf(IMP.mapping[h]).label)}</th>`).join('')}</tr>`;
   const gridBody=IMP.data.map((d,i)=>{ const nm=d.pid?`${esc(d.pname)}`:`<span class="lp-unmatched" title="${tt('load_planner.unmatched_hint','No matching player — assign the Catapult ID in Squad')}">${esc(d.name||d.ext)} ⚠</span>`;
     return `<tr data-i="${i}"><td>${nm}<div class="lp-mini">${d.ext||''}</div></td>${cols.map(h=>{ const cur=d.pid&&MANUAL[d.pid]&&MANUAL[d.pid][IMP.mapping[h]]; const val=d.cells[h]!=null?d.cells[h]:(cur!=null?cur:''); return `<td><input type="number" step="any" data-i="${i}" data-h="${h}" value="${val}" ${d.pid?'':'disabled'}></td>`; }).join('')}</tr>`; }).join('');
   document.getElementById('lpModalBody').innerHTML=`<div class="lp-note" style="margin-bottom:10px">${tt('load_planner.map_intro','Map each Catapult column to a ClavaMetrics metric (saved for next time). Then set the match reference per player.')}</div>

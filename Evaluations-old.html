@@ -1980,7 +1980,7 @@
     if (p) {
       document.getElementById('evDetailAv').textContent = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
       document.getElementById('evDetailName').textContent = `${p.first_name} ${p.last_name}`;
-      document.getElementById('evDetailMeta').innerHTML = `<span class="badge">${p.position || '—'}</span>`;
+      document.getElementById('evDetailMeta').innerHTML = `<span class="badge">${esc(p.position || '—')}</span>`;
     }
     const ph = document.getElementById('evDetailPlaceholder');
     if (ph) ph.style.display = 'none';
@@ -2014,8 +2014,8 @@
       }
       return `<div class="ev-tl-row" style="cursor:pointer" onclick="openEditEval('${e.id}','${escS(e.evaluation_type)}','${e.test_date}','${e.value}','${escS(e.unit||'')}','${escS(e.notes||'')}','${pid}')">
         <div class="ev-tl-date"><div class="m">${MONTHS_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
-        <div class="ev-tl-info"><div class="title">${e.evaluation_type}</div><div class="meta">${e.notes || '—'}</div></div>
-        <div class="ev-tl-score">${e.value}<sub>${e.unit ? ' '+e.unit : ''}</sub></div>
+        <div class="ev-tl-info"><div class="title">${esc(e.evaluation_type)}</div><div class="meta">${esc(e.notes || '—')}</div></div>
+        <div class="ev-tl-score">${e.value}<sub>${esc(e.unit ? ' '+e.unit : '')}</sub></div>
         ${deltaHTML}
       </div>`;
     }).join('');
@@ -2065,8 +2065,8 @@
       const histRows = pd.results.map(r => `
         <div class="ev-result-row">
           <span class="dt">${r.test_date}</span>
-          <span class="nt">${r.notes || '—'}</span>
-          <span class="vl">${r.value}${r.unit ? ' '+r.unit : ''}</span>
+          <span class="nt">${esc(r.notes || '—')}</span>
+          <span class="vl">${r.value}${esc(r.unit ? ' '+r.unit : '')}</span>
           <span class="ac">
             <button class="cm-btn is-outline is-sm" onclick="openEditEval('${r.id}','${escS(_currentTestType)}','${r.test_date}','${r.value}','${escS(r.unit||'')}','${escS(r.notes||'')}','${pid}')">Edit</button>
             <button class="cm-btn is-ghost is-sm" style="color:var(--cm-danger)" onclick="deleteEval('${r.id}','${pid}')">Delete</button>
@@ -2074,9 +2074,9 @@
         </div>`).join('');
       return `<div style="margin-bottom:12px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:12px 14px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <div style="width:30px;height:30px;border-radius:50%;background:var(--cm-accent-soft);color:var(--cm-accent);display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">${(pd.name[0]||'?').toUpperCase()}</div>
-          <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">${pd.name}</span>
-          <span style="font:700 17px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${latest.value}${latest.unit?' '+latest.unit:''}</span>
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--cm-accent-soft);color:var(--cm-accent);display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">${esc((pd.name[0]||'?').toUpperCase())}</div>
+          <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">${esc(pd.name)}</span>
+          <span style="font:700 17px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${latest.value}${esc(latest.unit?' '+latest.unit:'')}</span>
           ${deltaHTML}
         </div>${histRows}</div>`;
     }).join('');
@@ -2209,7 +2209,7 @@
       if (prev) { const d = +(latest.value - prev.value).toFixed(2); dCls = d>0?'up':d<0?'down':''; dTxt = d>0?`↑ +${d}`:d<0?`↓ ${d}`:''; }
       return `<div class="pt-prof-kpi">
         <div class="l">${type}</div>
-        <div class="v${dCls==='up'?' high':''}">${latest.value}<small>${latest.unit?' '+latest.unit:''}</small></div>
+        <div class="v${dCls==='up'?' high':''}">${latest.value}<small>${esc(latest.unit?' '+latest.unit:'')}</small></div>
         ${dTxt ? `<div class="d ${dCls}">${dTxt}</div>` : `<div class="d" style="color:var(--cm-fg-muted)">${latest.test_date}</div>`}
       </div>`;
     }).join('') : '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--cm-fg-muted)">No evaluations recorded yet</div>';
@@ -2227,7 +2227,7 @@
         return `<tr>
           <td><strong>${type}</strong></td>
           <td>${l.test_date}</td>
-          <td class="num">${l.value}${l.unit?' '+l.unit:''}</td>
+          <td class="num">${l.value}${esc(l.unit?' '+l.unit:'')}</td>
           <td class="num ${dCls}">${dVal}</td>
           <td></td><td></td>
           <td><button class="cm-icon-btn" title="Edit" onclick="openEditEval('${l.id}','${escS(type)}','${l.test_date}','${l.value}','${escS(l.unit||'')}','${escS(l.notes||'')}','${pid}')"><i class="ti ti-edit"></i></button>
@@ -2269,8 +2269,8 @@
       const cls = pct > 85 ? '' : pct > 65 ? 'med' : 'low';
       return `<div class="pt-rank-row" style="cursor:pointer" title="View profile" onclick="openIndFromSquad('${r.pid}')">
         <span class="ax">${i+1}</span>
-        <span class="pt-rank-bar"><span class="pt-rank-fill ${cls}" style="width:${pct}%">${r.name} · ${r.pos}</span></span>
-        <span class="pt-rank-v">${r.value}${r.unit?' '+r.unit:''}</span>
+        <span class="pt-rank-bar"><span class="pt-rank-fill ${cls}" style="width:${pct}%">${esc(r.name)} · ${r.pos}</span></span>
+        <span class="pt-rank-v">${r.value}${esc(r.unit?' '+r.unit:'')}</span>
       </div>`;
     }).join('') : '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No results for this test yet</div>';
     // Heatmap: all types per player
@@ -2290,7 +2290,7 @@
     document.getElementById('squadHeatSub').textContent = `${heatRows.length} players · ${types.length} test types`;
     if (heatRows.length) {
       heatEl.innerHTML = `<table class="pt-heatmap"><thead><tr><th class="pl">Player</th>${types.map(t=>`<th>${t}</th>`).join('')}</tr></thead>
-        <tbody>${heatRows.map(r => `<tr><td class="pl">${r.name}</td>${types.map(t => {
+        <tbody>${heatRows.map(r => `<tr><td class="pl">${esc(r.name)}</td>${types.map(t => {
           const v = r.tests[t];
           return v ? `<td><span class="hc warn">${v.v}${v.u?' '+v.u:''}</span></td>` : `<td><span class="hc neu">—</span></td>`;
         }).join('')}</tr>`).join('')}</tbody></table>`;
@@ -2327,8 +2327,8 @@
     grid.innerHTML = `<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cm-bg-soft)">
       ${th}Player</th>${th}Pos</th>${th}Last</th>${allTypes.map(t=>`${th.replace('left','right')}${t}</th>`).join('')}</tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td style="padding:10px 14px;font:500 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);border-bottom:1px solid var(--cm-border-soft)">${r.name}</td>
-        <td style="padding:10px 14px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)">${r.position||'—'}</td>
+        <td style="padding:10px 14px;font:500 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);border-bottom:1px solid var(--cm-border-soft)">${esc(r.name)}</td>
+        <td style="padding:10px 14px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)">${esc(r.position||'—')}</td>
         <td style="padding:10px 14px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)">${r.latest||'—'}</td>
         ${allTypes.map(t=>`<td style="padding:10px 14px;text-align:right;font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg);border-bottom:1px solid var(--cm-border-soft)">${r.tests[t]||'—'}</td>`).join('')}
       </tr>`).join('')}</tbody></table>`;
@@ -2385,8 +2385,8 @@
         ${results.map(r => { const p=r.players||{}; const name=p.first_name?`${p.first_name} ${p.last_name}`:'—';
           return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:7px;margin-bottom:4px">
             <span style="font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);flex:1">${name}</span>
-            <span style="font:700 14px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${r.value}${r.unit?' '+r.unit:''}</span>
-            ${r.notes?`<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${r.notes}</span>`:''}
+            <span style="font:700 14px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${r.value}${esc(r.unit?' '+r.unit:'')}</span>
+            ${r.notes?`<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(r.notes)}</span>`:''}
           </div>`; }).join('')}
       </div>`).join('');
   }
@@ -2888,7 +2888,7 @@
       }
       return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--cm-border-soft)">
         <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1">${fmtDate}</span>
-        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${e.unit ? ' ' + e.unit : ''}</span>
+        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${esc(e.unit ? ' ' + e.unit : '')}</span>
         ${dHtml}
       </div>`;
     }).join('');
@@ -4354,7 +4354,7 @@
     Object.keys(byCat).sort().forEach(cat => {
       html += `<optgroup label="${cat}">`;
       byCat[cat].sort((a, b) => (a.label || a.key).localeCompare(b.label || b.key)).forEach(d => {
-        html += `<option value="${d.key}" ${d.key === selectedKey ? 'selected' : ''}>${d.label || d.key}${d.unit ? ` · ${d.unit}` : ''}</option>`;
+        html += `<option value="${d.key}" ${d.key === selectedKey ? 'selected' : ''}>${esc(d.label || d.key)}${d.unit ? ` · ${esc(d.unit)}` : ''}</option>`;
       });
       html += `</optgroup>`;
     });
@@ -4708,7 +4708,7 @@
       const nm = document.createElement('div');
       nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
       nm.style.cursor = 'pointer';
-      nm.innerHTML = `<span>${r.name}</span>`;
+      nm.innerHTML = `<span>${esc(r.name)}</span>`;
       nm.title = `${r.name} — open profile`;
       nm.addEventListener('click', () => openForcePlayer(r.pid));
       names.appendChild(nm);
@@ -4973,14 +4973,14 @@
     svg += `<polyline points="${line.join(' ')}" fill="none" stroke="#475569" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>`;
     const ay = y(avg);
     svg += `<line x1="${L}" y1="${ay.toFixed(1)}" x2="${W - R}" y2="${ay.toFixed(1)}" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 4"/>`;
-    svg += `<text x="${L + 6}" y="${(ay - 7).toFixed(1)}" font-family="var(--cm-font-mono)" font-size="11" font-weight="600" fill="var(--cm-fg-muted)">avg ${ftFmt(avg, meta.dec)}${meta.unit ? ' ' + meta.unit : ''}</text>`;
+    svg += `<text x="${L + 6}" y="${(ay - 7).toFixed(1)}" font-family="var(--cm-font-mono)" font-size="11" font-weight="600" fill="var(--cm-fg-muted)">avg ${ftFmt(avg, meta.dec)}${esc(meta.unit ? ' ' + meta.unit : '')}</text>`;
     points.forEach((p, i) => {
       const last = i === points.length - 1;
       svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${last ? 5.5 : 3.8}" fill="${last ? 'var(--cm-fg-strong)' : 'var(--cm-surface)'}" stroke="var(--cm-fg-strong)" stroke-width="${last ? 0 : 2}"/>`;
-      svg += `<text x="${x(i).toFixed(1)}" y="${(H - 18).toFixed(1)}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">${p.label}</text>`;
+      svg += `<text x="${x(i).toFixed(1)}" y="${(H - 18).toFixed(1)}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">${esc(p.label)}</text>`;
     });
     const lastP = points[points.length - 1];
-    svg += `<text x="${(x(points.length - 1) - 6).toFixed(1)}" y="${(y(lastP.value) - 12).toFixed(1)}" text-anchor="end" font-family="var(--cm-font-mono)" font-size="12.5" font-weight="600" fill="var(--cm-fg-strong)">${ftFmt(lastP.value, meta.dec)}${meta.unit ? ' ' + meta.unit : ''}</text>`;
+    svg += `<text x="${(x(points.length - 1) - 6).toFixed(1)}" y="${(y(lastP.value) - 12).toFixed(1)}" text-anchor="end" font-family="var(--cm-font-mono)" font-size="12.5" font-weight="600" fill="var(--cm-fg-strong)">${ftFmt(lastP.value, meta.dec)}${esc(meta.unit ? ' ' + meta.unit : '')}</text>`;
     svg += `</svg>`;
     return svg;
   }
@@ -5066,7 +5066,7 @@
       const rawName = fields.name ? String(r[fields.name] ?? '').trim() : '';
       const cellName = m.playerId
         ? `<span style="color:var(--cm-fg-strong)">${playerName(m.playerId)}</span>`
-        : `<span style="color:var(--cm-warning)" title="Unmatched">${rawName || '—'}</span>`;
+        : `<span style="color:var(--cm-warning)" title="Unmatched">${esc(rawName || '—')}</span>`;
       const tt = fields.testType ? (r[fields.testType] || '—') : '—';
       const dt = fields.date ? (r[fields.date] || '—') : '—';
       const metricCells = sampleMetrics.map(mc => {
@@ -5074,7 +5074,7 @@
         const inner = value == null ? '—' : `${value}${forceSideBadge(side)}`;
         return `<td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${inner}</td>`;
       }).join('');
-      return `<tr><td style="padding:7px 10px;font:500 12.5px/1 var(--cm-font-sans)">${cellName}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${tt}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${dt}</td>${metricCells}</tr>`;
+      return `<tr><td style="padding:7px 10px;font:500 12.5px/1 var(--cm-font-sans)">${cellName}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${esc(tt)}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${esc(dt)}</td>${metricCells}</tr>`;
     }).join('');
     const mappedCount = metrics.filter(c => colMap[c]).length;
     document.getElementById('ftPreviewCount').textContent = `(${rows.length} rows · ${mappedCount}/${metrics.length} metrics mapped)`;
@@ -5316,8 +5316,8 @@
             : `<span style="font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${p.fit.est1RM} kg</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">R² ${(+p.fit.R2).toFixed(2)}</span>`;
       return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 12px">
         <div style="min-width:0">
-          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
-          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${p.exercise} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
+          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${esc(p.exercise)} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
         </div>
         <div style="text-align:right;white-space:nowrap">${flag}</div>
       </div>`;
@@ -5462,7 +5462,7 @@
     if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _evTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
-    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_evTeamId?'selected':''}>${t.name}</option>`).join('');
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_evTeamId?'selected':''}>${esc(t.name)}</option>`).join('');
     await evResolvePlayerIds();
   }
   async function evResolvePlayerIds() {

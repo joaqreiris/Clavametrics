@@ -37,8 +37,8 @@
       ${value != null ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
       <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
       <text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${fmtAcwr(value)}</text>
-      <text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${zone?.label || ''}</text>
-      <text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${label}</text>
+      <text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(zone?.label || '')}</text>
+      <text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${esc(label)}</text>
       <text x="22" y="106" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">0</text>
       <text x="178" y="106" text-anchor="end" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">2.0</text>
     </svg>`;
@@ -145,7 +145,7 @@
     const headers = `<tr>
       <th data-key="player" style="text-align:left">Player</th>
       <th data-key="sessCount" style="text-align:right">Sessions</th>
-      ${metrics.map(m => `<th data-key="${m.key}">ACWR ${m.label}</th>`).join('')}
+      ${metrics.map(m => `<th data-key="${esc(m.key)}">ACWR ${esc(m.label)}</th>`).join('')}
     </tr>`;
 
     const rows = entries.map(([pid, d]) => {

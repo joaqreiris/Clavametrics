@@ -43,7 +43,7 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
       const bc=status==='connected'?'s-connected':(status==='configured'?'s-pending':(status==='error'?'s-error':(status==='disabled'?'s-disabled':'s-pending')));
       const bt=status==='connected'?tt('admin.gps_connected','Connected'):(status==='configured'?tt('admin.gps_configured','Configured'):(status==='error'?tt('common.error','Error'):(status==='disabled'?tt('admin.gps_disabled','Disabled'):tt('admin.gps_not_connected','Not connected'))));
       return `<div class="gps-int-card">
-        <div class="gps-int-head"><h3>${p.name}</h3><span class="gps-int-badge ${bc}">${bt}</span></div>
+        <div class="gps-int-head"><h3>${_esc(p.name)}</h3><span class="gps-int-badge ${bc}">${bt}</span></div>
         <div class="gps-int-hint">${tt(p.hintKey,p.hintEN)}</div>
         ${isSet
           ? `${canConfig && p.slug==='catapult' ? (()=>{ const rg=(row?.config||{}).region||''; return `<div class="gps-int-form" style="margin-bottom:10px">
