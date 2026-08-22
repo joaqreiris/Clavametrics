@@ -1042,11 +1042,49 @@ async function dpChangeStatus(playerId, newStatus) {
 // ── Convocatoria por sesión (session_participants) ──────────────────────────
 // Sin filas = sin grupo definido → entrenan todos los disponibles del día. Al primer
 // cambio se materializa el grupo con todos los disponibles y recién ahí se aplica el
-// toggle, así destildar a uno no "borra" al resto.
+// toggle, así destildar a uno no "borra" al resto. El popover tiene su propio switch
+// de sesión (incluye los partidos, que NO tienen pestaña de planificación): la
+// convocatoria del partido se define desde acá sin abrir su "plan".
+let _dpGroupTarget = null;   // sesión cuyo grupo se está editando en el popover
+let _dpGroupParts  = null;   // Set|null de esa sesión (null = sin grupo definido)
+function _dpGroupableSessions(){ return (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'gym'); }
+async function _dpFetchSessParts(sessionId){
+  try {
+    const { data, error } = await window.sb.from('session_participants').select('player_id').eq('session_id', sessionId);
+    if (!error && data && data.length) return new Set(data.map(r => String(r.player_id)));
+  } catch (_) {}
+  return null;
+}
 function dpOpenSessGroup(btn){
-  if (!_dpCurrentSessionId) return;
+  const list = _dpGroupableSessions();
+  if (!list.length) return;
+  _dpGroupTarget = (_dpCurrentSessionId && list.some(s => s.id === _dpCurrentSessionId)) ? _dpCurrentSessionId : list[0].id;
+  _dpGroupParts  = (_dpGroupTarget === _dpCurrentSessionId) ? window._dpSessParts : null;
+  _dpRenderSessGroupMenu();
   const menu = document.getElementById('dpExPlayersMenu');
-  const parts = window._dpSessParts;
+  menu.classList.add('is-open');
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.top  = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - mh - 8)) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + 'px';
+  // El grupo de una sesión no activa se trae async; el menú se re-renderiza al llegar.
+  if (_dpGroupTarget !== _dpCurrentSessionId) dpSessGroupPick(_dpGroupTarget);
+}
+function _dpSessLabel(s){
+  const time = s.session_time ? String(s.session_time).slice(0,5) : '';
+  const name = s.title || ((s.session_type || '') === 'match' ? tt('daily_planning.match','Match') : tt('daily_planning.session','Session'));
+  return `${time ? time + ' · ' : ''}${name}`;
+}
+function _dpRenderSessGroupMenu(){
+  const menu = document.getElementById('dpExPlayersMenu');
+  const list = _dpGroupableSessions();
+  const parts = _dpGroupParts;
+  const pills = list.length >= 2
+    ? `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 6px 6px">` + list.map(s => {
+        const on = s.id === _dpGroupTarget;
+        return `<button type="button" onclick="dpSessGroupPick('${_dpEsc(s.id)}')" style="border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent-soft,rgba(22,163,74,.12))':'var(--cm-bg-soft)'};color:${on?'var(--cm-accent)':'var(--cm-fg-muted)'};border-radius:6px;padding:3px 8px;font:600 11px var(--cm-font-sans);cursor:pointer">${_dpEsc(_dpSessLabel(s))}</button>`;
+      }).join('') + `</div>`
+    : '';
   const buckets = {};
   _dpTrainees().forEach(p => {
     const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
@@ -1055,51 +1093,55 @@ function dpOpenSessGroup(btn){
   });
   const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : true)?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`;
   const cols = Object.entries(buckets).sort((a,b)=>a[1].o-b[1].o)
-    .map(([lbl,{list}]) => `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${list.length}</div>${list.map(optRow).join('')}</div>`).join('');
+    .map(([lbl,{list:ps}]) => `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${ps.length}</div>${ps.map(optRow).join('')}</div>`).join('');
   const body = cols ? `<div class="dp-exp-cols">${cols}</div>`
     : `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
   const hint = parts
     ? tt('daily_planning.group_only_selected','Only ticked players are in this session')
     : tt('daily_planning.group_not_set','No group set — everyone available is in');
   menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.session_group','Session group')}</span><button onclick="dpClearSessGroup()">${tt('daily_planning.group_everyone','Everyone')}</button></div>`
+    + pills
     + `<div style="padding:2px 10px 6px;color:var(--cm-fg-muted);font:500 11px var(--cm-font-sans)">${hint}</div>${body}`;
-  menu.classList.add('is-open');
-  const r = btn.getBoundingClientRect();
-  const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  menu.style.top  = Math.max(8, Math.min(r.bottom + window.scrollY + 6, window.scrollY + window.innerHeight - mh - 8)) + 'px';
-  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + 'px';
+}
+async function dpSessGroupPick(sessionId){
+  _dpGroupTarget = sessionId;
+  _dpGroupParts = (sessionId === _dpCurrentSessionId) ? window._dpSessParts : await _dpFetchSessParts(sessionId);
+  _dpRenderSessGroupMenu();
+}
+function _dpSyncActiveGroup(){
+  if (_dpGroupTarget === _dpCurrentSessionId) { window._dpSessParts = _dpGroupParts; dpRenderSquad(_dpAvMap); }
 }
 async function dpToggleSessPart(pid, on){
-  if (!_dpCurrentSessionId) return;
+  if (!_dpGroupTarget) return;
   try {
-    let parts = window._dpSessParts;
+    let parts = _dpGroupParts;
     if (!parts) {
       parts = new Set(_dpTrainees().map(p => String(p.id)));
-      window._dpSessParts = parts;
-      const rows = [...parts].map(id => ({ session_id: _dpCurrentSessionId, player_id: id, club_id: _dpClubId }));
+      _dpGroupParts = parts;
+      const rows = [...parts].map(id => ({ session_id: _dpGroupTarget, player_id: id, club_id: _dpClubId }));
       const { error } = await window.sb.from('session_participants').upsert(rows, { onConflict: 'session_id,player_id' });
       if (error) throw error;
     }
     if (on) {
       parts.add(String(pid));
-      const { error } = await window.sb.from('session_participants').upsert({ session_id: _dpCurrentSessionId, player_id: pid, club_id: _dpClubId }, { onConflict: 'session_id,player_id' });
+      const { error } = await window.sb.from('session_participants').upsert({ session_id: _dpGroupTarget, player_id: pid, club_id: _dpClubId }, { onConflict: 'session_id,player_id' });
       if (error) throw error;
     } else {
       parts.delete(String(pid));
-      const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpCurrentSessionId).eq('player_id', pid);
+      const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpGroupTarget).eq('player_id', pid);
       if (error) throw error;
     }
-    dpRenderSquad(_dpAvMap);
+    _dpSyncActiveGroup();
   } catch(e){ console.warn('[DP] session group:', e && e.message); }
 }
 async function dpClearSessGroup(){
-  if (!_dpCurrentSessionId) return;
+  if (!_dpGroupTarget) return;
   try {
-    const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpCurrentSessionId);
+    const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpGroupTarget);
     if (error) throw error;
-    window._dpSessParts = null;
-    document.getElementById('dpExPlayersMenu').classList.remove('is-open');
-    dpRenderSquad(_dpAvMap);
+    _dpGroupParts = null;
+    _dpRenderSessGroupMenu();
+    _dpSyncActiveGroup();
   } catch(e){ console.warn('[DP] session group clear:', e && e.message); }
 }
 
@@ -1175,9 +1217,10 @@ async function loadDay(dateStr) {
   // (Reached via a ?session=<gymId> link; the switcher redirects before we get here.)
   const _reqSess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || null;
   if (_dpIsGym(_reqSess)) { window.location.replace(`Gym Planner.html?date=${dateStr}`); return; }
-  // Default to the day's first FIELD (non-gym) training session; honour an explicit field
-  // request (?session= / switcher). A gym-only day starts empty, ready to create a field session.
-  const sess = _reqSess || _dpDaySessions.find(s => !_dpIsGym(s)) || null;
+  // Default to the day's first FIELD (non-gym, non-match) training session; honour an explicit
+  // request (?session= / switcher). A gym/match-only day starts empty, ready to create one —
+  // a match is a load unit (RPE/GPS), never a plan sheet to open by default.
+  const sess = _reqSess || _dpDaySessions.find(s => !_dpIsGym(s) && (s.session_type || '') !== 'match') || null;
   _dpPreferredSessionId = sess?.id || null;
   _dpCurrentSessionId = sess?.id || null;
   _dpRenderSessionSwitch();   // after _dpCurrentSessionId, which marks the active tab
@@ -3146,7 +3189,9 @@ function _dpGymSessionEmpty(s) {
 function _dpRenderSessionSwitch() {
   const host = document.getElementById('dpSessionSwitch');
   if (!host) return;
-  const list = (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'gym' || !_dpGymSessionEmpty(s));
+  // Los partidos no tienen pestaña: son unidades de carga (RPE/GPS), no planificaciones.
+  // Su convocatoria se define desde el popover "Session group" del card Squad.
+  const list = (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'match' && ((s.session_type || '') !== 'gym' || !_dpGymSessionEmpty(s)));
   const creating = !_dpCurrentSessionId;   // in "new session" mode (no row loaded)
   // Show the switch whenever there is at least one field session (so the "+ New session" affordance
   // for AM/PM double sessions is reachable) or while creating a new one.
