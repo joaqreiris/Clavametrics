@@ -448,6 +448,7 @@
           <h3 data-i18n="daily_planning.squad">Squad</h3>
           <span class="ct" id="dpSquadCt">—</span>
           <div class="right">
+            <button class="cm-btn is-ghost is-sm" id="dpGroupBtn" style="height:26px;padding:0 9px;display:none" onclick="event.stopPropagation();dpOpenSessGroup(this)"><i class="ti ti-users-group" style="font-size:13px"></i><span data-i18n="daily_planning.session_group">Session group</span></button>
             <button class="cm-btn is-ghost is-sm" style="height:26px;padding:0 9px" onclick="dpPrintRoster()"><i class="ti ti-printer" style="font-size:13px"></i><span data-i18n="daily_planning.print_roster">Print roster</span></button>
           </div>
         </div>
@@ -745,6 +746,16 @@ function dpRenderSquad(avMap) {
   const trainees = [], outs = [];
   _dpPlayers.forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
 
+  // Convocatoria por sesión: con grupo definido, los disponibles que no están en él se
+  // muestran aparte ("Other session") y no cuentan en el grupo de ESTA sesión.
+  const _parts = window._dpSessParts;
+  const otherSess = [];
+  if (_parts) {
+    for (let i = trainees.length - 1; i >= 0; i--) {
+      if (!_parts.has(String(trainees[i].id))) otherSess.unshift(trainees.splice(i, 1)[0]);
+    }
+  }
+
   const groups = {};
   trainees.forEach(p => {
     const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
@@ -756,6 +767,9 @@ function dpRenderSquad(avMap) {
     .map(([lbl, {list}]) =>
       `<div class="dp-pl-group"><span class="l">${lbl} · ${list.length}</span><div class="dp-players">${list.map(chip).join('')}</div></div>`
     ).join('');
+  if (otherSess.length) {
+    _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">${tt('daily_planning.other_session_count', `Other session · ${otherSess.length}`, {count: otherSess.length})}</span>${otherSess.map(outChip).join('')}</div>`;
+  }
   if (outs.length) {
     _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">${tt('daily_planning.out_count', `Out · ${outs.length}`, {count: outs.length})}</span>${outs.map(outChip).join('')}</div>`;
   }
@@ -774,12 +788,15 @@ function dpRenderSquad(avMap) {
   });
   const total = _dpPlayers.length;
 
-  document.getElementById('dpSquadCt').textContent = tt('daily_planning.of_total', `${avCt + partCt} of ${total}`, {avail: avCt + partCt, total});
+  // Con convocatoria definida, el contador refleja el grupo de ESTA sesión.
+  const _inSessCt = _parts ? trainees.length : avCt + partCt;
+  document.getElementById('dpSquadCt').textContent = tt('daily_planning.of_total', `${_inSessCt} of ${total}`, {avail: _inSessCt, total});
 
   const awayNotes = _dpPlayers.filter(p => avMap[p.id]?.status === 'away' && avMap[p.id]?.notes).map(p => avMap[p.id].notes);
   const awayDesc  = awayNotes.length ? ` (${[...new Set(awayNotes)].join(' + ')})` : '';
   const _mk = (val, txt, color) => `<span>${color ? `<strong style="color:${color}">${val}</strong> ` : `<strong>${val}</strong> `}${txt}</span>`;
   document.getElementById('dpSquadSummary').innerHTML =
+    (_parts ? `<span>${tt('daily_planning.n_in_session', `<strong>${trainees.length}</strong> in this session`, {count:`<strong>${trainees.length}</strong>`})}</span><span class="sep"></span>` : '') +
     `<span>${tt('daily_planning.n_of_m_available', `<strong>${avCt + partCt}</strong> of ${total} available`, {avail:`<strong>${avCt + partCt}</strong>`, total})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_partial', `<strong style="color:var(--cm-warning)">${partCt}</strong> partial`, {count:`<strong style="color:var(--cm-warning)">${partCt}</strong>`})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_out', `<strong style="color:var(--cm-danger)">${unCt}</strong> out`, {count:`<strong style="color:var(--cm-danger)">${unCt}</strong>`})}</span>` +
@@ -1022,6 +1039,70 @@ async function dpChangeStatus(playerId, newStatus) {
   dpRenderSquad(_dpAvMap);
 }
 
+// ── Convocatoria por sesión (session_participants) ──────────────────────────
+// Sin filas = sin grupo definido → entrenan todos los disponibles del día. Al primer
+// cambio se materializa el grupo con todos los disponibles y recién ahí se aplica el
+// toggle, así destildar a uno no "borra" al resto.
+function dpOpenSessGroup(btn){
+  if (!_dpCurrentSessionId) return;
+  const menu = document.getElementById('dpExPlayersMenu');
+  const parts = window._dpSessParts;
+  const buckets = {};
+  _dpTrainees().forEach(p => {
+    const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
+    if (!buckets[g.l]) buckets[g.l] = { o:g.o, list:[] };
+    buckets[g.l].list.push(p);
+  });
+  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : true)?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`;
+  const cols = Object.entries(buckets).sort((a,b)=>a[1].o-b[1].o)
+    .map(([lbl,{list}]) => `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${list.length}</div>${list.map(optRow).join('')}</div>`).join('');
+  const body = cols ? `<div class="dp-exp-cols">${cols}</div>`
+    : `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
+  const hint = parts
+    ? tt('daily_planning.group_only_selected','Only ticked players are in this session')
+    : tt('daily_planning.group_not_set','No group set — everyone available is in');
+  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.session_group','Session group')}</span><button onclick="dpClearSessGroup()">${tt('daily_planning.group_everyone','Everyone')}</button></div>`
+    + `<div style="padding:2px 10px 6px;color:var(--cm-fg-muted);font:500 11px var(--cm-font-sans)">${hint}</div>${body}`;
+  menu.classList.add('is-open');
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.top  = Math.max(8, Math.min(r.bottom + window.scrollY + 6, window.scrollY + window.innerHeight - mh - 8)) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + 'px';
+}
+async function dpToggleSessPart(pid, on){
+  if (!_dpCurrentSessionId) return;
+  try {
+    let parts = window._dpSessParts;
+    if (!parts) {
+      parts = new Set(_dpTrainees().map(p => String(p.id)));
+      window._dpSessParts = parts;
+      const rows = [...parts].map(id => ({ session_id: _dpCurrentSessionId, player_id: id, club_id: _dpClubId }));
+      const { error } = await window.sb.from('session_participants').upsert(rows, { onConflict: 'session_id,player_id' });
+      if (error) throw error;
+    }
+    if (on) {
+      parts.add(String(pid));
+      const { error } = await window.sb.from('session_participants').upsert({ session_id: _dpCurrentSessionId, player_id: pid, club_id: _dpClubId }, { onConflict: 'session_id,player_id' });
+      if (error) throw error;
+    } else {
+      parts.delete(String(pid));
+      const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpCurrentSessionId).eq('player_id', pid);
+      if (error) throw error;
+    }
+    dpRenderSquad(_dpAvMap);
+  } catch(e){ console.warn('[DP] session group:', e && e.message); }
+}
+async function dpClearSessGroup(){
+  if (!_dpCurrentSessionId) return;
+  try {
+    const { error } = await window.sb.from('session_participants').delete().eq('session_id', _dpCurrentSessionId);
+    if (error) throw error;
+    window._dpSessParts = null;
+    document.getElementById('dpExPlayersMenu').classList.remove('is-open');
+    dpRenderSquad(_dpAvMap);
+  } catch(e){ console.warn('[DP] session group clear:', e && e.message); }
+}
+
 // ── Objetivos tácticos del día (fuente: Tactical Planning, keyed por club+equipo+fecha) ──
 async function dpLoadTactical(dateStr) {
   const card = document.getElementById('dpTacticalCard');
@@ -1172,6 +1253,22 @@ async function loadDay(dateStr) {
   _dpAdaptRows.forEach(t => {
     if (t.adaptation_notes && !_dpDayAdaptMap[t.player_id]) _dpDayAdaptMap[t.player_id] = t;
   });
+
+  // Convocatoria de ESTA sesión (session_participants). Sin filas (o tabla aún no aplicada
+  // en la DB) → sin grupo definido: entrenan todos los disponibles del día.
+  window._dpSessParts = null;
+  if (_dpCurrentSessionId) {
+    try {
+      const { data: spData, error: spErr } = await window.sb.from('session_participants')
+        .select('player_id').eq('session_id', _dpCurrentSessionId);
+      if (!spErr && spData && spData.length) window._dpSessParts = new Set(spData.map(r => String(r.player_id)));
+    } catch (_) {}
+  }
+  const gb = document.getElementById('dpGroupBtn');
+  if (gb) {
+    const fieldCt = _dpDaySessions.filter(s => (s.session_type || '') !== 'gym').length;
+    gb.style.display = (!window._dpReadOnly && _dpCurrentSessionId && (fieldCt >= 2 || window._dpSessParts)) ? '' : 'none';
+  }
 
   dpRenderSquad(avMap);
 

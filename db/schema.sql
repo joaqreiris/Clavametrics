@@ -2323,6 +2323,30 @@ create table if not exists public.session_exercises (
 CREATE INDEX idx_session_exercises_session ON public.session_exercises USING btree (session_id);
 CREATE INDEX idx_session_exercises_club ON public.session_exercises USING btree (club_id);
 
+-- Convocatoria por sesión (días de doble sesión AM/PM): qué jugadores participan de CADA
+-- training_session. Sin filas para una sesión = sin convocatoria definida → participan todos
+-- los disponibles del día (comportamiento clásico). Con filas: el Daily Planning separa el
+-- grupo, session_rpe_status excluye a los no convocados del "missing" y resolve_rpe_session
+-- prioriza las sesiones donde el jugador está convocado.
+create table if not exists public.session_participants (
+  session_id uuid not null,
+  player_id uuid not null,
+  club_id uuid not null,
+  created_at timestamp with time zone default now(),
+  created_by uuid,
+  constraint session_participants_pkey primary key (session_id, player_id),
+  constraint session_participants_session_fk FOREIGN KEY (session_id) REFERENCES public.training_sessions(id) ON DELETE CASCADE,
+  constraint session_participants_player_fk FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE CASCADE,
+  constraint session_participants_club_fk FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_session_participants_player ON public.session_participants USING btree (player_id);
+alter table public.session_participants enable row level security;
+create policy "session_participants_scoped" on public.session_participants as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (EXISTS ( SELECT 1 FROM training_sessions ts WHERE ((ts.id = session_participants.session_id) AND ((ts.team_id IS NULL) OR (ts.team_id IN ( SELECT my_team_ids() AS my_team_ids)))))))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (EXISTS ( SELECT 1 FROM training_sessions ts WHERE ((ts.id = session_participants.session_id) AND ((ts.team_id IS NULL) OR (ts.team_id IN ( SELECT my_team_ids() AS my_team_ids)))))))));
+create policy "session_participants_super_all" on public.session_participants as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 create table if not exists public.share_links (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -4094,47 +4118,83 @@ end; $function$
 
 -- Resuelve a qué sesión del día pertenece un RPE. Con p_local_time (hora local del envío)
 -- gana la última sesión ya iniciada — el RPE se responde después de entrenar —, y si ninguna
--- empezó, la próxima; clave para días de doble sesión (AM/PM). Sin hora, desempata por
--- duración (comportamiento previo). Si no hay training session, materializa el partido del
--- calendario de ese día vía ensure_match_session.
+-- empezó, la próxima; clave para días de doble sesión (AM/PM). Una sesión con convocatoria
+-- (session_participants) que NO incluye al jugador va al final. Un partido del calendario aún
+-- sin materializar compite por horario contra las training_sessions; si gana, se materializa
+-- acá mismo (idempotente, sin el guard de staff de ensure_match_session: este camino ya está
+-- validado por el token del survey o por RPCs de staff — por eso EXECUTE está revocado a los
+-- roles de cliente).
 CREATE OR REPLACE FUNCTION public.resolve_rpe_session(p_club uuid, p_player uuid, p_date date, p_local_time time without time zone DEFAULT NULL::time without time zone)
  RETURNS uuid
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare v_team uuid; v_sid uuid; v_evt uuid;
+declare
+  v_team uuid; v_sid uuid; v_sess_d interval; v_mid uuid; e record;
 begin
   select team_id into v_team from public.players where id = p_player;
 
-  select ts.id into v_sid
+  select ts.id,
+         case when p_local_time is null or ts.session_time is null then interval '24 hours'
+              when ts.session_time <= p_local_time then p_local_time - ts.session_time
+              else (ts.session_time - p_local_time) + interval '12 hours' end
+    into v_sid, v_sess_d
   from public.training_sessions ts
   where ts.club_id = p_club
     and ts.session_date = p_date
     and (v_team is null or ts.team_id = v_team)
-  order by (ts.session_time is null),
+  order by (exists (select 1 from public.session_participants sp where sp.session_id = ts.id)
+            and not exists (select 1 from public.session_participants sp
+                            where sp.session_id = ts.id and sp.player_id = p_player)),
+           (ts.session_time is null),
            case when p_local_time is null then interval '0'
                 when ts.session_time <= p_local_time then p_local_time - ts.session_time
                 else (ts.session_time - p_local_time) + interval '12 hours' end,
            ts.duration desc nulls last
   limit 1;
 
-  if v_sid is null then
-    select ce.id into v_evt
-    from public.calendar_events ce
-    where ce.club_id = p_club
-      and ce.type = 'match'
-      and ce.date = p_date
-      and (v_team is null or ce.team_id is not distinct from v_team)
+  -- Partido del calendario (puede no estar materializado como training_session todavía).
+  select ce.*,
+         case when p_local_time is null or ce.start_time is null then interval '24 hours'
+              when ce.start_time <= p_local_time then p_local_time - ce.start_time
+              else (ce.start_time - p_local_time) + interval '12 hours' end as d
+    into e
+  from public.calendar_events ce
+  where ce.club_id = p_club
+    and ce.type = 'match'
+    and ce.date = p_date
+    and (v_team is null or ce.team_id is not distinct from v_team)
+  order by case when p_local_time is null or ce.start_time is null then interval '24 hours'
+                when ce.start_time <= p_local_time then p_local_time - ce.start_time
+                else (ce.start_time - p_local_time) + interval '12 hours' end
+  limit 1;
+
+  if e.id is not null and (v_sid is null or e.d < v_sess_d) then
+    -- Reusar el match ya materializado (mismo dedupe que ensure_match_session) o crearlo.
+    select ts.id into v_mid
+    from public.training_sessions ts
+    where ts.club_id = e.club_id and ts.session_date = e.date
+      and ts.session_type = 'match' and ts.team_id is not distinct from e.team_id
     limit 1;
-    if v_evt is not null then
-      v_sid := public.ensure_match_session(v_evt);
+    if v_mid is null then
+      insert into public.training_sessions
+        (club_id, team_id, session_date, session_time, duration, session_type,
+         title, estimated_rpe, published, visible_to)
+      values
+        (e.club_id, e.team_id, e.date, e.start_time, e.duration_minutes, 'match',
+         coalesce(nullif(trim(e.title), ''),
+                  case when e.opponent is not null then 'Match vs ' || e.opponent else 'Match' end),
+         e.estimated_rpe, true, coalesce(e.visible_to, ARRAY['staff'::text]))
+      returning id into v_mid;
     end if;
+    if v_mid is not null then v_sid := v_mid; end if;
   end if;
 
   return v_sid;
 end; $function$
 ;
+revoke execute on function public.resolve_rpe_session(uuid, uuid, date, time without time zone) from public, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.link_rpe_to_session(p_rpe_id uuid, p_local_time time without time zone DEFAULT NULL::time without time zone)
  RETURNS void
@@ -4809,6 +4869,13 @@ begin
           select 1 from public.availability a
           where a.player_id = p.id::text and a.date = v_date
             and a.status in ('sick','unavailable','away')
+        )
+        -- Convocatoria por sesión: si la sesión tiene grupo definido (session_participants),
+        -- los no convocados no cuentan como "missing" de ESTA sesión.
+        and not (
+          exists (select 1 from public.session_participants sp where sp.session_id = p_session_id)
+          and not exists (select 1 from public.session_participants sp
+                          where sp.session_id = p_session_id and sp.player_id = p.id)
         )
       order by p.id, r.created_at desc nulls last
     ) q
