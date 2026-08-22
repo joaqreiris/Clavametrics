@@ -3702,7 +3702,22 @@ begin
     from public.players p
     where p.club_id = v_link.club_id
       and p.archived_at is null
-      and (v_link.team_id is null or p.team_id = v_link.team_id)
+      -- Link atado a una sesión con convocatoria (session_participants) → solo los anotados,
+      -- sean del equipo que sean. Sin convocatoria (o link sin sesión) → roster del equipo vía
+      -- player_teams (incluye invitados), con fallback a players.team_id.
+      and (
+        (v_link.session_id is not null
+          and exists (select 1 from public.session_participants sp
+                      where sp.session_id = v_link.session_id and sp.player_id = p.id))
+        or (
+          (v_link.session_id is null
+            or not exists (select 1 from public.session_participants sp where sp.session_id = v_link.session_id))
+          and (v_link.team_id is null
+               or p.team_id = v_link.team_id
+               or exists (select 1 from public.player_teams pt
+                          where pt.player_id = p.id and pt.team_id = v_link.team_id))
+        )
+      )
     order by p.last_name nulls last, p.first_name nulls last;
 end; $function$
 ;
@@ -4863,19 +4878,26 @@ begin
       where p.club_id = v_club
         and p.archived_at is null
         and p.status <> 'inactive'
-        and (v_team is null or p.team_id = v_team)
         -- Not expected to check in that day: sick, unavailable, or national-team (away).
         and not exists (
           select 1 from public.availability a
           where a.player_id = p.id::text and a.date = v_date
             and a.status in ('sick','unavailable','away')
         )
-        -- Convocatoria por sesión: si la sesión tiene grupo definido (session_participants),
-        -- los no convocados no cuentan como "missing" de ESTA sesión.
-        and not (
-          exists (select 1 from public.session_participants sp where sp.session_id = p_session_id)
-          and not exists (select 1 from public.session_participants sp
-                          where sp.session_id = p_session_id and sp.player_id = p.id)
+        -- Quién se espera en ESTA sesión:
+        --  · con convocatoria definida (session_participants) → solo los anotados, sean del equipo que sean
+        --  · sin convocatoria → roster del equipo vía player_teams (incluye invitados de otros equipos),
+        --    con fallback a players.team_id por si falta el vínculo multi-equipo
+        and (
+          exists (select 1 from public.session_participants sp
+                  where sp.session_id = p_session_id and sp.player_id = p.id)
+          or (
+            not exists (select 1 from public.session_participants sp where sp.session_id = p_session_id)
+            and (v_team is null
+                 or p.team_id = v_team
+                 or exists (select 1 from public.player_teams pt
+                            where pt.player_id = p.id and pt.team_id = v_team))
+          )
         )
       order by p.id, r.created_at desc nulls last
     ) q
