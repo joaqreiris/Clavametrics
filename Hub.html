@@ -2195,7 +2195,7 @@ function renderTasks(tasks, view = 'my') {
       .order('created_at', { ascending: false })
       .limit(10),
     window.sb.from('microcycles')
-      .select('name, match_date, rival')
+      .select('name, match_date, rival, match_time')
       .eq('club_id', clubId).match(_teamEq)
       .lte('start_date', today)
       .gte('end_date', today)
@@ -2356,18 +2356,30 @@ function renderTasks(tasks, view = 'my') {
 
   renderActivity().catch(() => {});
 
-  // Nearest upcoming match from both calendar_events and microcycles
+  // Nearest upcoming match from both calendar_events and microcycles.
+  // A today match whose final whistle already passed (end_time, or start + 2h) no longer counts as "next".
+  const _matchEnded = (dateStr, startT, endT) => {
+    if (!dateStr || dateStr !== today) return dateStr ? dateStr < today : false;
+    let endMin = null;
+    if (endT)        { const [h, m] = endT.split(':').map(Number);  endMin = h * 60 + (m || 0); }
+    else if (startT) { const [h, m] = startT.split(':').map(Number); endMin = h * 60 + (m || 0) + 120; }
+    if (endMin === null) return false; // no kickoff time recorded → keep it all day
+    const now = new Date();
+    return (now.getHours() * 60 + now.getMinutes()) >= endMin;
+  };
   const [_nextEvtRes, _nextMcRes] = await Promise.all([
     window.sb.from('calendar_events')
-      .select('date,opponent,title,home_away,rival_crest_url').eq('club_id', clubId).match(_teamEq).eq('type', 'match')
-      .gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle(),
+      .select('date,opponent,title,home_away,rival_crest_url,start_time,end_time').eq('club_id', clubId).match(_teamEq).eq('type', 'match')
+      .gte('date', today).order('date', { ascending: true }).limit(2),
     window.sb.from('microcycles')
-      .select('rival,match_date,home_away').eq('club_id', clubId).match(_teamEq)
+      .select('rival,match_date,home_away,match_time').eq('club_id', clubId).match(_teamEq)
       .not('match_date', 'is', null).not('rival', 'is', null)
-      .gte('match_date', today).order('match_date', { ascending: true }).limit(1).maybeSingle(),
+      .gte('match_date', today).order('match_date', { ascending: true }).limit(2),
   ]);
-  const _nm1 = _nextEvtRes.data  ? { date: _nextEvtRes.data.date,       rival: _nextEvtRes.data.opponent || (_nextEvtRes.data.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvtRes.data.home_away, rival_crest_url: _nextEvtRes.data.rival_crest_url || null  } : null;
-  const _nm2 = _nextMcRes.data   ? { date: _nextMcRes.data.match_date,  rival: _nextMcRes.data.rival,                                                           homeAway: _nextMcRes.data.home_away, rival_crest_url: null } : null;
+  const _nextEvt = (_nextEvtRes.data || []).find(e => !_matchEnded(e.date, e.start_time, e.end_time)) || null;
+  const _nextMc  = (_nextMcRes.data  || []).find(m => !_matchEnded(m.match_date, m.match_time, null)) || null;
+  const _nm1 = _nextEvt ? { date: _nextEvt.date,       rival: _nextEvt.opponent || (_nextEvt.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvt.home_away, rival_crest_url: _nextEvt.rival_crest_url || null  } : null;
+  const _nm2 = _nextMc  ? { date: _nextMc.match_date,  rival: _nextMc.rival,                                                   homeAway: _nextMc.home_away,  rival_crest_url: null } : null;
   const _hubNextMatch = _nm1 && _nm2 ? (_nm1.date <= _nm2.date ? _nm1 : _nm2) : (_nm1 || _nm2);
 
   // Fallback: if no crest URL in the event/MC, try opponent_branding
@@ -2456,7 +2468,7 @@ function renderTasks(tasks, view = 'my') {
     // Microcycles — rival + match day from current MC, fallback to nearest upcoming match
     const el = document.getElementById('modFootMicrocycles');
     if (el) {
-      const src = (mcRes.data?.rival && mcRes.data?.match_date) ? mcRes.data : null;
+      const src = (mcRes.data?.rival && mcRes.data?.match_date && !_matchEnded(mcRes.data.match_date, mcRes.data.match_time, null)) ? mcRes.data : null;
       const rival    = src?.rival    || _hubNextMatch?.rival;
       const matchDt  = src?.match_date || _hubNextMatch?.date;
       if (rival && matchDt) {
