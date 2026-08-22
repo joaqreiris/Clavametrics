@@ -446,13 +446,28 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
       //     rewrite team_id on adopt: the adopted row already belongs to the right team.
       if (!sessionId) {
         let adoptQ = adminClient
-          .from('training_sessions').select('id')
+          .from('training_sessions').select('id, session_time')
           .eq('club_id', clubId).eq('session_date', date)
           .is('external_activity_id', null).neq('session_type', 'gym');
         adoptQ = teamId ? adoptQ.eq('team_id', teamId) : adoptQ.is('team_id', null);
-        const { data: sameDay } = await adoptQ.order('created_at', { ascending: true }).limit(1);
-        if (sameDay?.[0]?.id) {
-          sessionId = sameDay[0].id as string;
+        const { data: sameDay } = await adoptQ.order('created_at', { ascending: true });
+        if (sameDay?.length) {
+          // Día de doble sesión (AM + partido): adoptar la sesión cuya session_time esté MÁS
+          // CERCA del inicio real de la actividad (hora local del club vía tz_offset). Antes se
+          // adoptaba la primera creada, que podía ser la equivocada. Sin horas comparables
+          // (actividad sin hora o sesiones sin session_time) el sort estable preserva el
+          // comportamiento previo: primera por created_at.
+          const actMs = toMs(act.start_time ?? act.startTime ?? act.start);
+          const actMin = isNaN(actMs) ? null
+            : (() => { const d = new Date(actMs + _offMs); return d.getUTCHours() * 60 + d.getUTCMinutes(); })();
+          const dist = (st: unknown): number => {
+            if (actMin == null || !st) return 24 * 60;
+            const parts = String(st).split(':').map(Number);
+            if (!isFinite(parts[0]) || !isFinite(parts[1])) return 24 * 60;
+            return Math.abs(parts[0] * 60 + parts[1] - actMin);
+          };
+          const best = [...sameDay].sort((a, b) => dist(a.session_time) - dist(b.session_time))[0];
+          sessionId = best.id as string;
           await adminClient.from('training_sessions')
             .update({ external_activity_id: activityId, is_historical: isHistorical })
             .eq('id', sessionId);

@@ -3565,7 +3565,7 @@ async function _gpRenderPending(clubId, body, ov) {
       // Sesiones planificadas ADOPTABLES (no gym, sin GPS aún) esos días → sugerir ASOCIAR.
       // Traemos session_attributes para poder mostrar el rival fresco en las de tipo 'match'.
       const { data: ps } = await _teamStrict(window.sb.from('training_sessions')
-        .select('id, session_date, session_type, match_day_offset, team_id, title, session_attributes')
+        .select('id, session_date, session_type, session_time, match_day_offset, team_id, title, session_attributes')
         .eq('club_id', clubId).in('session_date', dates)
         .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym'));
       plans = ps || [];
@@ -3586,11 +3586,13 @@ async function _gpRenderPending(clubId, body, ov) {
   // calendar_events.opponent (renombrable) y, si no, session_attributes.rival.
   const _rivalOf = s => s?.session_attributes?.rival || s?.session_attributes?.opponent || null;
   const _planLabel = (p, mEvt) => {
+    // Hora al frente: en días de doble sesión (AM/PM) dos "TRAINING" serían indistinguibles.
+    const tm = p.session_time ? `${String(p.session_time).slice(0, 5)} · ` : '';
     if (p.session_type === 'match') {
       const riv = (mEvt && mEvt.opponent) || _rivalOf(p);
-      return riv ? `${_gpStLabel('match')} · ${riv}` : (p.title || _gpStLabel('match'));
+      return tm + (riv ? `${_gpStLabel('match')} · ${riv}` : (p.title || _gpStLabel('match')));
     }
-    return p.title || _gpStLabel(p.session_type);
+    return tm + (p.title || _gpStLabel(p.session_type));
   };
 
   const rowHtml = (r) => {
@@ -3701,7 +3703,10 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
         .select('id').eq('club_id', clubId).eq('session_date', p.date)
         .eq('is_historical', false).is('external_activity_id', null).neq('session_type', 'gym');
       const tId = window._gpTeamId; if (tId) fq = fq.eq('team_id', tId);
-      const { data: pl } = await fq.limit(1);
+      const { data: pl } = await fq.limit(2);
+      // Día con VARIAS sesiones adoptables y sin id explícito (HTML viejo cacheado): no adivinar
+      // a cuál va el GPS — pedir recargar y elegir en el selector.
+      if (pl && pl.length > 1) throw new Error(tt('gps_analysis.pending_ambiguous', 'Several sessions that day — reload the page and pick one in the selector.'));
       sessionId = (pl && pl[0] && pl[0].id) || null;
     }
     if (!sessionId) throw new Error(tt('gps_analysis.pending_no_session', 'No session for that day'));

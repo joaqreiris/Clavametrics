@@ -1848,10 +1848,29 @@
         }
         banner.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Searching…</div>`;
         const { data } = await window.sb.from('training_sessions')
-          .select('id,title,session_date,session_type')
+          .select('id,title,session_date,session_type,session_time')
           .eq('club_id', clubId).eq('session_date', date).eq('session_type', type)
-          .eq('is_historical', false).limit(3);
-        if (data?.length) {
+          .eq('is_historical', false)
+          .order('session_time', { ascending: true, nullsFirst: false }).limit(6);
+        if (data?.length > 1) {
+          // Día de doble sesión (AM/PM) y el CSV no trae hora → PREGUNTAR a cuál sesión van los
+          // datos en vez de adivinar. La primera queda preseleccionada (misma elección que antes).
+          si.existingId = data[0].id;
+          const optRows = data.map((s, i) => {
+            const tm = s.session_time ? String(s.session_time).slice(0, 5) : '—';
+            return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);cursor:pointer;margin-top:${i ? '6px' : '0'};background:var(--cm-bg-soft)">
+              <input type="radio" name="s4WhichSess" value="${s.id}" ${i === 0 ? 'checked' : ''}>
+              <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${tm}</span>
+              <span style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${esc(s.title || s.session_type)}</span>
+            </label>`;
+          }).join('');
+          banner.innerHTML = `
+            <div style="padding:9px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)">
+              <div style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${esc(_wt('gps_import.which_session', 'This day has several sessions — which one does this data belong to?'))}</div>
+              ${optRows}
+            </div>`;
+          banner.querySelectorAll('[name="s4WhichSess"]').forEach(r => r.addEventListener('change', e => { si.existingId = e.target.value; }));
+        } else if (data?.length) {
           const s = data[0];
           si.existingId = s.id;
           banner.innerHTML = `
