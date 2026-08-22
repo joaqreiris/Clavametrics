@@ -5063,10 +5063,24 @@ begin
   v_tz := coalesce((p_payload->>'tzOffset')::int, 0);
   v_local_date := ((now() at time zone 'UTC') - make_interval(mins => v_tz))::date;
 
+  -- Mismo criterio que get_survey_players: convocatoria de la sesión si existe; si no,
+  -- roster del equipo vía player_teams (incluye invitados) con fallback a players.team_id.
   select exists (
     select 1 from public.players p
     where p.id = p_player_id and p.club_id = v_link.club_id
-      and (v_link.team_id is null or p.team_id = v_link.team_id)
+      and (
+        (v_link.session_id is not null
+          and exists (select 1 from public.session_participants sp
+                      where sp.session_id = v_link.session_id and sp.player_id = p.id))
+        or (
+          (v_link.session_id is null
+            or not exists (select 1 from public.session_participants sp where sp.session_id = v_link.session_id))
+          and (v_link.team_id is null
+               or p.team_id = v_link.team_id
+               or exists (select 1 from public.player_teams pt
+                          where pt.player_id = p.id and pt.team_id = v_link.team_id))
+        )
+      )
   ) into v_ok;
   if not v_ok then return jsonb_build_object('error','player_not_in_scope'); end if;
 
