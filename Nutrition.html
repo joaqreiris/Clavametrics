@@ -505,16 +505,17 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
 
   if (club) window.applyClubTheme();
   await nuInitTeamSwitch(clubId);
-  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
-  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+  // Con equipo activo filtramos por equipo PRINCIPAL (player_teams.is_primary), no por
+  // membresía a secas: los invitados multi-categoría (ej. Second team entrenando con First)
+  // solo aparecen en Nutrition bajo su equipo principal, para no duplicarlos entre equipos.
   const _nuSel = 'id,first_name,last_name,number,position,weight,height,date_of_birth'
-    + (_nuTeamId ? ', player_teams!inner(team_id)' : '');
+    + (_nuTeamId ? ', player_teams!inner(team_id,is_primary)' : '');
   let _nuPlQ = window.sb.from('players')
     .select(_nuSel)
     .eq('club_id', clubId)
     .neq('status', 'inactive')
     .is('archived_at', null);
-  if (_nuTeamId) _nuPlQ = _nuPlQ.eq('player_teams.team_id', _nuTeamId);
+  if (_nuTeamId) _nuPlQ = _nuPlQ.eq('player_teams.team_id', _nuTeamId).eq('player_teams.is_primary', true);
   const { data: players } = await _nuPlQ.order('last_name');
 
   const _seenNu = new Set();
