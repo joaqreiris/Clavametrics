@@ -34,7 +34,7 @@ separa las dos cosas: no resta (volumen completo) y excluye al jugador de las me
 | `lib/gp-card/resolver.js` · `aggregateSeries` | Medias (`avg`/`wavg`/`median`) y rollup de plantel excluyen filas/jugadores marcados; `total`/`max`/`min` usan a todos. Cada punto lleva `_nonTeam`. |
 | `assets/gp-builder/gp-builder.js` · líneas de referencia | Los `vals` de la línea AVG/mediana excluyen jugadores `_nonTeam`; las barras muestran el volumen completo. |
 | `assets/gps-session-control.js` | Mismo modelo: volumen completo + excluir de la media al jugador con período no-team (chip REHAB/TOP-UP/INDIV en la fila). |
-| `assets/gps-match-perf.js` | **PENDIENTE**: alinear (todavía resta). |
+| `assets/gps-match-perf.js` | Mismo modelo: `_mpMarkNonTeam` marca `_excludeMean`; `_mpAggVal` excluye de las medias. Los charts TD/HI van por el resolver → ya cubiertos. |
 
 ## Detalles de datos
 
@@ -50,7 +50,6 @@ separa las dos cosas: no resta (volumen completo) y excluye al jugador de las me
 
 ## Pendiente
 
-- `gps-match-perf.js`: sacar la resta, alinear con Modelo A.
 - (Opcional/perf) RPC context-aware para no caer siempre al camino crudo con no-team.
 - (Opcional) modo "aislar contexto" real en la tabla principal (hoy el filtro Context filtra a
   nivel sesión, que es todo `team`).
