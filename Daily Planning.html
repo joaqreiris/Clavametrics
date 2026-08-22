@@ -168,6 +168,8 @@
   /* Shared checklist popover */
   .dp-exp-menu{position:fixed;z-index:900;display:none;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.18));padding:6px;min-width:210px;max-width:min(760px,92vw);max-height:360px;overflow:auto}
   .dp-exp-menu.is-open{display:block}
+  /* Popover de convocatoria: más alto que el picker de ejercicios para evitar scroll vertical */
+  .dp-exp-menu.is-tall{max-height:min(80vh,700px)}
   /* Position columns inside the player picker — horizontal so there's less vertical scroll */
   .dp-exp-cols{display:flex;gap:8px;align-items:flex-start}
   .dp-exp-col{display:flex;flex-direction:column;gap:1px;min-width:128px}
@@ -973,6 +975,7 @@ function dpOpenExGroup(seid, gid, btn){
     : `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_available_players','No available players.')}</div>`;
   menu.innerHTML = `<div class="hd"><span>${_dpEsc(g.name)}</span><button onclick="dpClearExGroup()">${tt('daily_planning.clear','Clear')}</button></div>${body}`;
   // Measure after render so a wide multi-column menu is clamped inside the viewport.
+  menu.classList.remove('is-tall');
   menu.classList.add('is-open');
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -1009,6 +1012,7 @@ function dpOpenCopyGroups(seid, btn){
   const r = btn.getBoundingClientRect();
   menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
   menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  menu.classList.remove('is-tall');
   menu.classList.add('is-open');
 }
 function dpCopyGroupsFrom(targetSeid, sourceSeid){
@@ -1048,6 +1052,9 @@ async function dpChangeStatus(playerId, newStatus) {
 let _dpGroupTarget = null;   // sesión cuyo grupo se está editando en el popover
 let _dpGroupParts  = null;   // Set|null de esa sesión (null = sin grupo definido)
 function _dpGroupableSessions(){ return (_dpDaySessions || []).filter(s => (s.session_type || '') !== 'gym'); }
+// Invitado de otra categoría: su membresía en ESTE equipo (player_teams filtrado por el
+// inner join) no es la primaria → su equipo principal es otro (p. ej. Second team).
+function _dpIsGuest(p){ const rows = p.player_teams || []; return rows.length ? rows.every(r => !r.is_primary) : false; }
 async function _dpFetchSessParts(sessionId){
   try {
     const { data, error } = await window.sb.from('session_participants').select('player_id').eq('session_id', sessionId);
@@ -1062,6 +1069,7 @@ function dpOpenSessGroup(btn){
   _dpGroupParts  = (_dpGroupTarget === _dpCurrentSessionId) ? window._dpSessParts : null;
   _dpRenderSessGroupMenu();
   const menu = document.getElementById('dpExPlayersMenu');
+  menu.classList.add('is-tall');
   menu.classList.add('is-open');
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -1079,10 +1087,12 @@ function _dpRenderSessGroupMenu(){
   const menu = document.getElementById('dpExPlayersMenu');
   const list = _dpGroupableSessions();
   const parts = _dpGroupParts;
+  // stopPropagation en pills y "Everyone": el re-render saca el nodo clickeado del DOM antes
+  // de que el handler global de cierre corra menu.contains(e.target) → cerraría el popover.
   const pills = list.length >= 2
     ? `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:0 6px 6px">` + list.map(s => {
         const on = s.id === _dpGroupTarget;
-        return `<button type="button" onclick="dpSessGroupPick('${_dpEsc(s.id)}')" style="border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent-soft,rgba(22,163,74,.12))':'var(--cm-bg-soft)'};color:${on?'var(--cm-accent)':'var(--cm-fg-muted)'};border-radius:6px;padding:3px 8px;font:600 11px var(--cm-font-sans);cursor:pointer">${_dpEsc(_dpSessLabel(s))}</button>`;
+        return `<button type="button" onclick="event.stopPropagation();dpSessGroupPick('${_dpEsc(s.id)}')" style="border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent-soft,rgba(22,163,74,.12))':'var(--cm-bg-soft)'};color:${on?'var(--cm-accent)':'var(--cm-fg-muted)'};border-radius:6px;padding:3px 8px;font:600 11px var(--cm-font-sans);cursor:pointer">${_dpEsc(_dpSessLabel(s))}</button>`;
       }).join('') + `</div>`
     : '';
   const buckets = {};
@@ -1091,7 +1101,8 @@ function _dpRenderSessGroupMenu(){
     if (!buckets[g.l]) buckets[g.l] = { o:g.o, list:[] };
     buckets[g.l].list.push(p);
   });
-  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : true)?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span></label>`;
+  const guestTag = p => _dpIsGuest(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.guest_tag','guest')}</span>` : '';
+  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : true)?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span>${guestTag(p)}</label>`;
   const cols = Object.entries(buckets).sort((a,b)=>a[1].o-b[1].o)
     .map(([lbl,{list:ps}]) => `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${ps.length}</div>${ps.map(optRow).join('')}</div>`).join('');
   const body = cols ? `<div class="dp-exp-cols">${cols}</div>`
@@ -1099,7 +1110,7 @@ function _dpRenderSessGroupMenu(){
   const hint = parts
     ? tt('daily_planning.group_only_selected','Only ticked players are in this session')
     : tt('daily_planning.group_not_set','No group set — everyone available is in');
-  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.session_group','Session group')}</span><button onclick="dpClearSessGroup()">${tt('daily_planning.group_everyone','Everyone')}</button></div>`
+  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.session_group','Session group')}</span><button onclick="event.stopPropagation();dpClearSessGroup()">${tt('daily_planning.group_everyone','Everyone')}</button></div>`
     + pills
     + `<div style="padding:2px 10px 6px;color:var(--cm-fg-muted);font:500 11px var(--cm-font-sans)">${hint}</div>${body}`;
 }
@@ -1215,8 +1226,14 @@ async function loadDay(dateStr) {
   const _dpIsGym = s => !!s && (s.session_type || '') === 'gym';
   // A gym session has its own planner — never open it here in the field-planning layout.
   // (Reached via a ?session=<gymId> link; the switcher redirects before we get here.)
-  const _reqSess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || null;
+  let _reqSess = _dpDaySessions.find(s => s.id === _dpPreferredSessionId) || null;
   if (_dpIsGym(_reqSess)) { window.location.replace(`Gym Planner.html?date=${dateStr}`); return; }
+  // Un ?session= que apunta a un partido (URLs guardadas de cuando el partido era pestaña)
+  // se ignora: el partido no tiene hoja de plan — se abre la sesión de campo del día.
+  if (_reqSess && (_reqSess.session_type || '') === 'match') {
+    _reqSess = null; _dpPreferredSessionId = null;
+    try { const u = new URL(window.location.href); u.searchParams.delete('session'); history.replaceState(null, '', u); } catch (_) {}
+  }
   // Default to the day's first FIELD (non-gym, non-match) training session; honour an explicit
   // request (?session= / switcher). A gym/match-only day starts empty, ready to create one —
   // a match is a load unit (RPE/GPS), never a plan sheet to open by default.
@@ -3677,7 +3694,7 @@ function dpApplyReadOnly() {
   const yesterday  = cmYMD(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000));
 
   const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
-    window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id)').eq('club_id', clubId).eq('player_teams.team_id', _dpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
+    window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id,is_primary)').eq('club_id', clubId).eq('player_teams.team_id', _dpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
     window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).eq('team_id', _dpTeamId).order('start_date'),
     window.sb.from('treatments')
