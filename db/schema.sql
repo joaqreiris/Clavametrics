@@ -5347,6 +5347,79 @@ begin
 end $function$
 ;
 
+-- Convocatoria del partido "se llena sola" desde el Lineup: cada cambio en lineup_players
+-- re-sincroniza session_participants de la sesión-partido (titulares + suplentes; reservas y
+-- lesionados quedan fuera). El grupo del partido es espejo de la citación — una edición
+-- manual del grupo de un partido CON lineup se pisa en el próximo cambio del lineup (la
+-- fuente de verdad es el Lineup). Materializa la sesión-partido si aún no existe (misma
+-- lógica idempotente que resolve_rpe_session / ensure_match_session).
+CREATE OR REPLACE FUNCTION public.trg_sync_lineup_participants()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  L record; e record; v_sid uuid;
+begin
+  select * into L from public.lineups where id = coalesce(NEW.lineup_id, OLD.lineup_id);
+  if L.id is null or L.match_id is null then return coalesce(NEW, OLD); end if;
+  select ce.* into e from public.calendar_events ce where ce.id = L.match_id and ce.type = 'match';
+  if e.id is null then return coalesce(NEW, OLD); end if;
+
+  select ts.id into v_sid
+  from public.training_sessions ts
+  where ts.club_id = e.club_id and ts.session_date = e.date
+    and ts.session_type = 'match' and ts.team_id is not distinct from e.team_id
+  limit 1;
+  if v_sid is null then
+    insert into public.training_sessions
+      (club_id, team_id, session_date, session_time, duration, session_type,
+       title, estimated_rpe, published, visible_to)
+    values
+      (e.club_id, e.team_id, e.date, e.start_time, e.duration_minutes, 'match',
+       coalesce(nullif(trim(e.title), ''),
+                case when e.opponent is not null then 'Match vs ' || e.opponent else 'Match' end),
+       e.estimated_rpe, true, coalesce(e.visible_to, ARRAY['staff'::text]))
+    returning id into v_sid;
+  end if;
+
+  delete from public.session_participants sp where sp.session_id = v_sid;
+  insert into public.session_participants (session_id, player_id, club_id, created_by)
+  select v_sid, lp.player_id, e.club_id, auth.uid()
+  from public.lineup_players lp
+  where lp.lineup_id = L.id and lp.role in ('starter','substitute')
+  on conflict do nothing;
+
+  return coalesce(NEW, OLD);
+end; $function$
+;
+
+-- Al borrar un lineup, limpiar la convocatoria de su sesión-partido (vuelve a "todos los
+-- disponibles"); sin esto quedarían filas huérfanas espejando una citación que ya no existe.
+CREATE OR REPLACE FUNCTION public.trg_clear_lineup_participants()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare e record; v_sid uuid;
+begin
+  if OLD.match_id is null then return OLD; end if;
+  select ce.* into e from public.calendar_events ce where ce.id = OLD.match_id;
+  if e.id is null then return OLD; end if;
+  select ts.id into v_sid
+  from public.training_sessions ts
+  where ts.club_id = e.club_id and ts.session_date = e.date
+    and ts.session_type = 'match' and ts.team_id is not distinct from e.team_id
+  limit 1;
+  if v_sid is not null then
+    delete from public.session_participants sp where sp.session_id = v_sid;
+  end if;
+  return OLD;
+end; $function$
+;
+
 -- Mirror an ACTIVE injury into availability as 'injured' rows, so a logged injury shows up
 -- everywhere that reads availability (Availability grid, Daily Planning day squad, Hub…) without
 -- anyone opening the Availability page. One row per day in [start_date, end], where end =
@@ -5784,7 +5857,9 @@ CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
 CREATE TRIGGER injury_fill_availability AFTER INSERT OR UPDATE OF status, start_date, expected_return, returned_date ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_injury_fill_availability();
+CREATE TRIGGER lineup_players_sync_participants AFTER INSERT OR UPDATE OR DELETE ON public.lineup_players FOR EACH ROW EXECUTE FUNCTION trg_sync_lineup_participants();
 CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
+CREATE TRIGGER lineups_clear_participants AFTER DELETE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_clear_lineup_participants();
 CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
 CREATE TRIGGER load_templates_updated_at BEFORE UPDATE ON public.load_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_match_report AFTER INSERT ON public.match_reports FOR EACH ROW EXECUTE FUNCTION trg_act_match_report();
