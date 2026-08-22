@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/nutrition-calc.js"></script>
+<script src="assets/anthro-calc.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -52,11 +53,17 @@
   .nu-tab .ti { font-size:14px; }
 
   /* Layout: roster + detail */
-  .nu-layout { display:grid; grid-template-columns:300px 1fr; background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; min-height:820px; }
+  /* overflow:clip (no hidden): hidden crea un scrollport y anula el position:sticky del roster */
+  .nu-layout { display:grid; grid-template-columns:300px 1fr; background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; overflow:clip; min-height:820px; }
   @media (max-width:1100px) { .nu-layout { grid-template-columns:1fr; } }
 
   /* Roster */
   .nu-roster { border-right:1px solid var(--cm-border); display:flex; flex-direction:column; }
+  /* La columna de detalle estira el grid; sin tope, .nu-list nunca scrollea. Sticky + cap al viewport. */
+  @media (min-width:1101px) {
+    .nu-roster { position:sticky; top:68px; align-self:start; max-height:calc(100vh - 84px); }
+  }
+  @media (max-width:1100px) { .nu-list { max-height:45vh; } }
   .nu-rh { padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; }
   .nu-rh h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-strong); }
   .nu-rh .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
@@ -209,6 +216,7 @@
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="nuBtnTemplates"><i class="ti ti-template" style="font-size:14px"></i><span data-i18n="nutrition.btn_templates">Plan templates</span></button>
           <button class="cm-btn is-outline is-sm" id="nuBtnWeighIn"><i class="ti ti-scale" style="font-size:14px"></i><span data-i18n="nutrition.btn_weigh_in">Add weigh-in</span></button>
+          <button class="cm-btn is-outline is-sm" id="nuBtnAnthro"><i class="ti ti-ruler-measure" style="font-size:14px"></i><span data-i18n="nutrition.btn_anthro">Anthropometry</span></button>
           <button class="cm-btn is-primary is-sm" id="nuBtnNewPlan"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="nutrition.btn_new_plan">New plan</span></button>
         </div>
       </header>
@@ -1318,6 +1326,186 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
     ov.classList.add('on');
   }
 
+  // ── Evaluación antropométrica (pliegues JP3/JP7/DW4 → %BF Siri, BMI/RFM, somatotipo) ──
+  // Espejo del panel individual de Evaluations: guarda la MISMA doble fila
+  // (evaluations 'Body composition' + body_composition) para que aparezca en ambas páginas.
+  async function openAnthroModal() {
+    if (!_nuCurrent) { alert(tt('nutrition.select_player_first', 'Select a player first.')); return; }
+    const AC = window.anthroCalc;
+    if (!AC) { alert('anthro-calc.js not loaded'); return; }
+    nuBuildModal();
+    const p = _nuCurrent.player;
+    let ov = document.getElementById('nuAnthroModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuAnthroModal'; ov.className = 'nu-modal-ov';
+      const fld = (id, labelHtml, extra) => `<div class="nu-fld"><label>${labelHtml}</label><input id="${id}" type="number" ${extra || 'step="0.1"'}></div>`;
+      ov.innerHTML = `<div class="nu-modal" role="dialog" aria-modal="true" style="width:640px">
+        <div class="nu-modal-h"><i class="ti ti-ruler-measure" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="an_title">${tt('nutrition.an_title', 'Anthropometric evaluation')}</h3><button class="x" id="an_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b">
+          <div class="nu-grid">
+            <div class="nu-fld"><label>${tt('common.date', 'Date')}</label><input id="an_date" type="date"></div>
+            <div class="nu-fld"><label>${tt('nutrition.an_method', 'Method')}</label><select id="an_method">
+              <option value="jp3">${tt('nutrition.an_m_jp3', 'Jackson & Pollock · 3 sites')}</option>
+              <option value="jp7">${tt('nutrition.an_m_jp7', 'Jackson & Pollock · 7 sites')}</option>
+              <option value="dw4">${tt('nutrition.an_m_dw4', 'Durnin & Womersley · 4 sites')}</option></select></div>
+            <div class="nu-fld"><label>${tt('nutrition.f_sex', 'Sex')}</label><select id="an_sex">
+              <option value="M">${tt('nutrition.sex_male', 'Male')}</option>
+              <option value="F">${tt('nutrition.sex_female', 'Female')}</option></select></div>
+          </div>
+          <div class="nu-grid">
+            ${fld('an_age', tt('nutrition.an_age', 'Age (years)'), 'min="15" max="80" step="1"')}
+            ${fld('an_weight', tt('nutrition.f_weight_kg', 'Weight (kg)'), 'min="30" max="200" step="0.1"')}
+            ${fld('an_height', tt('nutrition.f_height_cm', 'Height (cm)'), 'min="120" max="230" step="0.5"')}
+          </div>
+          <div class="nu-sec">${tt('nutrition.an_folds', 'Skinfolds (mm)')}</div>
+          <div class="nu-grid" id="an_folds"></div>
+          <div class="nu-sec" id="an_adv_tg" style="cursor:pointer;user-select:none"><i class="ti ti-chevron-right"></i> ${tt('nutrition.an_advanced', 'Advanced anthropometry (optional)')}</div>
+          <div id="an_adv" style="display:none;flex-direction:column;gap:14px">
+            <div class="nu-grid">
+              ${fld('an_waist', tt('nutrition.an_waist', 'Waist (cm) · RFM'), 'min="40" max="200" step="0.1"')}
+              ${fld('an_arm_girth', tt('nutrition.an_arm_girth', 'Flexed arm girth (cm)'), 'min="15" max="60" step="0.1"')}
+              ${fld('an_calf_girth', tt('nutrition.an_calf_girth', 'Calf girth (cm)'), 'min="20" max="60" step="0.1"')}
+            </div>
+            <div class="nu-grid">
+              ${fld('an_humerus', tt('nutrition.an_humerus', 'Humerus breadth (cm)'), 'min="4" max="12" step="0.1"')}
+              ${fld('an_femur', tt('nutrition.an_femur', 'Femur breadth (cm)'), 'min="6" max="14" step="0.1"')}
+              ${fld('an_sf_supraspinal', tt('nutrition.an_sf_supraspinal', 'Supraspinal fold (mm)'), 'min="1" max="80" step="0.1"')}
+            </div>
+            <div class="nu-grid">
+              ${fld('an_sf_calf', tt('nutrition.an_sf_calf', 'Calf fold (mm)'), 'min="1" max="80" step="0.1"')}
+            </div>
+          </div>
+          <div class="nu-info"><div class="b" id="an_out">${tt('nutrition.an_result_pending', 'Fill age + required folds to compute %BF')}</div><div class="c" id="an_out2" style="display:none"></div></div>
+          <div class="nu-fld"><label>${tt('nutrition.f_notes', 'Notes')}</label><textarea id="an_notes" placeholder="${tt('nutrition.notes_optional_ph', 'Optional…')}"></textarea></div>
+        </div>
+        <div class="nu-modal-f"><button class="cm-btn is-outline is-sm" id="an_cancel">${tt('common.cancel', 'Cancel')}</button>
+          <button class="cm-btn is-primary is-sm" id="an_save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i>${tt('nutrition.an_save', 'Save evaluation')}</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      const $ = id => ov.querySelector('#' + id);
+      $('an_close').onclick = $('an_cancel').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+      $('an_adv_tg').onclick = () => {
+        const adv = $('an_adv'), ic = $('an_adv_tg').querySelector('i');
+        const open = adv.style.display === 'none';
+        adv.style.display = open ? 'flex' : 'none';
+        ic.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-right';
+      };
+
+      const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : null; };
+      const readFolds = () => {
+        const folds = {};
+        ov.querySelectorAll('#an_folds input').forEach(i => { const v = parseFloat(i.value); if (isFinite(v)) folds[i.dataset.site] = v; });
+        return folds;
+      };
+      const recalc = () => {
+        const folds = readFolds(), sex = $('an_sex').value;
+        const pct = AC.sfBodyFatPct({ formula: $('an_method').value, sex, age: num('an_age'), folds });
+        const w = num('an_weight'), h = num('an_height');
+        const out = $('an_out'), out2 = $('an_out2');
+        if (pct == null) { out.textContent = tt('nutrition.an_result_pending', 'Fill age + required folds to compute %BF'); out2.style.display = 'none'; return; }
+        let main = `%BF ${pct}%`;
+        if (w != null) main += ` · ${tt('nutrition.an_fat_mass', 'fat')} ${(w * pct / 100).toFixed(1)} kg · ${tt('nutrition.an_lean_mass', 'lean')} ${(w * (1 - pct / 100)).toFixed(1)} kg`;
+        out.textContent = main;
+        const bmi = AC.calcBMI(w, h), rfm = AC.calcRFM(h, num('an_waist'), sex);
+        const soma = AC.calcSomatotype({ heightCm: h, weightKg: w,
+          sfTriceps: folds.triceps ?? null, sfSubscap: folds.subscapular ?? null,
+          sfSupraspinal: num('an_sf_supraspinal'), sfCalf: num('an_sf_calf'),
+          humerus: num('an_humerus'), femur: num('an_femur'),
+          armGirth: num('an_arm_girth'), calfGirth: num('an_calf_girth') });
+        const extras = [];
+        if (bmi != null) extras.push(`BMI ${bmi}`);
+        if (rfm != null) extras.push(`RFM ${rfm}%`);
+        if (soma.endo != null || soma.meso != null || soma.ecto != null)
+          extras.push(`${tt('nutrition.an_somatotype', 'somatotype')} ${soma.endo ?? '—'}-${soma.meso ?? '—'}-${soma.ecto ?? '—'}`);
+        out2.textContent = extras.join(' · ');
+        out2.style.display = extras.length ? '' : 'none';
+      };
+      const renderFolds = () => {
+        const area = $('an_folds');
+        const keep = {}; area.querySelectorAll('input').forEach(i => { keep[i.dataset.site] = i.value; });
+        area.innerHTML = AC.sfFormulaSites($('an_method').value, $('an_sex').value).map(s =>
+          `<div class="nu-fld"><label>${nuEsc(tt('evaluations.bc_site_' + s, AC.SITE_LABEL[s] || s))} (mm)</label>
+             <input type="number" min="1" max="80" step="0.5" data-site="${s}" value="${keep[s] || ''}"></div>`).join('');
+        area.querySelectorAll('input').forEach(i => i.addEventListener('input', recalc));
+        recalc();
+      };
+      ov._anRenderFolds = renderFolds;
+      $('an_method').onchange = $('an_sex').onchange = renderFolds;
+      ['an_age', 'an_weight', 'an_height', 'an_waist', 'an_arm_girth', 'an_calf_girth', 'an_humerus', 'an_femur', 'an_sf_supraspinal', 'an_sf_calf']
+        .forEach(id => $(id).addEventListener('input', recalc));
+
+      $('an_save').onclick = async () => {
+        const pl = _nuCurrent.player;
+        const method = $('an_method').value, sex = $('an_sex').value;
+        const age = num('an_age'), weight = num('an_weight');
+        if (age == null || weight == null) { alert(tt('nutrition.an_need_age_weight', 'Enter age and weight.')); return; }
+        const folds = readFolds();
+        const pct = AC.sfBodyFatPct({ formula: method, sex, age, folds });
+        if (pct == null) { alert(tt('nutrition.an_invalid', 'Invalid skinfold values — check inputs.')); return; }
+        const testDate = $('an_date').value || cmToday();
+        const btn = $('an_save'); btn.disabled = true;
+
+        // 1) Fila en evaluations — mismo shape que el panel individual de Evaluations.
+        const density = 4.95 / (pct / 100 + 4.50);
+        const computed = { inputs: { method, gender: sex, age, weight }, density: +density.toFixed(5), pct,
+          fatMass: +(weight * pct / 100).toFixed(1), leanMass: +(weight * (1 - pct / 100)).toFixed(1) };
+        const userNote = $('an_notes').value.trim();
+        if (userNote) computed.userNotes = userNote;
+        const { error: evErr } = await window.sb.from('evaluations').insert({
+          player_id: pl.id, club_id: clubId, evaluation_type: 'Body composition',
+          value: pct, unit: '%BF', test_date: testDate, notes: JSON.stringify(computed) });
+
+        // 2) Fila estructurada en body_composition (fuente de verdad de antropometría).
+        const nn = v => (v != null && isFinite(v) ? v : null);
+        const heightCm = num('an_height'), waistCm = num('an_waist');
+        const soma = AC.calcSomatotype({ heightCm, weightKg: weight,
+          sfTriceps: nn(folds.triceps), sfSubscap: nn(folds.subscapular),
+          sfSupraspinal: num('an_sf_supraspinal'), sfCalf: num('an_sf_calf'),
+          humerus: num('an_humerus'), femur: num('an_femur'),
+          armGirth: num('an_arm_girth'), calfGirth: num('an_calf_girth') });
+        const { error: bcErr } = await window.sb.from('body_composition').insert({
+          player_id: pl.id, club_id: clubId, measured_date: testDate,
+          method: 'skinfold', weight_kg: weight, body_fat_pct: pct,
+          lean_mass_kg: +(weight * (1 - pct / 100)).toFixed(1),
+          sf_chest: nn(folds.chest), sf_abdominal: nn(folds.abdomen), sf_thigh: nn(folds.thigh),
+          sf_triceps: nn(folds.triceps), sf_subscapular: nn(folds.subscapular),
+          sf_midaxillary: nn(folds.midaxillary), sf_biceps: nn(folds.biceps),
+          sf_supraspinal: (num('an_sf_supraspinal') != null ? num('an_sf_supraspinal') : nn(folds.suprailiac)),
+          sf_calf: num('an_sf_calf'),
+          sf_formula: method.toUpperCase(),
+          sum_skinfolds: AC.sfFormulaSites(method, sex).reduce((a, k) => a + (parseFloat(folds[k]) || 0), 0) || null,
+          age_years: age, sex: sex === 'F' ? 'female' : 'male',
+          height_cm: heightCm, waist_cm: waistCm,
+          girth_arm_flexed: num('an_arm_girth'), girth_calf: num('an_calf_girth'),
+          breadth_humerus: num('an_humerus'), breadth_femur: num('an_femur'),
+          bmi: AC.calcBMI(weight, heightCm), rfm: AC.calcRFM(heightCm, waistCm, sex),
+          soma_endo: soma.endo, soma_meso: soma.meso, soma_ecto: soma.ecto,
+          notes: userNote || null, created_by: profile?.id || null });
+
+        btn.disabled = false;
+        if (evErr || bcErr) {
+          alert(tt('nutrition.an_err_save', 'Could not save: {msg}', { msg: (evErr || bcErr).message }));
+          if (evErr && bcErr) return;   // nada se guardó — dejar el modal abierto
+        }
+        ov.classList.remove('on');
+        loadPlayerDetail(pl);
+      };
+    }
+    const $ = id => ov.querySelector('#' + id);
+    $('an_title').textContent = tt('nutrition.an_title_name', `Anthropometric evaluation · ${p._name || 'player'}`, { name: p._name || tt('common.player', 'player') });
+    $('an_date').value = cmToday();
+    const bc = _nuCurrent.bodyComp;
+    $('an_age').value = nuAge(p.date_of_birth) ?? '';
+    $('an_weight').value = (bc && bc.weight_kg) || p.weight || '';
+    $('an_height').value = p.height || '';
+    ['an_waist', 'an_arm_girth', 'an_calf_girth', 'an_humerus', 'an_femur', 'an_sf_supraspinal', 'an_sf_calf', 'an_notes'].forEach(id => { $(id).value = ''; });
+    $('an_folds').innerHTML = '';
+    ov._anRenderFolds();
+    ov.classList.add('on');
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  FASE E — KPIs del squad + Flags / Attention notes derivadas
   // ═══════════════════════════════════════════════════════════
@@ -1780,6 +1968,8 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
   if (btnEdit) btnEdit.onclick = openAssignModal;
   const btnWeigh = document.getElementById('nuBtnWeighIn');
   if (btnWeigh) btnWeigh.onclick = openWeighInModal;
+  const btnAnthro = document.getElementById('nuBtnAnthro');
+  if (btnAnthro) btnAnthro.onclick = openAnthroModal;
   const btnShare = document.getElementById('nuBtnShare');
   if (btnShare) btnShare.onclick = openShareModal;
   const btnHist = document.getElementById('nuBtnHistory');
