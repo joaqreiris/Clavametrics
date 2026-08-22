@@ -772,6 +772,10 @@
 
 <script>
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
+// Top-level (NO dentro del IIFE): también la usan el IIFE del club switcher (que corre
+// sin await, antes de que el flujo principal avance) y el bloque <script> del gestor de
+// equipos más abajo. Dentro del IIFE quedaría fuera de scope / en TDZ → ReferenceError.
+const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
@@ -870,7 +874,6 @@ function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     return _TEAM_COLORS[h % _TEAM_COLORS.length];
   }
-  const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   const _safeUrl = u => { const s = String(u == null ? '' : u).trim(); return /^(https?:\/\/|\/|\.\/|#|data:image\/)/i.test(s) ? s : '#'; };
 
   // ── Org / workspace bar ──────────────────────────────────────────
