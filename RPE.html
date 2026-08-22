@@ -1073,7 +1073,7 @@
     shareTeam.innerHTML = state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     const curTeam = activeTeamId();
     if (curTeam && [...shareTeam.options].some(o => o.value === curTeam)) shareTeam.value = curTeam;
-    shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','No session (linked by date)'))}</option>` +
+    shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','Auto (linked by date & time)'))}</option>` +
       mergedRecentList().map(o => `<option value="${o.value}">${T.escape(o.label)}</option>`).join('');
     const curSess = document.getElementById('rmSessionSelect').value;
     if (curSess && [...shareSession.options].some(o => o.value === curSess)) shareSession.value = curSess;
@@ -1092,7 +1092,7 @@
         btnGen.innerHTML = '<i class="ti ti-refresh"></i>' + T.escape(tt('rpe.newLink','New'));
         tokNote.style.display = '';
         const sessLabel = shareSession.options[shareSession.selectedIndex].text;
-        const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', 'linked by date, assign later');
+        const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', "auto-assigned to the day's session by time");
         tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('rpe.secureLinkValid', 'Secure link · valid until revoked · ' + att, { att }));
         if (shareMsg) { shareMsg.value = composeMsg(); shareMsgWrap.style.display = ''; }
         btnCopy.disabled = false; btnWa.disabled = false; btnTg.disabled = false;
@@ -1155,7 +1155,7 @@
       const st = document.getElementById('shareTeam');
       if (st && state.fullAccess && st.options[0] && st.options[0].value === '') st.options[0].text = tt('rpe.wholeClub', 'Whole club');
       const ss = document.getElementById('shareSession');
-      if (ss && ss.options[0] && ss.options[0].value === '') ss.options[0].text = tt('rpe.noSessionLinkedByDate', 'No session (linked by date)');
+      if (ss && ss.options[0] && ss.options[0].value === '') ss.options[0].text = tt('rpe.noSessionLinkedByDate', 'Auto (linked by date & time)');
       renderRpe();
       renderOrphans();
     } catch (e) {}

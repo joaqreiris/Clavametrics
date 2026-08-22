@@ -4092,54 +4092,76 @@ begin
 end; $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.link_rpe_to_session(p_rpe_id uuid)
+-- Resuelve a qué sesión del día pertenece un RPE. Con p_local_time (hora local del envío)
+-- gana la última sesión ya iniciada — el RPE se responde después de entrenar —, y si ninguna
+-- empezó, la próxima; clave para días de doble sesión (AM/PM). Sin hora, desempata por
+-- duración (comportamiento previo). Si no hay training session, materializa el partido del
+-- calendario de ese día vía ensure_match_session.
+CREATE OR REPLACE FUNCTION public.resolve_rpe_session(p_club uuid, p_player uuid, p_date date, p_local_time time without time zone DEFAULT NULL::time without time zone)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_team uuid; v_sid uuid; v_evt uuid;
+begin
+  select team_id into v_team from public.players where id = p_player;
+
+  select ts.id into v_sid
+  from public.training_sessions ts
+  where ts.club_id = p_club
+    and ts.session_date = p_date
+    and (v_team is null or ts.team_id = v_team)
+  order by (ts.session_time is null),
+           case when p_local_time is null then interval '0'
+                when ts.session_time <= p_local_time then p_local_time - ts.session_time
+                else (ts.session_time - p_local_time) + interval '12 hours' end,
+           ts.duration desc nulls last
+  limit 1;
+
+  if v_sid is null then
+    select ce.id into v_evt
+    from public.calendar_events ce
+    where ce.club_id = p_club
+      and ce.type = 'match'
+      and ce.date = p_date
+      and (v_team is null or ce.team_id is not distinct from v_team)
+    limit 1;
+    if v_evt is not null then
+      v_sid := public.ensure_match_session(v_evt);
+    end if;
+  end if;
+
+  return v_sid;
+end; $function$
+;
+
+CREATE OR REPLACE FUNCTION public.link_rpe_to_session(p_rpe_id uuid, p_local_time time without time zone DEFAULT NULL::time without time zone)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare r record; s record; v_team uuid; v_date date; v_evt uuid; v_sid uuid;
+declare r record; v_sid uuid; v_t time;
 begin
   select * into r from public.rpe where id = p_rpe_id;
   if not found or r.session_id is not null then return; end if;
 
-  -- categoría del jugador
-  select team_id into v_team from public.players where id = r.player_id;
-  v_date := coalesce(r.session_date, r.created_at::date);
+  -- Sin hora local, aproximar con la hora UTC del envío (error acotado a ±3h en los clubes
+  -- actuales; alcanza para separar sesiones AM/PM).
+  v_t := coalesce(p_local_time, (r.created_at at time zone 'UTC')::time);
+  v_sid := public.resolve_rpe_session(r.club_id, r.player_id, coalesce(r.session_date, r.created_at::date), v_t);
 
-  -- buscar sesión de la misma fecha Y de la categoría del jugador
-  select ts.* into s
-  from public.training_sessions ts
-  where ts.club_id = r.club_id
-    and ts.session_date = v_date
-    and (v_team is null or ts.team_id = v_team)   -- ← ahora matchea por categoría
-  order by ts.duration desc nulls last
-  limit 1;
-
-  -- Sin sesión de entrenamiento ese día → probar un partido del calendario (calendar_events).
-  -- Se materializa a training_sessions para que el RPE pueda enlazarse.
-  if not found then
-    select ce.id into v_evt
-    from public.calendar_events ce
-    where ce.club_id = r.club_id
-      and ce.type = 'match'
-      and ce.date = v_date
-      and (v_team is null or ce.team_id is not distinct from v_team)
-    limit 1;
-    if v_evt is not null then
-      v_sid := public.ensure_match_session(v_evt);
-      if v_sid is not null then
-        select ts.* into s from public.training_sessions ts where ts.id = v_sid;
-      end if;
-    end if;
-  end if;
-
-  if s.id is not null then
-    update public.rpe
-       set session_id = s.id,
-           duration   = coalesce(r.duration, s.duration),
-           load       = r.rpe * coalesce(s.duration, r.duration)
-     where id = r.id;
+  -- No pisar el unique (player_id, session_id): si esa sesión ya tiene RPE del jugador, se
+  -- deja huérfano para asignación manual.
+  if v_sid is not null and not exists (
+       select 1 from public.rpe where player_id = r.player_id and session_id = v_sid and id <> r.id) then
+    update public.rpe rp
+       set session_id = v_sid,
+           duration   = coalesce(rp.duration, ts.duration),
+           load       = rp.rpe * coalesce(ts.duration, rp.duration)
+      from public.training_sessions ts
+     where rp.id = p_rpe_id and ts.id = v_sid;
   end if;
 end; $function$
 ;
@@ -4938,7 +4960,7 @@ CREATE OR REPLACE FUNCTION public.submit_survey(p_token text, p_player_id uuid, 
 AS $function$
 declare
   v_link record; v_ok boolean; v_read int; v_hooper int;
-  v_areas text[]; v_note text; v_pname text; v_team uuid; v_rpe_id uuid; v_dur int; v_sdate date;
+  v_areas text[]; v_note text; v_pname text; v_team uuid; v_sid uuid; v_dur int; v_sdate date;
   v_tz int; v_local_date date;
 begin
   select * into v_link from public.share_links
@@ -4975,16 +4997,34 @@ begin
       values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
               v_link.session_id, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), coalesce(v_sdate, current_date));
     else
-      -- Candado por día (link sin sesión): ya respondió hoy (día local del jugador).
-      if exists (select 1 from public.rpe
-                 where club_id = v_link.club_id and player_id = p_player_id
-                   and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date) then
-        return jsonb_build_object('ok', true, 'already', true);
+      -- Link genérico (sin sesión): resolver la sesión por hora local del envío y candar POR
+      -- SESIÓN, así en días de doble sesión (AM + partido) se pueden cargar ambos RPE.
+      v_sid := public.resolve_rpe_session(v_link.club_id, p_player_id, v_local_date,
+                 ((now() at time zone 'UTC') - make_interval(mins => v_tz))::time);
+      if v_sid is not null then
+        -- Bloquea el duplicado de ESA sesión, y también si quedó un huérfano de hoy sin
+        -- asignar (no se puede saber a qué sesión pertenecía; lo resuelve el staff).
+        if exists (select 1 from public.rpe
+                   where club_id = v_link.club_id and player_id = p_player_id
+                     and (session_id = v_sid
+                          or (session_id is null
+                              and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date))) then
+          return jsonb_build_object('ok', true, 'already', true);
+        end if;
+        select duration into v_dur from public.training_sessions where id = v_sid;
+        insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_id, duration, load, session_date)
+        values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
+                v_sid, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), v_local_date);
+      else
+        -- Sin sesión ni partido ese día: queda huérfano con candado por día (como antes).
+        if exists (select 1 from public.rpe
+                   where club_id = v_link.club_id and player_id = p_player_id
+                     and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date) then
+          return jsonb_build_object('ok', true, 'already', true);
+        end if;
+        insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_date)
+        values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas, v_local_date);
       end if;
-      insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_date)
-      values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas, v_local_date)
-      returning id into v_rpe_id;
-      perform public.link_rpe_to_session(v_rpe_id);
     end if;
   else
     -- Wellness: uno por día (día local del jugador, no UTC).
