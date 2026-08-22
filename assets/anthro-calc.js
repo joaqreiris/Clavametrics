@@ -96,6 +96,20 @@
   var SITE_LABEL = { chest: 'Chest', abdomen: 'Abdomen', thigh: 'Thigh', triceps: 'Triceps',
     subscapular: 'Subscapular', suprailiac: 'Suprailiac', midaxillary: 'Midaxillary', biceps: 'Biceps' };
 
+  // Pliegue canónico → columna de body_composition (igual que Evaluations:
+  // suprailiac se guarda en sf_supraspinal, no hay columna sf_suprailiac).
+  var BC_SF_COL = { chest: 'sf_chest', abdomen: 'sf_abdominal', thigh: 'sf_thigh', triceps: 'sf_triceps',
+    subscapular: 'sf_subscapular', midaxillary: 'sf_midaxillary', biceps: 'sf_biceps', suprailiac: 'sf_supraspinal' };
+
+  // Columnas de pliegues para una grilla bulk (JP3 muestra la unión de ambos sexos; se habilita por fila).
+  function bcSkinfoldCols(formula) {
+    var f = String(formula || 'JP3').toUpperCase();
+    if (f === 'JP7') return sfFormulaSites('JP7');
+    if (f === 'DW4') return sfFormulaSites('DW4');
+    return ['chest', 'abdomen', 'thigh', 'triceps', 'suprailiac'];   // unión JP3
+  }
+
   window.anthroCalc = { sfFormulaSites: sfFormulaSites, sfBodyFatPct: sfBodyFatPct,
-    calcBMI: calcBMI, calcRFM: calcRFM, calcSomatotype: calcSomatotype, SITE_LABEL: SITE_LABEL };
+    calcBMI: calcBMI, calcRFM: calcRFM, calcSomatotype: calcSomatotype,
+    SITE_LABEL: SITE_LABEL, BC_SF_COL: BC_SF_COL, bcSkinfoldCols: bcSkinfoldCols };
 })();

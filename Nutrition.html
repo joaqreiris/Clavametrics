@@ -1506,6 +1506,189 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
     ov.classList.add('on');
   }
 
+  // Menú del botón Anthropometry: evaluación individual o carga masiva del plantel.
+  function openAnthroMenu(btn) {
+    const old = document.getElementById('nuAnthroMenu');
+    if (old) { old.remove(); return; }
+    const m = document.createElement('div'); m.id = 'nuAnthroMenu';
+    m.style.cssText = 'position:absolute;z-index:9100;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:9px;box-shadow:var(--cm-shadow-3,0 12px 32px rgba(0,0,0,.18));padding:4px;min-width:210px';
+    const item = (icon, label) => `<button style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:0;background:transparent;border-radius:6px;cursor:pointer;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg)" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background='transparent'"><i class="ti ${icon}" style="font-size:15px;color:var(--cm-fg-muted)"></i>${label}</button>`;
+    m.innerHTML = item('ti-user', tt('nutrition.an_individual', 'Individual evaluation'))
+                + item('ti-users-group', tt('nutrition.an_bulk', 'Bulk entry (squad)'));
+    document.body.appendChild(m);
+    const r = btn.getBoundingClientRect();
+    m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
+    m.style.top = (r.bottom + 6 + window.scrollY) + 'px';
+    const [bInd, bBulk] = m.querySelectorAll('button');
+    bInd.onclick = () => { m.remove(); openAnthroModal(); };
+    bBulk.onclick = () => { m.remove(); openAnthroBulkModal(); };
+    const close = e => { if (btn.contains(e.target)) return; m.remove(); document.removeEventListener('click', close); };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
+
+  // Carga masiva de composición corporal — espejo de la grilla bulk de Evaluations:
+  // misma fila de body_composition por jugador; las filas en blanco se saltean.
+  function openAnthroBulkModal() {
+    const AC = window.anthroCalc;
+    if (!AC) { alert('anthro-calc.js not loaded'); return; }
+    nuBuildModal();
+    let ov = document.getElementById('nuAnthroBulkModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuAnthroBulkModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal" role="dialog" aria-modal="true" style="width:min(96vw,1080px)">
+        <div class="nu-modal-h"><i class="ti ti-users-group" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3>${tt('nutrition.an_bulk_title', 'Anthropometry · bulk entry')}</h3><button class="x" id="anb_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b">
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+            <div class="nu-fld"><label>${tt('common.date', 'Date')}</label><input id="anb_date" type="date"></div>
+            <div class="nu-fld"><label>${tt('nutrition.an_mode', 'Mode')}</label><select id="anb_mode">
+              <option value="skinfolds">${tt('evaluations.bc_mode_skinfolds', 'Skinfolds')}</option>
+              <option value="results">${tt('evaluations.bc_mode_results', 'Results')}</option></select></div>
+            <div class="nu-fld" id="anb_formula_w"><label>${tt('nutrition.an_formula', 'Formula')}</label><select id="anb_formula">
+              <option value="jp3">${tt('nutrition.an_m_jp3', 'Jackson & Pollock · 3 sites')}</option>
+              <option value="jp7">${tt('nutrition.an_m_jp7', 'Jackson & Pollock · 7 sites')}</option>
+              <option value="dw4">${tt('nutrition.an_m_dw4', 'Durnin & Womersley · 4 sites')}</option></select></div>
+            <div class="nu-fld" id="anb_method_w" style="display:none"><label>${tt('nutrition.an_method', 'Method')}</label><select id="anb_method">
+              <option value="dexa">DEXA</option><option value="bia">BIA</option><option value="scale">${tt('evaluations.bc_scale', 'Scale')}</option></select></div>
+          </div>
+          <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('evaluations.bc_bulk_hint', 'One measurement per player, written to the shared body-composition history. In Skinfolds mode %BF, lean mass and BMI are computed. Blank rows are skipped.')}</div>
+          <div style="overflow:auto;max-height:56vh;border:1px solid var(--cm-border);border-radius:8px">
+            <table style="border-collapse:collapse;width:100%"><thead id="anb_head"></thead><tbody id="anb_body"></tbody></table>
+          </div>
+        </div>
+        <div class="nu-modal-f"><button class="cm-btn is-outline is-sm" id="anb_cancel">${tt('common.cancel', 'Cancel')}</button>
+          <span id="anb_msg" style="display:none;font:600 12px/1 var(--cm-font-sans);color:var(--cm-success,#16A34A)"></span>
+          <button class="cm-btn is-primary is-sm" id="anb_save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i>${tt('nutrition.an_bulk_save', 'Save all')}</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      const $ = id => ov.querySelector('#' + id);
+      $('anb_close').onclick = $('anb_cancel').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+
+      const cols = () => {
+        if ($('anb_mode').value === 'results')
+          return [{ key: 'weight_kg', label: tt('evaluations.bc_weight_kg', 'Weight (kg)') },
+                  { key: 'body_fat_pct', label: tt('evaluations.bc_bodyfat', 'Body fat (%)') },
+                  { key: 'lean_mass_kg', label: tt('evaluations.bc_lean_kg', 'Lean mass (kg)') },
+                  { key: 'height_cm', label: tt('evaluations.bc_height_cm', 'Height (cm)') }];
+        return [{ key: 'weight_kg', label: tt('evaluations.bc_weight_kg', 'Weight (kg)') },
+                { key: 'height_cm', label: tt('evaluations.bc_height_cm', 'Height (cm)') }]
+          .concat(AC.bcSkinfoldCols($('anb_formula').value).map(s => ({ key: 'sf_' + s, site: s, label: tt('evaluations.bc_site_' + s, AC.SITE_LABEL[s] || s) + ' (mm)' })));
+      };
+      const applyJp3Sex = tr => {
+        const sex = tr.querySelector('.anb-sex')?.value || 'M';
+        const enabled = AC.sfFormulaSites('JP3', sex);
+        ['chest', 'abdomen', 'thigh', 'triceps', 'suprailiac'].forEach(s => {
+          const inp = tr.querySelector('.anb-sf-' + s); if (!inp) return;
+          const on = enabled.includes(s);
+          inp.disabled = !on; inp.style.opacity = on ? '' : '0.35';
+          if (!on) inp.value = '';
+        });
+      };
+      const rowFolds = tr => {
+        const folds = {};
+        AC.bcSkinfoldCols($('anb_formula').value).forEach(s => {
+          const el = tr.querySelector('.anb-sf-' + s);
+          if (el && !el.disabled) { const v = parseFloat(el.value); if (isFinite(v)) folds[s] = v; }
+        });
+        return folds;
+      };
+      const updateRowPct = tr => {
+        const cell = tr.querySelector('.anb-pct'); if (!cell) return;
+        const p = list.find(x => x.id === tr.dataset.pid);
+        const pct = AC.sfBodyFatPct({ formula: $('anb_formula').value, sex: tr.querySelector('.anb-sex')?.value || 'M',
+          age: p ? nuAge(p.date_of_birth) : null, folds: rowFolds(tr) });
+        cell.textContent = pct == null ? '—' : pct.toFixed(1) + '%';
+      };
+      const render = () => {
+        const mode = $('anb_mode').value, cs = cols();
+        $('anb_formula_w').style.display = mode === 'skinfolds' ? '' : 'none';
+        $('anb_method_w').style.display = mode === 'results' ? '' : 'none';
+        const thc = 'text-align:left;padding:9px 8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap;position:sticky;top:0;background:var(--cm-surface);z-index:1';
+        const cell = 'padding:5px 6px;border-bottom:1px solid var(--cm-border-soft)';
+        const inp = 'height:30px;width:76px;padding:0 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);font:500 12.5px/1 var(--cm-font-sans)';
+        let head = `<th style="${thc};padding-left:10px">${tt('common.player', 'Player')}</th>`;
+        if (mode === 'skinfolds') head += `<th style="${thc}">${tt('evaluations.sex', 'Sex')}</th>`;
+        head += cs.map(c => `<th style="${thc}">${nuEsc(c.label)}</th>`).join('');
+        if (mode === 'skinfolds') head += `<th style="${thc}">%BF</th>`;
+        $('anb_head').innerHTML = `<tr>${head}</tr>`;
+        $('anb_body').innerHTML = list.map(p => {
+          let tds = `<td style="${cell};font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);white-space:nowrap;padding-left:10px">${nuEsc(p._name)}</td>`;
+          if (mode === 'skinfolds') tds += `<td style="${cell}"><select class="anb-sex" style="${inp};width:auto;min-width:56px;padding:0 6px"><option value="M">M</option><option value="F">F</option></select></td>`;
+          tds += cs.map(c => {
+            const val = c.key === 'height_cm' && p.height != null ? p.height : '';
+            return `<td style="${cell}"><input type="number" step="0.1" min="0" class="${c.key}${c.site ? ' anb-sf anb-sf-' + c.site : ''}" style="${inp}" value="${val}"></td>`;
+          }).join('');
+          if (mode === 'skinfolds') tds += `<td style="${cell};font:600 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap" class="anb-pct">—</td>`;
+          return `<tr data-pid="${p.id}">${tds}</tr>`;
+        }).join('');
+        if (mode === 'skinfolds' && $('anb_formula').value === 'jp3')
+          ov.querySelectorAll('#anb_body tr').forEach(applyJp3Sex);
+      };
+      $('anb_mode').onchange = render;
+      $('anb_formula').onchange = render;
+      $('anb_body').addEventListener('input', e => { const tr = e.target.closest('tr'); if (tr) updateRowPct(tr); });
+      $('anb_body').addEventListener('change', e => {
+        if (!e.target.classList.contains('anb-sex')) return;
+        const tr = e.target.closest('tr'); if (!tr) return;
+        if ($('anb_formula').value === 'jp3') applyJp3Sex(tr);
+        updateRowPct(tr);
+      });
+      ov._anbRender = render;
+
+      $('anb_save').onclick = async () => {
+        const date = $('anb_date').value;
+        if (!date) { alert(tt('evaluations.enter_date', 'Enter a date.')); return; }
+        const mode = $('anb_mode').value, formula = $('anb_formula').value.toUpperCase();
+        const rows = [];
+        ov.querySelectorAll('#anb_body tr').forEach(tr => {
+          const pid = tr.dataset.pid; if (!pid) return;
+          const num = cls => { const el = tr.querySelector('.' + cls); if (!el || el.disabled) return null; const v = parseFloat(el.value); return isFinite(v) ? v : null; };
+          const weight = num('weight_kg'), height = num('height_cm');
+          if (mode === 'results') {
+            let bf = num('body_fat_pct'), lean = num('lean_mass_kg');
+            if (weight == null && bf == null && lean == null) return;   // fila en blanco (altura sola es prefill)
+            if (lean == null && weight != null && bf != null) lean = +(weight * (1 - bf / 100)).toFixed(1);
+            rows.push({ player_id: pid, club_id: clubId, measured_date: date, method: $('anb_method').value,
+              weight_kg: weight, body_fat_pct: bf, lean_mass_kg: lean, height_cm: height,
+              bmi: AC.calcBMI(weight, height), created_by: profile?.id || null });
+            return;
+          }
+          const folds = rowFolds(tr);
+          if (!Object.keys(folds).length && weight == null) return;     // fila en blanco
+          const p = list.find(x => x.id === pid);
+          const age = p ? nuAge(p.date_of_birth) : null;
+          const sex = tr.querySelector('.anb-sex')?.value || 'M';
+          const pct = AC.sfBodyFatPct({ formula, sex, age, folds });
+          const row = { player_id: pid, club_id: clubId, measured_date: date, method: 'skinfold',
+            sf_formula: formula,
+            sum_skinfolds: AC.sfFormulaSites(formula, sex).reduce((a, k) => a + (parseFloat(folds[k]) || 0), 0) || null,
+            weight_kg: weight, height_cm: height, age_years: age, sex: sex === 'F' ? 'female' : 'male',
+            body_fat_pct: pct,
+            lean_mass_kg: (pct != null && weight != null) ? +(weight * (1 - pct / 100)).toFixed(1) : null,
+            bmi: AC.calcBMI(weight, height), created_by: profile?.id || null };
+          Object.keys(AC.BC_SF_COL).forEach(s => { if (folds[s] != null) row[AC.BC_SF_COL[s]] = folds[s]; });
+          rows.push(row);
+        });
+        if (!rows.length) { alert(tt('evaluations.no_valid_rows', 'No valid rows to save.')); return; }
+        const btn = $('anb_save'); btn.disabled = true;
+        const { error } = await window.sb.from('body_composition').insert(rows);
+        btn.disabled = false;
+        if (error) { alert(tt('nutrition.an_err_save', 'Could not save: {msg}', { msg: error.message })); return; }
+        const msg = $('anb_msg');
+        msg.textContent = tt('evaluations.n_records_saved', `✓ ${rows.length} record${rows.length > 1 ? 's' : ''} saved`, { count: rows.length });
+        msg.style.display = '';
+        setTimeout(() => { msg.style.display = 'none'; }, 3000);
+        if (_nuCurrent) loadPlayerDetail(_nuCurrent.player);
+        loadKPIs();
+      };
+    }
+    const $ = id => ov.querySelector('#' + id);
+    $('anb_date').value = cmToday();
+    ov._anbRender();
+    ov.classList.add('on');
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  FASE E — KPIs del squad + Flags / Attention notes derivadas
   // ═══════════════════════════════════════════════════════════
@@ -1969,7 +2152,7 @@ const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&
   const btnWeigh = document.getElementById('nuBtnWeighIn');
   if (btnWeigh) btnWeigh.onclick = openWeighInModal;
   const btnAnthro = document.getElementById('nuBtnAnthro');
-  if (btnAnthro) btnAnthro.onclick = openAnthroModal;
+  if (btnAnthro) btnAnthro.onclick = () => openAnthroMenu(btnAnthro);
   const btnShare = document.getElementById('nuBtnShare');
   if (btnShare) btnShare.onclick = openShareModal;
   const btnHist = document.getElementById('nuBtnHistory');
