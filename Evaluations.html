@@ -1522,6 +1522,9 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- Chart.js (same CDN build GPS Analysis uses) + shared adapter — charts degrade to the DOM renderer if absent -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="assets/cm-charts.js"></script>
 
 <!-- ── Catalog registry + data-status + navigation (no detail logic yet) ── -->
 <script>
@@ -2333,6 +2336,23 @@
     document.getElementById('ft-chart-title').textContent = tt('evaluations.chart_by_player','{label} by player · {test}',{label:label,test:_ftTeam.test}) + (betterHigh ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better'));
 
     // ── Bars + names ──
+    if (window.cmCharts && window.cmCharts.ready()){
+      // first render finds the wrap via #ft-plot; the canvas mount clears its children,
+      // so pin an id on the wrap to find it again on later renders
+      var ftp = document.getElementById('ft-plot');
+      var wrapEl = document.getElementById('ftPlotWrap') || (ftp && ftp.closest('.ft-plotwrap'));
+      if (wrapEl && !wrapEl.id) wrapEl.id = 'ftPlotWrap';
+      if (!wrapEl) return;
+      window.cmCharts.teamBars(wrapEl, {
+        rows: rows.map(function(r2){ return { label: r2.name, value: r2.value, pid: r2.pid, cls: ftClassify(r2.value, avg, betterHigh) }; }),
+        fmt: function(v){ return ftFmt(v, dec); }, unit: unit,
+        avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        side: _ftTeam.order === 'asc' ? 'left' : 'right',
+        onBarClick: openForcePlayer,
+      });
+      return;
+    }
     var plot = document.getElementById('ft-plot');
     var names = document.getElementById('ft-names');
     plot.innerHTML = ''; names.innerHTML = '';
@@ -2536,7 +2556,15 @@
     // ── Chart ──
     document.getElementById('fti-chart-title').textContent = tt('evaluations.over_time_title','{label} over time · {test}',{label:label,test:_ftIndiv.test}) + (betterHigh ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better'));
     document.getElementById('lg-metric').textContent = label;
-    document.getElementById('fti-chart').innerHTML = buildForceChart(rows.map(function(r2){ return { value: r2.value, label: ftDateShort(r2.iso) }; }), avg, meta);
+    var _ftiPts = rows.map(function(r2){ return { value: r2.value, label: ftDateShort(r2.iso) }; });
+    if (window.cmCharts && window.cmCharts.ready()){
+      window.cmCharts.trendLine(document.getElementById('fti-chart'), {
+        points: _ftiPts, fmt: function(v){ return ftFmt(v, dec); }, unit: unit, avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+      });
+    } else {
+      document.getElementById('fti-chart').innerHTML = buildForceChart(_ftiPts, avg, meta);
+    }
 
     // ── Table (most recent first) ──
     document.getElementById('th-metric').textContent = label + (unit ? (' (' + unit + ')') : '');
@@ -2623,11 +2651,39 @@
 
   // body_composition-sourced tests → the "variants" are table columns, not
   // evaluation_type strings. neutral = no better/worse direction (no colour bands).
+  // Reference bands are ORIENTATIVE (male, senior soccer), curated from: Ackland et al.
+  // 2012 Sports Med (IOC working group — skinfold sums preferred over % formulas);
+  // Milsom et al. 2015 J Sports Sci (EPL DXA ~10 %BF); Suárez-Arrones et al. 2018;
+  // Kyle et al. 2003 (FFMI reference ranges; pro footballers typically ~19–21 kg/m²).
+  // Absolute kg of lean mass and Σ skinfolds carry NO absolute bands on purpose:
+  // lean kg depends on stature (use FFMI instead) and Σ depends on the formula's fold count.
   var BC_VARIANTS = {
     bodycomp: [
-      { field:'body_fat_pct',  i18n:'evaluations.bc_var_bodyfat',  en:'% Body fat',  unit:'%',  betterHigh:false },
-      { field:'sum_skinfolds', i18n:'evaluations.bc_var_sumsf',    en:'Σ skinfolds', unit:'mm', betterHigh:false },
-      { field:'lean_mass_kg',  i18n:'evaluations.bc_var_leanmass', en:'Lean mass',   unit:'kg', betterHigh:true  },
+      { field:'body_fat_pct',  i18n:'evaluations.bc_var_bodyfat',  en:'% Body fat',  unit:'%',  betterHigh:false,
+        bands: [
+          { from:0,  to:7,        key:'warn', i18n:'evaluations.bcband_bf_verylow', en:'Very low · review' },
+          { from:7,  to:12,       key:'good', i18n:'evaluations.bcband_bf_optimal', en:'Optimal (elite)' },
+          { from:12, to:15,       key:'ok',   i18n:'evaluations.bcband_bf_ok',      en:'Acceptable' },
+          { from:15, to:18,       key:'warn', i18n:'evaluations.bcband_bf_high',    en:'High' },
+          { from:18, to:Infinity, key:'bad',  i18n:'evaluations.bcband_bf_veryhigh',en:'Very high' },
+        ],
+        refI18n:'evaluations.bcref_bodyfat',
+        refEn:'Orientative male-soccer skinfold ranges — Ackland et al. (2012), Sports Med (IOC); Milsom et al. (2015); Suárez-Arrones et al. (2018).' },
+      { field:'sum_skinfolds', i18n:'evaluations.bc_var_sumsf',    en:'Σ skinfolds', unit:'mm', betterHigh:false,
+        refI18n:'evaluations.bcref_sumsf',
+        refEn:'Raw skinfold sums are the IOC-preferred monitoring metric (Ackland et al. 2012) — compare each player against his own baseline; sums from different formulas (Σ3/Σ7) are not comparable.' },
+      { field:'ffmi', computed:'ffmi', i18n:'evaluations.bc_var_ffmi', en:'FFMI', unit:'kg/m²', betterHigh:true,
+        bands: [
+          { from:0,    to:17.5,     key:'warn', i18n:'evaluations.bcband_ffmi_low',  en:'Low' },
+          { from:17.5, to:19,       key:'ok',   i18n:'evaluations.bcband_ffmi_ok',   en:'Adequate' },
+          { from:19,   to:21,       key:'good', i18n:'evaluations.bcband_ffmi_opt',  en:'Optimal (soccer)' },
+          { from:21,   to:Infinity, key:'info', i18n:'evaluations.bcband_ffmi_high', en:'Very high' },
+        ],
+        refI18n:'evaluations.bcref_ffmi',
+        refEn:'FFMI = lean mass / height² — stature-normalized, comparable across players. Orientative ranges from Kyle et al. (2003) and pro-soccer profiles (~19–21 kg/m²).' },
+      { field:'lean_mass_kg',  i18n:'evaluations.bc_var_leanmass', en:'Lean mass',   unit:'kg', betterHigh:true,
+        refI18n:'evaluations.bcref_leanmass',
+        refEn:'Absolute lean kg depends on stature — compare players with FFMI, and each player against his own baseline (intra-athlete change is the gold standard: Ackland et al. 2012).' },
       { field:'weight_kg',     i18n:'evaluations.bc_var_weight',   en:'Weight',      unit:'kg', neutral:true     },
     ],
     somato: [
@@ -2701,9 +2757,11 @@
     var defs = BC_VARIANTS[test.key] || [];
     _ev.bcMeta = {};
     defs.forEach(function(d){ _ev.bcMeta[bcVarLabel(d)] = d; });
+    var realDefs = defs.filter(function(d){ return !d.computed; });
+    var hasFfmi = defs.some(function(d){ return d.computed === 'ffmi'; });
     var rows = [];
     try {
-      var cols = 'player_id,measured_date,method,' + defs.map(function(d){ return d.field; }).join(',');
+      var cols = 'player_id,measured_date,method,height_cm,' + realDefs.map(function(d){ return d.field; }).join(',');
       var data = await window.cmFetchAll(function(){
         var q = window.sb.from('body_composition').select(cols).eq('club_id', _clubId);
         if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
@@ -2711,11 +2769,28 @@
         return q;
       }, { label: 'ev:bcData' });
       if (_ev.test !== test) return;                     // stale response → drop it
+      // player-profile heights as fallback for rows measured without height
+      var hmap = {};
+      if (hasFfmi && _teamPlayerIds && _teamPlayerIds.length){
+        try {
+          var ph = await window.sb.from('players').select('id,height').in('id', _teamPlayerIds);
+          (ph.data || []).forEach(function(p){ var h = Number(p.height); if (h > 100) hmap[p.id] = h; });
+        } catch(e){}
+        if (_ev.test !== test) return;
+      }
+      var ffmiDef = defs.find(function(d){ return d.computed === 'ffmi'; });
       (data || []).forEach(function(r){
-        defs.forEach(function(d){
+        realDefs.forEach(function(d){
           if (r[d.field] == null) return;
           rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(d), test_date: r.measured_date, value: r[d.field], unit: d.unit, notes: r.method || null });
         });
+        if (ffmiDef && r.lean_mass_kg != null){
+          var h = Number(r.height_cm) || hmap[r.player_id];   // cm
+          if (h > 100){
+            var ffmi = +(Number(r.lean_mass_kg) / Math.pow(h / 100, 2)).toFixed(2);
+            rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(ffmiDef), test_date: r.measured_date, value: ffmi, unit: ffmiDef.unit, notes: r.method || null });
+          }
+        }
       });
     } catch(e){ console.warn('[ev2] body_composition data failed', e); }
     _ev.rows = rows;
@@ -2756,23 +2831,84 @@
     var classify = function(v){ return opts.neutral ? '' : ftClassify(v, avg, betterHigh); };
     var below = rows.filter(function(r){ return classify(r.value) !== ''; }).length;
     var us = unit ? ('<small>' + esc(unit) + '</small>') : '';
+    var bands = opts.bands || null;                     // [{from,to,key,label}] absolute reference zones
+    var bandOf = function(v){ if (!bands) return null; return bands.find(function(b){ return v >= b.from && v < b.to; }) || null; };
+    var useCm = window.cmCharts && window.cmCharts.ready();
+    var fmt = function(v){ return ftFmt(v, dec); };
+
+    // legend: band chips when reference bands exist, semantic vs-avg otherwise
+    var legendHtml;
+    if (bands && useCm){
+      legendHtml = bands.map(function(b){
+        return '<span class="it"><span class="sw" style="background:' + window.cmCharts.bandColor(b.key) + '"></span>' + esc(b.label) + '</span>';
+      }).join('') + '<span class="it"><span class="sw avgl"></span>' + esc(tt('evaluations.group_avg','Group avg')) + '</span>';
+    } else {
+      legendHtml = '<span class="it"><span class="sw avgl"></span>'+esc(tt('evaluations.group_avg','Group avg'))+'</span>'
+        + (opts.neutral ? '' : '<span class="it"><span class="sw ok"></span>'+esc(tt('evaluations.at_above','At / above'))+'</span><span class="it"><span class="sw warn"></span>'+esc(tt('evaluations.below','Below'))+'</span><span class="it"><span class="sw bad"></span>'+esc(tt('evaluations.well_below','Well below'))+'</span>');
+    }
+    // when bands drive the colors, "N below the squad average" is the wrong headline —
+    // count out-of-optimal instead
+    var thirdStat = '';
+    if (!opts.neutral){
+      if (bands){
+        var offBand = rows.filter(function(r){ var b = bandOf(r.value); return b && (b.key === 'warn' || b.key === 'bad'); }).length;
+        thirdStat = '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.out_of_range','Out of range'))+'</div><div class="v is-bad">' + offBand + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>';
+      } else {
+        thirdStat = '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.below_avg','Below avg'))+'</div><div class="v is-bad">' + below + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>';
+      }
+    }
+    var extraStat = opts.extraStat
+      ? '<div class="ft-stat"><div class="k"><i class="ti ti-trending-down" style="font-size:13px"></i>'+esc(opts.extraStat.k)+'</div><div class="v'+(opts.extraStat.bad?' is-bad':'')+'">'+esc(String(opts.extraStat.v))+'</div><div class="n">'+esc(opts.extraStat.n||'')+'</div></div>'
+      : '';
+    var warnHtml = opts.warnNote
+      ? '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:12px;border:1px solid var(--cm-warning);border-radius:10px;background:color-mix(in srgb, var(--cm-warning) 8%, transparent);font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg)"><i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:15px"></i><span>'+esc(opts.warnNote)+'</span></div>'
+      : '';
+    var refHtml = opts.refNote
+      ? '<div style="font:500 11px/1.5 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:10px">'+esc(opts.refNote)+'</div>'
+      : '';
 
     root.innerHTML =
-      '<div class="ft-card ft-summary" style="margin-bottom:14px">'
+      warnHtml
+      + '<div class="ft-card ft-summary" style="margin-bottom:14px">'
       +  '<div class="ft-avg"><span class="lab">' + esc(label) + ' · ' + esc(tt('evaluations.group_average','group average')) + '</span>'
       +    '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
       +    '<span class="sub">' + tt('evaluations.range_n','Range <b>'+ftFmt(minV,dec)+' – '+ftFmt(maxV,dec)+'</b> · n = '+rows.length,{min:ftFmt(minV,dec),max:ftFmt(maxV,dec),n:rows.length}) + '</span></div>'
       +  '<div class="ft-stats">'
       +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px"></i>'+esc(tt('evaluations.top','Top'))+'</div><div class="v">' + ftFmt(best.value, dec) + us + '</div><div class="n">' + esc(best.name) + '</div></div>'
       +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px"></i>'+esc(tt('evaluations.lowest','Lowest'))+'</div><div class="v">' + ftFmt(worst.value, dec) + us + '</div><div class="n">' + esc(worst.name) + '</div></div>'
-      +    (opts.neutral ? '' : '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.below_avg','Below avg'))+'</div><div class="v is-bad">' + below + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>')
+      +    thirdStat + extraStat
       +  '</div>'
       + '</div>'
       + '<div class="ft-card">'
       +  '<div class="ft-chart-head"><div class="ft-chart-title">' + tt('evaluations.by_player_short','{label} by player',{label:esc(label)}) + ((betterHigh || opts.neutral) ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better')) + '</div>'
-      +    '<div class="ft-legend"><span class="it"><span class="sw avgl"></span>'+esc(tt('evaluations.group_avg','Group avg'))+'</span>' + (opts.neutral ? '' : '<span class="it"><span class="sw ok"></span>'+esc(tt('evaluations.at_above','At / above'))+'</span><span class="it"><span class="sw warn"></span>'+esc(tt('evaluations.below','Below'))+'</span><span class="it"><span class="sw bad"></span>'+esc(tt('evaluations.well_below','Well below'))+'</span>') + '</div></div>'
-      +  '<div class="ft-plotwrap"><div class="ft-plot"></div><div class="ft-names"></div></div>'
+      +    '<div class="ft-legend">' + legendHtml + '</div></div>'
+      +  (useCm ? '<div class="cm-chart-host"></div>' : '<div class="ft-plotwrap"><div class="ft-plot"></div><div class="ft-names"></div></div>')
+      +  refHtml
       + '</div>';
+
+    if (useCm){
+      var host = root.querySelector('.cm-chart-host');
+      window.cmCharts.teamBars(host, {
+        rows: rows.map(function(r){
+          var b = bandOf(r.value);
+          return { label: r.name, value: r.value, pid: r.pid, cls: classify(r.value), bandKey: b ? b.key : null, _r: r };
+        }),
+        fmt: fmt, unit: unit,
+        avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        side: opts.order === 'asc' ? 'left' : 'right',
+        bands: bands, neutral: !!opts.neutral,
+        tipLines: function(row){
+          var lines = [];
+          var b = bandOf(row.value);
+          if (b) lines.push(b.label);
+          if (opts.tipLines) lines = lines.concat(opts.tipLines(row._r) || []);
+          return lines;
+        },
+        onBarClick: opts.onBarClick,
+      });
+      return;
+    }
 
     var plot = root.querySelector('.ft-plot'), names = root.querySelector('.ft-names');
     rows.forEach(function(r){
@@ -2824,10 +2960,57 @@
       return;
     }
     var bcm = _ev.bcMeta && _ev.bcMeta[variant];
+    var dec = ftDec(unit);
+
+    // ── body-comp extras: Δ vs each player's own baseline (intra-athlete change is the
+    //    scientifically preferred signal) + mixed-method warning (skinfold/BIA/DXA not comparable)
+    var deltas = null, methods = {};
+    if (bcm){
+      deltas = {};
+      var byP = {};
+      src.forEach(function(r){
+        (byP[r.player_id] = byP[r.player_id] || []).push(r);
+        if (r.notes) methods[String(r.notes)] = 1;
+      });
+      Object.keys(byP).forEach(function(pid){
+        var rs = byP[pid].slice().sort(function(a,b){ return String(a.test_date) < String(b.test_date) ? -1 : 1; });
+        if (rs.length < 2) return;
+        var first = Number(rs[0].value), last = Number(rs[rs.length-1].value);
+        if (isFinite(first) && isFinite(last) && first !== 0)
+          deltas[pid] = { abs: last - first, pct: (last - first) / first * 100, since: String(rs[0].test_date).slice(0,10) };
+      });
+    }
+    var extraStat = null;
+    if (bcm && !bcm.neutral && deltas && Object.keys(deltas).length){
+      // worsening = moving >2% in the bad direction since the player's own baseline
+      var worse = rows.filter(function(r){
+        var d = deltas[r.pid]; if (!d) return false;
+        return bcm.betterHigh ? d.pct <= -2 : d.pct >= 2;
+      }).length;
+      extraStat = { k: tt('evaluations.trending_worse','Worsening >2%'), v: worse,
+        n: tt('evaluations.vs_own_baseline','vs own baseline'), bad: worse > 0 };
+    }
+    var bands = (bcm && bcm.bands) ? bcm.bands.map(function(b){ return { from:b.from, to:b.to, key:b.key, label:tt(b.i18n, b.en) }; }) : null;
+
     drawTeamChart(root, rows, {
-      dec: ftDec(unit), unit: unit,
+      dec: dec, unit: unit,
       betterHigh: bcm ? !!bcm.betterHigh : evBetterHigh(_ev.test, unit),
       neutral: !!(bcm && bcm.neutral),
+      bands: bands,
+      refNote: bcm && bcm.refI18n ? tt(bcm.refI18n, bcm.refEn) : null,
+      warnNote: (bcm && Object.keys(methods).length > 1)
+        ? tt('evaluations.mixed_methods_warn','Measurements mix methods ({list}) — values from different methods are not directly comparable.',{list:Object.keys(methods).join(' / ')})
+        : null,
+      extraStat: extraStat,
+      tipLines: bcm ? function(r){
+        var lines = [];
+        var d = deltas && deltas[r.pid];
+        if (d) lines.push(tt('evaluations.delta_since','Δ {d} ({p}%) since {date}',{
+          d: (d.abs >= 0 ? '+' : '') + ftFmt(d.abs, dec) + (unit ? ' ' + unit : ''),
+          p: (d.pct >= 0 ? '+' : '') + d.pct.toFixed(1), date: d.since }));
+        if (r.notes) lines.push(tt('evaluations.method','Method') + ': ' + r.notes);
+        return lines;
+      } : null,
       order: _ev.order, label: variant || (_ev.test ? _ev.test.label : ''), onBarClick: openEvalPlayer
     });
   }
@@ -3213,7 +3396,9 @@
       '<div class="ft-card" style="margin-bottom:14px">'
       + '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' ' + esc(tt('evaluations.over_time','Over time').toLowerCase()) + ((betterHigh || neutral) ? '' : esc(tt('evaluations.lower_is_better_suffix',' · lower is better'))) + '</div>'
       +   '<div class="ft-legend"><span class="it"><span class="sw" style="width:12px;height:3px;border-radius:2px;background:#475569"></span>' + esc(label) + '</span><span class="it"><span class="sw avgl"></span>' + esc(tt('evaluations.personal_avg','Personal avg')) + '</span></div></div>'
-      + '<div class="ft-chartwrap">' + buildForceChart(rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso) }; }), avg, meta) + '</div>'
+      + '<div class="ft-chartwrap">' + (window.cmCharts && window.cmCharts.ready()
+          ? '<div id="evIndivTrend"></div>'
+          : buildForceChart(rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso) }; }), avg, meta)) + '</div>'
       + '</div>';
 
     // table (most recent first): date · value · vs avg · note
@@ -3269,6 +3454,20 @@
     }
 
     root.innerHTML = cards + vbtCard + hfvpCard + sprintCard + chart + table;
+
+    var trendHost = document.getElementById('evIndivTrend');
+    if (trendHost && window.cmCharts && window.cmCharts.ready()){
+      window.cmCharts.trendLine(trendHost, {
+        points: rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso), iso: r.iso, notes: r.notes }; }),
+        fmt: function(v){ return ftFmt(v, dec); }, unit: unit, avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        tipLines: function(p){
+          var lines = [ftDateFull(p.iso)];
+          if (_ev.bcMeta && p.notes) lines.push(tt('evaluations.method','Method') + ': ' + p.notes);
+          return lines;
+        },
+      });
+    }
 
     if (_ev.test && _ev.test.key === 'vbt') {
       var host = document.getElementById('evVbtProfile');
