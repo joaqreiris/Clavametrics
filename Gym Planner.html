@@ -1181,6 +1181,8 @@ function gpBuildLibModal() {
         .gp-lib-sel:focus{border-color:var(--cm-accent)}
         .gp-lib-item{display:flex;align-items:center;gap:10px}
         .gp-lib-thumb{width:46px;height:34px;border-radius:5px;overflow:hidden;flex:0 0 auto;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center}
+        .gp-lib-prev{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;flex:0 0 auto;color:var(--cm-fg-muted);font-size:15px}
+        .gp-lib-prev:hover{background:var(--cm-accent);color:#fff}
       </style>
       <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
@@ -1276,13 +1278,17 @@ function gpRenderLibList() {
         <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${escH(e.name||'—')}</div>
         ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
       </span>
+      ${e.video_url?`<span class="gp-lib-prev" title="${escH(tt('gym_planner.preview_video','Preview video'))}"><i class="ti ti-player-play"></i></span>`:''}
     </button>`;
   }).join('');
   foot.textContent = tt('gym_planner.n_exercises_count', `${items.length} exercise${items.length>1?'s':''}`, { count:items.length });
   list.querySelectorAll('.gp-lib-item').forEach(b => {
     b.onmouseenter = () => b.style.background = 'var(--cm-bg-soft)';
     b.onmouseleave = () => b.style.background = 'transparent';
-    b.onclick = () => gpPickLib(b.dataset.id, b.dataset.name);
+    b.onclick = ev => {
+      if (ev.target.closest('.gp-lib-prev')) { ev.stopPropagation(); gpOpenVidPrev(b.dataset.id); return; }
+      gpPickLib(b.dataset.id, b.dataset.name);
+    };
   });
   gpResolveLibMedia().then(gpPatchLibThumbs);
 }
@@ -1311,6 +1317,47 @@ async function gpResolveLibMedia(){
 }
 function gpPatchLibThumbs(){
   document.querySelectorAll('#gpLibList .gp-lib-thumb[data-ex]').forEach(el => { el.innerHTML = gpLibThumbHtml(el.dataset.ex); });
+}
+// ── Video preview from the picker (play button on rows with a video, doesn't add the exercise) ──
+let _gpVidPrevBuilt = false;
+function gpBuildVidPrev(){
+  if (_gpVidPrevBuilt) return; _gpVidPrevBuilt = true;
+  const ov = document.createElement('div');
+  ov.id = 'gpVidPrevOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.6);backdrop-filter:blur(4px);z-index:950;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = e => { if (e.target === ov) gpCloseVidPrev(); };
+  ov.innerHTML = `
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:640px;max-width:94vw;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border)">
+        <i class="ti ti-player-play" style="font-size:15px;color:var(--cm-accent)"></i>
+        <div id="gpVidPrevTitle" style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <button onclick="gpCloseVidPrev()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="gpVidPrevBody" style="background:#000;aspect-ratio:16/9"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov.style.display !== 'none') gpCloseVidPrev(); });
+}
+function gpOpenVidPrev(exId){
+  const e = (_gpLib||[]).find(x => x.id === exId); if (!e || !e.video_url) return;
+  gpBuildVidPrev();
+  const escA = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  const yt = gpYoutubeId(e.video_url);
+  const body = document.getElementById('gpVidPrevBody');
+  if (yt) body.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${yt}?autoplay=1&rel=0" style="width:100%;height:100%;border:0;display:block" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+  else if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(e.video_url))
+    body.innerHTML = `<video src="${escA(e.video_url)}" controls autoplay playsinline style="width:100%;height:100%;display:block;background:#000"></video>`;
+  else // non-embeddable URL (Vimeo page, Drive, etc.) → offer to open it in a new tab
+    body.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center">
+      <a href="${escA(e.video_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:var(--cm-accent);color:#fff;border-radius:8px;font:600 13px/1 var(--cm-font-sans);text-decoration:none"><i class="ti ti-external-link"></i>${tt('gym_planner.open_video','Open video')}</a>
+    </div>`;
+  document.getElementById('gpVidPrevTitle').textContent = e.name || '';
+  document.getElementById('gpVidPrevOv').style.display = 'flex';
+}
+function gpCloseVidPrev(){
+  const ov = document.getElementById('gpVidPrevOv'); if (!ov) return;
+  ov.style.display = 'none';
+  document.getElementById('gpVidPrevBody').innerHTML = '';   // stops YouTube/video playback
 }
 async function gpOpenLib(ctx) {
   _gpLibCtx = ctx; gpBuildLibModal();
