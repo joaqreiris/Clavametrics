@@ -2112,7 +2112,7 @@ function gpRenderRoster() {
     }).join('');
     pillsEl.innerHTML = allPill + pills;
     pillsEl.querySelectorAll('.gp-ath-pill[data-pid]').forEach(el => el.addEventListener('click', () => {
-      _gpRoster.delete(el.dataset.pid); _gpPartsDirty = true; gpRenderRoster(); gpScheduleSave();
+      _gpRoster.delete(el.dataset.pid); _gpPartsDirty = true; gpRenderRoster(); gpSaveNow();
     }));
   }
   if (ctEl) ctEl.textContent = tt('gym_planner.n_selected', `${roster.length} selected`, { count:roster.length });
@@ -2178,7 +2178,7 @@ function gpRenderSquadList() {
     row.onclick = () => { const id = row.dataset.pid; _gpSquadSel.has(id) ? _gpSquadSel.delete(id) : _gpSquadSel.add(id); gpRenderSquadList(); };
   });
 }
-function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); _gpPartsDirty = true; gpRenderRoster(); gpScheduleSave(); } gpCloseSquad(); }
+function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); _gpPartsDirty = true; gpRenderRoster(); gpSaveNow(); } gpCloseSquad(); }
 
 // ── Load groups (subgrupos por nivel según tests) ──
 // ── Jenks natural breaks + auto-k (GVF) ──
@@ -2597,7 +2597,15 @@ function gpUpdateAu() {
   if (elN) elN.textContent = (rpe && !dur) ? tt('gym_planner.set_duration_first','set duration first') : (dur && !rpe) ? tt('gym_planner.set_rpe_above','set RPE above') : '';
 }
 
+// Mientras el día se está cargando, _gpRoster todavía tiene el estado del día anterior
+// (gpLoadAthletes corre al FINAL): un autosave en esa ventana guardaría un roster viejo o
+// vacío pisando el real. gpAutoSave espera a que esto vuelva a false.
+let _gpDayLoading = false;
 async function gpLoadDay(dateStr) {
+  _gpDayLoading = true;
+  try { await _gpLoadDayInner(dateStr); } finally { _gpDayLoading = false; }
+}
+async function _gpLoadDayInner(dateStr) {
   _gpCurrentDate = dateStr;
   const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const fmt = _gpFmt(dateStr);
@@ -2716,8 +2724,18 @@ function gpScheduleSave() {
   clearTimeout(_gpSaveTimer);
   _gpSaveTimer = setTimeout(gpAutoSave, 800);
 }
+// Guardado inmediato para acciones deliberadas (editar el roster): el debounce de 800ms
+// se pierde si el usuario navega a otra página antes de que dispare (el fetch en vuelo
+// se cancela al descargar la página) — "seleccioné jugadores y al volver no estaban".
+function gpSaveNow() {
+  _gpSaveDirty = true;
+  clearTimeout(_gpSaveTimer);
+  gpAutoSave();
+}
 
 async function gpAutoSave() {
+  // Día a medio cargar → reintentar en breve (guardar ahora escribiría estado stale).
+  if (_gpDayLoading) { clearTimeout(_gpSaveTimer); _gpSaveTimer = setTimeout(gpAutoSave, 400); return; }
   const dateStr = _gpCurrentDate;
   if (!dateStr) return;
   const content   = gpCollectContent();
