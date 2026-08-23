@@ -2025,12 +2025,19 @@
     //  calculator evaluations    → New entry (modal) + bulk grid (+ CSV)
     //  force_tests               → device CSV drawer
     var isCalc = !isForce && !!EV_CALC[t.key] && !!EV_CALC_LABEL[t.key];
-    var isSingleEval = !isForce && !EV_CALC[t.key];
+    // body_composition-derived without own calculator (somato, bmirfm): values are
+    // computed from Body composition entries → no direct upload here.
+    var isBcDerived = !isForce && !isCalc && t.src && t.src.from === 'body_composition';
+    var isSingleEval = !isForce && !EV_CALC[t.key] && !isBcDerived;
     var isEval = isSingleEval || isCalc;
     document.getElementById('evUploadReal').style.display        = isEval ? '' : 'none';
     document.getElementById('evUploadCalc').style.display        = isCalc ? '' : 'none';
     document.getElementById('evUploadForce').style.display       = isForce ? '' : 'none';
     document.getElementById('evUploadPlaceholder').style.display = (isEval || isForce) ? 'none' : '';
+    var phTxt = document.getElementById('evUploadPlaceholderTxt');
+    if (phTxt) phTxt.textContent = isBcDerived
+      ? tt('evaluations.bc_derived_upload','These values are computed automatically from Body composition entries. Open the Body composition test to add or import data.')
+      : tt('evaluations.guided_entry_placeholder','This test uses a dedicated calculator or device import — wired in a later step.');
     // manual individual entry is available for DB-driven assessment tests (they carry a _def)
     var asBtn = document.getElementById('asAddResultBtn');
     if (asBtn) asBtn.style.display = (isForce && t._def) ? '' : 'none';
@@ -2062,7 +2069,7 @@
     var isHfvp = (t.key === 'hfvp');
     document.getElementById('evHfvpBulk').style.display = isHfvp ? '' : 'none';
     document.getElementById('evHfvpCsv').style.display  = isHfvp ? '' : 'none';
-    if (csvBtn) csvBtn.style.display = isForce ? 'none' : '';
+    if (csvBtn) csvBtn.style.display = (isForce || isBcDerived) ? 'none' : '';
     if (isHfvp){
       document.getElementById('evUploadReal').style.display = 'none';  // hide generic Player+Value grid
       document.getElementById('evCsvReal').style.display     = 'none';  // hide generic CSV importer
@@ -2582,6 +2589,27 @@
     ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', hfvp:'W/kg', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
   function evToday(){ return cmToday(); }
 
+  // body_composition-sourced tests → the "variants" are table columns, not
+  // evaluation_type strings. neutral = no better/worse direction (no colour bands).
+  var BC_VARIANTS = {
+    bodycomp: [
+      { field:'body_fat_pct',  i18n:'evaluations.bc_var_bodyfat',  en:'% Body fat',  unit:'%',  betterHigh:false },
+      { field:'sum_skinfolds', i18n:'evaluations.bc_var_sumsf',    en:'Σ skinfolds', unit:'mm', betterHigh:false },
+      { field:'lean_mass_kg',  i18n:'evaluations.bc_var_leanmass', en:'Lean mass',   unit:'kg', betterHigh:true  },
+      { field:'weight_kg',     i18n:'evaluations.bc_var_weight',   en:'Weight',      unit:'kg', neutral:true     },
+    ],
+    somato: [
+      { field:'soma_endo', i18n:'evaluations.bc_var_endo', en:'Endomorphy', unit:'', betterHigh:false },
+      { field:'soma_meso', i18n:'evaluations.bc_var_meso', en:'Mesomorphy', unit:'', betterHigh:true  },
+      { field:'soma_ecto', i18n:'evaluations.bc_var_ecto', en:'Ectomorphy', unit:'', neutral:true     },
+    ],
+    bmirfm: [
+      { field:'bmi', i18n:'evaluations.bc_var_bmi', en:'BMI', unit:'kg/m²', neutral:true     },
+      { field:'rfm', i18n:'evaluations.bc_var_rfm', en:'RFM', unit:'%',     betterHigh:false },
+    ],
+  };
+  function bcVarLabel(d){ return d ? tt(d.i18n, d.en) : ''; }
+
   // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
   var EV_LOWER_BETTER = { sprint:1, cod505:1, illinois:1, rsa:1, tt1600:1 };
   function evBetterHigh(test, unit){
@@ -2592,9 +2620,13 @@
   }
 
   // Load every evaluation row that matches this test's prefix, team-scoped via players.
+  // body_composition-sourced tests load from that table instead (synthetic rows).
   async function loadEvalData(test){
-    _ev.rows = [];
+    _ev.rows = []; _ev.bcMeta = null;
     if (!_clubId){ return; }
+    if (test.src && test.src.from === 'body_composition'){
+      await loadBcEvalData(test);
+    } else {
     try {
       var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, unit, notes').eq('club_id', _clubId);
       if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
@@ -2606,6 +2638,7 @@
     // distinct evaluation_type variants present in the data (e.g. VBT per exercise)
     _ev.types = Array.from(new Set(_ev.rows.map(function(r){ return r.evaluation_type; }).filter(Boolean))).sort();
     if (_ev.types.indexOf(_ev.variant) === -1) _ev.variant = _ev.types[0] || test.label;
+    }
 
     // variant selectors (team + individual) — only shown when >1 variant
     var multi = _ev.types.length > 1;
@@ -2621,6 +2654,39 @@
     psel.innerHTML = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name + ' ' + p.last_name)+'</option>'; }).join('');
     if (!_ev.player || !_ftPlayers.some(function(p){ return p.id === _ev.player; })) _ev.player = (_ftPlayers[0] && _ftPlayers[0].id) || null;
     psel.value = _ev.player || '';
+  }
+
+  // body_composition-sourced tests: synthesize evaluation-shaped rows (one per
+  // non-null column) so the whole team/individual pipeline works unchanged.
+  // evaluation_type = localized variant label; notes = measurement method.
+  async function loadBcEvalData(test){
+    var defs = BC_VARIANTS[test.key] || [];
+    _ev.bcMeta = {};
+    defs.forEach(function(d){ _ev.bcMeta[bcVarLabel(d)] = d; });
+    var rows = [];
+    try {
+      var cols = 'player_id,measured_date,method,' + defs.map(function(d){ return d.field; }).join(',');
+      var q = window.sb.from('body_composition').select(cols).eq('club_id', _clubId);
+      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+      var res = await q;
+      (res.data || []).forEach(function(r){
+        defs.forEach(function(d){
+          if (r[d.field] == null) return;
+          rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(d), test_date: r.measured_date, value: r[d.field], unit: d.unit, notes: r.method || null });
+        });
+      });
+    } catch(e){ console.warn('[ev2] body_composition data failed', e); }
+    _ev.rows = rows;
+    // variants in registry order (only those with data); default = the card's field
+    var present = {};
+    rows.forEach(function(r){ present[r.evaluation_type] = 1; });
+    _ev.types = defs.map(bcVarLabel).filter(function(l){ return present[l]; });
+    if (_ev.types.indexOf(_ev.variant) === -1){
+      var dd = defs.find(function(d){ return d.field === test.src.field; });
+      var dl = dd ? bcVarLabel(dd) : '';
+      _ev.variant = (dl && present[dl]) ? dl : (_ev.types[0] || dl || test.label);
+    }
   }
 
   async function openEvalTest(t){
@@ -2646,7 +2712,8 @@
     rows.sort(function(a, b){ return opts.order === 'desc' ? b.value - a.value : a.value - b.value; });
     var best = betterHigh ? rows.reduce(function(a, b){ return b.value > a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value < a.value ? b : a; });
     var worst = betterHigh ? rows.reduce(function(a, b){ return b.value < a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value > a.value ? b : a; });
-    var below = rows.filter(function(r){ return ftClassify(r.value, avg, betterHigh) !== ''; }).length;
+    var classify = function(v){ return opts.neutral ? '' : ftClassify(v, avg, betterHigh); };
+    var below = rows.filter(function(r){ return classify(r.value) !== ''; }).length;
     var us = unit ? ('<small>' + esc(unit) + '</small>') : '';
 
     root.innerHTML =
@@ -2657,18 +2724,18 @@
       +  '<div class="ft-stats">'
       +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px"></i>'+esc(tt('evaluations.top','Top'))+'</div><div class="v">' + ftFmt(best.value, dec) + us + '</div><div class="n">' + esc(best.name) + '</div></div>'
       +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px"></i>'+esc(tt('evaluations.lowest','Lowest'))+'</div><div class="v">' + ftFmt(worst.value, dec) + us + '</div><div class="n">' + esc(worst.name) + '</div></div>'
-      +    '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.below_avg','Below avg'))+'</div><div class="v is-bad">' + below + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>'
+      +    (opts.neutral ? '' : '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.below_avg','Below avg'))+'</div><div class="v is-bad">' + below + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>')
       +  '</div>'
       + '</div>'
       + '<div class="ft-card">'
-      +  '<div class="ft-chart-head"><div class="ft-chart-title">' + tt('evaluations.by_player_short','{label} by player',{label:esc(label)}) + (betterHigh ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better')) + '</div>'
-      +    '<div class="ft-legend"><span class="it"><span class="sw avgl"></span>'+esc(tt('evaluations.group_avg','Group avg'))+'</span><span class="it"><span class="sw ok"></span>'+esc(tt('evaluations.at_above','At / above'))+'</span><span class="it"><span class="sw warn"></span>'+esc(tt('evaluations.below','Below'))+'</span><span class="it"><span class="sw bad"></span>'+esc(tt('evaluations.well_below','Well below'))+'</span></div></div>'
+      +  '<div class="ft-chart-head"><div class="ft-chart-title">' + tt('evaluations.by_player_short','{label} by player',{label:esc(label)}) + ((betterHigh || opts.neutral) ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better')) + '</div>'
+      +    '<div class="ft-legend"><span class="it"><span class="sw avgl"></span>'+esc(tt('evaluations.group_avg','Group avg'))+'</span>' + (opts.neutral ? '' : '<span class="it"><span class="sw ok"></span>'+esc(tt('evaluations.at_above','At / above'))+'</span><span class="it"><span class="sw warn"></span>'+esc(tt('evaluations.below','Below'))+'</span><span class="it"><span class="sw bad"></span>'+esc(tt('evaluations.well_below','Well below'))+'</span>') + '</div></div>'
       +  '<div class="ft-plotwrap"><div class="ft-plot"></div><div class="ft-names"></div></div>'
       + '</div>';
 
     var plot = root.querySelector('.ft-plot'), names = root.querySelector('.ft-names');
     rows.forEach(function(r){
-      var cls = ftClassify(r.value, avg, betterHigh);
+      var cls = classify(r.value);
       var hPct = Math.max(0, (r.value / scaleMax) * 100);
       var col = document.createElement('div');
       col.className = 'ft-col' + (cls ? ' ' + cls : '');
@@ -2715,8 +2782,11 @@
       renderEnduranceGroups(root, rows, { test: _ev.test, unit: unit });
       return;
     }
+    var bcm = _ev.bcMeta && _ev.bcMeta[variant];
     drawTeamChart(root, rows, {
-      dec: ftDec(unit), unit: unit, betterHigh: evBetterHigh(_ev.test, unit),
+      dec: ftDec(unit), unit: unit,
+      betterHigh: bcm ? !!bcm.betterHigh : evBetterHigh(_ev.test, unit),
+      neutral: !!(bcm && bcm.neutral),
       order: _ev.order, label: variant || (_ev.test ? _ev.test.label : ''), onBarClick: openEvalPlayer
     });
   }
@@ -3070,7 +3140,9 @@
 
     var unit = (rows.map(function(r){ return r.unit; }).find(Boolean)) || '';
     var dec = ftDec(unit);
-    var betterHigh = evBetterHigh(_ev.test, unit);
+    var bcm = _ev.bcMeta && _ev.bcMeta[variant];
+    var betterHigh = bcm ? !!bcm.betterHigh : evBetterHigh(_ev.test, unit);
+    var neutral = !!(bcm && bcm.neutral);
     var label = variant || (_ev.test ? _ev.test.label : '');
     var meta = { dec: dec, unit: unit };
 
@@ -3086,7 +3158,7 @@
       '<div class="ft-cards" style="margin-bottom:14px">'
       + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-bolt"></i>' + esc(tt('evaluations.latest_label','Latest · '+label.toLowerCase(),{label:label.toLowerCase()})) + '</div>'
       +   '<div class="big"><span class="num">' + ftFmt(latest.value, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
-      +   '<div class="sub"><span class="ft-delta ' + (good ? 'good' : 'bad') + '"><i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta) + '</span><span style="color:var(--cm-fg-faint)"> ' + esc(tt('evaluations.vs_personal_avg','vs personal avg')) + '</span></div></div>'
+      +   '<div class="sub"><span class="ft-delta' + (neutral ? '' : (good ? ' good' : ' bad')) + '"><i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta) + '</span><span style="color:var(--cm-fg-faint)"> ' + esc(tt('evaluations.vs_personal_avg','vs personal avg')) + '</span></div></div>'
       + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-chart-line"></i>' + esc(tt('evaluations.personal_avg','Personal avg')) + '</div>'
       +   '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
       +   '<div class="sub">' + tt('evaluations.n_tests_all_time','<b>'+rows.length+' test'+(rows.length===1?'':'s')+'</b> · all time',{count:rows.length}) + '</div></div>'
@@ -3098,7 +3170,7 @@
     // chart (reuses the force SVG builder)
     var chart =
       '<div class="ft-card" style="margin-bottom:14px">'
-      + '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' ' + esc(tt('evaluations.over_time','Over time').toLowerCase()) + (betterHigh ? '' : esc(tt('evaluations.lower_is_better_suffix',' · lower is better'))) + '</div>'
+      + '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' ' + esc(tt('evaluations.over_time','Over time').toLowerCase()) + ((betterHigh || neutral) ? '' : esc(tt('evaluations.lower_is_better_suffix',' · lower is better'))) + '</div>'
       +   '<div class="ft-legend"><span class="it"><span class="sw" style="width:12px;height:3px;border-radius:2px;background:#475569"></span>' + esc(label) + '</span><span class="it"><span class="sw avgl"></span>' + esc(tt('evaluations.personal_avg','Personal avg')) + '</span></div></div>'
       + '<div class="ft-chartwrap">' + buildForceChart(rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso) }; }), avg, meta) + '</div>'
       + '</div>';
@@ -3110,7 +3182,7 @@
       return '<tr' + (idx === 0 ? ' class="is-latest"' : '') + '>'
         + '<td class="c-date">' + ftDateFull(r.iso) + (idx === 0 ? '<span class="ft-tag">'+esc(tt("evaluations.latest","Latest"))+'</span>' : '') + '</td>'
         + '<td class="num c-val">' + ftFmt(r.value, dec) + (unit ? ' <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + esc(unit) + '</span>' : '') + '</td>'
-        + '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + ftPctDelta(dlt) + '</span></td>'
+        + '<td class="num"><span class="ft-vsavg' + (neutral ? '' : (rGood ? ' good' : ' bad')) + '">' + ftPctDelta(dlt) + '</span></td>'
         + '<td>' + evNoteCell(r.notes) + '</td>'
         + '</tr>';
     }).join('');
@@ -3291,7 +3363,8 @@
 
   // reload evaluations data + re-render View results after a save
   async function reloadEvalViews(){
-    if (!_openTest || !_openTest.src || _openTest.src.from !== 'evaluations') return;
+    if (!_openTest || !_openTest.src) return;
+    if (_openTest.src.from !== 'evaluations' && _openTest.src.from !== 'body_composition') return;
     await loadEvalData(_openTest);
     renderEvalTeam();
     renderEvalIndiv();
@@ -8506,6 +8579,7 @@
         document.getElementById('evTestSub').textContent = catName(t._cat) + ' · ' + t.sub;
         renderDefMeta(t);
         if (t.src && t.src.from === 'force_tests'){ renderForceTeam(); renderForceIndiv(); }
+        else if (t.src && t.src.from === 'body_composition'){ openEvalTest(t).then(function(){ renderEvalIndiv(); }); }  // variant labels are localized → rebuild
         else { renderEvalTeam(); renderEvalIndiv(); }
       }
       // field assessment view (only if it was loaded)
