@@ -82,6 +82,26 @@
       + '</div>';
   }
 
+  // Mockup Nutrition: kcal objetivo + macros + plan de comidas (de ejemplo).
+  function nutriMock() {
+    var macros = [['Protein', '180 g', 72], ['Carbs', '340 g', 85], ['Fat', '78 g', 48]]
+      .map(function (m) { return '<div class="cmft-stat"><span class="k">' + m[0] + '</span><span class="v">' + m[1] + '</span><div class="tr"><i style="width:' + m[2] + '%"></i></div></div>'; }).join('');
+    var meals = [['Breakfast', 'Oats · eggs · fruit'], ['Lunch', 'Chicken · rice · veg'], ['Snack', 'Yogurt · nuts'], ['Dinner', 'Salmon · quinoa']]
+      .map(function (m) { return '<div class="cmft-meal"><span class="mn">' + m[0] + '</span><span class="md">' + m[1] + '</span></div>'; }).join('');
+    return '<div class="cmft-nutri">'
+      + '<div class="cmft-panel cmft-kcal"><div class="cmft-panel-h">Daily target</div><div class="big">2,850</div><div class="lbl">kcal</div></div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Macros</div>' + macros + '</div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Meal plan</div>' + meals + '</div>'
+      + '</div>';
+  }
+
+  // Mockup Video Room: galería de clips (de ejemplo).
+  function videoMock() {
+    var thumbs = ['1st half · build-up', 'Goal 24\'', 'Pressing', 'Set piece', 'Transition', 'Full match']
+      .map(function (t, i) { return '<div class="cmft-thumb' + (i === 1 ? ' feat' : '') + '"><i class="ti ti-player-play-filled"></i><span>' + t + '</span></div>'; }).join('');
+    return '<div class="cmft-panel"><div class="cmft-panel-h">Video library</div><div class="cmft-vidgrid">' + thumbs + '</div></div>';
+  }
+
   var TEASERS = {
     'gps': {
       plan: 'Basic', icon: 'ti-radar-2', accent: '#2da866', mock: gpsMock, tkey: 'gps',
@@ -102,6 +122,16 @@
       plan: 'Professional', icon: 'ti-report-analytics', accent: '#d4a14a', mock: matchMock, tkey: 'match',
       fb: { title: 'Informes de partido que hablan', sub: 'Resultado, tiros, estadísticas por jugador y mapa de juego.',
             b: ['Estadísticas por jugador y por equipo', 'Mapa de tiros y eventos clave', 'Exportá y compartí el informe'] }
+    },
+    'nutrition': {
+      plan: 'Full', icon: 'ti-apple', accent: '#e0863a', mock: nutriMock, tkey: 'nutri',
+      fb: { title: 'Nutrición a la medida de cada jugador', sub: 'Objetivos de calorías, macros y planes de comidas personalizados.',
+            b: ['Calorías y macros por jugador', 'Planes de comidas y objetivos', 'Ajustá según carga y composición'] }
+    },
+    'video-room': {
+      plan: 'Full', icon: 'ti-video', accent: '#e0863a', mock: videoMock, tkey: 'video',
+      fb: { title: 'Analizá el juego con video', sub: 'Subí clips, armá tu biblioteca y compartila con el plantel.',
+            b: ['Biblioteca de clips y partidos', 'Compartí video con jugadores y staff', 'Etiquetá momentos clave'] }
     }
   };
 
@@ -161,7 +191,21 @@
       '.cmft-stat .k{font-size:12px;color:var(--cm-fg-muted,#5b6472)}',
       '.cmft-stat .v{float:right;font:700 13px var(--cm-font-mono,monospace);color:var(--cm-fg-strong,#0f1115)}',
       '.cmft-stat .tr{height:7px;border-radius:4px;background:var(--cm-border-soft,rgba(0,0,0,.08));margin-top:6px;overflow:hidden}',
-      '.cmft-stat .tr i{display:block;height:100%;background:var(--cm-accent,#2da866);border-radius:4px}'
+      '.cmft-stat .tr i{display:block;height:100%;background:var(--cm-accent,#2da866);border-radius:4px}',
+      /* nutrition */
+      '.cmft-nutri{display:grid;grid-template-columns:.8fr 1fr 1.1fr;gap:16px;max-width:1000px;margin:0 auto}',
+      '.cmft-kcal{display:flex;flex-direction:column;align-items:center;justify-content:center}',
+      '.cmft-kcal .big{font-size:44px;font-weight:800;color:#e0863a}',
+      '.cmft-kcal .lbl{font-size:13px;color:var(--cm-fg-muted,#5b6472);letter-spacing:.08em}',
+      '.cmft-meal{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--cm-border-soft,rgba(0,0,0,.05))}',
+      '.cmft-meal .mn{font-size:13px;font-weight:600;color:var(--cm-fg-strong,#0f1115)}',
+      '.cmft-meal .md{font-size:12.5px;color:var(--cm-fg-muted,#5b6472)}',
+      /* video room */
+      '.cmft-vidgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:760px;margin:0 auto}',
+      '.cmft-thumb{position:relative;aspect-ratio:16/10;border-radius:10px;background:linear-gradient(135deg,#2a2f3a,#3a4150);display:flex;align-items:center;justify-content:center;overflow:hidden}',
+      '.cmft-thumb.feat{outline:3px solid var(--cm-accent,#2da866);outline-offset:-3px}',
+      '.cmft-thumb i{font-size:30px;color:rgba(255,255,255,.9)}',
+      '.cmft-thumb span{position:absolute;left:8px;bottom:6px;font-size:11px;color:rgba(255,255,255,.85)}'
     ].join('');
     document.head.appendChild(s);
   }
