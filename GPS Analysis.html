@@ -2835,7 +2835,7 @@ async function _gpAssignSeasonToDay(clubId, sessionId, seasonId) {
     if (error) throw error;
     showToast(seasonId ? tt('gps_analysis.ar_season_set','Season assigned') : tt('gps_analysis.ar_season_cleared','Season cleared'));
     try { window.cmInvalidateGpsCache?.(); window.invalidateBaselineCache?.(); } catch {}
-    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
     document.querySelector('.gp-modal-overlay')?.remove();
     _gpOpenAssignRivals();
@@ -2961,7 +2961,7 @@ function _gpConfirmDeleteSessions(clubId, ids) {
       }
       showToast(tt('gps_analysis.es_deleted', `${ids.length} sessions deleted`, { n: ids.length }));
       try { window.cmInvalidateGpsCache?.(); window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
-      try { await window.gpFilterBar?.reload?.(); } catch {}
+      try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
       try { await window.refreshDashboard?.(); } catch {}
       ov.remove();
       document.querySelector('.gp-modal-overlay')?.remove();
@@ -2999,7 +2999,7 @@ async function _gpBulkAssignSeason(clubId, sids, seasonId) {
       ? tt('gps_analysis.ar_season_set_n', `Season assigned to ${sids.length} days`, { n: sids.length })
       : tt('gps_analysis.ar_season_cleared_n', `Season cleared on ${sids.length} days`, { n: sids.length }));
     try { window.cmInvalidateGpsCache?.(); window.invalidateBaselineCache?.(); } catch {}
-    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
     document.querySelector('.gp-modal-overlay')?.remove();
     _gpOpenAssignRivals();
@@ -3180,7 +3180,7 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
     showToast(`Rival → ${rivalName}`);
     // The day is now a match → the vs-Match baseline (match-days cache) must refresh.
     try { window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
-    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
     document.querySelector('.gp-modal-overlay')?.remove();
     _gpOpenAssignRivals();   // reopen with the row gone
@@ -3237,7 +3237,7 @@ function _gpRemoveRivalFromDay(clubId, sessionId, rivalName) {
       }
       showToast('Rival removed');
       try { window.cmInvalidateGpsCache?.(); window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
-      try { await window.gpFilterBar?.reload?.(); } catch {}
+      try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
       try { await window.refreshDashboard?.(); } catch {}
       ov.remove();
       document.querySelector('.gp-modal-overlay')?.remove();   // close the Assign modal…
@@ -3467,7 +3467,7 @@ gpRefreshBtn?.addEventListener('click', async () => {
   gpRefreshBtn.disabled = true; if (ic) ic.style.animation = 'gp-spin 1s linear infinite';
   try {
     window.cmInvalidateGpsCache?.();
-    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
     showToast(tt('gps_analysis.refreshed', 'Data refreshed'));
   } catch (e) { showToast(tt('gps_analysis.refresh_failed', 'Refresh failed'), true); }
@@ -3742,7 +3742,7 @@ async function _gpResolvePending(clubId, p, body, ov, btn) {
     window.cmInvalidateGpsCache?.();
     // Recargar las OPCIONES del filterbar (fechas/sesiones) — cargaron al abrir la página, antes
     // del attach, así que la fecha recién enganchada no aparecía en el selector hasta recargarlas.
-    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.gpFilterBar?.reload?.({ force: true }); } catch {}
     try { window.refreshDashboard?.(); } catch {}
     await _gpRenderPending(clubId, body, ov);
   } catch (e) { showToast(tt('gps_analysis.ctx_failed', 'Failed: {msg}', { msg: e.message }), true); btn.disabled = false; btn.innerHTML = _lbl; }

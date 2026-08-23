@@ -7,7 +7,8 @@
    API pública:
      window.gpFilterBar.getState()      → snapshot limpio de los filtros
      window.gpFilterBar.onChange(fn)     → suscribirse a cambios (devuelve unsub)
-     window.gpFilterBar.reload()         → recargar opciones desde Supabase
+     window.gpFilterBar.reload()         → recargar opciones desde Supabase (dedupe por equipo;
+                                           pasar {force:true} tras mutar datos con el mismo equipo)
      window.gpFilterBar.clearAll()       → resetear todo
    Evento DOM: document → 'gpfilter:change' (detail = getState()).
    ───────────────────────────────────────────────────────────────────────── */
@@ -1566,12 +1567,15 @@
     // re-dispara el render de las cards: si no, la agregación queda con los microciclos de la
     // carga anterior (whole-club antes de resolver el equipo) y sesiones sin microcycle_id se
     // bucketean por fecha al MC equivocado (ej. el «MC 01» de otro equipo con ventana solapada).
-    async reload() {
+    async reload(opts) {
       // Dedupe del doble barrido en boot: si loadData YA corrió con este mismo equipo (p. ej.
       // boot() cargó con el equipo ya resuelto), no repetimos el fetch pesado de gps_reports —
       // solo re-disparamos el render. Si el equipo cambió (o boot difirió), sí recargamos.
+      // force:true (refresh manual / post-sync / post-attach): los DATOS mutaron con el mismo
+      // equipo activo, así que el dedupe convertía el reload en no-op y las cards quedaban
+      // stale hasta un F5 — con force siempre se recarga y se re-dispara el render.
       const _tid = window._gpTeamId != null ? String(window._gpTeamId) : '__none__';
-      if (_loadedTeamId !== _tid) {
+      if (opts?.force || _loadedTeamId !== _tid) {
         try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); }
         // fireNow SOLO si recargamos: si loadData ya había corrido con este equipo, boot() ya
         // disparó el render con este mismo estado → un fireNow acá sería una SEGUNDA pasada

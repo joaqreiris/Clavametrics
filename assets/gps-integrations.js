@@ -432,7 +432,16 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
         const cur=_syncJobs[nw.integration_id];
         // keep the latest job per integration (same row, or a newer one)
         if(!cur || nw.id===cur.id || new Date(nw.created_at)>=new Date(cur.created_at)){
+          const wasRunning = cur && (cur.status==='running'||cur.status==='queued');
           _syncJobs[nw.integration_id]=nw; _paintByInt(nw.integration_id);
+          // Sync terminado → refrescar el dashboard GPS si esta página lo tiene (GPS Analysis).
+          // En Admin estos globals no existen y todo es no-op. force:true: el equipo activo no
+          // cambió, así que sin force el reload del filterbar se dedupea y quedaría stale.
+          if(wasRunning && nw.status==='done'){
+            try{ window.cmInvalidateGpsCache?.(); }catch(_){}
+            try{ window.gpFilterBar?.reload?.({ force:true }); }catch(_){}
+            try{ window.refreshDashboard?.(); }catch(_){}
+          }
         }
       })
       .subscribe();
