@@ -610,6 +610,45 @@
     }
   };
 
+  // ── Upsell modal reutilizable (venta contextual al tocar un límite) ─────────
+  // window.cmUpsell({ title, body, cta, teamId }) → modal con CTA a Plan Picker.
+  // Se usa cuando el free/basic toca el tope de jugadores o staff.
+  window.cmUpsell = function (opts) {
+    opts = opts || {};
+    var t = (window.CM_I18N && CM_I18N.t) ? function (k, f, v) { var r = CM_I18N.t(k, v); return (r && r !== k) ? r : f; } : function (k, f) { return f; };
+    if (document.getElementById('cm-upsell-overlay')) return;
+    var href = 'Plan Picker.html' + (opts.teamId ? ('?team=' + encodeURIComponent(opts.teamId)) : '');
+    var st = document.createElement('style');
+    st.id = 'cm-upsell-style';
+    st.textContent = '#cm-upsell-overlay{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(10,12,16,.5);backdrop-filter:blur(6px);padding:24px}'
+      + '#cm-upsell-card{width:100%;max-width:420px;background:var(--cm-bg-elevated,var(--cm-surface,#fff));color:var(--cm-fg-strong,#0f1115);border:1px solid var(--cm-border,rgba(0,0,0,.08));border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.3);padding:28px 26px 22px;text-align:center}'
+      + '#cm-upsell-card .ic{width:54px;height:54px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:26px;background:color-mix(in srgb,var(--cm-accent,#2da866) 14%,transparent);color:var(--cm-accent,#2da866)}'
+      + '#cm-upsell-card h3{margin:0 0 8px;font-size:19px;font-weight:700}'
+      + '#cm-upsell-card p{margin:0 0 22px;font-size:14px;line-height:1.5;color:var(--cm-fg-muted,#5b6472)}'
+      + '#cm-upsell-card .cta{display:inline-flex;align-items:center;gap:8px;justify-content:center;width:100%;padding:12px 16px;border:0;border-radius:10px;background:var(--cm-accent,#2da866);color:#fff;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none}'
+      + '#cm-upsell-card .later{margin-top:12px;background:none;border:0;color:var(--cm-fg-faint,#8a93a0);font-size:13px;cursor:pointer}';
+    document.head.appendChild(st);
+    var ov = document.createElement('div');
+    ov.id = 'cm-upsell-overlay'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.innerHTML = '<div id="cm-upsell-card"><div class="ic"><i class="ti ti-rocket"></i></div><h3 data-u-title></h3><p data-u-body></p>'
+      + '<a class="cta" href="' + href + '"><i class="ti ti-arrow-up"></i><span data-u-cta></span></a>'
+      + '<div><button type="button" class="later" data-u-later></button></div></div>';
+    ov.querySelector('[data-u-title]').textContent = opts.title || t('upsell.title', 'Upgrade your plan');
+    ov.querySelector('[data-u-body]').textContent  = opts.body  || t('upsell.body', 'You reached your plan limit. Upgrade to add more.');
+    ov.querySelector('[data-u-cta]').textContent   = opts.cta   || t('upsell.cta', 'See plans');
+    ov.querySelector('[data-u-later]').textContent = t('upsell.later', 'Not now');
+    function close() { ov.remove(); var s = document.getElementById('cm-upsell-style'); if (s) s.remove(); }
+    ov.querySelector('.later').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
+    document.body.appendChild(ov);
+  };
+  // ¿El error de una operación es un límite de plan? (trigger de jugadores)
+  window.cmIsLimitError = function (err) {
+    var m = (err && (err.message || err.error_description || err.details || '')) + '';
+    return m.indexOf('PLAYER_LIMIT_REACHED') !== -1;
+  };
+
   window.setClubLogo = function (url) {
     if (_club) _club.logo_url = url;
     document.dispatchEvent(new CustomEvent('clublogochanged', { detail: { logo_url: url } }));

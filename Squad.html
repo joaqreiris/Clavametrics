@@ -2397,6 +2397,29 @@ async function reloadPlayers() {
       return;
     }
 
+    // ── Pre-chequeo de límite de jugadores por categoría (upsell antes de crear) ──
+    if (!_editingId && selectedTeamIds.length) {
+      for (const tid of selectedTeamIds) {
+        try {
+          const [cntRes, limRes] = await Promise.all([
+            window.sb.from('player_teams').select('id', { count:'exact', head:true }).eq('team_id', tid),
+            window.sb.rpc('team_player_limit', { p_team_id: tid })
+          ]);
+          const lim = limRes?.data, cnt = cntRes?.count ?? 0;
+          if (lim != null && cnt >= lim) {
+            saving.style.display = 'none'; saveBtn.disabled = false;
+            window.cmUpsell && window.cmUpsell({
+              teamId: tid,
+              title: tt('upsell.players_title','Llegaste al límite de jugadores'),
+              body: tt('upsell.players_body','Tu plan permite {n} jugadores en esta categoría. Sube de plan para agregar más.', { n: lim }),
+              cta: tt('upsell.cta','Ver planes')
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+
     const photoFile = _pendingPhotoFile || document.getElementById('sqF_photo')?.files?.[0] || null;
 
     async function uploadPhoto(playerId, clubId) {
@@ -2437,7 +2460,21 @@ async function reloadPlayers() {
     // jugador que crea un coach aparece en su roster, que filtra por player_teams).
     if (!error && savedPlayerId && selectedTeamIds.length) {
       const syncErr = await syncPlayerTeams(savedPlayerId, savedClubId, selectedTeamIds, primaryTeamId);
-      if (syncErr) console.error('[Squad] player_teams sync error:', syncErr);
+      if (syncErr) {
+        console.error('[Squad] player_teams sync error:', syncErr);
+        // Tope de plan al sumar a una categoría (ej. editar y agregar a un equipo lleno).
+        if (window.cmIsLimitError && window.cmIsLimitError(syncErr)) {
+          saving.style.display = 'none'; saveBtn.disabled = false;
+          window.cmUpsell && window.cmUpsell({
+            teamId: primaryTeamId,
+            title: tt('upsell.players_title','Llegaste al límite de jugadores'),
+            body: tt('upsell.players_limit_generic','Una de las categorías llegó al tope de jugadores de su plan. Sube de plan para agregar más.'),
+            cta: tt('upsell.cta','Ver planes')
+          });
+          await reloadPlayers();
+          return;
+        }
+      }
     }
 
     saving.style.display = 'none';

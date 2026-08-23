@@ -36,6 +36,19 @@ Deno.serve(async (req) => {
     if (clubId && (isSuper || clubId === caller?.club_id)) targetClub = clubId;
     if (!targetClub) return json({ error: 'No target club' }, 400);
 
+    // ── Límite de staff del plan (workspace, plan más alto). Super-admin exento. ──
+    if (!isSuper) {
+      const [{ data: lim }, { data: cnt }] = await Promise.all([
+        admin.rpc('club_staff_limit', { p_club_id: targetClub }),
+        admin.rpc('club_staff_count', { p_club_id: targetClub }),
+      ]);
+      if (lim != null && (cnt ?? 0) >= lim) {
+        // 200 (no 409) para que el cliente pueda leer el flag en `data`
+        // (supabase-js mete los 4xx en `error`, no en `data`).
+        return json({ staff_limit_reached: true, limit: lim }, 200);
+      }
+    }
+
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) return json({ error: 'Invalid email' }, 400);
     const cleanRole = String(role || 'staff');

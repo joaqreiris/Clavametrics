@@ -5286,6 +5286,70 @@ AS $function$
 $function$
 ;
 
+-- ── Límite de JUGADORES por categoría (enforcement server-side) ─────────────
+-- Trigger sobre player_teams (la membresía "jugador en esta categoría", que se
+-- inserta desde Squad, GPS, import, etc.) → un solo punto cubre todas las vías.
+-- Bloquea agregar cuando el equipo llegó al max_players de su plan. NULL = ilimitado.
+-- No es retroactivo: equipos ya por encima del tope conservan sus jugadores.
+CREATE OR REPLACE FUNCTION public.enforce_player_limit()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_limit int;
+  v_count int;
+BEGIN
+  v_limit := public.team_player_limit(NEW.team_id);
+  IF v_limit IS NULL THEN RETURN NEW; END IF;            -- plan ilimitado
+  SELECT count(*) INTO v_count FROM public.player_teams WHERE team_id = NEW.team_id;
+  IF v_count >= v_limit THEN
+    RAISE EXCEPTION 'PLAYER_LIMIT_REACHED' USING errcode = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$function$
+;
+DROP TRIGGER IF EXISTS trg_enforce_player_limit ON public.player_teams;
+CREATE TRIGGER trg_enforce_player_limit
+  BEFORE INSERT ON public.player_teams
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_player_limit();
+
+-- ── Límite de STAFF por club (workspace, plan más alto activo) ──────────────
+-- max_staff del plan MÁS ALTO del club; si algún equipo es ilimitado (full) → todo
+-- el club ilimitado. Se usa en la Edge Function invite-staff y en el cliente.
+CREATE OR REPLACE FUNCTION public.club_staff_limit(p_club_id uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT CASE
+           WHEN count(*) = 0 THEN (SELECT max_staff FROM public.plans WHERE slug='initiation')
+           WHEN bool_or(pl.max_staff IS NULL) THEN NULL   -- algún equipo ilimitado → club ilimitado
+           ELSE max(pl.max_staff)
+         END
+    FROM public.teams t
+    JOIN public.plans pl ON pl.slug = public.team_plan_slug(t.id)
+   WHERE t.club_id = p_club_id;
+$function$
+;
+
+-- Staff activo del club = perfiles (excluye rol player por si hubiera cuentas de atleta).
+CREATE OR REPLACE FUNCTION public.club_staff_count(p_club_id uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT count(*)::int FROM public.profiles
+   WHERE club_id = p_club_id AND coalesce(role,'') <> 'player';
+$function$
+;
+GRANT EXECUTE ON FUNCTION public.club_staff_limit(uuid) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.club_staff_count(uuid) TO authenticated, anon;
+
 CREATE OR REPLACE FUNCTION public.toggle_adaptation_applied(p_treatment_id uuid)
  RETURNS TABLE(applied_at timestamp with time zone, applied_by uuid)
  LANGUAGE plpgsql

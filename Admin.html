@@ -1749,6 +1749,15 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     const { data: res, error } = await window.sb.functions.invoke('invite-staff', {
       body: { email, role, redirectTo, clubId, teamIds },
     });
+    if (res?.staff_limit_reached) {
+      closeInviteModal();
+      window.cmUpsell && window.cmUpsell({
+        title: tt('upsell.staff_title','Llegaste al límite de usuarios'),
+        body: tt('upsell.staff_body','Tu plan permite {n} usuarios. Sube de plan para invitar a más staff.', { n: res.limit }),
+        cta: tt('upsell.cta','Ver planes')
+      });
+      return;
+    }
     if (error || res?.error) {
       if (msg) { msg.textContent = (res?.error) || error.message || tt('admin.invite_failed','Invite failed'); msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
       return;
