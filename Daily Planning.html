@@ -1326,8 +1326,10 @@ async function loadDay(dateStr) {
   }
   const gb = document.getElementById('dpGroupBtn');
   if (gb) {
-    const fieldCt = _dpDaySessions.filter(s => (s.session_type || '') !== 'gym').length;
-    gb.style.display = (!window._dpReadOnly && _dpCurrentSessionId && (fieldCt >= 2 || window._dpSessParts)) ? '' : 'none';
+    // Siempre disponible con una sesión activa (antes pedía ≥2 sesiones de campo y en
+    // días de sesión única desaparecía): sin grupo definido entrenan todos, pero el
+    // staff puede acotarlo cuando quiera.
+    gb.style.display = (!window._dpReadOnly && _dpCurrentSessionId && _dpGroupableSessions().length) ? '' : 'none';
   }
 
   dpRenderSquad(avMap);
