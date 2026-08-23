@@ -233,7 +233,13 @@
     // work_context: default (sin selección) = SOLO 'team' (rehab/individual/top-up ocultos);
     // con selección, los contextos elegidos. Espeja el default del resolver (empty → team).
     if (exceptKey !== 'work_context') {
-      if (state.work_context.length) { if (!state.work_context.includes(r.wc)) return false; }
+      if (state.work_context.length) {
+        // Con contextos no-team seleccionados NO se filtra por la etiqueta de sesión: rehab/
+        // individual/top-up viven en PERÍODOS (r.wc acá es casi siempre 'team'), y filtrar por
+        // ella dejaba la cascada VACÍA (dropdowns sin opciones + poda de otras selecciones).
+        const nonTeam = state.work_context.some(c => c !== 'team');
+        if (!nonTeam && !state.work_context.includes(r.wc)) return false;
+      }
       else if (r.wc && r.wc !== 'team') return false;
     }
     return true;
