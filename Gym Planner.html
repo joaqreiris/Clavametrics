@@ -2112,7 +2112,7 @@ function gpRenderRoster() {
     }).join('');
     pillsEl.innerHTML = allPill + pills;
     pillsEl.querySelectorAll('.gp-ath-pill[data-pid]').forEach(el => el.addEventListener('click', () => {
-      _gpRoster.delete(el.dataset.pid); gpRenderRoster(); gpScheduleSave();
+      _gpRoster.delete(el.dataset.pid); _gpPartsDirty = true; gpRenderRoster(); gpScheduleSave();
     }));
   }
   if (ctEl) ctEl.textContent = tt('gym_planner.n_selected', `${roster.length} selected`, { count:roster.length });
@@ -2178,7 +2178,7 @@ function gpRenderSquadList() {
     row.onclick = () => { const id = row.dataset.pid; _gpSquadSel.has(id) ? _gpSquadSel.delete(id) : _gpSquadSel.add(id); gpRenderSquadList(); };
   });
 }
-function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); gpRenderRoster(); gpScheduleSave(); } gpCloseSquad(); }
+function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); _gpPartsDirty = true; gpRenderRoster(); gpScheduleSave(); } gpCloseSquad(); }
 
 // ── Load groups (subgrupos por nivel según tests) ──
 // ── Jenks natural breaks + auto-k (GVF) ──
@@ -2651,6 +2651,7 @@ async function gpLoadDay(dateStr) {
   gpApplyContent(sess?.gym_content);
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
   _gpSavedRoster = sess?.gym_content?.roster || null;
+  _gpPartsDirty = false; // ediciones pendientes de otro día no aplican al recién cargado
 
   await gpSyncRowNames();
   await gpResolveSessionMedia();
@@ -2697,6 +2698,7 @@ function gpToast(msg) {
 
 let _gpSaveTimer = null;
 let _gpSaveDirty = false;
+let _gpPartsDirty = false; // roster editado a mano → espejar a session_participants en el próximo save
 function gpScheduleSave() {
   _gpSaveDirty = true;
   clearTimeout(_gpSaveTimer);
@@ -2733,7 +2735,33 @@ async function gpAutoSave() {
     if (error) { console.error('gym autosave failed:', error); _gpSaveDirty = true; return; }
     if (data?.id) { _gpCurrentSessionId = data.id; _gpUpdatePublishBtn(); }
   }
+  if (_gpPartsDirty && _gpCurrentSessionId) await gpSyncParticipants();
   _gpSaveDirty = false;
+}
+
+// El roster del gym vive en gym_content.roster (JSON), pero el resolver de RPE
+// (resolve_rpe_session) y el board de la sesión (session_rpe_status) miran
+// session_participants. Cuando el usuario edita el roster a mano (pills o Pick from
+// squad) se espeja acá, así el RPE del link genérico se auto-asigna al gym para los
+// convocados. El default "todos los disponibles" NO se espeja — solo ediciones
+// deliberadas — para no robarle el RPE al partido en días de doble sesión.
+async function gpSyncParticipants() {
+  try {
+    const ids = [..._gpRoster];
+    if (ids.length) {
+      const rows = ids.map(pid => ({ session_id: _gpCurrentSessionId, player_id: pid, club_id: _gpClubId }));
+      const { error } = await window.sb.from('session_participants').upsert(rows, { onConflict: 'session_id,player_id' });
+      if (error) throw error;
+      const { error: e2 } = await window.sb.from('session_participants').delete()
+        .eq('session_id', _gpCurrentSessionId)
+        .not('player_id', 'in', `(${ids.join(',')})`);
+      if (e2) throw e2;
+    } else {
+      const { error } = await window.sb.from('session_participants').delete().eq('session_id', _gpCurrentSessionId);
+      if (error) throw error;
+    }
+    _gpPartsDirty = false;
+  } catch (e) { console.warn('session_participants sync failed:', e && e.message); }
 }
 
 async function gpFlushSave() { clearTimeout(_gpSaveTimer); if (_gpSaveDirty) { try { await gpAutoSave(); } catch(_){} } }

@@ -3160,6 +3160,11 @@ begin
   select * into s from public.training_sessions where id = p_session_id;
   if not found then return jsonb_build_object('error','session_not_found'); end if;
   if r.club_id <> s.club_id then return jsonb_build_object('error','club_mismatch'); end if;
+  -- unique (player_id, session_id): si ya tiene un RPE en la sesión destino, avisar en vez de reventar.
+  if exists (select 1 from public.rpe x
+             where x.player_id = r.player_id and x.session_id = s.id and x.id <> r.id) then
+    return jsonb_build_object('error','already_has_rpe');
+  end if;
 
   update public.rpe
      set session_id   = s.id,
@@ -4133,12 +4138,16 @@ end; $function$
 
 -- Resuelve a qué sesión del día pertenece un RPE. Con p_local_time (hora local del envío)
 -- gana la última sesión ya iniciada — el RPE se responde después de entrenar —, y si ninguna
--- empezó, la próxima; clave para días de doble sesión (AM/PM). Una sesión con convocatoria
--- (session_participants) que NO incluye al jugador va al final. Un partido del calendario aún
--- sin materializar compite por horario contra las training_sessions; si gana, se materializa
--- acá mismo (idempotente, sin el guard de staff de ensure_match_session: este camino ya está
--- validado por el token del survey o por RPCs de staff — por eso EXECUTE está revocado a los
--- roles de cliente).
+-- empezó, la próxima; clave para días de doble sesión (AM/PM). El scope de equipo son TODOS
+-- los equipos del jugador (player_teams, incluye invitados, con fallback a players.team_id):
+-- un jugador del segundo equipo que entrena con el primero engancha igual. Prioridad: primero
+-- sesiones donde el jugador está explícitamente convocado (session_participants), después las
+-- sin convocatoria; una sesión con convocatoria que NO lo incluye va al final. Un partido del
+-- calendario aún sin materializar compite por horario contra las training_sessions — salvo que
+-- la sesión elegida tenga al jugador convocado, o que el partido ya materializado tenga una
+-- convocatoria que lo excluya —; si gana, se materializa acá mismo (idempotente, sin el guard
+-- de staff de ensure_match_session: este camino ya está validado por el token del survey o por
+-- RPCs de staff — por eso EXECUTE está revocado a los roles de cliente).
 CREATE OR REPLACE FUNCTION public.resolve_rpe_session(p_club uuid, p_player uuid, p_date date, p_local_time time without time zone DEFAULT NULL::time without time zone)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -4146,9 +4155,11 @@ CREATE OR REPLACE FUNCTION public.resolve_rpe_session(p_club uuid, p_player uuid
  SET search_path TO 'public'
 AS $function$
 declare
-  v_team uuid; v_sid uuid; v_sess_d interval; v_mid uuid; e record;
+  v_legacy uuid; v_any boolean; v_sid uuid; v_sess_d interval; v_mid uuid; e record;
 begin
-  select team_id into v_team from public.players where id = p_player;
+  select team_id into v_legacy from public.players where id = p_player;
+  v_any := (v_legacy is not null)
+        or exists (select 1 from public.player_teams pt where pt.player_id = p_player);
 
   select ts.id,
          case when p_local_time is null or ts.session_time is null then interval '24 hours'
@@ -4158,16 +4169,28 @@ begin
   from public.training_sessions ts
   where ts.club_id = p_club
     and ts.session_date = p_date
-    and (v_team is null or ts.team_id = v_team)
+    and (not v_any
+         or ts.team_id = v_legacy
+         or exists (select 1 from public.player_teams pt
+                    where pt.player_id = p_player and pt.team_id = ts.team_id))
   order by (exists (select 1 from public.session_participants sp where sp.session_id = ts.id)
             and not exists (select 1 from public.session_participants sp
                             where sp.session_id = ts.id and sp.player_id = p_player)),
+           (not exists (select 1 from public.session_participants sp
+                        where sp.session_id = ts.id and sp.player_id = p_player)),
            (ts.session_time is null),
            case when p_local_time is null then interval '0'
                 when ts.session_time <= p_local_time then p_local_time - ts.session_time
                 else (ts.session_time - p_local_time) + interval '12 hours' end,
            ts.duration desc nulls last
   limit 1;
+
+  -- Si la sesión elegida tiene al jugador explícitamente convocado, gana siempre:
+  -- el partido del calendario no compite por horario contra una convocatoria expresa.
+  if v_sid is not null and exists (select 1 from public.session_participants sp
+                                   where sp.session_id = v_sid and sp.player_id = p_player) then
+    return v_sid;
+  end if;
 
   -- Partido del calendario (puede no estar materializado como training_session todavía).
   select ce.*,
@@ -4179,7 +4202,10 @@ begin
   where ce.club_id = p_club
     and ce.type = 'match'
     and ce.date = p_date
-    and (v_team is null or ce.team_id is not distinct from v_team)
+    and (not v_any
+         or ce.team_id = v_legacy
+         or exists (select 1 from public.player_teams pt
+                    where pt.player_id = p_player and pt.team_id = ce.team_id))
   order by case when p_local_time is null or ce.start_time is null then interval '24 hours'
                 when ce.start_time <= p_local_time then p_local_time - ce.start_time
                 else (ce.start_time - p_local_time) + interval '12 hours' end
@@ -4192,7 +4218,13 @@ begin
     where ts.club_id = e.club_id and ts.session_date = e.date
       and ts.session_type = 'match' and ts.team_id is not distinct from e.team_id
     limit 1;
-    if v_mid is null then
+    if v_mid is not null
+       and exists (select 1 from public.session_participants sp where sp.session_id = v_mid)
+       and not exists (select 1 from public.session_participants sp
+                       where sp.session_id = v_mid and sp.player_id = p_player) then
+      -- Convocatoria del partido que excluye al jugador → no compite.
+      v_mid := null;
+    elsif v_mid is null then
       insert into public.training_sessions
         (club_id, team_id, session_date, session_time, duration, session_type,
          title, estimated_rpe, published, visible_to)
@@ -4647,7 +4679,10 @@ begin
 end; $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5)
+-- Sesiones recientes para el desplegable de asignar RPEs huérfanos. p_today = fecha local del
+-- browser: excluye sesiones futuras pre-creadas (sin esto, una sesión cargada para dentro de
+-- dos meses encabezaba el desplegable). Firma vieja (uuid, integer) dropeada al agregar p_today.
+CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5, p_today date DEFAULT NULL::date)
  RETURNS TABLE(id uuid, title text, session_date date, duration integer, session_type text)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
@@ -4658,7 +4693,8 @@ begin
     select ts.id, ts.title, ts.session_date, ts.duration, ts.session_type
     from public.training_sessions ts
     where ts.club_id = p_club_id
-    order by ts.session_date desc
+      and ts.session_date <= coalesce(p_today, current_date)
+    order by ts.session_date desc, ts.session_time desc nulls last
     limit p_limit;
 end; $function$
 ;

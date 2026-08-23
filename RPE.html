@@ -144,6 +144,7 @@
         </div>
         <div class="tr-spacer"></div>
         <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i><span data-i18n="rpe.sortedHighestFirst">Sorted highest RPE first</span></div>
+        <button class="cm-btn is-ghost is-sm" id="rmMoveBtn" style="display:none;"><i class="ti ti-transfer"></i><span data-i18n="rpe.moveBtn">Move to another session</span></button>
         <div class="tr-layout-toggle">
           <span class="lab" data-i18n="rpe.card">Card</span>
           <div class="tr-seg" data-layout-toggle="#listResponded">
@@ -287,6 +288,35 @@
       <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
       <button class="cm-btn" id="btnRemindTg" style="background:#229ED9;border-color:#229ED9;color:#fff;"><i class="ti ti-brand-telegram"></i><span id="btnRemindTgTxt">Telegram</span></button>
       <button class="cm-btn is-wa" id="btnRemindSend"><i class="ti ti-brand-whatsapp"></i><span id="btnRemindSendTxt">WhatsApp</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Move responses modal: reassign submitted RPEs to another session of the same day ── -->
+<div class="tr-overlay" id="rmMoveModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="rmMoveTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-transfer"></i></span>
+      <div>
+        <h3 id="rmMoveTitle" data-i18n="rpe.moveTitle">Move RPE to another session</h3>
+        <p data-i18n="rpe.moveSub">Pick the players whose RPE belongs to a different session or match of this day.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <div>
+        <div class="tr-field-lab" data-i18n="rpe.moveTarget">Move to</div>
+        <select class="cm-select" id="moveTarget" style="cursor:pointer;"></select>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 6px;font-weight:600;cursor:pointer;border-bottom:1px solid rgba(128,128,128,.18);">
+        <input type="checkbox" id="moveAll" style="width:16px;height:16px;cursor:pointer;">
+        <span data-i18n="rpe.remindSelectAll">Select all</span>
+      </label>
+      <div id="moveList" style="display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow:auto;margin-top:8px;"></div>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
+      <button class="cm-btn is-primary" id="btnMoveConfirm" disabled><i class="ti ti-transfer"></i><span id="btnMoveConfirmTxt">Move</span></button>
     </div>
   </div>
 </div>
@@ -609,6 +639,12 @@
     summaryCard.style.display = '';
     toolbar.style.display = '';
 
+    // "Move to another session": only on a settled board with responders and at least
+    // one other session/match that same day to move them to.
+    const moveBtn = document.getElementById('rmMoveBtn');
+    if (moveBtn) moveBtn.style.display =
+      (!state.loading && !state.error && state.responders.length && moveCandidates().length) ? '' : 'none';
+
     const done = state.responders.length;
     const total = state.total;
     const high = state.responders.filter(p => p.rpe != null && p.rpe >= 8).length;
@@ -671,7 +707,8 @@
   /* ── Loads ── */
   async function loadRecentSessions() {
     try {
-      const { data, error } = await window.sb.rpc('recent_sessions', { p_club_id: state.cid, p_limit: 8 });
+      // p_today = local date: keeps pre-created future sessions out of the assign dropdown.
+      const { data, error } = await window.sb.rpc('recent_sessions', { p_club_id: state.cid, p_limit: 8, p_today: localToday() });
       if (error) throw error;
       state.recent = data || [];
     } catch (e) { console.warn('[RPE] recent_sessions:', e && e.message); state.recent = []; }
@@ -868,8 +905,14 @@
     try {
       const sessionId = await resolveSession(rawVal); // materialize a calendar match if needed
       if (!sessionId) throw new Error('session_unresolved');
-      const { error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
+      const { data, error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
       if (error) throw error;
+      if (data && data.error) {
+        T.toast(data.error === 'already_has_rpe'
+          ? tt('rpe.moveDupOne', 'This player already has an RPE in that session')
+          : tt('rpe.assignError', "Couldn't assign session"), 'ti-alert-triangle');
+        btn.disabled = false; return;
+      }
       row.classList.add('is-done');
       row.querySelector('.o-assign').innerHTML =
         `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>${tt('rpe.linkedTo', `Linked to ${label}`, { label: T.escape(label) })}</span>`;
@@ -881,6 +924,85 @@
       T.toast(tt('rpe.assignError', "Couldn't assign session"), 'ti-alert-triangle');
       btn.disabled = false;
     }
+  });
+
+  /* ── Move submitted RPEs to another session of the same day ── */
+  // Sessions/matches sharing the current session's date (other than itself). When the
+  // current board IS a match, other 'match' entries of that date are excluded: after
+  // materialization the calendar copy ('evt:…') is the same game under another id.
+  function moveCandidates() {
+    const cur = state.sessionsById[state.currentSessionId];
+    if (!cur) return [];
+    return (state.sessionsList || []).filter(s =>
+      s.session_date === cur.session_date &&
+      s.id !== state.currentSessionId &&
+      !(state.currentIsMatch && s.session_type === 'match'));
+  }
+
+  function moveSelectedCount() {
+    return document.querySelectorAll('#moveList input:checked').length;
+  }
+  function syncMoveFoot() {
+    const n = moveSelectedCount();
+    document.getElementById('btnMoveConfirm').disabled = !n || !document.getElementById('moveTarget').value;
+    document.getElementById('btnMoveConfirmTxt').textContent =
+      n ? tt('rpe.moveConfirmN', `Move ${n}`, { count: n }) : tt('rpe.moveConfirm', 'Move');
+  }
+
+  document.getElementById('rmMoveBtn').addEventListener('click', () => {
+    const cands = moveCandidates();
+    document.getElementById('moveTarget').innerHTML =
+      cands.map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('');
+    document.getElementById('moveAll').checked = false;
+    document.getElementById('moveList').innerHTML = state.responders.map(p => `
+      <label style="display:flex;align-items:center;gap:10px;padding:7px 6px;cursor:pointer;border-radius:7px;">
+        <input type="checkbox" value="${p.id}" style="width:15px;height:15px;cursor:pointer;">
+        <span class="cm-avatar is-md" data-cm-photo="${p.id}">${initials(p.name)}</span>
+        <span style="flex:1;font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);">${T.escape(p.name)}</span>
+        <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);">${p.rpe != null ? p.rpe : '—'} ${tt('rpe.rpeShort','RPE')}</span>
+      </label>`).join('');
+    syncMoveFoot();
+    if (window.cmPaintPlayerPhotos) cmPaintPlayerPhotos(document.getElementById('moveList'));
+    document.getElementById('rmMoveModal').classList.add('is-open');
+  });
+  document.getElementById('moveAll').addEventListener('change', e => {
+    document.querySelectorAll('#moveList input').forEach(i => { i.checked = e.target.checked; });
+    syncMoveFoot();
+  });
+  document.getElementById('moveList').addEventListener('change', syncMoveFoot);
+  document.getElementById('moveTarget').addEventListener('change', syncMoveFoot);
+
+  document.getElementById('btnMoveConfirm').addEventListener('click', async function () {
+    const btn = this;
+    const ids = [...document.querySelectorAll('#moveList input:checked')].map(i => i.value);
+    const rawVal = document.getElementById('moveTarget').value;
+    if (!ids.length || !rawVal) return;
+    btn.disabled = true;
+    try {
+      const target = await resolveSession(rawVal); // materialize a calendar match if needed
+      if (!target) throw new Error('session_unresolved');
+      // session_rpe_status doesn't expose rpe row ids — fetch them for the selected players.
+      const { data: rows, error } = await window.sb.from('rpe')
+        .select('id, player_id')
+        .eq('session_id', state.currentSessionId)
+        .in('player_id', ids);
+      if (error) throw error;
+      let ok = 0, dup = 0;
+      for (const r of (rows || [])) {
+        const { data: res, error: e2 } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: r.id, p_session_id: target });
+        if (e2 || (res && res.error)) { if (res && res.error === 'already_has_rpe') dup++; continue; }
+        ok++;
+      }
+      let msg = tt('rpe.moveDone', `${ok} RPE moved`, { count: ok });
+      if (dup) msg += ' · ' + tt('rpe.moveDupSkipped', `${dup} skipped (already had an RPE there)`, { count: dup });
+      T.toast(msg, 'ti-transfer');
+      document.getElementById('rmMoveModal').classList.remove('is-open');
+      await Promise.all([loadRpe(), loadOrphans()]);
+    } catch (e) {
+      console.warn('[RPE] move:', e && e.message);
+      T.toast(tt('rpe.moveError', "Couldn't move RPE"), 'ti-alert-triangle');
+    }
+    btn.disabled = false;
   });
 
   /* ── Auto-link today's RPE (real) ── */
