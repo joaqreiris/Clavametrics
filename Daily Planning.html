@@ -2333,6 +2333,15 @@ async function dpRenderPrintSheet() {
     const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
     const trainees=[], outs=[];
     (_dpPlayers||[]).forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
+    // Convocatoria por sesión (igual que dpRenderSquad): con grupo definido, los
+    // disponibles fuera del grupo se imprimen aparte como "Other session".
+    const _pParts = window._dpSessParts;
+    const otherSess = [];
+    if (_pParts) {
+      for (let i = trainees.length - 1; i >= 0; i--) {
+        if (!_pParts.has(String(trainees[i].id))) otherSess.unshift(trainees.splice(i, 1)[0]);
+      }
+    }
     const groups = {};
     trainees.forEach(p => { const g=_DP_POS_GROUP[(p.position||'').toUpperCase()]||{l:(p.position||'?').toUpperCase(),o:9}; (groups[g.l]=groups[g.l]||{o:g.o,list:[]}).list.push(p); });
     const posBadge = lbl => `<span style="display:inline-block;font:700 9px ${MONO};letter-spacing:.04em;color:#fff;background:var(--club-accent);border-radius:4px;padding:2px 6px;margin-right:8px;white-space:nowrap">${esc(lbl)}</span>`;
@@ -2342,6 +2351,10 @@ async function dpRenderPrintSheet() {
       `<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:5px;flex-wrap:wrap">${posBadge(`${lbl} · ${list.length}`)}
         <span style="font:400 12px ${FONT}">${list.map(p=>{ const amber=isAmber(p); const numClr=amber?'#8a5e12':'#9CA3AF'; const nameClr=amber?'#7C2D12':'#15181D'; return `<span style="white-space:nowrap;margin-right:10px"><span style="color:${numClr};font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600;color:${nameClr}">${esc(lastName(p))}</b>${amber?' <span style="font-size:8px;color:#b5851f">●</span>':''}</span>`;}).join('')}</span>
       </div>`).join('');
+    const otherRow = otherSess.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
+      <span style="font:700 9px ${MONO};color:#8A93A0;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.other_session_count', `Other session · ${otherSess.length}`, {count: otherSess.length}))}</span>
+      <span style="font:400 11.5px ${FONT};color:#8A93A0">${otherSess.map(p=>`<span style="margin-right:10px"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}</span>`).join('')}</span>
+    </div>` : '';
     const outRow = outs.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
       <span style="font:700 9px ${MONO};color:#C0392B;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.sheet_out', `Out · ${outs.length}`, {count: outs.length}))}</span>
       <span style="font:400 11.5px ${FONT};color:#8A93A0">${outs.map(p=>{const r=statusOf(p).reason; return `<span style="margin-right:10px;text-decoration:line-through;text-decoration-color:#C9CDD3"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}${r?` · ${esc(r)}`:''}</span>`;}).join('')}</span>
@@ -2360,7 +2373,7 @@ async function dpRenderPrintSheet() {
     </div>` : '';
     const squadBlock = (_dpPlayers||[]).length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_squad_available', `Squad · ${availN} available`, {count: availN}))}
-      ${traineeRows}${outRow}
+      ${traineeRows}${otherRow}${outRow}
       <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${esc(tt('daily_planning.sheet_squad_summary', `${availN} available · ${partCt} partial · ${awayCt} away`, {avail: availN, partial: partCt, away: awayCt}))}</div>
       ${physioLines}
     </div>` : '';
