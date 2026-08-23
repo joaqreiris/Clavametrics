@@ -919,9 +919,17 @@ body.cm::before {
   padding: 10px 12px; border-radius: var(--cm-r-3);
   background: var(--cm-bg-soft); border: var(--cm-bw) solid var(--cm-border-soft);
 }
+.lm-kpi-sub { flex-wrap: wrap; gap: 6px; }
 .lm-kpi-sub .k { font: var(--cm-meta); color: var(--cm-fg-muted); }
-.lm-kpi-sub .v { font: 600 18px/1 var(--cm-font-mono); color: var(--cm-fg); letter-spacing: -0.01em; }
+.lm-kpi-sub .v { font: 600 18px/1 var(--cm-font-mono); color: var(--cm-fg); letter-spacing: -0.01em; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .lm-kpi-sub .v small { font: 500 11px/1 var(--cm-font-mono); color: var(--cm-fg-faint); margin-left: 2px; }
+
+/* zone tag — the zone's NAME in its color, next to the raw ratio */
+.lm-zone-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font: 600 10.5px/1 var(--cm-font-sans); white-space: nowrap; }
+.lm-zone-tag.under  { color: var(--cm-info);    background: var(--cm-info-bg); }
+.lm-zone-tag.sweet  { color: var(--cm-success); background: var(--cm-success-bg); }
+.lm-zone-tag.over   { color: var(--cm-warning); background: var(--cm-warning-bg); }
+.lm-zone-tag.danger { color: var(--cm-danger);  background: var(--cm-danger-bg); }
 
 /* Zone legend */
 .lm-zones { display: flex; flex-direction: column; gap: 7px; margin-top: auto; }
@@ -937,6 +945,27 @@ body.cm::before {
 
 /* Chart pane */
 .lm-chart-pane { padding: 18px 20px 16px; position: relative; min-height: 320px; }
+
+/* Squad distribution strip — one dot per player over the zone bands */
+.lm-dist { margin-top: 14px; padding-top: 12px; border-top: var(--cm-bw) solid var(--cm-border-soft); }
+.lm-dist-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.lm-dist-head .t { font: var(--cm-eyebrow); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-muted); }
+.lm-dist-head .h { font: var(--cm-body-sm); color: var(--cm-fg-faint); }
+.lm-dist-track { position: relative; height: 38px; border-radius: var(--cm-r-2); overflow: hidden; background: var(--cm-bg-soft); }
+.lm-dist-track .seg { position: absolute; top: 0; bottom: 0; }
+.lm-dist-track .seg.under  { background: var(--cm-info-bg); }
+.lm-dist-track .seg.sweet  { background: var(--cm-success-bg); }
+.lm-dist-track .seg.over   { background: var(--cm-warning-bg); }
+.lm-dist-track .seg.danger { background: var(--cm-danger-bg); }
+.lm-dist-track .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); top: 50%; margin-top: -4.5px; border: 1.5px solid var(--cm-surface); cursor: default; }
+.lm-dist-track .dot.r1 { margin-top: -13px; }
+.lm-dist-track .dot.r2 { margin-top: 4px; }
+.lm-dist-track .dot.under  { background: var(--cm-info); }
+.lm-dist-track .dot.sweet  { background: var(--cm-success); }
+.lm-dist-track .dot.over   { background: var(--cm-warning); }
+.lm-dist-track .dot.danger { background: var(--cm-danger); }
+.lm-dist-axis { position: relative; height: 14px; margin-top: 3px; }
+.lm-dist-axis .tick { position: absolute; transform: translateX(-50%); font: 500 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
 .lm-chart-legend { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
 .lm-lg { display: flex; align-items: center; gap: 6px; font: var(--cm-body-sm); color: var(--cm-fg-muted); }
 .lm-lg .line { width: 16px; height: 2px; border-radius: 2px; }
@@ -1066,7 +1095,12 @@ body.cm::before {
 .lm-table thead th.is-sorted { color: var(--cm-fg-strong); }
 .lm-table thead th.is-sorted::after { content: '▾'; font-size: 9px; margin-left: 4px; opacity: .85; }
 .lm-table thead th.is-sorted[data-dir="asc"]::after { content: '▴'; }
-.lm-risk .sig { font: 500 9.5px/1.25 var(--cm-font-mono); color: var(--cm-fg-faint); max-width: 128px; text-align: center; }
+.lm-risk .sigs { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-width: 150px; }
+.lm-sigchip { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border-radius: 999px; font: 500 10px/1 var(--cm-font-sans); white-space: nowrap; }
+.lm-sigchip b { font: 600 10px/1 var(--cm-font-mono); }
+.lm-sigchip.over   { color: var(--cm-warning); background: var(--cm-warning-bg); }
+.lm-sigchip.danger { color: var(--cm-danger);  background: var(--cm-danger-bg); }
+.lm-sigchip.more   { color: var(--cm-fg-muted); background: var(--cm-bg-sunk); }
 .lm-table tbody td { padding: 12px; border-bottom: var(--cm-bw) solid var(--cm-border-soft); vertical-align: middle; }
 .lm-table tbody tr:last-child td { border-bottom: 0; }
 .lm-table tbody tr { transition: background var(--cm-dur-1); }

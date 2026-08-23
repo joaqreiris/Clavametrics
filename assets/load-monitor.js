@@ -37,6 +37,20 @@
   function mean(a){ const v=a.filter(x=>x!=null&&isFinite(x)); return v.length? v.reduce((s,x)=>s+x,0)/v.length : null; }
   function accent(){ return getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#6366f1'; }
   function cssVar(n,f){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f; }
+  // ACWR zone → CSS class + translated label (same cutoffs as gpsACWR.ZONES).
+  function zoneInfo(v){
+    if(v==null||!isFinite(v)) return null;
+    if(v>1.5)  return { cls:'danger', label:tt('load_monitor.zone_danger','Danger') };
+    if(v>1.3)  return { cls:'over',   label:tt('load_monitor.zone_overreach','Overreach') };
+    if(v>=0.8) return { cls:'sweet',  label:tt('load_monitor.zone_sweet_spot','Sweet spot') };
+    return { cls:'under', label:tt('load_monitor.zone_underloaded','Underloaded') };
+  }
+  // Canvas-safe alpha tint of a CSS color (#hex or rgb/rgba) — CSS vars can't be alpha'd on canvas.
+  function tint(c,a){
+    c=(c||'').trim();
+    if(c[0]==='#'){ let h=c.slice(1); if(h.length===3) h=h.replace(/./g,x=>x+x); const n=parseInt(h,16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+    const m=c.match(/rgba?\(([^)]+)\)/); return m? `rgba(${m[1].split(',').slice(0,3).map(s=>s.trim()).join(',')},${a})` : c;
+  }
   // header helpers (wire the design's static counters to real data)
   function cardOf(id){ const el=document.getElementById(id); return el? el.closest('.cm-card') : null; }
   function setSub(card, txt){ const el=card&&card.querySelector('.lm-head .sub'); if(el) el.textContent=txt; }
@@ -111,7 +125,10 @@
       { risk:`<b>${riskN}</b>`, danger:`<b>${c.risk}</b>` });
 
     const med = squad ? median(Object.values(squad.perPlayer).map(p=>p.acwr)) : null;
-    if($('kpiAvg')) $('kpiAvg').innerHTML = (med!=null? med.toFixed(2) : '—') + `<small>${tt('load_monitor.squad_median','squad median')}</small>`;
+    const medZone = zoneInfo(med);
+    if($('kpiAvg')) $('kpiAvg').innerHTML =
+      `<span class="num">${med!=null? med.toFixed(2) : '—'}<small>${tt('load_monitor.squad_median','squad median')}</small></span>`
+      + (medZone? `<span class="lm-zone-tag ${medZone.cls}">${esc(medZone.label)}</span>` : '');
 
     // zone highlight
     const zoneCls = med==null?null: med>1.5?'danger': med>1.3?'over': med>=0.8?'sweet':'under';
@@ -148,7 +165,8 @@
         <span class="lm-lg"><span class="bar"></span>${esc(loadLbl)}</span>
         <span class="lm-lg spacer"></span>
       </div>
-      <div style="position:relative;height:280px"><canvas id="acwrCanvas"></canvas></div>`;
+      <div style="position:relative;height:280px"><canvas id="acwrCanvas"></canvas></div>
+      ${distStripHTML()}`;
 
     const labels = tl.dates.map(d=> new Date(d+'T12:00:00').toLocaleDateString(lang(),{day:'numeric',month:'short'}));
     const fai=cssVar('--cm-fg-faint','#aaa'), acc=accent();
@@ -159,21 +177,73 @@
     const maxAcwr=acwrVals.length?Math.max(...acwrVals):0;
     const yMax=Math.min(6, Math.max(2.2, Math.ceil((maxAcwr+0.15)*10)/10));
     if(state.chart){ state.chart.destroy(); state.chart=null; }
+    // Zone bands painted behind the series: the line's position IN a colored zone
+    // carries the meaning — no need to memorize the 0.8/1.3/1.5 cutoffs.
+    const zoneBands={ id:'zoneBands', beforeDraw(chart){
+      const area=chart.chartArea, y=chart.scales&&chart.scales.y; if(!area||!y) return;
+      const bands=[
+        [y.min,0.8, cssVar('--cm-info','#3B82F6'),    0.05],
+        [0.8,  1.3, cssVar('--cm-success','#22C55E'), 0.07],
+        [1.3,  1.5, cssVar('--cm-warning','#F59E0B'), 0.08],
+        [1.5, y.max,cssVar('--cm-danger','#EF4444'),  0.07],
+      ];
+      const ctx=chart.ctx; ctx.save();
+      for(const [a,b,c,al] of bands){
+        if(b<=y.min||a>=y.max) continue;
+        const top=y.getPixelForValue(Math.min(b,y.max)), bot=y.getPixelForValue(Math.max(a,y.min));
+        ctx.fillStyle=tint(c,al); ctx.fillRect(area.left, top, area.right-area.left, bot-top);
+      }
+      ctx.restore();
+    }};
     state.chart = new Chart($('acwrCanvas'), {
       data:{ labels, datasets:[
-        { type:'line', data:Array(labels.length).fill(1.5), borderColor:'rgba(220,38,38,0.35)', borderDash:[4,3], borderWidth:1, pointRadius:0, yAxisID:'y', order:4 },
-        { type:'line', data:Array(labels.length).fill(1.3), borderColor:'rgba(217,119,6,0.30)', borderDash:[3,3], borderWidth:1, pointRadius:0, yAxisID:'y', order:4 },
-        { type:'line', data:Array(labels.length).fill(0.8), borderColor:'rgba(34,197,94,0.30)', borderDash:[3,3], borderWidth:1, pointRadius:0, yAxisID:'y', order:4 },
         { type:'bar', label:loadLbl, data:tl.squadLoad, backgroundColor:'rgba(120,120,130,0.16)', borderWidth:0, borderRadius:2, yAxisID:'y2', order:5 },
         { type:'line', label:acwrLbl, data:tl.squadAcwr, borderColor:acc, backgroundColor:'rgba(99,102,241,0.08)', borderWidth:2.5, pointRadius:2.5, pointHoverRadius:5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 },
       ]},
-      options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:false}},
+      plugins:[zoneBands],
+      options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{ legend:{display:false},
+          tooltip:{ callbacks:{ label:(c)=>{
+            const v=c.parsed.y;
+            if(c.dataset.label===acwrLbl && v!=null){ const z=zoneInfo(v); return ` ${acwrLbl}: ${v.toFixed(2)}${z?` · ${z.label}`:''}`; }
+            return ` ${c.dataset.label}: ${v>=1000?(v/1000).toFixed(1)+'k':v}`;
+          } } } },
         scales:{
           y:{ min:0, max:yMax, position:'left', grid:{color:'rgba(128,128,128,0.10)'}, ticks:{color:fai,font:{size:11},callback:v=>v.toFixed(1)} },
           y2:{ position:'right', max:maxLoad*3, grid:{display:false}, ticks:{color:fai,font:{size:10},callback:v=> v>=1000?(v/1000).toFixed(0)+'k':v} },
           x:{ grid:{color:'rgba(128,128,128,0.06)'}, ticks:{color:fai,font:{size:10},maxTicksLimit:10} },
         } }
     });
+  }
+
+  // ── Squad distribution strip (one dot per player over the zone bands) ────────
+  // The squad line/median hides individuals; this makes every player visible at
+  // a glance — who's in which zone and who's the outlier.
+  function distStripHTML(){
+    const squad=state.lastSquad; if(!squad) return '';
+    const nameOf={}; state.players.forEach(p=>{ nameOf[p.id]=((p.first_name||'')+' '+(p.last_name||'')).trim(); });
+    const pts=Object.entries(squad.perPlayer||{})
+      .filter(([,v])=> v.acwr!=null)
+      .map(([id,v])=>({ name:nameOf[id]||'?', acwr:v.acwr }))
+      .sort((a,b)=> a.acwr-b.acwr);
+    if(!pts.length) return '';
+    const min=0.4, max=Math.max(1.8, Math.min(3, pts[pts.length-1].acwr+0.15));
+    const X=v=> Math.max(0, Math.min(100, (v-min)/(max-min)*100));
+    const seg=(a,b,cls)=> `<span class="seg ${cls}" style="left:${X(a)}%;width:${(X(b)-X(a)).toFixed(2)}%"></span>`;
+    const bands=seg(min,0.8,'under')+seg(0.8,1.3,'sweet')+seg(1.3,1.5,'over')+seg(1.5,max,'danger');
+    let lastX=-99, row=0;
+    const dots=pts.map(p=>{
+      const x=X(p.acwr);
+      row = (x-lastX<3.2)? (row+1)%3 : 0; lastX=x;   // nudge overlapping dots onto 3 lanes
+      const z=zoneInfo(p.acwr);
+      return `<span class="dot ${z.cls} r${row}" style="left:${x.toFixed(2)}%" title="${esc(p.name)} · ${p.acwr.toFixed(2)}"></span>`;
+    }).join('');
+    const ticks=[0.8,1.3,1.5].map(v=> `<span class="tick" style="left:${X(v).toFixed(2)}%">${v.toFixed(1)}</span>`).join('');
+    return `<div class="lm-dist">
+      <div class="lm-dist-head"><span class="t">${esc(tt('load_monitor.dist_title','Squad distribution'))}</span><span class="h">${esc(tt('load_monitor.dist_hint','one dot per player · today'))}</span></div>
+      <div class="lm-dist-track">${bands}${dots}</div>
+      <div class="lm-dist-axis">${ticks}</div>
+    </div>`;
   }
 
   // ── GPS exposure tiles ──────────────────────────────────────────────────────
@@ -651,7 +721,11 @@
           : rs.count===1? tt('load_monitor.risk_count_one','1 signal')
           : tt('load_monitor.risk_count_many','{n} signals',{n:rs.count}));
       const detail = rs.signals.map(s=> `${s.label} ${s.acwr.toFixed(2)}`).join(' · ');
-      const riskCell = `<td><div class="lm-risk ${riskCls}"${detail?` title="${esc(detail)}"`:''}><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span>${detail?`<span class="sig">${esc(detail)}</span>`:''}</div></td>`;
+      // Zone-colored chips instead of raw mono text: amber = overreach, red = danger.
+      const chips = rs.signals.slice(0,2).map(s=>
+        `<span class="lm-sigchip ${s.acwr>1.5?'danger':'over'}">${esc(s.label)} <b>${s.acwr.toFixed(2)}</b></span>`).join('');
+      const more = rs.signals.length>2? `<span class="lm-sigchip more">+${rs.signals.length-2}</span>` : '';
+      const riskCell = `<td><div class="lm-risk ${riskCls}"${detail?` title="${esc(detail)}"`:''}><span class="bar"><i></i><i></i><i></i></span><span class="lab">${esc(riskLab)}</span>${chips?`<span class="sigs">${chips}${more}</span>`:''}</div></td>`;
 
       const name=((p.first_name||'')+' '+(p.last_name||'')).trim();
       const ini=(((p.first_name||'')[0]||'')+((p.last_name||'')[0]||'')).toUpperCase()||'?';
