@@ -6539,8 +6539,10 @@
           soma_ecto: soma.ecto
         };
         const { error: bcErr } = await window.sb.from('body_composition').insert(bcRow);
-        if (bcErr) console.error('body_composition insert failed:', bcErr);
-      } catch (e) { console.error('body_composition insert exception:', e); }
+        if (bcErr) { console.error('body_composition insert failed:', bcErr);
+          alert(tt('evaluations.bc_row_failed','Warning: the body-composition record could not be stored ({msg}) — the Anthropometrics cards will not show this entry.',{msg:bcErr.message})); }
+      } catch (e) { console.error('body_composition insert exception:', e);
+        alert(tt('evaluations.bc_row_failed','Warning: the body-composition record could not be stored ({msg}) — the Anthropometrics cards will not show this entry.',{msg:(e&&e.message)||e})); }
 
     } else if (cfg.key === 'fvprofile') {
       const G=9.81;
