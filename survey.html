@@ -42,6 +42,18 @@
   .player-btn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 16px;color:#EDEDED;font:600 16px/1 var(--sans);cursor:pointer}
   .player-btn .av{width:36px;height:36px;border-radius:50%;background:rgba(74,222,128,.18);color:var(--green-d);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
   .back{background:none;border:0;color:#9CA3AF;font:500 13px/1 var(--sans);cursor:pointer;display:flex;align-items:center;gap:4px;padding:0 22px;margin-bottom:14px}
+  /* Session picker (double-session days) */
+  .sess-row{display:flex;flex-direction:column;gap:8px}
+  .sess-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:12px;padding:13px 15px;color:#EDEDED;font:600 14px/1 var(--sans);cursor:pointer}
+  .sess-btn i{font-size:17px;color:#9CA3AF}
+  .sess-btn.is-on{border-color:var(--green-d);background:rgba(74,222,128,.10)}
+  .sess-btn.is-on i{color:var(--green-d)}
+  .sess-btn.is-done{opacity:.5;cursor:default}
+  .sess-btn .tag{margin-left:auto;font:500 11px/1 var(--mono);color:var(--green-d)}
+  .sess-hint{font:400 12px/1.4 var(--sans);color:#9CA3AF;margin-top:8px}
+  .next-card{width:100%;max-width:380px;margin-top:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;text-align:center}
+  .next-card .q{font:500 14px/1.4 var(--sans);color:#EDEDED;margin-bottom:12px}
+  .next-card button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--green-d);color:#0A0A0A;font:700 14px/1 var(--sans);cursor:pointer}
   .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;color:#9CA3AF;padding:22px}
   .center .big{font-size:52px;color:var(--green-d)}
   .center .t{font:600 20px/1.3 var(--sans);color:#fff}
@@ -89,6 +101,10 @@ const T={
     last7:'Your last 7 days',readiness:'Readiness',today:'Today',loadLbl:'Session load',durLbl:'Duration',rpeLbl:'RPE',
     already:'Already checked in',alreadySub:"You already sent today's check-in. See you tomorrow!",
     alreadyRpe:'Already submitted',alreadyRpeSub:'You already submitted your RPE for this session.',
+    allRpeSub:"You already rated every session of today. Thanks!",
+    which:'Which session did you do?',whichSub:'If you did both, rate one and then the other.',
+    sessGym:'Gym',sessField:'Field',sessMatch:'Match',sentTag:'Sent',
+    also:n=>'Did you also do the '+n+' session?',alsoBtn:'Rate it too',
     parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
@@ -100,6 +116,10 @@ const T={
     last7:'Tus últimos 7 días',readiness:'Preparación',today:'Hoy',loadLbl:'Carga (sRPE)',durLbl:'Duración',rpeLbl:'RPE',
     already:'Ya completaste',alreadySub:'Ya enviaste el check-in de hoy. ¡Nos vemos mañana!',
     alreadyRpe:'Ya enviado',alreadyRpeSub:'Ya enviaste tu RPE de esta sesión.',
+    allRpeSub:'Ya calificaste todas las sesiones de hoy. ¡Gracias!',
+    which:'¿En qué sesión estuviste?',whichSub:'Si hiciste las dos, calificá una y después la otra.',
+    sessGym:'Gimnasio',sessField:'Campo',sessMatch:'Partido',sentTag:'Enviado',
+    also:n=>'¿También estuviste en '+n+'?',alsoBtn:'Calificarla también',
     parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
@@ -111,6 +131,10 @@ const T={
     last7:'Seus últimos 7 dias',readiness:'Prontidão',today:'Hoje',loadLbl:'Carga (sRPE)',durLbl:'Duração',rpeLbl:'RPE',
     already:'Já registrado',alreadySub:'Você já enviou o check-in de hoje. Até amanhã!',
     alreadyRpe:'Já enviado',alreadyRpeSub:'Você já enviou seu RPE desta sessão.',
+    allRpeSub:'Você já avaliou todas as sessões de hoje. Obrigado!',
+    which:'Em qual sessão você esteve?',whichSub:'Se fez as duas, avalie uma e depois a outra.',
+    sessGym:'Academia',sessField:'Campo',sessMatch:'Jogo',sentTag:'Enviado',
+    also:n=>'Você também esteve na sessão de '+n+'?',alsoBtn:'Avaliar também',
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
@@ -125,7 +149,7 @@ const app=document.getElementById('app');
 // Escapa datos de DB (nombres de jugador) y mensajes de error antes de innerHTML — página pública.
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const token=new URLSearchParams(location.search).get('token');
-let players=[],picked=null,scope='wellness';
+let players=[],picked=null,scope='wellness',sessions=[],sessPick=null;
 const state={sleepQ:4,mood:4,fatigue:4,stress:4,soreness:4,rpe:6,body:new Set(),note:''};
 const today=new Date().toLocaleDateString(L===T.en?'en-GB':'es-ES',{weekday:'long',day:'numeric',month:'short'});
 
@@ -145,8 +169,48 @@ function renderPick(){
   app.innerHTML=header()+
     `<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.who}</h1><p>${L.whoSub}</p></div>`+
     `<div class="players">`+players.map((p,i)=>`<button class="player-btn" data-i="${i}"><span class="av">${esc((p.name[0]||'?').toUpperCase())}</span>${esc(p.name)}</button>`).join('')+`</div>`;
-  app.querySelectorAll('.player-btn').forEach(b=>b.onclick=()=>{picked=players[+b.dataset.i];renderForm();});
+  app.querySelectorAll('.player-btn').forEach(b=>b.onclick=async()=>{
+    picked=players[+b.dataset.i];
+    b.style.opacity='.6';
+    await loadSessions();
+    renderForm();
+  });
 }
+// Sesiones del día local del jugador (solo RPE con link genérico). Si falla, sessions
+// queda vacío y el submit cae al resolver automático del servidor, como siempre.
+async function loadSessions(){
+  sessions=[];sessPick=null;
+  if(scope!=='rpe')return;
+  try{
+    const r=await sb.rpc('get_survey_sessions',{p_token:token,p_player_id:picked.id,p_tz:new Date().getTimezoneOffset()});
+    if(!r.error&&r.data&&!r.data.error)sessions=r.data.sessions||[];
+  }catch{}
+  sessPick=pickDefault();
+}
+// Preselección: la última sesión ya iniciada que siga sin responder (el RPE se manda
+// después de entrenar); si ninguna empezó, la primera pendiente.
+function pickDefault(){
+  const un=sessions.filter(s=>!s.answered);
+  if(!un.length)return null;
+  const now=new Date(),cur=now.getHours()*60+now.getMinutes();
+  const mins=s=>s.time?parseInt(s.time.slice(0,2),10)*60+parseInt(s.time.slice(3,5),10):null;
+  const started=un.filter(s=>mins(s)!=null&&mins(s)<=cur).sort((a,b)=>mins(b)-mins(a));
+  return (started[0]||un[0]).id;
+}
+function sessLabel(s){
+  const t=s.type==='gym'?L.sessGym:s.type==='match'?L.sessMatch:L.sessField;
+  return t+(s.time?' · '+String(s.time).slice(0,5):'');
+}
+function sessHtml(){
+  if(scope!=='rpe'||sessions.length<2)return '';
+  return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ti-calendar-time"></i></span><span class="title">${L.which}</span></div>
+    <div class="sess-row">`+sessions.map(s=>{
+      const ic=s.type==='gym'?'ti-barbell':s.type==='match'?'ti-trophy':'ti-run';
+      return `<button class="sess-btn${s.id===sessPick?' is-on':''}${s.answered?' is-done':''}"${s.answered?' disabled':''} onclick="pickSess('${s.id}')">
+        <i class="ti ${ic}"></i>${sessLabel(s)}${s.answered?`<span class="tag"><i class="ti ti-check"></i> ${L.sentTag}</span>`:''}</button>`;
+    }).join('')+`</div><div class="sess-hint">${L.whichSub}</div></div>`;
+}
+window.pickSess=id=>{const s=sessions.find(x=>x.id===id);if(!s||s.answered)return;sessPick=id;renderForm();};
 function scaleHtml(key,icon,label,ends,max=10){
   return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ${icon}"></i></span><span class="title">${label}</span><span class="val" id="v_${key}">${state[key]}</span></div>
     <div class="ph-scale" id="sc_${key}" style="grid-template-columns:repeat(${max},1fr)">`+[...Array(max)].map((_,i)=>`<button class="${state[key]===i+1?'is-on':''}" onclick="setScale('${key}',${i+1})">${i+1}</button>`).join('')+`</div>
@@ -154,15 +218,17 @@ function scaleHtml(key,icon,label,ends,max=10){
 }
 function bodyHtml(){const parts=Object.keys(L.parts);
   return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ti-pin"></i></span><span class="title">${L.soreQ}</span></div>
-    <div class="ph-body-row">`+parts.map(k=>`<button class="ph-body-chip" data-k="${k}" onclick="toggleBody('${k}',this)">${L.parts[k]}</button>`).join('')+`</div></div>`;
+    <div class="ph-body-row">`+parts.map(k=>`<button class="ph-body-chip${state.body.has(k)?' is-on':''}" data-k="${k}" onclick="toggleBody('${k}',this)">${L.parts[k]}</button>`).join('')+`</div></div>`;
 }
 function noteHtml(){return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ti-message"></i></span><span class="title">${L.note}</span></div>
     <textarea placeholder="${L.notePh}" oninput="state.note=this.value"></textarea></div>`;}
 
 function renderForm(){
+  // Día con sesiones y todas ya respondidas → no hay nada para calificar.
+  if(scope==='rpe'&&sessions.length&&sessions.every(s=>s.answered)){renderDone(null,true);return;}
   let body;
   if(scope==='rpe'){
-    body=scaleHtml('rpe','ti-flame',L.rpeTitle,L.e_rpe)+bodyHtml()+noteHtml();
+    body=sessHtml()+scaleHtml('rpe','ti-flame',L.rpeTitle,L.e_rpe)+bodyHtml()+noteHtml();
   }else{
     body=scaleHtml('sleepQ','ti-moon',L.sleep,L.e_sleep,7)+
          scaleHtml('fatigue','ti-bolt',L.fatigue,L.e_fatigue,7)+
@@ -181,23 +247,37 @@ window.submitForm=async()=>{
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
   const _tz=new Date().getTimezoneOffset();   // so the one-per-day lock uses the player's local day
   const payload=scope==='rpe'
-    ?{rpe:state.rpe,body:[...state.body],note:state.note,tzOffset:_tz}
+    ?{rpe:state.rpe,body:[...state.body],note:state.note,tzOffset:_tz,...(sessPick?{sessionId:sessPick}:{})}
     :{scale:'7',sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note,tzOffset:_tz};
   const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
   const already=data?.already===true;
+  if(sessPick){const s=sessions.find(x=>x.id===sessPick);if(s)s.answered=true;}
   let hist=null;
   try { const r=await sb.rpc('get_survey_history',{p_token:token,p_player_id:picked.id});
         if(!r.error && r.data && !r.data.error) hist=r.data; } catch {}
   renderDone(hist, already);
 };
+// Si quedó otra sesión del día sin calificar, ofrecerla acá mismo (doble sesión: gym + campo).
+function nextHtml(){
+  if(scope!=='rpe')return '';
+  const next=sessions.find(s=>!s.answered);
+  if(!next)return '';
+  return `<div class="next-card"><div class="q">${L.also(sessLabel(next))}</div>
+    <button onclick="rateNext('${next.id}')">${L.alsoBtn}</button></div>`;
+}
+window.rateNext=id=>{
+  sessPick=id;state.rpe=6;state.body=new Set();state.note='';
+  renderForm();
+};
 function renderDone(hist, already){
   const name=esc(picked.name.split(' ')[0]);
   const isRpe=(scope==='rpe');
+  const allDone=isRpe&&sessions.length&&sessions.every(s=>s.answered);
   const hl=already?(isRpe?L.alreadyRpe:L.already):L.done(name);
-  const sub=already?(isRpe?L.alreadyRpeSub:L.alreadySub):L.doneSub;
+  const sub=already?(isRpe?(allDone?L.allRpeSub:L.alreadyRpeSub):L.alreadySub):L.doneSub;
   if(!hist||!hist.history||!hist.history.length){
-    app.innerHTML=`<div class="center"><i class="ti ti-circle-check big"></i><div class="t">${hl}</div><div>${sub}</div></div>`;
+    app.innerHTML=`<div class="center"><i class="ti ti-circle-check big"></i><div class="t">${hl}</div><div>${sub}</div>${nextHtml()}</div>`;
     return;
   }
   const items=hist.history, n=items.length;
@@ -222,6 +302,7 @@ function renderDone(hist, already){
     :row(L.sleep,sv(t.sleep_quality))+row(L.mood,sv(t.mood))+row(L.energy,sv(t.fatigue))+row(L.stress,sv(t.stress))+row(L.soreness,sv(t.soreness));
   const cols=`grid-template-columns:repeat(${n},1fr)`;
   app.innerHTML=`<div class="done-wrap"><i class="ti ti-circle-check big"></i><div class="hl">${hl}</div><div class="sub">${sub}</div>`+
+    nextHtml()+
     `<div class="d7-card"><div class="d7-head"><span class="t">${L.last7}</span><span class="s">${isRpe?L.loadLbl:L.readiness}</span></div>`+
     `<div class="d7-bars" style="${cols}">${bars}</div><div class="d7-lbls" style="${cols}">${lbls}</div>`+
     `<div class="d7-rows">${rows}</div></div></div>`;

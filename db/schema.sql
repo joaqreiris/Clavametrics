@@ -3727,6 +3727,81 @@ begin
 end; $function$
 ;
 
+-- Sesiones del día local del jugador para el picker del survey de RPE: con link genérico y
+-- día de más de una sesión, el survey pregunta "¿en qué sesión estuviste?". Materializa los
+-- partidos del calendario de hoy (mismo dedupe que resolve_rpe_session) para que aparezcan
+-- como opción, y marca cuáles ya respondió este jugador (el candado es por sesión). Un link
+-- atado a una sesión concreta devuelve [] → el survey no muestra el picker. No es STABLE
+-- porque puede insertar (la materialización del partido).
+CREATE OR REPLACE FUNCTION public.get_survey_sessions(p_token text, p_player_id uuid, p_tz integer DEFAULT 0)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_link record; v_local_date date; v_legacy uuid; v_any boolean; e record; v_mid uuid;
+begin
+  select * into v_link from public.share_links
+   where token = p_token and revoked = false
+     and (expires_at is null or expires_at > now())
+     and scope in ('rpe','survey');
+  if not found then return jsonb_build_object('error','invalid_token'); end if;
+  if v_link.session_id is not null then return jsonb_build_object('sessions', '[]'::jsonb); end if;
+  if not exists (select 1 from public.players p
+                 where p.id = p_player_id and p.club_id = v_link.club_id) then
+    return jsonb_build_object('error','player_not_in_scope');
+  end if;
+
+  v_local_date := ((now() at time zone 'UTC') - make_interval(mins => coalesce(p_tz, 0)))::date;
+  select team_id into v_legacy from public.players where id = p_player_id;
+  v_any := (v_legacy is not null)
+        or exists (select 1 from public.player_teams pt where pt.player_id = p_player_id);
+
+  -- Partidos del calendario de hoy aún sin materializar → crearlos para que sean elegibles.
+  for e in
+    select ce.* from public.calendar_events ce
+    where ce.club_id = v_link.club_id and ce.type = 'match' and ce.date = v_local_date
+      and (not v_any
+           or ce.team_id = v_legacy
+           or exists (select 1 from public.player_teams pt
+                      where pt.player_id = p_player_id and pt.team_id = ce.team_id))
+  loop
+    select ts.id into v_mid from public.training_sessions ts
+    where ts.club_id = e.club_id and ts.session_date = e.date
+      and ts.session_type = 'match' and ts.team_id is not distinct from e.team_id
+    limit 1;
+    if v_mid is null then
+      insert into public.training_sessions
+        (club_id, team_id, session_date, session_time, duration, session_type,
+         title, estimated_rpe, published, visible_to)
+      values
+        (e.club_id, e.team_id, e.date, e.start_time, e.duration_minutes, 'match',
+         coalesce(nullif(trim(e.title), ''),
+                  case when e.opponent is not null then 'Match vs ' || e.opponent else 'Match' end),
+         e.estimated_rpe, true, coalesce(e.visible_to, ARRAY['staff'::text]));
+    end if;
+  end loop;
+
+  return jsonb_build_object('sessions', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', s.id, 'title', s.title, 'type', s.session_type,
+             'time', s.session_time, 'duration', s.duration,
+             'answered', exists (select 1 from public.rpe r
+                                 where r.player_id = p_player_id and r.session_id = s.id))
+           order by s.session_time nulls last, s.created_at)
+    from public.training_sessions s
+    where s.club_id = v_link.club_id
+      and s.session_date = v_local_date
+      and coalesce(s.is_historical, false) = false
+      and (not v_any
+           or s.team_id = v_legacy
+           or exists (select 1 from public.player_teams pt
+                      where pt.player_id = p_player_id and pt.team_id = s.team_id))
+  ), '[]'::jsonb));
+end; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.get_user_club_id()
  RETURNS uuid
  LANGUAGE sql
@@ -5086,7 +5161,7 @@ AS $function$
 declare
   v_link record; v_ok boolean; v_read int; v_hooper int;
   v_areas text[]; v_note text; v_pname text; v_team uuid; v_sid uuid; v_dur int; v_sdate date;
-  v_tz int; v_local_date date;
+  v_tz int; v_local_date date; v_pick uuid; v_plegacy uuid; v_pany boolean;
 begin
   select * into v_link from public.share_links
    where token = p_token and revoked = false
@@ -5136,10 +5211,32 @@ begin
       values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
               v_link.session_id, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), coalesce(v_sdate, current_date));
     else
-      -- Link genérico (sin sesión): resolver la sesión por hora local del envío y candar POR
-      -- SESIÓN, así en días de doble sesión (AM + partido) se pueden cargar ambos RPE.
-      v_sid := public.resolve_rpe_session(v_link.club_id, p_player_id, v_local_date,
-                 ((now() at time zone 'UTC') - make_interval(mins => v_tz))::time);
+      -- Link genérico (sin sesión): si el survey mandó la sesión elegida por el jugador
+      -- (payload.sessionId), esa manda — validada contra club, día local y equipos del
+      -- jugador. Si no vino o no valida, se resuelve por hora local como antes. El candado
+      -- es POR SESIÓN, así en días de doble sesión (gym + campo) se cargan ambos RPE.
+      begin
+        v_pick := nullif(trim(coalesce(p_payload->>'sessionId','')), '')::uuid;
+      exception when others then v_pick := null;
+      end;
+      if v_pick is not null then
+        select team_id into v_plegacy from public.players where id = p_player_id;
+        v_pany := (v_plegacy is not null)
+               or exists (select 1 from public.player_teams pt where pt.player_id = p_player_id);
+        select ts.id into v_sid
+        from public.training_sessions ts
+        where ts.id = v_pick
+          and ts.club_id = v_link.club_id
+          and ts.session_date = v_local_date
+          and (not v_pany
+               or ts.team_id = v_plegacy
+               or exists (select 1 from public.player_teams pt
+                          where pt.player_id = p_player_id and pt.team_id = ts.team_id));
+      end if;
+      if v_sid is null then
+        v_sid := public.resolve_rpe_session(v_link.club_id, p_player_id, v_local_date,
+                   ((now() at time zone 'UTC') - make_interval(mins => v_tz))::time);
+      end if;
       if v_sid is not null then
         -- Bloquea el duplicado de ESA sesión, y también si quedó un huérfano de hoy sin
         -- asignar (no se puede saber a qué sesión pertenecía; lo resuelve el staff).
