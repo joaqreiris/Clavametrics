@@ -3733,6 +3733,8 @@ end; $function$
 -- como opción, y marca cuáles ya respondió este jugador (el candado es por sesión). Un link
 -- atado a una sesión concreta devuelve [] → el survey no muestra el picker. No es STABLE
 -- porque puede insertar (la materialización del partido).
+-- has_list/listed: convocatoria (session_participants) por sesión, para que el survey avise
+-- si el jugador elige una sesión donde no figura o le falta calificar una donde sí figura.
 CREATE OR REPLACE FUNCTION public.get_survey_sessions(p_token text, p_player_id uuid, p_tz integer DEFAULT 0)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3788,7 +3790,11 @@ begin
              'id', s.id, 'title', s.title, 'type', s.session_type,
              'time', s.session_time, 'duration', s.duration,
              'answered', exists (select 1 from public.rpe r
-                                 where r.player_id = p_player_id and r.session_id = s.id))
+                                 where r.player_id = p_player_id and r.session_id = s.id),
+             'has_list', exists (select 1 from public.session_participants sp
+                                 where sp.session_id = s.id),
+             'listed', exists (select 1 from public.session_participants sp
+                               where sp.session_id = s.id and sp.player_id = p_player_id))
            order by s.session_time nulls last, s.created_at)
     from public.training_sessions s
     where s.club_id = v_link.club_id
@@ -3797,7 +3803,10 @@ begin
       and (not v_any
            or s.team_id = v_legacy
            or exists (select 1 from public.player_teams pt
-                      where pt.player_id = p_player_id and pt.team_id = s.team_id))
+                      where pt.player_id = p_player_id and pt.team_id = s.team_id)
+           -- Convocado como invitado en session_participants → ve la sesión aunque sea de otro equipo
+           or exists (select 1 from public.session_participants sp
+                      where sp.session_id = s.id and sp.player_id = p_player_id))
   ), '[]'::jsonb));
 end; $function$
 ;

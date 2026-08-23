@@ -51,6 +51,11 @@
   .sess-btn.is-done{opacity:.5;cursor:default}
   .sess-btn .tag{margin-left:auto;font:500 11px/1 var(--mono);color:var(--green-d)}
   .sess-hint{font:400 12px/1.4 var(--sans);color:#9CA3AF;margin-top:8px}
+  .sess-btn .tag.for-you{color:#9CA3AF}
+  .sess-warn{display:flex;gap:9px;align-items:flex-start;margin-top:10px;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);border-radius:12px;padding:11px 13px;font:500 12.5px/1.45 var(--sans);color:#FBBF24;text-align:left}
+  .sess-warn i{font-size:16px;flex-shrink:0;margin-top:1px}
+  .next-card.is-alert{border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)}
+  .next-card.is-alert .q{color:#FBBF24;font-weight:600}
   .next-card{width:100%;max-width:380px;margin-top:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;text-align:center}
   .next-card .q{font:500 14px/1.4 var(--sans);color:#EDEDED;margin-bottom:12px}
   .next-card button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--green-d);color:#0A0A0A;font:700 14px/1 var(--sans);cursor:pointer}
@@ -105,6 +110,10 @@ const T={
     which:'Which session did you do?',whichSub:'If you did both, rate one and then the other.',
     sessGym:'Gym',sessField:'Field',sessMatch:'Match',sentTag:'Sent',
     also:n=>'Did you also do the '+n+' session?',alsoBtn:'Rate it too',
+    forYou:'On your list',notOnList:'You are not on the list for this session.',
+    listedOther:n=>'You are on the list for the '+n+' session. Sure you did this one?',
+    confirmNotListed:'You are not on the list for this session. Send anyway?',
+    missing:n=>'You still need to rate the '+n+' session — you are on its list.',
     parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
@@ -120,6 +129,10 @@ const T={
     which:'¿En qué sesión estuviste?',whichSub:'Si hiciste las dos, calificá una y después la otra.',
     sessGym:'Gimnasio',sessField:'Campo',sessMatch:'Partido',sentTag:'Enviado',
     also:n=>'¿También estuviste en '+n+'?',alsoBtn:'Calificarla también',
+    forYou:'En tu lista',notOnList:'No figurás en la lista de esta sesión.',
+    listedOther:n=>'Figurás en la lista de la sesión de '+n+'. ¿Seguro que estuviste en esta?',
+    confirmNotListed:'No figurás en la lista de esta sesión. ¿Enviar igual?',
+    missing:n=>'Te falta calificar la sesión de '+n+' — figurás en su lista.',
     parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
@@ -135,6 +148,10 @@ const T={
     which:'Em qual sessão você esteve?',whichSub:'Se fez as duas, avalie uma e depois a outra.',
     sessGym:'Academia',sessField:'Campo',sessMatch:'Jogo',sentTag:'Enviado',
     also:n=>'Você também esteve na sessão de '+n+'?',alsoBtn:'Avaliar também',
+    forYou:'Na sua lista',notOnList:'Você não está na lista desta sessão.',
+    listedOther:n=>'Você está na lista da sessão de '+n+'. Certeza de que fez esta?',
+    confirmNotListed:'Você não está na lista desta sessão. Enviar mesmo assim?',
+    missing:n=>'Falta avaliar a sessão de '+n+' — você está na lista dela.',
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
@@ -189,9 +206,15 @@ async function loadSessions(){
 }
 // Preselección: la última sesión ya iniciada que siga sin responder (el RPE se manda
 // después de entrenar); si ninguna empezó, la primera pendiente.
+// Checker de convocatoria: una sesión "espera" al jugador si no tiene lista cargada
+// (session_participants) o si él figura en ella. Con la RPC vieja (sin has_list/listed)
+// todo da true y el comportamiento queda como antes.
+const expectsMe=s=>!s.has_list||!!s.listed;
 function pickDefault(){
-  const un=sessions.filter(s=>!s.answered);
+  let un=sessions.filter(s=>!s.answered);
   if(!un.length)return null;
+  const mine=un.filter(expectsMe);   // preferir las sesiones donde figura en la convocatoria
+  if(mine.length)un=mine;
   const now=new Date(),cur=now.getHours()*60+now.getMinutes();
   const mins=s=>s.time?parseInt(s.time.slice(0,2),10)*60+parseInt(s.time.slice(3,5),10):null;
   const started=un.filter(s=>mins(s)!=null&&mins(s)<=cur).sort((a,b)=>mins(b)-mins(a));
@@ -201,14 +224,24 @@ function sessLabel(s){
   const t=s.type==='gym'?L.sessGym:s.type==='match'?L.sessMatch:L.sessField;
   return t+(s.time?' · '+String(s.time).slice(0,5):'');
 }
+// Alarma si la sesión elegida tiene convocatoria y el jugador no figura; si figura en la
+// otra pendiente, el aviso lo manda para allá.
+function sessWarnHtml(){
+  const s=sessions.find(x=>x.id===sessPick);
+  if(!s||expectsMe(s))return '';
+  const other=sessions.find(x=>x.id!==s.id&&!x.answered&&x.listed);
+  return `<div class="sess-warn"><i class="ti ti-alert-triangle"></i><span>${other?L.listedOther(sessLabel(other)):L.notOnList}</span></div>`;
+}
 function sessHtml(){
   if(scope!=='rpe'||sessions.length<2)return '';
   return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ti-calendar-time"></i></span><span class="title">${L.which}</span></div>
     <div class="sess-row">`+sessions.map(s=>{
       const ic=s.type==='gym'?'ti-barbell':s.type==='match'?'ti-trophy':'ti-run';
+      const tag=s.answered?`<span class="tag"><i class="ti ti-check"></i> ${L.sentTag}</span>`
+        :(s.listed?`<span class="tag for-you"><i class="ti ti-clipboard-check"></i> ${L.forYou}</span>`:'');
       return `<button class="sess-btn${s.id===sessPick?' is-on':''}${s.answered?' is-done':''}"${s.answered?' disabled':''} onclick="pickSess('${s.id}')">
-        <i class="ti ${ic}"></i>${sessLabel(s)}${s.answered?`<span class="tag"><i class="ti ti-check"></i> ${L.sentTag}</span>`:''}</button>`;
-    }).join('')+`</div><div class="sess-hint">${L.whichSub}</div></div>`;
+        <i class="ti ${ic}"></i>${sessLabel(s)}${tag}</button>`;
+    }).join('')+`</div>`+sessWarnHtml()+`<div class="sess-hint">${L.whichSub}</div></div>`;
 }
 window.pickSess=id=>{const s=sessions.find(x=>x.id===id);if(!s||s.answered)return;sessPick=id;renderForm();};
 function scaleHtml(key,icon,label,ends,max=10){
@@ -244,6 +277,9 @@ window.setScale=(k,v)=>{state[k]=v;document.getElementById('v_'+k).textContent=v
   document.querySelectorAll('#sc_'+k+' button').forEach((b,i)=>b.classList.toggle('is-on',i+1===v));};
 window.toggleBody=(k,el)=>{state.body.has(k)?state.body.delete(k):state.body.add(k);el.classList.toggle('is-on');};
 window.submitForm=async()=>{
+  // Última barrera del checker: enviar a una sesión donde no figura pide confirmación.
+  if(sessPick){const s=sessions.find(x=>x.id===sessPick);
+    if(s&&!expectsMe(s)&&!confirm(L.confirmNotListed))return;}
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
   const _tz=new Date().getTimezoneOffset();   // so the one-per-day lock uses the player's local day
   const payload=scope==='rpe'
@@ -261,9 +297,12 @@ window.submitForm=async()=>{
 // Si quedó otra sesión del día sin calificar, ofrecerla acá mismo (doble sesión: gym + campo).
 function nextHtml(){
   if(scope!=='rpe')return '';
-  const next=sessions.find(s=>!s.answered);
+  // Si figura en la convocatoria de una pendiente, esa va primero y el cartel es alarma
+  // ("te falta esta"), no una sugerencia.
+  const next=sessions.find(s=>!s.answered&&s.listed)||sessions.find(s=>!s.answered);
   if(!next)return '';
-  return `<div class="next-card"><div class="q">${L.also(sessLabel(next))}</div>
+  const alert=!!next.listed;
+  return `<div class="next-card${alert?' is-alert':''}"><div class="q">${alert?`<i class="ti ti-alert-triangle"></i> `+L.missing(sessLabel(next)):L.also(sessLabel(next))}</div>
     <button onclick="rateNext('${next.id}')">${L.alsoBtn}</button></div>`;
 }
 window.rateNext=id=>{
