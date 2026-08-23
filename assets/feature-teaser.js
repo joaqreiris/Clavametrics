@@ -53,9 +53,56 @@
       + '</div>';
   }
 
+  // Mockup Drill Designer: pizarra táctica (cancha + jugadores + flechas).
+  function drillMock() {
+    return '<div class="cmft-panel cmft-drill"><div class="cmft-panel-h">Session · Rondo 4v2</div>'
+      + '<div class="cmft-pitch"><svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMid meet">'
+      + '<rect x="6" y="6" width="388" height="238" rx="10" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2"/>'
+      + '<line x1="200" y1="6" x2="200" y2="244" stroke="rgba(255,255,255,.4)" stroke-width="2"/>'
+      + '<circle cx="200" cy="125" r="40" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/>'
+      + '<circle cx="90" cy="70" r="11" fill="#2da866"/><circle cx="110" cy="185" r="11" fill="#2da866"/>'
+      + '<circle cx="300" cy="80" r="11" fill="#2da866"/><circle cx="310" cy="175" r="11" fill="#2da866"/>'
+      + '<circle cx="200" cy="125" r="11" fill="#d4a14a"/><circle cx="240" cy="60" r="11" fill="#dc5a5a"/>'
+      + '<path d="M120 80 Q170 60 195 118" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#ah)"/>'
+      + '<path d="M210 130 Q270 150 300 90" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="6 5"/>'
+      + '<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#fff"/></marker></defs>'
+      + '</svg></div></div>';
+  }
+
+  // Mockup Match Reports: marcador + barras de stats + mapa de tiros.
+  function matchMock() {
+    var stats = [['Possession', '58%', 58], ['Shots', '14', 70], ['xG', '1.8', 60], ['Passes', '486', 82]]
+      .map(function (s) { return '<div class="cmft-stat"><span class="k">' + s[0] + '</span><span class="v">' + s[1] + '</span><div class="tr"><i style="width:' + s[2] + '%"></i></div></div>'; }).join('');
+    var shots = [[60, 40], [90, 80], [120, 55], [70, 120], [140, 95], [100, 150]]
+      .map(function (p, i) { return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (i === 1 ? 9 : 6) + '" fill="' + (i === 1 ? '#2da866' : 'rgba(45,168,102,.55)') + '"/>'; }).join('');
+    return '<div class="cmft-match">'
+      + '<div class="cmft-panel cmft-score"><div class="cmft-panel-h">Full time</div><div class="sc">RC Celta <b>2</b> — <b>1</b> Rival</div><div class="mt">La Liga · MD 24</div></div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Shot map</div><div class="cmft-shotmap"><svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet"><rect x="4" y="4" width="192" height="192" rx="8" fill="none" stroke="var(--cm-border,rgba(0,0,0,.15))" stroke-width="1.5"/>' + shots + '</svg></div></div>'
+      + '<div class="cmft-panel"><div class="cmft-panel-h">Team stats</div>' + stats + '</div>'
+      + '</div>';
+  }
+
   var TEASERS = {
-    'gps':          { plan: 'Basic',        icon: 'ti-radar-2',   accent: '#2da866', mock: gpsMock,  tkey: 'gps' },
-    'load-monitor': { plan: 'Professional', icon: 'ti-heartbeat', accent: '#d4a14a', mock: loadMock, tkey: 'load' }
+    'gps': {
+      plan: 'Basic', icon: 'ti-radar-2', accent: '#2da866', mock: gpsMock, tkey: 'gps',
+      fb: { title: 'Ve la carga real de tu plantel', sub: 'Distancia, sprints, player load y aceleraciones de cada jugador.',
+            b: ['Métricas por jugador y por sesión', 'Comparativa vs. partido y microciclo', 'Importá desde Catapult, StatSports o CSV'] }
+    },
+    'load-monitor': {
+      plan: 'Professional', icon: 'ti-heartbeat', accent: '#d4a14a', mock: loadMock, tkey: 'load',
+      fb: { title: 'Anticipá lesiones antes de que pasen', sub: 'ACWR, CTL/ATL/TSB y alertas de riesgo para cuidar a tu plantel.',
+            b: ['Riesgo de lesión por ACWR, en tiempo real', 'Cargas aguda/crónica (CTL·ATL·TSB)', 'Alertas para ajustar antes de que se lesionen'] }
+    },
+    'planner': {
+      plan: 'Basic', icon: 'ti-clipboard-list', accent: '#2da866', mock: drillMock, tkey: 'drill',
+      fb: { title: 'Diseñá tus jugadas en la pizarra', sub: 'Dibujá ejercicios y jugadas con jugadores, movimientos y anotaciones.',
+            b: ['Pizarra táctica con jugadores y flechas', 'Biblioteca de ejercicios reutilizables', 'Compartí las sesiones con tu cuerpo técnico'] }
+    },
+    'match-reports': {
+      plan: 'Professional', icon: 'ti-report-analytics', accent: '#d4a14a', mock: matchMock, tkey: 'match',
+      fb: { title: 'Informes de partido que hablan', sub: 'Resultado, tiros, estadísticas por jugador y mapa de juego.',
+            b: ['Estadísticas por jugador y por equipo', 'Mapa de tiros y eventos clave', 'Exportá y compartí el informe'] }
+    }
   };
 
   function ensureStyle() {
@@ -99,7 +146,22 @@
       '.cmft-risk-row .dot{width:10px;height:10px;border-radius:50%}',
       '.cmft-risk-row .dot.ok{background:#2da866}.cmft-risk-row .dot.warn{background:#d4a14a}.cmft-risk-row .dot.high{background:#dc5a5a}',
       '.cmft-risk-row .nm{flex:1;font-size:13px;color:var(--cm-fg-strong,#0f1115)}',
-      '.cmft-risk-row .acwr{font:600 13px var(--cm-font-mono,monospace);color:var(--cm-fg-muted,#5b6472)}'
+      '.cmft-risk-row .acwr{font:600 13px var(--cm-font-mono,monospace);color:var(--cm-fg-muted,#5b6472)}',
+      /* drill designer */
+      '.cmft-drill{max-width:680px;margin:0 auto}',
+      '.cmft-pitch{background:linear-gradient(135deg,#1f7a44,#2da866);border-radius:12px;padding:10px}',
+      '.cmft-pitch svg{width:100%;height:auto;display:block}',
+      /* match reports */
+      '.cmft-match{display:grid;grid-template-columns:1fr 1fr 1.1fr;gap:16px;max-width:1000px;margin:0 auto}',
+      '.cmft-score .sc{font-size:26px;font-weight:800;color:var(--cm-fg-strong,#0f1115);margin-top:6px}',
+      '.cmft-score .sc b{color:var(--cm-accent,#2da866)}',
+      '.cmft-score .mt{font-size:12px;color:var(--cm-fg-muted,#5b6472);margin-top:6px}',
+      '.cmft-shotmap svg{width:100%;height:auto;display:block}',
+      '.cmft-stat{margin-bottom:12px}',
+      '.cmft-stat .k{font-size:12px;color:var(--cm-fg-muted,#5b6472)}',
+      '.cmft-stat .v{float:right;font:700 13px var(--cm-font-mono,monospace);color:var(--cm-fg-strong,#0f1115)}',
+      '.cmft-stat .tr{height:7px;border-radius:4px;background:var(--cm-border-soft,rgba(0,0,0,.08));margin-top:6px;overflow:hidden}',
+      '.cmft-stat .tr i{display:block;height:100%;background:var(--cm-accent,#2da866);border-radius:4px}'
     ].join('');
     document.head.appendChild(s);
   }
@@ -111,18 +173,12 @@
     if (document.getElementById('cmft-overlay')) return true;
     ensureStyle();
 
-    var title = tt('teaser.' + cfg.tkey + '_title', key === 'gps' ? 'Ve la carga real de tu plantel' : 'Anticipá lesiones antes de que pasen');
-    var sub   = tt('teaser.' + cfg.tkey + '_sub', key === 'gps'
-      ? 'Distancia, sprints, player load y aceleraciones de cada jugador.'
-      : 'ACWR, CTL/ATL/TSB y alertas de riesgo para cuidar a tu plantel.');
-    var bullets = (key === 'gps'
-      ? [tt('teaser.gps_b1', 'Métricas por jugador y por sesión'),
-         tt('teaser.gps_b2', 'Comparativa vs. partido y microciclo'),
-         tt('teaser.gps_b3', 'Importá desde Catapult, StatSports o CSV')]
-      : [tt('teaser.load_b1', 'Riesgo de lesión por ACWR, en tiempo real'),
-         tt('teaser.load_b2', 'Cargas aguda/crónica (CTL·ATL·TSB)'),
-         tt('teaser.load_b3', 'Alertas para ajustar antes de que se lesionen')]
-    ).map(function (b) { return '<li><i class="ti ti-check"></i><span>' + b + '</span></li>'; }).join('');
+    var fb = cfg.fb || { title: '', sub: '', b: ['', '', ''] };
+    var title = tt('teaser.' + cfg.tkey + '_title', fb.title);
+    var sub   = tt('teaser.' + cfg.tkey + '_sub', fb.sub);
+    var bullets = [1, 2, 3].map(function (i) {
+      return '<li><i class="ti ti-check"></i><span>' + tt('teaser.' + cfg.tkey + '_b' + i, fb.b[i - 1]) + '</span></li>';
+    }).join('');
 
     var team = activeTeam();
     var href = 'Plan Picker.html' + (team ? ('?team=' + encodeURIComponent(team)) : '');
