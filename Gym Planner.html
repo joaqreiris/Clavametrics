@@ -2811,7 +2811,9 @@ function gpRenderPrintSheet() {
     const today = cmToday();
     const dateLabel = _gpFmt(_gpCurrentDate || today);
 
-    // read block rows: cell[1] name, cell[3], cell[4], cell[5] (span.pct), cell[6] rest, cell[7]
+    // read block rows: cell[1] name, cell[2] contact-select (plyo), cell[3..8].
+    // cell[5] carries BOTH the computed %1RM span (.pct) and the VBT velocity-loss input:
+    // in VBT mode the visible input wins, otherwise the span is the real value.
     const readRows = tbodyId => {
       const tb = document.getElementById(tbodyId);
       if (!tb) return [];
@@ -2821,7 +2823,11 @@ function gpRenderPrintSheet() {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
         const mode = tr.querySelector('.gp-mode select') ? gpGetMode(tr) : '';
-        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c6: cell(6), c7: cell(7), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
+        const sel2 = tds[2]?.querySelector('select');
+        const c2 = (sel2 && !mode) ? (sel2.value || '').trim() : '';
+        const pctSpan = tds[5]?.querySelector('.pct');
+        let c5 = (pctSpan && mode !== 'VBT') ? (pctSpan.textContent || '').trim() : cell(5);
+        return { name: cell(1), c2, c3: cell(3), c4: cell(4), c5, c6: cell(6), c7: cell(7), c8: cell(8), exId: tr.dataset.exId || '', mode, link: tr.dataset.link || '' };
       });
     };
 
@@ -2854,9 +2860,13 @@ function gpRenderPrintSheet() {
     const chipHtml = c => `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 9px;font:600 10.5px ${FONT};color:#15181D"><span style="width:7px;height:7px;border-radius:50%;background:${c.color}"></span>${esc(c.label)}</span>`;
 
     const cells = [];
-    const loc = val('gpLocation'); if (loc) cells.push({l:tt('gym_planner.location_equipment','Location · equipment'), v:esc(loc), span:2});
-    const focus = val('gpFocus');  if (focus) cells.push({l:tt('gym_planner.focus','Focus'), v:esc(focus), span:1});
+    const startT = val('gpStartTime'); if (startT) cells.push({l:tt('gym_planner.start_time','Start time'), v:esc(startT.slice(0,5)), span:1});
+    const durMin = val('gpDuration'); if (durMin) cells.push({l:tt('gym_planner.duration','Duration'), v:esc(durMin)+' '+tt('gym_planner.unit_min','min'), span:1});
+    const estRpe = val('gpEstRpe'); if (estRpe) cells.push({l:tt('gym_planner.expected_rpe','Expected RPE'), v:esc(estRpe)+' / 10', span:1});
     const wuMin = val('gpWarmupMin'); if (wuMin) cells.push({l:tt('gym_planner.warmup','Warm-up'), v:esc(wuMin)+' '+tt('gym_planner.unit_min','min'), span:1});
+    const loc = val('gpLocation'); if (loc) cells.push({l:tt('gym_planner.location_equipment','Location · equipment'), v:esc(loc), span:2});
+    const mcName = (g('gpMicrocycle')?.selectedOptions?.[0]?.textContent || '').trim();
+    if (g('gpMicrocycle')?.value && mcName && !mcName.startsWith('—')) cells.push({l:tt('gym_planner.microcycle','Microcycle'), v:esc(mcName), span:2});
 
     const sessionLine = (title || md || chips.length) ? `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:${cells.length?'10px':'0'}">
       <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}${md?`<span style="font:700 11px ${MONO};color:var(--club-accent);margin-left:${title?'8px':'0'}">${esc(md)}</span>`:''}</div>
@@ -2985,7 +2995,12 @@ function gpRenderPrintSheet() {
     const plyoBlock = (!_plyHidden && plyoRows.length) ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.plyometrics','Plyometrics')} · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} ${tt('gym_planner.contacts_word','contacts')}`:''}`)}
       <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${plyoRows.map(r=>{
-        const params=[]; if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.contacts','Contacts'),v:r.c4});
+        const params=[];
+        if(r.c2)params.push({l:tt('gym_planner.contact','Contact'),v:r.c2});
+        if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3});
+        if(r.c4)params.push({l:tt('gym_planner.contacts','Contacts'),v:r.c4});
+        if(r.c5 && r.c5!=='—')params.push({l:tt('gym_planner.box_height','Box / height'),v:r.c5});
+        if(r.c6 && r.c6!=='—')params.push({l:tt('gym_planner.rest','Rest'),v:r.c6});
         return exCard({name:r.name, params, note:r.c7, tag:'POW', tagColor:'#7C3AED', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
@@ -3025,6 +3040,9 @@ function gpRenderPrintSheet() {
       } else {
         if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
       }
+      // Rest applies to every mode except HIIT (there it's already the round-rest param).
+      if (m !== 'HIIT' && r.c6 && r.c6 !== '—') params.push({l:tt('gym_planner.rest','Rest'),v:r.c6});
+      if (r.c8) params.push({l:tt('gym_planner.rpe','RPE'),v:r.c8});
       const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
       return exCard({name:r.name, params, note, tag, tagColor, exId:r.exId});
     };
@@ -3042,6 +3060,30 @@ function gpRenderPrintSheet() {
     const mainBlock = (!_mainHidden && mainRows.length) ? `<div style="margin-bottom:16px">
       ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}${mainHiitSec?` · ${gpFmtDur(mainHiitSec)}`:''}`)}
       <div style="display:grid;grid-template-columns:${exGridCols};gap:${textLayout?'7px':'12px'}">${mainCells.join('')}</div>
+    </div>` : '';
+
+    // 6b) INDIVIDUAL ADAPTATIONS — physio-seeded + manual rows, read straight from the DOM
+    // (gpCollectAdapt drops the reason on seeded rows, and here we want it on the sheet).
+    // Skipped when the section is hidden, like plyo/main.
+    let adaptRows = [];
+    if (!_gpHiddenSections.has('adapt')) {
+      adaptRows = [...document.querySelectorAll('#gpAdaptBody tr:not([data-empty])')].map(tr => {
+        const strong = tr.querySelector('strong');
+        const inp = [...tr.querySelectorAll('input')].map(i => (i.value || '').trim());
+        return strong
+          ? { player: strong.textContent.trim(), affected: inp[0] || '', replacement: inp[1] || '', reason: inp[2] || '' }
+          : { player: inp[0] || '', affected: inp[1] || '', replacement: inp[2] || '', reason: inp[3] || '' };
+      }).filter(a => a.player);
+    }
+    const adaptField = (l, v, accented) => `<span><span style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">${esc(l)}</span> <span style="font:600 11px ${FONT};color:${accented?'var(--club-accent)':'#15181D'}">${esc(v)}</span></span>`;
+    const adaptBlock = adaptRows.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`${tt('gym_planner.individual_adaptations','Individual adaptations')} · ${adaptRows.length}`)}
+      ${adaptRows.map(a=>`<div class="gsp-brk" style="border:1px solid #E7E7E4;border-radius:8px;padding:7px 11px;margin-bottom:6px;break-inside:avoid;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px">
+        <span style="font:700 12px ${FONT};color:#15181D">${esc(a.player)}</span>
+        ${a.affected?adaptField(tt('gym_planner.affected_exercises','Affected exercises'), a.affected, false):''}
+        ${a.replacement?adaptField(tt('gym_planner.replacement','Replacement'), a.replacement, true):''}
+        ${a.reason?`<span style="flex-basis:100%;font:400 10px/1.45 ${MONO};color:#8A93A0">${esc(a.reason)}</span>`:''}
+      </div>`).join('')}
     </div>` : '';
 
     // 7) Footer
@@ -3097,7 +3139,7 @@ function gpRenderPrintSheet() {
     } catch (e) { console.warn('gpRenderPrintSheet groups failed', e); }
 
     host.innerHTML = `<div class="gsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${equipBlock}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${footer}
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${equipBlock}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${adaptBlock}${footer}
     </div>${groupsPage}`;
   } catch (e) {
     console.warn('gpRenderPrintSheet failed', e);
