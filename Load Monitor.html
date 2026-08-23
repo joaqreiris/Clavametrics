@@ -947,7 +947,7 @@ body.cm::before {
 .lm-chart-pane { padding: 18px 20px 16px; position: relative; min-height: 320px; }
 
 /* Squad distribution strip — one dot per player over the zone bands */
-.lm-dist { margin-top: 14px; padding-top: 12px; border-top: var(--cm-bw) solid var(--cm-border-soft); }
+.lm-dist { margin-top: 14px; padding-top: 12px; border-top: var(--cm-bw) solid var(--cm-border-soft); position: relative; }
 .lm-dist-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .lm-dist-head .t { font: var(--cm-eyebrow); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-muted); }
 .lm-dist-head .h { font: var(--cm-body-sm); color: var(--cm-fg-faint); }
@@ -957,7 +957,8 @@ body.cm::before {
 .lm-dist-track .seg.sweet  { background: var(--cm-success-bg); }
 .lm-dist-track .seg.over   { background: var(--cm-warning-bg); }
 .lm-dist-track .seg.danger { background: var(--cm-danger-bg); }
-.lm-dist-track .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); top: 50%; margin-top: -4.5px; border: 1.5px solid var(--cm-surface); cursor: default; }
+.lm-dist-track .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); top: 50%; margin-top: -4.5px; border: 1.5px solid var(--cm-surface); cursor: default; transition: transform var(--cm-dur-1) var(--cm-ease); }
+.lm-dist-track .dot:hover { transform: translateX(-50%) scale(1.45); z-index: 2; }
 .lm-dist-track .dot.r1 { margin-top: -13px; }
 .lm-dist-track .dot.r2 { margin-top: 4px; }
 .lm-dist-track .dot.under  { background: var(--cm-info); }
@@ -966,6 +967,26 @@ body.cm::before {
 .lm-dist-track .dot.danger { background: var(--cm-danger); }
 .lm-dist-axis { position: relative; height: 14px; margin-top: 3px; }
 .lm-dist-axis .tick { position: absolute; transform: translateX(-50%); font: 500 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+
+/* hover card for the distribution dots */
+.lm-dist-tip {
+  position: absolute; z-index: 6; pointer-events: none;
+  background: var(--cm-surface); border: var(--cm-bw) solid var(--cm-border);
+  border-radius: var(--cm-r-3); box-shadow: var(--cm-shadow-pop);
+  padding: 8px 11px; white-space: nowrap;
+  opacity: 0; transform: translate(-50%, -4px);
+  transition: opacity var(--cm-dur-1) var(--cm-ease), transform var(--cm-dur-1) var(--cm-ease);
+}
+.lm-dist-tip.on { opacity: 1; transform: translate(-50%, -8px); }
+.lm-dist-tip .nm { font: 600 12px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); margin-bottom: 5px; }
+.lm-dist-tip .row { display: flex; align-items: center; gap: 7px; }
+.lm-dist-tip .val { font: 600 13px/1 var(--cm-font-mono); color: var(--cm-fg); letter-spacing: -0.01em; }
+.lm-dist-tip::after {
+  content: ''; position: absolute; left: calc(50% + var(--ax, 0px)); bottom: -4.5px;
+  width: 8px; height: 8px; transform: translateX(-50%) rotate(45deg);
+  background: var(--cm-surface);
+  border-right: var(--cm-bw) solid var(--cm-border); border-bottom: var(--cm-bw) solid var(--cm-border);
+}
 .lm-chart-legend { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
 .lm-lg { display: flex; align-items: center; gap: 6px; font: var(--cm-body-sm); color: var(--cm-fg-muted); }
 .lm-lg .line { width: 16px; height: 2px; border-radius: 2px; }

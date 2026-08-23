@@ -214,6 +214,7 @@
           x:{ grid:{color:'rgba(128,128,128,0.06)'}, ticks:{color:fai,font:{size:10},maxTicksLimit:10} },
         } }
     });
+    bindDistTip(pane);
   }
 
   // ── Squad distribution strip (one dot per player over the zone bands) ────────
@@ -236,14 +237,38 @@
       const x=X(p.acwr);
       row = (x-lastX<3.2)? (row+1)%3 : 0; lastX=x;   // nudge overlapping dots onto 3 lanes
       const z=zoneInfo(p.acwr);
-      return `<span class="dot ${z.cls} r${row}" style="left:${x.toFixed(2)}%" title="${esc(p.name)} · ${p.acwr.toFixed(2)}"></span>`;
+      return `<span class="dot ${z.cls} r${row}" style="left:${x.toFixed(2)}%" data-name="${esc(p.name)}" data-acwr="${p.acwr}"></span>`;
     }).join('');
     const ticks=[0.8,1.3,1.5].map(v=> `<span class="tick" style="left:${X(v).toFixed(2)}%">${v.toFixed(1)}</span>`).join('');
     return `<div class="lm-dist">
       <div class="lm-dist-head"><span class="t">${esc(tt('load_monitor.dist_title','Squad distribution'))}</span><span class="h">${esc(tt('load_monitor.dist_hint','one dot per player · today'))}</span></div>
       <div class="lm-dist-track">${bands}${dots}</div>
       <div class="lm-dist-axis">${ticks}</div>
+      <div class="lm-dist-tip"></div>
     </div>`;
+  }
+
+  // Custom hover card for the distribution dots (replaces the browser's native
+  // title tooltip): player name + ratio + zone tag, clamped inside the strip.
+  function bindDistTip(pane){
+    const wrap=pane.querySelector('.lm-dist'); if(!wrap) return;
+    const track=wrap.querySelector('.lm-dist-track'), tip=wrap.querySelector('.lm-dist-tip');
+    if(!track||!tip) return;
+    track.addEventListener('mouseover', e=>{
+      const d=e.target.closest('.dot'); if(!d) return;
+      const a=+d.dataset.acwr, z=zoneInfo(a);
+      tip.innerHTML=`<div class="nm">${esc(d.dataset.name||'')}</div>`
+        + `<div class="row"><span class="val">${isFinite(a)?a.toFixed(2):'—'}</span>${z?`<span class="lm-zone-tag ${z.cls}">${esc(z.label)}</span>`:''}</div>`;
+      tip.classList.add('on');
+      const wr=wrap.getBoundingClientRect(), dr=d.getBoundingClientRect();
+      const cx=dr.left+dr.width/2-wr.left;                       // dot center in .lm-dist coords
+      const half=tip.offsetWidth/2;
+      const left=Math.max(half+2, Math.min(wrap.clientWidth-half-2, cx));
+      tip.style.left=left+'px';
+      tip.style.top=(track.offsetTop - tip.offsetHeight - 9)+'px';
+      tip.style.setProperty('--ax', (cx-left)+'px');             // keep the arrow on the dot when clamped
+    });
+    track.addEventListener('mouseout', e=>{ if(e.target.closest('.dot')) tip.classList.remove('on'); });
   }
 
   // ── GPS exposure tiles ──────────────────────────────────────────────────────
