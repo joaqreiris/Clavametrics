@@ -603,7 +603,12 @@
         try { sessionStorage.setItem('cm_denied', k); } catch (_) {}   // Hub shows a notice on arrival
         window.location.replace('Hub.html'); return false;             // RBAC
       }
-      if (!(await window.planAllows(k))) { window.location.replace('Plan Picker.html'); return false; } // plan
+      if (!(await window.planAllows(k))) {
+        // Feature paga bloqueada: si hay teaser configurado, mostramos el "preview
+        // difuminado" con CTA (convierte más que patear al Plan Picker pelado).
+        if (window.cmFeatureTeaser && window.cmFeatureTeaser(k)) return false;
+        window.location.replace('Plan Picker.html'); return false;   // plan (sin teaser)
+      }
       return true;
     } catch (e) {
       return true;                         // fail-open: ante error no bloquear
