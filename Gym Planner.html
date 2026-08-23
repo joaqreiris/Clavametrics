@@ -2650,7 +2650,19 @@ async function gpLoadDay(dateStr) {
   setVal('gpEstRpe',    sess?.estimated_rpe || '');
   gpApplyContent(sess?.gym_content);
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
-  _gpSavedRoster = sess?.gym_content?.roster || null;
+  // Roster: la convocatoria de la sesión (session_participants) manda — puede haberse armado
+  // desde Daily Planning y este planner antes solo la ESCRIBÍA, nunca la leía. Fallbacks:
+  // roster guardado en gym_content → todos los disponibles del día. Lista vacía = sin grupo
+  // definido (entrenan todos), igual que en Daily Planning.
+  const _gcRoster = sess?.gym_content?.roster;
+  _gpSavedRoster = (Array.isArray(_gcRoster) && _gcRoster.length) ? _gcRoster : null;
+  if (_gpCurrentSessionId) {
+    try {
+      const { data: spData, error: spErr } = await window.sb.from('session_participants')
+        .select('player_id').eq('session_id', _gpCurrentSessionId);
+      if (!spErr && spData && spData.length) _gpSavedRoster = spData.map(r => String(r.player_id));
+    } catch (_) {}
+  }
   _gpPartsDirty = false; // ediciones pendientes de otro día no aplican al recién cargado
 
   await gpSyncRowNames();
@@ -2873,22 +2885,32 @@ function gpRenderPrintSheet() {
       ${chips.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">${chips.map(chipHtml).join('')}</div>`:''}
     </div>` : '';
 
-    const metaGrid = cells.length ? `<div class="gsp-brk" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
-      ${cells.map(c=>`<div style="grid-column:span ${c.span};background:#fff;padding:8px 11px">
+    // Auto-fit: column count follows the filled cells so nothing prints as an empty grey
+    // hole. ≤4 span-units → one full row; more → 4 columns with white fillers completing
+    // the last row (dense flow backfills any wrap gap from a span-2 cell).
+    const metaSpan = cells.reduce((s,c)=>s+c.span,0);
+    const metaCols = Math.min(4, metaSpan);
+    const metaPad  = (metaCols - metaSpan % metaCols) % metaCols;
+    const metaGrid = cells.length ? `<div class="gsp-brk" style="display:grid;grid-template-columns:repeat(${metaCols},1fr);grid-auto-flow:dense;gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      ${cells.map(c=>`<div style="grid-column:span ${Math.min(c.span,metaCols)};background:#fff;padding:8px 11px">
         <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF">${esc(c.l)}</div>
         <div style="font:600 13px ${FONT};color:#15181D;margin-top:3px">${c.v}</div>
       </div>`).join('')}
+      ${'<div style="background:#fff"></div>'.repeat(metaPad)}
     </div>` : '';
 
     // 3) KPI strip — hidden sections report '—' so an activation-only sheet stays clean.
     const _plyHidden = _gpHiddenSections.has('plyo'), _mainHidden = _gpHiddenSections.has('main');
-    const kpis = [[tt('gym_planner.warmup','Warm-up'),kv(g('gpTotWarmup'))],[tt('gym_planner.contacts','Contacts'),_plyHidden?'—':kv(g('gpTotPlyo'))],[tt('gym_planner.main_sets','Main sets'),_mainHidden?'—':kv(g('gpTotMain'))],[tt('gym_planner.tonnage','Tonnage'),_mainHidden?'—':kv(g('gpTotTonnage'))],[tt('gym_planner.athletes','Athletes'),kv(g('gpTotAthletes'))],[tt('gym_planner.planned_au','Planned AU'),kv(g('gpTotAu')),true]];
-    const kpiStrip = `<div class="gsp-brk" style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
+    // Empty totals ('—') are dropped and the columns re-fit, so a light session doesn't
+    // print a row of dashes.
+    const kpis = [[tt('gym_planner.warmup','Warm-up'),kv(g('gpTotWarmup'))],[tt('gym_planner.contacts','Contacts'),_plyHidden?'—':kv(g('gpTotPlyo'))],[tt('gym_planner.main_sets','Main sets'),_mainHidden?'—':kv(g('gpTotMain'))],[tt('gym_planner.tonnage','Tonnage'),_mainHidden?'—':kv(g('gpTotTonnage'))],[tt('gym_planner.athletes','Athletes'),kv(g('gpTotAthletes'))],[tt('gym_planner.planned_au','Planned AU'),kv(g('gpTotAu')),true]]
+      .filter(([,v]) => v !== '—' && !/^—/.test(v));
+    const kpiStrip = kpis.length ? `<div class="gsp-brk" style="display:grid;grid-template-columns:repeat(${kpis.length},1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
       ${kpis.map(([l,v,acc])=>`<div style="background:#fff;padding:10px 6px;text-align:center">
         <div style="font:700 18px ${MONO};color:${acc?'var(--club-accent)':'#15181D'}">${esc(v)}</div>
         <div style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-top:3px">${esc(l)}</div>
       </div>`).join('')}
-    </div>`;
+    </div>` : '';
 
     // 4) Notes band
     const notes = val('gpNotes');
