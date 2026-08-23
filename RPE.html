@@ -581,12 +581,34 @@
 
   /* ── Render ── */
   // ── Session gate builders (double-session chooser / no-session-today) ──
+  // Respondieron/total por sesión en los botones del chooser, para saber de un vistazo
+  // cuál board necesita atención. Async tras el render; los partidos del calendario aún
+  // sin materializar ('evt:…') no tienen board todavía → sin contador.
+  async function loadChooserCounts() {
+    const list = (state.todaysSessions || []).filter(s => !String(s.id).startsWith('evt:'));
+    await Promise.all(list.map(async s => {
+      try {
+        const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: s.id });
+        if (error) return;
+        const rows = data || [];
+        const done = rows.filter(r => r.responded).length;
+        const el = document.querySelector(`.ch-cnt[data-cnt="${s.id}"]`);
+        if (!el) return; // la vista cambió mientras cargaba
+        el.textContent = `· ${done}/${rows.length}`;
+        if (rows.length && done === rows.length) {
+          el.textContent += ' ✓';
+          el.style.color = 'var(--cm-success, #16A34A)';
+        }
+      } catch (_) {}
+    }));
+  }
+
   function chooserHTML() {
     const list = state.todaysSessions;
     const n = list.length;
     const title = n === 2 ? tt('rpe.twoSessionsToday', 'Two sessions today') : tt('rpe.nSessionsToday', `${n} sessions today`, { count: n });
     const btns = list.map(s =>
-      `<button class="cm-btn is-secondary" data-pick="${s.id}"><i class="ti ti-player-play"></i>${T.escape(todaySessionBtnLabel(s))}</button>`
+      `<button class="cm-btn is-secondary" data-pick="${s.id}"><i class="ti ti-player-play"></i>${T.escape(todaySessionBtnLabel(s))}<span class="ch-cnt" data-cnt="${s.id}" style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px;"></span></button>`
     ).join('');
     return `<div class="tr-empty">
       <span class="ic"><i class="ti ti-versions"></i></span>
@@ -632,6 +654,7 @@
       if (err) err.style.display = 'none';
       gate.style.display = '';
       gate.innerHTML = (state.view === 'chooser') ? chooserHTML() : noSessionHTML();
+      if (state.view === 'chooser') loadChooserCounts();
       orphanWrap.style.display = state.orphans.length ? '' : 'none';
       return;
     }
