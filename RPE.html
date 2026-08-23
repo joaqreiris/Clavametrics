@@ -1218,10 +1218,12 @@
     shareTeam.innerHTML = state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     const curTeam = activeTeamId();
     if (curTeam && [...shareTeam.options].some(o => o.value === curTeam)) shareTeam.value = curTeam;
-    shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','Auto (linked by date & time)'))}</option>` +
+    shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','Single link — player picks the session (auto by time)'))}</option>` +
       mergedRecentList().map(o => `<option value="${o.value}">${T.escape(o.label)}</option>`).join('');
-    const curSess = document.getElementById('rmSessionSelect').value;
-    if (curSess && [...shareSession.options].some(o => o.value === curSess)) shareSession.value = curSess;
+    // Default: link ÚNICO sin sesión atada — el survey le pregunta al jugador en qué sesión
+    // estuvo. Antes se preseleccionaba la sesión del board activo y en días dobles el staff
+    // terminaba mandando el link del partido a los que solo hicieron gym. Atar una sesión
+    // sigue disponible en el desplegable para casos puntuales.
 
     async function gen() {
       const teamId = shareTeam.value || null;
@@ -1237,7 +1239,7 @@
         btnGen.innerHTML = '<i class="ti ti-refresh"></i>' + T.escape(tt('rpe.newLink','New'));
         tokNote.style.display = '';
         const sessLabel = shareSession.options[shareSession.selectedIndex].text;
-        const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', "auto-assigned to the day's session by time");
+        const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', 'the player picks the session; otherwise auto-assigned by time');
         tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('rpe.secureLinkValid', 'Secure link · valid until revoked · ' + att, { att }));
         if (shareMsg) { shareMsg.value = composeMsg(); shareMsgWrap.style.display = ''; }
         btnCopy.disabled = false; btnWa.disabled = false; btnTg.disabled = false;
