@@ -1652,11 +1652,20 @@
     if (!iso.length && !mob.length) return;   // migration unapplied → leave CATALOG untouched
 
     // 1) Isometric strength category — fully data-driven from assessment_test_defs.
+    // Idempotent: a re-run (e.g. custom-test builder resetting _assessMerged) must not
+    // duplicate the category or its cards.
     if (iso.length){
-      var isoCat = { name:'Isometric strength', icon:'ti-dumbbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C',
-        tests: iso.map(_defToTest) };
-      var mi = CATALOG.findIndex(function(c){ return c.name === 'Mobility & screening'; });
-      CATALOG.splice(mi < 0 ? CATALOG.length : mi, 0, isoCat);
+      var isoExisting = CATALOG.find(function(c){ return c.name === 'Isometric strength'; });
+      if (isoExisting){
+        iso.forEach(function(d){
+          if (!isoExisting.tests.some(function(t){ return t.key === d.key; })) isoExisting.tests.push(_defToTest(d));
+        });
+      } else {
+        var isoCat = { name:'Isometric strength', icon:'ti-dumbbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C',
+          tests: iso.map(_defToTest) };
+        var mi = CATALOG.findIndex(function(c){ return c.name === 'Mobility & screening'; });
+        CATALOG.splice(mi < 0 ? CATALOG.length : mi, 0, isoCat);
+      }
     }
 
     // 2) Mobility defs → append to 'Mobility & screening' the ones not already present (ankle, hip rot).
@@ -1664,6 +1673,7 @@
       var mcat = CATALOG.find(function(c){ return c.name === 'Mobility & screening'; });
       if (mcat) mob.forEach(function(d){
         if (_LEGACY_MOB_DEFKEYS.indexOf(d.key) >= 0) return;
+        if (mcat.tests.some(function(t){ return t.key === d.key; })) return;   // already merged
         mcat.tests.push(_defToTest(d));
       });
     }
@@ -1816,6 +1826,9 @@
   //  DATA STATUS  — one query per source, aggregated, then matched to cards.
   // ════════════════════════════════════════════════════════════════════
   var _clubId = null, _teamId = null, _teamPlayerIds = null, _ftPlayers = [];
+  // Set by loadStatuses; detail-view loaders await it so a card clicked before the
+  // team scope resolves doesn't query club-wide (both scope guards still null → no filter).
+  var _scopeReady = null;
 
   async function loadTeamScope(){
     try {
@@ -1850,11 +1863,13 @@
     var agg = {}; // evaluation_type → {count, lastDate, lastValue}
     if (!_clubId) return agg;
     try {
-      var q = window.sb.from('evaluations').select('evaluation_type, test_date, value').eq('club_id', _clubId);
-      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
-      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
-      var res = await q;
-      (res.data || []).forEach(function(r){
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('evaluation_type, test_date, value').eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:status' });
+      (data || []).forEach(function(r){
         var t = r.evaluation_type; if (!t) return;
         var a = agg[t] || (agg[t] = { count:0, lastDate:null, lastValue:null });
         a.count++;
@@ -1869,10 +1884,12 @@
     var agg = {};
     if (!_clubId) return agg;
     try {
-      var q = window.sb.from('force_tests').select('test_type, test_date').eq('club_id', _clubId);
-      if (_teamId) q = q.eq('team_id', _teamId);
-      var res = await q;
-      (res.data || []).forEach(function(r){
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('force_tests').select('test_type, test_date').eq('club_id', _clubId);
+        if (_teamId) q = q.eq('team_id', _teamId);
+        return q;
+      }, { label: 'ev:forceStatus' });
+      (data || []).forEach(function(r){
         var t = r.test_type; if (!t) return;
         var a = agg[t] || (agg[t] = { count:0, lastDate:null });
         a.count++;
@@ -1887,13 +1904,15 @@
     var out = {};   // field -> { count, lastDate, lastValue }
     if (!_clubId) return out;
     try {
-      var q = window.sb.from('body_composition')
-        .select('player_id,measured_date,body_fat_pct,soma_endo,soma_meso,soma_ecto,bmi,rfm,weight_kg,lean_mass_kg')
-        .eq('club_id', _clubId).order('measured_date', { ascending:false });
-      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
-      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
-      var res = await q;
-      (res.data || []).forEach(function(r){
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('body_composition')
+          .select('player_id,measured_date,body_fat_pct,soma_endo,soma_meso,soma_ecto,bmi,rfm,weight_kg,lean_mass_kg')
+          .eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:bcStatus' });
+      (data || []).forEach(function(r){
         ['body_fat_pct','soma_meso','bmi','rfm','weight_kg','lean_mass_kg'].forEach(function(f){
           if (r[f] == null) return;
           var a = out[f] || (out[f] = { count:0, lastDate:null, lastValue:null });
@@ -1919,7 +1938,12 @@
       var agg = src.from === 'force_tests' ? forceAgg : evalAgg;
       var prefix = src.from === 'force_tests' ? src.testType : src.match;
       Object.keys(agg).forEach(function(type){
-        if (!startsWithCI(type, prefix)) return;
+        // force detail matches test_type EXACTLY — the card status must count the same set,
+        // else 'CMJ Rebound' inflates the CMJ card and its detail view comes up empty.
+        var hit = src.from === 'force_tests'
+          ? String(type||'').toLowerCase() === String(prefix||'').toLowerCase()
+          : startsWithCI(type, prefix);
+        if (!hit) return;
         var a = agg[type];
         st.count += a.count;
         if (a.lastDate && (!st.lastDate || String(a.lastDate) > String(st.lastDate))){
@@ -1934,7 +1958,8 @@
 
   async function loadStatuses(){
     if (!window.sb || !window.getClubId){ console.warn('[ev2] supabase not ready'); return; }
-    await loadTeamScope();
+    _scopeReady = loadTeamScope();
+    await _scopeReady;
     if (_clubId) window.cmLoadPlayerPhotos(_clubId);
     var ev = await loadEvaluationStatus();
     var ft = await loadForceStatus();
@@ -2204,13 +2229,20 @@
 
   // ── Team view (test fixed) ──
   async function loadForceView() {
+    if (_scopeReady) await _scopeReady;                  // never query before team scope resolves
     if (!_clubId) return;
+    var reqTest = _ftTeam.test;
     var empty = document.getElementById('ftEmpty');
     var teamView = document.getElementById('ftTeamView');
-    var q = window.sb.from('force_tests').select('id, player_id, test_type, test_date').eq('club_id', _clubId);
-    if (_teamId) q = q.eq('team_id', _teamId);
     var tests = [];
-    try { var r = await q; tests = r.data || []; } catch (e) { tests = []; }
+    try {
+      tests = await window.cmFetchAll(function(){
+        var q = window.sb.from('force_tests').select('id, player_id, test_type, test_date').eq('club_id', _clubId);
+        if (_teamId) q = q.eq('team_id', _teamId);
+        return q;
+      }, { label: 'ev:forceView' });
+    } catch (e) { tests = []; }
+    if (_ftTeam.test !== reqTest) return;                // user switched tests mid-flight → drop
     _ftTeam.tests = tests;
 
     var hasType = tests.some(function(t){ return t.test_type === _ftTeam.test; });
@@ -2577,15 +2609,15 @@
   var _ev = { test: null, types: [], variant: null, order: 'desc', rows: [], player: null };
 
   // tests that have their OWN calculator modal → openPhysAnalysis(label)
-  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, hfvp:1, fms:1, ankle:1, hiprot:1, bodycomp:1 };
+  // ankle/hiprot retired (their cards are now DB-driven force_tests assessments) — dead keys removed
+  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, hfvp:1, fms:1, bodycomp:1 };
   // v2 test key → PHYS_TESTS label (the key used by openPhysAnalysis)
   var EV_CALC_LABEL = {
     ift:'30-15 IFT', tt1600:'1,600 m TT', vbt:'VBT · Load-Velocity', orm:'1RM',
-    fvprofile:'F-V Profile · jumps', hfvp:'Sprint H-FVP', fms:'FMS', ankle:'Ankle dorsiflexion',
-    hiprot:'Hip ER/IR', bodycomp:'Body composition'
+    fvprofile:'F-V Profile · jumps', hfvp:'Sprint H-FVP', fms:'FMS', bodycomp:'Body composition'
   };
   // default unit prefill per single-value test
-  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
+  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'stage', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
     ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', hfvp:'W/kg', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
   function evToday(){ return cmToday(); }
 
@@ -2623,16 +2655,22 @@
   // body_composition-sourced tests load from that table instead (synthetic rows).
   async function loadEvalData(test){
     _ev.rows = []; _ev.bcMeta = null;
+    if (_scopeReady) await _scopeReady;                  // never query before team scope resolves
     if (!_clubId){ return; }
+    if (_ev.test !== test) return;                       // user already opened another test
     if (test.src && test.src.from === 'body_composition'){
       await loadBcEvalData(test);
+      if (_ev.test !== test) return;
     } else {
     try {
-      var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, unit, notes').eq('club_id', _clubId);
-      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
-      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
-      var res = await q;
-      _ev.rows = (res.data || []).filter(function(r){ return startsWithCI(r.evaluation_type, test.src.match); });
+      var rows = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, unit, notes').eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+        return q;
+      }, { label: 'ev:evalData' });
+      if (_ev.test !== test) return;                     // stale response → drop it
+      _ev.rows = rows.filter(function(r){ return startsWithCI(r.evaluation_type, test.src.match); });
     } catch(e){ console.warn('[ev2] evaluations data failed', e); _ev.rows = []; }
 
     // distinct evaluation_type variants present in the data (e.g. VBT per exercise)
@@ -2666,11 +2704,14 @@
     var rows = [];
     try {
       var cols = 'player_id,measured_date,method,' + defs.map(function(d){ return d.field; }).join(',');
-      var q = window.sb.from('body_composition').select(cols).eq('club_id', _clubId);
-      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
-      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
-      var res = await q;
-      (res.data || []).forEach(function(r){
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('body_composition').select(cols).eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:bcData' });
+      if (_ev.test !== test) return;                     // stale response → drop it
+      (data || []).forEach(function(r){
         defs.forEach(function(d){
           if (r[d.field] == null) return;
           rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(d), test_date: r.measured_date, value: r[d.field], unit: d.unit, notes: r.method || null });
@@ -3326,7 +3367,7 @@
     var testDate = document.getElementById('evManualDate').value;
     var notes = document.getElementById('evManualNotes').value.trim();
     if (!playerId || isNaN(value) || !testDate) return;
-    var payload = { player_id: playerId, club_id: _clubId, evaluation_type: _openTest.label, value: value, unit: unit || null, test_date: testDate, notes: notes || null };
+    var payload = { player_id: playerId, club_id: _clubId, evaluation_type: _openTest.label, value: value, unit: unit || '', test_date: testDate, notes: notes || null };   // unit is NOT NULL in DB
     var res = await window.sb.from('evaluations').insert(payload);
     if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
     var msg = document.getElementById('evManualMsg'); msg.textContent = tt('evaluations.saved_toast','✓ Saved'); msg.style.display = '';
@@ -3349,7 +3390,7 @@
       var noteEl = tr.querySelector('.ev-bulk-note');
       var note = (noteEl && noteEl.value || '').trim();
       if (isNaN(val)) return;
-      records.push({ player_id: pid, club_id: _clubId, evaluation_type: _openTest.label, value: val, unit: unit || null, test_date: testDate, notes: note || null });
+      records.push({ player_id: pid, club_id: _clubId, evaluation_type: _openTest.label, value: val, unit: unit || '', test_date: testDate, notes: note || null });
     });
     if (!records.length){ alert(tt('evaluations.no_valid_rows','No valid rows to save.')); return; }
     var res = await window.sb.from('evaluations').insert(records);
@@ -3361,9 +3402,14 @@
     loadStatuses();
   }
 
-  // reload evaluations data + re-render View results after a save
+  // reload data + re-render View results after a save (any source)
   async function reloadEvalViews(){
     if (!_openTest || !_openTest.src) return;
+    if (_openTest.src.from === 'force_tests'){
+      await loadForceView();
+      if (_ftIndiv.player) await loadForceIndivTests();
+      return;
+    }
     if (_openTest.src.from !== 'evaluations' && _openTest.src.from !== 'body_composition') return;
     await loadEvalData(_openTest);
     renderEvalTeam();
@@ -3371,7 +3417,16 @@
   }
 
   document.getElementById('evManualForm').addEventListener('submit', saveEvalManual);
-  document.getElementById('evBulkSave').addEventListener('click', saveBulkEntry);
+  // in-flight guard: disable the button while an async save runs (double-click = double insert)
+  function evGuardSave(fn){
+    return async function(ev){
+      var btn = ev && ev.currentTarget;
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true;
+      try { await fn(ev); } finally { if (btn) btn.disabled = false; }
+    };
+  }
+  document.getElementById('evBulkSave').addEventListener('click', evGuardSave(saveBulkEntry));
   // calculator tests → open the guided modal (ported openPhysAnalysis)
   document.getElementById('evUploadCalcBtn').addEventListener('click', function(){
     var label = this.getAttribute('data-label');
@@ -3423,6 +3478,8 @@
     }});
   }
   function evNormName(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,''); }
+  // comma-decimal tolerant number ('2,45' → 2.45); bare parseFloat would read it as 2 — silent corruption
+  function evCsvNum(v){ return parseFloat(String(v == null ? '' : v).trim().replace(',', '.')); }
   function evMatchPlayer(name){
     var nn = evNormName(name); if (!nn) return null;
     var p = _ftPlayers.find(function(x){ return evNormName(x.first_name+' '+x.last_name)===nn; });
@@ -3431,7 +3488,9 @@
     if (p) return p;
     var tokHit=_ftTokenMatch(_ftNorm(name).split(' ').filter(Boolean), _ftNameToks(_ftPlayers));
     if (tokHit){ var tp=_ftPlayers.find(function(x){ return x.id===tokHit; }); if (tp) return tp; }
-    return _ftPlayers.find(function(x){ var f=evNormName(x.first_name+' '+x.last_name); return f && (f.indexOf(nn)>=0 || nn.indexOf(f)>=0); }) || null;
+    // substring fallback only when it's UNAMBIGUOUS — 'García' matching two Garcías must not pick the first one
+    var cand = _ftPlayers.filter(function(x){ var f=evNormName(x.first_name+' '+x.last_name); return f && (f.indexOf(nn)>=0 || nn.indexOf(f)>=0); });
+    return cand.length === 1 ? cand[0] : null;
   }
   function populateEvCsvMap(){
     var heads = _evCsv.headers;
@@ -3440,7 +3499,7 @@
     pSel.innerHTML=opts(); vSel.innerHTML=opts(); dSel.innerHTML=opts(tt('evaluations.none_option','— none —'));
     var find = function(re){ return heads.find(function(h){ return re.test(String(h).toLowerCase()); }); };
     pSel.value = find(/name|player|athlete|jugador/) || heads[0] || '';
-    vSel.value = find(/vift|value|result|score|km\/h|distance|dist|metre|meter|m\b/) || heads[1] || heads[0] || '';
+    vSel.value = find(/vift|value|result|score|km\/h|distance|dist|metre|meter|\bm\b/) || heads[1] || heads[0] || '';
     dSel.value = find(/date|fecha/) || '';
     document.getElementById('evCsvDropWrap').style.display='none';
     document.getElementById('evCsvMap').style.display='';
@@ -3452,7 +3511,7 @@
     var pCol=document.getElementById('evCsvColPlayer').value, vCol=document.getElementById('evCsvColValue').value, dCol=document.getElementById('evCsvColDate').value;
     var matched=0, unmatched=0, trs='';
     _evCsv.rows.slice(0,60).forEach(function(r){
-      var nm=r[pCol], val=parseFloat(r[vCol]), p=evMatchPlayer(nm);
+      var nm=r[pCol], val=evCsvNum(r[vCol]), p=evMatchPlayer(nm);
       if (p && !isNaN(val)) matched++; else unmatched++;
       trs += '<tr><td>'+esc(nm||'—')+'</td><td>'+(p?esc(p.first_name+' '+p.last_name):'<span style="color:var(--cm-danger)">'+esc(tt('evaluations.no_match','no match'))+'</span>')+'</td><td class="num c-val">'+(isNaN(val)?'—':val)+'</td><td>'+(dCol?esc(r[dCol]||''):'<span style="color:var(--cm-fg-faint)">—</span>')+'</td></tr>';
     });
@@ -3467,11 +3526,11 @@
     var fallback=document.getElementById('evCsvFallbackDate').value || evToday();
     var records=[], skipped=0;
     _evCsv.rows.forEach(function(r){
-      var p=evMatchPlayer(r[pCol]); var val=parseFloat(r[vCol]);
+      var p=evMatchPlayer(r[pCol]); var val=evCsvNum(r[vCol]);
       if (!p || isNaN(val)){ skipped++; return; }
       var date=fallback;
-      if (dCol && String(r[dCol]||'').trim()){ var d=new Date(String(r[dCol]).trim()); date = isNaN(d) ? fallback : d.toISOString().slice(0,10); }
-      records.push({ player_id:p.id, club_id:_clubId, evaluation_type:_openTest.label, value:val, unit:unit||null, test_date:date, notes:null });
+      if (dCol && String(r[dCol]||'').trim()){ var pd=parseForceDate(String(r[dCol]).trim()); date = pd.warn ? fallback : pd.date; }
+      records.push({ player_id:p.id, club_id:_clubId, evaluation_type:_openTest.label, value:val, unit:unit||'', test_date:date, notes:null });
     });
     if (!records.length){ alert(tt('evaluations.no_matched_rows','No matched rows with a value to import.')); return; }
     var res=await window.sb.from('evaluations').insert(records);
@@ -3491,7 +3550,7 @@
       dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
       dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseEvCsv(e.dataTransfer.files[0]); });
     }
-    var ib=document.getElementById('evCsvImportBtn'); if (ib) ib.addEventListener('click', saveEvCsv);
+    var ib=document.getElementById('evCsvImportBtn'); if (ib) ib.addEventListener('click', evGuardSave(saveEvCsv));
     var rb=document.getElementById('evCsvResetBtn'); if (rb) rb.addEventListener('click', resetEvCsv);
   })();
 
@@ -3523,12 +3582,15 @@
   async function saveHfvpRecords(records){
     var natOf = function(pid, date){ return pid + '|Sprint H-FVP|' + date; };
     var pids = [...new Set(records.map(function(r){ return r.player_id; }))];
-    var ex = await window.sb.from('evaluations')
-      .select('id, player_id, test_date')
-      .eq('club_id', _clubId).eq('evaluation_type', 'Sprint H-FVP').in('player_id', pids);
-    if (ex.error) return ex.error;
+    var exRows;
+    try {
+      exRows = await window.cmFetchAll(function(){ return window.sb.from('evaluations')
+        .select('id, player_id, test_date')
+        .eq('club_id', _clubId).eq('evaluation_type', 'Sprint H-FVP').in('player_id', pids); },
+        { label: 'ev:hfvpDedup' });
+    } catch(e){ return e; }
     var keys = new Set(records.map(function(r){ return natOf(r.player_id, r.test_date); }));
-    var collide = (ex.data || [])
+    var collide = (exRows || [])
       .filter(function(e){ return keys.has(natOf(e.player_id, String(e.test_date).slice(0,10))); })
       .map(function(e){ return e.id; });
     if (collide.length){
@@ -3661,7 +3723,7 @@
     var splits = [];
     HFVP_DISTS.forEach(function(d){ var col = c['t' + d]; if (!col) return; var t = hfvpNum(r[col]); if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t }); });
     var dateStr = null;
-    if (c.date && String(r[c.date]||'').trim()){ var dt = new Date(String(r[c.date]).trim()); if (!isNaN(dt)) dateStr = dt.toISOString().slice(0,10); }
+    if (c.date && String(r[c.date]||'').trim()){ var pd = parseForceDate(String(r[c.date]).trim()); if (!pd.warn) dateStr = pd.date; }
     return { name: name, player: p, mass: mass, height: height, splits: splits, dateStr: dateStr };
   }
   function renderHfvpCsvPreview(){
@@ -4019,6 +4081,7 @@
     });
   }
 
+  window.onBcSexChange = onBcSexChange;   // called from an inline onchange (global scope)
   function onBcSexChange(sel){
     var tr = sel.closest('tr'); if (!tr) return;
     if (String(document.getElementById('evBcFormula').value).toUpperCase() === 'JP3') applyBcJp3Sex(tr);
@@ -4088,7 +4151,7 @@
   }
 
   (function initBc(){
-    var s = document.getElementById('evBcSave'); if (s) s.addEventListener('click', saveBcBulk);
+    var s = document.getElementById('evBcSave'); if (s) s.addEventListener('click', evGuardSave(saveBcBulk));
     var m = document.getElementById('evBcMode'); if (m) m.addEventListener('change', onBcModeChange);
     var f = document.getElementById('evBcFormula'); if (f) f.addEventListener('change', renderBcBulkRoster);
     var b = document.getElementById('evBcBody'); if (b) b.addEventListener('input', function(e){ var tr = e.target.closest('tr'); if (tr) bcUpdateRowResult(tr); });
@@ -4187,7 +4250,7 @@
     var meta = _bcPlayerMeta[p.id] || {};
     var cellNum = function(field){ var c = mapping[field]; if (!c) return null; var v = parseFloat(String(r[c]==null?'':r[c]).replace(',', '.')); return isFinite(v) ? v : null; };
     var date = fallbackDate;
-    if (mapping.date && String(r[mapping.date]||'').trim()){ var d = new Date(String(r[mapping.date]).trim()); if (!isNaN(d)) date = d.toISOString().slice(0,10); }
+    if (mapping.date && String(r[mapping.date]||'').trim()){ var pd = parseForceDate(String(r[mapping.date]).trim()); if (!pd.warn) date = pd.date; }
     var height = cellNum('height'); if (height == null && meta.height != null) height = meta.height;   // roster fallback
     var weight = cellNum('weight');
     var row;
@@ -4258,7 +4321,7 @@
       dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
       dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseBcCsv(e.dataTransfer.files[0]); });
     }
-    var ib = document.getElementById('evBcCsvImportBtn'); if (ib) ib.addEventListener('click', saveBcCsv);
+    var ib = document.getElementById('evBcCsvImportBtn'); if (ib) ib.addEventListener('click', evGuardSave(saveBcCsv));
     var rb = document.getElementById('evBcCsvResetBtn'); if (rb) rb.addEventListener('click', resetBcCsv);
     var m = document.getElementById('evBcCsvMode'); if (m) m.addEventListener('change', onBcCsvModeChange);
     var f = document.getElementById('evBcCsvFormula'); if (f) f.addEventListener('change', function(){ if (_bcCsv) populateBcCsvMap(); });
@@ -4542,12 +4605,16 @@
         var tr = await tq;
         var tests = tr.data || [];
         if (tests.length){
-          var typeToKey = {}; _assessDefs.forEach(function(d){ typeToKey[d.test_type] = d.key; });
+          var typeToKey = {}, keyToMetric = {};
+          _assessDefs.forEach(function(d){ typeToKey[d.test_type] = d.key; keyToMetric[d.key] = d.metric_key; });
           var ids = tests.map(function(x){ return x.id; });
-          var mr = await window.sb.from('force_test_metrics').select('test_id, value, side').in('test_id', ids);
+          var mr = await window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', ids);
           var idToKey = {}; tests.forEach(function(x){ idToKey[x.id] = typeToKey[x.test_type]; });
           (mr.data || []).forEach(function(m){
             var k = idToKey[m.test_id]; if (!k) return;
+            // only the def's own metric — a VALD import can carry peak_force + rfd + impulse
+            // for the same test; feeding RFD into a force ratio would corrupt it
+            if (keyToMetric[k] && m.metric_key && m.metric_key !== keyToMetric[k]) return;
             (_asEntry.sameDay[k] = _asEntry.sameDay[k] || {})[m.side || 'NA'] = m.value;
           });
         }
@@ -4659,7 +4726,7 @@
       // dedup: delete any existing test with the same (player, test_type, date) for this club/team, then insert
       var exQ = window.sb.from('force_tests').select('id').eq('club_id', _clubId).eq('player_id', pid)
         .eq('test_type', def.test_type).eq('test_date', date);
-      if (_teamId) exQ = exQ.eq('team_id', _teamId);
+      if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');   // include legacy NULL-team rows in the collide set
       var ex = await exQ;
       if (ex.data && ex.data.length){
         var delErr = (await window.sb.from('force_tests').delete().in('id', ex.data.map(function(x){return x.id;}))).error;
@@ -5018,6 +5085,7 @@
       const ex = document.getElementById('paExercise')?.value || 'Back Squat';
       testType = VBT_EVAL_TYPES[ex] || `VBT · ${ex.toLowerCase()}`;
     }
+    if (cfg?.key === 'orm') testType = `1RM · ${get1RMExercise()}`;   // saves write per-exercise types, never bare '1RM'
     if (testType) loadPaHistory(pid, testType);
   }
 
@@ -5031,8 +5099,7 @@
     if (!histEl) return;
     if (!data || !data.length) { histEl.innerHTML = ''; return; }
     const rows = data.map((e, i) => {
-      const dt = new Date(e.test_date + 'T00:00:00');
-      const fmtDate = `${MONTHS_SHORT[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
+      const fmtDate = ftDateFull(String(e.test_date).slice(0, 10));
       const prev = data[i + 1];
       let dHtml = '';
       if (prev) {
@@ -6496,7 +6563,7 @@
         if (Sfvopt!==0) FVimb_pct=+Math.abs(Sfv/Sfvopt*100).toFixed(0);
       }
       if (R2<0.70&&!confirm(tt('evaluations.low_r2_confirm','Low R² ('+R2+'). Save anyway?',{r2:R2}))) return;
-      value=F0; unit='N (F0)'; evalType='VBT · F-V Profile';
+      value=F0; unit='N'; evalType='F-V Profile · jumps';   // must match the card's src.match AND the bulk grid (_openTest.label)
       computed={ inputs:pairs.map(p=>({kg:p.kg,vmp:p.v})), F0, V0, Pmax, Sfv, R2, FVimb_pct, hSJ_cm:isNaN(hSJ_cm)?null:hSJ_cm };
 
     } else if (cfg.key === 'hfvp') {
@@ -6799,8 +6866,8 @@
     }
     m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);                          // ISO yyyy-mm-dd...
     if (m) return { date: `${m[1]}-${m[2]}-${m[3]}`, warn: false };
-    const t = new Date(s);                                            // fallback
-    if (!isNaN(t.getTime())) return { date: t.toISOString().slice(0, 10), warn: false };
+    const t = new Date(s);                                            // fallback (local parse → local Y-M-D; toISOString would shift a day east of UTC)
+    if (!isNaN(t.getTime())) return { date: (window.cmYMD ? cmYMD(t) : t.toISOString().slice(0, 10)), warn: false };
     return { date: today, warn: true };
   }
 
@@ -6841,8 +6908,8 @@
         const rec = {
           club_id: _clubId, team_id: _teamId || null, player_id: m.playerId,
           test_type: testType, test_date: date, test_time: testTime,
-          bodyweight_kg: fields.bw ? (parseFloat(row[fields.bw]) || null) : null,
-          reps: fields.reps ? (parseInt(row[fields.reps], 10) || null) : null,
+          bodyweight_kg: fields.bw ? (function(){ var n = evCsvNum(row[fields.bw]); return Number.isFinite(n) ? n : null; })() : null,
+          reps: fields.reps ? (function(){ var n = parseInt(String(row[fields.reps]).trim(), 10); return Number.isFinite(n) ? n : null; })() : null,
           tags: fields.tags ? (String(row[fields.tags] || '').trim() || null) : null,
           source: sourceLabel,
           external_id: fields.externalId ? (String(row[fields.externalId] || '').trim() || null) : null,
@@ -6862,11 +6929,13 @@
       if (plan.length) {
         // ── 2) Pre-fetch existing tests for the players in the plan (1 query) ──
         const pids = [...new Set(plan.map(p => p.rec.player_id))];
-        let exQ = window.sb.from('force_tests').select('id, player_id, test_type, test_date, test_time')
-          .eq('club_id', _clubId).in('player_id', pids);
-        if (_teamId) exQ = exQ.eq('team_id', _teamId);
-        const { data: existing, error: exErr } = await exQ;
-        if (exErr) throw exErr;
+        // paginated (dedup breaks silently past PostgREST's ~1000-row cap) + include NULL-team legacy rows
+        const existing = await window.cmFetchAll(() => {
+          let exQ = window.sb.from('force_tests').select('id, player_id, test_type, test_date, test_time')
+            .eq('club_id', _clubId).in('player_id', pids);
+          if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');
+          return exQ;
+        }, { label: 'ev:forceImportDedup' });
 
         // ── 3) Delete the ones that collide with the plan (metrics cascade) (1 query) ──
         const planKeys = new Set(plan.map(p => p.natKey));
@@ -7443,11 +7512,14 @@
     var natOf = function(pid, type, date){ return pid + '|' + type + '|' + String(date).slice(0,10); };
     if (!plans.length) return { testsCount:0, metricsCount:0 };
     var pids = [...new Set(plans.map(function(p){ return p.rec.player_id; }))];
-    var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id', _clubId).in('player_id', pids);
-    if (_teamId) exQ = exQ.eq('team_id', _teamId);
-    var ex = await exQ; if (ex.error) throw ex.error;
+    // paginated + include NULL-team legacy rows so replace-on-collide actually replaces
+    var exRows = await window.cmFetchAll(function(){
+      var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id', _clubId).in('player_id', pids);
+      if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');
+      return exQ;
+    }, { label: 'ev:asBulkDedup' });
     var planKeys = new Set(plans.map(function(p){ return p.natKey; }));
-    var delIds = (ex.data||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type, e.test_date)); }).map(function(e){ return e.id; });
+    var delIds = (exRows||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type, e.test_date)); }).map(function(e){ return e.id; });
     if (delIds.length){ var de = (await window.sb.from('force_tests').delete().in('id', delIds)).error; if (de) throw de; }
     var ins = await window.sb.from('force_tests').insert(plans.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
     if (ins.error) throw ins.error;
@@ -7686,8 +7758,7 @@
     const overlay = document.getElementById('ftImpOverlay');
     const open = () => { drawer.classList.add('is-open'); overlay.classList.add('is-open'); };
     const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
-    document.getElementById('ftImpOpen')?.addEventListener('click', open);
-    document.getElementById('ftImpOpen2')?.addEventListener('click', open);
+    // (drawer opens via evForceImportBtn → openForceImport; no other triggers exist)
     document.getElementById('ftImpClose')?.addEventListener('click', close);
     overlay?.addEventListener('click', close);
     document.getElementById('ftFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseForceCsv(e.target.files[0]); });
@@ -7713,7 +7784,9 @@
     if (!nn) return raw;
     for (const key of Object.keys(VBT_V1RM)) {
       const kn = _ftNorm(key);
-      if (nn === kn || nn.includes(kn) || kn.includes(nn)) return key;
+      // raw CONTAINS the canonical name ('back squat 3 reps' → Back Squat). The reverse
+      // direction ('bench' ⊂ 'bench press' AND ⊂ 'bench pull') is ambiguous → don't guess.
+      if (nn === kn || nn.includes(kn)) return key;
     }
     return raw;
   }
@@ -7822,8 +7895,8 @@
     rows.forEach(r => {
       const rawName = map.player ? String(r[map.player] ?? '').trim() : '';
       const exercise = map.exercise ? String(r[map.exercise] ?? '').trim() : '';
-      const load = map.load ? parseFloat(r[map.load]) : NaN;
-      const vmp = map.velocity ? parseFloat(r[map.velocity]) : NaN;
+      const load = map.load ? evCsvNum(r[map.load]) : NaN;      // comma-decimal tolerant ('102,5')
+      const vmp = map.velocity ? evCsvNum(r[map.velocity]) : NaN;
       const pid = vbtMatchPlayer(rawName);
       if (!pid) {
         const nn = _ftNorm(rawName);
@@ -7832,7 +7905,9 @@
       }
       matchedRows++;
       if (!exercise || !isFinite(load) || !isFinite(vmp) || load <= 0 || vmp <= 0) return;
-      const key = pid + '||' + exercise.toLowerCase();
+      // group by CANONICAL exercise — 'Squat' and 'Back Squat' in one file must merge, not
+      // collapse later at planMap and silently drop a profile
+      const key = pid + '||' + _ftNorm(vbtCanonExercise(exercise));
       let g = groups.get(key);
       if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map(), testDate: '' }; groups.set(key, g); }
       const prev = g.loadBest.get(load);
@@ -7965,10 +8040,10 @@
       // ── 1) Pre-fetch existing evaluations for these players + types (1 query) ──
       const pids = [...new Set(plan.map(r => r.player_id))];
       const types = [...new Set(plan.map(r => r.evaluation_type))];
-      const { data: existing, error: exErr } = await window.sb.from('evaluations')
+      const existing = await window.cmFetchAll(() => window.sb.from('evaluations')
         .select('id, player_id, evaluation_type, test_date')
-        .eq('club_id', _clubId).in('player_id', pids).in('evaluation_type', types);
-      if (exErr) throw exErr;
+        .eq('club_id', _clubId).in('player_id', pids).in('evaluation_type', types),
+        { label: 'ev:vbtDedup' });
 
       // ── 2) Delete the colliding ones (1 query), then insert the whole plan (1 query) — replace, no dup ──
       const planKeys = new Set(plan.map(r => natOf(r.player_id, r.evaluation_type, r.test_date)));
@@ -8062,11 +8137,12 @@
     _field.rows = [];
     if (!_clubId) return;
     try {
-      var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, notes').eq('club_id', _clubId).in('evaluation_type', SUBJ_DIMS);
-      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
-      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
-      var res = await q;
-      _field.rows = res.data || [];
+      _field.rows = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, notes').eq('club_id', _clubId).in('evaluation_type', SUBJ_DIMS);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+        return q;
+      }, { label: 'ev:fieldData' });
     } catch(e){ console.warn('[ev2] field data failed', e); }
     _field.loaded = true;
   }
@@ -8178,9 +8254,15 @@
     const date=document.getElementById('subjDate').value;
     const notes=document.getElementById('subjNotes').value.trim() || null;
     if(!playerId||!date){ alert(tt('evaluations.pick_player_date','Pick a player and date')); return; }
+    if(!_clubId){ alert(tt('evaluations.err_prefix','Error: no club',{msg:'no club'})); return; }
     const rows=Object.entries(FA_ID2DIM).map(([id,type])=>({
       player_id:playerId, club_id:_clubId, evaluation_type:type,
       value:+document.getElementById(id).value, unit:'/10', test_date:date, notes }));
+    // replace-on-collide: re-saving the same player+date must not stack a second set of 15 rows
+    const del=await window.sb.from('evaluations').delete()
+      .eq('club_id',_clubId).eq('player_id',playerId).eq('test_date',date)
+      .in('evaluation_type', Object.values(FA_ID2DIM));
+    if(del.error){ alert(tt('evaluations.err_prefix','Error: '+del.error.message,{msg:del.error.message})); return; }
     const { error }=await window.sb.from('evaluations').insert(rows);
     if(error){ alert(tt('evaluations.err_prefix','Error: '+error.message,{msg:error.message})); return; }
     const msg=document.getElementById('subjSaveMsg'); msg.textContent=tt('evaluations.saved_toast','✓ Saved'); msg.style.display='';
@@ -8319,10 +8401,11 @@
       var playerIds = roster.map(function(p){ return p.id; });
       var testTypes = cols.map(function(c){ return c.test_type; });
 
-      var tq = window.sb.from('force_tests').select('id, player_id, test_type, test_date, bodyweight_kg')
-        .eq('club_id', _clubId).in('player_id', playerIds).in('test_type', testTypes).order('test_date', { ascending: true });
-      var tr = await tq; if (tr.error) throw tr.error;
-      var tests = tr.data || [];
+      var tests = await window.cmFetchAll(function(){
+        return window.sb.from('force_tests').select('id, player_id, test_type, test_date, bodyweight_kg')
+          .eq('club_id', _clubId).in('player_id', playerIds).in('test_type', testTypes);
+      }, { label: 'ev:pbTests' });
+      tests.sort(function(a,b){ return String(a.test_date) < String(b.test_date) ? -1 : 1; });   // asc → "last write wins" below
 
       // most-recent test per (player|type) — asc order means last write wins
       var latest = {}; tests.forEach(function(t){ latest[t.player_id + '|' + t.test_type] = t; });
@@ -8332,9 +8415,11 @@
       var metricsByTest = {};
       for (var i = 0; i < testIds.length; i += 300){
         var chunk = testIds.slice(i, i + 300); if (!chunk.length) break;
-        var mr = await window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', chunk);
-        if (mr.error) throw mr.error;
-        (mr.data || []).forEach(function(m){ (metricsByTest[m.test_id] = metricsByTest[m.test_id] || []).push(m); });
+        // paginated: 300 tests × L/R × several metrics can exceed the ~1000-row cap
+        var mrows = await window.cmFetchAll(function(){
+          return window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', chunk);
+        }, { label: 'ev:pbMetrics' });
+        (mrows || []).forEach(function(m){ (metricsByTest[m.test_id] = metricsByTest[m.test_id] || []).push(m); });
       }
 
       // keep only tests actually performed (≥1 player with a value for that test)
@@ -8568,6 +8653,7 @@
 
   // ── re-render JS-built UI on language change (static nodes are re-applied by sidebar.js) ──
   document.addEventListener('cm:langchanged', function(){
+    if (!_bootDone) return;   // i18n's first apply() fires before boot (or after a guard redirect) — nothing to re-render yet
     try {
       // catalog cards + status labels
       renderCatalog();
@@ -8591,10 +8677,12 @@
   });
 
   // ── boot ──
+  var _bootDone = false;
   (async () => {
     if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
     await loadAssessmentDefs();   // merge DB-driven isometric/mobility tests into CATALOG before first render
     renderCatalog();
+    _bootDone = true;
     loadStatuses();
   })();
 })();
