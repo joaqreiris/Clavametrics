@@ -113,6 +113,21 @@
     let squad;
     try { squad = await window.gpsACWR.calculateSquad({ clubId:state.clubId, refDate:state.refDate, metricKey:metricKey(), model:state.model, coupled:state.coupled }); }
     catch { squad=null; }
+    // Team isolation: the engine fetches CLUB-wide; keep only the active roster
+    // (otherwise other teams' players inflate the KPI/median and show as "?" dots).
+    if(squad && state.players.length){
+      const roster=new Set(state.players.map(p=>String(p.id)));
+      const per={}, counts={ under:0, sweet:0, over:0, risk:0, noData:0 };
+      for(const [pid,v] of Object.entries(squad.perPlayer)){
+        if(!roster.has(String(pid))) continue;
+        per[pid]=v;
+        if(v.acwr==null){ counts.noData++; continue; }
+        const z=zoneInfo(v.acwr);
+        if(z.cls==='danger') counts.risk++; else if(z.cls==='over') counts.over++;
+        else if(z.cls==='sweet') counts.sweet++; else counts.under++;
+      }
+      squad.perPlayer=per; squad.counts=counts;
+    }
     state.lastSquad = squad;
 
     const total = state.players.length || (squad? Object.keys(squad.perPlayer).length : 0);
@@ -140,7 +155,19 @@
   async function renderChart(){
     const pane=$('acwrPane'); if(!pane) return;
     let tl;
-    try { tl = await window.gpsACWR.calculateSquadTimeline({ clubId:state.clubId, fromDate:offset(state.refDate,-42), toDate:state.refDate, metricKey:metricKey(), model:state.model, coupled:state.coupled }); }
+    try {
+      // Fetch club-wide (the engine's only granularity), then scope to the active
+      // roster BEFORE averaging — the squad line must not mix in other teams.
+      const from=offset(state.refDate,-42);
+      const fetchFrom=offset(from,-((window.gpsACWR.CONFIG.chronicDays||28)-1));   // pre-warm the chronic window
+      const byPlayer=await window.gpsACWR.fetchByPlayer({ clubId:state.clubId, metricKey:metricKey(), from:fetchFrom, to:state.refDate });
+      let scoped=byPlayer;
+      if(state.players.length){
+        const roster=new Set(state.players.map(p=>String(p.id)));
+        scoped={}; for(const [pid,recs] of Object.entries(byPlayer)) if(roster.has(String(pid))) scoped[pid]=recs;
+      }
+      tl = window.gpsACWR.squadTimeline(scoped, from, state.refDate, { model:state.model, coupled:state.coupled }, fetchFrom);
+    }
     catch { tl=null; }
 
     if(!tl || !tl.dates.length || tl.squadAcwr.every(v=>v==null)){
