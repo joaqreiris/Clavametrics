@@ -3804,6 +3804,11 @@
   fc.on('object:added',    markDirty);
   fc.on('object:removed',  markDirty);
   fc.on('object:modified', markDirty);
+  // Refresh/close/navigate with unsaved work (edited exercise OR a no-row draft
+  // drawing) → native "leave page?" prompt so the drawing isn't lost silently.
+  window.addEventListener('beforeunload', (e) => {
+    if (_dirty && (currentExerciseId || _hasDrawing())) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   // ── Intensity toggle ────────────────────────────────────────────
   function setIntensity(val) {
@@ -4026,7 +4031,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,objects_json,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -4055,11 +4060,24 @@
     renderExerciseList();
   }
 
+  // objects_json (the full canvas) no longer travels with the list — the club-wide download
+  // was megabytes and blocked the editor. Fetched per-row on open/duplicate, cached on the row.
+  async function _ensureObjectsJson(ex) {
+    if (!ex) return null;
+    if ('objects_json' in ex) return ex.objects_json;
+    try {
+      const { data } = await window.sb.from('exercises').select('objects_json').eq('id', ex.id).maybeSingle();
+      ex.objects_json = (data && data.objects_json) || null;
+    } catch (_) { ex.objects_json = null; }
+    return ex.objects_json;
+  }
+
   // Duplicate a drill: clone its canvas + all metadata into a new row so a variant can be
   // edited without rebuilding it. The preview image is copied to the new row's own path.
   async function duplicateExercise(id) {
     const src = exercises.find(e => e.id === id);
     if (!src) return;
+    await _ensureObjectsJson(src);
     const _dupTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
     const payload = {
       club_id: clubId,
@@ -4186,6 +4204,15 @@
   }
 
   async function selectExercise(id) {
+    if (!exercises.some(e => e.id === id)) return;
+    // Unsaved work (a row being edited, or a no-row draft drawing) → offer to save
+    // before it gets clobbered by the incoming exercise. Declining keeps old behavior.
+    if (id !== currentExerciseId && _dirty && (currentExerciseId || _hasDrawing())) {
+      if (confirm(tt('planner.confirm_unsaved_switch', 'You have unsaved changes. Save them before opening another exercise?'))) {
+        await saveExercise();
+        if (_dirty) return;   // save failed → stay put, nothing is lost
+      }
+    }
     const ex = exercises.find(e => e.id === id);
     if (!ex) return;
     currentExerciseId = id;
@@ -4240,6 +4267,8 @@
       }
     } else {
       plSetImageMode(false);
+      await _ensureObjectsJson(ex);
+      if (currentExerciseId !== id) return;   // switched to another exercise while fetching
       _loadingExercise = true;
       // Restore the pitch first (loadFromJSON ignores the `field` key → objects untouched).
       const _f = (ex.objects_json && ex.objects_json.field) || {};
