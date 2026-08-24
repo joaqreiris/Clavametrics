@@ -1341,6 +1341,9 @@ html.cm-rail .hub-nav-grip{display:none}
       document.getElementById('cm-np')?.classList.remove('is-open');
     });
     document.addEventListener('click', e => {
+      // Si el clic borró el nodo (un re-render dentro del panel), contains() daría
+      // falso y cerraríamos el popover por un clic que fue ADENTRO. No es clic afuera.
+      if (!e.target.isConnected) return;
       if (!wrap.contains(e.target)) {
         if (panel.classList.contains('is-open')) { panel.classList.remove('is-open'); _closeConvThread(); }
       }
@@ -1348,10 +1351,12 @@ html.cm-rail .hub-nav-grip{display:none}
     panel.addEventListener('click', e => {
       // Clic en una conversación: abrir el hilo inline (leer + responder acá mismo,
       // sin navegar). El link del header del hilo lleva al chat completo.
+      // stopPropagation: _openConvThread re-renderiza la lista y desconecta el botón
+      // clickeado — si el evento llegara a document, se leería como clic afuera.
       const item = e.target.closest('[data-chat-nav]');
-      if (item) { _openConvThread(item.dataset.conv || 'group'); return; }
-      if (e.target.closest('#cm-ct-back')) { _closeConvThread(); return; }
-      if (e.target.closest('#cm-ct-send')) { _ctSend(); return; }
+      if (item) { e.stopPropagation(); _openConvThread(item.dataset.conv || 'group'); return; }
+      if (e.target.closest('#cm-ct-back')) { e.stopPropagation(); _closeConvThread(); return; }
+      if (e.target.closest('#cm-ct-send')) { e.stopPropagation(); _ctSend(); return; }
     });
     const ctInp = panel.querySelector('#cm-ct-inp');
     if (ctInp) {
