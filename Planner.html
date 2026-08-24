@@ -749,7 +749,7 @@
      grid also neutralises justify-content:center leaking in from .pl-dock-btn on the
      rows that carry both classes (Ball/Cone/… , Crests). */
   .pl-drop-opt {
-    display:grid; grid-template-columns:22px 1fr; align-items:center; gap:10px;
+    display:grid; grid-template-columns:22px 1fr auto; align-items:center; gap:10px;
     width:100%; min-height:38px; padding:0 14px; border:0; box-sizing:border-box;
     border-radius:6px; background:none; cursor:pointer;
     font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted);
@@ -762,6 +762,13 @@
   .pl-drop-opt .ti { font-size:18px; }
   .pl-drop-opt svg { width:18px !important; height:18px !important; }
   .pl-drop-opt > span { grid-column:2; overflow:hidden; text-overflow:ellipsis; }
+  /* Single-letter shortcut badge at the right edge of a dropdown row (language-neutral). */
+  .pl-kbd {
+    grid-column:3; justify-self:end;
+    font:600 10px/1 ui-monospace, monospace; color:var(--cm-fg-muted);
+    border:1px solid var(--cm-border-soft); border-radius:4px;
+    padding:2px 5px; background:var(--cm-bg-soft);
+  }
   .pl-drop-team-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; transition:background 80ms; }
   .pl-drop-team-row:hover { background:var(--cm-bg-soft); cursor:pointer; }
   .pl-drop-team-row.is-active-team { background:var(--cm-accent-soft); box-shadow:inset 2px 0 0 var(--cm-accent); }
@@ -1683,6 +1690,13 @@
   fc.on('object:modified', e => {
     _clearGuides();
     const obj = e.target;
+    // Rotating an arrow with the knob must land in its endpoint geometry (see
+    // _bakeArrowTransform) BEFORE pushHistory serialises the canvas below.
+    if (obj && obj._type === 'arrow') {
+      _bakeArrowTransform(obj);
+      const act = fc.getActiveObject();
+      if (act?._type === 'arrow') _showArrowHandles(act._arrowId);   // re-show (hidden while rotating)
+    }
     if (obj && (obj.type === 'i-text' || obj.type === 'text') && (obj.scaleX !== 1 || obj.scaleY !== 1)) {
       const scale = Math.sqrt(Math.abs(obj.scaleX * obj.scaleY));
       obj.set({ fontSize: Math.round((obj.fontSize || 14) * scale), scaleX: 1, scaleY: 1 });
@@ -1858,6 +1872,12 @@
       const SNAP = 15;
       e.target.set({ angle: Math.round(e.target.angle / SNAP) * SNAP });
     }
+    // The endpoint handles live in canvas coords and can't follow the group mid-rotation —
+    // hide them while rotating (object:modified re-shows them once the transform is baked).
+    if (e.target?._type === 'arrow') {
+      const d = _arrowData.get(e.target._arrowId);
+      if (d) _removeArrowHandles(d);
+    }
     if (_angleBadge) {
       const deg = ((Math.round(e.target.angle) % 360) + 360) % 360;
       const vpt = fc.viewportTransform;
@@ -1878,7 +1898,18 @@
     // then rebuild it so the user's selection isn't lost.
     const _sel = fc.getActiveObject();
     const _selObjs = (_sel && _sel.type === 'activeSelection') ? _sel.getObjects().slice() : null;
-    if (_selObjs) { _suppressHistory = true; fc.discardActiveObject(); _suppressHistory = false; }
+    if (_selObjs) {
+      _suppressHistory = true; fc.discardActiveObject(); _suppressHistory = false;
+      // Moving/rotating a multi-selection transformed any arrow GROUPS inside it, but their
+      // endpoint geometry (_x1.. / _arrowData) never followed. Now that the discard baked the
+      // children to absolute transforms, fold each arrow's transform into its endpoints so
+      // the JSON below (and the handles) match what's on screen.
+      _selObjs.forEach((o, i) => {
+        if (o._type === 'arrow' && _bakeArrowTransform(o)) {
+          _selObjs[i] = _arrowData.get(o._arrowId)?.grp || o;   // baking rebuilt the group — reselect the live one
+        }
+      });
+    }
 
     _historyStack.push(JSON.stringify(fc.toJSON(ARROW_PROPS)));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
@@ -1904,6 +1935,7 @@
     fc.loadFromJSON(json, () => {
       try {
         _rebuildArrowDataFromCanvas();
+        _normalizeLoadedArrows();
         fc.discardActiveObject();
         fc.renderAll();
       } finally {
@@ -2346,13 +2378,24 @@
     const startPart = _capPart(startCap, x1, y1, curved?(x1-cx):(x1-x2), curved?(y1-cy):(y1-y2), color, w);
     if (endPart)   parts.push(endPart);
     if (startPart) parts.push(startPart);
-    return new fabric.Group(parts, {
-      selectable:true, evented:true, hasControls:false, hasBorders:false,
+    const g = new fabric.Group(parts, {
+      selectable:true, evented:true,
       perPixelTargetFind:true, _type:'arrow', _arrowId:d.id,
       _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2,
       _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved, _arrowWavy:d.wavy,
       _arrowStartCap:startCap, _arrowEndCap:endCap, _arrowWidth:w
     });
+    _setArrowControls(g);
+    return g;
+  }
+
+  // Arrows resize via their endpoint handles, so the scale corners are noise (and easy to
+  // confuse with the endpoint circles). Only the rotation knob stays. hasControls isn't
+  // serialized, so this must be re-applied on every path that materialises a group
+  // (build, load-from-JSON, paste) or reloaded arrows come back with the full corner box.
+  function _setArrowControls(grp) {
+    grp.set({ hasControls:true, hasBorders:false, cornerSize:11, touchCornerSize:24, transparentCorners:false });
+    grp.setControlsVisibility({ tl:false, tr:false, bl:false, br:false, ml:false, mt:false, mr:false, mb:false, mtr:true });
   }
 
   function _attachGroupHandlers(d) {
@@ -2379,7 +2422,8 @@
 
   function _removeArrowHandles(d) {
     if (!d.handles?.length) return;
-    _suppressHistory=true; d.handles.forEach(h=>fc.remove(h)); _suppressHistory=false;
+    const _prev=_suppressHistory;
+    _suppressHistory=true; d.handles.forEach(h=>fc.remove(h)); _suppressHistory=_prev;
     d.handles=[];
   }
   function _hideAllArrowHandles() { _arrowData.forEach(d=>_removeArrowHandles(d)); }
@@ -2404,7 +2448,7 @@
       hc.on('moving',()=>{d.cx=hc.left;d.cy=hc.top;_rebuildArrow(arrowId);});
       d.handles.push(hc);
     }
-    _suppressHistory=true; d.handles.forEach(h=>fc.add(h)); _suppressHistory=false;
+    { const _prev=_suppressHistory; _suppressHistory=true; d.handles.forEach(h=>fc.add(h)); _suppressHistory=_prev; }
     fc.renderAll();
   }
 
@@ -2412,14 +2456,43 @@
     const d=_arrowData.get(arrowId); if (!d) return;
     const old=d.grp;
     d.grp=_buildArrowGroup(d);
+    const _prev=_suppressHistory;
     _suppressHistory=true; _rebuilding=true;
     fc.remove(old);
     _rebuilding=false;
     fc.add(d.grp);
-    _suppressHistory=false;
+    _suppressHistory=_prev;
     _attachGroupHandlers(d);
     d.handles.forEach(h=>fc.bringToFront(h)); // keep handles above new group
     fc.requestRenderAll();
+  }
+
+  // Rotating (or scaling/flipping) an arrow acts on the GROUP transform, while the endpoint
+  // geometry — d.x1..y2, the white handles, the saved _x1.. props — lives in canvas coords.
+  // Left as-is they drift apart: handles land off the arrow and undo/reload snaps it back.
+  // Bake the group's transform into the endpoints and rebuild the arrow at rest (angle 0,
+  // scale 1) so the visual arrow, its handles and the persisted coords agree again. The
+  // at-rest reference is a throwaway rebuild from d: same geometry ⇒ same base matrix.
+  // Returns true if a transform was actually baked.
+  function _bakeArrowTransform(grp) {
+    const d = grp ? _arrowData.get(grp._arrowId) : null;
+    if (!d || d.grp !== grp) return false;
+    const ref  = _buildArrowGroup(d);
+    const cur  = grp.calcTransformMatrix(), base = ref.calcTransformMatrix();
+    if (cur.every((v, i) => Math.abs(v - base[i]) < 0.01)) return false;   // at rest — nothing to bake
+    const delta = fabric.util.multiplyTransformMatrices(cur, fabric.util.invertTransform(base));
+    const tp = (x, y) => fabric.util.transformPoint(new fabric.Point(x, y), delta);
+    const p1 = tp(d.x1, d.y1), p2 = tp(d.x2, d.y2), pc = tp(d.cx, d.cy);
+    d.x1 = p1.x; d.y1 = p1.y; d.x2 = p2.x; d.y2 = p2.y; d.cx = pc.x; d.cy = pc.y;
+    const wasActive = fc.getActiveObject() === grp;
+    _rebuildArrow(d.id);
+    d.grp.set({ _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2 });
+    if (wasActive) {
+      const _prev=_suppressHistory; _suppressHistory=true;
+      fc.setActiveObject(d.grp);
+      _suppressHistory=_prev;
+    }
+    return true;
   }
 
   // Caps/width from a saved (or pasted) group, with backward-compat for the old
@@ -2453,8 +2526,18 @@
       if (d.id>_nextArrowId) _nextArrowId=d.id;
       _arrowData.set(d.id,d);
       grp._arrowId=d.id;
+      _setArrowControls(grp);        // hasControls isn't serialized — reloaded groups default to the full corner box
       _attachGroupHandlers(d);
     });
+  }
+
+  // Arrows saved while rotated (from before rotation was baked into the endpoints, or via a
+  // rotated multi-selection) carry a group transform their _x1.. coords know nothing about —
+  // normalise them so the handles land ON the arrow instead of where it used to be.
+  // Only for JSON loads: the window-resize refit scales arrow groups on purpose (with _x1..
+  // already remapped to match), and baking there would double-apply the head-size drift.
+  function _normalizeLoadedArrows() {
+    _arrowData.forEach(d => _bakeArrowTransform(d.grp));
   }
 
   // Hold Shift to lock a segment to horizontal / vertical while drawing or dragging an
@@ -2493,6 +2576,7 @@
       color:grp._arrowColor||'#FBBF24', dashed:!!grp._arrowDash, curved:!!grp._arrowCurved, wavy:!!grp._arrowWavy,
       ..._capsFromGrp(grp), grp, handles:[] };
     _arrowData.set(id, d);
+    _setArrowControls(grp);
     _attachGroupHandlers(d);
   }
 
@@ -3011,6 +3095,24 @@
       _pasteClipboard();
       return;
     }
+    // ── Single-key creation shortcuts (Figma/Canva style — no modifier, so they
+    // never fight the browser's Cmd+A/Cmd+B…). Typing contexts already bailed at
+    // the top (INPUT/TEXTAREA covers Fabric's hidden textarea while editing text).
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const _act = {
+      v: () => { _clearPreview(); _arrowP1=null; setTool('select'); },
+      a: () => { setTool('arrow'); document.querySelector('.pl-drop-btn[data-menu="plDropLinesMenu"]')?.classList.add('is-on'); },
+      c: () => addCone(),
+      b: () => addBall(),
+      p: () => addPole(),
+      g: () => addGoal(),
+      m: () => addMannequin(),
+      z: () => addZoneRect(),
+      t: () => dockActions['Label'](),
+      1: () => addPlayer('t1'), 2: () => addPlayer('t2'),
+      3: () => addPlayer('t3'), 4: () => addPlayer('t4')
+    }[_k === 'l' ? 'a' : _k];               // L (line) = alias de A (arrow)
+    if (_act) { e.preventDefault(); _act(); }
   });
 
   // Copy/paste on Fabric 5 has two traps: (1) an activeSelection stores each
@@ -3146,6 +3248,13 @@
   document.querySelectorAll('.pl-dock-btn').forEach(btn => {
     const title=btn.getAttribute('title');
     if (dockActions[title]) btn.addEventListener('click', ()=>dockActions[title]());
+  });
+  // Shortcut badges on the dropdown rows. The single letters are language-neutral and the
+  // i18n pass only rewrites each row's <span data-i18n> text, so the badges survive it.
+  const _kbdHints = { Ball:'B', Cone:'C', Pole:'P', Goal:'G', Mannequin:'M', Rectangle:'Z', Label:'T' };
+  document.querySelectorAll('.pl-drop-opt[title]').forEach(btn => {
+    const k = _kbdHints[btn.getAttribute('title')];
+    if (k) btn.insertAdjacentHTML('beforeend', `<kbd class="pl-kbd">${k}</kbd>`);
   });
 
   // ── Lines composer (shape / style / caps / width / colour) ──────
@@ -4158,7 +4267,7 @@
         // silently stop working until the page is reloaded.
         const _rescueLoad = setTimeout(() => { _loadingExercise = false; }, 6000);
         fc.loadFromJSON(_ojLoad, () => {
-          try { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _lastFit = _fitParams(); }
+          try { _rebuildArrowDataFromCanvas(); _normalizeLoadedArrows(); _resignCustomObjects(); fc.renderAll(); _lastFit = _fitParams(); }
           finally { clearTimeout(_rescueLoad); _loadingExercise = false; _dirty = false; }
         });
       } else {
