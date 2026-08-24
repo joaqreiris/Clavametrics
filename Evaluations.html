@@ -532,7 +532,7 @@
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="evaluations.export_report">Export report</span></button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.new_evaluation">New evaluation</span></button>
+          <button class="cm-btn is-primary is-sm" id="evNewEvalBtn"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.new_evaluation">New evaluation</span></button>
         </div>
       </header>
 
@@ -1991,6 +1991,18 @@
     show(document, 'data-branch', v);
     if (v === 'field' && typeof loadFieldView === 'function') loadFieldView();
     if (v === 'prevention' && typeof loadPreventionBoard === 'function') loadPreventionBoard();
+  });
+
+  // header "New evaluation": jump to the entry flow. With a test open → its Upload
+  // pane; otherwise → the Measured catalog (highlighted) so the user picks a test.
+  document.getElementById('evNewEvalBtn').addEventListener('click', function(){
+    var mBtn = seg.querySelector('[data-branch-btn="measured"]');
+    if (mBtn && !mBtn.classList.contains('is-on')) mBtn.click();
+    if (_openTest && detail.classList.contains('is-on')){ setPane('upload'); return; }
+    catalog.scrollIntoView({ behavior:'smooth', block:'start' });
+    catalog.style.transition = 'box-shadow .35s';
+    catalog.style.boxShadow = '0 0 0 2px var(--cm-accent)';
+    setTimeout(function(){ catalog.style.boxShadow = ''; }, 1400);
   });
 
   // currently-open test (null in catalog)
