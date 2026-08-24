@@ -638,7 +638,7 @@ let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpReh
 // A day can hold more than one training session (double session). We load them ALL and let the
 // user switch; _dpPreferredSessionId is the one to open (from ?session= or the switcher).
 // It self-corrects on date change: an id that isn't in the new day falls back to the first.
-let _dpDaySessions = [], _dpPreferredSessionId = null, _dpDayOff = false;
+let _dpDaySessions = [], _dpPreferredSessionId = null, _dpDayOff = false, _dpDayOffIds = new Set();
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
@@ -1313,6 +1313,7 @@ async function loadDay(dateStr) {
   try {
     const ctx = await window.cmResolveDayContext(dateStr, _dpTeamId, _dpClubId);
     _dpDayOff = !!ctx.dayOff;
+    _dpDayOffIds = new Set((ctx.dayOffPlayerIds || []).map(String));
     _dpCalFields = new Set();
     const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
     const mcSelN = document.getElementById('dpMicrocycle');
@@ -1346,6 +1347,12 @@ async function loadDay(dateStr) {
     } else {
       avMap[a.player_id] = a;
     }
+  });
+  // El evento Day off del Calendar MANDA: si el jugador está en su lista de libres, ese día
+  // se muestra como day off aunque su fila de availability haya quedado vieja (p. ej. un
+  // 'injured' guardado antes de que el sync del evento lo pisara).
+  _dpDayOffIds.forEach(pid => {
+    avMap[pid] = { ...(avMap[pid] || { player_id: pid, date: dateStr, club_id: _dpClubId }), status: 'day_off', team_id: _dpTeamId || null };
   });
   _dpAvMap = avMap;
 

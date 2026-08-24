@@ -2512,13 +2512,16 @@ async function gpLoadAthletes(dateStr) {
   // directo tira TypeError sincrónico (mató gpLoadDay entero y el roster nunca se pintaba;
   // cada autosave en ese estado guardaba roster []). Promise.resolve() lo asimila primero.
   const safeQ = q => Promise.resolve(q).catch(() => ({ data: [] }));
-  const [availRes, treatRes] = await Promise.all([
+  const [availRes, treatRes, dayOffRes] = await Promise.all([
     safeQ(window.sb.from('availability')
       .select('player_id,status,team_id')
       .eq('club_id', _gpClubId).eq('date', dateStr)),
     safeQ(window.sb.from('treatments')
       .select('id,player_id,adaptation_notes,treatment_type,modalities,players(first_name,last_name,number,position)')
-      .eq('club_id', _gpClubId).eq('date', dateStr))
+      .eq('club_id', _gpClubId).eq('date', dateStr)),
+    safeQ(window.sb.from('calendar_events')
+      .select('player_ids')
+      .eq('club_id', _gpClubId).eq('type', 'day_off').eq('date', dateStr).eq('team_id', _gpTeamId))
   ]);
 
   // Con otro equipo ese día (fila relativa de otro team) → no disponible acá. Globales (NULL) sí.
@@ -2527,11 +2530,14 @@ async function gpLoadAthletes(dateStr) {
     const other = _GP_TEAM_REL.has(a.status) && a.team_id && _gpTeamId && a.team_id !== _gpTeamId;
     return [a.player_id, other ? 'other_team' : a.status];
   }));
+  // El evento Day off parcial del Calendar manda: sus jugadores quedan como day_off aunque
+  // la fila de availability haya quedado vieja (p. ej. 'injured' previo al sync del evento).
+  (dayOffRes.data || []).forEach(e => (e.player_ids || []).forEach(pid => { availMap[pid] = 'day_off'; }));
   const adaptNotes = Object.fromEntries(
     (treatRes.data || []).filter(t => t.adaptation_notes).map(t => [t.player_id, t.adaptation_notes])
   );
   const adaptedIds = new Set(Object.keys(adaptNotes));
-  const hasAvail   = (availRes.data || []).length > 0;
+  const hasAvail   = Object.keys(availMap).length > 0;   // incluye los day off inyectados del evento
 
   const active = _gpPlayers.filter(p => {
     if (!hasAvail) return true;
