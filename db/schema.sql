@@ -127,13 +127,15 @@ create table if not exists public.availability (
   team_id uuid,
   constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
-  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text, 'day_off'::text])))
+  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text, 'day_off'::text, 'rehab'::text])))
 );
 -- team_id: equipo con el que el jugador está ese día (para estados relativos al equipo:
 -- available/partial/limited/unavailable/absent/day_off). NULL = estado global del jugador
 -- (injured/sick/away) que se muestra en todos sus equipos. Una sola fila por (player_id, date).
 -- day_off: día libre INDIVIDUAL (day off parcial desde Calendar o marcado a mano) — relativo
 -- al equipo; excluye al jugador de Daily Planning / Gym Planner sin bloquear el día del equipo.
+-- rehab: lesionado que ese día hace sesión de rehabilitación (marcado a mano cuando no hay
+-- plan en rehab_plans ni tratamiento del día) — GLOBAL como injured; grupo «Rehab» en Daily Planning.
 alter table public.availability add constraint availability_team_id_fkey
   FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS availability_team_date_idx ON public.availability USING btree (team_id, date);

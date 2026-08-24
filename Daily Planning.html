@@ -725,6 +725,7 @@ function dpRenderSquad(avMap) {
     else if (av?.status === 'other_team'){ cls = 'unavailable'; reason = tt('daily_planning.with_other_team','With another team'); }
     else if (av?.status === 'unavailable'){ cls = 'unavailable'; reason = av.notes || 'out'; }
     else if (av?.status === 'day_off')   { cls = 'dayoff';    reason = av.notes || tt('daily_planning.day_off','Day off'); }
+    else if (av?.status === 'rehab')     { cls = 'rehab';     reason = av.notes || tt('daily_planning.rehab','Rehab'); }
     else if (av?.status === 'injured')   { cls = 'injured';   reason = av.notes || 'inj'; }
     else if (av?.status === 'sick')      { cls = 'sick';      reason = av.notes || 'sick'; }
     else if (av?.status === 'partial' || av?.status === 'limited') {
@@ -762,11 +763,17 @@ function dpRenderSquad(avMap) {
   const trainees = [], outs = [];
   _dpPlayers.forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
 
-  // Lesionados CON plan de rehab activo → grupo propio «Rehab»: ese día trabajan aparte
-  // (sesión de rehab), no están simplemente «Out» tachados.
+  // Grupo «Rehab»: ese día trabajan aparte (sesión de rehab), no están simplemente «Out».
+  // Tres vías, en cascada: plan activo en Rehab Planner, tratamiento del fisio registrado
+  // para el día, o marcado a mano con el estado 'rehab' desde el menú del jugador.
+  const _dpIsRehab = p => {
+    const cls = statusOf(p).cls;
+    if (cls === 'rehab') return true;
+    return cls === 'injured' && (!!_dpRehabMap[p.id] || (window._dpDayTreatIds && window._dpDayTreatIds.has(String(p.id))));
+  };
   const rehabs = [];
   for (let i = outs.length - 1; i >= 0; i--) {
-    if (statusOf(outs[i]).cls === 'injured' && _dpRehabMap[outs[i].id]) rehabs.unshift(outs.splice(i, 1)[0]);
+    if (_dpIsRehab(outs[i])) rehabs.unshift(outs.splice(i, 1)[0]);
   }
 
   // Convocatoria por sesión: con grupo definido, los disponibles que no están en él se
@@ -808,7 +815,8 @@ function dpRenderSquad(avMap) {
     else if (av?.status === 'other_team') unCt++;
     else if (av?.status === 'unavailable') unCt++;
     else if (av?.status === 'day_off')     dayOffCt++;
-    else if (av?.status === 'injured')   { if (_dpRehabMap[p.id]) rehabCt++; else injCt++; }
+    else if (av?.status === 'rehab')       rehabCt++;
+    else if (av?.status === 'injured')   { (_dpRehabMap[p.id] || (window._dpDayTreatIds && window._dpDayTreatIds.has(String(p.id)))) ? rehabCt++ : injCt++; }
     else if (av?.status === 'sick')        sickCt++;
     else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
     else avCt++;
@@ -861,6 +869,7 @@ function _dpStatusCls(p){
   if      (av?.status === 'away')        cls = 'away';
   else if (av?.status === 'unavailable') cls = 'unavailable';
   else if (av?.status === 'day_off')     cls = 'dayoff';
+  else if (av?.status === 'rehab')       cls = 'rehab';
   else if (av?.status === 'injured')     cls = 'injured';
   else if (av?.status === 'sick')        cls = 'sick';
   else if ((av?.status === 'partial' || av?.status === 'limited') && !cls) cls = 'partial';
@@ -1059,10 +1068,10 @@ document.addEventListener('click', e => {
 });
 
 async function dpChangeStatus(playerId, newStatus) {
-  // Estados globales (lesión/enfermedad/selección) → team_id NULL; los relativos al equipo
-  // (available/partial/unavailable/day_off) llevan el team_id de ESTE equipo (misma semántica
-  // que Availability.saveAvailability — antes no se seteaba y quedaban «globales» por error).
-  const _teamId = ['injured','sick','away'].includes(newStatus) ? null : (_dpTeamId || null);
+  // Estados globales (lesión/enfermedad/selección/rehab) → team_id NULL; los relativos al
+  // equipo (available/partial/unavailable/day_off) llevan el team_id de ESTE equipo (misma
+  // semántica que Availability.saveAvailability — antes no se seteaba y quedaban «globales»).
+  const _teamId = ['injured','sick','away','rehab'].includes(newStatus) ? null : (_dpTeamId || null);
   const { error } = await window.sb.from('availability').upsert({
     player_id: playerId,
     date:      _dpCurrentDate,
@@ -1339,6 +1348,10 @@ async function loadDay(dateStr) {
     }
   });
   _dpAvMap = avMap;
+
+  // Tratamientos del día (fisio): un lesionado con tratamiento registrado hoy cuenta como
+  // «en rehab» aunque no tenga plan creado en el Rehab Planner.
+  window._dpDayTreatIds = new Set((adaptResult.data || []).map(t => String(t.player_id)));
 
   // Team scope: show adaptations for THIS team only (legacy rows have no team_id → keep showing).
   const _dpAdaptRows = (adaptResult.data || []).filter(t => t.team_id == null || t.team_id === _dpTeamId);
@@ -3865,6 +3878,7 @@ function dpApplyReadOnly() {
   <div class="dp-status-opt" data-s="available"><span class="dot" style="background:var(--cm-success)"></span><span data-i18n="daily_planning.available">Available</span></div>
   <div class="dp-status-opt" data-s="partial"><span class="dot" style="background:var(--cm-warning)"></span><span data-i18n="daily_planning.partial">Partial</span></div>
   <div class="dp-status-opt" data-s="injured"><span class="dot" style="background:#dc2626"></span><span data-i18n="daily_planning.injured">Injured</span></div>
+  <div class="dp-status-opt" data-s="rehab"><span class="dot" style="background:#f97316"></span><span data-i18n="daily_planning.rehab">Rehab</span></div>
   <div class="dp-status-opt" data-s="sick"><span class="dot" style="background:#a855f7"></span><span data-i18n="daily_planning.sick">Sick</span></div>
   <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="daily_planning.unavailable">Unavailable</span></div>
   <div class="dp-status-opt" data-s="day_off"><span class="dot" style="background:#14b8a6"></span><span data-i18n="daily_planning.day_off">Day off</span></div>

@@ -137,6 +137,7 @@
   .av-bulk-btn.si { background:rgba(167,139,250,0.18); color:#C4B5FD; border-color:rgba(167,139,250,0.30); }
   .av-bulk-btn.na { background:rgba(96,165,250,0.18); color:#93C5FD; border-color:rgba(96,165,250,0.30); }
   .av-bulk-btn.do { background:rgba(20,184,166,0.18); color:#5EEAD4; border-color:rgba(20,184,166,0.30); }
+  .av-bulk-btn.rh { background:rgba(249,115,22,0.18); color:#FDBA74; border-color:rgba(249,115,22,0.30); }
   .av-bulk-btn.ot { background:rgba(99,102,241,0.18); color:#C7D2FE; border-color:rgba(99,102,241,0.32); }
   .av-bulk-btn.match { background:rgba(34,197,94,0.10); color:#86EFAC; border-color:rgba(34,197,94,0.30); }
   .av-bulk-btn.danger { background:rgba(239,68,68,0.18); color:#FCA5A5; border-color:rgba(239,68,68,0.30); margin-left:auto; }
@@ -299,6 +300,7 @@
   .av-cell-dot.un { background:#475569; }
   .av-cell-dot.na { background:var(--cm-info); }
   .av-cell-dot.do { background:#14B8A6; }
+  .av-cell-dot.rh { background:#F97316; }
   /* 'other_team' — jugador con OTRO equipo ese día (derivado, solo lectura). Anillo azul fino
      con relleno tenue para que quede SIEMPRE visible (antes transparente → parecía celda vacía). */
   .av-cell-dot.ot { background:rgba(99,102,241,0.22); box-shadow:inset 0 0 0 2px #6366F1, 0 0 0 2.5px var(--cm-surface); }
@@ -335,6 +337,7 @@
   .av-summary-bar .s.na { background:var(--cm-info); }
   .av-summary-bar .s.ab { background:var(--cm-neutral); }
   .av-summary-bar .s.do { background:#14B8A6; }
+  .av-summary-bar .s.rh { background:#F97316; }
   .av-summary-bar .s.un { background:#475569; }
   .av-summary-bar .s.ot { background:#6366F1; }
   .av-summary-min { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); min-width:30px; text-align:right; }
@@ -427,6 +430,7 @@
       <button class="av-bulk-btn si"><span class="dot" style="background:#C4B5FD"></span><span data-i18n="availability.statusIllness">Illness</span></button>
       <button class="av-bulk-btn na"><span class="dot" style="background:#93C5FD"></span><span data-i18n="availability.statusNatTeam">Nat. team</span></button>
       <button class="av-bulk-btn do"><span class="dot" style="background:#5EEAD4"></span><span data-i18n="availability.statusDayOff">Day off</span></button>
+      <button class="av-bulk-btn rh"><span class="dot" style="background:#FDBA74"></span><span data-i18n="availability.statusRehab">Rehab</span></button>
       <button class="av-bulk-btn ot"><span class="dot" style="background:#A5B4FC"></span><span data-i18n="availability.statusOtherTeam">Other team</span></button>
       <div class="sep"></div>
       <button class="av-bulk-btn match"><i class="ti ti-ball-football" style="font-size:13px"></i><span data-i18n="availability.bulkMatch">Match · 90′</span></button>
@@ -541,6 +545,7 @@
         <span class="it"><span class="d" style="background:var(--cm-violet)"></span><span data-i18n="availability.statusIllness">Illness</span></span>
         <span class="it"><span class="d" style="background:var(--cm-info)"></span><span data-i18n="availability.statusNatTeam">Nat. team</span></span>
         <span class="it"><span class="d" style="background:#14B8A6"></span><span data-i18n="availability.statusDayOff">Day off</span></span>
+        <span class="it"><span class="d" style="background:#F97316"></span><span data-i18n="availability.statusRehab">Rehab</span></span>
         <span class="it"><span class="d" style="background:var(--cm-neutral)"></span><span data-i18n="availability.statusAbsent">Absent</span></span>
         <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
         <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">match minutes</span></span>
@@ -653,13 +658,13 @@
   // Maps full DB status values → abbreviated CSS class keys (visual only)
   // 'unavailable' = the "No disponible" category (not-with-team, no clinical reason) — its own
   // slate colour, distinct from injury red. 'injured' stays red.
-  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'un', away:'na', injured:'in', sick:'si', other_team:'ot', day_off:'do' };
+  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'un', away:'na', injured:'in', sick:'si', other_team:'ot', day_off:'do', rehab:'rh' };
   function statusKey(s) { if (s && s.indexOf('other_team') === 0) return 'ot'; return STATUS_CSS[s] || s; }
   // Estados RELATIVOS al equipo: sólo valen en el equipo con el que el jugador está ese día
   // (availability.team_id). En cualquier otro equipo se muestran como 'other_team' ("entrena con…").
   const TEAM_RELATIVE  = new Set(['available', 'partial', 'limited', 'unavailable', 'absent', 'day_off']);
   // Estados GLOBALES del jugador: valen en TODOS sus equipos (team_id NULL). No se redirigen.
-  const GLOBAL_STATUS  = new Set(['injured', 'sick', 'away']);
+  const GLOBAL_STATUS  = new Set(['injured', 'sick', 'away', 'rehab']);
   // Status to show for a cell with NO stored record. Injury is global (shows in every
   // team); a guest with no record defaults to 'other_team' (with their own squad);
   // everyone else defaults to 'available'. 'other_team' is view-only — never stored.
@@ -773,7 +778,7 @@
   // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
   function summary(statuses, dates) {
     const todayStr = cmToday();
-    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0 };
+    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0, rh:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
@@ -781,7 +786,7 @@
       if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
       else { const k = statusKey(s); counts[k] = (counts[k] || 0) + 1; }
     });
-    const segs = ['av','pa','in','un','si','na','ot','ab','do'].filter(k => counts[k] > 0)
+    const segs = ['av','pa','in','un','si','na','ot','ab','do','rh'].filter(k => counts[k] > 0)
       .map(k => `<span class="s ${k}" style="flex:${counts[k]}"></span>`).join('');
     return `<div class="av-summary"><div class="av-summary-bar">${segs}</div><div class="av-summary-min">${mins}<sub>′</sub></div></div>`;
   }
@@ -789,7 +794,7 @@
   // ── Summary tooltip HTML ──
   function summaryTooltip(statuses, dates) {
     const todayStr = cmToday();
-    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0 };
+    const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0, rh:0 };
     let mins = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
@@ -807,6 +812,7 @@
       [counts.ot, '#6366F1',           'availability.tipOtherTeam', 'with another team'],
       [counts.ab, 'var(--cm-neutral)', 'availability.tipAbsent',    'absent'],
       [counts.do, '#14B8A6',           'availability.tipDayOff',    'day off'],
+      [counts.rh, '#F97316',           'availability.tipRehab',     'in rehab'],
     ].filter(([n]) => n > 0)
      .map(([n, c, key, en]) => `<span style="color:${c}">●</span> ${n} ${tt(key, en)}`);
     if (mins > 0) rows.push(`<i class="ti ti-clock" style="font-size:11px"></i> ${tt('availability.tipMatchMin', mins + ' match min', { count: mins })}`);
@@ -964,7 +970,7 @@
       // "Nombre Apellido" — first name + first surname only
       const name = `${p.first_name || ''} ${(p.last_name || '').split(' ')[0]}`.trim();
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
-      else if (s === 'injured') { inCount++; inPlayers.push(name); }
+      else if (s === 'injured' || s === 'rehab') { inCount++; inPlayers.push(name); }   // rehab = lesionado en tratamiento
       else if (s === 'sick') { siCount++; siPlayers.push(name); }
       else if (s === 'away') { naCount++; naPlayers.push(name); }
     });
@@ -1668,7 +1674,7 @@
   });
 
   // ── Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names ──
-  const BULK_STATUS = { av:'available', pa:'partial', in:'injured', un:'unavailable', si:'sick', na:'away', ot:'other_team', do:'day_off' };
+  const BULK_STATUS = { av:'available', pa:'partial', in:'injured', un:'unavailable', si:'sick', na:'away', ot:'other_team', do:'day_off', rh:'rehab' };
   Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
