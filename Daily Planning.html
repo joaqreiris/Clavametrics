@@ -1079,7 +1079,7 @@ async function dpChangeStatus(playerId, newStatus) {
     club_id:   _dpClubId,
     team_id:   _teamId
   }, { onConflict: 'player_id,date' });
-  if (error) { console.error('availability upsert:', error); return; }
+  if (error) { console.error('availability upsert:', error); dpToast(tt('daily_planning.status_save_error','Could not save the status: {msg}',{msg:error.message})); return; }
   if (!_dpAvMap[playerId]) _dpAvMap[playerId] = { player_id: playerId, date: _dpCurrentDate, club_id: _dpClubId };
   _dpAvMap[playerId].status = newStatus;
   _dpAvMap[playerId].team_id = _teamId;
