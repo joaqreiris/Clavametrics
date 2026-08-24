@@ -122,10 +122,10 @@
         .ilike('name', like)
         .limit(5),
       window.sb.from('exercises')
-        .select('id,name,players_count,field_width,field_height')
+        .select('id,name,players_count,field_width,field_height,visible_teams,origin_team_id')
         .eq('club_id', clubId)
         .ilike('name', like)
-        .limit(5)
+        .limit(15)
     ]);
 
     const players     = pRes.data  || [];
@@ -133,7 +133,9 @@
     const matches     = cRes.data  || [];
     const microcycles = mRes.data  || [];
     const exercises   = eRes.data  || [];
-    const drills      = dRes.data  || [];
+    // Team policy: field drills only surface for the active team (own + shared with it).
+    const _gsTeam     = window.getActiveTeamId ? window.getActiveTeamId() : null;
+    const drills      = (dRes.data || []).filter(ex => window.cmExVisibleForTeam(ex, _gsTeam)).slice(0, 5);
 
     if (![players, sessions, matches, microcycles, exercises, drills].some(a => a.length)) {
       drop.innerHTML = `<div class="hub-search-empty">No results for &ldquo;${esc(q)}&rdquo;</div>`;

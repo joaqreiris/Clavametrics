@@ -2530,7 +2530,7 @@ async function openLibModal(mode) {
   document.getElementById('libFooter').textContent = tt('common.loading','Loading…');
   _libExercises = [];
   let q = window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,folder_id,is_goalkeeper,preview_png,preview_path,source_type,visible_teams,origin_team_id')
     .eq('club_id', _dpClubId).order('name');
   const { data, error } = await q;
   _libFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
@@ -2549,7 +2549,9 @@ async function openLibModal(mode) {
     document.getElementById('libFooter').textContent = '—';
     return;
   }
-  _libExercises = data || [];
+  // Team policy: the picker only lists exercises visible to this page's team
+  // (its own + shared with it; visible_teams NULL/[] = whole club).
+  _libExercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _dpTeamId));
   // Which library exercises have associated GPS data → green tick in the picker.
   // One batch query over the club's exercises; cached for the session.
   if (_dpGpsExSet === null) {

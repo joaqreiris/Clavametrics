@@ -550,6 +550,18 @@
     } catch (e) { return null; }
   };
 
+  // Política de visibilidad de ejercicios del drill designer: un ejercicio se ve para un
+  // equipo solo si es su equipo de origen o está compartido con él (visible_teams).
+  // visible_teams NULL/[] = compartido con todo el club ("todas las categorías", elección
+  // explícita del creador). Sin equipo activo (teamId null) no se oculta nada.
+  window.cmExVisibleForTeam = function (ex, teamId) {
+    if (!teamId || !ex) return true;
+    if (ex.origin_team_id === teamId) return true;
+    const vt = ex.visible_teams;
+    if (!vt || vt.length === 0) return true;
+    return vt.includes(teamId);
+  };
+
   let _planPromise = null;
   // Clave de caché de features por equipo activo (o club si no hay equipo).
   function _pfCacheKey() {

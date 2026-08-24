@@ -538,7 +538,10 @@
     return;
   }
 
-  let allExercises = data || [];
+  // Team policy: only exercises visible to the active team (its own + shared with it).
+  // visible_teams NULL/[] = explicitly shared with the whole club.
+  const _slScopeTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
+  let allExercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _slScopeTeam));
 
   // Which exercises have associated GPS data (v_exercise_gps_profile) → green tick on the card.
   // One batch query; the set is read live inside _cardHtml.

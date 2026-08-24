@@ -3927,7 +3927,10 @@
       return;
     }
 
-    exercises = data || [];
+    // Team policy: the designer only lists exercises visible to the active team
+    // (its own + shared with it; visible_teams NULL/[] = whole club).
+    const _scopeTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
+    exercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _scopeTeam));
     // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback.
     try {
       const paths = exercises.filter(e => e.preview_path).map(e => e.preview_path);
@@ -3948,6 +3951,7 @@
   async function duplicateExercise(id) {
     const src = exercises.find(e => e.id === id);
     if (!src) return;
+    const _dupTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
     const payload = {
       club_id: clubId,
       created_by: profile?.id || null,
@@ -3959,8 +3963,11 @@
       focus: src.focus, game_type_enabled: src.game_type_enabled, game_type: src.game_type,
       objective: src.objective, description: src.description,
       source_type: src.source_type, objects_json: src.objects_json,
-      preview_png: src.preview_png || null, visible_teams: src.visible_teams,
-      origin_team_id: src.origin_team_id || null,   // a copy keeps the source's origin team
+      preview_png: src.preview_png || null,
+      // The copy belongs to the duplicating team (not the source's), so a coach who
+      // duplicates a shared drill gets an editable copy visible in their own library.
+      visible_teams: _dupTeam ? [_dupTeam] : src.visible_teams,
+      origin_team_id: _dupTeam || src.origin_team_id || null,
       video_url: src.video_url || null
     };
     const { data, error } = await window.sb.from('exercises').insert(payload).select().single();
