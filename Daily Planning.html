@@ -3914,9 +3914,14 @@ function dpApplyReadOnly() {
     if (!chip) return;
     _dpStatusTarget = chip.dataset.pid;
     const r = chip.getBoundingClientRect();
-    _dpStatusMenu.style.top  = (r.bottom + window.scrollY + 6) + 'px';
-    _dpStatusMenu.style.left = r.left + 'px';
+    // El menú es position:fixed → coordenadas de viewport, SIN scrollY (sumarlo lo mandaba
+    // fuera de pantalla con la página scrolleada y parecía que el click no hacía nada).
+    // Se abre primero (display) para poder medirlo y voltearlo hacia arriba si no entra.
     _dpStatusMenu.classList.add('is-open');
+    const mw = _dpStatusMenu.offsetWidth, mh = _dpStatusMenu.offsetHeight;
+    const top = (r.bottom + 6 + mh > window.innerHeight) ? Math.max(8, r.top - mh - 6) : r.bottom + 6;
+    _dpStatusMenu.style.top  = top + 'px';
+    _dpStatusMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8)) + 'px';
     e.stopPropagation();
   });
 
