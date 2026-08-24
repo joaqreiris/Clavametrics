@@ -35,6 +35,8 @@
   // (default 'id') so ranges are CONSISTENT across pages (PostgREST needs an explicit
   // order with range, else pages can overlap/skip). Returns the full array (throws on the
   // first-page error; later-page errors stop paging and return what was gathered).
+  // opts.concurrency (default 1 = sequential): >1 fetches pages after the first in parallel
+  // batches — use on reads known to span many pages so wall time ≈ 2 round trips.
   // ── Instrumentation (perf audit) — cheap counters to measure round-trips ────────
   // Read with window.cmFetchStatsDump() in the console; reset with .reset(). One entry
   // per label: { calls, pages (round-trips), rows, ms }. Use to compare before/after a
@@ -64,25 +66,38 @@
     const maxPages = (opts && opts.maxPages) || 50;          // 50k-row safety ceiling
     const label    = (opts && opts.label)    || 'cmFetchAll';
     const orderBy  = (opts && 'orderBy' in opts) ? opts.orderBy : 'id';
+    // concurrency>1 (opt-in) fetches pages in parallel BATCHES after page 0: multi-page reads cost
+    // ~2 round trips instead of N sequential ones. Page 0 always goes alone so small results (the
+    // common case) never pay for speculative extra requests.
+    const conc     = Math.max(1, (opts && opts.concurrency) || 1);
     const _s = (_stats[label] = _stats[label] || { calls: 0, pages: 0, rows: 0, ms: 0 });
     const _t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
     _s.calls++;
-    const all = [];
-    for (let page = 0; page < maxPages; page++) {
+    const fetchPage = (page) => {
       _s.pages++;
       const from = page * pageSize, to = from + pageSize - 1;
       let qb = queryFactory();
       if (orderBy) qb = qb.order(orderBy, { ascending: true });
-      const { data, error } = await qb.range(from, to);
-      if (error) {
-        if (page === 0) throw error;                         // surface like a normal query
-        console.error(`[cmFetchAll:${label}] page ${page} error — returning ${all.length} rows so far:`, error);
-        break;
+      return qb.range(from, to);
+    };
+    const all = [];
+    let page = 0, done = false;
+    while (!done && page < maxPages) {
+      const n = (page === 0) ? 1 : Math.min(conc, maxPages - page);
+      const results = await Promise.all(Array.from({ length: n }, (_, i) => fetchPage(page + i)));
+      for (let i = 0; i < results.length; i++) {
+        const { data, error } = results[i];
+        if (error) {
+          if (page + i === 0) throw error;                   // surface like a normal query
+          console.error(`[cmFetchAll:${label}] page ${page + i} error — returning ${all.length} rows so far:`, error);
+          done = true; break;
+        }
+        if (!data || !data.length) { done = true; break; }
+        all.push(...data);
+        if (data.length < pageSize) { done = true; break; }  // short page → last page
       }
-      if (!data || !data.length) break;
-      all.push(...data);
-      if (data.length < pageSize) break;                     // short page → last page
-      if (page === maxPages - 1) {
+      page += n;
+      if (!done && page >= maxPages) {
         console.warn(`[cmFetchAll:${label}] hit maxPages=${maxPages} (${all.length} rows) — result may be truncated`);
       }
     }

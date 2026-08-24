@@ -7641,7 +7641,10 @@ async function openManualGpsModal() {
     // a raw query silently truncates, so recent sessions counted as "no data" and vanished from
     // the 'With data' view even though their GPS was imported fine.
     window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id')
-      .eq('club_id', clubId).eq('is_invalid', false), { label: 'manual-gps.reports' }).catch(() => []),
+      .eq('club_id', clubId).eq('is_invalid', false),
+      // concurrency: clubs hold thousands of report rows (MKD ≈ 4k → 5 pages); parallel pages keep
+      // the modal open in ~2 round trips instead of one slow sequential crawl.
+      { label: 'manual-gps.reports', concurrency: 6 }).catch(() => []),
     // Ids of players whose PRIMARY membership is this team (same is_primary filter Top-Up /
     // Evaluations use). Everyone else in the roster is an alternate training up from another team.
     teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
