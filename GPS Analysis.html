@@ -642,6 +642,8 @@
   .mgp-search input:focus { border-color:var(--cm-accent,#15803D); }
   .mgp-search i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--cm-fg-muted); font-size:15px; pointer-events:none; }
   .mgp-list { max-height:236px; overflow-y:auto; border:1px solid var(--cm-border); border-radius:8px; background:var(--cm-bg-soft); padding:4px; display:flex; flex-direction:column; gap:1px; }
+  /* display:flex above beats the UA's [hidden]{display:none} — without this the session list can never close. */
+  .mgp-list[hidden] { display:none; }
   .mgp-opt { display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:7px 8px; border:0; background:transparent; border-radius:6px; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
   .mgp-opt:hover { background:var(--cm-surface); }
   .mgp-opt.is-sel { background:var(--cm-accent-soft,rgba(21,128,61,.1)); }
@@ -7635,7 +7637,11 @@ async function openManualGpsModal() {
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
   const [sessRes, rosterRes, dataRes, primRes, _seasons] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
-    window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false),
+    // cmFetchAll: this read easily exceeds PostgREST's 1000-row cap (squad × season of sessions);
+    // a raw query silently truncates, so recent sessions counted as "no data" and vanished from
+    // the 'With data' view even though their GPS was imported fine.
+    window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id')
+      .eq('club_id', clubId).eq('is_invalid', false), { label: 'manual-gps.reports' }).catch(() => []),
     // Ids of players whose PRIMARY membership is this team (same is_primary filter Top-Up /
     // Evaluations use). Everyone else in the roster is an alternate training up from another team.
     teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
@@ -7653,7 +7659,7 @@ async function openManualGpsModal() {
   // How many players already have data per session → shown as a badge so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
   const _dataCount = {};
-  (dataRes.data || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
+  (dataRes || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
   // Current season = the one whose range contains today; if today is off-season, fall back to the
   // most recent (seasons come newest-first). Used to hide LAST season's sessions from the picker.
   const _today = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0,10));
