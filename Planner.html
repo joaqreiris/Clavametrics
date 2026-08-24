@@ -4101,7 +4101,8 @@
     if (error || !data) { alert(tt('planner.duplicate_failed', 'Could not duplicate the exercise')); return; }
     if (src.preview_path) {   // give the copy its own preview file (best-effort)
       try {
-        const destPath = `${clubId}/${data.id}.png`;
+        const _ext = src.preview_path.split('.').pop() || 'png';   // keep the source's format
+        const destPath = `${clubId}/${data.id}.${_ext}`;
         const { error: cpErr } = await window.sb.storage.from('drill-previews').copy(src.preview_path, destPath);
         if (!cpErr) await window.sb.from('exercises').update({ preview_path: destPath }).eq('id', data.id);
       } catch(_) {}
@@ -4405,6 +4406,44 @@
     }
   }
 
+  // ── Preview compression ─────────────────────────────────────────
+  // WebP where the browser can encode it (Chrome/Edge/Firefox/Safari 17+), JPEG q0.85
+  // otherwise — both are ~8-10× smaller than the PNGs we used to ship (avg 179 kB/file).
+  // The canvas preview is opaque (grass background) so dropping alpha costs nothing.
+  async function _encodePreviewBlob(canvasEl) {
+    const enc = (type, q) => new Promise(res => { try { canvasEl.toBlob(res, type, q); } catch(_) { res(null); } });
+    let b = await enc('image/webp', 0.85);
+    if (b && b.type === 'image/webp') return { blob: b, ext: 'webp' };
+    b = await enc('image/jpeg', 0.85);
+    if (b && b.type === 'image/jpeg') return { blob: b, ext: 'jpg' };
+    b = await enc('image/png');
+    return b ? { blob: b, ext: 'png' } : null;
+  }
+  // Uploaded image drills: downscale to ≤1600px and re-encode. Phone screenshots arrive
+  // at several MB and nothing in the app renders them above ~1000px. If re-encoding
+  // doesn't actually shrink the file (tiny PNGs), the original is kept as-is.
+  async function _compressImgFile(file) {
+    const asIs = { blob: file, ext: file.type === 'image/png' ? 'png' : 'jpg' };
+    try {
+      const bmp = await createImageBitmap(file);
+      const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+      const cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);   // JPEG has no alpha
+      cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+      if (bmp.close) bmp.close();
+      const out = await _encodePreviewBlob(cv);
+      return (out && out.blob.size < file.size) ? out : asIs;
+    } catch(_) { return asIs; }
+  }
+  // A preview re-encode can change the file extension (old .png → .webp): once the row
+  // points at the new path, drop the stale file so the bucket doesn't accumulate both.
+  async function _dropOldPreview(oldPath, newPath) {
+    if (!oldPath || oldPath === newPath) return;
+    try { await window.sb.storage.from('drill-previews').remove([oldPath]); } catch(_) {}
+  }
+
   // Validate a picked file and route it to create-new vs replace-current.
   async function _handleImgFile(file) {
     if (!file) return;
@@ -4413,10 +4452,13 @@
 
     if (_imgPickMode === 'replace') {
       if (!currentExerciseId) return;
-      const path = `${clubId}/${currentExerciseId}.png`;
-      const up = await window.sb.storage.from('drill-previews').upload(path, file, { upsert: true, contentType: file.type });
+      const cf = await _compressImgFile(file);
+      const path = `${clubId}/${currentExerciseId}.${cf.ext}`;
+      const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type });
       if (up.error) { alert(tt('planner.upload_failed', `Upload failed: ${up.error.message}`, {msg: up.error.message})); return; }
+      const _oldPath = exercises.find(e => e.id === currentExerciseId)?.preview_path;
       await window.sb.from('exercises').update({ preview_path: path, preview_png: null, source_type: 'image' }).eq('id', currentExerciseId);
+      await _dropOldPreview(_oldPath, path);
       const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(path, 3600);
       const fresh = data?.signedUrl ? data.signedUrl + '#b=' + (++_imgCacheBust) : '';
       plSetImageMode(true, fresh);
@@ -4435,8 +4477,9 @@
       origin_team_id: _activeTeam || null   // stamp the originating team (immutable)
     }).select('id').single();
     if (error || !row) { alert(tt('planner.error_creating_exercise', `Error creating exercise: ${error?.message || 'unknown'}`, {msg: error?.message || 'unknown'})); return; }
-    const path = `${clubId}/${row.id}.png`;
-    const up = await window.sb.storage.from('drill-previews').upload(path, file, { upsert: true, contentType: file.type });
+    const cf = await _compressImgFile(file);
+    const path = `${clubId}/${row.id}.${cf.ext}`;
+    const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type });
     if (up.error) { alert(tt('planner.upload_failed', `Upload failed: ${up.error.message}`, {msg: up.error.message})); }
     else { await window.sb.from('exercises').update({ preview_path: path, preview_png: null }).eq('id', row.id); }
     await loadExercises();
@@ -4493,7 +4536,7 @@
     // preview_svg retired: nothing renders it (the PNG in the drill-previews bucket is
     // the real thumbnail). Serializing the whole pitch+objects SVG into the row made the
     // POST body huge and dropped it on iPad Safari ("TypeError: Load failed").
-    let _previewBlob = null;
+    let _previewOut = null;   // { blob, ext } — WebP/JPEG per _encodePreviewBlob
     try {
       fc.discardActiveObject(); fc.renderAll();              // no selection handles
       // Cap export size: thumbnails render ~150px and the lightbox never exceeds
@@ -4536,8 +4579,8 @@
       const objCanvas = fc.toCanvasElement(1);
       ctx.drawImage(objCanvas, 0, 0, W, H);
 
-      _previewBlob = await new Promise((res) => { try { out.toBlob(res, 'image/png'); } catch(_) { res(null); } });
-    } catch(_) { _previewBlob = null; }
+      _previewOut = await _encodePreviewBlob(out);
+    } catch(_) { _previewOut = null; }
     const payload = {
       name:              document.getElementById('plExName')?.value?.trim() || tt('planner.untitled','Untitled'),
       players_count:     players,
@@ -4593,13 +4636,15 @@
 
     btn.disabled = false;
     if (!error) {
-      if (currentExerciseId && _previewBlob && _curSourceType !== 'image') {
+      if (currentExerciseId && _previewOut && _curSourceType !== 'image') {
         try {
-          const _pPath = `${clubId}/${currentExerciseId}.png`;
+          const _pPath = `${clubId}/${currentExerciseId}.${_previewOut.ext}`;
           const _up = await window.sb.storage.from('drill-previews')
-            .upload(_pPath, _previewBlob, { upsert: true, contentType: 'image/png' });
+            .upload(_pPath, _previewOut.blob, { upsert: true, contentType: _previewOut.blob.type });
           if (!_up.error) {
+            const _oldPath = exercises.find(e => e.id === currentExerciseId)?.preview_path;
             await window.sb.from('exercises').update({ preview_path: _pPath, preview_png: null }).eq('id', currentExerciseId);
+            await _dropOldPreview(_oldPath, _pPath);   // re-save migrates old .png files to .webp
           } else {
             console.error('preview upload failed:', _up.error);
           }
