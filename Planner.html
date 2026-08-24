@@ -4797,6 +4797,9 @@
 
 })().catch(console.error);
 
+  // escH local de ESTE scope: la const del IIFE de arriba no llega acá (esc/escH nunca
+  // es global). Sin esto, plRenderVisTeams tira ReferenceError y mata selectExercise.
+  const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   let _plTeams = [], _plVisibleTeams = [], _plFolders = [];
   // Exercise sharing hierarchy: the designated first team + the club's open-sharing override,
   // and the origin team of the exercise currently open in the editor.
