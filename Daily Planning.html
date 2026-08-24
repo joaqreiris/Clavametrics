@@ -2262,7 +2262,8 @@ async function dpRenderPrintSheet() {
     // Resolve signed-URL previews (base64 fallback) for field + activation before building the sheet.
     const _allIds = [
       ...(_dpFieldExercises||[]).map(e=>e.planner_exercise_id),
-      ...((window._dpActItems)||[]).map(e=>e.planner_exercise_id)
+      ...((window._dpActItems)||[]).map(e=>e.planner_exercise_id),
+      ...((window._dpGkItems)||[]).map(e=>e.planner_exercise_id)
     ].filter(Boolean);
     try { await dpResolvePreviews(_allIds); } catch(_) {}
     try { await dpResolveGymImgs([...(_dpFieldExercises||[]), ...((window._dpActItems)||[])], null, null); } catch(_) {}
@@ -2372,13 +2373,16 @@ async function dpRenderPrintSheet() {
       <div style="display:grid;grid-template-columns:repeat(${Math.min(_gpsCells.length,6)},1fr);gap:8px">${_gpsCells.join('')}</div>
     </div>` : '';
 
-    // 4) Squad — recompute status like dpRenderSquad
+    // 4) Squad — recompute status like dpRenderSquad (same status chain: other_team/day_off/rehab included)
     const avMap = window._dpAvMap || {};
     const statusOf = p => {
       const av=avMap[p.id], inj=_dpInjMap[p.id]; let cls='', reason='';
       if (inj){ cls='partial'; reason=inj.body_area||inj.injury_type||'inj'; }
       if (av?.status==='away'){ cls='away'; reason=av.notes||'away'; }
+      else if (av?.status==='other_team'){ cls='unavailable'; reason=tt('daily_planning.with_other_team','With another team'); }
       else if (av?.status==='unavailable'){ cls='unavailable'; reason=av.notes||'out'; }
+      else if (av?.status==='day_off'){ cls='dayoff'; reason=av.notes||tt('daily_planning.day_off','Day off'); }
+      else if (av?.status==='rehab'){ cls='rehab'; reason=av.notes||tt('daily_planning.rehab','Rehab'); }
       else if (av?.status==='injured'){ cls='injured'; reason=av.notes||'inj'; }
       else if (av?.status==='sick'){ cls='sick'; reason=av.notes||'sick'; }
       else if (av?.status==='partial'||av?.status==='limited'){ if(!cls){ cls='partial'; reason=av.notes||reason||'partial'; } }
@@ -2387,6 +2391,14 @@ async function dpRenderPrintSheet() {
     const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
     const trainees=[], outs=[];
     (_dpPlayers||[]).forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
+    // Grupo «Rehab» aparte, igual que en pantalla: estado manual 'rehab', o injured con plan activo / tratamiento del día.
+    const _isRehabP = p => {
+      const cls = statusOf(p).cls;
+      if (cls === 'rehab') return true;
+      return cls === 'injured' && (!!_dpRehabMap[p.id] || (window._dpDayTreatIds && window._dpDayTreatIds.has(String(p.id))));
+    };
+    const rehabs = [];
+    for (let i = outs.length - 1; i >= 0; i--) { if (_isRehabP(outs[i])) rehabs.unshift(outs.splice(i, 1)[0]); }
     // Convocatoria por sesión (igual que dpRenderSquad): con grupo definido, los
     // disponibles fuera del grupo se imprimen aparte como "Other session".
     const _pParts = window._dpSessParts;
@@ -2409,14 +2421,21 @@ async function dpRenderPrintSheet() {
       <span style="font:700 9px ${MONO};color:#8A93A0;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.other_session_count', `Other session · ${otherSess.length}`, {count: otherSess.length}))}</span>
       <span style="font:400 11.5px ${FONT};color:#8A93A0">${otherSess.map(p=>`<span style="margin-right:10px"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}</span>`).join('')}</span>
     </div>` : '';
+    const rehabRow = rehabs.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
+      <span style="font:700 9px ${MONO};color:#EA7A28;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.rehab_count', `Rehab · ${rehabs.length}`, {count: rehabs.length}))}</span>
+      <span style="font:400 11.5px ${FONT};color:#8A93A0">${rehabs.map(p=>{const inj=_dpInjMap[p.id]; const r=inj?.body_area||inj?.injury_type||''; return `<span style="margin-right:10px"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}${r?` · ${esc(r)}`:''}</span>`;}).join('')}</span>
+    </div>` : '';
     const outRow = outs.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
       <span style="font:700 9px ${MONO};color:#C0392B;margin-right:8px;text-transform:uppercase">${esc(tt('daily_planning.sheet_out', `Out · ${outs.length}`, {count: outs.length}))}</span>
       <span style="font:400 11.5px ${FONT};color:#8A93A0">${outs.map(p=>{const r=statusOf(p).reason; return `<span style="margin-right:10px;text-decoration:line-through;text-decoration-color:#C9CDD3"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}${r?` · ${esc(r)}`:''}</span>`;}).join('')}</span>
     </div>` : '';
-    let avCt=0,partCt=0,awayCt=0;
+    let avCt=0,partCt=0,awayCt=0,dayOffCt=0,rehabCt=0;
     (_dpPlayers||[]).forEach(p => { const av=avMap[p.id], inj=_dpInjMap[p.id];
       if (av?.status==='away') awayCt++;
-      else if (['unavailable','injured','sick'].includes(av?.status)) { /* out */ }
+      else if (av?.status==='day_off') dayOffCt++;
+      else if (av?.status==='rehab') rehabCt++;
+      else if (av?.status==='injured') { if (_dpRehabMap[p.id] || (window._dpDayTreatIds && window._dpDayTreatIds.has(String(p.id)))) rehabCt++; }
+      else if (['other_team','unavailable','sick'].includes(av?.status)) { /* out */ }
       else if (inj || av?.status==='partial' || av?.status==='limited') partCt++;
       else avCt++;
     });
@@ -2425,10 +2444,13 @@ async function dpRenderPrintSheet() {
     const physioLines = (_dpPhysioRows || []).length ? `<div style="margin-top:7px;padding-top:6px;border-top:1px solid #E7E7E4;display:flex;flex-direction:column;gap:3px">
       ${(_dpPhysioRows||[]).map(t => { const pl=t.players||{}; const nm=lastName(pl)||(pl.last_name||pl.first_name||'—'); const note=(t.adaptation_notes||'').trim(); return `<div style="font:400 10px/1.4 ${FONT};color:#5B6470"><span style="font-size:7px;color:#b5851f;vertical-align:middle">●</span> <span style="font-family:${MONO};font-size:9px;color:#9CA3AF">${esc(pl.number??'—')}</span> <b style="font-weight:600;color:#7C2D12">${esc(nm)}</b> <span style="color:#C9CDD3">—</span> ${esc(note)}</div>`; }).join('')}
     </div>` : '';
+    const summaryParts = [tt('daily_planning.sheet_squad_summary', `${availN} available · ${partCt} partial · ${awayCt} away`, {avail: availN, partial: partCt, away: awayCt})];
+    if (dayOffCt) summaryParts.push(tt('daily_planning.n_day_off', `${dayOffCt} day off`, {count: dayOffCt}));
+    if (rehabCt)  summaryParts.push(tt('daily_planning.n_rehab', `${rehabCt} in rehab`, {count: rehabCt}));
     const squadBlock = (_dpPlayers||[]).length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_squad_available', `Squad · ${availN} available`, {count: availN}))}
-      ${traineeRows}${otherRow}${outRow}
-      <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${esc(tt('daily_planning.sheet_squad_summary', `${availN} available · ${partCt} partial · ${awayCt} away`, {avail: availN, partial: partCt, away: awayCt}))}</div>
+      ${traineeRows}${otherRow}${rehabRow}${outRow}
+      <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${esc(summaryParts.join(' · '))}</div>
       ${physioLines}
     </div>` : '';
 
@@ -2450,7 +2472,11 @@ async function dpRenderPrintSheet() {
         : repsMode
         ? `${e.series} × ${e.reps} ${tt('daily_planning.reps_short','reps')}`
         : '';
-      const note = (e.notes || '').trim() || (e.gym_exercises?.description || '').trim();
+      // Same info the on-screen card shows: Drill Designer objective + description, plus per-session notes (all, not one-or-the-other).
+      const dn  = _dpDescCache[e.planner_exercise_id] || null;
+      const obj = (dn?.objective || '').trim();
+      const dsc = (dn?.description || e.gym_exercises?.description || '').trim();
+      const note = (e.notes || '').trim();
       const grps = _dpExGroups(e).filter(g => (g.players||[]).length);
       const playersLine = grps.length
         ? `<div style="margin-top:5px;display:flex;flex-direction:column;gap:3px">${grps.map(g => {
@@ -2475,7 +2501,9 @@ async function dpRenderPrintSheet() {
           <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
           ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
           ${workLine ? `<div style="font:500 10.5px ${MONO};color:#15803D;margin-top:4px">${esc(workLine)}</div>` : ''}
-          ${note ? `<div style="font:400 10.5px ${FONT};color:#5B6470;margin-top:4px">${esc(note)}</div>` : ''}
+          ${obj ? `<div style="font:400 10.5px/1.4 ${FONT};color:#5B6470;margin-top:4px"><b style="font-weight:600;color:#3C4149">${esc(tt('daily_planning.objective_label','Objective'))}:</b> ${esc(obj)}</div>` : ''}
+          ${dsc ? `<div style="font:400 10.5px/1.4 ${FONT};color:#5B6470;margin-top:${obj?'2px':'4px'}">${esc(dsc)}</div>` : ''}
+          ${note ? `<div style="font:400 10.5px/1.4 ${FONT};color:#7C5A12;margin-top:4px;padding:4px 7px;background:#FBF6E9;border-radius:6px">${esc(note)}</div>` : ''}
           ${playersLine}
         </div>
       </div>`;
@@ -2489,7 +2517,8 @@ async function dpRenderPrintSheet() {
       const lbl = dpCatLabel(cat);
       const reps = (e.series && e.work_time) ? `${e.series} × ${esc(e.work_time)}`
                  : (e.series != null && e.reps != null && e.reps !== '') ? `${e.series} × ${e.reps} ${tt('daily_planning.reps_short','reps')}` : '';
-      const desc = (gx?.description || e.notes || '').trim();
+      const desc = (gx?.description || '').trim();
+      const noteS = (e.notes || '').trim();
       const src  = _img(e);
       const thumb = src
         ? `<img src="${esc(src)}" crossorigin="anonymous" style="width:100%;height:auto;display:block">`
@@ -2502,6 +2531,7 @@ async function dpRenderPrintSheet() {
           <div style="font:600 11px/1.25 ${FONT};color:#15181D">${esc(nm)}</div>
           ${reps?`<div style="font:600 10px ${MONO};color:#15803D;margin-top:3px">${esc(reps)}</div>`:''}
           ${desc?`<div style="font:400 9.5px/1.35 ${FONT};color:#5B6470;margin-top:3px">${esc(desc)}</div>`:''}
+          ${noteS?`<div style="font:400 9.5px/1.35 ${FONT};color:#7C5A12;margin-top:3px;padding:3px 6px;background:#FBF6E9;border-radius:5px">${esc(noteS)}</div>`:''}
         </div>
       </div>`;
     };
