@@ -98,9 +98,9 @@
       evs.push({ cls, kind: 'cal', info: true, icon: calIcon(c.type), title: c.title || calLabel(c.type), time: fmtTime(c.start_time), endTime: fmtTime(c.end_time), etype: c.type, loc: c.location || '', notes: c.notes || '', dur: c.duration_minutes || null, cid: c.id });
     });
     cM.forEach(m => evs.push({ cls: 'match', kind: 'match', info: true, icon: 'ti-ball-football', title: m.opponent ? ('vs ' + m.opponent) : (m.title || tt('club_overview.leg_match', 'Match')), time: fmtTime(m.start_time), meta: m.home_away || '', loc: m.location || '', mid: m.id }));
-    // Orden: entrenamientos → logística → partido al final.
+    // Orden: cronológico por hora (sin hora → al final); a igual hora: sesión → logística → partido.
     const rank = e => e.kind === 'match' ? 2 : e.kind === 'cal' ? 1 : 0;
-    evs.sort((a, b) => rank(a) - rank(b));
+    evs.sort((a, b) => { const ta = a.time || '99:99', tb = b.time || '99:99'; return ta < tb ? -1 : ta > tb ? 1 : rank(a) - rank(b); });
     return evs;
   }
   function rosterCount(teamId) { const s = new Set(); (state.data.pteams || []).forEach(p => { if (p.team_id === teamId) s.add(String(p.player_id)); }); return s.size; }
