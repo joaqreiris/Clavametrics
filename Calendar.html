@@ -2037,8 +2037,10 @@ async function calGetSquad() {
 }
 
 // Sincroniza availability con el day off parcial: los destildados/borrados vuelven a quedar
-// sin registro; los tildados se guardan con status='day_off' (relativo al equipo). No pisa
-// estados globales (lesión/enfermedad/selección): esos jugadores ya están fuera igual.
+// sin registro; los tildados se guardan con status='day_off' (relativo al equipo). El tilde
+// es intención explícita del staff: pisa cualquier estado previo del día, incluso los globales
+// (lesión/enfermedad/selección) — un lesionado con day off se muestra como day off. La lesión
+// en sí no se pierde (vive en injuries): al quitar el day off vuelve a verse como lesionado.
 async function calSyncDayOffAvail(prev, next) {
   try {
     const clubId = _clubId || await window.getClubId();
@@ -2051,14 +2053,11 @@ async function calSyncDayOffAvail(prev, next) {
       }
     }
     if (next && next.ids && next.ids.length) {
-      const { data: existing } = await window.sb.from('availability')
-        .select('player_id,status').eq('date', next.date).in('player_id', next.ids);
-      const skip = new Set((existing || []).filter(r => ['injured','sick','away'].includes(r.status)).map(r => String(r.player_id)));
-      const rows = next.ids.filter(id => !skip.has(String(id))).map(pid => ({
+      const rows = next.ids.map(pid => ({
         player_id: pid, date: next.date, status: 'day_off', minutes: 0,
         club_id: clubId, team_id: _activeTeamId, notes: null
       }));
-      if (rows.length) await window.sb.from('availability').upsert(rows, { onConflict: 'player_id,date' });
+      await window.sb.from('availability').upsert(rows, { onConflict: 'player_id,date' });
     }
   } catch (e) { console.warn('day-off availability sync:', e); }
 }
