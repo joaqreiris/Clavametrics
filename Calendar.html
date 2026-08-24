@@ -6503,7 +6503,9 @@ async function dsDefaultDate(){
 function dsReadableOn(hex){ const h=hex.replace('#',''); const f=i=>parseInt(h.slice(i,i+2),16)/255; const lin=c=>c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4); const L=.2126*lin(f(0))+.7152*lin(f(2))+.0722*lin(f(4)); return L>.55?'#14171C':'#ffffff'; }
 function dsInitials(name){ const w=(name||'').trim().split(/\s+/); return (((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||(name||'?').slice(0,2)).toUpperCase(); }
 function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const m=c.map(v=>Math.round(v*amt+255*(1-amt))); return '#'+m.map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',breakfast:'meal',lunch:'meal',dinner:'meal'})[st] || 'custom'; }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
+// Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
+const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun' };
 function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
 
 async function dsInlineImg(url){
@@ -6536,7 +6538,22 @@ async function dsPrefillFromEvents(){
     };
   } else _dsState.match = null;
   const timed = evs.filter(e => e.start_time && e.session_type !== 'match').sort((a,b) => (a.start_time||'').localeCompare(b.start_time||''));
-  _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), label:dsEvLabel(e), sub:e.notes || e.location || '' }));
+  _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), icon:DS_EVT_ICONS[e.session_type]||'', label:dsEvLabel(e), sub:e.notes || e.location || '' }));
+  // Day off (total o parcial) → fila al inicio del cronograma; el parcial lista los jugadores libres
+  const offs = data.filter(e => e.session_type === 'day_off');
+  if (offs.length){
+    let sq = [];
+    if (offs.some(o => Array.isArray(o.player_ids) && o.player_ids.length)){ try { sq = await calGetSquad(); } catch(_){} }
+    offs.forEach(o => {
+      const partial = Array.isArray(o.player_ids) && o.player_ids.length;
+      const names = partial ? o.player_ids
+        .map(id => sq.find(p => String(p.id) === String(id))).filter(Boolean)
+        .map(p => `${p.first_name||''} ${p.last_name||''}`.trim()).filter(Boolean) : [];
+      _dsState.tl.unshift({ t:_fmtTime(o.start_time) || '', type:'custom', icon:'sun',
+        label: o.title || calMetaLabel('day_off'),
+        sub: [names.join(', '), o.notes || ''].filter(Boolean).join(' — ') });
+    });
+  }
   // Drop any stale event-derived info from a previous open, then re-append this day's
   // untimed events (e.g. a pre-departure smoothie) as editable, non-persisted items.
   _dsState.info = (_dsState.info || []).filter(i => !i._ev);
