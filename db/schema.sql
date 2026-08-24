@@ -1864,8 +1864,10 @@ create table if not exists public.plans (
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
-  provider_price_monthly_id text,
+  provider_price_monthly_id text,        -- price id de SANDBOX (activo cuando paddle_env='sandbox')
   provider_price_yearly_id text,
+  provider_price_monthly_id_live text,   -- price id de PRODUCCIÓN (activo cuando paddle_env='production')
+  provider_price_yearly_id_live text,
   constraint plans_pkey primary key (id),
   constraint plans_slug_key UNIQUE (slug)
 );
@@ -1876,6 +1878,43 @@ create table if not exists public.platform_admins (
   created_at timestamp with time zone default now() not null,
   constraint platform_admins_pkey primary key (user_id)
 );
+
+-- Settings globales de plataforma (key/value). El super admin escribe; todos leen
+-- (el entorno de Paddle no es secreto). Guarda paddle_env = 'sandbox' | 'production'.
+create table if not exists public.platform_settings (
+  key text not null,
+  value text,
+  updated_at timestamp with time zone not null default now(),
+  constraint platform_settings_pkey primary key (key)
+);
+alter table public.platform_settings enable row level security;
+create policy "platform_settings_read" on public.platform_settings for select to public using (true);
+create policy "platform_settings_super_write" on public.platform_settings for all to public
+  using (public.is_super_admin()) with check (public.is_super_admin());
+insert into public.platform_settings(key, value) values ('paddle_env','sandbox')
+  on conflict (key) do nothing;
+
+-- Entorno de Paddle activo (default sandbox). Lo leen el cliente y las Edge Functions.
+CREATE OR REPLACE FUNCTION public.paddle_env()
+ RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+  SELECT coalesce((SELECT value FROM public.platform_settings WHERE key='paddle_env'), 'sandbox');
+$function$;
+GRANT EXECUTE ON FUNCTION public.paddle_env() TO authenticated, anon;
+
+-- Flip del entorno (solo super admin). Devuelve el entorno resultante.
+CREATE OR REPLACE FUNCTION public.set_paddle_env(p_env text)
+ RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NOT public.is_super_admin() THEN RAISE EXCEPTION 'not authorized'; END IF;
+  IF p_env NOT IN ('sandbox','production') THEN RAISE EXCEPTION 'invalid env'; END IF;
+  INSERT INTO public.platform_settings(key, value, updated_at) VALUES ('paddle_env', p_env, now())
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now();
+  RETURN p_env;
+END;
+$function$;
+GRANT EXECUTE ON FUNCTION public.set_paddle_env(text) TO authenticated;
 
 create table if not exists public.player_anthropometrics (
   id uuid default gen_random_uuid() not null,

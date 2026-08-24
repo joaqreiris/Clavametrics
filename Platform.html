@@ -62,6 +62,17 @@
       <button class="pf-tab" data-tab="calculator" data-i18n="platform.tab_calculator">Budget calculator</button>
     </div>
     <section class="pf-panel is-active" id="pfPlans">
+      <!-- Entorno de Paddle (sandbox / producción) — flip global -->
+      <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;margin-bottom:22px;background:var(--cm-bg)">
+        <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.pdl_env_title">Paddle environment</h3>
+        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.pdl_env_desc">Switch billing between test (sandbox) and real charges (production). Affects all clubs.</p>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-size:13px;color:var(--cm-fg-muted)" data-i18n="platform.pdl_env_current">Current:</span>
+          <span id="pfEnvBadge" class="pf-badge" style="font-size:12px">—</span>
+          <button id="pfEnvToggle" class="pf-mini" style="display:none"></button>
+          <span id="pfEnvMsg" style="font-size:12px;min-height:16px"></span>
+        </div>
+      </div>
       <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;margin-bottom:22px;background:var(--cm-bg)">
         <h3 style="margin:0 0 4px;font-size:15px" data-i18n="platform.grant_title">Grant complimentary plan</h3>
         <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px" data-i18n="platform.grant_desc">Give a club a plan without payment — for testing, partners or trials.</p>
@@ -317,8 +328,34 @@
       try{ const { error }=await sb.rpc('revoke_comp_subscription',{ p_team_id:teamId }); if(error) throw error; await loadComps(); }
       catch(e){ alert(tt('platform.failed','Failed: '+(e.message||e),{msg:(e.message||e)})); }
     }
-    function init(){ if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant);
-      document.addEventListener('cm:langchanged', ()=>{ try{ loadComps(); }catch(e){} }); }
+    // ── Entorno de Paddle (sandbox/producción) ──
+    async function loadEnv(){
+      const badge=$('pfEnvBadge'), btn=$('pfEnvToggle'); if(!badge) return;
+      let env='sandbox';
+      try{ const { data }=await sb.rpc('paddle_env'); if(data) env=data; }catch(_){}
+      const prod = env==='production';
+      badge.textContent = prod ? tt('platform.pdl_env_production','PRODUCTION · live charges') : tt('platform.pdl_env_sandbox','SANDBOX · test mode');
+      badge.style.background = prod ? 'color-mix(in srgb,var(--cm-danger,#dc2626) 15%,transparent)' : 'var(--cm-info-bg)';
+      badge.style.color = prod ? 'var(--cm-danger,#dc2626)' : 'var(--cm-info)';
+      if(btn){
+        btn.style.display='';
+        btn.textContent = prod ? tt('platform.pdl_env_to_sandbox','Switch to sandbox') : tt('platform.pdl_env_to_production','Switch to PRODUCTION');
+        btn.onclick = async ()=>{
+          const target = prod ? 'sandbox' : 'production';
+          const warn = target==='production'
+            ? tt('platform.pdl_env_confirm_prod','⚠️ Switch to PRODUCTION? Real cards will be charged. Make sure live price ids, tokens and secrets are set.')
+            : tt('platform.pdl_env_confirm_sbx','Switch back to sandbox (test mode)? No real charges.');
+          if(!confirm(warn)) return;
+          const m=$('pfEnvMsg'); if(m){ m.textContent=tt('platform.saving','Saving…'); m.style.color='var(--cm-fg-muted)'; }
+          try{ const { error }=await sb.rpc('set_paddle_env',{ p_env:target }); if(error) throw error;
+            if(m){ m.textContent=tt('platform.pdl_env_done','Done ✓'); m.style.color='var(--cm-accent)'; }
+            await loadEnv();
+          }catch(e){ if(m){ m.textContent=(e.message||e); m.style.color='var(--cm-danger)'; } }
+        };
+      }
+    }
+    function init(){ loadEnv(); if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant);
+      document.addEventListener('cm:langchanged', ()=>{ try{ loadComps(); loadEnv(); }catch(e){} }); }
     if(document.readyState!=='loading') init(); else document.addEventListener('DOMContentLoaded', init);
   })();
   </script>

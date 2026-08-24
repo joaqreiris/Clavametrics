@@ -77,12 +77,24 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
-  const secret = Deno.env.get('PADDLE_WEBHOOK_SECRET');
-  if (!secret) { console.error('PADDLE_WEBHOOK_SECRET not set'); return json({ error: 'not_configured' }, 500); }
+  // Aceptamos eventos de sandbox O producción: verificamos la firma contra CUALQUIERA
+  // de los secrets configurados (una firma solo valida con su propio secret). Así el
+  // toggle de entorno no requiere tocar el webhook. Legacy PADDLE_WEBHOOK_SECRET = sandbox.
+  const secrets = [
+    Deno.env.get('PADDLE_WEBHOOK_SECRET_LIVE'),
+    Deno.env.get('PADDLE_WEBHOOK_SECRET_SANDBOX'),
+    Deno.env.get('PADDLE_WEBHOOK_SECRET'),
+  ].filter(Boolean) as string[];
+  if (!secrets.length) { console.error('No PADDLE_WEBHOOK_SECRET* set'); return json({ error: 'not_configured' }, 500); }
 
   // Read the RAW body first — the signature is over these exact bytes.
   const raw = await req.text();
-  const { ok, ts } = await verifyPaddleSignature(raw, req.headers.get('paddle-signature'), secret);
+  const sigHeader = req.headers.get('paddle-signature');
+  let ok = false, ts = 0;
+  for (const s of secrets) {
+    const r = await verifyPaddleSignature(raw, sigHeader, s);
+    if (r.ok) { ok = true; ts = r.ts; break; }
+  }
   if (!ok) { console.warn('Invalid Paddle signature'); return json({ error: 'bad_signature' }, 401); }
 
   // Replay guard: Paddle re-firma cada intento de entrega con un ts fresco, así que un
@@ -128,9 +140,11 @@ Deno.serve(async (req: Request) => {
     // un update (custom.plan_slug queda "pegado" al slug de la compra original, así
     // que para detectar upgrade/downgrade priorizamos el price del evento).
     if (priceId) {
+      // Matchea contra price ids de sandbox O producción (un price id solo existe en
+      // un entorno), así el webhook es agnóstico al toggle de entorno.
       const { data: p } = await supabase.from('plans')
         .select('id, slug, sort_order, price_monthly, price_yearly')
-        .or(`provider_price_monthly_id.eq.${priceId},provider_price_yearly_id.eq.${priceId}`)
+        .or(`provider_price_monthly_id.eq.${priceId},provider_price_yearly_id.eq.${priceId},provider_price_monthly_id_live.eq.${priceId},provider_price_yearly_id_live.eq.${priceId}`)
         .maybeSingle();
       plan = p;
     }

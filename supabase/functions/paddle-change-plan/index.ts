@@ -51,9 +51,6 @@ Deno.serve(async (req) => {
     const URL     = Deno.env.get('SUPABASE_URL')!;
     const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const ANON    = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const API_KEY = Deno.env.get('PADDLE_API_KEY');
-    const API_BASE = (Deno.env.get('PADDLE_API_BASE') || 'https://sandbox-api.paddle.com').replace(/\/+$/, '');
-    if (!API_KEY) return json({ error: 'PADDLE_API_KEY no configurado' }, 500);
 
     // ── Auth: admin/owner del club (o super-admin) ──
     const userClient = createClient(URL, ANON, {
@@ -63,6 +60,19 @@ Deno.serve(async (req) => {
     if (uErr || !user) return json({ error: 'Not authenticated' }, 401);
 
     const admin = createClient(URL, SERVICE);
+
+    // ── Entorno de Paddle (bandera en DB) → elige secrets/base/price ──
+    const { data: envVal } = await admin.rpc('paddle_env');
+    const ENV = envVal === 'production' ? 'production' : 'sandbox';
+    const API_BASE = ENV === 'production' ? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com';
+    const API_KEY = ENV === 'production'
+      ? Deno.env.get('PADDLE_API_KEY_LIVE')
+      : (Deno.env.get('PADDLE_API_KEY_SANDBOX') || Deno.env.get('PADDLE_API_KEY'));
+    if (!API_KEY) return json({ error: 'PADDLE_API_KEY (' + ENV + ') no configurado' }, 500);
+    // price id según entorno
+    const priceOf = (p: any, cyc: any) => ENV === 'production'
+      ? (cyc === 'annual' ? p?.provider_price_yearly_id_live : p?.provider_price_monthly_id_live)
+      : (cyc === 'annual' ? p?.provider_price_yearly_id      : p?.provider_price_monthly_id);
     const { data: caller } = await admin.from('profiles')
       .select('club_id, role, club_role').eq('id', user.id).single();
     const { data: superRow } = await admin.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
@@ -115,8 +125,10 @@ Deno.serve(async (req) => {
     // El discount (%, duración en ciclos) se crea en Paddle y su id va en el secret
     // PADDLE_RETENTION_DISCOUNT_ID (dsc_...). Paddle lo aplica y lo saca solo al vencer.
     if (act === 'apply_discount') {
-      const discountId = Deno.env.get('PADDLE_RETENTION_DISCOUNT_ID');
-      if (!discountId) return json({ error: 'PADDLE_RETENTION_DISCOUNT_ID no configurado' }, 500);
+      const discountId = ENV === 'production'
+        ? Deno.env.get('PADDLE_RETENTION_DISCOUNT_ID_LIVE')
+        : (Deno.env.get('PADDLE_RETENTION_DISCOUNT_ID_SANDBOX') || Deno.env.get('PADDLE_RETENTION_DISCOUNT_ID'));
+      if (!discountId) return json({ error: 'PADDLE_RETENTION_DISCOUNT_ID (' + ENV + ') no configurado' }, 500);
       const res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
         discount: { id: discountId, effective_from: 'immediately' },
       });
@@ -154,8 +166,8 @@ Deno.serve(async (req) => {
         // Downgrade programado: volver al plan ALTO actual, sin cobro (aún dentro
         // del período ya pago).
         const { data: curPlan } = await admin.from('plans')
-          .select('provider_price_monthly_id, provider_price_yearly_id').eq('id', sub.plan_id).maybeSingle();
-        const priceId = sub.billing_cycle === 'yearly' ? curPlan?.provider_price_yearly_id : curPlan?.provider_price_monthly_id;
+          .select('provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live').eq('id', sub.plan_id).maybeSingle();
+        const priceId = priceOf(curPlan, sub.billing_cycle === 'yearly' ? 'annual' : 'monthly');
         if (!priceId) return json({ error: 'Sin price_id del plan actual' }, 422);
         res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
           items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: 'do_not_bill',
@@ -175,14 +187,14 @@ Deno.serve(async (req) => {
 
     // ── Cambio de plan (upgrade / downgrade) ──
     const { data: plansRows } = await admin.from('plans')
-      .select('id, slug, sort_order, provider_price_monthly_id, provider_price_yearly_id');
+      .select('id, slug, sort_order, provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live');
     const plans: Record<string, any> = {};
     (plansRows || []).forEach((p) => { plans[p.slug] = p; plans[p.id] = p; });
     const target = plans[plan_slug];
     const current = plans[sub.plan_id];
     if (!target) return json({ error: 'Plan destino no encontrado' }, 404);
 
-    const priceId = cycle === 'annual' ? target.provider_price_yearly_id : target.provider_price_monthly_id;
+    const priceId = priceOf(target, cycle);
     if (!priceId) return json({ error: 'El plan destino no tiene price_id de Paddle para este ciclo' }, 422);
 
     const curSort = current?.sort_order ?? 0;

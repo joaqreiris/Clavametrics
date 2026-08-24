@@ -861,22 +861,28 @@
   });
 
   // ── Paddle checkout ─────────────────────────────────
-  const PADDLE_TOKEN = 'test_effd5adff10614f5ee3b57a539b';   // sandbox client-side token
+  // Los client-side tokens de Paddle son PÚBLICOS (van en el front) → hardcodear ambos
+  // y elegir según el entorno activo (bandera paddle_env en DB, flipeable desde Platform).
+  const PADDLE_TOKEN_SANDBOX = 'test_effd5adff10614f5ee3b57a539b';
+  const PADDLE_TOKEN_LIVE    = 'live_REEMPLAZAR_CON_TOKEN_LIVE';   // ← pegar el client-side token LIVE de Paddle
+  let PADDLE_ENV = 'sandbox';
   // mapa data-tier del picker → slug real en la tabla plans
   const TIER_TO_SLUG = { free:'initiation', basic:'basic', pro:'professional', full:'full' };
   let PRICE_MAP = {};   // slug → { monthly, yearly }
 
-  if (window.Paddle) {
-    Paddle.Environment.set('sandbox');
-    Paddle.Initialize({ token: PADDLE_TOKEN });
-  }
-
-  // traer los price_id de la base (los que cargaste en la migración 128)
-  (async function loadPrices(){
+  (async function initPaddle(){
+    try { if (window.sb) { const { data } = await sb.rpc('paddle_env'); if (data === 'production') PADDLE_ENV = 'production'; } } catch(_){}
+    if (window.Paddle) {
+      Paddle.Environment.set(PADDLE_ENV);
+      Paddle.Initialize({ token: PADDLE_ENV === 'production' ? PADDLE_TOKEN_LIVE : PADDLE_TOKEN_SANDBOX });
+    }
+    // price_ids según entorno (columnas _live para producción)
     try{
       if(!window.sb) return;
-      const { data } = await sb.from('plans').select('slug, provider_price_monthly_id, provider_price_yearly_id');
-      (data||[]).forEach(p => PRICE_MAP[p.slug] = { monthly:p.provider_price_monthly_id, yearly:p.provider_price_yearly_id });
+      const { data } = await sb.from('plans').select('slug, provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live');
+      (data||[]).forEach(p => PRICE_MAP[p.slug] = (PADDLE_ENV === 'production')
+        ? { monthly:p.provider_price_monthly_id_live, yearly:p.provider_price_yearly_id_live }
+        : { monthly:p.provider_price_monthly_id,      yearly:p.provider_price_yearly_id });
     }catch(e){ console.error('No pude cargar price_ids', e); }
   })();
 
