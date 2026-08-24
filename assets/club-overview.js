@@ -51,7 +51,7 @@
     travel: 'ti-plane', bus_departure: 'ti-bus', bus_arrival: 'ti-bus', hotel_checkin: 'ti-bed', hotel_checkout: 'ti-bed',
     meeting: 'ti-users', evaluation: 'ti-clipboard-list', video_session: 'ti-device-desktop',
     breakfast: 'ti-coffee', lunch: 'ti-soup', dinner: 'ti-tools-kitchen',
-    press: 'ti-microphone', medical_check: 'ti-stethoscope', walkthrough: 'ti-walk', scouting: 'ti-binoculars',
+    press: 'ti-microphone', medical_check: 'ti-stethoscope', physio: 'ti-physotherapist', walkthrough: 'ti-walk', scouting: 'ti-binoculars',
     day_off: 'ti-beach', recovery: 'ti-heart-rate-monitor', gym: 'ti-barbell', tactical: 'ti-soccer-field', beach: 'ti-beach', outdoor: 'ti-run'
   };
   function calIcon(t) { t = (t || '').toLowerCase(); return CAL_ICONS[t] || 'ti-calendar-event'; }

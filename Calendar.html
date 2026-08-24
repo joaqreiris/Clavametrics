@@ -665,6 +665,8 @@
   /* Medical check */
   .mc-evt.medical { background:color-mix(in srgb, var(--cm-danger-bg) 70%, var(--cm-bg-soft)); border-color:var(--cm-danger-bd); color:#7F1D1D; }
   .mc-evt.medical .ti { color:var(--cm-danger); }
+  .mc-evt.physio { background:#ECFEFF; border-color:#A5F3FC; color:#155E75; }
+  .mc-evt.physio .ti { color:#06B6D4; }
 
   /* Walkthrough (activation pre-match, lighter than training) */
   .mc-evt.walkthrough { background:color-mix(in srgb, var(--cm-info-bg) 55%, var(--cm-surface)); border-color:var(--cm-border-soft); color:#1D4ED8; }
@@ -1605,6 +1607,7 @@
             <optgroup label="Obligations" data-i18n-attr="label:calendar.optgroup_obligations">
               <option value="press" data-i18n="calendar.type_press">Press conference</option>
               <option value="medical_check" data-i18n="calendar.type_medical_check">Medical check</option>
+              <option value="physio" data-i18n="calendar.type_physio">Physio treatment</option>
               <option value="meeting" data-i18n="calendar.type_meeting">Meeting</option>
               <option value="evaluation" data-i18n="calendar.type_evaluation">Evaluation</option>
               <option value="video_session" data-i18n="calendar.type_video_session">Video session</option>
@@ -1980,7 +1983,7 @@ const EVT_ICONS = {
   meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop',
   breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
   hotel:'ti-bed', bus:'ti-bus',
-  press:'ti-microphone', medical:'ti-stethoscope',
+  press:'ti-microphone', medical:'ti-stethoscope', physio:'ti-physotherapist',
   walkthrough:'ti-walk', scouting:'ti-binoculars',
   'day-off':'ti-beach',
 };
@@ -2001,6 +2004,7 @@ function focusToClass(focus) {
   if (f === 'bus_departure' || f === 'bus_arrival')          return 'bus';
   if (f === 'press')                                         return 'press';
   if (f === 'medical_check')                                 return 'medical';
+  if (f === 'physio')                                        return 'physio';
   if (f === 'walkthrough')                                   return 'walkthrough';
   if (f === 'scouting')                                      return 'scouting';
   if (f === 'day_off')                                       return 'day-off';
@@ -2103,6 +2107,7 @@ const VISIBLE_TO_DEFAULTS = {
   evaluation:    [],
   video_session: [],
   medical_check: ['medical'],
+  physio:        ['players','medical'],
 };
 
 function getVisibleToFromChips() {
@@ -3012,14 +3017,14 @@ const CAL_EVT_TYPES = [
   'match','recovery','travel','meeting','evaluation','video_session',
   'breakfast','lunch','dinner',
   'hotel_checkin','hotel_checkout','bus_departure','bus_arrival',
-  'press','medical_check','walkthrough','scouting','day_off',
+  'press','medical_check','physio','walkthrough','scouting','day_off',
 ];
 
 const DURATION_DEFAULTS = {
   training:90, tactical:90, beach:75, outdoor:75, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
   breakfast:45, lunch:60, dinner:60,
   hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
-  press:30, medical_check:30, walkthrough:30, scouting:60,
+  press:30, medical_check:30, physio:60, walkthrough:30, scouting:60,
   day_off:null,
 };
 
@@ -3441,7 +3446,7 @@ const EVT_TYPE_LABELS_EN = {
   breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner',
   hotel_checkin:'Hotel check-in', hotel_checkout:'Hotel check-out',
   bus_departure:'Bus departure', bus_arrival:'Bus arrival',
-  press:'Press conference', medical_check:'Medical check',
+  press:'Press conference', medical_check:'Medical check', physio:'Physio treatment',
   walkthrough:'Walkthrough', scouting:'Scouting', day_off:'Day off', other:'Other',
   conditioning:'Training', beach:'Beach session', outdoor:'Outdoor endurance',
 };
@@ -3451,7 +3456,7 @@ const EVT_TYPE_KEY = {
   breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
-  press:'calendar.type_press', medical_check:'calendar.type_medical_check',
+  press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting', day_off:'calendar.type_day_off', other:'calendar.type_other',
   conditioning:'calendar.filter_training', beach:'calendar.type_beach', outdoor:'calendar.type_outdoor',
 };
@@ -4435,7 +4440,7 @@ const TYPE_ICONS = {
   breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
   hotel_checkin:'ti-login', hotel_checkout:'ti-logout',
   bus_departure:'ti-bus', bus_arrival:'ti-bus', travel:'ti-plane',
-  press:'ti-microphone', medical_check:'ti-stethoscope', meeting:'ti-users',
+  press:'ti-microphone', medical_check:'ti-stethoscope', physio:'ti-physotherapist', meeting:'ti-users',
   evaluation:'ti-clipboard-list', video_session:'ti-device-desktop',
   day_off:'ti-bed', other:'ti-dots',
 };
@@ -5639,7 +5644,7 @@ const UPCOMING_FILTER_GROUPS = [
   { label:'Match',     key:'calendar.grp_match',     types:['match'] },
   { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner'] },
   { label:'Logistics', key:'calendar.grp_logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
-  { label:'Other',     key:'calendar.grp_other',     types:['press','medical_check','scouting','video_session','meeting','evaluation','day_off','other'] },
+  { label:'Other',     key:'calendar.grp_other',     types:['press','medical_check','physio','scouting','video_session','meeting','evaluation','day_off','other'] },
 ];
 const UPCOMING_ALL_TYPES     = UPCOMING_FILTER_GROUPS.flatMap(g => g.types);
 const UPCOMING_DEFAULT_HIDDEN = new Set(['breakfast','lunch','dinner']);
@@ -5675,7 +5680,7 @@ const _UPCOMING_TYPE_KEYS = {
   breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
-  press:'calendar.type_press', medical_check:'calendar.type_medical_check',
+  press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting',
   day_off:'calendar.type_day_off', meeting:'calendar.type_meeting', evaluation:'calendar.type_evaluation', video_session:'calendar.type_video_session',
 };
@@ -6099,6 +6104,7 @@ const CAL_TYPE_META = {
   lunch:      { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   dinner:     { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   day_off:    { abbr:'OFF',   fg:'#9CA3AF', bg:'#F3F4F6', bd:'#D8DCE0', label:'Day off' },
+  physio:     { abbr:'PHY',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Physio' },
   _fallback:  { abbr:'•',     fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' }
 };
 const CAL_TYPE_LABEL_KEY = {
@@ -6106,7 +6112,7 @@ const CAL_TYPE_LABEL_KEY = {
   recovery:'calendar.type_label_recovery', travel:'calendar.type_label_travel', meeting:'calendar.type_label_meeting',
   evaluation:'calendar.type_label_evaluation', video:'calendar.type_label_video',
   breakfast:'calendar.type_label_meal', lunch:'calendar.type_label_meal', dinner:'calendar.type_label_meal',
-  day_off:'calendar.type_label_day_off', _fallback:'calendar.type_label_event',
+  day_off:'calendar.type_label_day_off', physio:'calendar.type_label_physio', _fallback:'calendar.type_label_event',
 };
 function calMetaLabel(type){
   const meta = CAL_TYPE_META[type] || CAL_TYPE_META._fallback;
@@ -6447,6 +6453,7 @@ const DS_ICONS = {
   kickoff:'<circle cx="12" cy="12" r="8"/><path d="m12 8 3 2-1 4h-4l-1-4 3-2Z"/>',
   recovery:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15 5 17 3 17 3c1 4 .5 12-6 17M5 14c2 0 4 1 5 3"/>',
   meds:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  physio:'<circle cx="6.5" cy="13.3" r="1.7"/><path d="M9 15h6.5l4 1.5M3 18h18M6 18v2.5M18 18v2.5"/>',
   custom:'<circle cx="12" cy="12" r="3"/>',
   // --- extra glyphs, pickable per timeline row (override the type icon) ---
   bus:'<path d="M5 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M4 11h16"/><path d="M7 15v2M17 15v2"/><circle cx="8" cy="17.5" r="1.3"/><circle cx="16" cy="17.5" r="1.3"/>',
@@ -6470,7 +6477,7 @@ const DS_ICONS = {
 };
 const DS_TYPES = ['departure','arrival','activation','training','gym','meal','meeting','video','travel','kickoff','recovery','meds','custom'];
 // Icon picker: order shown in the per-moment popover ('' = follow the type).
-const DS_ICON_CHOICES = ['bus','car','train','travel','hotel','meal','coffee','water','snack','ice','training','pitch','gym','kickoff','run','stretch','bolt','activation','recovery','meds','meeting','video','tactics','mic','flag','sun','moon','clock','departure','arrival','custom'];
+const DS_ICON_CHOICES = ['bus','car','train','travel','hotel','meal','coffee','water','snack','ice','training','pitch','gym','kickoff','run','stretch','bolt','activation','recovery','meds','physio','meeting','video','tactics','mic','flag','sun','moon','clock','departure','arrival','custom'];
 function dsGlyph(key){ return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${DS_ICONS[key]||DS_ICONS.custom}</svg>`; }
 function dsRowIcon(r){ return dsGlyph(r.icon || (r.match ? 'kickoff' : r.type)); }
 const DS_SWATCHES = ['#2F5FD0','#8AC4EA','#12833E','#C81E3A','#0E1C3F','#E8820C','#111827','#7A2AA8'];
@@ -6503,9 +6510,9 @@ async function dsDefaultDate(){
 function dsReadableOn(hex){ const h=hex.replace('#',''); const f=i=>parseInt(h.slice(i,i+2),16)/255; const lin=c=>c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4); const L=.2126*lin(f(0))+.7152*lin(f(2))+.0722*lin(f(4)); return L>.55?'#14171C':'#ffffff'; }
 function dsInitials(name){ const w=(name||'').trim().split(/\s+/); return (((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||(name||'?').slice(0,2)).toUpperCase(); }
 function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const m=c.map(v=>Math.round(v*amt+255*(1-amt))); return '#'+m.map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
 // Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
-const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun' };
+const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun' };
 function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
 
 async function dsInlineImg(url){
