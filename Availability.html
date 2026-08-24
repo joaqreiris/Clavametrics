@@ -587,7 +587,7 @@
         </div>
 
         <div class="av-foot">
-          <span data-i18n-html="availability.footLine"><span class="key"><i class="ti ti-info-circle" style="font-size:13px;vertical-align:-2px"></i>Hover</span> for status detail · <span class="key"><i class="ti ti-keyboard"></i></span> shortcuts <kbd class="cm-kbd">A</kbd> available <kbd class="cm-kbd">P</kbd> partial <kbd class="cm-kbd">I</kbd> injury</span>
+          <span data-i18n-html="availability.footLine"><span class="key"><i class="ti ti-info-circle" style="font-size:13px;vertical-align:-2px"></i>Hover</span> for status detail · <span class="key"><i class="ti ti-keyboard"></i></span> shortcuts <kbd class="cm-kbd">A</kbd> available <kbd class="cm-kbd">P</kbd> partial <kbd class="cm-kbd">I</kbd> injury <kbd class="cm-kbd">U</kbd> unavailable <kbd class="cm-kbd">S</kbd> illness <kbd class="cm-kbd">N</kbd> nat. team <kbd class="cm-kbd">D</kbd> day off <kbd class="cm-kbd">R</kbd> rehab <kbd class="cm-kbd">O</kbd> other team</span>
           <div class="grow"></div>
           <span id="avFooterCount" data-i18n="availability.footShowingInit">Showing — players</span>
         </div>
@@ -1659,6 +1659,9 @@
     updateBulk();
   });
 
+  // Atajos de estado sobre la selección: una letra = el botón correspondiente de la barra
+  // de pintado (misma lógica, incluido el caso especial de «Other team»).
+  const KEY_STATUS = { a:'av', p:'pa', i:'in', u:'un', s:'si', n:'na', d:'do', r:'rh', o:'ot' };
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
@@ -1671,13 +1674,24 @@
       matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off):not(.is-dayoff)').forEach(td => td.classList.add('is-selected'));
       updateBulk();
     }
+    // Letras de estado — solo sin modificadores, fuera de campos de texto y con celdas seleccionadas
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+    const cssKey = KEY_STATUS[(e.key || '').toLowerCase()];
+    if (!cssKey) return;
+    if (!matrix.querySelector('td.cell.is-selected')) return;
+    e.preventDefault();
+    document.querySelector(`.av-bulk-btn.${cssKey}`)?.click();
   });
 
   // ── Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names ──
   const BULK_STATUS = { av:'available', pa:'partial', in:'injured', un:'unavailable', si:'sick', na:'away', ot:'other_team', do:'day_off', rh:'rehab' };
+  const BULK_KEY    = { av:'A', pa:'P', in:'I', un:'U', si:'S', na:'N', ot:'O', do:'D', rh:'R' };   // atajo de teclado
   Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
+    if (BULK_KEY[cssKey]) btn.title = tt('availability.shortcutTitle','Shortcut: {key}',{key:BULK_KEY[cssKey]});
     btn.addEventListener('click', () => {
       const updated = new Set();
       matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
