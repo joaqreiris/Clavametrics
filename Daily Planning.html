@@ -128,6 +128,9 @@
   .dp-player.injured{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}
   .dp-player.injured .num{background:#dc2626;color:#fff}
   .dp-player.injured .reason{color:#7f1d1d}
+  .dp-player.dayoff{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}
+  .dp-player.dayoff .num{background:#14b8a6;color:#fff}
+  .dp-player.dayoff .reason{color:#0f766e}
   .dp-player.sick{background:#fdf4ff;border-color:#e9d5ff;color:#581c87}
   .dp-player.sick .num{background:#a855f7;color:#fff}
   .dp-player.sick .reason{color:#581c87}
@@ -719,6 +722,7 @@ function dpRenderSquad(avMap) {
     if      (av?.status === 'away')      { cls = 'away';      reason = av.notes || 'away'; }
     else if (av?.status === 'other_team'){ cls = 'unavailable'; reason = tt('daily_planning.with_other_team','With another team'); }
     else if (av?.status === 'unavailable'){ cls = 'unavailable'; reason = av.notes || 'out'; }
+    else if (av?.status === 'day_off')   { cls = 'dayoff';    reason = av.notes || tt('daily_planning.day_off','Day off'); }
     else if (av?.status === 'injured')   { cls = 'injured';   reason = av.notes || 'inj'; }
     else if (av?.status === 'sick')      { cls = 'sick';      reason = av.notes || 'sick'; }
     else if (av?.status === 'partial' || av?.status === 'limited') {
@@ -777,12 +781,13 @@ function dpRenderSquad(avMap) {
   }
   document.getElementById('dpSquadBody').innerHTML = _dpSquadHtml;
 
-  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0;
+  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0, dayOffCt = 0;
   _dpPlayers.forEach(p => {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
     if      (av?.status === 'away')       awayCt++;
     else if (av?.status === 'other_team') unCt++;
     else if (av?.status === 'unavailable') unCt++;
+    else if (av?.status === 'day_off')     dayOffCt++;
     else if (av?.status === 'injured')     injCt++;
     else if (av?.status === 'sick')        sickCt++;
     else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
@@ -802,6 +807,7 @@ function dpRenderSquad(avMap) {
     `<span>${tt('daily_planning.n_of_m_available', `<strong>${avCt + partCt}</strong> of ${total} available`, {avail:`<strong>${avCt + partCt}</strong>`, total})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_partial', `<strong style="color:var(--cm-warning)">${partCt}</strong> partial`, {count:`<strong style="color:var(--cm-warning)">${partCt}</strong>`})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_out', `<strong style="color:var(--cm-danger)">${unCt}</strong> out`, {count:`<strong style="color:var(--cm-danger)">${unCt}</strong>`})}</span>` +
+    (dayOffCt ? `<span class="sep"></span><span>${tt('daily_planning.n_day_off', `<strong style="color:#14b8a6">${dayOffCt}</strong> day off`, {count:`<strong style="color:#14b8a6">${dayOffCt}</strong>`})}</span>` : '') +
     (injCt  ? `<span class="sep"></span><span>${tt('daily_planning.n_injured', `<strong style="color:#dc2626">${injCt}</strong> injured`, {count:`<strong style="color:#dc2626">${injCt}</strong>`})}</span>` : '') +
     (sickCt ? `<span class="sep"></span><span>${tt('daily_planning.n_sick', `<strong style="color:#a855f7">${sickCt}</strong> sick`, {count:`<strong style="color:#a855f7">${sickCt}</strong>`})}</span>` : '') +
     `<span class="sep"></span><span>${tt('daily_planning.n_away', `<strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong> away`, {count:`<strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong>`})}${awayDesc}</span>`;
@@ -833,6 +839,7 @@ function _dpStatusCls(p){
   let cls = inj ? 'partial' : '';
   if      (av?.status === 'away')        cls = 'away';
   else if (av?.status === 'unavailable') cls = 'unavailable';
+  else if (av?.status === 'day_off')     cls = 'dayoff';
   else if (av?.status === 'injured')     cls = 'injured';
   else if (av?.status === 'sick')        cls = 'sick';
   else if ((av?.status === 'partial' || av?.status === 'limited') && !cls) cls = 'partial';
@@ -1031,15 +1038,21 @@ document.addEventListener('click', e => {
 });
 
 async function dpChangeStatus(playerId, newStatus) {
+  // Estados globales (lesión/enfermedad/selección) → team_id NULL; los relativos al equipo
+  // (available/partial/unavailable/day_off) llevan el team_id de ESTE equipo (misma semántica
+  // que Availability.saveAvailability — antes no se seteaba y quedaban «globales» por error).
+  const _teamId = ['injured','sick','away'].includes(newStatus) ? null : (_dpTeamId || null);
   const { error } = await window.sb.from('availability').upsert({
     player_id: playerId,
     date:      _dpCurrentDate,
     status:    newStatus,
-    club_id:   _dpClubId
+    club_id:   _dpClubId,
+    team_id:   _teamId
   }, { onConflict: 'player_id,date' });
   if (error) { console.error('availability upsert:', error); return; }
   if (!_dpAvMap[playerId]) _dpAvMap[playerId] = { player_id: playerId, date: _dpCurrentDate, club_id: _dpClubId };
   _dpAvMap[playerId].status = newStatus;
+  _dpAvMap[playerId].team_id = _teamId;
   dpRenderSquad(_dpAvMap);
 }
 
@@ -1296,7 +1309,7 @@ async function loadDay(dateStr) {
   // Estados relativos al equipo (available/partial/etc) guardados para OTRO equipo → ese día el
   // jugador está con otra categoría: acá se muestra como 'other_team' (fuera de esta sesión).
   // Los estados globales (lesión/enfermedad/selección, team_id NULL) valen igual acá.
-  const _DP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+  const _DP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent','day_off']);
   (avResult.data || []).forEach(a => {
     if (_DP_TEAM_REL.has(a.status) && a.team_id && _dpTeamId && a.team_id !== _dpTeamId) {
       avMap[a.player_id] = { ...a, status: 'other_team' };
@@ -3827,6 +3840,7 @@ function dpApplyReadOnly() {
   <div class="dp-status-opt" data-s="injured"><span class="dot" style="background:#dc2626"></span><span data-i18n="daily_planning.injured">Injured</span></div>
   <div class="dp-status-opt" data-s="sick"><span class="dot" style="background:#a855f7"></span><span data-i18n="daily_planning.sick">Sick</span></div>
   <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="daily_planning.unavailable">Unavailable</span></div>
+  <div class="dp-status-opt" data-s="day_off"><span class="dot" style="background:#14b8a6"></span><span data-i18n="daily_planning.day_off">Day off</span></div>
   <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span><span data-i18n="daily_planning.away">Away</span></div>
 </div>
 

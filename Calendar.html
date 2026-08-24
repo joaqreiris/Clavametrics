@@ -1657,6 +1657,21 @@
           </div>
         </div>
       </div>
+      <!-- Day off scope: whole team (blocks the day) vs selected players (partial) -->
+      <div class="sq-modal-row" id="calEvtDayOffRow" style="display:none">
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label data-i18n="calendar.dayoff_who">Who is off</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="cm-btn is-sm" id="calDayOffWhole"><i class="ti ti-users-group" style="font-size:13px"></i><span data-i18n="calendar.dayoff_whole_team">Whole team</span></button>
+            <button type="button" class="cm-btn is-sm" id="calDayOffPartial"><i class="ti ti-user-check" style="font-size:13px"></i><span data-i18n="calendar.dayoff_some_players">Only some players</span></button>
+          </div>
+          <div id="calDayOffHint" style="font:500 10.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:6px" data-i18n="calendar.dayoff_whole_hint">Blocks the whole day for this team.</div>
+          <div id="calDayOffPicker" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-3);background:var(--cm-bg-soft)">
+            <div id="calDayOffChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+            <div id="calDayOffCount" style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field" id="calEvtDurationWrap">
           <label for="calEvtF_duration" data-i18n="calendar.duration_min">Duration (min)</label>
@@ -1991,6 +2006,62 @@ function focusToClass(focus) {
   if (f === 'day_off')                                       return 'day-off';
   return 'training'; // tactical, conditioning, other, training
 }
+
+// ── Day off: total vs parcial ─────────────────────────────────
+// player_ids NULL/[] = day off de TODO el equipo (bloquea el día). Con ids = day off
+// PARCIAL: solo esos jugadores libres, el día sigue abierto para entrenar al resto.
+function _isFullDayOff(s)    { return s.session_type === 'day_off' && !(Array.isArray(s.player_ids) && s.player_ids.length); }
+function _isPartialDayOff(s) { return s.session_type === 'day_off' && Array.isArray(s.player_ids) && s.player_ids.length > 0; }
+
+// URL de planificación de un evento (doble click / popover). null = no navegable.
+function _evtPlanUrl(s) {
+  if (!s || _calView === 'player' || !s.session_date) return null;
+  const cat = focusToClass(s.session_type);
+  if (cat === 'gym')      return `Gym Planner.html?date=${s.session_date}`;
+  if (cat === 'training') return `Daily Planning.html?date=${s.session_date}${s.source === 'session' && s.id ? `&session=${s.id}` : ''}`;
+  return null;
+}
+
+// Plantel del equipo activo (cache por equipo) — para el picker del day off parcial y el popover.
+let _calSquadCache = null, _calSquadTeam = null;
+async function calGetSquad() {
+  if (_calSquadCache && _calSquadTeam === _activeTeamId) return _calSquadCache;
+  try {
+    const { data } = await window.sb.from('players')
+      .select('id,first_name,last_name,number,position, player_teams!inner(team_id)')
+      .eq('club_id', _clubId).eq('player_teams.team_id', _activeTeamId).is('archived_at', null);
+    _calSquadCache = (data || []).sort((a, b) => (a.number || 999) - (b.number || 999) || `${a.last_name||''}`.localeCompare(`${b.last_name||''}`));
+    _calSquadTeam  = _activeTeamId;
+  } catch (_) { _calSquadCache = []; _calSquadTeam = _activeTeamId; }
+  return _calSquadCache;
+}
+
+// Sincroniza availability con el day off parcial: los destildados/borrados vuelven a quedar
+// sin registro; los tildados se guardan con status='day_off' (relativo al equipo). No pisa
+// estados globales (lesión/enfermedad/selección): esos jugadores ya están fuera igual.
+async function calSyncDayOffAvail(prev, next) {
+  try {
+    const clubId = _clubId || await window.getClubId();
+    if (prev && prev.ids && prev.ids.length) {
+      const keep = new Set((next && next.date === prev.date ? next.ids : []).map(String));
+      const gone = prev.ids.filter(id => !keep.has(String(id)));
+      if (gone.length) {
+        await window.sb.from('availability').delete()
+          .eq('club_id', clubId).eq('date', prev.date).eq('status', 'day_off').in('player_id', gone);
+      }
+    }
+    if (next && next.ids && next.ids.length) {
+      const { data: existing } = await window.sb.from('availability')
+        .select('player_id,status').eq('date', next.date).in('player_id', next.ids);
+      const skip = new Set((existing || []).filter(r => ['injured','sick','away'].includes(r.status)).map(r => String(r.player_id)));
+      const rows = next.ids.filter(id => !skip.has(String(id))).map(pid => ({
+        player_id: pid, date: next.date, status: 'day_off', minutes: 0,
+        club_id: clubId, team_id: _activeTeamId, notes: null
+      }));
+      if (rows.length) await window.sb.from('availability').upsert(rows, { onConflict: 'player_id,date' });
+    }
+  } catch (e) { console.warn('day-off availability sync:', e); }
+}
 // Intl-based day/month names (localized via CM_I18N.current). No hardcoded EN arrays.
 function dayShort(d) { return new Date(2021, 7, 1 + (d instanceof Date ? d.getDay() : d)).toLocaleDateString(ttLocale(), { weekday:'short' }); }
 function monthShort(m) { return new Date(2021, (m instanceof Date ? m.getMonth() : m), 1).toLocaleDateString(ttLocale(), { month:'short' }); }
@@ -2269,7 +2340,8 @@ function renderGrid() {
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
     const allDaySessions = _sessions.filter(s => s.session_date === dateStr);
-    const hasDayOff = allDaySessions.some(s => s.session_type === 'day_off');
+    // Solo el day off de equipo entero bloquea el día; el parcial se muestra como card normal
+    const hasDayOff = allDaySessions.some(_isFullDayOff);
     // In player view: only show events visible to players
     const daySessions = isPlayerView
       ? allDaySessions.filter(s => Array.isArray(s.visible_to) && s.visible_to.includes('players'))
@@ -2290,7 +2362,7 @@ function renderGrid() {
 
     const eventsHtml = hasDayOff ? '' : isOff
       ? `<div class="mc-evt day-off">${tt('calendar.rest_day','Rest day')}</div>`
-      : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && s.session_type !== 'day_off').map(s => {
+      : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && !_isFullDayOff(s)).map(s => {
           const cat = focusToClass(s.session_type);
           // Outdoor/beach are training-class substitutes: keep training routing/filters but give them
           // their own icon, label and colour (modifier class) so they read as distinct events.
@@ -2302,6 +2374,7 @@ function renderGrid() {
           // label. No minutes (MD tag already lives in the day header).
           const evtName   = isOutdoorTrain ? evtTypeLabel(s.session_type)
                           : cat === 'training' ? (s.title || tt('calendar.filter_training','Training'))
+                          : _isPartialDayOff(s) ? `${s.title || evtTypeLabel('day_off')} · ${s.player_ids.length}`
                           : (s.title || s.session_type || cat);
           const durSuffix = cat === 'training' ? '' : dur;
           // AU hidden in player view (staff-only metric)
@@ -2341,12 +2414,27 @@ function renderGrid() {
   ensureMdMenu(grid);
   ensureCtxMenu(grid);
 
-  // Wire event clicks — open popover (not modal directly)
+  // Wire event clicks — un click abre el popover; doble click sobre un entrenamiento/gym
+  // salta directo a su planificación (Daily Planning / Gym Planner). El click simple se
+  // difiere ~250ms SOLO en cards navegables, para que no se pise con el doble.
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
+    let clickTimer = null;
     el.addEventListener('click', e => {
       e.stopPropagation();
       const s = _sessions.find(x => x.id === el.dataset.id);
-      if (s) showEvtPopover(el, s);
+      if (!s) return;
+      if (!_evtPlanUrl(s)) { showEvtPopover(el, s); return; }
+      if (clickTimer) return;   // segundo click de un doble → lo maneja dblclick
+      clickTimer = setTimeout(() => { clickTimer = null; showEvtPopover(el, s); }, 250);
+    });
+    el.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const s = _sessions.find(x => x.id === el.dataset.id);
+      const url = s && _evtPlanUrl(s);
+      if (!url) return;
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      window.location.href = url;
     });
   });
   grid.querySelectorAll('[data-add-date]').forEach(btn => {
@@ -2453,7 +2541,7 @@ function renderGrid() {
       const dayEl = col.closest('.mc-day');
       if (dayEl) {
         dayEl.classList.add('drag-target');
-        if (_sessions.some(s => s.session_date === date && s.session_type === 'day_off'))
+        if (_sessions.some(s => s.session_date === date && _isFullDayOff(s)))
           dayEl.classList.add('drag-target-warn');
       }
     });
@@ -2497,7 +2585,7 @@ function ensureMdMenu(grid) {
 function openMdMenu(anchorEl, dateStr) {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
-  const hasDayOff = _sessions.some(s => s.session_date === dateStr && s.session_type === 'day_off');
+  const hasDayOff = _sessions.some(s => s.session_date === dateStr && _isFullDayOff(s));
   const override  = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
   const active    = hasDayOff ? 'OFF' : (override || 'Auto');
   _mdMenu.innerHTML = MD_MENU_OPTIONS.map(opt =>
@@ -2610,6 +2698,10 @@ async function pasteEvtToDate(clip, newDate) {
       payload.sort_order = payload.start_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
       const { error } = await window.sb.from('calendar_events').insert(payload);
       if (error) throw error;
+      // Day off parcial pegado en otra fecha → marcar libres también ahí
+      if (payload.type === 'day_off' && Array.isArray(payload.player_ids) && payload.player_ids.length) {
+        await calSyncDayOffAvail(null, { date: newDate, ids: payload.player_ids });
+      }
     } else {
       const { data: row, error: fe } = await window.sb.from('training_sessions').select('*').eq('id', clip.id).single();
       if (fe || !row) throw new Error(fe?.message || 'Source not found.');
@@ -2636,7 +2728,7 @@ async function pasteEvtToDate(clip, newDate) {
 
 // Remove a day_off marker on a date (calendar_events or training_sessions, by source)
 async function removeDayOffOnDate(dateStr) {
-  const off = _sessions.find(s => s.session_date === dateStr && s.session_type === 'day_off');
+  const off = _sessions.find(s => s.session_date === dateStr && _isFullDayOff(s));
   if (!off) return;
   const table = off.source === 'session' ? 'training_sessions' : 'calendar_events';
   const { error } = await window.sb.from(table).delete().eq('id', off.id);
@@ -2655,7 +2747,7 @@ async function applyMdChoice(dateStr, opt) {
       const { error: uerr } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
       if (uerr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:uerr.message})); return; }
       mc.md_overrides = next;
-      const existing = _sessions.some(s => s.session_date === dateStr && s.session_type === 'day_off');
+      const existing = _sessions.some(s => s.session_date === dateStr && _isFullDayOff(s));
       if (!existing) {
         const clubId = _clubId || await window.getClubId();
         const { error: ierr } = await window.sb.from('calendar_events').insert({
@@ -2724,6 +2816,11 @@ async function handleCrossDayMove(evt, newDate) {
         .eq('club_id', _clubId)
         .eq('team_id', _activeTeamId);
       if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+      // Day offs parciales de la serie: mover sus filas de availability a la nueva fecha
+      const _movedOffs = _sessions.filter(s => s.recurrence_group_id === evt.recurrence_group_id && _isPartialDayOff(s));
+      for (const off of _movedOffs) {
+        await calSyncDayOffAvail({ date: off.session_date, ids: off.player_ids }, { date: newDate, ids: off.player_ids });
+      }
       showCalToast(tt('calendar.series_moved','Series moved.'));
       await loadSessions();
       return;
@@ -2742,22 +2839,30 @@ async function handleCrossDayMove(evt, newDate) {
 
   const { error } = await window.sb.from(table).update(patch).eq('id', evt.id).eq('club_id', _clubId);
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+  // Day off parcial movido de día → mover también los libres en availability
+  if (_isPartialDayOff(evt)) {
+    await calSyncDayOffAvail({ date: evt.session_date, ids: evt.player_ids }, { date: newDate, ids: evt.player_ids });
+  }
   showCalToast(tt('calendar.event_moved','Event moved.'));
   await loadSessions();
 }
 
 // ── Fetch + merge training_sessions and calendar_events ────────
 async function fetchAllEvents(dateFrom, dateTo) {
-  const [sessRes, evtRes] = await Promise.all([
+  const _evtQ = cols => window.sb.from('calendar_events')
+    .select(cols)
+    .eq('club_id', _clubId).eq('team_id', _activeTeamId)
+    .gte('date', dateFrom).lte('date', dateTo).order('date');
+  const EVT_COLS = 'id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to,created_at';
+  let [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,orientation,visible_to,recurrence_group_id,created_at')
       .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
-    window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to,created_at')
-      .eq('club_id', _clubId).eq('team_id', _activeTeamId)
-      .gte('date', dateFrom).lte('date', dateTo).order('date')
+    _evtQ(EVT_COLS + ',player_ids')
   ]);
+  // Fallback: si la columna player_ids todavía no existe en la DB, reintentar sin ella
+  if (evtRes.error && /player_ids/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS);
   if (sessRes.error) return { error: sessRes.error.message };
   const norm = (sessRes.data || []).map(s => ({
     ...s, session_date: (s.session_date || '').split('T')[0],
@@ -2777,6 +2882,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     recurrence_group_id: e.recurrence_group_id || null,
     visible_to: e.visible_to || ['staff'],
     created_at: e.created_at || null,
+    player_ids: e.player_ids || null,
     source: 'event'
   }));
   // Dedup matches: a match can exist both as a calendar_events event and as a
@@ -3114,8 +3220,54 @@ function _calWireOpponentPicker() {
   input.addEventListener('blur', () => setTimeout(() => { menu.style.display = 'none'; }, 150));
 }
 
+// ── Day off scope UI (modal) ──────────────────────────────────
+let _dayOffScope = 'team';        // 'team' | 'players'
+let _dayOffSel   = new Set();     // player ids (string) del day off parcial
+function calSetDayOffScope(scope) {
+  _dayOffScope = scope;
+  const whole = document.getElementById('calDayOffWhole');
+  const part  = document.getElementById('calDayOffPartial');
+  const pick  = document.getElementById('calDayOffPicker');
+  const hint  = document.getElementById('calDayOffHint');
+  if (whole) whole.className = 'cm-btn is-sm' + (scope === 'team' ? ' is-primary' : ' is-ghost');
+  if (part)  part.className  = 'cm-btn is-sm' + (scope === 'players' ? ' is-primary' : ' is-ghost');
+  if (hint)  hint.textContent = scope === 'team'
+    ? tt('calendar.dayoff_whole_hint','Blocks the whole day for this team.')
+    : tt('calendar.dayoff_partial_hint','Only the selected players get the day off — the rest can still train.');
+  if (pick)  pick.style.display = scope === 'players' ? '' : 'none';
+  if (scope === 'players') calRenderDayOffChips();
+}
+function calSyncDayOffRow(type) {
+  const row = document.getElementById('calEvtDayOffRow');
+  if (row) row.style.display = type === 'day_off' ? '' : 'none';
+  if (type === 'day_off') calSetDayOffScope(_dayOffScope);
+}
+async function calRenderDayOffChips() {
+  const wrap = document.getElementById('calDayOffChips');
+  const ct   = document.getElementById('calDayOffCount');
+  if (!wrap) return;
+  wrap.innerHTML = `<span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">${tt('common.loading','Loading…')}</span>`;
+  const squad = await calGetSquad();
+  if (!squad.length) { wrap.innerHTML = `<span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">${tt('calendar.dayoff_no_squad','No players in this team.')}</span>`; return; }
+  wrap.innerHTML = squad.map(p => {
+    const on = _dayOffSel.has(String(p.id));
+    const lastName = (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop();
+    return `<button type="button" class="cal-dayoff-chip" data-pid="${p.id}" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:99px;cursor:pointer;font:600 11px/1 var(--cm-font-sans);border:1px solid ${on ? 'var(--cm-accent)' : 'var(--cm-border)'};background:${on ? 'color-mix(in srgb, var(--cm-accent) 14%, var(--cm-surface))' : 'var(--cm-surface)'};color:${on ? 'var(--cm-accent)' : 'var(--cm-fg-muted)'}"><span style="font:600 10px/1 var(--cm-font-mono)">${p.number ?? '—'}</span>${_esc(lastName)}</button>`;
+  }).join('');
+  wrap.querySelectorAll('.cal-dayoff-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const id = String(chip.dataset.pid);
+      _dayOffSel.has(id) ? _dayOffSel.delete(id) : _dayOffSel.add(id);
+      calRenderDayOffChips();
+    });
+  });
+  if (ct) ct.textContent = tt('calendar.dayoff_n_selected','{n} selected',{n:_dayOffSel.size});
+}
+document.getElementById('calDayOffWhole')?.addEventListener('click', () => calSetDayOffScope('team'));
+document.getElementById('calDayOffPartial')?.addEventListener('click', () => calSetDayOffScope('players'));
+
 function openEvtModal(session, defaultDate, focusTasks) {
-  if (!session && _sessions.some(s => s.session_date === defaultDate && s.session_type === 'day_off')) {
+  if (!session && _sessions.some(s => s.session_date === defaultDate && _isFullDayOff(s))) {
     showCalToast(tt('calendar.day_marked_off','This day is marked OFF. Remove the day off to add events.'));
     return;
   }
@@ -3148,6 +3300,11 @@ function openEvtModal(session, defaultDate, focusTasks) {
   // day_off: hide duration field
   const durWrap = document.getElementById('calEvtDurationWrap');
   if (durWrap) durWrap.style.display = (evtType === 'day_off' || evtType === 'match') ? 'none' : '';
+
+  // Day off scope: restaurar del evento (parcial si tiene player_ids) o default equipo entero
+  _dayOffSel   = new Set((session?.player_ids || []).map(String));
+  _dayOffScope = (evtType === 'day_off' && _dayOffSel.size) ? 'players' : 'team';
+  calSyncDayOffRow(evtType);
 
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
@@ -3358,6 +3515,10 @@ function showEvtPopover(anchor, session) {
   } else {
     if (session.location)   rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
   }
+  // Day off parcial: cuántos (y quiénes) están libres — los nombres se completan async
+  if (_isPartialDayOff(session)) {
+    rows.push(`<div class="cal-epop-row"><i class="ti ti-bed"></i><span id="epDayOffNames">${tt('calendar.dayoff_n_players','{n} players off',{n:session.player_ids.length})}</span></div>`);
+  }
 
   // Planning link
   let planBtn = '';
@@ -3433,6 +3594,20 @@ function showEvtPopover(anchor, session) {
   document.body.appendChild(pop);
   _evtPop = pop;
   _positionPop(pop, anchor, 320);
+
+  // Day off parcial: completar los nombres de los jugadores libres (async, plantel cacheado)
+  if (_isPartialDayOff(session)) {
+    calGetSquad().then(sq => {
+      const el = pop.querySelector('#epDayOffNames');
+      if (!el || !sq.length) return;
+      const names = session.player_ids
+        .map(id => sq.find(p => String(p.id) === String(id)))
+        .filter(Boolean)
+        .map(p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop());
+      if (names.length) el.textContent = `${tt('calendar.dayoff_n_players','{n} players off',{n:names.length})}: ${names.join(', ')}`;
+      _positionPop(pop, anchor, 320);
+    });
+  }
 
   // Wire edit button
   const editBtn = pop.querySelector('#epEditBtn');
@@ -3524,20 +3699,24 @@ function showRecurDeleteDialog(session) {
 }
 
 async function deleteEvt(id, source) {
+  const prev = _sessions.find(s => s.id === id);   // para limpiar availability si era day off parcial
   const table = (source === 'session') ? 'training_sessions' : 'calendar_events';
   const { data: del, error } = await window.sb.from(table).delete().eq('id', id).select('id');
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
   if (!del || !del.length) { showCalToast(tt('calendar.delete_no_rows','Nothing was deleted.')); return; }
+  if (prev && _isPartialDayOff(prev)) await calSyncDayOffAvail({ date: prev.session_date, ids: prev.player_ids }, null);
   showCalToast(tt('calendar.event_deleted','Event deleted.'));
   await loadSessions();
   await refreshRibbonMatches();
 }
 
 async function deleteEvtSeries(recurrenceGroupId, source) {
+  const prevOffs = _sessions.filter(s => s.recurrence_group_id === recurrenceGroupId && _isPartialDayOff(s));
   const table = (source === 'session') ? 'training_sessions' : 'calendar_events';
   const { data: del, error } = await window.sb.from(table).delete().eq('recurrence_group_id', recurrenceGroupId).select('id');
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
   if (!del || !del.length) { showCalToast(tt('calendar.delete_no_rows','Nothing was deleted.')); return; }
+  for (const off of prevOffs) await calSyncDayOffAvail({ date: off.session_date, ids: off.player_ids }, null);
   showCalToast(tt('calendar.series_deleted','Series deleted.'));
   await loadSessions();
   await refreshRibbonMatches();
@@ -3999,8 +4178,15 @@ async function saveEvt() {
   // Field (load) sessions require a start time: dedup + double-session (AM/PM) key on it.
   if ((type === 'training' || type === 'beach' || type === 'outdoor') && !startTimeVal) { showCalToast(tt('calendar.field_time_required','A start time is required for field training sessions.')); saving.style.display='none'; saveBtn.disabled=false; return; }
 
-  // Validation: day_off conflict (soft)
-  if (type === 'day_off' && !_editEvtId) {
+  // Day off parcial: necesita al menos un jugador tildado
+  const isPartialSave = type === 'day_off' && _dayOffScope === 'players';
+  if (isPartialSave && !_dayOffSel.size) {
+    showCalToast(tt('calendar.dayoff_pick_one','Select at least one player for the day off.'));
+    saving.style.display='none'; saveBtn.disabled=false; return;
+  }
+
+  // Validation: day_off conflict (soft) — solo el day off de equipo entero bloquea el día
+  if (type === 'day_off' && !isPartialSave && !_editEvtId) {
     const dayEvts = _sessions.filter(s => s.session_date === date && s.session_type !== 'day_off');
     if (dayEvts.length > 0 && !confirm(tt('calendar.other_events_save_dayoff','There are {n} other event(s) on {date}. Save day off anyway?',{n:dayEvts.length,date}))) {
       saving.style.display='none'; saveBtn.disabled=false; return;
@@ -4016,7 +4202,8 @@ async function saveEvt() {
   }
 
   // Type-change cleanup: if editing and was 'match', clear match-only fields
-  const prevType = _sessions.find(s => s.id === _editEvtId)?.session_type;
+  const prevEvt  = _editEvtId ? _sessions.find(s => s.id === _editEvtId) : null;
+  const prevType = prevEvt?.session_type;
   const matchFieldsToClear = (prevType === 'match' && type !== 'match')
     ? { opponent: null, home_away: null, competition: null, location: null, rival_crest_url: null }
     : {};
@@ -4053,6 +4240,7 @@ async function saveEvt() {
     let rows, table;
     if (isCalEvt) {
       const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
+      if (type === 'day_off') basePayload.player_ids = isPartialSave ? [..._dayOffSel] : null;
       if (type === 'match') {
         basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
         basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -4076,6 +4264,10 @@ async function saveEvt() {
     ({ error } = await window.sb.from(table).insert(rows));
     saving.style.display = 'none'; saveBtn.disabled = false;
     if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+    // Day off parcial recurrente → marcar libres en availability en cada fecha
+    if (isPartialSave) {
+      for (const d of dates) await calSyncDayOffAvail(null, { date: d, ids: [..._dayOffSel] });
+    }
     closeEvtModal();
     showCalToast(tt('calendar.events_created','{n} events created.',{n:rows.length}));
     await loadSessions();
@@ -4085,6 +4277,8 @@ async function saveEvt() {
 
   if (isCalEvt) {
     const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, ...matchFieldsToClear };
+    if (type === 'day_off') payload.player_ids = isPartialSave ? [..._dayOffSel] : null;
+    else if (prevType === 'day_off') payload.player_ids = null;   // dejó de ser day off
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -4131,6 +4325,12 @@ async function saveEvt() {
 
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+
+  // Day off parcial ⇄ availability: alta/baja/edición de jugadores libres (y limpieza si el
+  // evento cambió de tipo o de fecha).
+  const _prevOff = prevEvt && _isPartialDayOff(prevEvt) ? { date: prevEvt.session_date, ids: prevEvt.player_ids } : null;
+  const _nextOff = isPartialSave ? { date, ids: [..._dayOffSel] } : null;
+  if (_prevOff || _nextOff) await calSyncDayOffAvail(_prevOff, _nextOff);
 
   // Keep the materialized match-session (linked via GPS/RPE) in sync with the edited event:
   //  · duration → su sRPE sigue los minutos reales del partido.
@@ -4220,6 +4420,8 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   // day_off: hide duration
   const durWrap = document.getElementById('calEvtDurationWrap');
   if (durWrap) durWrap.style.display = (t === 'day_off' || t === 'match') ? 'none' : '';
+  // day_off: show scope row (whole team vs selected players)
+  calSyncDayOffRow(t);
   // Update visible-to defaults to match new type (only on new events)
   if (!_editEvtId) setVisibleToDefaults(t);
   calSyncTypeTrigger();
@@ -6026,7 +6228,7 @@ async function calBuildWeekSheet(){
       const wd = dt.toLocaleDateString(ttLocale(),{weekday:'short'}).toUpperCase();
       const md = calMdForDate(ds, mc);
       const list = byDay[ds] || [];
-      const cards = list.filter(e => e.session_type !== 'day_off').map(cardHtml).join('');
+      const cards = list.filter(e => !_isFullDayOff(e)).map(cardHtml).join('');
       const body = cards || dayOffCard;
       return `<div style="background:#fff;display:flex;flex-direction:column">
         <div style="background:#FAFAF8;padding:6px 7px;border-bottom:1px solid #ECECE9;display:flex;align-items:center;justify-content:space-between;gap:4px">
@@ -6128,7 +6330,7 @@ async function calBuildMonthSheet(){
     // 3) Month grid
     const dayOffPill = `<div style="display:flex;align-items:center;padding:2px 5px;border-radius:5px;border:1px dashed #D8DCE0;color:#9CA3AF;font:italic 600 9px ${FONT}">OFF</div>`;
     const pill = e => {
-      if (e.session_type === 'day_off') return dayOffPill;
+      if (_isFullDayOff(e)) return dayOffPill;
       const meta = CAL_TYPE_META[e.session_type] || CAL_TYPE_META._fallback;
       const t = _fmtTime(e.start_time);
       const nm = e.session_type === 'match'

@@ -2161,7 +2161,7 @@ function gpRenderSquadList() {
     const st   = _gpAvailMap[p.id];
     const unavail = st && !['available','partial','limited'].includes(st);
     const adapt   = _gpAdaptNotes[p.id];
-    const badge = unavail ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-danger);text-transform:capitalize">${st}</span>`
+    const badge = unavail ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-danger);text-transform:capitalize">${st === 'day_off' ? tt('gym_planner.day_off','Day off') : st.replace(/_/g,' ')}</span>`
                 : adapt   ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-warning)">${tt('gym_planner.adapt_tag','adapt')}</span>` : '';
     return `<div class="gp-squad-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;cursor:pointer">
       <i class="ti ${on?'ti-square-check':'ti-square'}" style="font-size:18px;color:${on?'var(--cm-accent)':'var(--cm-fg-faint)'}"></i>
@@ -2522,7 +2522,7 @@ async function gpLoadAthletes(dateStr) {
   ]);
 
   // Con otro equipo ese día (fila relativa de otro team) → no disponible acá. Globales (NULL) sí.
-  const _GP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent']);
+  const _GP_TEAM_REL = new Set(['available','partial','limited','unavailable','absent','day_off']);
   const availMap   = Object.fromEntries((availRes.data || []).map(a => {
     const other = _GP_TEAM_REL.has(a.status) && a.team_id && _gpTeamId && a.team_id !== _gpTeamId;
     return [a.player_id, other ? 'other_team' : a.status];

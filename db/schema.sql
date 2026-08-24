@@ -127,11 +127,13 @@ create table if not exists public.availability (
   team_id uuid,
   constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
-  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text])))
+  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text, 'day_off'::text])))
 );
 -- team_id: equipo con el que el jugador está ese día (para estados relativos al equipo:
--- available/partial/limited/unavailable/absent). NULL = estado global del jugador
+-- available/partial/limited/unavailable/absent/day_off). NULL = estado global del jugador
 -- (injured/sick/away) que se muestra en todos sus equipos. Una sola fila por (player_id, date).
+-- day_off: día libre INDIVIDUAL (day off parcial desde Calendar o marcado a mano) — relativo
+-- al equipo; excluye al jugador de Daily Planning / Gym Planner sin bloquear el día del equipo.
 alter table public.availability add constraint availability_team_id_fkey
   FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS availability_team_date_idx ON public.availability USING btree (team_id, date);
@@ -206,6 +208,10 @@ create table if not exists public.calendar_events (
   team_id uuid,
   competition_id uuid,
   season_id uuid,
+  -- Solo type='day_off': NULL/[] = day off de TODO el equipo (bloquea el día, comportamiento
+  -- clásico); con ids = day off PARCIAL (solo esos jugadores libres; el día sigue abierto).
+  -- Al guardar/borrar el evento se sincronizan filas availability con status='day_off'.
+  player_ids uuid[],
   constraint calendar_events_pkey primary key (id),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
   constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
