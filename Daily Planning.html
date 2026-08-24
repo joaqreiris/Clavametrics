@@ -131,6 +131,8 @@
   .dp-player.dayoff{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}
   .dp-player.dayoff .num{background:#14b8a6;color:#fff}
   .dp-player.dayoff .reason{color:#0f766e}
+  .dp-squad-out .o-pl.rehab{text-decoration:none;color:#9a3412}
+  .dp-squad-out.is-rehab .o-lbl{color:#f97316}
   .dp-player.sick{background:#fdf4ff;border-color:#e9d5ff;color:#581c87}
   .dp-player.sick .num{background:#a855f7;color:#fff}
   .dp-player.sick .reason{color:#581c87}
@@ -632,7 +634,7 @@
 <div id="settings-host"></div>
 
 <script>
-let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpRehabMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 // A day can hold more than one training session (double session). We load them ALL and let the
 // user switch; _dpPreferredSessionId is the one to open (from ?session= or the switcher).
 // It self-corrects on date change: an id that isn't in the new day falls back to the first.
@@ -748,9 +750,24 @@ function dpRenderSquad(avMap) {
     const num = p.number ?? '—';
     return `<span class="dp-player o-pl${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"${reason ? ` title="${reason.replace(/"/g,"'")}"` : ''}>${num} ${_dpEsc(lastName)}${reason ? ` · ${_dpEsc(reason)}` : ''}</span>`;
   }
+  function rehabChip(p) {
+    const plan = _dpRehabMap[p.id], inj = _dpInjMap[p.id];
+    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
+    const num = p.number ?? '—';
+    const phase = plan?.phase || plan?.phase_type || '';
+    const title = [tt('daily_planning.rehab','Rehab'), phase, inj?.body_area || inj?.injury_type || ''].filter(Boolean).join(' · ');
+    return `<span class="dp-player o-pl rehab" data-status="injured" data-pid="${p.id}" title="${title.replace(/"/g,"'")}">${num} ${_dpEsc(lastName)} · ${_dpEsc(tt('daily_planning.rehab','Rehab'))}</span>`;
+  }
 
   const trainees = [], outs = [];
   _dpPlayers.forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
+
+  // Lesionados CON plan de rehab activo → grupo propio «Rehab»: ese día trabajan aparte
+  // (sesión de rehab), no están simplemente «Out» tachados.
+  const rehabs = [];
+  for (let i = outs.length - 1; i >= 0; i--) {
+    if (statusOf(outs[i]).cls === 'injured' && _dpRehabMap[outs[i].id]) rehabs.unshift(outs.splice(i, 1)[0]);
+  }
 
   // Convocatoria por sesión: con grupo definido, los disponibles que no están en él se
   // muestran aparte ("Other session") y no cuentan en el grupo de ESTA sesión.
@@ -776,19 +793,22 @@ function dpRenderSquad(avMap) {
   if (otherSess.length) {
     _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">${tt('daily_planning.other_session_count', `Other session · ${otherSess.length}`, {count: otherSess.length})}</span>${otherSess.map(outChip).join('')}</div>`;
   }
+  if (rehabs.length) {
+    _dpSquadHtml += `<div class="dp-squad-out is-rehab"><span class="o-lbl">${tt('daily_planning.rehab_count', `Rehab · ${rehabs.length}`, {count: rehabs.length})}</span>${rehabs.map(rehabChip).join('')}</div>`;
+  }
   if (outs.length) {
     _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">${tt('daily_planning.out_count', `Out · ${outs.length}`, {count: outs.length})}</span>${outs.map(outChip).join('')}</div>`;
   }
   document.getElementById('dpSquadBody').innerHTML = _dpSquadHtml;
 
-  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0, dayOffCt = 0;
+  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0, dayOffCt = 0, rehabCt = 0;
   _dpPlayers.forEach(p => {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
     if      (av?.status === 'away')       awayCt++;
     else if (av?.status === 'other_team') unCt++;
     else if (av?.status === 'unavailable') unCt++;
     else if (av?.status === 'day_off')     dayOffCt++;
-    else if (av?.status === 'injured')     injCt++;
+    else if (av?.status === 'injured')   { if (_dpRehabMap[p.id]) rehabCt++; else injCt++; }
     else if (av?.status === 'sick')        sickCt++;
     else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
     else avCt++;
@@ -809,6 +829,7 @@ function dpRenderSquad(avMap) {
     `<span class="sep"></span><span>${tt('daily_planning.n_out', `<strong style="color:var(--cm-danger)">${unCt}</strong> out`, {count:`<strong style="color:var(--cm-danger)">${unCt}</strong>`})}</span>` +
     (dayOffCt ? `<span class="sep"></span><span>${tt('daily_planning.n_day_off', `<strong style="color:#14b8a6">${dayOffCt}</strong> day off`, {count:`<strong style="color:#14b8a6">${dayOffCt}</strong>`})}</span>` : '') +
     (injCt  ? `<span class="sep"></span><span>${tt('daily_planning.n_injured', `<strong style="color:#dc2626">${injCt}</strong> injured`, {count:`<strong style="color:#dc2626">${injCt}</strong>`})}</span>` : '') +
+    (rehabCt ? `<span class="sep"></span><span>${tt('daily_planning.n_rehab', `<strong style="color:#f97316">${rehabCt}</strong> in rehab`, {count:`<strong style="color:#f97316">${rehabCt}</strong>`})}</span>` : '') +
     (sickCt ? `<span class="sep"></span><span>${tt('daily_planning.n_sick', `<strong style="color:#a855f7">${sickCt}</strong> sick`, {count:`<strong style="color:#a855f7">${sickCt}</strong>`})}</span>` : '') +
     `<span class="sep"></span><span>${tt('daily_planning.n_away', `<strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong> away`, {count:`<strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong>`})}${awayDesc}</span>`;
 
@@ -818,7 +839,7 @@ function dpRenderSquad(avMap) {
     else if (f === 'available')  p.innerHTML = `<span class="dot" style="background:var(--cm-success)"></span>${tt('daily_planning.available','Available')} <span class="ct">${avCt}</span>`;
     else if (f === 'partial')    p.innerHTML = `<span class="dot" style="background:var(--cm-warning)"></span>${tt('daily_planning.partial','Partial')} <span class="ct">${partCt}</span>`;
     else if (f === 'unavailable')p.innerHTML = `<span class="dot" style="background:var(--cm-danger)"></span>${tt('daily_planning.unavailable','Unavailable')} <span class="ct">${unCt}</span>`;
-    else if (f === 'injured')    p.innerHTML = `<span class="dot" style="background:#dc2626"></span>${tt('daily_planning.injured','Injured')} <span class="ct">${injCt}</span>`;
+    else if (f === 'injured')    p.innerHTML = `<span class="dot" style="background:#dc2626"></span>${tt('daily_planning.injured','Injured')} <span class="ct">${injCt + rehabCt}</span>`;
     else if (f === 'sick')       p.innerHTML = `<span class="dot" style="background:#a855f7"></span>${tt('daily_planning.sick','Sick')} <span class="ct">${sickCt}</span>`;
     else if (f === 'away')       p.innerHTML = `<span class="dot" style="background:var(--cm-info,#3b82f6)"></span>${tt('daily_planning.away','Away')} <span class="ct">${awayCt}</span>`;
   });
@@ -3723,7 +3744,7 @@ function dpApplyReadOnly() {
   const yesterday7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const yesterday  = cmYMD(new Date(Date.now() - 1 * 24 * 60 * 60 * 1000));
 
-  const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
+  const [playersRes, injuriesRes, mcRes, adaptRes, rehabRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id,is_primary)').eq('club_id', clubId).eq('player_teams.team_id', _dpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
     window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).eq('team_id', _dpTeamId).order('start_date'),
@@ -3734,12 +3755,18 @@ function dpApplyReadOnly() {
       .gte('adaptation_sent_at', yesterday7)
       .gte('date', yesterday)
       .order('adaptation_sent_at', { ascending: false }),
+    // Planes de rehab activos: un lesionado CON plan trabaja aparte (grupo «Rehab»), no está «Out»
+    window.sb.from('rehab_plans')
+      .select('player_id,phase,phase_type,status')
+      .eq('club_id', clubId).eq('kind', 'rehab')
+      .in('status', ['on_track','near_rtp','blocked']),
   ]);
 
   const _seenDp = new Set();
   _dpPlayers = (playersRes.data || []).filter(p => _seenDp.has(p.id) ? false : (_seenDp.add(p.id), true));
   _dpMicrocycles = mcRes.data || [];
   (injuriesRes.data || []).forEach(i => { _dpInjMap[i.player_id] = i; });
+  (rehabRes.data || []).forEach(r => { if (!_dpRehabMap[r.player_id]) _dpRehabMap[r.player_id] = r; });
   // Keep most recent active adaptation per player
   (adaptRes.data || []).forEach(t => { if (!_dpAdaptMap[t.player_id]) _dpAdaptMap[t.player_id] = t; });
 
