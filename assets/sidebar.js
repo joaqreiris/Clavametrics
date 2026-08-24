@@ -153,6 +153,26 @@ html.cm-rail .hub-nav-grip{display:none}
 .cm-cp-foot{padding:10px 14px;border-top:1px solid var(--cm-border,#e5e7eb);display:flex;justify-content:center;flex-shrink:0}
 .cm-cp-foot a{font:600 12px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);text-decoration:none;padding:6px 12px;border-radius:6px}
 .cm-cp-foot a:hover{background:var(--cm-bg-soft,#f4f4f5)}
+/* Hilo inline: responder una conversación desde el panel sin salir de la página */
+.cm-ct-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--cm-border,#e5e7eb);flex-shrink:0}
+.cm-ct-back{width:26px;height:26px;border:0;background:transparent;color:var(--cm-fg-muted,#6b7280);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cm-ct-back:hover{background:var(--cm-bg-soft,#f4f4f5)}
+.cm-ct-av-slot{display:inline-flex;flex-shrink:0}
+.cm-ct-name{flex:1;min-width:0;font:600 12.5px/1.2 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-ct-open{width:26px;height:26px;color:var(--cm-fg-muted,#6b7280);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cm-ct-open:hover{background:var(--cm-bg-soft,#f4f4f5);color:var(--cm-accent,#6366f1)}
+.cm-ct-msgs{overflow-y:auto;flex:1;min-height:140px;max-height:280px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;background:var(--cm-bg-soft,#fafafa)}
+.cm-ct-who{font:600 10px/1.2 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin:6px 0 0 4px}
+.cm-ct-bub{max-width:82%;padding:6px 10px;border-radius:12px;font:500 12px/1.45 var(--cm-font-sans,sans-serif);white-space:pre-wrap;word-break:break-word;margin-top:4px}
+.cm-ct-bub.them{align-self:flex-start;background:var(--cm-surface,#fff);border:1px solid var(--cm-border,#e5e7eb);color:var(--cm-fg-strong,#111);border-bottom-left-radius:4px}
+.cm-ct-bub.me{align-self:flex-end;background:var(--cm-accent,#6366f1);color:#fff;border-bottom-right-radius:4px}
+.cm-ct-empty{margin:auto;font:500 12px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);text-align:center;padding:20px 10px}
+.cm-ct-comp{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--cm-border,#e5e7eb);flex-shrink:0}
+.cm-ct-inp{flex:1;min-width:0;resize:none;border:1px solid var(--cm-border,#e5e7eb);border-radius:10px;padding:7px 10px;font:500 12.5px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);background:var(--cm-surface,#fff);max-height:90px;outline:none}
+.cm-ct-inp:focus{border-color:var(--cm-accent,#6366f1)}
+.cm-ct-send{width:32px;height:32px;border:0;border-radius:9px;background:var(--cm-accent,#6366f1);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cm-ct-send:hover{filter:brightness(1.08)}
+.cm-ct-send:disabled{opacity:.55;cursor:default}
 /* Desktop collapse toggle button (in .hub-brand) */
 .hub-brand .cm-collapse-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--cm-side-border);background:transparent;color:var(--cm-side-fg-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .hub-brand .cm-collapse-btn:hover{background:var(--cm-side-item-active-bg);color:var(--cm-side-fg)}
@@ -1022,10 +1042,27 @@ html.cm-rail .hub-nav-grip{display:none}
       panel = document.createElement('div');
       panel.id = 'cm-cp';
       panel.className = 'cm-cp';
+      // Dos vistas dentro del mismo popover: la lista de conversaciones (cm-cp-main) y el
+      // hilo inline (cm-ct) que permite leer + responder sin navegar a Chat & Tasks.
       panel.innerHTML = `
-        <div class="cm-cp-h"><span class="ttl" data-i18n="shell.messages">Messages</span></div>
-        <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
-        <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>`;
+        <div id="cm-cp-main" style="display:flex;flex-direction:column;overflow:hidden;min-height:0">
+          <div class="cm-cp-h"><span class="ttl" data-i18n="shell.messages">Messages</span></div>
+          <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
+          <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>
+        </div>
+        <div id="cm-ct" style="display:none;flex-direction:column;overflow:hidden;min-height:0">
+          <div class="cm-ct-h">
+            <button id="cm-ct-back" class="cm-ct-back" data-i18n-attr="aria-label:shell.back" aria-label="Back"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <span class="cm-ct-av-slot"></span>
+            <span class="cm-ct-name"></span>
+            <a class="cm-ct-open" href="Chat%20%26%20Tasks.html" data-i18n-attr="title:shell.open_full;aria-label:shell.open_full" title="Open in Chat &amp; Tasks"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></a>
+          </div>
+          <div id="cm-ct-msgs" class="cm-ct-msgs"></div>
+          <div class="cm-ct-comp">
+            <textarea id="cm-ct-inp" class="cm-ct-inp" rows="1" data-i18n-ph="shell.type_message" placeholder="Type a message…"></textarea>
+            <button id="cm-ct-send" class="cm-ct-send" data-i18n-attr="aria-label:shell.send" aria-label="Send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+          </div>
+        </div>`;
       wrap.appendChild(panel);
       _applyI18n(panel);
     }
@@ -1112,6 +1149,139 @@ html.cm-rail .hub-nav-grip{display:none}
     _renderChatPanel();
     _updateChatBadge();
 
+    // ── Hilo inline: leer + responder desde el panel sin salir de la página ──
+    let _ctConv = null;              // { key, kind } de la conversación abierta en el panel
+    let _ctTeamId = null;            // team del canal de equipo (para responder a 'group')
+    const _ctRendered = new Set();   // ids ya pintados (dedup insert-echo vs realtime)
+
+    // Marca la conversación como leída (badge fuera ya; el upsert va en background).
+    function _markConvRead(conv) {
+      delete _chatUnread[conv];
+      _updateChatBadge();
+      try {
+        window.sb.from('channel_reads').upsert(
+          { user_id: user.id, club_id: clubId, channel_key: conv, last_read_at: new Date().toISOString() },
+          { onConflict: 'user_id,club_id,channel_key' }
+        ).then(() => {}, () => {});
+      } catch (_) {}
+    }
+
+    function _ctKind(key) {
+      if (key === 'club') return 'club';
+      if (key === 'group') return 'team';
+      return String(key).startsWith('cg:') ? 'cg' : 'dm';
+    }
+
+    function _ctBubbleHtml(m) {
+      const mine = m.sender_id === user.id;
+      // En canales/grupos, nombre del autor arriba de la burbuja ajena (en DM sobra).
+      const who = (!mine && _ctConv && _ctConv.kind !== 'dm')
+        ? `<div class="cm-ct-who">${_escHtml(_chatName(m.sender_id, m.sender_name))}</div>` : '';
+      const txt = m.content || (m.attachment_name ? '📎 ' + m.attachment_name : '');
+      return `${who}<div class="cm-ct-bub ${mine ? 'me' : 'them'}">${_escHtml(txt)}</div>`;
+    }
+
+    function _ctAppendMsg(m) {
+      const box = document.getElementById('cm-ct-msgs');
+      if (!box || !_ctConv) return;
+      if (m.id && _ctRendered.has(m.id)) return;
+      if (m.id) _ctRendered.add(m.id);
+      const empty = box.querySelector('.cm-ct-empty');
+      if (empty) empty.remove();
+      box.insertAdjacentHTML('beforeend', _ctBubbleHtml(m));
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function _closeConvThread() {
+      _ctConv = null;
+      _ctRendered.clear();
+      const main = document.getElementById('cm-cp-main');
+      const th = document.getElementById('cm-ct');
+      if (main) main.style.display = 'flex';
+      if (th) th.style.display = 'none';
+    }
+
+    async function _openConvThread(conv) {
+      const th = document.getElementById('cm-ct');
+      const main = document.getElementById('cm-cp-main');
+      if (!th || !main) return;
+      _ctConv = { key: conv, kind: _ctKind(conv) };
+      _ctRendered.clear();
+      _ctTeamId = null;
+      const rec = _chatRecent[conv];
+      const d = _convDisplay(conv, _ctConv.kind, (rec && !rec.mine) ? rec.senderName : '');
+      main.style.display = 'none';
+      th.style.display = 'flex';
+      th.querySelector('.cm-ct-av-slot').innerHTML = d.av;
+      th.querySelector('.cm-ct-name').textContent = d.name;
+      th.querySelector('.cm-ct-open').href = 'Chat%20%26%20Tasks.html?conv=' + encodeURIComponent(conv);
+      const box = document.getElementById('cm-ct-msgs');
+      box.innerHTML = '<div class="cm-ct-empty">…</div>';
+      _markConvRead(conv);
+      _renderChatPanel();
+      const inp = document.getElementById('cm-ct-inp');
+      if (inp) { inp.value = ''; inp.style.height = 'auto'; inp.focus(); }
+
+      // Últimos mensajes de la conversación (espeja los filtros de loadMessages en Chat & Tasks).
+      let q = window.sb.from('messages')
+        .select('id,sender_id,recipient_id,group_id,team_id,content,created_at,sender_name,attachment_name,deleted_at')
+        .eq('club_id', clubId);
+      if (conv === 'club') {
+        q = q.is('recipient_id', null).is('group_id', null).is('team_id', null);
+      } else if (conv === 'group') {
+        q = q.is('recipient_id', null).is('group_id', null);
+        let tid = null; try { tid = sessionStorage.getItem('cal_active_team'); } catch (_) {}
+        if (tid) q = q.or(`team_id.eq.${tid},team_id.is.null`);
+      } else if (_ctConv.kind === 'cg') {
+        q = q.eq('group_id', conv.slice(3));
+      } else {
+        q = q.or(`and(sender_id.eq.${user.id},recipient_id.eq.${conv}),and(sender_id.eq.${conv},recipient_id.eq.${user.id})`);
+      }
+      const { data: msgs } = await q.order('created_at', { ascending: false }).limit(15);
+      if (!_ctConv || _ctConv.key !== conv) return;   // cambió de hilo mientras cargaba
+      // Team para responder al canal de equipo: el seleccionado en la app, o el del
+      // mensaje más reciente que traiga uno (mensajes legacy vienen con team_id null).
+      if (_ctConv.kind === 'team') {
+        try { _ctTeamId = sessionStorage.getItem('cal_active_team') || null; } catch (_) {}
+        if (!_ctTeamId) { const wt = (msgs || []).find(m => m.team_id); _ctTeamId = wt ? wt.team_id : null; }
+      }
+      const rows = (msgs || []).filter(m => !m.deleted_at).reverse();
+      box.innerHTML = rows.length ? '' : '<div class="cm-ct-empty" data-i18n="shell.no_msgs">No messages yet</div>';
+      _applyI18n(box);
+      rows.forEach(m => _ctAppendMsg(m));
+    }
+
+    async function _ctSend() {
+      if (!_ctConv) return;
+      const inp = document.getElementById('cm-ct-inp');
+      const btn = document.getElementById('cm-ct-send');
+      const content = (inp && inp.value || '').trim();
+      if (!content) return;
+      const { key, kind } = _ctConv;
+      // El canal de equipo nunca guarda team_id null (ese mensaje no lo vería nadie).
+      if (kind === 'team' && !_ctTeamId) {
+        alert(_ttx('shell.select_team_first', 'Open Chat & Tasks and select a team before posting to the team channel.'));
+        return;
+      }
+      if (btn) btn.disabled = true;
+      const { data, error } = await window.sb.from('messages').insert({
+        club_id:      clubId,
+        sender_id:    user.id,
+        sender_name:  _chatName(user.id, (user.email || '').split('@')[0]),
+        recipient_id: kind === 'dm' ? key : null,
+        team_id:      kind === 'team' ? _ctTeamId : null,
+        group_id:     kind === 'cg' ? key.slice(3) : null,
+        content,
+        message_type: 'text'
+      }).select();
+      if (btn) btn.disabled = false;
+      if (error) { alert(_ttx('shell.send_failed', 'Could not send — try again.')); return; }
+      if (inp) { inp.value = ''; inp.style.height = 'auto'; inp.focus(); }
+      const row = (data || [])[0];
+      if (row) _ctAppendMsg(row);   // el eco realtime se dedupe por id
+      _markConvRead(key);           // actualiza last_read_at para el chat completo
+    }
+
     // Realtime
     try { window.sb.getChannels().filter(c => c.topic.includes('cm-chat-notif')).forEach(c => window.sb.removeChannel(c)); } catch(_){}
     window.sb.channel(`cm-chat-notif-${clubId}`)
@@ -1121,6 +1291,10 @@ html.cm-rail .hub-nav-grip{display:none}
         const key = _convKey(msg, user.id);
         if (!key) return;                       // DM ajeno o grupo del que no soy miembro
         const kind = _msgKind(msg);
+        // Si el hilo inline del panel está abierto sobre esta conversación, pintar el
+        // mensaje ahí mismo (dedup por id contra el eco del propio insert).
+        const inThread = _ctConv && _ctConv.key === key;
+        if (inThread) _ctAppendMsg(msg);
         if (msg.sender_id === user.id) {
           // My own message: never unread, but the thread must show up in "Recent" right away
           // (a DM I just started, before any reply).
@@ -1137,6 +1311,12 @@ html.cm-rail .hub-nav-grip{display:none}
           lastMsg: msg.content || '', lastAt: msg.created_at,
           senderName: msg.sender_name || '', senderId: msg.sender_id || null
         };
+        if (inThread) {
+          // Lo estoy viendo en el hilo inline: leído al instante, sin badge ni toast.
+          _markConvRead(key);
+          _renderChatPanel();
+          return;
+        }
         if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '', senderId: null };
         _chatUnread[key].count += 1;
         _chatUnread[key].lastMsg    = msg.content || '';
@@ -1156,30 +1336,34 @@ html.cm-rail .hub-nav-grip{display:none}
     if (!chatBtn || !panel || !wrap) return;
     chatBtn.addEventListener('click', e => {
       e.stopPropagation();
-      panel.classList.toggle('is-open');
+      const open = panel.classList.toggle('is-open');
+      if (!open) _closeConvThread();
       document.getElementById('cm-np')?.classList.remove('is-open');
     });
     document.addEventListener('click', e => {
-      if (!wrap.contains(e.target)) panel.classList.remove('is-open');
+      if (!wrap.contains(e.target)) {
+        if (panel.classList.contains('is-open')) { panel.classList.remove('is-open'); _closeConvThread(); }
+      }
     });
-    panel.addEventListener('click', async e => {
+    panel.addEventListener('click', e => {
+      // Clic en una conversación: abrir el hilo inline (leer + responder acá mismo,
+      // sin navegar). El link del header del hilo lleva al chat completo.
       const item = e.target.closest('[data-chat-nav]');
-      if (!item) return;
-      const conv = item.dataset.conv || 'group';
-      // Marcar como leído ya mismo (quita el badge sin esperar)
-      try {
-        const nowIso = new Date().toISOString();
-        await window.sb.from('channel_reads').upsert(
-          { user_id: user.id, club_id: clubId, channel_key: conv, last_read_at: nowIso },
-          { onConflict: 'user_id,club_id,channel_key' }
-        );
-      } catch (_) {}
-      delete _chatUnread[conv];
-      _updateChatBadge();
-      _renderChatPanel();
-      // Navegar a esa conversación
-      window.location.href = 'Chat%20%26%20Tasks.html?conv=' + encodeURIComponent(conv);
+      if (item) { _openConvThread(item.dataset.conv || 'group'); return; }
+      if (e.target.closest('#cm-ct-back')) { _closeConvThread(); return; }
+      if (e.target.closest('#cm-ct-send')) { _ctSend(); return; }
     });
+    const ctInp = panel.querySelector('#cm-ct-inp');
+    if (ctInp) {
+      ctInp.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _ctSend(); }
+        else if (e.key === 'Escape') { e.stopPropagation(); _closeConvThread(); }
+      });
+      ctInp.addEventListener('input', () => {
+        ctInp.style.height = 'auto';
+        ctInp.style.height = Math.min(ctInp.scrollHeight, 90) + 'px';
+      });
+    }
   }
 
   // ── LIVE PRESENCE (who's online, per club) ───────────────────
