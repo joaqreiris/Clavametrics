@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="assets/gps-integrations.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/feature-teaser.js"></script>
 <script src="assets/positions.js"></script>
 <script src="assets/gps-units.js"></script>   <!-- canonical units contract (single source) -->
@@ -8673,10 +8674,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 //   · vs sesión → su propio selector (sc-vs-compare-sel)
 //   · Outliers  → sesión previa del MISMO MD (contraste, no acotado por la barra)
 (function () {
+  // Mismo orden de prioridad que _mdRaw() del filter bar (columna primero, md_code después)
+  // y misma forma canónica (cmMdNorm), para que el match contra FB.mdCodes no falle por formato.
   const _mdOf = s => {
+    const off = s?.match_day_offset;
+    if (off != null && off !== '') return window.cmMdNorm(off);
     const md = s?.session_attributes?.md_code;
-    if (md != null && md !== '') return String(md);
-    return s?.match_day_offset != null ? 'MD' + s.match_day_offset : '';
+    return (md != null && md !== '') ? window.cmMdNorm(md) : '';
   };
   function _barFrom(d) {
     if (!d) return null;
@@ -8706,7 +8710,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const FB   = window.gpFilterBar?.getState?.() || null;
       const from = _barFrom(FB?.date), to = FB?.date?.to || null;
-      const md   = FB?.mdCodes?.length      ? new Set(FB.mdCodes.map(String))      : null;
+      const md   = FB?.mdCodes?.length      ? new Set(FB.mdCodes.map(v => window.cmMdNorm(v))) : null;
       const mc   = FB?.microcycleIds?.length ? new Set(FB.microcycleIds.map(String)) : null;
       const matches = s =>
         (!from || s.session_date >= from) && (!to || s.session_date <= to) &&

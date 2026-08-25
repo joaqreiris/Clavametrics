@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/exercise-folders.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -767,7 +768,7 @@
       pIds.length ? window.sb.from('players').select('id,first_name,last_name').in('id', pIds) : { data: [] },
       eIds.length ? window.sb.from('calendar_events').select('id,opponent,title,date').in('id', eIds) : { data: [] },
     ]);
-    const sessionLabel = s => s ? (s.title || (s.match_day_offset != null ? `MD${s.match_day_offset > 0 ? '+' : ''}${s.match_day_offset}` : (s.session_date ? fmtDate(s.session_date) : tt('video_detail.block_session', 'Session')))) : tt('video_detail.block_session', 'Session');
+    const sessionLabel = s => s ? (s.title || (s.match_day_offset != null ? (window.cmMdNorm ? window.cmMdNorm(s.match_day_offset) : String(s.match_day_offset)) : (s.session_date ? fmtDate(s.session_date) : tt('video_detail.block_session', 'Session')))) : tt('video_detail.block_session', 'Session');
     const playerLabel  = p => (p && (p.last_name || p.first_name)) || '—';
     const matchLabel   = e => (e && (e.opponent || e.title)) || tt('video_detail.block_match', 'Match');
 
@@ -837,7 +838,7 @@
         window.getActivePlayers(clubId),
         window.sb.from('calendar_events').select('id,opponent,title,date').eq('club_id', clubId).eq('type', 'match').order('date', { ascending: false }),
       ]);
-      const sLab = r => r.title || (r.match_day_offset != null ? `MD${r.match_day_offset > 0 ? '+' : ''}${r.match_day_offset}` : (r.session_date ? fmtDate(r.session_date) : tt('video_detail.block_session', 'Session')));
+      const sLab = r => r.title || (r.match_day_offset != null ? (window.cmMdNorm ? window.cmMdNorm(r.match_day_offset) : String(r.match_day_offset)) : (r.session_date ? fmtDate(r.session_date) : tt('video_detail.block_session', 'Session')));
       LISTS.session = (s.data || []).map(r => ({ id:r.id, label:sLab(r), sub:r.session_date ? fmtDate(r.session_date) : '', search:`${r.title || ''} ${sLab(r)}`.toLowerCase() }));
       LISTS.player  = (p || []).map(r => {
         const full = `${r.first_name || ''} ${r.last_name || ''}`.trim();

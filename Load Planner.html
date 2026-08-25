@@ -292,7 +292,7 @@ let PLAYER_SEL=new Set();    // selected players (GKs off by default)
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, ADAY={}, PREV={};
 let sortK='proj', sortD=-1;
 // MD taper (% of match per day) — Periodización Integral: P-4=45, P-3=60, P-2=25, P-1=35
-const MD_TAPER={ 'MD−6':40,'MD−5':45,'MD−4':45,'MD−3':60,'MD−2':25,'MD−1':35,'MD+1':20,'MD+2':0,'MD+3':0 };
+const MD_TAPER={ 'MD-6':40,'MD-5':45,'MD-4':45,'MD-3':60,'MD-2':25,'MD-1':35,'MD+1':20,'MD+2':0,'MD+3':0 };  // claves ASCII: lookup vía cmMdNorm en _dayW
 const bandMid=m=>{ const b=BANDS[m]; return b?(b[0]+b[1])/2:null; };
 let TARGETS={};   // metric → editable weekly ×match target (defaults to band mid)
 const targetOf=m=>{ const t=TARGETS[m]; return (t!=null&&t!=='')?+t:bandMid(m); };
@@ -803,7 +803,7 @@ function wireGrid(){
   const btt=document.getElementById('lpToTarget'); if(btt) btt.onclick=applyToTarget;
   const bc=document.getElementById('lpClearPlan'); if(bc) bc.onclick=clearPlan;
 }
-const _dayW=d=>{ let w=MD_TAPER[d.md]; if(w==null) w=['training','tactical','gym','recovery'].includes(d.type)?50:(d.hasSess?30:0); return w; };
+const _dayW=d=>{ let w=MD_TAPER[window.cmMdNorm?window.cmMdNorm(d.md):d.md]; if(w==null) w=['training','tactical','gym','recovery'].includes(d.type)?50:(d.hasSess?30:0); return w; };
 // #4 — fill the week from the typical MD taper (% of match per day), skipping match days
 async function applyTaper(){
   const changes=[];

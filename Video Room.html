@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/feature-teaser.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -438,7 +439,7 @@
       const sessionLabel = s => {
         if (!s) return tt('video_room.label_session_none', 'Session');
         if (s.title) return tt('video_room.label_session', `Session · ${s.title}`, { name: s.title });
-        if (s.match_day_offset != null) { const md = `MD${s.match_day_offset > 0 ? '+' : ''}${s.match_day_offset}`; return tt('video_room.label_session', `Session · ${md}`, { name: md }); }
+        if (s.match_day_offset != null) { const md = window.cmMdNorm ? window.cmMdNorm(s.match_day_offset) : String(s.match_day_offset); return tt('video_room.label_session', `Session · ${md}`, { name: md }); }
         const d = s.session_date ? fmtDate(s.session_date) : '';
         return tt('video_room.label_session', `Session · ${d}`, { name: d }).trim();
       };
