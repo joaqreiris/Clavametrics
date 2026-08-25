@@ -2073,7 +2073,9 @@
   async function evrFetch(pid){
     var player = {};
     try {
-      var pq = await window.sb.from('players').select('first_name,last_name,position,date_of_birth,height').eq('id', pid).single();
+      var pq = await window.sb.from('players')
+        .select('first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,photo_url')
+        .eq('id', pid).single();
       player = pq.data || {};
     } catch(e){}
     var evRows = [];
@@ -2226,6 +2228,22 @@
     return order.map(function(title){ return { title:title, items:byCat[title] }; });
   }
 
+  // player photo → data URI so html2canvas never taints the canvas (missing/failed → null)
+  async function evrPhotoData(url){
+    if (!url) return null;
+    try {
+      var r = await fetch(url);
+      if (!r.ok) return null;
+      var b = await r.blob();
+      return await new Promise(function(res){
+        var fr = new FileReader();
+        fr.onload = function(){ res(fr.result); };
+        fr.onerror = function(){ res(null); };
+        fr.readAsDataURL(b);
+      });
+    } catch(e){ return null; }
+  }
+
   // ── print sheet (fixed light palette: it's paper, not the app theme) ──
   function evrSpark(hist){
     var w=92, h=24, pad=3;
@@ -2240,31 +2258,56 @@
       + '<circle cx="'+lastX+'" cy="'+lastY+'" r="2.4" fill="#0F766E"/></svg>';
   }
 
-  function evrSheetHtml(player, sections){
+  function evrSheetHtml(player, sections, photoData){
     var F = "-apple-system,'Segoe UI',Roboto,Arial,sans-serif";
     var name = ((player.first_name||'') + ' ' + (player.last_name||'')).trim() || '—';
-    var meta = [];
-    if (player.position) meta.push(player.position);
+
+    // meta line 1: position · #number — line 2: age · height · weight · foot · nationality
+    var m1 = [];
+    if (player.position) m1.push(player.position);
+    if (player.number != null && player.number !== '') m1.push('#' + player.number);
+    var m2 = [];
     var dob = String(player.date_of_birth||'').slice(0,10);
     if (dob){
       var t = evToday().split('-'), b = dob.split('-');
       var age = (+t[0]) - (+b[0]) - ((+t[1] < +b[1] || (+t[1] === +b[1] && +t[2] < +b[2])) ? 1 : 0);
-      if (age > 0 && age < 60) meta.push(tt('evaluations.report_age', age+' years old', {n:age}));
+      if (age > 0 && age < 60) m2.push(tt('evaluations.report_age', age+' years old', {n:age}) + ' (' + evrD(dob) + ')');
     }
-    if (Number(player.height) > 100) meta.push(Math.round(player.height) + ' cm');
+    if (Number(player.height) > 100) m2.push(Math.round(player.height) + ' cm');
+    if (Number(player.weight) > 20) m2.push(Math.round(Number(player.weight)*10)/10 + ' kg');
+    if (player.dominant_foot) m2.push(tt('squad.foot_' + String(player.dominant_foot).toLowerCase(), player.dominant_foot));
+    if (player.nationality) m2.push(player.nationality);
+
     var allDates = [];
     sections.forEach(function(s){ s.items.forEach(function(it){ it.hist.forEach(function(p){ if(p.d) allDates.push(String(p.d).slice(0,10)); }); }); });
     allDates.sort();
     var range = allDates.length ? tt('evaluations.report_range','Data '+evrD(allDates[0])+' → '+evrD(allDates[allDates.length-1]), {from:evrD(allDates[0]), to:evrD(allDates[allDates.length-1])}) : '';
 
+    // photo circle, or initials placeholder when there is no usable photo
+    var initials = ((player.first_name||' ')[0] + (player.last_name||' ')[0]).trim().toUpperCase() || '·';
+    var photoHtml = photoData
+      ? '<img src="'+photoData+'" style="width:58px;height:58px;border-radius:50%;object-fit:cover;display:block;border:2px solid #0F766E;box-sizing:border-box" alt="">'
+      : '<div style="width:58px;height:58px;border-radius:50%;background:#E8ECEA;color:#0F766E;display:flex;align-items:center;justify-content:center;font:700 20px/1 '+F+';border:2px solid #0F766E;box-sizing:border-box">'+esc(initials)+'</div>';
+
+    // brand mark: same 3-bar SVG as the app sidebar, self-contained (no external asset)
+    var brandHtml = '<div style="display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-bottom:6px">'
+      + '<div style="width:24px;height:24px;border-radius:6px;background:#0F766E;display:flex;align-items:center;justify-content:center">'
+      +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg>'
+      + '</div>'
+      + '<span style="font:700 15px/1 '+F+';letter-spacing:-0.02em;color:#111">ClavaMetrics</span></div>';
+
     var html = '<div style="width:860px;background:#fff;color:#111;font-family:'+F+';padding:26px 32px 32px;box-sizing:border-box">'
-      + '<div id="evrHead" style="display:flex;align-items:flex-end;gap:16px;background:#fff;padding-bottom:12px;border-bottom:2px solid #111">'
-      +   '<div style="flex:1"><div style="font:700 22px/1.1 '+F+';letter-spacing:-0.01em">'+esc(name)+'</div>'
-      +     (meta.length ? '<div style="font:500 12px/1.4 '+F+';color:#555;margin-top:3px">'+esc(meta.join(' · '))+'</div>' : '')
+      + '<div id="evrHead" style="display:flex;align-items:center;gap:14px;background:#fff;padding-bottom:12px;border-bottom:2px solid #111">'
+      +   photoHtml
+      +   '<div style="flex:1;min-width:0"><div style="font:700 22px/1.1 '+F+';letter-spacing:-0.01em">'+esc(name)+'</div>'
+      +     (m1.length ? '<div style="font:600 12px/1.4 '+F+';color:#0F766E;margin-top:3px">'+esc(m1.join(' · '))+'</div>' : '')
+      +     (m2.length ? '<div style="font:500 11.5px/1.4 '+F+';color:#555;margin-top:2px">'+esc(m2.join(' · '))+'</div>' : '')
       +   '</div>'
-      +   '<div style="text-align:right"><div style="font:600 13px/1.2 '+F+'">'+esc(tt('evaluations.report_header','Evaluation report'))+'</div>'
-      +     '<div style="font:500 11px/1.5 '+F+';color:#555">'+esc(tt('evaluations.report_generated','Generated '+evrD(evToday()), {date:evrD(evToday())}))
-      +     (range ? ' · '+esc(range) : '') + '</div></div>'
+      +   '<div style="text-align:right;flex-shrink:0">'
+      +     brandHtml
+      +     '<div style="font:600 12px/1.2 '+F+'">'+esc(tt('evaluations.report_header','Evaluation report'))+'</div>'
+      +     '<div style="font:500 10.5px/1.5 '+F+';color:#555">'+esc(tt('evaluations.report_generated','Generated '+evrD(evToday()), {date:evrD(evToday())}))
+      +     (range ? '<br>'+esc(range) : '') + '</div></div>'
       + '</div>';
 
     var th = function(txt, align){ return '<th style="text-align:'+(align||'left')+';padding:6px 8px;font:600 10.5px/1.2 '+F+';text-transform:uppercase;letter-spacing:0.04em;color:#666;border-bottom:1px solid #ccc;white-space:nowrap">'+esc(txt)+'</th>'; };
@@ -2391,7 +2434,8 @@
         st.textContent = tt('evaluations.report_no_data','This player has no recorded tests yet.');
         return;
       }
-      host.innerHTML = evrSheetHtml(data.player, sections);
+      var photoData = await evrPhotoData(data.player.photo_url);
+      host.innerHTML = evrSheetHtml(data.player, sections, photoData);
       // reveal off-screen so html2canvas can measure and capture it
       host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
       await evrPdf(host.firstElementChild, data.player);
