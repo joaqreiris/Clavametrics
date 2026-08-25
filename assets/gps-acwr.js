@@ -112,28 +112,35 @@
   // setDate) used to reach Date.toISOString() → "RangeError: Invalid time value", which bubbled up
   // and blanked the ACWR chart. These helpers now return null / [] on bad input so callers can
   // degrade to an empty series instead of crashing.
+  // ⚠️ TODA la aritmética de fechas es UTC-anclada ('T00:00:00Z' + setUTCDate). Antes se
+  // parseaba medianoche LOCAL y se formateaba con toISOString() (UTC): al este de UTC
+  // (ej. Camboya, +7) cada pasada corría el día −1, y como _validDay + _enumDays/_offsetDate
+  // se encadenan, el gráfico quedaba corrido −2 días y descartaba los últimos 2 días de datos.
+  // Al oeste de UTC el redondeo caía en el mismo día y el bug era invisible.
   function _isValidDate(d) { return d instanceof Date && !isNaN(d.getTime()); }
   function _dateStr(d) { return _isValidDate(d) ? d.toISOString().slice(0, 10) : null; }
   // Normalize any input (Date | 'YYYY-MM-DD' | null/undefined) → valid 'YYYY-MM-DD' string, or null.
   function _validDay(s) {
     if (s == null || s === '') return null;
     if (s instanceof Date) return _dateStr(s);
-    const d = new Date(String(s) + 'T00:00:00');
+    const m = String(s).match(/^(\d{4}-\d{2}-\d{2})/);   // date-only: pasa tal cual, sin tocar el reloj
+    if (m) return m[1];
+    const d = new Date(String(s));
     return _isValidDate(d) ? _dateStr(d) : null;
   }
   function _offsetDate(refStr, days) {
-    const d = new Date(String(refStr) + 'T00:00:00');
+    const d = new Date(String(refStr) + 'T00:00:00Z');
     if (!_isValidDate(d) || !Number.isFinite(days)) return null;   // bad ref or NaN offset → null, don't crash
-    d.setDate(d.getDate() + days);
+    d.setUTCDate(d.getUTCDate() + days);
     return _dateStr(d);
   }
   function _enumDays(fromStr, toStr) {
     const out = [];
-    const cur = new Date(String(fromStr) + 'T00:00:00');
-    const end = new Date(String(toStr) + 'T00:00:00');
+    const cur = new Date(String(fromStr) + 'T00:00:00Z');
+    const end = new Date(String(toStr) + 'T00:00:00Z');
     if (!_isValidDate(cur) || !_isValidDate(end)) return out;   // invalid range → empty (never loop on NaN)
     let guard = 0;
-    while (cur <= end && guard++ < 4000) { out.push(_dateStr(cur)); cur.setDate(cur.getDate() + 1); }
+    while (cur <= end && guard++ < 4000) { out.push(_dateStr(cur)); cur.setUTCDate(cur.getUTCDate() + 1); }
     return out;
   }
 
