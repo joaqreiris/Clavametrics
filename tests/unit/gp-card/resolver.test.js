@@ -290,3 +290,52 @@ describe('aggregateSeries — scatter (one point per player; dimension = colour 
     sx.points.forEach(p => expect(p.cat).toBeNull());
   });
 });
+
+// ── aggregateSeries — métrica REPETIDA (misma métrica, distinto agg) ─────────
+// El builder permite repetir una métrica (ej. Distance/min como valor + como Nº de
+// sesiones con agg 'count'): cada entrada de config.metrics produce SU serie, 1:1
+// por índice, aunque el id (y por tanto series.label) se repita.
+
+describe('aggregateSeries — duplicated metric id (value + count)', () => {
+  const rows = [
+    makeRow({ playerId: 'p1', sessionId: 's1', reportId: 'r1', total_distance: 1000 }),
+    makeRow({ playerId: 'p1', sessionId: 's2', reportId: 'r2', total_distance: 3000 }),
+    makeRow({ playerId: 'p2', sessionId: 's1', reportId: 'r3', total_distance: 2000 }),
+  ];
+  const config = {
+    viz: 'table', scope: { level: 'squad' }, dimensions: [{ id: 'player_name' }],
+    metrics: [{ id: 'total_distance', agg: 'total' }, { id: 'total_distance', agg: 'count' }],
+  };
+
+  it('returns one series per config.metrics entry, in order, same label', () => {
+    const series = aggregateSeries(rows, new Map(), config, catalog);
+    expect(series).toHaveLength(2);
+    expect(series[0].label).toBe('total_distance');
+    expect(series[1].label).toBe('total_distance');
+  });
+
+  it('first instance aggregates the value; second counts distinct sessions', () => {
+    const [sum, count] = aggregateSeries(rows, new Map(), config, catalog);
+    // El grouping es por player_id (p1, p2) en el MISMO orden en ambas series.
+    expect(sum.points.map(p => p.y).sort((a, b) => a - b)).toEqual([2000, 4000]);   // p2 / p1(1000+3000)
+    expect(count.points.map(p => p.y).sort((a, b) => a - b)).toEqual([1, 2]);       // p2: 1 sesión, p1: 2
+    expect(count.unit).toBe('');                 // count → sin unidad
+  });
+});
+
+// ── enrichMcDiff — alineado por índice con métrica repetida ──────────────────
+
+describe('enrichMcDiff — index-aligned (duplicated labels)', async () => {
+  const { enrichMcDiff } = await import('../../../lib/gp-card/resolver.js');
+  const mk = (label, y) => ({ label, name: label, unit: 'm', points: [{ x: 'A', y }] });
+
+  it('pairs series[i] with refSeries[i], not by label', () => {
+    const series = [mk('total_distance', 200), mk('total_distance', 4)];   // valor + count
+    const ref    = [mk('total_distance', 100), mk('total_distance', 2)];
+    const out = enrichMcDiff(series, ref);
+    expect(out[0].points[0].ref).toBe(100);      // NO 2 (que sería el last-wins por label)
+    expect(out[0].points[0].diff).toBe(100);     // 200 vs 100 → +100%
+    expect(out[1].points[0].ref).toBe(2);
+    expect(out[1].points[0].diff).toBe(100);     // 4 vs 2 → +100%
+  });
+});

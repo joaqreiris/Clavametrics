@@ -402,7 +402,7 @@
   // Mini-menú de modos de variación sobre el botón % del chip de métrica.
   function _openRelMenu(btn) {
     const modes = _relModesFor(S);
-    const m = (S.metrics || []).find(x => x.id === btn.dataset.ddRel);
+    const m = (S.metrics || [])[+btn.dataset.ddRel];   // data-dd-rel = índice de instancia
     if (!modes.length || !m) return;
     if (popOwner === btn) { closePop(); return; }
     const cur = m.rel || '';
@@ -420,7 +420,7 @@
     for (const md of modes) rows += opt(md, LBL[md], ICO[md]);
     openPop(`<div class="rb-pop-h"><div class="t">${_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)')}</div></div><div class="rb-pop-b">${rows}</div>`, btn, 'rel');
     popEl.querySelectorAll('[data-rel-opt]').forEach(o => o.addEventListener('click', () => {
-      const mm = (S.metrics || []).find(x => x.id === btn.dataset.ddRel);
+      const mm = (S.metrics || [])[+btn.dataset.ddRel];
       if (mm) mm.rel = o.dataset.relOpt || undefined;
       closePop(); ddSyncFromS();
     }));
@@ -468,9 +468,11 @@
     const refConfig = { ...config, dimensions: refDims.map(id => ({ id })) };   // conserva el agg original
     const eav = await fetchExtraMetrics(seasonRows, refConfig, catalogMap, _clubId, sb);
     const refSeries = aggregateSeries(seasonRows, eav, refConfig, catalogMap);
-    // metricId → Map(groupKey "dims no temporales ¦ md" → [{ date, val }])
+    // ÍNDICE de métrica → Map(groupKey "dims no temporales ¦ md" → [{ date, val }]).
+    // Keyeado por índice (no por id): una métrica repetida con distinto agg genera dos
+    // refSeries con el mismo label, y por id la segunda pisaría a la primera.
     const occIdx = new Map();
-    for (const s of refSeries) {
+    refSeries.forEach((s, si) => {
       const g = new Map();
       for (const p of s.points) {
         const d = p.dims || [p.x];
@@ -478,10 +480,10 @@
         if (!g.has(groupKey)) g.set(groupKey, []);
         g.get(groupKey).push({ date: String(d[d.length - 1] || ''), val: p.y });
       }
-      occIdx.set(s.label, g);
-    }
-    const refVal = (metricId, groupKey, mode) => {
-      const arr = (occIdx.get(metricId) || new Map()).get(groupKey);
+      occIdx.set(si, g);
+    });
+    const refVal = (metricIdx, groupKey, mode) => {
+      const arr = (occIdx.get(metricIdx) || new Map()).get(groupKey);
       if (!arr || !arr.length) return null;
       if (mode === 'avg_md') {
         const vs = arr.map(o => o.val).filter(v => v != null && !isNaN(v));
@@ -495,8 +497,8 @@
 
     const mdOfDate = v => (isDateAxis ? (window._gpMdForDate?.[String(v).slice(0, 10)] || '') : v);
     const out = [];
-    curSeries.forEach(s => {
-      const mc = config.metrics.find(m => m.id === s.label);
+    curSeries.forEach((s, si) => {
+      const mc = config.metrics?.[si];   // curSeries es 1:1 con config.metrics (ids repetibles)
       const mode = mc && mc.rel;
       if ((mode !== 'last_md' && mode !== 'avg_md') || !s.points?.length) return;
       const nm  = catalogMap.get(s.label)?.name || s.name || s.label;
@@ -506,7 +508,7 @@
         points: s.points.map(p => {
           const dv = p.dims || [p.x];
           const groupKey = [...dv.filter((_, i) => i !== tIdx), mdOfDate(dv[tIdx])].join('¦');
-          const ref = refVal(s.label, groupKey, mode);
+          const ref = refVal(si, groupKey, mode);
           const raw = (ref != null && ref !== 0 && !isNaN(ref) && p.y != null && !isNaN(p.y)) ? (p.y - ref) / ref * 100 : null;
           const e = _capPct(raw);
           return { ...p, y: e.v, _abs: p.y, _capped: e.capped };
@@ -1568,7 +1570,8 @@
         if (e.target.closest('.cmf-rowacts')) { e.preventDefault(); return; }   // editar/borrar no arrastra
         const el = e.target.closest('.bdd-field, .bdd-chip');
         if (!el || el.classList.contains('is-placed')) return;
-        _ddDrag = { id: el.dataset.id, kind: el.dataset.kind, from: el.closest('.bdd-drop') ? 'zone' : 'panel' };
+        _ddDrag = { id: el.dataset.id, kind: el.dataset.kind, from: el.closest('.bdd-drop') ? 'zone' : 'panel',
+                    idx: el.dataset.i != null ? +el.dataset.i : null };   // índice de instancia (chips de zona)
         el.classList.add('is-dragging');
         try { e.dataTransfer.setData('text/plain', el.dataset.id); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
       });
@@ -1615,7 +1618,7 @@
         const role = zone.dataset.role || null;                 // scatter role zones carry data-role
         const idx  = _ddInsertIndex(zone.querySelector('.bdd-drop'), e.clientY);
         if (role)                         ddAddField(_ddDrag.kind, _ddDrag.id, idx, role);  // add OR re-assign role
-        else if (_ddDrag.from === 'zone') ddMoveWithin(_ddDrag.kind, _ddDrag.id, idx);      // reorder (default zones)
+        else if (_ddDrag.from === 'zone') ddMoveWithin(_ddDrag.kind, _ddDrag.id, idx, _ddDrag.idx);  // reorder (default zones)
         else                              ddAddField(_ddDrag.kind, _ddDrag.id, idx);         // add (default zones)
         _ddDrag = null;
         ddSyncFromS();
@@ -1638,22 +1641,24 @@
         const ddPop = e.target.closest('[data-ddpop]');
         if (ddPop) { togglePop(ddPop, ddPop.dataset.ddpop); return; }   // reuse the classic range/compare/bars popover
         // Bar/Line combo on a metric chip (bars only) — toggle the SAME m.line as the classic.
+        // data-dd-line lleva el ÍNDICE en S.metrics (los ids pueden repetirse).
         const lineBtn = e.target.closest('[data-dd-line]');
-        if (lineBtn) { const m = (S.metrics || []).find(x => x.id === lineBtn.dataset.ddLine); if (m) { m.line = !m.line; ddSyncFromS(); } return; }
+        if (lineBtn) { const m = (S.metrics || [])[+lineBtn.dataset.ddLine]; if (m) { m.line = !m.line; ddSyncFromS(); } return; }
         // Variación Δ% — abre el mini-menú de modos (según el eje X).
         const relBtn = e.target.closest('[data-dd-rel]');
         if (relBtn) { _openRelMenu(relBtn); return; }
         const rmDim = e.target.closest('[data-rmdim]');
         if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
+        // data-rm lleva el ÍNDICE: quitar SOLO esa instancia (no todas las del mismo id).
         const rmMet = e.target.closest('[data-rm]');
-        if (rmMet) { S.metrics = (S.metrics || []).filter(m => m.id !== rmMet.dataset.rm); ddSyncFromS(); return; }
+        if (rmMet) { const i = +rmMet.dataset.rm; if (S.metrics && S.metrics[i]) S.metrics.splice(i, 1); ddSyncFromS(); return; }
       });
 
       // cambiar agregación del chip de métrica → actualiza S y re-renderiza la card en vivo
       ddPane.addEventListener('change', e => {
         const sel = e.target.closest('[data-agg-for]');
         if (!sel) return;
-        const it = (S.metrics || []).find(m => m.id === sel.dataset.aggFor);
+        const it = (S.metrics || [])[+sel.dataset.aggFor];   // índice de instancia (ids repetibles)
         if (it) { it.agg = sel.value; ddSyncFromS(); }
       });
     }
@@ -1874,18 +1879,16 @@
   // (Classic setType() removed — the D&D toolbar uses ddSetType(). The table→squad default was
   //  ported there.)
 
+  // Agrega SIEMPRE una instancia nueva (ya no togglea): una misma métrica puede repetirse
+  // (ej. valor + Nº de sesiones con agg 'count'). Quitar = × del chip (por índice).
   function addMetric(id) {
     if (!S) return;
     pulseNext = true;
     const t = VIZ_TYPES[S.type];
-    const idx = S.metrics.findIndex(m => m.id === id);
-    if (idx >= 0) {
-      S.metrics.splice(idx, 1);
-    } else if (t.max === 1) {
-      const cat = catalogMap.get(id);
+    const cat = catalogMap.get(id);
+    if (t.max === 1) {
       S.metrics = [{ id, agg: defaultAgg(cat?.kind || 'accum') }];
     } else if (S.metrics.length < t.max) {
-      const cat = catalogMap.get(id);
       S.metrics.push({ id, agg: defaultAgg(cat?.kind || 'accum') });
     }
     syncAll();
@@ -2268,7 +2271,11 @@
       const m = S.metrics.find(x => x.id === b.dataset.lineFor);
       if (m) { m.line = !m.line; renderMetrics(); renderCard(); }
     });
-    wrap.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => addMetric(b.dataset.rm));
+    // Quitar por ÍNDICE de instancia (addMetric ya no togglea; los ids pueden repetirse).
+    wrap.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+      const i = +(b.closest('.es-field')?.dataset.idx ?? -1);
+      if (S.metrics[i]) { S.metrics.splice(i, 1); pulseNext = true; syncAll(); }
+    });
     wrap.querySelectorAll('[data-rmdim]').forEach(b => b.onclick = () => addDimension(b.dataset.rmdim));
     wrap.querySelectorAll('[data-agg-for]').forEach(b => {
       b.onclick = () => {
@@ -3092,16 +3099,18 @@
   // Both series sets come from the SAME pipeline (same metrics, same grouping), so
   // a point matches its reference by (series.label = metric id, point.x = group key).
 
-  /** Attach { cur, ref, diff% } to every current-series point using the reference series. */
+  /** Attach { cur, ref, diff% } to every current-series point using the reference series.
+   *  Alineado por ÍNDICE (ambos sets son 1:1 con config.metrics): keyear por label rompería
+   *  con una métrica repetida (mismo id, distinto agg → la última pisaría a la primera). */
   function _enrichMcDiff(series, refSeries) {
-    const refIdx = new Map();                      // metricId → Map(x → refValue)
-    for (const rs of (refSeries || [])) {
+    const refIdx = new Map();                      // índice de métrica → Map(x → refValue)
+    (refSeries || []).forEach((rs, i) => {
       const m = new Map();
       for (const p of rs.points) m.set(p.x, p.y);
-      refIdx.set(rs.label, m);
-    }
-    return (series || []).map(s => {
-      const rm = refIdx.get(s.label);
+      refIdx.set(i, m);
+    });
+    return (series || []).map((s, i) => {
+      const rm = refIdx.get(i);
       const points = s.points.map(p => {
         const rv = rm ? rm.get(p.x) : null;
         const diff = (rv != null && rv !== 0 && !isNaN(rv)) ? (p.y - rv) / rv * 100 : null;
@@ -6186,7 +6195,12 @@
     const dir = sort.dir === 'asc' ? 1 : -1;
     let get, type;
     if (sort.col.startsWith('met:')) {
-      const si = (config.metrics || []).findIndex(m => m.id === sort.col.slice(4));
+      // Formato nuevo "met:<i>:<id>" (índice de instancia) o legacy "met:<id>" (cards guardadas).
+      const raw = sort.col.slice(4);
+      const mm  = raw.match(/^(\d+):(.*)$/);
+      let si;
+      if (mm && series[+mm[1]] && (!mm[2] || config.metrics?.[+mm[1]]?.id === mm[2])) si = +mm[1];
+      else si = (config.metrics || []).findIndex(m => m.id === (mm ? mm[2] : raw));
       if (si < 0 || !series[si]) return null;
       const map = new Map(series[si].points.map(p => [p.x, p.y]));
       get = p => map.get(p.x); type = 'number';
@@ -6255,7 +6269,9 @@
       return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
-      const sid  = 'met:' + (config.metrics?.[i]?.id || i);
+      // "met:<i>:<id>" — el índice distingue instancias de una misma métrica repetida
+      // (ej. valor + count). _rowComparator sigue aceptando el formato viejo "met:<id>".
+      const sid  = 'met:' + i + ':' + (config.metrics?.[i]?.id || '');
       const lbl  = c.f.label || c.s.name;                          // FULL name (no word-splitting); custom rename wins
       const al   = c.f.align || 'right';
       const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="${_tt('gps_analysis.builder_column_options_format', 'Column options & format')}"><i class="ti ti-adjustments"></i></span>` : '';
@@ -7030,7 +7046,7 @@
       measuresHtml += `<div class="es-fly-grp ${grp.custom?'cust':''}">${esc(grp.g)}</div>`;
       items.forEach(m => {
         const on  = S.metrics.some(f => f.id === m.id);
-        const dis = !on && full;
+        const dis = full;   // clic = agregar otra instancia (repetible) → sólo bloquea el cupo lleno
         const isCalc = m.calculated;
         const tail = isCalc
           ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="${_tt('gps_analysis.calc_edit_formula_title', 'Edit formula')}"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="${_tt('gps_analysis.calc_delete_title', 'Delete')}"><i class="ti ti-trash"></i></button></span>`
@@ -7212,7 +7228,6 @@
     });
   }
   function _dimPlaced(id){ return !!(S && (S.dimensions || []).some(d => d.id === id)); }
-  function _metPlaced(id){ return !!(S && (S.metrics    || []).some(m => m.id === id)); }
 
   // Fila arrastrable del panel. Las ya colocadas (is-placed) no se arrastran.
   function ddFieldRow(id, kind, name, icon, unit, placed) {
@@ -7232,7 +7247,9 @@
     const q = _ddQuery.trim().toLowerCase();
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
     const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
-    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
+    // Las métricas NUNCA se marcan is-placed: se pueden repetir (misma métrica con otro agg,
+    // ej. valor + Nº de sesiones). Sólo las dimensiones siguen siendo únicas.
+    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, false));
     const none = `<div class="bdd-grp-h"><span class="hint">${_tt('gps_analysis.builder_no_matches', 'No matches')}</span></div>`;
     const addCalc = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>${_tt('gps_analysis.builder_calculated_metric', 'Calculated metric')}</button>`;
     return `
@@ -7250,7 +7267,7 @@
   // Fila D&D de una métrica calculada: arrastrable como cualquier métrica, con
   // distintivo fx (tinte info) + acciones editar/borrar.
   function ddCalcFieldHTML(m) {
-    const placed = _metPlaced(m.id);
+    const placed = false;   // las métricas (calculadas incluidas) se pueden repetir → nunca is-placed
     return `<div class="bdd-field${placed ? ' is-placed' : ''}" draggable="${placed ? 'false' : 'true'}" data-id="${esc(m.id)}" data-kind="metric">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic is-calc"><i class="ti ti-math-function"></i></span>
@@ -7277,26 +7294,29 @@
     </div>`;
   }
   function ddMetChip(m) {
+    // Identidad de INSTANCIA = índice en S.metrics (el id puede repetirse — misma métrica con
+    // distinto agg). Todos los controles del chip (agg/×/line/rel) operan por índice.
+    const mi   = S ? S.metrics.indexOf(m) : -1;
     const cat  = catalogMap.get(m.id) || { name: m.id, unit: '', group_name: 'custom' };
     const opts = AGGS.map(a => `<option value="${a.id}" ${a.id === m.agg ? 'selected' : ''}>${a.short}</option>`).join('');
     // Bar/Line combo — only for bars (same condition as the classic renderMetrics). Toggles the
     // SAME m.line prop. Uses a D&D-only attr (data-dd-line) so it never collides with the classic
     // data-line-for (which renderMetrics binds directly on the classic #gpbMetrics chips).
     const lineToggle = S && S.type === 'bars'
-      ? `<button class="bdd-line${m.line ? ' is-line' : ''}" data-dd-line="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}"><i class="ti ti-chart-bar"></i><i class="ti ti-chart-line"></i></button>`
+      ? `<button class="bdd-line${m.line ? ' is-line' : ''}" data-dd-line="${mi}" title="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}" aria-label="${esc(_tt('gps_analysis.builder_show_as_line', 'Show as line (secondary axis)'))}"><i class="ti ti-chart-bar"></i><i class="ti ti-chart-line"></i></button>`
       : '';
     // Modo variación Δ% — abre un mini-menú con los modos disponibles según el eje X:
     // microcycle → vs MC anterior; md_code/session_date → vs último MD igual / vs promedio MD.
     const relToggle = _relModesFor(S).length
-      ? `<button class="bdd-rel${m.rel ? ' is-on' : ''}" data-dd-rel="${esc(m.id)}" title="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}" aria-label="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}"><i class="ti ti-percentage"></i></button>`
+      ? `<button class="bdd-rel${m.rel ? ' is-on' : ''}" data-dd-rel="${mi}" title="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}" aria-label="${esc(_tt('gps_analysis.builder_variation_menu', 'Variation (Δ%)'))}"><i class="ti ti-percentage"></i></button>`
       : '';
-    return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="true">
+    return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" data-i="${mi}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(metIcon(cat))}"></i></span>
       <span class="nm">${esc(cat.name)}</span>
       ${lineToggle}${relToggle}
-      <span class="bdd-agg"><select data-agg-for="${esc(m.id)}">${opts}</select><i class="ti ti-selector car"></i></span>
-      <button class="x" data-rm="${esc(m.id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
+      <span class="bdd-agg"><select data-agg-for="${mi}">${opts}</select><i class="ti ti-selector car"></i></span>
+      <button class="x" data-rm="${mi}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
   }
 
@@ -7549,7 +7569,8 @@
     } else {
       const cat = catalogMap.get(id);
       if (!cat) return;
-      if (S.metrics.some(m => m.id === id)) return;
+      // Una misma métrica puede repetirse (ej. Distance/min como valor + como Nº de sesiones
+      // con agg 'count'); la identidad de instancia es el ÍNDICE en S.metrics, no el id.
       const agg = defaultAgg(cat.kind || 'accum');
       if (t.max === 1) { S.metrics = [{ id, agg }]; return; }  // métrica única → reemplaza
       if (S.metrics.length >= t.max) return;
@@ -7558,11 +7579,13 @@
     }
   }
 
-  // Reordena un chip ya colocado dentro de su array de S.
-  function ddMoveWithin(kind, id, atIndex) {
+  // Reordena un chip ya colocado dentro de su array de S. fromIdx = índice de la INSTANCIA
+  // arrastrada (los ids de métrica pueden repetirse); si no viene o no coincide, cae al id.
+  function ddMoveWithin(kind, id, atIndex, fromIdx) {
     const arr = kind === 'dim' ? S.dimensions : S.metrics;
     if (!arr) return;
-    const cur = arr.findIndex(x => x.id === id);
+    const cur = (fromIdx != null && arr[fromIdx] && arr[fromIdx].id === id)
+      ? fromIdx : arr.findIndex(x => x.id === id);
     if (cur < 0) return;
     const [it] = arr.splice(cur, 1);
     let idx = atIndex == null ? arr.length : atIndex;
