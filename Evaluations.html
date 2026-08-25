@@ -531,7 +531,7 @@
           <div class="ctx"><strong>— players</strong> · <span data-i18n="evaluations.ctx_measured_field">measured &amp; field assessment ·</span> <span data-i18n="evaluations.v2_skeleton">v2 skeleton</span></div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="evaluations.export_report">Export report</span></button>
+          <button class="cm-btn is-outline is-sm" id="evReportBtn"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="evaluations.export_report">Export report</span></button>
           <button class="cm-btn is-primary is-sm" id="evNewEvalBtn"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.new_evaluation">New evaluation</span></button>
         </div>
       </header>
@@ -1348,6 +1348,29 @@
   </div>
 </aside>
 
+<!-- ── Individual PDF report (header "Export report") ── -->
+<div class="ev-overlay" id="evrOvl">
+  <div class="ev-modal w-sm">
+    <div class="ev-mh">
+      <div class="ev-mh-info">
+        <div class="ev-mh-title" data-i18n="evaluations.report_title">Individual report</div>
+        <div class="ev-mh-sub" data-i18n="evaluations.report_sub">Every measured test with data · PDF</div>
+      </div>
+      <button class="cm-icon-btn" id="evrClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ev-mb">
+      <div class="ev-frow"><label class="ev-fl" data-i18n="evaluations.report_player">Player</label>
+        <select id="evrPlayer" class="ev-finput"></select></div>
+      <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+        <button class="cm-btn is-primary is-sm" id="evrGoBtn"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="evaluations.report_export">Export PDF</span></button>
+        <button class="cm-btn is-outline is-sm" id="evrCancel" data-i18n="common.cancel">Cancel</button>
+        <span id="evrStatus" style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="evrSheetHost" style="display:none"></div>
+
 <!-- ── Custom test builder (compose a def: movement · position · angle · method) ── -->
 <div class="ev-overlay" id="asBuilderOvl" onclick="if(event.target===this)closeAssessmentBuilder()">
   <div class="ev-modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
@@ -2003,6 +2026,383 @@
     catalog.style.transition = 'box-shadow .35s';
     catalog.style.boxShadow = '0 0 0 2px var(--cm-accent)';
     setTimeout(function(){ catalog.style.boxShadow = ''; }, 1400);
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  INDIVIDUAL PDF REPORT (header "Export report") — pick a player, gather
+  //  every measured test with data (evaluations + force_tests + body comp)
+  //  and export an A4 PDF. Same html2canvas+jsPDF model as Daily Planning:
+  //  player header repeated on pages 2+, cuts never split a section card.
+  // ════════════════════════════════════════════════════════════════════
+  var _evrBusy = false;
+
+  function evrShow(on){ document.getElementById('evrOvl').classList.toggle('is-open', !!on); }
+
+  document.getElementById('evReportBtn').addEventListener('click', async function(){
+    if (_scopeReady) await _scopeReady;
+    var sel = document.getElementById('evrPlayer');
+    var ps = _ftPlayers.slice().sort(function(a,b){ return String(a.last_name||'').localeCompare(String(b.last_name||'')); });
+    sel.innerHTML = '<option value="">' + esc(tt('evaluations.report_pick_player','Pick a player…')) + '</option>'
+      + ps.map(function(p){ return '<option value="'+p.id+'">'+esc((p.last_name||'') + ', ' + (p.first_name||''))+'</option>'; }).join('');
+    document.getElementById('evrStatus').textContent = '';
+    evrShow(true);
+  });
+  document.getElementById('evrClose').addEventListener('click', function(){ if(!_evrBusy) evrShow(false); });
+  document.getElementById('evrCancel').addEventListener('click', function(){ if(!_evrBusy) evrShow(false); });
+  document.getElementById('evrOvl').addEventListener('click', function(e){ if(e.target===this && !_evrBusy) evrShow(false); });
+
+  function evrLoadScript(src, globalKey){
+    return new Promise(function(res, rej){
+      if (globalKey && window[globalKey]) return res();
+      var s = document.createElement('script'); s.src = src;
+      s.onload = res; s.onerror = function(){ rej(new Error('PDF library failed to load')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // dd/mm/yy from 'YYYY-MM-DD' with no Date parsing (avoids the UTC off-by-one)
+  function evrD(s){
+    var p = String(s||'').slice(0,10).split('-');
+    return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0].slice(2)) : (s||'—');
+  }
+  function evrNum(v){ v = Number(v); return isFinite(v) ? v : null; }
+  function evrFmt(v, unit){ return v==null ? '—' : ftFmt(v, ftDec(unit)); }
+
+  // ── data: everything measured for one player (club-wide, not team-scoped:
+  //         it's the player's own report, so imports from other teams count) ──
+  async function evrFetch(pid){
+    var player = {};
+    try {
+      var pq = await window.sb.from('players').select('first_name,last_name,position,date_of_birth,height').eq('id', pid).single();
+      player = pq.data || {};
+    } catch(e){}
+    var evRows = [];
+    try {
+      evRows = await window.cmFetchAll(function(){
+        return window.sb.from('evaluations').select('evaluation_type,test_date,value,unit')
+          .eq('club_id', _clubId).eq('player_id', pid).order('test_date');
+      }, { label:'evr:evals' });
+    } catch(e){}
+    // field-assessment dimensions (unit '/10') are a separate surface → skip
+    evRows = evRows.filter(function(r){ return r.value != null && String(r.unit||'') !== '/10'; });
+
+    var ftTests = [], ftMets = [];
+    try {
+      ftTests = await window.cmFetchAll(function(){
+        return window.sb.from('force_tests').select('id,test_type,test_date')
+          .eq('club_id', _clubId).eq('player_id', pid).order('test_date');
+      }, { label:'evr:force' });
+    } catch(e){}
+    if (ftTests.length){
+      try {
+        ftMets = await window.cmFetchAll(function(){
+          return window.sb.from('force_test_metrics').select('test_id,metric_key,value,side')
+            .in('test_id', ftTests.map(function(t){ return t.id; }));
+        }, { label:'evr:forceMet' });
+      } catch(e){}
+    }
+    await ftEnsureDefs();
+
+    var bcRows = [];
+    try {
+      bcRows = await window.cmFetchAll(function(){
+        return window.sb.from('body_composition').select('*')
+          .eq('club_id', _clubId).eq('player_id', pid).order('measured_date');
+      }, { label:'evr:bc' });
+    } catch(e){}
+    return { player:player, evRows:evRows, ftTests:ftTests, ftMets:ftMets, bcRows:bcRows };
+  }
+
+  function evrCatalogHit(from, needle){
+    for (var i=0;i<CATALOG.length;i++){ var c=CATALOG[i];
+      for (var j=0;j<c.tests.length;j++){ var t=c.tests[j];
+        if (!t.src || t.src.from!==from) continue;
+        var pref = from==='evaluations' ? t.src.match : t.src.testType;
+        if (pref && startsWithCI(needle, pref)) return { cat:c, test:t };
+      } }
+    return null;
+  }
+
+  // ── model: [{title, items:[{label, sub, unit, hist:[{d,v}], betterHigh, neutral, sides, band}]}] ──
+  function evrBuildSections(data){
+    var byCat = {}, order = [];
+    function push(catTitle, item){
+      if (!item.hist.length) return;
+      if (!byCat[catTitle]){ byCat[catTitle] = []; order.push(catTitle); }
+      byCat[catTitle].push(item);
+    }
+
+    // 1. evaluations rows → group by evaluation_type
+    var groups = {};
+    data.evRows.forEach(function(r){
+      var v = evrNum(r.value); if (v==null) return;
+      (groups[r.evaluation_type] = groups[r.evaluation_type] || []).push(r);
+    });
+    Object.keys(groups).sort().forEach(function(type){
+      var rows = groups[type];                                  // already date-asc
+      var hit = evrCatalogHit('evaluations', type);
+      var unit = rows[rows.length-1].unit || '';
+      push(hit ? catName(hit.cat) : tt('evaluations.report_other','Other tests'), {
+        label: type, sub:'', unit: unit,
+        hist: rows.map(function(r){ return { d:r.test_date, v:evrNum(r.value) }; }),
+        betterHigh: evBetterHigh(hit && hit.test, unit), neutral: false
+      });
+    });
+
+    // 2. force tests → per test_type × metric_key
+    var metsByTest = {};
+    data.ftMets.forEach(function(m){
+      ((metsByTest[m.test_id] = metsByTest[m.test_id] || {})[m.metric_key] =
+        metsByTest[m.test_id][m.metric_key] || []).push(m);
+    });
+    var types = {};
+    data.ftTests.forEach(function(t){ (types[t.test_type] = types[t.test_type] || []).push(t); });
+    Object.keys(types).sort().forEach(function(type){
+      var tests = types[type];                                  // date-asc
+      var hit = evrCatalogHit('force_tests', type);
+      var keys = {};
+      tests.forEach(function(t){ Object.keys(metsByTest[t.id]||{}).forEach(function(k){ keys[k]=1; }); });
+      Object.keys(keys).sort(function(a,b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); }).forEach(function(mk){
+        var hist = [], lastRows = null;
+        tests.forEach(function(t){
+          var rows = (metsByTest[t.id]||{})[mk]; var v = ftTestValue(rows);
+          if (v==null || isNaN(v)) return;
+          hist.push({ d:t.test_date, v:v }); lastRows = rows;
+        });
+        // latest L/R split + asymmetry when both sides were measured
+        var sides = null;
+        if (lastRows){
+          var L = lastRows.find(function(r){ return r.side==='L' && r.value!=null; });
+          var R = lastRows.find(function(r){ return r.side==='R' && r.value!=null; });
+          if (L && R){
+            var l = Number(L.value), r2 = Number(R.value), mx = Math.max(Math.abs(l),Math.abs(r2));
+            sides = { l:l, r:r2, asym: mx ? Math.abs(l-r2)/mx*100 : 0 };
+          }
+        }
+        push(hit ? catName(hit.cat) : tt('evaluations.report_other','Other tests'), {
+          label: hit ? testLabel(hit.test) : type,
+          sub: ftMetricLabel(mk), unit: ftMetricUnit(mk),
+          hist: hist, betterHigh: ftBetterHigh(mk), neutral: false, sides: sides
+        });
+      });
+    });
+
+    // 3. body composition → BC_VARIANTS defs (incl. computed FFMI)
+    var bcCatTitle = catName({ name:'Anthropometrics' });
+    ['bodycomp','somato','bmirfm'].forEach(function(key){
+      (BC_VARIANTS[key]||[]).forEach(function(d){
+        var hist = [];
+        data.bcRows.forEach(function(r){
+          var v;
+          if (d.computed === 'ffmi'){
+            if (r.lean_mass_kg == null) return;
+            var h = Number(r.height_cm) || Number(data.player.height);
+            if (!(h > 100)) return;
+            v = +(Number(r.lean_mass_kg) / Math.pow(h/100, 2)).toFixed(2);
+          } else {
+            if (r[d.field] == null) return;
+            v = evrNum(r[d.field]);
+          }
+          if (v!=null) hist.push({ d:r.measured_date, v:v });
+        });
+        if (!hist.length) return;
+        var band = null;
+        if (d.bands){
+          var last = hist[hist.length-1].v;
+          var b = d.bands.find(function(x){ return last >= x.from && last < x.to; });
+          if (b) band = tt(b.i18n, b.en);
+        }
+        push(bcCatTitle, { label: bcVarLabel(d), sub:'', unit: d.unit,
+          hist: hist, betterHigh: d.betterHigh !== false, neutral: !!d.neutral, band: band });
+      });
+    });
+
+    // CATALOG category order first, then the rest (Other tests last)
+    var catOrder = CATALOG.map(function(c){ return catName(c); });
+    order.sort(function(a,b){
+      var ia = catOrder.indexOf(a), ib = catOrder.indexOf(b);
+      return (ia<0?999:ia) - (ib<0?999:ib);
+    });
+    return order.map(function(title){ return { title:title, items:byCat[title] }; });
+  }
+
+  // ── print sheet (fixed light palette: it's paper, not the app theme) ──
+  function evrSpark(hist){
+    var w=92, h=24, pad=3;
+    var vs = hist.map(function(p){ return p.v; });
+    var mn = Math.min.apply(null,vs), mx = Math.max.apply(null,vs);
+    var y = function(v){ return mx===mn ? h/2 : pad + (h-2*pad) * (1 - (v-mn)/(mx-mn)); };
+    var x = function(i){ return hist.length<2 ? w/2 : pad + (w-2*pad) * i/(hist.length-1); };
+    var pts = hist.map(function(p,i){ return x(i).toFixed(1)+','+y(p.v).toFixed(1); }).join(' ');
+    var lastX = x(hist.length-1).toFixed(1), lastY = y(vs[vs.length-1]).toFixed(1);
+    return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block">'
+      + (hist.length>1 ? '<polyline points="'+pts+'" fill="none" stroke="#0F766E" stroke-width="1.6" stroke-linejoin="round"/>' : '')
+      + '<circle cx="'+lastX+'" cy="'+lastY+'" r="2.4" fill="#0F766E"/></svg>';
+  }
+
+  function evrSheetHtml(player, sections){
+    var F = "-apple-system,'Segoe UI',Roboto,Arial,sans-serif";
+    var name = ((player.first_name||'') + ' ' + (player.last_name||'')).trim() || '—';
+    var meta = [];
+    if (player.position) meta.push(player.position);
+    var dob = String(player.date_of_birth||'').slice(0,10);
+    if (dob){
+      var t = evToday().split('-'), b = dob.split('-');
+      var age = (+t[0]) - (+b[0]) - ((+t[1] < +b[1] || (+t[1] === +b[1] && +t[2] < +b[2])) ? 1 : 0);
+      if (age > 0 && age < 60) meta.push(tt('evaluations.report_age', age+' years old', {n:age}));
+    }
+    if (Number(player.height) > 100) meta.push(Math.round(player.height) + ' cm');
+    var allDates = [];
+    sections.forEach(function(s){ s.items.forEach(function(it){ it.hist.forEach(function(p){ if(p.d) allDates.push(String(p.d).slice(0,10)); }); }); });
+    allDates.sort();
+    var range = allDates.length ? tt('evaluations.report_range','Data '+evrD(allDates[0])+' → '+evrD(allDates[allDates.length-1]), {from:evrD(allDates[0]), to:evrD(allDates[allDates.length-1])}) : '';
+
+    var html = '<div style="width:860px;background:#fff;color:#111;font-family:'+F+';padding:26px 32px 32px;box-sizing:border-box">'
+      + '<div id="evrHead" style="display:flex;align-items:flex-end;gap:16px;background:#fff;padding-bottom:12px;border-bottom:2px solid #111">'
+      +   '<div style="flex:1"><div style="font:700 22px/1.1 '+F+';letter-spacing:-0.01em">'+esc(name)+'</div>'
+      +     (meta.length ? '<div style="font:500 12px/1.4 '+F+';color:#555;margin-top:3px">'+esc(meta.join(' · '))+'</div>' : '')
+      +   '</div>'
+      +   '<div style="text-align:right"><div style="font:600 13px/1.2 '+F+'">'+esc(tt('evaluations.report_header','Evaluation report'))+'</div>'
+      +     '<div style="font:500 11px/1.5 '+F+';color:#555">'+esc(tt('evaluations.report_generated','Generated '+evrD(evToday()), {date:evrD(evToday())}))
+      +     (range ? ' · '+esc(range) : '') + '</div></div>'
+      + '</div>';
+
+    var th = function(txt, align){ return '<th style="text-align:'+(align||'left')+';padding:6px 8px;font:600 10.5px/1.2 '+F+';text-transform:uppercase;letter-spacing:0.04em;color:#666;border-bottom:1px solid #ccc;white-space:nowrap">'+esc(txt)+'</th>'; };
+    var td = function(inner, align, extra){ return '<td style="text-align:'+(align||'left')+';padding:7px 8px;font:500 12px/1.35 '+F+';border-bottom:1px solid #eee;vertical-align:middle;'+(extra||'')+'">'+inner+'</td>'; };
+
+    sections.forEach(function(sec){
+      html += '<div class="evr-brk" style="margin-top:20px">'
+        + '<div style="font:700 13px/1.2 '+F+';text-transform:uppercase;letter-spacing:0.05em;color:#0F766E;margin-bottom:6px">'+esc(sec.title)+'</div>'
+        + '<table style="width:100%;border-collapse:collapse"><thead><tr>'
+        + th(tt('evaluations.report_col_test','Test'))
+        + th(tt('evaluations.report_col_last','Latest'),'right')
+        + th(tt('evaluations.report_col_delta','Δ vs prev'),'right')
+        + th(tt('evaluations.report_col_best','Best'),'right')
+        + th('n','right')
+        + th(tt('evaluations.report_col_trend','Trend'),'right')
+        + '</tr></thead><tbody>';
+      sec.items.forEach(function(it){
+        var n = it.hist.length, last = it.hist[n-1], prev = n>1 ? it.hist[n-2] : null;
+        var dec = ftDec(it.unit);
+        var labelHtml = '<div style="font-weight:600">'+esc(it.label)+'</div>'
+          + (it.sub ? '<div style="font:500 10.5px/1.3 '+F+';color:#777">'+esc(it.sub)+'</div>' : '');
+        var lastHtml = '<div style="font-weight:600">'+evrFmt(last.v,it.unit)+(it.unit?' <span style="font-weight:500;color:#777;font-size:10.5px">'+esc(it.unit)+'</span>':'')+'</div>'
+          + '<div style="font:500 10px/1.3 '+F+';color:#999">'+esc(evrD(last.d))+'</div>'
+          + (it.sides ? '<div style="font:500 10px/1.3 '+F+';color:#777">L '+ftFmt(it.sides.l,dec)+' · R '+ftFmt(it.sides.r,dec)
+              +' · '+esc(tt('evaluations.report_asym','Asym '+it.sides.asym.toFixed(1)+'%',{pct:it.sides.asym.toFixed(1)}))+'</div>' : '')
+          + (it.band ? '<div style="font:600 10px/1.3 '+F+';color:#0F766E">'+esc(it.band)+'</div>' : '');
+        var deltaHtml = '—';
+        if (prev){
+          var dv = last.v - prev.v;
+          var good = it.neutral ? null : (it.betterHigh ? dv >= 0 : dv <= 0);
+          var col = good==null ? '#555' : (good ? '#15803D' : '#B91C1C');
+          deltaHtml = '<span style="font-weight:600;color:'+col+'">'+(dv>0?'+':'')+ftFmt(dv,dec)+'</span>';
+        }
+        var bestHtml = '—';
+        if (!it.neutral && n>0){
+          var vs = it.hist.map(function(p){ return p.v; });
+          bestHtml = evrFmt(it.betterHigh ? Math.max.apply(null,vs) : Math.min.apply(null,vs), it.unit);
+        }
+        html += '<tr>' + td(labelHtml) + td(lastHtml,'right') + td(deltaHtml,'right')
+          + td(bestHtml,'right') + td(String(n),'right','color:#777')
+          + td('<div style="display:inline-block">'+evrSpark(it.hist)+'</div>','right') + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    return html + '</div>';
+  }
+
+  // ── A4 pagination: header repeated on pages 2+, cuts never split an .evr-brk ──
+  async function evrPdf(el, player){
+    var canvas = await window.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff' });
+    var jsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDF) throw new Error('PDF library failed to load');
+    var JPEG_Q = 0.92;
+    var pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
+    var pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+    var MARGIN = 8, GAP = 4;
+    var pxPerMm = canvas.width / pageW;
+    var scale = canvas.width / el.offsetWidth;
+    var elTop = el.getBoundingClientRect().top;
+    var toPx = function(n){ var r = n.getBoundingClientRect(); return { top:(r.top-elTop)*scale, bottom:(r.bottom-elTop)*scale }; };
+
+    // header band capture (redrawn on pages 2+)
+    var headImg = null, headHmm = 0;
+    var headEl = el.querySelector('#evrHead');
+    if (headEl){
+      var hb = toPx(headEl);
+      var hPx = Math.round(hb.bottom - Math.max(0, hb.top));
+      var hc = document.createElement('canvas'); hc.width = canvas.width; hc.height = hPx;
+      var hctx = hc.getContext('2d');
+      hctx.fillStyle = '#ffffff'; hctx.fillRect(0,0,hc.width,hc.height);
+      hctx.drawImage(canvas, 0, Math.max(0,Math.round(hb.top)), canvas.width, hPx, 0, 0, canvas.width, hPx);
+      headImg = hc.toDataURL('image/jpeg', JPEG_Q);
+      headHmm = hPx / pxPerMm;
+    }
+
+    var boxes = [].slice.call(el.querySelectorAll('.evr-brk')).map(toPx);
+    var straddles = function(y){ return boxes.some(function(b){ return y > b.top+1 && y < b.bottom-1; }); };
+    var safeCut = function(start, maxEnd){
+      if (maxEnd >= canvas.height) return canvas.height;
+      var cands = boxes.map(function(b){ return Math.ceil(b.bottom); })
+        .filter(function(y){ return y > start+10 && y <= maxEnd && !straddles(y); });
+      if (cands.length) return Math.max.apply(null, cands);
+      var hit = boxes.find(function(b){ return maxEnd > b.top+1 && maxEnd < b.bottom-1; });
+      if (hit && hit.top > start+10) return Math.floor(hit.top);
+      return maxEnd;                                            // one box taller than a page
+    };
+
+    var sy = 0, page = 0;
+    while (sy < canvas.height){
+      if (page > 0) pdf.addPage();
+      var contentTop = MARGIN;
+      if (page > 0 && headImg){ pdf.addImage(headImg,'JPEG',0,MARGIN,pageW,headHmm); contentTop = MARGIN + headHmm + GAP; }
+      var maxSlice = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
+      var cut = safeCut(sy, sy + maxSlice);
+      var h = Math.max(1, cut - sy);
+      var slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = h;
+      var sctx = slice.getContext('2d');
+      sctx.fillStyle = '#ffffff'; sctx.fillRect(0,0,slice.width,slice.height);
+      sctx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      pdf.addImage(slice.toDataURL('image/jpeg', JPEG_Q),'JPEG',0,contentTop,pageW,h/pxPerMm);
+      sy += h; page++;
+    }
+    var fname = ((player.last_name||'player') + '-' + (player.first_name||'') + '-report-' + evToday())
+      .toLowerCase().replace(/\s+/g,'_');
+    pdf.save(fname + '.pdf');
+  }
+
+  document.getElementById('evrGoBtn').addEventListener('click', async function(){
+    var pid = document.getElementById('evrPlayer').value;
+    if (!pid || _evrBusy) return;
+    var btn = this, st = document.getElementById('evrStatus');
+    _evrBusy = true; btn.disabled = true;
+    st.textContent = tt('evaluations.report_generating','Generating report…');
+    var host = document.getElementById('evrSheetHost');
+    try {
+      await Promise.all([
+        evrLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','html2canvas'),
+        evrLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','jspdf')
+      ]);
+      var data = await evrFetch(pid);
+      var sections = evrBuildSections(data);
+      if (!sections.length){
+        st.textContent = tt('evaluations.report_no_data','This player has no recorded tests yet.');
+        return;
+      }
+      host.innerHTML = evrSheetHtml(data.player, sections);
+      // reveal off-screen so html2canvas can measure and capture it
+      host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
+      await evrPdf(host.firstElementChild, data.player);
+      evrShow(false);
+    } catch(e){
+      console.error('[evr]', e);
+      st.textContent = tt('evaluations.report_failed','Export failed: {msg}', {msg:(e && e.message) || String(e)});
+    } finally {
+      host.style.cssText = 'display:none'; host.innerHTML = '';
+      _evrBusy = false; btn.disabled = false;
+    }
   });
 
   // currently-open test (null in catalog)
