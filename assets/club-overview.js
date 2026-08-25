@@ -63,17 +63,31 @@
 
   // ── MD offset (por equipo y día) ──
   function mdDiffLabel(target, day) { const diff = Math.round((parseYMD(target) - parseYMD(day)) / 86400000); if (diff === 0) return 'MD'; if (diff > 0 && diff <= 10) return 'MD-' + diff; if (diff < 0 && diff >= -3) return 'MD+' + (-diff); return ''; }
+  function mdNorm(v) { return window.cmMdNorm ? window.cmMdNorm(v) : String(v || ''); }
+  // MD del día = la dinámica DEL EQUIPO: microciclo primero (override manual → fecha de partido),
+  // igual que Calendar. El match_day_offset de cada sesión es la dinámica de ESE grupo (puede
+  // haber dos el mismo día, ej. pretemporada) y se muestra aparte vía groupMdsFor()/mdBadge.
   function mdFor(teamId, y) {
-    const sess = (state.data.sessions || []).filter(s => s.team_id === teamId && s.session_date === y);
-    for (const s of sess) { if (s.match_day_offset) return s.match_day_offset; }
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
     if (mc) {
-      if (mc.md_overrides && mc.md_overrides[y]) return mc.md_overrides[y];
+      if (mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
       if (mc.match_date) return mdDiffLabel(mc.match_date, y);
     }
+    const sess = (state.data.sessions || []).filter(s => s.team_id === teamId && s.session_date === y);
+    for (const s of sess) { if (s.match_day_offset) return mdNorm(s.match_day_offset); }
     const wm = (state.data.matches || []).filter(x => x.team_id === teamId).map(x => x.date).sort();
     if (wm.length) return mdDiffLabel(wm[wm.length - 1], y);
     return '';
+  }
+  // MDs de grupo del día: los match_day_offset (normalizados) distintos del MD del día.
+  function groupMdsFor(teamId, y, dayMd) {
+    const out = [];
+    (state.data.sessions || []).forEach(s => {
+      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
+      const v = mdNorm(s.match_day_offset);
+      if (v && v !== dayMd && !out.includes(v)) out.push(v);
+    });
+    return out;
   }
   function isPlanExpected(teamId, y) {
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
@@ -90,7 +104,7 @@
     (state.data.sessions || []).filter(s => s.team_id === teamId && s.session_date === y).forEach(s => {
       const cls = evClass(s.session_type);
       if (cls === 'match' && hasCal) return;
-      evs.push({ cls, kind: 'session', icon: evIcon(cls), title: s.title || defaultTitle(cls), time: fmtTime(s.session_time), dur: s.duration, au: auOf(s), sid: s.id, stype: s.session_type, gym: s.gym_content });
+      evs.push({ cls, kind: 'session', icon: evIcon(cls), title: s.title || defaultTitle(cls), time: fmtTime(s.session_time), dur: s.duration, au: auOf(s), sid: s.id, stype: s.session_type, gym: s.gym_content, mdo: s.match_day_offset || null });
     });
     // Resto de eventos del calendario: viajes, comidas, reuniones, día libre, etc.
     (state.data.calevents || []).filter(c => c.team_id === teamId && c.date === y).forEach(c => {
@@ -101,6 +115,9 @@
     // Orden: cronológico por hora (sin hora → al final); a igual hora: sesión → logística → partido.
     const rank = e => e.kind === 'match' ? 2 : e.kind === 'cal' ? 1 : 0;
     evs.sort((a, b) => { const ta = a.time || '99:99', tb = b.time || '99:99'; return ta < tb ? -1 : ta > tb ? 1 : rank(a) - rank(b); });
+    // Badge MD de grupo: cuando la sesión tiene su propio MD distinto del MD del día.
+    const dayMd = mdFor(teamId, y);
+    evs.forEach(ev => { if (ev.kind === 'session' && ev.mdo) { const v = mdNorm(ev.mdo); if (v && v !== dayMd) ev.mdBadge = v; } });
     return evs;
   }
   function rosterCount(teamId) { const s = new Set(); (state.data.pteams || []).forEach(p => { if (p.team_id === teamId) s.add(String(p.player_id)); }); return s.size; }
@@ -207,7 +224,7 @@
   function evMeta(e) {
     if (e.kind === 'match') return [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ');
     if (e.kind === 'cal') return [e.time, e.loc].filter(Boolean).join(' · ');
-    return [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
+    return [e.mdBadge, e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
   }
   function evHtml(e) {
     const meta = evMeta(e);
@@ -223,7 +240,9 @@
       h += '<div class="co-row"><div class="co-rl"><div class="tn">' + esc(t.name) + '</div><div class="tm">' + rosterCount(t.id) + ' ' + tt('common.players', 'players') + '</div></div>';
       state.week.forEach(d => {
         const evs = cellEvents(t.id, d.ymd), md = mdFor(t.id, d.ymd);
-        const mdHtml = md ? '<span class="co-md' + (md === 'MD' ? ' md0' : '') + '">' + md + '</span>' : '';
+        const gmds = groupMdsFor(t.id, d.ymd, md);
+        const mdHtml = (md ? '<span class="co-md' + (md === 'MD' ? ' md0' : '') + '">' + md + '</span>' : '')
+          + gmds.map(v => '<span class="co-md md2" title="' + tt('club_overview.group_md_hint', 'Group MD — set per session in Daily Planning') + '">' + v + '</span>').join('');
         let inner;
         if (evs.length) inner = evs.map(evHtml).join('');
         else if (isPlanExpected(t.id, d.ymd)) inner = '<div class="co-noplan"><i class="ti ti-alert-triangle"></i>' + tt('club_overview.no_plan', 'No plan yet') + '</div>';
@@ -430,7 +449,7 @@
     const bg = cls === 'match' ? 'var(--cm-danger-bg)' : cls === 'gym' ? 'var(--cm-info-bg)' : cls === 'recovery' ? 'var(--cm-violet-bg)' : 'var(--cm-accent-soft)';
     const col = cls === 'match' ? 'var(--cm-danger)' : cls === 'gym' ? 'var(--cm-info)' : cls === 'recovery' ? 'var(--cm-violet)' : 'var(--cm-accent)';
     const label = cls === 'match' ? tt('club_overview.matchday', 'Matchday') : cls === 'gym' ? tt('club_overview.leg_gym', 'Gym') : cls === 'recovery' ? tt('club_overview.leg_recovery', 'Recovery') : tt('club_overview.leg_field', 'Field');
-    const meta = e.kind === 'match' ? [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ') : [e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
+    const meta = e.kind === 'match' ? [fmtHomeAway(e.meta), e.time].filter(Boolean).join(' · ') : [e.mdBadge, e.time, e.dur ? e.dur + '′' : '', e.au ? e.au + ' AU' : ''].filter(Boolean).join(' · ');
     let html = sh(bg, col, evIcon(cls), label + ' · ' + e.title, meta);
     html += '<div class="co-preview" id="coPreview">' + (cls === 'gym' ? '<div class="co-pvph"><i class="ti ti-barbell"></i></div>' : pitchHtml()) + '</div>';
     html += '<div class="co-exlist" id="coExList"></div><div id="coExParams"></div>';
