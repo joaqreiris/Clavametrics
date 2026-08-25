@@ -1077,6 +1077,7 @@
       card.classList.remove('is-draft', 'is-editing');
       card.dataset.size = _editCardOrigSize;
       card.style.setProperty('--cm-accent', _editCardOrigAccent);
+      _unwireInlineTitle(card);
       const ttlEl = card.querySelector('.ttl');
       const subEl = card.querySelector('.sub');
       if (ttlEl) ttlEl.textContent = _editCardOrigTtl;
@@ -1148,6 +1149,7 @@
       targetCard.dataset.size = S.size;
       targetCard.style.setProperty('--cm-accent', S.color);
 
+      _unwireInlineTitle(targetCard);
       const titleElE = targetCard.querySelector('.ttl');
       const subElE   = targetCard.querySelector('.sub');
       if (titleElE) titleElE.textContent = autoTitle(S);
@@ -1231,6 +1233,11 @@
     // No native draggable: moves are 100% pointer-based (gp-canvas.js). A native
     // dragstart would re-add .is-dragging (opacity:0.4) and never get a dragend.
 
+    _unwireInlineTitle(savedCard);
+    // Quitar los ids del template del draft: si persisten, el PRÓXIMO draft comparte ids con
+    // esta card guardada y cualquier getElementById apunta a la card equivocada.
+    savedCard.querySelectorAll('#gpbDraftTitle, #gpbDraftSub, #gpbDraftBody, #gpbDraftSizeToggle')
+      .forEach(el => el.removeAttribute('id'));
     const titleEl = savedCard.querySelector('.ttl');
     const subEl   = savedCard.querySelector('.sub');
     if (titleEl) titleEl.textContent = autoTitle(S);
@@ -2332,7 +2339,9 @@
     // pulse "Add metric" button when no metrics and panel is on Setup tab
     if (addBtn) addBtn.classList.toggle('gpb-pulse', !valid && S.metrics.length === 0);
 
-    const body = document.getElementById('gpbDraftBody') || draftCard.querySelector('.gp-c-b');
+    // Scoped a draftCard (no getElementById): una card guardada conserva id=gpbDraftBody y el
+    // preview de la SIGUIENTE card se renderizaba dentro de la card anterior.
+    const body = draftCard.querySelector('.gp-c-b');
     if (!body) return;
     destroyBodyChart(body);
 
@@ -2500,16 +2509,60 @@
 
   function updateDraftHeader() {
     if (!draftCard || !S) return;
-    const titleEl = document.getElementById('gpbDraftTitle') || draftCard.querySelector('.ttl');
-    const subEl   = document.getElementById('gpbDraftSub')   || draftCard.querySelector('.sub');
-    if (titleEl) titleEl.textContent = autoTitle(S);
+    // SIEMPRE scoped a draftCard: getElementById('gpbDraftTitle') encontraba el título de una
+    // card YA GUARDADA (el draft conserva sus ids al guardarse), así que armar una SEGUNDA card
+    // escribía el título/preview en la card anterior — «no se puede cambiar el título».
+    const titleEl = draftCard.querySelector('.ttl');
+    const subEl   = draftCard.querySelector('.sub');
+    // No pisar el título mientras el usuario lo está tipeando inline (perdería el cursor).
+    if (titleEl && document.activeElement !== titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
       subEl.textContent = `${_vizFull(S.type).toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
+    _wireInlineTitle(titleEl);
     // Live format preview (draftCard IS the real card in edit mode). Idempotent. viz=S.type so a KPI
     // draft (header stripped) formats its body .l/.sb instead of the missing header spans.
     gpApplyHeaderFormat(draftCard, { titleFormat: S.titleFormat, subtitleFormat: S.subtitleFormat }, S.type);
+  }
+
+  // ── Título editable INLINE en la card en edición ──────────────────────────
+  // Descubribilidad: el campo Title vive abajo del panel (Configuration) y nadie lo
+  // encuentra — el gesto natural es clickear el título de la card. Mientras el builder
+  // está abierto, el título del draft es contenteditable y sincroniza el MISMO S.title
+  // que el input clásico (que se mantiene en sync vía syncSelects). Al guardar/cancelar
+  // se desactiva (_unwireInlineTitle) para que la card guardada no quede editable.
+  function _wireInlineTitle(titleEl) {
+    if (!titleEl || titleEl.dataset.inlineTtl) return;
+    titleEl.dataset.inlineTtl = '1';
+    try { titleEl.contentEditable = 'plaintext-only'; }
+    catch (e) { titleEl.contentEditable = 'true'; }   // Firefox viejo: sin plaintext-only
+    titleEl.spellcheck = false;
+    titleEl.title = _tt('gps_analysis.builder_title_inline_hint', 'Click to rename');
+    titleEl.style.cursor = 'text';
+    // El canvas arrastra cards desde el header (pointer-based): que el click en el
+    // título edite en vez de iniciar un drag.
+    titleEl.addEventListener('pointerdown', e => e.stopPropagation());
+    titleEl.addEventListener('input', () => {
+      if (!S) return;
+      const v = titleEl.textContent.replace(/\n/g, ' ');
+      S.title = v; S.titleCustom = !!v.trim();
+      syncSelects();   // refleja en el input Title del panel (salta el elemento enfocado)
+    });
+    titleEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+      if (e.key === 'Escape') { e.stopPropagation(); titleEl.blur(); }   // no cerrar el builder
+    });
+    titleEl.addEventListener('blur', () => { if (S) renderCard(); });    // vacío → vuelve al auto
+  }
+  function _unwireInlineTitle(cardEl) {
+    const el = cardEl && cardEl.querySelector('.ttl');
+    if (!el) return;
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('data-inline-ttl');
+    el.removeAttribute('spellcheck');
+    el.style.removeProperty('cursor');
+    el.removeAttribute('title');
   }
 
   // ── Current view helper ──────────────────────────────────────
