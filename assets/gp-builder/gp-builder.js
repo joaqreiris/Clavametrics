@@ -6263,10 +6263,13 @@
       const lbl  = d.label || n;                                   // custom rename wins
       const al   = d.align || 'left';
       const sid  = _dimSortId(config, j);
+      // .dt = columna de fecha: ancho garantizado (table-layout:fixed la aprieta y el
+      // ellipsis cortaba "2026-05-…"). Sólo en columnas .dc (la .pc ya tiene 140px).
+      const dt   = (j > 0 && d.id === 'session_date') ? ' dt' : '';
       // Column-options chip only when this header maps to a real dimension (not the legacy
       // single-identity fallback) so the pane has something to edit.
       const chip = (editable && dims[j]) ? `<span class="tf-fbtn" data-di="${j}" title="${_tt('gps_analysis.builder_column_options', 'Column options')}"><i class="ti ti-adjustments"></i></span>` : '';
-      return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
+      return `<th class="${j === 0 ? 'pc' : 'dc'}${dt} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
       // "met:<i>:<id>" — el índice distingue instancias de una misma métrica repetida
@@ -6290,7 +6293,7 @@
       // Las celdas de VALOR quedan sin marcar → el press cae al engine y la card se sigue
       // arrastrando agarrando el cuerpo, como hoy.
       const _fidAttr = (p.fid != null) ? ` data-fid="${esc(String(p.fid))}"` : '';
-      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'} tf-al-${(dims[i]?.align) || 'left'}"${i === 0 ? _fidAttr : ''}>${esc(v)}</td>`).join('');
+      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}${(i > 0 && dims[i]?.id === 'session_date') ? ' dt' : ''} tf-al-${(dims[i]?.align) || 'left'}"${i === 0 ? _fidAttr : ''}>${esc(v)}</td>`).join('');
       const valCells = cols.map(c => {
         const pt = c.s.points.find(q => q.x === p.x);
         return `<td class="tf tf-al-${c.f.align || 'right'}">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
