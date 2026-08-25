@@ -1430,6 +1430,31 @@
     // Unmapped primero.
     groups.sort((a,b) => (a.mapped===b.mapped) ? (b.nInst - a.nInst) : (a.mapped ? 1 : -1));
 
+    // ── Sugerencias automáticas: similitud de nombre (bigramas, Dice) entre el
+    // grupo sin mapear y el catálogo de exercises. NUNCA se guardan solas:
+    // quedan como sugerencia visible y el usuario las acepta (Usar / Aceptar todas).
+    function bigrams(s){ const m=new Map(); for(let i=0;i<s.length-1;i++){ const b=s.slice(i,i+2); m.set(b,(m.get(b)||0)+1); } return m; }
+    function nameSim(a, b){
+      if (!a || !b) return 0;
+      if (a === b) return 1;
+      const A=bigrams(a), B=bigrams(b);
+      let inter=0, na=0, nb=0;
+      A.forEach(v=>na+=v); B.forEach(v=>nb+=v);
+      A.forEach((v,k)=>{ if (B.has(k)) inter += Math.min(v, B.get(k)); });
+      return (na+nb) ? (2*inter)/(na+nb) : 0;
+    }
+    const SUGGEST_MIN = 0.55;
+    function computeSuggestions(){
+      const cand = exercises.map(e => ({ id: e.id, norm: normName(e.name) }));
+      groups.forEach(g => {
+        if (g.choice !== '' || g.mapped || g.suggest) return;
+        let best = null;
+        cand.forEach(c => { const s = nameSim(g.key, c.norm); if (s >= SUGGEST_MIN && (!best || s > best.score)) best = { id: c.id, score: s }; });
+        if (best) g.suggest = best;
+      });
+    }
+    computeSuggestions();
+
     // GPS preview per period_name (≥30s, mirrors the v_exercise_gps_profile floor).
     // Lets each card show the RESULTING TD/min before saving → flags absurd merges.
     const gpsByName = new Map();    // period_name → { n, sumPerMin, sumTotal }
@@ -1471,7 +1496,7 @@
         <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
       </div>
       <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
-        ${tt('exlib.map_drills_help','Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Tick cards to <b>merge</b> them, or <b>Edit names</b> to split out / move individual period names. Unmapped groups are shown first.')}
+        ${tt('exlib.map_drills_help','Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Tick cards to <b>merge</b> them, or <b>Edit names</b> to split out / move individual period names. Unmapped groups are shown first. When a name closely matches an existing exercise, a <b>suggestion</b> appears — nothing is saved until you accept it.')}
       </div>
       <div style="padding:10px 18px 0;display:flex;gap:6px;align-items:center">
         <button data-tab="active" class="cm-btn is-sm" style="border-radius:8px">${tt('exlib.tab_active','Active')}</button>
@@ -1480,6 +1505,7 @@
       <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <input data-search type="text" placeholder="${tt('exlib.search_drills','Search drills…')}" style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
         <button data-merge class="cm-btn is-outline is-sm" style="display:none">${tt('exlib.merge_selected','Merge selected')}</button>
+        <button data-suggall class="cm-btn is-outline is-sm" style="display:none"><i class="ti ti-sparkles" style="font-size:13px"></i> <span data-suggall-label></span></button>
         <span style="font-size:11.5px;color:var(--cm-fg-muted)">${tt('exlib.dates','Dates')}</span>
         <span data-daterange></span>
       </div>
@@ -1624,6 +1650,16 @@
       btn.style.display = (n>=2 && activeTab !== 'ignored') ? '' : 'none';
       btn.textContent = tt('exlib.merge_selected_n','Merge selected ({count})',{count:n});
     }
+    // Sugerencias pendientes (sin mapear + sugerencia cuyo exercise sigue existiendo).
+    function pendingSuggestions(){ return groups.filter(g => g.choice === '' && g.suggest && exercises.some(e => e.id === g.suggest.id)); }
+    function updateSuggBar(){
+      const btn = ov.querySelector('[data-suggall]');
+      if (!btn) return;
+      const n = pendingSuggestions().length;
+      btn.style.display = (n > 0 && activeTab !== 'ignored') ? '' : 'none';
+      const lb = btn.querySelector('[data-suggall-label]');
+      if (lb) lb.textContent = tt('exlib.accept_all_suggestions','Accept suggestions ({count})',{count:n});
+    }
     // A) Merge ticked cards into one; destination = first explicit choice among them.
     function mergeSelected(){
       const idx = groups.map((g,i)=>g.msel?i:-1).filter(i=>i>=0);
@@ -1686,6 +1722,13 @@
         const gpsLine = gps ? `<div style="font:600 10.5px var(--cm-font-mono);margin-top:4px;color:${gps.absurd?'var(--cm-danger,#dc2626)':'var(--cm-fg-muted)'}">
           ${tt('exlib.gps_preview','GPS preview')} · ${Math.round(gps.tdPerMin)} m/min · ${Math.round(gps.tdAvgM)} m/session · ${tt('exlib.n_valid','{count} valid',{count:gps.n})}${gps.absurd?' · '+tt('exlib.unusually_high','⚠ Unusually high — likely mixed drills'):''}
         </div>` : '';
+        const suggEx = (!resolved && g.suggest) ? exercises.find(e => e.id === g.suggest.id) : null;
+        const suggLine = suggEx ? `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:500 11.5px var(--cm-font-sans);color:var(--cm-fg-muted)">
+          <i class="ti ti-sparkles" style="font-size:13px;color:var(--cm-accent)"></i>
+          <span>${tt('exlib.suggested_match','Suggested')}: <b style="color:var(--cm-fg-strong)">${esc(suggEx.name)}</b> · ${Math.round(g.suggest.score*100)}%</span>
+          <button type="button" data-sugguse="${i}" style="${MINIBTN_CSS};color:var(--cm-accent);border-color:var(--cm-accent)">${tt('exlib.use_suggestion','Use')}</button>
+          <button type="button" data-suggdrop="${i}" style="${MINIBTN_CSS}">${tt('exlib.dismiss','Dismiss')}</button>
+        </div>` : '';
         const panel = g.expanded ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft,rgba(0,0,0,.02))">
           ${g.names.map(n => `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:3px 0">
             <input type="checkbox" data-namesel="${i}" value="${esc(n.period_name)}">
@@ -1705,7 +1748,7 @@
             </div>
             <button type="button" data-choice-btn="${i}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:${resolved?'var(--cm-fg-strong)':'var(--cm-fg-muted)'};font:inherit;cursor:pointer;text-align:left"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(choiceLabel(g.choice))}</span><i class="ti ti-chevron-down" style="font-size:15px;color:var(--cm-fg-muted);flex-shrink:0"></i></button>
             <button class="cm-btn is-outline is-sm" data-create="${i}" title="${tt('exlib.create_exercise_title','Create an exercise named &quot;{name}&quot; and map to it',{name:esc(g.repName)})}">${tt('exlib.create_exercise','Create exercise')}</button>
-          </div>${dimsEditorHtml(g, i)}${gpsLine}${variantsLine}${panel}
+          </div>${suggLine}${dimsEditorHtml(g, i)}${gpsLine}${variantsLine}${panel}
         </div>`;
       }).join('');
       listEl.querySelectorAll('[data-choice-btn]').forEach(b => b.addEventListener('click', async () => {
@@ -1714,6 +1757,13 @@
         groups[i].choice = val; paint();
       }));
       listEl.querySelectorAll('[data-create]').forEach(b => b.addEventListener('click', () => createForGroup(+b.dataset.create)));
+      listEl.querySelectorAll('[data-sugguse]').forEach(b => b.addEventListener('click', () => {
+        const g = groups[+b.dataset.sugguse]; if (!g || !g.suggest) return;
+        g.choice = g.suggest.id; delete g.suggest; paint();
+      }));
+      listEl.querySelectorAll('[data-suggdrop]').forEach(b => b.addEventListener('click', () => {
+        const g = groups[+b.dataset.suggdrop]; if (g) delete g.suggest; paint();
+      }));
       listEl.querySelectorAll('[data-expand]').forEach(b => b.addEventListener('click', () => { const g=groups[+b.dataset.expand]; g.expanded=!g.expanded; paint(); }));
       listEl.querySelectorAll('[data-mergesel]').forEach(c => c.addEventListener('change', () => { groups[+c.dataset.mergesel].msel = c.checked; updateMergeBar(); }));
       listEl.querySelectorAll('[data-splitout]').forEach(b => b.addEventListener('click', () => splitOut(+b.dataset.splitout)));
@@ -1737,6 +1787,7 @@
         paint();
       }));
       updateMergeBar();
+      updateSuggBar();
       updateTabs();
       applyFilter();
     }
@@ -1781,6 +1832,7 @@
       activeTab = b.dataset.tab;
       // The merge bar only makes sense in the Active tab.
       const mb = ov.querySelector('[data-merge]'); if (mb && activeTab === 'ignored') mb.style.display = 'none';
+      updateSuggBar();
       updateTabs(); applyFilter();
     }));
     ov.querySelector('[data-search]').addEventListener('input', applyFilter);
@@ -1870,6 +1922,14 @@
     ov.querySelectorAll('[data-x]').forEach(b => b.addEventListener('click', () => ov.remove()));
     ov.querySelector('[data-save]').addEventListener('click', save);
     ov.querySelector('[data-merge]').addEventListener('click', mergeSelected);
+    ov.querySelector('[data-suggall]').addEventListener('click', () => {
+      const pend = pendingSuggestions();
+      if (!pend.length) return;
+      pend.forEach(g => { g.choice = g.suggest.id; delete g.suggest; });
+      modalMsg.style.color = 'var(--cm-fg-muted)';
+      modalMsg.textContent = tt('exlib.suggestions_applied','Applied {count} suggestion — review and save.|Applied {count} suggestions — review and save.',{count:pend.length});
+      paint();
+    });
     paint();
     loadGpsByName();   // async; re-paints with the GPS preview line when ready
   }
