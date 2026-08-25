@@ -1247,13 +1247,22 @@
     // MD by DATE, mirroring the microcycle-by-date derivation: the MD is assigned in
     // Calendar / Daily Planning (on the planned session), but the imported GPS day is usually
     // a different row with match_day_offset NULL. Map date → MD from every session that HAS an
-    // MD, so a GPS day inherits the MD of the planned session on the same date. First MD wins.
+    // MD, so a GPS day inherits the MD of the planned session on the same date.
+    // Dos dinámicas el mismo día (grupos con MD distinto): la herencia por fecha es AMBIGUA —
+    // la fecha se saca del mapa y el back-fill de abajo la rellena con el MD derivado del
+    // microciclo (la dinámica del equipo). Las sesiones con MD propio no pasan por este mapa.
     window._gpMdForDate = {};
+    const _mdDateConflict = {};
+    const _mdEq = (a, b) => (window.cmMdNorm ? window.cmMdNorm(a) === window.cmMdNorm(b) : a === b);
     (sessions || []).forEach(s => {
       const v = _mdRaw(s);
       const d = s && s.session_date ? String(s.session_date).slice(0, 10) : '';
-      if (v && d && !window._gpMdForDate[d]) window._gpMdForDate[d] = v;
+      if (!v || !d) return;
+      const prev = window._gpMdForDate[d];
+      if (!prev) window._gpMdForDate[d] = v;
+      else if (!_mdEq(prev, v)) _mdDateConflict[d] = 1;
     });
+    Object.keys(_mdDateConflict).forEach(d => { delete window._gpMdForDate[d]; });
     const _mdOf = (ts) => _mdRaw(ts) || (ts && ts.session_date ? (window._gpMdForDate[String(ts.session_date).slice(0, 10)] || '') : '');
     // options.md_code se construye MÁS ABAJO (tras _rows), para incluir los MD DERIVADOS del
     // microciclo (partido + md_overrides), no solo los guardados por Daily Planning.
