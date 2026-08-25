@@ -1315,12 +1315,15 @@ async function loadDay(dateStr) {
     _dpDayOff = !!ctx.dayOff;
     _dpDayOffIds = new Set((ctx.dayOffPlayerIds || []).map(String));
     _dpCalFields = new Set();
-    const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
+    const mdMap = m => { const n = window.cmMdNorm ? window.cmMdNorm(m) : (m || '').replace('−','-'); return n === 'MD' ? 'MD0' : n; };   // resolver label → option value
     const mcSelN = document.getElementById('dpMicrocycle');
     if (ctx.microcycle && mcSelN && [...mcSelN.options].some(o => o.value === String(ctx.microcycle.id))) { mcSelN.value = String(ctx.microcycle.id); _dpCalFields.add('dpMicrocycle'); }
+    // MD: SOLO relleno cuando la sesión no tiene match_day_offset propio. El MD guardado por
+    // sesión manda (dos dinámicas el mismo día: grupo en MD+1 y grupo en MD-2); si el microciclo
+    // lo pisara acá, el autosave re-persistiría el valor derivado y mataría el MD del grupo.
     const mdSel = document.getElementById('dpMatchDay');
     const mdVal = ctx.md ? mdMap(ctx.md) : '';
-    if (mdVal && mdSel && [...mdSel.options].some(o => o.value === mdVal)) { mdSel.value = mdVal; _dpCalFields.add('dpMatchDay'); }
+    if (mdVal && mdSel && !(sess && sess.match_day_offset) && [...mdSel.options].some(o => o.value === mdVal)) { mdSel.value = mdVal; _dpCalFields.add('dpMatchDay'); }
     // NOTE: start time is NOT overlaid from calendar_events. The training block on
     // the Calendar IS this training_sessions row (source='session'), so session_time
     // is the single source of truth for both — overlaying an unrelated ancillary
@@ -1467,7 +1470,13 @@ function dpMarkCalFields() {
     el.classList.toggle('is-cal-sourced', _dpCalFields.has(id));
     if (_dpCalFields.has(id) && !el.dataset.calWarn) {
       el.dataset.calWarn = '1';
-      el.addEventListener('change', () => { if (_dpCalFields.has(id)) dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.')); });
+      el.addEventListener('change', () => {
+        if (!_dpCalFields.has(id)) return;
+        // El MD ahora es por sesión (dos dinámicas/día): cambiarlo acá es legítimo y persiste.
+        // Se des-marca como cal-sourced en vez de avisar "cambialo en Calendar".
+        if (id === 'dpMatchDay') { _dpCalFields.delete(id); el.classList.remove('is-cal-sourced'); return; }
+        dpToast(tt('daily_planning.cal_synced_warn','This value comes from the Calendar — change it there to keep things in sync.'));
+      });
     }
   });
 }
@@ -3033,7 +3042,11 @@ async function dpAutoSaveSession() {
     try {
       const patch = { team_id: _dpTeamId };
       if (mcId)                     patch.microcycle_id    = mcId;
-      if (payload.match_day_offset) patch.match_day_offset = payload.match_day_offset;
+      // Con dos dinámicas MD el mismo día (otra sesión del día con un MD distinto), la fila
+      // importada es ambigua: no se sabe a qué grupo pertenece → no estampar MD.
+      const _norm = v => window.cmMdNorm ? window.cmMdNorm(v) : String(v || '');
+      const _mdAmbiguous = (_dpDaySessions || []).some(s => s.id !== _dpCurrentSessionId && s.match_day_offset && _norm(s.match_day_offset) !== _norm(payload.match_day_offset));
+      if (payload.match_day_offset && !_mdAmbiguous) patch.match_day_offset = payload.match_day_offset;
       await window.sb.from('training_sessions').update(patch)
         .eq('club_id', _dpClubId).eq('session_date', date)
         .is('team_id', null).is('microcycle_id', null)
