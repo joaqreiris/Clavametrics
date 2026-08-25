@@ -433,7 +433,7 @@
 
       <!-- Section header + billing toggle -->
       <div class="pp-eyebrow">
-        <h2 data-i18n="plan_picker.pick_tier">Pick a tier for U-17</h2>
+        <h2 id="ppPickTier">Pick a tier</h2>
         <span class="meta" data-i18n="plan_picker.billed_per_cat">Billed per category · cancel anytime</span>
         <div class="right">
           <div class="pp-toggle" id="pp-toggle">
@@ -1179,6 +1179,7 @@
       setTxt('ppHdrTitle', title);
       setTxt('ppFootCat', title);
       if (teamName) { const cc = document.getElementById('ppCrumbChange'); if (cc) { cc.removeAttribute('data-i18n'); cc.textContent = _tt('plan_picker.crumb_change_plan_generic','Change plan') + ' · ' + teamName; } }
+      setTxt('ppPickTier', teamName ? _tt('plan_picker.pick_tier','Pick a tier for {team}',{team:teamName}) : _tt('plan_picker.pick_tier_generic','Pick a tier'));
 
       if(document.getElementById('ppHdrMeta')){
         const created = team.created_at ? new Date(team.created_at).toLocaleDateString(lang,{month:'short',year:'numeric'}) : '';
