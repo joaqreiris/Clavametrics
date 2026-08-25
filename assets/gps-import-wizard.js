@@ -2188,6 +2188,42 @@
     return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount, speedSpikeCount };
   }
 
+  // ── Aviso de datos existentes (robustez CSV ↔ API) ───────────
+  // Muestra en el cuerpo del wizard la elección Reemplazar / Conservar / Cancelar y
+  // resuelve con 'replace' | 'keep' | 'cancel'. La fuente de los datos previos se muestra
+  // (catapult / csv) para que el usuario entienda de dónde vienen.
+  function _wizAskExistingData(nRows, nSessions, sources) {
+    return new Promise(resolve => {
+      const body = document.getElementById('wizBody');
+      const srcLabel = (sources || []).map(s => s === 'catapult' ? 'Catapult API' : String(s).toUpperCase()).join(', ') || 'CSV';
+      const opt = (id, icon, title, desc, tone) => `
+        <button data-dup="${id}" style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:1px solid var(--cm-border);border-radius:10px;background:var(--cm-surface);cursor:pointer;text-align:left">
+          <i class="ti ${icon}" style="font-size:20px;color:${tone}"></i>
+          <span style="display:flex;flex-direction:column;gap:2px">
+            <span style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${title}</span>
+            <span style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${desc}</span>
+          </span>
+        </button>`;
+      body.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;padding:8px 0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <i class="ti ti-alert-triangle" style="font-size:26px;color:var(--cm-warning)"></i>
+            <div>
+              <div style="font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${_wt('gps_import.dup_title', 'Existing GPS data found')}</div>
+              <div style="font:400 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">
+                ${nRows} ${_wt('gps_import.dup_body_rows', 'row(s) in this file already have GPS data in')} ${nSessions} ${_wt('gps_import.dup_body_sessions', 'session(s)')} · ${_wt('gps_import.dup_body_source', 'existing source')}: <b>${srcLabel}</b>
+              </div>
+            </div>
+          </div>
+          ${opt('replace', 'ti-replace', _wt('gps_import.dup_replace', 'Replace existing'), _wt('gps_import.dup_replace_desc', 'Overwrite those reports with the values from this file'), 'var(--cm-warning)')}
+          ${opt('keep', 'ti-shield-check', _wt('gps_import.dup_keep', 'Keep existing'), _wt('gps_import.dup_keep_desc', 'Import only the new rows; existing reports stay untouched'), 'var(--cm-success)')}
+          ${opt('cancel', 'ti-x', _wt('gps_import.dup_cancel', 'Cancel import'), _wt('gps_import.dup_cancel_desc', 'Nothing is written'), 'var(--cm-fg-muted)')}
+        </div>`;
+      document.getElementById('wizFooter').innerHTML = '';
+      body.querySelectorAll('[data-dup]').forEach(b => b.addEventListener('click', () => resolve(b.dataset.dup)));
+    });
+  }
+
   // ── Main import function ───────────────────────────────────
   async function runImport() {
     const setStatus = (main, sub) => {
@@ -2224,6 +2260,9 @@
       // so existingId stayed null and a duplicate session was spawned. Resolving here closes it.
       // Match key stays (club, date, type, is_historical) — unchanged — so legitimate double
       // sessions and existing behaviour are untouched; only the missing lookup is added.
+      // Sesiones CREADAS por este import (no adoptadas): si el usuario cancela en el aviso de
+      // datos existentes, se borran (siempre que sigan sin gps_reports) para no dejar huérfanas.
+      const _createdSessionIds = [];
       async function _gpResolveSessionId(date, type, title) {
         // Enganchar el GPS a la sesión PLANIFICADA (que trae microciclo/MD) en vez de crear una
         // suelta. Matchea por equipo activo O team-null (importadas/legacy), prefiriendo la del
@@ -2257,6 +2296,7 @@
           .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(teamId ? { team_id: teamId } : {}) })
           .select('id').single();
         if (error) throw new Error(`Could not create session for ${date}: ${error.message}`);
+        _createdSessionIds.push(newSess.id);
         return newSess.id;
       }
 
@@ -2332,7 +2372,61 @@
       // Deduplicate: keep last row per (player_id, session_id) to avoid
       // "ON CONFLICT cannot affect row a second time" from Postgres
       const rowKey = r => `${r.player_id ?? '_'}__${r.session_id}`;
-      const deduped = [...new Map(insertable.map(r => [rowKey(r), r])).values()];
+      let deduped = [...new Map(insertable.map(r => [rowKey(r), r])).values()];
+
+      // ── 2b. ¿Ya existen reportes GPS para estas filas? → preguntar qué hacer ──
+      // Robustez cross-fuente (CSV ↔ API Catapult): el upsert de abajo PISA silenciosamente
+      // lo que ya haya. Acá se detectan los pares (player, session) que ya tienen datos y se
+      // le pregunta al usuario: Reemplazar / Conservar existentes / Cancelar.
+      setStatus(_wt('gps_import.dup_checking', 'Checking existing data…'));
+      const _targetSids = [...new Set(deduped.map(r => r.session_id).filter(Boolean))];
+      const _existingPairs = new Set(); const _existingSources = new Set();
+      try {
+        for (let i = 0; i < _targetSids.length; i += 200) {
+          const { data: _ex } = await window.sb.from('gps_reports')
+            .select('player_id, session_id, source')
+            .eq('club_id', clubId).in('session_id', _targetSids.slice(i, i + 200));
+          (_ex || []).forEach(x => {
+            _existingPairs.add(`${x.player_id}__${x.session_id}`);
+            _existingSources.add(x.source || 'csv');
+          });
+        }
+      } catch (e) { console.warn('gps import existing-data check:', e); }
+      const _conflicts = deduped.filter(r => _existingPairs.has(rowKey(r)));
+      if (_conflicts.length) {
+        const _conflictSids = new Set(_conflicts.map(r => r.session_id));
+        const choice = await _wizAskExistingData(_conflicts.length, _conflictSids.size, [..._existingSources]);
+        if (choice === 'cancel') {
+          // Borrar SOLO las sesiones creadas por este import y que sigan vacías (sin reportes).
+          for (const sid of _createdSessionIds) {
+            try {
+              const { count } = await window.sb.from('gps_reports')
+                .select('id', { count: 'exact', head: true }).eq('session_id', sid);
+              if (!count) await window.sb.from('training_sessions').delete().eq('id', sid).eq('club_id', clubId);
+            } catch (e) { console.warn('gps import cancel cleanup:', e); }
+          }
+          document.getElementById('wizSpinner')?.remove();
+          const el = document.getElementById('wizImportStatus');
+          if (el) el.textContent = _wt('gps_import.dup_cancelled', 'Import cancelled — nothing was written.');
+          document.getElementById('wizFooter').innerHTML = `
+            <div class="right"><button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">${_wt('gps_import.close', 'Close')}</button></div>`;
+          return;
+        }
+        if (choice === 'keep') {
+          deduped = deduped.filter(r => !_existingPairs.has(rowKey(r)));
+          warnings.push(`${_conflicts.length} ${_wt('gps_import.dup_kept_note', 'row(s) skipped — they already had GPS data')}`);
+          if (!deduped.length) {
+            document.getElementById('wizSpinner')?.remove();
+            const el = document.getElementById('wizImportStatus');
+            if (el) el.textContent = _wt('gps_import.dup_nothing_new', 'All rows already exist — nothing new to import.');
+            document.getElementById('wizFooter').innerHTML = `
+              <div class="right"><button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">${_wt('gps_import.close', 'Close')}</button></div>`;
+            return;
+          }
+        }
+        // 'replace' → seguir como siempre (el upsert pisa los existentes)
+        renderStep5Import(document.getElementById('wizBody'));
+      }
 
       // ── 3. Upsert core rows → gps_reports (with RETURNING ids) ──
       const CHUNK = 500;

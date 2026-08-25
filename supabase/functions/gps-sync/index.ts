@@ -78,6 +78,30 @@ const STALE_MS = 5 * 60 * 1000;
 // INT columns are rounded; the rest are stored toFixed(4).
 const GPS_INT_COLS = new Set(['accelerations', 'decelerations', 'sprint_count', 'time_played']);
 
+// Outlier defense (same contract as the CSV importer): total_distance in canonical
+// metres above the physical session max = noise. Keep in sync with assets/gps-units.js.
+const OUTLIER_MAX_M = 25000;
+
+// ── Períodos SUPERPUESTOS (doble conteo) ─────────────────────────────────────
+// En OpenField una actividad puede quedar con períodos redundantes que cubren la MISMA
+// ventana de tiempo (ej. "1RST HALF"/"2ND HALF" + los genéricos "Period 1"/"Period 2").
+// Catapult agrega la actividad SUMANDO sus períodos → los totales de sesión salen
+// DUPLICADOS (partido de 10 km reportado como 20 km). Defensa: detectar por jugador los
+// períodos cuya ventana [start,end] ya está cubierta (>50% de solape con los aceptados),
+// marcarlos is_flagged='overlap_duplicate' (la vista de tasks ya excluye flaggeados) y
+// RECALCULAR las columnas-suma del gps_report desde los períodos aceptados.
+// Prioridad de aceptación: períodos con NOMBRE propio ganan a los genéricos "Period N";
+// a igual tier, el más largo primero. Un período sin ventana temporal no se puede juzgar
+// → se acepta (nunca descartamos datos que no podemos probar redundantes).
+const isGenericPeriodName = (n: string | null) => !n || /^period\s*\d+$/i.test(String(n).trim());
+// Columnas de ACUMULACIÓN (la agregación de actividad es la suma de períodos → son las
+// que quedan dobladas y hay que recalcular). max_speed/avg_speed NO: el máx/ratio a nivel
+// actividad no se duplica por solape.
+const GPS_SUM_COLS = [
+  'total_distance', 'high_speed_distance', 'very_high_speed_distance', 'sprint_distance',
+  'sprint_count', 'accelerations', 'decelerations', 'player_load', 'hmld',
+];
+
 // Canonical gps_reports columns (the 13 core). target_metric values NOT in this
 // set are treated as gps_metric_definitions keys → gps_report_metrics (EAV).
 const GPS_REPORT_COLS = new Set([
@@ -289,6 +313,7 @@ async function loadContext(adminClient: Admin, integrationId: string): Promise<C
 
 interface ChunkResult {
   act: number; rows: number; per: number; skip: number; flagged: number; pending: number;
+  overlap: number;   // períodos redundantes detectados (doble conteo corregido)
   errs: string[]; unmapped: string[];
 }
 
@@ -410,7 +435,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
     return !isNaN(ms) && ms >= fromMsRange && ms < toMsRange;   // [from 00:00, to+1day 00:00)
   });
 
-  let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0, pendingActivities = 0;
+  let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0, pendingActivities = 0, overlapPeriods = 0;
   const errors: string[] = [];
 
   // Per-activity worker: returns its OWN counters (no shared-counter mutation under concurrency)
@@ -420,9 +445,9 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
   // scoped by session_id; upsert by unique key), so two activities in flight never touch the same
   // row. Within an activity the flow stays SEQUENTIAL (unchanged) to preserve the "no recs → skip
   // periods" semantics; the win comes from running SEVERAL activities at once.
-  type ActRes = { act: number; rows: number; per: number; skip: number; flagged: number; pending: number; errs: string[] };
+  type ActRes = { act: number; rows: number; per: number; skip: number; flagged: number; pending: number; overlap: number; errs: string[] };
   async function processActivity(act: Record<string, unknown>): Promise<ActRes> {
-    const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, pending: 0, errs: [] };
+    const r: ActRes = { act: 0, rows: 0, per: 0, skip: 0, flagged: 0, pending: 0, overlap: 0, errs: [] };
     const activityId = String(act.id ?? act.activity_id ?? '');
     if (!activityId) return r;
     const date = _localDate(act.start_time ?? act.startTime ?? act.start);   // fecha LOCAL del club, no UTC
@@ -530,9 +555,8 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
 
         const { core, extras } = normalizeMetrics(row, resolveMap, mappedSlugs, unmappedParams);
 
-        // Outlier defense (same contract as the CSV importer): total_distance in
-        // canonical metres above the physical session max = noise. Insert but flag.
-        const OUTLIER_MAX_M = 25000; // keep in sync with assets/gps-units.js
+        // Outlier defense: total_distance above the physical session max = noise.
+        // Insert but flag (OUTLIER_MAX_M, module const — shared with the overlap fix).
         const is_invalid = typeof core.total_distance === 'number' && core.total_distance > OUTLIER_MAX_M;
         // Speed spike defense: max_speed (km/h) at/above the human ceiling is a GPS
         // glitch (Catapult emits 45–82 km/h, or millions). NULL just that metric —
@@ -578,6 +602,9 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
           (rw) => _athKey(rw) + '|' + String(rw.period_id ?? ''));
         {
           const periodRecs: Record<string, unknown>[] = [];
+          // Ventanas por jugador para la detección de solape (ver isGenericPeriodName arriba).
+          type PerEntry = { start: number | null; end: number | null; name: string | null; rec: Record<string, unknown> };
+          const perByPlayer = new Map<string, PerEntry[]>();
           for (const row of (Array.isArray(perRows) ? perRows : [])) {
             const ext = String(row.athlete_id ?? (row.athlete as Record<string, unknown>)?.id ?? row.id ?? '');
             const playerId = ext ? playerByExt.get(ext) : undefined;
@@ -604,20 +631,83 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
             // Same max_speed spike guard as the session level (keep in sync with 40 km/h).
             if (typeof core.max_speed === 'number' && core.max_speed >= 40) core.max_speed = null;
 
-            periodRecs.push({
+            const rec: Record<string, unknown> = {
               club_id: clubId, session_id: sessionId, player_id: playerId,
               period_id: periodId, period_name: periodName,
               duration_seconds: durationSeconds ?? null,
               ...core, extra_metrics,
               is_flagged: isSpeedOutlier,
               flag_reason: isSpeedOutlier ? 'speed_outlier' : null,
-            });
+            };
+            periodRecs.push(rec);
+            if (!perByPlayer.has(playerId)) perByPlayer.set(playerId, []);
+            perByPlayer.get(playerId)!.push({ start: startS, end: endS, name: periodName, rec });
           }
+
+          // ── 7b. Períodos superpuestos → flag + recálculo del reporte de sesión ──
+          // Greedy por jugador: aceptar en orden de prioridad (nombrado > genérico, largo >
+          // corto); un período cuya ventana ya está cubierta >50% por los aceptados es
+          // redundante. Con redundantes: se flaggean (quedan fuera de task analysis) y las
+          // columnas-suma del gps_report se recalculan desde los aceptados — sin esto el
+          // total de sesión que reporta Catapult viene DUPLICADO (suma todos los períodos).
+          const reportFix = new Map<string, Record<string, unknown>>();
+          for (const [pid, list] of perByPlayer) {
+            if (list.length < 2) continue;
+            const sorted = [...list].sort((a, b) =>
+              (isGenericPeriodName(a.name) ? 1 : 0) - (isGenericPeriodName(b.name) ? 1 : 0)
+              || (((b.end ?? 0) - (b.start ?? 0)) - ((a.end ?? 0) - (a.start ?? 0))));
+            const accepted: PerEntry[] = [], redundant: PerEntry[] = [];
+            for (const p of sorted) {
+              if (p.start == null || p.end == null || p.end <= p.start) { accepted.push(p); continue; }
+              const dur = p.end - p.start;
+              let ov = 0;
+              for (const a of accepted) {
+                if (a.start == null || a.end == null) continue;
+                ov += Math.max(0, Math.min(p.end, a.end) - Math.max(p.start, a.start));
+              }
+              if (ov > dur * 0.5) redundant.push(p); else accepted.push(p);
+            }
+            if (!redundant.length) continue;
+            for (const p of redundant) {
+              p.rec.is_flagged = true;
+              p.rec.flag_reason = 'overlap_duplicate';
+            }
+            r.overlap += redundant.length;
+            // Recalcular SOLO las columnas de acumulación desde los períodos aceptados
+            // (max_speed/avg_speed a nivel actividad no se duplican por solape → intactas).
+            const fix: Record<string, unknown> = {};
+            for (const col of GPS_SUM_COLS) {
+              let s = 0, any = false;
+              for (const p of accepted) {
+                const v = p.rec[col as keyof typeof p.rec];
+                if (typeof v === 'number' && isFinite(v)) { s += v; any = true; }
+              }
+              if (any) fix[col] = GPS_INT_COLS.has(col) ? Math.round(s) : +s.toFixed(4);
+            }
+            const durS = accepted.reduce((s, p) => s + (typeof p.rec.duration_seconds === 'number' ? p.rec.duration_seconds as number : 0), 0);
+            if (typeof fix.total_distance === 'number') {
+              if (durS > 0) {
+                fix.distance_per_minute = +((fix.total_distance as number) / (durS / 60)).toFixed(4);
+                fix.time_played = Math.round(durS / 60);
+              }
+              fix.is_invalid = (fix.total_distance as number) > OUTLIER_MAX_M;   // re-evaluar el outlier con el total corregido
+            }
+            if (Object.keys(fix).length) reportFix.set(pid, fix);
+          }
+
           if (periodRecs.length) {
             const { error: pErr } = await adminClient.from('gps_period_reports')
               .upsert(periodRecs, { onConflict: 'club_id,session_id,period_id,player_id' });
             if (pErr) r.errs.push(`periods ${activityId}: ${pErr.message}`);
             else r.per += periodRecs.length;
+          }
+          if (reportFix.size) {
+            console.log(`[gps-sync] overlap fix: activity ${activityId}, ${reportFix.size} player(s) recomputed from non-overlapping periods`);
+            for (const [pid, fix] of reportFix) {
+              const { error: fErr } = await adminClient.from('gps_reports')
+                .update(fix).eq('club_id', clubId).eq('session_id', sessionId).eq('player_id', pid);
+              if (fErr) r.errs.push(`overlap fix ${activityId}: ${fErr.message}`);
+            }
           }
         }
       } catch (pe) {
@@ -644,12 +734,13 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
     for (const rr of results) {
       syncedActivities += rr.act; syncedRows += rr.rows; syncedPeriods += rr.per;
       skippedUnmapped += rr.skip; flaggedPeriods += rr.flagged; pendingActivities += rr.pending;
+      overlapPeriods += rr.overlap;
       if (rr.errs.length) errors.push(...rr.errs);
     }
   }
 
-  console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, ${_statsCalls} /stats calls, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods`);
-  return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, pending: pendingActivities, errs: errors, unmapped: [...unmappedParams] };
+  console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, ${_statsCalls} /stats calls, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods, overlap ${overlapPeriods} periods`);
+  return { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped, flagged: flaggedPeriods, pending: pendingActivities, overlap: overlapPeriods, errs: errors, unmapped: [...unmappedParams] };
 }
 
 // ── job helpers ─────────────────────────────────────────────────────────────
@@ -694,6 +785,7 @@ function mergeTotals(prev: Record<string, unknown> | null, p: ChunkResult): Reco
     skipped_unmapped:  n('skipped_unmapped') + p.skip,
     flagged_periods:   n('flagged_periods') + p.flagged,
     pending_activities: n('pending_activities') + p.pending,
+    overlap_periods:   n('overlap_periods') + p.overlap,   // doble conteo detectado y corregido
     errors:            [...a('errors'), ...p.errs].slice(0, 200),   // cap the log
     unmapped_params:   [...new Set([...a('unmapped_params'), ...p.unmapped])],
   };
