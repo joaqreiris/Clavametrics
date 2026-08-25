@@ -64,17 +64,22 @@
   // ── MD offset (por equipo y día) ──
   function mdDiffLabel(target, day) { const diff = Math.round((parseYMD(target) - parseYMD(day)) / 86400000); if (diff === 0) return 'MD'; if (diff > 0 && diff <= 10) return 'MD-' + diff; if (diff < 0 && diff >= -3) return 'MD+' + (-diff); return ''; }
   function mdNorm(v) { return window.cmMdNorm ? window.cmMdNorm(v) : String(v || ''); }
-  // MD del día = la dinámica DEL EQUIPO: microciclo primero (override manual → fecha de partido),
-  // igual que Calendar. El match_day_offset de cada sesión es la dinámica de ESE grupo (puede
-  // haber dos el mismo día, ej. pretemporada) y se muestra aparte vía groupMdsFor()/mdBadge.
+  // MD del día — misma prioridad que el chip de Calendar: override manual del microciclo →
+  // MD UNÁNIME de las sesiones del día (Daily Planning / Gym Planner) → derivado del partido.
+  // Con dos dinámicas (sesiones en desacuerdo) manda el derivado y cada grupo se muestra
+  // aparte vía groupMdsFor()/mdBadge.
   function mdFor(teamId, y) {
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
-    if (mc) {
-      if (mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
-      if (mc.match_date) return mdDiffLabel(mc.match_date, y);
-    }
-    const sess = (state.data.sessions || []).filter(s => s.team_id === teamId && s.session_date === y);
-    for (const s of sess) { if (s.match_day_offset) return mdNorm(s.match_day_offset); }
+    if (mc && mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
+    const mds = [];
+    (state.data.sessions || []).forEach(s => {
+      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
+      const v = mdNorm(s.match_day_offset);
+      if (v && !mds.includes(v)) mds.push(v);
+    });
+    if (mds.length === 1) return mds[0];
+    if (mc && mc.match_date) return mdDiffLabel(mc.match_date, y);
+    if (mds.length) return mds[0];   // sin microciclo y sesiones en desacuerdo: comportamiento previo
     const wm = (state.data.matches || []).filter(x => x.team_id === teamId).map(x => x.date).sort();
     if (wm.length) return mdDiffLabel(wm[wm.length - 1], y);
     return '';

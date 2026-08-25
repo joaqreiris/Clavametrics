@@ -2646,7 +2646,7 @@ async function _gpLoadDayInner(dateStr) {
   // Load ALL of the day's sessions (same set as Daily Planning) so we can offer a switcher back to
   // the field session. The gym planner still edits the day's gym session.
   const { data: _rows } = await window.sb.from('training_sessions')
-    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content')
+    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content,match_day_offset')
     .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr).eq('is_historical', false)
     .order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true });
   _gpDaySessions = _rows || [];
@@ -2664,6 +2664,14 @@ async function _gpLoadDayInner(dateStr) {
   setVal('gpLocation',  sess?.location || '');
   setVal('gpNotes',     sess?.notes || '');
   setVal('gpEstRpe',    sess?.estimated_rpe || '');
+  // MD guardado de la sesión (columna ASCII/'MD0') → value del select (labels con U+2212,
+  // 'MD' para día de partido). El guardado manda; el derivado de arriba era solo relleno.
+  if (sess?.match_day_offset) {
+    const _n = window.cmMdNorm ? window.cmMdNorm(sess.match_day_offset) : String(sess.match_day_offset);
+    const _lbl = _n === 'MD' ? 'MD' : _n.replace('MD-', 'MD−');
+    const _mdSel2 = document.getElementById('gpMatchDay');
+    if (_mdSel2 && [..._mdSel2.options].some(o => o.value === _lbl)) _mdSel2.value = _lbl;
+  }
   gpApplyContent(sess?.gym_content);
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
   // Roster: la convocatoria de la sesión (session_participants) manda — puede haberse armado
@@ -2694,7 +2702,9 @@ async function _gpLoadDayInner(dateStr) {
     const ctx = await window.cmResolveDayContext(dateStr, _gpTeamId, _gpClubId);
     _gpCalFields = new Set();
     if (ctx.microcycle && mcSel && [...mcSel.options].some(o => o.value === String(ctx.microcycle.id))) { mcSel.value = String(ctx.microcycle.id); _gpCalFields.add('gpMicrocycle'); }
-    if (ctx.md && mdSel && [...mdSel.options].some(o => o.value === ctx.md)) { mdSel.value = ctx.md; _gpCalFields.add('gpMatchDay'); }
+    // MD: SOLO relleno cuando la sesión no tiene match_day_offset propio (mismo criterio que
+    // Daily Planning) — si el microciclo lo pisara, el autosave re-persistiría el derivado.
+    if (ctx.md && mdSel && !(sess && sess.match_day_offset) && [...mdSel.options].some(o => o.value === ctx.md)) { mdSel.value = ctx.md; _gpCalFields.add('gpMatchDay'); }
     if (ctx.hasEvent && ctx.estimated_rpe) { setVal('gpEstRpe', ctx.estimated_rpe); _gpCalFields.add('gpEstRpe'); }
     gpMarkCalFields();
   } catch(_) {}
@@ -2711,7 +2721,12 @@ function gpMarkCalFields() {
     el.classList.toggle('is-cal-sourced', _gpCalFields.has(id));
     if (_gpCalFields.has(id) && !el.dataset.calWarn) {
       el.dataset.calWarn = '1';
-      el.addEventListener('change', () => { if (_gpCalFields.has(id)) gpToast(tt('gym_planner.calendar_sync_toast','This value comes from the Calendar — change it there to keep things in sync.')); });
+      el.addEventListener('change', () => {
+        if (!_gpCalFields.has(id)) return;
+        // El MD es por sesión (dos dinámicas/día): cambiarlo acá es legítimo y persiste.
+        if (id === 'gpMatchDay') { _gpCalFields.delete(id); el.classList.remove('is-cal-sourced'); return; }
+        gpToast(tt('gym_planner.calendar_sync_toast','This value comes from the Calendar — change it there to keep things in sync.'));
+      });
     }
   });
 }
@@ -2762,6 +2777,13 @@ async function gpAutoSave() {
     location:      document.getElementById('gpLocation')?.value?.trim() || null,
     notes:         notesVal,
     estimated_rpe: parseInt(document.getElementById('gpEstRpe')?.value) || null,
+    // MD del select (labels U+2212) → convención de Daily Planning: ASCII, 'MD0' para partido.
+    match_day_offset: (() => {
+      const v = document.getElementById('gpMatchDay')?.value || '';
+      if (!v) return null;
+      const n = window.cmMdNorm ? window.cmMdNorm(v) : v.replace(/−/g, '-');
+      return n === 'MD' ? 'MD0' : n;
+    })(),
     gym_content:   content,
   };
   if (_gpCurrentSessionId) {
@@ -3344,7 +3366,7 @@ async function gpExportPDF() {
   document.getElementById('gpNavNext').addEventListener('click', async () => { await gpFlushSave(); gpLoadDay(_gpAddDays(_gpCurrentDate, 1)); });
   document.getElementById('gpDateInput').addEventListener('change', async e => { if (e.target.value) { await gpFlushSave(); gpLoadDay(e.target.value); } });
 
-  ['gpTitle','gpStartTime','gpDuration','gpLocation','gpNotes','gpEstRpe'].forEach(id => {
+  ['gpTitle','gpStartTime','gpDuration','gpLocation','gpNotes','gpEstRpe','gpMatchDay'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', gpScheduleSave);
   });

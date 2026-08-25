@@ -2349,7 +2349,11 @@ function renderGrid() {
   }
 
   // Build all day columns
-  const _md = mcMatchDate(mc);
+  // Fechas de partido del MC (TODAS, no solo la última): en semanas con doble partido el MD
+  // «Auto» cuenta contra el partido MÁS CERCANO, igual que Club overview / GPS / Load Planner.
+  const _mDates = [...new Set((_matchSessions || [])
+    .filter(s => s.session_date >= start && s.session_date <= end)
+    .map(s => s.session_date))].sort();
   let html = '';
   for (let i = 0; i < totalDays; i++) {
     const dateStr = addDays(start, i);
@@ -2365,26 +2369,35 @@ function renderGrid() {
     const isOff = daySessions.length === 0;
 
     let mdLabel = '';
-    if (_md) {
-      const diff = daysBetween(dateStr, _md);
-      if (diff === 0) mdLabel = 'MD';
-      else if (diff > 0 && diff <= 10) mdLabel = `MD−${diff}`;
-      else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
+    if (_mDates.length) {
+      if (_mDates.indexOf(dateStr) >= 0) mdLabel = 'MD';
+      else {
+        const next = _mDates.find(x => x > dateStr), prev = [..._mDates].slice().reverse().find(x => x < dateStr);
+        const cand = [];
+        if (next) { const dn = daysBetween(dateStr, next); if (dn >= 1 && dn <= 10) cand.push({ v: dn, lbl: `MD−${dn}` }); }
+        if (prev) { const dp = daysBetween(prev, dateStr); if (dp >= 1 && dp <= 3) cand.push({ v: dp, lbl: `MD+${dp}` }); }
+        cand.sort((a, b) => a.v - b.v);
+        if (cand.length) mdLabel = cand[0].lbl;
+      }
     }
     const dayOverride = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
-    const tagText  = hasDayOff ? 'OFF' : (dayOverride || mdLabel);
+    // MD de las sesiones del día (Daily Planning / Gym Planner), en forma canónica (cmMdNorm:
+    // el tag derivado puede venir en U+2212 y la columna en ASCII/'MD0').
+    const _mdN = window.cmMdNorm || (v => String(v || ''));
+    const sessMds = [...new Set(
+      daySessions.filter(s => s.source === 'session' && s.match_day_offset)
+        .map(s => _mdN(s.match_day_offset)).filter(Boolean)
+    )];
+    // Prioridad del chip del día: override manual (menú del chip) → MD UNÁNIME de las sesiones
+    // planificadas → derivado del partido más cercano. Con dos dinámicas (sesiones en
+    // desacuerdo) manda el derivado y cada grupo aparece como chip punteado aparte.
+    const unanimousMd = sessMds.length === 1 ? sessMds[0] : '';
+    const tagText  = hasDayOff ? 'OFF' : (dayOverride || unanimousMd || mdLabel);
     const isMatchTag = tagText === 'MD';
     const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
-    // MD de grupo: sesiones del día con match_day_offset propio distinto del MD del día
-    // (dos dinámicas el mismo día, ej. pretemporada). Chip read-only — se asigna en Daily
-    // Planning; comparación en forma canónica (cmMdNorm) porque el tag del día puede venir
-    // en U+2212 y la columna en ASCII/'MD0'.
-    const _mdN = window.cmMdNorm || (v => String(v || ''));
     const _dayMdN = hasDayOff ? '' : _mdN(tagText);
-    const groupChips = hasDayOff ? '' : [...new Set(
-      daySessions.filter(s => s.source === 'session' && s.match_day_offset)
-        .map(s => _mdN(s.match_day_offset)).filter(v => v && v !== _dayMdN)
-    )].map(v => `<span class="mc-day-md2" title="${tt('calendar.group_md_hint','Group MD — set per session in Daily Planning')}">${_esc(v)}</span>`).join('');
+    const groupChips = hasDayOff ? '' : sessMds.filter(v => v && v !== _dayMdN)
+      .map(v => `<span class="mc-day-md2" title="${tt('calendar.group_md_hint','Group MD — set per session in Daily Planning')}">${_esc(v)}</span>`).join('');
 
     const eventsHtml = hasDayOff ? '' : isOff
       ? `<div class="mc-evt day-off">${tt('calendar.rest_day','Rest day')}</div>`
