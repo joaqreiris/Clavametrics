@@ -71,6 +71,11 @@
   function mdFor(teamId, y) {
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
     if (mc && mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
+    // Día de partido: siempre 'MD' — el MD de una sesión de entrenamiento del mismo día
+    // (ej. activación matinal MD+1 del otro grupo) no destrona al partido.
+    const hasMatch = (state.data.matches || []).some(m => m.team_id === teamId && m.date === y)
+      || (state.data.sessions || []).some(s => s.team_id === teamId && s.session_date === y && s.session_type === 'match');
+    if (hasMatch) return 'MD';
     const mds = [];
     (state.data.sessions || []).forEach(s => {
       if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;

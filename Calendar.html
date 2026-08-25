@@ -2388,11 +2388,12 @@ function renderGrid() {
       daySessions.filter(s => s.source === 'session' && s.match_day_offset)
         .map(s => _mdN(s.match_day_offset)).filter(Boolean)
     )];
-    // Prioridad del chip del día: override manual (menú del chip) → MD UNÁNIME de las sesiones
-    // planificadas → derivado del partido más cercano. Con dos dinámicas (sesiones en
-    // desacuerdo) manda el derivado y cada grupo aparece como chip punteado aparte.
+    // Prioridad del chip del día: override manual (menú del chip) → DÍA DE PARTIDO (siempre
+    // 'MD': una sesión de la mañana no lo destrona) → MD UNÁNIME de las sesiones planificadas
+    // → derivado del partido más cercano. Con dos dinámicas (sesiones en desacuerdo) manda el
+    // derivado y cada grupo aparece como chip punteado aparte.
     const unanimousMd = sessMds.length === 1 ? sessMds[0] : '';
-    const tagText  = hasDayOff ? 'OFF' : (dayOverride || unanimousMd || mdLabel);
+    const tagText  = hasDayOff ? 'OFF' : (dayOverride || (mdLabel === 'MD' ? 'MD' : (unanimousMd || mdLabel)));
     const isMatchTag = tagText === 'MD';
     const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
     const _dayMdN = hasDayOff ? '' : _mdN(tagText);
