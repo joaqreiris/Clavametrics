@@ -425,7 +425,7 @@
     if (cls === 'match') return ['var(--cm-danger-bg)', 'var(--cm-danger)'];
     if (cls === 'gym') return ['var(--cm-info-bg)', 'var(--cm-info)'];
     if (cls === 'recovery') return ['var(--cm-violet-bg)', 'var(--cm-violet)'];
-    if (cls === 'travel') return ['var(--cm-warning-bg)', 'var(--cm-warning)'];
+    if (cls === 'travel') return ['#ECFEFF', '#0E7490'];
     if (cls === 'other') return ['var(--cm-neutral-bg)', 'var(--cm-neutral)'];
     return ['var(--cm-accent-soft)', 'var(--cm-accent)'];
   }

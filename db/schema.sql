@@ -214,7 +214,10 @@ create table if not exists public.calendar_events (
   -- clásico); con ids = day off PARCIAL (solo esos jugadores libres; el día sigue abierto).
   -- Al guardar/borrar el evento se sincronizan filas availability con status='day_off'.
   player_ids uuid[],
+  -- Solo type='travel': medio de transporte. Las horas de trayecto viven en duration_minutes.
+  travel_mode text,
   constraint calendar_events_pkey primary key (id),
+  constraint calendar_events_travel_mode_check CHECK ((travel_mode = ANY (ARRAY['bus'::text, 'flight'::text, 'train'::text, 'other'::text]))),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
   constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
   constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),

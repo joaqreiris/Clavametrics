@@ -643,8 +643,9 @@
   .mc-evt.match .ti { color:var(--cm-danger); }
   .mc-evt.recovery  { background:var(--cm-success-bg);border-color:var(--cm-success-bd); color:#14532D; }
   .mc-evt.recovery .ti { color:var(--cm-success); }
-  .mc-evt.travel    { background:var(--cm-warning-bg);border-color:var(--cm-warning-bd); color:#7C2D12; }
-  .mc-evt.travel .ti { color:var(--cm-warning); }
+  /* Travel: celeste (cyan) — distinto del ámbar de las comidas */
+  .mc-evt.travel    { background:#ECFEFF; border-color:#A5F3FC; color:#155E75; }
+  .mc-evt.travel .ti { color:#06B6D4; }
   .mc-evt.meeting   { background:#EFF6FF; border-color:#BFDBFE; color:#1E3A8A; }
   .mc-evt.meeting .ti { color:#3B82F6; }
   .mc-evt.evaluation{ background:#F0FDF4; border-color:#BBF7D0; color:#14532D; }
@@ -744,7 +745,7 @@
   }
   .upcoming-meta .badge.t-match { background:var(--cm-danger-bg); color:var(--cm-danger); }
   .upcoming-meta .badge.t-training { background:var(--cm-info-bg); color:var(--cm-info); }
-  .upcoming-meta .badge.t-travel { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .upcoming-meta .badge.t-travel { background:#ECFEFF; color:#0E7490; }
   .upcoming-meta .badge.t-recovery { background:var(--cm-success-bg); color:var(--cm-success); }
   .upcoming-meta .badge.t-gym { background:var(--cm-violet-bg); color:var(--cm-violet); }
   .upcoming-when {
@@ -1289,7 +1290,7 @@
             <button class="cal-filter-pill" data-filter="gym"><span class="dot" style="background:var(--cm-violet)"></span><span data-i18n="calendar.filter_gym">Gym</span></button>
             <button class="cal-filter-pill" data-filter="match"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="calendar.filter_match">Match</span></button>
             <button class="cal-filter-pill" data-filter="recovery"><span class="dot" style="background:var(--cm-success)"></span><span data-i18n="calendar.filter_recovery">Recovery</span></button>
-            <button class="cal-filter-pill" data-filter="travel"><span class="dot" style="background:var(--cm-warning)"></span><span data-i18n="calendar.filter_travel">Travel</span></button>
+            <button class="cal-filter-pill" data-filter="travel"><span class="dot" style="background:#06B6D4"></span><span data-i18n="calendar.filter_travel">Travel</span></button>
           </div>
 
           <!-- Days grid: Sun 11 → Sat 17 (week 1, today is Fri 16) -->
@@ -1685,6 +1686,19 @@
             <div id="calDayOffChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
             <div id="calDayOffCount" style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:8px"></div>
           </div>
+        </div>
+      </div>
+      <!-- Travel: medio de transporte (solo type='travel'); las horas de trayecto = Duration -->
+      <div class="sq-modal-row" id="calEvtTravelRow" style="display:none">
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label for="calEvtF_travelMode" data-i18n="calendar.travel_mode">Transport</label>
+          <select id="calEvtF_travelMode">
+            <option value="">—</option>
+            <option value="bus" data-i18n="calendar.travel_bus">Bus</option>
+            <option value="flight" data-i18n="calendar.travel_flight">Flight</option>
+            <option value="train" data-i18n="calendar.travel_train">Train</option>
+            <option value="other" data-i18n="calendar.travel_other">Other</option>
+          </select>
         </div>
       </div>
       <div class="sq-modal-row">
@@ -2407,7 +2421,8 @@ function renderGrid() {
           // Outdoor/beach are training-class substitutes: keep training routing/filters but give them
           // their own icon, label and colour (modifier class) so they read as distinct events.
           const isOutdoorTrain = s.session_type === 'beach' || s.session_type === 'outdoor';
-          const icon = isOutdoorTrain ? EVT_ICONS[s.session_type] : (EVT_ICONS[cat] || 'ti-calendar');
+          const icon = cat === 'travel' ? ({ bus:'ti-bus', flight:'ti-plane', train:'ti-train' }[s.travel_mode] || 'ti-plane')
+                     : isOutdoorTrain ? EVT_ICONS[s.session_type] : (EVT_ICONS[cat] || 'ti-calendar');
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
           // Training: show the custom title if the user renamed it, else the generic "Training"
@@ -2899,9 +2914,10 @@ async function fetchAllEvents(dateFrom, dateTo) {
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,orientation,visible_to,recurrence_group_id,created_at,match_day_offset')
       .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
-    _evtQ(EVT_COLS + ',player_ids')
+    _evtQ(EVT_COLS + ',player_ids,travel_mode')
   ]);
-  // Fallback: si la columna player_ids todavía no existe en la DB, reintentar sin ella
+  // Fallbacks: si travel_mode / player_ids todavía no existen en la DB, reintentar sin ellas
+  if (evtRes.error && /travel_mode/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids');
   if (evtRes.error && /player_ids/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS);
   if (sessRes.error) return { error: sessRes.error.message };
   const norm = (sessRes.data || []).map(s => ({
@@ -2923,6 +2939,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     visible_to: e.visible_to || ['staff'],
     created_at: e.created_at || null,
     player_ids: e.player_ids || null,
+    travel_mode: e.travel_mode || null,
     source: 'event'
   }));
   // Dedup matches: a match can exist both as a calendar_events event and as a
@@ -2950,11 +2967,25 @@ async function loadSessions() {
   _weekOffset = 0;
 
   // Travel Days KPI
-  const travelCt = _sessions.filter(s => s.session_type === 'travel').length;
+  const travelEvts = _sessions.filter(s => s.session_type === 'travel');
+  const travelCt = travelEvts.length;
   const elTV = document.getElementById('calTravelV');
   const elTT = document.getElementById('calTravelT');
   if (elTV) elTV.innerHTML = `${travelCt} <sub>${tt('calendar.this_mc','this MC')}</sub>`;
-  if (elTT) elTT.textContent = travelCt > 0 ? tt('calendar.travel_line','{n} travel session this MC|{n} travel sessions this MC',{n:travelCt,count:travelCt}) : tt('calendar.no_travel_planned','No travel planned');
+  // Horas de trayecto = suma de Duration de los eventos travel, desglosadas por medio
+  const _fmtHM = mins => { const h = Math.floor(mins / 60), m = mins % 60; return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`; };
+  const _tmLabel = k => tt('calendar.travel_' + k, ({ bus:'Bus', flight:'Flight', train:'Train', other:'Other' })[k] || k);
+  const _byMode = {};
+  travelEvts.forEach(s => { if (s.duration) { const k = s.travel_mode || 'other'; _byMode[k] = (_byMode[k] || 0) + s.duration; } });
+  const _travelMin = Object.values(_byMode).reduce((a, b) => a + b, 0);
+  if (elTT) {
+    if (!travelCt) elTT.textContent = tt('calendar.no_travel_planned','No travel planned');
+    else if (_travelMin > 0) {
+      const parts = Object.entries(_byMode).map(([k, v]) => `${_fmtHM(v)} ${_tmLabel(k).toLowerCase()}`);
+      elTT.textContent = tt('calendar.travel_hours_line','{t} travel time',{t:_fmtHM(_travelMin)}) + (parts.length > 1 ? ' · ' + parts.join(' · ') : '');
+    }
+    else elTT.textContent = tt('calendar.travel_line','{n} travel session this MC|{n} travel sessions this MC',{n:travelCt,count:travelCt});
+  }
 
   renderGrid();
   renderWorkload();
@@ -3341,6 +3372,12 @@ function openEvtModal(session, defaultDate, focusTasks) {
   const durWrap = document.getElementById('calEvtDurationWrap');
   if (durWrap) durWrap.style.display = (evtType === 'day_off' || evtType === 'match') ? 'none' : '';
 
+  // travel: medio de transporte
+  const travelRow = document.getElementById('calEvtTravelRow');
+  if (travelRow) travelRow.style.display = evtType === 'travel' ? '' : 'none';
+  const travelSel = document.getElementById('calEvtF_travelMode');
+  if (travelSel) travelSel.value = session?.travel_mode || '';
+
   // Day off scope: restaurar del evento (parcial si tiene player_ids) o default equipo entero
   _dayOffSel   = new Set((session?.player_ids || []).map(String));
   _dayOffScope = (evtType === 'day_off' && _dayOffSel.size) ? 'players' : 'team';
@@ -3551,6 +3588,7 @@ function showEvtPopover(anchor, session) {
     if (session.location)     rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
     if (session.estimated_rpe) rows.push(`<div class="cal-epop-row"><i class="ti ti-activity"></i><span>${tt('calendar.rpe_prefix','RPE {n}',{n:session.estimated_rpe})}</span></div>`);
   } else if (cat === 'travel') {
+    if (session.travel_mode) rows.push(`<div class="cal-epop-row"><i class="ti ${({ bus:'ti-bus', flight:'ti-plane', train:'ti-train' })[session.travel_mode] || 'ti-plane'}"></i><span>${tt('calendar.travel_' + session.travel_mode, ({ bus:'Bus', flight:'Flight', train:'Train', other:'Other' })[session.travel_mode] || session.travel_mode)}</span></div>`);
     if (session.location)   rows.push(`<div class="cal-epop-row"><i class="ti ti-route"></i><span>${_esc(session.location)}</span></div>`);
   } else {
     if (session.location)   rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
@@ -4280,6 +4318,7 @@ async function saveEvt() {
     let rows, table;
     if (isCalEvt) {
       const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
+      if (type === 'travel') basePayload.travel_mode = document.getElementById('calEvtF_travelMode')?.value || null;
       if (type === 'day_off') basePayload.player_ids = isPartialSave ? [..._dayOffSel] : null;
       if (type === 'match') {
         basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
@@ -4317,6 +4356,7 @@ async function saveEvt() {
 
   if (isCalEvt) {
     const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, ...matchFieldsToClear };
+    payload.travel_mode = type === 'travel' ? (document.getElementById('calEvtF_travelMode')?.value || null) : null;
     if (type === 'day_off') payload.player_ids = isPartialSave ? [..._dayOffSel] : null;
     else if (prevType === 'day_off') payload.player_ids = null;   // dejó de ser day off
     if (type === 'match') {
@@ -4344,6 +4384,12 @@ async function saveEvt() {
       payload.club_id = clubId;
       payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('calendar_events').insert(payload));
+    }
+    // Fallback: la columna travel_mode todavía no existe en la DB → reintentar sin ella
+    if (error && /travel_mode/i.test(error.message || '')) {
+      delete payload.travel_mode;
+      if (_editEvtId && _editEvtSource === 'event') ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
+      else ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
     const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo };
@@ -4460,6 +4506,9 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   // day_off: hide duration
   const durWrap = document.getElementById('calEvtDurationWrap');
   if (durWrap) durWrap.style.display = (t === 'day_off' || t === 'match') ? 'none' : '';
+  // travel: medio de transporte
+  const travelRow = document.getElementById('calEvtTravelRow');
+  if (travelRow) travelRow.style.display = t === 'travel' ? '' : 'none';
   // day_off: show scope row (whole team vs selected players)
   calSyncDayOffRow(t);
   // Update visible-to defaults to match new type (only on new events)
@@ -4955,7 +5004,7 @@ document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg
 // ── Month view ────────────────────────────────────────────────
 const EVT_BG = {
   training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)',
-  travel:'var(--cm-warning-bg)', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)',
+  travel:'#ECFEFF', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)',
   breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)',
   hotel:'var(--cm-bg-soft)', bus:'var(--cm-bg-soft)',
   press:'var(--cm-info-bg)', medical:'var(--cm-danger-bg)',
@@ -4964,7 +5013,7 @@ const EVT_BG = {
 };
 const EVT_CLR = {
   training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)',
-  travel:'var(--cm-warning)', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)',
+  travel:'#06B6D4', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)',
   breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)',
   hotel:'var(--cm-fg-muted)', bus:'var(--cm-fg-muted)',
   press:'var(--cm-info)', medical:'var(--cm-danger)',
@@ -6132,7 +6181,7 @@ const CAL_TYPE_META = {
   gym:        { abbr:'GYM',   fg:'#5B21B6', bg:'#F5F2FF', bd:'#DDD3FB', label:'Gym' },
   match:      { abbr:'MATCH', fg:'#991B1B', bg:'#FCE9E9', bd:'#F1B9B9', label:'Match' },
   recovery:   { abbr:'REC',   fg:'#14532D', bg:'#ECFBF1', bd:'#BBEBCB', label:'Recovery' },
-  travel:     { abbr:'TRV',   fg:'#7C2D12', bg:'#FEF4E6', bd:'#F3D9A6', label:'Travel' },
+  travel:     { abbr:'TRV',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Travel' },
   meeting:    { abbr:'MTG',   fg:'#1E3A8A', bg:'#EFF6FF', bd:'#BFDBFE', label:'Meeting' },
   evaluation: { abbr:'EVA',   fg:'#14532D', bg:'#F0FDF4', bd:'#BBF7D0', label:'Evaluation' },
   video:      { abbr:'VID',   fg:'#334155', bg:'#F1F4F8', bd:'#D8E0EA', label:'Video' },
