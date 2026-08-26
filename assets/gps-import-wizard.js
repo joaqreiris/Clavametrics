@@ -29,6 +29,7 @@
     player_last_name: 'Last name', jersey_number: 'Jersey #',
     position: 'Position', player_external_gps_id: 'External GPS ID',
     session_date: 'Session date', session_type: 'Session type',
+    period_name: 'Period name',
     total_distance: 'Total distance', high_speed_distance: 'HSR distance',
     very_high_speed_distance: 'VHSR distance', sprint_distance: 'Sprint distance',
     hmld: 'HMLD', distance_per_minute: 'Distance / min',
@@ -2048,6 +2049,7 @@
     const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
     const jerseyIdx     = _colOf('jersey_number');
     const dateColIdx    = _colOf('session_date');
+    const periodColIdx  = _colOf('period_name');
     const typeColIdx    = Object.entries(columnMap).find(([, c]) => c.field === 'session_type')?.[0] ?? null;
     const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
     const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
@@ -2098,6 +2100,12 @@
 
       const rec    = { club_id: clubId, session_id: sessionId, player_id: playerId };
       const extras = [];
+      // Columna de período mapeada: esta fila es UN período del jugador (no la sesión entera).
+      // _consolidatePeriods la escribe en gps_period_reports y agrega la fila de sesión.
+      if (periodColIdx != null) {
+        const _pn = String(row[+periodColIdx] ?? '').trim();
+        if (_pn) rec.__period = _pn;
+      }
 
       for (const [ci, map] of Object.entries(columnMap)) {
         // Accumulate session attributes (grain = per session, not per player)
@@ -2159,8 +2167,9 @@
       if (rec.max_speed != null && rec.max_speed >= _maxKmh) { rec.max_speed = null; speedSpikeCount++; }
 
       insertable.push(rec);
-      // Overwrite on duplicate key (same as dedup keeps last row)
-      if (extras.length) extrasMap[_rowKey(rec)] = extras;
+      // Overwrite on duplicate key (same as dedup keeps last row). Con columna de período,
+      // _consolidatePeriods reconstruye extrasMap desde __extras (suma por período).
+      if (extras.length) { extrasMap[_rowKey(rec)] = extras; rec.__extras = extras; }
     }
 
     // Consolidate attribute values: take most frequent; warn if varies within session
@@ -2186,6 +2195,91 @@
     if (speedSpikeCount) warnings.push(`${speedSpikeCount} row${speedSpikeCount === 1 ? '' : 's'} had an impossible max_speed (≥ ${(window.GpsUnits?.MAX_SPEED_KMH ?? 40)} km/h) — that value was cleared, the rest of the row was kept`);
 
     return { insertable, extrasMap, skippedCells, warnings, attrsBySession, outlierCount, speedSpikeCount };
+  }
+
+  // ── CSV con columna de PERÍODO: consolidación a sesión + filas de período ─────────
+  // Cuando el archivo trae una fila por período/drill del jugador (nombre, fecha, período,
+  // métricas…), cada fila con período va a gps_period_reports y la fila de gps_reports se arma:
+  //  · con la fila "Total"/"Session" del archivo si vino (nombres de _PERIOD_TOTAL_NAMES), o
+  //  · agregando los períodos: suma para volumen, máx para max_speed, media ponderada por
+  //    minutos para avg_speed, y m/min recalculado = Σdistancia / Σminutos.
+  // work_context NO se manda: default 'team' + el trigger apply_gps_context_rule etiqueta por
+  // nombre ("Rehab X", "Top-up"…) con las reglas del club → el filtro Contexto dinámico funciona
+  // para clubes CSV igual que con Catapult. Sin columna de período: dedup clásico (última gana).
+  const _PERIOD_TOTAL_NAMES = new Set([
+    'session', 'total', 'all', 'summary', 'full session', 'entire session', 'whole session',
+    'sesion', 'sesion completa', 'total sesion', 'totales', 'resumen', 'match total', 'game total',
+  ]);
+  const _PERIOD_SUM_COLS = ['total_distance', 'high_speed_distance', 'very_high_speed_distance',
+    'sprint_distance', 'sprint_count', 'accelerations', 'decelerations', 'player_load', 'hmld', 'time_played'];
+  function _consolidatePeriods(insertable, extrasMap, rowKeyFn) {
+    const hasPeriods = insertable.some(r => r.__period);
+    if (!hasPeriods) {
+      for (const r of insertable) { delete r.__period; delete r.__extras; }
+      return { sessionRows: [...new Map(insertable.map(r => [rowKeyFn(r), r])).values()], periodRows: [] };
+    }
+    const norm = window.normalizeAlias || (s => String(s || '').toLowerCase().trim());
+    const groups = new Map();
+    for (const r of insertable) {
+      const k = rowKeyFn(r);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    const sessionRows = [], periodRows = [];
+    for (const [k, recs] of groups) {
+      const totals  = recs.filter(r => !r.__period ||  _PERIOD_TOTAL_NAMES.has(norm(r.__period)));
+      const periods = recs.filter(r =>  r.__period && !_PERIOD_TOTAL_NAMES.has(norm(r.__period)));
+      // Filas de período (nombre duplicado en el mismo jugador+sesión: gana la última)
+      const byName = new Map();
+      for (const p of periods) byName.set(norm(p.__period), p);
+      const ps = [...byName.values()];
+      for (const p of ps) {
+        const row = { club_id: p.club_id, session_id: p.session_id, player_id: p.player_id,
+                      period_id: p.__period, period_name: p.__period };
+        for (const c of GPS_REPORT_COLS) if (p[c] != null) row[c] = p[c];
+        if (p.time_played != null) row.duration_seconds = Math.round(p.time_played * 60);
+        if (row.distance_per_minute == null && p.time_played > 0 && p.total_distance != null) {
+          row.distance_per_minute = +(p.total_distance / p.time_played).toFixed(4);
+        }
+        if (p.__extras?.length) row.extra_metrics = Object.fromEntries(p.__extras.map(e => [e.metric_key, e.value]));
+        periodRows.push(row);
+      }
+      // Fila de sesión: la "Total" del archivo si vino; si no, agregada desde los períodos
+      let sess;
+      if (totals.length) {
+        sess = totals[totals.length - 1];
+        if (sess.__extras?.length) extrasMap[k] = sess.__extras; else delete extrasMap[k];
+      } else {
+        sess = { club_id: recs[0].club_id, session_id: recs[0].session_id, player_id: recs[0].player_id };
+        for (const c of _PERIOD_SUM_COLS) {
+          const vals = ps.map(p => p[c]).filter(v => v != null);
+          if (vals.length) sess[c] = +vals.reduce((s, v) => s + v, 0).toFixed(4);
+        }
+        for (const c of GPS_INT_COLS) if (sess[c] != null) sess[c] = Math.round(sess[c]);
+        const maxes = ps.map(p => p.max_speed).filter(v => v != null);
+        if (maxes.length) sess.max_speed = Math.max(...maxes);
+        let _sw = 0, _swd = 0;
+        for (const p of ps) if (p.avg_speed != null) { const w = p.time_played || 1; _sw += p.avg_speed * w; _swd += w; }
+        if (_swd > 0) sess.avg_speed = +(_sw / _swd).toFixed(4);
+        if (sess.time_played > 0 && sess.total_distance != null) {
+          sess.distance_per_minute = +(sess.total_distance / sess.time_played).toFixed(4);
+        } else {
+          // Sin columna de tiempo: no se puede recalcular Σdist/Σmin → media (ponderada si se
+          // puede) de los m/min que trajo el archivo por período. Mejor aproximación disponible.
+          let _dw = 0, _dwd = 0;
+          for (const p of ps) if (p.distance_per_minute != null) { const w = p.time_played || 1; _dw += p.distance_per_minute * w; _dwd += w; }
+          if (_dwd > 0) sess.distance_per_minute = +(_dw / _dwd).toFixed(4);
+        }
+        if (ps.some(p => p.is_invalid)) sess.is_invalid = true;
+        const exSum = new Map();
+        for (const p of ps) for (const e of (p.__extras || [])) exSum.set(e.metric_key, (exSum.get(e.metric_key) || 0) + e.value);
+        if (exSum.size) extrasMap[k] = [...exSum].map(([metric_key, value]) => ({ metric_key, value: +value.toFixed(4) }));
+        else delete extrasMap[k];
+      }
+      delete sess.__period; delete sess.__extras;
+      sessionRows.push(sess);
+    }
+    return { sessionRows, periodRows };
   }
 
   // ── Aviso de datos existentes (robustez CSV ↔ API) ───────────
@@ -2369,10 +2463,11 @@
         return;
       }
 
-      // Deduplicate: keep last row per (player_id, session_id) to avoid
-      // "ON CONFLICT cannot affect row a second time" from Postgres
+      // Con columna de período: cada fila del CSV es un período → gps_period_reports + fila de
+      // sesión consolidada. Sin período: dedup clásico — última fila por (player, session) gana
+      // (evita "ON CONFLICT cannot affect row a second time" de Postgres).
       const rowKey = r => `${r.player_id ?? '_'}__${r.session_id}`;
-      let deduped = [...new Map(insertable.map(r => [rowKey(r), r])).values()];
+      let { sessionRows: deduped, periodRows } = _consolidatePeriods(insertable, extrasMap, rowKey);
 
       // ── 2b. ¿Ya existen reportes GPS para estas filas? → preguntar qué hacer ──
       // Robustez cross-fuente (CSV ↔ API Catapult): el upsert de abajo PISA silenciosamente
@@ -2414,6 +2509,7 @@
         }
         if (choice === 'keep') {
           deduped = deduped.filter(r => !_existingPairs.has(rowKey(r)));
+          periodRows = periodRows.filter(r => !_existingPairs.has(rowKey(r)));
           warnings.push(`${_conflicts.length} ${_wt('gps_import.dup_kept_note', 'row(s) skipped — they already had GPS data')}`);
           if (!deduped.length) {
             document.getElementById('wizSpinner')?.remove();
@@ -2442,6 +2538,20 @@
         if (returned) allReturned.push(...returned);
         done = Math.min(i + CHUNK, deduped.length);
         setStatus('Saving GPS reports…', `${done} / ${deduped.length}`);
+      }
+
+      // ── 3a. Upsert filas de período → gps_period_reports (CSV con columna de período) ──
+      // Upsert por (club, session, period, player) SIN work_context: en filas nuevas aplica el
+      // default 'team' + el trigger de auto-etiquetado por nombre; en re-imports se PRESERVA el
+      // contexto ya seteado (manual o por regla), igual que el re-sync de Catapult.
+      if (periodRows.length) {
+        setStatus('Saving period data…', `0 / ${periodRows.length}`);
+        for (let i = 0; i < periodRows.length; i += CHUNK) {
+          const { error } = await window.sb.from('gps_period_reports')
+            .upsert(periodRows.slice(i, i + CHUNK), { onConflict: 'club_id,session_id,period_id,player_id' });
+          if (error) throw error;
+          setStatus('Saving period data…', `${Math.min(i + CHUNK, periodRows.length)} / ${periodRows.length}`);
+        }
       }
 
       // ── 3b. Upsert custom metrics → gps_report_metrics ───────
@@ -2542,6 +2652,8 @@
         ? ` · ${customMetricCount} custom metric value${customMetricCount !== 1 ? 's' : ''}` : '';
       const attrLine        = attrCount
         ? ` · ${attrCount} session attribute${attrCount !== 1 ? 's' : ''}` : '';
+      const periodLine      = periodRows.length
+        ? ` · ${periodRows.length} period${periodRows.length !== 1 ? 's' : ''}` : '';
 
       document.getElementById('wizBody').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
@@ -2549,7 +2661,7 @@
           <div>
             <div style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Import complete</div>
             <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">
-              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''}${customLine}${attrLine} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
+              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''}${periodLine}${customLine}${attrLine} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
             </div>
           </div>
           ${warningLines.length ? `

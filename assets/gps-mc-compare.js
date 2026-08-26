@@ -199,15 +199,26 @@
         currentSessId, ...refSessIds, ...trendSessIds,
         ...shapeCurrSessIds, ...shapeRefAllSessIds,
       ])];
+      // Contexto de trabajo (Modelo B): etiqueta de SESIÓN en la query + recorte dinámico por
+      // PERÍODO vía applyCtxToRows del resolver (mismo motor que las cards del dashboard).
+      const _wcMc = FB?.workContexts?.length ? FB.workContexts : ['team'];
+      const _mcSelect = `player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`;
       const reports = await window.cmFetchAll(() => _scopeTeam(window.sb
         .from('gps_reports')
-        .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
+        .select(_mcSelect)
         .eq('club_id', clubId)
         .eq('is_invalid', false)
+        .in('work_context', _wcMc)
         .in('session_id', allSessIds)), { label: 'mc-heatmap' })
         .catch(e => { console.error('[MC heatmap] query failed:', e); return []; });
 
-      const allReports = reports || [];
+      let allReports = reports || [];
+      try {
+        const _ctxMod = await import('./lib/gp-card/resolver.js');
+        allReports = await _ctxMod.applyCtxToRows(window.sb, { clubId }, allSessIds, _wcMc,
+          Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length ? window._gpPlayerIds : null,
+          allReports, _mcSelect);
+      } catch (e) { console.warn('[MC heatmap] ctx scope no aplicado:', e?.message || e); }
 
       // Per-player data
       const playerIds  = [...new Set(allReports.map(r => r.player_id))];

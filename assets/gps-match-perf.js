@@ -58,9 +58,8 @@
     return { key, agg, label: _mpChipLabel(key, agg), unit: key === 'acc_dec' ? '' : (cat?.unit || ''), dec: cat?.decimals ?? 0 };
   }
   function _mpAggVal(rows, def) {
-    // Media (avg/median): excluye jugadores con período no-team (_excludeMean). Total/máx/mín: todos.
-    const isMean = def.agg === 'avg' || def.agg === 'median';
-    const base = isMean ? rows.filter(r => !r._excludeMean) : rows;
+    // Modelo B: las filas llegan ya recortadas al contexto → todas las agregaciones usan a todos.
+    const base = rows;
     const vals = base.map(r => def.key === 'acc_dec' ? (r.accelerations||0)+(r.decelerations||0) : r[def.key])
       .filter(v => v != null && !isNaN(v));
     if (!vals.length) return null;
@@ -223,21 +222,11 @@
     return { from: d.from || null, to: d.to || null };
   }
 
-  // ── Modelo A (2026-08, docs/gps-work-context.md): el trabajo no-team es SOLO VOLUMEN.
-  //    NO se resta del total de partido (el volumen se ve completo). En cambio, se MARCAN las
-  //    filas (session, player) con período no-team para EXCLUIRLAS de las medias (_mpAggVal).
-  //    Un jugador con top-up/rehab en la misma actividad queda fuera de la media de partido entero.
-  async function _mpMarkNonTeam(rows, clubId, sessIds) {
-    try {
-      if (!rows || !rows.length || !sessIds || !sessIds.length) return;
-      const np = await window.cmFetchAll(() => window.sb.from('gps_period_reports')
-        .select('session_id,player_id')
-        .eq('club_id', clubId).neq('work_context', 'team').in('session_id', sessIds), { label: 'mp-nonteam' });
-      if (!np || !np.length) return;
-      const keys = new Set(np.map(p => p.session_id + '|' + p.player_id));
-      for (const r of rows) { if (keys.has(r.session_id + '|' + r.player_id)) r._excludeMean = true; }
-    } catch (_e) { /* no romper la card por esto */ }
-  }
+  // ── Modelo B (2026-08): el filtro Context recorta DINÁMICAMENTE por período — los valores
+  //    de cada (partido, jugador) reflejan solo los contextos seleccionados: el trabajo de otros
+  //    contextos se resta vía períodos y un jugador sin períodos del contexto desaparece
+  //    (ver applyCtxToRows en lib/gp-card/resolver.js). Reemplaza al marcado _excludeMean.
+  const _MP_SELECT = 'session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)';
 
   // ── KPIs de partido: alcance intrínseco = sesiones de PARTIDO; el ÚNICO filtrado
   //    del usuario es la barra de desplegables (player/posición/MD/microciclo/fecha).
@@ -271,7 +260,7 @@
       const reports = await window.cmFetchAll(() => {
         let q = _scopeTeam(window.sb
           .from('gps_reports')
-          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
+          .select(_MP_SELECT)
           .eq('club_id', clubId)
           .eq('is_invalid', false)
           .in('session_id', sessIds));
@@ -280,9 +269,13 @@
         .catch(e => { console.error('[pos report] query failed:', e); return []; });
 
       let rows = reports || [];
-      // Modelo A: NO se resta. Se marcan las filas con período no-team para excluirlas de las medias
-      // (el volumen se ve completo; solo el partido cuenta en la media al excluir al jugador entero).
-      await _mpMarkNonTeam(rows, clubId, sessIds);
+      // Modelo B: recorte dinámico por período (mismo motor que el dashboard).
+      try {
+        const _ctxMod = await import('./lib/gp-card/resolver.js');
+        rows = await _ctxMod.applyCtxToRows(window.sb, { clubId }, sessIds, _wcMp,
+          Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length ? window._gpPlayerIds : null,
+          rows, _MP_SELECT);
+      } catch (e) { console.warn('[pos report] ctx scope no aplicado:', e?.message || e); }
       if (FB?.playerIds?.length) { const p = new Set(FB.playerIds);  rows = rows.filter(r => p.has(r.player_id)); }
       if (FB?.positions?.length) { const ps = new Set(FB.positions); rows = rows.filter(r => ps.has(r.players?.position)); }
 

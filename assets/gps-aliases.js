@@ -67,6 +67,16 @@
       category: 'date',
       aliases: ['session date', 'date', 'fecha', 'fecha sesion', 'training date', 'match date'],
     },
+    // Columna de PERÍODO (una fila del CSV por período/drill del jugador). El wizard la usa
+    // para escribir gps_period_reports y agregar la fila de sesión (ver _consolidatePeriods).
+    {
+      metric_key: 'period_name',
+      category: 'date',
+      aliases: [
+        'period', 'period name', 'periods', 'periodo', 'nombre periodo', 'periodo nombre',
+        'drill', 'drill name', 'drill title', 'phase', 'phase name', 'bloque', 'split name', 'interval name',
+      ],
+    },
     // ── Distance ────────────────────────────────────────────────
     {
       metric_key: 'total_distance',
