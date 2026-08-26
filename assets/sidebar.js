@@ -624,10 +624,14 @@ html.cm-rail .hub-nav-grip{display:none}
     if (typeof window.planAllows === 'function') {
       const items = [...document.querySelectorAll('.hub-nav-item[data-mod]')];
       const checks = await Promise.all(items.map(async el => ({ el, ok: await window.planAllows(el.dataset.mod) })));
+      // Features con "teaser difuminado" (feature-teaser.js): el candado mantiene el
+      // href a SU página; al entrar, guardModule() muestra el preview con CTA (convierte
+      // más que patear al Plan Picker pelado). El resto sí va directo al Plan Picker.
+      const TEASER_KEYS = new Set(['gps', 'load-monitor', 'planner', 'match-reports', 'nutrition', 'video-room']);
       checks.forEach(({ el, ok }) => {
         if (ok) return;
         el.classList.add('is-locked');
-        el.setAttribute('href', 'Plan Picker.html');
+        if (!TEASER_KEYS.has(el.dataset.mod)) el.setAttribute('href', 'Plan Picker.html');
         const t = el.getAttribute('title') || '';
         if (!t.includes('Upgrade')) el.setAttribute('title', t + ' — Upgrade to unlock');
         if (!el.querySelector('.hub-nav-lock')) {
