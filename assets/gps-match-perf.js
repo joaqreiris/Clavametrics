@@ -231,8 +231,10 @@
   // ── KPIs de partido: alcance intrínseco = sesiones de PARTIDO; el ÚNICO filtrado
   //    del usuario es la barra de desplegables (player/posición/MD/microciclo/fecha).
   async function _mpLoad() {
-    if (!kpiBody) return;
-    kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Loading…</div>';
+    // La card de KPIs (mp-kpi-body) fue eliminada del HTML; la carga sigue viva para
+    // la Player card (mp-player-body). Sin ninguna de las dos no hay nada que alimentar.
+    if (!kpiBody && !document.getElementById('mp-player-body')) return;
+    if (kpiBody) kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Loading…</div>';
     try {
       const clubId = await window.getClubId?.();
       if (!clubId) return;
@@ -251,7 +253,12 @@
       if (FB?.microcycleIds?.length) { const mc = new Set(FB.microcycleIds.map(String)); matchSessions = matchSessions.filter(s => mc.has(String(s.microcycle_id))); }
       if (FB?.mdCodes?.length)       { const md = new Set(FB.mdCodes.map(String));       matchSessions = matchSessions.filter(s => md.has(String(s.session_attributes?.md_code ?? ''))); }
 
-      if (!matchSessions.length) { _mpCurrentRows = []; kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No matches for the active filters.</div>'; return; }
+      if (!matchSessions.length) {
+        _mpCurrentRows = [];
+        if (kpiBody) kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No matches for the active filters.</div>';
+        _mpRenderPlayerCard([]);
+        return;
+      }
 
       const sessIds = matchSessions.map(s => s.id);
       // Training context: default 'team' only (rehab/individual/top-up NO cuentan en la media
@@ -280,8 +287,9 @@
       if (FB?.positions?.length) { const ps = new Set(FB.positions); rows = rows.filter(r => ps.has(r.players?.position)); }
 
       _mpCurrentRows = rows;
-      _mpRenderKPIs(rows);
-    } catch (e) { console.error('_mpLoad:', e); kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Error loading data.</div>'; }
+      if (kpiBody) _mpRenderKPIs(rows);
+      _mpRenderPlayerCard(rows);
+    } catch (e) { console.error('_mpLoad:', e); if (kpiBody) kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Error loading data.</div>'; }
   }
 
   // ── KPIs (configurable chips) ─────────────────────────────────
@@ -353,6 +361,70 @@
     window.GpBuilder.resolveAndRenderCard(el, el.__config);
   }
 
+
+  // ── Player card (foto + identidad del jugador filtrado) ──────
+  // Bespoke: con EXACTAMENTE un jugador en el filter bar muestra foto, nombre, dorsal,
+  // posición y nº de partidos del filtro activo; en cualquier otro caso, hint de uso.
+  const _mpPlayerCache = new Map();   // player_id → fila de players (identidad estable en la sesión)
+  async function _mpRenderPlayerCard(rows) {
+    const body = document.getElementById('mp-player-body');
+    if (!body) return;   // card stasheada / eliminada del dashboard
+    const emptyMsg = msg => `<div class="mp-player-empty"><i class="ti ti-user-search"></i><span>${esc(msg)}</span></div>`;
+    const hint = tt('gps_analysis.mp_player_empty', 'Filter by a single player to see their card.');
+    const ids = window.gpFilterBar?.getState?.()?.playerIds || [];
+    if (ids.length !== 1) { body.innerHTML = emptyMsg(hint); return; }
+    const pid = ids[0];
+    let p = _mpPlayerCache.get(pid);
+    if (!p) {
+      try {
+        const { data } = await window.sb.from('players')
+          .select('id,first_name,last_name,number,position,photo_url,date_of_birth,nationality')
+          .eq('id', pid).maybeSingle();
+        if (data) { p = data; _mpPlayerCache.set(pid, p); }
+      } catch (e) { console.warn('_mpRenderPlayerCard:', e); }
+    }
+    if (!p) { body.innerHTML = emptyMsg(hint); return; }
+    const full  = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+    const ini   = (((p.first_name || '')[0] || '') + ((p.last_name || '')[0] || '')).toUpperCase();
+    const photo = p.photo_url
+      ? `<img src="${esc(p.photo_url)}" alt="${esc(full)}">`
+      : `<span class="ini">${esc(ini || '?')}</span>`;
+    const age = p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth).getTime()) / 31557600000) : null;
+    const bio = [age != null ? tt('gps_analysis.mp_player_age', '{n} yrs', { n: age }) : null, p.nationality || null]
+      .filter(Boolean).join(' · ');
+    const posLine = [(p.number != null && p.number !== '') ? '#' + p.number : null, p.position || null]
+      .filter(Boolean).join(' · ');
+    const games = new Set((rows || []).filter(r => r.player_id === pid).map(r => r.session_id)).size;
+    body.innerHTML = `<div class="mp-player">
+      <div class="mp-player-photo">${photo}</div>
+      <div class="mp-player-info">
+        <div class="nm"><a href="Player.html?id=${encodeURIComponent(pid)}">${esc(full || '—')}</a></div>
+        ${posLine ? `<div class="pos">${esc(posLine)}</div>` : ''}
+        ${bio ? `<div class="bio">${esc(bio)}</div>` : ''}
+      </div>
+      <div class="mp-player-games">
+        <span class="v">${games}</span>
+        <span class="l">${esc(tt('gps_analysis.mp_player_matches', 'Matches'))}</span>
+      </div>
+    </div>`;
+  }
+
+  // Quitar: coherente con el resto de cards de catálogo (stash + recuperable vía Add card).
+  const _mpSpotCard = document.getElementById('card-mp-player');
+  _mpSpotCard?.querySelector('[data-del]')?.addEventListener('click', () => {
+    if (typeof _gpRemoveCardCoherent === 'function') _gpRemoveCardCoherent(_mpSpotCard);
+    else { _mpSpotCard.remove(); if (typeof saveLayout === 'function') saveLayout('mind').catch(() => {}); }
+  });
+
+  // Si la card entra a la grilla DESPUÉS del load (unstash vía Add card), _mpLoad ya corrió
+  // sin ella → recargar para poblarla (refreshDashboard no pasa por esta vista).
+  const _mpGridEl = document.querySelector('.gp-view[data-view="mind"] .gp-grid');
+  if (_mpGridEl && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(muts => {
+      for (const m of muts) for (const n of m.addedNodes)
+        if (n.nodeType === 1 && n.id === 'card-mp-player' && _mpInited) { _mpLoad(); return; }
+    }).observe(_mpGridEl, { childList: true });
+  }
 
   // ── events ───────────────────────────────────────────────────
   // (Sin listeners de filtros propios: los selectores viejos se eliminaron.)
