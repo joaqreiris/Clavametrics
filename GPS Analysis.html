@@ -1297,7 +1297,10 @@
         <div class="gp-grid is-edit">
 
           <!-- NEW: ACWR gauges row (team) -->
-          <div class="gp-c" data-size="full" id="card-lm-gauges">
+          <!-- data-card-id es OBLIGATORIO: sin él la card no se restaura (los lookups del layout
+               son por data-card-id), no se puede ocultar (_stashAbsentCards la saltea) y su id
+               persistido cae al fallback del TÍTULO TRADUCIDO → cambiaba al cambiar de idioma. -->
+          <div class="gp-c" data-size="full" id="card-lm-gauges" data-card-id="lm-gauges">
             <div class="gp-c-h">
               <span class="ttl" data-i18n="gps_analysis.card_acwr_gauges">ACWR gauges</span>
               <span class="sub" data-i18n="gps_analysis.card_acwr_gauges_sub">team average · 7d acute / 28d chronic</span>
@@ -1830,8 +1833,24 @@ function _acPaths(active) {
     ${card('ti-flask','Evidence-based template','Ready cards, scientifically validated.','recommended',active==='tpl','tpl')}
     ${card('ti-adjustments-alt','Build custom','Pick metrics, type and aggregation · opens the Chart builder.','',active==='custom','custom')}</div>`;
 }
-function _acTplCard(t) {
-  return `<div class="ac-tpl" data-actpl="${t.id}">
+// Dashboard dueño de una plantilla (su card estática vive en el HTML de UNA sola vista), o null
+// si puede ir a cualquiera. Una card estática es UN elemento del DOM con id único y lógica
+// bindeada a ese id: no puede existir en dos dashboards a la vez, y saveLayout descarta la que
+// aparezca fuera de su vista dueña. Por eso la galería la ofrece sólo donde de verdad persiste.
+function _acTplOwner(t) {
+  const cid = String(t.cardId || '').replace(/^card-/, '');
+  return _STATIC_CARD_OWNER.get(cid) || null;
+}
+function _acTplForeign(t, view) {
+  const owner = _acTplOwner(t);
+  if (!owner || owner === view) return null;
+  const cid = String(t.cardId || '').replace(/^card-/, '');
+  if (_EXTRA_CARD_OWNERS[cid]?.has(view)) return null;
+  return _AC_DASH_NAMES[owner] || owner;
+}
+function _acTplCard(t, view) {
+  const foreign = _acTplForeign(t, view);
+  return `<div class="ac-tpl${foreign ? ' is-foreign' : ''}" data-actpl="${t.id}">
     <div class="ac-tpl-top">
       <span class="spark" style="background:color-mix(in srgb, ${t.color} 14%, var(--cm-surface)); color:${t.color}"><i class="ti ${t.icon}"></i></span>
       <span class="nm">${_acEsc(t.nm)}</span>
@@ -1841,7 +1860,9 @@ function _acTplCard(t) {
     <div class="ac-tpl-tags"><span class="ac-cite"><i class="ti ti-quote"></i>${_acEsc(t.cite)}</span>
       <span class="ac-info"><i class="ti ti-info-circle"></i>${_acEsc(t.info)}</span></div>
     <div class="ac-tpl-foot"><span class="type"><i class="ti ti-chart-histogram"></i>${_acEsc(t.type)}</span>
-      <button class="ac-add" type="button"><i class="ti ti-plus"></i>Add</button></div>
+      ${foreign
+        ? `<span class="ac-owned" title="${_acEsc(tt('gps_analysis.tpl_owned_hint', 'This card lives on {dash}. To have a copy here, build it with the Chart builder.', { dash: foreign }))}"><i class="ti ti-lock"></i>${_acEsc(tt('gps_analysis.tpl_owned', 'On {dash}', { dash: foreign }))}</span>`
+        : `<button class="ac-add" type="button"><i class="ti ti-plus"></i>Add</button>`}</div>
     <div class="ac-refpop" hidden>
       <div class="ac-refpop-h"><span class="ic"><i class="ti ti-book"></i></span>
         <span class="m"><span class="t">${_acEsc(t.ref.title)}</span><span class="a">${_acEsc(t.ref.author)}</span></span></div>
@@ -1849,7 +1870,7 @@ function _acTplCard(t) {
         <span class="doi"><i class="ti ti-link"></i>DOI <a href="#" onclick="return false">${_acEsc(t.ref.doi)}</a></span></div>
     </div></div>`;
 }
-function _acPanel(active, dashName) {
+function _acPanel(active, dashName, view) {
   if (active === 'custom') {
     return `<div class="ac-panel" style="width:600px">${_acHeader(dashName)}${_acPaths('custom')}
       <div class="ac-custom"><span class="ic"><i class="ti ti-adjustments-alt"></i></span>
@@ -1859,10 +1880,11 @@ function _acPanel(active, dashName) {
       <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Not sure where to start? Try an evidence-based template.</span>
         <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
   }
+  const _avail = AC_TPLS.filter(t => !_acTplForeign(t, view)).length;
   return `<div class="ac-panel">${_acHeader(dashName)}${_acPaths('tpl')}
-    <div class="ac-gallery"><div class="ac-gallery-h"><span class="t">Templates</span><span class="n">${AC_TPLS.length}</span>
-      <span class="all"><i class="ti ti-circle-check"></i>All can be added to any dashboard</span></div>
-      <div class="ac-grid">${AC_TPLS.map(_acTplCard).join('')}</div></div>
+    <div class="ac-gallery"><div class="ac-gallery-h"><span class="t">Templates</span><span class="n">${_avail}</span>
+      <span class="all"><i class="ti ti-circle-check"></i>${_acEsc(tt('gps_analysis.tpl_avail_here', 'Available on this dashboard'))}</span></div>
+      <div class="ac-grid">${AC_TPLS.map(t => _acTplCard(t, view)).join('')}</div></div>
     <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Templates come with metrics, type and thresholds preconfigured.</span>
       <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
 }
@@ -1892,7 +1914,7 @@ function _acInsertCard(cardId, name) {
 
 function _acRender(active) {
   if (!_acOverlay) return;
-  _acOverlay.innerHTML = _acPanel(active, _acDashName());
+  _acOverlay.innerHTML = _acPanel(active, _acDashName(), document.querySelector('.gp-view.is-on')?.dataset.view || '');
   // header / cancel / backdrop close
   _acOverlay.querySelector('.ac-x')?.addEventListener('click', _acClose);
   _acOverlay.querySelectorAll('.ac-cancel').forEach(b => b.addEventListener('click', _acClose));
@@ -2168,6 +2190,36 @@ async function _loadLayoutStrict(viewKey) {
 }
 
 // ── Restore helpers (size + order) ─────────────────────────────
+// Restaura las coords guardadas de una card PASANDO POR gpCanvas.applyCoords. Escribir
+// card.dataset.x/y/w/h a mano NO alcanza: gp-canvas marca dataset.autoFlow='1' en su primer
+// pintado (que corre ANTES de que llegue el layout de la red) y applyCoords es lo ÚNICO que
+// borra esa marca. Si queda puesta, el renderGrid inmediatamente posterior trata las coords
+// recién restauradas como provisionales (gp-canvas.js:387) y vuelve a auto-acomodar la card
+// → en cada recarga se perdían posición y alto, y sobrevivía sólo el ancho. Afectaba a las
+// cards estáticas de las 5 vistas; las del builder ya usaban applyCoords y por eso andaban.
+function _restoreCardCoords(card, x, y, w, h) {
+  if (!card || ![x, y, w, h].every(Number.isFinite)) return;
+  if (window.gpCanvas?.applyCoords) { window.gpCanvas.applyCoords(card, { x, y, w, h }); return; }
+  card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h;
+  delete card.dataset.autoFlow;
+}
+
+// MIGRACIÓN de layouts viejos: _deriveCardId cae al TÍTULO cuando la card no tiene
+// data-card-id, así que una card que lo ganó después (lm-gauges) quedó persistida bajo su
+// título TRADUCIDO. Sin esto, al estrenar su data-card-id el layout no la reconocería y
+// _stashAbsentCards la ocultaría. El primer saveLayout reescribe el id real y se auto-sana.
+function _cardTitleKey(card) { return card.querySelector('.ttl')?.textContent?.trim() || ''; }
+function _cardByTitleKey(grid, key) {
+  if (!key) return null;
+  return [...grid.querySelectorAll('.gp-c[data-card-id]')].find(c => _cardTitleKey(c) === key) || null;
+}
+function _migrateTitleKeyedIds(grid, activeIds) {
+  grid.querySelectorAll('.gp-c[data-card-id]').forEach(c => {
+    const k = _cardTitleKey(c);
+    if (k && activeIds.has(k)) activeIds.add(c.dataset.cardId);
+  });
+}
+
 function _applyCardSize(card, size, span) {
   if (!card) return;
   // Prefer the saved fine-grained span; fall back to the legacy size bucket.
@@ -2251,9 +2303,7 @@ async function applyLayoutToView(viewKey) {
     if (!card) continue;
     _applyCardSize(card, size, span);
     // Canvas: restore free-placement coords so the editor reopens exactly as left.
-    if ([x, y, w, h].every(Number.isFinite)) {
-      card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h;
-    }
+    _restoreCardCoords(card, x, y, w, h);
     if (!config) continue;
     if (config.metric_key) card.dataset.metricKey = config.metric_key;
     if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
@@ -2311,7 +2361,7 @@ async function applyGrpDefaultLayout() {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       _applyCardSize(card, size);
-      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
+      _restoreCardCoords(card, x, y, w, h);
       if (!config) continue;
       if (config.metric_key) card.dataset.metricKey = config.metric_key;
       if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session' || card_id === 'outliers') && config.metrics?.length) {
@@ -2353,11 +2403,12 @@ async function applyMcDefaultLayout() {
     const activeIds = new Set(layout.map(c => c.card_id));
     _stashAbsentCards('mc', activeIds);
 
-    for (const { card_id, size, x, y, w, h } of layout) {
+    for (const { card_id, size, config, x, y, w, h } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       _applyCardSize(card, size);
-      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
+      if (config?.metric_key) card.dataset.metricKey = config.metric_key;   // mc no lo restauraba
+      _restoreCardCoords(card, x, y, w, h);
     }
     _reorderGrid(grid, layout);
     if (window.gpCanvas && window.gpCanvas.renderGrid) window.gpCanvas.renderGrid(grid);
@@ -2391,13 +2442,14 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
     }
     // Subsequent loads — stash absent, apply size/metric_key, reorder
     const activeIds = new Set(layout.map(c => c.card_id));
+    _migrateTitleKeyedIds(grid, activeIds);
     _stashAbsentCards(viewKey, activeIds);
     for (const { card_id, size, config, x, y, w, h } of layout) {
-      const card = grid.querySelector(`[data-card-id="${card_id}"]`);
+      const card = grid.querySelector(`[data-card-id="${card_id}"]`) || _cardByTitleKey(grid, card_id);
       if (!card) continue;
       _applyCardSize(card, size);
       if (config?.metric_key) card.dataset.metricKey = config.metric_key;
-      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
+      _restoreCardCoords(card, x, y, w, h);
     }
     _reorderGrid(grid, layout);
     if (window.gpCanvas && window.gpCanvas.renderGrid) window.gpCanvas.renderGrid(grid);
