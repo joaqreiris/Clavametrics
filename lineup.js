@@ -146,12 +146,17 @@
     return String.fromCodePoint(...[...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
   }
 
+  // ── Bench size: cada competición permite un banco distinto (5, 7, 9, 12…),
+  //    así que el nº de slots es configurable por lineup (persistido en style_config).
+  const SUB_MIN = 3, SUB_MAX = 15, SUB_DEFAULT = 7;
+
   // ── State (players populated async from Supabase)
   let state = {
     formation: '4-3-3',
     style: 'editorial',
     starters: [],
     subs: [],
+    subSlots: SUB_DEFAULT,
     showNumbers: true,
     showCaptainBadge: true,
     language: 'en',
@@ -302,7 +307,7 @@
 
     if (_playersLoading && !state.starters.some(Boolean)) {
       xi.innerHTML = positions.map(() => skeletonRow()).join('');
-      sub.innerHTML = Array.from({ length: 7 }, () => skeletonRow()).join('');
+      sub.innerHTML = Array.from({ length: state.subSlots }, () => skeletonRow()).join('');
       return;
     }
 
@@ -311,13 +316,15 @@
       return p ? filledRow(p, i, 'xi') : emptyRow(pos.role, i, 'xi');
     }).join('');
 
-    const SUB_SLOTS = 7;
-    sub.innerHTML = Array.from({ length: SUB_SLOTS }, (_, i) => {
+    // Nunca ocultar un suplente ya cargado en un slot alto
+    const subSlots = Math.max(state.subSlots, state.subs.length);
+    sub.innerHTML = Array.from({ length: subSlots }, (_, i) => {
       const p = state.subs[i];
       return p ? filledRow(p, i, 'sub') : emptyRow('SUB', i, 'sub');
     }).join('');
 
     updateTabCounts();
+    renderBenchCtl();
   }
 
   // ── Render the subs band on the poster
@@ -348,7 +355,7 @@
     set('[data-band-subs]',         lang.substitutes);
     set('[data-coach-l]',           lang.coach);
 
-    const cap = state.starters.find(p => p.captain);
+    const cap = state.starters.find(p => p && p.captain);
     set('[data-meta-captain]',      cap ? cap.last : '—');
   }
 
@@ -835,6 +842,38 @@
     if (error) throw error;
   }
 
+  // ── Bench-size stepper (± slots de suplentes)
+  // No se puede bajar por debajo del último slot ocupado: primero hay que vaciarlo.
+  function _benchMinAllowed () {
+    let lastFilled = -1;
+    state.subs.forEach((p, i) => { if (p) lastFilled = i; });
+    return Math.max(SUB_MIN, lastFilled + 1);
+  }
+
+  function setSubSlots (n) {
+    n = Math.min(SUB_MAX, Math.max(_benchMinAllowed(), n));
+    if (n === state.subSlots) return;
+    state.subSlots = n;
+    // Recorta los slots vacíos que quedaron por encima del nuevo tamaño
+    while (state.subs.length > n && !state.subs[state.subs.length - 1]) state.subs.pop();
+    renderComposer();
+    scheduleSave();
+  }
+
+  function renderBenchCtl () {
+    const ct = document.getElementById('luBenchCount');
+    if (ct) ct.textContent = state.subSlots;
+    const minus = document.getElementById('luBenchMinus');
+    const plus  = document.getElementById('luBenchPlus');
+    if (minus) minus.disabled = state.subSlots <= _benchMinAllowed();
+    if (plus)  plus.disabled  = state.subSlots >= SUB_MAX;
+  }
+
+  function wireBenchCtl () {
+    document.getElementById('luBenchMinus')?.addEventListener('click', () => setSubSlots(state.subSlots - 1));
+    document.getElementById('luBenchPlus') ?.addEventListener('click', () => setSubSlots(state.subSlots + 1));
+  }
+
   function updateTabCounts () {
     const xiCt  = state.starters.filter(Boolean).length;
     const subCt = state.subs.filter(Boolean).length;
@@ -918,10 +957,15 @@
       .eq('lineup_id', lineupId)
       .eq('role', role)
       .order('slot_index');
-    return (data || []).map(lp => {
+    // Coloca cada jugador en SU slot_index (array disperso). Compactar los huecos
+    // corría a todos los jugadores de slot y el siguiente guardado los pisaba.
+    const arr = [];
+    (data || []).forEach(lp => {
       const p = lp.players || {};
       const nat = p.nationality || '';
-      return {
+      const idx = (Number.isInteger(lp.slot_index) && lp.slot_index >= 0 && lp.slot_index < 40)
+        ? lp.slot_index : arr.length;
+      arr[idx] = {
         id:      p.id,
         num:     p.number || '?',
         last:    p.last_name || '—',
@@ -933,6 +977,7 @@
         flag:    _countryIso2(nat),
       };
     });
+    return arr;
   }
 
   // ── Supabase: debounced save of lineup metadata (formation, style, language, colors)
@@ -944,6 +989,7 @@
       if (state.titleColor)  styleConfig.title_color  = state.titleColor;
       if (state.accentColor) styleConfig.accent_color = state.accentColor;
       if (state.bgColor)     styleConfig.bg_color     = state.bgColor;
+      if (state.subSlots !== SUB_DEFAULT) styleConfig.sub_slots = state.subSlots;
       const { error } = await window.sb.from('lineups').update({
         formation:    state.formation,
         poster_style: state.style,
@@ -1209,6 +1255,7 @@
     wireExport();
     wireColorPickers();
     wireComposerDelegation();
+    wireBenchCtl();
 
     // Wire formation + style save debounce (no Supabase needed, safe to do now)
     document.querySelectorAll('.lu-form-btn').forEach(b => {
@@ -1280,6 +1327,8 @@
           const p = document.getElementById('luBgColor');
           if (p) p.value = state.bgColor;
         }
+        const savedSlots = parseInt(lineup.style_config?.sub_slots, 10);
+        if (savedSlots >= SUB_MIN && savedSlots <= SUB_MAX) state.subSlots = savedSlots;
         applyColors();
 
         const [starters, subs] = await Promise.all([
@@ -1289,6 +1338,8 @@
         ]);
         if (starters.length) state.starters = starters;
         if (subs.length)     state.subs = subs;
+        // Si hay más suplentes guardados que slots configurados, el banco crece
+        state.subSlots = Math.max(state.subSlots, state.subs.length);
       }
     }
 
