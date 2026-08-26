@@ -992,7 +992,11 @@ function dpOpenExGroup(seid, gid, btn){
   const sel = new Set((g.players||[]).map(String));
   // Hide players already taken by ANOTHER group of this exercise (a player is in one group only).
   const takenElsewhere = new Set(_dpExGroups(e).filter(x => x.id !== gid).flatMap(x => (x.players||[]).map(String)));
-  const avail = _dpTrainees().filter(p => !takenElsewhere.has(String(p.id)));
+  // Con convocatoria definida (Session group), el picker solo ofrece a los que están
+  // en ESTA sesión; los ya asignados al grupo se muestran igual para poder sacarlos.
+  const sessParts = window._dpSessParts;
+  const avail = _dpTrainees().filter(p => !takenElsewhere.has(String(p.id))
+    && (!sessParts || sessParts.has(String(p.id)) || sel.has(String(p.id))));
   // Bucket available players by position (GK/DEF/MID/WNG/FWD) → one column each, so the
   // picker reads horizontally and needs far less vertical scrolling.
   const buckets = {};
