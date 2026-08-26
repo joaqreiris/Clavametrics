@@ -170,6 +170,21 @@ function readParam(row: Record<string, unknown>, slug: string): number | null {
   return isFinite(n) ? n : null;
 }
 
+// time_played: OpenField devuelve el slug `duration` en 0 (verificado en datos reales: 4202
+// de 4218 filas quedaron en 0), así que el mapeo SLUG_MAP no alcanza. Los minutos REALES del
+// jugador se derivan del ritmo que Catapult sí calcula bien: distancia ÷ metros-por-minuto.
+// Es el tiempo EN CANCHA, no la ventana del período: un suplente que entró a los 30' da sus
+// minutos reales, mientras que la duración del período "SECOND HALF" daría el tiempo entero.
+// Solo se deriva si el slug mapeado no trajo un valor propio (>0) — si algún día el club
+// mapea el slug correcto, ese valor manda.
+function deriveTimePlayed(core: Record<string, number | null>) {
+  if (typeof core.time_played === 'number' && core.time_played > 0) return;
+  const dist = core.total_distance, mpm = core.distance_per_minute;
+  if (typeof dist !== 'number' || typeof mpm !== 'number' || mpm <= 0) return;
+  const mins = Math.round(dist / mpm);
+  if (mins > 0) core.time_played = mins;
+}
+
 // slug → canonical core column (with priority) or non-core EAV extra. Pure now (takes
 // resolveMap/mappedSlugs + an unmappedParams sink) so it can run outside the request scope.
 function normalizeMetrics(
@@ -564,6 +579,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
         // with assets/gps-units.js MAX_SPEED_KMH.
         const MAX_SPEED_KMH = 40;
         if (typeof core.max_speed === 'number' && core.max_speed >= MAX_SPEED_KMH) core.max_speed = null;
+        deriveTimePlayed(core);
         recs.push({ club_id: clubId, session_id: sessionId, player_id: playerId, ...core, is_invalid });
         if (extras.length) extrasByPlayer.set(playerId, extras);
       }
@@ -630,6 +646,7 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
             if (isSpeedOutlier) r.flagged++;
             // Same max_speed spike guard as the session level (keep in sync with 40 km/h).
             if (typeof core.max_speed === 'number' && core.max_speed >= 40) core.max_speed = null;
+            deriveTimePlayed(core);   // minutos EN CANCHA del período, no su ventana
 
             const rec: Record<string, unknown> = {
               club_id: clubId, session_id: sessionId, player_id: playerId,
@@ -684,11 +701,20 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
               }
               if (any) fix[col] = GPS_INT_COLS.has(col) ? Math.round(s) : +s.toFixed(4);
             }
+            // Minutos EN CANCHA de los períodos aceptados (distancia ÷ ritmo de cada uno), NO la
+            // suma de sus ventanas: la ventana del período mide cuánto duró el bloque, no cuánto
+            // estuvo el jugador dentro (un suplente comparte la ventana del 2º tiempo con los
+            // titulares pero jugó una fracción). Fallback a las ventanas si falta el ritmo.
+            const minReal = accepted.reduce((s, p) => {
+              const d = p.rec.total_distance, m = p.rec.distance_per_minute;
+              return s + ((typeof d === 'number' && typeof m === 'number' && m > 0) ? d / m : 0);
+            }, 0);
             const durS = accepted.reduce((s, p) => s + (typeof p.rec.duration_seconds === 'number' ? p.rec.duration_seconds as number : 0), 0);
+            const minFix = minReal > 0 ? minReal : (durS > 0 ? durS / 60 : 0);
             if (typeof fix.total_distance === 'number') {
-              if (durS > 0) {
-                fix.distance_per_minute = +((fix.total_distance as number) / (durS / 60)).toFixed(4);
-                fix.time_played = Math.round(durS / 60);
+              if (minFix > 0) {
+                fix.distance_per_minute = +((fix.total_distance as number) / minFix).toFixed(4);
+                fix.time_played = Math.round(minFix);
               }
               fix.is_invalid = (fix.total_distance as number) > OUTLIER_MAX_M;   // re-evaluar el outlier con el total corregido
             }
@@ -708,6 +734,36 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
                 .update(fix).eq('club_id', clubId).eq('session_id', sessionId).eq('player_id', pid);
               if (fErr) r.errs.push(`overlap fix ${activityId}: ${fErr.message}`);
             }
+          }
+
+          // ── 7c. Top-up: trabajo EXTRA del jugador, no minutos de la sesión → se descuenta
+          // de time_played. El work_context lo asigna un trigger de la DB al insertar el período
+          // (gps_context_rules, por nombre), así que hay que RELEERLO — no está en periodRecs.
+          // Solo top-up: rehab e individual sí son trabajo del jugador y siguen contando.
+          try {
+            const { data: topups } = await adminClient.from('gps_period_reports')
+              .select('player_id,total_distance,distance_per_minute')
+              .eq('club_id', clubId).eq('session_id', sessionId).eq('work_context', 'topup');
+            const minsByPlayer = new Map<string, number>();
+            for (const t of (topups || [])) {
+              const d = t.total_distance as number | null, m = t.distance_per_minute as number | null;
+              if (typeof d !== 'number' || typeof m !== 'number' || m <= 0) continue;
+              const pid = t.player_id as string;
+              minsByPlayer.set(pid, (minsByPlayer.get(pid) || 0) + d / m);
+            }
+            for (const [pid, mins] of minsByPlayer) {
+              const { data: rep } = await adminClient.from('gps_reports')
+                .select('time_played').eq('club_id', clubId).eq('session_id', sessionId).eq('player_id', pid).maybeSingle();
+              const tp = rep?.time_played as number | null;
+              if (typeof tp !== 'number' || tp <= 0) continue;
+              const net = Math.round(tp - mins);
+              if (net === tp) continue;
+              await adminClient.from('gps_reports')
+                .update({ time_played: net > 0 ? net : null })
+                .eq('club_id', clubId).eq('session_id', sessionId).eq('player_id', pid);
+            }
+          } catch (te) {
+            r.errs.push(`topup discount ${activityId}: ${String((te as Error)?.message || te)}`);
           }
         }
       } catch (pe) {
