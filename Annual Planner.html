@@ -832,6 +832,28 @@ function apLegacyClass(compId){
   const c = _apComps.find(x => x.id === compId);
   return c ? (LEGACY_COMP_CLASS[c.comp_type] || null) : null;
 }
+// Selector de competición de un partido: competiciones de la temporada + «Friendly»
+// suelto, igual que el modal de partido del Calendar (la otra vía de alta/edición).
+function apCompOptions(m){
+  const isFriendly = !m?.competition_id && m?.competition === 'friendly';
+  return `<option value="">${tt('annual_planner.no_competition_opt','— No competition')}</option>` +
+    _apComps.map(c => `<option value="${c.id}"${c.id===m?.competition_id?' selected':''}>${c.name}</option>`).join('') +
+    `<option value="friendly"${isFriendly?' selected':''}>${tt('annual_planner.comp_friendly','Friendly')}</option>`;
+}
+// Valor del selector → las dos columnas que guarda calendar_events.
+function apCompPayload(val){
+  if (val === 'friendly') return { competition_id: null, competition: 'friendly' };
+  const cid = val || null;
+  return { competition_id: cid, competition: apLegacyClass(cid) };
+}
+// Chip de competición: la competición de la temporada si la tiene, si no el tipo legacy.
+function apCompBadge(m){
+  const comp = _apComps.find(c => c.id === m.competition_id);
+  if (comp) return `<span class="ap-badge" style="background:color-mix(in srgb, ${comp.color} 14%, transparent);color:${comp.color}">${comp.name}</span>`;
+  const t = COMP_TYPES[m.competition];
+  if (!t) return '';
+  return `<span class="ap-badge" style="background:${t.bg};color:${t.tx}">${tt('annual_planner.comp_' + m.competition, t.label)}</span>`;
+}
 function apRenderPhasesList(){
   const wrap = document.getElementById('apPhasesList');
   if (!_apPhases.length) { wrap.innerHTML = ''; return; }
@@ -1121,10 +1143,7 @@ function apRenderMatchesList(){
   if (!_apMatches.length) { wrap.innerHTML = `<div class="ap-tl-empty" style="position:static;padding:16px 0">${tt('annual_planner.no_matches_import_above','No matches yet — import fixtures above')}</div>`; return; }
   wrap.innerHTML = _apMatches.map(m => {
     if (m.id === _apEditingMatch) return apMatchEditRow(m);
-    const comp = _apComps.find(c => c.id === m.competition_id);
-    const compHtml = comp
-      ? `<span class="ap-badge" style="background:color-mix(in srgb, ${comp.color} 14%, transparent);color:${comp.color}">${comp.name}</span>`
-      : (m.competition ? `<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${m.competition}</span>` : '');
+    const compHtml = apCompBadge(m);
     const time = m.start_time ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${m.start_time.slice(0,5)}</span>` : '';
     return `<div class="ap-phase-row">
       <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:135px">${apFmtDate(m.date)}</span>
@@ -1140,8 +1159,7 @@ function apRenderMatchesList(){
 }
 
 function apMatchEditRow(m){
-  const compOpts = `<option value="">${tt('annual_planner.no_competition_opt','— No competition')}</option>` +
-    _apComps.map(c => `<option value="${c.id}"${c.id===m.competition_id?' selected':''}>${c.name}</option>`).join('');
+  const compOpts = apCompOptions(m);
   const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
   return `
     <div class="ap-phase-row" style="flex-wrap:wrap;gap:8px">
@@ -1168,7 +1186,7 @@ async function apSaveMatchEdit(id){
   if (!date || !opp) { alert(tt('annual_planner.date_opponent_required','Date and opponent are required.')); return; }
   const { error } = await window.sb.from('calendar_events').update({
     date, opponent: opp, home_away: ha,
-    competition_id: cid, competition: apLegacyClass(cid),
+    ...apCompPayload(cid),
     start_time: time, title: `vs ${opp}`
   }).eq('id', id);
   if (error) { alert(tt('annual_planner.could_not_update','Could not update: ' + error.message, {msg:error.message})); return; }
@@ -1188,7 +1206,7 @@ function apToggleAddMatch(){
   p.classList.toggle('is-hidden');
   if (!p.classList.contains('is-hidden')) {
     document.getElementById('apImportPanel').classList.add('is-hidden');
-    document.getElementById('apNewMatchComp').innerHTML = `<option value="">${tt('annual_planner.no_competition_opt','— No competition')}</option>` + _apComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('apNewMatchComp').innerHTML = apCompOptions(null);
   }
 }
 
@@ -1201,7 +1219,7 @@ async function apAddMatch(){
   if (!date || !opp) { alert(tt('annual_planner.date_opponent_required','Date and opponent are required.')); return; }
   const { error } = await window.sb.from('calendar_events').insert({
     id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
-    competition_id: cid, competition: apLegacyClass(cid),
+    ...apCompPayload(cid),
     title: `vs ${opp}`, type: 'match', date, opponent: opp, home_away: ha,
     start_time: time, duration_minutes: null
   });

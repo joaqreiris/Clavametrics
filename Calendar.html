@@ -4327,7 +4327,8 @@ async function saveEvt() {
         const compId  = compVal === 'friendly' ? null : compVal;
         const comp    = _calComps.find(c => c.id === compId);
         basePayload.competition_id = compId;
-        basePayload.competition    = comp ? comp.comp_type : 'friendly';
+        // «— No competition» = sin tipo; «Friendly» es una elección explícita.
+        basePayload.competition    = comp ? comp.comp_type : (compVal === 'friendly' ? 'friendly' : null);
         basePayload.season_id      = _calSeasonId;
         basePayload.location    = document.getElementById('calEvtF_location').value.trim() || null;
       }
@@ -4366,7 +4367,8 @@ async function saveEvt() {
       const compId  = compVal === 'friendly' ? null : compVal;
       const comp    = _calComps.find(c => c.id === compId);
       payload.competition_id = compId;
-      payload.competition    = comp ? comp.comp_type : 'friendly';
+      // «— No competition» = sin tipo; «Friendly» es una elección explícita.
+      payload.competition    = comp ? comp.comp_type : (compVal === 'friendly' ? 'friendly' : null);
       payload.season_id      = _calSeasonId;
       payload.location    = document.getElementById('calEvtF_location').value.trim() || null;
       if (_pendingCrestUrl) payload.rival_crest_url = _pendingCrestUrl;
