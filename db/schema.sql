@@ -125,10 +125,15 @@ create table if not exists public.availability (
   club_id uuid,
   notes text,
   team_id uuid,
+  match_kind text,
   constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
-  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text, 'day_off'::text, 'rehab'::text])))
+  constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text, 'other_team'::text, 'day_off'::text, 'rehab'::text]))),
+  constraint availability_match_kind_check CHECK ((match_kind IS NULL OR match_kind = ANY (ARRAY['official'::text, 'friendly'::text])))
 );
+-- match_kind: clase del partido al que pertenecen los `minutes` de ese día ('official' |
+-- 'friendly'). Solo tiene sentido con minutes > 0; NULL en filas viejas cuenta como oficial.
+-- Permite separar minutos oficiales de amistosos en stats sin duplicar la columna minutes.
 -- team_id: equipo con el que el jugador está ese día (para estados relativos al equipo:
 -- available/partial/limited/unavailable/absent/day_off). NULL = estado global del jugador
 -- (injured/sick/away) que se muestra en todos sus equipos. Una sola fila por (player_id, date).
@@ -3219,8 +3224,8 @@ begin
   update public.rpe
      set session_id   = s.id,
          session_date = s.session_date,                 -- adopta la fecha de la sesión
-         duration     = s.duration,
-         load         = r.rpe * coalesce(s.duration, r.duration)
+         duration     = public.rpe_effective_duration(s.id, r.player_id),
+         load         = r.rpe * coalesce(public.rpe_effective_duration(s.id, r.player_id), r.duration)
    where id = r.id;
 
   return jsonb_build_object('ok', true);
@@ -3300,9 +3305,30 @@ END;
 $function$
 ;
 
+-- Duración efectiva de una sesión PARA UN JUGADOR. Para partidos (session_type='match'),
+-- los minutos individuales cargados en availability.minutes (>0) pisan la duración de la
+-- sesión (90′ por defecto); para el resto de sesiones es la duración planificada a secas.
+-- Única fuente para todos los caminos que fijan rpe.duration/load.
+CREATE OR REPLACE FUNCTION public.rpe_effective_duration(p_session_id uuid, p_player_id uuid)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select case when ts.session_type = 'match'
+              then coalesce(nullif(a.minutes, 0), ts.duration)
+              else ts.duration end
+  from public.training_sessions ts
+  left join public.availability a
+    on a.player_id = p_player_id::text and a.date = ts.session_date
+  where ts.id = p_session_id;
+$function$
+;
+
 -- When the planned session duration changes, propagate it to the linked RPE rows so
 -- the sRPE load (AU) stays in sync. The BEFORE UPDATE rpe_calculate_load_trigger then
--- recomputes load = rpe * duration on each affected row.
+-- recomputes load = rpe * duration on each affected row. Per-row via rpe_effective_duration:
+-- en partidos, los minutos individuales (availability.minutes) siguen mandando sobre el default.
 CREATE OR REPLACE FUNCTION public.propagate_session_duration_to_rpe()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3311,14 +3337,68 @@ CREATE OR REPLACE FUNCTION public.propagate_session_duration_to_rpe()
 AS $function$
 BEGIN
   IF NEW.duration IS DISTINCT FROM OLD.duration THEN
-    UPDATE public.rpe
-       SET duration = NEW.duration
-     WHERE session_id = NEW.id
-       AND duration IS DISTINCT FROM NEW.duration;
+    UPDATE public.rpe r
+       SET duration = public.rpe_effective_duration(NEW.id, r.player_id)
+     WHERE r.session_id = NEW.id
+       AND r.duration IS DISTINCT FROM public.rpe_effective_duration(NEW.id, r.player_id);
   END IF;
   RETURN NEW;
 END;
 $function$
+;
+
+-- Al editar los minutos de partido de un jugador (availability.minutes), resincronizar la
+-- duración de sus RPE ya enviados en sesiones 'match' de ese día — el BEFORE UPDATE
+-- rpe_calculate_load_trigger recalcula load = rpe × duration. minutes 0/NULL vuelve al
+-- default de la sesión (90′ o lo que se haya fijado).
+CREATE OR REPLACE FUNCTION public.trg_availability_minutes_to_rpe()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'UPDATE' and NEW.minutes is not distinct from OLD.minutes then
+    return NEW;
+  end if;
+  update public.rpe r
+     set duration = coalesce(nullif(NEW.minutes, 0), ts.duration)
+    from public.training_sessions ts
+   where ts.id = r.session_id
+     and r.player_id::text = NEW.player_id
+     and ts.session_date = NEW.date
+     and ts.session_type = 'match'
+     and r.duration is distinct from coalesce(nullif(NEW.minutes, 0), ts.duration);
+  return NEW;
+end $function$
+;
+
+-- Editor de minutos por jugador desde la página de RPE (staff). Upsert quirúrgico sobre
+-- availability: solo minutes + match_kind — un conflicto NO pisa status/team_id/notes de
+-- una fila existente (ej. 'injured'). p_kind: 'official' | 'friendly' (default official).
+CREATE OR REPLACE FUNCTION public.set_match_minutes(p_player_id uuid, p_date date, p_minutes integer, p_kind text DEFAULT NULL::text, p_team_id uuid DEFAULT NULL::uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_club uuid;
+begin
+  select club_id into v_club from public.profiles where id = auth.uid();
+  if v_club is null then raise exception 'not authorized'; end if;
+  if not exists (select 1 from public.players p where p.id = p_player_id and p.club_id = v_club) then
+    raise exception 'player not in your club';
+  end if;
+  if p_minutes is null or p_minutes < 0 or p_minutes > 200 then
+    raise exception 'minutes out of range';
+  end if;
+  insert into public.availability (player_id, date, status, minutes, club_id, team_id, match_kind)
+  values (p_player_id::text, p_date, 'available', p_minutes, v_club, p_team_id,
+          case when p_minutes > 0 then coalesce(p_kind, 'official') end)
+  on conflict (player_id, date) do update
+    set minutes    = excluded.minutes,
+        match_kind = excluded.match_kind;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.clear_gps_credential(p_integration_id uuid)
@@ -4399,10 +4479,9 @@ begin
        select 1 from public.rpe where player_id = r.player_id and session_id = v_sid and id <> r.id) then
     update public.rpe rp
        set session_id = v_sid,
-           duration   = coalesce(rp.duration, ts.duration),
-           load       = rp.rpe * coalesce(ts.duration, rp.duration)
-      from public.training_sessions ts
-     where rp.id = p_rpe_id and ts.id = v_sid;
+           duration   = coalesce(public.rpe_effective_duration(v_sid, rp.player_id), rp.duration),
+           load       = rp.rpe * coalesce(public.rpe_effective_duration(v_sid, rp.player_id), rp.duration)
+     where rp.id = p_rpe_id;
   end if;
 end; $function$
 ;
@@ -5018,10 +5097,12 @@ declare
   v_team uuid;
   v_date date;
   v_dur  integer;
+  v_type text;
 begin
   -- Qualify with the table alias: `duration`/`load` are also OUT columns of this function,
   -- so an unqualified `duration` would be an ambiguous reference and raise at runtime.
-  select ts.club_id, ts.team_id, ts.session_date, ts.duration into v_club, v_team, v_date, v_dur
+  select ts.club_id, ts.team_id, ts.session_date, ts.duration, ts.session_type
+    into v_club, v_team, v_date, v_dur, v_type
   from public.training_sessions ts
   where ts.id = p_session_id;
 
@@ -5037,14 +5118,21 @@ begin
         r.note       as note,
         r.body_areas as body_areas,
         -- Duration/load follow the session's CURRENT effective duration (from Daily Planning),
-        -- so already-submitted RPE updates if the plan's effective time changes.
-        coalesce(v_dur, r.duration)             as duration,
-        r.rpe * coalesce(v_dur, r.duration)     as load,
+        -- so already-submitted RPE updates if the plan's effective time changes. En partidos,
+        -- los minutos individuales de availability (>0) pisan la duración default por jugador.
+        case when v_type = 'match'
+             then coalesce(nullif(am.minutes, 0), v_dur, r.duration)
+             else coalesce(v_dur, r.duration) end           as duration,
+        r.rpe * case when v_type = 'match'
+                     then coalesce(nullif(am.minutes, 0), v_dur, r.duration)
+                     else coalesce(v_dur, r.duration) end   as load,
         r.created_at as submitted_at,
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.rpe r
         on r.player_id = p.id and r.session_id = p_session_id
+      left join public.availability am
+        on am.player_id = p.id::text and am.date = v_date
       where p.club_id = v_club
         and p.archived_at is null
         and p.status <> 'inactive'
@@ -5265,7 +5353,8 @@ begin
                    and session_id = v_link.session_id) then
         return jsonb_build_object('ok', true, 'already', true);
       end if;
-      select duration, session_date into v_dur, v_sdate from public.training_sessions where id = v_link.session_id;
+      v_dur := public.rpe_effective_duration(v_link.session_id, p_player_id);
+      select session_date into v_sdate from public.training_sessions where id = v_link.session_id;
       insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_id, duration, load, session_date)
       values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
               v_link.session_id, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), coalesce(v_sdate, current_date));
@@ -5306,7 +5395,7 @@ begin
                               and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date))) then
           return jsonb_build_object('ok', true, 'already', true);
         end if;
-        select duration into v_dur from public.training_sessions where id = v_sid;
+        v_dur := public.rpe_effective_duration(v_sid, p_player_id);
         insert into public.rpe (club_id, player_id, rpe, note, body_areas, session_id, duration, load, session_date)
         values (v_link.club_id, p_player_id, (p_payload->>'rpe')::numeric, v_note, v_areas,
                 v_sid, v_dur, (p_payload->>'rpe')::numeric * coalesce(v_dur, 0), v_local_date);
@@ -6134,6 +6223,7 @@ create or replace view public.wellness_latest with (security_invoker = on) as
 -- ========================== TRIGGERS ==========================
 
 CREATE TRIGGER act_availability AFTER UPDATE ON public.availability FOR EACH ROW EXECUTE FUNCTION trg_act_availability();
+CREATE TRIGGER availability_minutes_to_rpe AFTER INSERT OR UPDATE OF minutes ON public.availability FOR EACH ROW EXECUTE FUNCTION trg_availability_minutes_to_rpe();
 CREATE TRIGGER club_branding_updated_at BEFORE UPDATE ON public.club_branding FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER club_settings_updated_at BEFORE UPDATE ON public.club_settings FOR EACH ROW EXECUTE FUNCTION set_club_settings_updated_at();
 CREATE TRIGGER trg_seed_core_metrics AFTER INSERT ON public.clubs FOR EACH ROW EXECUTE FUNCTION seed_core_metrics_for_club();

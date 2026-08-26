@@ -308,6 +308,12 @@
   .av-cell-mins { display:inline-block; font:600 10px/1 var(--cm-font-mono); color:var(--cm-info); margin-top:2px; }
   .av-cell-match { background:rgba(34,197,94,0.06); }
   .av-cell-match-min { font:700 11px/1 var(--cm-font-mono); color:var(--cm-success); }
+  /* Amistoso: mismos minutos, tinte ámbar para distinguirlo del oficial a simple vista */
+  .av-cell-match.is-friendly { background:rgba(217,119,6,0.07); }
+  .av-cell-match.is-friendly .av-cell-match-min { color:var(--cm-warning,#D97706); }
+  .av-matrix thead th.day.is-match.is-friendly { background:color-mix(in srgb, var(--cm-warning,#D97706) 8%, var(--cm-surface)); color:var(--cm-warning,#D97706); }
+  .av-matrix thead th.day.is-match.is-friendly b,
+  .av-matrix thead th.day.is-match.is-friendly .md-tag { color:var(--cm-warning,#D97706); }
   .av-cell-min-input {
     width: 38px; text-align: center; border: none; background: transparent;
     font: 700 11px/1 var(--cm-font-mono); color: var(--cm-success);
@@ -548,7 +554,8 @@
         <span class="it"><span class="d" style="background:#F97316"></span><span data-i18n="availability.statusRehab">Rehab</span></span>
         <span class="it"><span class="d" style="background:var(--cm-neutral)"></span><span data-i18n="availability.statusAbsent">Absent</span></span>
         <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
-        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">match minutes</span></span>
+        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">official match minutes</span></span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(217,119,6,0.07);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-warning,#D97706)">90</span><span data-i18n="availability.matchMinutesFriendly">friendly minutes</span></span>
         <span class="it" data-i18n="availability.matrixHint">Click cell to edit · drag to multi-select · ⌘+A all · double-click for reason</span>
       </div>
 
@@ -748,6 +755,14 @@
     return dayCountable(date) ? 'cell is-future-plan' : 'cell is-future';
   }
 
+  // Clase de celda de minutos de partido: amistoso lleva su propio tinte (ámbar) para no
+  // leerse igual que un oficial. La clase del partido sale de la fila guardada (match_kind)
+  // o, si falta, del partido del calendario de ese día.
+  function matchCellCls(pid, date) {
+    const kind = (pid && avMap[pid + '|' + date]?.match_kind) || (window.__avMatchKind || {})[date] || 'official';
+    return 'av-cell-match' + (kind === 'friendly' ? ' is-friendly' : '');
+  }
+
   function cellHTML(status, dayIdx, pid, date) {
     const isFuture = isFutureDate(date);
     let cls = cellBaseCls(date);
@@ -763,7 +778,7 @@
     if (!status) return isFuture ? `<td class="${cls}"${data}></td>` : `<td class="${cls} is-off"${data}></td>`;
     if (status.startsWith('match:')) {
       const min = parseInt(status.split(':')[1], 10);
-      return `<td class="${cls} av-cell-match"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
+      return `<td class="${cls} ${matchCellCls(pid, date)}"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
     }
     if (status.indexOf('other_team') === 0) {
       // 'other_team#<teamId>' → nombre de ESE equipo; 'other_team' pelado → equipo primario del guest.
@@ -776,30 +791,42 @@
   }
 
   // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
+  // Minutos oficiales y amistosos por separado: el número principal es SOLO oficial; si hay
+  // minutos de amistoso van aparte en ámbar (+N′), nunca sumados al oficial.
   function summary(statuses, dates) {
     const todayStr = cmToday();
     const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0, rh:0 };
-    let mins = 0;
+    let mins = 0, minsFr = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
       if (dates && dates[i] > todayStr) return; // future: visible in matrix but not counted
-      if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
+      if (s.startsWith('match:')) {
+        const m = parseInt(s.split(':')[1], 10);
+        if (dates && (window.__avMatchKind || {})[dates[i]] === 'friendly') minsFr += m; else mins += m;
+        counts.av++;
+      }
       else { const k = statusKey(s); counts[k] = (counts[k] || 0) + 1; }
     });
     const segs = ['av','pa','in','un','si','na','ot','ab','do','rh'].filter(k => counts[k] > 0)
       .map(k => `<span class="s ${k}" style="flex:${counts[k]}"></span>`).join('');
-    return `<div class="av-summary"><div class="av-summary-bar">${segs}</div><div class="av-summary-min">${mins}<sub>′</sub></div></div>`;
+    const fr = minsFr > 0 ? `<span style="color:var(--cm-warning,#D97706);font-size:10px"> +${minsFr}<sub>′</sub></span>` : '';
+    return `<div class="av-summary"><div class="av-summary-bar">${segs}</div><div class="av-summary-min">${mins}<sub>′</sub>${fr}</div></div>`;
   }
 
   // ── Summary tooltip HTML ──
   function summaryTooltip(statuses, dates) {
     const todayStr = cmToday();
     const counts = { av:0, pa:0, in:0, un:0, si:0, na:0, ot:0, ab:0, do:0, rh:0 };
-    let mins = 0;
+    let mins = 0, minsFr = 0;
     statuses.forEach((s, i) => {
       if (!s) return;
       if (dates && dates[i] > todayStr) return;
-      if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
+      if (s.startsWith('match:')) {
+        const m = parseInt(s.split(':')[1], 10);
+        // amistoso vs oficial por el partido del día (misma fuente que el tinte de la celda)
+        if (dates && (window.__avMatchKind || {})[dates[i]] === 'friendly') minsFr += m; else mins += m;
+        counts.av++;
+      }
       else { const k = statusKey(s); if (k in counts) counts[k]++; }
     });
     const rows = [
@@ -815,7 +842,8 @@
       [counts.rh, '#F97316',           'availability.tipRehab',     'in rehab'],
     ].filter(([n]) => n > 0)
      .map(([n, c, key, en]) => `<span style="color:${c}">●</span> ${n} ${tt(key, en)}`);
-    if (mins > 0) rows.push(`<i class="ti ti-clock" style="font-size:11px"></i> ${tt('availability.tipMatchMin', mins + ' match min', { count: mins })}`);
+    if (mins > 0) rows.push(`<i class="ti ti-clock" style="font-size:11px"></i> ${tt('availability.tipMatchMinOff', mins + ' official min', { count: mins })}`);
+    if (minsFr > 0) rows.push(`<i class="ti ti-clock" style="font-size:11px;color:var(--cm-warning,#D97706)"></i> ${tt('availability.tipMatchMinFr', minsFr + ' friendly min', { count: minsFr })}`);
     return rows.join('<br>');
   }
 
@@ -857,10 +885,11 @@
       const num    = d.getUTCDate();
       const isToday = i === todayIdx;
       const isMatch = !!matchDates[date];
+      const isFriendly = isMatch && ((window.__avMatchKind || {})[date] === 'friendly');
       const isOff   = DAYOFF_DATES.has(date);
       let cls = 'day';
       if (isToday) cls += ' is-today';
-      else if (isMatch) cls += ' is-match';
+      else if (isMatch) cls += ' is-match' + (isFriendly ? ' is-friendly' : '');
       if (isOff) cls += ' is-dayoff';
       let label = mdLabelFor(date);
       if (isMatch && !label) label = 'MD';  // match outside any MC range still reads MD
@@ -871,7 +900,8 @@
       else                       tagText = label;
       let tag = '';
       if (tagText) {
-        const title = isMatch ? ` title="vs ${esc(matchDates[date])}"` : '';
+        const kindTxt = isFriendly ? ` · ${tt('availability.friendly','Friendly')}` : '';
+        const title = isMatch ? ` title="vs ${esc(matchDates[date])}${kindTxt}"` : '';
         tag = `<span class="md-tag"${title}>${tagText}</span>`;
       }
       h += `<th class="${cls}"><b>${letter}</b>${num}${tag}</th>`;
@@ -1091,8 +1121,10 @@
                   : (GLOBAL_STATUS.has(status) ? null : (_avTeamId || null));
     // Un (re)asignado de estado limpia la nota: el motivo pertenece al estado que se marcó,
     // no se arrastra a uno nuevo. La nota se agrega/edita aparte vía saveNote() (update).
+    // match_kind acompaña a los minutos: clase del partido de ese día (oficial/amistoso).
+    const match_kind = minutes > 0 ? ((window.__avMatchKind || {})[date] || 'official') : null;
     const { error } = await window.sb.from('availability')
-      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID, team_id, notes: null }, { onConflict: 'player_id,date' });
+      .upsert({ player_id: pid, date, status, minutes, match_kind, club_id: CLUB_ID, team_id, notes: null }, { onConflict: 'player_id,date' });
     if (error) console.warn('[Availability] save error:', error.message);
   }
 
@@ -1252,13 +1284,13 @@
           return data || [];
         } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); return []; }
       })(),
-      window.sb.from('availability').select('player_id, date, status, minutes, team_id, notes')
+      window.sb.from('availability').select('player_id, date, status, minutes, match_kind, team_id, notes')
         .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
       window.sb.from('availability').select('player_id, status, minutes, team_id')
         .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
       (async () => {   // matches (red MD indicators) — scoped al equipo activo, no a todo el club
         try {
-          let cq = window.sb.from('calendar_events').select('date, opponent, title')
+          let cq = window.sb.from('calendar_events').select('date, opponent, title, competition')
             .eq('club_id', CLUB_ID).eq('type', 'match')
             .gte('date', mcStart).lte('date', mcEnd);
           if (_avTeamId) cq = cq.eq('team_id', _avTeamId);
@@ -1333,15 +1365,24 @@
 
     todayIdx = MC_DATES.indexOf(todayStr);
 
-    // Build match-dates map (date → opponent name for tooltip)
+    // Build match-dates map (date → opponent name for tooltip) + kind map (official|friendly).
+    // Dos partidos el mismo día (rarísimo): si alguno es oficial, el día cuenta como oficial.
     const matchDates = {};
-    (matchEventsData || []).forEach(e => { matchDates[e.date] = e.opponent || e.title || tt('availability.matchLabel','Match'); });
-    if (mcMatchDate && mcMatchDate >= mcStart && mcMatchDate <= mcEnd)
+    const matchKind = {};
+    (matchEventsData || []).forEach(e => {
+      matchDates[e.date] = e.opponent || e.title || tt('availability.matchLabel','Match');
+      const k = (e.competition === 'friendly') ? 'friendly' : 'official';
+      matchKind[e.date] = (matchKind[e.date] === 'official') ? 'official' : k;
+    });
+    if (mcMatchDate && mcMatchDate >= mcStart && mcMatchDate <= mcEnd) {
       matchDates[mcMatchDate] = matchDates[mcMatchDate] || mcRival || tt('availability.matchLabel','Match');
+      matchKind[mcMatchDate] = matchKind[mcMatchDate] || 'official';
+    }
 
     // Exponer match-dates para que avRenderStats marque los días de partido
     // en la evolución (misma fuente que el matrix). NO query nueva.
     window.__avMatchDates = matchDates;
+    window.__avMatchKind = matchKind;
 
     // Day-off dates — solo el day off de equipo ENTERO bloquea el día. Un day off parcial
     // (player_ids con ids) no bloquea: esos jugadores se ven con status 'day_off' en su celda.
@@ -1563,14 +1604,15 @@
       let n = parseInt(input.value, 10);
       if (isNaN(n)) n = current;
       n = Math.max(0, Math.min(200, n));
+      const kind = n > 0 ? ((window.__avMatchKind || {})[date] || 'official') : null;
       if (n > 0) {
-        td.className = cellBaseCls(date) + ' av-cell-match';
+        td.className = cellBaseCls(date) + ' av-cell-match' + (kind === 'friendly' ? ' is-friendly' : '');
         td.innerHTML = `<span class="av-cell-match-min">${n}′</span>`;
       } else {
         td.className = cellBaseCls(date);
         td.innerHTML = dotEl('available');
       }
-      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n, team_id: _avTeamId || null };
+      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n, match_kind: kind, team_id: _avTeamId || null };
       saveAvailability(pid, date, 'available', n);
       updateRowSummary(pid);
       recalcKPIs();
@@ -1745,9 +1787,10 @@
     matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
       const { pid, date } = td.dataset;
       if (pid && date) {
+        const kind = (window.__avMatchKind || {})[date] || 'official';
         td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
-        td.className = cellBaseCls(date) + ' av-cell-match';
-        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90, team_id: _avTeamId || null };
+        td.className = cellBaseCls(date) + ' av-cell-match' + (kind === 'friendly' ? ' is-friendly' : '');
+        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90, match_kind: kind, team_id: _avTeamId || null };
         updated.add(pid);
         saveAvailability(pid, date, 'available', 90);
       }
@@ -2017,7 +2060,7 @@
     const pids = players.map(p => p.id);
 
     const { data: availRaw } = await window.sb.from('availability')
-      .select('player_id, date, status, minutes, team_id')
+      .select('player_id, date, status, minutes, match_kind, team_id')
       .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
       .gte('date', from).lte('date', to);
     // Fila relativa cuyo team_id ≠ equipo visto = ese día el jugador entrenó con OTRO
@@ -2028,13 +2071,16 @@
     const avail = (availRaw || []);
 
     const stat = {};
-    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, total:0 });
+    // minutes = minutos OFICIALES; minutesFr = amistosos (fila vieja sin match_kind = oficial).
+    // No se suman juntos en ningún lado: el % de participación se calcula solo sobre oficiales.
+    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, otherTeam:0, minutes:0, minutesFr:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
       if (r.date > todayStr) return;   // future pre-fills are planning, not events — don't count as elapsed
       s.total++;
       if (isOtherRow(r)) { s.otherTeam++; return; }   // día con otro equipo: no suma minutos de ESTE equipo
-      s.minutes += (r.minutes || 0);
+      if (r.match_kind === 'friendly') s.minutesFr += (r.minutes || 0);
+      else s.minutes += (r.minutes || 0);
       const st = (r.status||'').toLowerCase();
       if (st === 'available') s.avail++;
       else if (st === 'partial' || st === 'limited') s.partial++;
@@ -2043,7 +2089,7 @@
       else if (st === 'absent' || st === 'unavailable') s.absent++;
       else if (st === 'away' || st === 'national') s.national++;
     });
-    // Techo de minutos del equipo (el jugador que más jugó marca el 100%)
+    // Techo de minutos OFICIALES del equipo (el jugador que más jugó marca el 100%)
     const _maxMin = Math.max(1, ...Object.values(stat).map(s => s.minutes));
     Object.values(stat).forEach(s => { s.partPct = Math.round((s.minutes/_maxMin)*100); });
 
@@ -2135,9 +2181,10 @@
               <th data-sort="absent" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer">${tt('availability.statsColAbs','Abs.')}</th>
               <th data-sort="national" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer">${tt('availability.statsColNat','Nat.')}</th>
               <th data-sort="otherTeam" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:#6366F1;cursor:pointer">${tt('availability.statsColOther','Other')}</th>
-              <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">${tt('availability.statsColMin','Min')}</th>
+              <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">${tt('availability.statsColMinOff','Min off.')}</th>
+              <th data-sort="minutesFr" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning,#D97706);cursor:pointer">${tt('availability.statsColMinFr','Min friendly')}</th>
               <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:120px">${tt('availability.statsColPctAvail','% Availability')}</th>
-              <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">${tt('availability.statsColPctMin','% Minutes')}</th>
+              <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">${tt('availability.statsColPctMinOff','% Official min')}</th>
             </tr></thead>
             <tbody id="avStatsTbody"></tbody>
           </table>
@@ -2254,6 +2301,7 @@
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.national?'var(--cm-info,#2563eb)':'var(--cm-fg-faint,#cbd5e1)'}">${s.national}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.otherTeam?'#6366F1':'var(--cm-fg-faint,#cbd5e1)'}">${s.otherTeam}</td>
           <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${s.minutes}'</td>
+          <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:${s.minutesFr?'var(--cm-warning,#D97706)':'var(--cm-fg-faint,#cbd5e1)'}">${s.minutesFr}'</td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
           <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${s.partPct}%;height:100%;background:var(--cm-info,#2563eb);border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-info,#2563eb);min-width:36px;text-align:right">${s.partPct}%</span></div></td>
         </tr>`;

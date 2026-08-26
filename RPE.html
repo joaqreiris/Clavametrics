@@ -50,6 +50,11 @@
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
   .tr-gate-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+
+  /* Duración editable por jugador (solo partidos): la figura es clickeable */
+  .pc-fig .v.pc-min-edit { cursor:pointer; border-radius:6px; padding:1px 4px; margin:-1px -4px; }
+  .pc-fig .v.pc-min-edit:hover { background:var(--cm-bg-soft); }
+  .pc-fig .v.pc-min-edit:hover .ti-pencil { color:var(--cm-fg-muted); }
 </style>
 </head>
 <body class="cm">
@@ -125,7 +130,7 @@
           </div>
           <!-- Editable match duration (shown only when the session is a match). Drives sRPE = RPE × duration. -->
           <div class="tr-sum-stat" id="sumDurWrap" style="display:none;">
-            <div class="k"><i class="ti ti-clock-edit"></i><span data-i18n="rpe.matchDuration">Match duration</span></div>
+            <div class="k"><i class="ti ti-clock-edit"></i><span data-i18n="rpe.matchDuration">Match duration</span><span id="sumDurKind" style="display:none;font:700 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;margin-left:5px;"></span></div>
             <div class="v" style="display:flex;align-items:center;gap:5px;">
               <input id="sumDurInput" type="number" min="5" max="300" step="1" inputmode="numeric"
                 aria-label="Match duration (min)"
@@ -344,7 +349,7 @@
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
-                  currentSessionId:null, currentIsMatch:false, sessionDuration:null,
+                  currentSessionId:null, currentIsMatch:false, currentMatchKind:null, sessionDuration:null,
                   responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
@@ -362,7 +367,8 @@
   function matchAsSession(m) {
     return { id: 'evt:' + m.id, session_date: m.date, session_time: m.start_time,
       title: m.opponent ? tt('rpe.matchVs', `Match vs ${m.opponent}`, { opp: m.opponent }) : tt('rpe.match', 'Match'),
-      session_type: 'match', duration: m.duration_minutes, team_id: m.team_id || null, created_at: m.created_at };
+      session_type: 'match', duration: m.duration_minutes, team_id: m.team_id || null,
+      competition: m.competition || null, created_at: m.created_at };
   }
   // Merge recent training sessions with calendar matches for the assign/share pickers.
   // A match is deduped by date when a materialized training_sessions 'match' already exists.
@@ -482,7 +488,7 @@
         <div class="pc-mid">
           <div class="pc-secondary">
             <div class="pc-fig"><span class="k">${tt('rpe.sessionLoad','Session load')}</span><span class="v">${loadTxt}<small>au</small></span></div>
-            <div class="pc-fig"><span class="k">${tt('rpe.duration','Duration')}</span><span class="v">${durTxt}<small>′</small></span></div>
+            <div class="pc-fig"><span class="k">${tt('rpe.duration','Duration')}</span><span class="v${state.currentIsMatch ? ' pc-min-edit' : ''}"${state.currentIsMatch ? ` data-min-edit="${p.id}" title="${tt('rpe.editPlayerMinutes','Click to edit this player\'s match minutes')}"` : ''}>${durTxt}<small>′</small>${state.currentIsMatch ? '<i class="ti ti-pencil" style="font-size:11px;margin-left:3px;color:var(--cm-fg-faint);"></i>' : ''}</span></div>
           </div>
         </div>
         <div class="pc-flags">${flagsHTML}</div>
@@ -684,6 +690,16 @@
       durWrap.style.display = show ? '' : 'none';
       const inp = document.getElementById('sumDurInput');
       if (show && inp && document.activeElement !== inp) inp.value = state.sessionDuration;
+      // Chip oficial/amistoso al lado del label — deja claro qué clase de minutos se cargan.
+      const kindEl = document.getElementById('sumDurKind');
+      if (kindEl) {
+        if (show && state.currentMatchKind) {
+          const friendly = state.currentMatchKind === 'friendly';
+          kindEl.textContent = friendly ? tt('rpe.matchFriendly', 'Friendly') : tt('rpe.matchOfficial', 'Official');
+          kindEl.style.color = friendly ? 'var(--cm-warning,#D97706)' : 'var(--cm-success)';
+          kindEl.style.display = '';
+        } else kindEl.style.display = 'none';
+      }
     }
     document.getElementById('pipResp').textContent = done;
     document.getElementById('pipPend').textContent = missing;
@@ -755,7 +771,7 @@
       const activeTeam = activeTeamId();
       const todayStr = localToday();
       let q = window.sb.from('calendar_events')
-        .select('id, date, start_time, duration_minutes, title, opponent, team_id, created_at')
+        .select('id, date, start_time, duration_minutes, title, opponent, team_id, competition, created_at')
         .eq('club_id', state.cid).eq('type', 'match').lte('date', todayStr);
       if (activeTeam) q = q.eq('team_id', activeTeam);
       const { data, error } = await q.order('date', { ascending: false }).limit(8);
@@ -792,15 +808,28 @@
     state.view = 'board';
     state.currentSessionId = sessionId;
     state.currentIsMatch = (state.sessionsById[sessionId]?.session_type === 'match');
+    // Clase del partido (oficial/amistoso): del propio objeto sesión si vino del calendario,
+    // o buscando el evento match del mismo día/equipo (sesiones ya materializadas no la traen).
+    state.currentMatchKind = null;
+    if (state.currentIsMatch) {
+      const sMeta = state.sessionsById[sessionId] || {};
+      const comp = sMeta.competition
+        ?? (state.matches || []).find(m => m.date === sMeta.session_date
+              && (m.team_id || null) === (sMeta.team_id || null))?.competition;
+      state.currentMatchKind = (comp === 'friendly') ? 'friendly' : 'official';
+    }
     if (sel.selectedIndex >= 0) document.getElementById('pgSub').textContent = sel.options[sel.selectedIndex].text;
     state.loading = true; state.error = false; renderRpe();
     try {
       const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sessionId });
       if (error) throw error;
       const rows = data || [];
-      // Session duration drives the sRPE; session_rpe_status returns it per row (v_dur).
+      // Session duration drives the sRPE default. Con minutos por jugador, las filas ya no
+      // comparten duración: el campo del header muestra la de la SESIÓN (default), no la de
+      // una fila cualquiera.
+      const metaDur = state.sessionsById[sessionId]?.duration;
       const durRow = rows.find(r => r.duration != null);
-      state.sessionDuration = durRow ? Number(durRow.duration) : (state.sessionsById[sessionId]?.duration ?? null);
+      state.sessionDuration = (metaDur != null) ? Number(metaDur) : (durRow ? Number(durRow.duration) : null);
       const responders = rows.filter(r => r.responded).map(modelFromRow);
       const pending = rows.filter(r => !r.responded).map(modelFromRow);
       // highest-first: rpe DESC, then load (sRPE) DESC
@@ -845,7 +874,7 @@
     const activeTeam = activeTeamId();
     const todayStr = localToday();
     let q = window.sb.from('training_sessions')
-      .select('id, session_date, session_time, title, session_type, team_id, created_at')
+      .select('id, session_date, session_time, title, session_type, duration, team_id, created_at')
       .eq('club_id', state.cid)
       .lte('session_date', todayStr); // RPE is only rated for today or past — exclude future prepared sessions so they don't crowd out today
     if (activeTeam) q = q.eq('team_id', activeTeam);
@@ -1082,6 +1111,55 @@
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
   }
 
+  /* ── Minutos POR JUGADOR (solo partidos) — escribe availability.minutes vía RPC y el
+     trigger de la DB resincroniza la duración/carga del RPE ya enviado. 0 = vuelve al
+     default del partido (el campo Match duration). ── */
+  async function setPlayerMinutes(playerId, rawVal) {
+    let n = parseInt(rawVal, 10);
+    if (isNaN(n)) { renderRpe(); return; }
+    n = Math.max(0, Math.min(200, n));
+    const meta = state.sessionsById[state.currentSessionId] || {};
+    if (!meta.session_date) { renderRpe(); return; }
+    try {
+      const { error } = await window.sb.rpc('set_match_minutes', {
+        p_player_id: playerId, p_date: meta.session_date, p_minutes: n,
+        p_kind: state.currentMatchKind || 'official', p_team_id: meta.team_id || null,
+      });
+      if (error) throw error;
+      T.toast(tt('rpe.playerMinutesUpdated', `Minutes set to ${n}′ · load recomputed`, { min: n }), 'ti-clock-check');
+      await loadRpe();
+    } catch (e) {
+      console.warn('[RPE] setPlayerMinutes:', e && e.message);
+      T.toast(tt('rpe.playerMinutesError', "Couldn't update the player's minutes"), 'ti-alert-triangle');
+      renderRpe();
+    }
+  }
+  // Delegado: la lista se re-renderiza entera en cada loadRpe, así que el listener vive en
+  // el contenedor. Click en la figura Duration de una card (solo partidos) → input inline.
+  function wirePlayerMinutesEditor() {
+    const host = document.getElementById('listResponded');
+    if (!host) return;
+    host.addEventListener('click', e => {
+      const fig = e.target.closest('[data-min-edit]');
+      if (!fig || fig.querySelector('input')) return;
+      e.stopPropagation();
+      const pid = fig.dataset.minEdit;
+      const prev = parseInt(fig.textContent, 10) || state.sessionDuration || 90;
+      fig.innerHTML = `<input type="number" min="0" max="200" value="${prev}"
+        style="width:52px;font:inherit;color:inherit;background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:6px;padding:1px 5px;text-align:right;">`;
+      const inp = fig.querySelector('input');
+      inp.addEventListener('click', ev => ev.stopPropagation());
+      inp.focus(); inp.select();
+      let done = false;
+      const commit = () => { if (done) return; done = true; setPlayerMinutes(pid, inp.value); };
+      inp.addEventListener('blur', commit);
+      inp.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+        if (ev.key === 'Escape') { done = true; renderRpe(); }
+      });
+    });
+  }
+
   /* ── Refresh ── */
   function wireRefresh() {
     const btn = document.getElementById('rmRefresh');
@@ -1272,6 +1350,7 @@
       wireRemind();
       wireRefresh();
       wireDurationEditor();
+      wirePlayerMinutesEditor();
       wireLiveRefresh();
       state.inited = true;
       await Promise.all([loadRpe(), loadOrphans()]);
