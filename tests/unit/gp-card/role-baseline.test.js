@@ -59,6 +59,31 @@ describe('fetchRoleBaseline · grupo de referencia', () => {
   });
 });
 
+describe('medida de referencia · media vs mediana', () => {
+  // Caso real del club: los mediocampistas dan 389 de media y 320 de mediana por un jugador
+  // que se despega (677). La mediana describe al jugador típico; la media, al grupo entero.
+  const perPlayer = [216, 260, 320, 470, 677];
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const median = a => { const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+  it('la mediana no se deja arrastrar por el jugador que se despega', () => {
+    expect(median(perPlayer)).toBe(320);
+    expect(Math.round(mean(perPlayer))).toBe(389);
+  });
+  it('con dos compañeros ambas medidas coinciden (la mediana nunca empeora un grupo chico)', () => {
+    const dos = [300, 400];
+    expect(median(dos)).toBe(mean(dos));
+  });
+  it('el rango del grupo distingue una referencia apretada de una dispersa', () => {
+    const apretado = [386, 408, 450];
+    const disperso = [216, 320, 677];
+    expect(median(apretado)).toBe(median([386, 408, 450]));
+    expect(Math.max(...apretado) - Math.min(...apretado)).toBe(64);
+    expect(Math.max(...disperso) - Math.min(...disperso)).toBe(461);
+  });
+});
+
 describe('roleNormAgg · normalización por exposición', () => {
   it('los volúmenes acumulados pasan a media por sesión', () => {
     expect(roleNormAgg('total')).toBe('avg');

@@ -277,6 +277,8 @@
     if (Object.keys(opts).length) c.opts = opts;
     // Reference window is FIXED and independent of the card range (position/self).
     if (baseline === 'position' || baseline === 'self') c.refWindow = S.refWindow || { type: 'season' };
+    // Medida de tendencia central del grupo de puesto (lo consume fetchRoleBaseline).
+    if (baseline === 'position') c.stat = S.compareStat === 'avg' ? 'avg' : 'median';
     return c;
   }
 
@@ -1013,7 +1015,7 @@
     // Default: NO comparison → the card shows RAW values, not %. Comparison is opt-in
     // per card (the Comparison dropdown writes config.comparison; null = raw).
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
-             compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
+             compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
@@ -1386,6 +1388,7 @@
       S.compare = cfg.compare === 'role' ? 'position' : cfg.compare;
       S.refMcId = cfg.refMcId || null;
       S.compareMethod = cfg.compareMethod || 'avg';
+      S.compareStat   = cfg.compareStat   || 'median';
       S.compareOpts   = cfg.compareOpts || { topN:5, mdLookback:4 };
       S.refWindow     = cfg.refWindow || { type:'season' };
       S.size    = cfg.size;
@@ -1422,6 +1425,7 @@
       S.compare = (rawConfig.comparison?.baseline === 'role' ? 'position' : rawConfig.comparison?.baseline) || 'none';
       S.refMcId = rawConfig.comparison?.refMcId  || null;
       S.compareMethod = rawConfig.comparison?.method || 'avg';
+      S.compareStat   = rawConfig.comparison?.stat   || 'median';
       S.compareOpts   = { topN: rawConfig.comparison?.opts?.topN ?? 5, mdLookback: rawConfig.comparison?.opts?.mdLookback ?? 4 };
       S.refWindow     = rawConfig.comparison?.refWindow || { type:'season' };
       S.size    = rawConfig.style?.size          || 'md';
@@ -3488,18 +3492,22 @@
     //   ring → gray legend label ("Pico de partido (100%)")
     //   of   → tooltip suffix ("78% del pico")
     const BASELINE_LABELS = {
-      role:  { ring: _tt('gps_analysis.radar_ring_role',  'Position avg (100%)'), of: _tt('gps_analysis.radar_of_role',  'of avg') },
+      role:  { ring: _tt('gps_analysis.radar_ring_role',  'Position avg (100%)'), of: _tt('gps_analysis.radar_of_role',  'of position') },
       match: { ring: _tt('gps_analysis.radar_ring_match', 'Match peak (100%)'),   of: _tt('gps_analysis.radar_of_match', 'of peak') },
       md:    { ring: _tt('gps_analysis.radar_ring_md',    'Same MD (100%)'),       of: _tt('gps_analysis.radar_of_md',    'of MD') },
     };
     const baselineInfo = hasBaseline ? BASELINE_LABELS[_cmpBase(config)] : null;
-    // Media de puesto: mostrar SIEMPRE contra cuántos compañeros se compara. Un n bajo (o el
-    // roll-up a una línea más amplia) cambia por completo cómo hay que leer el %, y hasta ahora
-    // no se veía en ningún lado. `__peers` lo trae fetchRoleBaseline.
+    // Referencia de puesto: mostrar SIEMPRE contra cuántos compañeros se compara y con qué
+    // medida. Un n bajo (o el roll-up a una línea más amplia) cambia por completo cómo hay que
+    // leer el %, y hasta ahora no se veía en ningún lado. Los metadatos los trae fetchRoleBaseline.
     const _peers = (baselineMap && typeof baselineMap.__peers === 'number') ? baselineMap.__peers : null;
-    const _ringRole = _peers != null
-      ? `${baselineInfo?.ring || ''} · n=${_peers}`.trim()
-      : (baselineInfo?.ring || '');
+    const _stat  = baselineMap?.__stat || 'median';
+    const _ringRole = [
+      _stat === 'avg'
+        ? _tt('gps_analysis.radar_ring_role', 'Position avg (100%)')
+        : _tt('gps_analysis.radar_ring_role_median', 'Position median (100%)'),
+      _peers != null ? `n=${_peers}` : null,
+    ].filter(Boolean).join(' · ');
     const baselineName = baselineInfo
       ? (_cmpBase(config) === 'role' ? _ringRole : baselineInfo.ring)
       : (hasBaseline ? _cmpName(config.comparison.baseline) : null);
@@ -3542,6 +3550,22 @@
     const refs      = rawRef.map((b, i) => refHas[i] ? b : (realVals[i] || 1));
     const pctReal    = realVals.map((v, i) => Math.round((v / refs[i]) * 100));   // true %, kept for the tooltip
     const pct        = pctReal.map(p => Math.min(p, DRAW_CAP));                    // clamped value actually drawn
+    // Dispersión del grupo de referencia, como % del valor central: es lo que distingue un 90%
+    // contra un grupo apretado de un 90% contra un grupo que va del 50% al 200%. Se dibuja como
+    // banda y se escribe en el tooltip. Sólo existe para el baseline de puesto.
+    const _rangeMap  = baselineMap?.__range || null;
+    const bandLo = [], bandHi = [], rangeLabels = [];
+    let hasBand = false;
+    ms.forEach((s, i) => {
+      const r = (_rangeMap && refHas[i]) ? _rangeMap.get(s.label) : null;
+      // Sin rango en un eje: banda de ancho cero sobre el 100% para que el polígono igual
+      // cierre (un null partiría la figura en dos).
+      if (!r || !(refs[i] > 0)) { bandLo.push(100); bandHi.push(100); rangeLabels.push(null); return; }
+      hasBand = true;
+      bandLo.push(Math.min(Math.round((r.min / refs[i]) * 100), DRAW_CAP));
+      bandHi.push(Math.min(Math.round((r.max / refs[i]) * 100), DRAW_CAP));
+      rangeLabels.push(`${fmt(Math.round(r.min * 10) / 10)}–${fmt(Math.round(r.max * 10) / 10)}${units[i] ? ' ' + units[i] : ''}`);
+    });
     const clamped    = pctReal.map((p, i) => refHas[i] && p > DRAW_CAP);
     const fmtVal     = (v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '');
     const realLabels = realVals.map(fmtVal);
@@ -3565,7 +3589,7 @@
     const baselineMissingNote = (hasBaseline && !hasRealBaseline)
       ? (_MISS_NOTE[config.comparison.baseline] || _tt('gps_analysis.builder_miss_default', 'No baseline data yet')) : null;
 
-    return { labels, pct, pctReal, clamped, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
+    return { labels, pct, pctReal, clamped, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl, bandLo, bandHi, hasBand, rangeLabels, peers: _peers };
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
@@ -3616,6 +3640,23 @@
       const ringLabel = (!d.grouped && d.labels.length === 1 && d.refHas[0])
         ? `${d.baselineName} · ${d.refLabels[0]}`
         : d.baselineName;
+      // Banda de dispersión del grupo (mín–máx de los compañeros, en % del valor de referencia).
+      // Es lo que distingue un 90% contra un grupo apretado de un 90% contra un grupo que va del
+      // 50% al 200%: sin ella las dos lecturas se ven idénticas. `order` alto = se dibuja primero,
+      // detrás del polígono del jugador. Los dos datasets se excluyen del tooltip vía _isBand.
+      if (!d.grouped && d.hasRealBaseline && d.hasBand) {
+        datasets.push({
+          label: '', data: d.bandLo, _isBand: true, _isBandLo: true,
+          borderColor: 'transparent', backgroundColor: 'transparent',
+          borderWidth: 0, pointRadius: 0, fill: false, order: 4,
+        });
+        datasets.push({
+          label: _tt('gps_analysis.radar_band', 'Position range'),
+          data: d.bandHi, _isBand: true,
+          borderColor: 'rgba(148,163,184,0.35)', backgroundColor: 'rgba(148,163,184,0.16)',
+          borderWidth: 1, borderDash: [2, 3], pointRadius: 0, fill: '-1', order: 3,
+        });
+      }
       // Draw the reference ring ONLY when a real baseline resolved — never a fake 100%.
       if (!d.grouped && d.hasRealBaseline) datasets.push({
         label: ringLabel,
@@ -3635,8 +3676,10 @@
           animation: { duration: 320 },
           plugins: {
             legend: { display: d.grouped ? d.showLeg : (d.showLeg && d.hasRealBaseline), position: 'bottom',
-                      labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true } },
-            tooltip: { callbacks: { label: ctx => {
+                      labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true,
+                                // el borde inferior de la banda no es una serie: fuera de la leyenda
+                                filter: item => !(datasets[item.datasetIndex]?._isBandLo) } },
+            tooltip: { filter: item => !item.dataset?._isBand, callbacks: { label: ctx => {
               if (d.grouped) {
                 // "Drill A — HSR: 640 m" (real value per group per axis)
                 const real = d.groups[ctx.datasetIndex]?.realLabels[ctx.dataIndex] ?? (ctx.raw + '%');
@@ -3651,7 +3694,11 @@
               if (!d.hasBaseline || !d.refHas[ctx.dataIndex]) return `${lbl}: ${real}`;
               // Show the TRUE % (not the clamped drawn value); note when it was capped.
               const clampTxt = d.clamped[ctx.dataIndex] ? ' (capped)' : '';
-              return `${lbl}: ${real} · ${d.pctReal[ctx.dataIndex]}% ${d.baselineOf}${clampTxt} (ref: ${d.refLabels[ctx.dataIndex]})`;
+              // El rango del grupo va junto a la referencia: el % solo no dice si el jugador
+              // está dentro de lo normal de su puesto o si la referencia misma es dispersa.
+              const rng = d.rangeLabels?.[ctx.dataIndex];
+              const refTxt = rng ? `${d.refLabels[ctx.dataIndex]} · ${rng}` : d.refLabels[ctx.dataIndex];
+              return `${lbl}: ${real} · ${d.pctReal[ctx.dataIndex]}% ${d.baselineOf}${clampTxt} (ref: ${refTxt})`;
             } } },
             gpbRadarLabels: { show: !d.grouped && d.showLbl, labels: d.realLabels, color: d.color },
           },
@@ -6962,6 +7009,20 @@
             <span class="tx"><span class="t">${esc(_winName(w.id))}</span><span class="d">${esc(_winDesc(w.id))}</span></span>
             <i class="ti ti-check ck"></i></button>`).join('');
           opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_window_fixed', 'Reference window (fixed)')}</div></div><div class="rb-pop-b">${winRows}</div>`;
+          if (S.compare === 'position') {
+            // Medida de tendencia central del grupo de referencia. Mediana por defecto: no cambia
+            // nada en un grupo simétrico y evita que un solo jugador que se despega arrastre el
+            // 100% (en datos reales, 389 de media contra 320 de mediana en un mismo puesto).
+            const _stats = [
+              { id: 'median', name: _tt('gps_analysis.builder_stat_median', 'Median'),  d: _tt('gps_analysis.builder_stat_median_desc', 'Typical player — resists outliers') },
+              { id: 'avg',    name: _tt('gps_analysis.builder_stat_avg', 'Average'),     d: _tt('gps_analysis.builder_stat_avg_desc', 'Group mean — every player weighs in') },
+            ];
+            const statRows = _stats.map(o => `<button class="rb-opt ${(S.compareStat||'median')===o.id?'is-on':''}" data-stat="${esc(o.id)}">
+              <span class="ic"><i class="ti ti-chart-dots"></i></span>
+              <span class="tx"><span class="t">${esc(o.name)}</span><span class="d">${esc(o.d)}</span></span>
+              <i class="ti ti-check ck"></i></button>`).join('');
+            opts += `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_reference_stat', 'Reference measure')}</div></div><div class="rb-pop-b">${statRows}</div>`;
+          }
         }
         sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">${_tt('gps_analysis.builder_method', 'Method')}</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
       }
@@ -7036,6 +7097,14 @@
     popEl.querySelectorAll('[data-method]').forEach(b => b.onclick = e => {
       e.stopPropagation();
       S.compareMethod = b.dataset.method;
+      const owner = popOwner;
+      syncSelects(); pulseNext = true; renderCard();
+      openPop(popHTML('compare'), owner, 'compare');
+    });
+    // Reference measure (median / avg) para el baseline de puesto → keep open, re-render.
+    popEl.querySelectorAll('[data-stat]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      S.compareStat = b.dataset.stat;
       const owner = popOwner;
       syncSelects(); pulseNext = true; renderCard();
       openPop(popHTML('compare'), owner, 'compare');
@@ -8179,6 +8248,7 @@
     S.compare = (config.comparison?.baseline === 'role' ? 'position' : config.comparison?.baseline) || 'none';
     S.refMcId = config.comparison?.refMcId        || null;
     S.compareMethod = config.comparison?.method || 'avg';
+    S.compareStat   = config.comparison?.stat   || 'median';
     S.compareOpts   = { topN: config.comparison?.opts?.topN ?? 5, mdLookback: config.comparison?.opts?.mdLookback ?? 4 };
     S.refWindow     = config.comparison?.refWindow || { type:'season' };
     S.size    = config.style?.size                || 'md';
