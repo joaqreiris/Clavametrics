@@ -2591,7 +2591,7 @@
     if (mod) container.classList.add(mod);
 
     switch (config.viz) {
-      case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null); break;
+      case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null, opts.mixedTypes || 0); break;
       case 'bars':    mountBarsChart(container, config, series, opts.mcNames || null); break;
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
       case 'scatter': mountScatterChart(container, config, series, { scatterSparks: opts.scatterSparks || null }); break;
@@ -3007,6 +3007,14 @@
                 const _avg = aggregateSeries(rows, eavMap, _avgCfg, catalogMap);
                 if (_avg && _avg.length) series = _avg;
               }
+              // Mezcla de tipos de sesión: un partido pesa ~2,5× un entrenamiento en volumen, y
+              // la proporción partido/entrenamiento varía entre jugadores (quien juega menos
+              // entrena igual). Con tipos mezclados la media por sesión ya no mide lo mismo para
+              // cada uno y el % es engañoso — se avisa en la card (no se bloquea nada).
+              const _types = new Set((rows || [])
+                .map(r => r.training_sessions?.session_type ?? r.session_type)
+                .filter(Boolean));
+              drawOpts.mixedTypes = _types.size > 1 ? _types.size : 0;
             } catch (e) { console.warn('gpb role baseline:', e); }
           }
           if (_isPinned) console.log('[PIN DEBUG] radar baseline', { cmp, playerId: ctx.playerId, baselineMapSize: drawOpts.baselineMap?.size ?? 0, metricIds: (config.metrics || []).map(m => m.id) });
@@ -3561,8 +3569,9 @@
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
-  function mountRadarChart(body, config, series, baselineMap) {
+  function mountRadarChart(body, config, series, baselineMap, mixedTypes) {
     const d = radarChartData(config, series, baselineMap);
+    d.mixedTypes = mixedTypes || 0;
     const axisLabels = d.grouped ? d.axes : d.labels;
     if (!axisLabels.length || (d.grouped && !d.groups.length)) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.')); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
@@ -3665,6 +3674,15 @@
         note.style.cssText = 'text-align:center;margin-top:4px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
         note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${d.baselineMissingNote}`;
         body.appendChild(note);
+      }
+      // Comparación sobre tipos de sesión mezclados → el % no es comparable entre jugadores
+      // (ver nota en el bloque del baseline de rol). Aviso, no bloqueo.
+      if (!d.grouped && d.hasRealBaseline && d.mixedTypes > 1) {
+        const warn = document.createElement('div');
+        warn.style.cssText = 'text-align:center;margin-top:4px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-warning,#b45309)';
+        warn.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:11px;vertical-align:-1px"></i> ${
+          _tt('gps_analysis.radar_mixed_types', 'Mixed session types — filter by one type to compare fairly')}`;
+        body.appendChild(warn);
       }
     };
     mount();
