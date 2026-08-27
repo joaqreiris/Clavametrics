@@ -2995,8 +2995,19 @@
             } catch (e) { console.warn('gpb md baseline:', e); }
           } else if (fetchRoleBaseline) {
             // vs Position (role) — also the default radial scale for any player radar.
-            try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
-            catch (e) { console.warn('gpb role baseline:', e); }
+            try {
+              drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+              // MISMA ESCALA que la referencia: los volúmenes se comparan POR SESIÓN, no
+              // acumulados. Sin esto, el jugador aportaba la suma de SUS n sesiones contra la
+              // media de las n' de cada compañero: con menos partidos aparecía por debajo
+              // aunque su rendimiento por partido fuese idéntico (mezclaba exposición con
+              // rendimiento). Mismo re-escalado que ya hacía el baseline 'match'.
+              if ((config.metrics || []).some(m => m.agg === 'total')) {
+                const _avgCfg = { ...config, metrics: config.metrics.map(m => ({ ...m, agg: m.agg === 'total' ? 'avg' : m.agg })) };
+                const _avg = aggregateSeries(rows, eavMap, _avgCfg, catalogMap);
+                if (_avg && _avg.length) series = _avg;
+              }
+            } catch (e) { console.warn('gpb role baseline:', e); }
           }
           if (_isPinned) console.log('[PIN DEBUG] radar baseline', { cmp, playerId: ctx.playerId, baselineMapSize: drawOpts.baselineMap?.size ?? 0, metricIds: (config.metrics || []).map(m => m.id) });
         }
@@ -3474,8 +3485,15 @@
       md:    { ring: _tt('gps_analysis.radar_ring_md',    'Same MD (100%)'),       of: _tt('gps_analysis.radar_of_md',    'of MD') },
     };
     const baselineInfo = hasBaseline ? BASELINE_LABELS[_cmpBase(config)] : null;
+    // Media de puesto: mostrar SIEMPRE contra cuántos compañeros se compara. Un n bajo (o el
+    // roll-up a una línea más amplia) cambia por completo cómo hay que leer el %, y hasta ahora
+    // no se veía en ningún lado. `__peers` lo trae fetchRoleBaseline.
+    const _peers = (baselineMap && typeof baselineMap.__peers === 'number') ? baselineMap.__peers : null;
+    const _ringRole = _peers != null
+      ? `${baselineInfo?.ring || ''} · n=${_peers}`.trim()
+      : (baselineInfo?.ring || '');
     const baselineName = baselineInfo
-      ? baselineInfo.ring
+      ? (_cmpBase(config) === 'role' ? _ringRole : baselineInfo.ring)
       : (hasBaseline ? _cmpName(config.comparison.baseline) : null);
     const baselineOf   = baselineInfo ? baselineInfo.of : _tt('gps_analysis.radar_of_baseline', 'of baseline');
 
