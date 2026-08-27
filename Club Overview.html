@@ -12,6 +12,12 @@
      paralelo con el CSS principal. El @import sigue en el CSS como respaldo:
      el navegador deduplica y no la vuelve a pedir. -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<!-- El handshake con Supabase (DNS + TLS) es lo primero que necesita CADA página
+     autenticada: supabase-init.js crea el cliente y la primera consulta sale
+     enseguida. Abrir la conexión aquí ahorra ese ida y vuelta antes de que se
+     pida el primer dato. (No se pasan los scripts del <head> a defer porque los
+     scripts inline del cuerpo usan window.sb de inmediato y correrían antes.) -->
+<link rel="preconnect" href="https://xesrumijvdmqjrufgeka.supabase.co" crossorigin>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
 <script src="assets/boot-brand.js"></script>
 <link rel="stylesheet" href="clavametrics.css">

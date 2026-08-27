@@ -2681,6 +2681,24 @@
     body.className = 'gp-c-b';
     body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">${_tt('gps_analysis.builder_loading', 'Loading GPS data…')}</div></div>`;
 
+    // Guardián. Este render tiene una veintena de `if (stale()) return` y algún
+    // otro corte temprano; todos dejan el spinner puesto. Si el que gana la
+    // carrera muere en uno de ellos —o se cuelga esperando una respuesta que no
+    // llega— la card se queda girando para siempre, sin error en consola y sin
+    // nada que mirar. Esto no arregla la causa: la hace visible en vez de
+    // dejarla en silencio.
+    clearTimeout(cardEl.__loadWatchdog);
+    cardEl.__loadWatchdog = setTimeout(() => {
+      if (cardEl.__resolveSeq !== seq) return;              // otro render tomó el relevo
+      if (!body.querySelector('.cb2-state.load')) return;   // ya pintó algo
+      console.error('[gpb] card colgada en "Loading GPS data…" — el render salió sin pintar.',
+        { title: config?.title, viz: config?.viz, range: config?.range, scope: config?.scope,
+          clubId: _clubId || window._gpClubId, teamId: window._gpTeamId, mcId: window._gpMcId,
+          resolverError: window.__gpbResolverError || null });
+      _showCardState(cardEl, body, 'err',
+        _tt('gps_analysis.builder_stuck', 'Took too long to load. Reload the page — details are in the console.'), config);
+    }, 25000);
+
     try {
       // Context readiness (TIMING): a card can be rendered during dashboard boot —
       // before the club context is resolved. Wait, showing the spinner, for clubId +
@@ -2693,10 +2711,24 @@
         await new Promise(r => setTimeout(r, 100));
       }
       if (stale()) return;
+      // Si tras los 8 s el contexto sigue sin resolverse, seguir adelante deja
+      // ctx.clubId en null: getSessionIds devuelve [] y la card muere sin
+      // explicación. Mejor decirlo.
+      if (!(_clubId || window._gpClubId) || !window.sb) {
+        console.error('[gpb] contexto del club no resuelto tras 8s — la card no puede consultar datos');
+        _showCardState(cardEl, body, 'nodata',
+          _tt('gps_analysis.builder_ctx_timeout', 'Could not load the club context. Reload the page.'), config);
+        return;
+      }
 
       const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, fetchMdBaseline, enrichMcDiff, CORE_COLS, neededKeys, canUsePlayerAgg, resolvePlayerAggSeries, canUsePlayerMcAgg, resolvePlayerMcAggSeries } = await _importResolver();
       if (stale()) return;
-      if (!applyAgg) return; // resolver not available
+      if (!applyAgg) {
+        // Antes: `return` pelado → spinner eterno, sin pista de qué pasó.
+        _showCardState(cardEl, body, 'nodata',
+          _tt('gps_analysis.builder_resolver_missing', 'Chart engine failed to load. Reload the page.'), config);
+        return;
+      }
 
       const _teamPids  = Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null;
       const _chosenPid = window._gpPlayerId || window.gpState?.playerId || null;
@@ -3182,8 +3214,10 @@
       if (stale()) return;
       _renderCardInto(body, config, series, drawOpts);
       cardEl.classList.remove('is-draft');
+      clearTimeout(cardEl.__loadWatchdog);   // render completo: guardián de baja
 
     } catch (e) {
+      clearTimeout(cardEl.__loadWatchdog);
       console.warn('gpb resolveAndRenderCard:', e);
       _showCardState(cardEl, body, 'err', 'GPS query failed. Your config is saved — try refreshing.', config);
     }
@@ -3244,7 +3278,14 @@
   async function _importResolver() {
     try {
       return await import('../../lib/gp-card/resolver.js');
-    } catch {
+    } catch (e) {
+      // Tragarse este error en silencio dejaba la card girando para siempre con
+      // "Loading GPS data…" y NADA en consola: el llamador hace `if (!applyAgg)
+      // return` y el spinner se queda puesto. Si el módulo no carga hay que
+      // poder verlo.
+      console.error('[gpb] no se pudo cargar lib/gp-card/resolver.js —',
+                    'las cards del builder no pueden resolver datos:', e);
+      window.__gpbResolverError = String(e && e.message || e);
       return {};
     }
   }
@@ -3417,6 +3458,7 @@
   }
 
   function _showCardState(cardEl, body, kind, msg, config) {
+    clearTimeout(cardEl.__loadWatchdog);   // la card ya dijo algo: guardián de baja
     cardEl.classList.add('is-draft');
     body.className = 'gp-c-b';
     const vizIcon = VIZ_TYPES[config.viz]?.icon || 'ti-chart-bar';
