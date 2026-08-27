@@ -439,6 +439,11 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
           // cambió, así que sin force el reload del filterbar se dedupea y quedaría stale.
           if(wasRunning && nw.status==='done'){
             try{ window.cmInvalidateGpsCache?.(); }catch(_){}
+            // Catálogo de métricas: un sync puede ESTRENAR datos de una métrica recién mapeada.
+            // Sin esto seguía marcada "sin datos" hasta recargar la página (el chequeo se cachea
+            // por club y getCatalog tiene TTL de 5 min).
+            try{ window.invalidateCatalogCache?.(); }catch(_){}
+            try{ window.GpBuilder?.refreshCatalog?.(); }catch(_){}
             try{ window.gpFilterBar?.reload?.({ force:true }); }catch(_){}
             try{ window.refreshDashboard?.(); }catch(_){}
           }

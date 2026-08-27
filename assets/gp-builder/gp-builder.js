@@ -746,11 +746,15 @@
       .eq('club_id', clubId)
       .order('display_order', { ascending: true });
 
-    // Filter to metrics that actually have data (see _loadHasData). Built-in DERIVED (acc_dec) and
-    // TASK metrics are added AFTER this and are NOT filtered — they stay offered regardless.
+    // Métricas SIN datos: antes se filtraban y desaparecían del builder. Una recién creada y
+    // mapeada quedaba invisible hasta el primer sync, sin ningún cartel — indistinguible de
+    // "la creé mal" (caso real: Max HR estuvo 10 días oculta esperando datos). Ahora se ofrecen
+    // igual, marcadas noData: se muestran atenuadas y no se pueden soltar en la card, pero se
+    // VEN, así que se entiende que existen y qué les falta. Las DERIVADAS (acc_dec) y las de
+    // TASK se agregan después y nunca pasaron por este chequeo.
     const allRows = data || [];
     const hasData = await _loadHasData(clubId, allRows);
-    const rows = allRows.filter(r => hasData.has(r.key));
+    const rows = allRows;
     catalogMap = new Map();
 
     // group for flyout
@@ -768,6 +772,7 @@
         is_custom:   !row.is_core,
         squad_rollup:row.squad_rollup ?? true,
         decimals:    row.decimals ?? 1,
+        noData:      !hasData.has(row.key),   // mapeada pero todavía sin un solo valor importado
       };
       catalogMap.set(m.id, m);
       const g = row.category || 'custom';
@@ -7207,13 +7212,18 @@
       measuresHtml += `<div class="es-fly-grp ${grp.custom?'cust':''}">${esc(grp.g)}</div>`;
       items.forEach(m => {
         const on  = S.metrics.some(f => f.id === m.id);
-        const dis = full;   // clic = agregar otra instancia (repetible) → sólo bloquea el cupo lleno
+        // clic = agregar otra instancia (repetible) → sólo bloquea el cupo lleno… o que la
+        // métrica todavía no tenga ni un dato importado (se muestra, pero no se puede usar).
+        const dis = full || !!m.noData;
         const isCalc = m.calculated;
         const tail = isCalc
           ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="${_tt('gps_analysis.calc_edit_formula_title', 'Edit formula')}"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="${_tt('gps_analysis.calc_delete_title', 'Delete')}"><i class="ti ti-trash"></i></button></span>`
-          : `<span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>`;
+          : (m.noData
+              ? `<span class="kind nodata"><i class="ti ti-cloud-off"></i>${esc(_tt('gps_analysis.builder_metric_nodata_tag', 'no data'))}</span>`
+              : `<span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>`);
         const tag = (!isCalc && m.is_custom) ? ' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>' : '';
-        measuresHtml += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-mid="${esc(m.id)}" draggable="true">
+        const ndTitle = m.noData ? ` title="${esc(_tt('gps_analysis.builder_metric_nodata', 'No data yet — sync to use it'))}"` : '';
+        measuresHtml += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''} ${m.noData?'is-nodata':''}" data-mid="${esc(m.id)}" draggable="${m.noData?'false':'true'}"${ndTitle}>
           <span class="ic${isCalc?' is-calc':''}"><i class="ti ${metIcon(m)}"></i></span>
           <span class="nm">
             <span class="t">${esc(m.name)}${tag}</span>
@@ -7390,12 +7400,16 @@
   }
   function _dimPlaced(id){ return !!(S && (S.dimensions || []).some(d => d.id === id)); }
 
-  // Fila arrastrable del panel. Las ya colocadas (is-placed) no se arrastran.
-  function ddFieldRow(id, kind, name, icon, unit, placed) {
-    return `<div class="bdd-field${placed ? ' is-placed' : ''}" draggable="${placed ? 'false' : 'true'}" data-id="${esc(id)}" data-kind="${kind}">
+  // Fila arrastrable del panel. Las ya colocadas (is-placed) no se arrastran; las que aún no
+  // tienen datos (is-nodata) tampoco, pero SE MUESTRAN con el motivo, en vez de desaparecer.
+  function ddFieldRow(id, kind, name, icon, unit, placed, noData) {
+    const off = placed || noData;
+    const hint = noData ? esc(_tt('gps_analysis.builder_metric_nodata', 'No data yet — sync to use it')) : '';
+    return `<div class="bdd-field${placed ? ' is-placed' : ''}${noData ? ' is-nodata' : ''}" draggable="${off ? 'false' : 'true'}" data-id="${esc(id)}" data-kind="${kind}"${hint ? ` title="${hint}"` : ''}>
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(icon)}"></i></span>
       <span class="nm">${esc(name)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}
+      ${noData ? `<span class="nodata-tag"><i class="ti ti-cloud-off"></i></span>` : ''}
     </div>`;
   }
 
@@ -7410,7 +7424,7 @@
     const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
     // Las métricas NUNCA se marcan is-placed: se pueden repetir (misma métrica con otro agg,
     // ej. valor + Nº de sesiones). Sólo las dimensiones siguen siendo únicas.
-    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, false));
+    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, false, !!m.noData));
     const none = `<div class="bdd-grp-h"><span class="hint">${_tt('gps_analysis.builder_no_matches', 'No matches')}</span></div>`;
     const addCalc = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>${_tt('gps_analysis.builder_calculated_metric', 'Calculated metric')}</button>`;
     return `
@@ -8287,8 +8301,20 @@
   /**
    * Namespace exposed for gp-ai.js (fallback heuristic needs VIZ_TYPES + catalog).
    */
+  // Tras un sync hay métricas que PASAN a tener datos (o aparecen nuevas). Sin esto el
+  // builder seguía mostrándolas como "sin datos" hasta recargar la página, porque el chequeo
+  // se cachea por club y el catálogo tiene TTL. Lo llama gps-integrations al cerrar un job.
+  async function refreshCatalog(clubId) {
+    const cid = clubId || window._gpClubId || (await window.getClubId?.());
+    if (!cid) return;
+    _hasDataCache.delete(cid);
+    try { window.invalidateCatalogCache?.(cid); } catch (_e) {}
+    await loadCatalog(cid);
+  }
+
   window.GpBuilder = {
     get catalogMap() { return catalogMap; },
+    refreshCatalog,
     get VIZ_TYPES()  { return VIZ_TYPES;  },
     get AGG()        { return AGG;        },
     defaultAgg,
