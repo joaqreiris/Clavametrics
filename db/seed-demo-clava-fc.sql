@@ -218,8 +218,10 @@ raise notice 'RPE: % fechas corregidas.', v_n;
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- Microciclos para las semanas que tienen sesiones pero quedaron sin uno.
-insert into microcycles (club_id, team_id, name, start_date, end_date, type, season_id)
-select v_club, v_first,
+-- ojo: microcycles.id NO tiene default (la app lo genera en el cliente),
+-- así que hay que pasarle el uuid a mano.
+insert into microcycles (id, club_id, team_id, name, start_date, end_date, type, season_id)
+select gen_random_uuid(), v_club, v_first,
        'MC ' || (46 + row_number() over (order by w))::text,
        w::date, (w + interval '6 days')::date, 'competitive', v_season
   from generate_series(
