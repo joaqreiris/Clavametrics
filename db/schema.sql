@@ -3433,6 +3433,68 @@ AS $function$
 $function$
 ;
 
+-- Renombra la CLAVE de una métrica custom arrastrando todo lo que la referencia. Va en una
+-- función (y no en cuatro updates desde el cliente) porque tiene que ser atómico: si la
+-- definición cambia pero los datos no, la métrica queda viva pero vacía. Toca:
+--   gps_metric_definitions.key · gps_column_mappings.target_metric ·
+--   gps_report_metrics.metric_key · dashboard_cards.config (cards que ya la usan)
+-- Sólo métricas del club y NO core. Devuelve cuántas filas movió cada tabla.
+CREATE OR REPLACE FUNCTION public.gps_rename_metric_key(p_club_id uuid, p_old text, p_new text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_is_core boolean;
+  v_data int := 0; v_maps int := 0; v_cards int := 0;
+begin
+  if p_club_id is null or coalesce(p_old,'') = '' or coalesce(p_new,'') = '' then
+    raise exception 'club, clave actual y clave nueva son obligatorias';
+  end if;
+  if p_new !~ '^[a-z][a-z0-9_]*$' then
+    raise exception 'la clave nueva debe empezar con letra y usar sólo minúsculas, números y guión bajo';
+  end if;
+  -- Sólo quien pertenece al club (o un super admin) puede renombrar.
+  if not (public.is_super_admin() or p_club_id = public.get_user_club_id()) then
+    raise exception 'sin permiso sobre este club';
+  end if;
+
+  select is_core into v_is_core from public.gps_metric_definitions
+   where club_id = p_club_id and key = p_old;
+  if v_is_core is null then raise exception 'no existe la métrica "%"', p_old; end if;
+  if v_is_core then raise exception 'las métricas del sistema no se pueden renombrar'; end if;
+  if exists (select 1 from public.gps_metric_definitions where club_id = p_club_id and key = p_new) then
+    raise exception 'ya existe una métrica con la clave "%"', p_new;
+  end if;
+
+  update public.gps_report_metrics set metric_key = p_new
+   where club_id = p_club_id and metric_key = p_old;
+  get diagnostics v_data = row_count;
+
+  update public.gps_column_mappings set target_metric = p_new
+   where club_id = p_club_id and target_metric = p_old;
+  get diagnostics v_maps = row_count;
+
+  -- Cards del builder que ya usan la métrica: la clave viaja SIEMPRE entrecomillada dentro del
+  -- config, así que el reemplazo acotado a esa forma no puede tocar un título ni otro valor.
+  -- dashboard_cards no tiene club_id: el club se resuelve por su dashboard.
+  update public.dashboard_cards dc
+     set config = replace(dc.config::text, '"' || p_old || '"', '"' || p_new || '"')::jsonb
+    from public.dashboards d
+   where d.id = dc.dashboard_id
+     and d.club_id = p_club_id
+     and dc.config::text like '%"' || p_old || '"%';
+  get diagnostics v_cards = row_count;
+
+  update public.gps_metric_definitions set key = p_new, updated_at = now()
+   where club_id = p_club_id and key = p_old;
+
+  return jsonb_build_object('data_rows', v_data, 'mappings', v_maps, 'cards', v_cards);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.cm_norm(t text)
  RETURNS text
  LANGUAGE sql

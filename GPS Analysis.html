@@ -8259,7 +8259,17 @@ async function openGpsMetricsCatalog() {
           <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Label *</label>
           <input id="mfLabel" type="text" value="${_gpEsc(def?.label||'')}" placeholder="e.g. Player Load Slow"
             style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
-          <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${mode==='add'?`key: <span id="mfKeyPrev"></span>`:(`key: <strong>${_gpEsc(slug)}</strong> (read-only)`)}</div>
+          <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${
+            mode === 'add'
+              ? `key: <span id="mfKeyPrev"></span>`
+              : (def?.is_core
+                  // Las del sistema tienen la clave cableada en el código (columnas de gps_reports).
+                  ? `key: <strong>${_gpEsc(slug)}</strong> (${tt('gps_analysis.cat_key_locked','system metric — key can\'t change')})`
+                  : `<label style="display:block;margin-bottom:2px">${tt('gps_analysis.cat_key_label','key')}</label>
+                     <input id="mfKey" type="text" value="${_gpEsc(slug)}" spellcheck="false"
+                       style="width:100%;padding:4px 7px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 10.5px/1 var(--cm-font-mono);box-sizing:border-box">
+                     <span style="display:block;margin-top:2px;color:var(--cm-fg-faint)">${tt('gps_analysis.cat_key_hint','Renaming it moves the data, the Catapult mapping and the cards that use it.')}</span>`)
+          }</div>
         </div>
         <div>
           <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Unit</label>
@@ -8329,6 +8339,21 @@ async function openGpsMetricsCatalog() {
         if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Add metric'; return; }
         catalog = [...catalog, ins];
       } else {
+        // Renombrar la CLAVE va por RPC: mueve datos, mapeo y cards en UNA transacción. Si se
+        // hiciera con updates sueltos y fallara alguno, la métrica quedaría viva pero vacía.
+        const newKey = (container.querySelector('#mfKey')?.value || '').trim();
+        const _fail = m => { errDiv.textContent = m; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Save changes'; };
+        if (newKey && newKey !== def.key) {
+          if (!/^[a-z][a-z0-9_]*$/.test(newKey)) return _fail(tt('gps_analysis.cat_key_invalid','The key must start with a letter and use only lowercase, numbers and underscore.'));
+          if (catalog.some(d => d.key === newKey)) return _fail(tt('gps_analysis.cat_key_taken','A metric with that key already exists.'));
+          const { data: moved, error: rErr } = await window.sb.rpc('gps_rename_metric_key',
+            { p_club_id: clubId, p_old: def.key, p_new: newKey });
+          if (rErr) return _fail(rErr.message);
+          showToast(tt('gps_analysis.cat_key_renamed','Key renamed — {n} values moved',{ n: moved?.data_rows ?? 0 }));
+          catalog = catalog.map(d => d.key === def.key ? { ...d, key: newKey } : d);
+          def = { ...def, key: newKey };
+          try { window.invalidateCatalogCache?.(clubId); window.GpBuilder?.refreshCatalog?.(clubId); } catch (_e) {}
+        }
         const { data: upd, error: e } = await window.sb.from('gps_metric_definitions')
           .update({ label, unit, category, decimals }).eq('id', def.id).eq('club_id', clubId).select();
         if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Save changes'; return; }
