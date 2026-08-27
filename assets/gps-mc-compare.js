@@ -214,7 +214,7 @@
 
       let allReports = reports || [];
       try {
-        const _ctxMod = await import('./lib/gp-card/resolver.js');
+        const _ctxMod = await import('../lib/gp-card/resolver.js');
         allReports = await _ctxMod.applyCtxToRows(window.sb, { clubId }, allSessIds, _wcMc,
           Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length ? window._gpPlayerIds : null,
           allReports, _mcSelect);

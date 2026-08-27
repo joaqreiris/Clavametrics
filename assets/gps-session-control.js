@@ -405,7 +405,7 @@
       // Modelo B: recorte dinámico por período — síntesis para contextos no-team + recálculo/
       // eliminación de filas con trabajo de otros contextos (mismo motor que el dashboard).
       try {
-        const _ctxMod = await import('./lib/gp-card/resolver.js');
+        const _ctxMod = await import('../lib/gp-card/resolver.js');
         reports = await _ctxMod.applyCtxToRows(window.sb, { clubId }, [sessionId], _wcSc,
           Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length ? window._gpPlayerIds : null,
           reports || [], _SC_SELECT);

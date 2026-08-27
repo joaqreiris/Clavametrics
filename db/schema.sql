@@ -6758,8 +6758,14 @@ create policy "gps_report_metrics_ins" on public.gps_report_metrics as permissiv
   with check (((club_id = get_user_club_id()) OR is_super_admin()));
 -- Inherit visibility from gps_reports (the subquery is filtered by gps_reports' own RLS),
 -- so any broadening there (e.g. session-team access) applies to the metrics too.
+-- EXISTS CORRELACIONADO, no `IN (SELECT id FROM gps_reports)`: aquel materializaba TODOS los
+-- reports visibles evaluando la RLS de gps_reports fila por fila (my_player_ids /
+-- session_in_my_teams). Con ~4.000 reports la consulta más simple sobre esta tabla —un
+-- `limit 1` por metric_key— moría con "canceling statement due to statement timeout" (500),
+-- y el builder lo interpretaba como "esta métrica no tiene datos". El EXISTS resuelve cada
+-- fila con un lookup por PK. Misma semántica, plan acotado.
 create policy "gps_report_metrics_scoped_select" on public.gps_report_metrics as permissive for select to public
-  using ((is_super_admin() OR (report_id IN ( SELECT gps_reports.id FROM gps_reports))));
+  using ((is_super_admin() OR EXISTS ( SELECT 1 FROM gps_reports r WHERE r.id = gps_report_metrics.report_id )));
 create policy "gps_report_metrics_upd" on public.gps_report_metrics as permissive for update to authenticated
   using (((club_id = get_user_club_id()) OR is_super_admin()));
 

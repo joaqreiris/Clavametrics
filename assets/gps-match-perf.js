@@ -278,7 +278,7 @@
       let rows = reports || [];
       // Modelo B: recorte dinámico por período (mismo motor que el dashboard).
       try {
-        const _ctxMod = await import('./lib/gp-card/resolver.js');
+        const _ctxMod = await import('../lib/gp-card/resolver.js');
         rows = await _ctxMod.applyCtxToRows(window.sb, { clubId }, sessIds, _wcMp,
           Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length ? window._gpPlayerIds : null,
           rows, _MP_SELECT);
