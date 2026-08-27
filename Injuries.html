@@ -1471,6 +1471,17 @@ function calcEstimatedReturn(startDate, bamicGrade, injuryType, injuryCategory, 
   return d.toISOString().split('T')[0];
 }
 
+// Fin de la última fase del protocolo que se generaría para esta lesión.
+// Misma fuente que la línea de tiempo de fases, para que el «Regreso est.» y la última fase
+// no puedan decir cosas distintas (RTP_DAYS queda solo como respaldo).
+function calcProtocolReturn(startDate, severity, injuryType, injuryCategory, subClassification, bamicGrade) {
+  if (!startDate) return null;
+  try {
+    const phs = buildPhases(null, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification);
+    return (phs && phs.length) ? phs[phs.length - 1].end_date : null;
+  } catch(e) { return null; }
+}
+
 function fmtHintDate(dateStr) {
   return dateStr ? ttFmtDate(dateStr, { day:'numeric', month:'short', year:'numeric' }) : '';
 }
@@ -1696,6 +1707,70 @@ async function updateAvailabilityForPhase(injId, phaseNum) {
   } catch(e) { console.warn('[Injuries] availability sync failed:', e.message); }
 }
 
+// ═══════════════ PHASE DATE REFLOW ═══════════════
+// Las fases se generan el día 1 con las duraciones del protocolo. Si el jugador avanza antes
+// (o se atrasa), las fechas estimadas de las fases que siguen quedarían clavadas en el plan
+// original y el «Regreso est.» de la lesión diría otra cosa que la última fase. Esto reencadena
+// las fases todavía abiertas desde el avance REAL (manteniendo la duración de cada una) y baja
+// el resultado a injuries.expected_return, que es lo que muestran las tarjetas.
+// Las fases ya completadas conservan su estimación original: son registro histórico.
+function _phAddDays(ymd, days) {
+  const d = new Date(ymd + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+function _phDurDays(ph) {
+  if (!ph.start_date || !ph.end_date) return null;
+  const ms = new Date(ph.end_date + 'T00:00:00Z') - new Date(ph.start_date + 'T00:00:00Z');
+  return Math.max(1, Math.round(ms / 86400000));
+}
+
+async function reflowPhaseDates(injId) {
+  const phs = _phasesMap[injId];
+  if (!phs || !phs.length) return;
+  const ordered = [...phs].sort((a, b) => a.phase_number - b.phase_number);
+  const durs    = new Map(ordered.map(p => [p.id, _phDurDays(p)]));
+
+  // Ancla: dónde terminó de verdad lo ya completado.
+  const lastDone = [...ordered].reverse().find(p => p.status === 'done');
+  let cursor = lastDone
+    ? (lastDone.actual_end || lastDone.end_date)
+    : (ordered[0].actual_start || ordered[0].start_date);
+  if (!cursor) return;
+
+  const writes = [];
+  for (const p of ordered) {
+    if (p.status === 'done') continue;
+    const dur = durs.get(p.id);
+    if (dur == null) continue;
+    const start = p.actual_start || cursor;
+    const end   = _phAddDays(start, dur);
+    if (p.start_date !== start || p.end_date !== end) {
+      p.start_date = start; p.end_date = end;
+      writes.push({ id: p.id, start_date: start, end_date: end });
+    }
+    cursor = end;
+  }
+
+  const last   = ordered[ordered.length - 1];
+  const newRet = (last.status === 'done' ? (last.actual_end || last.end_date) : last.end_date) || null;
+  const inj    = _allInjuries.find(i => i.id === injId);
+  const retChanged = !!(inj && newRet && inj.expected_return !== newRet);
+  if (retChanged) inj.expected_return = newRet;
+
+  if (!writes.length && !retChanged) return;
+  try {
+    await Promise.all([
+      ...writes.map(w => window.sb.from('injury_phases')
+        .update({ start_date: w.start_date, end_date: w.end_date }).eq('id', w.id)),
+      ...(retChanged ? [window.sb.from('injuries')
+        .update({ expected_return: newRet }).eq('id', injId)] : []),
+    ]);
+  } catch(e) { console.warn('[Injuries] phase reflow failed:', e.message); }
+  updateKPIs();
+  applyFilters();
+}
+
 async function savePhaseStatus(status) {
   const phaseId = _phaseModalPhaseId; // capture before closePhaseModal clears globals
   const injId   = _phaseModalInjId;
@@ -1744,6 +1819,9 @@ async function savePhaseStatus(status) {
     if (nextPh) await window.sb.from('injury_phases')
       .update({status:'in_progress', actual_start:todayStr}).eq('id', nextPh.id);
   }
+
+  // Correr las estimaciones que siguen + el regreso estimado con el avance real
+  await reflowPhaseDates(injId);
 
   // Sync availability: phases 1-3 → injured, phases 4-6 → partial
   await updateAvailabilityForPhase(injId, getCurrentPhaseNumber(injId));
@@ -1924,16 +2002,29 @@ async function savePhaseStatus(status) {
     autoFillReturn();
   });
 
+  // Estimación del protocolo que se va a generar (la misma que define las fases).
+  // El grado BAMIC sigue siendo opcional: sin él se usa el protocolo por categoría + gravedad.
+  function protocolEstimate() {
+    const startDate   = document.getElementById('logStart')?.value;
+    const bamicGrade  = document.getElementById('logBamic')?.value;
+    const injType     = document.getElementById('logType')?.value;
+    const injCategory = document.getElementById('logCategory')?.value;
+    const severity    = document.getElementById('logSev')?.value;
+    const subCls      = getSubClsFromModal(injCategory);
+    // Sin categoría ni grado no hay protocolo elegido todavía: no adivinamos una fecha.
+    const est = (injCategory || bamicGrade)
+      ? (calcProtocolReturn(startDate, severity, injType, injCategory, subCls, bamicGrade)
+         || calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls))
+      : calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls);
+    return { est, bamicGrade, injType, injCategory, subCls };
+  }
+
   // Auto-calculate expected return from category + sub-classification
   function autoFillReturn() {
     if (_returnManuallyEdited) return;
-    const startDate      = document.getElementById('logStart')?.value;
-    const bamicGrade     = document.getElementById('logBamic')?.value;
-    const injType        = document.getElementById('logType')?.value;
-    const injCategory    = document.getElementById('logCategory')?.value;
-    const subCls         = getSubClsFromModal(injCategory);
-    const est = calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls);
+    const { est, bamicGrade, injType, injCategory, subCls } = protocolEstimate();
     const hintEl = document.getElementById('logReturnHint');
+    if (hintEl) hintEl.style.color = 'var(--cm-accent)';
     if (est) {
       document.getElementById('logReturn').value = est;
       let lbl;
@@ -1952,10 +2043,22 @@ async function savePhaseStatus(status) {
   document.getElementById('logStart')?.addEventListener('change', checkOldDate);
   document.getElementById('logType')?.addEventListener('input', autoFillReturn);
   document.getElementById('logCategory')?.addEventListener('change', autoFillReturn);
+  document.getElementById('logSev')?.addEventListener('change', autoFillReturn);
+  // Fecha puesta a mano: se respeta, pero se avisa si no coincide con el protocolo
+  // (la línea de tiempo de fases se genera con el protocolo, no con esta fecha).
   document.getElementById('logReturn')?.addEventListener('input', () => {
     _returnManuallyEdited = true;
     const hintEl = document.getElementById('logReturnHint');
-    if (hintEl) hintEl.style.display = 'none';
+    if (!hintEl) return;
+    const { est } = protocolEstimate();
+    const val = document.getElementById('logReturn').value;
+    if (est && val && val !== est) {
+      hintEl.textContent = tt('injuries.protocol_says', `Protocol estimate: ${fmtHintDate(est)}`, { date: fmtHintDate(est) });
+      hintEl.style.color   = 'var(--cm-warning)';
+      hintEl.style.display = '';
+    } else {
+      hintEl.style.display = 'none';
+    }
   });
 
   // Body map dot clicks → popover (event delegation on SVG containers)
@@ -2350,7 +2453,7 @@ function injCard(inj) {
       const refs  = cat ? (PROTOCOL_REFS[cat === 'muscular' ? 'muscle' : cat] || []) : [];
       const proto = getProtocol(inj.injury_type, inj.injury_category, inj.sub_classification);
       const protoLabel = proto === PROTOCOLS.acl ? 'ACL 7-phase protocol'
-        : proto === PROTOCOLS.muscle ? 'BAMIC muscle protocol'
+        : proto === PROTOCOLS.muscle ? (inj.bamic_grade ? `BAMIC ${inj.bamic_grade} muscle protocol` : 'Muscle protocol')
         : proto === PROTOCOLS.ligament_i ? 'Ligament Grade I protocol'
         : proto === PROTOCOLS.ligament_ii ? 'Ligament Grade II protocol'
         : proto === PROTOCOLS.ligament_iii ? 'Ligament Grade III protocol'
@@ -2735,7 +2838,19 @@ async function saveInjury() {
       try {
         const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification);
         const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
-        if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
+        if (insertedPhs) {
+          _phasesMap[newInj.id] = insertedPhs;
+          // Sin fecha propia, el regreso estimado lo marca el fin de la última fase:
+          // así la tarjeta y la línea de tiempo arrancan diciendo lo mismo.
+          if (!expected_return) {
+            const ordered  = [...insertedPhs].sort((a, b) => a.phase_number - b.phase_number);
+            const protoEnd = ordered[ordered.length - 1]?.end_date || null;
+            if (protoEnd) {
+              await window.sb.from('injuries').update({ expected_return: protoEnd }).eq('id', newInj.id);
+              newInj.expected_return = protoEnd;
+            }
+          }
+        }
       } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
     }
 
@@ -2982,6 +3097,8 @@ async function confirmRevert() {
       .update({ status: 'pending', actual_start: null }).eq('id', nextPh.id);
   }
 
+  await reflowPhaseDates(injId);
+
   // Sync availability after revert
   await updateAvailabilityForPhase(injId, getCurrentPhaseNumber(injId));
 }
@@ -3022,6 +3139,8 @@ async function togglePhase(phaseId, injuryId) {
     const nextPh = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress');
     if (nextPh) await window.sb.from('injury_phases').update({ status: 'in_progress', actual_start: todayStr }).eq('id', nextPh.id);
   }
+
+  await reflowPhaseDates(injuryId);
 }
 
 // ═══════════════ DELETE ═══════════════
