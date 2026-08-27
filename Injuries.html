@@ -1119,7 +1119,11 @@ const PROTOCOLS = {
       {name:'Return to training',type:'training',criteria:'Full training without restriction; sprints pain-free'},
       {name:'Return to competition',type:'competition',criteria:'Asymmetry < 10% in strength tests; physio clearance'},
     ],
-    durations:{minor:[5,8,12,16,20,22],moderate:[8,14,21,28,35,42],severe:[14,21,35,49,63,70]},
+    // Sin grado BAMIC, la gravedad mapea al grado representativo de su banda de baja
+    // (Fuller/UEFA consensus 2006: leve ≤7 d, moderada 8-28 d, grave >28 d) y se usa el
+    // reparto de fases de ese grado en Pollock 2014: leve → 1a (15 d), moderada → 2a (28 d),
+    // grave → 3b (63 d). Con grado BAMIC cargado manda BAMIC_PROTOCOLS, no esta tabla.
+    durations:{minor:[3,3,4,2,2,1],moderate:[5,5,8,4,4,2],severe:[12,12,18,9,6,6]},
   },
   ligament: {
     phases:[
@@ -1130,7 +1134,9 @@ const PROTOCOLS = {
       {name:'Return to training',type:'training',criteria:'Full team training without restriction'},
       {name:'Return to competition',type:'competition',criteria:'Strength symmetry ≥ 90%; functional tests passed'},
     ],
-    durations:{minor:[3,5,7,10,12,14],moderate:[5,10,14,21,28,35],severe:[10,21,35,49,63,77]},
+    // Sin grado cargado, la gravedad mapea al grado equivalente de Kerkhoffs 2012 /
+    // Vuurberg 2018: leve → grado I (14 d), moderada → grado II (35 d), grave → grado III (77 d).
+    durations:{minor:[3,3,3,2,2,1],moderate:[5,6,8,7,5,4],severe:[10,14,18,15,12,8]},
   },
   acl: {
     phases:[
@@ -1213,7 +1219,9 @@ const PROTOCOLS = {
       {name:'Return to training',type:'training',criteria:'Full training load tolerated'},
       {name:'Return to competition',type:'competition',criteria:'VISA score ≥ 90; symmetric loading'},
     ],
-    durations:{minor:[7,14,21,28,35,42],moderate:[7,14,28,42,56,70],severe:[14,28,56,84,112,140]},
+    // Sin estadio cargado, la gravedad mapea al estadio del continuum de Cook & Purdam 2009:
+    // leve → reactiva (28 d), moderada → disrepair (56 d), grave → degenerativa (120 d).
+    durations:{minor:[7,7,7,3,2,2],moderate:[14,13,14,7,5,3],severe:[14,14,21,21,14,36]},
   },
   bone: {
     phases:[
@@ -1224,7 +1232,9 @@ const PROTOCOLS = {
       {name:'Return to training',type:'training',criteria:'Impact activities tolerated; team training completed'},
       {name:'Return to competition',type:'competition',criteria:'Radiological union confirmed; functional tests passed'},
     ],
-    durations:{minor:[14,21,28,35,42,49],moderate:[21,35,49,56,70,84],severe:[42,56,84,112,140,168]},
+    // Sin tipo cargado: leve → estrés de bajo riesgo (56 d, Warden 2014: 4-8 semanas),
+    // moderada → fractura completa (84 d), grave → estrés de alto riesgo (120 d, Boden 2000).
+    durations:{minor:[14,7,14,10,6,5],moderate:[21,14,17,14,10,8],severe:[21,21,21,21,20,16]},
   },
   generic: {
     phases:[
@@ -1234,7 +1244,9 @@ const PROTOCOLS = {
       {name:'Return to running',type:'running',criteria:'Jogging and running pain-free'},
       {name:'Return to training',type:'training',criteria:'Full team training completed'},
     ],
-    durations:{minor:[3,5,7,10,14],moderate:[5,10,14,21,28],severe:[7,14,21,35,42]},
+    // Sin categoría no hay protocolo específico: se usan las bandas de baja del consenso
+    // UEFA/FIFA (Fuller 2006) — leve ≤14 d, moderada 28 d, grave 56 d.
+    durations:{minor:[3,3,3,3,2],moderate:[5,6,6,6,5],severe:[10,12,12,12,10]},
   },
   // Ligament Grade I — JOSPT/Kerkhoffs (2012), RTP ~14 days
   ligament_i: {
@@ -1441,10 +1453,12 @@ const BAMIC_CRITERIA_EXTRA_34 = [
 ];
 
 // ═══════════════ ESTIMATED RETURN HELPERS ═══════════════
+// Respaldo cuando no hay protocolo: mismos totales que BAMIC_PROTOCOLS (Pollock 2014),
+// para que la estimación no pueda contradecir la línea de tiempo de fases.
 const RTP_DAYS = {
-  '0a':4,'0b':7,'1a':15,'1b':21,'1c':35,
+  '0a':5,'0b':5,'1a':15,'1b':21,'1c':35,
   '2a':28,'2b':35,'2c':56,
-  '3a':42,'3b':63,'3c':84,'4':120,
+  '3a':42,'3b':63,'3c':84,'4':105,
 };
 
 const LIGAMENT_RTP = { grade_i:14, grade_ii:35, grade_iii:77 };
@@ -1456,7 +1470,7 @@ function calcEstimatedReturn(startDate, bamicGrade, injuryType, injuryCategory, 
   let days = null;
   const cat = injuryCategory || '';
   if (cat === 'acl' || /acl|cruciate/i.test(injuryType || '')) {
-    days = 270;
+    days = 300; // igual que el protocolo de 7 fases (~10 meses; van Melick 2016, Ardern 2016)
   } else if ((cat === 'muscular' || !cat) && bamicGrade && RTP_DAYS[bamicGrade]) {
     days = RTP_DAYS[bamicGrade];
   } else if (cat === 'ligament') {
@@ -2028,7 +2042,7 @@ async function savePhaseStatus(status) {
     if (est) {
       document.getElementById('logReturn').value = est;
       let lbl;
-      if (injCategory === 'acl' || /acl|cruciate/i.test(injType||'')) lbl = tt('injuries.est_lbl_acl','ACL protocol (270 days)');
+      if (injCategory === 'acl' || /acl|cruciate/i.test(injType||'')) lbl = tt('injuries.est_lbl_acl','ACL protocol (~10 months)');
       else if (injCategory === 'muscular' && bamicGrade)               lbl = `BAMIC ${bamicGrade}`;
       else if (injCategory === 'ligament' && subCls)                   lbl = `Ligament ${subCls.replace('grade_','Grade ').toUpperCase()} — Kerkhoffs 2012`;
       else if (injCategory === 'tendon'   && subCls)                   lbl = `Tendon Stage ${subCls === 'reactive' ? '1' : subCls === 'disrepair' ? '2' : '3'} — Cook & Purdam`;
