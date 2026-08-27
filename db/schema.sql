@@ -5890,7 +5890,14 @@ begin
   if NEW.published_at is not null
      and (TG_OP = 'INSERT' or OLD.published_at is distinct from NEW.published_at) then
     insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
-    values (NEW.club_id, NEW.team_id, coalesce(NEW.published_by, auth.uid()), 'microcycle.published', 'microcycles', NEW.id,
+    values (NEW.club_id, NEW.team_id, coalesce(NEW.published_by, auth.uid()), 'microcycle.published', 'microcycles',
+            -- microcycles.id es TEXT (única tabla así: la app lo genera en el
+            -- cliente) y activity_log.entity_id es uuid. Sin este cast el
+            -- trigger reventaba y NINGÚN microciclo se podía publicar.
+            -- Los ids viejos de carga masiva ('MC01-2025-07-07') no son uuid:
+            -- para esos queda NULL en vez de romper la publicación.
+            case when NEW.id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                 then NEW.id::uuid end,
             jsonb_build_object('name', NEW.name, 'start_date', NEW.start_date));
   end if;
   return NEW;

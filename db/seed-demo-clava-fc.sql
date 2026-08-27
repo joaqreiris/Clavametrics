@@ -17,6 +17,11 @@
 --  Es idempotente salvo el paso 3 (el desplazamiento), que se saltea solo si
 --  detecta que ya hay actividad en la semana en curso.
 --
+--  ANTES DE CORRER ESTO: aplicar db/fix-microcycle-publish.sql. El paso 5
+--  publica microciclos, y el trigger de publicación está roto en producción
+--  (microcycles.id es text, activity_log.entity_id es uuid). Sin ese arreglo
+--  este script falla ahí.
+--
 --  Ejecutar entero en el SQL Editor de Supabase.
 -- ═══════════════════════════════════════════════════════════════════════════
 
