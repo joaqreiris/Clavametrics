@@ -144,6 +144,36 @@
   .av-bulk .clear { background:none; border:0; color:rgba(255,255,255,0.55); font:500 12px/1 var(--cm-font-sans); cursor:pointer; padding:0 6px; }
   .av-bulk .clear:hover { color:#fff; }
 
+  /* Popover de minutos de partido (bulk): presets + valor libre para pintar la selección */
+  .av-min-pop {
+    position:fixed; z-index:210; width:210px; padding:10px;
+    background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px;
+    box-shadow:var(--cm-shadow-pop,0 12px 40px rgba(0,0,0,.18));
+  }
+  .av-min-pop .ttl {
+    font:600 11px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase;
+    color:var(--cm-fg-muted); margin-bottom:8px;
+  }
+  .av-min-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+  .av-min-grid button {
+    height:30px; border:1px solid var(--cm-border); border-radius:7px;
+    background:var(--cm-bg-soft); color:var(--cm-fg-strong);
+    font:700 12px/1 var(--cm-font-mono); cursor:pointer;
+  }
+  .av-min-grid button:hover { border-color:var(--cm-accent); color:var(--cm-accent); }
+  .av-min-pop .row { display:flex; gap:5px; margin-top:8px; }
+  .av-min-pop .row input {
+    flex:1; min-width:0; box-sizing:border-box; height:30px;
+    border:1px solid var(--cm-border); border-radius:7px; padding:0 8px;
+    background:var(--cm-bg-soft); color:var(--cm-fg-strong);
+    font:700 12px/1 var(--cm-font-mono);
+  }
+  .av-min-pop .row button {
+    border:0; background:var(--cm-accent); color:#fff; border-radius:7px;
+    padding:0 12px; font:600 12px/1 var(--cm-font-sans); cursor:pointer;
+  }
+  .av-min-pop .hint { margin-top:8px; font:500 11px/1.35 var(--cm-font-sans); color:var(--cm-fg-muted); }
+
   /* Matrix card ----- */
   .av-matrix-wrap {
     background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0;
@@ -288,6 +318,18 @@
     background-image: linear-gradient(to top left, transparent calc(50% - 1px), rgba(120,120,120,0.40), transparent calc(50% + 1px));
   }
   .av-matrix td.cell.is-dayoff:hover { outline: none; }
+  /* Antes de la fecha de incorporación del jugador: todavía no estaba en el club → no se
+     asume nada, no se puede editar y no cuenta. Rayado tenue + guion, distinto del día sin
+     sesión (is-off) para que se lea "no pertenecía", no "no hubo entreno". */
+  .av-matrix td.cell.is-nojoin {
+    background: repeating-linear-gradient(45deg, var(--cm-bg-soft) 0 3px, transparent 3px 6px);
+    cursor: default; opacity: 0.5;
+  }
+  .av-matrix td.cell.is-nojoin::before {
+    content:"–"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint,#94A3B8);
+  }
+  .av-matrix td.cell.is-nojoin:hover { outline:none; }
 
   /* Status dot in cell */
   .av-cell-dot { width:14px; height:14px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2.5px var(--cm-surface); transition:transform var(--cm-dur-1); }
@@ -439,7 +481,7 @@
       <button class="av-bulk-btn rh"><span class="dot" style="background:#FDBA74"></span><span data-i18n="availability.statusRehab">Rehab</span></button>
       <button class="av-bulk-btn ot"><span class="dot" style="background:#A5B4FC"></span><span data-i18n="availability.statusOtherTeam">Other team</span></button>
       <div class="sep"></div>
-      <button class="av-bulk-btn match"><i class="ti ti-ball-football" style="font-size:13px"></i><span data-i18n="availability.bulkMatch">Match · 90′</span></button>
+      <button class="av-bulk-btn match" id="bulkMinBtn"><i class="ti ti-ball-football" style="font-size:13px"></i><span data-i18n="availability.bulkMinutes">Match minutes</span><i class="ti ti-chevron-down" style="font-size:12px;opacity:.7"></i></button>
       <button class="av-bulk-btn danger"><i class="ti ti-trash" style="font-size:13px"></i><span data-i18n="availability.bulkClear">Clear</span></button>
       <button class="clear" id="clearSel"><i class="ti ti-x" style="font-size:13px;vertical-align:-2px"></i> <span data-i18n="availability.bulkEsc">Esc to deselect</span></button>
     </div>
@@ -556,7 +598,7 @@
         <span class="it"><span style="width:14px;height:11px;border-radius:3px;background:color-mix(in srgb, var(--cm-accent) 22%, var(--cm-surface));border:1px solid color-mix(in srgb, var(--cm-accent) 35%, transparent)"></span><span data-i18n="availability.legendPlanned">Planned ahead (editable)</span></span>
         <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(34,197,94,0.06);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-success)">90</span><span data-i18n="availability.matchMinutes">official match minutes</span></span>
         <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:rgba(217,119,6,0.07);display:inline-flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-mono);color:var(--cm-warning,#D97706)">90</span><span data-i18n="availability.matchMinutesFriendly">friendly minutes</span></span>
-        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · drag to multi-select · ⌘+A all · double-click for reason</span>
+        <span class="it" data-i18n="availability.matrixHint">Click cell to edit · shift+click for a range · drag or ⌘+click to add · ⌘+A all · double-click for reason</span>
       </div>
 
       <!-- VIEWS -->
@@ -650,6 +692,7 @@
   let injuredIds        = new Set(); // player IDs with active injury
   let _avGuestTeam      = new Map(); // guest player id → their primary team name (viewing another squad here)
   let _avPlayerTeams    = new Map(); // player id → [team_id, …] todas sus membresías (para «otro equipo»)
+  let _avJoined         = new Map(); // player id → joined_date (YYYY-MM-DD) — antes de esa fecha no estaba en el club
   let todayStr          = '';   // YYYY-MM-DD, set in init()
   let yesterdayByPlayer = null; // { [player_id]: row } for delta KPI
   let _realtimeSub      = null; // Supabase realtime channel
@@ -681,6 +724,16 @@
   // Applying the live flag to past no-record days would flip them red→green the instant
   // the injury is cleared (a player is no longer in injuredIds, so the default becomes
   // 'available'); history must not change colour on discharge.
+  // ── Antes de la incorporación ──
+  // players.joined_date = el día que el jugador entró al club. Un día ANTERIOR no puede
+  // asumirse "disponible": el jugador todavía no estaba. Esos días quedan sin estado por
+  // defecto, no se pueden editar, no se autorrellenan y no cuentan en KPIs ni stats.
+  // Si existe una fila guardada para ese día (dato real cargado antes), se respeta y se muestra.
+  function avPreJoin(pid, date) {
+    const j = _avJoined.get(pid);
+    return !!(j && date && date < j);
+  }
+
   function avDefaultStatus(pid, date) {
     if (injuredIds.has(pid) && (!date || date >= todayStr)) return 'injured';
     if (_avGuestTeam.has(pid)) return 'other_team';
@@ -713,6 +766,7 @@
   function cellStatus(pid, date) {
     const e = avMap[pid + '|' + date];
     if (e) return effStatus(pid, date, e);
+    if (avPreJoin(pid, date)) return null;   // aún no estaba en el club
     if (isFutureDate(date)) return null;
     if (_avGuestTeam.has(pid) && !injuredIds.has(pid)) return 'other_team';
     if (!dayCountable(date)) return null;
@@ -774,6 +828,11 @@
     const noteTitle = note ? ` title="${avEscAttr(note)}"` : '';
     // Planned day off → crossed-out, empty, non-editable (blocked via isBlockedCell)
     if (DAYOFF_DATES.has(date)) return `<td class="${cls} is-dayoff"${data}></td>`;
+    // Día anterior a la incorporación del jugador → celda "no pertenecía" (bloqueada, no cuenta)
+    if (!status && pid && avPreJoin(pid, date)) {
+      const j = _avJoined.get(pid) || '';
+      return `<td class="${cls} is-nojoin"${data} title="${avEscAttr(tt('availability.notJoinedYet', `Joined the club on ${j}`, { date: j }))}"></td>`;
+    }
     // Future with no record → blank (not striped day-off pattern)
     if (!status) return isFuture ? `<td class="${cls}"${data}></td>` : `<td class="${cls} is-off"${data}></td>`;
     if (status.startsWith('match:')) {
@@ -992,7 +1051,9 @@
     const inPlayers = [], siPlayers = [], naPlayers = [];
     // Mismo alcance que las stats: por defecto solo el plantel principal (los invitados
     // de otros equipos no deben contar en «X/Y disponibles»).
-    const kpiPlayers = (_avStatScope === 'all') ? players : players.filter(p => p.team_id === _avTeamId);
+    // Los que todavía no se incorporaron (joined_date futura) no entran en el denominador de hoy.
+    const kpiPlayers = ((_avStatScope === 'all') ? players : players.filter(p => p.team_id === _avTeamId))
+      .filter(p => !avPreJoin(p.id, todayStr));
     kpiPlayers.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
       let s = effStatus(p.id, todayStr, e);   // guests / con-otro-equipo → 'other_team', no cuenta como disponible
@@ -1072,6 +1133,8 @@
     const rows = [];
     players.forEach(p => {
       if (avMap[p.id + '|' + todayStr]) return;
+      // Fichaje futuro (se incorpora después de hoy): no se rellena nada — todavía no está en el club.
+      if (avPreJoin(p.id, todayStr)) return;
       // Guests stay derived ('with their own team') — don't persist an 'available' row
       // that would silently override it. Injured guests still get filled below via injury.
       if (_avGuestTeam.has(p.id) && !injuredIds.has(p.id)) return;
@@ -1099,6 +1162,7 @@
       const end = inj.returned_date || inj.expected_return || todayStr;
       MC_DATES.forEach(date => {
         if (date < inj.start_date || date > end) return;
+        if (avPreJoin(inj.player_id, date)) return;    // antes de su incorporación no hay historia que llenar
         if (avMap[inj.player_id + '|' + date]) return; // don't overwrite manual edits
         rows.push({ player_id: inj.player_id, date, status: 'injured', minutes: 0, club_id: CLUB_ID, team_id: null }); // lesión = global
       });
@@ -1199,7 +1263,7 @@
           return data || null;
         } catch (e) { return null; }
       })(),
-      window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id').order('last_name'),
+      window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id, joined_date').order('last_name'),
       window.sb.from('injuries').select('player_id, start_date, expected_return, returned_date')
         .eq('club_id', CLUB_ID).eq('status', 'active'),
       // Todas las membresías de equipo por jugador (para el botón «entrena con el OTRO equipo»)
@@ -1403,8 +1467,10 @@
     // Guests: players whose PRIMARY team isn't the one we're viewing. They default to
     // "training with their own squad" instead of "available" here (derived, not stored).
     _avGuestTeam = new Map();
+    _avJoined = new Map();
     players.forEach(p => {
       if (p.team_id && p.team_id !== _avTeamId) _avGuestTeam.set(p.id, _avTeamsById.get(p.team_id)?.name || '');
+      if (p.joined_date) _avJoined.set(p.id, String(p.joined_date).slice(0, 10));
     });
     avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
@@ -1498,7 +1564,7 @@
   }
 
   function isBlockedCell(td) {
-    if (td.classList.contains('is-off') || td.classList.contains('is-dayoff')) return true;
+    if (td.classList.contains('is-off') || td.classList.contains('is-dayoff') || td.classList.contains('is-nojoin')) return true;
     // Día futuro sin plan: bloqueado, SALVO que ya tenga un estado guardado (p.ej. una fila
     // 'injured' auto-rellenada por la lesión). Ahí hay que poder corregirlo (marcarlo 'Nat. team',
     // limpiarlo, etc.) aunque el día no esté planificado — si no, queda rojo y trabado.
@@ -1546,6 +1612,8 @@
     if (!td || isBlockedCell(td)) return;
     isDragging = true;
     dragMoved  = false;
+    // El arranque del arrastre también fija el ancla del rango (un shift+click posterior extiende desde acá)
+    if (!e.shiftKey && td.dataset.pid && td.dataset.date) _avAnchor = { pid: td.dataset.pid, date: td.dataset.date };
     e.preventDefault(); // prevent browser text-selection during drag
   });
 
@@ -1560,16 +1628,50 @@
 
   document.addEventListener('mouseup', () => { isDragging = false; });
 
-  // ── Click (single toggle) ──
+  // ── Selección por rango (shift) ──
+  // Ancla = última celda clickeada sin shift (o el arranque de un arrastre). Shift+click
+  // pinta el RECTÁNGULO ancla→celda (todas las filas y todos los días intermedios), como
+  // en una planilla. ⌘/Ctrl+click sigue sumando/quitando celdas sueltas.
+  let _avAnchor = null;   // { pid, date }
+
+  function avRowIds() {
+    return Array.from(matrix.querySelectorAll('tr[data-player-id]')).map(tr => tr.dataset.playerId);
+  }
+  function avSelectRange(a, b) {
+    const rows = avRowIds();
+    const r1 = rows.indexOf(a.pid), r2 = rows.indexOf(b.pid);
+    const c1 = MC_DATES.indexOf(a.date), c2 = MC_DATES.indexOf(b.date);
+    if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) return false;
+    const rA = Math.min(r1, r2), rB = Math.max(r1, r2);
+    const cA = Math.min(c1, c2), cB = Math.max(c1, c2);
+    for (let r = rA; r <= rB; r++) {
+      const tr = matrix.querySelector(`tr[data-player-id="${rows[r]}"]`);
+      if (!tr) continue;
+      for (let c = cA; c <= cB; c++) {
+        const td = tr.querySelector(`td.cell[data-date="${MC_DATES[c]}"]`);
+        if (td && !isBlockedCell(td)) td.classList.add('is-selected');
+      }
+    }
+    return true;
+  }
+
+  // ── Click (single toggle / rango con shift) ──
   matrix.addEventListener('click', e => {
     if (dragMoved) { dragMoved = false; return; } // drag already handled selection
     const td = e.target.closest('td.cell');
     if (!td || isBlockedCell(td)) return;
-    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+    const { pid, date } = td.dataset;
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && _avAnchor && pid && date) {
+      // Rango: reemplaza la selección (el ancla NO se mueve, para poder reencuadrar).
+      matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+      if (!avSelectRange(_avAnchor, { pid, date })) td.classList.add('is-selected');
+    } else if (e.metaKey || e.ctrlKey || e.shiftKey) {
       td.classList.toggle('is-selected');
+      if (pid && date) _avAnchor = { pid, date };
     } else {
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c !== td && c.classList.remove('is-selected'));
       td.classList.toggle('is-selected');
+      _avAnchor = (pid && date) ? { pid, date } : null;
     }
     updateBulk();
   });
@@ -1706,6 +1808,8 @@
   const KEY_STATUS = { a:'av', p:'pa', i:'in', u:'un', s:'si', n:'na', d:'do', r:'rh', o:'ot' };
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      closeMinPop();
+      _avAnchor = null;
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
       updateBulk();
     }
@@ -1713,7 +1817,7 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
       e.preventDefault();
       // Editable set = past/today countable + future-planned (is-future-plan lacks .is-future).
-      matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off):not(.is-dayoff)').forEach(td => td.classList.add('is-selected'));
+      matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off):not(.is-dayoff):not(.is-nojoin)').forEach(td => td.classList.add('is-selected'));
       updateBulk();
     }
     // Letras de estado — solo sin modificadores, fuera de campos de texto y con celdas seleccionadas
@@ -1780,25 +1884,85 @@
     });
   });
 
-  // ── Match · 90' button ──
-  const matchBtn = document.querySelector('.av-bulk-btn.match');
-  if (matchBtn) matchBtn.addEventListener('click', () => {
+  // ── Minutos de partido (bulk) ──
+  // Un partido casi nunca es "todos 90′": hay quien juega 45, 60, 30 o entra 10 minutos.
+  // El botón abre un popover con los repartos habituales + un valor libre, y pinta TODA
+  // la selección con ese número (0 = jugó el partido pero sin minutos → celda 'available').
+  function avApplyMinutes(n) {
+    n = Math.max(0, Math.min(200, parseInt(n, 10) || 0));
     const updated = new Set();
     matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
       const { pid, date } = td.dataset;
-      if (pid && date) {
-        const kind = (window.__avMatchKind || {})[date] || 'official';
-        td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
+      if (!pid || !date) return;
+      const kind = n > 0 ? ((window.__avMatchKind || {})[date] || 'official') : null;
+      if (n > 0) {
+        td.innerHTML = `<span class="av-cell-match-min">${n}′</span>`;
         td.className = cellBaseCls(date) + ' av-cell-match' + (kind === 'friendly' ? ' is-friendly' : '');
-        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90, match_kind: kind, team_id: _avTeamId || null };
-        updated.add(pid);
-        saveAvailability(pid, date, 'available', 90);
+      } else {
+        td.innerHTML = dotEl('available');
+        td.className = cellBaseCls(date);
       }
+      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n, match_kind: kind, team_id: _avTeamId || null };
+      updated.add(pid);
+      saveAvailability(pid, date, 'available', n);
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
     updated.forEach(pid => updateRowSummary(pid));
     recalcKPIs();
     updateBulk();
+  }
+
+  const MIN_PRESETS = [90, 75, 60, 45, 30, 15];
+  let _minPop = null;
+  function closeMinPop() { if (_minPop) { _minPop.remove(); _minPop = null; } }
+  function openMinPop(anchorBtn) {
+    closeMinPop();
+    const nSel = matrix.querySelectorAll('td.cell.is-selected').length;
+    const pop = document.createElement('div');
+    _minPop = pop;
+    pop.className = 'av-min-pop';
+    pop.innerHTML = `
+      <div class="ttl">${tt('availability.minPopTitle','Match minutes')}</div>
+      <div class="av-min-grid">${MIN_PRESETS.map(m => `<button data-min="${m}">${m}′</button>`).join('')}</div>
+      <div class="row">
+        <input type="number" min="0" max="200" placeholder="${tt('availability.minPopCustom','Other')}">
+        <button class="apply">${tt('availability.minPopApply','Apply')}</button>
+      </div>
+      <div class="hint">${tt('availability.minPopHint', `Applies to the ${nSel} selected cells. Double-click a cell to fine-tune one player.`, { count: nSel })}</div>`;
+    document.body.appendChild(pop);
+    const r = anchorBtn.getBoundingClientRect();
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8)) + 'px';
+    pop.style.top  = (r.bottom + ph + 8 > window.innerHeight ? r.top - ph - 6 : r.bottom + 6) + 'px';
+
+    const input = pop.querySelector('input');
+    const commit = (n) => { closeMinPop(); avApplyMinutes(n); };
+    pop.querySelectorAll('.av-min-grid button').forEach(b =>
+      b.addEventListener('click', () => commit(b.dataset.min)));
+    pop.querySelector('.apply').addEventListener('click', () => {
+      if (input.value === '') return;
+      commit(input.value);
+    });
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); if (input.value !== '') commit(input.value); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); closeMinPop(); }
+    });
+    pop.addEventListener('mousedown', ev => ev.stopPropagation());
+    setTimeout(() => document.addEventListener('mousedown', function onDoc(ev) {
+      if (_minPop !== pop) { document.removeEventListener('mousedown', onDoc); return; }
+      if (!pop.contains(ev.target) && ev.target !== anchorBtn) {
+        document.removeEventListener('mousedown', onDoc);
+        closeMinPop();
+      }
+    }), 0);
+    input.focus();
+  }
+
+  const matchBtn = document.getElementById('bulkMinBtn');
+  if (matchBtn) matchBtn.addEventListener('click', () => {
+    if (_minPop) { closeMinPop(); return; }
+    if (!matrix.querySelector('td.cell.is-selected')) return;
+    openMinPop(matchBtn);
   });
 
   // Clear (danger) button
@@ -2049,11 +2213,12 @@
     const from = MC_DATES[0], to = MC_DATES[MC_DATES.length - 1];
     if (!from || !to) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoRange','No range selected.')}</div>`; return; }
 
-    const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id');
+    const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number, team_id, joined_date');
     const { data: rosterAll } = await pq.order('last_name');
     if (!rosterAll || !rosterAll.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
     // Invitados = jugadores del roster cuyo equipo principal es OTRO. Por defecto no
     // cuentan (no son plantel real); el toggle 'all' los incluye.
+    (rosterAll || []).forEach(p => { if (p.joined_date) _avJoined.set(p.id, String(p.joined_date).slice(0, 10)); });
     const _guestCount = rosterAll.filter(p => p.team_id !== _avTeamId).length;
     const players = (_avStatScope === 'all') ? rosterAll : rosterAll.filter(p => p.team_id === _avTeamId);
     if (!players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
@@ -2124,7 +2289,12 @@
     // with no row are counted as available — so including the future would inflate the line.
     const evoDays = MC_DATES.filter(dStr => dStr <= todayStr).map(dStr => {
       const c = { disp:0, mod:0, les:0, enf:0, sel:0, aus:0, otro:0 };
+      // Denominador POR DÍA: sólo los que ya estaban en el club ese día (joined_date).
+      // Antes contaban como "sin fila = disponible" e inflaban la curva hacia atrás.
+      let nDay = 0;
       players.forEach(p => {
+        if (avPreJoin(p.id, dStr)) return;
+        nDay++;
         const row = evoByKey[p.id + '|' + dStr];
         if (!row) { c.disp++; return; }        // sin fila = disponible (decisión tomada)
         if (isOtherRow(row)) { c.otro++; return; }   // ese día entrenó con otro equipo
@@ -2133,8 +2303,8 @@
       return {
         date: new Date(dStr + 'T00:00:00'),     // local: fShort/getDate() del render usan hora local
         disp:c.disp, mod:c.mod, les:c.les, enf:c.enf, sel:c.sel, aus:c.aus, otro:c.otro,
-        total: evoN,
-        pct: evoN ? Math.round((c.disp / evoN) * 100) : 0,
+        total: nDay,
+        pct: nDay ? Math.round((c.disp / nDay) * 100) : 0,
         match: !!matchSet[dStr],
       };
     });
