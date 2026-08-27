@@ -1132,6 +1132,56 @@ const PHASE_TYPE_ICONS = {
   neuromuscular:'ti-brain', running:'ti-run', training:'ti-ball-football', competition:'ti-trophy'
 };
 
+// ═══════════════ CRITERIOS POR MÚSCULO ═══════════════
+// El protocolo muscular genérico sirve para cualquier músculo, pero isquios, aductores y
+// gemelo tienen literatura propia con criterios concretos. Estos sets se aplican por índice
+// de fase: si la zona corporal cargada es una de esas tres, reemplazan a los criterios
+// genéricos, tanto en el protocolo por gravedad como en el de grado BAMIC.
+
+// Isquiotibiales — London International Consensus (Paton et al. 2023, BJSM) sobre BAMIC:
+// se progresa por capacidad y síntomas, con umbral de dolor según la actividad, salvo el
+// sprint, donde el consenso respalda el criterio de "sin dolor" (85,5% de acuerdo).
+const HAMSTRING_CRITERIA = [
+  [{id:'ham1_1',label:'No pain at rest'},{id:'ham1_2',label:'Swelling controlled'},{id:'ham1_3',label:'Normal gait pattern, no limp'}],
+  [{id:'ham2_1',label:'Pain-free passive ROM'},{id:'ham2_2',label:'No palpation pain at injury site'},{id:'ham2_3',label:'Isometric contraction tolerated at low load'}],
+  [{id:'ham3_1',label:'Eccentric loading tolerated (Nordic / extender) within agreed pain threshold'},{id:'ham3_2',label:'Pain-free maximal isometric contraction vs healthy side (manual resistance)'},{id:'ham3_3',label:'Lumbo-pelvic and kinetic chain work completed'}],
+  [{id:'ham4_1',label:'Progressive running tolerated within agreed pain threshold'},{id:'ham4_2',label:'No pain on palpation the day after running'},{id:'ham4_3',label:'Full passive ROM'}],
+  [{id:'ham5_1',label:'Sprinting at 100% of maximal speed — completely pain-free (consensus criterion)'},{id:'ham5_2',label:'Eccentric strength within 10% of healthy side'},{id:'ham5_3',label:'Askling H-test without apprehension or insecurity'}],
+  [{id:'ham6_1',label:'Repeated maximal sprints completed symptom-free'},{id:'ham6_2',label:'No pain on palpation or on strength testing'},{id:'ham6_3',label:'Full training completed, sport-specific drills at match intensity'},{id:'ham6_4',label:'Psychological readiness confirmed'}],
+];
+
+// Aductores — Serner et al. (2020, OJSM / Aspetar). Criterios textuales de la Tabla 1:
+// hito 1 «clínicamente sin dolor» y hito 2 «entrenamiento deportivo controlado completado».
+// Cumplir el hito 1 se asoció a menos recaídas (5% vs 21%).
+const ADDUCTOR_CRITERIA = [
+  [{id:'add1_1',label:'Therapeutic loading started; exercises done at pain ≤2/10 (pain-controlled RM)'},{id:'add1_2',label:'Normal gait pattern'}],
+  [{id:'add2_1',label:'Groin exercise program 3×/week on alternate days'},{id:'add2_2',label:'Load increased when exercise pain ≤1/10, reduced when ≥3/10'},{id:'add2_3',label:'Non-groin strength and conditioning maintained'}],
+  [{id:'add3_1',label:'Pain-free adductor palpation'},{id:'add3_2',label:'Pain-free maximal isometric adduction in outer-range abduction'},{id:'add3_3',label:'Pain-free maximal passive adductor stretch'},{id:'add3_4',label:'Pain-free hip adduction exercise with elastics at 10 repetition maximum'},{id:'add3_5',label:'Pain-free Copenhagen adduction exercise for 10 repetitions'}],
+  [{id:'add4_1',label:'Progressive running and sports function without pain'},{id:'add4_2',label:'Change of direction with and without ball tolerated'}],
+  [{id:'add5_1',label:'Pain-free linear sprinting at 100% self-reported intensity (10 × 30 m)'},{id:'add5_2',label:'Pain-free T-test at 100% self-reported intensity'},{id:'add5_3',label:'Pain-free Illinois agility test at 100% self-reported intensity'},{id:'add5_4',label:'Pain-free spider test at 100% self-reported intensity'},{id:'add5_5',label:'Pain-free sport-specific training: preplanned and reactive change of direction with/without ball, jumps, passes, crosses, shooting, 1v1'}],
+  [{id:'add6_1',label:'Full team training without restrictions'},{id:'add6_2',label:'Available for match selection'}],
+];
+
+// Gemelo / sóleo — Green et al. (2022, Sports Med Open): seis fases de manejo y criterios
+// de alta acordados por 20 clínicos expertos. Los umbrales del alta son textuales.
+const CALF_CRITERIA = [
+  [{id:'cf1_1',label:'Therapeutic loading started as early as tolerated'},{id:'cf1_2',label:'Walking without limp'},{id:'cf1_3',label:'Pain settling at rest'}],
+  [{id:'cf2_1',label:'Pain-free single-leg heel raise from the floor'},{id:'cf2_2',label:'Baseline capacity of 20-25 single-leg heel raises before loaded strengthening'},{id:'cf2_3',label:'Ankle dorsiflexion range restoring (knee-to-wall)'}],
+  [{id:'cf3_1',label:'Loaded strengthening tolerated with knee straight and knee bent'},{id:'cf3_2',label:'No symptom flare the morning after loading'},{id:'cf3_3',label:'Heavy sets (3-4 × 6-8) tolerated'}],
+  [{id:'cf4_1',label:'Adequate heel raise capacity plus no clinical signs or symptoms before running'},{id:'cf4_2',label:'Running on alternate days; volume and intensity not increased on consecutive days'},{id:'cf4_3',label:'No prolonged slow continuous running early (especially soleus injuries)'}],
+  [{id:'cf5_1',label:'Graded exposure to reactive agility, jumping, maximum velocity and maximum acceleration'},{id:'cf5_2',label:'Exposure to the mechanism of injury reproduced in training'},{id:'cf5_3',label:'No next-day symptom response to full loads'}],
+  [{id:'cf6_1',label:'Self-reported symptoms 0/10 (pain, tightness, cramping)'},{id:'cf6_2',label:'Palpation tenderness 0/10'},{id:'cf6_3',label:'Weight-bearing dorsiflexion (knee-to-wall) asymmetry <10%'},{id:'cf6_4',label:'Single-leg heel raise from the floor: ≥30 repetitions, asymmetry <10%'},{id:'cf6_5',label:'Vertical and horizontal calf power asymmetry <10%'},{id:'cf6_6',label:'At least one full training session completed'},{id:'cf6_7',label:'Athlete confidence and staff agreement on readiness to perform'}],
+];
+
+// Qué set de criterios corresponde a la zona corporal cargada (null = criterios genéricos).
+function muscleCriteriaSet(bodyArea) {
+  const a = (bodyArea || '').toLowerCase();
+  if (/adductor|groin/.test(a)) return ADDUCTOR_CRITERIA;
+  if (/calf/.test(a))           return CALF_CRITERIA;
+  if (/hamstring/.test(a))      return HAMSTRING_CRITERIA;
+  return null;
+}
+
 const PROTOCOLS = {
   muscle: {
     phases:[
@@ -1259,6 +1309,31 @@ const PROTOCOLS = {
     // moderada → fractura completa (84 d), grave → estrés de alto riesgo (120 d, Boden 2000).
     durations:{minor:[14,7,14,10,6,5],moderate:[21,14,17,14,10,8],severe:[21,21,21,21,20,16]},
   },
+  // Aductores — Serner 2020 (Aspetar). Tiempos medianos del estudio: grado 0-2 sin dolor
+  // clínico a los ~13 d y entrenamiento completo a los ~18 d; grado 3, ~55 d y ~78 d.
+  adductor: {
+    phases:[
+      {name:'Early loading',type:'acute',criteria:ADDUCTOR_CRITERIA[0].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[0]},
+      {name:'Groin exercise progression',type:'subacute',criteria:ADDUCTOR_CRITERIA[1].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[1]},
+      {name:'Clinically pain-free',type:'strength',criteria:ADDUCTOR_CRITERIA[2].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[2]},
+      {name:'Running and sports function',type:'running',criteria:ADDUCTOR_CRITERIA[3].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[3]},
+      {name:'Controlled sports training',type:'training',criteria:ADDUCTOR_CRITERIA[4].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[4]},
+      {name:'Return to full team training',type:'competition',criteria:ADDUCTOR_CRITERIA[5].map(c=>c.label).join('; '),criteria_items:ADDUCTOR_CRITERIA[5]},
+    ],
+    durations:{minor:[3,4,3,2,1,1],moderate:[4,5,4,3,1,1],severe:[14,21,20,9,4,10]},
+  },
+  // Gemelo / sóleo — Green 2022 (Sports Med Open), seis fases de manejo.
+  calf: {
+    phases:[
+      {name:'Acute injury',type:'acute',criteria:CALF_CRITERIA[0].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[0]},
+      {name:'Early rehabilitation',type:'subacute',criteria:CALF_CRITERIA[1].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[1]},
+      {name:'Loaded strengthening',type:'strength',criteria:CALF_CRITERIA[2].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[2]},
+      {name:'Return to running',type:'running',criteria:CALF_CRITERIA[3].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[3]},
+      {name:'Return to full training',type:'training',criteria:CALF_CRITERIA[4].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[4]},
+      {name:'Return to play',type:'competition',criteria:CALF_CRITERIA[5].map(c=>c.label).join('; '),criteria_items:CALF_CRITERIA[5]},
+    ],
+    durations:{minor:[3,3,3,2,2,1],moderate:[5,6,6,5,4,2],severe:[10,12,12,10,8,4]},
+  },
   generic: {
     phases:[
       {name:'Acute',type:'acute',criteria:'Pain and swelling controlled; protected rest'},
@@ -1383,6 +1458,15 @@ const PROTOCOL_REFS = {
   muscle: [
     'Pollock N et al. (2014). British athletics muscle injury classification. Br J Sports Med.',
     'Askling CM et al. (2013). Acute hamstring injuries in Swedish elite football. Br J Sports Med.',
+    'Paton BM et al. (2023). London International Consensus on hamstring injuries part 3: rehabilitation, running and return to sport. Br J Sports Med.',
+  ],
+  adductor: [
+    'Serner A et al. (2020). Return to sport after criteria-based rehabilitation of acute adductor injuries in male athletes. Orthop J Sports Med.',
+    'Hölmich P et al. (1999). Active physical training for long-standing adductor-related groin pain. Lancet.',
+  ],
+  calf: [
+    'Green B et al. (2022). The assessment, management and prevention of calf muscle strain injuries: 20 expert sports clinicians. Sports Med Open.',
+    'Green B et al. (2020). Return to play and recurrence after calf muscle strain injuries in elite Australian football. Am J Sports Med.',
   ],
   acl: [
     'Myer GD et al. (2006). Rehabilitation after ACL reconstruction. JOSPT.',
@@ -1411,10 +1495,16 @@ function catLabel(cat) {
   return tt('injuries.catchip_' + cat, CATEGORY_LABELS[cat] || cat);
 }
 
-function getProtocol(injuryType, injuryCategory, subClassification) {
+function getProtocol(injuryType, injuryCategory, subClassification, bodyArea) {
   // Category-based selection takes priority
   if (injuryCategory === 'acl')      return PROTOCOLS.acl;
-  if (injuryCategory === 'muscular') return PROTOCOLS.muscle;
+  if (injuryCategory === 'muscular') {
+    // Isquios, aductores y gemelo tienen protocolo propio; el resto va al muscular genérico
+    const area = (bodyArea || '').toLowerCase();
+    if (/adductor|groin/.test(area)) return PROTOCOLS.adductor;
+    if (/calf/.test(area))           return PROTOCOLS.calf;
+    return PROTOCOLS.muscle;
+  }
   if (injuryCategory === 'ligament') {
     if (subClassification === 'grade_iii') return PROTOCOLS.ligament_iii;
     if (subClassification === 'grade_ii')  return PROTOCOLS.ligament_ii;
@@ -1511,10 +1601,10 @@ function calcEstimatedReturn(startDate, bamicGrade, injuryType, injuryCategory, 
 // Fin de la última fase del protocolo que se generaría para esta lesión.
 // Misma fuente que la línea de tiempo de fases, para que el «Regreso est.» y la última fase
 // no puedan decir cosas distintas (RTP_DAYS queda solo como respaldo).
-function calcProtocolReturn(startDate, severity, injuryType, injuryCategory, subClassification, bamicGrade) {
+function calcProtocolReturn(startDate, severity, injuryType, injuryCategory, subClassification, bamicGrade, bodyArea) {
   if (!startDate) return null;
   try {
-    const phs = buildPhases(null, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification);
+    const phs = buildPhases(null, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification, bodyArea);
     return (phs && phs.length) ? phs[phs.length - 1].end_date : null;
   } catch(e) { return null; }
 }
@@ -1527,7 +1617,12 @@ function isMuscular(t) {
   return /muscle|strain|tear|hamstring|quad|calf|adductor|groin|biceps femoris|rectus femoris/i.test(t || '');
 }
 
-function getBamicCriteria(phaseName, grade) {
+// El grado BAMIC fija los TIEMPOS (clasificación por resonancia) y la zona corporal fija los
+// CRITERIOS: un isquio clasificado 2b usa los tiempos de Pollock con los criterios del
+// consenso de Londres. Sin zona reconocida se usan los criterios genéricos de siempre.
+function getBamicCriteria(phaseName, grade, phaseIdx, bodyArea) {
+  const set = muscleCriteriaSet(bodyArea);
+  if (set && phaseIdx != null && set[phaseIdx]) return set[phaseIdx];
   const base     = BAMIC_CRITERIA_BY_PHASE[phaseName] || [];
   const advanced = ['Return to running','Return to training','Return to play'];
   const isHigh   = grade === '4' || /^3/.test(grade);
@@ -1539,7 +1634,7 @@ const _BAMIC_PHASE_TYPES = {
   'Return to running':'running','Return to training':'training','Return to play':'competition',
 };
 
-function buildBamicPhases(injuryId, startDate, grade) {
+function buildBamicPhases(injuryId, startDate, grade, bodyArea) {
   const proto = BAMIC_PROTOCOLS[grade];
   if (!proto) return null;
   return proto.phases.map((name, idx) => {
@@ -1547,7 +1642,8 @@ function buildBamicPhases(injuryId, startDate, grade) {
     const thisEnd = proto.ends[idx];
     const phStart = new Date(startDate); phStart.setDate(phStart.getDate() + prevEnd);
     const phEnd   = new Date(startDate); phEnd.setDate(phEnd.getDate() + thisEnd);
-    const items   = getBamicCriteria(name, grade);
+    // El set por músculo tiene 6 entradas: solo aplica a los protocolos BAMIC de 6 fases
+    const items   = getBamicCriteria(name, grade, proto.phases.length === 6 ? idx : null, bodyArea);
     return {
       injury_id: injuryId, phase_number: idx + 1, phase_name: name,
       phase_type: _BAMIC_PHASE_TYPES[name] || 'generic',
@@ -1560,11 +1656,13 @@ function buildBamicPhases(injuryId, startDate, grade) {
   });
 }
 
-function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification) {
+function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification, bodyArea) {
   if (bamicGrade && BAMIC_PROTOCOLS[bamicGrade]) {
-    return buildBamicPhases(injuryId, startDate, bamicGrade);
+    return buildBamicPhases(injuryId, startDate, bamicGrade, bodyArea);
   }
-  const proto = getProtocol(injuryType, injuryCategory, subClassification);
+  const proto = getProtocol(injuryType, injuryCategory, subClassification, bodyArea);
+  // Criterios propios del músculo cuando el protocolo elegido es el muscular genérico
+  const areaSet = (proto === PROTOCOLS.muscle) ? muscleCriteriaSet(bodyArea) : null;
   // New category-based protocols have a single 'minor' duration row — use it regardless of severity
   const hasSingleRow = proto.durations.minor && !proto.durations.moderate;
   const sev   = hasSingleRow ? 'minor' : (severity || 'moderate');
@@ -1574,10 +1672,12 @@ function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade, inju
     const dur     = durs[idx] !== undefined ? durs[idx] : durs[durs.length - 1];
     const phStart = new Date(startDate); phStart.setDate(phStart.getDate() + cumDays);
     const phEnd   = new Date(phStart);   phEnd.setDate(phEnd.getDate() + dur);
+    const items = (areaSet && areaSet[idx]) ? areaSet[idx] : (ph.criteria_items || null);
     phases.push({
       injury_id: injuryId, phase_number: idx + 1, phase_name: ph.name,
-      phase_type: ph.type, criteria: ph.criteria,
-      criteria_items: ph.criteria_items || null,
+      phase_type: ph.type,
+      criteria: items ? items.map(c => c.label).join('; ') : ph.criteria,
+      criteria_items: items,
       start_date: phStart.toISOString().split('T')[0],
       end_date:   phEnd.toISOString().split('T')[0],
       status: idx === 0 ? 'in_progress' : 'pending',
@@ -1613,6 +1713,18 @@ const PHASE_DESCRIPTIONS = {
   'Full loading':       'Full weight bearing and impact activities confirmed by radiological and clinical assessment.',
   'Conditioning':       'Cardiovascular fitness and muscle strength restoration after prolonged immobilization.',
   'Reconditioning':     'Systematic restoration of strength, flexibility, and cardiovascular fitness baseline.',
+  // Adductor protocol (Serner 2020)
+  'Early loading':      'Therapeutic loading starts as soon as tolerated. Exercises are performed with minor pain (≤2/10): load goes up at ≤1/10 and down at ≥3/10.',
+  'Groin exercise progression': 'Groin exercise program on alternate days, three times a week, progressed by pain-controlled repetition maximum. Non-groin conditioning continues.',
+  'Clinically pain-free': 'First return-to-sport milestone: no pain on palpation, on maximal isometric adduction, on passive stretch, or during the loaded adduction exercises.',
+  'Running and sports function': 'Running, sprinting and change of direction progressed daily and independently of the groin exercise program.',
+  'Controlled sports training': 'Second milestone: full-intensity sprinting, agility tests and sport-specific drills completed pain-free before rejoining the team.',
+  'Return to full team training': 'Third milestone: full team training without restrictions and availability for match selection.',
+  // Calf protocol (Green 2022)
+  'Acute injury':       'Early therapeutic loading within tolerance. Priority is settling symptoms while avoiding complete unloading of the calf.',
+  'Early rehabilitation': 'Rebuild single-leg heel raise capacity. A base of 20-25 repetitions is the benchmark before adding external load.',
+  'Loaded strengthening': 'Heavy loading with the knee straight (gastrocnemius) and bent (soleus), monitoring the next-morning symptom response.',
+  'Return to full training': 'Graded exposure to reactive agility, jumping, maximum velocity and acceleration, including the mechanism of injury.',
 };
 
 // ═══════════════ PHASE MODAL ═══════════════
@@ -2058,6 +2170,8 @@ async function savePhaseStatus(status) {
       document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
         z.classList.toggle('is-sel', z.dataset.area === area);
       });
+      // La zona elige el protocolo muscular (isquios / aductor / gemelo)
+      autoFillReturn(); renderLogCriteria();
     });
   });
 
@@ -2066,6 +2180,7 @@ async function savePhaseStatus(status) {
     document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
       z.classList.toggle('is-sel', z.dataset.area === this.value);
     });
+    autoFillReturn(); renderLogCriteria();
   });
 
   // Category selector — show/hide sub-classification sections
@@ -2120,10 +2235,11 @@ async function savePhaseStatus(status) {
     const injType     = document.getElementById('logType')?.value;
     const injCategory = document.getElementById('logCategory')?.value;
     const severity    = document.getElementById('logSev')?.value;
+    const bodyArea    = document.getElementById('logAreaSel')?.value;
     const subCls      = getSubClsFromModal(injCategory);
     // Sin categoría ni grado no hay protocolo elegido todavía: no adivinamos una fecha.
     const est = (injCategory || bamicGrade)
-      ? (calcProtocolReturn(startDate, severity, injType, injCategory, subCls, bamicGrade)
+      ? (calcProtocolReturn(startDate, severity, injType, injCategory, subCls, bamicGrade, bodyArea)
          || calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls))
       : calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls);
     return { est, bamicGrade, injType, injCategory, subCls };
@@ -2560,9 +2676,15 @@ function injCard(inj) {
     ${(() => {
       if (isHistorical) return '';
       const cat   = inj.injury_category || (()=>{ const t=(inj.injury_type||'').toLowerCase(); if(/acl|cruciate/.test(t)) return 'acl'; if(/muscle|strain|tear|hamstring|quad|calf|adductor|groin/.test(t)) return 'muscular'; if(/ligament|sprain|ankle/.test(t)) return 'ligament'; if(/tendon|tendinop|achilles/.test(t)) return 'tendon'; if(/bone|fracture/.test(t)) return 'bone'; return null; })();
-      const refs  = cat ? (PROTOCOL_REFS[cat === 'muscular' ? 'muscle' : cat] || []) : [];
-      const proto = getProtocol(inj.injury_type, inj.injury_category, inj.sub_classification);
+      const _area = (inj.body_area || '').toLowerCase();
+      const _refKey = cat === 'muscular'
+        ? (/adductor|groin/.test(_area) ? 'adductor' : /calf/.test(_area) ? 'calf' : 'muscle')
+        : cat;
+      const refs  = _refKey ? (PROTOCOL_REFS[_refKey] || []) : [];
+      const proto = getProtocol(inj.injury_type, inj.injury_category, inj.sub_classification, inj.body_area);
       const protoLabel = proto === PROTOCOLS.acl ? 'ACL 7-phase protocol'
+        : proto === PROTOCOLS.adductor ? 'Adductor protocol — Serner 2020'
+        : proto === PROTOCOLS.calf ? 'Calf protocol — Green 2022'
         : proto === PROTOCOLS.muscle ? (inj.bamic_grade ? `BAMIC ${inj.bamic_grade} muscle protocol` : 'Muscle protocol')
         : proto === PROTOCOLS.ligament_i ? 'Ligament Grade I protocol'
         : proto === PROTOCOLS.ligament_ii ? 'Ligament Grade II protocol'
@@ -2919,6 +3041,7 @@ function renderLogCriteria() {
   const injCategory = document.getElementById('logCategory')?.value;
   const severity    = document.getElementById('logSev')?.value;
   const bamicGrade  = document.getElementById('logBamic')?.value;
+  const bodyArea    = document.getElementById('logAreaSel')?.value;
   const subCls      = getSubClsFromModal(injCategory);
 
   // Solo para casos activos nuevos: el registro histórico no genera fases y editar una lesión
@@ -2927,11 +3050,11 @@ function renderLogCriteria() {
     resetLogCriteria(); return;
   }
 
-  const sig = [startDate, injCategory, severity, bamicGrade || '', subCls || '',
+  const sig = [startDate, injCategory, severity, bamicGrade || '', subCls || '', bodyArea || '',
                /acl|cruciate/i.test(injType || '') ? 'acl' : ''].join('|');
   if (sig === _logCritSig && _logCriteria) { wrap.style.display = ''; return; } // no pisar lo ya editado
 
-  const phases = buildPhases(null, startDate, severity, injType, bamicGrade, injCategory, subCls) || [];
+  const phases = buildPhases(null, startDate, severity, injType, bamicGrade, injCategory, subCls, bodyArea) || [];
   _logCriteria = phases.map(p => ({ phase_number: p.phase_number, phase_name: p.phase_name, items: phaseItems(p) }));
   _logCritSig  = sig;
   wrap.style.display = _logCriteria.length ? '' : 'none';
@@ -3031,7 +3154,7 @@ async function saveInjury() {
     if (!isHistorical) {
       try {
         const phases = applyLogCriteria(
-          buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification));
+          buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area));
         const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
         if (insertedPhs) {
           _phasesMap[newInj.id] = insertedPhs;
