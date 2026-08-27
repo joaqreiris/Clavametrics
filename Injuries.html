@@ -1839,6 +1839,8 @@ async function savePhaseStatus(status) {
 
   // Sync availability: phases 1-3 → injured, phases 4-6 → partial
   await updateAvailabilityForPhase(injId, getCurrentPhaseNumber(injId));
+
+  if (status === 'done') maybeOfferDischarge(injId);
 }
 
 // ═══════════════ BOOT ═══════════════
@@ -2942,7 +2944,7 @@ function createPreventivePlan(id) {
 }
 
 // ═══════════════ DISCHARGE ═══════════════
-function openDischarge(id) {
+function openDischarge(id, suggestedDate) {
   _dischargeId = id;
   const inj  = _allInjuries.find(i => i.id === id);
   const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
@@ -2951,9 +2953,25 @@ function openDischarge(id) {
   if (info) info.textContent = pName
     ? tt('injuries.discharge_info', `Clearing injury for ${pName} (${inj.injury_type || tt('injuries.injury_word','injury')}).`, { name: pName, type: inj.injury_type || tt('injuries.injury_word','injury') })
     : tt('injuries.discharge_confirm','Confirm discharge.');
-  document.getElementById('disDate').value  = cmToday();
+  document.getElementById('disDate').value  = suggestedDate || cmToday();
   document.getElementById('disNotes').value = '';
   document.getElementById('modalDischarge').classList.add('is-open');
+}
+
+// Con la última fase completada ya no queda rehab por delante: se ofrece el alta en el momento
+// (con la fecha real de cierre de esa fase), en vez de dejar el caso en «Alta pendiente»
+// esperando que alguien se acuerde. El alta sigue siendo una decisión: si se cancela, el caso
+// queda exactamente como antes.
+function maybeOfferDischarge(injId) {
+  const inj = _allInjuries.find(i => i.id === injId);
+  if (!inj || inj.status !== 'active') return;
+  const phs = _phasesMap[injId];
+  if (!phs || !phs.length || !phs.every(p => p.status === 'done')) return;
+  const last = [...phs].sort((a, b) => a.phase_number - b.phase_number).pop();
+  openDischarge(injId, last?.actual_end || null);
+  // Que se entienda por qué se abrió solo
+  const info = document.getElementById('disInfo');
+  if (info) info.textContent = tt('injuries.rehab_complete_prefix','Rehab complete — all phases done.') + ' ' + info.textContent;
 }
 function closeDischarge() {
   _dischargeId = null;
@@ -3155,6 +3173,8 @@ async function togglePhase(phaseId, injuryId) {
   }
 
   await reflowPhaseDates(injuryId);
+
+  if (newStatus === 'done') maybeOfferDischarge(injuryId);
 }
 
 // ═══════════════ DELETE ═══════════════
