@@ -552,6 +552,19 @@ html.cm-rail .hub-nav-grip{display:none}
     if (markEl) applyLogoToMark(markEl, e.detail.logo_url);
   });
 
+  // Pinta nombre y escudo con lo último que se supo del club (cache que deja
+  // getClub() y que boot-brand.js levanta en el <head>). loadData() espera a la
+  // red, así que sin esto el sidebar se queda con el nombre vacío y un cuadrado
+  // en lugar del escudo durante todo ese viaje de ida y vuelta.
+  function _paintCachedBrand() {
+    var c = window.__cmBrandBoot;
+    if (!c) return;
+    var nameEl = document.getElementById('sideClubName');
+    if (nameEl && !nameEl.textContent && c.name) nameEl.textContent = c.name;
+    var markEl = document.querySelector('.hub-brand .mark');
+    if (markEl && c.logo_url) applyLogoToMark(markEl, c.logo_url);
+  }
+
   // ── LOAD USER/CLUB DATA ──────────────────────────────────────
   async function loadData() {
     const [profile, club] = await Promise.all([
@@ -1545,9 +1558,10 @@ html.cm-rail .hub-nav-grip{display:none}
   // switches language (covers the sidebar + the dynamically-built chrome panels).
   document.addEventListener('cm:langchanged', () => _applyI18n(document));
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); _initChatNotif(); _initPresence(); });
+    document.addEventListener('DOMContentLoaded', () => { inject(); _paintCachedBrand(); loadData(); _initNotifications(); _initChatNotif(); _initPresence(); });
   } else {
     inject();
+    _paintCachedBrand();
     loadData();
     _initNotifications();
     _initChatNotif();

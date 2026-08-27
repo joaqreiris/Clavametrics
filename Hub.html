@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-i18n="hub.staff_hub_clavametrics">Staff Hub — ClavaMetrics</title>
+<!-- La fuente de iconos entraba por @import DENTRO de clavametrics.css: el
+     navegador tenía que bajar y parsear ese CSS antes de descubrir que
+     necesitaba otro CSS de un CDN externo, y sólo entonces la fuente. Tres
+     saltos en serie, y por eso los iconos aparecían tarde y el menú se veía
+     con cuadrados vacíos. Con el link aquí arriba, la petición sale en
+     paralelo con el CSS principal. El @import sigue en el CSS como respaldo:
+     el navegador deduplica y no la vuelve a pedir. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
+<script src="assets/boot-brand.js"></script>
 <link rel="stylesheet" href="clavametrics.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
@@ -110,6 +120,35 @@
     font: 500 12px/1 var(--cm-font-sans);
     color: var(--cm-fg-muted);
     margin-bottom: 12px;
+  }
+
+  /* ── Esqueleto de carga ──
+     Mientras llegan los datos, las tarjetas muestran su marco y un bloque que
+     late donde irá el número. Antes el bloque entero estaba en visibility:hidden
+     y se veía un hueco blanco del alto exacto de la fila. La etiqueta con su
+     icono sí se muestra, porque ya se sabe: sólo falta el valor. */
+  .kpis.is-loading .kpi-value,
+  .kpis.is-loading .kpi-trend,
+  .kpis.is-loading .kpi-sub { color: transparent; position: relative; }
+  .kpis.is-loading .kpi-value > *,
+  .kpis.is-loading .kpi-trend > * { visibility: hidden; }
+  .kpis.is-loading .kpi-value::after,
+  .kpis.is-loading .kpi-trend::after {
+    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    height: 60%; width: 62%; border-radius: 6px;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--cm-fg) 7%, transparent) 25%,
+      color-mix(in srgb, var(--cm-fg) 12%, transparent) 37%,
+      color-mix(in srgb, var(--cm-fg) 7%, transparent) 63%);
+    background-size: 400% 100%;
+    animation: cm-kpi-shimmer 1.4s ease-in-out infinite;
+  }
+  .kpis.is-loading .kpi-trend::after { width: 40%; height: 9px; }
+  .kpis.is-loading .kpi-spark { opacity: 0; }
+  @keyframes cm-kpi-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .kpis.is-loading .kpi-value::after,
+    .kpis.is-loading .kpi-trend::after { animation: none; }
   }
   .kpi-label .ti { font-size: 14px; }
   .kpi-value {
@@ -685,7 +724,10 @@
           </button>
         </div>
       </div>
-      <div class="kpis" id="kpiStrip" style="visibility:hidden">
+      <!-- Arranca con la clase de carga en vez de visibility:hidden: así se ve
+           la estructura de las tarjetas latiendo mientras llegan los datos, y
+           no un hueco blanco del alto exacto. _applyKpiPrefs() quita la clase. -->
+      <div class="kpis is-loading" id="kpiStrip">
         <div class="kpi" data-kpi-id="squad_size">
           <div class="kpi-label"><i class="ti ti-users"></i><span data-i18n="hub.squad_size">Squad size</span></div>
           <div class="kpi-value" id="kpiSquad">— <sub data-i18n="hub.players">players</sub></div>
@@ -2744,6 +2786,14 @@ function renderTasks(tasks, view = 'my') {
     const _cached = JSON.parse(localStorage.getItem(_KPI_CACHE_KEY) || 'null');
     if (Array.isArray(_cached) && _cached.length) _kpiSel = _cached;
   } catch (_) {}
+  // Aplicar YA qué tarjetas van (con la selección cacheada), sin esperar a los
+  // datos: el esqueleto que se ve mientras cargan es entonces el set correcto,
+  // y cuando llegan los números no se mueve nada de sitio.
+  try {
+    document.querySelectorAll('#kpiStrip .kpi[data-kpi-id]').forEach(el => {
+      el.style.display = _kpiSel.includes(el.dataset.kpiId) ? '' : 'none';
+    });
+  } catch (_) {}
 
   function _applyKpiPrefs() {
     document.querySelectorAll('#kpiStrip .kpi[data-kpi-id]').forEach(el => {
@@ -2752,6 +2802,7 @@ function renderTasks(tasks, view = 'my') {
     const strip = document.getElementById('kpiStrip');
     if (strip) {
       strip.style.visibility = 'visible';   // reveal once a resolved set is applied
+      strip.classList.remove('is-loading'); // apaga el esqueleto
       _hubStagger(strip.querySelectorAll('.kpi[data-kpi-id]:not([style*="display: none"])'));
     }
     if (_kpiSel.includes('weather')) _loadWeather();

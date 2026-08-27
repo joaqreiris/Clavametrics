@@ -182,6 +182,19 @@
         .eq('id', clubId)
         .single();
       _club = data;
+      // Cache de identidad para el primer pintado. Sin esto, cada carga
+      // arranca con el acento por defecto, el nombre vacío y sin escudo, y
+      // todo salta cuando llega esta respuesta: el usuario ve la marca
+      // cambiar delante suyo. boot-brand.js lo lee de forma síncrona en el
+      // <head>, antes del primer frame.
+      try {
+        if (_club) {
+          localStorage.setItem('cm_brand_cache', JSON.stringify({
+            id: _club.id, name: _club.name,
+            primary_color: _club.primary_color, logo_url: _club.logo_url
+          }));
+        }
+      } catch (_) {}
       return _club;
     })();
     return _clubPromise;
@@ -464,6 +477,9 @@
     _flagsMap = null; _flagsPromise = null;
     _planPromise = null;
     try { Object.keys(sessionStorage).forEach(k => { if (k.indexOf('cm_pf_') === 0) sessionStorage.removeItem(k); }); } catch (_) {}
+    // El cache de marca es de ESTE club: al cambiar de club o cerrar sesión hay
+    // que soltarlo, si no el arranque siguiente pinta el escudo del club anterior.
+    try { localStorage.removeItem('cm_brand_cache'); } catch (_) {}
   };
 
   // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──
@@ -683,6 +699,12 @@
 
   window.setClubLogo = function (url) {
     if (_club) _club.logo_url = url;
+    // Mantener el cache de marca al día, si no el próximo arranque pinta el
+    // escudo anterior antes de corregirse.
+    try {
+      const c = JSON.parse(localStorage.getItem('cm_brand_cache') || 'null');
+      if (c) { c.logo_url = url; localStorage.setItem('cm_brand_cache', JSON.stringify(c)); }
+    } catch (_) {}
     document.dispatchEvent(new CustomEvent('clublogochanged', { detail: { logo_url: url } }));
   };
 
