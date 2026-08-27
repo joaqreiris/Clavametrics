@@ -173,6 +173,24 @@
     padding:0 12px; font:600 12px/1 var(--cm-font-sans); cursor:pointer;
   }
   .av-min-pop .hint { margin-top:8px; font:500 11px/1.35 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .av-min-pop .warn {
+    margin-top:8px; padding:6px 8px; border-radius:7px;
+    background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.28);
+    color:var(--cm-danger,#DC2626); font:600 11px/1.35 var(--cm-font-sans);
+  }
+  .av-min-pop button:disabled, .av-min-pop input:disabled { opacity:0.4; cursor:not-allowed; }
+  .av-min-pop .av-min-grid button:disabled:hover { border-color:var(--cm-border); color:var(--cm-fg-strong); }
+
+  /* Toast de aviso (p. ej. minutos salteados por lesión) */
+  .av-toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px);
+    background:var(--cm-fg-strong); color:var(--cm-bg);
+    border-radius:var(--cm-r-3); padding:9px 16px; max-width:min(520px,90vw);
+    font:500 13px/1.35 var(--cm-font-sans); text-align:center;
+    z-index:500; opacity:0; pointer-events:none;
+    transition:opacity 200ms, transform 200ms;
+  }
+  .av-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
 
   /* Matrix card ----- */
   .av-matrix-wrap {
@@ -653,6 +671,7 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 <!-- Summary tooltip -->
+<div class="av-toast" id="avToast"></div>
 <div id="avSummaryTip" style="position:fixed;display:none;z-index:200;padding:8px 11px;background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:7px;font:500 12px/1.6 var(--cm-font-sans);pointer-events:none;white-space:nowrap;box-shadow:var(--cm-shadow-pop)"></div>
 
 <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
@@ -1888,12 +1907,49 @@
   // Un partido casi nunca es "todos 90′": hay quien juega 45, 60, 30 o entra 10 minutos.
   // El botón abre un popover con los repartos habituales + un valor libre, y pinta TODA
   // la selección con ese número (0 = jugó el partido pero sin minutos → celda 'available').
+  // Un día marcado como LESIÓN (o rehabilitación) no puede recibir minutos: cargarlos
+  // convertiría la celda en 'available' y borraría la lesión sin que nadie lo note. Se avisa
+  // y se saltea — para cargarle minutos hay que cambiarle el estado primero (tecla A / botón).
+  function avIsInjuredCell(pid, date) {
+    const s = cellStatus(pid, date);
+    return s === 'injured' || s === 'rehab';
+  }
+  function avPlayerName(pid) {
+    const p = players.find(x => x.id === pid);
+    if (!p) return '';
+    return [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
+  }
+  function avInjuredInSelection() {
+    const out = [];
+    matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
+      const { pid, date } = td.dataset;
+      if (pid && date && avIsInjuredCell(pid, date)) out.push(pid);
+    });
+    return out;
+  }
+  function avToast(msg) {
+    const t = document.getElementById('avToast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('is-show');
+    clearTimeout(avToast._t);
+    avToast._t = setTimeout(() => t.classList.remove('is-show'), 4200);
+  }
+  // "APELLIDO Nombre, APELLIDO Nombre +2" — lista corta de nombres para el aviso
+  function avNameList(pids) {
+    const names = [...new Set(pids)].map(avPlayerName).filter(Boolean);
+    const head = names.slice(0, 3).join(', ');
+    return names.length > 3 ? `${head} +${names.length - 3}` : head;
+  }
+
   function avApplyMinutes(n) {
     n = Math.max(0, Math.min(200, parseInt(n, 10) || 0));
     const updated = new Set();
+    const blocked = [];
     matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
       const { pid, date } = td.dataset;
       if (!pid || !date) return;
+      if (avIsInjuredCell(pid, date)) { blocked.push(pid); return; }   // lesionado → no se le cargan minutos
       const kind = n > 0 ? ((window.__avMatchKind || {})[date] || 'official') : null;
       if (n > 0) {
         td.innerHTML = `<span class="av-cell-match-min">${n}′</span>`;
@@ -1910,6 +1966,12 @@
     updated.forEach(pid => updateRowSummary(pid));
     recalcKPIs();
     updateBulk();
+    if (blocked.length) {
+      const names = avNameList(blocked);
+      avToast(tt('availability.minInjuredSkipped',
+        `${names} is injured — minutes not applied. Change the status first.`,
+        { names, count: [...new Set(blocked)].length }));
+    }
   }
 
   const MIN_PRESETS = [90, 75, 60, 45, 30, 15];
@@ -1918,16 +1980,28 @@
   function openMinPop(anchorBtn) {
     closeMinPop();
     const nSel = matrix.querySelectorAll('td.cell.is-selected').length;
+    // Celdas de la selección marcadas como lesión: se avisan ANTES de aplicar (y si son todas,
+    // no se deja aplicar nada — primero hay que corregir el estado).
+    const injured = avInjuredInSelection();
+    const allInjured = injured.length > 0 && injured.length === nSel;
     const pop = document.createElement('div');
     _minPop = pop;
     pop.className = 'av-min-pop';
+    const warn = injured.length
+      ? `<div class="warn"><i class="ti ti-alert-triangle" style="font-size:12px;vertical-align:-1px"></i> ${
+          allInjured
+            ? tt('availability.minPopAllInjured', 'The whole selection is injured. Change the status before adding minutes.')
+            : tt('availability.minPopInjuredWarn', `${injured.length} injured cells will be skipped: ${esc(avNameList(injured))}`, { count: injured.length, names: esc(avNameList(injured)) })
+        }</div>`
+      : '';
     pop.innerHTML = `
       <div class="ttl">${tt('availability.minPopTitle','Match minutes')}</div>
-      <div class="av-min-grid">${MIN_PRESETS.map(m => `<button data-min="${m}">${m}′</button>`).join('')}</div>
+      <div class="av-min-grid">${MIN_PRESETS.map(m => `<button data-min="${m}"${allInjured ? ' disabled' : ''}>${m}′</button>`).join('')}</div>
       <div class="row">
-        <input type="number" min="0" max="200" placeholder="${tt('availability.minPopCustom','Other')}">
-        <button class="apply">${tt('availability.minPopApply','Apply')}</button>
+        <input type="number" min="0" max="200" placeholder="${tt('availability.minPopCustom','Other')}"${allInjured ? ' disabled' : ''}>
+        <button class="apply"${allInjured ? ' disabled' : ''}>${tt('availability.minPopApply','Apply')}</button>
       </div>
+      ${warn}
       <div class="hint">${tt('availability.minPopHint', `Applies to the ${nSel} selected cells. Double-click a cell to fine-tune one player.`, { count: nSel })}</div>`;
     document.body.appendChild(pop);
     const r = anchorBtn.getBoundingClientRect();
