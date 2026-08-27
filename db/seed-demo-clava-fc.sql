@@ -199,11 +199,13 @@ if v_season is null then select id into v_season from seasons where club_id = v_
 -- 4. RPE: session_date decía 2026-06-09 en las 7.220 filas. El dato bueno
 --    está en la sesión vinculada, así que se copia de ahí.
 -- ─────────────────────────────────────────────────────────────────────────
-update rpe r
+-- ojo: el alias NO puede ser "r" — choca con la variable r record de arriba
+-- y plpgsql resuelve r.session_id contra la variable, no contra la tabla.
+update rpe rp
    set session_date = s.session_date
   from training_sessions s
- where s.id = r.session_id and r.club_id = v_club
-   and r.session_date is distinct from s.session_date;
+ where s.id = rp.session_id and rp.club_id = v_club
+   and rp.session_date is distinct from s.session_date;
 get diagnostics v_n = row_count;
 raise notice 'RPE: % fechas corregidas.', v_n;
 
@@ -421,8 +423,10 @@ union all select 'rpe fecha mal',  (select count(*)::text from rpe r join traini
                                      where r.club_id=c.id and r.session_date is distinct from s.session_date)
 union all select 'rivales',        (select count(distinct e.opponent)::text from calendar_events e, c
                                      where e.club_id=c.id and e.opponent is not null)
+-- ojo: cross join, no coma: con coma el LEFT JOIN se cuelga de "c" y no ve "t"
 union all select 'planes por equipo',(select string_agg(t.name||'='||coalesce(pl.name,'Free'),' · ' order by t.name)
-                                     from teams t, c
+                                     from c
+                                     cross join teams t
                                      left join subscriptions s on s.team_id=t.id and s.status in ('active','trialing')
                                      left join plans pl on pl.id=s.plan_id
                                      where t.club_id=c.id);
