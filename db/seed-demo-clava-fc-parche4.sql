@@ -133,6 +133,12 @@ raise notice 'Ejercicios creados: %', v_n;
 
 -- ═════════════════════════════════════════════════════════════════════════
 --  C. Armar las sesiones (2 semanas atrás + 2 adelante)
+--
+--  ojo: session_exercises tiene DOS claves foráneas distintas —
+--    exercise_id         -> gym_exercises  (ejercicios de gimnasio)
+--    planner_exercise_id -> exercises      (ejercicios de campo)
+--  Los de campo van SIEMPRE en planner_exercise_id, como hacen los que ya
+--  existían; usar exercise_id revienta la foránea contra gym_exercises.
 -- ═════════════════════════════════════════════════════════════════════════
 for r in
   select s.id, s.session_date, extract(isodow from s.session_date)::int dow
@@ -146,7 +152,7 @@ loop
   v_pos := 0;
 
   -- Activación: todos los días de campo abren igual
-  insert into session_exercises (club_id, session_id, exercise_id, name, phase,
+  insert into session_exercises (club_id, session_id, planner_exercise_id, name, phase,
                                  duration, intensity, position, players_count)
   select v_club, r.id, e.id, e.name, 'activation', e.duration, e.intensity, v_pos, e.players_count
     from exercises e
@@ -156,7 +162,7 @@ loop
 
   -- Bloque principal: según el día del microciclo
   v_pos := 1;
-  insert into session_exercises (club_id, session_id, exercise_id, name, phase,
+  insert into session_exercises (club_id, session_id, planner_exercise_id, name, phase,
                                  duration, intensity, position, players_count,
                                  field_width, field_height)
   select v_club, r.id, e.id, e.name, 'main', e.duration, e.intensity,
@@ -177,7 +183,7 @@ loop
   -- ojo: la fase válida es 'cooldown' — session_exercises_phase_check sólo
   -- acepta warmup | main | cooldown | activation | goalkeepers.
   if r.dow in (2,3,4) then
-    insert into session_exercises (club_id, session_id, exercise_id, name, phase,
+    insert into session_exercises (club_id, session_id, planner_exercise_id, name, phase,
                                    duration, intensity, position, players_count)
     select v_club, r.id, e.id, e.name, 'cooldown', e.duration, e.intensity, 90, e.players_count
       from exercises e
@@ -186,7 +192,7 @@ loop
 
   -- Porteros, dos veces por semana
   if r.dow in (3,5) then
-    insert into session_exercises (club_id, session_id, exercise_id, name, phase,
+    insert into session_exercises (club_id, session_id, planner_exercise_id, name, phase,
                                    duration, intensity, position, players_count)
     select v_club, r.id, e.id, e.name, 'goalkeepers', e.duration, e.intensity, 91, e.players_count
       from exercises e
