@@ -722,17 +722,30 @@
     // concurrently, once per club (cached below).
     const coreChecks = _CORE_DATA_COLS.map(async (col) => {
       try {
-        const { data } = await window.sb.from('gps_reports')
+        const { data, error } = await window.sb.from('gps_reports')
           .select('id').eq('club_id', clubId).not(col, 'is', null).limit(1);
+        if (error) throw error;
         if (data && data.length) has.add(col);
-      } catch { /* on error leave it out → metric hidden, non-fatal */ }
+      } catch (e) {
+        console.warn(`[gp-builder] no se pudo comprobar "${col}" → se ofrece igual:`, e?.message || e);
+        has.add(col);   // fail-open, igual que las custom
+      }
     });
     const customChecks = customKeys.map(async (key) => {
       try {
-        const { data } = await window.sb.from('gps_report_metrics')
+        const { data, error } = await window.sb.from('gps_report_metrics')
           .select('report_id').eq('club_id', clubId).eq('metric_key', key).limit(1);
-        if (data && data.length) has.add(key);
-      } catch { /* hidden on error */ }
+        if (error) throw error;
+        if (data && data.length) { has.add(key); return; }
+        // 0 filas SIN error: o de verdad no hay datos, o RLS los está filtrando. Se loguea para
+        // poder distinguir los dos casos sin adivinar (la métrica se marca noData igual).
+        console.info(`[gp-builder] métrica "${key}": 0 filas visibles en gps_report_metrics → se marca sin datos`);
+      } catch (e) {
+        // FAIL-OPEN: no poder COMPROBARLO no es lo mismo que no tener datos. Esconder (o marcar
+        // vacía) una métrica que sí tiene datos es peor que ofrecer una que está vacía.
+        console.warn(`[gp-builder] no se pudo comprobar "${key}" → se ofrece igual:`, e?.message || e);
+        has.add(key);
+      }
     });
     await Promise.all([...coreChecks, ...customChecks]);
     _hasDataCache.set(clubId, has);
