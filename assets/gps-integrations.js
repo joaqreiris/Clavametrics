@@ -466,14 +466,28 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     if(!job){ bar.style.display='none'; bar.innerHTML=''; if(btn){ btn.disabled=false; btn.textContent=tt('admin.gps_sync_now','Sync now'); } return; }
 
     const total=job.chunks_total||0, done=job.chunks_done||0;
-    const pct = total>0 ? Math.min(100, Math.round(done/total*100)) : (job.status==='done'?100:0);
     const t=job.totals||{};
     const running=(job.status==='running'||job.status==='queued');
+    // Progreso FINO: el chunk en curso publica act_done/act_total (actividades procesadas). Sin
+    // esto el % sólo avanzaba al cerrar un chunk entero, y como casi todos los sync entran en UN
+    // chunk la barra quedaba clavada hasta el final aunque estuviera bajando períodos.
+    const subT=+t.act_total||0, subD=+t.act_done||0;
+    const sub=(running && subT>0) ? Math.min(1, subD/subT) : 0;
+    const pct = total>0
+      ? Math.min(100, Math.round(((done+sub)/total)*100))
+      : (job.status==='done'?100:0);
     const stale = running && job.heartbeat_at && (Date.now()-new Date(job.heartbeat_at).getTime()>_SYNC_STALE_MS);
 
     let label, cls='', animated=false, retry=false, isDone=false;
     if(running && stale){ label=tt('admin.gps_sync_stalled','Sync stalled — the worker stopped responding.'); cls='s-error'; retry=true; }
-    else if(running){ label=tt('admin.gps_syncing_progress','Syncing… {done}/{total} ({pct}%)',{ done, total, pct }); animated=true; }
+    else if(running){
+      // Con sub-progreso decimos QUÉ está bajando ("actividad 7 de 26"), que es lo que el usuario
+      // quiere ver; sin él (arranque del chunk) se cae al contador de chunks de siempre.
+      label = subT>0
+        ? tt('admin.gps_syncing_activity','Syncing… activity {done} of {total} ({pct}%)',{ done:Math.min(subD,subT), total:subT, pct })
+        : tt('admin.gps_syncing_progress','Syncing… {done}/{total} ({pct}%)',{ done, total, pct });
+      animated=true;
+    }
     else if(job.status==='done'){ label=tt('admin.gps_sync_complete','Sync complete'); cls='s-done'; isDone=true; }
     else if(job.status==='cancelled'){ label=tt('admin.gps_sync_cancelled','Cancelled'); }
     else if(job.status==='error'){ label=tt('admin.gps_sync_failed_x','Sync failed: {msg}',{ msg: job.error||'unknown' }); cls='s-error'; retry=true; }
@@ -522,7 +536,15 @@ window.cmMountGpsIntegrations = function (hostEl, opts) {
     const mb=bar.querySelector('[data-syncmap]'); if(mb) mb.addEventListener('click',()=>mapAthletes(prov));
     const db=bar.querySelector('[data-syncdismiss]'); if(db) db.addEventListener('click',()=>{ const iid=INTS[prov]?.id; if(iid) delete _syncJobs[iid]; _paintSyncBar(prov); });
 
-    if(btn){ const busy=running && !stale; btn.disabled=busy; btn.textContent = busy?tt('admin.gps_syncing_btn','Syncing…'):tt('admin.gps_sync_now','Sync now'); }
+    // El botón lleva el % para que el avance se vea también con la card colapsada o sin mirar
+    // la barra — era el síntoma que se reportaba: "Sincronizando…" fijo durante todo el proceso.
+    if(btn){
+      const busy=running && !stale;
+      btn.disabled=busy;
+      btn.textContent = busy
+        ? (pct>0 ? tt('admin.gps_syncing_btn_pct','Syncing… {pct}%',{ pct }) : tt('admin.gps_syncing_btn','Syncing…'))
+        : tt('admin.gps_sync_now','Sync now');
+    }
     // Cancelled auto-hides; a completed sync STAYS (with its totals) until dismissed or re-synced,
     // so the user can actually read the result instead of it vanishing.
     if(job.status==='cancelled') _scheduleHide(prov, job.id);

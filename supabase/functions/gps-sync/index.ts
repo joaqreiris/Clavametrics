@@ -378,7 +378,12 @@ async function fetchCatapult(url: string, opts?: RequestInit): Promise<Response>
   throw new Error('Catapult request failed');   // unreachable (loop returns/throws), keeps TS happy
 }
 
-async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string, onlyActivityId?: string, tzOffsetMin = 0): Promise<ChunkResult> {
+// onProgress: se llama al cerrar cada LOTE de actividades con el avance dentro del chunk. Sin
+// esto la barra sólo se movía al terminar el chunk entero, y como casi todos los sync caben en
+// UN chunk (los rangos de menos de 6 meses no se parten), la barra quedaba clavada hasta el
+// final: un sync de 26 actividades y 1.747 períodos pasaba 62 s sin moverse y saltaba a 100%.
+type ChunkProgress = { done: number; total: number; acc: ChunkResult };
+async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string, onlyActivityId?: string, tzOffsetMin = 0, onProgress?: (p: ChunkProgress) => Promise<void>): Promise<ChunkResult> {
   const { clubId, teamId, baseUrl, authH, playerByExt, resolveMap, mappedSlugs, seasonStart } = ctx;
   const unmappedParams = new Set<string>();
   // Zona horaria del que sincroniza (minutos al ESTE de UTC; +420 = UTC+7). El rango que elige el
@@ -793,6 +798,17 @@ async function syncRange(adminClient: Admin, ctx: Ctx, from: string, to: string,
       overlapPeriods += rr.overlap;
       if (rr.errs.length) errors.push(...rr.errs);
     }
+    if (onProgress) {
+      // Awaited a propósito: el callback viene throttleado, así que son pocos writes y no
+      // conviene dejarlos sueltos compitiendo con el lote siguiente.
+      await onProgress({
+        done: Math.min(i + BATCH_SIZE, activities.length),
+        total: activities.length,
+        acc: { act: syncedActivities, rows: syncedRows, per: syncedPeriods, skip: skippedUnmapped,
+               flagged: flaggedPeriods, pending: pendingActivities, overlap: overlapPeriods,
+               errs: errors, unmapped: [...unmappedParams] },
+      }).catch(() => { /* el progreso es cosmético: nunca debe tumbar el sync */ });
+    }
   }
 
   console.log(`[gps-sync] chunk ${from}..${to} done in ${Date.now() - _t0}ms, ${activities.length} activities, ${_statsCalls} /stats calls, batch=${BATCH_SIZE}, flagged ${flaggedPeriods} periods, overlap ${overlapPeriods} periods`);
@@ -898,7 +914,21 @@ async function processChunk(adminClient: Admin, jobId: string) {
 
   console.log('[gps-sync] processing chunk', { jobId, idx, chunk });
   let partial: ChunkResult;
-  try { partial = await syncRange(adminClient, ctx, chunk[0], chunk[1], undefined, (job.tz_offset as number) || 0); }
+  // Progreso VIVO dentro del chunk: cada lote de actividades publica el avance (act_done /
+  // act_total) y los contadores parciales en el mismo jsonb `totals`, que ya viaja por Realtime
+  // a la barra. Va throttleado para no escribir en cada lote de un sync grande, y refresca el
+  // heartbeat de paso, así un chunk largo no se marca como colgado.
+  let _lastBeat = 0;
+  const _onProgress = async (p: ChunkProgress) => {
+    const now = Date.now();
+    if (now - _lastBeat < 1200 && p.done < p.total) return;
+    _lastBeat = now;
+    const live = mergeTotals(job.totals as Record<string, unknown>, p.acc);
+    live.act_done = p.done; live.act_total = p.total;
+    await adminClient.from('gps_sync_jobs')
+      .update({ totals: live, heartbeat_at: nowISO() }).eq('id', jobId);
+  };
+  try { partial = await syncRange(adminClient, ctx, chunk[0], chunk[1], undefined, (job.tz_offset as number) || 0, _onProgress); }
   catch (e) { await failJob(adminClient, jobId, `chunk ${chunk[0]}..${chunk[1]}: ${String((e as Error)?.message || e)}`); return; }
 
   const totals = mergeTotals(job.totals as Record<string, unknown>, partial);
