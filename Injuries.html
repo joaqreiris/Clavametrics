@@ -287,6 +287,19 @@
   .ph-criterion input[type=checkbox] { margin-top:1px; accent-color:var(--cm-success); width:15px; height:15px; flex-shrink:0; cursor:pointer; }
   .ph-criterion .lbl { font:500 13px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
   .ph-criterion.is-checked .lbl { color:var(--cm-success); text-decoration:line-through; }
+  .ph-criterion .lbl { flex:1; min-width:0; }
+  /* Editor de criterios (modal de fase y alta de lesión) */
+  .crit-del { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border:0; border-radius:5px; background:transparent; color:var(--cm-fg-faint); cursor:pointer; font-size:13px; opacity:0; transition:opacity .1s, color .1s, background .1s; }
+  .ph-criterion:hover .crit-del, .crit-row:hover .crit-del { opacity:1; }
+  .crit-del:hover { color:var(--cm-danger); background:rgba(220,38,38,0.08); }
+  .crit-add { display:flex; gap:6px; align-items:center; margin-top:2px; }
+  .crit-add .cm-input { flex:1; min-width:0; }
+  .crit-phase { border:1px solid var(--cm-border-soft); border-radius:8px; padding:8px 10px 10px; background:var(--cm-bg-soft); display:flex; flex-direction:column; gap:5px; }
+  .crit-phase-h { display:flex; align-items:baseline; gap:7px; }
+  .crit-phase-h .n { font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; color:var(--cm-fg-muted); }
+  .crit-phase-h .l { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .crit-row { display:flex; align-items:flex-start; gap:8px; padding:4px 6px; border-radius:5px; background:var(--cm-bg); border:1px solid var(--cm-border-soft); }
+  .crit-row span { flex:1; min-width:0; font:500 12.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
   .ph-status-badge { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:4px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
   .ph-status-badge.pending { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); }
   .ph-status-badge.in_progress { background:var(--cm-accent-soft); color:var(--cm-accent); }
@@ -757,6 +770,15 @@
         </div>
       </div>
 
+      <!-- Criterios de progresión del protocolo — editables antes de crear el caso -->
+      <div id="logCriteriaWrap" style="display:none">
+        <div class="cm-label" style="margin-bottom:6px">
+          <span data-i18n="injuries.progression_criteria">Progression criteria</span>
+          <span style="font-weight:500;color:var(--cm-fg-muted)"> · <span data-i18n="injuries.criteria_editable_hint">you can remove or add your own</span></span>
+        </div>
+        <div id="logCriteriaList" class="ph-criteria-list"></div>
+      </div>
+
       <div class="cm-field"><label class="cm-label" for="logNotes" data-i18n="injuries.notes_mechanism_details">Notes / mechanism details</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context, initial assessment…" data-i18n-ph="injuries.notes_mechanism_ph"></textarea></div>
     </div>
     <div class="inj-modal-foot">
@@ -913,6 +935,7 @@ function setLogMode(mode) {
     _returnManuallyEdited = false;
     checkOldDate();
   }
+  renderLogCriteria();
 }
 
 function checkOldDate() {
@@ -1114,10 +1137,10 @@ const PROTOCOLS = {
     phases:[
       {name:'Acute',type:'acute',criteria:'No pain at rest; swelling controlled; normal gait'},
       {name:'Regeneration',type:'subacute',criteria:'Pain-free passive ROM; no palpation pain'},
-      {name:'Functional',type:'strength',criteria:'Isokinetic strength ≥ 60% vs contralateral; pain-free cycling'},
+      {name:'Functional',type:'strength',criteria:'Pain-free maximal isometric contraction vs healthy side (manual resistance); pain-free cycling'},
       {name:'Return to running',type:'running',criteria:'Pain-free running at 8 km/h; no limp'},
       {name:'Return to training',type:'training',criteria:'Full training without restriction; sprints pain-free'},
-      {name:'Return to competition',type:'competition',criteria:'Asymmetry < 10% in strength tests; physio clearance'},
+      {name:'Return to competition',type:'competition',criteria:'Single-leg hop test ≥90% of healthy side; physio clearance'},
     ],
     // Sin grado BAMIC, la gravedad mapea al grado representativo de su banda de baja
     // (Fuller/UEFA consensus 2006: leve ≤7 d, moderada 8-28 d, grave >28 d) y se usa el
@@ -1129,7 +1152,7 @@ const PROTOCOLS = {
     phases:[
       {name:'Acute',type:'acute',criteria:'Pain and swelling controlled; protected weight bearing'},
       {name:'Sub-acute',type:'subacute',criteria:'Full range of motion; pain-free ADL'},
-      {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥ 70%; proprioception restored'},
+      {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥70% of healthy side (manual/functional test); proprioception restored'},
       {name:'Functional',type:'running',criteria:'Change of direction pain-free; jogging unrestricted'},
       {name:'Return to training',type:'training',criteria:'Full team training without restriction'},
       {name:'Return to competition',type:'competition',criteria:'Strength symmetry ≥ 90%; functional tests passed'},
@@ -1150,59 +1173,59 @@ const PROTOCOLS = {
          {id:'acl1_5',label:'Pain ≤ 3/10 at rest'},
        ]},
       {name:'Early Rehab',type:'subacute',
-       criteria:'ROM 0-120°; normal gait; SLS >10s; no effusion; quad >60%',
+       criteria:'ROM 0-120°; normal gait; SLS >10s; no effusion; 10 single-leg sit-to-stand',
        criteria_items:[
          {id:'acl2_1',label:'ROM 0-120° achieved'},
          {id:'acl2_2',label:'Normal gait pattern without assistive device'},
          {id:'acl2_3',label:'Single leg stance >10 seconds without trunk deviation'},
          {id:'acl2_4',label:'No joint effusion post-exercise'},
-         {id:'acl2_5',label:'Quad strength >60% symmetry (handheld dynamometer)'},
+         {id:'acl2_5',label:'Quad control: 10 pain-free single-leg sit-to-stand reps'},
        ]},
       {name:'Strengthening',type:'strength',
-       criteria:'Quad >70% LSI; hamstring >80% LSI; single leg squat; step down; no swelling',
+       criteria:'Single-leg sit-to-stand ≥70% of healthy side; single-leg bridge ≥80%; single leg squat; step down; no swelling',
        criteria_items:[
-         {id:'acl3_1',label:'Quad strength >70% limb symmetry index (LSI)'},
-         {id:'acl3_2',label:'Hamstring strength >80% LSI'},
+         {id:'acl3_1',label:'Single-leg sit-to-stand ≥70% of healthy side reps'},
+         {id:'acl3_2',label:'Single-leg bridge ≥80% of healthy side reps'},
          {id:'acl3_3',label:'Single leg squat — good form, no valgus collapse'},
          {id:'acl3_4',label:'Step down test — controlled, pain-free'},
          {id:'acl3_5',label:'No swelling after strengthening sessions'},
        ]},
       {name:'Neuromuscular',type:'neuromuscular',
-       criteria:'SLB >30s; Y-Balance <4cm; jump symmetry; no pain; ACL-RSI >50',
+       criteria:'SLB >30s; anterior reach <4cm difference; jump symmetry; no pain; ACL-RSI >50',
        criteria_items:[
          {id:'acl4_1',label:'Single leg balance >30s eyes closed'},
-         {id:'acl4_2',label:'Y-Balance test within 4cm side-to-side difference'},
+         {id:'acl4_2',label:'Anterior reach test (tape measure) within 4 cm side-to-side'},
          {id:'acl4_3',label:'Double leg squat jump — symmetrical landing mechanics'},
          {id:'acl4_4',label:'No pain or swelling with progressive loading'},
          {id:'acl4_5',label:'Psychological readiness score (ACL-RSI) >50'},
        ]},
       {name:'Return to running',type:'running',
-       criteria:'Quad ≥80% LSI; hamstring ≥80% LSI; 20min run pain-free; no swelling; mechanics',
+       criteria:'Single-leg sit-to-stand ≥80%; single-leg bridge ≥80%; 20min run pain-free; no swelling; mechanics',
        criteria_items:[
-         {id:'acl5_1',label:'Quad strength ≥80% LSI'},
-         {id:'acl5_2',label:'Hamstring strength ≥80% LSI'},
+         {id:'acl5_1',label:'Single-leg sit-to-stand ≥80% of healthy side reps'},
+         {id:'acl5_2',label:'Single-leg bridge ≥80% of healthy side reps'},
          {id:'acl5_3',label:'Pain-free running at 8 km/h for 20 min'},
          {id:'acl5_4',label:'No swelling post-running'},
          {id:'acl5_5',label:'Running mechanics assessment passed'},
        ]},
       {name:'Sport-specific',type:'training',
-       criteria:'Quad ≥90% LSI; hop tests ≥90%; cutting drills; ACL-RSI >65',
+       criteria:'Single-leg sit-to-stand ≥90% of healthy side; hop tests ≥90%; cutting drills; ACL-RSI >65',
        criteria_items:[
-         {id:'acl6_1',label:'Quad strength ≥90% LSI'},
-         {id:'acl6_2',label:'Single leg hop test ≥90% LSI'},
-         {id:'acl6_3',label:'Triple hop test ≥90% LSI'},
-         {id:'acl6_4',label:'Crossover hop test ≥90% LSI'},
+         {id:'acl6_1',label:'Single-leg sit-to-stand ≥90% of healthy side reps'},
+         {id:'acl6_2',label:'Single leg hop ≥90% of healthy side (distance)'},
+         {id:'acl6_3',label:'Triple hop ≥90% of healthy side (distance)'},
+         {id:'acl6_4',label:'Crossover hop ≥90% of healthy side (distance)'},
          {id:'acl6_5',label:'Cutting and pivoting drills — pain-free'},
          {id:'acl6_6',label:'Psychological readiness score (ACL-RSI) >65'},
        ]},
       {name:'Return to competition',type:'competition',
        criteria:'All tests ≥90%; full training; agility; no valgus; ACL-RSI >65; medical clearance',
        criteria_items:[
-         {id:'acl7_1',label:'Quad strength ≥90% LSI confirmed'},
+         {id:'acl7_1',label:'Single-leg sit-to-stand ≥90% of healthy side confirmed'},
          {id:'acl7_2',label:'No swelling after full training session'},
          {id:'acl7_3',label:'Full training participation without restrictions'},
          {id:'acl7_4',label:'Agility T-test within normal range'},
-         {id:'acl7_5',label:'Landing mechanics — no valgus (video analysis)'},
+         {id:'acl7_5',label:'Landing mechanics — no knee valgus on drop jump (observed or phone video)'},
          {id:'acl7_6',label:'ACL-RSI score >65'},
          {id:'acl7_7',label:'Medical staff clearance confirmed'},
        ]},
@@ -1266,7 +1289,7 @@ const PROTOCOLS = {
       {name:'Partial weight bearing',type:'subacute',criteria:'ROM progressing; partial weight bearing pain-free'},
       {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥70%; proprioception restored'},
       {name:'Functional / COD',type:'running',criteria:'Change of direction pain-free; jogging unrestricted'},
-      {name:'Return to training',type:'training',criteria:'Hop test ≥90% LSI; no swelling post-exercise'},
+      {name:'Return to training',type:'training',criteria:'Hop test ≥90% of healthy side (distance); no swelling post-exercise'},
     ],
     durations:{minor:[5,5,11,7,7]},
   },
@@ -1276,9 +1299,9 @@ const PROTOCOLS = {
       {name:'Acute / protected',type:'acute',criteria:'Immobilization; swelling controlled; pain ≤3/10'},
       {name:'ROM / partial loading',type:'subacute',criteria:'ROM progressing; partial weight bearing with support'},
       {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥60%; no joint effusion'},
-      {name:'Neuromuscular',type:'neuromuscular',criteria:'Single leg balance ≥80%; Y-Balance within 4 cm'},
+      {name:'Neuromuscular',type:'neuromuscular',criteria:'Single leg balance ≥80%; anterior reach test (tape measure) within 4 cm'},
       {name:'Return to running',type:'running',criteria:'Running pain-free at 8 km/h; no swelling post-session'},
-      {name:'Return to competition',type:'competition',criteria:'Hop test ≥90% LSI; figure-8 run pain-free; strength ≥90% symmetry'},
+      {name:'Return to competition',type:'competition',criteria:'Hop test ≥90% of healthy side (distance); figure-8 run pain-free; strength ≥90% vs healthy side'},
     ],
     durations:{minor:[14,7,14,14,14,14]},
   },
@@ -1440,14 +1463,14 @@ const BAMIC_PROTOCOLS = {
 const BAMIC_CRITERIA_BY_PHASE = {
   'Acute':              [{id:'a1',label:'No pain at rest'},{id:'a2',label:'Swelling controlled'},{id:'a3',label:'Normal gait pattern'}],
   'Regeneration':       [{id:'rg1',label:'Pain-free passive ROM'},{id:'rg2',label:'No palpation pain at injury site'},{id:'rg3',label:'Satisfactory tissue tone on palpation'}],
-  'Functional':         [{id:'fn1',label:'Isokinetic strength ≥60% vs contralateral'},{id:'fn2',label:'Pain-free cycling / aquatic exercise'},{id:'fn3',label:'Core and hip stability exercises completed'}],
+  'Functional':         [{id:'fn1',label:'Pain-free maximal isometric contraction vs healthy side (manual resistance)'},{id:'fn2',label:'Pain-free cycling / aquatic exercise'},{id:'fn3',label:'Core and hip stability exercises completed'}],
   'Return to running':  [{id:'rr1',label:'Pain-free running at 8 km/h'},{id:'rr2',label:'No swelling post-exercise'},{id:'rr3',label:'Full passive ROM'}],
-  'Return to training': [{id:'rt1',label:'Full training without restrictions'},{id:'rt2',label:'Strength symmetry >80%'},{id:'rt3',label:'No pain on palpation'}],
-  'Return to play':     [{id:'rp1',label:'Asymmetry <10% in isokinetic testing'},{id:'rp2',label:'Successful completion of sport-specific drills'},{id:'rp3',label:'Psychological readiness confirmed'}],
+  'Return to training': [{id:'rt1',label:'Full training without restrictions'},{id:'rt2',label:'Single-leg strength test ≥80% of healthy side (bridge / calf raise reps)'},{id:'rt3',label:'No pain on palpation'}],
+  'Return to play':     [{id:'rp1',label:'Single-leg hop test ≥90% of healthy side'},{id:'rp2',label:'Successful completion of sport-specific drills'},{id:'rp3',label:'Psychological readiness confirmed'}],
 };
 
 const BAMIC_CRITERIA_EXTRA_34 = [
-  {id:'ex1',label:'Isokinetic strength ≥90% symmetry'},
+  {id:'ex1',label:'Repeated single-leg strength test ≥90% of healthy side'},
   {id:'ex2',label:'Single-leg hop test ≥90%'},
   {id:'ex3',label:'Sprint mechanics assessment passed'},
 ];
@@ -1665,32 +1688,95 @@ function closePhaseModal() {
   document.getElementById('modalPhase').classList.remove('is-open');
 }
 
+// Los protocolos viejos guardan los criterios como un texto separado por ';' y los nuevos
+// como lista con id. Esto devuelve siempre la lista, que es lo único que edita la UI.
+function phaseItems(ph) {
+  if (Array.isArray(ph.criteria_items) && ph.criteria_items.length) {
+    return ph.criteria_items.map(c => ({ id: c.id, label: c.label }));
+  }
+  return (ph.criteria || '').split(';')
+    .map((s, i) => ({ id: `c${i}`, label: s.trim() }))
+    .filter(c => c.label);
+}
+
+function newCriterionId() { return 'u' + Date.now().toString(36) + Math.floor(Math.random()*1e4).toString(36); }
+
 function renderPhaseCriteria(ph) {
   const container = document.getElementById('phModalCriteria');
   const completed = ph.criteria_completed || {};
+  const items     = phaseItems(ph);
+  const editable  = ph.status !== 'done';
 
-  let items = [];
-  if (Array.isArray(ph.criteria_items) && ph.criteria_items.length) {
-    items = ph.criteria_items;
-  } else if (ph.criteria) {
-    items = ph.criteria.split(';').map((s,i) => ({id:`c${i}`,label:s.trim()})).filter(c=>c.label);
-  }
+  const rows = items.length
+    ? items.map(item => {
+        const checked = !!completed[item.id];
+        return `<label class="ph-criterion${checked?' is-checked':''}" data-item-id="${esc(item.id)}">
+          <input type="checkbox"${checked?' checked':''} onchange="onCriterionChange(this,'${esc(item.id)}')">
+          <span class="lbl">${esc(item.label)}</span>
+          ${editable ? `<button type="button" class="crit-del" title="${tt('injuries.remove_criterion','Remove criterion')}"
+            onclick="event.preventDefault();event.stopPropagation();phCritDelete('${esc(item.id)}')"><i class="ti ti-x"></i></button>` : ''}
+        </label>`;
+      }).join('')
+    : `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">${tt('injuries.no_criteria_defined','No specific criteria defined for this phase.')}</div>`;
 
-  if (!items.length) {
-    container.innerHTML = `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">${tt('injuries.no_criteria_defined','No specific criteria defined for this phase.')}</div>`;
-    document.getElementById('phBtnComplete').disabled = false;
-    return;
-  }
+  const adder = editable
+    ? `<div class="crit-add">
+        <input id="phCritNew" class="cm-input" placeholder="${tt('injuries.add_criterion_ph','Add your own criterion…')}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();phCritAdd();}">
+        <button type="button" class="cm-btn is-ghost is-sm" onclick="phCritAdd()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('injuries.add_criterion','Add')}</button>
+      </div>`
+    : '';
 
-  container.innerHTML = items.map(item => {
-    const checked = !!completed[item.id];
-    return `<label class="ph-criterion${checked?' is-checked':''}" data-item-id="${esc(item.id)}">
-      <input type="checkbox"${checked?' checked':''} onchange="onCriterionChange(this,'${esc(item.id)}')">
-      <span class="lbl">${esc(item.label)}</span>
-    </label>`;
-  }).join('');
-
+  container.innerHTML = rows + adder;
   updatePhaseCompleteBtn();
+}
+
+// Lo tildado en pantalla todavía no está guardado: se rescata antes de repintar la lista.
+function readPhaseCriteriaState() {
+  const out = {};
+  document.querySelectorAll('#phModalCriteria input[type=checkbox]').forEach(cb => {
+    const id = cb.closest('.ph-criterion')?.dataset?.itemId;
+    if (id) out[id] = cb.checked;
+  });
+  return out;
+}
+
+// Los criterios se guardan al momento de tocarlos (no al cerrar el modal): así el fisio que
+// ajusta la lista no la pierde si después cancela, y el resto del staff la ve enseguida.
+async function persistPhaseCriteria(ph, items, completed) {
+  ph.criteria_items      = items;
+  ph.criteria            = items.map(i => i.label).join('; ');
+  ph.criteria_completed  = completed;
+  const { error } = await window.sb.from('injury_phases')
+    .update({ criteria_items: items, criteria: ph.criteria, criteria_completed: completed })
+    .eq('id', ph.id);
+  if (error) { alert(tt('injuries.err_generic', `Error: ${error.message}`, { msg: error.message })); return false; }
+  applyFilters();
+  return true;
+}
+
+function _phModalPhase() {
+  return _phasesMap[_phaseModalInjId]?.find(p => p.id === _phaseModalPhaseId) || null;
+}
+
+async function phCritAdd() {
+  const ph  = _phModalPhase(); if (!ph) return;
+  const inp = document.getElementById('phCritNew');
+  const val = inp?.value?.trim(); if (!val) return;
+  const items = phaseItems(ph);
+  items.push({ id: newCriterionId(), label: val });
+  if (await persistPhaseCriteria(ph, items, readPhaseCriteriaState())) {
+    renderPhaseCriteria(ph);
+    document.getElementById('phCritNew')?.focus();
+  }
+}
+
+async function phCritDelete(itemId) {
+  const ph = _phModalPhase(); if (!ph) return;
+  const items     = phaseItems(ph).filter(i => i.id !== itemId);
+  const completed = readPhaseCriteriaState();
+  delete completed[itemId];
+  if (await persistPhaseCriteria(ph, items, completed)) renderPhaseCriteria(ph);
 }
 
 function onCriterionChange(checkbox, itemId) {
@@ -1952,6 +2038,14 @@ async function savePhaseStatus(status) {
     const ph = e.target.closest('.tl-phase[data-phase-id]');
     if (ph) { openPhaseModal(ph.dataset.phaseId, ph.dataset.injId); return; }
   });
+
+  // Cualquier campo que cambie el protocolo vuelve a proponer los criterios de las fases
+  ['logStart','logType','logCategory','logSev','logBamic','logLigamentGrade','logTendonStage','logBoneType']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener(el.tagName === 'INPUT' && el.type !== 'date' ? 'input' : 'change', renderLogCriteria);
+    });
 
   // Body area map clicks in modal
   ['formMapAnt','formMapPost'].forEach(svgId => {
@@ -2741,6 +2835,7 @@ function openLogModal() {
   _hideAllSubClsSections();
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = false;
+  resetLogCriteria();
   document.getElementById('logModeWrap').style.display = '';
   document.getElementById('logModeDesc').style.display = '';
   setLogMode('active');
@@ -2784,6 +2879,7 @@ function openEditInjury(id) {
   }
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = !!(inj.expected_return);
+  resetLogCriteria(); // editar una lesión no regenera las fases: los criterios se tocan en cada fase
   // Historical/active toggle is only for new records — hide when editing
   _logMode = 'active';
   document.getElementById('logModeWrap').style.display = 'none';
@@ -2801,6 +2897,88 @@ function openEditInjury(id) {
 
 function closeLogModal() {
   document.getElementById('modalLogInj').classList.remove('is-open');
+}
+
+// ═══════════════ CRITERIOS DEL PROTOCOLO EN EL ALTA DE LESIÓN ═══════════════
+// El protocolo propone los criterios; el club decide con cuáles se queda. Se muestran al
+// cargar la lesión y se pueden borrar o agregar antes de crear el caso — no todos los clubes
+// tienen isocinético, kit de Y-Balance o análisis de video, y cada cuerpo médico tiene los suyos.
+let _logCriteria = null, _logCritSig = '';
+
+function resetLogCriteria() {
+  _logCriteria = null; _logCritSig = '';
+  const wrap = document.getElementById('logCriteriaWrap');
+  if (wrap) wrap.style.display = 'none';
+}
+
+function renderLogCriteria() {
+  const wrap = document.getElementById('logCriteriaWrap');
+  if (!wrap) return;
+  const startDate   = document.getElementById('logStart')?.value;
+  const injType     = document.getElementById('logType')?.value;
+  const injCategory = document.getElementById('logCategory')?.value;
+  const severity    = document.getElementById('logSev')?.value;
+  const bamicGrade  = document.getElementById('logBamic')?.value;
+  const subCls      = getSubClsFromModal(injCategory);
+
+  // Solo para casos activos nuevos: el registro histórico no genera fases y editar una lesión
+  // ya creada tampoco las regenera.
+  if (_logMode !== 'active' || _editingInjuryId || !startDate || !injCategory || !severity) {
+    resetLogCriteria(); return;
+  }
+
+  const sig = [startDate, injCategory, severity, bamicGrade || '', subCls || '',
+               /acl|cruciate/i.test(injType || '') ? 'acl' : ''].join('|');
+  if (sig === _logCritSig && _logCriteria) { wrap.style.display = ''; return; } // no pisar lo ya editado
+
+  const phases = buildPhases(null, startDate, severity, injType, bamicGrade, injCategory, subCls) || [];
+  _logCriteria = phases.map(p => ({ phase_number: p.phase_number, phase_name: p.phase_name, items: phaseItems(p) }));
+  _logCritSig  = sig;
+  wrap.style.display = _logCriteria.length ? '' : 'none';
+  paintLogCriteria();
+}
+
+function paintLogCriteria() {
+  const list = document.getElementById('logCriteriaList');
+  if (!list || !_logCriteria) return;
+  list.innerHTML = _logCriteria.map((ph, pi) => `
+    <div class="crit-phase">
+      <div class="crit-phase-h"><span class="n">${tt('injuries.ph_abbr','Ph.')}${ph.phase_number}</span><span class="l">${esc(ph.phase_name)}</span></div>
+      ${ph.items.map((it, ii) => `<div class="crit-row"><span>${esc(it.label)}</span>
+        <button type="button" class="crit-del" title="${tt('injuries.remove_criterion','Remove criterion')}"
+          onclick="logCritDelete(${pi},${ii})"><i class="ti ti-x"></i></button></div>`).join('')}
+      <div class="crit-add">
+        <input id="logCritNew${pi}" class="cm-input" placeholder="${tt('injuries.add_criterion_ph','Add your own criterion…')}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();logCritAdd(${pi});}">
+        <button type="button" class="cm-btn is-ghost is-sm" onclick="logCritAdd(${pi})"><i class="ti ti-plus" style="font-size:14px"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+function logCritAdd(pi) {
+  const val = document.getElementById('logCritNew' + pi)?.value?.trim();
+  if (!val || !_logCriteria?.[pi]) return;
+  _logCriteria[pi].items.push({ id: newCriterionId(), label: val });
+  paintLogCriteria();
+  document.getElementById('logCritNew' + pi)?.focus();
+}
+
+function logCritDelete(pi, ii) {
+  if (!_logCriteria?.[pi]) return;
+  _logCriteria[pi].items.splice(ii, 1);
+  paintLogCriteria();
+}
+
+// Vuelca lo que quedó en el editor sobre las fases que se van a insertar.
+function applyLogCriteria(phases) {
+  if (!_logCriteria || !phases) return phases;
+  phases.forEach(p => {
+    const ed = _logCriteria.find(c => c.phase_number === p.phase_number);
+    if (!ed) return;
+    p.criteria_items = ed.items.length ? ed.items : null;
+    p.criteria       = ed.items.map(i => i.label).join('; ');
+  });
+  return phases;
 }
 
 function getSubClsFromModal(category) {
@@ -2852,7 +3030,8 @@ async function saveInjury() {
     // Auto-create phases (active protocol only — historical records skip the rehab timeline)
     if (!isHistorical) {
       try {
-        const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification);
+        const phases = applyLogCriteria(
+          buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification));
         const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
         if (insertedPhs) {
           _phasesMap[newInj.id] = insertedPhs;
