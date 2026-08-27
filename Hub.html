@@ -2076,7 +2076,15 @@ function renderTasks(tasks, view = 'my') {
     if (!_fullAccess) { try { _myTeams = (await window.sb.rpc('my_team_ids')).data || []; } catch {} }
 
     // 1. Honor the shared active team if it's valid for this user.
-    const _saved = sessionStorage.getItem('cal_active_team');
+    // Leer AMBOS almacenes, igual que window.getActiveTeamId() y el selector del
+    // sidebar. Leyendo sólo sessionStorage, el primer Hub tras un login en una
+    // pestaña nueva no encontraba nada (sessionStorage muere al cerrar el
+    // navegador, localStorage no), caía al equipo por defecto y calculaba los
+    // KPI para otro equipo que el que mostraba el sidebar. El sidebar entonces
+    // escribía sessionStorage, y por eso al recargar ya salía bien.
+    const _saved = (window.getActiveTeamId && window.getActiveTeamId())
+                || sessionStorage.getItem('cal_active_team')
+                || localStorage.getItem('cal_active_team');
     if (_saved && (_fullAccess || _myTeams.includes(_saved))) {
       _hubTeamId = _saved;
     } else {
@@ -2085,8 +2093,15 @@ function renderTasks(tasks, view = 'my') {
       else { _hubTeamId = _myTeams[0] || null; }
     }
 
-    // Keep it shared with Chat & Tasks / Calendar.
-    if (_hubTeamId) sessionStorage.setItem('cal_active_team', _hubTeamId);
+    // Keep it shared with Chat & Tasks / Calendar. En los dos almacenes, como
+    // hace el sidebar: si sólo se guarda en sessionStorage, la elección se
+    // pierde al cerrar el navegador.
+    if (_hubTeamId) {
+      try {
+        sessionStorage.setItem('cal_active_team', _hubTeamId);
+        localStorage.setItem('cal_active_team', _hubTeamId);
+      } catch (_) {}
+    }
   } catch (e) { console.warn('[Hub] team resolve:', e.message); }
   window._hubTeamId = _hubTeamId;
   const _teamEq = _hubTeamId ? { team_id: _hubTeamId } : {};

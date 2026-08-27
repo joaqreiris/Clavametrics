@@ -606,14 +606,18 @@
       const ext  = file.name.split('.').pop().toLowerCase();
       const path = `${clubId}/logo.${ext}`;
       const { error: upErr } = await window.sb.storage
-        .from('club-logos').upload(path, file, { upsert: true, contentType: file.type });
+        .from('club-logos').upload(path, file, { upsert: true, contentType: file.type, cacheControl: '60' });
       if (upErr) { alert(tt('onboarding.uploadFailed', 'Upload failed: ') + upErr.message); return; }
       const { data: { publicUrl } } = window.sb.storage.from('club-logos').getPublicUrl(path);
+      // La ruta es siempre la misma, así que la URL pública no cambia entre
+      // subidas y el CDN sigue devolviendo el logo anterior. Se versiona ANTES
+      // de guardarla, no sólo para pintarla.
+      const versionedUrl = publicUrl + '?v=' + Date.now();
       const { data: dbData, error: dbErr } = await window.sb
-        .from('clubs').update({ logo_url: publicUrl }).eq('id', clubId).select('id');
+        .from('clubs').update({ logo_url: versionedUrl }).eq('id', clubId).select('id');
       if (dbErr) { alert(tt('onboarding.saveFailedColon', 'Save failed: ') + dbErr.message); return; }
       if (!dbData?.length) { alert(tt('onboarding.savePermDenied', 'Save failed: permission denied.')); return; }
-      const displayUrl = publicUrl + '?t=' + Date.now();
+      const displayUrl = versionedUrl;
       if (crest) { crest.style.background = 'transparent'; crest.innerHTML = `<img src="${displayUrl}" alt="${tt('onboarding.clubCrest','Club crest')}" style="width:100%;height:100%;object-fit:contain">`; }
       if (typeof window.setClubLogo === 'function') window.setClubLogo(displayUrl);
       else if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();

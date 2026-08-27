@@ -1818,22 +1818,29 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
 
       const { error: upErr } = await window.sb.storage
         .from('club-logos')
-        .upload(path, file, { upsert: true, contentType: file.type });
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '60' });
       if (upErr) { alert(tt('admin.upload_failed_x','Upload failed: {msg}',{ msg:upErr.message })); return; }
 
       const { data: { publicUrl } } = window.sb.storage
         .from('club-logos')
         .getPublicUrl(path);
 
+      // El archivo se sobrescribe SIEMPRE en la misma ruta (clubId/logo.ext), así
+      // que la URL pública no cambia entre subidas y el navegador y el CDN siguen
+      // sirviendo el logo anterior: parecía que el cambio "no se guardaba" cuando
+      // en realidad sí se guardaba. Por eso la URL se versiona ANTES de escribirla
+      // en la base, no sólo para pintarla en pantalla.
+      const versionedUrl = publicUrl + '?v=' + Date.now();
+
       const { data: dbData, error: dbErr } = await window.sb
         .from('clubs')
-        .update({ logo_url: publicUrl })
+        .update({ logo_url: versionedUrl })
         .eq('id', clubId)
         .select('id');
       if (dbErr) { alert(tt('admin.save_failed_x','Save failed: {msg}',{ msg:dbErr.message })); return; }
       if (!dbData?.length) { alert(tt('admin.save_failed_permission','Save failed: permission denied — no rows updated.')); return; }
 
-      const displayUrl = publicUrl + '?t=' + Date.now();
+      const displayUrl = versionedUrl;
       applyLogoToOrgIc(displayUrl);
 
       if (typeof window.setClubLogo === 'function') window.setClubLogo(displayUrl);
