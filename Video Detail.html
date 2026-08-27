@@ -459,7 +459,24 @@
     }
     return v.url || null;
   }
+  // Descarga: el archivo vive en Drive/Dropbox, así que se le pide al proveedor
+  // que lo sirva como descarga. Un <a download> no sirve: el navegador lo ignora
+  // cross-origin y bajarlo por fetch se choca con CORS.
+  function downloadUrl() {
+    if (isFolder) return null;
+    if (v.provider === 'dropbox') {
+      const u = v.url || ''; if (!u) return null;
+      if (/dropboxusercontent\.com/i.test(u)) return u;          // ya es un directo
+      if (/[?&]dl=\d/.test(u))  return u.replace(/([?&])dl=\d/,  '$1dl=1');
+      if (/[?&]raw=\d/.test(u)) return u.replace(/([?&])raw=\d/, '$1dl=1');
+      return u + (u.includes('?') ? '&' : '?') + 'dl=1';
+    }
+    if (v.provider === 'google_drive') { const fid = driveId(); return fid ? `https://drive.google.com/uc?export=download&id=${fid}` : null; }
+    return null;                                                  // YouTube/Vimeo/otros: no aplica
+  }
+
   const embed = embedUrl();
+  const dlUrl = downloadUrl();
   const dur = isFolder ? null : fmtDur(v.duration_seconds);
   const openLabel = isFolder ? tt('video_detail.open_folder_in', `Open folder in ${prov.label}`, { name:prov.label }) : prov.open;
   const embedBadge = isFolder ? tt('video_detail.browsing_folder', `Browsing ${prov.label} folder`, { name:prov.label }) : tt('video_detail.streaming_from', `Streaming from ${prov.label}`, { name:prov.label });
@@ -490,6 +507,7 @@
         <div id="vdPlayerHost">${priorPlayer ? '' : playerHtml}</div>
         <div class="vd-acts">
           <button class="cm-btn is-primary" id="vdOpen"><i class="ti ${prov.icon}" style="font-size:16px"></i>${esc(openLabel)}<i class="ti ti-external-link" style="font-size:15px"></i></button>
+          ${dlUrl ? `<button class="cm-btn" id="vdDownload"><i class="ti ti-download" style="font-size:15px"></i>${esc(tt('video_detail.download', 'Download'))}</button>` : ''}
           <button class="cm-btn" id="vdCopy"><i class="ti ti-copy" style="font-size:15px"></i>${esc(tt('video_detail.copy_link', 'Copy link'))}</button>
         </div>
         <div class="vd-titlecard">
@@ -554,6 +572,11 @@
   // ── Actions ──────────────────────────────────────────────────────────────────
   document.getElementById('vdOpen').addEventListener('click', () => window.open(safeUrl(v.url), '_blank', 'noopener'));
   document.getElementById('vdCopy').addEventListener('click', () => navigator.clipboard?.writeText(v.url).then(() => toast(tt('video_detail.link_copied', 'Link copied'))));
+  const dlBtn = document.getElementById('vdDownload');
+  if (dlBtn) dlBtn.addEventListener('click', () => {
+    window.open(safeUrl(dlUrl), '_blank', 'noopener');
+    toast(tt('video_detail.download_started', 'Download started — check your browser downloads'));
+  });
 
   // ── Notes save ───────────────────────────────────────────────────────────────
   document.getElementById('vdSaveNotes').addEventListener('click', async () => {
