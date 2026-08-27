@@ -5423,7 +5423,10 @@ begin
     if (p_payload->>'scale') = '7' then
       v_hooper := coalesce((p_payload->>'sleepQ')::int,4) + coalesce((p_payload->>'fatigue')::int,4)
                 + coalesce((p_payload->>'stress')::int,4) + coalesce((p_payload->>'soreness')::int,4);
-      v_read := round(10 - (v_hooper - 4) / 24.0 * 10)::int;
+      -- piso en 1: wellness tiene CHECK (readiness between 1 and 10) y la
+      -- fórmula da 0 con Hooper >= 27, así que el jugador que peor está era
+      -- justo el que no podía enviar el check-in.
+      v_read := greatest(1, round(10 - (v_hooper - 4) / 24.0 * 10)::int);
       insert into public.wellness (club_id, player_id, sleep_quality, mood, fatigue, stress, soreness, hooper_index, readiness, note, body_areas, submitted_at)
       values (v_link.club_id, p_player_id, (p_payload->>'sleepQ')::int, (p_payload->>'mood')::int,
               (p_payload->>'fatigue')::int, (p_payload->>'stress')::int, (p_payload->>'soreness')::int,

@@ -113,7 +113,7 @@ update players
 insert into subscriptions (team_id, club_id, plan_id, status, billing_cycle,
                            current_period_start, current_period_end, is_comp)
 select v_first, v_club, (select id from plans where slug = 'full'),
-       'active', 'annual', now(), now() + interval '10 years', true
+       'active', 'yearly', now(), now() + interval '10 years', true   -- ojo: 'monthly' | 'yearly'
  where not exists (select 1 from subscriptions
                     where team_id = v_first and status in ('active','trialing'));
 
@@ -316,7 +316,10 @@ insert into wellness (club_id, player_id, sleep_quality, mood, fatigue, stress,
                       soreness, hooper_index, readiness, submitted_at)
 select v_club, x.player_id, x.sleep, x.mood, x.fatigue, x.stress, x.soreness,
        x.sleep + x.fatigue + x.stress + x.soreness as hooper,
-       round(10 - ((x.sleep + x.fatigue + x.stress + x.soreness) - 4) / 24.0 * 10)::int,
+       -- misma fórmula que submit_survey(), pero con piso en 1: la tabla tiene
+       -- CHECK (readiness between 1 and 10) y la fórmula da 0 cuando el Hooper
+       -- llega a 27 o más.
+       greatest(1, round(10 - ((x.sleep + x.fatigue + x.stress + x.soreness) - 4) / 24.0 * 10)::int),
        (x.dia + time '08:15' + (random() * interval '90 minutes')) at time zone 'UTC'
   from (
     select p.id as player_id, d.dia,
