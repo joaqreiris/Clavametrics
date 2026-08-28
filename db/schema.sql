@@ -7984,40 +7984,28 @@ create policy "wellness_scoped_delete" on public.wellness as permissive for dele
 -- vieja: sin eso viaja solo la PK y el filtro club_id=eq.… lo descarta.
 -- Costo de FULL: los UPDATE/DELETE escriben la fila vieja entera en el WAL.
 -- ─────────────────────────────────────────────────────────────────────────────
-alter table public.training_sessions    replica identity full;
-alter table public.calendar_events      replica identity full;
-alter table public.microcycles          replica identity full;
-alter table public.session_exercises    replica identity full;
-alter table public.session_participants replica identity full;
-alter table public.treatments           replica identity full;
-alter table public.tactical_objectives  replica identity full;
-alter table public.tactical_catalog     replica identity full;
-alter table public.injuries             replica identity full;
-alter table public.injury_phases        replica identity full;
-alter table public.rpe                  replica identity full;
-alter table public.wellness             replica identity full;
-alter table public.rehab_plans          replica identity full;
-alter table public.players              replica identity full;
-alter table public.player_teams         replica identity full;
-alter table public.tasks                replica identity full;
-
-alter publication supabase_realtime add table public.training_sessions;
-alter publication supabase_realtime add table public.calendar_events;
-alter publication supabase_realtime add table public.microcycles;
-alter publication supabase_realtime add table public.session_exercises;
-alter publication supabase_realtime add table public.session_participants;
-alter publication supabase_realtime add table public.treatments;
-alter publication supabase_realtime add table public.tactical_objectives;
-alter publication supabase_realtime add table public.tactical_catalog;
-alter publication supabase_realtime add table public.injuries;
-alter publication supabase_realtime add table public.injury_phases;
-alter publication supabase_realtime add table public.rpe;
-alter publication supabase_realtime add table public.wellness;
-alter publication supabase_realtime add table public.rehab_plans;
-alter publication supabase_realtime add table public.players;
-alter publication supabase_realtime add table public.player_teams;
--- tasks: Chat & Tasks ya se suscribía a esta tabla, pero al no estar publicada
--- las tareas nunca llegaban en vivo. Publicarla arregla esa suscripción vieja.
-alter publication supabase_realtime add table public.tasks;
+-- Idempotente a propósito: `alter publication … add table` tira 42710 si la tabla
+-- ya está, y el editor SQL de Supabase corre todo en una transacción — un choque
+-- aborta el resto del bloque. Así se puede re-correr sin romper nada.
+-- tasks: Chat & Tasks ya se suscribía a esa tabla, pero al no estar publicada las
+-- tareas nunca llegaban en vivo. Publicarla arregla esa suscripción vieja.
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'training_sessions','calendar_events','microcycles','session_exercises',
+    'session_participants','treatments','tactical_objectives','tactical_catalog',
+    'injuries','injury_phases','rpe','wellness','rehab_plans','players',
+    'player_teams','tasks'
+  ] loop
+    execute format('alter table public.%I replica identity full', t);
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
 -- Ya publicadas de antes: availability, messages, message_reactions, channel_reads,
 -- notifications, gps_sync_jobs.
