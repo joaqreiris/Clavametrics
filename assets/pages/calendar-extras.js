@@ -44,9 +44,9 @@ function mcMatch(mc) {
 }
 function mcMatchDate(mc) { return mcMatch(mc)?.session_date || null; }
 
-// Load the active season + its competitions (from Annual Planner model)
+// Load the active season + its competitions and phases (from Annual Planner model)
 async function loadCalCompetitions() {
-  _calComps = []; _calSeasonId = null; _calSeason = null; _calPlanModel = 'tactical';
+  _calComps = []; _calSeasonId = null; _calSeason = null; _calPlanModel = 'tactical'; _calPhases = [];
   if (!_clubId || !_activeTeamId) return;
   const { data: seasons } = await window.sb
     .from('seasons').select('*')
@@ -58,10 +58,14 @@ async function loadCalCompetitions() {
   _calSeason = current || seasons[0];
   _calSeasonId = _calSeason.id;
   _calPlanModel = _calSeason.planning_model || 'tactical';
-  const { data: comps } = await window.sb
-    .from('competitions').select('id,name,comp_type,color')
-    .eq('season_id', _calSeasonId).order('created_at');
-  _calComps = comps || [];
+  const [{ data: comps }, { data: phases }] = await Promise.all([
+    window.sb.from('competitions').select('id,name,comp_type,color')
+      .eq('season_id', _calSeasonId).order('created_at'),
+    window.sb.from('season_phases').select('id,name,color,start_date,end_date,counts_availability')
+      .eq('season_id', _calSeasonId).order('start_date')
+  ]);
+  _calComps  = comps || [];
+  _calPhases = (phases || []).filter(p => p.start_date && p.end_date);
 }
 
 // Refetch match events + re-render ribbon/KPIs/upcoming (after event CRUD)
@@ -176,6 +180,92 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       monthsEl.appendChild(cell);
       cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
     }
+  }
+
+  // ── Phase rail (etapas de la temporada) ──
+  // Riel fino sobre el eje de meses + un corte vertical en cada frontera.
+  // Sin fases cargadas la fila mide 0 y el ribbon queda exactamente como antes.
+  const phasesEl = document.getElementById('calV2Phases');
+  const linesEl  = document.getElementById('calV2PhaseLines');
+  if (phasesEl && linesEl) {
+    const ymd = d => window.cmYMD ? window.cmYMD(d)
+      : (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+    const rbFrom = ymd(ribbonStart), rbTo = ymd(ribbonEnd);
+    // Solo las fases que asoman en el rango visible, recortadas a él
+    const visible = (_calPhases || [])
+      .filter(p => p.end_date >= rbFrom && p.start_date <= rbTo)
+      .sort((a, b) => a.start_date > b.start_date ? 1 : -1)
+      .map(p => ({ ...p, _from: p.start_date < rbFrom ? rbFrom : p.start_date,
+                          _to:   p.end_date   > rbTo   ? rbTo   : p.end_date }));
+
+    phasesEl.innerHTML = '';
+    linesEl.innerHTML  = '';
+    if (track) track.classList.toggle('has-phases', visible.length > 0);
+
+    const bounds = new Set();
+    visible.forEach(p => {
+      const off  = dayOffset(p._from);
+      const days = dayOffset(p._to) - off + 1;
+      const isNow   = p.start_date <= TODAY && p.end_date >= TODAY;
+      const isFocus = _ribbonViewRange
+        && _ribbonViewRange.from === p.start_date && _ribbonViewRange.to === p.end_date;
+      const counts  = p.counts_availability !== false;
+
+      const seg = document.createElement('div');
+      seg.className = 'phase-seg'
+        + (counts ? '' : ' phase-seg--off')
+        + (isNow ? ' phase-seg--now' : '')
+        + (isFocus ? ' phase-seg--focus' : '');
+      seg.style.setProperty('--ph', p.color || 'var(--cm-border-strong)');
+      seg.style.left  = (off * ppd) + 'px';
+      seg.style.width = Math.max(6, days * ppd - 2) + 'px';
+      seg.title = `${p.name} · ${_fmtDateStr(p.start_date)} → ${_fmtDateStr(p.end_date)}`
+        + (counts ? '' : ' · ' + tt('calendar.phase_not_counted','Doesn\'t count for availability'))
+        + '\n' + (isFocus
+            ? tt('calendar.phase_click_out','Click to see the whole season again')
+            : tt('calendar.phase_click_in','Click to zoom the ribbon into this phase'));
+      // El nombre sólo cuando hay lugar para leerlo; si no, queda el tooltip
+      if (days * ppd >= 56) {
+        const nm = document.createElement('span');
+        nm.className = 'phase-seg__name';
+        nm.textContent = p.name;
+        seg.appendChild(nm);
+      }
+      seg.addEventListener('click', () => {
+        _ribbonViewRange = isFocus ? null : { from: p.start_date, to: p.end_date };
+        renderSeasonRibbon(_allMCs, _matchSessions);
+        const vp = document.getElementById('calRibbonV2');
+        if (!vp) return;
+        if (_ribbonViewRange) { vp.scrollLeft = 0; }
+        else if (_ribbonV2Meta) {
+          // Al volver a la temporada completa, recentrar en hoy
+          const p2 = RIBBON_ZOOM[_ribbonZoomIdx];
+          requestAnimationFrame(() => {
+            const t = (Math.round((new Date(TODAY + 'T00:00:00') - _ribbonV2Meta.ribbonStart) / 86400000)) * p2
+                      + RIBBON_GUTTER - vp.clientWidth / 2;
+            vp.scrollTo({ left: Math.max(0, t), behavior: 'smooth' });
+          });
+        }
+      });
+      phasesEl.appendChild(seg);
+
+      // Fronteras: inicio de cada fase, y su fin cuando la siguiente no encadena
+      bounds.add(JSON.stringify([off, p.color]));
+      const nextDay = new Date(new Date(p._to + 'T00:00:00').getTime() + 86400000);
+      if (nextDay <= ribbonEnd && !visible.some(q => q._from === ymd(nextDay))) {
+        bounds.add(JSON.stringify([dayOffset(nextDay), p.color]));
+      }
+    });
+
+    bounds.forEach(key => {
+      const [off, color] = JSON.parse(key);
+      if (off <= 0) return; // el borde izquierdo del track ya es un corte
+      const line = document.createElement('div');
+      line.className = 'phase-line';
+      line.style.setProperty('--ph', color || 'var(--cm-border-strong)');
+      line.style.left = (off * ppd + RIBBON_GUTTER) + 'px';
+      linesEl.appendChild(line);
+    });
   }
 
   // ── Microcycles ──

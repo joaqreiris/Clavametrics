@@ -24,6 +24,7 @@ let _calComps = [];          // competitions of the active season (from Annual P
 let _calSeasonId = null;     // id of the active/most-recent season for this team
 let _calPlanModel = 'tactical';   // seasons.planning_model of the active season (gates micro_type)
 let _calSeason = null;       // full active/most-recent season row
+let _calPhases = [];         // season_phases of the active season → riel de etapas del ribbon
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _ribbonZoomIdx = 2;           // índice en RIBBON_ZOOM

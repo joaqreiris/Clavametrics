@@ -126,15 +126,26 @@
     padding: var(--cm-s-4) 28px var(--cm-s-5);
     width: max-content;
     min-width: 100%;
+    /* Altura de la cabecera (meses + riel de fases). Los marcadores verticales
+       —hoy, límites de temporada, sombreado— arrancan justo debajo. */
+    --ribbon-months-gap: var(--cm-s-3);
+    --ribbon-phase-h: 0px;
+    --ribbon-phase-gap: 0px;
+    --ribbon-head-h: calc(var(--cm-s-4) + 40px + var(--ribbon-months-gap)
+                          + var(--ribbon-phase-h) + var(--ribbon-phase-gap) - 6px);
+  }
+  .ribbon-track.has-phases {
+    --ribbon-phase-h: 18px;
+    --ribbon-phase-gap: 6px;   /* el riel se pega al eje: es parte de la regla */
   }
 
   /* ── Month axis (sticky top band) ── */
   .ribbon-track__months {
     position: sticky;
-    top: 0;
+    top: var(--ribbon-phase-h);
     z-index: 3;
     height: 40px;
-    margin-bottom: var(--cm-s-3);
+    margin-bottom: var(--ribbon-months-gap);
   }
   .month {
     position: absolute;
@@ -178,6 +189,86 @@
   }
   .tick__n { font: 400 9px/1 var(--cm-font-mono); margin-top: 2px; }
   .month:hover .tick { opacity: 0.9; }
+
+  /* ── Phase rail (etapas de la temporada) ──
+     Riel fino sobre el eje de meses — la jerarquía es fase › mes › microciclo.
+     Tinte suave + filete de color abajo: el color de la fase se lee sin
+     competir con las chips ni con el marcador de hoy. Sin fases cargadas la
+     fila mide 0 y el ribbon queda exactamente como antes. */
+  .ribbon-track__phases {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    height: var(--ribbon-phase-h);
+    margin-bottom: var(--ribbon-phase-gap);
+  }
+  .phase-seg {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    border-radius: var(--cm-r-1);
+    background: color-mix(in srgb, var(--ph) 16%, transparent);
+    box-shadow: inset 0 -2px 0 0 var(--ph);
+    cursor: pointer;
+    /* clip-path en vez de overflow:hidden — recorta igual, pero no crea un
+       scroll container y deja funcionar el sticky del nombre. */
+    clip-path: inset(0 round var(--cm-r-1));
+    transition: background var(--cm-dur-1) var(--cm-ease);
+  }
+  .phase-seg:hover { background: color-mix(in srgb, var(--ph) 26%, transparent); }
+  .phase-seg__name {
+    position: sticky;
+    left: 26px;   /* después del fade lateral del viewport */
+    max-width: 100%;
+    font: 600 9px/1 var(--cm-font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--ph) 55%, var(--cm-fg-strong));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Fase en curso: un punto más de tinte, para ubicarse de un vistazo */
+  .phase-seg--now { background: color-mix(in srgb, var(--ph) 25%, transparent); }
+  .phase-seg--now .phase-seg__name { color: color-mix(in srgb, var(--ph) 42%, var(--cm-fg-strong)); }
+  /* Fase recortada en el ribbon (click) */
+  .phase-seg--focus {
+    background: color-mix(in srgb, var(--ph) 26%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ph) 55%, transparent),
+                inset 0 -2px 0 0 var(--ph);
+  }
+  /* Fase que no cuenta para disponibilidad (parón / off-season): sin color,
+     rayado sutil — rima con las chips de descanso, que ya son punteadas. */
+  .phase-seg--off {
+    background: repeating-linear-gradient(-45deg,
+      transparent 0 5px,
+      color-mix(in srgb, var(--cm-fg) 7%, transparent) 5px 10px);
+    box-shadow: inset 0 -2px 0 0 var(--cm-border-strong);
+  }
+  .phase-seg--off:hover {
+    background: repeating-linear-gradient(-45deg,
+      transparent 0 5px,
+      color-mix(in srgb, var(--cm-fg) 12%, transparent) 5px 10px);
+  }
+  .phase-seg--off .phase-seg__name { color: var(--cm-fg-faint); }
+  /* Corte vertical en cada frontera de fase: se ve dónde cambia la etapa
+     aunque estés mirando las pills de abajo. Va antes de las chips en el DOM
+     para quedar por detrás sin pelearse por z-index. */
+  .ribbon-track__phase-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .phase-line {
+    position: absolute;
+    top: var(--ribbon-head-h);
+    bottom: var(--cm-s-5);
+    width: 0;
+    border-left: 1px solid color-mix(in srgb, var(--ph) 28%, transparent);
+  }
 
   /* ── Microcycle row ── */
   .ribbon-track__cycles {
@@ -369,7 +460,7 @@
   /* ── TODAY marker ── */
   .ribbon-track__today {
     position: absolute;
-    top: calc(var(--cm-s-4) + 40px + var(--cm-s-3) - 6px);
+    top: var(--ribbon-head-h);
     bottom: var(--cm-s-5);
     width: 0;
     border-left: 2px solid var(--cm-accent);
@@ -409,7 +500,7 @@
   }
   .ribbon-track__season-bound {
     position: absolute;
-    top: calc(var(--cm-s-4) + 40px + var(--cm-s-3) - 6px);
+    top: var(--ribbon-head-h);
     bottom: var(--cm-s-5);
     width: 0;
     border-left: 2px dashed var(--cm-border-strong);
@@ -434,7 +525,7 @@
   .ribbon-track__season-bound.is-end   .season-flag { right: 6px; }
   .ribbon-track__season-shade {
     position: absolute;
-    top: calc(var(--cm-s-4) + 40px + var(--cm-s-3) - 6px);
+    top: var(--ribbon-head-h);
     bottom: var(--cm-s-5);
     background: color-mix(in srgb, var(--cm-fg) 5%, transparent);
     z-index: 3;
@@ -1251,7 +1342,9 @@
         <!-- Season ribbon V2 (px-per-day engine, behind RIBBON_V2) -->
         <div class="season-ribbon__viewport" id="calRibbonV2" hidden>
           <div class="ribbon-track" id="calV2Track">
+            <div class="ribbon-track__phases" id="calV2Phases"></div>
             <div class="ribbon-track__months" id="calV2Months"></div>
+            <div class="ribbon-track__phase-lines" id="calV2PhaseLines"></div>
             <div class="ribbon-track__cycles" id="calV2Cycles"></div>
             <div class="ribbon-track__matches" id="calV2Matches"></div>
             <div class="ribbon-track__season-shade" id="calV2SeasonShadeBefore" hidden></div>
