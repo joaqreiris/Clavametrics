@@ -106,6 +106,30 @@
   function modelLabel(){ return state.model==='ewma' ? tt('load_monitor.model_ewma','EWMA 7:28') : tt('load_monitor.model_ra','rolling 7:28'); }
 
   // ── ACWR: KPIs + zones + chart ──────────────────────────────────────────────
+  // ── Lesionados / trabajo limitado ────────────────────────────────────────────
+  // Su carga no representa el entrenamiento del grupo: queda fuera de los promedios
+  // del plantel (mediana ACWR, conteo de riesgo y línea del gráfico). El jugador sigue
+  // visible con su ACWR individual en la tabla y en los puntitos.
+  const AV_OUT_OF_AVG = new Set(['injured','limited','partial']);
+  async function loadOutOfAvg(){
+    const out=new Set();
+    (state.players||[]).forEach(p=>{ if(p.status==='injured') out.add(String(p.id)); });   // respaldo: sin fila del día
+    const ids=(state.players||[]).map(p=>p.id);
+    if(ids.length){
+      try{
+        const { data } = await sb().from('availability').select('player_id,status,team_id')
+          .eq('club_id',state.clubId).in('player_id',ids).eq('date',state.refDate);
+        // La fila del día manda sobre players.status; y la del equipo activo sobre la global.
+        const rows=(data||[]).filter(r=> !r.team_id || !state.teamId || r.team_id===state.teamId);
+        const ordered=rows.slice().sort((a,b)=> (a.team_id?1:0)-(b.team_id?1:0));
+        ordered.forEach(r=>{ const id=String(r.player_id);
+          if(AV_OUT_OF_AVG.has(r.status)) out.add(id); else out.delete(id); });
+      }catch{}
+    }
+    state.outOfAvg=out;
+  }
+  function isOutOfAvg(pid){ return !!(state.outOfAvg && state.outOfAvg.has(String(pid))); }
+
   async function renderACWR(){
     const sub=$('acwrSub'); if(sub) sub.textContent=`${metricLabel()} · ${modelLabel()} · ${tt('load_monitor.last6w','last 6 weeks')}`;
     const mn=$('metricName'); if(mn) mn.textContent=metricLabel();
@@ -120,7 +144,9 @@
       const per={}, counts={ under:0, sweet:0, over:0, risk:0, noData:0 };
       for(const [pid,v] of Object.entries(squad.perPlayer)){
         if(!roster.has(String(pid))) continue;
-        per[pid]=v;
+        // El lesionado/limitado queda marcado (se sigue viendo) pero no entra en los conteos.
+        per[pid]= isOutOfAvg(pid) ? { ...v, outOfAvg:true } : v;
+        if(isOutOfAvg(pid)) continue;
         if(v.acwr==null){ counts.noData++; continue; }
         const z=zoneInfo(v.acwr);
         if(z.cls==='danger') counts.risk++; else if(z.cls==='over') counts.over++;
@@ -130,16 +156,22 @@
     }
     state.lastSquad = squad;
 
-    const total = state.players.length || (squad? Object.keys(squad.perPlayer).length : 0);
+    const fitPlayers = state.players.filter(p=> !isOutOfAvg(p.id)).length;
+    const total = fitPlayers || (squad? Object.keys(squad.perPlayer).filter(id=>!isOutOfAvg(id)).length : 0);
     const c = squad?.counts || { under:0,sweet:0,over:0,risk:0,noData:0 };
     const riskN = c.over + c.risk;
     if($('kpiN')) $('kpiN').textContent = String(riskN);
     if($('kpiDen')) $('kpiDen').textContent = `/ ${total}`;
+    // Cuántos quedaron fuera del promedio: sin decirlo, el denominador parece mal.
+    const nOut = state.players.filter(p=> isOutOfAvg(p.id)).length;
+    const outNote = nOut
+      ? ` <span style="color:var(--cm-fg-faint)">· ${esc(tt('load_monitor.kpi_foot_excl', `${nOut} injured / limited excluded`, { count:nOut }))}</span>`
+      : '';
     if($('kpiFoot')) $('kpiFoot').innerHTML = tt('load_monitor.kpi_foot',
       `<b>${riskN}</b> players ≥ 1.3 ACWR · <b>${c.risk}</b> above 1.5 (danger).`,
-      { risk:`<b>${riskN}</b>`, danger:`<b>${c.risk}</b>` });
+      { risk:`<b>${riskN}</b>`, danger:`<b>${c.risk}</b>` }) + outNote;
 
-    const med = squad ? median(Object.values(squad.perPlayer).map(p=>p.acwr)) : null;
+    const med = squad ? median(Object.values(squad.perPlayer).filter(p=>!p.outOfAvg).map(p=>p.acwr)) : null;
     const medZone = zoneInfo(med);
     if($('kpiAvg')) $('kpiAvg').innerHTML =
       `<span class="num">${med!=null? med.toFixed(2) : '—'}<small>${tt('load_monitor.squad_median','squad median')}</small></span>`
@@ -163,8 +195,10 @@
       const byPlayer=await window.gpsACWR.fetchByPlayer({ clubId:state.clubId, metricKey:metricKey(), from:fetchFrom, to:state.refDate });
       let scoped=byPlayer;
       if(state.players.length){
+        // Roster del equipo y sin lesionados/limitados: la línea del plantel refleja
+        // lo que hizo el grupo sano, no la carga recortada de quien está de baja.
         const roster=new Set(state.players.map(p=>String(p.id)));
-        scoped={}; for(const [pid,recs] of Object.entries(byPlayer)) if(roster.has(String(pid))) scoped[pid]=recs;
+        scoped={}; for(const [pid,recs] of Object.entries(byPlayer)) if(roster.has(String(pid)) && !isOutOfAvg(pid)) scoped[pid]=recs;
       }
       tl = window.gpsACWR.squadTimeline(scoped, from, state.refDate, { model:state.model, coupled:state.coupled }, fetchFrom);
     }
@@ -252,7 +286,7 @@
     const nameOf={}; state.players.forEach(p=>{ nameOf[p.id]=((p.first_name||'')+' '+(p.last_name||'')).trim(); });
     const pts=Object.entries(squad.perPlayer||{})
       .filter(([,v])=> v.acwr!=null)
-      .map(([id,v])=>({ name:nameOf[id]||'?', acwr:v.acwr }))
+      .map(([id,v])=>({ name:nameOf[id]||'?', acwr:v.acwr, out:!!v.outOfAvg }))
       .sort((a,b)=> a.acwr-b.acwr);
     if(!pts.length) return '';
     const min=0.4, max=Math.max(1.8, Math.min(3, pts[pts.length-1].acwr+0.15));
@@ -264,7 +298,9 @@
       const x=X(p.acwr);
       row = (x-lastX<3.2)? (row+1)%3 : 0; lastX=x;   // nudge overlapping dots onto 3 lanes
       const z=zoneInfo(p.acwr);
-      return `<span class="dot ${z.cls} r${row}" style="left:${x.toFixed(2)}%" data-name="${esc(p.name)}" data-acwr="${p.acwr}"></span>`;
+      // El lesionado se sigue viendo (su ACWR importa para el retorno) pero va hueco:
+      // no pesa en la mediana ni en el conteo de riesgo.
+      return `<span class="dot ${z.cls} r${row}${p.out?' is-out':''}" style="left:${x.toFixed(2)}%" data-name="${esc(p.name)}" data-acwr="${p.acwr}"${p.out?' data-out="1"':''}></span>`;
     }).join('');
     const ticks=[0.8,1.3,1.5].map(v=> `<span class="tick" style="left:${X(v).toFixed(2)}%">${v.toFixed(1)}</span>`).join('');
     return `<div class="lm-dist">
@@ -285,7 +321,8 @@
       const d=e.target.closest('.dot'); if(!d) return;
       const a=+d.dataset.acwr, z=zoneInfo(a);
       tip.innerHTML=`<div class="nm">${esc(d.dataset.name||'')}</div>`
-        + `<div class="row"><span class="val">${isFinite(a)?a.toFixed(2):'—'}</span>${z?`<span class="lm-zone-tag ${z.cls}">${esc(z.label)}</span>`:''}</div>`;
+        + `<div class="row"><span class="val">${isFinite(a)?a.toFixed(2):'—'}</span>${z?`<span class="lm-zone-tag ${z.cls}">${esc(z.label)}</span>`:''}</div>`
+        + (d.dataset.out? `<div class="row" style="font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">${esc(tt('load_monitor.dot_out_of_avg','Injured / limited · not in the squad average'))}</div>` : '');
       tip.classList.add('on');
       const wr=wrap.getBoundingClientRect(), dr=d.getBoundingClientRect();
       const cx=dr.left+dr.width/2-wr.left;                       // dot center in .lm-dist coords
@@ -892,6 +929,7 @@
   // ── orchestration ────────────────────────────────────────────────────────────
   async function loadAll(){
     setPageContext();
+    await loadOutOfAvg();                                 // lesionados/limitados fuera de los promedios
     await renderACWR();                                   // sets state.lastSquad
     try { state.lastStress = await window.stressors.build({ clubId:state.clubId, teamId:state.teamId, refStr:state.refDate, days:21, tt }); } catch { state.lastStress=null; }
     await Promise.all([ renderExposure(), renderStressors(), renderAvailability(state.lastSquad?.perPlayer) ]);

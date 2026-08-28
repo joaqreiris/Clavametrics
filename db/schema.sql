@@ -5149,7 +5149,7 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.session_rpe_status(p_session_id uuid)
- RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric, note text, body_areas text[], duration integer, load numeric, submitted_at timestamp with time zone)
+ RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric, note text, body_areas text[], duration integer, load numeric, submitted_at timestamp with time zone, av_status text)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -5170,7 +5170,7 @@ begin
 
   return query
     select q.player_id, q.player_name, q.responded, q.rpe,
-           q.note, q.body_areas, q.duration, q.load, q.submitted_at
+           q.note, q.body_areas, q.duration, q.load, q.submitted_at, q.av_status
     from (
       select distinct on (p.id)
         p.id as player_id,
@@ -5189,12 +5189,23 @@ begin
                      then coalesce(nullif(am.minutes, 0), v_dur, r.duration)
                      else coalesce(v_dur, r.duration) end   as load,
         r.created_at as submitted_at,
+        -- Estado de disponibilidad del día: la pantalla marca al lesionado/limitado y lo
+        -- deja fuera de la media de la sesión (su carga no representa el entrenamiento).
+        am.status    as av_status,
         p.last_name as ln, p.first_name as fn
       from public.players p
       left join public.rpe r
         on r.player_id = p.id and r.session_id = p_session_id
-      left join public.availability am
-        on am.player_id = p.id::text and am.date = v_date
+      -- Una fila de availability por jugador/día: la del equipo de la sesión manda, si no
+      -- la global (team_id null). Sin el lateral, un jugador con filas en dos equipos
+      -- duplicaba y el distinct on se quedaba con cualquiera de las dos.
+      left join lateral (
+        select a2.status, a2.minutes
+        from public.availability a2
+        where a2.player_id = p.id::text and a2.date = v_date
+        order by case when a2.team_id = v_team then 0 when a2.team_id is null then 1 else 2 end
+        limit 1
+      ) am on true
       where p.club_id = v_club
         and p.archived_at is null
         and p.status <> 'inactive'
