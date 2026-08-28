@@ -1,0 +1,7809 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   evaluations.js — el código de la página Evaluations.
+
+   Estaba escrito dentro de Evaluations.html: 492 KB de los 623 KB del
+   archivo. Como el HTML se pide de nuevo en cada visita (nunca se cachea:
+   siempre tiene que traer los datos frescos), esos 492 KB viajaban otra vez
+   cada vez que alguien entraba, aunque el código no hubiera cambiado.
+
+   En un archivo aparte el navegador lo guarda y en las visitas siguientes
+   sólo pregunta "¿cambió?" — y se ahorra la descarga entera.
+
+   Va con defer: se descarga en paralelo con el resto y se ejecuta al terminar
+   el parseo, antes de DOMContentLoaded. El código no dependía de ejecutarse
+   durante el parseo (no usa DOMContentLoaded ni document.write ni
+   currentScript) y todo el markup que toca está por encima de donde estaba
+   escrito, así que ve el mismo DOM que antes.
+   ──────────────────────────────────────────────────────────────────────── */
+(function(){
+  // ── i18n helper (sidebar injects assets/i18n.js) ──
+  function tt(key, fallbackEN, vars){
+    var v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+  // localized month names for compact date formatting
+  function ttLocale(){ return (window.CM_I18N && CM_I18N.current) || 'en'; }
+  function ttMonShort(monthIdx){
+    try { return new Date(2020, monthIdx, 1).toLocaleDateString(ttLocale(), { month:'short' }); }
+    catch(e){ return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthIdx]; }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  TEST REGISTRY  (ported from Evaluations.html: PHYS_TESTS + the
+  //  .pt-cat-group category grouping). Each test declares its data SOURCE:
+  //    { from:'evaluations', match:'<prefix>' }   → evaluations.evaluation_type LIKE prefix%
+  //    { from:'force_tests', testType:'<prefix>' } → force_tests.test_type  LIKE prefix%
+  //  (prefix match is case-insensitive; e.g. VBT → 'VBT · back squat …',
+  //   1RM → '1RM bench', CMJ → force-plate 'CMJ …'.)
+  // ════════════════════════════════════════════════════════════════════
+  var CATALOG = [
+    { name:'Jumps & power', icon:'ti-rocket', ic:'rgba(168,85,247,0.12)', ico:'#7C3AED', tests:[
+      { key:'cmj',    label:'CMJ',            sub:'Counter-movement jump',  icon:'ti-arrow-up',         src:{from:'force_tests', testType:'CMJ'} },
+      { key:'sj',     label:'Squat jump',     sub:'90° · no arm swing',     icon:'ti-stairs-up',        src:{from:'force_tests', testType:'SJ'} },
+      { key:'dj',     label:'Drop jump',      sub:'Box · RSI',              icon:'ti-arrows-vertical',  src:{from:'force_tests', testType:'DJ'} },
+      { key:'slcmj',  label:'SL-CMJ + LSI',   sub:'L vs R asymmetry',       icon:'ti-shoe',             src:{from:'force_tests', testType:'SL-CMJ'} },
+      { key:'broad',  label:'Broad jump',     sub:'Horizontal standing',    icon:'ti-arrows-horizontal',src:{from:'evaluations', match:'Broad jump'} },
+    ]},
+    { name:'Speed & agility', icon:'ti-bolt', ic:'rgba(245,158,11,0.12)', ico:'#B45309', tests:[
+      { key:'sprint',   label:'Sprint splits',   sub:'10 · 20 · 30 · 40 m',  icon:'ti-run',           src:{from:'evaluations', match:'Sprint splits'} },
+      { key:'hfvp',     label:'Sprint H-FVP',    sub:'Horizontal F-V profile · Samozino-Morin', icon:'ti-run',  src:{from:'evaluations', match:'Sprint H-FVP'} },
+      { key:'cod505',   label:'505 COD',         sub:'Change of direction',  icon:'ti-arrow-back',    src:{from:'evaluations', match:'505 COD'} },
+      { key:'illinois', label:'Illinois agility',sub:'40 m · 4 cones',       icon:'ti-route-square',  src:{from:'evaluations', match:'Illinois agility'} },
+      { key:'rsa',      label:'RSA · 6×30m',     sub:'Fatigue index',        icon:'ti-history-toggle',src:{from:'evaluations', match:'RSA'} },
+    ]},
+    { name:'Endurance / VO₂max', icon:'ti-heart', ic:'rgba(34,197,94,0.12)', ico:'#15803D', tests:[
+      { key:'ift',    label:'30-15 IFT',     sub:'VIFT → MAS, VO₂max',  icon:'ti-activity-heartbeat', src:{from:'evaluations', match:'30-15 IFT'} },
+      { key:'yoyo1',  label:'Yo-Yo IR1',     sub:'Bangsbo intermittent',icon:'ti-refresh',           src:{from:'evaluations', match:'Yo-Yo IR1'} },
+      { key:'yoyo2',  label:'Yo-Yo IR2',     sub:'High-level',          icon:'ti-refresh',           src:{from:'evaluations', match:'Yo-Yo IR2'} },
+      { key:'cooper', label:'Cooper 12-min', sub:'VO₂ estimation',      icon:'ti-clock-12',          src:{from:'evaluations', match:'Cooper 12-min'} },
+      { key:'tt1600', label:'1,600 m TT',    sub:'ACSM pace formula',   icon:'ti-stopwatch',         src:{from:'evaluations', match:'1,600 m TT'} },
+      { key:'leger',  label:'Léger shuttle', sub:'20 m · stage',        icon:'ti-arrows-shuffle',    src:{from:'evaluations', match:'Léger'} },
+    ]},
+    { name:'Strength / VBT', icon:'ti-barbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C', tests:[
+      { key:'vbt',       label:'VBT · Load-Velocity', sub:'Velocity → %1RM',    icon:'ti-barbell',     src:{from:'evaluations', match:'VBT'} },
+      { key:'orm',       label:'1RM',                 sub:'Epley + Brzycki',    icon:'ti-weight',      src:{from:'evaluations', match:'1RM'} },
+      { key:'fvprofile', label:'F-V Profile · jumps', sub:'Samozino · F₀ V₀ Pmax',icon:'ti-chart-line',src:{from:'evaluations', match:'F-V Profile'} },
+    ]},
+    { name:'Mobility & screening', icon:'ti-stretching', ic:'rgba(59,130,246,0.12)', ico:'#1D4ED8', tests:[
+      { key:'fms',      label:'FMS',                sub:'Functional movement screen', icon:'ti-checkbox', src:{from:'evaluations', match:'FMS'} },
+      // Ankle dorsiflexion & Hip ER/IR are now data-driven from assessment_test_defs
+      // (mob_ankle_df / mob_hip_ir / mob_hip_er → force_tests with native L/R). The old
+      // evaluations-backed cards were retired so individual + bulk land in the same test
+      // and surface in the Prevention board.
+      { key:'sitreach', label:'Sit & reach',        sub:'Posterior chain',            icon:'ti-yoga',     src:{from:'evaluations', match:'Sit'} },
+    ]},
+    { name:'Anthropometrics', icon:'ti-ruler', ic:'rgba(17,94,89,0.12)', ico:'#0F766E', tests:[
+      { key:'bodycomp',  label:'Body composition', sub:'JP3/JP7/DW4 · Siri %BF', icon:'ti-body-scan',  src:{from:'body_composition', field:'body_fat_pct'} },
+      { key:'somato',    label:'Somatotype',       sub:'Heath-Carter',           icon:'ti-categories', src:{from:'body_composition', field:'soma_meso'} },
+      { key:'bmirfm',    label:'BMI / RFM',        sub:'Relative fat mass',      icon:'ti-percentage', src:{from:'body_composition', field:'bmi'} },
+    ]},
+  ];
+
+  // flat lookup by key
+  var TEST_BY_KEY = {};
+  function rebuildTestIndex(){
+    TEST_BY_KEY = {};
+    CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){ t._cat = cat; TEST_BY_KEY[t.key] = t; }); });
+  }
+  rebuildTestIndex();
+
+  // ════════════════════════════════════════════════════════════════════
+  //  DB-DRIVEN ASSESSMENT CATALOG  — isometric strength + mobility from
+  //  assessment_test_defs, merged into CATALOG. Degrades silently to [] if
+  //  the table doesn't exist yet (migration 126 not applied), same defensive
+  //  pattern as loadForceCatalog().
+  // ════════════════════════════════════════════════════════════════════
+  var _assessDefs = [], _assessMerged = false;
+  var ASSESS_ICON = {
+    iso_post_chain_30:'ti-stretching-2', iso_knee_ext_90:'ti-walk', iso_hip_add_0:'ti-arrows-minimize',
+    iso_hip_abd_0:'ti-arrows-maximize', iso_shoulder_er:'ti-rotate-clockwise', iso_shoulder_ir:'ti-rotate-2',
+    mob_ankle_df:'ti-angle', mob_hip_ir:'ti-rotate-2', mob_hip_er:'ti-rotate-clockwise',
+    mob_aslr:'ti-arrow-up', mob_thomas:'ti-yoga', mob_hypermobility:'ti-body-scan'
+  };
+  // Retired: Ankle/Hip legacy cards used to shadow these defs. Now every mobility def
+  // renders as its own force_tests-backed card (no evaluations shadowing).
+  var _LEGACY_MOB_DEFKEYS = [];
+
+  var POS_LABEL    = { supine:'Supine', prone:'Prone', standing:'Standing', seated:'Seated', side_lying:'Side-lying' };
+  var METHOD_LABEL = { hhd:'HHD', force_frame:'Force frame', force_plate:'Force plate', nordbord:'NordBord',
+                       isokinetic:'Isokinetic', goniometer:'Goniometer', tape:'Tape', clinical:'Clinical', field:'Field' };
+  function _fmtAngle(a){ return !a ? '' : (/^[0-9]+$/.test(a) ? a + '°' : a); }
+  // Card subtitle from the facets: e.g. "Supine · 90:20 · Force plate · N · L/R".
+  function _assessSub(def){
+    var bits = [];
+    if (def.position)    bits.push(POS_LABEL[def.position] || def.position);
+    if (def.joint_angle) bits.push(_fmtAngle(def.joint_angle));
+    if (def.method)      bits.push(METHOD_LABEL[def.method] || def.method);
+    if (def.unit)        bits.push(def.unit + (def.bilateral ? ' · L/R' : ''));
+    else if (def.bilateral) bits.push('L/R');
+    return bits.join(' · ') || (def.unit || '');
+  }
+  function _defToTest(def){
+    return { key:def.key, label:def.label, sub:_assessSub(def),
+      icon: ASSESS_ICON[def.key] || (def.family === 'isometric' ? 'ti-barbell' : 'ti-stretching'),
+      src:{ from:'force_tests', testType:def.test_type }, _def:def, _defLabel:true };
+  }
+
+  async function loadAssessmentDefs(){
+    try {
+      if (!_clubId && window.getClubId){ try { _clubId = await window.getClubId(); } catch(e){} }
+      var q = window.sb.from('assessment_test_defs').select('*').eq('active', true);
+      q = _clubId ? q.or('club_id.is.null,club_id.eq.' + _clubId) : q.is('club_id', null);
+      var res = await q;
+      _assessDefs = res.data || [];
+    } catch(e){ _assessDefs = []; /* table missing → silent degrade */ }
+    mergeAssessmentCatalog();
+  }
+
+  function mergeAssessmentCatalog(){
+    if (_assessMerged) return;
+    var iso = _assessDefs.filter(function(d){ return d.family === 'isometric'; }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    var mob = _assessDefs.filter(function(d){ return d.family === 'mobility';  }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    if (!iso.length && !mob.length) return;   // migration unapplied → leave CATALOG untouched
+
+    // 1) Isometric strength category — fully data-driven from assessment_test_defs.
+    // Idempotent: a re-run (e.g. custom-test builder resetting _assessMerged) must not
+    // duplicate the category or its cards.
+    if (iso.length){
+      var isoExisting = CATALOG.find(function(c){ return c.name === 'Isometric strength'; });
+      if (isoExisting){
+        iso.forEach(function(d){
+          if (!isoExisting.tests.some(function(t){ return t.key === d.key; })) isoExisting.tests.push(_defToTest(d));
+        });
+      } else {
+        var isoCat = { name:'Isometric strength', icon:'ti-dumbbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C',
+          tests: iso.map(_defToTest) };
+        var mi = CATALOG.findIndex(function(c){ return c.name === 'Mobility & screening'; });
+        CATALOG.splice(mi < 0 ? CATALOG.length : mi, 0, isoCat);
+      }
+    }
+
+    // 2) Mobility defs → append to 'Mobility & screening' the ones not already present (ankle, hip rot).
+    if (mob.length){
+      var mcat = CATALOG.find(function(c){ return c.name === 'Mobility & screening'; });
+      if (mcat) mob.forEach(function(d){
+        if (_LEGACY_MOB_DEFKEYS.indexOf(d.key) >= 0) return;
+        if (mcat.tests.some(function(t){ return t.key === d.key; })) return;   // already merged
+        mcat.tests.push(_defToTest(d));
+      });
+    }
+
+    rebuildTestIndex();
+
+    _assessMerged = true;
+  }
+
+  // category display name → i18n (labels/subs of individual tests are technical
+  // names/acronyms and stay as data). English name is the canonical fallback.
+  var CAT_I18N = {
+    'Jumps & power':'evaluations.cat_jumps_power', 'Speed & agility':'evaluations.cat_speed_agility',
+    'Endurance / VO₂max':'evaluations.cat_endurance', 'Strength / VBT':'evaluations.cat_strength_vbt',
+    'Mobility & screening':'evaluations.cat_mobility', 'Anthropometrics':'evaluations.cat_anthropometrics',
+    'Isometric strength':'evaluations.cat_isometric'
+  };
+  function catName(cat){ return tt(CAT_I18N[cat.name] || '', cat.name); }
+  // Localized display name for a test (falls back to the English catalog label).
+  var TEST_I18N = {
+    'Body composition':'evaluations.test_bodycomp', 'Somatotype':'evaluations.test_somato', 'BMI / RFM':'evaluations.test_bmirfm'
+  };
+  // DB-driven assessment CARDS (built from a def) use the def's i18n key. Legacy cards
+  // that were merely enriched with a _def (for the chip/reference) keep their own label.
+  function testLabel(t){
+    if (t._defLabel && t._def && t._def.i18n_key) return tt(t._def.i18n_key, t._def.label || t.label);
+    return tt(TEST_I18N[t.label] || '', t.label);
+  }
+
+  var catalog = document.getElementById('catalogView');
+  var detail  = document.getElementById('testDetailView');
+
+  // ── helpers ──
+  function show(scope, attr, value){
+    scope.querySelectorAll('['+attr+']').forEach(function(el){
+      el.classList.toggle('is-on', el.getAttribute(attr) === value);
+    });
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function escS(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+  function safeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
+  function startsWithCI(haystack, prefix){ return String(haystack||'').toLowerCase().indexOf(String(prefix||'').toLowerCase()) === 0; }
+  function fmtDate(d){
+    if (!d) return '';
+    var dt = new Date(String(d).length <= 10 ? d + 'T00:00:00' : d);
+    if (isNaN(dt)) return String(d).slice(0,10);
+    return dt.toLocaleDateString(ttLocale(), { month:'short', day:'numeric', year:'numeric' });
+  }
+  function fmtVal(v){
+    if (v == null || v === '') return '';
+    var n = Number(v);
+    if (!isNaN(n)) return (Math.round(n*100)/100).toString();
+    return String(v);
+  }
+
+  // Group faceted variants of one movement (label without its angle) into a single card.
+  function _groupKey(t){
+    var d = t._def;
+    if (!d) return '§' + t.key;                       // non-faceted test → its own card
+    var ang = _fmtAngle(d.joint_angle);
+    var g = (d.label || t.label || '');
+    if (ang) g = g.replace(new RegExp('\\s*' + ang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$'), '');
+    return g.trim() || t.key;
+  }
+  var _EV_CLR = { strong:'var(--cm-success)', moderate:'var(--cm-warning)', practice:'var(--cm-fg-faint)' };
+  function _refHtml(t){
+    var d = t._def; if (!d || !d.reference) return '';
+    return '<div class="b-ref" title="'+esc(d.reference)+'" style="display:flex;align-items:center;gap:5px;margin-top:4px;font:400 9px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);overflow:hidden">'
+      + (d.evidence_level ? '<span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:'+(_EV_CLR[d.evidence_level]||'var(--cm-fg-faint)')+'"></span>' : '')
+      + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(d.reference)+'</span></div>';
+  }
+  var _SEL_CSS = 'width:100%;margin:1px 0;padding:5px 7px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px var(--cm-font-sans);cursor:pointer';
+  // Variant dropdown changed → re-point the card to the chosen def (status, reference, open target).
+  window.evOnVariantChange = function(sel){
+    var card = sel.closest('.ev-test-card'); var t = TEST_BY_KEY[sel.value];
+    if (!card || !t) return;
+    card.setAttribute('data-open-test', t.key);
+    var stEl = card.querySelector('.b-status'); if (stEl) stEl.setAttribute('data-status', t.key);
+    var rw = card.querySelector('.b-refwrap'); if (rw) rw.innerHTML = _refHtml(t);
+    paintStatus(t.key, (_lastStatusByKey || {})[t.key]);
+  };
+
+  // ── render the catalog (cards start in a "loading…" status state) ──
+  function renderCatalog(){
+    var html = CATALOG.map(function(cat, i){
+      // One card per movement; angle/position/method variants live in a dropdown inside the card.
+      var groups = [], gi = {};
+      cat.tests.forEach(function(t){
+        var gk = _groupKey(t);
+        if (gi[gk] == null){ gi[gk] = groups.length; groups.push({ name: gk, tests: [] }); }
+        groups[gi[gk]].tests.push(t);
+      });
+      var cards = groups.map(function(g){
+        var t0 = g.tests[0], multi = g.tests.length > 1;
+        var body = multi
+          ? '<select class="ev-var-select" onclick="event.stopPropagation()" onchange="evOnVariantChange(this)" style="'+_SEL_CSS+'">'
+              + g.tests.map(function(t){ return '<option value="'+esc(t.key)+'">'+esc(t.sub)+'</option>'; }).join('')
+              + '</select>'
+          : '<div class="b-s">'+esc(t0.sub)+'</div>';
+        return '<div class="ev-test-card" role="button" tabindex="0" data-open-test="'+t0.key+'">'
+          + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t0.icon+'"></i></div>'
+          + '<div class="b-l">'+esc(multi ? g.name : testLabel(t0))+'</div>'
+          + body
+          + '<div class="b-status" data-status="'+t0.key+'"><span class="dot"></span>'+esc(tt('evaluations.loading_status','Loading…'))+'</div>'
+          + '<div class="b-refwrap">'+_refHtml(t0)+'</div>'
+          + '</div>';
+      }).join('');
+      var batFam = cat.name === 'Isometric strength' ? 'isometric' : (cat.name === 'Mobility & screening' ? 'mobility' : null);
+      var newBtn = batFam
+        ? '<button class="cm-btn is-ghost is-sm" style="margin-left:auto" onclick="event.stopPropagation();openAssessmentBuilder(\''+batFam+'\')"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="evaluations.custom_test">Custom test</span></button>'
+        : '';
+      var batBtn = (batFam && _assessDefs.some(function(d){ return d.family === batFam; }))
+        ? '<button class="cm-btn is-outline is-sm"'+(newBtn?'':' style="margin-left:auto"')+' onclick="event.stopPropagation();openBatteryEntry(\''+batFam+'\')"><i class="ti ti-table" style="font-size:14px"></i><span data-i18n="evaluations.battery_entry">Battery entry</span></button>'
+        : '';
+      return '<div class="ev-cat'+(i===0?'':' is-collapsed')+'">'
+        + '<div class="ev-cat-h" data-cat-toggle>'
+        +   '<span class="ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+cat.icon+'"></i></span>'
+        +   '<h4>'+esc(catName(cat))+'</h4><span class="ct">'+esc(tt('evaluations.tests_count',cat.tests.length+' tests',{count:cat.tests.length}))+'</span>'
+        +   newBtn + batBtn
+        +   '<span class="chev"><i class="ti ti-chevron-down"></i></span>'
+        + '</div>'
+        + '<div class="ev-cat-body">'+cards+'</div>'
+        + '</div>';
+    }).join('');
+    document.getElementById('catalogCats').innerHTML = html;
+  }
+
+  // ── apply a status object {count, lastDate, lastValue} to a card ──
+  function paintStatus(key, st){
+    var el = catalog.querySelector('[data-status="'+key+'"]');
+    if (!el) return;
+    if (st && st.count > 0){
+      var parts = [tt('evaluations.last_date','last '+fmtDate(st.lastDate),{date:fmtDate(st.lastDate)}),
+                   tt('evaluations.n_records', st.count+' record'+(st.count===1?'':'s'), {count:st.count})];
+      if (st.lastValue != null && st.lastValue !== '') parts.push(fmtVal(st.lastValue));
+      el.innerHTML = '<span class="dot" style="background:var(--cm-success)"></span>' + esc(parts.join(' · '));
+      el.style.color = 'var(--cm-fg-muted)';
+    } else {
+      el.innerHTML = '<span class="dot"></span>'+esc(tt('evaluations.no_data_yet','No data yet'));
+      el.style.color = 'var(--cm-fg-faint)';
+    }
+  }
+  var _lastStatusByKey = {};
+  function paintAll(statusByKey){
+    _lastStatusByKey = statusByKey || {};
+    Object.keys(TEST_BY_KEY).forEach(function(k){ paintStatus(k, statusByKey[k]); });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  DATA STATUS  — one query per source, aggregated, then matched to cards.
+  // ════════════════════════════════════════════════════════════════════
+  var _clubId = null, _teamId = null, _teamPlayerIds = null, _ftPlayers = [];
+  // Set by loadStatuses; detail-view loaders await it so a card clicked before the
+  // team scope resolves doesn't query club-wide (both scope guards still null → no filter).
+  var _scopeReady = null;
+
+  async function loadTeamScope(){
+    try {
+      _clubId = await window.getClubId();
+      var prof = await window.getProfile();
+      var bucket = ((prof && (prof.role || prof.club_role)) || '').toLowerCase();
+      var full = bucket === 'admin' || bucket === 'owner';
+      if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch(e){} }
+      var teams = await window.getTeams(_clubId);
+      if (!full) {
+        var mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch(e){}
+        var s = new Set(mine); teams = teams.filter(function(t){ return s.has(t.id); });
+      }
+      var sel = document.getElementById('evTeamSelect');
+      if (!teams.length){ sel.innerHTML = '<option value="">'+esc(tt('evaluations.no_teams','No teams'))+'</option>'; _teamId = null; return; }
+      var saved = sessionStorage.getItem('cal_active_team');
+      _teamId = (saved && teams.some(function(t){ return t.id===saved; })) ? saved : teams[0].id;
+      sel.innerHTML = teams.map(function(t){ return '<option value="'+t.id+'"'+(t.id===_teamId?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
+      // resolve players for the active team (evaluations are scoped via player, not team_id)
+      // Filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario), para
+      // incluir jugadores multi-categoría en su categoría secundaria. _teamId nunca es null acá
+      // (si no hay equipos, se hizo return arriba).
+      var pr = await window.sb.from('players').select('id, first_name, last_name, player_teams!inner(team_id)').eq('club_id', _clubId).eq('player_teams.team_id', _teamId).is('archived_at', null);
+      var _seenFt = new Set();
+      _ftPlayers = (pr.data || []).filter(function(r){ return _seenFt.has(r.id) ? false : (_seenFt.add(r.id), true); });
+      _teamPlayerIds = _ftPlayers.map(function(r){ return r.id; });
+    } catch(e){ console.warn('[ev2] team scope failed', e); }
+  }
+
+  // evaluations: aggregate by evaluation_type → {count, lastDate, lastValue}
+  async function loadEvaluationStatus(){
+    var agg = {}; // evaluation_type → {count, lastDate, lastValue}
+    if (!_clubId) return agg;
+    try {
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('evaluation_type, test_date, value').eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:status' });
+      (data || []).forEach(function(r){
+        var t = r.evaluation_type; if (!t) return;
+        var a = agg[t] || (agg[t] = { count:0, lastDate:null, lastValue:null });
+        a.count++;
+        if (!a.lastDate || String(r.test_date) > String(a.lastDate)){ a.lastDate = r.test_date; a.lastValue = r.value; }
+      });
+    } catch(e){ console.warn('[ev2] evaluations status failed', e); }
+    return agg;
+  }
+
+  // force_tests: aggregate by test_type → {count, lastDate} (values live in force_test_metrics; not fetched here)
+  async function loadForceStatus(){
+    var agg = {};
+    if (!_clubId) return agg;
+    try {
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('force_tests').select('test_type, test_date').eq('club_id', _clubId);
+        if (_teamId) q = q.eq('team_id', _teamId);
+        return q;
+      }, { label: 'ev:forceStatus' });
+      (data || []).forEach(function(r){
+        var t = r.test_type; if (!t) return;
+        var a = agg[t] || (agg[t] = { count:0, lastDate:null });
+        a.count++;
+        if (!a.lastDate || String(r.test_date) > String(a.lastDate)) a.lastDate = r.test_date;
+      });
+    } catch(e){ console.warn('[ev2] force_tests status failed', e); }
+    return agg;
+  }
+
+  // body_composition: aggregate by column → {count, lastDate, lastValue} (single source of truth for anthropometry)
+  async function fetchBodyCompAgg(){
+    var out = {};   // field -> { count, lastDate, lastValue }
+    if (!_clubId) return out;
+    try {
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('body_composition')
+          .select('player_id,measured_date,body_fat_pct,soma_endo,soma_meso,soma_ecto,bmi,rfm,weight_kg,lean_mass_kg')
+          .eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:bcStatus' });
+      (data || []).forEach(function(r){
+        ['body_fat_pct','soma_meso','bmi','rfm','weight_kg','lean_mass_kg'].forEach(function(f){
+          if (r[f] == null) return;
+          var a = out[f] || (out[f] = { count:0, lastDate:null, lastValue:null });
+          a.count++;
+          if (!a.lastDate || String(r.measured_date) > String(a.lastDate)) { a.lastDate = r.measured_date; a.lastValue = r[f]; }
+        });
+      });
+    } catch(e){ console.warn('[ev2] body_composition status failed', e); }
+    return out;
+  }
+
+  // match aggregated source buckets to each catalog test (prefix match)
+  function buildStatusByKey(evalAgg, forceAgg, bcAgg){
+    var out = {};
+    Object.keys(TEST_BY_KEY).forEach(function(key){
+      var src = TEST_BY_KEY[key].src;
+      var st = { count:0, lastDate:null, lastValue:null };
+      if (src.from === 'body_composition') {
+        var bc = (bcAgg || {})[src.field];
+        if (bc) { st.count = bc.count; st.lastDate = bc.lastDate; st.lastValue = bc.lastValue; }
+        out[key] = st; return;      // skip the prefix-matching path
+      }
+      var agg = src.from === 'force_tests' ? forceAgg : evalAgg;
+      var prefix = src.from === 'force_tests' ? src.testType : src.match;
+      Object.keys(agg).forEach(function(type){
+        // force detail matches test_type EXACTLY — the card status must count the same set,
+        // else 'CMJ Rebound' inflates the CMJ card and its detail view comes up empty.
+        var hit = src.from === 'force_tests'
+          ? String(type||'').toLowerCase() === String(prefix||'').toLowerCase()
+          : startsWithCI(type, prefix);
+        if (!hit) return;
+        var a = agg[type];
+        st.count += a.count;
+        if (a.lastDate && (!st.lastDate || String(a.lastDate) > String(st.lastDate))){
+          st.lastDate = a.lastDate;
+          st.lastValue = (a.lastValue != null) ? a.lastValue : null;
+        }
+      });
+      out[key] = st;
+    });
+    return out;
+  }
+
+  async function loadStatuses(){
+    if (!window.sb || !window.getClubId){ console.warn('[ev2] supabase not ready'); return; }
+    _scopeReady = loadTeamScope();
+    await _scopeReady;
+    if (_clubId) window.cmLoadPlayerPhotos(_clubId);
+    var ev = await loadEvaluationStatus();
+    var ft = await loadForceStatus();
+    var bc = await fetchBodyCompAgg();
+    var byKey = buildStatusByKey(ev, ft, bc);
+    paintAll(byKey);
+  }
+
+  // team switch → reload (same pattern as Evaluations.html)
+  window.evOnTeamChange = function(){
+    var v = document.getElementById('evTeamSelect').value;
+    sessionStorage.setItem('cal_active_team', v);
+    location.reload();
+  };
+
+  // ════════════════════════════════════════════════════════════════════
+  //  NAVIGATION (shell only — detail View/Upload stay as placeholders)
+  // ════════════════════════════════════════════════════════════════════
+
+  // top-level branch segment (Measured / Field assessment)
+  var seg = document.getElementById('evBranchSeg');
+  seg.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-branch-btn]'); if(!btn) return;
+    var v = btn.getAttribute('data-branch-btn');
+    seg.querySelectorAll('[data-branch-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
+    show(document, 'data-branch', v);
+    if (v === 'field' && typeof loadFieldView === 'function') loadFieldView();
+    if (v === 'prevention' && typeof loadPreventionBoard === 'function') loadPreventionBoard();
+  });
+
+  // header "New evaluation": jump to the entry flow. With a test open → its Upload
+  // pane; otherwise → the Measured catalog (highlighted) so the user picks a test.
+  document.getElementById('evNewEvalBtn').addEventListener('click', function(){
+    var mBtn = seg.querySelector('[data-branch-btn="measured"]');
+    if (mBtn && !mBtn.classList.contains('is-on')) mBtn.click();
+    if (_openTest && detail.classList.contains('is-on')){ setPane('upload'); return; }
+    catalog.scrollIntoView({ behavior:'smooth', block:'start' });
+    catalog.style.transition = 'box-shadow .35s';
+    catalog.style.boxShadow = '0 0 0 2px var(--cm-accent)';
+    setTimeout(function(){ catalog.style.boxShadow = ''; }, 1400);
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  INDIVIDUAL PDF REPORT (header "Export report") — pick a player, gather
+  //  every measured test with data (evaluations + force_tests + body comp)
+  //  and export an A4 PDF. Same html2canvas+jsPDF model as Daily Planning:
+  //  player header repeated on pages 2+, cuts never split a section card.
+  // ════════════════════════════════════════════════════════════════════
+  var _evrBusy = false;
+
+  function evrShow(on){ document.getElementById('evrOvl').classList.toggle('is-open', !!on); }
+
+  document.getElementById('evReportBtn').addEventListener('click', async function(){
+    if (_scopeReady) await _scopeReady;
+    var sel = document.getElementById('evrPlayer');
+    var ps = _ftPlayers.slice().sort(function(a,b){ return String(a.last_name||'').localeCompare(String(b.last_name||'')); });
+    sel.innerHTML = '<option value="">' + esc(tt('evaluations.report_pick_player','Pick a player…')) + '</option>'
+      + ps.map(function(p){ return '<option value="'+p.id+'">'+esc((p.last_name||'') + ', ' + (p.first_name||''))+'</option>'; }).join('');
+    document.getElementById('evrStatus').textContent = '';
+    evrShow(true);
+  });
+  document.getElementById('evrClose').addEventListener('click', function(){ if(!_evrBusy) evrShow(false); });
+  document.getElementById('evrCancel').addEventListener('click', function(){ if(!_evrBusy) evrShow(false); });
+  document.getElementById('evrOvl').addEventListener('click', function(e){ if(e.target===this && !_evrBusy) evrShow(false); });
+
+  function evrLoadScript(src, globalKey){
+    return new Promise(function(res, rej){
+      if (globalKey && window[globalKey]) return res();
+      var s = document.createElement('script'); s.src = src;
+      s.onload = res; s.onerror = function(){ rej(new Error('PDF library failed to load')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // dd/mm/yy from 'YYYY-MM-DD' with no Date parsing (avoids the UTC off-by-one)
+  function evrD(s){
+    var p = String(s||'').slice(0,10).split('-');
+    return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0].slice(2)) : (s||'—');
+  }
+  function evrNum(v){ v = Number(v); return isFinite(v) ? v : null; }
+  function evrFmt(v, unit){ return v==null ? '—' : ftFmt(v, ftDec(unit)); }
+
+  // ── data: everything measured for one player (club-wide, not team-scoped:
+  //         it's the player's own report, so imports from other teams count) ──
+  async function evrFetch(pid){
+    var player = {};
+    try {
+      var pq = await window.sb.from('players')
+        .select('first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,photo_url')
+        .eq('id', pid).single();
+      player = pq.data || {};
+    } catch(e){}
+    var evRows = [];
+    try {
+      evRows = await window.cmFetchAll(function(){
+        return window.sb.from('evaluations').select('evaluation_type,test_date,value,unit')
+          .eq('club_id', _clubId).eq('player_id', pid).order('test_date');
+      }, { label:'evr:evals' });
+    } catch(e){}
+    // field-assessment dimensions (unit '/10') are a separate surface → skip
+    evRows = evRows.filter(function(r){ return r.value != null && String(r.unit||'') !== '/10'; });
+
+    var ftTests = [], ftMets = [];
+    try {
+      ftTests = await window.cmFetchAll(function(){
+        return window.sb.from('force_tests').select('id,test_type,test_date')
+          .eq('club_id', _clubId).eq('player_id', pid).order('test_date');
+      }, { label:'evr:force' });
+    } catch(e){}
+    if (ftTests.length){
+      try {
+        ftMets = await window.cmFetchAll(function(){
+          return window.sb.from('force_test_metrics').select('test_id,metric_key,value,side')
+            .in('test_id', ftTests.map(function(t){ return t.id; }));
+        }, { label:'evr:forceMet' });
+      } catch(e){}
+    }
+    await ftEnsureDefs();
+
+    var bcRows = [];
+    try {
+      bcRows = await window.cmFetchAll(function(){
+        return window.sb.from('body_composition').select('*')
+          .eq('club_id', _clubId).eq('player_id', pid).order('measured_date');
+      }, { label:'evr:bc' });
+    } catch(e){}
+    return { player:player, evRows:evRows, ftTests:ftTests, ftMets:ftMets, bcRows:bcRows };
+  }
+
+  function evrCatalogHit(from, needle){
+    for (var i=0;i<CATALOG.length;i++){ var c=CATALOG[i];
+      for (var j=0;j<c.tests.length;j++){ var t=c.tests[j];
+        if (!t.src || t.src.from!==from) continue;
+        var pref = from==='evaluations' ? t.src.match : t.src.testType;
+        if (pref && startsWithCI(needle, pref)) return { cat:c, test:t };
+      } }
+    return null;
+  }
+
+  // ── model: [{title, items:[{label, sub, unit, hist:[{d,v}], betterHigh, neutral, sides, band}]}] ──
+  function evrBuildSections(data){
+    var byCat = {}, order = [];
+    function push(catTitle, item){
+      if (!item.hist.length) return;
+      if (!byCat[catTitle]){ byCat[catTitle] = []; order.push(catTitle); }
+      byCat[catTitle].push(item);
+    }
+
+    // 1. evaluations rows → group by evaluation_type
+    var groups = {};
+    data.evRows.forEach(function(r){
+      var v = evrNum(r.value); if (v==null) return;
+      (groups[r.evaluation_type] = groups[r.evaluation_type] || []).push(r);
+    });
+    Object.keys(groups).sort().forEach(function(type){
+      var rows = groups[type];                                  // already date-asc
+      var hit = evrCatalogHit('evaluations', type);
+      var unit = rows[rows.length-1].unit || '';
+      push(hit ? catName(hit.cat) : tt('evaluations.report_other','Other tests'), {
+        label: type, sub:'', unit: unit,
+        hist: rows.map(function(r){ return { d:r.test_date, v:evrNum(r.value) }; }),
+        betterHigh: evBetterHigh(hit && hit.test, unit), neutral: false
+      });
+    });
+
+    // 2. force tests → per test_type × metric_key
+    var metsByTest = {};
+    data.ftMets.forEach(function(m){
+      ((metsByTest[m.test_id] = metsByTest[m.test_id] || {})[m.metric_key] =
+        metsByTest[m.test_id][m.metric_key] || []).push(m);
+    });
+    var types = {};
+    data.ftTests.forEach(function(t){ (types[t.test_type] = types[t.test_type] || []).push(t); });
+    Object.keys(types).sort().forEach(function(type){
+      var tests = types[type];                                  // date-asc
+      var hit = evrCatalogHit('force_tests', type);
+      var keys = {};
+      tests.forEach(function(t){ Object.keys(metsByTest[t.id]||{}).forEach(function(k){ keys[k]=1; }); });
+      Object.keys(keys).sort(function(a,b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); }).forEach(function(mk){
+        var hist = [], lastRows = null;
+        tests.forEach(function(t){
+          var rows = (metsByTest[t.id]||{})[mk]; var v = ftTestValue(rows);
+          if (v==null || isNaN(v)) return;
+          hist.push({ d:t.test_date, v:v }); lastRows = rows;
+        });
+        // latest L/R split + asymmetry when both sides were measured
+        var sides = null;
+        if (lastRows){
+          var L = lastRows.find(function(r){ return r.side==='L' && r.value!=null; });
+          var R = lastRows.find(function(r){ return r.side==='R' && r.value!=null; });
+          if (L && R){
+            var l = Number(L.value), r2 = Number(R.value), mx = Math.max(Math.abs(l),Math.abs(r2));
+            sides = { l:l, r:r2, asym: mx ? Math.abs(l-r2)/mx*100 : 0 };
+          }
+        }
+        push(hit ? catName(hit.cat) : tt('evaluations.report_other','Other tests'), {
+          label: hit ? testLabel(hit.test) : type,
+          sub: ftMetricLabel(mk), unit: ftMetricUnit(mk),
+          hist: hist, betterHigh: ftBetterHigh(mk), neutral: false, sides: sides
+        });
+      });
+    });
+
+    // 3. body composition → BC_VARIANTS defs (incl. computed FFMI)
+    var bcCatTitle = catName({ name:'Anthropometrics' });
+    ['bodycomp','somato','bmirfm'].forEach(function(key){
+      (BC_VARIANTS[key]||[]).forEach(function(d){
+        var hist = [];
+        data.bcRows.forEach(function(r){
+          var v;
+          if (d.computed === 'ffmi'){
+            if (r.lean_mass_kg == null) return;
+            var h = Number(r.height_cm) || Number(data.player.height);
+            if (!(h > 100)) return;
+            v = +(Number(r.lean_mass_kg) / Math.pow(h/100, 2)).toFixed(2);
+          } else {
+            if (r[d.field] == null) return;
+            v = evrNum(r[d.field]);
+          }
+          if (v!=null) hist.push({ d:r.measured_date, v:v });
+        });
+        if (!hist.length) return;
+        var band = null;
+        if (d.bands){
+          var last = hist[hist.length-1].v;
+          var b = d.bands.find(function(x){ return last >= x.from && last < x.to; });
+          if (b) band = tt(b.i18n, b.en);
+        }
+        push(bcCatTitle, { label: bcVarLabel(d), sub:'', unit: d.unit,
+          hist: hist, betterHigh: d.betterHigh !== false, neutral: !!d.neutral, band: band });
+      });
+    });
+
+    // CATALOG category order first, then the rest (Other tests last)
+    var catOrder = CATALOG.map(function(c){ return catName(c); });
+    order.sort(function(a,b){
+      var ia = catOrder.indexOf(a), ib = catOrder.indexOf(b);
+      return (ia<0?999:ia) - (ib<0?999:ib);
+    });
+    return order.map(function(title){ return { title:title, items:byCat[title] }; });
+  }
+
+  // player photo → data URI so html2canvas never taints the canvas (missing/failed → null)
+  async function evrPhotoData(url){
+    if (!url) return null;
+    try {
+      var r = await fetch(url);
+      if (!r.ok) return null;
+      var b = await r.blob();
+      return await new Promise(function(res){
+        var fr = new FileReader();
+        fr.onload = function(){ res(fr.result); };
+        fr.onerror = function(){ res(null); };
+        fr.readAsDataURL(b);
+      });
+    } catch(e){ return null; }
+  }
+
+  // ── print sheet (fixed light palette: it's paper, not the app theme) ──
+  function evrSpark(hist){
+    var w=92, h=24, pad=3;
+    var vs = hist.map(function(p){ return p.v; });
+    var mn = Math.min.apply(null,vs), mx = Math.max.apply(null,vs);
+    var y = function(v){ return mx===mn ? h/2 : pad + (h-2*pad) * (1 - (v-mn)/(mx-mn)); };
+    var x = function(i){ return hist.length<2 ? w/2 : pad + (w-2*pad) * i/(hist.length-1); };
+    var pts = hist.map(function(p,i){ return x(i).toFixed(1)+','+y(p.v).toFixed(1); }).join(' ');
+    var lastX = x(hist.length-1).toFixed(1), lastY = y(vs[vs.length-1]).toFixed(1);
+    return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block">'
+      + (hist.length>1 ? '<polyline points="'+pts+'" fill="none" stroke="#0F766E" stroke-width="1.6" stroke-linejoin="round"/>' : '')
+      + '<circle cx="'+lastX+'" cy="'+lastY+'" r="2.4" fill="#0F766E"/></svg>';
+  }
+
+  function evrSheetHtml(player, sections, photoData){
+    var F = "-apple-system,'Segoe UI',Roboto,Arial,sans-serif";
+    var name = ((player.first_name||'') + ' ' + (player.last_name||'')).trim() || '—';
+
+    // meta line 1: position · #number — line 2: age · height · weight · foot · nationality
+    var m1 = [];
+    if (player.position) m1.push(player.position);
+    if (player.number != null && player.number !== '') m1.push('#' + player.number);
+    var m2 = [];
+    var dob = String(player.date_of_birth||'').slice(0,10);
+    if (dob){
+      var t = evToday().split('-'), b = dob.split('-');
+      var age = (+t[0]) - (+b[0]) - ((+t[1] < +b[1] || (+t[1] === +b[1] && +t[2] < +b[2])) ? 1 : 0);
+      if (age > 0 && age < 60) m2.push(tt('evaluations.report_age', age+' years old', {n:age}) + ' (' + evrD(dob) + ')');
+    }
+    if (Number(player.height) > 100) m2.push(Math.round(player.height) + ' cm');
+    if (Number(player.weight) > 20) m2.push(Math.round(Number(player.weight)*10)/10 + ' kg');
+    if (player.dominant_foot) m2.push(tt('squad.foot_' + String(player.dominant_foot).toLowerCase(), player.dominant_foot));
+    if (player.nationality) m2.push(player.nationality);
+
+    var allDates = [];
+    sections.forEach(function(s){ s.items.forEach(function(it){ it.hist.forEach(function(p){ if(p.d) allDates.push(String(p.d).slice(0,10)); }); }); });
+    allDates.sort();
+    var range = allDates.length ? tt('evaluations.report_range','Data '+evrD(allDates[0])+' → '+evrD(allDates[allDates.length-1]), {from:evrD(allDates[0]), to:evrD(allDates[allDates.length-1])}) : '';
+
+    // photo circle, or initials placeholder when there is no usable photo
+    var initials = ((player.first_name||' ')[0] + (player.last_name||' ')[0]).trim().toUpperCase() || '·';
+    var photoHtml = photoData
+      ? '<img src="'+photoData+'" style="width:58px;height:58px;border-radius:50%;object-fit:cover;display:block;border:2px solid #0F766E;box-sizing:border-box" alt="">'
+      : '<div style="width:58px;height:58px;border-radius:50%;background:#E8ECEA;color:#0F766E;display:flex;align-items:center;justify-content:center;font:700 20px/1 '+F+';border:2px solid #0F766E;box-sizing:border-box">'+esc(initials)+'</div>';
+
+    // brand mark: same 3-bar SVG as the app sidebar, self-contained (no external asset)
+    var brandHtml = '<div style="display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-bottom:6px">'
+      + '<div style="width:24px;height:24px;border-radius:6px;background:#0F766E;display:flex;align-items:center;justify-content:center">'
+      +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg>'
+      + '</div>'
+      + '<span style="font:700 15px/1 '+F+';letter-spacing:-0.02em;color:#111">ClavaMetrics</span></div>';
+
+    var html = '<div style="width:860px;background:#fff;color:#111;font-family:'+F+';padding:26px 32px 32px;box-sizing:border-box">'
+      + '<div id="evrHead" style="display:flex;align-items:center;gap:14px;background:#fff;padding-bottom:12px;border-bottom:2px solid #111">'
+      +   photoHtml
+      +   '<div style="flex:1;min-width:0"><div style="font:700 22px/1.1 '+F+';letter-spacing:-0.01em">'+esc(name)+'</div>'
+      +     (m1.length ? '<div style="font:600 12px/1.4 '+F+';color:#0F766E;margin-top:3px">'+esc(m1.join(' · '))+'</div>' : '')
+      +     (m2.length ? '<div style="font:500 11.5px/1.4 '+F+';color:#555;margin-top:2px">'+esc(m2.join(' · '))+'</div>' : '')
+      +   '</div>'
+      +   '<div style="text-align:right;flex-shrink:0">'
+      +     brandHtml
+      +     '<div style="font:600 12px/1.2 '+F+'">'+esc(tt('evaluations.report_header','Evaluation report'))+'</div>'
+      +     '<div style="font:500 10.5px/1.5 '+F+';color:#555">'+esc(tt('evaluations.report_generated','Generated '+evrD(evToday()), {date:evrD(evToday())}))
+      +     (range ? '<br>'+esc(range) : '') + '</div></div>'
+      + '</div>';
+
+    var th = function(txt, align){ return '<th style="text-align:'+(align||'left')+';padding:6px 8px;font:600 10.5px/1.2 '+F+';text-transform:uppercase;letter-spacing:0.04em;color:#666;border-bottom:1px solid #ccc;white-space:nowrap">'+esc(txt)+'</th>'; };
+    var td = function(inner, align, extra){ return '<td style="text-align:'+(align||'left')+';padding:7px 8px;font:500 12px/1.35 '+F+';border-bottom:1px solid #eee;vertical-align:middle;'+(extra||'')+'">'+inner+'</td>'; };
+
+    sections.forEach(function(sec){
+      html += '<div class="evr-brk" style="margin-top:20px">'
+        + '<div style="font:700 13px/1.2 '+F+';text-transform:uppercase;letter-spacing:0.05em;color:#0F766E;margin-bottom:6px">'+esc(sec.title)+'</div>'
+        + '<table style="width:100%;border-collapse:collapse"><thead><tr>'
+        + th(tt('evaluations.report_col_test','Test'))
+        + th(tt('evaluations.report_col_last','Latest'),'right')
+        + th(tt('evaluations.report_col_delta','Δ vs prev'),'right')
+        + th(tt('evaluations.report_col_best','Best'),'right')
+        + th('n','right')
+        + th(tt('evaluations.report_col_trend','Trend'),'right')
+        + '</tr></thead><tbody>';
+      sec.items.forEach(function(it){
+        var n = it.hist.length, last = it.hist[n-1], prev = n>1 ? it.hist[n-2] : null;
+        var dec = ftDec(it.unit);
+        var labelHtml = '<div style="font-weight:600">'+esc(it.label)+'</div>'
+          + (it.sub ? '<div style="font:500 10.5px/1.3 '+F+';color:#777">'+esc(it.sub)+'</div>' : '');
+        var lastHtml = '<div style="font-weight:600">'+evrFmt(last.v,it.unit)+(it.unit?' <span style="font-weight:500;color:#777;font-size:10.5px">'+esc(it.unit)+'</span>':'')+'</div>'
+          + '<div style="font:500 10px/1.3 '+F+';color:#999">'+esc(evrD(last.d))+'</div>'
+          + (it.sides ? '<div style="font:500 10px/1.3 '+F+';color:#777">L '+ftFmt(it.sides.l,dec)+' · R '+ftFmt(it.sides.r,dec)
+              +' · '+esc(tt('evaluations.report_asym','Asym '+it.sides.asym.toFixed(1)+'%',{pct:it.sides.asym.toFixed(1)}))+'</div>' : '')
+          + (it.band ? '<div style="font:600 10px/1.3 '+F+';color:#0F766E">'+esc(it.band)+'</div>' : '');
+        var deltaHtml = '—';
+        if (prev){
+          var dv = last.v - prev.v;
+          var good = it.neutral ? null : (it.betterHigh ? dv >= 0 : dv <= 0);
+          var col = good==null ? '#555' : (good ? '#15803D' : '#B91C1C');
+          deltaHtml = '<span style="font-weight:600;color:'+col+'">'+(dv>0?'+':'')+ftFmt(dv,dec)+'</span>';
+        }
+        var bestHtml = '—';
+        if (!it.neutral && n>0){
+          var vs = it.hist.map(function(p){ return p.v; });
+          bestHtml = evrFmt(it.betterHigh ? Math.max.apply(null,vs) : Math.min.apply(null,vs), it.unit);
+        }
+        html += '<tr>' + td(labelHtml) + td(lastHtml,'right') + td(deltaHtml,'right')
+          + td(bestHtml,'right') + td(String(n),'right','color:#777')
+          + td('<div style="display:inline-block">'+evrSpark(it.hist)+'</div>','right') + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    return html + '</div>';
+  }
+
+  // ── A4 pagination: header repeated on pages 2+, cuts never split an .evr-brk ──
+  async function evrPdf(el, player){
+    var canvas = await window.html2canvas(el, { scale:2, useCORS:true, backgroundColor:'#ffffff' });
+    var jsPDF = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDF) throw new Error('PDF library failed to load');
+    var JPEG_Q = 0.92;
+    var pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
+    var pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+    var MARGIN = 8, GAP = 4;
+    var pxPerMm = canvas.width / pageW;
+    var scale = canvas.width / el.offsetWidth;
+    var elTop = el.getBoundingClientRect().top;
+    var toPx = function(n){ var r = n.getBoundingClientRect(); return { top:(r.top-elTop)*scale, bottom:(r.bottom-elTop)*scale }; };
+
+    // header band capture (redrawn on pages 2+)
+    var headImg = null, headHmm = 0;
+    var headEl = el.querySelector('#evrHead');
+    if (headEl){
+      var hb = toPx(headEl);
+      var hPx = Math.round(hb.bottom - Math.max(0, hb.top));
+      var hc = document.createElement('canvas'); hc.width = canvas.width; hc.height = hPx;
+      var hctx = hc.getContext('2d');
+      hctx.fillStyle = '#ffffff'; hctx.fillRect(0,0,hc.width,hc.height);
+      hctx.drawImage(canvas, 0, Math.max(0,Math.round(hb.top)), canvas.width, hPx, 0, 0, canvas.width, hPx);
+      headImg = hc.toDataURL('image/jpeg', JPEG_Q);
+      headHmm = hPx / pxPerMm;
+    }
+
+    var boxes = [].slice.call(el.querySelectorAll('.evr-brk')).map(toPx);
+    var straddles = function(y){ return boxes.some(function(b){ return y > b.top+1 && y < b.bottom-1; }); };
+    var safeCut = function(start, maxEnd){
+      if (maxEnd >= canvas.height) return canvas.height;
+      var cands = boxes.map(function(b){ return Math.ceil(b.bottom); })
+        .filter(function(y){ return y > start+10 && y <= maxEnd && !straddles(y); });
+      if (cands.length) return Math.max.apply(null, cands);
+      var hit = boxes.find(function(b){ return maxEnd > b.top+1 && maxEnd < b.bottom-1; });
+      if (hit && hit.top > start+10) return Math.floor(hit.top);
+      return maxEnd;                                            // one box taller than a page
+    };
+
+    var sy = 0, page = 0;
+    while (sy < canvas.height){
+      if (page > 0) pdf.addPage();
+      var contentTop = MARGIN;
+      if (page > 0 && headImg){ pdf.addImage(headImg,'JPEG',0,MARGIN,pageW,headHmm); contentTop = MARGIN + headHmm + GAP; }
+      var maxSlice = Math.max(1, Math.floor((pageH - contentTop - MARGIN) * pxPerMm));
+      var cut = safeCut(sy, sy + maxSlice);
+      var h = Math.max(1, cut - sy);
+      var slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = h;
+      var sctx = slice.getContext('2d');
+      sctx.fillStyle = '#ffffff'; sctx.fillRect(0,0,slice.width,slice.height);
+      sctx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
+      pdf.addImage(slice.toDataURL('image/jpeg', JPEG_Q),'JPEG',0,contentTop,pageW,h/pxPerMm);
+      sy += h; page++;
+    }
+    var fname = ((player.last_name||'player') + '-' + (player.first_name||'') + '-report-' + evToday())
+      .toLowerCase().replace(/\s+/g,'_');
+    pdf.save(fname + '.pdf');
+  }
+
+  document.getElementById('evrGoBtn').addEventListener('click', async function(){
+    var pid = document.getElementById('evrPlayer').value;
+    if (!pid || _evrBusy) return;
+    var btn = this, st = document.getElementById('evrStatus');
+    _evrBusy = true; btn.disabled = true;
+    st.textContent = tt('evaluations.report_generating','Generating report…');
+    var host = document.getElementById('evrSheetHost');
+    try {
+      await Promise.all([
+        evrLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','html2canvas'),
+        evrLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','jspdf')
+      ]);
+      var data = await evrFetch(pid);
+      var sections = evrBuildSections(data);
+      if (!sections.length){
+        st.textContent = tt('evaluations.report_no_data','This player has no recorded tests yet.');
+        return;
+      }
+      var photoData = await evrPhotoData(data.player.photo_url);
+      host.innerHTML = evrSheetHtml(data.player, sections, photoData);
+      // reveal off-screen so html2canvas can measure and capture it
+      host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
+      await evrPdf(host.firstElementChild, data.player);
+      evrShow(false);
+    } catch(e){
+      console.error('[evr]', e);
+      st.textContent = tt('evaluations.report_failed','Export failed: {msg}', {msg:(e && e.message) || String(e)});
+    } finally {
+      host.style.cssText = 'display:none'; host.innerHTML = '';
+      _evrBusy = false; btn.disabled = false;
+    }
+  });
+
+  // currently-open test (null in catalog)
+  var _openTest = null;
+
+  // open a test from the catalog → detail view, in force or evaluations mode
+  // unit chip + evidence/reference popover for DB-driven tests (t._def). Scientific
+  // reference text is NOT translated; only the "Evidence: …" label is.
+  function renderDefMeta(t){
+    var el = document.getElementById('evDefMeta'); if (!el) return;
+    var d = t && t._def;
+    if (!d){ el.innerHTML = ''; return; }
+    var evTxt = d.evidence_level ? tt('evaluations.evidence_' + d.evidence_level, d.evidence_level) : '';
+    var chip = '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;background:var(--cm-bg-sunk);color:var(--cm-fg-muted);font-size:12px;font-weight:600">'
+      + esc(d.unit || '') + (d.bilateral ? ' · L/R' : '') + '</span>';
+    var info = d.reference ? '<button type="button" id="evDefInfoBtn" title="' + esc(tt('evaluations.evidence','Evidence'))
+      + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:0;background:none;color:var(--cm-fg-faint);cursor:pointer"><i class="ti ti-info-circle"></i></button>' : '';
+    var refLink = d.reference_url ? '<div style="margin-top:7px"><a href="' + esc(d.reference_url) + '" target="_blank" rel="noopener" style="color:var(--cm-accent);font-weight:600;text-decoration:none">' + esc(tt('evaluations.view_source','View source')) + ' ↗</a></div>' : '';
+    var pop = d.reference ? '<div id="evDefPop" style="display:none;position:absolute;top:100%;left:0;z-index:40;margin-top:6px;max-width:340px;padding:10px 12px;border-radius:10px;background:var(--cm-bg-elev,#fff);border:1px solid var(--cm-border,rgba(0,0,0,.12));box-shadow:0 8px 24px rgba(0,0,0,.16);font-size:12px;line-height:1.45;color:var(--cm-fg);white-space:normal;text-align:left">'
+      + (evTxt ? '<div style="font-weight:700;margin-bottom:4px">' + esc(tt('evaluations.evidence','Evidence')) + ': ' + esc(evTxt) + '</div>' : '')
+      + '<div style="color:var(--cm-fg-muted)">' + esc(d.reference) + '</div>' + refLink + '</div>' : '';
+    el.innerHTML = '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;margin-top:6px">' + chip + info + pop + '</div>';
+    var ib = document.getElementById('evDefInfoBtn');
+    if (ib) ib.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var p = document.getElementById('evDefPop'); if (!p) return;
+      p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+    });
+  }
+
+  function openTestDetail(t){
+    _openTest = t;
+    document.getElementById('evTestName').textContent = testLabel(t);
+    document.getElementById('evTestSub').textContent  = catName(t._cat) + ' · ' + t.sub;
+    renderDefMeta(t);
+    catalog.classList.remove('is-on');
+    detail.classList.add('is-on');
+
+    // reset detail sub-nav → View results, and viewMode → Team
+    setPane('view');
+    activateViewMode('team');
+
+    var isForce = t.src && t.src.from === 'force_tests';
+    document.getElementById('ftForceTeam').style.display          = isForce ? '' : 'none';
+    document.getElementById('ftEvalTeamPlaceholder').style.display = isForce ? 'none' : '';
+    document.getElementById('ftForceIndiv').style.display          = isForce ? '' : 'none';
+    document.getElementById('ftEvalIndivPlaceholder').style.display= isForce ? 'none' : '';
+
+    if (isForce){
+      // fix the test_type to the opened test (no test selector)
+      _ftTeam.test = t.src.testType; _ftTeam.metric = null;
+      _ftIndiv.test = t.src.testType; _ftIndiv.metric = null; _ftIndiv.player = null;
+      loadForceView();
+    } else {
+      openEvalTest(t);
+    }
+
+    // ── Upload pane dispatch ──
+    //  single-value evaluations → manual + bulk (+ CSV)
+    //  calculator evaluations    → New entry (modal) + bulk grid (+ CSV)
+    //  force_tests               → device CSV drawer
+    var isCalc = !isForce && !!EV_CALC[t.key] && !!EV_CALC_LABEL[t.key];
+    // body_composition-derived without own calculator (somato, bmirfm): values are
+    // computed from Body composition entries → no direct upload here.
+    var isBcDerived = !isForce && !isCalc && t.src && t.src.from === 'body_composition';
+    var isSingleEval = !isForce && !EV_CALC[t.key] && !isBcDerived;
+    var isEval = isSingleEval || isCalc;
+    document.getElementById('evUploadReal').style.display        = isEval ? '' : 'none';
+    document.getElementById('evUploadCalc').style.display        = isCalc ? '' : 'none';
+    document.getElementById('evUploadForce').style.display       = isForce ? '' : 'none';
+    document.getElementById('evUploadPlaceholder').style.display = (isEval || isForce) ? 'none' : '';
+    var phTxt = document.getElementById('evUploadPlaceholderTxt');
+    if (phTxt) phTxt.textContent = isBcDerived
+      ? tt('evaluations.bc_derived_upload','These values are computed automatically from Body composition entries. Open the Body composition test to add or import data.')
+      : tt('evaluations.guided_entry_placeholder','This test uses a dedicated calculator or device import — wired in a later step.');
+    // manual individual entry is available for DB-driven assessment tests (they carry a _def)
+    var asBtn = document.getElementById('asAddResultBtn');
+    if (asBtn) asBtn.style.display = (isForce && t._def) ? '' : 'none';
+    var asImpBtn = document.getElementById('asImpOpenBtn');
+    if (asImpBtn) asImpBtn.style.display = (isForce && t._def) ? '' : 'none';
+    activateMini('uploadMode', 'manual');
+
+    var entrySeg = detail.querySelector('[data-mini="entryMode"]');
+    if (isSingleEval){
+      // both Single + Bulk tabs (Single is the primary manual entry)
+      if (entrySeg) entrySeg.style.display = '';
+      activateMini('entryMode', 'single');
+      setupEvalUpload(t);
+    } else if (isCalc){
+      // Single entry = the modal; the grid is for quick team bulk → show Bulk only
+      if (entrySeg) entrySeg.style.display = 'none';
+      activateMini('entryMode', 'bulk');
+      setupEvalUpload(t);
+      document.getElementById('evUploadCalcTitle').textContent = testLabel(t);
+      document.getElementById('evUploadCalcBtn').setAttribute('data-label', EV_CALC_LABEL[t.key]);
+      document.getElementById('evVbtImportBtn').style.display = (t.key === 'vbt') ? '' : 'none';
+    }
+
+    // CSV pane: simple Player+Value importer for evaluations; force uses its own drawer
+    setupCsvImport(t, isForce);
+
+    // H-FVP: dedicated team grid + CSV (mass · height · 5 split times → full profile)
+    var csvBtn = detail.querySelector('[data-mini-btn="csv"]');
+    var isHfvp = (t.key === 'hfvp');
+    document.getElementById('evHfvpBulk').style.display = isHfvp ? '' : 'none';
+    document.getElementById('evHfvpCsv').style.display  = isHfvp ? '' : 'none';
+    if (csvBtn) csvBtn.style.display = (isForce || isBcDerived) ? 'none' : '';
+    if (isHfvp){
+      document.getElementById('evUploadReal').style.display = 'none';  // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';  // hide generic CSV importer
+      document.getElementById('evUploadCalcTxt').textContent =
+        tt('evaluations.hfvp_single_hint', 'Single player · enter sprint splits → full horizontal F-V profile. Use the team grid below, or Import CSV, for bulk.');
+      setupHfvpBulk();
+      resetHfvpCsv();
+    }
+
+    // Sprint splits (manual): dedicated grid with selectable distances (no CSV, no calc modal).
+    var isSprint = (t.key === 'sprint');
+    var upSeg = detail.querySelector('[data-mini="uploadMode"]');
+    if (upSeg) upSeg.style.display = isSprint ? 'none' : '';   // restore for other tests
+    document.getElementById('evSprintBulk').style.display = isSprint ? '' : 'none';
+    if (isSprint){
+      document.getElementById('evUploadReal').style.display = 'none';  // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';  // hide generic CSV importer
+      if (entrySeg) entrySeg.style.display = 'none';                    // no Single/Bulk generic tabs
+      if (csvBtn) csvBtn.style.display = 'none';
+      activateMini('uploadMode', 'manual');                            // our grid lives in the manual pane
+      setupSprintBulk();
+    }
+
+    // Body composition: dedicated bulk grid + dedicated CSV importer → both write to body_composition.
+    // Keeps the "New entry" launcher (individual skinfold panel); replaces the generic single-value grid/CSV.
+    var isBodyComp = (t.key === 'bodycomp');
+    document.getElementById('evBcBulk').style.display = isBodyComp ? '' : 'none';
+    document.getElementById('evBcCsv').style.display  = isBodyComp ? '' : 'none';
+    if (isBodyComp){
+      document.getElementById('evUploadReal').style.display = 'none';   // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';   // hide generic CSV importer (use the dedicated one)
+      if (csvBtn) csvBtn.style.display = '';                            // keep the CSV tab (dedicated bodycomp importer)
+      setupBcBulk();
+      setupBcCsv();
+    }
+
+    window.scrollTo(0,0);
+  }
+
+  // catalog category collapse/expand + open a test (event delegation, works for rendered cards)
+  document.getElementById('catalogCats').addEventListener('click', function(e){
+    var head = e.target.closest('[data-cat-toggle]');
+    if (head){ head.closest('.ev-cat').classList.toggle('is-collapsed'); return; }
+    var card = e.target.closest('[data-open-test]');
+    if (card){
+      var t = TEST_BY_KEY[card.getAttribute('data-open-test')];
+      if (t) openTestDetail(t);
+    }
+  });
+
+  // back to catalog
+  document.getElementById('evBackToCatalog').addEventListener('click', function(){
+    detail.classList.remove('is-on');
+    catalog.classList.add('is-on');
+  });
+
+  // detail sub-nav: View results / Upload results
+  var subnav = document.getElementById('evDetailSubnav');
+  function setPane(v){
+    subnav.querySelectorAll('[data-pane-btn]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-pane-btn')===v); });
+    show(detail, 'data-pane', v);
+  }
+  subnav.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-pane-btn]'); if(!btn) return;
+    setPane(btn.getAttribute('data-pane-btn'));
+  });
+
+  // mini-segment activation (group:value) — toggles buttons + panes, fires hooks
+  function activateMini(group, v){
+    var segEl = detail.querySelector('[data-mini="'+group+'"]');
+    if (segEl) segEl.querySelectorAll('[data-mini-btn]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-mini-btn')===v); });
+    detail.querySelectorAll('[data-mini-pane^="'+group+':"]').forEach(function(p){
+      p.style.display = (p.getAttribute('data-mini-pane') === group+':'+v) ? 'block' : 'none';
+    });
+    if (group === 'viewMode') onViewModeChange(v);
+  }
+  function activateViewMode(v){ activateMini('viewMode', v); }
+
+  // when switching Team/Individual, lazy-load the individual view for the current source
+  function onViewModeChange(v){
+    if (!_openTest || !_openTest.src || v !== 'individual') return;
+    if (_openTest.src.from === 'force_tests') loadForceIndiv();
+    else renderEvalIndiv();
+  }
+
+  // mini-segments (Team/Individual · Manual/CSV)
+  document.querySelectorAll('[data-mini]').forEach(function(segEl){
+    var group = segEl.getAttribute('data-mini');
+    segEl.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-mini-btn]'); if(!btn) return;
+      activateMini(group, btn.getAttribute('data-mini-btn'));
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  FORCE TESTS · View results (ported from Evaluations.html, adapted:
+  //  test_type is FIXED to the opened catalog test → no test selector;
+  //  scope uses _clubId / _teamId / _ftPlayers from this module).
+  // ════════════════════════════════════════════════════════════════════
+  var _ftTeam  = { tests: [], defs: {}, test: null, metric: null, order: 'desc' };
+  var _ftIndiv = { player: null, tests: [], test: null, metric: null };
+
+  function ftPlayerName(id) { var p = _ftPlayers.find(function(x){ return x.id === id; }); return p ? (p.first_name + ' ' + p.last_name) : '—'; }
+  function ftDec(unit) { if (unit === 'W' || unit === 'N' || unit === 'ms' || unit === 'N/s') return 0; if (!unit) return 2; return 1; }
+  function ftFmt(v, dec) { return dec === 0 ? Math.round(v).toLocaleString(ttLocale()) : v.toFixed(dec); }
+  function ftMetricLabel(key) { var d = _ftTeam.defs[key]; return d ? (d.label || key) : key; }
+  function ftMetricUnit(key) { var d = _ftTeam.defs[key]; return d ? (d.unit || '') : ''; }
+  function ftBetterHigh(key) { var cat = ((_ftTeam.defs[key] && _ftTeam.defs[key].category) || '').toLowerCase(); return !(cat === 'time' || cat === 'asymmetry'); }
+  function ftClassify(value, avg, betterHigh) {
+    if (!avg) return '';
+    var dev = (value - avg) / avg;
+    var worse = betterHigh ? -dev : dev;
+    if (worse <= 0) return '';
+    return worse < 0.08 ? 'warn' : 'bad';
+  }
+  // Per-test value for the selected metric: bilateral (side null) preferred, else mean of L/R.
+  function ftTestValue(rows) {
+    if (!rows || !rows.length) return null;
+    var bil = rows.find(function(r){ return (r.side == null || r.side === '') && r.value != null; });
+    if (bil) return Number(bil.value);
+    var sided = rows.filter(function(r){ return r.value != null; }).map(function(r){ return Number(r.value); });
+    if (!sided.length) return null;
+    return sided.reduce(function(a, b){ return a + b; }, 0) / sided.length;
+  }
+  async function ftEnsureDefs(force) {
+    if (!force && Object.keys(_ftTeam.defs).length) return;
+    try {
+      var res = await window.sb.from('force_metric_definitions').select('key, label, unit, category').or('club_id.is.null,club_id.eq.' + _clubId);
+      _ftTeam.defs = {}; (res.data || []).forEach(function(d){ _ftTeam.defs[d.key] = d; });
+    } catch (e) {}
+  }
+
+  // ── Team view (test fixed) ──
+  async function loadForceView() {
+    if (_scopeReady) await _scopeReady;                  // never query before team scope resolves
+    if (!_clubId) return;
+    var reqTest = _ftTeam.test;
+    var empty = document.getElementById('ftEmpty');
+    var teamView = document.getElementById('ftTeamView');
+    var tests = [];
+    try {
+      tests = await window.cmFetchAll(function(){
+        var q = window.sb.from('force_tests').select('id, player_id, test_type, test_date').eq('club_id', _clubId);
+        if (_teamId) q = q.eq('team_id', _teamId);
+        return q;
+      }, { label: 'ev:forceView' });
+    } catch (e) { tests = []; }
+    if (_ftTeam.test !== reqTest) return;                // user switched tests mid-flight → drop
+    _ftTeam.tests = tests;
+
+    var hasType = tests.some(function(t){ return t.test_type === _ftTeam.test; });
+    if (!tests.length || !hasType) {
+      // no force data for this test → show the empty state, hide the chart
+      empty.style.display = ''; teamView.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none'; teamView.style.display = '';
+    await ftEnsureDefs(true);
+    await loadForceMetricsForTest();
+  }
+
+  async function loadForceMetricsForTest() {
+    var ids = _ftTeam.tests.filter(function(t){ return t.test_type === _ftTeam.test; }).map(function(t){ return t.id; });
+    var keys = [];
+    if (ids.length) {
+      try {
+        var r = await window.sb.from('force_test_metrics').select('metric_key').in('test_id', ids);
+        keys = Array.from(new Set((r.data || []).map(function(x){ return x.metric_key; })));
+      } catch (e) { keys = []; }
+    }
+    keys.sort(function(a, b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); });
+    var sel = document.getElementById('ft-metric');
+    sel.innerHTML = keys.map(function(k){ return '<option value="'+k+'">'+esc(ftMetricLabel(k))+'</option>'; }).join('');
+    if (keys.indexOf(_ftTeam.metric) === -1) _ftTeam.metric = keys[0] || null;
+    sel.value = _ftTeam.metric || '';
+    await renderForceTeam();
+  }
+
+  async function renderForceTeam() {
+    var chartCard = document.getElementById('ftChartCard');
+    var noData = document.getElementById('ftTeamNoData');
+    if (!_ftTeam.test || !_ftTeam.metric) { chartCard.style.display = 'none'; noData.style.display = ''; return; }
+
+    var typeTests = _ftTeam.tests.filter(function(t){ return t.test_type === _ftTeam.test; });
+    var ids = typeTests.map(function(t){ return t.id; });
+    var mrows = [];
+    try {
+      var r = await window.sb.from('force_test_metrics').select('test_id, value, side').eq('metric_key', _ftTeam.metric).in('test_id', ids);
+      mrows = r.data || [];
+    } catch (e) { mrows = []; }
+    var byTest = {};
+    mrows.forEach(function(r2){ (byTest[r2.test_id] = byTest[r2.test_id] || []).push(r2); });
+
+    // Per player: value from their most-recent test (max test_date) that has a value.
+    var perPlayer = {};
+    typeTests.forEach(function(t){
+      var v = ftTestValue(byTest[t.id]);
+      if (v == null || isNaN(v)) return;
+      var prev = perPlayer[t.player_id];
+      if (!prev || t.test_date > prev.date) perPlayer[t.player_id] = { date: t.test_date, value: v };
+    });
+
+    var rows = Object.keys(perPlayer).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perPlayer[pid].value }; });
+
+    if (!rows.length) { chartCard.style.display = 'none'; noData.style.display = ''; clearForceSummary(); return; }
+    chartCard.style.display = ''; noData.style.display = 'none';
+
+    var unit = ftMetricUnit(_ftTeam.metric);
+    var dec = ftDec(unit);
+    var betterHigh = ftBetterHigh(_ftTeam.metric);
+    var label = ftMetricLabel(_ftTeam.metric);
+
+    var values = rows.map(function(r2){ return r2.value; });
+    var avg = values.reduce(function(a, b){ return a + b; }, 0) / values.length;
+    var maxV = Math.max.apply(null, values), minV = Math.min.apply(null, values);
+    var scaleMax = maxV > 0 ? maxV * 1.12 : 1;
+
+    rows.sort(function(a, b){ return _ftTeam.order === 'desc' ? b.value - a.value : a.value - b.value; });
+
+    var best = betterHigh ? rows.reduce(function(a, b){ return b.value > a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value < a.value ? b : a; });
+    var worst = betterHigh ? rows.reduce(function(a, b){ return b.value < a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value > a.value ? b : a; });
+    var belowCount = rows.filter(function(r2){ return ftClassify(r2.value, avg, betterHigh) !== ''; }).length;
+
+    // ── Summary ──
+    var unitSuffix = unit ? ('<small>' + unit + '</small>') : '';
+    document.getElementById('ft-avg-lab').textContent = label + ' · ' + tt('evaluations.group_average','group average');
+    document.getElementById('ft-avg-num').textContent = ftFmt(avg, dec);
+    document.getElementById('ft-avg-unit').textContent = unit;
+    document.getElementById('ft-avg-sub').innerHTML = tt('evaluations.range_n','Range <b>'+ftFmt(minV,dec)+' – '+ftFmt(maxV,dec)+'</b> · n = '+rows.length, {min:ftFmt(minV,dec), max:ftFmt(maxV,dec), n:rows.length});
+    document.getElementById('ft-top-v').innerHTML = ftFmt(best.value, dec) + unitSuffix;
+    document.getElementById('ft-top-n').textContent = best.name;
+    document.getElementById('ft-low-v').innerHTML = ftFmt(worst.value, dec) + unitSuffix;
+    document.getElementById('ft-low-n').textContent = worst.name;
+    document.getElementById('ft-below-v').textContent = belowCount;
+    document.getElementById('ft-below-n').textContent = tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length});
+    document.getElementById('ft-chart-title').textContent = tt('evaluations.chart_by_player','{label} by player · {test}',{label:label,test:_ftTeam.test}) + (betterHigh ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better'));
+
+    // ── Bars + names ──
+    if (window.cmCharts && window.cmCharts.ready()){
+      // first render finds the wrap via #ft-plot; the canvas mount clears its children,
+      // so pin an id on the wrap to find it again on later renders
+      var ftp = document.getElementById('ft-plot');
+      var wrapEl = document.getElementById('ftPlotWrap') || (ftp && ftp.closest('.ft-plotwrap'));
+      if (wrapEl && !wrapEl.id) wrapEl.id = 'ftPlotWrap';
+      if (!wrapEl) return;
+      window.cmCharts.teamBars(wrapEl, {
+        rows: rows.map(function(r2){ return { label: r2.name, value: r2.value, pid: r2.pid, cls: ftClassify(r2.value, avg, betterHigh) }; }),
+        fmt: function(v){ return ftFmt(v, dec); }, unit: unit,
+        avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        side: _ftTeam.order === 'asc' ? 'left' : 'right',
+        onBarClick: openForcePlayer,
+      });
+      return;
+    }
+    var plot = document.getElementById('ft-plot');
+    var names = document.getElementById('ft-names');
+    plot.innerHTML = ''; names.innerHTML = '';
+    rows.forEach(function(r2){
+      var cls = ftClassify(r2.value, avg, betterHigh);
+      var hPct = Math.max(0, (r2.value / scaleMax) * 100);
+      var col = document.createElement('div');
+      col.className = 'ft-col' + (cls ? ' ' + cls : '');
+      col.style.cursor = 'pointer';
+      col.title = r2.name + ' ' + tt('evaluations.open_profile_suffix','— open profile');
+      col.innerHTML = '<span class="ft-val">' + ftFmt(r2.value, dec) + '</span><span class="ft-bar" style="height:' + hPct.toFixed(1) + '%"></span>';
+      col.addEventListener('click', function(){ openForcePlayer(r2.pid); });
+      plot.appendChild(col);
+      var nm = document.createElement('div');
+      nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
+      nm.style.cursor = 'pointer';
+      nm.innerHTML = '<span>' + esc(r2.name) + '</span>';
+      nm.title = r2.name + ' ' + tt('evaluations.open_profile_suffix','— open profile');
+      nm.addEventListener('click', function(){ openForcePlayer(r2.pid); });
+      names.appendChild(nm);
+    });
+
+    // ── Average line ──
+    var line = document.createElement('div');
+    line.className = 'ft-avgline ' + (_ftTeam.order === 'asc' ? 'tag-left' : 'tag-right');
+    line.style.top = (100 - (avg / scaleMax) * 100).toFixed(1) + '%';
+    line.innerHTML = '<span class="tag">' + esc(tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)})) + (unit ? ' ' + unit : '') + '</span>';
+    plot.appendChild(line);
+  }
+
+  function clearForceSummary() {
+    ['ft-avg-num','ft-top-v','ft-low-v','ft-below-v'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = '—'; });
+    ['ft-avg-sub','ft-top-n','ft-low-n','ft-below-n','ft-avg-unit'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = ''; });
+  }
+
+  // jump to a player's profile from a clicked team-view bar
+  function openForcePlayer(pid) {
+    _ftIndiv.player = pid;
+    activateViewMode('individual');
+  }
+
+  // team-view controls (metric + order)
+  document.getElementById('ft-metric').addEventListener('change', async function(e){ _ftTeam.metric = e.target.value; await renderForceTeam(); });
+  document.querySelectorAll('#ft-order button').forEach(function(btn){ btn.addEventListener('click', function(){
+    document.querySelectorAll('#ft-order button').forEach(function(b){ b.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    _ftTeam.order = btn.getAttribute('data-order');
+    renderForceTeam();
+  }); });
+
+  // ── Individual profile (test fixed) ──
+  function ftDateOnly(iso){ return String(iso || '').slice(0, 10); }
+  function ftDateShort(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return isNaN(d) ? iso : (d.getDate() + ' ' + ttMonShort(d.getMonth())); }
+  function ftDateFull(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return isNaN(d) ? iso : (d.getDate() + ' ' + ttMonShort(d.getMonth()) + ' ' + d.getFullYear()); }
+  function ftDaysAgo(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return Math.round((Date.now() - d.getTime()) / 86400000); }
+  function ftPctDelta(d){ var r = Math.abs(d) < 0.05 ? 0 : d; return (r > 0 ? '+' : '') + r.toFixed(1) + '%'; }
+  function ftAsymColor(a){ return a <= 5 ? 'var(--cm-success)' : a <= 10 ? 'var(--cm-warning)' : 'var(--cm-danger)'; }
+
+  // Asymmetry for a test: prefer L/R of selected metric, else a dedicated asymmetry metric.
+  function ftAsymForTest(metricRows, selectedKey) {
+    var sel = metricRows.filter(function(r){ return r.metric_key === selectedKey && r.value != null; });
+    var L = sel.find(function(r){ return String(r.side || '').toUpperCase() === 'L'; });
+    var R = sel.find(function(r){ return String(r.side || '').toUpperCase() === 'R'; });
+    if (L && R) {
+      var lv = Number(L.value), rv = Number(R.value);
+      var hi = Math.max(lv, rv), lo = Math.min(lv, rv);
+      var pct = hi > 0 ? (hi - lo) / hi * 100 : 0;
+      return { pct: pct, side: lv >= rv ? 'L' : 'R', hasLR: true, L: lv, R: rv };
+    }
+    var asy = metricRows.find(function(r){
+      var cat = ((_ftTeam.defs[r.metric_key] && _ftTeam.defs[r.metric_key].category) || '').toLowerCase();
+      return (cat === 'asymmetry' || /asym/i.test(r.metric_key)) && r.value != null;
+    });
+    if (asy) return { pct: Math.abs(Number(asy.value)), side: String(asy.side || '').toUpperCase() || null, hasLR: false };
+    return null;
+  }
+
+  async function loadForceIndiv() {
+    await ftEnsureDefs();
+    var psel = document.getElementById('ft-player');
+    psel.innerHTML = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name + ' ' + p.last_name)+'</option>'; }).join('');
+    if (!_ftIndiv.player || !_ftPlayers.some(function(p){ return p.id === _ftIndiv.player; })) _ftIndiv.player = (_ftPlayers[0] && _ftPlayers[0].id) || null;
+    psel.value = _ftIndiv.player || '';
+    await loadForceIndivTests();
+  }
+
+  async function loadForceIndivTests() {
+    var body = document.getElementById('ftIndivBody');
+    var noData = document.getElementById('ftIndivNoData');
+    if (!_ftIndiv.player || !_clubId) { body.style.display = 'none'; noData.style.display = ''; return; }
+    var tests = [];
+    try {
+      var r = await window.sb.from('force_tests').select('id, test_type, test_date, test_time').eq('club_id', _clubId).eq('player_id', _ftIndiv.player);
+      tests = r.data || [];
+    } catch (e) { tests = []; }
+    _ftIndiv.tests = tests;
+    // test is FIXED to the opened catalog test (no selector)
+    _ftIndiv.test = _ftTeam.test;
+    var hasType = tests.some(function(t){ return t.test_type === _ftIndiv.test; });
+    if (!hasType) { body.style.display = 'none'; noData.style.display = ''; return; }
+    body.style.display = ''; noData.style.display = 'none';
+    await loadForceIndivMetrics();
+  }
+
+  async function loadForceIndivMetrics() {
+    var ids = _ftIndiv.tests.filter(function(t){ return t.test_type === _ftIndiv.test; }).map(function(t){ return t.id; });
+    var keys = [];
+    if (ids.length) {
+      try {
+        var r = await window.sb.from('force_test_metrics').select('metric_key').in('test_id', ids);
+        keys = Array.from(new Set((r.data || []).map(function(x){ return x.metric_key; })));
+      } catch (e) { keys = []; }
+    }
+    keys.sort(function(a, b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); });
+    var sel = document.getElementById('fti-metric');
+    sel.innerHTML = keys.map(function(k){ return '<option value="'+k+'">'+esc(ftMetricLabel(k))+'</option>'; }).join('');
+    if (keys.indexOf(_ftIndiv.metric) === -1) _ftIndiv.metric = keys[0] || null;
+    sel.value = _ftIndiv.metric || '';
+    await renderForceIndiv();
+  }
+
+  async function renderForceIndiv() {
+    var noData = document.getElementById('ftIndivNoData');
+    var body = document.getElementById('ftIndivBody');
+    if (!_ftIndiv.test || !_ftIndiv.metric) { body.style.display = 'none'; noData.style.display = ''; return; }
+
+    var typeTests = _ftIndiv.tests.filter(function(t){ return t.test_type === _ftIndiv.test; })
+      .slice().sort(function(a, b){ return ftDateOnly(a.test_date) < ftDateOnly(b.test_date) ? -1 : 1; });
+    var ids = typeTests.map(function(t){ return t.id; });
+    var mrows = [];
+    try {
+      var r = await window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', ids);
+      mrows = r.data || [];
+    } catch (e) { mrows = []; }
+    var byTest = {};
+    mrows.forEach(function(r2){ (byTest[r2.test_id] = byTest[r2.test_id] || []).push(r2); });
+
+    var rows = [];
+    typeTests.forEach(function(t){
+      var group = byTest[t.id] || [];
+      var v = ftTestValue(group.filter(function(x){ return x.metric_key === _ftIndiv.metric; }));
+      if (v == null || isNaN(v)) return;
+      rows.push({ iso: ftDateOnly(t.test_date), value: v, asym: ftAsymForTest(group, _ftIndiv.metric), test: t.test_type });
+    });
+
+    if (!rows.length) { body.style.display = 'none'; noData.style.display = ''; return; }
+    body.style.display = ''; noData.style.display = 'none';
+
+    var unit = ftMetricUnit(_ftIndiv.metric);
+    var dec = ftDec(unit);
+    var betterHigh = ftBetterHigh(_ftIndiv.metric);
+    var label = ftMetricLabel(_ftIndiv.metric);
+    var meta = { dec: dec, unit: unit };
+
+    var vals = rows.map(function(r2){ return r2.value; });
+    var avg = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+    var latest = rows[rows.length - 1];
+    var rawDelta = avg ? (latest.value - avg) / avg * 100 : 0;
+    var good = betterHigh ? rawDelta >= 0 : rawDelta <= 0;
+
+    // ── Card: latest ──
+    document.getElementById('sc-latest-lab').textContent = tt('evaluations.latest_label','Latest · '+label.toLowerCase(),{label:label.toLowerCase()});
+    document.getElementById('sc-latest-num').textContent = ftFmt(latest.value, dec);
+    document.getElementById('sc-latest-unit').textContent = unit;
+    var dEl = document.getElementById('sc-latest-delta');
+    dEl.className = 'ft-delta ' + (good ? 'good' : 'bad');
+    dEl.innerHTML = '<i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta);
+
+    // ── Card: personal avg ──
+    document.getElementById('sc-avg-num').textContent = ftFmt(avg, dec);
+    document.getElementById('sc-avg-unit').textContent = unit;
+    document.getElementById('sc-avg-sub').innerHTML = tt('evaluations.n_tests_all_time', '<b>'+rows.length+' test'+(rows.length===1?'':'s')+'</b> · all time', {count:rows.length});
+
+    // ── Card: asymmetry (latest test) ──
+    var wrap = document.getElementById('sc-asym-wrap');
+    var emptyA = document.getElementById('sc-asym-empty');
+    var a = latest.asym;
+    if (a && a.pct != null && !isNaN(a.pct)) {
+      wrap.style.display = ''; emptyA.style.display = 'none';
+      var apct = a.pct;
+      document.getElementById('sc-asym-num').textContent = apct.toFixed(apct < 10 ? 1 : 0) + '%';
+      document.getElementById('sc-asym-side').textContent = a.side === 'R' ? tt('evaluations.right_strong','Right strong') : a.side === 'L' ? tt('evaluations.left_strong','Left strong') : '';
+      document.getElementById('sc-asym-dot').style.background = ftAsymColor(apct);
+      var lW, rW;
+      if (a.hasLR) { var mx = Math.max(a.L, a.R) || 1; lW = a.L / mx * 100; rW = a.R / mx * 100; }
+      else { lW = a.side === 'R' ? (100 - apct) : 100; rW = a.side === 'R' ? 100 : (100 - apct); }
+      var abl = document.getElementById('ab-l'), abr = document.getElementById('ab-r');
+      abl.style.width = lW + '%'; abr.style.width = rW + '%';
+      abl.className = 'ft-ab-fill' + (a.side === 'R' ? ' weak' : '');
+      abr.className = 'ft-ab-fill' + (a.side === 'L' ? ' weak' : '');
+    } else {
+      wrap.style.display = 'none'; emptyA.style.display = '';
+    }
+
+    // ── Card: last test ──
+    var dAgo = ftDaysAgo(latest.iso);
+    document.getElementById('sc-last-num').textContent = dAgo;
+    document.getElementById('sc-last-unit').textContent = dAgo === 1 ? tt('evaluations.day_ago','day ago') : tt('evaluations.days_ago','days ago');
+    document.getElementById('sc-last-sub').innerHTML = '<b>' + esc(latest.test) + '</b> · ' + ftDateFull(latest.iso);
+
+    // ── Chart ──
+    document.getElementById('fti-chart-title').textContent = tt('evaluations.over_time_title','{label} over time · {test}',{label:label,test:_ftIndiv.test}) + (betterHigh ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better'));
+    document.getElementById('lg-metric').textContent = label;
+    var _ftiPts = rows.map(function(r2){ return { value: r2.value, label: ftDateShort(r2.iso) }; });
+    if (window.cmCharts && window.cmCharts.ready()){
+      window.cmCharts.trendLine(document.getElementById('fti-chart'), {
+        points: _ftiPts, fmt: function(v){ return ftFmt(v, dec); }, unit: unit, avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+      });
+    } else {
+      document.getElementById('fti-chart').innerHTML = buildForceChart(_ftiPts, avg, meta);
+    }
+
+    // ── Table (most recent first) ──
+    document.getElementById('th-metric').textContent = label + (unit ? (' (' + unit + ')') : '');
+    document.getElementById('fti-table-count').textContent = tt('evaluations.n_sessions', rows.length+' session'+(rows.length===1?'':'s'), {count:rows.length});
+    var tb = document.getElementById('fti-tbody');
+    tb.innerHTML = '';
+    rows.slice().reverse().slice(0, 10).forEach(function(r2, idx){
+      var dlt = avg ? (r2.value - avg) / avg * 100 : 0;
+      var rGood = betterHigh ? dlt >= 0 : dlt <= 0;
+      var asymCell = r2.asym && r2.asym.pct != null
+        ? '<span class="ft-asym-dot" style="background:' + ftAsymColor(r2.asym.pct) + '"></span>' + r2.asym.pct.toFixed(r2.asym.pct < 10 ? 1 : 0) + '%' + (r2.asym.side ? ' ' + r2.asym.side : '')
+        : '<span style="color:var(--cm-fg-faint)">—</span>';
+      var tr = document.createElement('tr');
+      if (idx === 0) tr.className = 'is-latest';
+      tr.innerHTML =
+        '<td class="c-date">' + ftDateFull(r2.iso) + (idx === 0 ? '<span class="ft-tag">'+esc(tt("evaluations.latest","Latest"))+'</span>' : '') + '</td>' +
+        '<td><span class="ft-pill-sm">' + esc(r2.test) + '</span></td>' +
+        '<td class="num c-val">' + ftFmt(r2.value, dec) + '</td>' +
+        '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + ftPctDelta(dlt) + '</span></td>' +
+        '<td class="num c-asym">' + asymCell + '</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  // SVG line chart with a dotted personal-average line (ported verbatim).
+  function buildForceChart(points, avg, meta) {
+    var W = 960, H = 320, L = 56, R = 22, T = 24, B = 48;
+    var pw = W - L - R, ph = H - T - B;
+    var vals = points.map(function(p){ return p.value; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var range = hi - lo || (Math.abs(hi) * 0.1 || 1);
+    lo -= range * 0.22; hi += range * 0.22;
+    var x = function(i){ return L + pw * (points.length > 1 ? i / (points.length - 1) : 0.5); };
+    var y = function(v){ return T + ph * (1 - (v - lo) / (hi - lo || 1)); };
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img">';
+    for (var i = 0; i <= 3; i++) {
+      var gv = lo + (hi - lo) * (i / 3), gy = y(gv);
+      svg += '<line x1="' + L + '" y1="' + gy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + gy.toFixed(1) + '" stroke="var(--cm-border-soft)" stroke-width="1"/>';
+      svg += '<text x="' + (L - 10) + '" y="' + (gy + 3.5).toFixed(1) + '" text-anchor="end" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">' + ftFmt(gv, meta.dec) + '</text>';
+    }
+    var pts = points.map(function(p, i2){ return x(i2).toFixed(1) + ',' + y(p.value).toFixed(1); });
+    var area = 'M' + x(0).toFixed(1) + ',' + (T + ph).toFixed(1) + ' L' + pts.join(' L') + ' L' + x(points.length - 1).toFixed(1) + ',' + (T + ph).toFixed(1) + ' Z';
+    svg += '<path d="' + area + '" fill="rgba(71,85,105,0.07)"/>';
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#475569" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>';
+    var ay = y(avg);
+    svg += '<line x1="' + L + '" y1="' + ay.toFixed(1) + '" x2="' + (W - R) + '" y2="' + ay.toFixed(1) + '" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 4"/>';
+    svg += '<text x="' + (L + 6) + '" y="' + (ay - 7).toFixed(1) + '" font-family="var(--cm-font-mono)" font-size="11" font-weight="600" fill="var(--cm-fg-muted)">' + esc(tt('evaluations.avg_tag','avg '+ftFmt(avg,meta.dec),{value:ftFmt(avg,meta.dec)})) + (meta.unit ? ' ' + meta.unit : '') + '</text>';
+    points.forEach(function(p, i2){
+      var last = i2 === points.length - 1;
+      svg += '<circle cx="' + x(i2).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="' + (last ? 5.5 : 3.8) + '" fill="' + (last ? 'var(--cm-fg-strong)' : 'var(--cm-surface)') + '" stroke="var(--cm-fg-strong)" stroke-width="' + (last ? 0 : 2) + '"/>';
+      svg += '<text x="' + x(i2).toFixed(1) + '" y="' + (H - 18).toFixed(1) + '" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">' + esc(p.label) + '</text>';
+    });
+    var lastP = points[points.length - 1];
+    svg += '<text x="' + (x(points.length - 1) - 6).toFixed(1) + '" y="' + (y(lastP.value) - 12).toFixed(1) + '" text-anchor="end" font-family="var(--cm-font-mono)" font-size="12.5" font-weight="600" fill="var(--cm-fg-strong)">' + ftFmt(lastP.value, meta.dec) + (meta.unit ? ' ' + meta.unit : '') + '</text>';
+    svg += '</svg>';
+    return svg;
+  }
+
+  // individual-profile controls (player + metric; test is fixed)
+  document.getElementById('ftBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
+  document.getElementById('ft-player').addEventListener('change', async function(e){ _ftIndiv.player = e.target.value; await loadForceIndivTests(); });
+  document.getElementById('fti-metric').addEventListener('change', async function(e){ _ftIndiv.metric = e.target.value; await renderForceIndiv(); });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · View results (single value per evaluation_type)
+  //  Reuses the force visual component: same .ft-* markup/classes, same
+  //  helpers (ftClassify/ftFmt/ftDec, buildForceChart, ftDate*).
+  // ════════════════════════════════════════════════════════════════════
+  var _ev = { test: null, types: [], variant: null, order: 'desc', rows: [], player: null };
+
+  // tests that have their OWN calculator modal → openPhysAnalysis(label)
+  // ankle/hiprot retired (their cards are now DB-driven force_tests assessments) — dead keys removed
+  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, hfvp:1, fms:1, bodycomp:1 };
+  // v2 test key → PHYS_TESTS label (the key used by openPhysAnalysis)
+  var EV_CALC_LABEL = {
+    ift:'30-15 IFT', tt1600:'1,600 m TT', vbt:'VBT · Load-Velocity', orm:'1RM',
+    fvprofile:'F-V Profile · jumps', hfvp:'Sprint H-FVP', fms:'FMS', bodycomp:'Body composition'
+  };
+  // default unit prefill per single-value test
+  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'stage', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
+    ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', hfvp:'W/kg', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
+  function evToday(){ return cmToday(); }
+
+  // body_composition-sourced tests → the "variants" are table columns, not
+  // evaluation_type strings. neutral = no better/worse direction (no colour bands).
+  // Reference bands are ORIENTATIVE (male, senior soccer), curated from: Ackland et al.
+  // 2012 Sports Med (IOC working group — skinfold sums preferred over % formulas);
+  // Milsom et al. 2015 J Sports Sci (EPL DXA ~10 %BF); Suárez-Arrones et al. 2018;
+  // Kyle et al. 2003 (FFMI reference ranges; pro footballers typically ~19–21 kg/m²).
+  // Absolute kg of lean mass and Σ skinfolds carry NO absolute bands on purpose:
+  // lean kg depends on stature (use FFMI instead) and Σ depends on the formula's fold count.
+  var BC_VARIANTS = {
+    bodycomp: [
+      { field:'body_fat_pct',  i18n:'evaluations.bc_var_bodyfat',  en:'% Body fat',  unit:'%',  betterHigh:false,
+        bands: [
+          { from:0,  to:7,        key:'warn', i18n:'evaluations.bcband_bf_verylow', en:'Very low · review' },
+          { from:7,  to:12,       key:'good', i18n:'evaluations.bcband_bf_optimal', en:'Optimal (elite)' },
+          { from:12, to:15,       key:'ok',   i18n:'evaluations.bcband_bf_ok',      en:'Acceptable' },
+          { from:15, to:18,       key:'warn', i18n:'evaluations.bcband_bf_high',    en:'High' },
+          { from:18, to:Infinity, key:'bad',  i18n:'evaluations.bcband_bf_veryhigh',en:'Very high' },
+        ],
+        refI18n:'evaluations.bcref_bodyfat',
+        refEn:'Orientative male-soccer skinfold ranges — Ackland et al. (2012), Sports Med (IOC); Milsom et al. (2015); Suárez-Arrones et al. (2018).' },
+      { field:'sum_skinfolds', i18n:'evaluations.bc_var_sumsf',    en:'Σ skinfolds', unit:'mm', betterHigh:false,
+        refI18n:'evaluations.bcref_sumsf',
+        refEn:'Raw skinfold sums are the IOC-preferred monitoring metric (Ackland et al. 2012) — compare each player against his own baseline; sums from different formulas (Σ3/Σ7) are not comparable.' },
+      { field:'ffmi', computed:'ffmi', i18n:'evaluations.bc_var_ffmi', en:'FFMI', unit:'kg/m²', betterHigh:true,
+        bands: [
+          { from:0,    to:17.5,     key:'warn', i18n:'evaluations.bcband_ffmi_low',  en:'Low' },
+          { from:17.5, to:19,       key:'ok',   i18n:'evaluations.bcband_ffmi_ok',   en:'Adequate' },
+          { from:19,   to:21,       key:'good', i18n:'evaluations.bcband_ffmi_opt',  en:'Optimal (soccer)' },
+          { from:21,   to:Infinity, key:'info', i18n:'evaluations.bcband_ffmi_high', en:'Very high' },
+        ],
+        refI18n:'evaluations.bcref_ffmi',
+        refEn:'FFMI = lean mass / height² — stature-normalized, comparable across players. Orientative ranges from Kyle et al. (2003) and pro-soccer profiles (~19–21 kg/m²).' },
+      { field:'lean_mass_kg',  i18n:'evaluations.bc_var_leanmass', en:'Lean mass',   unit:'kg', betterHigh:true,
+        refI18n:'evaluations.bcref_leanmass',
+        refEn:'Absolute lean kg depends on stature — compare players with FFMI, and each player against his own baseline (intra-athlete change is the gold standard: Ackland et al. 2012).' },
+      { field:'weight_kg',     i18n:'evaluations.bc_var_weight',   en:'Weight',      unit:'kg', neutral:true     },
+    ],
+    somato: [
+      { field:'soma_endo', i18n:'evaluations.bc_var_endo', en:'Endomorphy', unit:'', betterHigh:false },
+      { field:'soma_meso', i18n:'evaluations.bc_var_meso', en:'Mesomorphy', unit:'', betterHigh:true  },
+      { field:'soma_ecto', i18n:'evaluations.bc_var_ecto', en:'Ectomorphy', unit:'', neutral:true     },
+    ],
+    bmirfm: [
+      { field:'bmi', i18n:'evaluations.bc_var_bmi', en:'BMI', unit:'kg/m²', neutral:true     },
+      { field:'rfm', i18n:'evaluations.bc_var_rfm', en:'RFM', unit:'%',     betterHigh:false },
+    ],
+  };
+  function bcVarLabel(d){ return d ? tt(d.i18n, d.en) : ''; }
+
+  // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
+  var EV_LOWER_BETTER = { sprint:1, cod505:1, illinois:1, rsa:1, tt1600:1 };
+  function evBetterHigh(test, unit){
+    var u = String(unit || '').toLowerCase().trim();
+    if (u === 's' || u === 'ms' || u === 'sec' || u === 'secs' || u === 'min') return false;
+    if (test && EV_LOWER_BETTER[test.key]) return false;
+    return true;
+  }
+
+  // Load every evaluation row that matches this test's prefix, team-scoped via players.
+  // body_composition-sourced tests load from that table instead (synthetic rows).
+  async function loadEvalData(test){
+    _ev.rows = []; _ev.bcMeta = null;
+    if (_scopeReady) await _scopeReady;                  // never query before team scope resolves
+    if (!_clubId){ return; }
+    if (_ev.test !== test) return;                       // user already opened another test
+    if (test.src && test.src.from === 'body_composition'){
+      await loadBcEvalData(test);
+      if (_ev.test !== test) return;
+    } else {
+    try {
+      var rows = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, unit, notes').eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+        return q;
+      }, { label: 'ev:evalData' });
+      if (_ev.test !== test) return;                     // stale response → drop it
+      _ev.rows = rows.filter(function(r){ return startsWithCI(r.evaluation_type, test.src.match); });
+    } catch(e){ console.warn('[ev2] evaluations data failed', e); _ev.rows = []; }
+
+    // distinct evaluation_type variants present in the data (e.g. VBT per exercise)
+    _ev.types = Array.from(new Set(_ev.rows.map(function(r){ return r.evaluation_type; }).filter(Boolean))).sort();
+    if (_ev.types.indexOf(_ev.variant) === -1) _ev.variant = _ev.types[0] || test.label;
+    }
+
+    // variant selectors (team + individual) — only shown when >1 variant
+    var multi = _ev.types.length > 1;
+    var optsHtml = _ev.types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
+    document.getElementById('evTeamVariantWrap').style.display = multi ? '' : 'none';
+    document.getElementById('eviVariantWrap').style.display    = multi ? '' : 'none';
+    var vt = document.getElementById('ev-variant'), vi = document.getElementById('evi-variant');
+    vt.innerHTML = optsHtml; vi.innerHTML = optsHtml;
+    vt.value = _ev.variant || ''; vi.value = _ev.variant || '';
+
+    // player selector for the individual view
+    var psel = document.getElementById('ev-player');
+    psel.innerHTML = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name + ' ' + p.last_name)+'</option>'; }).join('');
+    if (!_ev.player || !_ftPlayers.some(function(p){ return p.id === _ev.player; })) _ev.player = (_ftPlayers[0] && _ftPlayers[0].id) || null;
+    psel.value = _ev.player || '';
+  }
+
+  // body_composition-sourced tests: synthesize evaluation-shaped rows (one per
+  // non-null column) so the whole team/individual pipeline works unchanged.
+  // evaluation_type = localized variant label; notes = measurement method.
+  async function loadBcEvalData(test){
+    var defs = BC_VARIANTS[test.key] || [];
+    _ev.bcMeta = {};
+    defs.forEach(function(d){ _ev.bcMeta[bcVarLabel(d)] = d; });
+    var realDefs = defs.filter(function(d){ return !d.computed; });
+    var hasFfmi = defs.some(function(d){ return d.computed === 'ffmi'; });
+    var rows = [];
+    try {
+      var cols = 'player_id,measured_date,method,height_cm,' + realDefs.map(function(d){ return d.field; }).join(',');
+      var data = await window.cmFetchAll(function(){
+        var q = window.sb.from('body_composition').select(cols).eq('club_id', _clubId);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+        return q;
+      }, { label: 'ev:bcData' });
+      if (_ev.test !== test) return;                     // stale response → drop it
+      // player-profile heights as fallback for rows measured without height
+      var hmap = {};
+      if (hasFfmi && _teamPlayerIds && _teamPlayerIds.length){
+        try {
+          var ph = await window.sb.from('players').select('id,height').in('id', _teamPlayerIds);
+          (ph.data || []).forEach(function(p){ var h = Number(p.height); if (h > 100) hmap[p.id] = h; });
+        } catch(e){}
+        if (_ev.test !== test) return;
+      }
+      var ffmiDef = defs.find(function(d){ return d.computed === 'ffmi'; });
+      (data || []).forEach(function(r){
+        realDefs.forEach(function(d){
+          if (r[d.field] == null) return;
+          rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(d), test_date: r.measured_date, value: r[d.field], unit: d.unit, notes: r.method || null });
+        });
+        if (ffmiDef && r.lean_mass_kg != null){
+          var h = Number(r.height_cm) || hmap[r.player_id];   // cm
+          if (h > 100){
+            var ffmi = +(Number(r.lean_mass_kg) / Math.pow(h / 100, 2)).toFixed(2);
+            rows.push({ player_id: r.player_id, evaluation_type: bcVarLabel(ffmiDef), test_date: r.measured_date, value: ffmi, unit: ffmiDef.unit, notes: r.method || null });
+          }
+        }
+      });
+    } catch(e){ console.warn('[ev2] body_composition data failed', e); }
+    _ev.rows = rows;
+    // variants in registry order (only those with data); default = the card's field
+    var present = {};
+    rows.forEach(function(r){ present[r.evaluation_type] = 1; });
+    _ev.types = defs.map(bcVarLabel).filter(function(l){ return present[l]; });
+    if (_ev.types.indexOf(_ev.variant) === -1){
+      var dd = defs.find(function(d){ return d.field === test.src.field; });
+      var dl = dd ? bcVarLabel(dd) : '';
+      _ev.variant = (dl && present[dl]) ? dl : (_ev.types[0] || dl || test.label);
+    }
+  }
+
+  async function openEvalTest(t){
+    _ev = { test: t, types: [], variant: null, order: 'desc', rows: [], player: null };
+    document.getElementById('ev-order').querySelectorAll('button').forEach(function(b){ b.classList.toggle('is-active', b.getAttribute('data-order')==='desc'); });
+    await loadEvalData(t);
+    renderEvalTeam();          // individual renders lazily on Team→Individual switch
+  }
+
+  // Generic team chart (summary + bars + avg line) into a root element — same look as force.
+  function drawTeamChart(root, rows, opts){
+    if (!rows.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">'+esc(tt('evaluations.no_values_test_yet','No values for this test yet'))+'</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">'+esc(tt('evaluations.no_recorded_value_test','No player has a recorded value for this test yet.'))+'</div></div>';
+      return;
+    }
+    var dec = opts.dec, unit = opts.unit, betterHigh = opts.betterHigh, label = opts.label;
+    var values = rows.map(function(r){ return r.value; });
+    var avg = values.reduce(function(a, b){ return a + b; }, 0) / values.length;
+    var maxV = Math.max.apply(null, values), minV = Math.min.apply(null, values);
+    var scaleMax = maxV > 0 ? maxV * 1.12 : 1;
+    rows.sort(function(a, b){ return opts.order === 'desc' ? b.value - a.value : a.value - b.value; });
+    var best = betterHigh ? rows.reduce(function(a, b){ return b.value > a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value < a.value ? b : a; });
+    var worst = betterHigh ? rows.reduce(function(a, b){ return b.value < a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value > a.value ? b : a; });
+    var classify = function(v){ return opts.neutral ? '' : ftClassify(v, avg, betterHigh); };
+    var below = rows.filter(function(r){ return classify(r.value) !== ''; }).length;
+    var us = unit ? ('<small>' + esc(unit) + '</small>') : '';
+    var bands = opts.bands || null;                     // [{from,to,key,label}] absolute reference zones
+    var bandOf = function(v){ if (!bands) return null; return bands.find(function(b){ return v >= b.from && v < b.to; }) || null; };
+    var useCm = window.cmCharts && window.cmCharts.ready();
+    var fmt = function(v){ return ftFmt(v, dec); };
+
+    // legend: band chips when reference bands exist, semantic vs-avg otherwise
+    var legendHtml;
+    if (bands && useCm){
+      legendHtml = bands.map(function(b){
+        return '<span class="it"><span class="sw" style="background:' + window.cmCharts.bandColor(b.key) + '"></span>' + esc(b.label) + '</span>';
+      }).join('') + '<span class="it"><span class="sw avgl"></span>' + esc(tt('evaluations.group_avg','Group avg')) + '</span>';
+    } else {
+      legendHtml = '<span class="it"><span class="sw avgl"></span>'+esc(tt('evaluations.group_avg','Group avg'))+'</span>'
+        + (opts.neutral ? '' : '<span class="it"><span class="sw ok"></span>'+esc(tt('evaluations.at_above','At / above'))+'</span><span class="it"><span class="sw warn"></span>'+esc(tt('evaluations.below','Below'))+'</span><span class="it"><span class="sw bad"></span>'+esc(tt('evaluations.well_below','Well below'))+'</span>');
+    }
+    // when bands drive the colors, "N below the squad average" is the wrong headline —
+    // count out-of-optimal instead
+    var thirdStat = '';
+    if (!opts.neutral){
+      if (bands){
+        var offBand = rows.filter(function(r){ var b = bandOf(r.value); return b && (b.key === 'warn' || b.key === 'bad'); }).length;
+        thirdStat = '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.out_of_range','Out of range'))+'</div><div class="v is-bad">' + offBand + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>';
+      } else {
+        thirdStat = '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>'+esc(tt('evaluations.below_avg','Below avg'))+'</div><div class="v is-bad">' + below + '</div><div class="n">'+esc(tt('evaluations.of_n_players','of '+rows.length+' players',{count:rows.length}))+'</div></div>';
+      }
+    }
+    var extraStat = opts.extraStat
+      ? '<div class="ft-stat"><div class="k"><i class="ti ti-trending-down" style="font-size:13px"></i>'+esc(opts.extraStat.k)+'</div><div class="v'+(opts.extraStat.bad?' is-bad':'')+'">'+esc(String(opts.extraStat.v))+'</div><div class="n">'+esc(opts.extraStat.n||'')+'</div></div>'
+      : '';
+    var warnHtml = opts.warnNote
+      ? '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:12px;border:1px solid var(--cm-warning);border-radius:10px;background:color-mix(in srgb, var(--cm-warning) 8%, transparent);font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg)"><i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:15px"></i><span>'+esc(opts.warnNote)+'</span></div>'
+      : '';
+    var refHtml = opts.refNote
+      ? '<div style="font:500 11px/1.5 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:10px">'+esc(opts.refNote)+'</div>'
+      : '';
+
+    root.innerHTML =
+      warnHtml
+      + '<div class="ft-card ft-summary" style="margin-bottom:14px">'
+      +  '<div class="ft-avg"><span class="lab">' + esc(label) + ' · ' + esc(tt('evaluations.group_average','group average')) + '</span>'
+      +    '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +    '<span class="sub">' + tt('evaluations.range_n','Range <b>'+ftFmt(minV,dec)+' – '+ftFmt(maxV,dec)+'</b> · n = '+rows.length,{min:ftFmt(minV,dec),max:ftFmt(maxV,dec),n:rows.length}) + '</span></div>'
+      +  '<div class="ft-stats">'
+      +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px"></i>'+esc(tt('evaluations.top','Top'))+'</div><div class="v">' + ftFmt(best.value, dec) + us + '</div><div class="n">' + esc(best.name) + '</div></div>'
+      +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px"></i>'+esc(tt('evaluations.lowest','Lowest'))+'</div><div class="v">' + ftFmt(worst.value, dec) + us + '</div><div class="n">' + esc(worst.name) + '</div></div>'
+      +    thirdStat + extraStat
+      +  '</div>'
+      + '</div>'
+      + '<div class="ft-card">'
+      +  '<div class="ft-chart-head"><div class="ft-chart-title">' + tt('evaluations.by_player_short','{label} by player',{label:esc(label)}) + ((betterHigh || opts.neutral) ? '' : tt('evaluations.lower_is_better_suffix',' · lower is better')) + '</div>'
+      +    '<div class="ft-legend">' + legendHtml + '</div></div>'
+      +  (useCm ? '<div class="cm-chart-host"></div>' : '<div class="ft-plotwrap"><div class="ft-plot"></div><div class="ft-names"></div></div>')
+      +  refHtml
+      + '</div>';
+
+    if (useCm){
+      var host = root.querySelector('.cm-chart-host');
+      window.cmCharts.teamBars(host, {
+        rows: rows.map(function(r){
+          var b = bandOf(r.value);
+          return { label: r.name, value: r.value, pid: r.pid, cls: classify(r.value), bandKey: b ? b.key : null, _r: r };
+        }),
+        fmt: fmt, unit: unit,
+        avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        side: opts.order === 'asc' ? 'left' : 'right',
+        bands: bands, neutral: !!opts.neutral,
+        tipLines: function(row){
+          var lines = [];
+          var b = bandOf(row.value);
+          if (b) lines.push(b.label);
+          if (opts.tipLines) lines = lines.concat(opts.tipLines(row._r) || []);
+          return lines;
+        },
+        onBarClick: opts.onBarClick,
+      });
+      return;
+    }
+
+    var plot = root.querySelector('.ft-plot'), names = root.querySelector('.ft-names');
+    rows.forEach(function(r){
+      var cls = classify(r.value);
+      var hPct = Math.max(0, (r.value / scaleMax) * 100);
+      var col = document.createElement('div');
+      col.className = 'ft-col' + (cls ? ' ' + cls : '');
+      col.style.cursor = 'pointer';
+      col.title = r.name + ' ' + tt('evaluations.open_profile_suffix','— open profile');
+      col.innerHTML = '<span class="ft-val">' + ftFmt(r.value, dec) + '</span><span class="ft-bar" style="height:' + hPct.toFixed(1) + '%"></span>';
+      col.addEventListener('click', function(){ if (opts.onBarClick) opts.onBarClick(r.pid); });
+      plot.appendChild(col);
+      var nm = document.createElement('div');
+      nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
+      nm.style.cursor = 'pointer';
+      nm.innerHTML = '<span>' + esc(r.name) + '</span>';
+      nm.title = r.name + ' ' + tt('evaluations.open_profile_suffix','— open profile');
+      nm.addEventListener('click', function(){ if (opts.onBarClick) opts.onBarClick(r.pid); });
+      names.appendChild(nm);
+    });
+    var line = document.createElement('div');
+    line.className = 'ft-avgline ' + (opts.order === 'asc' ? 'tag-left' : 'tag-right');
+    line.style.top = (100 - (avg / scaleMax) * 100).toFixed(1) + '%';
+    line.innerHTML = '<span class="tag">' + esc(tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)})) + (unit ? ' ' + unit : '') + '</span>';
+    plot.appendChild(line);
+  }
+
+  function renderEvalTeam(){
+    var root = document.getElementById('evTeamRender');
+    var variant = _ev.variant;
+    var src = _ev.rows.filter(function(r){ return r.evaluation_type === variant && r.value != null && r.value !== ''; });
+    // per player: latest value (max test_date), keeping notes for level grouping
+    var perP = {};
+    src.forEach(function(r){
+      var n = Number(r.value); if (isNaN(n)) return;
+      var prev = perP[r.player_id];
+      if (!prev || String(r.test_date) > String(prev.date)) perP[r.player_id] = { date: r.test_date, value: n, notes: r.notes };
+    });
+    var rows = Object.keys(perP).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perP[pid].value, notes: perP[pid].notes }; });
+    var unit = (src.map(function(r){ return r.unit; }).find(Boolean)) || (EV_DEFAULT_UNIT[_ev.test && _ev.test.key] || '');
+    // Sprint H-FVP → group by F-V bias relative to the squad (training need)
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      renderHfvpGroups(root, rows);
+      return;
+    }
+    // Endurance tests → grouped-by-level view instead of generic bars
+    if (_ev.test && EV_ENDURANCE[_ev.test.key]) {
+      renderEnduranceGroups(root, rows, { test: _ev.test, unit: unit });
+      return;
+    }
+    var bcm = _ev.bcMeta && _ev.bcMeta[variant];
+    var dec = ftDec(unit);
+
+    // ── body-comp extras: Δ vs each player's own baseline (intra-athlete change is the
+    //    scientifically preferred signal) + mixed-method warning (skinfold/BIA/DXA not comparable)
+    var deltas = null, methods = {};
+    if (bcm){
+      deltas = {};
+      var byP = {};
+      src.forEach(function(r){
+        (byP[r.player_id] = byP[r.player_id] || []).push(r);
+        if (r.notes) methods[String(r.notes)] = 1;
+      });
+      Object.keys(byP).forEach(function(pid){
+        var rs = byP[pid].slice().sort(function(a,b){ return String(a.test_date) < String(b.test_date) ? -1 : 1; });
+        if (rs.length < 2) return;
+        var first = Number(rs[0].value), last = Number(rs[rs.length-1].value);
+        if (isFinite(first) && isFinite(last) && first !== 0)
+          deltas[pid] = { abs: last - first, pct: (last - first) / first * 100, since: String(rs[0].test_date).slice(0,10) };
+      });
+    }
+    var extraStat = null;
+    if (bcm && !bcm.neutral && deltas && Object.keys(deltas).length){
+      // worsening = moving >2% in the bad direction since the player's own baseline
+      var worse = rows.filter(function(r){
+        var d = deltas[r.pid]; if (!d) return false;
+        return bcm.betterHigh ? d.pct <= -2 : d.pct >= 2;
+      }).length;
+      extraStat = { k: tt('evaluations.trending_worse','Worsening >2%'), v: worse,
+        n: tt('evaluations.vs_own_baseline','vs own baseline'), bad: worse > 0 };
+    }
+    var bands = (bcm && bcm.bands) ? bcm.bands.map(function(b){ return { from:b.from, to:b.to, key:b.key, label:tt(b.i18n, b.en) }; }) : null;
+
+    drawTeamChart(root, rows, {
+      dec: dec, unit: unit,
+      betterHigh: bcm ? !!bcm.betterHigh : evBetterHigh(_ev.test, unit),
+      neutral: !!(bcm && bcm.neutral),
+      bands: bands,
+      refNote: bcm && bcm.refI18n ? tt(bcm.refI18n, bcm.refEn) : null,
+      warnNote: (bcm && Object.keys(methods).length > 1)
+        ? tt('evaluations.mixed_methods_warn','Measurements mix methods ({list}) — values from different methods are not directly comparable.',{list:Object.keys(methods).join(' / ')})
+        : null,
+      extraStat: extraStat,
+      tipLines: bcm ? function(r){
+        var lines = [];
+        var d = deltas && deltas[r.pid];
+        if (d) lines.push(tt('evaluations.delta_since','Δ {d} ({p}%) since {date}',{
+          d: (d.abs >= 0 ? '+' : '') + ftFmt(d.abs, dec) + (unit ? ' ' + unit : ''),
+          p: (d.pct >= 0 ? '+' : '') + d.pct.toFixed(1), date: d.since }));
+        if (r.notes) lines.push(tt('evaluations.method','Method') + ': ' + r.notes);
+        return lines;
+      } : null,
+      order: _ev.order, label: variant || (_ev.test ? _ev.test.label : ''), onBarClick: openEvalPlayer
+    });
+  }
+
+  // ── Endurance team view: group players by fitness level (semantic colours) ──
+  var EV_ENDURANCE = { ift:1, yoyo1:1, yoyo2:1, cooper:1 };
+  var EV_LEVEL_META = {
+    elite:        { name:'Elite / Professional', color:'var(--cm-success)' },
+    advanced:     { name:'Advanced',             color:'var(--cm-info)' },
+    intermediate: { name:'Intermediate',         color:'var(--cm-warning)' },
+    developing:   { name:'Developing',           color:'var(--cm-danger)' },
+  };
+  var EV_LEVEL_ORDER = ['elite','advanced','intermediate','developing'];
+  var EV_LEVEL_I18N = { elite:'evaluations.level_elite', advanced:'evaluations.level_advanced', intermediate:'evaluations.level_intermediate', developing:'evaluations.level_developing' };
+  function levelName(lvl){ return tt(EV_LEVEL_I18N[lvl] || '', (EV_LEVEL_META[lvl]||{}).name || lvl); }
+  // simple value bands per test (IFT bands are the male-threshold fallback; level usually comes from computed)
+  var EV_BANDS = {
+    ift:    { unit:'km/h', bands:[['elite',19.5,Infinity],['advanced',17.5,19.5],['intermediate',15.5,17.5],['developing',0,15.5]] },
+    yoyo1:  { unit:'m',    bands:[['elite',2400,Infinity],['advanced',1800,2400],['intermediate',1200,1800],['developing',0,1200]] },
+    yoyo2:  { unit:'m',    bands:[['elite',1000,Infinity],['advanced',750,1000],['intermediate',500,750],['developing',0,500]] },
+    cooper: { unit:'m',    bands:[['elite',3000,Infinity],['advanced',2700,3000],['intermediate',2400,2700],['developing',0,2400]] },
+  };
+  var IFT_LEVEL_MAP = { 'Elite/Professional':'elite', 'Advanced':'advanced', 'Intermediate':'intermediate', 'Developing':'developing' };
+  // Interval prescription presets (velocity-based tests). pct of VIFT · run/rest seconds.
+  var EV_RX_PRESETS = [
+    { id:'15-15-90',  label:'15-15 · 90% VIFT',  run:15, rest:15, pct:90,  desc:'15s run / 15s rest · 90%' },
+    { id:'15-15-95',  label:'15-15 · 95% VIFT',  run:15, rest:15, pct:95,  desc:'15s run / 15s rest · 95%' },
+    { id:'10-10-100', label:'10-10 · 100% VIFT', run:10, rest:10, pct:100, desc:'10s run / 10s rest · 100%' },
+    { id:'10-20-105', label:'10-20 · 105% VIFT', run:10, rest:20, pct:105, desc:'10s run / 20s rest · 105%' },
+    { id:'30-30-85',  label:'30-30 · 85% VIFT',  run:30, rest:30, pct:85,  desc:'30s run / 30s rest · 85%' },
+  ];
+  // Work-zone cuts by % of VIFT/VAM (Buchheit & Laursen 2013). Orientation, not dogma.
+  // <=90 Aerobic · 90-100 Supra-aerobic · 100-110 Anaerobic · >110 (+ short work) Speed/RSA.
+  // (vVO2max ≈ 85% VIFT; VIFT is the upper bound of HIIT.) Tune here.
+  var EV_ZONE_CUTS = { aerobic: 90, supra: 100, anaerobic: 110 };
+  var EV_ZONE_SPRINT_MAXWORK = 10; // s — "Speed/RSA" needs %>110 AND short work reps
+  // intensity zone from effective % and interval work duration → { label, color }
+  function evWorkZone(pct, workSec){
+    if (pct <= EV_ZONE_CUTS.aerobic)    return { label:tt('evaluations.zone_aerobic','Aerobic'),       color:'var(--cm-success)' };
+    if (pct <= EV_ZONE_CUTS.supra)      return { label:tt('evaluations.zone_supra','Supra-aerobic'), color:'var(--cm-info)' };
+    if (pct <= EV_ZONE_CUTS.anaerobic)  return { label:tt('evaluations.zone_anaerobic','Anaerobic'),     color:'var(--cm-warning)' };
+    if (workSec <= EV_ZONE_SPRINT_MAXWORK) return { label:tt('evaluations.zone_speed_rsa','Speed / RSA'), color:'var(--cm-danger)' };
+    return { label:tt('evaluations.zone_anaerobic','Anaerobic'), color:'var(--cm-warning)' };
+  }
+  // velocity-based = a reference running speed (km/h) can be used for interval prescription.
+  // 30-15 IFT: value IS the VIFT. Cooper 12-min: VAM is derived from distance.
+  var EV_VELOCITY_TEST = { ift:1, cooper:1 };
+  // Cooper VAM (maximal aerobic speed, km/h) ≈ distance_m / 200.
+  // (12-min avg speed: dist/1000 km × 60/12 h⁻¹ = dist/200.) e.g. 3100 m → 15.5 km/h.
+  function cooperVAM(distM){ return distM / 200; }
+  // reference speed (km/h) + its label, per velocity test
+  function evRefSpeed(test, value){
+    if (test.key === 'cooper') return { speed: cooperVAM(value), label: 'VAM' };
+    return { speed: value, label: 'VIFT' };   // ift: value is already the VIFT speed
+  }
+  function evParseComputed(notes){ if (!notes) return null; try { return (typeof notes==='string') ? JSON.parse(notes) : notes; } catch(e){ return null; } }
+  // Short, readable summary of a computed-profile blob (no raw JSON). Returns ''
+  // when the object isn't a recognised profile, so the caller can fall back to '—'.
+  function evNoteSummary(c){
+    if (!c || typeof c !== 'object') return '';
+    if (c.F0 != null && c.V0 != null){            // H-FVP sprint profile
+      var s = 'F₀ ' + Math.round(c.F0) + 'N · V₀ ' + Number(c.V0).toFixed(2);
+      if (c.Pmax_rel != null) s += ' · Pmax ' + Number(c.Pmax_rel).toFixed(1) + ' W/kg';
+      return s;
+    }
+    if (c.est1RM != null){                         // VBT / load-velocity profile
+      return '1RM ' + c.est1RM + ' kg' + (c.R2 != null ? ' · R² ' + c.R2 : '');
+    }
+    return '';                                     // other computed blob → no JSON dump
+  }
+  // NOTE cell for the Recent-tests table: text notes pass through, profile JSON
+  // (H-FVP, VBT, …) is shown as a short summary, empty → dash.
+  function evNoteCell(notes){
+    var dash = '<span style="color:var(--cm-fg-faint)">—</span>';
+    if (!notes) return dash;
+    var c = evParseComputed(notes);
+    if (c && typeof c === 'object'){               // parsed to an object → profile JSON
+      var sum = evNoteSummary(c);
+      return sum ? esc(sum) : dash;
+    }
+    return esc(String(notes));                      // plain text (or a bare number) → as-is
+  }
+  function evBandKey(key, value){
+    var spec = EV_BANDS[key]; if (!spec) return 'developing';
+    for (var i=0;i<spec.bands.length;i++){ var b=spec.bands[i]; if (value>=b[1] && value<b[2]) return b[0]; }
+    return 'developing';
+  }
+  // level: IFT prefers the stored (gender-aware) computed.level; everything else uses value bands
+  function evEnduranceLevel(test, value, notes){
+    if (test.key === 'ift'){
+      var c = evParseComputed(notes);
+      if (c && c.level && IFT_LEVEL_MAP[c.level]) return IFT_LEVEL_MAP[c.level];
+    }
+    return evBandKey(test.key, value);
+  }
+  function evBandRangeLabel(key, lvlKey){
+    var spec = EV_BANDS[key]; if (!spec) return '';
+    var b = spec.bands.find(function(x){ return x[0]===lvlKey; }); if (!b) return '';
+    var u = spec.unit;
+    if (b[2]===Infinity) return '≥ '+b[1]+' '+u;
+    if (b[1]===0) return '< '+b[2]+' '+u;
+    return b[1]+'–'+b[2]+' '+u;
+  }
+  function renderEnduranceGroups(root, rows, opts){
+    var test = opts.test, unit = opts.unit || (EV_BANDS[test.key] && EV_BANDS[test.key].unit) || '';
+    if (!rows.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">'+esc(tt('evaluations.no_values_test_yet','No values for this test yet'))+'</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">'+esc(tt('evaluations.no_recorded_result_test','No player has a recorded result for this test yet.'))+'</div></div>';
+      return;
+    }
+    var dec = ftDec(unit);
+    var isVel = !!EV_VELOCITY_TEST[test.key];   // velocity-based → show prescription panel
+    var refLabel = isVel ? evRefSpeed(test, 0).label : '';   // VIFT (ift) | VAM (cooper)
+    var showRef = isVel && test.key !== 'ift';  // show the derived reference speed when value isn't already a speed
+    rows.forEach(function(r){ r.level = evEnduranceLevel(test, r.value, r.notes); });
+    var groupsHtml = EV_LEVEL_ORDER.map(function(lvl){
+      var meta = EV_LEVEL_META[lvl];
+      var grp = rows.filter(function(r){ return r.level===lvl; }).sort(function(a,b){ return b.value - a.value; });
+      if (!grp.length) return '';
+      var rowsHtml = grp.map(function(r){
+        var rightHtml;
+        if (isVel){
+          // velocity-based: show Run @ (actionable, big) · m/rep · VIFT/VAM (context, small).
+          // The raw test value moves into the small context line — no separate big pval.
+          var ref = evRefSpeed(test, r.value);
+          rightHtml = '<span class="eg-rx" data-ref="'+ref.speed+'">'
+            + '<span class="rx-run">'+tt('evaluations.rx_run_at','Run @ <b>—</b> km/h')+'</span>'
+            + '<span class="rx-rep">'+tt('evaluations.rx_m_per_rep','<b>—</b> m / rep')+'</span>'
+            + '<span class="rx-shuttle" style="display:none"></span>'
+            + '<span class="rx-ctx">'+esc(tt('evaluations.rx_ctx','{label} {speed} km/h',{label:refLabel,speed:ref.speed.toFixed(1)}))+'</span>'
+            + '</span>';
+        } else {
+          rightHtml = '<span class="pval">'+ftFmt(r.value, dec)+(unit?' <small>'+esc(unit)+'</small>':'')+'</span>';
+        }
+        return '<button class="eg-row" data-eg-pid="'+r.pid+'"><span class="pname">'+esc(r.name)+'</span>'
+          + '<span class="eg-right">'+rightHtml+'</span></button>';
+      }).join('');
+      return '<div class="eg-group" style="border-left-color:'+meta.color+'">'
+        + '<div class="eg-head"><span class="eg-dot" style="background:'+meta.color+'"></span>'
+        + '<span class="eg-nm" style="color:'+meta.color+'">'+esc(levelName(lvl))+'</span>'
+        + '<span class="eg-rng">'+evBandRangeLabel(test.key, lvl)+'</span>'
+        + '<span class="eg-ct">'+esc(tt('evaluations.n_players_plural',grp.length+' player'+(grp.length===1?'':'s'),{count:grp.length}))+'</span></div>'
+        + '<div class="eg-rows">'+rowsHtml+'</div></div>';
+    }).join('');
+
+    // ── Prescription panel (velocity-based tests) or a note (non-velocity) ──
+    var rxPanel;
+    if (isVel){
+      var opts2 = EV_RX_PRESETS.map(function(p){ return '<option value="'+p.id+'">'+esc(p.label.replace('VIFT', refLabel))+'</option>'; }).join('')
+        + '<option value="__custom__">'+esc(tt('evaluations.rx_custom','Custom…'))+'</option>';
+      var nInp = 'width:64px;height:30px;padding:0 8px';
+      rxPanel = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+        + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        +   '<label for="egRxType" style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">'+esc(tt('evaluations.work_type','Work type'))+'</label>'
+        +   '<select id="egRxType" class="ev-finput" style="width:auto;min-width:210px">'+opts2+'</select>'
+        +   '<span id="egRxDesc" style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)"></span>'
+        +   '<span id="egRxZone" style="display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:5px;font:700 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;background:var(--cm-bg-soft);border:1px solid var(--cm-border)"></span>'
+        +   '<span style="width:1px;height:22px;background:var(--cm-border)"></span>'
+        +   '<label for="egRxPattern" style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">'+esc(tt('evaluations.run_pattern','Run pattern'))+'</label>'
+        +   '<select id="egRxPattern" class="ev-finput" style="width:auto;min-width:120px"><option value="straight">'+esc(tt('evaluations.straight','Straight'))+'</option><option value="shuttle">'+esc(tt('evaluations.shuttle','Shuttle'))+'</option></select>'
+        +   '<span id="egRxShuttleWrap" style="display:none;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">'+esc(tt('evaluations.shuttle_length','Shuttle length'))+' <input id="egRxShuttle" type="number" min="5" max="120" step="1" value="20" class="ev-finput" style="'+nInp+'"> m</span>'
+        + '</div>'
+        + '<div id="egRxCustom" style="display:none;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px">'
+        +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">'+esc(tt('evaluations.work_label','Work'))+' <input id="egRxWork" type="number" min="1" max="120" step="1" value="15" class="ev-finput" style="'+nInp+'"> s</span>'
+        +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">'+esc(tt('evaluations.rest_label','Rest'))+' <input id="egRxRest" type="number" min="0" max="120" step="1" value="15" class="ev-finput" style="'+nInp+'"> s</span>'
+        +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"><input id="egRxPct" type="number" min="50" max="130" step="1" value="90" class="ev-finput" style="'+nInp+'"> '+esc(tt('evaluations.pct_of','% of {label}',{label:refLabel}))+'</span>'
+        + '</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">'+esc(tt('evaluations.rx_target_note','Target speed = {label} × % · Distance per rep = target speed × work seconds.',{label:refLabel}))+(showRef?esc(tt('evaluations.rx_derived_note',' {label} derived from distance.',{label:refLabel})):'')+esc(tt('evaluations.rx_per_player_below',' Per player below.'))+'</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:4px">'+tt('evaluations.rx_zone_note','Intensity zone by % of {label} (orientation). Actual physiological emphasis also depends on interval duration, work:rest ratio and format. Ref: Buchheit &amp; Laursen (2013), Sports Med.',{label:refLabel})+'</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:4px">'+tt('evaluations.rx_shuttle_note','Shuttle (out-and-back) adds change-of-direction load: at the same speed, internal intensity is higher than straight-line — adjust the % manually if needed. For VIFT (a shuttle test) this matches the test condition; for Cooper-derived VAM, straight-line is the matched condition. Ref: Buchheit &amp; Laursen (2013).')+'</div>'
+        + '</div>';
+    } else {
+      rxPanel = '<div class="ft-card" style="padding:12px 18px;margin-bottom:12px">'
+        + '<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)"><i class="ti ti-info-circle" style="font-size:14px"></i> '+esc(tt('evaluations.rx_only_velocity','Interval prescription is available for velocity-based tests (e.g. 30-15 IFT).'))+'</div></div>';
+    }
+
+    root.innerHTML = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+      + '<div style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">'+tt('evaluations.team_by_level','{label} · team by level',{label:esc(test.label||'')})+'</div>'
+      + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">'+esc(tt('evaluations.n_evaluated_grouped',rows.length+' player'+(rows.length===1?'':'s')+' evaluated · grouped by '+(test.key==='ift'?'30-15 IFT level':'performance band'),{count:rows.length,grouping:(test.key==='ift'?tt('evaluations.grouping_ift','30-15 IFT level'):tt('evaluations.grouping_band','performance band'))}))+'</div></div>'
+      + rxPanel
+      + '<div class="eg-list">'+groupsHtml+'</div>';
+
+    root.querySelectorAll('[data-eg-pid]').forEach(function(b){ b.addEventListener('click', function(){ openEvalPlayer(b.getAttribute('data-eg-pid')); }); });
+
+    // live prescription recompute
+    if (isVel){
+      var applyRx = function(){
+        var sel = document.getElementById('egRxType'); if (!sel) return;
+        var isCustom = sel.value === '__custom__';
+        var customBox = document.getElementById('egRxCustom');
+        if (customBox) customBox.style.display = isCustom ? 'flex' : 'none';
+        var work, pct, desc;
+        if (isCustom){
+          work = parseFloat(document.getElementById('egRxWork').value) || 0;
+          var rest = parseFloat(document.getElementById('egRxRest').value) || 0;
+          pct  = parseFloat(document.getElementById('egRxPct').value) || 0;
+          desc = tt('evaluations.rx_desc_custom', work+'s run / '+rest+'s rest · '+pct+'%', {work:work, rest:rest, pct:pct});
+        } else {
+          var p = EV_RX_PRESETS.find(function(x){ return x.id === sel.value; }) || EV_RX_PRESETS[0];
+          work = p.run; pct = p.pct; desc = p.desc;
+        }
+        var d = document.getElementById('egRxDesc'); if (d) d.textContent = desc;
+        // intensity-zone badge (Buchheit & Laursen) — by effective % and work duration
+        var zone = evWorkZone(pct, work);
+        var z = document.getElementById('egRxZone');
+        if (z){ z.textContent = zone.label; z.style.color = zone.color; z.style.borderColor = zone.color; }
+        // run pattern: straight (default) vs shuttle (out-and-back). Shuttle only
+        // splits the SAME distance/rep into lengths — it never changes the distance.
+        var pattern = (document.getElementById('egRxPattern') || {}).value || 'straight';
+        var shuttleLen = parseFloat((document.getElementById('egRxShuttle') || {}).value) || 0;
+        var shuttleWrap = document.getElementById('egRxShuttleWrap');
+        if (shuttleWrap) shuttleWrap.style.display = (pattern === 'shuttle') ? 'inline-flex' : 'none';
+        root.querySelectorAll('.eg-rx').forEach(function(el){
+          var ref = parseFloat(el.getAttribute('data-ref'));
+          var runEl = el.querySelector('.rx-run b'), repEl = el.querySelector('.rx-rep b'), shEl = el.querySelector('.rx-shuttle');
+          if (isNaN(ref) || !pct || !work){ if (runEl) runEl.textContent='—'; if (repEl) repEl.textContent='—'; if (shEl) shEl.style.display='none'; return; }
+          var speed = ref * pct / 100;              // km/h (× VIFT or VAM) — run speed
+          var dist  = speed * (1000/3600) * work;   // m per rep (target speed × work seconds)
+          if (runEl) runEl.textContent = speed.toFixed(1);
+          if (repEl) repEl.textContent = Math.round(dist);
+          if (shEl){
+            if (pattern === 'shuttle' && shuttleLen > 0){
+              var N = Math.max(1, Math.round(dist / shuttleLen));   // lengths (same total distance)
+              var T = Math.max(0, N - 1);                           // changes of direction
+              shEl.textContent = tt('evaluations.shuttle_desc', '~'+N+' × '+shuttleLen+' m ('+T+' turn'+(T===1?'':'s'), {n:N, len:shuttleLen, turns:T, count:T}) + ')';
+              shEl.style.display = '';
+            } else {
+              shEl.style.display = 'none';
+            }
+          }
+        });
+      };
+      var selEl = document.getElementById('egRxType');
+      if (selEl){ selEl.addEventListener('change', applyRx); }
+      ['egRxWork','egRxRest','egRxPct','egRxShuttle'].forEach(function(id){ var e = document.getElementById(id); if (e) e.addEventListener('input', applyRx); });
+      var patEl = document.getElementById('egRxPattern'); if (patEl) patEl.addEventListener('change', applyRx);
+      applyRx();
+    }
+  }
+
+  // ── Sprint H-FVP team view: group by F-V bias RELATIVE TO THE SQUAD (Morin) ──
+  // Classification metric = FVslope (F-V slope, N/(m/s), negative). A steeper
+  // (more negative) slope ⇒ force-dominant, hence velocity-DEFICIENT; a flatter
+  // (less negative) slope ⇒ velocity-dominant, hence force-DEFICIENT. Each player
+  // is grouped by how far their slope sits from the squad mean, in squad SDs.
+  // HFVP_BIAS_K — half-width of the "balanced" band, in SDs. Tune here.
+  var HFVP_BIAS_K = 0.5;
+  // Group descriptors keep the squad-relative deficiency name; the recommendation
+  // targets the lacking quality (consistent with the individual-view verdict).
+  var HFVP_GROUPS = {
+    veloDef:  { name:'Velocity-deficient — train maximal velocity',
+                rec:'Steeper F-V slope than the squad: strong relative force, comparatively low velocity. Emphasize maximal-velocity sprinting (fly-ins, sprint-float-sprint, overspeed).',
+                color:'var(--cm-warning)' },
+    forceDef: { name:'Force-deficient — train horizontal force',
+                rec:'Flatter F-V slope than the squad: strong velocity, comparatively low horizontal force. Emphasize horizontal-force work (resisted/sled sprints, short accelerations, hill sprints).',
+                color:'var(--cm-info)' },
+    balanced: { name:'Well-balanced — maintain',
+                rec:'F-V slope within ±' + HFVP_BIAS_K + ' SD of the squad mean. Maintain a mixed stimulus (accelerations + maximal-velocity exposure).',
+                color:'var(--cm-success)' },
+  };
+  var HFVP_GROUP_ORDER = ['veloDef','forceDef','balanced'];
+  function hfvpGroupName(key){ return tt('evaluations.hfvp_'+key+'_name', (HFVP_GROUPS[key]||{}).name || key); }
+  function hfvpGroupRec(key){ return tt('evaluations.hfvp_'+key+'_rec', (HFVP_GROUPS[key]||{}).rec || '', { k: HFVP_BIAS_K }); }
+
+  function renderHfvpGroups(root, rows){
+    // latest record per player → parse computed; keep only those with a usable FVslope
+    var data = rows.map(function(r){
+      var c = evParseComputed(r.notes);
+      if (!c || c.FVslope == null || isNaN(Number(c.FVslope))) return null;
+      return { pid:r.pid, name:r.name, slope:Number(c.FVslope), F0_rel:c.F0_rel, V0:c.V0, Pmax_rel:c.Pmax_rel };
+    }).filter(Boolean);
+
+    if (!data.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">'+esc(tt('evaluations.no_hfvp_profiles_yet','No H-FVP profiles yet'))+'</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">'+esc(tt('evaluations.no_stored_hfvp_team','No player has a stored sprint F-V profile for this team.'))+'</div></div>';
+      return;
+    }
+
+    // squad mean & SD of the slope (population SD)
+    var n = data.length;
+    var mean = data.reduce(function(s,d){ return s + d.slope; }, 0) / n;
+    var sd = Math.sqrt(data.reduce(function(s,d){ return s + (d.slope - mean) * (d.slope - mean); }, 0) / n);
+    var margin = HFVP_BIAS_K * sd;
+
+    data.forEach(function(d){
+      if (d.slope < mean - margin)      d.grp = 'veloDef';   // steeper ⇒ force-dominant ⇒ velocity-deficient
+      else if (d.slope > mean + margin) d.grp = 'forceDef';  // flatter ⇒ velocity-dominant ⇒ force-deficient
+      else                              d.grp = 'balanced';
+    });
+
+    var fmt = function(v, d){ return (v == null || isNaN(Number(v))) ? '—' : Number(v).toFixed(d); };
+    var groupsHtml = HFVP_GROUP_ORDER.map(function(key){
+      var meta = HFVP_GROUPS[key];
+      var grp = data.filter(function(d){ return d.grp === key; }).sort(function(a, b){ return a.slope - b.slope; });
+      if (!grp.length) return '';
+      var rowsHtml = grp.map(function(d){
+        var kpi = function(lbl, val){ return '<span style="white-space:nowrap">' + lbl + ' <b style="color:var(--cm-fg-strong)">' + val + '</b></span>'; };
+        return '<button class="eg-row" data-eg-pid="' + d.pid + '"><span class="pname">' + esc(d.name) + '</span>'
+          + '<span class="eg-right" style="gap:14px;font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">'
+          +   kpi('F₀', fmt(d.F0_rel, 1) + ' <small style="color:var(--cm-fg-faint)">N/kg</small>')
+          +   kpi('V₀', fmt(d.V0, 2))
+          +   kpi('P', fmt(d.Pmax_rel, 1) + ' <small style="color:var(--cm-fg-faint)">W/kg</small>')
+          +   kpi('S<sub>FV</sub>', fmt(d.slope, 1))
+          + '</span></button>';
+      }).join('');
+      return '<div class="eg-group" style="border-left-color:' + meta.color + '">'
+        + '<div class="eg-head"><span class="eg-dot" style="background:' + meta.color + ';flex-shrink:0"></span>'
+        +   '<div style="display:flex;flex-direction:column;gap:3px;min-width:0">'
+        +     '<span class="eg-nm" style="color:' + meta.color + '">' + esc(hfvpGroupName(key)) + '</span>'
+        +     '<span style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">' + esc(hfvpGroupRec(key)) + '</span>'
+        +   '</div>'
+        +   '<span class="eg-ct">' + esc(tt('evaluations.n_players_plural', grp.length+' player'+(grp.length===1?'':'s'), {count:grp.length})) + '</span></div>'
+        + '<div class="eg-rows">' + rowsHtml + '</div></div>';
+    }).join('');
+
+    var lowN = data.length < 3
+      ? '<div style="margin-top:8px;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-warning);border-radius:6px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-warning)"><i class="ti ti-alert-triangle" style="font-size:13px"></i> ' + esc(tt('evaluations.hfvp_need_more_players','Need more players for reliable squad-relative grouping (only '+data.length+' assessed).',{count:data.length})) + '</div>'
+      : '';
+
+    root.innerHTML = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+      + '<div style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">'+esc(tt('evaluations.hfvp_team_by_need','Sprint H-FVP · team by training need'))+'</div>'
+      + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">' + esc(tt('evaluations.hfvp_assessed_grouped', data.length+' player'+(data.length===1?'':'s')+' assessed · grouped by F-V slope vs squad mean ('+fmt(mean,1)+' ± '+fmt(sd,1)+' N/(m/s), ±'+HFVP_BIAS_K+' SD band)', {count:data.length, mean:fmt(mean,1), sd:fmt(sd,1), k:HFVP_BIAS_K})) + '</div>'
+      + '<div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">'+tt('evaluations.hfvp_classification_note','Classification is relative to the assessed squad (Morin &amp; Samozino). A coaching aid, not a prescription.<br><span style="font:500 10.5px/1.4 var(--cm-font-mono)">Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.</span>')+'</div>'
+      + lowN
+      + '</div>'
+      + '<div class="eg-list">' + groupsHtml + '</div>';
+
+    root.querySelectorAll('[data-eg-pid]').forEach(function(b){ b.addEventListener('click', function(){ openEvalPlayer(b.getAttribute('data-eg-pid')); }); });
+  }
+
+  function openEvalPlayer(pid){
+    _ev.player = pid;
+    var psel = document.getElementById('ev-player'); if (psel) psel.value = pid;
+    activateViewMode('individual');
+  }
+
+  function renderEvalIndiv(){
+    var root = document.getElementById('evIndivRender');
+    var noData = document.getElementById('evIndivNoData');
+    var variant = _ev.variant, pid = _ev.player;
+    var rows = _ev.rows
+      .filter(function(r){ return r.player_id === pid && r.evaluation_type === variant && r.value != null && r.value !== ''; })
+      .map(function(r){ return { iso: String(r.test_date).slice(0,10), value: Number(r.value), unit: r.unit, notes: r.notes }; })
+      .filter(function(r){ return !isNaN(r.value); })
+      .sort(function(a, b){ return a.iso < b.iso ? -1 : 1; });
+
+    if (!rows.length){ root.style.display = 'none'; root.innerHTML = ''; noData.style.display = ''; return; }
+    noData.style.display = 'none'; root.style.display = '';
+
+    var unit = (rows.map(function(r){ return r.unit; }).find(Boolean)) || '';
+    var dec = ftDec(unit);
+    var bcm = _ev.bcMeta && _ev.bcMeta[variant];
+    var betterHigh = bcm ? !!bcm.betterHigh : evBetterHigh(_ev.test, unit);
+    var neutral = !!(bcm && bcm.neutral);
+    var label = variant || (_ev.test ? _ev.test.label : '');
+    var meta = { dec: dec, unit: unit };
+
+    var vals = rows.map(function(r){ return r.value; });
+    var avg = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+    var latest = rows[rows.length - 1];
+    var rawDelta = avg ? (latest.value - avg) / avg * 100 : 0;
+    var good = betterHigh ? rawDelta >= 0 : rawDelta <= 0;
+    var dAgo = ftDaysAgo(latest.iso);
+
+    // summary cards (latest · personal avg · last test)
+    var cards =
+      '<div class="ft-cards" style="margin-bottom:14px">'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-bolt"></i>' + esc(tt('evaluations.latest_label','Latest · '+label.toLowerCase(),{label:label.toLowerCase()})) + '</div>'
+      +   '<div class="big"><span class="num">' + ftFmt(latest.value, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +   '<div class="sub"><span class="ft-delta' + (neutral ? '' : (good ? ' good' : ' bad')) + '"><i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta) + '</span><span style="color:var(--cm-fg-faint)"> ' + esc(tt('evaluations.vs_personal_avg','vs personal avg')) + '</span></div></div>'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-chart-line"></i>' + esc(tt('evaluations.personal_avg','Personal avg')) + '</div>'
+      +   '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +   '<div class="sub">' + tt('evaluations.n_tests_all_time','<b>'+rows.length+' test'+(rows.length===1?'':'s')+'</b> · all time',{count:rows.length}) + '</div></div>'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-calendar-event"></i>' + esc(tt('evaluations.last_test','Last test')) + '</div>'
+      +   '<div class="big"><span class="num" style="font-size:26px">' + dAgo + '</span><span class="unit">' + (dAgo === 1 ? esc(tt('evaluations.day_ago','day ago')) : esc(tt('evaluations.days_ago','days ago'))) + '</span></div>'
+      +   '<div class="sub">' + ftDateFull(latest.iso) + '</div></div>'
+      + '</div>';
+
+    // chart (reuses the force SVG builder)
+    var chart =
+      '<div class="ft-card" style="margin-bottom:14px">'
+      + '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' ' + esc(tt('evaluations.over_time','Over time').toLowerCase()) + ((betterHigh || neutral) ? '' : esc(tt('evaluations.lower_is_better_suffix',' · lower is better'))) + '</div>'
+      +   '<div class="ft-legend"><span class="it"><span class="sw" style="width:12px;height:3px;border-radius:2px;background:#475569"></span>' + esc(label) + '</span><span class="it"><span class="sw avgl"></span>' + esc(tt('evaluations.personal_avg','Personal avg')) + '</span></div></div>'
+      + '<div class="ft-chartwrap">' + (window.cmCharts && window.cmCharts.ready()
+          ? '<div id="evIndivTrend"></div>'
+          : buildForceChart(rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso) }; }), avg, meta)) + '</div>'
+      + '</div>';
+
+    // table (most recent first): date · value · vs avg · note
+    var body = rows.slice().reverse().slice(0, 10).map(function(r, idx){
+      var dlt = avg ? (r.value - avg) / avg * 100 : 0;
+      var rGood = betterHigh ? dlt >= 0 : dlt <= 0;
+      return '<tr' + (idx === 0 ? ' class="is-latest"' : '') + '>'
+        + '<td class="c-date">' + ftDateFull(r.iso) + (idx === 0 ? '<span class="ft-tag">'+esc(tt("evaluations.latest","Latest"))+'</span>' : '') + '</td>'
+        + '<td class="num c-val">' + ftFmt(r.value, dec) + (unit ? ' <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + esc(unit) + '</span>' : '') + '</td>'
+        + '<td class="num"><span class="ft-vsavg' + (neutral ? '' : (rGood ? ' good' : ' bad')) + '">' + ftPctDelta(dlt) + '</span></td>'
+        + '<td>' + evNoteCell(r.notes) + '</td>'
+        + '</tr>';
+    }).join('');
+    var table =
+      '<div class="ft-card"><div class="ft-table-head"><h2>' + esc(tt('evaluations.recent_tests','Recent tests')) + '</h2><span class="count">' + esc(tt('evaluations.n_sessions', rows.length+' session'+(rows.length===1?'':'s'), {count:rows.length})) + '</span></div>'
+      + '<table class="ft-table"><thead><tr><th>' + esc(tt('common.date','Date')) + '</th><th class="num">' + esc(label) + (unit ? ' (' + esc(unit) + ')' : '') + '</th><th class="num">' + esc(tt('evaluations.vs_avg','vs avg')) + '</th><th>' + esc(tt('evaluations.note','Note')) + '</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table></div>';
+
+    // VBT: load-velocity profile of the latest record (line + zones + work zones), via the shared modal drawing
+    var vbtCard = '';
+    var vbtProfile = (_ev.test && _ev.test.key === 'vbt') ? parseVbtProfileFromNotes(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'vbt') {
+      vbtCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">' + esc(tt('evaluations.load_velocity_profile','Load-velocity profile ·')) + ' ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">' + esc(tt('evaluations.latest_dot','latest ·')) + ' ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evVbtProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    // H-FVP: full horizontal F-V profile of the latest record (line + KPIs +
+    // diagnosis + citation), via the same shared drawing used by the modal.
+    // The Pmax_rel (W/kg) evolution over time is already the generic chart below
+    // (value = Pmax_rel), so this card just adds the latest-profile picture.
+    var hfvpCard = '';
+    var hfvpProfileData = (_ev.test && _ev.test.key === 'hfvp') ? evParseComputed(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      hfvpCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">' + esc(tt('evaluations.horizontal_fv_profile','Horizontal F-V profile ·')) + ' ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">' + esc(tt('evaluations.latest_dot','latest ·')) + ' ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evHfvpProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    // Sprint splits: 4 metrics + per-segment speeds + parciales + squad percentile (from notes JSON).
+    var sprintCard = '';
+    var sprintData = (_ev.test && _ev.test.key === 'sprint') ? evParseComputed(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'sprint') {
+      sprintCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">' + esc(tt('evaluations.sprint_profile','Sprint splits ·')) + ' ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">' + esc(tt('evaluations.latest_dot','latest ·')) + ' ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evSprintProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    root.innerHTML = cards + vbtCard + hfvpCard + sprintCard + chart + table;
+
+    var trendHost = document.getElementById('evIndivTrend');
+    if (trendHost && window.cmCharts && window.cmCharts.ready()){
+      window.cmCharts.trendLine(trendHost, {
+        points: rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso), iso: r.iso, notes: r.notes }; }),
+        fmt: function(v){ return ftFmt(v, dec); }, unit: unit, avg: avg,
+        avgLabel: tt('evaluations.avg_tag','avg '+ftFmt(avg,dec),{value:ftFmt(avg,dec)}) + (unit ? ' ' + unit : ''),
+        tipLines: function(p){
+          var lines = [ftDateFull(p.iso)];
+          if (_ev.bcMeta && p.notes) lines.push(tt('evaluations.method','Method') + ': ' + p.notes);
+          return lines;
+        },
+      });
+    }
+
+    if (_ev.test && _ev.test.key === 'vbt') {
+      var host = document.getElementById('evVbtProfile');
+      if (host) {
+        if (vbtProfile && typeof renderVBTProfileChart === 'function') renderVBTProfileChart(vbtProfile, host);
+        else host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_lv_profile_stored','No load-velocity profile stored for this entry.'))+'</div>';
+      }
+    }
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      var hhost = document.getElementById('evHfvpProfile');
+      if (hhost) {
+        if (hfvpProfileData && typeof renderHFVPProfile === 'function') renderHFVPProfile(hfvpProfileData, hhost);
+        else hhost.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_hfvp_profile_stored','No H-FVP profile stored for this entry.'))+'</div>';
+      }
+    }
+    if (_ev.test && _ev.test.key === 'sprint') {
+      var sphost = document.getElementById('evSprintProfile');
+      if (sphost) {
+        if (sprintData && sprintData.metrics && typeof renderSprintResult === 'function') renderSprintResult(sprintData, sphost, latest.value);
+        else sphost.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_sprint_stored','No sprint metrics stored for this entry.'))+'</div>';
+      }
+    }
+  }
+
+  // Parse the stored VBT JSON (evaluations.notes) into a profile for renderVBTProfileChart.
+  function parseVbtProfileFromNotes(notes){
+    if (!notes) return null;
+    var c;
+    try { c = (typeof notes === 'string') ? JSON.parse(notes) : notes; } catch(e){ return null; }
+    if (!c || !c.inputs || !c.inputs.length || c.slope == null || c.intercept == null) return null;
+    return {
+      a: c.intercept, b: c.slope, r2: c.R2, v1rm: c.v1rm_used, est1RM: c.est1RM,
+      method: c.method, exercise: c.exercise,
+      pairs: c.inputs.map(function(p){ return { load: p.kg, vmp: p.vmp }; })
+    };
+  }
+
+  // eval controls (variant in team + individual, order, player, back)
+  document.getElementById('ev-variant').addEventListener('change', function(e){
+    _ev.variant = e.target.value;
+    var vi = document.getElementById('evi-variant'); if (vi) vi.value = _ev.variant;
+    renderEvalTeam();
+  });
+  document.getElementById('evi-variant').addEventListener('change', function(e){
+    _ev.variant = e.target.value;
+    var vt = document.getElementById('ev-variant'); if (vt) vt.value = _ev.variant;
+    renderEvalIndiv();
+  });
+  document.querySelectorAll('#ev-order button').forEach(function(btn){ btn.addEventListener('click', function(){
+    document.querySelectorAll('#ev-order button').forEach(function(b){ b.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    _ev.order = btn.getAttribute('data-order');
+    renderEvalTeam();
+  }); });
+  document.getElementById('ev-player').addEventListener('change', function(e){ _ev.player = e.target.value; renderEvalIndiv(); });
+  document.getElementById('evBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · Upload results — manual + bulk entry (single value)
+  //  Ported from saveEval / saveBulkEntry. evaluation_type = opened test.
+  // ════════════════════════════════════════════════════════════════════
+  function setupEvalUpload(t){
+    // single form
+    var psel = document.getElementById('evManualPlayer');
+    psel.innerHTML = '<option value="">'+esc(tt('evaluations.select_player','Select player…'))+'</option>' + _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name+' '+p.last_name)+'</option>'; }).join('');
+    document.getElementById('evManualValue').value = '';
+    document.getElementById('evManualUnit').value  = EV_DEFAULT_UNIT[t.key] || '';
+    document.getElementById('evManualDate').value  = evToday();
+    document.getElementById('evManualNotes').value = '';
+    document.getElementById('evManualMsg').style.display = 'none';
+    // bulk
+    document.getElementById('evBulkUnit').value = EV_DEFAULT_UNIT[t.key] || '';
+    document.getElementById('evBulkDate').value = evToday();
+    document.getElementById('evBulkMsg').style.display = 'none';
+    renderBulkRoster();
+  }
+
+  function renderBulkRoster(){
+    var tb = document.getElementById('evBulkBody');
+    var cell = 'padding:6px 14px;border-bottom:1px solid var(--cm-border-soft)';
+    tb.innerHTML = _ftPlayers.map(function(p){
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 14px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong)">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + '<td style="'+cell+'"><input type="number" step="any" class="ev-finput ev-bulk-val" style="height:32px"></td>'
+        + '<td style="'+cell+'"><input class="ev-finput ev-bulk-note" style="height:32px"></td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+  }
+
+  async function saveEvalManual(e){
+    e.preventDefault();
+    if (!_openTest || !_clubId) return;
+    var playerId = document.getElementById('evManualPlayer').value;
+    var value = parseFloat(document.getElementById('evManualValue').value);
+    var unit = document.getElementById('evManualUnit').value.trim();
+    var testDate = document.getElementById('evManualDate').value;
+    var notes = document.getElementById('evManualNotes').value.trim();
+    if (!playerId || isNaN(value) || !testDate) return;
+    var payload = { player_id: playerId, club_id: _clubId, evaluation_type: _openTest.label, value: value, unit: unit || '', test_date: testDate, notes: notes || null };   // unit is NOT NULL in DB
+    var res = await window.sb.from('evaluations').insert(payload);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    var msg = document.getElementById('evManualMsg'); msg.textContent = tt('evaluations.saved_toast','✓ Saved'); msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    document.getElementById('evManualValue').value = ''; document.getElementById('evManualNotes').value = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  async function saveBulkEntry(){
+    if (!_openTest || !_clubId) return;
+    var testDate = document.getElementById('evBulkDate').value;
+    var unit = document.getElementById('evBulkUnit').value.trim();
+    if (!testDate){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var records = [];
+    document.querySelectorAll('#evBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var valEl = tr.querySelector('.ev-bulk-val'); if (!valEl) return;
+      var val = parseFloat(valEl.value);
+      var noteEl = tr.querySelector('.ev-bulk-note');
+      var note = (noteEl && noteEl.value || '').trim();
+      if (isNaN(val)) return;
+      records.push({ player_id: pid, club_id: _clubId, evaluation_type: _openTest.label, value: val, unit: unit || '', test_date: testDate, notes: note || null });
+    });
+    if (!records.length){ alert(tt('evaluations.no_valid_rows','No valid rows to save.')); return; }
+    var res = await window.sb.from('evaluations').insert(records);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    var msg = document.getElementById('evBulkMsg'); msg.textContent = tt('evaluations.n_records_saved','✓ '+records.length+' record'+(records.length>1?'s':'')+' saved',{count:records.length}); msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    renderBulkRoster();
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  // reload data + re-render View results after a save (any source)
+  async function reloadEvalViews(){
+    if (!_openTest || !_openTest.src) return;
+    if (_openTest.src.from === 'force_tests'){
+      await loadForceView();
+      if (_ftIndiv.player) await loadForceIndivTests();
+      return;
+    }
+    if (_openTest.src.from !== 'evaluations' && _openTest.src.from !== 'body_composition') return;
+    await loadEvalData(_openTest);
+    renderEvalTeam();
+    renderEvalIndiv();
+  }
+
+  document.getElementById('evManualForm').addEventListener('submit', saveEvalManual);
+  // in-flight guard: disable the button while an async save runs (double-click = double insert)
+  function evGuardSave(fn){
+    return async function(ev){
+      var btn = ev && ev.currentTarget;
+      if (btn && btn.disabled) return;
+      if (btn) btn.disabled = true;
+      try { await fn(ev); } finally { if (btn) btn.disabled = false; }
+    };
+  }
+  document.getElementById('evBulkSave').addEventListener('click', evGuardSave(saveBulkEntry));
+  // calculator tests → open the guided modal (ported openPhysAnalysis)
+  document.getElementById('evUploadCalcBtn').addEventListener('click', function(){
+    var label = this.getAttribute('data-label');
+    if (label && typeof openPhysAnalysis === 'function') openPhysAnalysis(label);
+  });
+  // VBT → multi-player bulk CSV importer (ported openVbtBulkDrawer)
+  document.getElementById('evVbtImportBtn').addEventListener('click', function(){
+    if (typeof openVbtBulkDrawer === 'function') openVbtBulkDrawer();
+  });
+  // force tests → CSV import drawer (ported openForceImport)
+  document.getElementById('evForceImportBtn').addEventListener('click', function(){
+    if (typeof openForceImport === 'function') openForceImport();
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · Import CSV (simple Player + Value [+ Date] → bulk insert)
+  //  evaluation_type = opened test. Used by single-value AND calculator tests.
+  // ════════════════════════════════════════════════════════════════════
+  var _evCsv = null; // { rows, headers }
+
+  function setupCsvImport(t, isForce){
+    var real = document.getElementById('evCsvReal');
+    var note = document.getElementById('evCsvNote');
+    var isEval = !isForce;
+    real.style.display = isEval ? '' : 'none';
+    note.style.display = isEval ? 'none' : '';
+    if (isEval){
+      resetEvCsv();
+      document.getElementById('evCsvType').textContent = t.label;
+      document.getElementById('evCsvUnit').value = EV_DEFAULT_UNIT[t.key] || '';
+      document.getElementById('evCsvFallbackDate').value = evToday();
+    }
+  }
+  function resetEvCsv(){
+    _evCsv = null;
+    document.getElementById('evCsvMap').style.display = 'none';
+    document.getElementById('evCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evCsvPreview').innerHTML = '';
+    document.getElementById('evCsvResult').textContent = '';
+  }
+  function parseEvCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    window.Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert(tt('evaluations.empty_csv','Empty CSV')); return; }
+      _evCsv = { rows: rows, headers: (res.meta && res.meta.fields) || Object.keys(rows[0]) };
+      populateEvCsvMap();
+    }});
+  }
+  function evNormName(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,''); }
+  // comma-decimal tolerant number ('2,45' → 2.45); bare parseFloat would read it as 2 — silent corruption
+  function evCsvNum(v){ return parseFloat(String(v == null ? '' : v).trim().replace(',', '.')); }
+  function evMatchPlayer(name){
+    var nn = evNormName(name); if (!nn) return null;
+    var p = _ftPlayers.find(function(x){ return evNormName(x.first_name+' '+x.last_name)===nn; });
+    if (p) return p;
+    p = _ftPlayers.find(function(x){ return evNormName(x.last_name+' '+x.first_name)===nn; });
+    if (p) return p;
+    var tokHit=_ftTokenMatch(_ftNorm(name).split(' ').filter(Boolean), _ftNameToks(_ftPlayers));
+    if (tokHit){ var tp=_ftPlayers.find(function(x){ return x.id===tokHit; }); if (tp) return tp; }
+    // substring fallback only when it's UNAMBIGUOUS — 'García' matching two Garcías must not pick the first one
+    var cand = _ftPlayers.filter(function(x){ var f=evNormName(x.first_name+' '+x.last_name); return f && (f.indexOf(nn)>=0 || nn.indexOf(f)>=0); });
+    return cand.length === 1 ? cand[0] : null;
+  }
+  function populateEvCsvMap(){
+    var heads = _evCsv.headers;
+    var opts = function(extra){ return (extra?'<option value="">'+extra+'</option>':'') + heads.map(function(h){ return '<option value="'+esc(h)+'">'+esc(h)+'</option>'; }).join(''); };
+    var pSel=document.getElementById('evCsvColPlayer'), vSel=document.getElementById('evCsvColValue'), dSel=document.getElementById('evCsvColDate');
+    pSel.innerHTML=opts(); vSel.innerHTML=opts(); dSel.innerHTML=opts(tt('evaluations.none_option','— none —'));
+    var find = function(re){ return heads.find(function(h){ return re.test(String(h).toLowerCase()); }); };
+    pSel.value = find(/name|player|athlete|jugador/) || heads[0] || '';
+    vSel.value = find(/vift|value|result|score|km\/h|distance|dist|metre|meter|\bm\b/) || heads[1] || heads[0] || '';
+    dSel.value = find(/date|fecha/) || '';
+    document.getElementById('evCsvDropWrap').style.display='none';
+    document.getElementById('evCsvMap').style.display='';
+    ['evCsvColPlayer','evCsvColValue','evCsvColDate'].forEach(function(id){ document.getElementById(id).onchange = renderEvCsvPreview; });
+    renderEvCsvPreview();
+  }
+  function renderEvCsvPreview(){
+    if (!_evCsv) return;
+    var pCol=document.getElementById('evCsvColPlayer').value, vCol=document.getElementById('evCsvColValue').value, dCol=document.getElementById('evCsvColDate').value;
+    var matched=0, unmatched=0, trs='';
+    _evCsv.rows.slice(0,60).forEach(function(r){
+      var nm=r[pCol], val=evCsvNum(r[vCol]), p=evMatchPlayer(nm);
+      if (p && !isNaN(val)) matched++; else unmatched++;
+      trs += '<tr><td>'+esc(nm||'—')+'</td><td>'+(p?esc(p.first_name+' '+p.last_name):'<span style="color:var(--cm-danger)">'+esc(tt('evaluations.no_match','no match'))+'</span>')+'</td><td class="num c-val">'+(isNaN(val)?'—':val)+'</td><td>'+(dCol?esc(r[dCol]||''):'<span style="color:var(--cm-fg-faint)">—</span>')+'</td></tr>';
+    });
+    document.getElementById('evCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+esc(tt('evaluations.n_matched_unmatched','{m} matched · {u} unmatched',{m:matched,u:unmatched}))+(_evCsv.rows.length>60?esc(tt('evaluations.showing_first_60',' · showing first 60')):'')+'</div>'
+      + '<table class="ft-table"><thead><tr><th>'+esc(tt('evaluations.csv_name','CSV name'))+'</th><th>'+esc(tt('evaluations.player','Player'))+'</th><th class="num">'+esc(tt('evaluations.value','Value'))+'</th><th>'+esc(tt('common.date','Date'))+'</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveEvCsv(){
+    if (!_evCsv || !_openTest || !_clubId) return;
+    var pCol=document.getElementById('evCsvColPlayer').value, vCol=document.getElementById('evCsvColValue').value, dCol=document.getElementById('evCsvColDate').value;
+    var unit=document.getElementById('evCsvUnit').value.trim();
+    var fallback=document.getElementById('evCsvFallbackDate').value || evToday();
+    var records=[], skipped=0;
+    _evCsv.rows.forEach(function(r){
+      var p=evMatchPlayer(r[pCol]); var val=evCsvNum(r[vCol]);
+      if (!p || isNaN(val)){ skipped++; return; }
+      var date=fallback;
+      if (dCol && String(r[dCol]||'').trim()){ var pd=parseForceDate(String(r[dCol]).trim()); date = pd.warn ? fallback : pd.date; }
+      records.push({ player_id:p.id, club_id:_clubId, evaluation_type:_openTest.label, value:val, unit:unit||'', test_date:date, notes:null });
+    });
+    if (!records.length){ alert(tt('evaluations.no_matched_rows','No matched rows with a value to import.')); return; }
+    var res=await window.sb.from('evaluations').insert(records);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    document.getElementById('evCsvResult').textContent=tt('evaluations.n_records_imported','✓ Imported '+records.length+' record'+(records.length>1?'s':''),{count:records.length})+(skipped?tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}):'');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetEvCsv, 2500);
+  }
+
+  (function initEvCsv(){
+    var fi=document.getElementById('evCsvFile');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseEvCsv(e.target.files[0]); });
+    var dz=document.getElementById('evCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor='var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseEvCsv(e.dataTransfer.files[0]); });
+    }
+    var ib=document.getElementById('evCsvImportBtn'); if (ib) ib.addEventListener('click', evGuardSave(saveEvCsv));
+    var rb=document.getElementById('evCsvResetBtn'); if (rb) rb.addEventListener('click', resetEvCsv);
+  })();
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SPRINT H-FVP · BULK (team grid) + CSV import
+  //  Both reuse window.hfvpProfile and the exact save shape of the manual
+  //  entry (2a): value=Pmax_rel (W/kg), notes=JSON computed + splits + mass/height.
+  //  Dedup by (player, 'Sprint H-FVP', date) — same as the VBT bulk save.
+  // ════════════════════════════════════════════════════════════════════
+  var HFVP_DISTS = [5, 10, 20, 30, 40];
+
+  // Build one evaluations record + return the raw profile for the summary cell.
+  function buildHfvpRecord(pid, mass, height, splits, date){
+    var r = window.hfvpProfile(splits, mass, height);
+    var computed = {
+      inputs: { mass: mass, height: height, splits: splits, air: { tempC: 20, pressure_kPa: 101.325 } },
+      vmax: r.vmax, tau: r.tau, F0: r.F0, F0_rel: r.F0_rel, V0: r.V0,
+      Pmax: r.Pmax, Pmax_rel: r.Pmax_rel, RFmax: r.RFmax, DRF: r.DRF, FVslope: r.FVslope,
+    };
+    var rec = {
+      player_id: pid, club_id: _clubId, evaluation_type: 'Sprint H-FVP',
+      value: +r.Pmax_rel.toFixed(2), unit: 'W/kg', test_date: date, notes: JSON.stringify(computed),
+    };
+    return { rec: rec, r: r };
+  }
+
+  // Replace-on-collide insert: delete any existing (player, test, date), then insert.
+  async function saveHfvpRecords(records){
+    var natOf = function(pid, date){ return pid + '|Sprint H-FVP|' + date; };
+    var pids = [...new Set(records.map(function(r){ return r.player_id; }))];
+    var exRows;
+    try {
+      exRows = await window.cmFetchAll(function(){ return window.sb.from('evaluations')
+        .select('id, player_id, test_date')
+        .eq('club_id', _clubId).eq('evaluation_type', 'Sprint H-FVP').in('player_id', pids); },
+        { label: 'ev:hfvpDedup' });
+    } catch(e){ return e; }
+    var keys = new Set(records.map(function(r){ return natOf(r.player_id, r.test_date); }));
+    var collide = (exRows || [])
+      .filter(function(e){ return keys.has(natOf(e.player_id, String(e.test_date).slice(0,10))); })
+      .map(function(e){ return e.id; });
+    if (collide.length){
+      var del = await window.sb.from('evaluations').delete().in('id', collide);
+      if (del.error) return del.error;
+    }
+    var ins = await window.sb.from('evaluations').insert(records);
+    return ins.error || null;
+  }
+
+  // tolerate comma decimals ("1,73") and stray spaces
+  function hfvpNum(v){ var n = parseFloat(String(v == null ? '' : v).replace(',', '.').trim()); return isNaN(n) ? NaN : n; }
+  function hfvpHeightM(h){ return (!isNaN(h) && h > 3) ? +(h / 100).toFixed(2) : h; }  // players.height is cm
+
+  // ── BULK grid ──
+  var _hfvpMeta = {};   // playerId → { weight, height }
+  async function setupHfvpBulk(){
+    document.getElementById('evHfvpBulkDate').value = evToday();
+    document.getElementById('evHfvpBulkMsg').style.display = 'none';
+    _hfvpMeta = {};
+    if (_ftPlayers.length && _clubId){
+      var ids = _ftPlayers.map(function(p){ return p.id; });
+      var res = await window.sb.from('players').select('id, weight, height').in('id', ids);
+      (res.data || []).forEach(function(p){ _hfvpMeta[p.id] = { weight: p.weight, height: p.height }; });
+    }
+    renderHfvpBulkRoster();
+  }
+  function renderHfvpBulkRoster(){
+    var tb = document.getElementById('evHfvpBulkBody');
+    var cell = 'padding:6px 6px;border-bottom:1px solid var(--cm-border-soft)';
+    var inp = function(cls, val, step){ return '<td style="'+cell+'"><input type="number" step="'+step+'" class="ev-finput '+cls+'" style="height:30px;min-width:60px;padding:0 8px" value="'+(val===''||val==null?'':val)+'"></td>'; };
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var m = _hfvpMeta[p.id] || {};
+      var w = (m.weight != null) ? m.weight : '';
+      var h = (m.height != null) ? hfvpHeightM(m.height) : '';
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + inp('hf-mass', w, '0.1') + inp('hf-height', h, '0.01')
+        + inp('hf-t5', '', '0.01') + inp('hf-t10', '', '0.01') + inp('hf-t20', '', '0.01') + inp('hf-t30', '', '0.01') + inp('hf-t40', '', '0.01')
+        + '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap" class="hf-result">—</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+  }
+  function hfvpRowSplits(tr){
+    var splits = [];
+    HFVP_DISTS.forEach(function(d){
+      var el = tr.querySelector('.hf-t' + d);
+      var t = el ? hfvpNum(el.value) : NaN;
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return splits;
+  }
+  async function saveHfvpBulk(){
+    if (!_clubId) return;
+    if (typeof window.hfvpProfile !== 'function'){ alert(tt('evaluations.hfvp_calc_not_loaded','hfvp-calc.js not loaded')); return; }
+    var date = document.getElementById('evHfvpBulkDate').value;
+    if (!date){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var records = [], skipped = 0;
+    document.querySelectorAll('#evHfvpBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var resCell = tr.querySelector('.hf-result');
+      var mass = hfvpNum(tr.querySelector('.hf-mass').value);
+      var height = hfvpHeightM(hfvpNum(tr.querySelector('.hf-height').value));
+      var splits = hfvpRowSplits(tr);
+      if (isNaN(mass) || isNaN(height) || splits.length < 4){
+        if (resCell){ resCell.textContent = '—'; resCell.style.color = 'var(--cm-fg-faint)'; }
+        skipped++; return;
+      }
+      try {
+        var built = buildHfvpRecord(pid, mass, height, splits, date);
+        records.push(built.rec);
+        if (resCell){ resCell.style.color = 'var(--cm-fg-muted)'; resCell.innerHTML = 'F₀ '+Math.round(built.r.F0)+'N · V₀ '+built.r.V0.toFixed(2)+' · P '+Math.round(built.r.Pmax)+'W'; }
+      } catch (e){ if (resCell){ resCell.textContent = tt('evaluations.error_state','error'); resCell.style.color = 'var(--cm-danger)'; } skipped++; }
+    });
+    if (!records.length){ alert(tt('evaluations.no_rows_mht','No rows with mass, height and at least 4 split times.')); return; }
+    var err = await saveHfvpRecords(records);
+    if (err){ alert(tt('evaluations.err_prefix','Error: '+err.message,{msg:err.message})); return; }
+    var msg = document.getElementById('evHfvpBulkMsg');
+    msg.textContent = tt('evaluations.n_profiles_saved','✓ '+records.length+' profile'+(records.length>1?'s':'')+' saved',{count:records.length}) + (skipped ? tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}) : '');
+    msg.style.display = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  // ── CSV import ──
+  var _hfvpCsv = null;   // { rows, headers, cols }
+  function resetHfvpCsv(){
+    _hfvpCsv = null;
+    document.getElementById('evHfvpCsvMap').style.display = 'none';
+    document.getElementById('evHfvpCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evHfvpCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evHfvpCsvPreview').innerHTML = '';
+    document.getElementById('evHfvpCsvResult').textContent = '';
+  }
+  function hfvpFindCol(heads, regexes){ return heads.find(function(h){ var s = String(h).toLowerCase().trim(); return regexes.some(function(re){ return re.test(s); }); }) || null; }
+  function hfvpTimeCol(heads, used, d){
+    return heads.find(function(h){
+      if (used.indexOf(h) >= 0) return false;
+      var m = String(h).match(/\d+/);
+      return m && parseInt(m[0], 10) === d;
+    }) || null;
+  }
+  function parseHfvpCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    window.Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert(tt('evaluations.empty_csv','Empty CSV')); return; }
+      var heads = (res.meta && res.meta.fields) || Object.keys(rows[0]);
+      var cols = {
+        player: hfvpFindCol(heads, [/name/, /player/, /athlete/, /jugador/]),
+        mass:   hfvpFindCol(heads, [/mass/, /weight/, /peso/, /masa/, /kg/]),
+        height: hfvpFindCol(heads, [/height/, /talla/, /altura/, /stature/]),
+        date:   hfvpFindCol(heads, [/date/, /fecha/]),
+      };
+      var used = [cols.player, cols.mass, cols.height, cols.date].filter(Boolean);
+      HFVP_DISTS.forEach(function(d){ var c = hfvpTimeCol(heads, used, d); cols['t' + d] = c; if (c) used.push(c); });
+      _hfvpCsv = { rows: rows, headers: heads, cols: cols };
+      document.getElementById('evHfvpCsvFallbackDate').value = evToday();
+      document.getElementById('evHfvpCsvDropWrap').style.display = 'none';
+      document.getElementById('evHfvpCsvMap').style.display = '';
+      renderHfvpCsvPreview();
+    }});
+  }
+  function hfvpCsvParseRow(r){
+    var c = _hfvpCsv.cols;
+    var name = c.player ? r[c.player] : '';
+    var p = evMatchPlayer(name);
+    var mass = c.mass ? hfvpNum(r[c.mass]) : NaN;
+    var height = hfvpHeightM(c.height ? hfvpNum(r[c.height]) : NaN);
+    var splits = [];
+    HFVP_DISTS.forEach(function(d){ var col = c['t' + d]; if (!col) return; var t = hfvpNum(r[col]); if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t }); });
+    var dateStr = null;
+    if (c.date && String(r[c.date]||'').trim()){ var pd = parseForceDate(String(r[c.date]).trim()); if (!pd.warn) dateStr = pd.date; }
+    return { name: name, player: p, mass: mass, height: height, splits: splits, dateStr: dateStr };
+  }
+  function renderHfvpCsvPreview(){
+    if (!_hfvpCsv) return;
+    var ok = 0, skip = 0, trs = '';
+    _hfvpCsv.rows.slice(0, 60).forEach(function(r){
+      var d = hfvpCsvParseRow(r);
+      var reason = '', resCell = '';
+      if (!d.player) reason = tt('evaluations.no_match','no match');
+      else if (isNaN(d.mass) || isNaN(d.height)) reason = tt('evaluations.reason_mass_height_missing','mass/height missing');
+      else if (d.splits.length < 4) reason = tt('evaluations.reason_lt_4_times','<4 times');
+      if (reason){ skip++; resCell = '<span style="color:var(--cm-danger)">'+esc(reason)+'</span>'; }
+      else {
+        ok++;
+        try { var b = window.hfvpProfile(d.splits, d.mass, d.height); resCell = 'F₀ '+Math.round(b.F0)+'N · V₀ '+b.V0.toFixed(2)+' · P '+Math.round(b.Pmax)+'W'; }
+        catch (e){ skip++; ok--; resCell = '<span style="color:var(--cm-danger)">'+esc(tt('evaluations.reason_calc_error','calc error'))+'</span>'; }
+      }
+      trs += '<tr><td>'+esc(d.name||'—')+'</td><td>'+(d.player?esc(d.player.first_name+' '+d.player.last_name):'<span style="color:var(--cm-danger)">'+esc(tt('evaluations.no_match','no match'))+'</span>')+'</td>'
+        + '<td class="num">'+(isNaN(d.mass)?'—':d.mass)+'</td><td class="num">'+(isNaN(d.height)?'—':d.height)+'</td><td class="num">'+d.splits.length+'</td><td>'+resCell+'</td></tr>';
+    });
+    document.getElementById('evHfvpCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+esc(tt('evaluations.n_importable_skipped','{ok} importable · {skip} skipped',{ok:ok,skip:skip}))+(_hfvpCsv.rows.length>60?esc(tt('evaluations.showing_first_60',' · showing first 60')):'')+'</div>'
+      + '<table class="ft-table"><thead><tr><th>'+esc(tt('evaluations.csv_name','CSV name'))+'</th><th>'+esc(tt('evaluations.player','Player'))+'</th><th class="num">'+esc(tt('evaluations.mass','Mass'))+'</th><th class="num">'+esc(tt('evaluations.height','Height'))+'</th><th class="num">#t</th><th>'+esc(tt('evaluations.profile_col','Profile'))+'</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveHfvpCsv(){
+    if (!_hfvpCsv || !_clubId) return;
+    if (typeof window.hfvpProfile !== 'function'){ alert(tt('evaluations.hfvp_calc_not_loaded','hfvp-calc.js not loaded')); return; }
+    var fallback = document.getElementById('evHfvpCsvFallbackDate').value || evToday();
+    var records = [], skipped = 0;
+    _hfvpCsv.rows.forEach(function(r){
+      var d = hfvpCsvParseRow(r);
+      if (!d.player || isNaN(d.mass) || isNaN(d.height) || d.splits.length < 4){ skipped++; return; }
+      try { records.push(buildHfvpRecord(d.player.id, d.mass, d.height, d.splits, d.dateStr || fallback).rec); }
+      catch (e){ skipped++; }
+    });
+    if (!records.length){ alert(tt('evaluations.no_matched_rows_mht','No matched rows with mass, height and at least 4 split times.')); return; }
+    var err = await saveHfvpRecords(records);
+    if (err){ alert(tt('evaluations.err_prefix','Error: '+err.message,{msg:err.message})); return; }
+    document.getElementById('evHfvpCsvResult').textContent = tt('evaluations.n_profiles_imported','✓ Imported '+records.length+' profile'+(records.length>1?'s':''),{count:records.length}) + (skipped ? tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}) : '');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetHfvpCsv, 2500);
+  }
+
+  (function initHfvp(){
+    var bs = document.getElementById('evHfvpBulkSave'); if (bs) bs.addEventListener('click', saveHfvpBulk);
+    var fi = document.getElementById('evHfvpCsvFile'); if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseHfvpCsv(e.target.files[0]); });
+    var dz = document.getElementById('evHfvpCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor = ''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseHfvpCsv(e.dataTransfer.files[0]); });
+    }
+    var ib = document.getElementById('evHfvpCsvImportBtn'); if (ib) ib.addEventListener('click', saveHfvpCsv);
+    var rb = document.getElementById('evHfvpCsvResetBtn'); if (rb) rb.addEventListener('click', resetHfvpCsv);
+  })();
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SPRINT SPLITS (manual) — selectable distances, per-segment metrics.
+  //  Clones the H-FVP dedicated grid, minus mass/height and the model.
+  //  value = Vmax (km/h) → squad percentiles come for free via evalBench (L2).
+  //  Full metrics live in notes JSON. Reuses hfvpNum/esc/evToday/_ftPlayers/_clubId.
+  // ════════════════════════════════════════════════════════════════════
+  var SPRINT_DEFAULT_DISTS = [5, 10, 20, 30, 40];
+  var _sprintDists = SPRINT_DEFAULT_DISTS.slice();
+
+  // decimals allowed (e.g. 7.5) → safe class token
+  function sprintKey(d){ return String(d).replace('.', '_'); }
+
+  function parseSprintDists(str){
+    var seen = {}, out = [];
+    String(str || '').split(/[,;\s]+/).forEach(function(tok){
+      var n = parseFloat(String(tok).replace(',', '.'));
+      if (isFinite(n) && n > 0 && !(n in seen)){ seen[n] = 1; out.push(n); }
+    });
+    out.sort(function(a, b){ return a - b; });
+    return out;
+  }
+
+  async function setupSprintBulk(){
+    document.getElementById('evSprintBulkDate').value = evToday();
+    document.getElementById('evSprintBulkMsg').style.display = 'none';
+    var parsed = parseSprintDists(document.getElementById('evSprintDists').value);
+    _sprintDists = parsed.length ? parsed : SPRINT_DEFAULT_DISTS.slice();
+    document.getElementById('evSprintDists').value = _sprintDists.join(',');
+    renderSprintBulkRoster();
+  }
+
+  // Re-parse distances and re-render, preserving already-typed times for kept distances.
+  function applySprintDists(){
+    var prev = {};
+    document.querySelectorAll('#evSprintBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      _sprintDists.forEach(function(d){
+        var el = tr.querySelector('.sp-t' + sprintKey(d));
+        if (el && el.value) prev[pid + '|' + d] = el.value;
+      });
+    });
+    var parsed = parseSprintDists(document.getElementById('evSprintDists').value);
+    if (!parsed.length){ alert(tt('evaluations.enter_distances','Enter at least one distance (m).')); return; }
+    _sprintDists = parsed;
+    document.getElementById('evSprintDists').value = _sprintDists.join(',');
+    renderSprintBulkRoster(prev);
+  }
+
+  function renderSprintBulkRoster(preserve){
+    preserve = preserve || {};
+    var th = document.getElementById('evSprintBulkHead');
+    var tb = document.getElementById('evSprintBulkBody');
+    var thc = 'text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)';
+    th.innerHTML = '<tr style="background:var(--cm-bg-soft)">'
+      + '<th style="'+thc+';white-space:nowrap">'+esc(tt('evaluations.player','Player'))+'</th>'
+      + _sprintDists.map(function(d){ return '<th style="'+thc+'">'+esc(d + ' m')+'</th>'; }).join('')
+      + '<th style="'+thc+';white-space:nowrap">'+esc(tt('evaluations.sprint_vmax','Vmax'))+'</th>'
+      + '</tr>';
+    var cell = 'padding:6px 6px;border-bottom:1px solid var(--cm-border-soft)';
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var cols = _sprintDists.map(function(d){
+        var v = preserve[p.id + '|' + d] || '';
+        return '<td style="'+cell+'"><input type="number" step="0.01" min="0" class="ev-finput sp-t'+sprintKey(d)+'" style="height:30px;min-width:58px;padding:0 8px" value="'+v+'"></td>';
+      }).join('');
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + cols
+        + '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap" class="sp-result">—</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="'+(_sprintDists.length+2)+'" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+  }
+
+  function sprintRowSplits(tr){
+    var splits = [];
+    _sprintDists.forEach(function(d){
+      var el = tr.querySelector('.sp-t' + sprintKey(d));
+      var t = el ? hfvpNum(el.value) : NaN;   // comma-tolerant parse
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return splits;
+  }
+
+  function buildSprintRecord(pid, splits, date){
+    var m = window.sprintSplitsMetrics(splits);
+    if (!m || !m.vmax) return null;
+    var rec = {
+      player_id: pid, club_id: _clubId, evaluation_type: 'Sprint splits',
+      value: +m.vmax.v_kmh.toFixed(2), unit: 'km/h', test_date: date,
+      notes: JSON.stringify({ splits: splits, metrics: m }),
+    };
+    return { rec: rec, m: m };
+  }
+
+  async function saveSprintRecords(records){
+    var natOf = function(pid, date){ return pid + '|Sprint splits|' + date; };
+    var pids = [...new Set(records.map(function(r){ return r.player_id; }))];
+    var ex = await window.sb.from('evaluations')
+      .select('id, player_id, test_date')
+      .eq('club_id', _clubId).eq('evaluation_type', 'Sprint splits').in('player_id', pids);
+    if (ex.error) return ex.error;
+    var keys = new Set(records.map(function(r){ return natOf(r.player_id, r.test_date); }));
+    var collide = (ex.data || [])
+      .filter(function(e){ return keys.has(natOf(e.player_id, String(e.test_date).slice(0,10))); })
+      .map(function(e){ return e.id; });
+    if (collide.length){
+      var del = await window.sb.from('evaluations').delete().in('id', collide);
+      if (del.error) return del.error;
+    }
+    var ins = await window.sb.from('evaluations').insert(records);
+    return ins.error || null;
+  }
+
+  async function saveSprintBulk(){
+    if (!_clubId) return;
+    if (typeof window.sprintSplitsMetrics !== 'function'){ alert(tt('evaluations.sprint_calc_not_loaded','sprint-splits-calc.js not loaded')); return; }
+    var date = document.getElementById('evSprintBulkDate').value;
+    if (!date){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var records = [], skipped = 0;
+    document.querySelectorAll('#evSprintBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var resCell = tr.querySelector('.sp-result');
+      var splits = sprintRowSplits(tr);
+      if (splits.length < 2){
+        if (resCell){ resCell.textContent = '—'; resCell.style.color = 'var(--cm-fg-faint)'; }
+        if (splits.length === 1) skipped++;   // a lone partial → skipped; fully blank rows ignored
+        return;
+      }
+      var built = buildSprintRecord(pid, splits, date);
+      if (!built){ if (resCell){ resCell.textContent = tt('evaluations.error_state','error'); resCell.style.color = 'var(--cm-danger)'; } skipped++; return; }
+      records.push(built.rec);
+      if (resCell){ resCell.style.color = 'var(--cm-fg-muted)'; resCell.textContent = built.m.vmax.v_kmh.toFixed(2) + ' km/h'; }
+    });
+    if (!records.length){ alert(tt('evaluations.no_rows_2_splits','No rows with at least 2 valid split times.')); return; }
+    var err = await saveSprintRecords(records);
+    if (err){ alert(tt('evaluations.err_prefix','Error: '+err.message,{msg:err.message})); return; }
+    var msg = document.getElementById('evSprintBulkMsg');
+    msg.textContent = tt('evaluations.n_records_saved','✓ '+records.length+' record'+(records.length>1?'s':'')+' saved',{count:records.length}) + (skipped ? tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}) : '');
+    msg.style.display = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  (function initSprint(){
+    var bs = document.getElementById('evSprintBulkSave'); if (bs) bs.addEventListener('click', saveSprintBulk);
+    var ab = document.getElementById('evSprintDistsApply'); if (ab) ab.addEventListener('click', applySprintDists);
+    var di = document.getElementById('evSprintDists');
+    if (di) di.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); applySprintDists(); } });
+  })();
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Body composition · dedicated bulk grid → writes to body_composition
+  //  Results mode: weight/%BF/lean/height. Skinfolds mode: raw folds → Siri %BF
+  //  (via the shared sfBodyFatPct) + lean + BMI. One method per batch.
+  // ════════════════════════════════════════════════════════════════════
+  var _bcPlayerMeta = {};   // pid → { age, height, weight }
+  var BC_SITE_LABEL = { chest:'Chest', abdomen:'Abdomen', thigh:'Thigh', triceps:'Triceps', subscapular:'Subscapular', suprailiac:'Suprailiac', midaxillary:'Midaxillary', biceps:'Biceps' };
+  function bcSiteLabel(s){ return tt('evaluations.bc_site_'+s, BC_SITE_LABEL[s]||s); }
+  // Canonical fold → body_composition column (mirrors the individual save: suprailiac stored in sf_supraspinal).
+  var BC_SF_COL = { chest:'sf_chest', abdomen:'sf_abdominal', thigh:'sf_thigh', triceps:'sf_triceps', subscapular:'sf_subscapular', midaxillary:'sf_midaxillary', biceps:'sf_biceps', suprailiac:'sf_supraspinal' };
+
+  // Skinfold columns rendered for a formula (JP3 shows the union of both sexes; enabled per row).
+  function bcSkinfoldCols(formula){
+    var f = String(formula||'JP3').toUpperCase();
+    if (f === 'JP7') return sfFormulaSites('JP7');
+    if (f === 'DW4') return sfFormulaSites('DW4');
+    return ['chest','abdomen','thigh','triceps','suprailiac'];   // JP3 union
+  }
+
+  // Single source of truth for a body_composition row, used by BOTH the grid and the CSV importer.
+  //  ctx:  { player_id, club_id, date, age, sex }   (sex 'M'|'F', only used in skinfolds mode)
+  //  vals: results  → { weight, bf, lean, height }
+  //        skinfolds→ { weight, height, folds:{ site:mm } }
+  //  Returns the row object, or null when the row is blank.
+  function buildBodyCompRow(mode, method, formula, ctx, vals){
+    var base = { player_id: ctx.player_id, club_id: ctx.club_id, measured_date: ctx.date };
+    if (mode === 'results'){
+      var weight = vals.weight, bf = vals.bf, lean = vals.lean, height = vals.height;
+      if (weight == null && bf == null && lean == null) return null;   // blank (height alone is a prefill/fallback)
+      if (lean == null && weight != null && bf != null) lean = +(weight * (1 - bf/100)).toFixed(1);
+      base.method = method;
+      base.weight_kg = weight; base.body_fat_pct = bf; base.lean_mass_kg = lean;
+      base.height_cm = height; base.bmi = calcBMI(weight, height);
+      return base;
+    }
+    // skinfolds
+    var sex = (String(ctx.sex || 'M').toUpperCase().charAt(0) === 'F') ? 'F' : 'M';
+    var folds = vals.folds || {}, weightS = vals.weight, heightS = vals.height;
+    var anyFold = Object.keys(folds).some(function(s){ return folds[s] != null; });
+    if (!anyFold && weightS == null) return null;   // blank row
+    var pct = sfBodyFatPct({ formula: formula, sex: sex, age: ctx.age, folds: folds });
+    var sum = sfFormulaSites(formula, sex).reduce(function(a,k){ return a + (parseFloat(folds[k]) || 0); }, 0) || null;
+    base.method = 'skinfold';
+    base.sf_formula = formula; base.sum_skinfolds = sum;
+    base.weight_kg = weightS; base.height_cm = heightS;
+    base.age_years = (ctx.age != null ? ctx.age : null);
+    base.sex = (sex === 'F' ? 'female' : 'male');
+    base.body_fat_pct = pct;
+    base.lean_mass_kg = (pct != null && weightS != null) ? +(weightS * (1 - pct/100)).toFixed(1) : null;
+    base.bmi = calcBMI(weightS, heightS);
+    Object.keys(BC_SF_COL).forEach(function(s){ if (folds[s] != null) base[BC_SF_COL[s]] = folds[s]; });
+    return base;
+  }
+
+  // Roster age/height/weight for the current team — shared by the grid and the CSV importer.
+  async function loadBcPlayerMeta(){
+    _bcPlayerMeta = {};
+    try {
+      if (_teamPlayerIds && _teamPlayerIds.length){
+        var pr = await window.sb.from('players').select('id, date_of_birth, height, weight').eq('club_id', _clubId).in('id', _teamPlayerIds);
+        (pr.data || []).forEach(function(r){
+          var age = r.date_of_birth ? Math.floor((Date.now() - new Date(r.date_of_birth)) / (365.25 * 86400000)) : null;
+          _bcPlayerMeta[r.id] = { age: (isFinite(age) ? age : null), height: (r.height != null ? r.height : null), weight: (r.weight != null ? r.weight : null) };
+        });
+      }
+    } catch(e){ console.warn('[ev2] bc player meta failed', e); }
+  }
+
+  async function setupBcBulk(){
+    document.getElementById('evBcDate').value = evToday();
+    document.getElementById('evBcMsg').style.display = 'none';
+    document.getElementById('evBcMode').value = 'results';
+    await loadBcPlayerMeta();
+    onBcModeChange();
+  }
+
+  function onBcModeChange(){
+    var mode = document.getElementById('evBcMode').value;
+    var methodSel = document.getElementById('evBcMethod');
+    var methodWrap = methodSel.closest('.ev-frow');
+    var formulaWrap = document.getElementById('evBcFormulaWrap');
+    if (mode === 'results'){
+      methodSel.innerHTML = '<option value="dexa">DEXA</option><option value="bia">BIA</option><option value="scale">'+esc(tt('evaluations.bc_scale','Scale'))+'</option>';
+      if (methodWrap) methodWrap.style.display = '';
+      formulaWrap.style.display = 'none';
+    } else {
+      if (methodWrap) methodWrap.style.display = 'none';   // method is implicitly 'skinfold'
+      formulaWrap.style.display = '';
+    }
+    renderBcBulkRoster();
+  }
+
+  function renderBcBulkRoster(){
+    var mode = document.getElementById('evBcMode').value;
+    var formula = document.getElementById('evBcFormula').value;
+    var th = document.getElementById('evBcHead'), tb = document.getElementById('evBcBody');
+    var thc = 'text-align:left;padding:10px 8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap';
+    var cell = 'padding:6px 8px;border-bottom:1px solid var(--cm-border-soft)';
+    var inpCss = 'height:30px;min-width:70px;padding:0 8px';
+    var cols;
+    if (mode === 'results'){
+      cols = [ {key:'weight_kg',label:esc(tt('evaluations.bc_weight_kg','Weight (kg)'))},
+               {key:'body_fat_pct',label:esc(tt('evaluations.bc_bodyfat','Body fat (%)'))},
+               {key:'lean_mass_kg',label:esc(tt('evaluations.bc_lean_kg','Lean mass (kg)'))},
+               {key:'height_cm',label:esc(tt('evaluations.bc_height_cm','Height (cm)'))} ];
+    } else {
+      cols = [ {key:'weight_kg',label:esc(tt('evaluations.bc_weight_kg','Weight (kg)'))},
+               {key:'height_cm',label:esc(tt('evaluations.bc_height_cm','Height (cm)'))} ]
+        .concat(bcSkinfoldCols(formula).map(function(s){ return { key:'sf_'+s, site:s, label:esc(bcSiteLabel(s))+' (mm)' }; }));
+    }
+    var head = '<th style="'+thc+'">'+esc(tt('evaluations.player','Player'))+'</th>';
+    if (mode === 'skinfolds') head += '<th style="'+thc+'">'+esc(tt('evaluations.sex','Sex'))+'</th>';
+    head += cols.map(function(c){ return '<th style="'+thc+'">'+c.label+'</th>'; }).join('');
+    if (mode === 'skinfolds') head += '<th style="'+thc+'">%BF</th>';
+    th.innerHTML = '<tr style="background:var(--cm-bg-soft)">'+head+'</tr>';
+
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var meta = _bcPlayerMeta[p.id] || {};
+      var tds = '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>';
+      if (mode === 'skinfolds'){
+        tds += '<td style="'+cell+'"><select class="ev-finput bc-sex" style="height:30px;min-width:60px;padding:0 6px" onchange="onBcSexChange(this)"><option value="M">M</option><option value="F">F</option></select></td>';
+      }
+      tds += cols.map(function(c){
+        var val = (c.key === 'height_cm' && meta.height != null) ? meta.height : '';   // prefill height from roster
+        var cls = c.key + (c.site ? ' bc-sf bc-sf-'+c.site : '');
+        return '<td style="'+cell+'"><input type="number" step="0.1" min="0" class="ev-finput '+cls+'" style="'+inpCss+'" value="'+val+'"></td>';
+      }).join('');
+      if (mode === 'skinfolds') tds += '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);white-space:nowrap" class="bc-result">—</td>';
+      return '<tr data-pid="'+p.id+'">'+tds+'</tr>';
+    }).join('') || '<tr><td colspan="20" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+
+    if (mode === 'skinfolds' && String(formula).toUpperCase() === 'JP3'){
+      document.querySelectorAll('#evBcBody tr').forEach(function(tr){ applyBcJp3Sex(tr); });
+    }
+  }
+
+  // JP3: enable only the current sex's sites in a row; clear + dim the others so they aren't saved.
+  function applyBcJp3Sex(tr){
+    var sexEl = tr.querySelector('.bc-sex');
+    var sex = sexEl ? sexEl.value : 'M';
+    var enabled = sfFormulaSites('JP3', sex);
+    ['chest','abdomen','thigh','triceps','suprailiac'].forEach(function(s){
+      var inp = tr.querySelector('.bc-sf-'+s); if (!inp) return;
+      var on = enabled.indexOf(s) !== -1;
+      inp.disabled = !on;
+      inp.style.opacity = on ? '' : '0.35';
+      if (!on) inp.value = '';
+    });
+  }
+
+  window.onBcSexChange = onBcSexChange;   // called from an inline onchange (global scope)
+  function onBcSexChange(sel){
+    var tr = sel.closest('tr'); if (!tr) return;
+    if (String(document.getElementById('evBcFormula').value).toUpperCase() === 'JP3') applyBcJp3Sex(tr);
+    bcUpdateRowResult(tr);
+  }
+
+  // Live %BF for a skinfold row (null when not yet computable).
+  function bcRowPct(tr){
+    if (document.getElementById('evBcMode').value !== 'skinfolds') return null;
+    var formula = document.getElementById('evBcFormula').value;
+    var meta = _bcPlayerMeta[tr.getAttribute('data-pid')] || {};
+    var sexEl = tr.querySelector('.bc-sex');
+    var folds = {};
+    bcSkinfoldCols(formula).forEach(function(s){
+      var el = tr.querySelector('.bc-sf-'+s);
+      if (el && !el.disabled){ var v = parseFloat(el.value); if (isFinite(v)) folds[s] = v; }
+    });
+    return sfBodyFatPct({ formula: formula, sex: (sexEl ? sexEl.value : 'M'), age: meta.age, folds: folds });
+  }
+
+  function bcUpdateRowResult(tr){
+    var cell = tr.querySelector('.bc-result'); if (!cell) return;
+    var pct = bcRowPct(tr);
+    if (pct == null){ cell.textContent = '—'; cell.style.color = 'var(--cm-fg-faint)'; }
+    else { cell.textContent = pct.toFixed(1) + '%'; cell.style.color = 'var(--cm-fg-muted)'; }
+  }
+
+  async function saveBcBulk(){
+    if (!_clubId) return;
+    var date = document.getElementById('evBcDate').value;
+    if (!date){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var mode = document.getElementById('evBcMode').value;
+    var formula = document.getElementById('evBcFormula').value;
+    var method = mode === 'skinfolds' ? 'skinfold' : document.getElementById('evBcMethod').value;
+    var rows = [];
+    document.querySelectorAll('#evBcBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var meta = _bcPlayerMeta[pid] || {};
+      var num = function(cls){ var el = tr.querySelector('.'+cls); if (!el || el.disabled) return null; var v = parseFloat(el.value); return isFinite(v) ? v : null; };
+      var height = num('height_cm'), weight = num('weight_kg');
+      var row;
+      if (mode === 'results'){
+        row = buildBodyCompRow('results', method, formula,
+          { player_id: pid, club_id: _clubId, date: date },
+          { weight: weight, bf: num('body_fat_pct'), lean: num('lean_mass_kg'), height: height });
+      } else {
+        var sexEl = tr.querySelector('.bc-sex');
+        var folds = {};
+        bcSkinfoldCols(formula).forEach(function(s){ var v = num('sf_'+s); if (v != null) folds[s] = v; });
+        row = buildBodyCompRow('skinfolds', 'skinfold', formula,
+          { player_id: pid, club_id: _clubId, date: date, age: meta.age, sex: (sexEl ? sexEl.value : 'M') },
+          { weight: weight, height: height, folds: folds });
+        var rc = tr.querySelector('.bc-result');
+        if (rc && row && row.body_fat_pct != null){ rc.textContent = row.body_fat_pct.toFixed(1) + '%'; rc.style.color = 'var(--cm-fg-muted)'; }
+      }
+      if (row) rows.push(row);
+    });
+    if (!rows.length){ alert(tt('evaluations.no_valid_rows','No valid rows to save.')); return; }
+    var res = await window.sb.from('body_composition').insert(rows);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    var msg = document.getElementById('evBcMsg');
+    msg.textContent = tt('evaluations.n_records_saved','✓ '+rows.length+' record'+(rows.length>1?'s':'')+' saved',{count:rows.length});
+    msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  (function initBc(){
+    var s = document.getElementById('evBcSave'); if (s) s.addEventListener('click', evGuardSave(saveBcBulk));
+    var m = document.getElementById('evBcMode'); if (m) m.addEventListener('change', onBcModeChange);
+    var f = document.getElementById('evBcFormula'); if (f) f.addEventListener('change', renderBcBulkRoster);
+    var b = document.getElementById('evBcBody'); if (b) b.addEventListener('input', function(e){ var tr = e.target.closest('tr'); if (tr) bcUpdateRowResult(tr); });
+  })();
+
+  // ─── Body composition · dedicated CSV importer (shares buildBodyCompRow with the grid) ───
+  var _bcCsv = null;   // { rows, headers }
+  var BC_SITE_GUESS = {
+    chest:/chest|pecho|peito|pector/, abdomen:/abdom/, thigh:/thigh|muslo|coxa|quad/,
+    triceps:/tricep|trícep/, subscapular:/subscap|subescap|subesc/, suprailiac:/suprail|iliac|ilíac|supraesp|supraspin/,
+    midaxillary:/midax|mid.?ax|axilar|axillary|axila/, biceps:/bicep|bícep/
+  };
+  // Field descriptors for the CSV mapper — the set depends on mode/formula (same fields the grid needs).
+  function bcCsvFields(mode, formula){
+    var f = [ { key:'player', label:tt('evaluations.player','Player'), req:true, guess:/name|player|athlete|jugador|jogador|nombre|nome/ },
+              { key:'date',   label:tt('common.date','Date'), guess:/date|fecha|data/ } ];
+    if (mode === 'skinfolds') f.push({ key:'sex', label:tt('evaluations.sex','Sex'), guess:/sex|sexo|gender|gener|género/ });
+    f.push({ key:'weight', label:tt('evaluations.bc_weight_kg','Weight (kg)'), guess:/peso|weight|kg\b|massa|mass\b/ });
+    f.push({ key:'height', label:tt('evaluations.bc_height_cm','Height (cm)'), guess:/altura|height|estatura|talla|statur|\bcm\b/ });
+    if (mode === 'results'){
+      f.push({ key:'bf',   label:tt('evaluations.bc_bodyfat','Body fat (%)'), guess:/fat|grasa|gordura|\bbf\b|body.?fat/ });
+      f.push({ key:'lean', label:tt('evaluations.bc_lean_kg','Lean mass (kg)'), guess:/lean|magra|magro|ffm|fat.?free/ });
+    } else {
+      bcSkinfoldCols(formula).forEach(function(s){ f.push({ key:'sf_'+s, site:s, label:bcSiteLabel(s)+' (mm)', guess:BC_SITE_GUESS[s] }); });
+    }
+    return f;
+  }
+  async function setupBcCsv(){
+    document.getElementById('evBcCsvFallbackDate').value = evToday();
+    document.getElementById('evBcCsvMode').value = 'results';
+    resetBcCsv();
+    await loadBcPlayerMeta();
+    onBcCsvModeChange();
+  }
+  function resetBcCsv(){
+    _bcCsv = null;
+    document.getElementById('evBcCsvMap').style.display = 'none';
+    document.getElementById('evBcCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evBcCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evBcCsvPreview').innerHTML = '';
+    document.getElementById('evBcCsvResult').textContent = '';
+  }
+  function onBcCsvModeChange(){
+    var mode = document.getElementById('evBcCsvMode').value;
+    var methodWrap = document.getElementById('evBcCsvMethodWrap');
+    var formulaWrap = document.getElementById('evBcCsvFormulaWrap');
+    if (mode === 'results'){
+      document.getElementById('evBcCsvMethod').innerHTML = '<option value="dexa">DEXA</option><option value="bia">BIA</option><option value="scale">'+esc(tt('evaluations.bc_scale','Scale'))+'</option>';
+      methodWrap.style.display = ''; formulaWrap.style.display = 'none';
+    } else {
+      methodWrap.style.display = 'none'; formulaWrap.style.display = '';
+    }
+    if (_bcCsv) populateBcCsvMap();
+  }
+  function parseBcCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    window.Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert(tt('evaluations.empty_csv','Empty CSV')); return; }
+      _bcCsv = { rows: rows, headers: (res.meta && res.meta.fields) || Object.keys(rows[0]) };
+      populateBcCsvMap();
+    }});
+  }
+  function populateBcCsvMap(){
+    if (!_bcCsv) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var heads = _bcCsv.headers;
+    var find = function(re){ return re ? heads.find(function(h){ return re.test(String(h).toLowerCase()); }) : null; };
+    var fields = bcCsvFields(mode, formula);
+    var cont = document.getElementById('evBcCsvMapCols');
+    cont.innerHTML = fields.map(function(fd){
+      var opts = (fd.req ? '' : '<option value="">'+esc(tt('evaluations.none_option','— none —'))+'</option>')
+        + heads.map(function(h){ return '<option value="'+esc(h)+'">'+esc(h)+'</option>'; }).join('');
+      return '<div class="ev-frow"><label class="ev-fl">'+esc(fd.label)+(fd.req?' <span style="color:var(--cm-danger)">*</span>':'')+'</label>'
+        + '<select class="ev-finput bc-csv-col" data-field="'+esc(fd.key)+'" style="height:32px">'+opts+'</select></div>';
+    }).join('');
+    fields.forEach(function(fd){
+      var sel = cont.querySelector('.bc-csv-col[data-field="'+fd.key+'"]'); if (!sel) return;
+      sel.value = find(fd.guess) || (fd.req ? (heads[0]||'') : '');
+      sel.onchange = renderBcCsvPreview;
+    });
+    document.getElementById('evBcCsvDropWrap').style.display = 'none';
+    document.getElementById('evBcCsvMap').style.display = '';
+    renderBcCsvPreview();
+  }
+  function bcCsvMapping(){
+    var m = {};
+    document.querySelectorAll('#evBcCsvMapCols .bc-csv-col').forEach(function(sel){ m[sel.getAttribute('data-field')] = sel.value; });
+    return m;
+  }
+  // Build a body_composition row from a raw CSV row via the SHARED buildBodyCompRow. Returns { player, row }.
+  function bcCsvBuildRow(r, mapping, mode, formula, fallbackDate){
+    var p = evMatchPlayer(r[mapping.player]);
+    if (!p) return { player:null, row:null };
+    var meta = _bcPlayerMeta[p.id] || {};
+    var cellNum = function(field){ var c = mapping[field]; if (!c) return null; var v = parseFloat(String(r[c]==null?'':r[c]).replace(',', '.')); return isFinite(v) ? v : null; };
+    var date = fallbackDate;
+    if (mapping.date && String(r[mapping.date]||'').trim()){ var pd = parseForceDate(String(r[mapping.date]).trim()); if (!pd.warn) date = pd.date; }
+    var height = cellNum('height'); if (height == null && meta.height != null) height = meta.height;   // roster fallback
+    var weight = cellNum('weight');
+    var row;
+    if (mode === 'results'){
+      row = buildBodyCompRow('results', document.getElementById('evBcCsvMethod').value, formula,
+        { player_id:p.id, club_id:_clubId, date:date },
+        { weight:weight, bf:cellNum('bf'), lean:cellNum('lean'), height:height });
+    } else {
+      var sex = 'M';
+      if (mapping.sex){ var sv = String(r[mapping.sex]||'').trim().toUpperCase(); if (sv){ sex = (sv.charAt(0)==='F' || sv.indexOf('MUJ')===0 || sv.indexOf('FEM')===0) ? 'F' : 'M'; } }
+      var folds = {};
+      bcSkinfoldCols(formula).forEach(function(s){ var v = cellNum('sf_'+s); if (v != null) folds[s] = v; });
+      row = buildBodyCompRow('skinfolds', 'skinfold', formula,
+        { player_id:p.id, club_id:_clubId, date:date, age:meta.age, sex:sex },
+        { weight:weight, height:height, folds:folds });
+    }
+    return { player:p, row:row };
+  }
+  function renderBcCsvPreview(){
+    if (!_bcCsv) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var mapping = bcCsvMapping();
+    var fallback = document.getElementById('evBcCsvFallbackDate').value || evToday();
+    var matched = 0, unmatched = 0, trs = '';
+    _bcCsv.rows.forEach(function(r, idx){
+      var built = bcCsvBuildRow(r, mapping, mode, formula, fallback);
+      if (built.player && built.row) matched++; else unmatched++;
+      if (idx < 10){
+        var pct = built.row ? built.row.body_fat_pct : null;
+        trs += '<tr><td>'+esc(r[mapping.player]||'—')+'</td>'
+          + '<td>'+(built.player?esc(built.player.first_name+' '+built.player.last_name):'<span style="color:var(--cm-danger)">'+esc(tt('evaluations.no_match','no match'))+'</span>')+'</td>'
+          + '<td class="num">'+(built.row&&built.row.weight_kg!=null?built.row.weight_kg:'—')+'</td>'
+          + '<td class="num">'+(pct!=null?pct.toFixed(1)+'%':'—')+'</td></tr>';
+      }
+    });
+    document.getElementById('evBcCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+esc(tt('evaluations.n_matched_unmatched','{m} matched · {u} unmatched',{m:matched,u:unmatched}))+'</div>'
+      + '<table class="ft-table"><thead><tr><th>'+esc(tt('evaluations.csv_name','CSV name'))+'</th><th>'+esc(tt('evaluations.player','Player'))+'</th><th class="num">'+esc(tt('evaluations.bc_weight_kg','Weight (kg)'))+'</th><th class="num">%BF</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveBcCsv(){
+    if (!_bcCsv || !_clubId) return;
+    var mode = document.getElementById('evBcCsvMode').value;
+    var formula = document.getElementById('evBcCsvFormula').value;
+    var mapping = bcCsvMapping();
+    if (!mapping.player){ alert(tt('evaluations.select_player_column','Select the player column.')); return; }
+    var fallback = document.getElementById('evBcCsvFallbackDate').value || evToday();
+    var rows = [], skipped = 0;
+    _bcCsv.rows.forEach(function(r){
+      var built = bcCsvBuildRow(r, mapping, mode, formula, fallback);
+      if (!built.player || !built.row){ skipped++; return; }
+      rows.push(built.row);
+    });
+    if (!rows.length){ alert(tt('evaluations.no_matched_rows','No matched rows with a value to import.')); return; }
+    var res = await window.sb.from('body_composition').insert(rows);
+    if (res.error){ alert(tt('evaluations.err_prefix','Error: '+res.error.message,{msg:res.error.message})); return; }
+    document.getElementById('evBcCsvResult').textContent = tt('evaluations.n_records_imported','✓ Imported '+rows.length+' record'+(rows.length>1?'s':''),{count:rows.length})+(skipped?tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}):'');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetBcCsv, 2500);
+  }
+  (function initBcCsv(){
+    var fi = document.getElementById('evBcCsvFile');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseBcCsv(e.target.files[0]); });
+    var dz = document.getElementById('evBcCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor='var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseBcCsv(e.dataTransfer.files[0]); });
+    }
+    var ib = document.getElementById('evBcCsvImportBtn'); if (ib) ib.addEventListener('click', evGuardSave(saveBcCsv));
+    var rb = document.getElementById('evBcCsvResetBtn'); if (rb) rb.addEventListener('click', resetBcCsv);
+    var m = document.getElementById('evBcCsvMode'); if (m) m.addEventListener('change', onBcCsvModeChange);
+    var f = document.getElementById('evBcCsvFormula'); if (f) f.addEventListener('change', function(){ if (_bcCsv) populateBcCsvMap(); });
+    var fd = document.getElementById('evBcCsvFallbackDate'); if (fd) fd.addEventListener('change', function(){ if (_bcCsv) renderBcCsvPreview(); });
+  })();
+
+  // English ordinal for the percentile badge (72 → "72nd"); es/pt use the raw {pct}.
+  function sprintOrd(n){ var s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+  // Result panel for a Sprint splits entry (L2): 4 metric KPI cards + splits table +
+  // per-segment speeds + squad percentile of Vmax (via window.evalBench). Clones the
+  // H-FVP hero styling (pa-result-hero / KPI cards / pa-zone-table). computed = {splits, metrics}.
+  async function renderSprintResult(computed, host, playerVmax){
+    var m = computed.metrics, splits = computed.splits || [];
+    if (!m || !m.vmax){ host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_sprint_stored','No sprint metrics stored for this entry.'))+'</div>'; return; }
+    var f2 = function(x){ return (x == null || isNaN(x)) ? '—' : Number(x).toFixed(2); };
+
+    var kpis = [
+      [ tt('evaluations.sprint_vmax','Vmax'), f2(m.vmax.v_kmh), 'km/h', esc(m.vmax.from_m + '–' + m.vmax.to_m + ' m') ],
+      [ tt('evaluations.sprint_flying','Flying speed'), m.flying ? f2(m.flying.v_kmh) : '—', m.flying ? 'km/h' : '',
+        m.flying ? esc(m.flying.from_m + '–' + m.flying.to_m + ' m') : esc(tt('evaluations.sprint_need_3','≥3 splits')) ],
+      [ tt('evaluations.sprint_accel','Acceleration'), f2(m.accel.v_kmh), 'km/h',
+        esc(tt('evaluations.sprint_accel_desc','first {d} m · {t} s', { d: m.accel.to_m, t: f2(m.accel.time_s) })) ],
+    ];
+    var kpiGrid = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
+      + kpis.map(function(a){
+          return '<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px">'
+            + '<div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">'+esc(a[0])+'</div>'
+            + '<div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">'+a[1]+'<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">'+esc(a[2])+'</span></div>'
+            + '<div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">'+a[3]+'</div></div>';
+        }).join('')
+      + '</div>';
+
+    var splitRows = splits.map(function(s){ return '<tr><td>'+esc(s.distance_m + ' m')+'</td><td class="r">'+esc(Number(s.time_s).toFixed(2) + ' s')+'</td></tr>'; }).join('');
+    var segRows = (m.segments || []).map(function(s){ return '<tr><td>'+esc(s.from_m + '–' + s.to_m + ' m')+'</td><td class="r">'+esc(s.v_kmh.toFixed(2))+'</td><td class="r">'+esc(s.v_ms.toFixed(2))+'</td></tr>'; }).join('');
+
+    // Squad percentile of Vmax (compares evaluations.value = Vmax). ≥4 peers required.
+    var pctHtml = esc(tt('evaluations.sprint_pct_na','Not enough peers to compare (need ≥4)'));
+    try {
+      if (window.evalBench && _teamId){
+        var stats = await window.evalBench.categoryStats({ clubId: _clubId, teamId: _teamId, types: ['Sprint splits'] });
+        var s = stats && stats['Sprint splits'];
+        if (s && s.values && s.values.length >= 4 && playerVmax != null){
+          var pct = window.evalBench.percentile(Number(playerVmax), s, false);
+          pctHtml = esc(tt('evaluations.sprint_pct_line', '{ord} percentile in squad · {n} peers', { ord: sprintOrd(pct), pct: pct, n: s.values.length }));
+        }
+      }
+    } catch (e) {}
+
+    host.innerHTML =
+      '<div class="pa-result-hero">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +   '<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em">'+esc(tt('evaluations.sprint_vmax','Vmax'))+'</span>'
+      +   '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:var(--cm-accent-soft);border:1px solid var(--cm-accent);font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)"><i class="ti ti-chart-bar" style="font-size:13px"></i>'+pctHtml+'</span>'
+      + '</div>'
+      + kpiGrid
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +   '<div><div class="pa-section" style="margin-top:0">'+esc(tt('evaluations.sprint_splits_label','Splits'))+'</div>'
+      +     '<div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden"><table class="pa-zone-table"><thead><tr><th>'+esc(tt('evaluations.sprint_distance','Distance'))+'</th><th class="r">'+esc(tt('evaluations.sprint_time','Time'))+'</th></tr></thead><tbody>'+splitRows+'</tbody></table></div></div>'
+      +   '<div><div class="pa-section" style="margin-top:0">'+esc(tt('evaluations.sprint_segment_speeds','Segment speeds'))+'</div>'
+      +     '<div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden"><table class="pa-zone-table"><thead><tr><th>'+esc(tt('evaluations.sprint_segment','Segment'))+'</th><th class="r">km/h</th><th class="r">m/s</th></tr></thead><tbody>'+segRows+'</tbody></table></div></div>'
+      + '</div>'
+      + '</div>';
+  }
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  CALCULATOR MODALS (ported verbatim from Evaluations.html; only scope
+  //  glue adapted: clubId->_clubId, allPlayers->_ftPlayers, save refresh).
+  // ════════════════════════════════════════════════════════════════════
+  var selectedPlayerId = null;
+  const PHYS_TESTS = {
+    '30-15 IFT':        { key:'ift',       label:'30-15 IFT',               sub:'Buchheit 2008 · VIFT → VO₂max + 6 training zones' },
+    '1,600 m TT':       { key:'tt1600',    label:'1,600 m Time Trial',       sub:'Cooper adapted · VO₂max + pace-based running zones' },
+    'VBT · Load-Velocity': { key:'vbt',    label:'VBT · Load-Velocity',      sub:'González-Badillo · velocity zone + 1RM estimation · per exercise', exercise:'Back Squat' },
+    '1RM':              { key:'orm',       label:'%1RM Estimation',          sub:'Epley + Brzycki averaged · full load prescription table', exercise:'Bench Press' },
+    'FMS':              { key:'fms',       label:'FMS — Functional Movement Screen', sub:'Cook (2010) · 7 tests · score /21 · riesgo lesión · Kiesel et al. 2007' },
+    'Ankle dorsiflexion':{ key:'ankle',    label:'Ankle Dorsiflexion',       sub:'Weight-bearing lunge test · L/R · Searle et al.' },
+    'Hip ER/IR':        { key:'hiprot',    label:'Hip ER/IR — Hip rotation', sub:'Lerebours et al. (2016) · IR/ER bilateral · BIBE/FAI alerts' },
+    'Body composition': { key:'skinfold',  label:'Composición corporal — Pliegues', sub:'JP3 · JP7 · DW4 · Siri (1956) · %BF · masa grasa y magra' },
+    'F-V Profile · jumps':{ key:'fvprofile', label:'F-V Profile · jumps',     sub:'Samozino & Morin (2012–2016) · loaded jumps · F₀ V₀ Pmax · FVimb' },
+    'Sprint H-FVP':     { key:'hfvp',      label:'Sprint H-FVP — Horizontal F-V profile', sub:'Samozino et al. (2016) · sprint splits · F₀ V₀ Pmax · RFmax · DRF' },
+  };
+
+  const VBT_EVAL_TYPES = { 'Back Squat':'VBT · back squat', 'Bench Press':'VBT · bench press', 'Hip Thrust':'VBT · hip thrust', 'Deadlift':'VBT · deadlift', 'Military Press':'VBT · military press', 'Bench Pull':'VBT · bench pull' };
+  // Minimum velocity threshold (MVT / V1RM, m/s) per exercise — load at this velocity ≈ 1RM.
+  // Exercises absent here fall back to V0 (x-intercept, load at v=0) as a generic estimate.
+  const VBT_V1RM = { 'Back Squat':0.30, 'Bench Press':0.17, 'Hip Thrust':0.25, 'Deadlift':0.20, 'Military Press':0.19, 'Bench Pull':0.50 };
+
+  let _paCurrent = null;
+  let _paPlayerData = null;
+
+  function isPhysAnalysisTest(label) { return label in PHYS_TESTS; }
+
+  async function openPhysAnalysis(label) {
+    const cfg = PHYS_TESTS[label];
+    if (!cfg) { console.warn('[ev2] no calculator for', label); return; }
+    _paCurrent = { cfg, label };
+    _paPlayerData = null;
+    document.getElementById('paMTitle').textContent = tt('evaluations.calc_title_'+cfg.key, cfg.label);
+    document.getElementById('paMSub').textContent   = tt('evaluations.calc_sub_'+cfg.key, cfg.sub);
+    document.getElementById('paResults').innerHTML  = '';
+    document.getElementById('paZones').innerHTML    = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.enter_values_to_see','Enter values to see analysis'))+'</div>';
+    document.getElementById('paHistory').innerHTML  = '';
+    document.getElementById('paFootInfo').textContent = tt('evaluations.fill_required_to_save','Fill in all required fields to save');
+    renderPhysForm(cfg);
+    document.getElementById('physAnalysisOvl').classList.add('is-open');
+  }
+
+  function closePhysModal() {
+    document.getElementById('physAnalysisOvl').classList.remove('is-open');
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  ASSESSMENT MANUAL ENTRY  — individual (1 player × 1 test with _def).
+  //  Writes force_tests + force_test_metrics (same dedup as saveForceImport).
+  //  Live feedback via window.assessNorms. Reuses pa-* / ev-* markup.
+  // ════════════════════════════════════════════════════════════════════
+  var _asEntry = null;   // { def, sides, binary:{}, sameDay:{} }
+
+  function asSides(def){ return def.bilateral ? ['L','R'] : ['NA']; }
+  function asSideLabel(s){ return s === 'L' ? tt('evaluations.side_left','Left') : s === 'R' ? tt('evaluations.side_right','Right') : ''; }
+
+  // Normalized metric list for a def (falls back to the single metric_key/unit).
+  function asMetrics(def){
+    var m = def.metrics;
+    if (typeof m === 'string'){ try { m = JSON.parse(m); } catch(e){ m = null; } }
+    if (m && m.length) return m;
+    return [{ key: def.metric_key, label: def.unit || def.metric_key, unit: def.unit, primary: true }];
+  }
+  function asPrimary(def){ var m = asMetrics(def); return m.filter(function(x){return x.primary;})[0] || m[0]; }
+
+  // Modified Thomas (value_type 'flags'): +/− per leg → reveal the structure checkboxes.
+  window.asSetFlag = function(side, v){
+    if (!_asEntry) return;
+    _asEntry.flags = _asEntry.flags || {};
+    _asEntry.flags[side] = v;
+    var b1 = document.getElementById('asFlag_'+side+'_1'), b0 = document.getElementById('asFlag_'+side+'_0');
+    if (b1) b1.classList.toggle('is-primary', v===1);
+    if (b0) b0.classList.toggle('is-primary', v===0);
+    var st = document.getElementById('asFlagStruct_'+side);
+    if (st) st.style.display = (v===1) ? 'flex' : 'none';
+    if (v===0) asMetrics(_asEntry.def).forEach(function(m){ var c=document.getElementById('asStruct_'+side+'_'+m.key); if(c) c.checked=false; });
+  };
+
+  // best of up to 3 numeric trials for one side (max if higher-is-better, min otherwise)
+  function asBestForSide(def, side){
+    var vals = [];
+    for (var i=1;i<=3;i++){
+      var el = document.getElementById('asTrial_'+side+'_'+i);
+      if (!el) continue;
+      var n = parseFloat(String(el.value).replace(',','.'));
+      if (isFinite(n)) vals.push(n);
+    }
+    if (!vals.length) return null;
+    return (def.higher_is_better === false) ? Math.min.apply(null, vals) : Math.max.apply(null, vals);
+  }
+
+  // current value for a side across all value_types (numeric best / binary / score)
+  function asValueForSide(def, side){
+    if (def.value_type === 'binary') return (_asEntry && _asEntry.binary[side] != null) ? _asEntry.binary[side] : null;
+    if (def.value_type === 'score'){
+      var el = document.getElementById('asScore_'+side);
+      if (!el) return null;
+      var n = parseFloat(String(el.value).replace(',','.'));
+      return isFinite(n) ? n : null;
+    }
+    return asBestForSide(def, side);
+  }
+
+  function openAssessmentEntry(){
+    var t = _openTest;
+    if (!t || !t._def){ return; }
+    var def = t._def;
+    _asEntry = { def: def, sides: asSides(def), binary: {}, flags: {}, sameDay: {} };
+    document.getElementById('asEntryTitle').textContent = testLabel(t);
+    document.getElementById('asEntrySub').textContent   = (def.unit || '') + (def.bilateral ? ' · L/R' : '');
+    renderAssessmentForm(def);
+    document.getElementById('asEntryFeedback').innerHTML =
+      '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.enter_values_to_see','Enter values to see analysis'))+'</div>';
+    document.getElementById('asEntryOvl').classList.add('is-open');
+  }
+  function closeAssessmentEntry(){ document.getElementById('asEntryOvl').classList.remove('is-open'); }
+
+  function renderAssessmentForm(def){
+    var opts = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name+' '+p.last_name)+'</option>'; }).join('');
+    var head = '<div class="ev-frow"><label class="ev-fl">'+esc(tt('evaluations.player','Player'))+'</label>'
+      + '<select id="asPlayer" class="ev-finput" onchange="onAsPlayerChange()" required>'
+      + '<option value="">'+esc(tt('evaluations.select_player','Select player…'))+'</option>'+opts+'</select></div>'
+      + '<div class="ev-f2">'
+      +   '<div class="ev-frow"><label class="ev-fl">'+esc(tt('common.date','Date'))+'</label>'
+      +     '<input id="asDate" type="date" class="ev-finput" value="'+evToday()+'" onchange="onAsPlayerChange()" required></div>'
+      +   (def.family === 'isometric'
+        ? '<div class="ev-frow"><label class="ev-fl">'+esc(tt('evaluations.bodyweight_kg','Bodyweight'))+' <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(kg · '+esc(tt('common.optional','optional'))+')</span></label>'
+          + '<input id="asBw" type="number" step="0.1" min="20" max="200" class="ev-finput" placeholder="—"></div>'
+        : '')
+      + '</div>';
+
+    var mets = asMetrics(def), primary = asPrimary(def);
+    var body = '';
+    _asEntry.sides.forEach(function(s){
+      var head2 = def.bilateral ? '<div class="pa-section" style="margin-top:14px">'+esc(asSideLabel(s))+'</div>' : '<div class="pa-section" style="margin-top:14px">'+esc(tt('evaluations.result','Result'))+'</div>';
+      var field = '';
+      if (def.value_type === 'flags'){
+        // Modified Thomas: +/− per leg, then which structures are positive.
+        field = '<div class="ev-frow"><div style="display:inline-flex;gap:6px">'
+          + '<button type="button" id="asFlag_'+s+'_1" onclick="asSetFlag(\''+s+'\',1)" class="cm-btn is-outline is-sm">'+esc(tt('evaluations.positive','Positive (+)'))+'</button>'
+          + '<button type="button" id="asFlag_'+s+'_0" onclick="asSetFlag(\''+s+'\',0)" class="cm-btn is-outline is-sm">'+esc(tt('evaluations.negative','Negative (−)'))+'</button>'
+          + '</div></div>'
+          + '<div id="asFlagStruct_'+s+'" style="display:none;flex-wrap:wrap;gap:10px;margin-top:6px">'
+          + mets.map(function(m){ return '<label style="display:inline-flex;align-items:center;gap:5px;font:500 12px var(--cm-font-sans);cursor:pointer"><input type="checkbox" id="asStruct_'+s+'_'+m.key+'"> '+esc(m.label||m.key)+'</label>'; }).join('')
+          + '</div>';
+      } else if (def.value_type === 'binary'){
+        field = '<div class="ev-frow"><div style="display:inline-flex;gap:6px">'
+          + '<button type="button" id="asBin_'+s+'_1" onclick="asSetBinary(\''+s+'\',1)" class="cm-btn is-outline is-sm">+</button>'
+          + '<button type="button" id="asBin_'+s+'_0" onclick="asSetBinary(\''+s+'\',0)" class="cm-btn is-outline is-sm">−</button>'
+          + '</div></div>';
+      } else if (def.value_type === 'score'){
+        field = '<div class="ev-frow"><div class="pt-field"><div class="input-wrap">'
+          + '<input id="asScore_'+s+'" type="number" step="1"'
+          + (def.min_value!=null?' min="'+def.min_value+'"':'') + (def.max_value!=null?' max="'+def.max_value+'"':'')
+          + ' class="ev-finput" placeholder="—" oninput="asEntryRecalc()"><span class="unit">'+esc(def.unit||'')+'</span></div></div></div>';
+      } else {
+        // Primary metric: up to 3 trials → best.
+        var trials = '<div class="ev-f2" style="margin-bottom:0">';
+        for (var i=1;i<=3;i++){
+          trials += '<div class="pt-field"><div class="input-wrap"><input id="asTrial_'+s+'_'+i+'" type="number" step="0.1" class="ev-finput" placeholder="'+esc(tt('evaluations.trial','Trial'))+' '+i+'" oninput="asEntryRecalc()"><span class="unit">'+esc(primary.unit||def.unit||'')+'</span></div></div>';
+        }
+        trials += '</div>';
+        field = trials + '<div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px">'+esc(tt('evaluations.best_of_trials','Best'))+': <span id="asBest_'+s+'">—</span></div>';
+        // Additional metrics (e.g. VALD RFD / impulse) → one input each.
+        mets.forEach(function(m){
+          if (m === primary) return;
+          field += '<div class="ev-frow" style="margin-top:6px"><label class="ev-fl" style="font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">'+esc(m.label||m.key)+'</label>'
+            + '<div class="pt-field"><div class="input-wrap"><input id="asMetric_'+esc(m.key)+'_'+s+'" type="number" step="0.1" class="ev-finput" placeholder="—" oninput="asEntryRecalc()"><span class="unit">'+esc(m.unit||'')+'</span></div></div></div>';
+        });
+      }
+      body += head2 + field;
+    });
+
+    var notes = '<div class="ev-frow" style="margin-top:14px"><label class="ev-fl">'+esc(tt('evaluations.notes','Notes'))+'</label>'
+      + '<textarea id="asNotes" class="ev-finput" rows="2" style="resize:vertical"></textarea></div>';
+
+    document.getElementById('asEntryForm').innerHTML = head + body + notes;
+  }
+
+  function asSetBinary(side, v){
+    if (!_asEntry) return;
+    _asEntry.binary[side] = v;
+    ['1','0'].forEach(function(k){
+      var b = document.getElementById('asBin_'+side+'_'+k);
+      if (b) b.classList.toggle('is-primary', String(v)===k);
+    });
+    asEntryRecalc();
+  }
+
+  async function onAsPlayerChange(){
+    if (!_asEntry) return;
+    var pid = document.getElementById('asPlayer') && document.getElementById('asPlayer').value;
+    var date = document.getElementById('asDate') && document.getElementById('asDate').value;
+    // prefill bodyweight with the player's most recent force_tests.bodyweight_kg (fallback players.weight)
+    if (pid && _clubId){
+      try {
+        var bwEl = document.getElementById('asBw');
+        if (bwEl && !bwEl.value){
+          var bwq = await window.sb.from('force_tests').select('bodyweight_kg, test_date')
+            .eq('club_id', _clubId).eq('player_id', pid).not('bodyweight_kg','is',null)
+            .order('test_date', { ascending:false }).limit(1);
+          var bw = (bwq.data && bwq.data[0] && bwq.data[0].bodyweight_kg) || null;
+          if (bw == null){ var pq = await window.sb.from('players').select('weight').eq('id', pid).single(); bw = pq.data && pq.data.weight; }
+          if (bw != null) bwEl.value = bw;
+        }
+      } catch(e){}
+    }
+    // load this player's OTHER assessment values on the same date (for derived ratios)
+    _asEntry.sameDay = {};
+    if (pid && date && _clubId){
+      try {
+        var tq = window.sb.from('force_tests').select('id, test_type').eq('club_id', _clubId).eq('player_id', pid).eq('test_date', date);
+        if (_teamId) tq = tq.eq('team_id', _teamId);
+        var tr = await tq;
+        var tests = tr.data || [];
+        if (tests.length){
+          var typeToKey = {}, keyToMetric = {};
+          _assessDefs.forEach(function(d){ typeToKey[d.test_type] = d.key; keyToMetric[d.key] = d.metric_key; });
+          var ids = tests.map(function(x){ return x.id; });
+          var mr = await window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', ids);
+          var idToKey = {}; tests.forEach(function(x){ idToKey[x.id] = typeToKey[x.test_type]; });
+          (mr.data || []).forEach(function(m){
+            var k = idToKey[m.test_id]; if (!k) return;
+            // only the def's own metric — a VALD import can carry peak_force + rfd + impulse
+            // for the same test; feeding RFD into a force ratio would corrupt it
+            if (keyToMetric[k] && m.metric_key && m.metric_key !== keyToMetric[k]) return;
+            (_asEntry.sameDay[k] = _asEntry.sameDay[k] || {})[m.side || 'NA'] = m.value;
+          });
+        }
+      } catch(e){}
+    }
+    asEntryRecalc();
+  }
+
+  function asStatusChip(res){
+    if (!res || res.status === 'none') return '';
+    var col = res.status === 'alert' ? 'var(--cm-danger)' : res.status === 'watch' ? 'var(--cm-warning,#B45309)' : 'var(--cm-success)';
+    var lbl = tt('evaluations.status_'+res.status, res.status);
+    var tip = window.assessNorms ? window.assessNorms.explain(res) : '';
+    return '<span title="'+esc(tip)+'" style="display:inline-flex;align-items:center;gap:5px;font:600 11px/1 var(--cm-font-sans);color:'+col+'"><span style="width:7px;height:7px;border-radius:50%;background:'+col+'"></span>'+esc(lbl)+'</span>';
+  }
+
+  function asEntryRecalc(){
+    if (!_asEntry || !window.assessNorms) return;
+    var def = _asEntry.def, AN = window.assessNorms;
+    var vals = {};
+    _asEntry.sides.forEach(function(s){
+      var v = asValueForSide(def, s);
+      vals[s] = v;
+      var bestEl = document.getElementById('asBest_'+s);
+      if (bestEl) bestEl.textContent = (v==null ? '—' : fmtVal(v));
+    });
+
+    var rows = [];
+    // per-side absolute/baseline status
+    _asEntry.sides.forEach(function(s){
+      if (vals[s] == null) return;
+      var res = AN.statusFor(def, { value: vals[s] });
+      var chip = asStatusChip(res);
+      var side = def.bilateral ? esc(asSideLabel(s))+': ' : '';
+      rows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)"><span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">'+side+esc(fmtVal(vals[s]))+' '+esc(def.unit||'')+'</span>'+(chip||'<span style="font:500 11px/1;color:var(--cm-fg-faint)">'+esc(tt('evaluations.no_flag','—'))+'</span>')+'</div>');
+    });
+
+    // asymmetry
+    if (def.bilateral && vals.L != null && vals.R != null){
+      var asy = AN.asymStatus(def, vals.L, vals.R);
+      rows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)"><span style="font:500 12px/1;color:var(--cm-fg-muted)">'+esc(tt('evaluations.asym_pct','Asymmetry'))+': '+esc(asy.pct.toFixed(0))+'% ('+esc(asy.higherSide||'—')+')</span>'+asStatusChip(asy)+'</div>');
+    }
+
+    // derived ratios: merge the live test into same-day values
+    var byKey = {};
+    Object.keys(_asEntry.sameDay).forEach(function(k){ byKey[k] = Object.assign({}, _asEntry.sameDay[k]); });
+    byKey[def.key] = {};
+    _asEntry.sides.forEach(function(s){ if (vals[s] != null) byKey[def.key][s] = vals[s]; });
+    var rs = AN.ratios(byKey);
+    rs.forEach(function(r){
+      rows.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)"><span style="font:500 12px/1;color:var(--cm-fg-muted)" title="'+esc(r.reference||'')+'">'+esc(tt('evaluations.ratio_'+r.key, r.key))+(r.angle?' '+esc(r.angle):'')+' '+(r.side&&r.side!=='NA'?esc(r.side)+' ':'')+esc((Math.round(r.value*100)/100).toFixed(2))+'</span>'+asStatusChip({ status:r.status, detail:'', reference:r.reference })+'</div>');
+    });
+
+    var fb = document.getElementById('asEntryFeedback');
+    fb.innerHTML = rows.length ? rows.join('') : '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.enter_values_to_see','Enter values to see analysis'))+'</div>';
+  }
+
+  async function saveAssessmentEntry(){
+    if (!_asEntry || !_clubId) return;
+    var def = _asEntry.def;
+    var pid  = document.getElementById('asPlayer').value;
+    var date = document.getElementById('asDate').value;
+    var info = document.getElementById('asEntryFootInfo');
+    if (!pid || !date){ info.textContent = tt('evaluations.fill_required_to_save','Fill in all required fields to save'); info.style.color='var(--cm-danger)'; return; }
+
+    // collect metric rows (skip empty sides)
+    var metricRows = [];
+    if (def.value_type === 'flags'){
+      // Modified Thomas: one 0/1 row per structure per assessed leg (+ → checked=1, − → all 0).
+      var fmets = asMetrics(def);
+      _asEntry.sides.forEach(function(s){
+        var st = _asEntry.flags ? _asEntry.flags[s] : null;
+        if (st == null) return;                       // leg not assessed
+        fmets.forEach(function(m){
+          var chk = document.getElementById('asStruct_'+s+'_'+m.key);
+          var val = (st === 1 && chk && chk.checked) ? 1 : 0;
+          metricRows.push({ metric_key: m.key, value: val, side: (s==='NA'?null:s), unit: m.unit || def.unit });
+        });
+      });
+    } else {
+      var primary = asPrimary(def);
+      _asEntry.sides.forEach(function(s){
+        var v = asValueForSide(def, s);   // primary (best-of-trials / binary / score)
+        if (v != null) metricRows.push({ metric_key: primary.key || def.metric_key, value: v, side: (s==='NA'?null:s), unit: primary.unit || def.unit });
+        // additional metrics (single input each)
+        asMetrics(def).forEach(function(m){
+          if (m === primary) return;
+          var el = document.getElementById('asMetric_'+m.key+'_'+s);
+          if (!el) return;
+          var n = parseFloat(String(el.value).replace(',','.'));
+          if (isFinite(n)) metricRows.push({ metric_key: m.key, value: n, side: (s==='NA'?null:s), unit: m.unit || '' });
+        });
+      });
+    }
+    if (!metricRows.length){ info.textContent = tt('evaluations.enter_at_least_one','Enter at least one value'); info.style.color='var(--cm-danger)'; return; }
+
+    var bwEl = document.getElementById('asBw');
+    var bw = bwEl && bwEl.value ? parseFloat(bwEl.value) : null;
+    var notes = document.getElementById('asNotes').value || null;
+
+    var uid = null, uname = null;
+    try { var u = await window.sb.auth.getUser(); uid = u.data && u.data.user ? u.data.user.id : null; } catch(e){}
+    try { var prof = await window.getProfile(); uname = prof && prof.full_name || null; } catch(e){}
+
+    var btn = document.getElementById('asEntrySaveBtn');
+    var btnHtml = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    try {
+      // dedup: delete any existing test with the same (player, test_type, date) for this club/team, then insert
+      var exQ = window.sb.from('force_tests').select('id').eq('club_id', _clubId).eq('player_id', pid)
+        .eq('test_type', def.test_type).eq('test_date', date);
+      if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');   // include legacy NULL-team rows in the collide set
+      var ex = await exQ;
+      if (ex.data && ex.data.length){
+        var delErr = (await window.sb.from('force_tests').delete().in('id', ex.data.map(function(x){return x.id;}))).error;
+        if (delErr) throw delErr;
+      }
+      var ins = await window.sb.from('force_tests').insert({
+        club_id: _clubId, team_id: _teamId || null, player_id: pid,
+        test_type: def.test_type, test_date: date, bodyweight_kg: bw,
+        source: 'manual', uploaded_by: uid, uploaded_by_name: uname, notes: notes
+      }).select('id').single();
+      if (ins.error) throw ins.error;
+      var tid = ins.data.id;
+      var mErr = (await window.sb.from('force_test_metrics').insert(
+        metricRows.map(function(m){ return { test_id: tid, club_id: _clubId, metric_key: m.metric_key, value: m.value, side: m.side, unit: m.unit }; })
+      )).error;
+      if (mErr) throw mErr;
+
+      closeAssessmentEntry();
+      if (typeof reloadEvalViews === 'function') await reloadEvalViews();
+      if (typeof loadStatuses === 'function') loadStatuses();
+    } catch(e){
+      console.warn('[ev2] assessment entry save failed', e);
+      info.textContent = tt('evaluations.save_failed','Save failed'); info.style.color='var(--cm-danger)';
+    } finally {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+    }
+  }
+
+  function renderPhysForm(cfg) {
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
+    const playerSel = `
+      <div class="ev-frow"><label class="ev-fl">${esc(tt('evaluations.player','Player'))}</label>
+        <select id="paPlayer" class="ev-finput" onchange="onPaPlayerChange()" required>
+          <option value="">${esc(tt('evaluations.select_player','Select player…'))}</option>${opts}
+        </select></div>
+      <div class="ev-frow"><label class="ev-fl">${esc(tt('common.date','Date'))}</label>
+        <input id="paDate" type="date" class="ev-finput" value="${cmToday()}" required></div>`;
+
+    let specificFields = '';
+
+    if (cfg.key === 'ift') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">VIFT <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paVift" type="number" step="0.5" min="10" max="24" class="ev-finput" placeholder="e.g. 19.0" oninput="calcIFT()"><span class="unit">km/h</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Gender</label>
+            <select id="paGender" class="ev-finput" onchange="calcIFT()">
+              <option value="M">Male</option><option value="F">Female</option>
+            </select></div>
+        </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Age <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from DOB)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paAge" type="number" min="15" max="55" step="1" class="ev-finput" placeholder="—" oninput="calcIFT()"><span class="unit">yrs</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Weight <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paWeight" type="number" min="40" max="150" step="0.5" class="ev-finput" placeholder="—" oninput="calcIFT()"><span class="unit">kg</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'tt1600') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Finish time <span style="color:var(--cm-danger)">*</span></label>
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="pt-field"><div class="input-wrap"><input id="paTTmin" type="number" min="3" max="20" step="1" class="ev-finput" placeholder="min" oninput="calc1600m()"><span class="unit">min</span></div></div>
+            <div class="pt-field"><div class="input-wrap"><input id="paTTsec" type="number" min="0" max="59" step="1" class="ev-finput" placeholder="sec" oninput="calc1600m()"><span class="unit">s</span></div></div>
+          </div></div>`;
+
+    } else if (cfg.key === 'vbt') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label>
+          <select id="paExercise" class="ev-finput" onchange="onVBTExerciseChange()">
+            <option value="Back Squat"${cfg.exercise==='Back Squat'?' selected':''}>Back Squat</option>
+            <option value="Bench Press"${cfg.exercise==='Bench Press'?' selected':''}>Bench Press</option>
+            <option value="Hip Thrust"${cfg.exercise==='Hip Thrust'?' selected':''}>Hip Thrust</option>
+            <option value="Deadlift">Deadlift</option>
+            <option value="Military Press">Military Press</option>
+            <option value="Bench Pull">Bench Pull</option>
+            <option value="Romanian Deadlift">Romanian Deadlift</option>
+            <option value="Pull-up">Pull-up</option>
+          </select></div>
+        <div class="pa-section" style="margin-top:14px">Load / velocity profile <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(min 2 loads · 2-point method)</span></div>
+        <div style="display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;margin-bottom:6px;padding:0 4px">
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Set</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Load (kg)</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Best VMP (m/s)</span>
+          <span></span>
+        </div>
+        <div id="vbtRowsContainer" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px"></div>
+        <button type="button" class="pt-add-sprint" onclick="addVBTRow()"><i class="ti ti-plus"></i> Add load</button>
+        <div class="pa-section" style="margin-top:14px">Import from encoder (CSV)</div>
+        <div id="vbtCsvDrop" style="border:1.5px dashed var(--cm-border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          <i class="ti ti-upload" style="font-size:18px;display:block;margin-bottom:4px"></i>
+          Drop encoder CSV here or <span style="color:var(--cm-accent);text-decoration:underline">browse</span>
+          <div style="font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:4px">load &amp; velocity columns · any VBT encoder export</div>
+        </div>
+        <input id="vbtCsvFile" type="file" accept=".csv,.tsv,text/csv" style="display:none">
+        <div id="vbtCsvMap" style="display:none;margin-top:8px">
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="ev-frow"><label class="ev-fl">Load column</label>
+              <select id="vbtCsvLoadCol" class="ev-finput" onchange="applyVBTCsvImport()"></select></div>
+            <div class="ev-frow"><label class="ev-fl">Velocity column</label>
+              <select id="vbtCsvVelCol" class="ev-finput" onchange="applyVBTCsvImport()"></select></div>
+          </div>
+          <div id="vbtCsvSummary" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px"></div>
+        </div>`;
+
+    } else if (cfg.key === 'orm') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label>
+          <select id="pa1RMExercise" class="ev-finput" onchange="on1RMExerciseChange()">
+            <option value="Squat">Squat</option>
+            <option value="Bench Press"${cfg.exercise==='Bench Press'?' selected':''}>Bench Press</option>
+            <option value="Hip Thrust">Hip Thrust</option>
+            <option value="Deadlift">Deadlift</option>
+            <option value="Military Press">Military Press</option>
+            <option value="Romanian Deadlift">Romanian Deadlift</option>
+            <option value="Pull-up">Pull-up</option>
+            <option value="Nordic Curl">Nordic Curl</option>
+            <option value="__custom__">Other (custom)…</option>
+          </select>
+          <input id="pa1RMCustom" type="text" class="ev-finput" placeholder="Custom exercise name" data-i18n-ph="evaluations.orm_custom_ex_ph" oninput="on1RMExerciseChange()" style="display:none;margin-top:8px"></div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Weight lifted <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="pa1RMkg" type="number" step="0.5" min="5" max="400" class="ev-finput" placeholder="kg" oninput="calc1RM_modal()"><span class="unit">kg</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Reps completed <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="pa1RMreps" type="number" step="1" min="1" max="30" class="ev-finput" placeholder="reps" oninput="calc1RM_modal()"><span class="unit">reps</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'fms') {
+      const sel03 = (id, def=3) => `<select id="${id}" class="ev-finput" style="height:32px" onchange="calcFMS()">
+        <option value="3"${def===3?' selected':''}>3 — Normal</option>
+        <option value="2"${def===2?' selected':''}>2 — Con compensación</option>
+        <option value="1"${def===1?' selected':''}>1 — No puede</option>
+        <option value="0">0 — Dolor / No realiza</option></select>`;
+      const rowLR = (label, idL, idR) => `
+        <div style="display:grid;grid-template-columns:160px 1fr 1fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)">
+          <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${label}</label>
+          <div>${sel03(idL)} <span style="font:500 9.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);display:block;margin-top:2px;text-align:center">Izq.</span></div>
+          <div>${sel03(idR)} <span style="font:500 9.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);display:block;margin-top:2px;text-align:center">Der.</span></div>
+        </div>`;
+      const rowSingle = (label, id) => `
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)">
+          <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${label}</label>
+          ${sel03(id)}
+        </div>`;
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Tests (escala 0–3)</div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:4px 12px 8px">
+          ${rowSingle('Deep Squat','paFMSds')}
+          ${rowLR('Hurdle Step','paFMShsL','paFMShsR')}
+          ${rowLR('In-Line Lunge','paFMSilL','paFMSilR')}
+          ${rowLR('Shoulder Mobility','paFMSsmL','paFMSsmR')}
+          ${rowLR('Active SLR','paFMSaslrL','paFMSaslrR')}
+          ${rowSingle('Trunk Stability Push-Up','paFMStsp')}
+          ${rowLR('Rotary Stability','paFMSrsL','paFMSrsR')}
+        </div>`;
+
+    } else if (cfg.key === 'ankle') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Wall-to-toe distance (cm)</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Left</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paAnkleL" type="number" step="0.5" min="0" max="30" class="ev-finput" placeholder="cm" oninput="calcAnkle()"><span class="unit">cm</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Right</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paAnkleR" type="number" step="0.5" min="0" max="30" class="ev-finput" placeholder="cm" oninput="calcAnkle()"><span class="unit">cm</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'hiprot') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Degrees · Internal rotation (IR)</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">IR — Left</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHipIRL" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">IR — Right</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHipIRR" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
+        </div>
+        <div class="pa-section">Degrees · External rotation (ER)</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">ER — Left</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHipERL" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">ER — Right</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHipERR" type="number" step="1" min="0" max="90" class="ev-finput" placeholder="°" oninput="calcHipRot()"><span class="unit">°</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'skinfold') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Configuración</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Método</label>
+            <select id="paSkinfoldMethod" class="ev-finput" onchange="onSkinfoldMethodChange()">
+              <option value="jp3">Jackson &amp; Pollock 3 sitios</option>
+              <option value="jp7">Jackson &amp; Pollock 7 sitios</option>
+              <option value="dw4">Durnin &amp; Womersley 4 sitios</option>
+            </select></div>
+          <div class="ev-frow"><label class="ev-fl">Género</label>
+            <select id="paSkinfoldGender" class="ev-finput" onchange="onSkinfoldMethodChange()">
+              <option value="M">Masculino</option><option value="F">Femenino</option>
+            </select></div>
+        </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Edad <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paSkinfoldAge" type="number" min="15" max="80" step="1" class="ev-finput" placeholder="años" oninput="calcSkinfold()"><span class="unit">años</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Peso <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(opcional)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paSkinfoldWeight" type="number" min="30" max="200" step="0.5" class="ev-finput" placeholder="kg" oninput="calcSkinfold()"><span class="unit">kg</span></div></div></div>
+        </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Altura <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(BMI · somatotipo)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paSkinfoldHeight" type="number" min="120" max="230" step="0.5" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          <div class="ev-frow"></div>
+        </div>
+        <div class="pa-section">Pliegues cutáneos (mm)</div>
+        <div id="sfFoldsArea"></div>
+        <div class="pa-section" style="cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none" onclick="var b=document.getElementById('paAnthroAdvanced');var i=this.querySelector('i');if(b){var open=b.style.display==='none';b.style.display=open?'':'none';if(i)i.className=open?'ti ti-chevron-down':'ti ti-chevron-right';}"><i class="ti ti-chevron-right"></i> Antropometría avanzada (opcional)</div>
+        <div id="paAnthroAdvanced" style="display:none">
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Cintura <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(RFM)</span></label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroWaist" type="number" min="40" max="200" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Perímetro brazo flex. <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(somatotipo)</span></label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroArmGirth" type="number" min="15" max="60" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Perímetro pantorrilla</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroCalfGirth" type="number" min="20" max="60" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Diámetro húmero</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroHumerus" type="number" min="4" max="12" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Diámetro fémur</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paAnthroFemur" type="number" min="6" max="14" step="0.1" class="ev-finput" placeholder="cm" oninput="calcSkinfold()"><span class="unit">cm</span></div></div></div>
+            <div class="ev-frow"><label class="ev-fl">Pliegue supraespinal</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paSF_supraspinal" type="number" min="1" max="80" step="0.1" class="ev-finput" placeholder="mm" oninput="calcSkinfold()"><span class="unit">mm</span></div></div></div>
+          </div>
+          <div class="ev-f2">
+            <div class="ev-frow"><label class="ev-fl">Pliegue pantorrilla</label>
+              <div class="pt-field"><div class="input-wrap"><input id="paSF_calf" type="number" min="1" max="80" step="0.1" class="ev-finput" placeholder="mm" oninput="calcSkinfold()"><span class="unit">mm</span></div></div></div>
+            <div class="ev-frow"></div>
+          </div>
+        </div>`;
+
+    } else if (cfg.key === 'fvprofile') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Import from encoder (CSV)</div>
+        <div id="fvCsvDrop" style="border:1.5px dashed var(--cm-border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          <i class="ti ti-upload" style="font-size:18px;display:block;margin-bottom:4px"></i>
+          Drop encoder CSV here or <span style="color:var(--cm-accent);text-decoration:underline">browse</span>
+          <div style="font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:4px">load &amp; velocity columns · any VBT encoder export</div>
+        </div>
+        <input id="fvCsvFile" type="file" accept=".csv,.tsv,text/csv" style="display:none">
+        <div id="fvCsvMap" style="display:none;margin-top:8px">
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="ev-frow"><label class="ev-fl">Load column</label>
+              <select id="fvCsvLoadCol" class="ev-finput" onchange="applyFVCsvImport()"></select></div>
+            <div class="ev-frow"><label class="ev-fl">Velocity column</label>
+              <select id="fvCsvVelCol" class="ev-finput" onchange="applyFVCsvImport()"></select></div>
+          </div>
+          <div id="fvCsvSummary" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px"></div>
+        </div>
+        <div class="pa-section" style="margin-top:14px">Pares Carga / VMP</div>
+        <div style="display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;margin-bottom:6px;padding:0 4px">
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Set</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Carga (kg)</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">VMP (m/s)</span>
+          <span></span>
+        </div>
+        <div id="fvRowsContainer" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px"></div>
+        <button type="button" class="pt-add-sprint" onclick="addFVRow()"><i class="ti ti-plus"></i> Agregar carga</button>
+        <div class="ev-frow" style="margin-top:12px">
+          <label class="ev-fl">h_SJ — altura salto sin carga <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(opcional · para perfil óptimo)</span></label>
+          <div class="pt-field"><div class="input-wrap"><input id="paFVhSJ" type="number" step="0.5" min="5" max="100" class="ev-finput" placeholder="cm" oninput="calcFVProfile()"><span class="unit">cm</span></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'hfvp') {
+      const distRows = [5, 10, 20, 30, 40].map(d => `
+        <div class="ev-frow" style="margin-bottom:0">
+          <label class="ev-fl">${d} m</label>
+          <div class="pt-field"><div class="input-wrap"><input id="paHfvp${d}" type="number" step="0.01" min="0.5" max="12" class="ev-finput" placeholder="s" oninput="calcHFVP()"><span class="unit">s</span></div></div>
+        </div>`).join('');
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Athlete</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Mass <span style="color:var(--cm-danger)">*</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHfvpMass" type="number" step="0.1" min="30" max="150" class="ev-finput" placeholder="kg" oninput="calcHFVP()"><span class="unit">kg</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Height <span style="color:var(--cm-danger)">*</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHfvpHeight" type="number" step="0.01" min="1.2" max="2.3" class="ev-finput" placeholder="m" oninput="calcHFVP()"><span class="unit">m</span></div></div></div>
+        </div>
+        <div class="pa-section" style="margin-top:14px">Split times <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(cumulative from start · min 4 · standard air 20°C, sea level)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px">${distRows}</div>`;
+    }
+
+    document.getElementById('paFormContent').innerHTML = playerSel + specificFields +
+      `<div class="ev-frow" style="margin-top:10px"><label class="ev-fl">Notes</label>
+        <textarea id="paNotes" class="ev-finput" rows="2" placeholder="Optional…"></textarea></div>`;
+
+    const playerEl = document.getElementById('paPlayer');
+    if (playerEl && selectedPlayerId) { playerEl.value = selectedPlayerId; onPaPlayerChange(); }
+    // Post-render init
+    if (cfg.key === 'fms') calcFMS();
+    if (cfg.key === 'skinfold') onSkinfoldMethodChange();
+    if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); initFVCsvImport(); }
+    if (cfg.key === 'hfvp') calcHFVP();
+    if (cfg.key === 'vbt') { for (let i = 0; i < 3; i++) addVBTRow(); initVBTCsvImport(); }
+  }
+
+  async function onPaPlayerChange() {
+    const pid = document.getElementById('paPlayer')?.value;
+    if (!pid || !_clubId) return;
+    const { data } = await window.sb.from('players')
+      .select('id, first_name, last_name, date_of_birth, weight, height, position')
+      .eq('id', pid).single();
+    _paPlayerData = data;
+    const cfg = _paCurrent?.cfg;
+    if (data && cfg?.key === 'ift') {
+      if (data.date_of_birth) {
+        const age = Math.floor((Date.now() - new Date(data.date_of_birth)) / (365.25 * 86400000));
+        const ageEl = document.getElementById('paAge');
+        if (ageEl && !ageEl.value) ageEl.value = age;
+      }
+      if (data.weight) {
+        const wEl = document.getElementById('paWeight');
+        if (wEl && !wEl.value) wEl.value = data.weight;
+      }
+      calcIFT();
+    }
+    if (data && cfg?.key === 'hfvp') {
+      if (data.weight) {
+        const mEl = document.getElementById('paHfvpMass');
+        if (mEl && !mEl.value) mEl.value = data.weight;
+      }
+      if (data.height) {
+        const hEl = document.getElementById('paHfvpHeight');
+        // players.height is stored in cm → convert to metres for the model
+        if (hEl && !hEl.value) hEl.value = data.height > 3 ? +(data.height / 100).toFixed(2) : data.height;
+      }
+      calcHFVP();
+    }
+    if (data && cfg?.key === 'skinfold') {
+      if (data.date_of_birth) {
+        const age = Math.floor((Date.now() - new Date(data.date_of_birth)) / (365.25 * 86400000));
+        const ageEl = document.getElementById('paSkinfoldAge');
+        if (ageEl && !ageEl.value) { ageEl.value = age; calcSkinfold(); }
+      }
+      if (data.weight) {
+        const wEl = document.getElementById('paSkinfoldWeight');
+        if (wEl && !wEl.value) { wEl.value = data.weight; calcSkinfold(); }
+      }
+      if (data.height) {
+        const hEl = document.getElementById('paSkinfoldHeight');
+        if (hEl && !hEl.value) { hEl.value = data.height; calcSkinfold(); }
+      }
+    }
+    // Load previous test history for this player
+    let testType = _paCurrent?.label;
+    if (cfg?.key === 'vbt') {
+      const ex = document.getElementById('paExercise')?.value || 'Back Squat';
+      testType = VBT_EVAL_TYPES[ex] || `VBT · ${ex.toLowerCase()}`;
+    }
+    if (cfg?.key === 'orm') testType = `1RM · ${get1RMExercise()}`;   // saves write per-exercise types, never bare '1RM'
+    if (testType) loadPaHistory(pid, testType);
+  }
+
+  async function loadPaHistory(pid, testType) {
+    if (!pid || !testType || !_clubId) return;
+    const { data } = await window.sb.from('evaluations')
+      .select('test_date, value, unit')
+      .eq('player_id', pid).eq('club_id', _clubId).eq('evaluation_type', testType)
+      .order('test_date', { ascending: false }).limit(5);
+    const histEl = document.getElementById('paHistory');
+    if (!histEl) return;
+    if (!data || !data.length) { histEl.innerHTML = ''; return; }
+    const rows = data.map((e, i) => {
+      const fmtDate = ftDateFull(String(e.test_date).slice(0, 10));
+      const prev = data[i + 1];
+      let dHtml = '';
+      if (prev) {
+        const d = +(e.value - prev.value).toFixed(2);
+        if (d > 0) dHtml = `<span style="color:var(--cm-success);font:600 11px/1 var(--cm-font-mono)">↑ +${d}</span>`;
+        else if (d < 0) dHtml = `<span style="color:var(--cm-danger);font:600 11px/1 var(--cm-font-mono)">↓ ${d}</span>`;
+        else dHtml = `<span style="color:var(--cm-fg-faint);font:600 11px/1 var(--cm-font-mono)">±0</span>`;
+      }
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--cm-border-soft)">
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1">${fmtDate}</span>
+        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${e.unit ? ' ' + esc(e.unit) : ''}</span>
+        ${dHtml}
+      </div>`;
+    }).join('');
+    histEl.innerHTML = `<div class="pa-section">Previous results · ${esc(testType)}</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:4px 12px">${rows}</div>`;
+  }
+
+  // ─── Calc: 30-15 IFT (Buchheit 2008) ───
+  function calcIFT() {
+    const vift   = parseFloat(document.getElementById('paVift')?.value);
+    const gender = document.getElementById('paGender')?.value || 'M';
+    const age    = parseFloat(document.getElementById('paAge')?.value);
+    const weight = parseFloat(document.getElementById('paWeight')?.value);
+    const resEl  = document.getElementById('paResults');
+    const zoneEl = document.getElementById('paZones');
+
+    if (!vift || vift < 10) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+tt('evaluations.enter_vift_analysis','Enter VIFT to see analysis')+'</div>';
+      return;
+    }
+
+    const G = gender === 'M' ? 1 : 2;
+    const hasAll = !isNaN(age) && !isNaN(weight);
+    let vo2max = null;
+    if (hasAll) vo2max = +(28.3 - 2.15*G - 0.741*age - 0.0357*weight + 0.0586*age*vift + 1.03*vift).toFixed(1);
+
+    let level, levelCls;
+    if (gender === 'M') {
+      if      (vift >= 19.5) { level = 'Elite / Professional'; levelCls = 'elite'; }
+      else if (vift >= 17.5) { level = 'Advanced';             levelCls = 'advanced'; }
+      else if (vift >= 15.5) { level = 'Intermediate';         levelCls = 'intermediate'; }
+      else                   { level = 'Developing';            levelCls = 'developing'; }
+    } else {
+      if      (vift >= 17.0) { level = 'Elite / Professional'; levelCls = 'elite'; }
+      else if (vift >= 15.0) { level = 'Advanced';             levelCls = 'advanced'; }
+      else if (vift >= 13.5) { level = 'Intermediate';         levelCls = 'intermediate'; }
+      else                   { level = 'Developing';            levelCls = 'developing'; }
+    }
+
+    const zones = [
+      { name:'Zone 1', desc:'Recovery',           lo:0.60, hi:0.65 },
+      { name:'Zone 2', desc:'Extensive aerobic',  lo:0.70, hi:0.75 },
+      { name:'Zone 3', desc:'Intensive aerobic',  lo:0.80, hi:0.85 },
+      { name:'Zone 4', desc:'Anaerobic threshold',lo:0.85, hi:0.90 },
+      { name:'Zone 5', desc:'VO₂max',             lo:0.95, hi:1.00 },
+      { name:'Zone 6', desc:'Anaerobic speed',    lo:1.05, hi:1.15 },
+    ];
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">VIFT</div><div class="pa-hero-val">${vift}<small>km/h</small></div></div>
+          ${vo2max !== null ? `<div><div class="pa-hero-label">VO₂max est.</div><div class="pa-hero-val">${vo2max}<small>ml/kg/min</small></div></div>` : ''}
+        </div>
+        <span class="pa-level-badge ${levelCls}">${level}</span>
+        ${!hasAll ? `<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:6px">${tt('evaluations.add_age_weight_vo2','Add age + weight above to compute VO₂max')}</div>` : ''}
+      </div>`;
+
+    const zoneRows = zones.map(z => `<tr>
+      <td><div class="pa-zone-name">${z.name}</div><div class="pa-zone-pct">${z.desc}</div></td>
+      <td>${Math.round(z.lo*100)}–${Math.round(z.hi*100)}% VIFT</td>
+      <td class="r">${(vift*z.lo).toFixed(1)}–${(vift*z.hi).toFixed(1)} km/h</td>
+    </tr>`).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Training zones · VIFT ${vift} km/h</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>% VIFT</th><th class="r">Speed</th></tr></thead>
+        <tbody>${zoneRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formula · Buchheit (2008)</div>
+      <div class="pt-formula" style="font-size:11px">
+        VO₂max = 28.3 − (2.15×G) − (0.741×A) − (0.0357×W)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (0.0586×A×VIFT) + (1.03×VIFT)
+        <span class="cit">G=1(M) / 2(F) · A=age · W=weight</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `VIFT ${vift} km/h · ${level}${vo2max ? ` · VO₂max ${vo2max} ml/kg/min` : ' · add age+weight for VO₂max'}`;
+  }
+
+  // ─── Calc: 1600m Time Trial ───
+  function calc1600m() {
+    const mins    = parseFloat(document.getElementById('paTTmin')?.value) || 0;
+    const secs    = parseFloat(document.getElementById('paTTsec')?.value) || 0;
+    const totalSec = mins * 60 + secs;
+    const resEl   = document.getElementById('paResults');
+    const zoneEl  = document.getElementById('paZones');
+
+    if (totalSec < 60) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+tt('evaluations.enter_time','Enter time to see analysis')+'</div>';
+      return;
+    }
+
+    const vAvg_ms   = 1600 / totalSec;
+    const dist12min = vAvg_ms * 720;
+    const vo2Cooper = (dist12min - 504.9) / 44.73;
+    const vo2Direct = 3.5 + 483 / (totalSec / 60);
+    const vo2max    = +((vo2Cooper + vo2Direct) / 2).toFixed(1);
+    const vAvgKmh   = +(vAvg_ms * 3.6).toFixed(2);
+    const paceSecKm = totalSec / 1.6;
+    const pm = Math.floor(paceSecKm / 60), ps = Math.round(paceSecKm % 60);
+    const paceStr = `${pm}:${String(ps).padStart(2, '0')}`;
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">VO₂max (avg)</div><div class="pa-hero-val">${vo2max}<small>ml/kg/min</small></div></div>
+          <div><div class="pa-hero-label">Pace</div><div class="pa-hero-val">${paceStr}<small>/km</small></div></div>
+        </div>
+        <div style="margin-top:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
+          Avg speed: ${vAvgKmh} km/h · 12-min equiv: ${Math.round(dist12min)} m
+        </div>
+      </div>`;
+
+    const zones = [
+      { name:'Recovery',    lo:0,    hi:0.60 },
+      { name:'Aerobic base',lo:0.60, hi:0.70 },
+      { name:'Tempo',       lo:0.70, hi:0.80 },
+      { name:'Threshold',   lo:0.80, hi:0.90 },
+      { name:'VO₂max',      lo:0.90, hi:1.00 },
+      { name:'Speed',       lo:1.00, hi:1.15 },
+    ];
+    const fp = (s) => { const m=Math.floor(s/60),sec=Math.round(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
+    const zoneRows = zones.map(z => {
+      const loKmh = (vAvg_ms * z.lo * 3.6).toFixed(1);
+      const hiKmh = (vAvg_ms * z.hi * 3.6).toFixed(1);
+      const loPaceSec = z.lo > 0 ? 3600 / (vAvg_ms * z.lo * 3.6) : 0;
+      const hiPaceSec = z.hi > 0 ? 3600 / (vAvg_ms * z.hi * 3.6) : 0;
+      const speedStr = z.lo === 0 ? `< ${hiKmh} km/h` : z.hi === 1.15 ? `> ${loKmh} km/h` : `${loKmh}–${hiKmh} km/h`;
+      const pStr     = z.lo === 0 ? `> ${fp(hiPaceSec)} /km` : z.hi === 1.15 ? `< ${fp(loPaceSec)} /km` : `${fp(hiPaceSec)}–${fp(loPaceSec)} /km`;
+      return `<tr><td><div class="pa-zone-name">${z.name}</div><div class="pa-zone-pct">${Math.round(z.lo*100)}–${Math.round(z.hi*100)}% vVO₂max</div></td><td>${speedStr}</td><td class="r">${pStr}</td></tr>`;
+    }).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Running zones · ${vAvgKmh} km/h avg</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>Speed</th><th class="r">Pace</th></tr></thead>
+        <tbody>${zoneRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formulas</div>
+      <div class="pt-formula" style="font-size:11px">
+        Cooper: VO₂max = (d₁₂ − 504.9) / 44.73<br>
+        Direct: VO₂max = 3.5 + 483 / t(min)<br>
+        <span class="cit">d₁₂ = velocity × 720 s · both averaged</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `VO₂max ${vo2max} ml/kg/min · ${paceStr}/km · ${vAvgKmh} km/h avg`;
+  }
+
+  // ─── Calc: VBT (González-Badillo) ───
+  // PURE load–velocity fit. pairs=[{load, vmp}] → { a, b, R2, r2, method, v1rm, est1RM, hasThreshold } or { error }.
+  // Single source of truth for VBT math, reused by the manual form and the bulk importer.
+  function fitVBTProfile(pairs, exercise) {
+    const pts = (pairs || []).filter(p => p && isFinite(p.load) && isFinite(p.vmp) && p.load > 0 && p.vmp > 0);
+    if (pts.length < 2) return { pairs: pts, error: 'few', n: pts.length };
+    const n = pts.length;
+    const sx = pts.reduce((s, p) => s + p.load, 0), sy = pts.reduce((s, p) => s + p.vmp, 0);
+    const sxy = pts.reduce((s, p) => s + p.load * p.vmp, 0), sx2 = pts.reduce((s, p) => s + p.load * p.load, 0);
+    const denom = n * sx2 - sx * sx;
+    if (denom === 0) return { pairs: pts, error: 'sameload', n };
+    const b = (n * sxy - sx * sy) / denom;     // slope (m/s per kg, negative on a valid profile)
+    const a = (sy - b * sx) / n;               // intercept = velocity at load 0
+    const method = n === 2 ? '2-point' : 'multi-point';
+    const ymean = sy / n;
+    const SStot = pts.reduce((s, p) => s + (p.vmp - ymean) ** 2, 0);
+    const SSres = pts.reduce((s, p) => s + (p.vmp - (a + b * p.load)) ** 2, 0);
+    const R2 = n === 2 ? 1 : (SStot > 0 ? +(1 - SSres / SStot).toFixed(3) : 0);   // 2 points → exact line
+    const hasThreshold = VBT_V1RM[exercise] !== undefined;
+    const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept, load at v=0)
+    const est1RM = b < 0 ? +(((v1rm - a) / b)).toFixed(1) : null;
+    return { pairs: pts, a, b, method, R2, r2: R2, n, v1rm, est1RM, hasThreshold };
+  }
+
+  // DOM wrapper: reads the .vbt-row inputs and delegates to fitVBTProfile. Keeps {kg,v} pairs for the chart.
+  function vbtFit() {
+    const domPairs = [...document.querySelectorAll('.vbt-row')].reduce((acc, r) => {
+      const kg = parseFloat(r.querySelector('.vbt-load')?.value);
+      const v = parseFloat(r.querySelector('.vbt-vmp')?.value);
+      if (!isNaN(kg) && !isNaN(v) && kg > 0 && v > 0) acc.push({ kg, v });
+      return acc;
+    }, []);
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const profile = fitVBTProfile(domPairs.map(p => ({ load: p.kg, vmp: p.v })), exercise);
+    if (profile.error) return { pairs: domPairs, error: profile.error };
+    return { ...profile, pairs: domPairs };   // override with {kg,v} pairs used by the SVG below
+  }
+
+  // Shared VBT drawing — renders the FULL load-velocity viz (line + colour zones +
+  // KPIs + work-zones load prescription + formula) into one host element, exactly
+  // as the modal does. profile = { a, b, r2, est1RM, v1rm, exercise, method, pairs:[{load,vmp}] }.
+  // Returns a one-line footer summary string. Used by both calcVBT (modal) and renderEvalIndiv.
+  function renderVBTProfileChart(profile, hostEl) {
+    if (!hostEl || !profile) return '';
+    const pairs = (profile.pairs || []).map(p => ({ kg: +p.load, v: +p.vmp }));
+    const a = +profile.a, b = +profile.b, R2 = profile.r2, v1rm = +profile.v1rm, est1RM = +profile.est1RM;
+    const method = profile.method || '', exercise = profile.exercise || '';
+    const hasThreshold = (typeof VBT_V1RM !== 'undefined') && VBT_V1RM[exercise] !== undefined;
+    const validSlope = b < 0;
+    const eqStr = `v = ${a.toFixed(3)} ${b < 0 ? '−' : '+'} ${Math.abs(b).toFixed(4)}·Load`;
+
+    // ── Velocity zones (shared palette: warm = force → cool = speed) ──
+    const VBT_ZONES=[
+      { name:'Maximum strength', range:'≤ 0.35 m/s', lo:0,    hi:0.35, vt:0.28, color:'#DC2626' },
+      { name:'Strength',         range:'0.35–0.50',  lo:0.35, hi:0.50, vt:0.43, color:'#EA580C' },
+      { name:'Strength-power',   range:'0.50–0.75',  lo:0.50, hi:0.75, vt:0.63, color:'#CA8A04' },
+      { name:'Power',            range:'0.75–1.00',  lo:0.75, hi:1.00, vt:0.88, color:'#16A34A' },
+      { name:'Speed',            range:'> 1.00',     lo:1.00, hi:99,   vt:1.15, color:'#2563EB' },
+    ];
+
+    // ── SVG chart: X = Load (kg), Y = Velocity (m/s) ──
+    const W=520,H=300,pl=58,pr=16,pt=22,pb=40;
+    const gW=W-pl-pr, gH=H-pt-pb;
+    const dataMaxX=Math.max(...pairs.map(p=>p.kg));
+    const dataMaxY=Math.max(...pairs.map(p=>p.v));
+    const maxX_ax=Math.max(est1RM&&est1RM>0?est1RM:0, dataMaxX)*1.1;
+    const maxY_ax=Math.max(a>0?a:0, dataMaxY)*1.1;
+    const toX=L=>pl+(L/maxX_ax)*gW, toY=v=>pt+gH-(v/maxY_ax)*gH;
+    // Horizontal colour bands per velocity zone (behind everything)
+    let bandsSvg='';
+    VBT_ZONES.forEach(z=>{
+      const topV=Math.min(z.hi,maxY_ax), botV=Math.min(z.lo,maxY_ax);
+      if (topV<=botV) return;
+      const yTop=toY(topV), h=toY(botV)-yTop;
+      bandsSvg+=`<rect x="${pl}" y="${yTop.toFixed(1)}" width="${gW}" height="${h.toFixed(1)}" fill="${z.color}" opacity="0.10"/>`;
+      if (h>=15) bandsSvg+=`<text x="${pl+5}" y="${(yTop+h/2+3).toFixed(1)}" font-size="9" font-weight="600" fill="${z.color}" opacity="0.85">${z.name}</text>`;
+    });
+    let gridSvg='';
+    for (let i=0;i<=4;i++){ const L=maxX_ax*i/4, x=toX(L);
+      gridSvg+=`<line x1="${x.toFixed(0)}" y1="${pt}" x2="${x.toFixed(0)}" y2="${pt+gH}" stroke="var(--cm-border-soft)" stroke-width="1" opacity="0.6"/>`;
+      gridSvg+=`<text x="${x.toFixed(0)}" y="${(pt+gH+15)}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${Math.round(L)}</text>`; }
+    for (let i=0;i<=4;i++){ const v=maxY_ax*i/4, y=toY(v);
+      gridSvg+=`<line x1="${pl}" y1="${y.toFixed(0)}" x2="${pl+gW}" y2="${y.toFixed(0)}" stroke="var(--cm-border-soft)" stroke-width="1" opacity="0.6"/>`;
+      gridSvg+=`<text x="${pl-7}" y="${(y+4).toFixed(0)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${v.toFixed(2)}</text>`; }
+    // Regression line from load 0 (v=a) to where velocity hits 0 (or the axis edge)
+    const lEnd=validSlope?Math.min(maxX_ax,-a/b):maxX_ax;
+    const x0=toX(0), y0=toY(Math.min(a,maxY_ax)), x1=toX(lEnd), y1=toY(Math.max(0,a+b*lEnd));
+    const dots=pairs.map(p=>`<circle cx="${toX(p.kg).toFixed(1)}" cy="${toY(p.v).toFixed(1)}" r="5" fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2"><title>${p.kg}kg · ${p.v}m/s</title></circle>`).join('');
+    const markE1=(est1RM&&est1RM>0&&est1RM<=maxX_ax)?toX(est1RM):null;
+    const markV1=toY(Math.min(v1rm,maxY_ax));
+    const chart=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;border-radius:10px;margin-bottom:12px">
+      <rect width="${W}" height="${H}" fill="var(--cm-bg-soft)" rx="10"/>
+      <g>${bandsSvg}</g>
+      <g>${gridSvg}</g>
+      ${markE1!==null?`<line x1="${pl}" y1="${markV1.toFixed(1)}" x2="${markE1.toFixed(1)}" y2="${markV1.toFixed(1)}" stroke="var(--cm-fg-strong)" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>`:''}
+      ${markE1!==null?`<line x1="${markE1.toFixed(1)}" y1="${pt}" x2="${markE1.toFixed(1)}" y2="${(pt+gH)}" stroke="var(--cm-fg-strong)" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>`:''}
+      <line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="var(--cm-fg-strong)" stroke-width="2.5" stroke-linecap="round"/>
+      ${dots}
+      ${markE1!==null?`<circle cx="${markE1.toFixed(1)}" cy="${markV1.toFixed(1)}" r="5.5" fill="var(--cm-fg-strong)" stroke="var(--cm-surface)" stroke-width="2"/>`:''}
+      ${markE1!==null?`<text x="${(markE1-5).toFixed(1)}" y="${(pt+gH-6)}" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--cm-fg-strong)">1RM ${est1RM}kg</text>`:''}
+      <text x="${(pl+gW-2)}" y="${(pt+13)}" text-anchor="end" font-size="11" font-weight="600" fill="${R2>=0.95?'var(--cm-success)':'var(--cm-danger)'}">R² = ${R2}</text>
+      <text x="${(pl+gW/2).toFixed(0)}" y="${H-5}" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Load (kg)</text>
+      <text transform="translate(14 ${(pt+gH/2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Velocity (m/s)</text>
+    </svg>`;
+
+    const kpis=[
+      ['Est. 1RM', est1RM&&est1RM>0?est1RM:'—', est1RM&&est1RM>0?'kg':'', `at V1RM ${v1rm} m/s`],
+      ['V1RM', v1rm, 'm/s', hasThreshold?exercise:'generic (V0)'],
+      ['Slope', b.toFixed(4), '(m/s)/kg', 'load sensitivity'],
+      ['R²', R2, '', method],
+    ];
+    const notice = !hasThreshold
+      ? `<div style="margin-top:8px;padding:8px;background:rgba(180,83,9,0.12);border-radius:6px;border:1px solid rgba(180,83,9,0.3);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">${tt('evaluations.vbt_no_threshold','⚠ No velocity threshold for "{ex}" — generic estimate using V0 (load at v=0).',{ex:exercise})}</div>`
+      : !validSlope
+        ? `<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">${tt('evaluations.vbt_slope_warn','⚠ Velocity does not decrease with load (slope ≥ 0) — cannot estimate 1RM. Check inputs.')}</div>`
+        : R2<0.95
+          ? `<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">${tt('evaluations.vbt_low_quality','⚠ Low profile quality (R²={r2}) — review measurements.',{r2:R2})}</div>`
+          : '';
+
+    // ── Work zones · load prescription (Load = (Vtarget − a)/b; %1RM = Load/1RM) ──
+    let rxCards='';
+    if (validSlope && est1RM>0) {
+      rxCards = VBT_ZONES.map(z=>{
+        const load=(z.vt-a)/b, pct=load/est1RM*100;
+        if (!(load>0 && load<=est1RM+0.01)) return null;   // keep only loads in range (0 < load ≤ 1RM)
+        return `<div style="display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-left:3px solid ${z.color};border-radius:8px;padding:9px 12px">
+          <span style="width:9px;height:9px;border-radius:50%;background:${z.color}"></span>
+          <div><div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${z.name}</div><div style="font:500 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${z.range} · target ${z.vt.toFixed(2)} m/s</div></div>
+          <div style="text-align:right"><div style="font:700 18px/1 var(--cm-font-sans);color:${z.color}">${load.toFixed(1)}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">kg</span></div><div style="font:600 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${Math.round(pct)}% 1RM</div></div>
+        </div>`;
+      }).filter(Boolean).join('');
+    }
+    const rxBlock = rxCards ? `
+      <div class="pa-section" style="margin-top:0">Work zones · load prescription</div>
+      <div style="display:flex;flex-direction:column;gap:6px">${rxCards}</div>` : '';
+
+    // ── Interpretation (green if R²≥0.95, amber otherwise) ──
+    let interp='';
+    if (validSlope && est1RM>0) {
+      const good=R2>=0.95, col=good?'#15803D':'#B45309';
+      const bg=good?'rgba(21,128,61,0.10)':'rgba(180,83,9,0.12)', bd=good?'rgba(21,128,61,0.3)':'rgba(180,83,9,0.3)';
+      const powerLoad=(0.88-a)/b;
+      const powerTxt=(powerLoad>0 && powerLoad<=est1RM)?' '+tt('evaluations.vbt_train_power','Train power around {kg} kg (~0.88 m/s).',{kg:powerLoad.toFixed(1)}):'';
+      interp=`<div style="margin-top:8px;padding:8px;background:${bg};border-radius:6px;border:1px solid ${bd};font:500 12px/1.4 var(--cm-font-sans);color:${col}">${good?'🟢':'🟡'} ${good?'Good':'Moderate'} profile (${method} · R²=${R2}). At V1RM ${v1rm} m/s the athlete completes ${est1RM} kg.${powerTxt}</div>`;
+    }
+
+    // ── Summary: method badge + equation + KPIs ──
+    const summary=`
+      <div style="margin-bottom:8px"><span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);border:1px solid var(--cm-accent)">${method}</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">${eqStr}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+        ${kpis.map(([l,v,u,d])=>`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
+      </div>
+      ${notice}
+      ${interp}`;
+
+    const maxErr=Math.max(...pairs.map(p=>Math.abs(p.v-(a+b*p.kg))));
+    hostEl.innerHTML=`
+      <div class="pa-result-hero">${chart}${summary}</div>
+      ${rxBlock}
+      <div class="pa-section"${rxBlock?'':' style="margin-top:0"'}>Formula · load-velocity profile</div>
+      <div class="pt-formula" style="font-size:11px">
+        VMP = a + b·Load &nbsp;·&nbsp; ${method === '2-point' ? tt('evaluations.vbt_two_point','exact line through 2 loads') : tt('evaluations.vbt_least_squares','least-squares fit')}<br>
+        1RM = (V1RM − a) / b &nbsp;·&nbsp; V1RM = ${v1rm} m/s${hasThreshold ? '' : ' (V0 fallback)'}<br>
+        fit error ≤ ${maxErr.toFixed(3)} m/s · ${pairs.length} loads<br>
+        <span class="cit">González-Badillo &amp; Sánchez-Medina (2010) · García-Ramos et al. (2018) two-point method · MVT thresholds Sánchez-Medina et al.</span>
+      </div>`;
+
+    return `${exercise} · ${method} · ${eqStr} · R²=${R2}${est1RM&&est1RM>0?` · Est. 1RM ${est1RM} kg @ V1RM ${v1rm}`:''}`;
+  }
+
+  function calcVBT() {
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const resEl    = document.getElementById('paResults');
+    const zoneEl   = document.getElementById('paZones');
+    if (!resEl || !zoneEl) return;
+    const fit = vbtFit();
+    if (fit.error==='few') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('evaluations.enter_2_loads','Enter at least 2 loads to build the load-velocity profile (current: {n})',{n:fit.pairs.length})}</div>`;
+      return;
+    }
+    if (fit.error==='sameload') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+tt('evaluations.loads_differ_line','Loads must differ to fit a load-velocity line.')+'</div>';
+      return;
+    }
+    const { pairs, a, b, method, R2, v1rm, est1RM } = fit;
+    // Whole analysis lives in the right column (#paZones); left column shows only the form
+    resEl.innerHTML='';
+    const profile = { a, b, r2:R2, v1rm, est1RM, method, exercise, pairs: pairs.map(p=>({ load:p.kg, vmp:p.v })) };
+    const foot = renderVBTProfileChart(profile, zoneEl);
+    document.getElementById('paFootInfo').textContent = foot;
+  }
+
+  function onVBTExerciseChange() {
+    calcVBT();
+    const pid      = document.getElementById('paPlayer')?.value;
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const type     = VBT_EVAL_TYPES[exercise] || `VBT · ${exercise.toLowerCase()}`;
+    if (pid) loadPaHistory(pid, type);
+  }
+
+  // ─── Calc: %1RM (Epley + Brzycki) ───
+  // Resolve the effective 1RM exercise name (handles the "Other (custom)…" option)
+  function get1RMExercise() {
+    const sel = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    if (sel === '__custom__') return document.getElementById('pa1RMCustom')?.value?.trim() || 'Custom';
+    return sel;
+  }
+
+  function calc1RM_modal() {
+    const kg       = parseFloat(document.getElementById('pa1RMkg')?.value);
+    const reps     = parseInt(document.getElementById('pa1RMreps')?.value);
+    const exercise = get1RMExercise();
+    const resEl    = document.getElementById('paResults');
+    const zoneEl   = document.getElementById('paZones');
+
+    if (!kg || !reps || reps < 1) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+tt('evaluations.enter_weight_reps_analysis','Enter weight and reps to see analysis')+'</div>';
+      return;
+    }
+
+    const epley   = +(kg * (1 + reps / 30)).toFixed(1);
+    const brzycki = reps < 37 ? +(kg * 36 / (37 - reps)).toFixed(1) : epley;
+    const avg     = +((epley + brzycki) / 2).toFixed(1);
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">Estimated 1RM</div><div class="pa-hero-val">${avg}<small>kg</small></div></div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:12px">
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Epley: ${epley} kg</span>
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Brzycki: ${brzycki} kg</span>
+        </div>
+      </div>`;
+
+    const loadTable = [
+      { pct:100, reps:1,  label:'Max strength' },
+      { pct:95,  reps:2,  label:'' },
+      { pct:90,  reps:4,  label:'Strength' },
+      { pct:85,  reps:6,  label:'Strength-power' },
+      { pct:80,  reps:8,  label:'Hypertrophy-strength' },
+      { pct:75,  reps:10, label:'Hypertrophy' },
+      { pct:70,  reps:12, label:'Hypertrophy-endurance' },
+      { pct:65,  reps:15, label:'Muscular endurance' },
+      { pct:60,  reps:20, label:'' },
+    ].map(r => ({ ...r, kgVal: +(avg * r.pct / 100).toFixed(1) }));
+
+    const tableRows = loadTable.map(r => `<tr>
+      <td style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${r.pct}%</td>
+      <td>${r.reps} rep${r.reps > 1 ? 's' : ''}</td>
+      <td style="color:var(--cm-fg-muted);font:400 11px/1 var(--cm-font-mono)">${r.label}</td>
+      <td class="r">${r.kgVal} kg</td>
+    </tr>`).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Load prescription · ${exercise}</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>%1RM</th><th>Reps</th><th>Goal</th><th class="r">Load</th></tr></thead>
+        <tbody>${tableRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formulas</div>
+      <div class="pt-formula" style="font-size:11px">
+        Epley:   1RM = w × (1 + reps/30)<br>
+        Brzycki: 1RM = w × 36 / (37 − reps)<br>
+        <span class="cit">Average of both formulas used</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `${exercise} · Est. 1RM ${avg} kg (Epley: ${epley} · Brzycki: ${brzycki})`;
+  }
+
+  function on1RMExerciseChange() {
+    const customEl = document.getElementById('pa1RMCustom');
+    if (customEl) customEl.style.display = document.getElementById('pa1RMExercise')?.value === '__custom__' ? '' : 'none';
+    calc1RM_modal();
+    const pid      = document.getElementById('paPlayer')?.value;
+    const exercise = get1RMExercise();
+    if (pid) loadPaHistory(pid, `1RM · ${exercise}`);
+  }
+
+  // ─── Calc: FMS (Cook 2010 · Kiesel et al. 2007) ───
+  function calcFMS() {
+    const g = id => parseInt(document.getElementById(id)?.value ?? '3') || 0;
+    const ds = g('paFMSds');
+    const [hsL,hsR] = [g('paFMShsL'),g('paFMShsR')];
+    const [ilL,ilR] = [g('paFMSilL'),g('paFMSilR')];
+    const [smL,smR] = [g('paFMSsmL'),g('paFMSsmR')];
+    const [aslrL,aslrR] = [g('paFMSaslrL'),g('paFMSaslrR')];
+    const tsp = g('paFMStsp');
+    const [rsL,rsR] = [g('paFMSrsL'),g('paFMSrsR')];
+    const hs=Math.min(hsL,hsR), il=Math.min(ilL,ilR), sm=Math.min(smL,smR);
+    const aslr=Math.min(aslrL,aslrR), rs=Math.min(rsL,rsR);
+    const total = ds+hs+il+sm+aslr+tsp+rs;
+    const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
+    let riskLevel, riskCls, riskColor;
+    if (total<=14) { riskLevel=tt('evaluations.fms_high_risk','HIGH injury risk'); riskCls='developing'; riskColor='#B91C1C'; }
+    else if (total<=16) { riskLevel=tt('evaluations.fms_moderate_risk','Moderate risk'); riskCls='intermediate'; riskColor='#B45309'; }
+    else { riskLevel=tt('evaluations.fms_optimal','Optimal range'); riskCls='elite'; riskColor='#15803D'; }
+    const asym=[];
+    if (Math.abs(hsL-hsR)>1) asym.push(`Hurdle Step (L=${hsL} R=${hsR})`);
+    if (Math.abs(ilL-ilR)>1) asym.push(`In-Line Lunge (L=${ilL} R=${ilR})`);
+    if (Math.abs(smL-smR)>1) asym.push(`Shoulder Mobility (L=${smL} R=${smR})`);
+    if (Math.abs(aslrL-aslrR)>1) asym.push(`Active SLR (L=${aslrL} R=${aslrR})`);
+    if (Math.abs(rsL-rsR)>1) asym.push(`Rotary Stability (L=${rsL} R=${rsR})`);
+    const pains=[];
+    if (ds===0) pains.push('Deep Squat');
+    if (hsL===0||hsR===0) pains.push('Hurdle Step');
+    if (ilL===0||ilR===0) pains.push('In-Line Lunge');
+    if (smL===0||smR===0) pains.push('Shoulder Mobility');
+    if (aslrL===0||aslrR===0) pains.push('Active SLR');
+    if (tsp===0) pains.push('Trunk Stability Push-Up');
+    if (rsL===0||rsR===0) pains.push('Rotary Stability');
+    const breakdown=[
+      {name:'Deep Squat',s:ds,l:null,r:null},{name:'Hurdle Step',s:hs,l:hsL,r:hsR},
+      {name:'In-Line Lunge',s:il,l:ilL,r:ilR},{name:'Shoulder Mobility',s:sm,l:smL,r:smR},
+      {name:'Active SLR',s:aslr,l:aslrL,r:aslrR},{name:'Trunk Push-Up',s:tsp,l:null,r:null},
+      {name:'Rotary Stability',s:rs,l:rsL,r:rsR},
+    ];
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">FMS Total</div><div class="pa-hero-val">${total}<small>/ 21</small></div></div>
+        </div>
+        <span class="pa-level-badge ${riskCls}" style="border-color:${riskColor}40;background:${riskColor}18;color:${riskColor};margin-top:6px">${total<=14?'🔴':total<=16?'🟡':'🟢'} ${riskLevel}</span>
+        ${pains.length?`<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25)"><div style="font:600 11px/1 var(--cm-font-mono);color:#B91C1C;margin-bottom:4px">${tt('evaluations.fms_pain_detected','⚠ Pain detected — refer to physio:')}</div>${pains.map(p=>`<div style="font:500 11px/1.4 var(--cm-font-sans);color:#B91C1C">· ${p}</div>`).join('')}</div>`:''}
+        ${asym.length?`<div style="margin-top:6px;padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25)"><div style="font:600 11px/1 var(--cm-font-mono);color:#B45309;margin-bottom:4px">${tt('evaluations.fms_asymmetries','Asymmetries (diff > 1 pt):')}</div>${asym.map(a=>`<div style="font:500 11px/1.4 var(--cm-font-sans);color:#B45309">· ${a}</div>`).join('')}</div>`:''}
+      </div>`;
+    const brkRows = breakdown.map(b => {
+      const lr = b.l!==null?`<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">L:${b.l} / R:${b.r}</span>`:'<span style="color:var(--cm-fg-faint)">—</span>';
+      const sc = b.s<=1?'#B91C1C':b.s===2?'#B45309':'#15803D';
+      const dots='●'.repeat(b.s)+'○'.repeat(3-b.s);
+      return `<tr><td style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${b.name}</td><td style="text-align:center">${lr}</td><td style="text-align:center;font:700 14px/1 var(--cm-font-mono);color:${sc}">${b.s}</td><td style="text-align:center;color:${sc};letter-spacing:-1px;font-size:12px">${dots}</td></tr>`;
+    }).join('');
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Breakdown by test</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Test</th><th style="text-align:center">L / R</th><th style="text-align:center">Score</th><th></th></tr></thead><tbody>${brkRows}</tbody></table>
+      </div>
+      <div class="pa-section">Referencia · Kiesel et al. (2007)</div>
+      <div class="pt-formula" style="font-size:11px">
+        Score ≤ 14 → HIGH injury risk (OR 11.7)<br>Score 15–16 → Moderate risk<br>Score 17–21 → Optimal range<br>
+        <span class="cit">Cook (2010) · Kiesel, Plisky &amp; Voight (2007)</span>
+      </div>`;
+    document.getElementById('paFootInfo').textContent = `FMS ${total}/21 · ${riskLevel}${asym.length?` · ${asym.length} asimetría(s)`:''}${pains.length?` · ⚠ dolor en ${pains.length} test(s)`:''}`;
+  }
+
+  // ─── Calc: Ankle Dorsiflexion ───
+  function calcAnkle() {
+    const lCm=parseFloat(document.getElementById('paAnkleL')?.value);
+    const rCm=parseFloat(document.getElementById('paAnkleR')?.value);
+    const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
+    const has=v=>!isNaN(v);
+    if (!has(lCm)&&!has(rCm)) {
+      resEl.innerHTML=''; zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">'+esc(tt('evaluations.enter_at_least_one','Enter at least one value to see the analysis'))+'</div>'; return;
+    }
+    const classify=cm=>{
+      if (!has(cm)) return {label:'—',color:'var(--cm-fg-muted)'};
+      if (cm>12) return {label:'Hypermobile',color:'#1D4ED8'};
+      if (cm>=10) return {label:'Normal',color:'#15803D'};
+      if (cm>=7)  return {label:'Mild restriction',color:'#B45309'};
+      return {label:'Severe restriction',color:'#B91C1C'};
+    };
+    const clL=classify(lCm), clR=classify(rCm);
+    const asymAlert=has(lCm)&&has(rCm)&&Math.abs(lCm-rCm)>2;
+    const hasSevere=(has(lCm)&&lCm<7)||(has(rCm)&&rCm<7);
+    const hasLight=!hasSevere&&((has(lCm)&&lCm<10)||(has(rCm)&&rCm<10));
+    const card=(val,cl,side)=>!has(val)?'':`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px 12px;flex:1">
+      <div style="font:600 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">${side}</div>
+      <div style="font:700 24px/1 var(--cm-font-sans);color:${cl.color}">${val}<span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">cm</span></div>
+      <div style="margin-top:6px;display:inline-flex;height:20px;padding:0 8px;border-radius:4px;background:${cl.color}18;color:${cl.color};border:1px solid ${cl.color}40;font:600 10.5px/20px var(--cm-font-mono)">${cl.label}</div>
+    </div>`;
+    resEl.innerHTML=`<div class="pa-result-hero">
+      <div style="display:flex;gap:10px;margin-bottom:10px">${card(lCm,clL,'Left')}${card(rCm,clR,'Right')}</div>
+      ${hasSevere?`<div style="padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">${tt('evaluations.ankle_severe','🔴 Severely limited dorsiflexion — ACL/knee risk')}</div>`:''}
+      ${hasLight?`<div style="padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">${tt('evaluations.ankle_light','🟡 Limited dorsiflexion — assess posterior chain')}</div>`:''}
+      ${asymAlert?`<div style="margin-top:5px;padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">${tt('evaluations.ankle_asym','🟡 Bilateral asymmetry detected ({cm} cm)',{cm:Math.abs(lCm-rCm).toFixed(1)})}</div>`:''}
+    </div>`;
+    zoneEl.innerHTML=`
+      <div class="pa-section" style="margin-top:0">Ranges · Weight-Bearing Lunge Test</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Classification</th><th class="r">Distance</th><th class="r">Tibial</th></tr></thead>
+        <tbody>
+          <tr><td style="color:#1D4ED8"><strong>Hypermobile</strong></td><td class="r">> 12 cm</td><td class="r">> 38°</td></tr>
+          <tr><td style="color:#15803D"><strong>Normal</strong></td><td class="r">10–12 cm</td><td class="r">30–38°</td></tr>
+          <tr><td style="color:#B45309"><strong>Mild restriction</strong></td><td class="r">7–9 cm</td><td class="r">20–29°</td></tr>
+          <tr><td style="color:#B91C1C"><strong>Severe restriction</strong></td><td class="r">< 7 cm</td><td class="r">< 20°</td></tr>
+        </tbody></table>
+      </div>
+      <div class="pt-formula" style="font-size:11px;margin-top:12px">
+        Asymmetry > 2 cm → bilateral alert<br>< 7 cm → ACL, knee, posterior-chain risk<br>
+        <span class="cit">Searle et al. · Weight-Bearing Lunge Test</span>
+      </div>`;
+    const worst=has(lCm)&&has(rCm)?Math.min(lCm,rCm):has(lCm)?lCm:rCm;
+    document.getElementById('paFootInfo').textContent=`Ankle dorsiflexion L:${has(lCm)?lCm+' cm':'—'} R:${has(rCm)?rCm+' cm':'—'}${asymAlert?' · Bilateral asymmetry':''}`;
+  }
+
+  // ─── Calc: Hip ER/IR (Lerebours et al. 2016) ───
+  function calcHipRot() {
+    const irL=parseFloat(document.getElementById('paHipIRL')?.value);
+    const irR=parseFloat(document.getElementById('paHipIRR')?.value);
+    const erL=parseFloat(document.getElementById('paHipERL')?.value);
+    const erR=parseFloat(document.getElementById('paHipERR')?.value);
+    const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
+    const has=v=>!isNaN(v);
+    if (!has(irL)&&!has(irR)&&!has(erL)&&!has(erR)) {
+      resEl.innerHTML=''; zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">'+esc(tt('evaluations.enter_values_analysis','Enter values to see the analysis'))+'</div>'; return;
+    }
+    const alerts=[];
+    [{side:'L',ir:irL,er:erL},{side:'R',ir:irR,er:erR}].forEach(({side,ir,er})=>{
+      if (!has(ir)) return;
+      if (ir<20) alerts.push({lv:'red',msg:tt('evaluations.hip_ir_severe','🔴 IR {side} = {ir}° — Severely limited internal rotation (hip/groin risk)',{side:side,ir:ir})});
+      else if (has(er)&&ir<25&&er>65) alerts.push({lv:'red',msg:tt('evaluations.hip_bibe','🔴 BIBE {side}: IR={ir}° + ER={er}° — Internal rotation deficit — assess FAI',{side:side,ir:ir,er:er})});
+      else if (ir<30) alerts.push({lv:'warn',msg:tt('evaluations.hip_ir_reduced','🟡 IR {side} = {ir}° — Reduced internal rotation — monitor',{side:side,ir:ir})});
+      if (has(er)&&(ir+er)<80) alerts.push({lv:'warn',msg:tt('evaluations.hip_total_range','🟡 Total range {side} = {total}° — Review hip mobility',{side:side,total:ir+er})});
+    });
+    if (has(irL)&&has(irR)&&Math.abs(irL-irR)>15) alerts.push({lv:'warn',msg:tt('evaluations.hip_ir_asym','🟡 Bilateral IR asymmetry: L={l}° R={r}° (diff. {d}°)',{l:irL,r:irR,d:Math.abs(irL-irR)})});
+    const sideCard=(ir,er,label)=>(!has(ir)&&!has(er))?'':
+      `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px 12px;flex:1">
+        <div style="font:600 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">${label}</div>
+        ${has(ir)?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">IR</span><span style="font:700 18px/1 var(--cm-font-mono);color:${ir<20?'#B91C1C':ir<30?'#B45309':'#15803D'}">${ir}°</span></div>`:''}
+        ${has(er)?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">ER</span><span style="font:700 18px/1 var(--cm-font-mono);color:${er<40?'#B45309':er>60?'#1D4ED8':'#15803D'}">${er}°</span></div>`:''}
+        ${has(ir)&&has(er)?`<div style="display:flex;justify-content:space-between;border-top:1px solid var(--cm-border-soft);padding-top:4px;margin-top:4px"><span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Total IR+ER</span><span style="font:700 14px/1 var(--cm-font-mono);color:${(ir+er)<80?'#B45309':'#15803D'}">${ir+er}°</span></div>`:''}
+      </div>`;
+    resEl.innerHTML=`<div class="pa-result-hero">
+      <div style="display:flex;gap:10px;margin-bottom:10px">${sideCard(irL,erL,'Left')}${sideCard(irR,erR,'Right')}</div>
+      ${alerts.map(a=>`<div style="margin-top:5px;padding:7px 10px;border-radius:6px;border:1px solid ${a.lv==='red'?'rgba(220,38,38,0.25)':'rgba(217,119,6,0.25)'};background:${a.lv==='red'?'rgba(220,38,38,0.1)':'rgba(217,119,6,0.1)'};font:500 12px/1.4 var(--cm-font-sans);color:${a.lv==='red'?'#B91C1C':'#B45309'}">${a.msg}</div>`).join('')}
+    </div>`;
+    zoneEl.innerHTML=`
+      <div class="pa-section" style="margin-top:0">Normal athlete ranges · Lerebours et al. (2016)</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Movement</th><th class="r">Normal</th><th class="r">Alert</th></tr></thead>
+        <tbody>
+          <tr><td>IR (internal)</td><td class="r">30–50°</td><td class="r">< 30° monitor · < 20° critical</td></tr>
+          <tr><td>ER (external)</td><td class="r">40–60°</td><td class="r">—</td></tr>
+          <tr><td>IR+ER total</td><td class="r">80–100°</td><td class="r">< 80° → review</td></tr>
+          <tr><td>IR asymmetry</td><td class="r">< 15°</td><td class="r">> 15° → alert</td></tr>
+          <tr><td>BIBE syndrome</td><td class="r">—</td><td class="r">IR < 25° + ER > 65°</td></tr>
+        </tbody></table>
+      </div>`;
+    document.getElementById('paFootInfo').textContent=`Hip Rot IR: L=${has(irL)?irL+'°':'—'} R=${has(irR)?irR+'°':'—'} · ER: L=${has(erL)?erL+'°':'—'} R=${has(erR)?erR+'°':'—'}${alerts.length?' · '+alerts.length+' alert(s)':''}`;
+  }
+
+  // ─── Skinfold helper: show/hide fold inputs by method ───
+  function onSkinfoldMethodChange() {
+    const method=document.getElementById('paSkinfoldMethod')?.value||'jp3';
+    const gender=document.getElementById('paSkinfoldGender')?.value||'M';
+    const area=document.getElementById('sfFoldsArea'); if (!area) return;
+    const sfInp=(id,label)=>`<div class="ev-frow"><label class="ev-fl">${label}</label>
+      <div class="pt-field"><div class="input-wrap"><input id="paSF_${id}" type="number" step="0.1" min="1" max="80" class="ev-finput" placeholder="mm" oninput="calcSkinfold()"><span class="unit">mm</span></div></div></div>`;
+    let html='<div class="ev-f2" style="margin-top:4px">';
+    if (method==='jp3'&&gender==='M') html+=sfInp('chest','Pecho')+sfInp('abdomen','Abdomen')+sfInp('thigh','Muslo');
+    else if (method==='jp3'&&gender==='F') html+=sfInp('triceps','Tríceps')+sfInp('suprailiac','Suprailíaco')+sfInp('thigh','Muslo');
+    else if (method==='jp7') html+=sfInp('chest7','Pecho')+sfInp('axillary','Axilar medio')+sfInp('triceps7','Tríceps')+sfInp('subscapular','Subescapular')+sfInp('abdomen7','Abdomen')+sfInp('suprailiac7','Suprailíaco')+sfInp('thigh7','Muslo');
+    else if (method==='dw4') html+=sfInp('biceps','Bíceps')+sfInp('tricepsDW','Tríceps')+sfInp('subscapularDW','Subescapular')+sfInp('suprailiacDW','Suprailíaco');
+    area.innerHTML=html+'</div>';
+    calcSkinfold();
+  }
+
+  // ─── Anthropometry helpers: BMI, RFM, Heath-Carter somatotype (pure, never throw) ───
+  function calcBMI(weightKg, heightCm){
+    if (!isFinite(weightKg) || !isFinite(heightCm) || weightKg <= 0 || heightCm <= 0) return null;
+    const m = heightCm / 100;
+    return +(weightKg / (m * m)).toFixed(1);
+  }
+  function calcRFM(heightCm, waistCm, gender){
+    if (!isFinite(heightCm) || !isFinite(waistCm) || heightCm <= 0 || waistCm <= 0) return null;
+    const sexFactor = gender === 'F' ? 1 : 0;
+    return +(64 - (20 * heightCm / waistCm) + (12 * sexFactor)).toFixed(1);
+  }
+  function calcSomatotype(x){
+    const out = { endo:null, meso:null, ecto:null };
+    if (!x || !isFinite(x.heightCm) || x.heightCm <= 0) return out;   // height needed by all three
+    const ok = v => v != null && isFinite(v);   // isFinite(null) is true, so guard explicitly
+    const clamp = v => { const r = +v.toFixed(1); return r < 0.1 ? 0.1 : r; };
+    // Endomorphy
+    if ([x.sfTriceps, x.sfSubscap, x.sfSupraspinal].every(ok)){
+      const X = (x.sfTriceps + x.sfSubscap + x.sfSupraspinal) * (170.18 / x.heightCm);
+      out.endo = clamp(-0.7182 + 0.1451*X - 0.00068*X*X + 0.0000014*X*X*X);
+    }
+    // Mesomorphy
+    if ([x.humerus, x.femur, x.armGirth, x.calfGirth, x.sfTriceps, x.sfCalf].every(ok)){
+      const cArm  = x.armGirth  - x.sfTriceps / 10;
+      const cCalf = x.calfGirth - x.sfCalf    / 10;
+      out.meso = clamp((0.858*x.humerus + 0.601*x.femur + 0.188*cArm + 0.161*cCalf) - (0.131*x.heightCm) + 4.5);
+    }
+    // Ectomorphy
+    if (isFinite(x.weightKg) && x.weightKg > 0){
+      const HWR = x.heightCm / Math.cbrt(x.weightKg);
+      let ecto;
+      if (HWR >= 40.75) ecto = 0.732*HWR - 28.58;
+      else if (HWR > 38.25) ecto = 0.463*HWR - 17.63;
+      else ecto = 0.1;
+      out.ecto = clamp(ecto);
+    }
+    return out;
+  }
+  // Gather the optional anthropometry inputs from the skinfold form (null when empty/invalid).
+  function readAnthroExtras(){
+    const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : null; };
+    const pick = (...ids) => { for (const id of ids){ const v = parseFloat(document.getElementById(id)?.value); if (isFinite(v)) return v; } return null; };
+    return {
+      heightCm:      num('paSkinfoldHeight'),
+      weightKg:      num('paSkinfoldWeight'),
+      waistCm:       num('paAnthroWaist'),
+      armGirth:      num('paAnthroArmGirth'),
+      calfGirth:     num('paAnthroCalfGirth'),
+      humerus:       num('paAnthroHumerus'),
+      femur:         num('paAnthroFemur'),
+      sfSupraspinal: num('paSF_supraspinal'),
+      sfCalf:        num('paSF_calf'),
+      sfTriceps:     pick('paSF_triceps', 'paSF_triceps7', 'paSF_tricepsDW'),
+      sfSubscap:     pick('paSF_subscapular', 'paSF_subscapularDW')
+    };
+  }
+
+  // ─── Skinfold %BF: single source of truth for the density → Siri (1956) equations ───
+  // Sites required by each formula (JP3 depends on sex). Canonical keys reused everywhere.
+  function sfFormulaSites(formula, sex){
+    var f = String(formula||'').toUpperCase();
+    var isF = String(sex||'M').toUpperCase().charAt(0) === 'F';
+    if (f === 'JP7') return ['chest','midaxillary','triceps','subscapular','abdomen','suprailiac','thigh'];
+    if (f === 'DW4') return ['biceps','triceps','subscapular','suprailiac'];
+    if (f === 'JP3') return isF ? ['triceps','suprailiac','thigh'] : ['chest','abdomen','thigh'];
+    return [];
+  }
+  // Body density → Siri %BF for JP3/JP7/DW4. folds: { canonicalSite: mm }. Returns number|null; never throws.
+  function sfBodyFatPct(o){
+    o = o || {};
+    var formula = String(o.formula||'').toUpperCase();
+    var sex = (String(o.sex||'M').toUpperCase().charAt(0) === 'F') ? 'F' : 'M';
+    var age = parseFloat(o.age);
+    var folds = o.folds || {};
+    if (!isFinite(age)) return null;
+    var sites = sfFormulaSites(formula, sex);
+    if (!sites.length) return null;
+    var S = 0;
+    for (var i=0;i<sites.length;i++){
+      var v = parseFloat(folds[sites[i]]);
+      if (!isFinite(v) || v <= 0) return null;   // every required site must be present
+      S += v;
+    }
+    var D = null;
+    if (formula === 'JP3'){
+      D = sex==='M' ? 1.10938-0.0008267*S+0.0000016*S*S-0.0002574*age
+                    : 1.0994921-0.0009929*S+0.0000023*S*S-0.0001392*age;
+    } else if (formula === 'JP7'){
+      D = sex==='M' ? 1.112-0.00043499*S+0.00000055*S*S-0.00028826*age
+                    : 1.097-0.00046971*S+0.00000056*S*S-0.00012828*age;
+    } else if (formula === 'DW4'){
+      var DW={M:[[17,19,1.1620,0.0630],[20,29,1.1631,0.0632],[30,39,1.1422,0.0544],[40,49,1.1620,0.0700]],
+              F:[[17,19,1.1549,0.0678],[20,29,1.1599,0.0717],[30,39,1.1423,0.0632],[40,49,1.1333,0.0612]]};
+      var rows = DW[sex] || DW.M;
+      var row = rows.find(function(r){ return age>=r[0] && age<=r[1]; }) || rows[rows.length-1];
+      D = row[2] - row[3]*Math.log10(S);
+    }
+    if (!D || D < 0.9 || D > 1.1) return null;
+    return +((4.95/D - 4.50)*100).toFixed(1);
+  }
+  // Read the individual skinfold panel's per-method inputs into canonical fold keys.
+  function readIndivFolds(method, gender){
+    var g = id => { var v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : undefined; };
+    var m = String(method||'jp3').toLowerCase();
+    if (m === 'jp7') return { chest:g('paSF_chest7'), midaxillary:g('paSF_axillary'), triceps:g('paSF_triceps7'), subscapular:g('paSF_subscapular'), abdomen:g('paSF_abdomen7'), suprailiac:g('paSF_suprailiac7'), thigh:g('paSF_thigh7') };
+    if (m === 'dw4') return { biceps:g('paSF_biceps'), triceps:g('paSF_tricepsDW'), subscapular:g('paSF_subscapularDW'), suprailiac:g('paSF_suprailiacDW') };
+    return String(gender||'M').toUpperCase().charAt(0)==='F'
+      ? { triceps:g('paSF_triceps'), suprailiac:g('paSF_suprailiac'), thigh:g('paSF_thigh') }
+      : { chest:g('paSF_chest'), abdomen:g('paSF_abdomen'), thigh:g('paSF_thigh') };
+  }
+
+  // ─── Calc: Body Composition — Skinfolds (JP3/JP7/DW4 + Siri 1956) ───
+  function calcSkinfold() {
+    const method=document.getElementById('paSkinfoldMethod')?.value||'jp3';
+    const gender=document.getElementById('paSkinfoldGender')?.value||'M';
+    const age=parseFloat(document.getElementById('paSkinfoldAge')?.value);
+    const weight=parseFloat(document.getElementById('paSkinfoldWeight')?.value);
+    const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
+    const _folds=readIndivFolds(method, gender);
+    const _sites=sfFormulaSites(method, gender);
+    const sum=_sites.reduce((a,k)=>a+(parseFloat(_folds[k])||0),0);
+    const pct=sfBodyFatPct({formula:method, sex:gender, age, folds:_folds});
+    if (pct===null) {
+      resEl.innerHTML=''; zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">'+esc(tt('evaluations.enter_skinfolds','Enter the skinfolds to see the analysis'))+'</div>'; return;
+    }
+    const density=4.95/(pct/100+4.50);   // recover D from %BF for the readout
+    const fatMass=!isNaN(weight)?+(weight*pct/100).toFixed(1):null;
+    const leanMass=fatMass!==null?+(weight-fatMass).toFixed(1):null;
+    // Optional anthropometry-derived metrics (only shown when their inputs are present)
+    const _ax=readAnthroExtras();
+    const bmi=calcBMI(weight, _ax.heightCm);
+    const rfm=calcRFM(_ax.heightCm, _ax.waistCm, gender);
+    const soma=calcSomatotype(_ax);
+    const somaTriplet=(soma.endo!=null||soma.meso!=null||soma.ecto!=null)
+      ? `${soma.endo!=null?soma.endo:'—'} – ${soma.meso!=null?soma.meso:'—'} – ${soma.ecto!=null?soma.ecto:'—'}` : null;
+    const anthroCells=[];
+    if (bmi!=null) anthroCells.push(`<div><div class="pa-hero-label">BMI</div><div class="pa-hero-val">${bmi}<small>kg/m²</small></div></div>`);
+    if (rfm!=null) anthroCells.push(`<div><div class="pa-hero-label">RFM</div><div class="pa-hero-val">${rfm}<small>%</small></div></div>`);
+    if (somaTriplet) anthroCells.push(`<div><div class="pa-hero-label">Somatotipo</div><div class="pa-hero-val" style="font-size:18px">${somaTriplet}</div></div>`);
+    const anthroHtml=anthroCells.length ? `<div class="pa-hero-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--cm-border-soft)">${anthroCells.join('')}</div>` : '';
+    let bfClass,bfColor;
+    if (gender==='M') {
+      if (pct<6){bfClass=tt('evaluations.bf_very_low','Very low · health risk');bfColor='#B91C1C';}
+      else if (pct<=13){bfClass=tt('evaluations.bf_athletic','Excellent · athletic');bfColor='#15803D';}
+      else if (pct<=17){bfClass=tt('evaluations.bf_good','Good');bfColor='#15803D';}
+      else if (pct<=24){bfClass=tt('evaluations.bf_average','Average');bfColor='#B45309';}
+      else{bfClass=tt('evaluations.bf_above_avg','Above average');bfColor='#B91C1C';}
+    } else {
+      if (pct<14){bfClass=tt('evaluations.bf_very_low','Very low · health risk');bfColor='#B91C1C';}
+      else if (pct<=20){bfClass=tt('evaluations.bf_athletic','Excellent · athletic');bfColor='#15803D';}
+      else if (pct<=24){bfClass=tt('evaluations.bf_good','Good');bfColor='#15803D';}
+      else if (pct<=31){bfClass=tt('evaluations.bf_average','Average');bfColor='#B45309';}
+      else{bfClass=tt('evaluations.bf_above_avg','Above average');bfColor='#B91C1C';}
+    }
+    const isLow=(gender==='M'&&pct<6)||(gender==='F'&&pct<14);
+    resEl.innerHTML=`<div class="pa-result-hero">
+      <div class="pa-hero-row">
+        <div><div class="pa-hero-label">%BF</div><div class="pa-hero-val" style="color:${bfColor}">${pct}<small>%</small></div></div>
+        ${fatMass!==null?`<div><div class="pa-hero-label">Masa grasa</div><div class="pa-hero-val">${fatMass}<small>kg</small></div></div>`:''}
+        ${leanMass!==null?`<div><div class="pa-hero-label">Masa magra</div><div class="pa-hero-val">${leanMass}<small>kg</small></div></div>`:''}
+      </div>
+      <span class="pa-level-badge" style="background:${bfColor}18;color:${bfColor};border-color:${bfColor}40;margin-top:8px">${bfClass}</span>
+      <div style="margin-top:4px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Σ = ${sum} mm · D = ${density.toFixed(4)} g/mL</div>
+      ${isLow?`<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">${tt('evaluations.bf_health_risk','🔴 Possible health risk — consult a nutritionist')}</div>`:''}
+      ${anthroHtml}
+    </div>`;
+    const mName={'jp3':tt('evaluations.bf_method_jp3','Jackson & Pollock 3-site'),'jp7':tt('evaluations.bf_method_jp7','Jackson & Pollock 7-site'),'dw4':tt('evaluations.bf_method_dw4','Durnin & Womersley 4-site')}[method];
+    const table=(gender==='M'?[['< 6%',tt('evaluations.bf_very_low_short','Very low · risk'),'#B91C1C'],['6–13%',tt('evaluations.bf_athletic','Excellent · athletic'),'#15803D'],['14–17%',tt('evaluations.bf_good','Good'),'#15803D'],['18–24%',tt('evaluations.bf_average','Average'),'#B45309'],['> 25%',tt('evaluations.bf_above_avg_short','Above avg.'),'#B91C1C']]:[['< 14%',tt('evaluations.bf_very_low_short','Very low · risk'),'#B91C1C'],['14–20%',tt('evaluations.bf_athletic','Excellent · athletic'),'#15803D'],['21–24%',tt('evaluations.bf_good','Good'),'#15803D'],['25–31%',tt('evaluations.bf_average','Average'),'#B45309'],['> 32%',tt('evaluations.bf_above_avg_short','Above avg.'),'#B91C1C']]);
+    zoneEl.innerHTML=`
+      <div class="pa-section" style="margin-top:0">Clasificación ACSM · atletas</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>%BF</th><th>Clasificación</th></tr></thead>
+        <tbody>${table.map(([r,c,col])=>`<tr ${pct!==null&&r.startsWith(bfClass.slice(0,4))?'class="pa-zone-active"':''}><td style="color:${col};font-weight:600">${r}</td><td style="color:${col}">${c}</td></tr>`).join('')}</tbody></table>
+      </div>
+      <div class="pa-section">Fórmula · Siri (1956)</div>
+      <div class="pt-formula" style="font-size:11px">%BF = (4.95 / D − 4.50) × 100<br>Método: ${mName}<br><span class="cit">Siri (1956) · ${mName}</span></div>`;
+    document.getElementById('paFootInfo').textContent=`${mName} · %BF ${pct}%${fatMass?` · Grasa ${fatMass}kg · Magra ${leanMass}kg`:''}`;
+  }
+
+  // ─── FV Profile helpers ───
+  function addFVRow() {
+    const c=document.getElementById('fvRowsContainer'); if (!c) return;
+    const idx=c.children.length+1;
+    const row=document.createElement('div');
+    row.className='fv-row'; row.style.cssText='display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;align-items:center';
+    row.innerHTML=`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center">Set ${idx}</span>
+      <div style="position:relative"><input type="number" class="fv-load ev-finput" step="0.5" min="1" max="500" placeholder="kg" oninput="calcFVProfile()" style="padding-right:32px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">kg</span></div>
+      <div style="position:relative"><input type="number" class="fv-vmp ev-finput" step="0.01" min="0.05" max="3.5" placeholder="VMP" oninput="calcFVProfile()" style="padding-right:38px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span></div>
+      <button type="button" style="width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;border-radius:5px" onclick="this.closest('.fv-row').remove();calcFVProfile()"><i class="ti ti-trash" style="font-size:13px"></i></button>`;
+    c.appendChild(row);
+  }
+
+  // ─── VBT load-velocity profile helpers ───
+  function addVBTRow() {
+    const c=document.getElementById('vbtRowsContainer'); if (!c) return;
+    const idx=c.children.length+1;
+    const row=document.createElement('div');
+    row.className='vbt-row'; row.style.cssText='display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;align-items:center';
+    row.innerHTML=`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center">Set ${idx}</span>
+      <div style="position:relative"><input type="number" class="vbt-load ev-finput" step="0.5" min="1" max="500" placeholder="kg" oninput="calcVBT()" style="padding-right:32px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">kg</span></div>
+      <div style="position:relative"><input type="number" class="vbt-vmp ev-finput" step="0.01" min="0.05" max="3.5" placeholder="VMP" oninput="calcVBT()" style="padding-right:38px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span></div>
+      <button type="button" style="width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;border-radius:5px" onclick="this.closest('.vbt-row').remove();calcVBT()"><i class="ti ti-trash" style="font-size:13px"></i></button>`;
+    c.appendChild(row);
+  }
+
+  // ─── Encoder CSV import (inside F-V Profile test) ───
+  let _fvCsvData = null;
+
+  function initFVCsvImport() {
+    _fvCsvData = null;
+    const dz = document.getElementById('fvCsvDrop');
+    const fi = document.getElementById('fvCsvFile');
+    if (!dz || !fi) return;
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; const f = e.dataTransfer.files[0]; if (f) parseFVCsvFile(f); });
+    fi.addEventListener('change', e => { if (e.target.files[0]) parseFVCsvFile(e.target.files[0]); });
+  }
+
+  // Match the first header whose normalized name contains one of the keywords (keyword order = priority)
+  function detectFVColumn(headers, keywords, exclude) {
+    const norm = s => String(s).toLowerCase().replace(/[._\-\/\s]+/g, ' ').trim();
+    for (const kw of keywords) {
+      const hit = headers.find(h => h !== exclude && norm(h).includes(kw));
+      if (hit) return hit;
+    }
+    return '';
+  }
+
+  function parseFVCsvFile(file) {
+    if (!window.Papa) { alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete(res) {
+        if (!res.data.length) { alert(tt('evaluations.empty_file','Empty file.')); return; }
+        _fvCsvData = res.data;
+        const headers = res.meta.fields || [];
+        const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
+        const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
+        const opts = headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
+        const loadSel = document.getElementById('fvCsvLoadCol');
+        const velSel  = document.getElementById('fvCsvVelCol');
+        loadSel.innerHTML = opts; velSel.innerHTML = opts;
+        loadSel.value = loadGuess || headers[0] || '';
+        velSel.value  = velGuess || headers[1] || headers[0] || '';
+        document.getElementById('fvCsvMap').style.display = '';
+        applyFVCsvImport();
+      },
+      error(err) { alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); }
+    });
+  }
+
+  // ADR / VBT encoder exports mix computed RESULT rows (V0, L0, 1RM, Vmax…) into the same sheet as
+  // the actual test loads (Carga/Load/Set N). Those results must NEVER be imported as loads — the
+  // 1RM row in particular would force the load-velocity line through the estimated point and fake a
+  // perfect fit. Detected by a result label in any non-mapped column (the "Kg"/"m/s" columns are
+  // skipped, so numeric %1RM/power values never trip it).
+  const VBT_RESULT_LABEL = /^\s*(v0|l0|f0|p0|v1rm|1\s*-?\s*rm|0\s*-?\s*rm|v\s*max|vmax|p\s*max|pmax|carga\s*0|load\s*0|set\s*0)\s*$/i;
+  function vbtIsResultRow(row, loadCol, velCol) {
+    for (const k in row) {
+      if (k === loadCol || k === velCol) continue;
+      const val = row[k];
+      if (typeof val === 'string' && VBT_RESULT_LABEL.test(val)) return true;
+    }
+    return false;
+  }
+
+  function applyFVCsvImport() {
+    if (!_fvCsvData) return;
+    const loadCol = document.getElementById('fvCsvLoadCol')?.value;
+    const velCol  = document.getElementById('fvCsvVelCol')?.value;
+    const summary = document.getElementById('fvCsvSummary');
+    if (!loadCol || !velCol) return;
+
+    // Best attempt per load: keep the highest velocity for each load
+    const best = new Map();
+    let skipped = 0;
+    for (const row of _fvCsvData) {
+      const kg = parseFloat(row[loadCol]);
+      const v  = parseFloat(row[velCol]);
+      if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
+      if (vbtIsResultRow(row, loadCol, velCol)) { skipped++; continue; }   // skip V0/L0/1RM… result rows
+      const prev = best.get(kg);
+      if (prev === undefined || v > prev) best.set(kg, v);
+    }
+    const pairs = [...best.entries()].map(([kg, v]) => ({ kg, v })).sort((a, b) => a.kg - b.kg);
+    if (!pairs.length) {
+      if (summary) summary.textContent = tt('evaluations.no_valid_lv_pairs','No valid load/velocity pairs found — check the column mapping.');
+      return;
+    }
+
+    const c = document.getElementById('fvRowsContainer');
+    if (!c) return;
+    c.innerHTML = '';
+    pairs.forEach(p => {
+      addFVRow();
+      const last = c.lastElementChild;
+      last.querySelector('.fv-load').value = p.kg;
+      last.querySelector('.fv-vmp').value  = +p.v.toFixed(3);
+    });
+    calcFVProfile();
+    if (summary) summary.textContent = tt('evaluations.imported_n_loads','Imported '+pairs.length+' load'+(pairs.length>1?'s':'')+' ('+skipped+' row'+(skipped===1?'':'s')+' skipped)',{count:pairs.length,loads:pairs.length,skipped:skipped});
+  }
+
+  // ─── Encoder CSV import (inside VBT load-velocity test) ───
+  let _vbtCsvData = null;
+
+  function initVBTCsvImport() {
+    _vbtCsvData = null;
+    const dz = document.getElementById('vbtCsvDrop');
+    const fi = document.getElementById('vbtCsvFile');
+    if (!dz || !fi) return;
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; const f = e.dataTransfer.files[0]; if (f) parseVBTCsvFile(f); });
+    fi.addEventListener('change', e => { if (e.target.files[0]) parseVBTCsvFile(e.target.files[0]); });
+  }
+
+  function parseVBTCsvFile(file) {
+    if (!window.Papa) { alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete(res) {
+        if (!res.data.length) { alert(tt('evaluations.empty_file','Empty file.')); return; }
+        _vbtCsvData = res.data;
+        const headers = res.meta.fields || [];
+        const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
+        const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
+        const opts = headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
+        const loadSel = document.getElementById('vbtCsvLoadCol');
+        const velSel  = document.getElementById('vbtCsvVelCol');
+        loadSel.innerHTML = opts; velSel.innerHTML = opts;
+        loadSel.value = loadGuess || headers[0] || '';
+        velSel.value  = velGuess || headers[1] || headers[0] || '';
+        document.getElementById('vbtCsvMap').style.display = '';
+        applyVBTCsvImport();
+      },
+      error(err) { alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); }
+    });
+  }
+
+  function applyVBTCsvImport() {
+    if (!_vbtCsvData) return;
+    const loadCol = document.getElementById('vbtCsvLoadCol')?.value;
+    const velCol  = document.getElementById('vbtCsvVelCol')?.value;
+    const summary = document.getElementById('vbtCsvSummary');
+    if (!loadCol || !velCol) return;
+
+    // Import EVERY actual rep row (not just the best per load) so the whole encoder set comes
+    // through, and drop the computed result rows (V0, L0, 1RM…) so they never land as loads.
+    const pairs = [];
+    let skipped = 0;
+    for (const row of _vbtCsvData) {
+      const kg = parseFloat(row[loadCol]);
+      const v  = parseFloat(row[velCol]);
+      if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
+      if (vbtIsResultRow(row, loadCol, velCol)) { skipped++; continue; }   // skip V0/L0/1RM… result rows
+      pairs.push({ kg, v });
+    }
+    pairs.sort((a, b) => a.kg - b.kg);
+    if (!pairs.length) {
+      if (summary) summary.textContent = tt('evaluations.no_valid_lv_pairs','No valid load/velocity pairs found — check the column mapping.');
+      return;
+    }
+
+    const c = document.getElementById('vbtRowsContainer');
+    if (!c) return;
+    c.innerHTML = '';
+    pairs.forEach(p => {
+      addVBTRow();
+      const last = c.lastElementChild;
+      last.querySelector('.vbt-load').value = p.kg;
+      last.querySelector('.vbt-vmp').value  = +p.v.toFixed(3);
+    });
+    calcVBT();
+    if (summary) summary.textContent = tt('evaluations.imported_n_loads','Imported '+pairs.length+' load'+(pairs.length>1?'s':'')+' ('+skipped+' row'+(skipped===1?'':'s')+' skipped)',{count:pairs.length,loads:pairs.length,skipped:skipped});
+  }
+
+  // ─── Calc: VBT F-V Profile (Samozino & Morin 2012–2016) ───
+  function calcFVProfile() {
+    const G=9.81;
+    const pairs=[...document.querySelectorAll('.fv-row')].reduce((acc,r)=>{
+      const kg=parseFloat(r.querySelector('.fv-load')?.value);
+      const v=parseFloat(r.querySelector('.fv-vmp')?.value);
+      if (!isNaN(kg)&&!isNaN(v)&&kg>0&&v>0) acc.push({kg,F:kg*G,v});
+      return acc;
+    },[]);
+    const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
+    if (pairs.length<3) {
+      resEl.innerHTML=''; zoneEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">${esc(tt('evaluations.min_3_pairs_current','Minimum 3 load/VMP pairs to compute the profile (current: '+pairs.length+')',{n:pairs.length}))}</div>`; return;
+    }
+    const n=pairs.length;
+    const sv=pairs.reduce((s,p)=>s+p.v,0);
+    const sF=pairs.reduce((s,p)=>s+p.F,0);
+    const svF=pairs.reduce((s,p)=>s+p.v*p.F,0);
+    const sv2=pairs.reduce((s,p)=>s+p.v*p.v,0);
+    const b=(n*svF-sv*sF)/(n*sv2-sv*sv);
+    const a=(sF-b*sv)/n;
+    const F0=+a.toFixed(1), V0=b<0?+(-a/b).toFixed(2):null;
+    const Pmax=V0?+(F0*V0/4).toFixed(1):null;
+    const Sfv=+b.toFixed(2);
+    const Fmean=sF/n;
+    const SStot=pairs.reduce((s,p)=>s+(p.F-Fmean)**2,0);
+    const SSres=pairs.reduce((s,p)=>s+(p.F-(a+b*p.v))**2,0);
+    const R2=SStot>0?+(1-SSres/SStot).toFixed(3):0;
+    // Optional FVimb
+    const hSJ_cm=parseFloat(document.getElementById('paFVhSJ')?.value);
+    let FVimb_pct=null;
+    if (!isNaN(hSJ_cm)&&hSJ_cm>0&&V0&&V0>0) {
+      const hSJ_m=hSJ_cm/100, mass=F0/G;
+      const Sfvopt=-(2*mass*G*Math.sqrt(hSJ_m))/(V0*V0);
+      if (Sfvopt!==0) FVimb_pct=+Math.abs(Sfv/Sfvopt*100).toFixed(0);
+    }
+    // SVG chart — canonical F-V line drawn between its real intercepts: F₀ (Y axis) → V₀ (X axis)
+    const W=460,H=240,pl=55,pr=15,pt=24,pb=38;
+    const gW=W-pl-pr, gH=H-pt-pb;
+    const dataMaxV=Math.max(...pairs.map(p=>p.v));
+    const dataMaxF=Math.max(...pairs.map(p=>p.F));
+    // Axes from 0 so both intercepts (F₀ on Y, V₀ on X) stay visible
+    const maxV_ax=Math.max((V0&&V0>0)?V0:0, dataMaxV)*1.1;
+    const maxF_ax=Math.max(F0>0?F0:0, dataMaxF)*1.1;
+    const toX=v=>pl+(v/maxV_ax)*gW, toY=F=>pt+gH-(F/maxF_ax)*gH;
+    let gridSvg='';
+    for (let i=0;i<=4;i++) {
+      const v=maxV_ax*i/4, x=toX(v);
+      gridSvg+=`<line x1="${x.toFixed(0)}" y1="${pt}" x2="${x.toFixed(0)}" y2="${pt+gH}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg+=`<text x="${x.toFixed(0)}" y="${(pt+gH+14)}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${v.toFixed(1)}</text>`;
+    }
+    for (let i=0;i<=4;i++) {
+      const F=maxF_ax*i/4, y=toY(F);
+      gridSvg+=`<line x1="${pl}" y1="${y.toFixed(0)}" x2="${pl+gW}" y2="${y.toFixed(0)}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg+=`<text x="${pl-6}" y="${(y+4).toFixed(0)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${Math.round(F)}</text>`;
+    }
+    // Regression line endpoints: (v=0, F=F₀) on the Y axis → (v=V₀, F=0) on the X axis
+    const baseY=toY(0), ax0=toX(0), ayF0=toY(F0);
+    const vEnd=(V0&&V0>0)?V0:maxV_ax;
+    const fEnd=(V0&&V0>0)?0:Math.max(0,a+b*maxV_ax);
+    const bx=toX(vEnd), byF=toY(fEnd);
+    const pmX=(V0&&V0>0)?toX(V0/2):null, pmY=toY(F0/2);
+    const v0X=(V0&&V0>0)?toX(V0):null;
+    const dots=pairs.map(p=>`<circle cx="${toX(p.v).toFixed(1)}" cy="${toY(p.F).toFixed(1)}" r="4.5" fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2"><title>${p.kg}kg · ${p.v}m/s</title></circle>`).join('');
+    // Faint area under the line (triangle from the origin), not a floating rectangle
+    const areaFill=(V0&&V0>0)?`<polygon points="${ax0.toFixed(1)},${baseY.toFixed(1)} ${ax0.toFixed(1)},${ayF0.toFixed(1)} ${bx.toFixed(1)},${baseY.toFixed(1)}" fill="var(--cm-accent)" opacity="0.07"/>`:'';
+    const chart=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;border-radius:8px;margin-bottom:12px">
+      <rect width="${W}" height="${H}" fill="var(--cm-bg-soft)" rx="8"/>
+      <g>${gridSvg}</g>
+      ${areaFill}
+      ${v0X?`<line x1="${v0X.toFixed(1)}" y1="${pt}" x2="${v0X.toFixed(1)}" y2="${(pt+gH)}" stroke="var(--cm-fg-muted)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>`:''}
+      <line x1="${ax0.toFixed(1)}" y1="${ayF0.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${byF.toFixed(1)}" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${ax0.toFixed(1)}" cy="${ayF0.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>
+      ${v0X?`<circle cx="${v0X.toFixed(1)}" cy="${baseY.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>`:''}
+      ${pmX?`<circle cx="${pmX.toFixed(1)}" cy="${pmY.toFixed(1)}" r="5" fill="var(--cm-warning)" opacity="0.95"/>`:''}
+      ${dots}
+      <text x="${(pl+4)}" y="${(ayF0-5).toFixed(1)}" font-size="10" fill="var(--cm-fg-muted)">F₀=${Math.round(F0)}N</text>
+      ${v0X?`<text x="${(v0X+3).toFixed(1)}" y="${(pt+gH-4)}" font-size="10" fill="var(--cm-fg-muted)">V₀=${V0}</text>`:''}
+      ${pmX?`<text x="${(pmX+6).toFixed(1)}" y="${(pmY-5).toFixed(1)}" font-size="10" fill="var(--cm-warning)">Pmax=${Pmax}W</text>`:''}
+      <text x="${(pl+gW-2)}" y="${(pt+14)}" text-anchor="end" font-size="11" font-weight="600" fill="${R2>=0.95?'var(--cm-success)':'var(--cm-danger)'}">R² = ${R2}</text>
+      <text x="${(pl+gW/2).toFixed(0)}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Velocity (m/s)</text>
+      <text transform="translate(13 ${(pt+gH/2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Force (N)</text>
+    </svg>`;
+    const kpis=[['F₀',Math.round(F0),'N','Fuerza máx. teórica'],['V₀',V0||'—',V0?'m/s':'','Velocidad máx. teórica'],['Pmax',Pmax?Math.round(Pmax):'—',Pmax?'W':'','Potencia máxima'],['Sfv',Sfv,'N·s/m','Pendiente F-V']];
+    let fvAlert='';
+    if (FVimb_pct!==null) {
+      const fc=FVimb_pct<80||FVimb_pct>120?'#B91C1C':'#15803D';
+      const fm=FVimb_pct<80?tt('evaluations.fv_force_deficit','🔴 Force deficit: emphasize heavy loads (>80% 1RM)'):FVimb_pct>120?tt('evaluations.fv_velocity_deficit','🔴 Velocity deficit: emphasize light loads and high velocity'):tt('evaluations.fv_balanced','🟢 Balanced profile: keep a variety of stimuli');
+      fvAlert=`<div style="margin-top:8px;padding:8px;background:${fc}18;border-radius:6px;border:1px solid ${fc}40;font:500 12px/1.4 var(--cm-font-sans);color:${fc}">FVimb ${FVimb_pct}% — ${fm}</div>`;
+    }
+    resEl.innerHTML=`<div class="pa-result-hero">
+      ${chart}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+        ${kpis.map(([l,v,u,d])=>`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
+      </div>
+      ${R2<0.95?`<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">${tt('evaluations.fv_low_quality','⚠ Low profile quality (R²={r2}) — review measurements',{r2:R2})}</div>`:''}
+      ${fvAlert}
+    </div>`;
+    const tableRows=pairs.map(p=>{const Fpred=+(a+b*p.v).toFixed(0);const err=+Math.abs(p.F-Fpred).toFixed(0);return `<tr><td>${p.kg} kg</td><td class="r">${p.v} m/s</td><td class="r">${p.F.toFixed(0)} N</td><td class="r">${Fpred} N</td><td class="r" style="color:${err>p.F*0.05?'var(--cm-warning)':'var(--cm-fg-muted)'}">${err} N</td></tr>`;}).join('');
+    zoneEl.innerHTML=`
+      <div class="pa-section" style="margin-top:0">Datos · ${n} puntos de carga</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Carga</th><th class="r">VMP</th><th class="r">F real</th><th class="r">F reg.</th><th class="r">Error</th></tr></thead>
+        <tbody>${tableRows}</tbody></table>
+      </div>
+      <div class="pa-section">Fórmulas · Samozino &amp; Morin (2012–2016)</div>
+      <div class="pt-formula" style="font-size:11px">
+        F = F₀ − (F₀/V₀) × v &nbsp;·&nbsp; regresión mínimos cuadrados<br>
+        Pmax = F₀ × V₀ / 4<br>
+        ${FVimb_pct!==null?'FVimb = Sfv / Sfvopt × 100 · Sfvopt = −2mg√h_SJ / V₀²<br>':''}
+        <span class="cit">Samozino et al. (2014) · Morin &amp; Samozino (2016)</span>
+      </div>`;
+    document.getElementById('paFootInfo').textContent=`F-V Profile · F₀=${Math.round(F0)}N · V₀=${V0||'?'}m/s · Pmax=${Pmax?Math.round(Pmax):'?'}W · R²=${R2}${FVimb_pct!==null?` · FVimb=${FVimb_pct}%`:''}`;
+  }
+
+  // ─── Calc: Sprint Horizontal F-V profile (Samozino et al. 2016) ───
+  // Reads the 5 fixed split-time inputs (5/10/20/30/40 m) + mass + height,
+  // builds the splits array (only distances with a time, min 4) and calls the
+  // validated engine window.hfvpProfile(). Renders KPIs, the F-V line chart and
+  // a short actionable conclusion. Returns the computed object (used by save).
+  function readHfvpInputs() {
+    const mass   = parseFloat(document.getElementById('paHfvpMass')?.value);
+    const height = parseFloat(document.getElementById('paHfvpHeight')?.value);
+    const splits = [];
+    [5, 10, 20, 30, 40].forEach(d => {
+      const t = parseFloat(document.getElementById('paHfvp' + d)?.value);
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return { mass, height, splits };
+  }
+
+  // ── Shared H-FVP profile drawing: KPIs + F-V line + diagnosis (+ citation) ──
+  // profile: the stored computed object OR a live window.hfvpProfile() result —
+  // both expose { F0, F0_rel, V0, Pmax, Pmax_rel, RFmax, DRF, vmax }.
+  // Used by the modal (calcHFVP) and the individual View results (renderEvalIndiv).
+  // opts.showCitation (default true) — the modal suppresses it because its right
+  // panel already prints the method/citation block, so the modal stays identical.
+  function renderHFVPProfile(profile, host, opts) {
+    if (!host) return;
+    opts = opts || {};
+    const p = profile || {};
+    if (p.F0 == null || p.V0 == null || p.Pmax == null) {
+      host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+tt('evaluations.no_hfvp_profile_stored','No H-FVP profile stored for this entry.')+'</div>';
+      return;
+    }
+    const F0 = p.F0, V0 = p.V0, Pmax = p.Pmax;
+    const F0_rel   = (p.F0_rel   != null) ? p.F0_rel   : (p.mass ? F0 / p.mass : 0);
+    const Pmax_rel = (p.Pmax_rel != null) ? p.Pmax_rel : (p.mass ? Pmax / p.mass : 0);
+    const RFmax = p.RFmax != null ? p.RFmax : 0;
+    const DRF   = p.DRF   != null ? p.DRF   : 0;
+    const vmax  = p.vmax  != null ? p.vmax  : 0;
+
+    // ── F-V line chart: F₀ (Y intercept) → V₀ (X intercept), Pmax at midpoint ──
+    const W = 460, H = 240, pl = 55, pr = 15, pt = 24, pb = 38;
+    const gW = W - pl - pr, gH = H - pt - pb;
+    const maxV_ax = V0 * 1.1, maxF_ax = F0 * 1.1;
+    const toX = v => pl + (v / maxV_ax) * gW, toY = F => pt + gH - (F / maxF_ax) * gH;
+    let gridSvg = '';
+    for (let i = 0; i <= 4; i++) {
+      const v = maxV_ax * i / 4, x = toX(v);
+      gridSvg += `<line x1="${x.toFixed(0)}" y1="${pt}" x2="${x.toFixed(0)}" y2="${pt + gH}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg += `<text x="${x.toFixed(0)}" y="${pt + gH + 14}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${v.toFixed(1)}</text>`;
+    }
+    for (let i = 0; i <= 4; i++) {
+      const F = maxF_ax * i / 4, y = toY(F);
+      gridSvg += `<line x1="${pl}" y1="${y.toFixed(0)}" x2="${pl + gW}" y2="${y.toFixed(0)}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg += `<text x="${pl - 6}" y="${(y + 4).toFixed(0)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${Math.round(F)}</text>`;
+    }
+    const ax0 = toX(0), ayF0 = toY(F0), v0X = toX(V0), baseY = toY(0);
+    const pmX = toX(V0 / 2), pmY = toY(F0 / 2);
+    const areaFill = `<polygon points="${ax0.toFixed(1)},${baseY.toFixed(1)} ${ax0.toFixed(1)},${ayF0.toFixed(1)} ${v0X.toFixed(1)},${baseY.toFixed(1)}" fill="var(--cm-accent)" opacity="0.07"/>`;
+    const chart = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;border-radius:8px;margin-bottom:12px">
+      <rect width="${W}" height="${H}" fill="var(--cm-bg-soft)" rx="8"/>
+      <g>${gridSvg}</g>
+      ${areaFill}
+      <line x1="${v0X.toFixed(1)}" y1="${pt}" x2="${v0X.toFixed(1)}" y2="${pt + gH}" stroke="var(--cm-fg-muted)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+      <line x1="${ax0.toFixed(1)}" y1="${ayF0.toFixed(1)}" x2="${v0X.toFixed(1)}" y2="${baseY.toFixed(1)}" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${ax0.toFixed(1)}" cy="${ayF0.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>
+      <circle cx="${v0X.toFixed(1)}" cy="${baseY.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>
+      <circle cx="${pmX.toFixed(1)}" cy="${pmY.toFixed(1)}" r="5" fill="var(--cm-warning)" opacity="0.95"/>
+      <text x="${pl + 4}" y="${(ayF0 - 5).toFixed(1)}" font-size="10" fill="var(--cm-fg-muted)">F₀=${Math.round(F0)}N</text>
+      <text x="${(v0X + 3).toFixed(1)}" y="${pt + gH - 4}" font-size="10" fill="var(--cm-fg-muted)">V₀=${V0.toFixed(2)}</text>
+      <text x="${(pmX + 6).toFixed(1)}" y="${(pmY - 5).toFixed(1)}" font-size="10" fill="var(--cm-warning)">Pmax=${Math.round(Pmax)}W</text>
+      <text x="${pl + gW / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Velocity (m/s)</text>
+      <text transform="translate(13 ${pt + gH / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Horizontal force (N)</text>
+    </svg>`;
+
+    const kpis = [
+      ['F₀', Math.round(F0), 'N', `${F0_rel.toFixed(2)} N/kg`],
+      ['V₀', V0.toFixed(2), 'm/s', 'theoretical max velocity'],
+      ['Pmax', Math.round(Pmax), 'W', `${Pmax_rel.toFixed(2)} W/kg`],
+      ['RFmax', (RFmax * 100).toFixed(1), '%', 'max ratio of force'],
+      ['DRF', DRF.toFixed(4), '', 'RF decay rate'],
+      ['Vmax', vmax.toFixed(2), 'm/s', 'modelled top speed'],
+    ];
+
+    // ── Conclusion (force vs velocity bias) ──
+    // Practical heuristic: balance the relative force (F0_rel, ref ≈ 8 N/kg)
+    // against the theoretical max velocity (V0, ref ≈ 9 m/s). Ratio >1.1 ⇒
+    // force-oriented (velocity-deficient); <0.9 ⇒ velocity-oriented.
+    const balance = (F0_rel / 8.0) / (V0 / 9.0);
+    let verdict, vCls;
+    if (balance > 1.10) {
+      verdict = tt('evaluations.hfvp_force_oriented','Force-oriented profile — velocity-deficient: prioritize maximal-velocity sprinting (fly-ins, sprint-float-sprint, overspeed).');
+      vCls = '#B45309';
+    } else if (balance < 0.90) {
+      verdict = tt('evaluations.hfvp_velocity_oriented','Velocity-oriented profile — force-deficient: prioritize horizontal-force work (resisted/sled sprints, short accelerations, hill sprints).');
+      vCls = '#B91C1C';
+    } else {
+      verdict = tt('evaluations.hfvp_balanced','Well-balanced F-V profile — maintain a mixed stimulus (accelerations + maximal-velocity exposure).');
+      vCls = '#15803D';
+    }
+    let drfLine;
+    if (DRF < -0.10) drfLine = tt('evaluations.hfvp_drf_steep','Steep ratio-of-force decay (DRF {drf}) — mechanical effectiveness drops quickly with speed: refine sprint technique / forward force orientation.',{drf:DRF.toFixed(3)});
+    else if (DRF > -0.06) drfLine = tt('evaluations.hfvp_drf_good','Well-maintained ratio of force (DRF {drf}) — good mechanical effectiveness across the acceleration.',{drf:DRF.toFixed(3)});
+    else drfLine = tt('evaluations.hfvp_drf_typical','Ratio-of-force decay within typical range (DRF {drf}, RFmax {rf}%).',{drf:DRF.toFixed(3),rf:(RFmax * 100).toFixed(1)});
+
+    const citation = (opts.showCitation === false) ? '' :
+      `<div style="margin-top:8px;font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">${tt('evaluations.hfvp_method_citation','Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.')}</div>`;
+
+    host.innerHTML = `<div class="pa-result-hero">
+      ${chart}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
+        ${kpis.map(([l, v, u, d]) => `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:8px;padding:10px;background:${vCls}18;border-radius:6px;border:1px solid ${vCls}40;font:600 12.5px/1.45 var(--cm-font-sans);color:${vCls}">${verdict}</div>
+      <div style="margin-top:6px;padding:8px 10px;background:var(--cm-surface);border-radius:6px;border:1px solid var(--cm-border-soft);font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">${drfLine}</div>${citation}
+    </div>`;
+  }
+
+  function calcHFVP() {
+    const resEl = document.getElementById('paResults');
+    const zoneEl = document.getElementById('paZones');
+    if (!resEl || !zoneEl) return null;
+    const { mass, height, splits } = readHfvpInputs();
+
+    if (isNaN(mass) || isNaN(height) || splits.length < 4) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">${tt('evaluations.hfvp_enter_inputs','Enter mass, height and at least 4 split times to compute the profile (current splits: {n}).',{n:splits.length})}</div>`;
+      document.getElementById('paFootInfo').textContent = tt('evaluations.hfvp_fill_to_save','Fill in mass, height and ≥4 split times to save');
+      return null;
+    }
+    if (typeof window.hfvpProfile !== 'function') {
+      resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">hfvp-calc.js not loaded.</div>`;
+      return null;
+    }
+
+    let r;
+    try { r = window.hfvpProfile(splits, mass, height); }
+    catch (e) { resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">${esc(e.message)}</div>`; return null; }
+
+    const F0 = r.F0, V0 = r.V0, Pmax = r.Pmax;
+
+    // KPIs + F-V line + diagnosis (shared with the individual View results).
+    // showCitation:false → the citation stays in the modal's right panel below,
+    // so the modal renders exactly as before the refactor.
+    renderHFVPProfile(r, resEl, { showCitation: false });
+
+    const splitRows = splits.map(s => `<tr><td>${s.distance_m} m</td><td class="r">${s.time_s.toFixed(2)} s</td></tr>`).join('');
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Splits · ${splits.length} points</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Distance</th><th class="r">Time</th></tr></thead><tbody>${splitRows}</tbody></table>
+      </div>
+      <div class="pa-section">Mechanics</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><tbody>
+          <tr><td>F-V slope</td><td class="r">${r.FVslope.toFixed(2)} N/(m/s)</td></tr>
+          <tr><td>τ (tau)</td><td class="r">${r.tau.toFixed(3)} s</td></tr>
+          <tr><td>Mass · Height</td><td class="r">${mass} kg · ${height} m</td></tr>
+        </tbody></table>
+      </div>
+      <div class="pa-section">Method &amp; interpretation</div>
+      <div class="pt-formula" style="font-size:11px">
+        v(t) = Vmax·(1 − e<sup>−t/τ</sup>) · F<sub>h</sub> = m·a + ½ρA<sub>f</sub>C<sub>d</sub>v²<br>
+        F-V linear → F₀, V₀ · Pmax = F₀·V₀ / 4 · air 20°C, sea level<br>
+        <span class="cit">${tt('evaluations.hfvp_method_citation','Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.')}</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `H-FVP · F₀=${Math.round(F0)}N (${r.F0_rel.toFixed(2)} N/kg) · V₀=${V0.toFixed(2)} m/s · Pmax=${Math.round(Pmax)}W (${r.Pmax_rel.toFixed(2)} W/kg)`;
+    return { r, mass, height, splits };
+  }
+
+  // ─── Bulk entry ───
+
+  async function savePhysAnalysis() {
+    if (!_paCurrent || !_clubId) return;
+    const cfg      = _paCurrent.cfg;
+    const pid      = document.getElementById('paPlayer')?.value;
+    const testDate = document.getElementById('paDate')?.value;
+    const userNote = document.getElementById('paNotes')?.value?.trim() || '';
+
+    if (!pid || !testDate) { alert(tt('evaluations.select_player_date','Please select a player and date.')); return; }
+
+    let value, unit, evalType, computed = {};
+
+    if (cfg.key === 'ift') {
+      value = parseFloat(document.getElementById('paVift')?.value);
+      if (!value) { alert(tt('evaluations.enter_vift','Please enter VIFT.')); return; }
+      unit     = 'km/h';
+      evalType = '30-15 IFT';
+      const gender = document.getElementById('paGender')?.value || 'M';
+      const age    = parseFloat(document.getElementById('paAge')?.value);
+      const weight = parseFloat(document.getElementById('paWeight')?.value);
+      const G = gender === 'M' ? 1 : 2;
+      computed = { inputs: { vift: value, gender, age: isNaN(age) ? null : age, weight: isNaN(weight) ? null : weight } };
+      if (!isNaN(age) && !isNaN(weight))
+        computed.vo2max = +(28.3 - 2.15*G - 0.741*age - 0.0357*weight + 0.0586*age*value + 1.03*value).toFixed(1);
+      const isM = gender === 'M';
+      computed.level = (isM ? value>=19.5 : value>=17.0) ? 'Elite/Professional'
+                     : (isM ? value>=17.5 : value>=15.0) ? 'Advanced'
+                     : (isM ? value>=15.5 : value>=13.5) ? 'Intermediate' : 'Developing';
+
+    } else if (cfg.key === 'tt1600') {
+      const mins = parseFloat(document.getElementById('paTTmin')?.value) || 0;
+      const secs = parseFloat(document.getElementById('paTTsec')?.value) || 0;
+      const totalSec = mins * 60 + secs;
+      if (totalSec < 60) { alert(tt('evaluations.enter_valid_time','Please enter a valid time.')); return; }
+      const vAvg_ms = 1600 / totalSec;
+      const vo2maxVal = +((( (vAvg_ms*720) - 504.9) / 44.73 + 3.5 + 483 / (totalSec/60)) / 2).toFixed(1);
+      value    = vo2maxVal;
+      unit     = 'ml/kg/min';
+      evalType = '1,600 m TT';
+      const pm = Math.floor(totalSec/1.6/60), ps = Math.round((totalSec/1.6)%60);
+      computed = { inputs: { timeSec: totalSec }, vo2max: vo2maxVal, vAvgKmh: +(vAvg_ms*3.6).toFixed(2), pace: `${pm}:${String(ps).padStart(2,'0')}` };
+
+    } else if (cfg.key === 'vbt') {
+      const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+      const fit = vbtFit();
+      if (fit.error === 'few') { alert(tt('evaluations.min_2_loads','Minimum 2 loads required for the load-velocity profile.')); return; }
+      if (fit.error === 'sameload') { alert(tt('evaluations.loads_must_differ','Loads must differ to fit the profile.')); return; }
+      const { pairs, a, b, method, R2 } = fit;
+      if (b >= 0) { if (!confirm(tt('evaluations.slope_confirm','Velocity does not decrease with load (slope ≥ 0). Save anyway?'))) return; }
+      const hasThreshold = VBT_V1RM[exercise] !== undefined;
+      const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept)
+      const est1RM = b < 0 ? +(((v1rm - a) / b)).toFixed(1) : null;
+      if (est1RM === null || !isFinite(est1RM) || est1RM <= 0) { alert(tt('evaluations.cannot_estimate_1rm','Cannot estimate 1RM from this profile — check the loads/velocities.')); return; }
+      if (R2 < 0.70 && method === 'multi-point' && !confirm(tt('evaluations.low_r2_confirm','Low R² ('+R2+'). Save anyway?',{r2:R2}))) return;
+      value    = est1RM;
+      unit     = 'kg';
+      evalType = VBT_EVAL_TYPES[exercise] || `VBT · ${exercise.toLowerCase()}`;
+      computed = { inputs: pairs.map(p => ({ kg: p.kg, vmp: p.v })), slope: +b.toFixed(5), intercept: +a.toFixed(4), R2, v1rm_used: v1rm, est1RM, method, exercise };
+
+    } else if (cfg.key === 'orm') {
+      const kg   = parseFloat(document.getElementById('pa1RMkg')?.value);
+      const reps = parseInt(document.getElementById('pa1RMreps')?.value);
+      if (!kg || !reps) { alert(tt('evaluations.enter_weight_reps','Please enter weight and reps.')); return; }
+      const exercise = get1RMExercise();
+      const epley    = +(kg * (1 + reps/30)).toFixed(1);
+      const brzycki  = reps < 37 ? +(kg * 36 / (37 - reps)).toFixed(1) : epley;
+      value    = +((epley + brzycki) / 2).toFixed(1);
+      unit     = 'kg';
+      evalType = `1RM · ${exercise}`;
+      computed = { inputs: { weightKg: kg, reps, exercise }, epley, brzycki, avg: value };
+
+    } else if (cfg.key === 'fms') {
+      const g = id => parseInt(document.getElementById(id)?.value ?? '3') || 0;
+      const ds=g('paFMSds');
+      const hsL=g('paFMShsL'), hsR=g('paFMShsR'), hs=Math.min(hsL,hsR);
+      const ilL=g('paFMSilL'), ilR=g('paFMSilR'), il=Math.min(ilL,ilR);
+      const smL=g('paFMSsmL'), smR=g('paFMSsmR'), sm=Math.min(smL,smR);
+      const aslrL=g('paFMSaslrL'), aslrR=g('paFMSaslrR'), aslr=Math.min(aslrL,aslrR);
+      const tsp=g('paFMStsp');
+      const rsL=g('paFMSrsL'), rsR=g('paFMSrsR'), rs=Math.min(rsL,rsR);
+      const total=ds+hs+il+sm+aslr+tsp+rs;
+      value=total; unit='/21'; evalType='FMS';
+      computed={ inputs:{ds,hsL,hsR,ilL,ilR,smL,smR,aslrL,aslrR,tsp,rsL,rsR}, scores:{ds,hs,il,sm,aslr,tsp,rs}, total, risk:total<=14?'high':total<=16?'moderate':'optimal' };
+
+    } else if (cfg.key === 'ankle') {
+      const L=parseFloat(document.getElementById('paAnkleL')?.value);
+      const R=parseFloat(document.getElementById('paAnkleR')?.value);
+      if (isNaN(L)||isNaN(R)) { alert(tt('evaluations.enter_both_ankle','Enter both ankle measurements.')); return; }
+      const cls=v=>v>12?'hypermobile':v>=10?'normal':v>=7?'mild restriction':'severe restriction';
+      value=+((L+R)/2).toFixed(1); unit='cm'; evalType='Ankle dorsiflexion';
+      computed={ inputs:{L,R}, classL:cls(L), classR:cls(R), asymmetry:+Math.abs(L-R).toFixed(1) };
+
+    } else if (cfg.key === 'hiprot') {
+      const irL=parseFloat(document.getElementById('paHipIRL')?.value);
+      const irR=parseFloat(document.getElementById('paHipIRR')?.value);
+      const erL=parseFloat(document.getElementById('paHipERL')?.value);
+      const erR=parseFloat(document.getElementById('paHipERR')?.value);
+      if ([irL,irR,erL,erR].some(isNaN)) { alert(tt('evaluations.enter_all_hip','Enter all hip rotation values.')); return; }
+      value=+((irL+irR)/2).toFixed(1); unit='° IR avg'; evalType='Hip ER/IR';
+      computed={ inputs:{irL,irR,erL,erR}, totalL:irL+erL, totalR:irR+erR, bibe:{L:irL<25&&erL>65,R:irR<25&&erR>65}, asymIR:+Math.abs(irL-irR).toFixed(1), asymER:+Math.abs(erL-erR).toFixed(1) };
+
+    } else if (cfg.key === 'skinfold') {
+      const method=document.getElementById('paSkinfoldMethod')?.value||'jp3';
+      const gender=document.getElementById('paSkinfoldGender')?.value||'M';
+      const age=parseFloat(document.getElementById('paSkinfoldAge')?.value);
+      const weight=parseFloat(document.getElementById('paSkinfoldWeight')?.value);
+      if (isNaN(age)||isNaN(weight)) { alert(tt('evaluations.enter_age_weight','Enter age and weight.')); return; }
+      const pct=sfBodyFatPct({ formula:method, sex:gender, age, folds:readIndivFolds(method, gender) });
+      if (pct===null) { alert(tt('evaluations.invalid_skinfold','Invalid skinfold values — check inputs.')); return; }
+      const density=4.95/(pct/100+4.50);   // recover D from %BF for the stored detail
+      value=pct; unit='%BF'; evalType='Body composition';
+      computed={ inputs:{method,gender,age,weight}, density:+density.toFixed(5), pct, fatMass:+(weight*pct/100).toFixed(1), leanMass:+(weight*(1-pct/100)).toFixed(1) };
+
+      // Also write a structured row into body_composition (single source of truth for anthropometry).
+      // Resilient: a failure here must NOT block the evaluations insert below.
+      try {
+        const numId = id => { const v = parseFloat(document.getElementById(id)?.value); return isFinite(v) ? v : null; };
+        const nn = v => (isFinite(v) ? v : null);   // canonical fold → value|null
+        const folds = readIndivFolds(method, gender);   // { canonicalSite: mm }
+        const _siteSum = sfFormulaSites(method, gender).reduce((a,k) => a + (parseFloat(folds[k]) || 0), 0);
+        const heightCm = numId('paSkinfoldHeight');
+        const waistCm  = numId('paAnthroWaist');
+        const bmi  = calcBMI(weight, heightCm);
+        const rfm  = calcRFM(heightCm, waistCm, gender);
+        const soma = calcSomatotype(readAnthroExtras());
+        const bcRow = {
+          player_id: pid, club_id: _clubId,
+          measured_date: testDate,
+          method: 'skinfold',
+          weight_kg: weight,
+          body_fat_pct: pct,
+          lean_mass_kg: +(weight * (1 - pct/100)).toFixed(1),
+          sf_chest: nn(folds.chest), sf_abdominal: nn(folds.abdomen), sf_thigh: nn(folds.thigh),
+          sf_triceps: nn(folds.triceps), sf_subscapular: nn(folds.subscapular),
+          sf_midaxillary: nn(folds.midaxillary), sf_biceps: nn(folds.biceps),
+          sf_supraspinal: (numId('paSF_supraspinal') != null ? numId('paSF_supraspinal') : nn(folds.suprailiac)),
+          sf_calf: numId('paSF_calf'),
+          sf_formula: method.toUpperCase(),           // 'JP3' | 'JP7' | 'DW4'
+          sum_skinfolds: _siteSum || null,
+          age_years: age,
+          sex: gender === 'F' ? 'female' : 'male',
+          height_cm: heightCm,
+          waist_cm: waistCm,
+          girth_arm_flexed: numId('paAnthroArmGirth'),
+          girth_calf: numId('paAnthroCalfGirth'),
+          breadth_humerus: numId('paAnthroHumerus'),
+          breadth_femur: numId('paAnthroFemur'),
+          bmi: bmi,
+          rfm: rfm,
+          soma_endo: soma.endo,
+          soma_meso: soma.meso,
+          soma_ecto: soma.ecto
+        };
+        const { error: bcErr } = await window.sb.from('body_composition').insert(bcRow);
+        if (bcErr) { console.error('body_composition insert failed:', bcErr);
+          alert(tt('evaluations.bc_row_failed','Warning: the body-composition record could not be stored ({msg}) — the Anthropometrics cards will not show this entry.',{msg:bcErr.message})); }
+      } catch (e) { console.error('body_composition insert exception:', e);
+        alert(tt('evaluations.bc_row_failed','Warning: the body-composition record could not be stored ({msg}) — the Anthropometrics cards will not show this entry.',{msg:(e&&e.message)||e})); }
+
+    } else if (cfg.key === 'fvprofile') {
+      const G=9.81;
+      const pairs=[...document.querySelectorAll('.fv-row')].reduce((acc,r)=>{
+        const kg=parseFloat(r.querySelector('.fv-load')?.value), v=parseFloat(r.querySelector('.fv-vmp')?.value);
+        if (!isNaN(kg)&&!isNaN(v)&&kg>0&&v>0) acc.push({kg,F:kg*G,v});
+        return acc;
+      },[]);
+      if (pairs.length<3) { alert(tt('evaluations.min_3_pairs','Minimum 3 load/VMP pairs required.')); return; }
+      const n=pairs.length, sv=pairs.reduce((s,p)=>s+p.v,0), sF=pairs.reduce((s,p)=>s+p.F,0);
+      const svF=pairs.reduce((s,p)=>s+p.v*p.F,0), sv2=pairs.reduce((s,p)=>s+p.v*p.v,0);
+      const b=(n*svF-sv*sF)/(n*sv2-sv*sv), a=(sF-b*sv)/n;
+      const F0=+a.toFixed(1), V0=b<0?+(-a/b).toFixed(2):null, Pmax=V0?+(F0*V0/4).toFixed(1):null, Sfv=+b.toFixed(2);
+      const Fmean=sF/n, SStot=pairs.reduce((s,p)=>s+(p.F-Fmean)**2,0), SSres=pairs.reduce((s,p)=>s+(p.F-(a+b*p.v))**2,0);
+      const R2=SStot>0?+(1-SSres/SStot).toFixed(3):0;
+      const hSJ_cm=parseFloat(document.getElementById('paFVhSJ')?.value);
+      let FVimb_pct=null;
+      if (!isNaN(hSJ_cm)&&hSJ_cm>0&&V0&&V0>0) {
+        const m=F0/G, Sfvopt=-(2*m*G*Math.sqrt(hSJ_cm/100))/(V0*V0);
+        if (Sfvopt!==0) FVimb_pct=+Math.abs(Sfv/Sfvopt*100).toFixed(0);
+      }
+      if (R2<0.70&&!confirm(tt('evaluations.low_r2_confirm','Low R² ('+R2+'). Save anyway?',{r2:R2}))) return;
+      value=F0; unit='N'; evalType='F-V Profile · jumps';   // must match the card's src.match AND the bulk grid (_openTest.label)
+      computed={ inputs:pairs.map(p=>({kg:p.kg,vmp:p.v})), F0, V0, Pmax, Sfv, R2, FVimb_pct, hSJ_cm:isNaN(hSJ_cm)?null:hSJ_cm };
+
+    } else if (cfg.key === 'hfvp') {
+      const out = calcHFVP();
+      if (!out) { alert(tt('evaluations.enter_mass_height_4','Enter mass, height and at least 4 split times.')); return; }
+      const { r, mass, height, splits } = out;
+      value    = +r.Pmax_rel.toFixed(2);   // principal value: relative max power (W/kg)
+      unit     = 'W/kg';
+      evalType = 'Sprint H-FVP';
+      // full profile + inputs in notes JSON → redraw the F-V profile in the player view
+      computed = {
+        inputs: { mass, height, splits, air: { tempC: 20, pressure_kPa: 101.325 } },
+        vmax: r.vmax, tau: r.tau, F0: r.F0, F0_rel: r.F0_rel, V0: r.V0,
+        Pmax: r.Pmax, Pmax_rel: r.Pmax_rel, RFmax: r.RFmax, DRF: r.DRF, FVslope: r.FVslope,
+      };
+    }
+
+    if (userNote) computed.userNotes = userNote;
+    const payload = { player_id: pid, club_id: _clubId, evaluation_type: evalType, value, unit, test_date: testDate, notes: JSON.stringify(computed) };
+    const { error } = await window.sb.from('evaluations').insert(payload);
+    if (error) { alert(tt('evaluations.err_prefix','Error: '+error.message,{msg:error.message})); return; }
+
+    closePhysModal();
+    if (typeof reloadEvalViews === 'function') await reloadEvalViews();
+    if (typeof loadStatuses === 'function') loadStatuses();
+  }
+
+  // expose calculator-modal functions for the inline on*= handlers in the ported markup
+  Object.assign(window, { openPhysAnalysis, closePhysModal, savePhysAnalysis, onPaPlayerChange,
+    calcIFT, calc1600m, calcVBT, onVBTExerciseChange, addVBTRow, applyVBTCsvImport,
+    calc1RM_modal, on1RMExerciseChange, calcFMS, calcAnkle, calcHipRot,
+    onSkinfoldMethodChange, calcSkinfold, addFVRow, calcFVProfile, applyFVCsvImport, calcHFVP,
+    openAssessmentEntry, closeAssessmentEntry, saveAssessmentEntry, onAsPlayerChange, asSetBinary, asEntryRecalc });
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  CSV IMPORTERS (ported verbatim from Evaluations.html): force tests
+  //  + VBT bulk. Scope glue: clubId->_clubId, _evTeamId->_teamId,
+  //  allPlayers->_ftPlayers; save refresh -> View results + catalog status.
+  // ════════════════════════════════════════════════════════════════════
+  const _ftNorm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Build a [{id, toks:[...]}] index from a roster for token-subset name matching.
+  const _ftNameToks = roster => (roster || []).map(p => ({ id: p.id, toks: _ftNorm(`${p.first_name} ${p.last_name}`).split(' ').filter(Boolean) }));
+  // Token-subset fallback: match multi-surname names in any order (e.g. "Mauricio BARBOSA TEIXEIRA").
+  // Returns a player id only when exactly one candidate contains (or is contained by) all tokens and shares >=2.
+  function _ftTokenMatch(parts, nameToks) {
+    if (!parts || parts.length < 2 || !nameToks) return null;
+    const cand = nameToks.filter(e => {
+      if (e.toks.length < 2) return false;
+      const aInB = parts.every(t => e.toks.indexOf(t) >= 0);
+      const bInA = e.toks.every(t => parts.indexOf(t) >= 0);
+      const shared = parts.filter(t => e.toks.indexOf(t) >= 0).length;
+      return (aInB || bInA) && shared >= 2;
+    });
+    return cand.length === 1 ? cand[0].id : null;
+  }
+
+  // Identity/fixed columns, by priority of role. First header that matches a role wins.
+  const _FT_IDENTITY = [
+    { role: 'externalId', label: 'External ID', match: h => /\b(external\s*id|externalid|profile\s*id|athlete\s*id|athleteid)\b/.test(h) },
+    { role: 'name',       label: 'Name',        match: h => /\b(name|player|athlete|jugador)\b/.test(h) },
+    { role: 'testType',   label: 'Test Type',   match: h => /\b(test\s*type|testtype|test|movement|exercise|type)\b/.test(h) },
+    { role: 'date',       label: 'Date',        match: h => /\b(date|recorded|fecha)\b/.test(h) && !/time/.test(h) },
+    { role: 'time',       label: 'Time',        match: h => /\b(time|hora)\b/.test(h) },
+    { role: 'bw',         label: 'Bodyweight',  match: h => /\b(bw|bodyweight|body\s*weight|body\s*mass|weight|mass|peso)\b/.test(h) },
+    { role: 'reps',       label: 'Reps',        match: h => /\b(reps?|repetitions?)\b/.test(h) },
+    { role: 'tags',       label: 'Tags',        match: h => /\b(tags?|notes?|comments?|label)\b/.test(h) },
+  ];
+
+  let _ftState = null; // { rows, headers, fields:{role->header}, metrics:[], roster:[], byId:Map, byName:Map, manual:Map<normName,playerId> }
+
+  function classifyForceColumns(headers) {
+    const fields = {};   // role -> header
+    const used = new Set();
+    for (const def of _FT_IDENTITY) {
+      const hit = headers.find(h => !used.has(h) && def.match(_ftNorm(h)));
+      if (hit) { fields[def.role] = hit; used.add(hit); }
+    }
+    const metrics = headers.filter(h => !used.has(h));
+    return { fields, metrics };
+  }
+
+  async function loadForceRoster() {
+    if (!_clubId) return [];
+    // external_force_id may not exist yet (migration 051) — fall back to name-only roster.
+    // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario).
+    const _frSel1 = 'id, first_name, last_name, external_force_id' + (_teamId ? ', player_teams!inner(team_id)' : '');
+    let q = window.sb.from('players').select(_frSel1).eq('club_id', _clubId).is('archived_at', null);
+    if (_teamId) q = q.eq('player_teams.team_id', _teamId);
+    let res = await q;
+    if (res.error) {
+      const _frSel2 = 'id, first_name, last_name' + (_teamId ? ', player_teams!inner(team_id)' : '');
+      let q2 = window.sb.from('players').select(_frSel2).eq('club_id', _clubId).is('archived_at', null);
+      if (_teamId) q2 = q2.eq('player_teams.team_id', _teamId);
+      res = await q2;
+    }
+    const _seenFr = new Set();
+    return (res.data || []).filter(function(p){ return _seenFr.has(p.id) ? false : (_seenFr.add(p.id), true); });
+  }
+
+  // Resolve a row to a player id: (1) external_force_id, (2) name (incl. swapped "Last First"), (3) manual map.
+  function matchForceRow(row) {
+    const { fields, byId, byName, manual } = _ftState;
+    const ext = fields.externalId ? String(row[fields.externalId] ?? '').trim() : '';
+    if (ext && byId.has(ext)) return { playerId: byId.get(ext), how: 'id' };
+    const rawName = fields.name ? String(row[fields.name] ?? '').trim() : '';
+    const nn = _ftNorm(rawName);
+    if (nn) {
+      if (byName.has(nn)) return { playerId: byName.get(nn), how: 'name' };
+      const parts = nn.split(' ');
+      if (parts.length === 2) {
+        const swapped = parts[1] + ' ' + parts[0];
+        if (byName.has(swapped)) return { playerId: byName.get(swapped), how: 'name' };
+      }
+      if (manual.has(nn)) return { playerId: manual.get(nn), how: 'manual' };
+      const tokHit = _ftTokenMatch(parts, _ftState.nameToks);
+      if (tokHit) return { playerId: tokHit, how: 'name' };
+    }
+    return { playerId: null, how: null };
+  }
+
+  function playerName(id) {
+    const p = (_ftState.roster.find(x => x.id === id)) || _ftPlayers.find(x => x.id === id);
+    return p ? `${p.first_name} ${p.last_name}` : '—';
+  }
+
+  function parseForceCsv(file) {
+    if (!window.Papa) { alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert(tt('evaluations.empty_file','Empty file.')); return; }
+        const headers = res.meta.fields || [];
+        const { fields, metrics } = classifyForceColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _ftState = { rows: res.data, headers, fields, metrics, roster, byId, byName, nameToks: _ftNameToks(roster), manual: new Map(), defs: [], savedMap: {}, colMap: {}, sourceLabel: 'csv', _createCol: null };
+        // Catalog + saved column mappings (degrade gracefully if tables/migration absent)
+        const looksVald = !!fields.testType && headers.some(h => /\[kg\]/i.test(h) || /\(asym\)/i.test(h));
+        _ftState.sourceLabel = looksVald ? 'forcedecks' : 'csv';
+        await loadForceCatalog();
+        autoMapForceColumns();
+        document.getElementById('ftDropZone').style.display = 'none';
+        document.getElementById('ftResultArea').style.display = '';
+        document.getElementById('ftSaveResult').textContent = '';
+        renderForceClassification();
+        renderForceMatch();
+        renderForceMapping();
+        renderForcePreview();
+      },
+      error(err) { alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); }
+    });
+  }
+
+  // Parse a force value that may carry an L/R asymmetry side: "3.5 R" → {value:3.5, side:'R'}.
+  function parseForceValue(raw) {
+    if (raw == null) return { value: null, side: null };
+    const s = String(raw).trim();
+    if (!s) return { value: null, side: null };
+    const m = s.match(/^(-?\d+(?:[.,]\d+)?)\s*([LR])?$/i);
+    if (m) {
+      const v = parseFloat(m[1].replace(',', '.'));
+      return { value: isNaN(v) ? null : v, side: m[2] ? m[2].toUpperCase() : null };
+    }
+    const n = parseFloat(s.replace(',', '.'));
+    return { value: isNaN(n) ? null : n, side: null };
+  }
+
+  // Normalize a metric name for fuzzy matching: drop [..]/(..) units, keep alphanumerics only.
+  const _ftMetricNorm = s => String(s ?? '').toLowerCase().replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]/g, '');
+
+  async function loadForceCatalog() {
+    if (!_clubId) return;
+    try {
+      const { data } = await window.sb.from('force_metric_definitions').select('*').or(`club_id.is.null,club_id.eq.${_clubId}`);
+      _ftState.defs = data || [];
+    } catch (e) { _ftState.defs = []; }
+    try {
+      const { data } = await window.sb.from('force_column_mappings').select('*').eq('club_id', _clubId).eq('source_label', _ftState.sourceLabel);
+      const map = {};
+      (data || []).forEach(r => { const col = r.source_column ?? r.source_column_name; if (col) map[col] = r.target_metric_key; });
+      _ftState.savedMap = map;
+    } catch (e) { _ftState.savedMap = {}; }
+  }
+
+  function autoMapForceColumns() {
+    const { metrics, defs, savedMap } = _ftState;
+    const defIndex = [];
+    defs.forEach(d => {
+      if (d.label) defIndex.push({ norm: _ftMetricNorm(d.label), key: d.key });
+      if (d.key)   defIndex.push({ norm: _ftMetricNorm(d.key), key: d.key });
+    });
+    const colMap = {};
+    metrics.forEach(col => {
+      if (savedMap[col]) { colMap[col] = savedMap[col]; return; }        // (a) saved memory
+      const cn = _ftMetricNorm(col);
+      let best = null;
+      for (const di of defIndex) { if (di.norm && di.norm === cn) { best = di.key; break; } }  // (b1) exact
+      if (!best) {                                                        // (b2) substring, longest wins
+        let bestLen = 0;
+        for (const di of defIndex) {
+          if (di.norm.length >= 4 && (cn.includes(di.norm) || di.norm.includes(cn)) && di.norm.length > bestLen) { bestLen = di.norm.length; best = di.key; }
+        }
+      }
+      colMap[col] = best || null;                                         // (c) unmapped
+    });
+    _ftState.colMap = colMap;
+  }
+
+  function forceDefLabel(key) { const d = _ftState.defs.find(x => x.key === key); return d ? (d.label || d.key) : key; }
+
+  function forceDefOptions(selectedKey) {
+    const byCat = {};
+    _ftState.defs.forEach(d => { (byCat[d.category || 'other'] = byCat[d.category || 'other'] || []).push(d); });
+    let html = `<option value="" ${!selectedKey ? 'selected' : ''}>${esc(tt('evaluations.dont_import',"— don't import —"))}</option>`;
+    Object.keys(byCat).sort().forEach(cat => {
+      html += `<optgroup label="${cat}">`;
+      byCat[cat].sort((a, b) => (a.label || a.key).localeCompare(b.label || b.key)).forEach(d => {
+        html += `<option value="${esc(d.key)}" ${d.key === selectedKey ? 'selected' : ''}>${esc(d.label || d.key)}${d.unit ? ` · ${esc(d.unit)}` : ''}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    html += `<option value="__create__">${esc(tt('evaluations.create_new_metric_opt','+ Create new metric…'))}</option>`;
+    return html;
+  }
+
+  function renderForceMapping() {
+    const { metrics, colMap } = _ftState;
+    const mapped = metrics.filter(c => colMap[c]).length;
+    document.getElementById('ftMapCount').textContent = tt('evaluations.n_m_mapped','('+mapped+'/'+metrics.length+' mapped)',{mapped:mapped,total:metrics.length});
+    document.getElementById('ftMappingRows').innerHTML = metrics.length
+      ? metrics.map((col, i) =>
+          `<div style="display:grid;grid-template-columns:1fr 230px;gap:8px;align-items:center">
+             <span style="font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${col}">${col}</span>
+             <select class="ev-finput" style="height:30px" data-i="${i}" onchange="onForceColMapChange(this)">${forceDefOptions(colMap[col])}</select>
+           </div>`).join('')
+      : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.no_metric_cols_detected','No metric columns detected.'))+'</div>';
+  }
+
+  function onForceColMapChange(sel) {
+    const col = _ftState.metrics[+sel.dataset.i];
+    if (sel.value === '__create__') { openCreateForceMetric(col, sel); return; }
+    _ftState.colMap[col] = sel.value || null;
+    renderForceMapping();
+    renderForcePreview();
+  }
+  window.onForceColMapChange = onForceColMapChange;
+
+  function openCreateForceMetric(col, sel) {
+    _ftState._createCol = col;
+    if (sel) sel.value = _ftState.colMap[col] || '';
+    document.getElementById('ftCreateForCol').textContent = col;
+    document.getElementById('ftNewLabel').value = '';
+    document.getElementById('ftNewUnit').value = '';
+    document.getElementById('ftNewCategory').value = 'custom';
+    document.getElementById('ftCreateForm').style.display = '';
+  }
+
+  function cancelCreateForceMetric() {
+    if (_ftState) _ftState._createCol = null;
+    document.getElementById('ftCreateForm').style.display = 'none';
+  }
+  window.cancelCreateForceMetric = cancelCreateForceMetric;
+
+  async function createForceMetric() {
+    if (!_ftState || !_clubId) return;
+    const label = document.getElementById('ftNewLabel').value.trim();
+    const unit = document.getElementById('ftNewUnit').value.trim();
+    const category = document.getElementById('ftNewCategory').value;
+    if (!label) { alert(tt('evaluations.enter_a_label','Enter a label.')); return; }
+    let key = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+    if (!key) key = 'metric_' + Date.now();
+    const row = { club_id: _clubId, key, label, unit: unit || null, category };
+    const { data, error } = await window.sb.from('force_metric_definitions').insert(row).select().single();
+    if (error) { alert(tt('evaluations.could_not_create_metric','Could not create metric: '+error.message,{msg:error.message})); return; }
+    _ftState.defs.push(data);
+    if (_ftState._createCol) _ftState.colMap[_ftState._createCol] = data.key;
+    _ftState._createCol = null;
+    document.getElementById('ftCreateForm').style.display = 'none';
+    renderForceMapping();
+    renderForcePreview();
+  }
+  window.createForceMetric = createForceMetric;
+
+  // Parse a test date → 'yyyy-mm-dd'. VALD exports DD/MM/YYYY; fall back to Date(); else today (warn).
+  function parseForceDate(raw) {
+    const today = cmToday();
+    const s = String(raw ?? '').trim();
+    if (!s) return { date: today, warn: true };
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);   // DD/MM/YYYY (day-first)
+    if (m) {
+      let [, d, mo, y] = m;
+      if (y.length === 2) y = '20' + y;
+      const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      if (!isNaN(new Date(iso).getTime())) return { date: iso, warn: false };
+    }
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);                          // ISO yyyy-mm-dd...
+    if (m) return { date: `${m[1]}-${m[2]}-${m[3]}`, warn: false };
+    const t = new Date(s);                                            // fallback (local parse → local Y-M-D; toISOString would shift a day east of UTC)
+    if (!isNaN(t.getTime())) return { date: (window.cmYMD ? cmYMD(t) : t.toISOString().slice(0, 10)), warn: false };
+    return { date: today, warn: true };
+  }
+
+  // Save matched rows to force_tests + force_test_metrics; persist mapping memory; skip unmatched; no dups.
+  async function saveForceImport() {
+    if (!_ftState || !_clubId) return;
+    const btn = document.getElementById('ftSaveBtn');
+    const resEl = document.getElementById('ftSaveResult');
+    const { rows, fields, metrics, colMap, defs, sourceLabel } = _ftState;
+
+    let uid = null, uname = null;
+    try { const { data: { user } } = await window.sb.auth.getUser(); uid = user?.id || null; } catch (e) {}
+    try { const prof = await window.getProfile(); uname = prof?.full_name || null; } catch (e) {}
+
+    const unitFor = key => { const d = defs.find(x => x.key === key); return d?.unit || null; };
+    const mappedCols = metrics.filter(c => colMap[c] && colMap[c] !== '__none__');
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = tt('evaluations.saving','Saving…');
+
+    // Natural key for a test, normalized so re-imports match the DB (date → yyyy-mm-dd, time → HH:MM).
+    const normTime = t => (t == null ? '' : String(t).trim().slice(0, 5));
+    const natOf = (pid, type, date, time) => `${pid}|${type}|${String(date).slice(0, 10)}|${normTime(time)}`;
+
+    let testsCount = 0, metricsCount = 0, skipped = 0, dateWarns = 0;
+    try {
+      // ── 1) Build the plan in memory (collapse in-file duplicates by natural key; last wins) ──
+      const planMap = new Map();
+      for (const row of rows) {
+        const m = matchForceRow(row);
+        if (!m.playerId) { skipped++; continue; }
+        const { date, warn } = parseForceDate(fields.date ? row[fields.date] : '');
+        const testType = (fields.testType ? String(row[fields.testType] || '').trim() : '') || 'Unknown';
+        const testTime = fields.time ? (String(row[fields.time] || '').trim() || null) : null;
+        const rec = {
+          club_id: _clubId, team_id: _teamId || null, player_id: m.playerId,
+          test_type: testType, test_date: date, test_time: testTime,
+          bodyweight_kg: fields.bw ? (function(){ var n = evCsvNum(row[fields.bw]); return Number.isFinite(n) ? n : null; })() : null,
+          reps: fields.reps ? (function(){ var n = parseInt(String(row[fields.reps]).trim(), 10); return Number.isFinite(n) ? n : null; })() : null,
+          tags: fields.tags ? (String(row[fields.tags] || '').trim() || null) : null,
+          source: sourceLabel,
+          external_id: fields.externalId ? (String(row[fields.externalId] || '').trim() || null) : null,
+          uploaded_by: uid, uploaded_by_name: uname,
+        };
+        const metricsRaw = [];
+        for (const col of mappedCols) {
+          const { value, side } = parseForceValue(row[col]);
+          if (value == null) continue;
+          metricsRaw.push({ metric_key: colMap[col], value, side, unit: unitFor(colMap[col]) });
+        }
+        planMap.set(natOf(m.playerId, testType, date, testTime), { rec, metricsRaw, warn });
+      }
+      const plan = [...planMap.entries()].map(([natKey, p]) => ({ natKey, ...p }));
+      dateWarns = plan.filter(p => p.warn).length;
+
+      if (plan.length) {
+        // ── 2) Pre-fetch existing tests for the players in the plan (1 query) ──
+        const pids = [...new Set(plan.map(p => p.rec.player_id))];
+        // paginated (dedup breaks silently past PostgREST's ~1000-row cap) + include NULL-team legacy rows
+        const existing = await window.cmFetchAll(() => {
+          let exQ = window.sb.from('force_tests').select('id, player_id, test_type, test_date, test_time')
+            .eq('club_id', _clubId).in('player_id', pids);
+          if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');
+          return exQ;
+        }, { label: 'ev:forceImportDedup' });
+
+        // ── 3) Delete the ones that collide with the plan (metrics cascade) (1 query) ──
+        const planKeys = new Set(plan.map(p => p.natKey));
+        const existingIds = (existing || [])
+          .filter(e => planKeys.has(natOf(e.player_id, e.test_type, e.test_date, e.test_time)))
+          .map(e => e.id);
+        if (existingIds.length) {
+          const { error: delErr } = await window.sb.from('force_tests').delete().in('id', existingIds);
+          if (delErr) throw delErr;
+        }
+
+        // ── 4) Insert all tests in one shot, correlate returned ids by natural key ──
+        const { data: insTests, error: insErr } = await window.sb.from('force_tests')
+          .insert(plan.map(p => p.rec))
+          .select('id, player_id, test_type, test_date, test_time');
+        if (insErr) throw insErr;
+        const idByKey = new Map();
+        (insTests || []).forEach(t => idByKey.set(natOf(t.player_id, t.test_type, t.test_date, t.test_time), t.id));
+        testsCount = (insTests || []).length;
+
+        // ── 5) Gather every metric row and insert in chunks (1 query, or a few if huge) ──
+        const allMetricRows = [];
+        plan.forEach(p => {
+          const tid = idByKey.get(p.natKey);
+          if (!tid) return;
+          p.metricsRaw.forEach(mr => allMetricRows.push({ test_id: tid, club_id: _clubId, metric_key: mr.metric_key, value: mr.value, side: mr.side, unit: mr.unit }));
+        });
+        const CHUNK = 500;
+        for (let i = 0; i < allMetricRows.length; i += CHUNK) {
+          const { error: mErr } = await window.sb.from('force_test_metrics').insert(allMetricRows.slice(i, i + CHUNK));
+          if (mErr) throw mErr;
+        }
+        metricsCount = allMetricRows.length;
+      }
+
+      // ── 6) Persist column-mapping memory once (non-fatal if it fails) ──
+      if (mappedCols.length) {
+        const mapRows = mappedCols.map(col => ({ club_id: _clubId, source_label: sourceLabel, source_column_name: col, target_metric_key: colMap[col] }));
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = tt('evaluations.import_failed','Import failed: '+(e.message||e),{msg:(e.message||e)}) + (testsCount ? tt('evaluations.tests_saved_before_error',' — '+testsCount+' tests saved before the error',{count:testsCount}) : '');
+      return;
+    }
+
+    const parts = [tt('evaluations.imported_n_tests','Imported '+testsCount+' tests',{count:testsCount}), tt('evaluations.n_metric_values',metricsCount+' metric values',{count:metricsCount}), tt('evaluations.n_rows_skipped_unmatched',skipped+' rows skipped (unmatched)',{count:skipped})];
+    if (dateWarns) parts.push(tt('evaluations.n_dates_defaulted',dateWarns+' dates defaulted to today',{count:dateWarns}));
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = parts.join(' · ');
+    setTimeout(() => {
+      document.getElementById('ftImpDrawer').classList.remove('is-open');
+      document.getElementById('ftImpOverlay').classList.remove('is-open');
+      resetForceImport();
+      if (typeof loadForceView === 'function') loadForceView();   // refresh team view with the new data
+      if (typeof loadStatuses === 'function') loadStatuses();
+    }, 2000);
+  }
+  window.saveForceImport = saveForceImport;
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SCREENING IMPORTER (#asImpDrawer) — WIDE format. Each metric column IS
+  //  a (test, side). Clones the force-importer pipeline (classify → match →
+  //  auto-map → preview → save) but maps columns to (test_key, side) and
+  //  persists memory in assessment_column_maps. Writes force_tests + metrics.
+  // ════════════════════════════════════════════════════════════════════
+  var _asState = null;   // { rows, headers, fields, metrics, byId, byName, manual, colMap, savedMap }
+  var _asTargets = [];   // [{ key, test_type, metric_key, unit, family, label, bilateral, value_type, aliases }]
+  var _asTargetsByKey = {};
+
+  // identity columns for a wide screening export (name split, external id, real test date)
+  var _AS_ID = [
+    { role:'externalId', match:h => /\b(external\s*id|externalid|profile\s*id|athlete\s*id|athleteid)\b/.test(h) },
+    { role:'name',       match:h => /\b(name|player|athlete|jugador)\b/.test(h) },
+    { role:'date',       match:h => /\b(date|recorded|fecha)\b/.test(h) && !/time|birth|nac|dob/.test(h) },
+  ];
+
+  function _asBuildTargets(){
+    var out = [];
+    _assessDefs.forEach(function(d){
+      out.push({ key:d.key, test_type:d.test_type, metric_key:d.metric_key, unit:d.unit, family:d.family,
+                 label:d.label, bilateral:d.bilateral, value_type:d.value_type, aliases:(d.aliases||[]),
+                 metrics:asMetrics(d) });   // multi-metric aware (VALD peak force + RFD + impulse…)
+    });
+    // jump / other force_tests catalog entries (CMJ, SJ, DJ, SL-CMJ) so their columns still import
+    var jumpAliases = { cmj:['CMJ'], sj:['SJ','SQUAT JUMP'], dj:['DJ','DROP JUMP'], slcmj:['SLJ','SLCMJ','SL CMJ','SL-CMJ'] };
+    CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){
+      if (!t.src || t.src.from !== 'force_tests' || t._def) return;
+      out.push({ key:'cat_'+t.key, test_type:t.src.testType, metric_key:'jump_height', unit:'cm', family:'jump',
+                 label:t.label, bilateral:(t.key==='slcmj'), value_type:'numeric', aliases:(jumpAliases[t.key]||[t.label]),
+                 metrics:[{ key:'jump_height', label:'cm', unit:'cm', primary:true }] });
+    }); });
+    _asTargets = out;
+    _asTargetsByKey = {}; out.forEach(function(t){ _asTargetsByKey[t.key] = t; });
+  }
+
+  // strip a trailing side token (R|L|RIGHT|LEFT|D|I) from a header → { side, base }
+  function _asParseSide(header){
+    var h = ' ' + String(header||'').trim().toUpperCase().replace(/[_\-]+/g,' ').replace(/\s+/g,' ') + ' ';
+    var m = h.match(/\s(RIGHT|LEFT|R|L|D|I)\s*$/);
+    if (m){
+      var tok = m[1];
+      var side = (tok==='R'||tok==='RIGHT'||tok==='D') ? 'R' : 'L';
+      return { side:side, base:h.slice(0, h.length - (m[0].length)).trim() };
+    }
+    return { side:null, base:String(header||'').trim() };
+  }
+
+  function _asClassify(headers){
+    var fields = { _ignore:[] }, used = new Set();
+    // 1) name split + ignored identity (number/position/DOB) — BEFORE the generic date match
+    headers.forEach(function(h){ var n=_ftNorm(h);
+      if (used.has(h)) return;
+      if (/\b(first\s*name|firstname|nombre|given\s*name)\b/.test(n)){ if(!fields.firstName){ fields.firstName=h; used.add(h); } }
+      else if (/\b(last\s*name|lastname|surname|apellido|family\s*name)\b/.test(n)){ if(!fields.lastName){ fields.lastName=h; used.add(h); } }
+      else if (/\b(number|dorsal|jersey|shirt|num)\b/.test(n) || n==='no' || n==='n'){ fields._ignore.push(h); used.add(h); }
+      else if (/\b(position|pos|posicion|posición)\b/.test(n)){ fields._ignore.push(h); used.add(h); }
+      else if (/\b(date\s*of\s*birth|dob|birth\s*date|nacimiento|fecha\s*nac)\b/.test(n) || /\bbirth\b/.test(n)){ fields._ignore.push(h); used.add(h); }
+    });
+    // 2) external id / full name / real test date
+    _AS_ID.forEach(function(def){
+      var hit = headers.find(function(h){ return !used.has(h) && def.match(_ftNorm(h)); });
+      if (hit){ fields[def.role]=hit; used.add(hit); }
+    });
+    // A bare "NAME" column alongside a "LAST NAME" column is the first-name half of a
+    // split name, not the full name — treat it as firstName so _asFullName joins both.
+    if (fields.name && fields.lastName && !fields.firstName){ fields.firstName=fields.name; delete fields.name; }
+    var metrics = headers.filter(function(h){ return !used.has(h); });
+    return { fields:fields, metrics:metrics };
+  }
+
+  function _asFullName(row){
+    var f=_asState.fields;
+    if (f.name) return String(row[f.name]||'').trim();
+    if (f.firstName || f.lastName) return ((f.firstName?row[f.firstName]:'')+' '+(f.lastName?row[f.lastName]:'')).replace(/\s+/g,' ').trim();
+    return '';
+  }
+  function _asMatchRow(row){
+    var f=_asState.fields, byId=_asState.byId, byName=_asState.byName, manual=_asState.manual;
+    var ext = f.externalId ? String(row[f.externalId]||'').trim() : '';
+    if (ext && byId.has(ext)) return { playerId:byId.get(ext), how:'id' };
+    var nn = _ftNorm(_asFullName(row));
+    if (nn){
+      if (byName.has(nn)) return { playerId:byName.get(nn), how:'name' };
+      var parts = nn.split(' ');
+      if (parts.length===2){ var sw=parts[1]+' '+parts[0]; if (byName.has(sw)) return { playerId:byName.get(sw), how:'name' }; }
+      if (manual.has(nn)) return { playerId:manual.get(nn), how:'manual' };
+      var tokHit=_ftTokenMatch(parts, _asState.nameToks);
+      if (tokHit) return { playerId:tokHit, how:'name' };
+    }
+    return { playerId:null, how:null };
+  }
+
+  function _asAutoMap(){
+    var cols=_asState.metrics, saved=_asState.savedMap;
+    var aliasIdx=[];   // { norm, key }
+    _asTargets.forEach(function(t){
+      (t.aliases||[]).forEach(function(a){ var nz=_ftMetricNorm(a); if (nz) aliasIdx.push({ norm:nz, key:t.key }); });
+      var nl=_ftMetricNorm(t.label);     if (nl) aliasIdx.push({ norm:nl, key:t.key });
+      var nt=_ftMetricNorm(t.test_type); if (nt) aliasIdx.push({ norm:nt, key:t.key });
+    });
+    var map={};
+    cols.forEach(function(col){
+      if (saved[col]){ map[col] = { test_key:saved[col].test_key, side:saved[col].side||null }; return; }
+      var ps=_asParseSide(col), cn=_ftMetricNorm(ps.base), key=null, bestLen=0;
+      for (var i=0;i<aliasIdx.length;i++){ if (aliasIdx[i].norm===cn){ key=aliasIdx[i].key; break; } }
+      if (!key){ for (var j=0;j<aliasIdx.length;j++){ var a=aliasIdx[j];
+        if (a.norm.length>=3 && (cn.indexOf(a.norm)>=0 || a.norm.indexOf(cn)>=0) && a.norm.length>bestLen){ bestLen=a.norm.length; key=a.key; } } }
+      map[col] = { test_key:key, side:ps.side };
+    });
+    _asState.colMap = map;
+  }
+
+  function _asTargetOptions(selKey){
+    var groups={}; _asTargets.forEach(function(t){ (groups[t.family]=groups[t.family]||[]).push(t); });
+    var famLabel={ isometric:tt('evaluations.cat_isometric','Isometric strength'), mobility:tt('evaluations.cat_mobility','Mobility & screening'), jump:tt('evaluations.cat_jumps_power','Jumps & power') };
+    var html='<option value="">'+esc(tt('evaluations.dont_import',"— don't import —"))+'</option>';
+    ['isometric','mobility','jump'].forEach(function(fam){
+      var arr=groups[fam]; if (!arr||!arr.length) return;
+      html+='<optgroup label="'+esc(famLabel[fam]||fam)+'">';
+      arr.forEach(function(t){ html+='<option value="'+esc(t.key)+'"'+(t.key===selKey?' selected':'')+'>'+esc(t.label)+(t.unit?' · '+esc(t.unit):'')+'</option>'; });
+      html+='</optgroup>';
+    });
+    return html;
+  }
+  function _asSideOptions(sel){
+    return ['','L','R'].map(function(s){
+      var lbl = s===''? tt('evaluations.side_none','—') : (s==='L'? tt('evaluations.side_left','Left') : tt('evaluations.side_right','Right'));
+      return '<option value="'+s+'"'+(s===(sel||'')?' selected':'')+'>'+esc(lbl)+'</option>';
+    }).join('');
+  }
+
+  function _asTargetValueType(target){ return target ? (target.value_type||'numeric') : 'numeric'; }
+  function _asParseValue(raw, target){
+    var s=String(raw==null?'':raw).trim();
+    if (s==='') return null;
+    if (_asTargetValueType(target)==='binary'){
+      var low=s.toLowerCase();
+      if (['+','yes','si','sí','y','1','true','pos','positive'].indexOf(low)>=0) return 1;
+      if (['-','—','no','n','0','false','neg','negative'].indexOf(low)>=0) return 0;
+      var nb=parseFloat(s.replace(',','.')); return isFinite(nb)?(nb?1:0):null;
+    }
+    if (s==='-'||s==='—') return null;   // empty marker in a numeric column (NOT zero)
+    var n=parseFloat(s.replace(',','.'));
+    return isFinite(n)?n:null;
+  }
+
+  function openAssessmentImport(){
+    _asBuildTargets();
+    var d=document.getElementById('asImpDate'); if (d && !d.value) d.value = evToday();
+    document.getElementById('asImpDrawer').classList.add('is-open');
+    document.getElementById('asImpOverlay').classList.add('is-open');
+  }
+  function closeAssessmentImport(){
+    document.getElementById('asImpDrawer').classList.remove('is-open');
+    document.getElementById('asImpOverlay').classList.remove('is-open');
+  }
+  function resetAssessmentImport(){
+    _asState=null;
+    var fi=document.getElementById('asImpFile'); if (fi) fi.value='';
+    var pt=document.getElementById('asImpPaste'); if (pt) pt.value='';
+    document.getElementById('asImpResult').style.display='none';
+    document.getElementById('asImpDrop').style.display='';
+    document.getElementById('asImpSaveResult').textContent='';
+  }
+
+  async function _asIngest(rows, headers){
+    if (!rows.length){ alert(tt('evaluations.empty_file','Empty file.')); return; }
+    var cls=_asClassify(headers);
+    var roster=await loadForceRoster();
+    var byId=new Map(), byName=new Map();
+    roster.forEach(function(p){ if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id); byName.set(_ftNorm(p.first_name+' '+p.last_name), p.id); });
+    _asState={ rows:rows, headers:headers, fields:cls.fields, metrics:cls.metrics, roster:roster, byId:byId, byName:byName, nameToks:_ftNameToks(roster), manual:new Map(), savedMap:{}, colMap:{} };
+    // saved column mappings (screening)
+    try {
+      var sm=await window.sb.from('assessment_column_maps').select('source_column_name,test_key,side,metric_key').eq('club_id',_clubId).eq('source_label','screening');
+      var map={}; (sm.data||[]).forEach(function(r){ map[r.source_column_name]={ test_key:r.test_key, side:r.side||null, metric_key:r.metric_key||null }; });
+      _asState.savedMap=map;
+    } catch(e){ _asState.savedMap={}; }
+    _asAutoMap();
+    document.getElementById('asImpDrop').style.display='none';
+    document.getElementById('asImpResult').style.display='';
+    document.getElementById('asImpSaveResult').textContent='';
+    renderAssessmentMatch();
+    renderAssessmentMapping();
+    renderAssessmentPreview();
+  }
+
+  function parseAssessmentCsv(file){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      _asIngest(res.data||[], res.meta.fields||[]);
+    }, error:function(err){ alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); } });
+  }
+  function asImpParsePaste(){
+    if (!window.Papa){ alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    var txt=(document.getElementById('asImpPaste').value||'').trim();
+    if (!txt){ alert(tt('evaluations.empty_file','Empty file.')); return; }
+    var res=Papa.parse(txt, { header:true, skipEmptyLines:true, delimiter:'' });   // '' → auto-detect (TSV from Numbers/Excel)
+    _asIngest(res.data||[], (res.meta && res.meta.fields)||[]);
+  }
+
+  function renderAssessmentMatch(){
+    var matched=0, unmatched=[];
+    _asState.rows.forEach(function(row){ var m=_asMatchRow(row); if (m.playerId) matched++; else { var nm=_asFullName(row); if (nm) unmatched.push(nm); } });
+    var mappedCols=_asState.metrics.filter(function(c){ return _asState.colMap[c] && _asState.colMap[c].test_key; }).length;
+    var chip=function(txt,col){ return '<span style="font:600 11px/1 var(--cm-font-sans);padding:5px 9px;border-radius:20px;background:'+col+'">'+esc(txt)+'</span>'; };
+    document.getElementById('asImpMatchSummary').innerHTML =
+      chip(tt('evaluations.n_players',matched+' players',{count:matched}), 'var(--cm-success-bg,rgba(34,197,94,.12))')
+      + chip(tt('evaluations.n_columns',mappedCols+' mapped columns',{count:mappedCols}), 'var(--cm-bg-sunk)')
+      + (unmatched.length? chip(tt('evaluations.n_unmatched',unmatched.length+' unmatched',{count:unmatched.length}), 'var(--cm-danger-bg,rgba(220,38,38,.12))') : '');
+    document.getElementById('asImpUnmatched').innerHTML = unmatched.length
+      ? '<div style="font:500 11px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">'+esc(tt('evaluations.unmatched_rows','Unmatched (skipped): '))+esc(unmatched.slice(0,12).join(', '))+(unmatched.length>12?'…':'')+'</div>' : '';
+  }
+
+  function renderAssessmentMapping(){
+    var cols=_asState.metrics, colMap=_asState.colMap;
+    var mapped=cols.filter(function(c){ return colMap[c] && colMap[c].test_key; }).length;
+    document.getElementById('asImpMapCount').textContent = tt('evaluations.n_m_mapped','('+mapped+'/'+cols.length+' mapped)',{mapped:mapped,total:cols.length});
+    document.getElementById('asImpMapRows').innerHTML = cols.length ? cols.map(function(col,i){
+      var cm=colMap[col]||{};
+      var tgt = cm.test_key ? _asTargetsByKey[cm.test_key] : null;
+      var mets = (tgt && tgt.metrics) ? tgt.metrics : [];
+      var metricSel = (mets.length > 1)
+        ? '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="metric" onchange="onAsColMapChange(this)">'+_asMetricOptions(mets, cm.metric_key)+'</select>'
+        : '<span></span>';
+      return '<div style="display:grid;grid-template-columns:1fr 160px 110px 78px;gap:8px;align-items:center">'
+        + '<span style="font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(col)+'">'+esc(col)+'</span>'
+        + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="test" onchange="onAsColMapChange(this)">'+_asTargetOptions(cm.test_key)+'</select>'
+        + metricSel
+        + '<select class="ev-finput" style="height:30px" data-i="'+i+'" data-role="side" onchange="onAsColMapChange(this)">'+_asSideOptions(cm.side)+'</select>'
+        + '</div>';
+    }).join('') : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.no_metric_cols_detected','No metric columns detected.'))+'</div>';
+  }
+  function _asMetricOptions(mets, selKey){
+    var def = (mets.filter(function(x){return x.primary;})[0] || mets[0] || {}).key;
+    var sel = selKey || def;
+    return mets.map(function(m){ return '<option value="'+esc(m.key)+'"'+(sel===m.key?' selected':'')+'>'+esc(m.label||m.key)+'</option>'; }).join('');
+  }
+  function onAsColMapChange(sel){
+    var col=_asState.metrics[+sel.dataset.i]; if (!col) return;
+    var cm=_asState.colMap[col]||(_asState.colMap[col]={ test_key:null, side:null, metric_key:null });
+    if (sel.dataset.role==='test'){ cm.test_key = sel.value||null; cm.metric_key = null; }  // reset metric → primary
+    else if (sel.dataset.role==='metric') cm.metric_key = sel.value||null;
+    else cm.side = sel.value||null;
+    renderAssessmentMapping();
+    renderAssessmentPreview();
+  }
+  window.onAsColMapChange = onAsColMapChange;
+
+  function renderAssessmentPreview(){
+    var cols=_asState.metrics.filter(function(c){ return _asState.colMap[c] && _asState.colMap[c].test_key; });
+    var rowsHtml='', shown=0, values=0;
+    for (var r=0; r<_asState.rows.length && shown<20; r++){
+      var row=_asState.rows[r], m=_asMatchRow(row);
+      var name=_asFullName(row);
+      var cells=cols.map(function(col){
+        var cm=_asState.colMap[col], target=_asTargetsByKey[cm.test_key];
+        var v=_asParseValue(row[col], target);
+        if (v!=null) values++;
+        return '<td style="padding:4px 8px;white-space:nowrap;color:'+(v==null?'var(--cm-fg-faint)':'var(--cm-fg)')+'">'+(v==null?'—':esc(fmtVal(v))+(cm.side?' '+esc(cm.side):''))+'</td>';
+      }).join('');
+      rowsHtml += '<tr style="border-top:1px solid var(--cm-border-soft)"><td style="padding:4px 8px;white-space:nowrap;color:'+(m.playerId?'var(--cm-fg)':'var(--cm-danger)')+'">'+esc(name||'—')+'</td>'+cells+'</tr>';
+      shown++;
+    }
+    // count all values (not just shown) for the counter
+    var allValues=0;
+    _asState.rows.forEach(function(row){ if (!_asMatchRow(row).playerId) return; cols.forEach(function(col){ if (_asParseValue(row[col], _asTargetsByKey[_asState.colMap[col].test_key])!=null) allValues++; }); });
+    var head='<th style="text-align:left;padding:5px 8px;position:sticky;top:0;background:var(--cm-surface)">'+esc(tt('evaluations.player','Player'))+'</th>'
+      + cols.map(function(col){ var cm=_asState.colMap[col]; var t=_asTargetsByKey[cm.test_key]; return '<th style="text-align:left;padding:5px 8px;position:sticky;top:0;background:var(--cm-surface);font:600 11px/1.2 var(--cm-font-sans)">'+esc(t?t.label:col)+(cm.side?' '+esc(cm.side):'')+'</th>'; }).join('');
+    document.getElementById('asImpPreview').innerHTML = cols.length
+      ? '<table style="width:100%;border-collapse:collapse;font:500 12px/1.3 var(--cm-font-mono)"><thead><tr>'+head+'</tr></thead><tbody>'+rowsHtml+'</tbody></table>'
+      : '<div style="padding:16px;font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.map_columns_to_preview','Map at least one column to preview.'))+'</div>';
+    document.getElementById('asImpPreviewCount').textContent = tt('evaluations.n_values',allValues+' values',{count:allValues});
+  }
+
+  async function saveAssessmentImport(){
+    if (!_asState || !_clubId) return;
+    var btn=document.getElementById('asImpSaveBtn'), resEl=document.getElementById('asImpSaveResult');
+    var colMap=_asState.colMap;
+    var mappedCols=_asState.metrics.filter(function(c){ return colMap[c] && colMap[c].test_key; });
+    var drawerDate = (document.getElementById('asImpDate').value || evToday());
+
+    var uid=null, uname=null;
+    try { var u=await window.sb.auth.getUser(); uid=u.data&&u.data.user?u.data.user.id:null; } catch(e){}
+    try { var prof=await window.getProfile(); uname=prof&&prof.full_name||null; } catch(e){}
+
+    var btnHtml=btn.innerHTML; btn.disabled=true;
+    btn.innerHTML='<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    resEl.style.color='var(--cm-fg-muted)'; resEl.textContent=tt('evaluations.saving','Saving…');
+
+    var natOf=function(pid,type,date){ return pid+'|'+type+'|'+String(date).slice(0,10); };
+    var testsCount=0, metricsCount=0, skipped=0, noData=0;
+    try {
+      // build plan: group by (player, test_type, date) → rec + metrics[]
+      var planMap=new Map();
+      _asState.rows.forEach(function(row){
+        var m=_asMatchRow(row);
+        if (!m.playerId){ skipped++; return; }
+        var date = _asState.fields.date ? (parseForceDate(row[_asState.fields.date]).date) : drawerDate;
+        var any=false;
+        mappedCols.forEach(function(col){
+          var cm=colMap[col], target=_asTargetsByKey[cm.test_key]; if (!target) return;
+          var v=_asParseValue(row[col], target); if (v==null) return;
+          any=true;
+          var nk=natOf(m.playerId, target.test_type, date);
+          var entry=planMap.get(nk);
+          if (!entry){ entry={ rec:{ club_id:_clubId, team_id:_teamId||null, player_id:m.playerId, test_type:target.test_type, test_date:date, source:'csv', uploaded_by:uid, uploaded_by_name:uname }, metrics:[] }; planMap.set(nk, entry); }
+          // multi-metric: use the column's chosen metric (VALD), else the target's primary/default.
+          var mk = cm.metric_key || target.metric_key;
+          var mdef = (target.metrics||[]).filter(function(x){ return x.key === mk; })[0];
+          entry.metrics.push({ metric_key:mk, value:v, side:(cm.side||null), unit:(mdef && mdef.unit) || target.unit });
+        });
+        if (!any) noData++;
+      });
+      var plan=[...planMap.entries()].map(function(e){ return { natKey:e[0], rec:e[1].rec, metrics:e[1].metrics }; });
+
+      if (plan.length){
+        var r = await _asBulkSaveTests(plan);
+        testsCount = r.testsCount; metricsCount = r.metricsCount;
+      }
+
+      // persist mapping memory in assessment_column_maps
+      if (mappedCols.length){
+        var mapRows=mappedCols.map(function(col){ return { club_id:_clubId, source_label:'screening', source_column_name:col, test_key:colMap[col].test_key, side:colMap[col].side||null, metric_key:colMap[col].metric_key||null }; });
+        try { await window.sb.from('assessment_column_maps').upsert(mapRows, { onConflict:'club_id,source_label,source_column_name' }); } catch(e){}
+      }
+    } catch(e){
+      btn.disabled=false; btn.innerHTML=btnHtml;
+      resEl.style.color='var(--cm-danger)';
+      resEl.textContent=tt('evaluations.import_failed','Import failed: '+(e.message||e),{msg:(e.message||e)});
+      return;
+    }
+
+    btn.disabled=false; btn.innerHTML=btnHtml;
+    resEl.style.color='var(--cm-success)';
+    resEl.textContent=[tt('evaluations.imported_n_tests','Imported '+testsCount+' tests',{count:testsCount}), tt('evaluations.n_metric_values',metricsCount+' metric values',{count:metricsCount}), tt('evaluations.n_rows_skipped_unmatched',skipped+' rows skipped (unmatched)',{count:skipped})].join(' · ');
+    setTimeout(function(){ closeAssessmentImport(); resetAssessmentImport(); if (typeof reloadEvalViews==='function') reloadEvalViews(); if (typeof loadStatuses==='function') loadStatuses(); }, 2000);
+  }
+
+  // wiring: file drop / browse / close for the screening drawer
+  (function(){
+    var drop=document.getElementById('asImpDrop');
+    var fi=document.getElementById('asImpFile');
+    var ovl=document.getElementById('asImpOverlay');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseAssessmentCsv(e.target.files[0]); });
+    document.getElementById('asImpClose') && document.getElementById('asImpClose').addEventListener('click', closeAssessmentImport);
+    if (ovl) ovl.addEventListener('click', closeAssessmentImport);
+    if (drop){
+      drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('is-drag'); });
+      drop.addEventListener('dragleave', function(){ drop.classList.remove('is-drag'); });
+      drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('is-drag'); if (e.dataTransfer.files[0]) parseAssessmentCsv(e.dataTransfer.files[0]); });
+    }
+  })();
+
+  Object.assign(window, { openAssessmentImport, closeAssessmentImport, resetAssessmentImport, saveAssessmentImport, asImpParsePaste, onAsColMapChange });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  BATTERY ENTRY (#asBatteryDrawer) — team × (test × side) editable grid.
+  //  A whole testing day by hand: 25 players. Keyboard nav (Tab + ↑/↓).
+  //  Live status via assessNorms. Saves force_tests + metrics (same dedup).
+  // ════════════════════════════════════════════════════════════════════
+  var _asBattery = null;   // { family, defs, selected:Set, players }
+
+  function _batStatusTint(status){
+    return status === 'alert' ? 'rgba(220,38,38,0.16)'
+         : status === 'watch' ? 'rgba(180,83,9,0.16)'
+         : status === 'ok'    ? 'rgba(34,197,94,0.14)' : '';
+  }
+
+  function openBatteryEntry(family){
+    var defs = _assessDefs.filter(function(d){ return d.family === family; }).sort(function(a,b){ return a.sort_order - b.sort_order; });
+    if (!defs.length){ alert(tt('evaluations.no_tests_for_family','No tests available for this family.')); return; }
+    if (!_ftPlayers || !_ftPlayers.length){ alert(tt('evaluations.no_players','No players in the active team.')); return; }
+    _asBattery = { family: family, defs: defs, selected: new Set(defs.map(function(d){ return d.key; })), players: _ftPlayers };
+    var d = document.getElementById('asBatteryDate'); if (d) d.value = evToday();
+    document.getElementById('asBatterySub').textContent =
+      (family === 'isometric' ? tt('evaluations.cat_isometric','Isometric strength') : tt('evaluations.cat_mobility','Mobility & screening'))
+      + ' · ' + tt('evaluations.n_players', _ftPlayers.length + ' players', { count: _ftPlayers.length });
+    renderBatteryChips();
+    renderBatteryGrid();
+    document.getElementById('asBatteryResult').textContent = '';
+    document.getElementById('asBatteryDrawer').classList.add('is-open');
+    document.getElementById('asBatteryOverlay').classList.add('is-open');
+  }
+  function closeBatteryEntry(){
+    document.getElementById('asBatteryDrawer').classList.remove('is-open');
+    document.getElementById('asBatteryOverlay').classList.remove('is-open');
+  }
+
+  function renderBatteryChips(){
+    document.getElementById('asBatteryChips').innerHTML = _asBattery.defs.map(function(def){
+      var on = _asBattery.selected.has(def.key);
+      return '<button type="button" class="cm-btn is-sm '+(on?'is-primary':'is-outline')+'" onclick="toggleBatteryTest(\''+def.key+'\')">'
+        + esc(tt(def.i18n_key, def.label)) + '</button>';
+    }).join('');
+  }
+  function toggleBatteryTest(key){
+    if (_asBattery.selected.has(key)) _asBattery.selected.delete(key); else _asBattery.selected.add(key);
+    renderBatteryChips();
+    renderBatteryGrid();
+  }
+
+  function renderBatteryGrid(){
+    var defs = _asBattery.defs.filter(function(d){ return _asBattery.selected.has(d.key); });
+    var players = _asBattery.players;
+    var showKg = _asBattery.family === 'isometric';   // bodyweight only matters for N/kg (isometric)
+    // header
+    var th = function(txt, extra){ return '<th style="text-align:'+(extra||'left')+';padding:6px 8px;position:sticky;top:0;background:var(--cm-surface);z-index:1;font:600 11px/1.2 var(--cm-font-sans);white-space:nowrap">'+esc(txt)+'</th>'; };
+    var head = th(tt('evaluations.player','Player'))
+      + (showKg ? '<th title="'+esc(tt('evaluations.bw_hint','Player bodyweight — only used to compute N/kg (optional)'))+'" style="text-align:right;padding:6px 8px;position:sticky;top:0;background:var(--cm-surface);z-index:1;font:600 11px/1.2 var(--cm-font-sans);white-space:nowrap">'+esc(tt('evaluations.bw_kg','BW (kg)'))+'</th>' : '');
+    defs.forEach(function(def){
+      var sides = def.bilateral ? ['L','R'] : ['NA'];
+      sides.forEach(function(s){
+        var lbl = esc(tt(def.i18n_key, def.label)) + (def.bilateral ? ' '+esc(s) : '');
+        head += th(lbl, 'right');
+      });
+    });
+    // rows
+    var colCount = 1 + defs.reduce(function(a,d){ return a + (d.bilateral?2:1); }, 0);   // kg + side cells (col index 0 = kg)
+    var body = players.map(function(p, ri){
+      var cells = '<td style="padding:4px 8px;white-space:nowrap;position:sticky;left:0;background:var(--cm-surface);font:500 12px/1.3 var(--cm-font-sans)">'+esc(p.first_name+' '+p.last_name)+'</td>';
+      var ci = 0;
+      if (showKg) cells += '<td style="padding:2px 4px"><input class="bat-inp ev-finput" data-pid="'+p.id+'" data-role="kg" data-row="'+ri+'" data-col="'+(ci++)+'" type="number" step="0.1" placeholder="kg" title="'+esc(tt('evaluations.bw_hint','Player bodyweight — only used to compute N/kg (optional)'))+'" style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)"></td>';
+      defs.forEach(function(def){
+        var sides = def.bilateral ? ['L','R'] : ['NA'];
+        sides.forEach(function(s){
+          var idc = 'data-pid="'+p.id+'" data-def="'+def.key+'" data-side="'+s+'" data-row="'+ri+'" data-col="'+(ci++)+'"';
+          var input;
+          if (def.value_type === 'binary'){
+            input = '<select class="bat-inp ev-finput" '+idc+' style="height:28px;width:56px" onchange="onBatteryCell(this)"><option value="">—</option><option value="1">+</option><option value="0">−</option></select>';
+          } else {
+            input = '<input class="bat-inp ev-finput" '+idc+' type="number" step="'+(def.value_type==='score'?'1':'0.1')+'"'
+              + (def.min_value!=null?' min="'+def.min_value+'"':'') + (def.max_value!=null?' max="'+def.max_value+'"':'')
+              + ' style="height:28px;width:64px;text-align:right" oninput="onBatteryCell(this)">';
+          }
+          cells += '<td style="padding:2px 4px" data-cell="'+p.id+'_'+def.key+'_'+s+'">'+input+'</td>';
+        });
+      });
+      return '<tr style="border-top:1px solid var(--cm-border-soft)">'+cells+'</tr>';
+    }).join('');
+    document.getElementById('asBatteryGrid').innerHTML =
+      '<table style="border-collapse:collapse;font:500 12px/1.3 var(--cm-font-mono)"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+    updateBatteryCount();
+  }
+
+  function _batDefByKey(key){ return _asBattery.defs.find(function(d){ return d.key === key; }); }
+  function _batReadCell(pid, defKey, side){
+    var el = document.querySelector('.bat-inp[data-pid="'+pid+'"][data-def="'+defKey+'"][data-side="'+side+'"]');
+    if (!el) return null;
+    var raw = el.value;
+    if (raw === '' || raw == null) return null;
+    var n = parseFloat(String(raw).replace(',','.'));
+    return isFinite(n) ? n : null;
+  }
+
+  function onBatteryCell(el){
+    var pid = el.dataset.pid;
+    if (el.dataset.role === 'kg'){ updateBatteryCount(); return; }
+    var def = _batDefByKey(el.dataset.def); if (!def || !window.assessNorms) { updateBatteryCount(); return; }
+    var sides = def.bilateral ? ['L','R'] : ['NA'];
+    var vals = {};
+    sides.forEach(function(s){ vals[s] = _batReadCell(pid, def.key, s); });
+    sides.forEach(function(s){
+      var cell = document.querySelector('[data-cell="'+pid+'_'+def.key+'_'+s+'"]');
+      if (!cell) return;
+      var status = 'none';
+      if (vals[s] != null){
+        var res = window.assessNorms.statusFor(def, { value: vals[s] });
+        status = res.status;
+        // if no absolute signal but both sides present, tint by asymmetry
+        if ((status === 'none' || status === 'ok') && def.bilateral && vals.L != null && vals.R != null){
+          var asy = window.assessNorms.asymStatus(def, vals.L, vals.R);
+          if (asy.status !== 'none') status = asy.status;
+          cell.title = window.assessNorms.explain(asy);
+        } else {
+          cell.title = window.assessNorms.explain(res);
+        }
+      } else { cell.title = ''; }
+      cell.style.background = _batStatusTint(status);
+    });
+    updateBatteryCount();
+  }
+
+  function updateBatteryCount(){
+    var n = 0;
+    document.querySelectorAll('#asBatteryGrid .bat-inp').forEach(function(el){
+      if (el.dataset.role === 'kg') return;
+      if (el.value !== '' && el.value != null) n++;
+    });
+    document.getElementById('asBatteryCount').textContent = tt('evaluations.n_values_loaded', n + ' values loaded', { count: n });
+  }
+
+  // Tab is native; ↑/↓ move within the same column.
+  (function(){
+    var grid = document.getElementById('asBatteryGrid');
+    if (!grid) return;
+    grid.addEventListener('keydown', function(e){
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      var el = e.target; if (!el.classList || !el.classList.contains('bat-inp')) return;
+      var col = el.dataset.col, row = parseInt(el.dataset.row, 10);
+      var next = row + (e.key === 'ArrowDown' ? 1 : -1);
+      var target = grid.querySelector('.bat-inp[data-col="'+col+'"][data-row="'+next+'"]');
+      if (target){ e.preventDefault(); target.focus(); if (target.select) target.select(); }
+    });
+  })();
+
+  // ── Shared bulk-save engine for assessments (battery grid + CSV import) ──
+  // Takes plans of shape { natKey:'pid|test_type|YYYY-MM-DD', rec:<force_tests row>, metrics:[{metric_key,value,side,unit}] }.
+  // Dedups by (player, test_type, date) then bulk-inserts parents + chunked child metrics.
+  async function _asBulkSaveTests(plans){
+    var natOf = function(pid, type, date){ return pid + '|' + type + '|' + String(date).slice(0,10); };
+    if (!plans.length) return { testsCount:0, metricsCount:0 };
+    var pids = [...new Set(plans.map(function(p){ return p.rec.player_id; }))];
+    // paginated + include NULL-team legacy rows so replace-on-collide actually replaces
+    var exRows = await window.cmFetchAll(function(){
+      var exQ = window.sb.from('force_tests').select('id,player_id,test_type,test_date').eq('club_id', _clubId).in('player_id', pids);
+      if (_teamId) exQ = exQ.or('team_id.eq.' + _teamId + ',team_id.is.null');
+      return exQ;
+    }, { label: 'ev:asBulkDedup' });
+    var planKeys = new Set(plans.map(function(p){ return p.natKey; }));
+    var delIds = (exRows||[]).filter(function(e){ return planKeys.has(natOf(e.player_id, e.test_type, e.test_date)); }).map(function(e){ return e.id; });
+    if (delIds.length){ var de = (await window.sb.from('force_tests').delete().in('id', delIds)).error; if (de) throw de; }
+    var ins = await window.sb.from('force_tests').insert(plans.map(function(p){ return p.rec; })).select('id,player_id,test_type,test_date');
+    if (ins.error) throw ins.error;
+    var idByKey = new Map(); (ins.data||[]).forEach(function(t){ idByKey.set(natOf(t.player_id, t.test_type, t.test_date), t.id); });
+    var allMetrics = [];
+    plans.forEach(function(p){ var tid = idByKey.get(p.natKey); if (!tid) return; p.metrics.forEach(function(m){ allMetrics.push({ test_id:tid, club_id:_clubId, metric_key:m.metric_key, value:m.value, side:m.side, unit:m.unit }); }); });
+    var CHUNK = 500;
+    for (var i=0;i<allMetrics.length;i+=CHUNK){ var me = (await window.sb.from('force_test_metrics').insert(allMetrics.slice(i,i+CHUNK))).error; if (me) throw me; }
+    return { testsCount:(ins.data||[]).length, metricsCount: allMetrics.length };
+  }
+
+  // ── Custom test builder (compose a def · saved per club) ──
+  var _cbFamily = 'isometric';
+  window.openAssessmentBuilder = function(family){
+    _cbFamily = family || 'isometric';
+    document.getElementById('cbRegion').value = (family==='mobility') ? 'mobility' : 'posterior_chain';
+    document.getElementById('cbMethod').value = (family==='mobility') ? 'goniometer' : 'hhd';
+    document.getElementById('cbUnit').value   = (family==='mobility') ? 'deg' : 'N';
+    ['cbName','cbAngle','cbRef','cbRefUrl'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+    document.getElementById('cbPosition').value = '';
+    document.getElementById('cbBilateral').checked = true;
+    document.getElementById('cbHib').checked = true;
+    var info=document.getElementById('cbInfo'); if(info){ info.textContent=''; }
+    document.getElementById('asBuilderOvl').classList.add('is-open');
+  };
+  window.closeAssessmentBuilder = function(){ document.getElementById('asBuilderOvl').classList.remove('is-open'); };
+  // Battery drawer → CSV import (same unified save engine).
+  window.batteryToImport = function(){ if (typeof closeBatteryEntry==='function') closeBatteryEntry(); if (typeof openAssessmentImport==='function') openAssessmentImport(); };
+  function _cbSlug(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'') || 'test'; }
+
+  window.saveAssessmentBuilder = async function(){
+    if (!_clubId) return;
+    var info = document.getElementById('cbInfo');
+    var name = (document.getElementById('cbName').value||'').trim();
+    if (!name){ info.textContent = tt('evaluations.name_required','Enter a test name'); info.style.color='var(--cm-danger)'; return; }
+    var angle = (document.getElementById('cbAngle').value||'').trim() || null;
+    var unit  = (document.getElementById('cbUnit').value||'').trim() || (_cbFamily==='mobility'?'deg':'N');
+    var hib   = document.getElementById('cbHib').checked;
+    var metricKey = (_cbFamily==='mobility') ? 'rom' : 'peak_force';
+    var key = ('cst_' + _cbSlug(name + (angle?('_'+angle):''))).slice(0,38) + '_' + Date.now().toString(36).slice(-4);
+    if (!/^[a-z]/.test(key)) key = 'x' + key;
+    var btn = document.getElementById('cbSaveBtn'), bh = btn.innerHTML; btn.disabled=true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    try {
+      var ins = await window.sb.from('assessment_test_defs').insert({
+        club_id:_clubId, family:_cbFamily, key:key, test_type:key.toUpperCase(), label:name,
+        metric_key:metricKey, unit:unit, value_type:'numeric',
+        bilateral:document.getElementById('cbBilateral').checked, higher_is_better:hib,
+        region:document.getElementById('cbRegion').value||null, position:document.getElementById('cbPosition').value||null,
+        joint_angle:angle, method:document.getElementById('cbMethod').value||null,
+        contraction:(_cbFamily==='mobility')?'rom':'isometric',
+        metrics:[{ key:metricKey, label:unit, unit:unit, higher_is_better:hib, primary:true }],
+        reference:(document.getElementById('cbRef').value||'').trim()||null,
+        reference_url:(document.getElementById('cbRefUrl').value||'').trim()||null,
+        sort_order:500, active:true
+      }).select('*').single();
+      if (ins.error) throw ins.error;
+      // Append the new def to its category without re-merging (merge isn't idempotent).
+      _assessDefs.push(ins.data);
+      var catName2 = (_cbFamily==='isometric') ? 'Isometric strength' : 'Mobility & screening';
+      var cat = CATALOG.find(function(c){ return c.name === catName2; });
+      if (cat) cat.tests.push(_defToTest(ins.data));
+      else { _assessMerged=false; mergeAssessmentCatalog(); }
+      rebuildTestIndex();
+      closeAssessmentBuilder();
+      renderCatalog();
+      if (typeof loadStatuses === 'function') loadStatuses();
+    } catch(e){
+      info.textContent = tt('evaluations.save_failed','Save failed') + ': ' + (e.message||e); info.style.color='var(--cm-danger)';
+    } finally { btn.disabled=false; btn.innerHTML=bh; }
+  };
+
+  async function saveBatteryEntry(){
+    if (!_asBattery || !_clubId) return;
+    var btn = document.getElementById('asBatterySaveBtn'), resEl = document.getElementById('asBatteryResult');
+    var date = document.getElementById('asBatteryDate').value || evToday();
+    var defs = _asBattery.defs.filter(function(d){ return _asBattery.selected.has(d.key); });
+
+    var uid = null, uname = null;
+    try { var u = await window.sb.auth.getUser(); uid = u.data && u.data.user ? u.data.user.id : null; } catch(e){}
+    try { var prof = await window.getProfile(); uname = prof && prof.full_name || null; } catch(e){}
+
+    var plan = [], noData = 0;
+    _asBattery.players.forEach(function(p){
+      var kgEl = document.querySelector('.bat-inp[data-pid="'+p.id+'"][data-role="kg"]');
+      var kg = kgEl && kgEl.value ? parseFloat(kgEl.value) : null;
+      var anyForPlayer = false;
+      defs.forEach(function(def){
+        var sides = def.bilateral ? ['L','R'] : ['NA'];
+        var prim = asPrimary(def);
+        var metrics = [];
+        sides.forEach(function(s){
+          var v = _batReadCell(p.id, def.key, s);          // grid holds the primary metric
+          if (v == null) return;
+          metrics.push({ metric_key: prim.key || def.metric_key, value: v, side: (s==='NA'?null:s), unit: prim.unit || def.unit });
+        });
+        if (!metrics.length) return;
+        anyForPlayer = true;
+        plan.push({ natKey: p.id + '|' + def.test_type + '|' + String(date).slice(0,10),
+          rec: { club_id:_clubId, team_id:_teamId||null, player_id:p.id, test_type:def.test_type, test_date:date, bodyweight_kg:kg, source:'manual', uploaded_by:uid, uploaded_by_name:uname }, metrics: metrics });
+      });
+      if (!anyForPlayer) noData++;
+    });
+
+    if (!plan.length){ resEl.style.color='var(--cm-danger)'; resEl.textContent = tt('evaluations.no_values_to_save','No values to save.'); return; }
+
+    var btnHtml = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>'+esc(tt('evaluations.saving','Saving…'));
+    resEl.style.color = 'var(--cm-fg-muted)'; resEl.textContent = tt('evaluations.saving','Saving…');
+
+    var testsCount = 0, metricsCount = 0;
+    try {
+      var r = await _asBulkSaveTests(plan);
+      testsCount = r.testsCount; metricsCount = r.metricsCount;
+    } catch(e){
+      btn.disabled=false; btn.innerHTML=btnHtml;
+      resEl.style.color='var(--cm-danger)';
+      resEl.textContent = tt('evaluations.save_failed','Save failed') + ': ' + (e.message||e);
+      return;
+    }
+
+    btn.disabled=false; btn.innerHTML=btnHtml;
+    resEl.style.color='var(--cm-success)';
+    resEl.textContent = [tt('evaluations.imported_n_tests','Imported '+testsCount+' tests',{count:testsCount}), tt('evaluations.n_metric_values',metricsCount+' metric values',{count:metricsCount}), tt('evaluations.n_players_no_data',noData+' players without data',{count:noData})].join(' · ');
+    setTimeout(function(){ closeBatteryEntry(); if (typeof reloadEvalViews==='function') reloadEvalViews(); if (typeof loadStatuses==='function') loadStatuses(); }, 1800);
+  }
+
+  document.getElementById('asBatteryClose') && document.getElementById('asBatteryClose').addEventListener('click', closeBatteryEntry);
+  document.getElementById('asBatteryOverlay') && document.getElementById('asBatteryOverlay').addEventListener('click', closeBatteryEntry);
+
+  Object.assign(window, { openBatteryEntry, closeBatteryEntry, toggleBatteryTest, onBatteryCell, saveBatteryEntry });
+
+  function renderForceClassification() {
+    const { fields, metrics } = _ftState;
+    const fieldsEl = document.getElementById('ftDetectedFields');
+    const rows = _FT_IDENTITY.filter(d => fields[d.role]).map(d =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;font:500 12px/1.3 var(--cm-font-sans)"><span style="color:var(--cm-fg-muted)">${d.label}</span><span style="color:var(--cm-fg-strong);font-family:var(--cm-font-mono);font-size:11.5px;text-align:right">${esc(fields[d.role])}</span></div>`
+    ).join('');
+    fieldsEl.innerHTML = rows || '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">'+esc(tt('evaluations.none_detected','None detected'))+'</div>';
+    document.getElementById('ftMetricCount').textContent = `(${metrics.length})`;
+    document.getElementById('ftMetricCols').innerHTML = metrics.length
+      ? metrics.map(m => `<span class="fmt" title="${m}">${m}</span>`).join('')
+      : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">None</div>';
+  }
+
+  function renderForceMatch() {
+    const { rows } = _ftState;
+    let matched = 0; const unmatchedNames = new Map(); // normName -> rawName
+    rows.forEach(r => {
+      const m = matchForceRow(r);
+      if (m.playerId) matched++;
+      else {
+        const raw = _ftState.fields.name ? String(r[_ftState.fields.name] ?? '').trim() : '';
+        const nn = _ftNorm(raw);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, raw || '(blank)');
+      }
+    });
+    const unmatched = rows.length - matched;
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('ftMatchSummary').innerHTML =
+      pill(`${rows.length} tests`, 'av') + pill(`${matched} players matched`, 'ok') + pill(`${unmatched} unmatched`, unmatched ? 'av' : 'ok');
+
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('ftUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${tt('evaluations.assign_unmatched_rows','Assign unmatched rows to a player (kept in memory for the next step):')}</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(raw)}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignForcePlayer('${escS(nn)}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`
+        ).join('')
+      : '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">'+tt('evaluations.all_rows_matched','All rows matched a player.')+'</div>';
+  }
+
+  function assignForcePlayer(nn, playerId) {
+    if (!_ftState) return;
+    if (playerId) _ftState.manual.set(nn, playerId); else _ftState.manual.delete(nn);
+    renderForceMatch();
+    renderForcePreview();
+  }
+  window.assignForcePlayer = assignForcePlayer;
+
+  function forceSideBadge(side) {
+    if (!side) return '';
+    const c = side === 'R' ? 'rgba(59,130,246,0.16);color:#1D4ED8' : 'rgba(220,38,38,0.16);color:#B91C1C';
+    return `<span style="display:inline-block;margin-left:5px;padding:0 5px;height:15px;border-radius:3px;font:700 9px/15px var(--cm-font-mono);background:${c}">${side}</span>`;
+  }
+
+  function renderForcePreview() {
+    const { rows, fields, metrics, colMap } = _ftState;
+    // Show up to 3 sample metric columns — mapped ones first, falling back to raw columns.
+    const mappedCols = metrics.filter(c => colMap[c]);
+    const sampleMetrics = (mappedCols.length ? mappedCols : metrics).slice(0, 3);
+    const MAX = 10;
+    const metricHeads = sampleMetrics.map(c => colMap[c] ? forceDefLabel(colMap[c]) : c);
+    const head = ['Player', 'Test Type', 'Date', ...metricHeads];
+    const th = head.map(h => `<th style="padding:7px 10px;text-align:left;font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap">${h}</th>`).join('');
+    const trs = rows.slice(0, MAX).map(r => {
+      const m = matchForceRow(r);
+      const rawName = fields.name ? String(r[fields.name] ?? '').trim() : '';
+      const cellName = m.playerId
+        ? `<span style="color:var(--cm-fg-strong)">${playerName(m.playerId)}</span>`
+        : `<span style="color:var(--cm-warning)" title="Unmatched">${esc(rawName || '—')}</span>`;
+      const tt = fields.testType ? (r[fields.testType] || '—') : '—';
+      const dt = fields.date ? (r[fields.date] || '—') : '—';
+      const metricCells = sampleMetrics.map(mc => {
+        const { value, side } = parseForceValue(r[mc]);
+        const inner = value == null ? '—' : `${value}${forceSideBadge(side)}`;
+        return `<td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${inner}</td>`;
+      }).join('');
+      return `<tr><td style="padding:7px 10px;font:500 12.5px/1 var(--cm-font-sans)">${cellName}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${tt}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${dt}</td>${metricCells}</tr>`;
+    }).join('');
+    const mappedCount = metrics.filter(c => colMap[c]).length;
+    document.getElementById('ftPreviewCount').textContent = tt('evaluations.rows_metrics_mapped','({n} rows · {m}/{t} metrics mapped)',{n:rows.length,m:mappedCount,t:metrics.length});
+    document.getElementById('ftPreviewTable').innerHTML =
+      `<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cm-bg-soft)">${th}</tr></thead><tbody>${trs}</tbody></table>` +
+      (rows.length > MAX ? `<div style="padding:7px 10px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">…and ${rows.length - MAX} more</div>` : '');
+  }
+
+  function resetForceImport() {
+    _ftState = null;
+    const fi = document.getElementById('ftFileInput'); if (fi) fi.value = '';
+    document.getElementById('ftCreateForm').style.display = 'none';
+    const rEl = document.getElementById('ftSaveResult'); if (rEl) rEl.textContent = '';
+    document.getElementById('ftResultArea').style.display = 'none';
+    document.getElementById('ftDropZone').style.display = '';
+  }
+  window.resetForceImport = resetForceImport;
+
+  // ── Force import drawer wiring ──
+  (function initForceImportDrawer() {
+    const drawer = document.getElementById('ftImpDrawer');
+    const overlay = document.getElementById('ftImpOverlay');
+    const open = () => { drawer.classList.add('is-open'); overlay.classList.add('is-open'); };
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    // (drawer opens via evForceImportBtn → openForceImport; no other triggers exist)
+    document.getElementById('ftImpClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('ftFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseForceCsv(e.target.files[0]); });
+    const dz = document.getElementById('ftDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseForceCsv(e.dataTransfer.files[0]); });
+  })();
+
+  let _vbt = null; // { rows, headers, map:{player,exercise,load,velocity,date}, roster, byId, byName, manual:Map, sourceLabel }
+
+  const _VBT_ROLE_PATTERNS = {
+    player:   /\b(athlete|player|name|jugador|lifter)\b/,
+    exercise: /\b(exercise|lift|movement|ejercicio|drill)\b/,
+    load:     /\b(load|kg|weight|carga|mass|resistance)\b/,
+    velocity: /\b(velocity|vmp|mean velocity|mean propulsive|vel|m s|speed)\b/,
+    date:     /\b(date|fecha|timestamp)\b/,
+  };
+
+  // Map a raw exercise string to a canonical VBT_V1RM key (so the 1RM threshold applies); else keep raw.
+  function vbtCanonExercise(raw) {
+    const nn = _ftNorm(raw);
+    if (!nn) return raw;
+    for (const key of Object.keys(VBT_V1RM)) {
+      const kn = _ftNorm(key);
+      // raw CONTAINS the canonical name ('back squat 3 reps' → Back Squat). The reverse
+      // direction ('bench' ⊂ 'bench press' AND ⊂ 'bench pull') is ambiguous → don't guess.
+      if (nn === kn || nn.includes(kn)) return key;
+    }
+    return raw;
+  }
+
+  function classifyVbtColumns(headers) {
+    const map = { player: '', exercise: '', load: '', velocity: '', date: '' };
+    const used = new Set();
+    // Priority order avoids e.g. a velocity column being grabbed as load.
+    ['player', 'exercise', 'velocity', 'load', 'date'].forEach(role => {
+      const hit = headers.find(h => !used.has(h) && _VBT_ROLE_PATTERNS[role].test(_ftNorm(h)));
+      if (hit) { map[role] = hit; used.add(hit); }
+    });
+    return map;
+  }
+
+  function vbtMatchPlayer(rawName, externalVal) {
+    const ext = String(externalVal ?? '').trim();
+    if (ext && _vbt.byId.has(ext)) return _vbt.byId.get(ext);
+    const nn = _ftNorm(rawName);
+    if (!nn) return null;
+    if (_vbt.byName.has(nn)) return _vbt.byName.get(nn);
+    const parts = nn.split(' ');
+    if (parts.length === 2 && _vbt.byName.has(parts[1] + ' ' + parts[0])) return _vbt.byName.get(parts[1] + ' ' + parts[0]);
+    if (_vbt.manual.has(nn)) return _vbt.manual.get(nn);
+    return _ftTokenMatch(parts, _vbt.nameToks);
+  }
+
+  function parseVbtCsv(file) {
+    if (!window.Papa) { alert(tt('evaluations.papaparse_not_loaded','PapaParse not loaded')); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert(tt('evaluations.empty_file','Empty file.')); return; }
+        const headers = res.meta.fields || [];
+        const map = classifyVbtColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _vbt = { rows: res.data, headers, map, roster, byId, byName, nameToks: _ftNameToks(roster), manual: new Map(), sourceLabel: 'vbt' };
+        await loadVbtSavedMappings();
+        document.getElementById('vbtDropZone').style.display = 'none';
+        document.getElementById('vbtResultArea').style.display = '';
+        document.getElementById('vbtSaveResult').textContent = '';
+        populateVbtMapSelects();
+        renderVbtAll();
+      },
+      error(err) { alert(tt('evaluations.parse_error','Parse error: '+err.message,{msg:err.message})); }
+    });
+  }
+
+  // Saved role mappings live in force_column_mappings under a 'vbt' source_label (target_metric_key holds the role).
+  async function loadVbtSavedMappings() {
+    if (!_clubId) return;
+    try {
+      const { data } = await window.sb.from('force_column_mappings').select('source_column_name, target_metric_key')
+        .eq('club_id', _clubId).eq('source_label', _vbt.sourceLabel);
+      (data || []).forEach(r => {
+        const role = r.target_metric_key, col = r.source_column_name;
+        if (role && _vbt.map[role] !== undefined && _vbt.headers.includes(col)) _vbt.map[role] = col;
+      });
+    } catch (e) {}
+  }
+
+  function populateVbtMapSelects() {
+    const opts = noneFirst => `<option value="">${noneFirst}</option>` + _vbt.headers.map(h => `<option value="${esc(h)}">${esc(h)}</option>`).join('');
+    const setSel = (id, role, noneLabel) => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = opts(noneLabel);
+      sel.value = _vbt.map[role] || '';
+    };
+    setSel('vbtColPlayer', 'player', '— select —');
+    setSel('vbtColExercise', 'exercise', '— select —');
+    setSel('vbtColLoad', 'load', '— select —');
+    setSel('vbtColVelocity', 'velocity', '— select —');
+    setSel('vbtColDate', 'date', '— none —');
+  }
+
+  function onVbtMapChange() {
+    if (!_vbt) return;
+    _vbt.map.player = document.getElementById('vbtColPlayer').value;
+    _vbt.map.exercise = document.getElementById('vbtColExercise').value;
+    _vbt.map.load = document.getElementById('vbtColLoad').value;
+    _vbt.map.velocity = document.getElementById('vbtColVelocity').value;
+    _vbt.map.date = document.getElementById('vbtColDate').value;
+    renderVbtAll();
+  }
+  window.onVbtMapChange = onVbtMapChange;
+
+  function assignVbtPlayer(nn, playerId) {
+    if (!_vbt) return;
+    if (playerId) _vbt.manual.set(nn, playerId); else _vbt.manual.delete(nn);
+    renderVbtAll();
+  }
+  window.assignVbtPlayer = assignVbtPlayer;
+
+  // Group rows by (player + exercise), pick best VMP per load, track the latest date per group.
+  function buildVbtGroups() {
+    const { rows, map } = _vbt;
+    const today = cmToday();
+    const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp>, testDate }
+    const unmatchedNames = new Map(); // normName → rawName
+    let matchedRows = 0;
+    rows.forEach(r => {
+      const rawName = map.player ? String(r[map.player] ?? '').trim() : '';
+      const exercise = map.exercise ? String(r[map.exercise] ?? '').trim() : '';
+      const load = map.load ? evCsvNum(r[map.load]) : NaN;      // comma-decimal tolerant ('102,5')
+      const vmp = map.velocity ? evCsvNum(r[map.velocity]) : NaN;
+      const pid = vbtMatchPlayer(rawName);
+      if (!pid) {
+        const nn = _ftNorm(rawName);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, rawName || '(blank)');
+        return;
+      }
+      matchedRows++;
+      if (!exercise || !isFinite(load) || !isFinite(vmp) || load <= 0 || vmp <= 0) return;
+      // group by CANONICAL exercise — 'Squat' and 'Back Squat' in one file must merge, not
+      // collapse later at planMap and silently drop a profile
+      const key = pid + '||' + _ftNorm(vbtCanonExercise(exercise));
+      let g = groups.get(key);
+      if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map(), testDate: '' }; groups.set(key, g); }
+      const prev = g.loadBest.get(load);
+      if (prev == null || vmp > prev) g.loadBest.set(load, vmp);   // best (max) VMP per load
+      const d = map.date ? parseForceDate(r[map.date]).date : today;
+      if (d > g.testDate) g.testDate = d;                          // latest date among the group's rows
+    });
+    return { groups: [...groups.values()], unmatchedNames, matchedRows };
+  }
+
+  // Build the full profile list (display + save share this so they never diverge).
+  function computeVbtProfiles() {
+    const today = cmToday();
+    const { groups, unmatchedNames } = buildVbtGroups();
+    const profiles = groups.map(g => {
+      const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));
+      const canon = vbtCanonExercise(g.exercise);
+      const fit = fitVBTProfile(pairs, canon);
+      return { name: g.name, playerId: g.playerId, exercise: g.exercise, canon, nLoads: pairs.length, fit, testDate: g.testDate || today };
+    }).sort((a, b) => a.name.localeCompare(b.name) || a.exercise.localeCompare(b.exercise));
+    return { profiles, unmatchedNames };
+  }
+
+  function renderVbtAll() {
+    const { profiles, unmatchedNames } = computeVbtProfiles();
+
+    const valid = profiles.filter(p => !p.fit.error && p.fit.est1RM != null);
+    const players = new Set(profiles.map(p => p.playerId)).size;
+    const unmatched = unmatchedNames.size;
+
+    // Match summary
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('vbtMatchSummary').innerHTML =
+      pill(tt('evaluations.pill_profiles','{n} profiles',{n:profiles.length}), 'av') + pill(tt('evaluations.pill_players','{n} players',{n:players}), 'ok') + pill(tt('evaluations.pill_unmatched_skipped','{n} unmatched (skipped)',{n:unmatched}), unmatched ? 'av' : 'ok');
+
+    // Unmatched assign
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${esc(p.first_name)} ${esc(p.last_name)}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('vbtUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">${tt('evaluations.assign_unmatched_players','Assign unmatched players (kept in memory):')}</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(raw)}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignVbtPlayer('${escS(nn)}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`).join('')
+      : (un.length === 0 && _vbt.map.player ? '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">'+tt('evaluations.all_players_matched','All players matched.')+'</div>' : '');
+
+    // Profiles list
+    document.getElementById('vbtProfCount').textContent = tt('evaluations.n_ready_total','({v} ready · {t} total)',{v:valid.length,t:profiles.length});
+    const list = document.getElementById('vbtProfiles');
+    if (!profiles.length) {
+      list.innerHTML = '<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint)">'+tt('evaluations.no_profiles_yet_check','No profiles yet — check the Player / Exercise / Load / Velocity mapping.')+'</div>';
+      return;
+    }
+    list.innerHTML = profiles.map(p => {
+      const needsLoads = p.fit.error === 'few' || p.nLoads < 2;
+      const flag = needsLoads
+        ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>needs ≥2 loads</span>'
+        : p.fit.error === 'sameload'
+          ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>'+tt('evaluations.pill_loads_must_differ','loads must differ')+'</span>'
+          : p.fit.est1RM == null
+            ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>invalid slope</span>'
+            : `<span style="font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${p.fit.est1RM} kg</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">R² ${(+p.fit.R2).toFixed(2)}</span>`;
+      return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 12px">
+        <div style="min-width:0">
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
+          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${esc(p.exercise)} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">${flag}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function resetVbtBulk() {
+    _vbt = null;
+    const fi = document.getElementById('vbtFileInput'); if (fi) fi.value = '';
+    const r = document.getElementById('vbtSaveResult'); if (r) r.textContent = '';
+    document.getElementById('vbtResultArea').style.display = 'none';
+    document.getElementById('vbtDropZone').style.display = '';
+  }
+  window.resetVbtBulk = resetVbtBulk;
+
+  // Batch-save VBT profiles to evaluations — same shape as the manual VBT save; dedup by (player, type, date).
+  async function saveVbtBulk() {
+    if (!_vbt || !_clubId) return;
+    const btn = document.getElementById('vbtSaveBtn');
+    const resEl = document.getElementById('vbtSaveResult');
+    const { profiles, unmatchedNames } = computeVbtProfiles();
+
+    // Only matched players with a valid ≥2-load profile are saveable.
+    const saveable = profiles.filter(p => !p.fit.error && p.fit.est1RM != null && isFinite(p.fit.est1RM) && p.fit.est1RM > 0);
+    const tooFewLoads = profiles.length - saveable.length;
+    const unmatched = unmatchedNames.size;
+
+    if (!saveable.length) {
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = tt('evaluations.nothing_to_save_vbt','Nothing to save — no profile has a matched player with ≥2 loads.');
+      return;
+    }
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Saving…';
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = 'Saving…';
+
+    // Build evaluation records (identical structure to the manual VBT save), collapsing in-file dups by natural key.
+    const natOf = (pid, type, date) => `${pid}|${type}|${date}`;
+    const planMap = new Map();
+    saveable.forEach(p => {
+      const f = p.fit;
+      const evalType = VBT_EVAL_TYPES[p.canon] || `VBT · ${p.canon.toLowerCase()}`;
+      const computed = {
+        inputs: f.pairs.map(x => ({ kg: x.load, vmp: x.vmp })),
+        slope: +f.b.toFixed(5), intercept: +f.a.toFixed(4), R2: f.R2,
+        v1rm_used: f.v1rm, est1RM: f.est1RM, method: f.method, exercise: p.canon,
+      };
+      const rec = {
+        player_id: p.playerId, club_id: _clubId, evaluation_type: evalType,
+        value: f.est1RM, unit: 'kg', test_date: p.testDate, notes: JSON.stringify(computed),
+      };
+      planMap.set(natOf(p.playerId, evalType, p.testDate), rec);   // last wins
+    });
+    const plan = [...planMap.values()];
+
+    let savedCount = 0;
+    try {
+      // ── 1) Pre-fetch existing evaluations for these players + types (1 query) ──
+      const pids = [...new Set(plan.map(r => r.player_id))];
+      const types = [...new Set(plan.map(r => r.evaluation_type))];
+      const existing = await window.cmFetchAll(() => window.sb.from('evaluations')
+        .select('id, player_id, evaluation_type, test_date')
+        .eq('club_id', _clubId).in('player_id', pids).in('evaluation_type', types),
+        { label: 'ev:vbtDedup' });
+
+      // ── 2) Delete the colliding ones (1 query), then insert the whole plan (1 query) — replace, no dup ──
+      const planKeys = new Set(plan.map(r => natOf(r.player_id, r.evaluation_type, r.test_date)));
+      const collideIds = (existing || [])
+        .filter(e => planKeys.has(natOf(e.player_id, e.evaluation_type, String(e.test_date).slice(0, 10))))
+        .map(e => e.id);
+      if (collideIds.length) {
+        const { error: delErr } = await window.sb.from('evaluations').delete().in('id', collideIds);
+        if (delErr) throw delErr;
+      }
+      const { error: insErr } = await window.sb.from('evaluations').insert(plan);
+      if (insErr) throw insErr;
+      savedCount = plan.length;
+
+      // ── 3) Persist column-mapping memory once (non-fatal) ──
+      const mapRows = Object.entries(_vbt.map)
+        .filter(([role, col]) => col)
+        .map(([role, col]) => ({ club_id: _clubId, source_label: _vbt.sourceLabel, source_column_name: col, target_metric_key: role }));
+      if (mapRows.length) {
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = tt('evaluations.save_failed','Save failed') + ': ' + (e.message || e);
+      return;
+    }
+
+    const skipped = unmatched + tooFewLoads;
+    const skipDetail = skipped ? ' ' + tt('evaluations.skip_detail','({u} unmatched, {n} need ≥2 loads)',{u:unmatched,n:tooFewLoads}) : '';
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = tt('evaluations.saved_profiles_skipped','Saved {n} profiles · {s} skipped',{n:savedCount,s:skipped}) + skipDetail;
+    if (typeof reloadEvalViews === 'function') reloadEvalViews();
+    if (typeof loadStatuses === 'function') loadStatuses();
+    setTimeout(() => {
+      document.getElementById('vbtBulkDrawer').classList.remove('is-open');
+      document.getElementById('vbtBulkOverlay').classList.remove('is-open');
+      resetVbtBulk();
+    }, 2200);
+  }
+  window.saveVbtBulk = saveVbtBulk;
+
+  function openVbtBulkDrawer() {
+    document.getElementById('vbtBulkDrawer').classList.add('is-open');
+    document.getElementById('vbtBulkOverlay').classList.add('is-open');
+  }
+  window.openVbtBulkDrawer = openVbtBulkDrawer;
+
+  (function initVbtBulkDrawer() {
+    const drawer = document.getElementById('vbtBulkDrawer');
+    const overlay = document.getElementById('vbtBulkOverlay');
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    document.getElementById('vbtBulkClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('vbtFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseVbtCsv(e.target.files[0]); });
+    const dz = document.getElementById('vbtDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseVbtCsv(e.dataTransfer.files[0]); });
+  })();
+
+  // v2 helper: open the force-import drawer from the Upload pane button
+  function openForceImport(){ document.getElementById('ftImpDrawer').classList.add('is-open'); document.getElementById('ftImpOverlay').classList.add('is-open'); }
+  // expose importer functions for inline on*= handlers in the ported drawer markup
+  Object.assign(window, { saveForceImport, resetForceImport, cancelCreateForceMetric, createForceMetric,
+    onForceColMapChange, openCreateForceMetric, assignForcePlayer,
+    openVbtBulkDrawer, saveVbtBulk, resetVbtBulk, onVbtMapChange, assignVbtPlayer });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  FIELD ASSESSMENT (subjective) — ported from Evaluations-old.html.
+  //  saveSubjEval copied verbatim (scope glue: clubId->_clubId; refresh ->
+  //  reloadFieldView). Team grid + overall ring + per-player history are glue.
+  // ════════════════════════════════════════════════════════════════════
+  var _field = { rows: [], player: null, loaded: false };
+  var SUBJ_DIMS = ['Technique','Passing','Vision','1v1','Defending','Duels',
+                   'Positioning','Game reading','Pressing','Marking','Off-ball movement',
+                   'Concentration','Composure','Decision-making','Leadership'];
+  // display-only i18n for the canonical (DB) dimension names — value stays English
+  var DIM_I18N = {
+    'Technique':'evaluations.dim_technique','Passing':'evaluations.dim_passing','Vision':'evaluations.dim_vision',
+    'Defending':'evaluations.dim_defending','Duels':'evaluations.dim_duels','Positioning':'evaluations.dim_positioning',
+    'Game reading':'evaluations.dim_game_reading','Pressing':'evaluations.dim_pressing','Marking':'evaluations.dim_marking',
+    'Off-ball movement':'evaluations.dim_off_ball','Concentration':'evaluations.dim_concentration','Composure':'evaluations.dim_composure',
+    'Decision-making':'evaluations.dim_decision_making','Leadership':'evaluations.dim_leadership'
+  };
+  function dimLabel(k){ return tt(DIM_I18N[k] || '', k); }
+  function faColor(v){ return v>=7 ? 'var(--cm-success)' : v>=5 ? 'var(--cm-warning)' : 'var(--cm-danger)'; }
+
+  async function loadFieldData(){
+    _field.rows = [];
+    if (!_clubId) return;
+    try {
+      _field.rows = await window.cmFetchAll(function(){
+        var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, notes').eq('club_id', _clubId).in('evaluation_type', SUBJ_DIMS);
+        if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+        else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+        return q;
+      }, { label: 'ev:fieldData' });
+    } catch(e){ console.warn('[ev2] field data failed', e); }
+    _field.loaded = true;
+  }
+
+  // group a player's rows by date → { date: {Technical:n,...} }
+  function faByDate(pid){
+    var byDate = {};
+    _field.rows.filter(function(r){ return r.player_id===pid && r.value!=null; }).forEach(function(r){
+      var d = String(r.test_date).slice(0,10); (byDate[d] = byDate[d] || {})[r.evaluation_type] = Number(r.value);
+    });
+    return byDate;
+  }
+  // latest overall = avg of the 4 dims at the player's most recent subjective date
+  function fieldOverall(pid){
+    var byDate = faByDate(pid);
+    var dates = Object.keys(byDate).sort();
+    if (!dates.length) return null;
+    var last = dates[dates.length-1], dims = byDate[last];
+    var vals = SUBJ_DIMS.map(function(k){ return dims[k]; }).filter(function(v){ return v!=null && !isNaN(v); });
+    if (!vals.length) return null;
+    return { overall: +(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1), date: last, dims: dims };
+  }
+
+  function faPopulatePlayerSelect(){
+    var sel = document.getElementById('subjPlayer');
+    sel.innerHTML = '<option value="">'+esc(tt('evaluations.select_player','Select player…'))+'</option>' + _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name+' '+p.last_name)+'</option>'; }).join('');
+  }
+
+  function renderFieldGrid(){
+    var grid = document.getElementById('faGrid');
+    document.getElementById('faGridCount').textContent = tt('evaluations.n_players', _ftPlayers.length+' players', {count:_ftPlayers.length});
+    grid.innerHTML = _ftPlayers.map(function(p){
+      var o = fieldOverall(p.id);
+      var ovTxt = o ? o.overall.toFixed(1) : '—';
+      var col = o ? faColor(o.overall) : 'var(--cm-border)';
+      var pct = o ? (o.overall/10*100) : 0;
+      return '<button class="fa-card'+(p.id===_field.player?' is-on':'')+'" data-fa-pid="'+p.id+'">'
+        + '<div class="fa-ring" style="background:conic-gradient('+col+' 0% '+pct+'%, var(--cm-bg-sunk) '+pct+'% 100%)"><span class="v">'+ovTxt+'</span></div>'
+        + '<div style="min-width:0"><div class="nm">'+esc(p.first_name+' '+p.last_name)+'</div><div class="sub">'+(o?esc(tt('evaluations.last_date','last '+fmtDate(o.date),{date:fmtDate(o.date)})):esc(tt('evaluations.no_data_short','no data yet')))+'</div></div>'
+        + '</button>';
+    }).join('') || '<div style="padding:16px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</div>';
+  }
+
+  var FA_ID2DIM = {
+    subjTechnique:'Technique', subjPassing:'Passing', subjVision:'Vision', subjOneVOne:'1v1',
+    subjDefending:'Defending', subjDuels:'Duels',
+    subjPositioning:'Positioning', subjGameReading:'Game reading', subjPressing:'Pressing',
+    subjMarking:'Marking', subjOffBall:'Off-ball movement',
+    subjConcentration:'Concentration', subjComposure:'Composure', subjDecision:'Decision-making', subjLeadership:'Leadership'
+  };
+  function openFieldPlayer(pid){
+    _field.player = pid;
+    document.getElementById('fieldDetail').style.display = '';
+    document.querySelectorAll('#faGrid [data-fa-pid]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-fa-pid')===pid); });
+    var p = _ftPlayers.find(function(x){ return x.id===pid; });
+    document.getElementById('faPlayerName').textContent = p ? (p.first_name+' '+p.last_name) : tt('evaluations.player','Player');
+    var o = fieldOverall(pid);
+    var pct = o ? (o.overall/10*100) : 0;
+    var col = o ? faColor(o.overall) : 'var(--cm-bg-sunk)';
+    document.getElementById('faRing').style.background = 'conic-gradient('+col+' 0% '+pct+'%, var(--cm-bg-sunk) '+pct+'% 100%)';
+    document.getElementById('faRingVal').textContent = o ? o.overall.toFixed(1) : '—';
+    document.getElementById('faPlayerMeta').textContent = o ? tt('evaluations.latest_across_attrs','Latest '+fmtDate(o.date)+' · across technical & mental attributes.',{date:fmtDate(o.date)}) : tt('evaluations.no_field_evals_yet','No field evaluations yet. Add the first one below.');
+    var tags = document.getElementById('faTags');
+    tags.innerHTML = o ? SUBJ_DIMS.map(function(k){ var v=o.dims[k]; if(v==null) return ''; var cls=v>=7?'good':v>=5?'info':'warn'; return '<span class="tag '+cls+'">'+esc(dimLabel(k))+' '+v+'</span>'; }).join('') : '';
+    // preset the form to this player's latest (editable)
+    document.getElementById('subjPlayer').value = pid;
+    document.getElementById('subjDate').value = evToday();
+    Object.keys(FA_ID2DIM).forEach(function(id){
+      var v = (o && o.dims && o.dims[FA_ID2DIM[id]] != null) ? o.dims[FA_ID2DIM[id]] : 5;
+      var el = document.getElementById(id);
+      el.value = v; el.nextElementSibling.textContent = v;
+    });
+    document.getElementById('subjNotes').value = '';
+    renderFieldHistory(pid);
+  }
+
+  function renderFieldHistory(pid){
+    var byDate = faByDate(pid);
+    var dates = Object.keys(byDate).sort().reverse();
+    document.getElementById('faHistCount').textContent = tt('evaluations.n_sessions', dates.length+' session'+(dates.length===1?'':'s'), {count:dates.length});
+    var host = document.getElementById('faHistory');
+    if (!dates.length){ host.innerHTML = '<div style="padding:14px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_evaluations_yet','No evaluations yet.'))+'</div>'; return; }
+    host.innerHTML = dates.map(function(d){
+      var dims = byDate[d];
+      var vals = SUBJ_DIMS.map(function(k){ return dims[k]; }).filter(function(v){ return v!=null; });
+      var ov = vals.length ? (vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1) : '—';
+      var dimsTxt = SUBJ_DIMS.map(function(k){ return dims[k]!=null ? (dimLabel(k).slice(0,3)+' '+dims[k]) : null; }).filter(Boolean).join(' · ');
+      return '<div class="fa-hist-row"><span class="d">'+fmtDate(d)+'</span><span class="dims">'+esc(dimsTxt)+'</span><span class="ov" style="color:'+(vals.length?faColor(+ov):'var(--cm-fg-faint)')+'">'+ov+'</span></div>';
+    }).join('');
+  }
+
+  async function loadFieldView(){
+    faPopulatePlayerSelect();
+    await loadFieldData();
+    renderFieldGrid();
+    if (_field.player) openFieldPlayer(_field.player);
+  }
+  async function reloadFieldView(pid){
+    await loadFieldData();
+    renderFieldGrid();
+    if (pid) openFieldPlayer(pid);
+    else if (_field.player) openFieldPlayer(_field.player);
+  }
+
+  // saveSubjEval — ported verbatim (clubId->_clubId; refresh -> reloadFieldView)
+  async function saveSubjEval(e){
+    e.preventDefault();
+    const playerId=document.getElementById('subjPlayer').value;
+    const date=document.getElementById('subjDate').value;
+    const notes=document.getElementById('subjNotes').value.trim() || null;
+    if(!playerId||!date){ alert(tt('evaluations.pick_player_date','Pick a player and date')); return; }
+    if(!_clubId){ alert(tt('evaluations.err_prefix','Error: no club',{msg:'no club'})); return; }
+    const rows=Object.entries(FA_ID2DIM).map(([id,type])=>({
+      player_id:playerId, club_id:_clubId, evaluation_type:type,
+      value:+document.getElementById(id).value, unit:'/10', test_date:date, notes }));
+    // replace-on-collide: re-saving the same player+date must not stack a second set of 15 rows
+    const del=await window.sb.from('evaluations').delete()
+      .eq('club_id',_clubId).eq('player_id',playerId).eq('test_date',date)
+      .in('evaluation_type', Object.values(FA_ID2DIM));
+    if(del.error){ alert(tt('evaluations.err_prefix','Error: '+del.error.message,{msg:del.error.message})); return; }
+    const { error }=await window.sb.from('evaluations').insert(rows);
+    if(error){ alert(tt('evaluations.err_prefix','Error: '+error.message,{msg:error.message})); return; }
+    const msg=document.getElementById('subjSaveMsg'); msg.textContent=tt('evaluations.saved_toast','✓ Saved'); msg.style.display='';
+    setTimeout(()=>{ msg.style.display='none'; },3000);
+    await reloadFieldView(playerId);
+    if(typeof loadStatuses==='function') loadStatuses();
+  }
+  window.saveSubjEval = saveSubjEval;
+
+  // Pick a player → prefill via the existing flow (or reset for a new evaluation).
+  document.getElementById('subjPlayer').addEventListener('change', e =>
+    e.target.value ? openFieldPlayer(e.target.value) : document.getElementById('faNewBtn').click());
+
+  // field interactions
+  document.getElementById('faGrid').addEventListener('click', function(e){
+    var card = e.target.closest('[data-fa-pid]'); if(!card) return;
+    openFieldPlayer(card.getAttribute('data-fa-pid'));
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('faNewBtn').addEventListener('click', function(){
+    _field.player = null;
+    document.getElementById('fieldDetail').style.display = '';
+    document.querySelectorAll('#faGrid [data-fa-pid]').forEach(function(b){ b.classList.remove('is-on'); });
+    faPopulatePlayerSelect();
+    document.getElementById('subjPlayer').value = '';
+    document.getElementById('subjDate').value = evToday();
+    Object.keys(FA_ID2DIM).forEach(function(id){ var el=document.getElementById(id); el.value=5; el.nextElementSibling.textContent='5'; });
+    document.getElementById('subjNotes').value = '';
+    document.getElementById('faPlayerName').textContent = tt('evaluations.new_evaluation','New evaluation');
+    document.getElementById('faPlayerMeta').textContent = tt('evaluations.new_eval_meta','Pick a player, score the attributes and save.');
+    document.getElementById('faRing').style.background = 'conic-gradient(var(--cm-bg-sunk) 0% 100%)';
+    document.getElementById('faRingVal').textContent = '—';
+    document.getElementById('faTags').innerHTML = '';
+    document.getElementById('faHistory').innerHTML = '';
+    document.getElementById('faHistCount').textContent = '';
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  PREVENTION BOARD (team) — matrix of players × iso/mobility tests,
+  //  each cell = L/R asymmetry %, colored by assessNorms risk status.
+  //  Row links to Rehab & Preventives (new preventive, pre-filled player).
+  // ════════════════════════════════════════════════════════════════════
+  var _pbData = null;
+  var _PB_RANK = { none:0, ok:1, watch:2, alert:3 };
+
+  function pbEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function pbFmt(v){ v = Number(v); if (!isFinite(v)) return '—'; return Number.isInteger(v) ? String(v) : String(Math.round(v*10)/10); }
+  function pbStatusColor(s){ return s==='alert'?'var(--cm-danger)':s==='watch'?'var(--cm-warning,#B45309)':s==='ok'?'var(--cm-success)':'var(--cm-fg-faint)'; }
+  function pbShortLabel(def){ return pbEsc(tt(def.i18n_key, def.label)).replace(/^(ISO|MOB)\s*·\s*/i, ''); }
+
+  function pbInjectStyles(){
+    if (document.getElementById('pb-styles')) return;
+    var css = ''
+      + '#preventionView .pb-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}'
+      + '#preventionView .pb-tile{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:14px 15px;position:relative;overflow:hidden}'
+      + '#preventionView .pb-tile .k{font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.04em;color:var(--cm-fg-muted)}'
+      + '#preventionView .pb-tile .v{font:700 27px/1 var(--cm-font-mono);font-variant-numeric:tabular-nums;margin-top:8px;letter-spacing:-.02em;color:var(--cm-fg-strong)}'
+      + '#preventionView .pb-tile .c{font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:3px}'
+      + '#preventionView .pb-tile .stripe{position:absolute;left:0;top:0;bottom:0;width:3px}'
+      + '#preventionView .pb-tile.alert .v{color:var(--cm-danger)} #preventionView .pb-tile.alert .stripe{background:var(--cm-danger)}'
+      + '#preventionView .pb-tile.watch .v{color:var(--cm-warning,#B45309)} #preventionView .pb-tile.watch .stripe{background:var(--cm-warning,#B45309)}'
+      + '#preventionView .pb-tile.ok .stripe{background:var(--cm-success)} #preventionView .pb-tile.neutral .stripe{background:var(--cm-accent)}'
+      + '#preventionView .pb-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:13px;overflow:hidden}'
+      + '#preventionView .pb-card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cm-border-soft);flex-wrap:wrap}'
+      + '#preventionView .pb-card-h h3{font:700 13.5px/1 var(--cm-font-sans);margin:0;color:var(--cm-fg-strong)}'
+      + '#preventionView .pb-legend{display:flex;gap:13px;flex-wrap:wrap}'
+      + '#preventionView .pb-lg{display:inline-flex;align-items:center;gap:6px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}'
+      + '#preventionView .pb-lg .sw{width:12px;height:12px;border-radius:4px;border:1px solid var(--cm-border)}'
+      + '#preventionView .pb-lg .sw.ok{background:color-mix(in srgb,var(--cm-success) 14%,transparent);border-color:var(--cm-success)}'
+      + '#preventionView .pb-lg .sw.watch{background:color-mix(in srgb,var(--cm-warning,#B45309) 16%,transparent);border-color:var(--cm-warning,#B45309)}'
+      + '#preventionView .pb-lg .sw.alert{background:color-mix(in srgb,var(--cm-danger) 15%,transparent);border-color:var(--cm-danger)}'
+      + '#preventionView .pb-lg .sw.none{background:var(--cm-bg-sunk,rgba(120,130,145,.10))}'
+      + '#preventionView .pb-scroll{overflow-x:auto}'
+      + '#preventionView .pb-tbl{border-collapse:separate;border-spacing:0;width:100%}'
+      + '#preventionView .pb-tbl th,#preventionView .pb-tbl td{white-space:nowrap}'
+      + '#preventionView .pb-tbl thead .grp th{font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-faint);padding:11px 6px 4px;text-align:center}'
+      + '#preventionView .pb-tbl thead .grp th.fam{color:var(--cm-accent)}'
+      + '#preventionView .pb-tbl thead .cols th{font:600 10px/1.15 var(--cm-font-sans);color:var(--cm-fg-muted);padding:4px 6px 10px;text-align:center;vertical-align:bottom;border-bottom:1px solid var(--cm-border);max-width:66px;white-space:normal}'
+      + '#preventionView .pb-tbl th.pl{text-align:left;padding-left:16px}'
+      + '#preventionView .pb-tbl th.stk,#preventionView .pb-tbl td.stk{position:sticky;left:0;background:var(--cm-surface);z-index:2}'
+      + '#preventionView .pb-tbl tbody td{border-bottom:1px solid var(--cm-border-soft);height:44px}'
+      + '#preventionView .pb-tbl tbody tr:last-child td{border-bottom:0}'
+      + '#preventionView .pb-tbl tbody tr:hover td{background:var(--cm-bg-sunk,rgba(120,130,145,.08))}'
+      + '#preventionView .pb-plcell{display:flex;align-items:center;gap:10px;padding:0 10px 0 16px;min-width:184px}'
+      + '#preventionView .pb-mono{width:28px;height:28px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font:700 10.5px/1 var(--cm-font-sans);color:#fff;background:var(--cm-accent)}'
+      + '#preventionView .pb-nm{font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}'
+      + '#preventionView .pb-nm a{color:inherit;text-decoration:none} #preventionView .pb-nm a:hover{color:var(--cm-accent)}'
+      + '#preventionView .pb-pos{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:2px}'
+      + '#preventionView td.pb-col{padding:0 3px;text-align:center}'
+      + '#preventionView .pb-cell{display:flex;align-items:center;justify-content:center;height:34px;margin:4px 3px;border-radius:7px;position:relative;font:700 12px/1 var(--cm-font-mono);font-variant-numeric:tabular-nums;min-width:44px}'
+      + '#preventionView .pb-cell.ok{background:color-mix(in srgb,var(--cm-success) 13%,transparent);color:var(--cm-success)}'
+      + '#preventionView .pb-cell.watch{background:color-mix(in srgb,var(--cm-warning,#B45309) 15%,transparent);color:var(--cm-warning,#B45309)}'
+      + '#preventionView .pb-cell.alert{background:color-mix(in srgb,var(--cm-danger) 14%,transparent);color:var(--cm-danger)}'
+      + '#preventionView .pb-cell.none{color:var(--cm-fg-faint);font-weight:500}'
+      + '#preventionView .pb-cell .fl{position:absolute;top:2px;right:5px;font-size:7px}'
+      + '#preventionView td.pb-al{text-align:center}'
+      + '#preventionView .pb-cnt{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 7px;border-radius:6px;font:700 12px/1 var(--cm-font-mono)}'
+      + '#preventionView .pb-cnt.a{background:color-mix(in srgb,var(--cm-danger) 14%,transparent);color:var(--cm-danger)}'
+      + '#preventionView .pb-cnt.w{background:color-mix(in srgb,var(--cm-warning,#B45309) 15%,transparent);color:var(--cm-warning,#B45309)}'
+      + '#preventionView .pb-cnt.z{background:var(--cm-bg-sunk,rgba(120,130,145,.10));color:var(--cm-fg-faint)}'
+      + '#preventionView td.pb-act{text-align:center;padding:0 12px}'
+      + '#preventionView .pb-act a{display:inline-flex;align-items:center;gap:4px;color:var(--cm-accent);font:600 11.5px/1 var(--cm-font-sans);text-decoration:none;white-space:nowrap}'
+      + '#preventionView .pb-loading,#preventionView .pb-empty{padding:34px;text-align:center;color:var(--cm-fg-faint);font:500 13px/1.4 var(--cm-font-sans)}'
+      + '#preventionView .pb-foot{margin-top:12px;font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-faint);display:flex;gap:7px;align-items:flex-start}'
+      + '.pb-tip{position:fixed;z-index:9999;pointer-events:none;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.17);opacity:0;transition:opacity .08s;padding:10px 12px;max-width:260px;white-space:normal}'
+      + '.pb-tip .pb-tip-name{font:600 11.5px/1.35 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:7px}'
+      + '.pb-tip .pb-tip-grid{display:grid;grid-template-columns:auto auto;gap:3px 16px;align-items:baseline}'
+      + '.pb-tip .pb-tip-grid .k{font:600 10px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.03em}'
+      + '.pb-tip .pb-tip-grid .v{font:700 12px/1.4 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:right}';
+    var el = document.createElement('style'); el.id = 'pb-styles'; el.textContent = css; document.head.appendChild(el);
+  }
+
+  async function loadPreventionBoard(){
+    pbInjectStyles();
+    var mount = document.getElementById('pbBoard'), tiles = document.getElementById('pbTiles');
+    if (!mount) return;
+    mount.innerHTML = '<div class="pb-loading">…</div>'; if (tiles) tiles.innerHTML = '';
+    try {
+      // roster (team-scoped, with position). Prevention board shows only players whose
+      // PRIMARY team is the active team (player_teams.is_primary) — guests linked from
+      // another squad are excluded; view their data from their own team instead.
+      var sel = 'id, first_name, last_name, position' + (_teamId ? ', player_teams!inner(team_id, is_primary)' : '');
+      var rq = window.sb.from('players').select(sel).eq('club_id', _clubId).is('archived_at', null);
+      if (_teamId) rq = rq.eq('player_teams.team_id', _teamId).eq('player_teams.is_primary', true);
+      var rr = await rq; if (rr.error) throw rr.error;
+      var seen = {}, roster = (rr.data || []).filter(function(p){ return seen[p.id] ? false : (seen[p.id] = true); });
+
+      // columns = active isometric + mobility defs
+      var famOrder = { isometric:0, mobility:1 };
+      var cols = (_assessDefs || []).filter(function(d){ return d.family === 'isometric' || d.family === 'mobility'; })
+        .slice().sort(function(a,b){ return (famOrder[a.family]-famOrder[b.family]) || ((a.sort_order||0)-(b.sort_order||0)); });
+
+      _pbData = { roster: roster, cols: cols, latest: {}, metricsByTest: {} };
+      if (!roster.length || !cols.length){ renderPreventionBoard(); return; }
+
+      var playerIds = roster.map(function(p){ return p.id; });
+      var testTypes = cols.map(function(c){ return c.test_type; });
+
+      var tests = await window.cmFetchAll(function(){
+        return window.sb.from('force_tests').select('id, player_id, test_type, test_date, bodyweight_kg')
+          .eq('club_id', _clubId).in('player_id', playerIds).in('test_type', testTypes);
+      }, { label: 'ev:pbTests' });
+      tests.sort(function(a,b){ return String(a.test_date) < String(b.test_date) ? -1 : 1; });   // asc → "last write wins" below
+
+      // most-recent test per (player|type) — asc order means last write wins
+      var latest = {}; tests.forEach(function(t){ latest[t.player_id + '|' + t.test_type] = t; });
+      var latestTests = Object.keys(latest).map(function(k){ return latest[k]; });
+      var testIds = latestTests.map(function(t){ return t.id; });
+
+      var metricsByTest = {};
+      for (var i = 0; i < testIds.length; i += 300){
+        var chunk = testIds.slice(i, i + 300); if (!chunk.length) break;
+        // paginated: 300 tests × L/R × several metrics can exceed the ~1000-row cap
+        var mrows = await window.cmFetchAll(function(){
+          return window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', chunk);
+        }, { label: 'ev:pbMetrics' });
+        (mrows || []).forEach(function(m){ (metricsByTest[m.test_id] = metricsByTest[m.test_id] || []).push(m); });
+      }
+
+      // keep only tests actually performed (≥1 player with a value for that test)
+      var typeHasData = {};
+      Object.keys(latest).forEach(function(k){
+        var t = latest[k], mets = metricsByTest[t.id] || [];
+        var def = cols.filter(function(c){ return c.test_type === t.test_type; })[0];
+        if (def && mets.some(function(m){ return m.metric_key === def.metric_key && m.value != null; })) typeHasData[t.test_type] = true;
+      });
+      _pbData.hadDefs = cols.length > 0;
+      cols = cols.filter(function(d){ return typeHasData[d.test_type]; });
+
+      _pbData.cols = cols;
+      _pbData.latest = latest; _pbData.metricsByTest = metricsByTest;
+      renderPreventionBoard();
+    } catch(e){
+      console.warn('[ev2] prevention board load failed', e);
+      mount.innerHTML = '<div class="pb-empty">' + pbEsc(tt('evaluations.prev_board_error','Could not load the prevention board.')) + '</div>';
+    }
+  }
+
+  function pbComputeCell(def, metrics){
+    var mk = def.metric_key, L = null, R = null, NA = null;
+    (metrics || []).forEach(function(m){ if (m.metric_key === mk){ var s = m.side || 'NA', v = Number(m.value); if (s === 'L') L = v; else if (s === 'R') R = v; else NA = v; } });
+    var AN = window.assessNorms, statuses = [], asym = null;
+    if (AN){
+      [L, R, NA].forEach(function(v){ if (v != null) statuses.push(AN.statusFor(def, { value: v })); });
+      if (def.bilateral && L != null && R != null){ asym = AN.asymStatus(def, L, R); statuses.push(asym); }
+    }
+    var st = statuses.reduce(function(b, r){ return (_PB_RANK[r.status]||0) > (_PB_RANK[b.status]||0) ? r : b; }, { status:'none' });
+    return { status: st.status, pct: asym ? asym.pct : null, L:L, R:R, NA:NA, unit: def.unit || '', hasData: (L != null || R != null || NA != null) };
+  }
+
+  // Derived ADD:ABD ratio for a player, from the latest isometric hip add/abd tests.
+  // Worst (per side/angle) wins so the column mirrors the board's risk-first ordering.
+  function pbRatioRow(playerId){
+    var AN = window.assessNorms; if (!AN) return { status:'none', has:false };
+    var byKey = {};
+    (_assessDefs || []).forEach(function(def){
+      if (def.family !== 'isometric') return;
+      var t = _pbData.latest[playerId + '|' + def.test_type]; if (!t) return;
+      var o = {};
+      (_pbData.metricsByTest[t.id] || []).forEach(function(m){
+        if (m.metric_key === def.metric_key && m.value != null) o[m.side || 'NA'] = Number(m.value);
+      });
+      if (o.L != null || o.R != null || o.NA != null) byKey[def.key] = o;
+    });
+    var rs = AN.ratios(byKey).filter(function(r){ return r.key === 'add_abd'; });
+    if (!rs.length) return { status:'none', has:false };
+    var worst = rs.reduce(function(b, r){
+      var rk = _PB_RANK[r.status]||0, bk = _PB_RANK[b.status]||0;
+      if (rk > bk) return r;
+      if (rk === bk && r.value < b.value) return r;
+      return b;
+    });
+    return { status: worst.status, value: worst.value, items: rs, has: true };
+  }
+
+  function pbRatioFmt(v){ v = Number(v); return isFinite(v) ? v.toFixed(2) : '—'; }
+
+  function pbRatioCellHtml(rt){
+    if (!rt || !rt.has) return '<td class="pb-col"><div class="pb-cell none">—</div></td>';
+    var name = tt('evaluations.ratio_add_abd','ADD:ABD');
+    var lines = rt.items.map(function(r){
+      return (r.angle ? r.angle + ' ' : '') + (r.side && r.side !== 'NA' ? r.side + ' ' : '') + '=' + pbRatioFmt(r.value);
+    }).join('¦');
+    var flag = rt.status === 'alert' ? '▲' : (rt.status === 'watch' ? '●' : '');
+    return '<td class="pb-col"><div class="pb-cell ' + rt.status + '" data-tip="1" data-name="' + pbEsc(name) + '" data-ratio="' + pbEsc(lines) + '">'
+      + (flag ? '<span class="fl">' + flag + '</span>' : '') + '<span class="n">' + pbEsc(pbRatioFmt(rt.value)) + '</span></div></td>';
+  }
+
+  function pbCellHtml(c){
+    if (!c.hasData) return '<td class="pb-col"><div class="pb-cell none">—</div></td>';
+    var u = c.unit ? (' ' + c.unit) : '';
+    var lv = c.L != null ? (pbFmt(c.L) + u) : null, rv = c.R != null ? (pbFmt(c.R) + u) : null, nv = c.NA != null ? (pbFmt(c.NA) + u) : null;
+    var name = c.def ? tt(c.def.i18n_key, c.def.label) : '';
+    var main, attrs = 'data-tip="1" data-name="' + pbEsc(name) + '"';
+    if (c.pct != null){
+      main = Math.round(c.pct) + '%';
+      attrs += ' data-l="' + pbEsc(lv || '—') + '" data-r="' + pbEsc(rv || '—') + '" data-asym="' + Math.round(c.pct) + '%"';
+    } else {
+      var only = nv || lv || rv;
+      main = only ? only.split(' ')[0] : '—';
+      attrs += ' data-val="' + pbEsc(only || '—') + '"';
+    }
+    var flag = c.status === 'alert' ? '▲' : (c.status === 'watch' ? '●' : '');
+    return '<td class="pb-col"><div class="pb-cell ' + c.status + '" ' + attrs + '>'
+      + (flag ? '<span class="fl">' + flag + '</span>' : '') + '<span class="n">' + pbEsc(main) + '</span></div></td>';
+  }
+
+  var _pbShowAllCols = false;   // when false, columns with data for only a few players (e.g. GK-only shoulder tests) are hidden
+  function renderPreventionBoard(){
+    var mount = document.getElementById('pbBoard'), tilesEl = document.getElementById('pbTiles');
+    if (!mount || !_pbData) return;
+    var d = _pbData;
+    if (!d.roster.length){ mount.innerHTML = '<div class="pb-empty">' + pbEsc(tt('evaluations.prev_board_empty','No players to show.')) + '</div>'; if (tilesEl) tilesEl.innerHTML = ''; return; }
+    if (!d.cols.length){ mount.innerHTML = '<div class="pb-empty">' + pbEsc(d.hadDefs ? tt('evaluations.prev_board_no_data','No isometric or mobility tests recorded for this team yet.') : tt('evaluations.prev_board_no_tests','No isometric or mobility tests configured.')) + '</div>'; if (tilesEl) tilesEl.innerHTML = ''; return; }
+
+    // per-player rows
+    var rows = d.roster.map(function(p){
+      var cells = d.cols.map(function(def){
+        var t = d.latest[p.id + '|' + def.test_type];
+        if (!t) return { status:'none', hasData:false, def:def };
+        var c = pbComputeCell(def, d.metricsByTest[t.id]); c.def = def; return c;
+      });
+      var ratio = pbRatioRow(p.id);
+      return {
+        player: p, cells: cells, ratio: ratio,
+        alerts: cells.filter(function(c){ return c.status === 'alert'; }).length + (ratio.status === 'alert' ? 1 : 0),
+        watches: cells.filter(function(c){ return c.status === 'watch'; }).length + (ratio.status === 'watch' ? 1 : 0),
+        evaluated: cells.some(function(c){ return c.hasData; }) || ratio.has
+      };
+    });
+    rows.sort(function(a,b){ return (b.alerts-a.alerts) || (b.watches-a.watches) || String(a.player.last_name||'').localeCompare(String(b.player.last_name||'')); });
+
+    // summary
+    var totalAlerts = 0, totalWatch = 0, playersWithAlert = 0, evaluated = 0, maxAsym = { pct: -1 };
+    rows.forEach(function(r){
+      totalAlerts += r.alerts; totalWatch += r.watches;
+      if (r.alerts > 0) playersWithAlert++; if (r.evaluated) evaluated++;
+      r.cells.forEach(function(c){ if (c.pct != null && c.pct > maxAsym.pct){ maxAsym = { pct: c.pct, player: r.player, def: c.def }; } });
+    });
+
+    if (tilesEl){
+      tilesEl.innerHTML = ''
+        + '<div class="pb-tile ' + (playersWithAlert?'alert':'ok') + '"><span class="stripe"></span><div class="k">' + pbEsc(tt('evaluations.prev_tile_players','Players with alert')) + '</div><div class="v">' + playersWithAlert + '</div><div class="c">' + pbEsc(tt('evaluations.prev_of_evaluated','of {n} evaluated', { n: evaluated })) + '</div></div>'
+        + '<div class="pb-tile ' + (totalAlerts?'alert':'ok') + '"><span class="stripe"></span><div class="k">' + pbEsc(tt('evaluations.prev_tile_alerts','Total alerts')) + '</div><div class="v">' + totalAlerts + '</div><div class="c">' + pbEsc(tt('evaluations.prev_tile_alerts_cap','asymmetry ≥15% or out of norm')) + '</div></div>'
+        + '<div class="pb-tile ' + (totalWatch?'watch':'ok') + '"><span class="stripe"></span><div class="k">' + pbEsc(tt('evaluations.prev_tile_watch','To watch')) + '</div><div class="v">' + totalWatch + '</div><div class="c">' + pbEsc(tt('evaluations.prev_tile_watch_cap','asymmetry 10–15%')) + '</div></div>'
+        + '<div class="pb-tile neutral"><span class="stripe"></span><div class="k">' + pbEsc(tt('evaluations.prev_tile_maxasym','Largest asymmetry')) + '</div><div class="v">' + (maxAsym.pct >= 0 ? Math.round(maxAsym.pct) + '%' : '—') + '</div><div class="c">' + (maxAsym.pct >= 0 ? pbEsc(maxAsym.player.last_name + ' · ' + pbShortLabel(maxAsym.def)) : '—') + '</div></div>';
+    }
+
+    // Hide "sparse" columns — a test recorded for only a small minority of the squad (e.g. the
+    // GK-only shoulder tests) leaves a dead band across every outfield row. Drop those by default;
+    // a toggle reveals them. Group colspans below derive from visCols, so they re-adjust for free.
+    var pbTotal = rows.length || 1;
+    var pbFill = d.cols.map(function(_, i){ return rows.reduce(function(n, r){ return n + ((r.cells[i] && r.cells[i].hasData) ? 1 : 0); }, 0); });
+    var pbSparse = pbFill.map(function(f){ return f > 0 && (f / pbTotal) < 0.30; });
+    var pbHiddenCount = pbSparse.filter(Boolean).length;
+    var pbVisIdx = d.cols.map(function(_, i){ return i; }).filter(function(i){ return _pbShowAllCols || !pbSparse[i]; });
+    if (!pbVisIdx.length) pbVisIdx = d.cols.map(function(_, i){ return i; });   // never hide the whole table
+    var visCols = pbVisIdx.map(function(i){ return d.cols[i]; });
+    var pbTogBtn = pbHiddenCount
+      ? '<button id="pbColToggle" type="button" title="' + pbEsc(tt('evaluations.prev_cols_hint','Tests recorded for only a few players are hidden')) + '" style="margin-left:6px;display:inline-flex;align-items:center;gap:5px;font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:999px;padding:5px 10px;cursor:pointer;white-space:nowrap">'
+        + '<i class="ti ' + (_pbShowAllCols ? 'ti-eye-off' : 'ti-eye') + '" style="font-size:13px"></i>'
+        + pbEsc(_pbShowAllCols ? tt('evaluations.prev_hide_cols','Hide sparse tests') : tt('evaluations.prev_show_cols','Show {n} hidden tests', { n: pbHiddenCount }))
+        + '</button>'
+      : '';
+
+    // grouped headers
+    var groups = [];
+    visCols.forEach(function(def){ var last = groups[groups.length-1]; if (last && last.fam === def.family) last.count++; else groups.push({ fam: def.family, count: 1 }); });
+    var famLabel = function(fam){ return fam === 'isometric' ? tt('player.iso_strength_block','Isometric strength') : tt('player.mobility_block','Mobility'); };
+    var showRatioCol = rows.some(function(r){ return r.ratio && r.ratio.has; });
+    var grpHtml = '<th class="pl stk"></th>' + groups.map(function(g){ return '<th class="fam" colspan="' + g.count + '">' + pbEsc(famLabel(g.fam)) + '</th>'; }).join('')
+      + (showRatioCol ? '<th class="fam" colspan="1">' + pbEsc(tt('evaluations.prev_group_derived','Derived')) + '</th>' : '')
+      + '<th rowspan="2" style="vertical-align:bottom;padding-bottom:10px">' + pbEsc(tt('evaluations.prev_col_alerts','Alerts')) + '</th><th rowspan="2"></th>';
+    var colHtml = '<th class="pl stk">' + pbEsc(tt('evaluations.player','Player')) + '</th>'
+      + visCols.map(function(def){ return '<th>' + pbShortLabel(def) + '</th>'; }).join('')
+      + (showRatioCol ? '<th>' + pbEsc(tt('evaluations.ratio_add_abd','ADD:ABD')) + '</th>' : '');
+
+    // body
+    var bodyHtml = rows.map(function(r){
+      var p = r.player;
+      var initials = ((p.first_name||' ')[0] + (p.last_name||' ')[0]).toUpperCase();
+      var pid = encodeURIComponent(p.id);
+      var cnt = r.alerts ? '<span class="pb-cnt a">' + r.alerts + '</span>' : (r.watches ? '<span class="pb-cnt w">' + r.watches + '</span>' : '<span class="pb-cnt z">0</span>');
+      return '<tr>'
+        + '<td class="stk"><div class="pb-plcell"><span class="pb-mono" data-cm-photo="' + pbEsc(p.id) + '">' + pbEsc(initials) + '</span><span><div class="pb-nm"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '">' + pbEsc((p.first_name||'') + ' ' + (p.last_name||'')) + '</a></div>' + (p.position ? '<div class="pb-pos">' + pbEsc(p.position) + '</div>' : '') + '</span></div></td>'
+        + pbVisIdx.map(function(i){ return pbCellHtml(r.cells[i]); }).join('')
+        + (showRatioCol ? pbRatioCellHtml(r.ratio) : '')
+        + '<td class="pb-al">' + cnt + '</td>'
+        + '<td class="pb-act"><a href="Rehab &amp; Preventives.html?newPlan=preventive&amp;player=' + pid + '"><i class="ti ti-shield-plus"></i>' + pbEsc(tt('evaluations.prev_action','Preventive')) + '</a></td>'
+        + '</tr>';
+    }).join('');
+
+    mount.innerHTML = ''
+      + '<div class="pb-card">'
+      + '<div class="pb-card-h"><h3>' + pbEsc(tt('evaluations.prev_board_head','Squad · asymmetry by test (%)')) + '</h3>'
+      + '<div class="pb-legend">'
+      + '<span class="pb-lg"><span class="sw ok"></span>' + pbEsc(tt('evaluations.prev_legend_ok','In range')) + '</span>'
+      + '<span class="pb-lg"><span class="sw watch"></span>' + pbEsc(tt('evaluations.prev_legend_watch','Watch ≥10%')) + '</span>'
+      + '<span class="pb-lg"><span class="sw alert"></span>' + pbEsc(tt('evaluations.prev_legend_alert','Alert ≥15%')) + '</span>'
+      + '<span class="pb-lg"><span class="sw none"></span>' + pbEsc(tt('evaluations.prev_legend_none','No data')) + '</span>'
+      + pbTogBtn
+      + '</div></div>'
+      + '<div class="pb-scroll"><table class="pb-tbl"><thead><tr class="grp">' + grpHtml + '</tr><tr class="cols">' + colHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table></div>'
+      + '</div>'
+      + '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.prev_foot','Cell shows left/right asymmetry of the latest test; hover for values. Default thresholds: watch ≥10%, alert ≥15% — configurable per test.')) + '</span></div>'
+      + (showRatioCol ? '<div class="pb-foot"><span>ⓘ</span><span>' + pbEsc(tt('evaluations.ratio_foot','ADD:ABD = hip adductor ÷ abductor strength (worst side of the latest test). ≥0.90 in range · 0.80–0.89 watch · <0.80 alert. Ref: Thorborg et al., AJSM 2010.')) + '</span></div>' : '');
+
+    // column visibility toggle (re-wired each render since innerHTML is rebuilt)
+    var pbTog = document.getElementById('pbColToggle');
+    if (pbTog) pbTog.addEventListener('click', function(){ _pbShowAllCols = !_pbShowAllCols; renderPreventionBoard(); });
+
+    // custom hover tooltip (wired once on the persistent #pbBoard)
+    if (!mount._pbTipWired){
+      mount._pbTipWired = true;
+      var tipEl = document.getElementById('pbTip');
+      if (!tipEl){ tipEl = document.createElement('div'); tipEl.id = 'pbTip'; tipEl.className = 'pb-tip'; document.body.appendChild(tipEl); }
+      mount.addEventListener('mousemove', function(e){
+        var cell = e.target.closest ? e.target.closest('.pb-cell[data-tip]') : null;
+        if (cell){
+          var html = '<div class="pb-tip-name">' + pbEsc(cell.getAttribute('data-name') || '') + '</div>';
+          var ratio = cell.getAttribute('data-ratio');
+          var asym = cell.getAttribute('data-asym');
+          if (ratio){
+            html += '<div class="pb-tip-grid">' + ratio.split('¦').map(function(part){
+              var kv = part.split('='); return '<span class="k">' + pbEsc(kv[0] || '') + '</span><span class="v">' + pbEsc(kv[1] || '') + '</span>';
+            }).join('') + '</div>';
+          } else if (asym){
+            html += '<div class="pb-tip-grid">'
+              + '<span class="k">L</span><span class="v">' + pbEsc(cell.getAttribute('data-l') || '—') + '</span>'
+              + '<span class="k">R</span><span class="v">' + pbEsc(cell.getAttribute('data-r') || '—') + '</span>'
+              + '<span class="k">' + pbEsc(tt('evaluations.asym_pct','Asym')) + '</span><span class="v">' + pbEsc(asym) + '</span>'
+              + '</div>';
+          } else {
+            var val = cell.getAttribute('data-val');
+            if (val) html += '<div class="pb-tip-grid"><span class="k">' + pbEsc(tt('evaluations.value','Value')) + '</span><span class="v">' + pbEsc(val) + '</span></div>';
+          }
+          tipEl.innerHTML = html;
+          tipEl.style.opacity = '1';
+          var x = e.clientX + 14, y = e.clientY + 16;
+          if (x + tipEl.offsetWidth > window.innerWidth - 8) x = e.clientX - tipEl.offsetWidth - 12;
+          if (y + tipEl.offsetHeight > window.innerHeight - 8) y = e.clientY - tipEl.offsetHeight - 12;
+          tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+        } else { tipEl.style.opacity = '0'; }
+      });
+      mount.addEventListener('mouseleave', function(){ tipEl.style.opacity = '0'; });
+    }
+  }
+
+  // ── re-render JS-built UI on language change (static nodes are re-applied by sidebar.js) ──
+  document.addEventListener('cm:langchanged', function(){
+    if (!_bootDone) return;   // i18n's first apply() fires before boot (or after a guard redirect) — nothing to re-render yet
+    try {
+      // catalog cards + status labels
+      renderCatalog();
+      loadStatuses();
+      // open test detail (force or evaluations source)
+      if (_openTest){
+        var t = _openTest;
+        document.getElementById('evTestName').textContent = testLabel(t);
+        document.getElementById('evTestSub').textContent = catName(t._cat) + ' · ' + t.sub;
+        renderDefMeta(t);
+        if (t.src && t.src.from === 'force_tests'){ renderForceTeam(); renderForceIndiv(); }
+        else if (t.src && t.src.from === 'body_composition'){ openEvalTest(t).then(function(){ renderEvalIndiv(); }); }  // variant labels are localized → rebuild
+        else { renderEvalTeam(); renderEvalIndiv(); }
+      }
+      // field assessment view (only if it was loaded)
+      if (_field && _field.loaded){ renderFieldGrid(); if (_field.player) openFieldPlayer(_field.player); }
+      // prevention board (only if open and already loaded)
+      var _pbBranch = document.querySelector('[data-branch="prevention"]');
+      if (_pbBranch && _pbBranch.classList.contains('is-on') && _pbData){ renderPreventionBoard(); }
+    } catch(e){ console.warn('[ev2] langchanged re-render failed', e); }
+  });
+
+  // ── boot ──
+  var _bootDone = false;
+  (async () => {
+    if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
+    await loadAssessmentDefs();   // merge DB-driven isometric/mobility tests into CATALOG before first render
+    renderCatalog();
+    _bootDone = true;
+    loadStatuses();
+  })();
+})();
