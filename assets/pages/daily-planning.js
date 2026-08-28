@@ -25,6 +25,7 @@ let _dpDaySessions = [], _dpPreferredSessionId = null, _dpDayOff = false, _dpDay
 let _dpTeamId = null, _dpTeams = [];
 let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
 let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
+let _dpGpsProfIn = {};         // exercise_id → in-flight fetch promise (dedupe badges vs projection)
 let _libExercises = [], _libFolders = [], _libOrient = '', _dpMicrocycles = [], _dpPublished = false;
 let _dpGpsExSet = null;         // Set of exercise_ids with a GPS profile (library picker tick), or null until loaded
 let _dpCalFields = new Set();
@@ -1103,6 +1104,23 @@ function dpPaintGkStrip(){
   strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
   dpPaintGpsBadges();
 }
+// Load the FULL profile row for these exercises into the shared cache. Always select('*'):
+// badges only need n_instances, but the projection reads the *_per_min columns off the same
+// cached object — a partial row would poison it and project zeros. In-flight promises are
+// deduped so badges + projection racing on boot fire one query, not two.
+async function dpEnsureGpsProfiles(ids){
+  const need = [...new Set(ids.filter(id => id && !(id in _dpGpsProfiles) && !_dpGpsProfIn[id]))];
+  if (need.length) {
+    const p = window.sb.from('v_exercise_gps_profile').select('*').in('exercise_id', need).then(({ data, error }) => {
+      if (error) { console.warn('[dp-gps-profile] fetch failed:', error.message); need.forEach(id => { delete _dpGpsProfIn[id]; }); return; }   // don't cache a failure as "no profile"
+      const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
+      need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; delete _dpGpsProfIn[id]; });   // null = fetched, no profile
+    });
+    need.forEach(id => { _dpGpsProfIn[id] = p; });
+  }
+  const waits = [...new Set(ids.map(id => _dpGpsProfIn[id]).filter(Boolean))];
+  if (waits.length) await Promise.all(waits);
+}
 // Green tick on field cards whose exercise has associated GPS data (v_exercise_gps_profile).
 // DOM-patched (not baked into the card HTML) so it survives async profile loading without
 // re-rendering cards mid-drag. Helps the coach see which blocks feed the GPS projection.
@@ -1110,13 +1128,7 @@ async function dpPaintGpsBadges(){
   const blocks = [...(_dpFieldExercises||[]), ...((window._dpActItems)||[]), ...((window._dpGkItems)||[])];
   const bySeid = new Map();
   blocks.forEach(e => { if (e.planner_exercise_id) bySeid.set(String(e.id), e.planner_exercise_id); });
-  // Fetch any profiles we don't have cached yet (shared cache with renderGpsProjection).
-  const need = [...new Set([...bySeid.values()].filter(id => !(id in _dpGpsProfiles)))];
-  if (need.length) {
-    const { data } = await window.sb.from('v_exercise_gps_profile').select('exercise_id,n_instances').in('exercise_id', need);
-    const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
-    need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });
-  }
+  await dpEnsureGpsProfiles([...bySeid.values()]);
   document.querySelectorAll('.dp-ex[data-seid]').forEach(card => {
     const pid  = bySeid.get(card.dataset.seid);
     const prof = pid ? _dpGpsProfiles[pid] : null;
@@ -1599,12 +1611,7 @@ async function renderGpsProjection(){
   const blocks = [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ];  // field + activation; phase no longer gates the projection
   const withId = blocks.filter(e => e.planner_exercise_id && dpBlockMins(e).work_min > 0);
   // Fetch any profiles we don't have cached yet. planner_exercise_id IS exercises.id (= the view key).
-  const need = [...new Set(withId.map(e => e.planner_exercise_id).filter(id => !(id in _dpGpsProfiles)))];
-  if (need.length) {
-    const { data } = await window.sb.from('v_exercise_gps_profile').select('*').in('exercise_id', need);
-    const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
-    need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });   // null = known to have no profile
-  }
+  await dpEnsureGpsProfiles(withId.map(e => e.planner_exercise_id));
   const covered = withId.filter(e => _dpGpsProfiles[e.planner_exercise_id]);
   // Visible whenever a day session is loaded (same criterion as the totals strip).
   // No static display:none — only hide on an empty day with no session at all.
