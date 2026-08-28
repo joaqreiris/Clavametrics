@@ -936,18 +936,9 @@
             <label class="pl-form-label" style="display:flex;align-items:center;gap:6px"><i class="ti ti-brand-youtube" style="font-size:14px"></i><span data-i18n="planner.video_link">Video link</span></label>
             <input type="url" class="pl-form-input" id="plExVideo" data-i18n-ph="planner.video_link_ph" placeholder="YouTube, Vimeo, Google Drive…">
           </div>
-          <div class="pl-form-group">
-            <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
-              <i class="ti ti-eye" style="font-size:14px"></i><span data-i18n="planner.visibility_by_category">Visibility by category</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);margin:6px 0 8px;cursor:pointer">
-              <input type="checkbox" id="plExVisAll" onchange="plToggleVisAll()" style="width:16px;height:16px;accent-color:var(--cm-accent)">
-              <span data-i18n="planner.visible_all_categories">Visible to all categories</span>
-            </label>
-            <div id="plExVisTeams" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-            <div id="plExVisHint" style="display:none;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-warn,#b45309);margin-top:6px"></div>
-            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="planner.visibility_hint">If you don't check "all", only the selected categories will see this exercise.</div>
-          </div>
+          <!-- Visibility by category retired (2026-08-28): an exercise now belongs to the team it
+               was created in, full stop — no sharing across categories. Legacy rows with no origin
+               team stay club-wide (cmExVisibleForTeam treats NULL/[] as "everyone"). -->
 
           <div class="pl-form-group">
             <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
@@ -4408,7 +4399,6 @@
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
     { const _v = document.getElementById('plExVideo'); if (_v) _v.value = ex.video_url || ''; }
-    plSetVisibilityUI(ex.visible_teams, ex.origin_team_id);
     plRenderFolderSelect(ex.folder_id || '');
     { const _gk = document.getElementById('plExGk'); if (_gk) _gk.checked = !!ex.is_goalkeeper; }
 
@@ -4776,7 +4766,9 @@
       // overwrite the uploaded preview with an empty pitch.
       source_type:       _curSourceType || 'canvas',
       objects_json:      _curSourceType === 'image' ? null : _oj,
-      visible_teams:     _plComputeVisibleTeams(),
+      // visible_teams is set once, at creation, from the team the drill was born in. An update
+      // deliberately leaves it alone so re-saving a legacy club-wide drill doesn't silently
+      // yank it out of the other categories' libraries.
       folder_id:         document.getElementById('plExFolder')?.value || null,
       is_goalkeeper:     !!document.getElementById('plExGk')?.checked
     };
@@ -4793,8 +4785,8 @@
     } else {
       // First save: INSERT the draft (canvas + meta) and adopt the new row.
       const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
-      const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null, origin_team_id: _activeTeam || null };
-      if (insertPayload.visible_teams == null && _activeTeam) insertPayload.visible_teams = [_activeTeam];
+      const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null, origin_team_id: _activeTeam || null,
+        visible_teams: _activeTeam ? [_activeTeam] : null };
       let res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
       if (res.error && _isNetErr(res.error)) {
         res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
@@ -4969,45 +4961,15 @@
   // escH local de ESTE scope: la const del IIFE de arriba no llega acá (esc/escH nunca
   // es global). Sin esto, plRenderVisTeams tira ReferenceError y mata selectExercise.
   const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  let _plTeams = [], _plVisibleTeams = [], _plFolders = [];
+  let _plTeams = [], _plFolders = [];
   // Exercise sharing hierarchy: the designated first team + the club's open-sharing override,
   // and the origin team of the exercise currently open in the editor.
-  let _plPrimaryTeamId = null, _plOpenSharing = false, _plOriginTeamId = null;
   async function plLoadTeams() {
     const cid = await window.getClubId();
     _plTeams = await window.getTeams(cid);
-    try {
-      const [{ data: prim }, { data: cs }] = await Promise.all([
-        window.sb.from('teams').select('id').eq('club_id', cid).eq('is_primary', true).maybeSingle(),
-        window.sb.from('club_settings').select('enabled').eq('club_id', cid).eq('module_key', 'exercises_open_sharing').maybeSingle(),
-      ]);
-      _plPrimaryTeamId = prim?.id || null;
-      _plOpenSharing = !!(cs && cs.enabled);
-    } catch { _plPrimaryTeamId = null; _plOpenSharing = false; }
     await plLoadFolders();
   }
   const _plActiveTeam = () => sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
-  // The origin used for the rule: the loaded exercise's origin, else the active team (new drafts).
-  const _plEffectiveOrigin = () => _plOriginTeamId || _plActiveTeam();
-  // Rule: a lower-category (non-primary) exercise may NOT be shared to the first team.
-  // Active only when a first team exists, open-sharing is OFF, and this exercise is from an inferior team.
-  const _plShareRuleActive = () => {
-    const origin = _plEffectiveOrigin();
-    return !_plOpenSharing && !!_plPrimaryTeamId && !!origin && origin !== _plPrimaryTeamId;
-  };
-  // Final visible_teams to persist, honouring the rule (never lets an inferior exercise reach the first team).
-  function _plComputeVisibleTeams() {
-    const allOn = document.getElementById('plExVisAll')?.checked;
-    const ruleOn = _plShareRuleActive();
-    if (allOn) {
-      if (!ruleOn) return null;                                   // truly all categories
-      const inf = _plTeams.filter(t => t.id !== _plPrimaryTeamId).map(t => t.id);
-      return inf.length ? inf : null;                             // "all other categories" (never the first team)
-    }
-    let list = _plVisibleTeams.slice();
-    if (ruleOn) list = list.filter(id => id !== _plPrimaryTeamId);
-    return list.length ? list : null;
-  }
   async function plLoadFolders() {
     _plFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
     plRenderFolderSelect(document.getElementById('plExFolder')?.value || '');
@@ -5017,58 +4979,17 @@
     if (!sel || !window.CMFolders) return;
     sel.innerHTML = window.CMFolders.optionsHtml(_plFolders, { teamId: _plActiveTeam(), selectedId });
   }
-  // "New folder" nests under whatever is selected; team scope follows the exercise's visibility
-  // (shared folder when "visible to all categories" is on, otherwise the active team).
+  // "New folder" nests under whatever is selected and belongs to the active team, like the
+  // exercises inside it.
   window.plNewFolder = async function() {
     if (!window.CMFolders) return;
     const parentId = document.getElementById('plExFolder')?.value || null;
-    const teamId = document.getElementById('plExVisAll')?.checked ? null : _plActiveTeam();
+    const teamId = _plActiveTeam();
     const row = await window.CMFolders.promptCreate({ kind: 'field', parentId, teamId });
     if (!row) return;
     await plLoadFolders();
     plRenderFolderSelect(row.id);
   };
-  function plRenderVisTeams() {
-    const wrap = document.getElementById('plExVisTeams');
-    const allOn = document.getElementById('plExVisAll').checked;
-    const ruleOn = _plShareRuleActive();
-    // When "all categories" is on for an inferior exercise, show a hint that the first team is excluded.
-    const hint = document.getElementById('plExVisHint');
-    if (hint) {
-      const show = ruleOn;
-      hint.style.display = show ? 'block' : 'none';
-      if (show) hint.textContent = allOn
-        ? tt('planner.share_all_excludes_first', 'Visible to all other categories (not the first team).')
-        : tt('planner.share_blocked_first_team', 'Lower-category exercises can’t be shared with the first team.');
-    }
-    wrap.style.display = allOn ? 'none' : 'flex';
-    if (allOn) { wrap.innerHTML = ''; return; }
-    wrap.innerHTML = _plTeams.map(t => {
-      const blocked = ruleOn && t.id === _plPrimaryTeamId;
-      if (blocked) {
-        return `<button type="button" disabled title="${tt('planner.share_blocked_first_team','Lower-category exercises can’t be shared with the first team.')}" style="padding:6px 12px;border-radius:999px;border:1px dashed var(--cm-border);background:transparent;color:var(--cm-fg-faint);font:500 12px/1 var(--cm-font-sans);cursor:not-allowed;opacity:.55">${escH(t.name)}</button>`;
-      }
-      const on = _plVisibleTeams.includes(t.id);
-      return `<button type="button" onclick="plToggleVisTeam('${t.id}')" style="padding:6px 12px;border-radius:999px;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'};font:500 12px/1 var(--cm-font-sans);cursor:pointer">${escH(t.name)}</button>`;
-    }).join('');
-  }
-  window.plToggleVisAll = function() {
-    if (document.getElementById('plExVisAll').checked) _plVisibleTeams = [];
-    plRenderVisTeams();
-  };
-  window.plToggleVisTeam = function(id) {
-    if (_plShareRuleActive() && id === _plPrimaryTeamId) return;   // can't share an inferior exercise to the first team
-    const i = _plVisibleTeams.indexOf(id);
-    if (i >= 0) _plVisibleTeams.splice(i, 1); else _plVisibleTeams.push(id);
-    plRenderVisTeams();
-  };
-  function plSetVisibilityUI(visibleTeams, originTeamId) {
-    _plOriginTeamId = originTeamId || null;
-    const all = !visibleTeams || visibleTeams.length === 0;
-    document.getElementById('plExVisAll').checked = all;
-    _plVisibleTeams = all ? [] : [...visibleTeams];
-    plRenderVisTeams();
-  }
   plLoadTeams();
 </script>
 

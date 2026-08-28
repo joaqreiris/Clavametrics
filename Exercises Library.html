@@ -528,9 +528,17 @@
   window._slTeams = await window.getTeams(clubId);
   window._slTeamMap = Object.fromEntries((window._slTeams||[]).map(t => [t.id, t.name]));
   window._slFolders = window.CMFolders ? await window.CMFolders.load('field') : [];
+  // Single-team clubs have nothing to filter or label by category — hide the origin-team
+  // filter, its toolbar mirror and the per-card team chip.
+  window._slMultiTeam = (window._slTeams || []).length > 1;
   (function slRenderTeamFilter() {
     const wrap = document.getElementById('accTeam');
     if (!wrap || !window._slTeams) return;
+    if (!window._slMultiTeam) {
+      wrap.closest('.sl-fdrop')?.style.setProperty('display', 'none');
+      document.getElementById('slOriginSel')?.style.setProperty('display', 'none');
+      return;
+    }
     wrap.innerHTML = window._slTeams.map(t =>
       `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${escH(t.name)}</span><span class="ct">—</span></div>`
     ).join('') + `<div class="sl-opt" data-group="team" data-val="__none__"><span class="cb"></span><span class="lbl">${tt('exlib.no_origin_team','No team')}</span><span class="ct">—</span></div>`;
@@ -813,6 +821,7 @@
         <div class="sl-body">
           <div class="title">${escH(ex.name) || tt('exlib.untitled','Untitled')}</div>
           ${(() => {
+            if (!window._slMultiTeam) return '';
             const vt = ex.visible_teams;
             if (!vt || vt.length === 0) return `<div style="display:inline-flex;align-items:center;gap:4px;font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin:2px 0"><i class="ti ti-world" style="font-size:11px"></i>${tt('exlib.all_teams_short','All')}</div>`;
             const names = vt.map(id => (window._slTeamMap||{})[id]).filter(Boolean);
@@ -1349,7 +1358,7 @@
   updateCounts();
   // Restore the remembered origin choice (so "only my team" sticks across visits).
   try {
-    const savedOrigin = localStorage.getItem('cm_sl_origin');
+    const savedOrigin = window._slMultiTeam ? localStorage.getItem('cm_sl_origin') : null;   // no hidden filter in single-team clubs
     if (savedOrigin && savedOrigin !== '__ALL__'
         && (savedOrigin === '__none__' || (window._slTeams||[]).some(t => t.id === savedOrigin))) {
       applyOriginFilter(savedOrigin);
