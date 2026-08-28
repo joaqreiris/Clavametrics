@@ -809,6 +809,12 @@ async function loadDay(dateStr) {
   dpRenderPhysioList();
 
   await dpRenderPrintSheet();
+
+  // El candado es por día: al cambiar de fecha se suelta el anterior y se pide
+  // el nuevo. Y si quedamos en modo lectura, se re-aplica: loadDay repintó los
+  // campos y volvieron a quedar habilitados.
+  if (_dpLock) _dpLock.setResource(`dp:${_dpTeamId}:${dateStr}`);
+  if (window._dpReadOnly) dpApplyReadOnly();
 }
 
 // Physio adaptation alerts — visual state derives ONLY from adaptation_applied_at so a
@@ -3145,11 +3151,20 @@ async function dpExportPDF() {
 // Doble capa: CSS body.dp-ro esconde los controles de edición, y las funciones
 // que escriben quedan envueltas con un guard (las automáticas en silencio, las
 // interactivas con toast). Super admin queda exento en el boot.
+const DP_RO_FIELDS = ['dpSessionTitle','dpStartTime','dpEndTime','dpMicrocycle','dpOrientation','dpFocus','dpEstRpe','dpMatchDay','dpNotes'];
 function dpApplyReadOnly() {
   document.body.classList.add('dp-ro');
-  ['dpSessionTitle','dpStartTime','dpEndTime','dpMicrocycle','dpOrientation','dpFocus','dpEstRpe','dpMatchDay','dpNotes']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+  DP_RO_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
 }
+// Inverso, para el candado por presencia: el de al lado cerró la pestaña y esto
+// vuelve a ser editable. Nunca libera el solo-lectura por ROL — ese lo decide el
+// boot y no se toca (_dpRoByRole).
+function dpReleaseReadOnly() {
+  if (_dpRoByRole) return;
+  document.body.classList.remove('dp-ro');
+  DP_RO_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+}
+let _dpRoByRole = false, _dpLock = null;
 (function () {
   const wrap = (name, silent) => {
     const orig = window[name];
@@ -3186,6 +3201,7 @@ function dpApplyReadOnly() {
   _dpProfile = profile;
   window._dpReadOnly = !!(window.cmTacticalAccess && profile && !window.cmTacticalAccess(profile));
   if (window._dpReadOnly) { try { if (await window.isSuperAdmin()) window._dpReadOnly = false; } catch (_) {} }
+  _dpRoByRole = window._dpReadOnly;   // el candado no puede levantar un bloqueo de rol
   if (window._dpReadOnly) dpApplyReadOnly();
   await dpInitTeamSwitch();
 
@@ -3248,6 +3264,23 @@ function dpApplyReadOnly() {
   (adaptRes.data || []).forEach(t => { if (!_dpAdaptMap[t.player_id]) _dpAdaptMap[t.player_id] = t; });
 
   await loadDay(initDate);
+
+  // ── Candado suave ─────────────────────────────────────────────
+  // El primero que abre el día lo edita; el que llega después queda en modo
+  // lectura con un cartel arriba y un botón para forzar. Evita que dos
+  // autosaves se pisen la sesión entera sin que nadie se entere.
+  // Ver assets/cm-lock.js.
+  if (window.cmLock && _dpClubId && !_dpRoByRole) {
+    _dpLock = window.cmLock.claim({
+      resource: `dp:${_dpTeamId}:${_dpCurrentDate}`,
+      clubId:   _dpClubId,
+      label:    tt('daily_planning.lock_label', 'this session'),
+      onState: ({ isOwner }) => {
+        window._dpReadOnly = !isOwner;
+        if (isOwner) dpReleaseReadOnly(); else dpApplyReadOnly();
+      },
+    });
+  }
 
   // ── Refresco en vivo ──────────────────────────────────────────
   // Otro miembro del staff toca la sesión del día (ejercicios, horario,

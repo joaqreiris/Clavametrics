@@ -5,7 +5,7 @@ Dos cosas distintas que se suelen mezclar bajo "tipo Google Docs":
 | | Qué se ve | Estado |
 |---|---|---|
 | **Nivel 1 — refresco en vivo** | Otro toca algo y tu pantalla se pone al día sola, sin recargar | **Hecho** (Calendar + Daily Planning) |
-| **Nivel 2 — edición concurrente** | Dos personas escriben lo mismo al mismo tiempo sin pisarse, con cursores/presencia | Planificado, abajo |
+| **Nivel 2 — edición concurrente** | Dos personas escriben lo mismo al mismo tiempo sin pisarse, con cursores/presencia | Paso 1 (candado) hecho; pasos 2 y 3 abajo |
 
 ---
 
@@ -82,13 +82,31 @@ El Nivel 1 lo hace **visible** (ves el cambio del otro), pero no lo **evita**.
 
 ### Tres caminos, de barato a caro
 
-**A · Candado suave por presencia** — 2 a 3 días
-Cada pantalla de edición se une a un canal de presencia (`channel.track()`, ya usado en [assets/sidebar.js](../assets/sidebar.js) para los avatares "en línea") con clave `sesión:<id>`. Si ya hay alguien:
-- se muestra "Martín está editando esta sesión" con su avatar;
-- el segundo entra en modo lectura, con un botón "Editar igual" que avisa del riesgo;
-- al cerrar la pestaña el candado se libera solo (la presencia es efímera, no ensucia la DB).
+**A · Candado suave por presencia — HECHO**
+Motor en [assets/cm-lock.js](../assets/cm-lock.js), cableado en Daily Planning y Gym Planner:
 
-Cubre el 90% de los casos reales: en un cuerpo técnico casi nunca dos personas *quieren* editar la misma sesión a la vez; el problema es no enterarse.
+```js
+const lock = window.cmLock.claim({
+  resource: `dp:${teamId}:${date}`,   // qué se está editando
+  clubId,
+  label: 'esta sesión',
+  scope: '.gp-card-b',                // opcional: qué apagar en modo lectura
+  guard: { silent: ['gpAutoSave'], toast: ['gpPublish'] },
+  onState: ({ isOwner }) => { window._dpReadOnly = !isOwner; },
+});
+lock.setResource(`dp:${teamId}:${otroDia}`);   // al cambiar de día, sin recargar
+```
+
+Cómo se decide quién manda: todos publican su presencia (`tabId`, `userId`, `since`, `resource`) en el canal `cmlock-<clubId>`; el dueño es el de `since` más viejo, con desempate por `tabId` para que todas las pestañas coincidan. La misma persona con dos pestañas no se bloquea a sí misma (se compara por `userId`), y quien está en otro día ni cuenta (se filtra por `resource`).
+
+El que no tiene el candado ve el cartel arriba con el avatar del que está editando y un botón **«Editar igual»**. Si lo pulsa, los dos quedan como editores y ambos ven una advertencia amarilla — no hay bloqueo duro, es un candado social. Cuando el dueño cierra la pestaña, el candado cae solo en el que estaba mirando y se le avisa en verde que ya puede editar.
+
+Tres capas de bloqueo, según lo que tenga cada pantalla:
+- **Daily Planning** reusa su modo solo-lectura por rol, que ya existía (`window._dpReadOnly` + `body.dp-ro` + funciones envueltas). El candado solo mueve el flag; nunca levanta un bloqueo que venga del rol.
+- **Gym Planner** usa `scope`: se apagan los cuerpos de las tarjetas y las acciones de sus encabezados, y quedan vivos el pager de días, el print y el PDF. Solo se revierte lo que apagó el helper — un campo que ya venía deshabilitado sigue así.
+- **`guard`** envuelve funciones globales (autosaves con timer ya lanzados, atajos) como red de seguridad para lo que no pasa por el DOM.
+
+Falta: Planner (la pizarra de ejercicios, `resource: exercise:<id>`) y Lineup.
 
 **B · Guardado por campo en vez de por objeto** — 1 a 2 semanas
 Dejar de mandar la fila entera. Cada cambio escribe solo lo suyo:
@@ -104,13 +122,13 @@ Es el único que da la sensación literal de Google Docs, y el único que obliga
 
 ### Orden recomendado
 
-1. **A** ya, sobre Daily Planning, Gym Planner y Planner. Barato y elimina la pérdida silenciosa de trabajo.
-2. **B** sobre `training_sessions` (los dos jsonb) y `session_exercises`. Es el arreglo de fondo.
+1. ~~**A**, sobre Daily Planning y Gym Planner.~~ Hecho. Queda extenderlo a Planner y Lineup.
+2. **B** sobre `training_sessions` (los dos jsonb) y `session_exercises`. Es el arreglo de fondo. Recién vale la pena si alguien pide editar en paralelo de verdad: con el candado puesto, la pérdida silenciosa ya no ocurre.
 3. **C** solo si aparece el pedido concreto de escribir juntos en la pizarra o en las notas.
 
 ### Cosas a tener en cuenta
 
-- **Presencia y RLS.** El canal de presencia debe ser por club (`presence:<club_id>:<recurso>`); nunca exponer nombres fuera del club.
+- **Presencia y RLS.** El canal del candado es por club (`cmlock-<club_id>`) y lleva nombre y avatar: nunca debe abrirse a más de un club. Realtime no aplica RLS sobre presencia, así que el aislamiento lo da el nombre del canal.
 - **Escalado.** `REPLICA IDENTITY FULL` engorda el WAL en cada update. Con jsonb grandes y muchos clubes hay que medirlo; si molesta, sacar el `FULL` de `training_sessions` y filtrar los DELETE en el cliente.
 - **Límites de Realtime.** Lo que se cuenta como *conexión* es el cliente (la pestaña), no el canal: hasta 100 canales viajan por el mismo WebSocket. Como `assets/sidebar.js` ya abría canales (notificaciones, chat, presencia) en todas las páginas, el Nivel 1 **no agregó conexiones** — agregó canales sobre las que ya estaban. Lo que sí crece es el conteo de **mensajes**: cada cambio en la DB cuenta uno por cada cliente que lo escucha. Cuotas: conexiones 200 (Free) / 500 (Pro, 10.000 sin spend cap); mensajes 2 M (Free) / 5 M (Pro) por mes, después USD 2,50 el millón; mensajes por segundo 100 (Free) / 500 (Pro) — este último es el que puede morder en un pico, por ejemplo 25 jugadores mandando el RPE juntos con 8 del staff mirando el tablero. Se mira en Dashboard → Reports → Realtime.
 - **Offline.** Nada de esto funciona sin conexión. El chip y el refresh al reconectar son la red de seguridad; el service worker no cachea escrituras.

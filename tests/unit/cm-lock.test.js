@@ -1,0 +1,127 @@
+/**
+ * cm-lock.js — candado suave por presencia.
+ * Lo que importa es quién queda como dueño: el que llegó primero, sin que dos
+ * pestañas de la misma persona se bloqueen entre sí, y con el forzado como
+ * escape.
+ */
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+
+let cmLock, syncCb, tracked, TAB, presence;
+
+// El helper lee chan.presenceState() en cada sync, así que la simulación pasa
+// por acá y no por el argumento del callback.
+function sync(state) { presence = state; syncCb(); }
+
+function fakeEl() {
+  return {
+    style: {}, innerHTML: '', id: '', setAttribute() {}, appendChild() {},
+    querySelector: () => null, querySelectorAll: () => [],
+  };
+}
+
+beforeAll(async () => {
+  global.window = {
+    addEventListener() {},
+    getProfile: async () => ({ full_name: 'Yo Mismo' }),
+    sb: {
+      auth: { getUser: async () => ({ data: { user: { id: 'user-me' } } }) },
+      channel: () => ({
+        on(_t, _cfg, cb) { syncCb = cb; return this; },
+        subscribe(cb) { cb('SUBSCRIBED'); return this; },
+        track(meta) { tracked = meta; },
+        untrack() {},
+        presenceState: () => presence || {},
+      }),
+      removeChannel() {},
+    },
+  };
+  global.document = {
+    body: { appendChild() {}, classList: { add() {}, remove() {}, contains: () => false } },
+    createElement: fakeEl,
+    getElementById: () => null,
+    querySelectorAll: () => [],
+    addEventListener() {},
+  };
+  await import('../../assets/cm-lock.js');
+  cmLock = global.window.cmLock;
+  TAB = cmLock.TAB_ID;
+});
+
+beforeEach(() => { syncCb = null; tracked = null; presence = null; });
+
+// Deja correr el connect() interno (auth + profile son promesas).
+const settle = () => new Promise(r => setTimeout(r, 0));
+
+const other = (over = {}) => ({
+  tabId: 'tab-otro', userId: 'user-otro', name: 'Martín',
+  since: 1000, resource: 'dp:t1:2026-08-28', forced: false, ...over,
+});
+const meMeta = (over = {}) => ({ ...tracked, ...over });
+
+describe('cmLock.claim', () => {
+  it('el que llegó primero se queda el candado; el segundo pasa a lectura', async () => {
+    const states = [];
+    cmLock.claim({
+      resource: 'dp:t1:2026-08-28', clubId: 'c1', label: 'esta sesión',
+      onState: s => states.push(s),
+    });
+    await settle();
+
+    // Martín entró antes (since menor) → yo miro.
+    sync({ 'tab-otro': [other()], [TAB]: [meMeta({ since: 5000 })] });
+    expect(states.at(-1).isOwner).toBe(false);
+    expect(states.at(-1).owner.name).toBe('Martín');
+
+    // Martín cierra la pestaña → el candado cae solo en mí.
+    sync({ [TAB]: [meMeta({ since: 5000 })] });
+    expect(states.at(-1).isOwner).toBe(true);
+  });
+
+  it('la misma persona en dos pestañas no se bloquea a sí misma', async () => {
+    const states = [];
+    cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1', onState: s => states.push(s) });
+    await settle();
+
+    // Otra pestaña MÍA, abierta antes.
+    sync({
+      'tab-mio-2': [other({ tabId: 'tab-mio-2', userId: 'user-me', name: 'Yo Mismo', since: 100 })],
+      [TAB]: [meMeta({ since: 5000 })],
+    });
+    expect(states.at(-1).isOwner).toBe(true);
+  });
+
+  it('ignora a quien está editando OTRO día', async () => {
+    const states = [];
+    cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1', onState: s => states.push(s) });
+    await settle();
+
+    sync({
+      'tab-otro': [other({ since: 10, resource: 'dp:t1:2026-09-01' })],
+      [TAB]: [meMeta({ since: 5000 })],
+    });
+    expect(states.at(-1).isOwner).toBe(true);
+  });
+
+  it('al cambiar de día se anuncia el nuevo recurso', async () => {
+    const lock = cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1' });
+    await settle();
+    expect(tracked.resource).toBe('dp:t1:2026-08-28');
+
+    lock.setResource('dp:t1:2026-08-29');
+    expect(tracked.resource).toBe('dp:t1:2026-08-29');
+    expect(tracked.forced).toBe(false);   // el forzado no se arrastra al día nuevo
+  });
+
+  it('quien forzó queda como editor aunque no tenga el candado', async () => {
+    const states = [];
+    cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1', onState: s => states.push(s) });
+    await settle();
+
+    sync({ 'tab-otro': [other()], [TAB]: [meMeta({ since: 5000, forced: true })] });
+    // Un `forced` que llega por la presencia no me habilita a mí: el forzado es
+    // una decisión local, y solo la toma el botón «Editar igual».
+    const st = states.at(-1);
+    expect(st.owner.name).toBe('Martín');   // el candado sigue siendo de él
+    expect(st.isOwner).toBe(false);
+  });
+});

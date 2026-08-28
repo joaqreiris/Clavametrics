@@ -36,6 +36,7 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/cm-realtime.js"></script>
+<script src="assets/cm-lock.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="assets/gps-acwr.js"></script>
@@ -510,7 +511,7 @@
 <script>
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
-let _gpTeamId = null, _gpTeams = [];
+let _gpTeamId = null, _gpTeams = [], _gpLock = null;
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [], _gpDaySessions = [];
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
 let _gpCalFields = new Set();
@@ -2635,6 +2636,10 @@ let _gpDayLoading = false;
 async function gpLoadDay(dateStr) {
   _gpDayLoading = true;
   try { await _gpLoadDayInner(dateStr); } finally { _gpDayLoading = false; }
+  // El candado es por día: se suelta el anterior y se pide el nuevo. Y si
+  // quedamos en modo lectura, se vuelven a apagar los campos que el repintado
+  // acaba de crear habilitados.
+  if (_gpLock) { _gpLock.setResource(`gym:${_gpTeamId}:${dateStr}`); _gpLock.reapply(); }
 }
 async function _gpLoadDayInner(dateStr) {
   _gpCurrentDate = dateStr;
@@ -3449,6 +3454,23 @@ async function gpExportPDF() {
 
   await gpLoadCustomEquip();   // club custom materials → labels + add-material dropdown
   try { await gpLoadDay(initDate); } catch (e) { console.error('gpLoadDay failed', e); }
+
+  // ── Candado suave ─────────────────────────────────────────────
+  // El primero que abre el día de gym lo edita; el que llega después ve el
+  // cartel, queda en modo lectura (se apagan los cuerpos de las tarjetas, no la
+  // navegación ni el print) y puede forzar. Ver assets/cm-lock.js.
+  if (window.cmLock && _gpClubId) {
+    _gpLock = window.cmLock.claim({
+      resource: `gym:${_gpTeamId}:${_gpCurrentDate}`,
+      clubId:   _gpClubId,
+      label:    tt('gym_planner.lock_label', 'this gym session'),
+      scope:    '.gp-card-b, .gp-card-h .right',
+      guard: {
+        silent: ['gpAutoSave', 'gpScheduleSave', 'gpFlushSave'],
+        toast:  ['gpPublish', 'gpSaveTemplate', 'gpApplyTemplate', 'gpDeleteTemplate', 'gpSaveExCreate'],
+      },
+    });
+  }
 
   // ── Refresco en vivo ──────────────────────────────────────────
   // El día se pone al día solo si otro toca la sesión de gym, la convocatoria,
