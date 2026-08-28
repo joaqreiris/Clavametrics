@@ -28,9 +28,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
+     Antes venía de un CDN externo: saludo DNS + TLS a otro servidor para un
+     archivo de 207 KB que además BLOQUEA el pintado (no puede llevar defer:
+     los scripts inline del cuerpo usan window.sb apenas empiezan). Y venía
+     como "@2", o sea la última 2.x que hubiera ese día: una publicación del
+     paquete podía romper la app sin que tocáramos nada. -->
+<script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
-<script src="assets/sidebar.js"></script>
+<script src="assets/sidebar.js" defer></script>
 <script defer src="triage.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
@@ -133,7 +139,7 @@
         </div>
         <div class="tr-sum-stats">
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-flame"></i><span data-i18n="rpe.avgSrpe">Avg sRPE</span></div>
+            <div class="k"><i class="ti ti-flame"></i><span data-i18n="rpe.avgSrpe">Avg sRPE</span><span id="sumSrpeNote" style="display:none;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;margin-left:5px;color:var(--cm-fg-faint);"></span></div>
             <div class="v" id="sumSrpe">0</div>
           </div>
           <div class="tr-sum-stat">
@@ -366,7 +372,7 @@
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
                   currentSessionId:null, currentIsMatch:false, currentMatchKind:null, sessionDuration:null,
-                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
+                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0 };
 
   const T = window.Triage;
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
@@ -430,7 +436,22 @@
       pain: painLabels(r.body_areas),
       comment: r.note || '',
       time: fmtTime(r.submitted_at),
+      av: r.av_status || null,
     };
+  }
+
+  // Lesionado / trabajo limitado: sigue en la lista (puede cargar su RPE de trabajo
+  // diferenciado) pero su carga NO entra en la media de la sesión — no representa lo
+  // que hizo el grupo. Mismo criterio que el Load Monitor para el ACWR de plantel.
+  const AV_OUT_OF_AVG = new Set(['injured', 'limited', 'partial']);
+  function isOutOfAvg(p) { return AV_OUT_OF_AVG.has(p && p.av); }
+  function avTagHTML(p) {
+    if (!isOutOfAvg(p)) return '';
+    const injured = p.av === 'injured';
+    const lab = injured ? tt('rpe.tagInjury', 'Injury') : tt('rpe.tagLimited', 'Limited');
+    const col = injured ? 'var(--cm-danger,#DC2626)' : 'var(--cm-warning,#D97706)';
+    const tip = tt('rpe.tagOutOfAvgTip', 'Not counted in the session average');
+    return `<span class="pc-av-tag" title="${tip}" style="border-color:${col};color:${col}"><i class="ti ${injured ? 'ti-bandage' : 'ti-alert-triangle'}"></i>${lab}</span>`;
   }
 
   // Gauge zones for RPE (1–10): green ≤4, amber 5–7, red ≥8.
@@ -487,7 +508,7 @@
           <span class="cm-avatar is-md" data-cm-photo="${p.id}">${initials(p.name)}</span>
           <div class="pc-who">
             <div class="pc-name">${T.escape(p.name)}</div>
-            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}</div>
+            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}${avTagHTML(p)}</div>
           </div>
         </div>
         <div class="pc-metric">
@@ -554,6 +575,7 @@
             <div class="pc-name">${T.escape(p.name)}</div>
           </div>
         </div>
+        ${avTagHTML(p)}
         <span class="status"><i class="ti ti-clock-x"></i>${tt('rpe.notSubmitted','Not submitted')}</span>
         <div class="right">
           <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('rpe.remind','Remind')}</button>
@@ -698,6 +720,13 @@
     document.getElementById('sumDone').textContent = done;
     document.getElementById('sumDen').textContent = '/ ' + total;
     document.getElementById('sumSrpe').textContent = state.avgSrpe || 0;
+    // La media excluye lesionados/limitados: decirlo, si no el número parece mal calculado.
+    const srpeNote = document.getElementById('sumSrpeNote');
+    if (srpeNote) {
+      const nOut = state.excludedFromAvg || 0;
+      srpeNote.style.display = nOut ? '' : 'none';
+      srpeNote.textContent = nOut ? tt('rpe.avgExclInjured', `excl. ${nOut} injured`, { count: nOut }) : '';
+    }
     document.getElementById('sumHigh').textContent = high;
     // Match duration editor: only for matches, and don't clobber the field while it's focused.
     const durWrap = document.getElementById('sumDurWrap');
@@ -816,7 +845,7 @@
       // Never fall through to the latest past session.
       state.view = (state.todaysSessions.length >= 2) ? 'chooser' : 'nosession';
       document.getElementById('pgSub').textContent = (state.view === 'chooser') ? tt('rpe.todayChooseSession', 'Today · choose a session') : tt('rpe.todayNoSession', 'Today · no session');
-      state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1;
+      state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
       state.loading = false; state.error = false;
       renderRpe();
       return;
@@ -850,9 +879,13 @@
       const pending = rows.filter(r => !r.responded).map(modelFromRow);
       // highest-first: rpe DESC, then load (sRPE) DESC
       responders.sort((a, b) => (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
-      const loads = responders.map(p => p.load).filter(v => v != null);
+      // La media de la sesión sale del grupo que entrenó completo: los lesionados y los
+      // de trabajo limitado quedan fuera (su carga distorsiona la referencia del equipo).
+      const loads = responders.filter(p => !isOutOfAvg(p)).map(p => p.load).filter(v => v != null);
+      const allLoads = responders.map(p => p.load).filter(v => v != null);
       state.avgSrpe = loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0;
-      state.maxSrpe = loads.length ? Math.max(...loads) : 1;
+      state.maxSrpe = allLoads.length ? Math.max(...allLoads) : 1;
+      state.excludedFromAvg = responders.filter(p => isOutOfAvg(p) && p.load != null).length;
       state.responders = responders;
       state.pending = pending;
       state.total = rows.length;

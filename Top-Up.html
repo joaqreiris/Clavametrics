@@ -297,9 +297,15 @@
     .tu-doc{box-shadow:none;padding:0}
   }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
+     Antes venía de un CDN externo: saludo DNS + TLS a otro servidor para un
+     archivo de 207 KB que además BLOQUEA el pintado (no puede llevar defer:
+     los scripts inline del cuerpo usan window.sb apenas empiezan). Y venía
+     como "@2", o sea la última 2.x que hubiera ese día: una publicación del
+     paquete podía romper la app sin que tocáramos nada. -->
+<script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
-<script src="assets/sidebar.js"></script>
+<script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/gps-baseline.js"></script>
 <script src="assets/topup-calc.js"></script>
