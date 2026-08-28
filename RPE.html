@@ -199,6 +199,19 @@
         <div class="tr-list" id="listPending" style="gap:8px;"></div>
       </div>
 
+      <!-- Trabajo diferenciado: lesionados anotados en la sesión. Van al final y aparte —
+           su carga no cuenta en el total ni en la media, hayan cargado el RPE o no. -->
+      <div id="diffWrap" style="display:none; margin-top:18px;">
+        <div class="tr-diff-hd">
+          <span class="ic"><i class="ti ti-bandage"></i></span>
+          <div class="tx">
+            <div class="t"><span data-i18n="rpe.diffTitle">Modified work · injured</span> <span id="diffCt" class="ct">0</span></div>
+            <div class="s" data-i18n="rpe.diffSub">Out of the session total and the squad average — their load isn't the group's.</div>
+          </div>
+        </div>
+        <div class="tr-list" id="listDiff" style="gap:8px;"></div>
+      </div>
+
       <!-- Loading skeleton (wired next step) -->
       <div id="skeleton" style="display:none;">
         <div class="tr-list"></div>
@@ -372,7 +385,7 @@
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
                   currentSessionId:null, currentIsMatch:false, currentMatchKind:null, sessionDuration:null,
-                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0 };
+                  responders:[], pending:[], diff:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0 };
 
   const T = window.Triage;
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
@@ -437,6 +450,7 @@
       comment: r.note || '',
       time: fmtTime(r.submitted_at),
       av: r.av_status || null,
+      responded: !!r.responded,
     };
   }
 
@@ -634,7 +648,8 @@
       try {
         const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: s.id });
         if (error) return;
-        const rows = data || [];
+        // Mismo criterio que el board: el diferenciado no cuenta en el x/y de la sesión.
+        const rows = (data || []).filter(r => !AV_OUT_OF_AVG.has(r.av_status));
         const done = rows.filter(r => r.responded).length;
         const el = document.querySelector(`.ch-cnt[data-cnt="${s.id}"]`);
         if (!el) return; // la vista cambió mientras cargaba
@@ -696,6 +711,8 @@
       skel.style.display = 'none';
       empty.style.display = 'none';
       if (err) err.style.display = 'none';
+      const diffGate = document.getElementById('diffWrap');
+      if (diffGate) diffGate.style.display = 'none';
       gate.style.display = '';
       gate.innerHTML = (state.view === 'chooser') ? chooserHTML() : noSessionHTML();
       if (state.view === 'chooser') loadChooserCounts();
@@ -758,12 +775,25 @@
     skel.style.display = 'none';
     empty.style.display = 'none';
     if (err) err.style.display = 'none';
+    // Bloque de diferenciados: mismo contenido en las dos pestañas — es una lista aparte,
+    // no responde a Responded/Pending.
+    const diffWrap = document.getElementById('diffWrap');
+    const diffList = state.diff || [];
+    if (diffWrap) {
+      const showDiff = !state.loading && !state.error && diffList.length > 0;
+      diffWrap.style.display = showDiff ? '' : 'none';
+      if (showDiff) {
+        document.getElementById('diffCt').textContent = diffList.length;
+        document.getElementById('listDiff').innerHTML =
+          diffList.map(p => p.responded ? cardHTML(p) : pendingCardHTML(p)).join('');
+      }
+    }
     // orphan section: hidden while loading / on error / when none
     orphanWrap.style.display = (state.loading || state.error || state.orphans.length === 0) ? 'none' : '';
 
     if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
     if (state.error) { if (err) err.style.display = ''; return; }
-    if (total === 0) {
+    if (total === 0 && !diffList.length) {
       document.getElementById('emptyH').textContent = tt('rpe.noPlayersTitle', 'No players in this session');
       document.getElementById('emptyP').textContent = tt('rpe.noPlayersSub', 'There are no players to show for the selected session.');
       empty.style.display = ''; return;
@@ -845,7 +875,7 @@
       // Never fall through to the latest past session.
       state.view = (state.todaysSessions.length >= 2) ? 'chooser' : 'nosession';
       document.getElementById('pgSub').textContent = (state.view === 'chooser') ? tt('rpe.todayChooseSession', 'Today · choose a session') : tt('rpe.todayNoSession', 'Today · no session');
-      state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
+      state.responders = []; state.pending = []; state.diff = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
       state.loading = false; state.error = false;
       renderRpe();
       return;
@@ -875,20 +905,27 @@
       const metaDur = state.sessionsById[sessionId]?.duration;
       const durRow = rows.find(r => r.duration != null);
       state.sessionDuration = (metaDur != null) ? Number(metaDur) : (durRow ? Number(durRow.duration) : null);
-      const responders = rows.filter(r => r.responded).map(modelFromRow);
-      const pending = rows.filter(r => !r.responded).map(modelFromRow);
+      const all = rows.map(modelFromRow);
+      // Trabajo diferenciado (lesionado/limitado anotado en la sesión): va aparte, al final.
+      // No entra en el total ni en pendientes — cargue o no, no es parte del grupo.
+      const diff = all.filter(isOutOfAvg);
+      const squad = all.filter(p => !isOutOfAvg(p));
+      const responders = squad.filter(p => p.responded);
+      const pending = squad.filter(p => !p.responded);
       // highest-first: rpe DESC, then load (sRPE) DESC
       responders.sort((a, b) => (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
-      // La media de la sesión sale del grupo que entrenó completo: los lesionados y los
-      // de trabajo limitado quedan fuera (su carga distorsiona la referencia del equipo).
-      const loads = responders.filter(p => !isOutOfAvg(p)).map(p => p.load).filter(v => v != null);
-      const allLoads = responders.map(p => p.load).filter(v => v != null);
+      // Los que cargaron primero; dentro de cada bloque, RPE más alto arriba.
+      diff.sort((a, b) => ((b.rpe != null) - (a.rpe != null)) || ((b.rpe || 0) - (a.rpe || 0)));
+      // La media de la sesión sale del grupo que entrenó: el diferenciado no la mueve.
+      const loads = responders.map(p => p.load).filter(v => v != null);
+      const allLoads = all.map(p => p.load).filter(v => v != null);
       state.avgSrpe = loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0;
       state.maxSrpe = allLoads.length ? Math.max(...allLoads) : 1;
-      state.excludedFromAvg = responders.filter(p => isOutOfAvg(p) && p.load != null).length;
+      state.excludedFromAvg = diff.filter(p => p.load != null).length;
       state.responders = responders;
       state.pending = pending;
-      state.total = rows.length;
+      state.diff = diff;
+      state.total = squad.length;
       state.loading = false; state.error = false;
       renderRpe();
     } catch (e) {

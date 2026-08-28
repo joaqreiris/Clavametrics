@@ -155,6 +155,9 @@
   .dp-player.dayoff .reason{color:#0f766e}
   .dp-squad-out .o-pl.rehab{text-decoration:none;color:#9a3412}
   .dp-squad-out.is-rehab .o-lbl{color:#f97316}
+  /* Diferenciado: está EN la sesión (por eso no va tachado), pero aparte del grupo */
+  .dp-squad-out.is-diff .o-lbl{color:#dc2626}
+  .dp-squad-out.is-diff .o-pl{text-decoration:none;color:#b91c1c}
   .dp-player.sick{background:#fdf4ff;border-color:#e9d5ff;color:#581c87}
   .dp-player.sick .num{background:#a855f7;color:#fff}
   .dp-player.sick .reason{color:#581c87}
@@ -808,6 +811,18 @@ function dpRenderSquad(avMap) {
     }
   }
 
+  // Diferenciado: el lesionado/rehab que SÍ fue anotado en la convocatoria porque ese día
+  // hizo trabajo aparte. Sale de «Out»/«Rehab» y se muestra dentro de la sesión, en su
+  // propio bloque — no suma al grupo ni a la media (igual que en el RPE).
+  const diffIn = [];
+  if (_parts) {
+    const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) {
+      const cls = statusOf(arr[i]).cls;
+      if (_parts.has(String(arr[i].id)) && (cls === 'injured' || cls === 'rehab')) diffIn.unshift(arr.splice(i, 1)[0]);
+    } };
+    pull(outs); pull(rehabs);
+  }
+
   const groups = {};
   trainees.forEach(p => {
     const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
@@ -819,6 +834,9 @@ function dpRenderSquad(avMap) {
     .map(([lbl, {list}]) =>
       `<div class="dp-pl-group"><span class="l">${lbl} · ${list.length}</span><div class="dp-players">${list.map(chip).join('')}</div></div>`
     ).join('');
+  if (diffIn.length) {
+    _dpSquadHtml += `<div class="dp-squad-out is-diff"><span class="o-lbl">${tt('daily_planning.diff_count', `Modified work · ${diffIn.length}`, {count: diffIn.length})}</span>${diffIn.map(outChip).join('')}</div>`;
+  }
   if (otherSess.length) {
     _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">${tt('daily_planning.other_session_count', `Other session · ${otherSess.length}`, {count: otherSess.length})}</span>${otherSess.map(outChip).join('')}</div>`;
   }
@@ -854,6 +872,7 @@ function dpRenderSquad(avMap) {
   const _mk = (val, txt, color) => `<span>${color ? `<strong style="color:${color}">${val}</strong> ` : `<strong>${val}</strong> `}${txt}</span>`;
   document.getElementById('dpSquadSummary').innerHTML =
     (_parts ? `<span>${tt('daily_planning.n_in_session', `<strong>${trainees.length}</strong> in this session`, {count:`<strong>${trainees.length}</strong>`})}</span><span class="sep"></span>` : '') +
+    (diffIn.length ? `<span>${tt('daily_planning.n_diff_work', `<strong style="color:#dc2626">${diffIn.length}</strong> modified work`, {count:`<strong style="color:#dc2626">${diffIn.length}</strong>`})}</span><span class="sep"></span>` : '') +
     `<span>${tt('daily_planning.n_of_m_available', `<strong>${avCt + partCt}</strong> of ${total} available`, {avail:`<strong>${avCt + partCt}</strong>`, total})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_partial', `<strong style="color:var(--cm-warning)">${partCt}</strong> partial`, {count:`<strong style="color:var(--cm-warning)">${partCt}</strong>`})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_out', `<strong style="color:var(--cm-danger)">${unCt}</strong> out`, {count:`<strong style="color:var(--cm-danger)">${unCt}</strong>`})}</span>` +
@@ -898,6 +917,11 @@ function _dpStatusCls(p){
   return cls;
 }
 function _dpTrainees(){ return _dpPlayers.filter(p => ['','partial'].includes(_dpStatusCls(p))); }
+// Trabajo diferenciado: lesionado o en rehab. No entra al grupo por defecto, pero se puede
+// tildar en la convocatoria si ese día hizo algo — y entonces aparece aparte en el RPE.
+function _dpIsDiffWork(p){ return ['injured','rehab'].includes(_dpStatusCls(p)); }
+// Candidatos de la convocatoria: el grupo que entrena + los de diferenciado (tildables).
+function _dpGroupCandidates(){ return _dpPlayers.filter(p => ['','partial','injured','rehab'].includes(_dpStatusCls(p))); }
 function _dpPlayerById(id){ return _dpPlayers.find(p => String(p.id) === String(id)) || null; }
 function _dpPlayerShort(p){ return (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '—'; }
 const _DP_EXG_COLORS = ['#2563EB','#16A34A','#D97706','#7C3AED','#DC2626','#0891B2'];
@@ -1165,13 +1189,18 @@ function _dpRenderSessGroupMenu(){
       }).join('') + `</div>`
     : '';
   const buckets = {};
-  _dpTrainees().forEach(p => {
+  _dpGroupCandidates().forEach(p => {
     const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
     if (!buckets[g.l]) buckets[g.l] = { o:g.o, list:[] };
     buckets[g.l].list.push(p);
   });
   const guestTag = p => _dpIsGuest(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-faint);border:1px solid var(--cm-border);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.guest_tag','guest')}</span>` : '';
-  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : true)?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span>${guestTag(p)}</label>`;
+  // El lesionado se puede tildar: si hizo diferenciado, entra a la convocatoria (y al RPE,
+  // aparte). Va marcado para que nadie lo confunda con uno más del grupo.
+  const injTag = p => _dpIsDiffWork(p) ? `<span style="font:600 8px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-danger,#dc2626);border:1px solid var(--cm-danger,#dc2626);border-radius:4px;padding:2px 4px;margin-left:auto">${tt('daily_planning.injured_tag','inj')}</span>` : '';
+  // Sin convocatoria armada, el lesionado arranca destildado: no está en la sesión hasta
+  // que alguien lo ponga (si arrancara tildado, el primer clic lo haría desaparecer).
+  const optRow = p => `<label class="dp-exp-opt"><input type="checkbox" value="${p.id}" ${(parts ? parts.has(String(p.id)) : !_dpIsDiffWork(p))?'checked':''} onchange="dpToggleSessPart('${p.id}',this.checked)"><span class="num">${p.number ?? '—'}</span><span>${_dpPlayerShort(p)}</span>${injTag(p)}${guestTag(p)}</label>`;
   const cols = Object.entries(buckets).sort((a,b)=>a[1].o-b[1].o)
     .map(([lbl,{list:ps}]) => `<div class="dp-exp-col"><div class="dp-exp-col-h">${lbl} · ${ps.length}</div>${ps.map(optRow).join('')}</div>`).join('');
   const body = cols ? `<div class="dp-exp-cols">${cols}</div>`
