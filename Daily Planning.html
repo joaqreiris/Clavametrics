@@ -863,15 +863,16 @@ function dpRenderSquad(avMap) {
   });
   const total = _dpPlayers.length;
 
-  // Con convocatoria definida, el contador refleja el grupo de ESTA sesión.
-  const _inSessCt = _parts ? trainees.length : avCt + partCt;
+  // Con convocatoria definida, el contador refleja el grupo de ESTA sesión — los de
+  // diferenciado incluidos, para que coincida con el total del board de RPE.
+  const _inSessCt = _parts ? trainees.length + diffIn.length : avCt + partCt;
   document.getElementById('dpSquadCt').textContent = tt('daily_planning.of_total', `${_inSessCt} of ${total}`, {avail: _inSessCt, total});
 
   const awayNotes = _dpPlayers.filter(p => avMap[p.id]?.status === 'away' && avMap[p.id]?.notes).map(p => avMap[p.id].notes);
   const awayDesc  = awayNotes.length ? ` (${[...new Set(awayNotes)].join(' + ')})` : '';
   const _mk = (val, txt, color) => `<span>${color ? `<strong style="color:${color}">${val}</strong> ` : `<strong>${val}</strong> `}${txt}</span>`;
   document.getElementById('dpSquadSummary').innerHTML =
-    (_parts ? `<span>${tt('daily_planning.n_in_session', `<strong>${trainees.length}</strong> in this session`, {count:`<strong>${trainees.length}</strong>`})}</span><span class="sep"></span>` : '') +
+    (_parts ? `<span>${tt('daily_planning.n_in_session', `<strong>${_inSessCt}</strong> in this session`, {count:`<strong>${_inSessCt}</strong>`})}</span><span class="sep"></span>` : '') +
     (diffIn.length ? `<span>${tt('daily_planning.n_diff_work', `<strong style="color:#dc2626">${diffIn.length}</strong> modified work`, {count:`<strong style="color:#dc2626">${diffIn.length}</strong>`})}</span><span class="sep"></span>` : '') +
     `<span>${tt('daily_planning.n_of_m_available', `<strong>${avCt + partCt}</strong> of ${total} available`, {avail:`<strong>${avCt + partCt}</strong>`, total})}</span>` +
     `<span class="sep"></span><span>${tt('daily_planning.n_partial', `<strong style="color:var(--cm-warning)">${partCt}</strong> partial`, {count:`<strong style="color:var(--cm-warning)">${partCt}</strong>`})}</span>` +
