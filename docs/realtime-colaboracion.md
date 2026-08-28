@@ -114,3 +114,22 @@ Es el único que da la sensación literal de Google Docs, y el único que obliga
 - **Escalado.** `REPLICA IDENTITY FULL` engorda el WAL en cada update. Con jsonb grandes y muchos clubes hay que medirlo; si molesta, sacar el `FULL` de `training_sessions` y filtrar los DELETE en el cliente.
 - **Límites de Realtime.** Lo que se cuenta como *conexión* es el cliente (la pestaña), no el canal: hasta 100 canales viajan por el mismo WebSocket. Como `assets/sidebar.js` ya abría canales (notificaciones, chat, presencia) en todas las páginas, el Nivel 1 **no agregó conexiones** — agregó canales sobre las que ya estaban. Lo que sí crece es el conteo de **mensajes**: cada cambio en la DB cuenta uno por cada cliente que lo escucha. Cuotas: conexiones 200 (Free) / 500 (Pro, 10.000 sin spend cap); mensajes 2 M (Free) / 5 M (Pro) por mes, después USD 2,50 el millón; mensajes por segundo 100 (Free) / 500 (Pro) — este último es el que puede morder en un pico, por ejemplo 25 jugadores mandando el RPE juntos con 8 del staff mirando el tablero. Se mira en Dashboard → Reports → Realtime.
 - **Offline.** Nada de esto funciona sin conexión. El chip y el refresh al reconectar son la red de seguridad; el service worker no cachea escrituras.
+
+---
+
+## Cuándo hay que pagarle más a Supabase
+
+Medido el 2026-08-28: 7 clubes (2 con actividad en 30 días), 21 cuentas de staff, 125 jugadores, base de 85 MB, storage de 108 MB, ~2.800 filas nuevas por mes en tablas publicadas.
+
+Escalando esos números por club activo (≈3 del staff, ≈5 conexiones pico, ≈15.000 mensajes al mes):
+
+| Límite | Free | Se toca cerca de | Pro |
+|---|---|---|---|
+| Conexiones pico | 200 | ~40 clubes activos a la vez | 500 (10.000 sin spend cap) |
+| Mensajes/mes | 2 M | ~130 clubes activos | 5 M |
+| Tamaño de base | 500 MB | ~40 clubes | 8 GB |
+| Storage | 1 GB | ~65 clubes | 100 GB |
+
+**Realtime no es lo que va a obligar a pagar.** El Free Plan no tiene backups automáticos ni point-in-time recovery: con clubes pagando por el producto, eso es el motivo real para estar en Pro (USD 25/mes, que ya cubre un proyecto Micro con los USD 10 de compute credits), mucho antes que cualquier cuota de Realtime.
+
+Pasado Pro, el orden es: apagar el spend cap (sube a 10.000 conexiones y 2.500 mensajes/segundo) y pagar el excedente — USD 10 por cada 1.000 conexiones pico y USD 2,50 por millón de mensajes. El salto a Team (USD 599/mes) es por cumplimiento y soporte, no por estos límites.
