@@ -165,6 +165,13 @@
       const isOwner = forced || owner.userId === me.userId;
       const others  = editors.filter(m => m.userId !== me.userId);
 
+      // Estamos por perder la edición. El sync puede llegar segundos después de
+      // abrir la pantalla, con el usuario ya escribiendo: si se bloquea sin más,
+      // el autosave en vuelo queda frenado y ESO SÍ pierde lo tipeado. Se
+      // persiste lo pendiente ANTES de cerrar la puerta.
+      if (!isOwner && !_guardState.blocked && opts.onLosing) {
+        try { opts.onLosing(); } catch (e) { console.warn('[cmLock] flush', e); }
+      }
       _guardState.blocked = !isOwner;
       if (opts.scope) {
         if (!isOwner && !scopeTouched.length) scopeTouched = lockScope(opts.scope);
@@ -174,11 +181,15 @@
 
       const what = opts.label || tt('lock.this_page', 'this page');
       if (!isOwner) {
+        // El aviso dice explícitamente que los controles se esconden: sin eso, la
+        // pantalla sin botones se lee como «desapareció el planning».
         paintBar(
           `${avatarHtml(owner)}<span>${esc(tt('lock.editing_by', `${owner.name} is editing ${what}`,
-            { name: owner.name, what }))}</span>` +
+            { name: owner.name, what }))}` +
+          `<br><span style="color:var(--cm-fg-muted,#666);font-weight:400">` +
+          `${esc(tt('lock.view_only_hint', 'View only — nothing was lost, the editing controls are just hidden'))}</span></span>` +
           `<button type="button" id="cmLockTakeover" style="border:0;cursor:pointer;padding:5px 11px;border-radius:7px;` +
-          `background:var(--cm-bg-soft,#eee);color:var(--cm-fg-strong,#111);font:600 12px/1 var(--cm-font-sans,system-ui)">` +
+          `background:var(--cm-bg-soft,#eee);color:var(--cm-fg-strong,#111);font:600 12px/1 var(--cm-font-sans,system-ui);flex:0 0 auto">` +
           `${esc(tt('lock.edit_anyway', 'Edit anyway'))}</button>`);
         const btn = document.getElementById('cmLockTakeover');
         if (btn) btn.onclick = () => { forced = true; track(); };

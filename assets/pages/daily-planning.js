@@ -3275,6 +3275,13 @@ let _dpRoByRole = false, _dpLock = null;
       resource: `dp:${_dpTeamId}:${_dpCurrentDate}`,
       clubId:   _dpClubId,
       label:    tt('daily_planning.lock_label', 'this session'),
+      // Se corre ANTES de que el candado bloquee: si había algo a medio guardar
+      // (el debounce del autosave, ediciones de tareas, targets de GPS), se
+      // persiste ahora. Después de esto los guardados quedan frenados.
+      onLosing: () => {
+        try { dpFlushEdits(); dpFlushTargets(); } catch (_) {}
+        if (_dpSaveTimer) { clearTimeout(_dpSaveTimer); _dpSaveTimer = null; dpAutoSaveSession(); }
+      },
       onState: ({ isOwner }) => {
         window._dpReadOnly = !isOwner;
         if (isOwner) dpReleaseReadOnly(); else dpApplyReadOnly();

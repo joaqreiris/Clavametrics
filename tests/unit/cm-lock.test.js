@@ -77,6 +77,37 @@ describe('cmLock.claim', () => {
     expect(states.at(-1).isOwner).toBe(true);
   });
 
+  it('guarda lo que estaba en vuelo ANTES de bloquear, y no lo repite después', async () => {
+    const orden = [];
+    cmLock.claim({
+      resource: 'dp:t1:2026-08-28', clubId: 'c1',
+      onLosing: () => orden.push('flush'),
+      onState: ({ isOwner }) => orden.push(isOwner ? 'edita' : 'bloquea'),
+    });
+    await settle();
+
+    // Llega el sync y me saca la edición: el guardado tiene que salir primero,
+    // o el autosave con debounce queda frenado y se pierde lo tipeado.
+    sync({ 'tab-otro': [other()], [TAB]: [meMeta({ since: 5000 })] });
+    expect(orden).toEqual(['flush', 'bloquea']);
+
+    // Syncs posteriores estando ya bloqueado no vuelven a flushear.
+    sync({ 'tab-otro': [other()], [TAB]: [meMeta({ since: 5000 })] });
+    expect(orden.filter(x => x === 'flush')).toHaveLength(1);
+  });
+
+  it('no flushea cuando el candado es mío', async () => {
+    const orden = [];
+    cmLock.claim({
+      resource: 'dp:t1:2026-08-28', clubId: 'c1',
+      onLosing: () => orden.push('flush'),
+      onState: () => {},
+    });
+    await settle();
+    sync({ [TAB]: [meMeta({ since: 5000 })] });
+    expect(orden).toEqual([]);
+  });
+
   it('la misma persona en dos pestañas no se bloquea a sí misma', async () => {
     const states = [];
     cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1', onState: s => states.push(s) });
