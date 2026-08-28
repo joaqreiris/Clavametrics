@@ -37,6 +37,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/cm-realtime.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="assets/positions.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -510,15 +513,8 @@
 
         <div class="grow"></div>
 
-        <div class="sq-filters">
-          <button class="sq-pill-filter is-on" data-pos="All"><span data-i18n="common.all">All</span><span class="ct">27</span></button>
-          <button class="sq-pill-filter" data-pos="GK"><span class="dot" style="background:var(--cm-pos-gk)"></span>GK<span class="ct">3</span></button>
-          <button class="sq-pill-filter" data-pos="CB"><span class="dot" style="background:var(--cm-pos-cb)"></span>CB<span class="ct">4</span></button>
-          <button class="sq-pill-filter" data-pos="FB"><span class="dot" style="background:var(--cm-pos-fb)"></span>FB<span class="ct">4</span></button>
-          <button class="sq-pill-filter" data-pos="MF"><span class="dot" style="background:var(--cm-pos-mf)"></span>MF<span class="ct">7</span></button>
-          <button class="sq-pill-filter" data-pos="WG"><span class="dot" style="background:var(--cm-pos-wg)"></span>WG<span class="ct">4</span></button>
-          <button class="sq-pill-filter" data-pos="ST"><span class="dot" style="background:var(--cm-pos-st)"></span>ST<span class="ct">5</span></button>
-        </div>
+        <!-- One pill per roll-up code of the active sport (fillPositionFilters) -->
+        <div class="sq-filters" id="sqFilters"></div>
 
       </div>
 
@@ -617,34 +613,9 @@
         </div>
         <div class="sq-modal-field">
           <label for="sqF_position" data-i18n="squad.position">Position</label>
+          <!-- Options are built from the active sport pack (fillPositionSelects) -->
           <select id="sqF_position">
             <option value="" data-i18n="squad.select_ph">— Select —</option>
-            <optgroup label="Goalkeeper" data-i18n-attr="label:squad.optgroup_goalkeeper">
-              <option value="GK" data-i18n="squad.pos_gk">GK — Goalkeeper</option>
-            </optgroup>
-            <optgroup label="Defenders" data-i18n-attr="label:squad.optgroup_defenders">
-              <option value="CB" data-i18n="squad.pos_cb">CB — Centre back</option>
-              <option value="LB" data-i18n="squad.pos_lb">LB — Left back</option>
-              <option value="RB" data-i18n="squad.pos_rb">RB — Right back</option>
-              <option value="LWB" data-i18n="squad.pos_lwb">LWB — Left wing back</option>
-              <option value="RWB" data-i18n="squad.pos_rwb">RWB — Right wing back</option>
-            </optgroup>
-            <optgroup label="Midfielders" data-i18n-attr="label:squad.optgroup_midfielders">
-              <option value="CDM" data-i18n="squad.pos_cdm">CDM — Defensive mid</option>
-              <option value="CM" data-i18n="squad.pos_cm">CM — Central mid</option>
-              <option value="CAM" data-i18n="squad.pos_cam">CAM — Attacking mid</option>
-            </optgroup>
-            <optgroup label="Wide" data-i18n-attr="label:squad.optgroup_wide">
-              <option value="LM" data-i18n="squad.pos_lm">LM — Left mid</option>
-              <option value="RM" data-i18n="squad.pos_rm">RM — Right mid</option>
-              <option value="LW" data-i18n="squad.pos_lw">LW — Left winger</option>
-              <option value="RW" data-i18n="squad.pos_rw">RW — Right winger</option>
-            </optgroup>
-            <optgroup label="Forwards" data-i18n-attr="label:squad.optgroup_forwards">
-              <option value="SS" data-i18n="squad.pos_ss">SS — Second striker</option>
-              <option value="CF" data-i18n="squad.pos_cf">CF — Centre forward</option>
-              <option value="ST" data-i18n="squad.pos_st">ST — Striker</option>
-            </optgroup>
           </select>
         </div>
       </div>
@@ -653,32 +624,6 @@
           <label data-i18n="squad.also_plays">Also plays (optional)</label>
           <select id="sqF_positionsAdd">
             <option value="" data-i18n="squad.add_position">— Add position —</option>
-            <optgroup label="Goalkeeper" data-i18n-attr="label:squad.optgroup_goalkeeper">
-              <option value="GK" data-i18n="squad.pos_gk">GK — Goalkeeper</option>
-            </optgroup>
-            <optgroup label="Defenders" data-i18n-attr="label:squad.optgroup_defenders">
-              <option value="CB" data-i18n="squad.pos_cb">CB — Centre back</option>
-              <option value="LB" data-i18n="squad.pos_lb">LB — Left back</option>
-              <option value="RB" data-i18n="squad.pos_rb">RB — Right back</option>
-              <option value="LWB" data-i18n="squad.pos_lwb">LWB — Left wing back</option>
-              <option value="RWB" data-i18n="squad.pos_rwb">RWB — Right wing back</option>
-            </optgroup>
-            <optgroup label="Midfielders" data-i18n-attr="label:squad.optgroup_midfielders">
-              <option value="CDM" data-i18n="squad.pos_cdm">CDM — Defensive mid</option>
-              <option value="CM" data-i18n="squad.pos_cm">CM — Central mid</option>
-              <option value="CAM" data-i18n="squad.pos_cam">CAM — Attacking mid</option>
-            </optgroup>
-            <optgroup label="Wide" data-i18n-attr="label:squad.optgroup_wide">
-              <option value="LM" data-i18n="squad.pos_lm">LM — Left mid</option>
-              <option value="RM" data-i18n="squad.pos_rm">RM — Right mid</option>
-              <option value="LW" data-i18n="squad.pos_lw">LW — Left winger</option>
-              <option value="RW" data-i18n="squad.pos_rw">RW — Right winger</option>
-            </optgroup>
-            <optgroup label="Forwards" data-i18n-attr="label:squad.optgroup_forwards">
-              <option value="SS" data-i18n="squad.pos_ss">SS — Second striker</option>
-              <option value="CF" data-i18n="squad.pos_cf">CF — Centre forward</option>
-              <option value="ST" data-i18n="squad.pos_st">ST — Striker</option>
-            </optgroup>
           </select>
           <div id="sqF_positionsTags" class="sq-postags"></div>
         </div>
@@ -938,75 +883,122 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 // i18n helpers (runtime injected by sidebar.js; fall back to English text)
 function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 function ttLocale(){ return (window.CM_I18N && window.CM_I18N.current) || 'en-GB'; }
-// Translate a position-group display name (keys keep canonical English internally).
-const _GROUP_KEYS = { Goalkeepers:'squad.group_goalkeepers', Defenders:'squad.group_defenders', Midfielders:'squad.group_midfielders', Wingers:'squad.group_wingers', Forwards:'squad.group_forwards', Other:'squad.group_other' };
+// Position vocabulary — DERIVED from the active sport pack.
+// This block used to carry Squad's own copy of the football tables (POS_CFG + aliases),
+// duplicating assets/positions.js. The pack (assets/sport-packs.js) now owns them, so a
+// basketball club gets guards/wings/bigs and a rugby club gets pack/backs here for free,
+// and the two tables can no longer drift apart.
+//
+// Shape kept identical to the old one on purpose (group / icon / css / pill / order) so
+// every call site below is untouched:
+//   icon  ← the group's icon declared by the pack
+//   css   ← one of the six colour classes already styled in this page (gk cb fb mf wg st)
+//   pill  ← the roll-up (basic) code, which is what the old table showed
+let POS_CFG      = {};
+let GROUPS_ORDER = ['Other'];
+let _GROUP_KEYS  = { Other: 'squad.group_other' };
+let _GROUP_ICONS = { Other: 'ti-users' };
+
+function buildPositionTables() {
+  const P    = window.CM_POSITIONS || {};
+  const cfg  = P.CFG || {};
+  const defs = P.GROUP_DEFS || [];
+
+  _GROUP_KEYS  = { Other: 'squad.group_other' };
+  _GROUP_ICONS = { Other: 'ti-users' };
+  defs.forEach(g => { _GROUP_KEYS[g.key] = g.i18n; _GROUP_ICONS[g.key] = g.icon; });
+
+  GROUPS_ORDER = (P.GROUPS && P.GROUPS.length) ? P.GROUPS.slice() : ['Other'];
+
+  POS_CFG = {};
+  Object.keys(cfg).forEach(code => {
+    const c = cfg[code];
+    POS_CFG[code] = {
+      group: c.group,
+      icon:  _GROUP_ICONS[c.group] || 'ti-users',
+      css:   (window.cmPositionCss && window.cmPositionCss(code)) || '',
+      pill:  c.basic || code,
+      order: (typeof c.order === 'number') ? c.order : 999,
+    };
+  });
+}
+// Filter pills — one per roll-up (basic) code of the active sport, plus "All".
+// The counters and the click handler key off data-pos, exactly as they did when these
+// buttons were written by hand in the markup.
+function fillPositionFilters() {
+  const box = document.getElementById('sqFilters');
+  if (!box) return;
+  const P = window.CM_POSITIONS || {};
+  const active = _activeFilter || 'All';
+  let html = `<button class="sq-pill-filter${active === 'All' ? ' is-on' : ''}" data-pos="All"><span data-i18n="common.all">${tt('common.all','All')}</span><span class="ct">0</span></button>`;
+  (P.BASIC || []).forEach(code => {
+    const css = (window.cmPositionCssBasic && window.cmPositionCssBasic(code)) || '';
+    const dot = css ? `<span class="dot" style="background:var(--cm-pos-${css})"></span>` : '';
+    html += `<button class="sq-pill-filter${active === code ? ' is-on' : ''}" data-pos="${esc(code)}">${dot}${esc(code)}<span class="ct">0</span></button>`;
+  });
+  box.innerHTML = html;
+}
+
+// Position <select>s — built from the pack instead of being written out in the markup,
+// so a basketball club sees PG/SG/SF/PF/C where a football club sees GK/CB/CDM.
+function fillPositionSelects() {
+  const P    = window.CM_POSITIONS || {};
+  const defs = P.GROUP_DEFS || [];
+  const sel  = P.SELECTABLE || [];
+  const lbl  = code => {
+    const L = (window.cmPositionLabel && window.cmPositionLabel(code)) || { i18n:'', en:code };
+    return tt(L.i18n, L.en);
+  };
+  // Group the selectable codes by their pack group, keeping pack order.
+  const byGroup = new Map();
+  defs.forEach(g => byGroup.set(g.key, []));
+  sel.forEach(code => {
+    const grp = (P.CFG[code] && P.CFG[code].group) || 'Other';
+    if (!byGroup.has(grp)) byGroup.set(grp, []);
+    byGroup.get(grp).push(code);
+  });
+  let opts = '';
+  byGroup.forEach((codes, grp) => {
+    if (!codes.length) return;
+    opts += `<optgroup label="${esc(ttGroup(grp))}">`;
+    codes.forEach(c => { opts += `<option value="${esc(c)}">${esc(lbl(c))}</option>`; });
+    opts += '</optgroup>';
+  });
+
+  [['sqF_position', tt('squad.select_ph','— Select —')],
+   ['sqF_positionsAdd', tt('squad.add_position','— Add position —')]].forEach(([id, placeholder]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const keep = el.value;                     // survive a rebuild with the modal open
+    el.innerHTML = `<option value="">${esc(placeholder)}</option>` + opts;
+    if (keep) el.value = keep;
+  });
+}
+
+buildPositionTables();
+
+// The sport is cached in localStorage so the first paint is instant, then confirmed
+// against the DB. On the first load for a club whose sport differs from the cache we
+// rebuild the vocabulary and repaint — otherwise a basketball squad would show football
+// groups until the next reload. See assets/sport.js.
+window.addEventListener('cm:sport-change', () => {
+  buildPositionTables();
+  fillPositionFilters();
+  fillPositionSelects();
+  try { if (typeof window.sqRepaint === 'function') window.sqRepaint(); } catch (_e) {}
+});
+
 function ttGroup(name){ return tt(_GROUP_KEYS[name] || '', name); }
 
-// Position → display config
-const POS_CFG = {
-  // Abbreviations
-  GK:  { group:'Goalkeepers',        icon:'ti-shield',            css:'gk', pill:'GK', order:0 },
-  CB:  { group:'Defenders',          icon:'ti-wall',              css:'cb', pill:'CB', order:1 },
-  LB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  RB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  FB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  WB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  LWB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  RWB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  DM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  CDM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  CM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  MF:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  LM:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  RM:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  CAM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  AM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  WG:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  LW:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  RW:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  ST:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
-  CF:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
-  SS:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
-  '9': { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
-  // Full names (from DB)
-  GOALKEEPER:  { group:'Goalkeepers', icon:'ti-shield',           css:'gk', pill:'GK', order:0 },
-  DEFENDER:    { group:'Defenders',   icon:'ti-wall',             css:'cb', pill:'CB', order:1 },
-  MIDFIELDER:  { group:'Midfielders', icon:'ti-circles-relation', css:'mf', pill:'MF', order:2 },
-  FORWARD:     { group:'Forwards',    icon:'ti-target-arrow',     css:'st', pill:'ST', order:4 },
-  WINGER:      { group:'Wingers',     icon:'ti-flame',            css:'wg', pill:'WG', order:3 },
-};
-const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers','Forwards','Other'];
-
 // Normalize a free-text position (CSV import, etc.) to a code POS_CFG understands.
-const _POS_ALIASES = {
-  GOALKEEPER:'GK', PORTERO:'GK', ARQUERO:'GK', GUARDAMETA:'GK', GOLERO:'GK', POR:'GK', GUARDAVALLAS:'GK', PORTEIRO:'GK', GOLEIRO:'GK', KEEPER:'GK',
-  DEFENDER:'CB', DEF:'CB', DF:'CB', DEFENSA:'CB', DEFENSOR:'CB', ZAGA:'CB', 'CENTRE BACK':'CB', 'CENTER BACK':'CB', 'CENTRE-BACK':'CB', 'CENTER-BACK':'CB', CENTRAL:'CB', 'DEFENSA CENTRAL':'CB', DC:'CB', ZAGUERO:'CB', ZAGUEIRO:'CB',
-  'LEFT BACK':'LB', 'LEFT-BACK':'LB', 'LATERAL IZQUIERDO':'LB', 'LATERAL IZQ':'LB', LI:'LB',
-  'RIGHT BACK':'RB', 'RIGHT-BACK':'RB', 'LATERAL DERECHO':'RB', 'LATERAL DER':'RB', LD:'RB',
-  FULLBACK:'FB', 'FULL BACK':'FB', 'FULL-BACK':'FB', BACK:'FB', LATERAL:'FB', LATERAIS:'FB',
-  'WING BACK':'WB', WINGBACK:'WB', CARRILERO:'WB',
-  'LEFT WING BACK':'LWB', 'RIGHT WING BACK':'RWB',
-  'DEFENSIVE MIDFIELDER':'CDM', 'DEFENSIVE MID':'CDM', DM:'CDM', MCD:'CDM', PIVOTE:'CDM', PIVOT:'CDM', 'MEDIOCENTRO DEFENSIVO':'CDM', 'VOLANTE DEFENSIVO':'CDM',
-  'CENTRAL MIDFIELDER':'CM', 'CENTRAL MID':'CM', MEDIOCENTRO:'CM', MC:'CM', VOLANTE:'CM', MEIA:'CM',
-  'ATTACKING MIDFIELDER':'CAM', 'ATTACKING MID':'CAM', AM:'CAM', MCO:'CAM', MEDIAPUNTA:'CAM', ENGANCHE:'CAM',
-  MIDFIELDER:'CM', MID:'CM', MF:'CM', MEDIO:'CM', MEDIOCAMPO:'CM', MEDIOCAMPISTA:'CM', MEIOCAMPISTA:'CM',
-  'LEFT MIDFIELDER':'LM', 'LEFT MID':'LM', 'RIGHT MIDFIELDER':'RM', 'RIGHT MID':'RM',
-  WINGER:'WG', WING:'WG', EXTREMO:'WG', PONTA:'WG',
-  'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW', EI:'LW',
-  'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW', ED:'RW',
-  STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST', DEL:'ST', DELANTEROS:'ST', ATACANTES:'ST', ATACANTE_CENTRAL:'ST',
-  'CENTRE FORWARD':'CF', 'CENTER FORWARD':'CF', 'DELANTERO CENTRO':'CF',
-  'SECOND STRIKER':'SS', 'SEGUNDA PUNTA':'SS', 'SEGUNDO DELANTERO':'SS',
-  FORWARD:'ST', FW:'ST', ATACANTE_FW:'ST',
-};
+// Delegates to the shared vocabulary; keeps the old contract of echoing the cleaned-up
+// raw value when the code is unknown, so the importer can decide what to do with it.
 function normalizePosition(raw) {
   if (raw == null) return null;
-  // Strip accents, upper-case and collapse spaces so matching is lenient (Posición, Zagüero…).
-  const k = String(raw).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase().replace(/\s+/g, ' ');
-  if (!k) return null;
-  if (POS_CFG[k]) return k;               // already a valid code
-  if (_POS_ALIASES[k]) return _POS_ALIASES[k];
-  return k;                                // unknown: caller decides (importer imports without a position)
+  const code = window.cmNormalizePosition ? window.cmNormalizePosition(raw) : null;
+  if (code) return code;
+  const k = String(raw).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase().replace(/\s+/g, ' ');
+  return k || null;
 }
 
 // Multi-position chips for the player modal (PR2). positions[] = full set incl. primary.
@@ -1563,17 +1555,19 @@ async function reloadPlayers() {
     if (typeof updateBulkBar === 'function') updateBulkBar();
   });
 
-  // Filter pills
-  document.querySelectorAll('.sq-pill-filter').forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('.sq-pill-filter').forEach(o => o.classList.remove('is-on'));
-      pill.classList.add('is-on');
-      const label = pill.dataset.pos || pill.textContent.replace(/\d+/g, '').replace('·', '').trim();
-      _activeFilter = label;
-      if (_activeView === 'list') renderTable();
-      else if (_activeView === 'cards') renderCards();
-      else if (_activeView === 'depth') renderDepthChart();
-    });
+  // Filter pills. Built from the active sport pack, so the handler is delegated on the
+  // container: the buttons are replaced whenever the sport is confirmed.
+  fillPositionFilters();
+  fillPositionSelects();
+  document.getElementById('sqFilters')?.addEventListener('click', e => {
+    const pill = e.target.closest('.sq-pill-filter');
+    if (!pill) return;
+    document.querySelectorAll('.sq-pill-filter').forEach(o => o.classList.remove('is-on'));
+    pill.classList.add('is-on');
+    _activeFilter = pill.dataset.pos || pill.textContent.replace(/\d+/g, '').replace('·', '').trim();
+    if (_activeView === 'list') renderTable();
+    else if (_activeView === 'cards') renderCards();
+    else if (_activeView === 'depth') renderDepthChart();
   });
 
   // Search
@@ -2093,6 +2087,14 @@ async function reloadPlayers() {
     if (view === 'depth')  renderDepthChart();
   }
 
+  // Repaint whichever view is on screen. Exposed because the sport-change handler lives
+  // in the outer scope and can't see _activeView / renderCards / renderDepthChart.
+  window.sqRepaint = function () {
+    if (_activeView === 'cards')      renderCards();
+    else if (_activeView === 'depth') renderDepthChart();
+    else                              renderTable();
+  };
+
   function getFiltered() {
     const posUpper = _activeFilter.toUpperCase();
     return _allPlayers.filter(p => {
@@ -2155,14 +2157,8 @@ async function reloadPlayers() {
   function renderDepthChart() {
     const container = document.getElementById('sqDepthChart');
     if (!container) return;
-    const lines = [
-      { label: 'Goalkeepers', groups: ['Goalkeepers'] },
-      { label: 'Defenders',   groups: ['Defenders'] },
-      { label: 'Midfielders', groups: ['Midfielders'] },
-      { label: 'Wingers',     groups: ['Wingers'] },
-      { label: 'Forwards',    groups: ['Forwards'] },
-      { label: 'Other',       groups: ['Other'] },
-    ];
+    // One line per group of the active sport (GROUPS_ORDER already ends in 'Other').
+    const lines = GROUPS_ORDER.map(g => ({ label: g, groups: [g] }));
     const byGroup = {};
     GROUPS_ORDER.forEach(g => byGroup[g] = []);
     _allPlayers.forEach(p => {
@@ -2773,6 +2769,11 @@ async function reloadPlayers() {
   // dynamic bits (lists, cards, headers, lineup, options built in JS).
   document.addEventListener('cm:langchanged', () => {
     try {
+      // Position pills and <select>s are built in JS from the sport pack, so their labels
+      // only speak the right language once i18n has booted (it fires this on first render
+      // too, not just on a manual switch).
+      if (typeof fillPositionFilters === 'function') fillPositionFilters();
+      if (typeof fillPositionSelects === 'function') fillPositionSelects();
       // Header summary + pill counts (re-derived from cached players, no refetch).
       if (typeof reloadPlayers === 'function') reloadPlayers();
       // Re-render whichever data view is currently visible.

@@ -511,11 +511,14 @@
               <button type="button" class="reg-sport-tab" data-sport="basketball" role="tab" aria-selected="false">
                 <i class="ti ti-ball-basketball"></i><span data-i18n="login.basketball">Basketball</span>
               </button>
-              <button type="button" class="reg-sport-tab" data-sport="volleyball" role="tab" aria-selected="false">
-                <i class="ti ti-ball-volleyball"></i><span data-i18n="login.volleyball">Volleyball</span>
+              <button type="button" class="reg-sport-tab" data-sport="futsal" role="tab" aria-selected="false">
+                <i class="ti ti-ball-football"></i><span data-i18n="sport.futsal">Futsal</span>
               </button>
               <button type="button" class="reg-sport-tab" data-sport="rugby" role="tab" aria-selected="false">
                 <i class="ti ti-ball-american-football"></i><span data-i18n="login.rugby">Rugby</span>
+              </button>
+              <button type="button" class="reg-sport-tab" data-sport="hockey" role="tab" aria-selected="false">
+                <i class="ti ti-ball-tennis"></i><span data-i18n="sport.hockey">Field hockey</span>
               </button>
               <button type="button" class="reg-sport-tab" data-sport="other" role="tab" aria-selected="false">
                 <i class="ti ti-dots"></i><span data-i18n="register.other">Other</span>
@@ -642,6 +645,13 @@
       btn.setAttribute('aria-selected', 'true');
     });
   });
+  // Selected sport → the value stored in clubs.sport. Falls back to football rather than
+  // to NULL: a club with no sport can't resolve a pack, and football is what the tabs
+  // default to on screen.
+  function selectedSport() {
+    const active = document.querySelector('#sport-tabs .reg-sport-tab.is-active');
+    return (active && active.dataset.sport) || 'football';
+  }
 
   // Password strength
   const pwd = document.getElementById('pwd');
@@ -704,8 +714,12 @@
 
       // 2. Create club (only if session is active)
       const country = document.getElementById('country')?.value || null;
+      // The picked sport used to be thrown away here, which left clubs.sport NULL for
+      // every club ever created. It drives the whole sport pack (positions, pitch,
+      // lineup, load metrics), so it has to be persisted at creation time.
+      const sport = selectedSport();
       const { data: club, error: clubErr } = await window.sb.from('clubs')
-        .insert({ name: clubName, country })
+        .insert({ name: clubName, country, sport })
         .select('id')
         .single();
       if (clubErr) throw clubErr;

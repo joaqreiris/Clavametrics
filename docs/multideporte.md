@@ -225,12 +225,21 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 
 ---
 
-## 6. Decisiones abiertas
+## 6. Decisiones tomadas (2026-08-28)
 
-1. **Alcance de la v1**: ¿qué deportes salen primero? Mi recomendación: futsal (casi gratis) + básquetbol (el mercado más grande después del fútbol) + vóley (el que más obliga a repensar la carga, y por eso el que más valida la arquitectura).
-2. **¿El deporte va en el club o en el equipo?** Recomiendo equipo con default del club.
-3. **¿Se puede cambiar de deporte después de crear el club?** Recomiendo sí, pero con pantalla de migración explícita.
-4. **¿Módulos que directamente no aplican se esconden o se muestran vacíos?** Recomiendo esconder vía `club_modules`, que ya existe.
+1. **Alcance de la v1**: fútbol (base) + **futsal**, **básquetbol**, **rugby** y **hockey césped**.
+   Vóley y handball quedan fuera de la v1, pero el paquete se diseña para soportarlos sin
+   romper nada: por eso el modelo de carga contempla `tracking:'imu'` y saltos desde el
+   arranque, aunque todavía ningún pack activo los use.
+2. **El deporte vive en el club** (`clubs.sport`), no en el equipo. Más simple. Si más
+   adelante aparece un club polideportivo, se agrega `teams.sport` como override sin
+   romper nada de lo que se construye ahora.
+3. **Se puede cambiar de deporte después**, pero con pantalla de migración explícita (Fase 6).
+4. **Los módulos que no aplican se esconden** vía `club_modules`, que ya existe.
+
+### Decisiones que quedan para más adelante
+- Cómo se mapean las posiciones guardadas cuando un club cambia de deporte.
+- Si el Top-Up se esconde o se reemplaza por un equivalente indoor.
 
 ---
 

@@ -1,94 +1,80 @@
 // ClavaMetrics — Shared position vocabulary (single source of truth)
-// Include before page logic:  <script src="assets/positions.js"></script>
+// Requires assets/sport-packs.js (and, on app pages, assets/sport.js) loaded BEFORE this:
+//   <script src="assets/sport-packs.js"></script>
+//   <script src="assets/sport.js"></script>
+//   <script src="assets/positions.js"></script>
 //
 // MODEL: one canonical DETAILED code is what gets STORED in players.position; the coarser
 // levels are DERIVED, never stored — so analysis can roll up without ever losing detail:
 //
-//   detailed (LB, CDM, LW…)  →  basic 6 (GK CB FB MF WG ST)  →  group (Goalkeepers, …)
+//   detailed (LB, CDM, LW…)  →  basic (GK CB FB MF WG ST)  →  group (Goalkeepers, …)
 //
 // Why derive instead of letting the user pick one vocabulary: a 25-man squad spread over
 // ~20 detailed positions leaves ~1 player per position, which makes the "vs Position"
-// baseline compare a player against himself. Rolling up to the basic 6 gives a real
-// reference set — while the detailed code stays available for squad/lineup views.
+// baseline compare a player against himself. Rolling up gives a real reference set —
+// while the detailed code stays available for squad/lineup views.
 //
-// NOTE: these tables mirror Squad.html's POS_CFG/_POS_ALIASES. Squad still owns its own
-// copy for now (left untouched deliberately); converge it here when convenient.
+// MULTI-SPORT: the tables themselves now come from the ACTIVE SPORT PACK
+// (assets/sport-packs.js), not from this file. Football keeps exactly the vocabulary it
+// always had; basketball rolls up to guards/wings/bigs, rugby to the pack/backs split
+// the load literature requires, and so on. Everything below is sport-agnostic plumbing.
+//
+// The exports are live getters, not snapshots: if the club's sport is confirmed after
+// first paint (see assets/sport.js), CM_POSITIONS.CFG reflects it without a reload.
 
 (function () {
   if (window.CM_POSITIONS) return;   // idempotent
 
-  // code → { group, basic (the 6-code roll-up), order }
-  var CFG = {
-    GK:  { group: 'Goalkeepers', basic: 'GK', order: 0 },
+  var DEFAULT_SPORT = window.CM_SPORT_DEFAULT || 'football';
 
-    CB:  { group: 'Defenders',   basic: 'CB', order: 1 },
-    LB:  { group: 'Defenders',   basic: 'FB', order: 1 },
-    RB:  { group: 'Defenders',   basic: 'FB', order: 1 },
-    FB:  { group: 'Defenders',   basic: 'FB', order: 1 },
-    WB:  { group: 'Defenders',   basic: 'FB', order: 1 },
-    LWB: { group: 'Defenders',   basic: 'FB', order: 1 },
-    RWB: { group: 'Defenders',   basic: 'FB', order: 1 },
+  /** The active pack's `positions` block, or null for sports with no position model
+   *  ('other' — free text, never normalised, never rolled up). */
+  function P() {
+    try {
+      var pack = window.CMSport
+        ? window.CMSport.pack()
+        : (window.CM_SPORT_PACKS || {})[DEFAULT_SPORT];
+      return (pack && pack.positions) || null;
+    } catch (_e) { return null; }
+  }
 
-    DM:  { group: 'Midfielders', basic: 'MF', order: 2 },
-    CDM: { group: 'Midfielders', basic: 'MF', order: 2 },
-    CM:  { group: 'Midfielders', basic: 'MF', order: 2 },
-    MF:  { group: 'Midfielders', basic: 'MF', order: 2 },
-    CAM: { group: 'Midfielders', basic: 'MF', order: 2 },
-    AM:  { group: 'Midfielders', basic: 'MF', order: 2 },
+  function cfg()        { var p = P(); return (p && p.cfg)        || {}; }
+  function aliases()    { var p = P(); return (p && p.aliases)    || {}; }
+  function selectable() { var p = P(); return (p && p.selectable) || []; }
+  function labels()     { var p = P(); return (p && p.labels)     || {}; }
+  function basics()     { var p = P(); return (p && p.basics)     || []; }
+  function groupDefs()  { var p = P(); return (p && p.groups)     || []; }
 
-    LM:  { group: 'Wingers',     basic: 'WG', order: 3 },
-    RM:  { group: 'Wingers',     basic: 'WG', order: 3 },
-    WG:  { group: 'Wingers',     basic: 'WG', order: 3 },
-    LW:  { group: 'Wingers',     basic: 'WG', order: 3 },
-    RW:  { group: 'Wingers',     basic: 'WG', order: 3 },
+  /** Group display keys in pack order, with the catch-all last (unchanged behaviour). */
+  function groups() {
+    return groupDefs().map(function (g) { return g.key; }).concat(['Other']);
+  }
 
-    ST:  { group: 'Forwards',    basic: 'ST', order: 4 },
-    CF:  { group: 'Forwards',    basic: 'ST', order: 4 },
-    SS:  { group: 'Forwards',    basic: 'ST', order: 4 },
-    '9': { group: 'Forwards',    basic: 'ST', order: 4 },
+  /** Group key → { key, i18n, icon }. 'Other' has no pack entry; callers fall back. */
+  function groupMeta(key) {
+    var found = null;
+    groupDefs().forEach(function (g) { if (g.key === key) found = g; });
+    return found;
+  }
 
-    // Full names occasionally stored by older imports
-    GOALKEEPER: { group: 'Goalkeepers', basic: 'GK', order: 0 },
-    DEFENDER:   { group: 'Defenders',   basic: 'CB', order: 1 },
-    MIDFIELDER: { group: 'Midfielders', basic: 'MF', order: 2 },
-    WINGER:     { group: 'Wingers',     basic: 'WG', order: 3 },
-    FORWARD:    { group: 'Forwards',    basic: 'ST', order: 4 },
-  };
+  /** Long display name for a code: { i18n, en }. Falls back to the bare code. */
+  function labelFor(code) {
+    var c = normalize(code) || String(code == null ? '' : code).trim().toUpperCase();
+    return labels()[c] || { i18n: '', en: c };
+  }
 
-  // Free text (any provider / language) → canonical code.
-  var ALIASES = {
-    GOALKEEPER:'GK', PORTERO:'GK', ARQUERO:'GK', GUARDAMETA:'GK', GOLERO:'GK', POR:'GK', GUARDAVALLAS:'GK', PORTEIRO:'GK', GOLEIRO:'GK', KEEPER:'GK', 'GOAL KEEPER':'GK',
-    DEFENDER:'CB', DEF:'CB', DF:'CB', DEFENSA:'CB', DEFENSOR:'CB', ZAGA:'CB', 'CENTRE BACK':'CB', 'CENTER BACK':'CB', 'CENTRE-BACK':'CB', 'CENTER-BACK':'CB', CENTRAL:'CB', 'DEFENSA CENTRAL':'CB', DC:'CB', ZAGUERO:'CB', ZAGUEIRO:'CB',
-    'LEFT BACK':'LB', 'LEFT-BACK':'LB', 'LATERAL IZQUIERDO':'LB', 'LATERAL IZQ':'LB', LI:'LB',
-    'RIGHT BACK':'RB', 'RIGHT-BACK':'RB', 'LATERAL DERECHO':'RB', 'LATERAL DER':'RB', LD:'RB',
-    FULLBACK:'FB', 'FULL BACK':'FB', 'FULL-BACK':'FB', BACK:'FB', LATERAL:'FB', LATERAIS:'FB',
-    'WING BACK':'WB', WINGBACK:'WB', CARRILERO:'WB',
-    'LEFT WING BACK':'LWB', 'RIGHT WING BACK':'RWB',
-    'DEFENSIVE MIDFIELDER':'CDM', 'DEFENSIVE MID':'CDM', MCD:'CDM', PIVOTE:'CDM', PIVOT:'CDM', 'MEDIOCENTRO DEFENSIVO':'CDM', 'VOLANTE DEFENSIVO':'CDM',
-    'CENTRAL MIDFIELDER':'CM', 'CENTRAL MID':'CM', MEDIOCENTRO:'CM', MC:'CM', VOLANTE:'CM', MEIA:'CM',
-    'ATTACKING MIDFIELDER':'CAM', 'ATTACKING MID':'CAM', MCO:'CAM', MEDIAPUNTA:'CAM', ENGANCHE:'CAM',
-    MIDFIELDER:'CM', MID:'CM', MEDIO:'CM', MEDIOCAMPO:'CM', MEDIOCAMPISTA:'CM', MEIOCAMPISTA:'CM',
-    'LEFT MIDFIELDER':'LM', 'LEFT MID':'LM', 'RIGHT MIDFIELDER':'RM', 'RIGHT MID':'RM',
-    WINGER:'WG', WING:'WG', EXTREMO:'WG', PONTA:'WG',
-    'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW', EI:'LW',
-    'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW', ED:'RW',
-    STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST', DEL:'ST', DELANTEROS:'ST', ATACANTES:'ST',
-    'CENTRE FORWARD':'CF', 'CENTER FORWARD':'CF', 'DELANTERO CENTRO':'CF',
-    'SECOND STRIKER':'SS', 'SEGUNDA PUNTA':'SS', 'SEGUNDO DELANTERO':'SS',
-    FORWARD:'ST', FW:'ST',
-  };
+  /** Detailed code → one of the six colour classes Squad already styles. */
+  function cssFor(code) {
+    var b = basic(code);
+    return b ? cssForBasic(b) : '';
+  }
 
-  // Ordered list for <select>s (detailed first within each line of the pitch, generic last).
-  var SELECTABLE = [
-    'GK',
-    'CB', 'LB', 'RB', 'WB', 'LWB', 'RWB', 'FB',
-    'CDM', 'CM', 'CAM', 'LM', 'RM', 'MF',
-    'LW', 'RW', 'WG',
-    'ST', 'CF', 'SS',
-  ];
-
-  var BASIC  = ['GK', 'CB', 'FB', 'MF', 'WG', 'ST'];
-  var GROUPS = ['Goalkeepers', 'Defenders', 'Midfielders', 'Wingers', 'Forwards', 'Other'];
+  /** Basic (roll-up) code → colour class. Chips and legends key off the roll-up, not
+   *  the detailed code, so they need this entry point directly. */
+  function cssForBasic(b) {
+    var p = P(); if (!p || !p.cssByBasic || !b) return '';
+    return p.cssByBasic[b] || '';
+  }
 
   /** Free text → canonical detailed code, or null when unknown/empty.
    *  Returns null (never a guess) so callers don't invent a position. */
@@ -102,28 +88,35 @@
       // want them collapsed to the short code (GK, CB, …) rather than stored verbatim —
       // otherwise "GK" and "GOALKEEPER" become two separate values all over again.
       // No bare short code is an alias key, so valid codes still fall through to CFG.
-      if (ALIASES[k]) return ALIASES[k];
-      if (CFG[k]) return k;
+      var A = aliases(), C = cfg();
+      if (A[k]) return A[k];
+      if (C[k]) return k;
       return null;
     } catch (_e) { return null; }
   }
 
-  /** Detailed code (or free text) → one of the basic 6, or null. */
+  /** Detailed code (or free text) → basic roll-up code, or null. */
   function basic(code) {
-    var c = normalize(code);
-    return (c && CFG[c] && CFG[c].basic) || null;
+    var c = normalize(code), C = cfg();
+    return (c && C[c] && C[c].basic) || null;
   }
 
   /** Detailed code (or free text) → broad group label, 'Other' when unknown. */
   function group(code) {
-    var c = normalize(code);
-    return (c && CFG[c] && CFG[c].group) || 'Other';
+    var c = normalize(code), C = cfg();
+    return (c && C[c] && C[c].group) || 'Other';
+  }
+
+  /** Sort index within the squad list (front of the field first). 999 when unknown. */
+  function order(code) {
+    var c = normalize(code), C = cfg();
+    return (c && C[c] && typeof C[c].order === 'number') ? C[c].order : 999;
   }
 
   /** Project a stored position onto the ACTIVE analysis granularity.
    *  'detailed' → canonical code, or the RAW value when we don't know it (so a club's
    *               custom position never disappears from a filter that showed it before);
-   *  'basic'    → one of the 6;  'group' → broad group. Unknown → null in those two,
+   *  'basic'    → the roll-up;  'group' → broad group. Unknown → null in those two,
    *  because there's nothing sound to roll an unrecognised value up to. */
   function at(code, granularity) {
     if (code == null || code === '') return null;
@@ -134,9 +127,30 @@
 
   var GRANULARITIES = ['detailed', 'basic', 'group'];
 
-  window.CM_POSITIONS = { CFG: CFG, ALIASES: ALIASES, SELECTABLE: SELECTABLE, BASIC: BASIC, GROUPS: GROUPS, GRANULARITIES: GRANULARITIES };
-  window.cmPositionAt = at;
+  // Live view over the active pack. Defined with getters so a sport confirmed after
+  // first paint (cm:sport-change) is picked up without reloading the page.
+  var API = {};
+  Object.defineProperties(API, {
+    CFG:           { enumerable: true, get: cfg },
+    ALIASES:       { enumerable: true, get: aliases },
+    SELECTABLE:    { enumerable: true, get: selectable },
+    LABELS:        { enumerable: true, get: labels },
+    BASIC:         { enumerable: true, get: basics },
+    GROUPS:        { enumerable: true, get: groups },
+    GROUP_DEFS:    { enumerable: true, get: groupDefs },
+    GRANULARITIES: { enumerable: true, get: function () { return GRANULARITIES.slice(); } },
+    /** False for sports with no position model — hide position pickers and filters. */
+    HAS_POSITIONS: { enumerable: true, get: function () { return !!P(); } },
+  });
+
+  window.CM_POSITIONS = API;
+  window.cmPositionAt        = at;
   window.cmNormalizePosition = normalize;
   window.cmPositionBasic     = basic;
   window.cmPositionGroup     = group;
+  window.cmPositionOrder     = order;
+  window.cmPositionCss       = cssFor;
+  window.cmPositionCssBasic  = cssForBasic;
+  window.cmPositionGroupMeta = groupMeta;
+  window.cmPositionLabel     = labelFor;
 })();

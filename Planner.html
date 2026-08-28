@@ -35,6 +35,8 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js?v=gps-avg"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="assets/cm-lock.js"></script>
 <script src="assets/feature-teaser.js"></script>
 <script src="assets/exercise-folders.js"></script>
@@ -1648,7 +1650,16 @@
   // ── Vector pitch (field-system) ─────────────────────────────────
   // Renders the SVG pitch into #plPitch (behind the canvas). Persisted
   // inside objects_json.field — never touches the tactical objects.
-  let _plField = { type:'football', variant:'full', orient:'h' };
+  // The default surface comes from the club's sport pack (assets/sport-packs.js), so a
+  // basketball club draws on a court and a rugby club on a rugby pitch. An exercise that
+  // was saved with its own field keeps it: loadFromJSON restores objects_json.field.
+  function plDefaultField() {
+    const f = (window.CMSport && window.CMSport.at('field', null)) || null;
+    return { type: (f && f.type) || 'football',
+             variant: (f && f.variant) || 'full',
+             orient: (f && f.orient) || 'h' };
+  }
+  let _plField = plDefaultField();
   function plRenderField(type, variant, orient) {
     const r = CMField.renderField(document.getElementById('plPitch'), type, variant, orient);
     _plField = { type:r.sport, variant:r.variant, orient:r.orient };
@@ -1656,8 +1667,8 @@
     return r;
   }
 
-  // Sport is fixed to football for now (new-sport clubs start from scratch);
-  // the user only picks Full / Half / Blank and the orientation.
+  // The user picks Full / Half / Blank and the orientation; the SPORT comes from the club
+  // and is not a per-drill choice (fase 2 adds the picker for multi-sport clubs).
   function plInitFieldSelector() {
     document.getElementById('plFieldRotate')?.addEventListener('click', () => {
       plRenderField(_plField.type, _plField.variant, _plField.orient === 'h' ? 'v' : 'h');
@@ -1684,7 +1695,15 @@
   }
 
   plInitFieldSelector();
-  plRenderField('football', 'full', 'h');
+  plRenderField(_plField.type, _plField.variant, _plField.orient);
+  // The sport is served from cache on first paint; if the DB says otherwise, swap the
+  // surface — but only while the board is still the untouched default, so we never wipe
+  // a pitch the user (or a loaded exercise) already chose.
+  window.addEventListener('cm:sport-change', () => {
+    try { if (_dirty) return; } catch (_e) {}   // _dirty is declared further down
+    const d = plDefaultField();
+    plRenderField(d.type, d.variant, d.orient);
+  });
   _lastFit = _fitParams();   // now _plField exists → baseline fit for resize re-mapping
 
   // ── Canvas state ────────────────────────────────────────────────

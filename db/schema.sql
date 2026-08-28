@@ -405,7 +405,11 @@ create table if not exists public.clubs (
   country text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
-  sport text,
+  -- Deporte del club: elige el "sport pack" (assets/sport-packs.js) que define posiciones,
+  -- cancha, alineación, métricas de carga, tests y modelo de microciclo. Antes se pedía en
+  -- el registro y se tiraba; ahora se persiste y es obligatorio. 'other' = deporte sin
+  -- modelo propio (superficie en blanco, posiciones libres, sin módulo de partido).
+  sport text default 'football'::text not null,
   plan text default 'free'::text,
   stripe_customer_id text,
   billing_amount_cents integer,
@@ -421,7 +425,8 @@ create table if not exists public.clubs (
   trial_ends_at timestamp with time zone default (now() + interval '15 days'),
   constraint clubs_pkey primary key (id),
   constraint clubs_billing_status_check CHECK ((billing_status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
-  constraint clubs_billing_provider_check CHECK ((billing_provider = 'paddle'::text))
+  constraint clubs_billing_provider_check CHECK ((billing_provider = 'paddle'::text)),
+  constraint clubs_sport_check CHECK ((sport = ANY (ARRAY['football'::text, 'futsal'::text, 'basketball'::text, 'rugby'::text, 'hockey'::text, 'other'::text])))
 );
 CREATE INDEX clubs_id_idx ON public.clubs USING btree (id);
 CREATE UNIQUE INDEX idx_clubs_provider_customer ON public.clubs USING btree (billing_provider_customer_id) WHERE (billing_provider_customer_id IS NOT NULL);
