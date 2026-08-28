@@ -2041,7 +2041,7 @@
     // Transient overlays (alignment guides, metre labels) must never enter the timeline —
     // an undo would otherwise resurrect them as unselectable pink ghosts.
     const _snap = fc.toJSON(ARROW_PROPS);
-    _snap.objects = (_snap.objects || []).filter(o => o._type !== '_preview');
+    _snap.objects = (_snap.objects || []).filter(o => o._type !== '_preview' && o._type !== 'arrow_handle');
     _historyStack.push(JSON.stringify(_snap));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
     _redoStack.length = 0;                 // a fresh change invalidates the redo timeline
@@ -2565,9 +2565,13 @@
   function _showArrowHandles(arrowId) {
     const d=_arrowData.get(arrowId); if (!d) return;
     _removeArrowHandles(d);
+    // excludeFromExport: the handles are live UI, not canvas content. Without it they land in
+    // every toJSON() (history snapshots AND the saved exercise) and come back as plain circles
+    // no longer wired to any arrow — a dot that can't be dismissed, wearing the default corner
+    // box + rotation knob (hasControls isn't serialized, so it defaults back to true).
     const hs={radius:7,fill:'rgba(255,255,255,0.9)',stroke:d.color,strokeWidth:2,
       originX:'center',originY:'center',hasControls:false,hasBorders:false,
-      selectable:true,evented:true,_type:'arrow_handle',_arrowId:arrowId};
+      selectable:true,evented:true,excludeFromExport:true,_type:'arrow_handle',_arrowId:arrowId};
     const h1=new fabric.Circle({...hs,left:d.x1,top:d.y1,_role:'p1'});
     const h2=new fabric.Circle({...hs,left:d.x2,top:d.y2,_role:'p2'});
     h1.on('mousedown',()=>{_handleDragging=true;});
@@ -2643,6 +2647,14 @@
   function _rebuildArrowDataFromCanvas() {
     _arrowData.forEach(d=>_removeArrowHandles(d));
     _arrowData.clear();
+    // Sweep out orphan handles baked into older saves/history states (before they were excluded
+    // from export): they'd otherwise sit on the canvas as undeletable dots with a rotation knob.
+    const _ghosts = fc.getObjects().filter(o => o._type === 'arrow_handle');
+    if (_ghosts.length) {
+      const _prev=_suppressHistory; _suppressHistory=true;
+      _ghosts.forEach(o => fc.remove(o));
+      _suppressHistory=_prev;
+    }
     fc.getObjects().filter(o=>o._type==='arrow'&&o._x1!=null).forEach(grp=>{
       // Guard against a duplicate _arrowId across two groups (an old paste/duplicate that
       // didn't reassign ids leaves them sharing one, persisted in older exercises): if the
@@ -4674,7 +4686,7 @@
 
     const mdRaw = document.getElementById('plExMatchDay')?.value;
     const _oj = fc.toJSON(ARROW_PROPS);
-    _oj.objects = (_oj.objects || []).filter(o => o._type !== '_preview');   // never save transient guides
+    _oj.objects = (_oj.objects || []).filter(o => o._type !== '_preview' && o._type !== 'arrow_handle');   // never save transient guides or endpoint handles
     // Persist geometry in field viewBox units (browser-independent) via the uniform meet-fit
     // transform. Runtime objects are untouched — only this serialized copy is normalized.
     const _fit = _fitParams();
