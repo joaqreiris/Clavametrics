@@ -3249,6 +3249,37 @@ function dpApplyReadOnly() {
 
   await loadDay(initDate);
 
+  // ── Refresco en vivo ──────────────────────────────────────────
+  // Otro miembro del staff toca la sesión del día (ejercicios, horario,
+  // convocatoria, disponibilidad, adaptaciones del físio) y esta pantalla se
+  // pone al día sola. Nunca mientras se está escribiendo o hay autosave en
+  // vuelo: ahí aparece el chip «hay cambios» y se aplica al soltar.
+  // Ver assets/cm-realtime.js.
+  if (window.cmLive && _dpClubId) {
+    window.cmLive.watch({
+      name: 'daily-planning',
+      tables: [
+        { table: 'training_sessions',    filter: `club_id=eq.${_dpClubId}` },
+        { table: 'session_exercises',    filter: `club_id=eq.${_dpClubId}` },
+        { table: 'session_participants', filter: `club_id=eq.${_dpClubId}` },
+        { table: 'availability',         filter: `club_id=eq.${_dpClubId}` },
+        { table: 'treatments',           filter: `club_id=eq.${_dpClubId}` },
+      ],
+      relevant: (row, p) => {
+        if (p.table === 'training_sessions')
+          return row.session_date === _dpCurrentDate && (!row.team_id || row.team_id === _dpTeamId);
+        if (p.table === 'session_exercises' || p.table === 'session_participants')
+          return (_dpDaySessions || []).some(s => s.id === row.session_id);
+        if (p.table === 'availability') return row.date === _dpCurrentDate;
+        if (p.table === 'treatments')   return (row.adaptation_date || row.date) === _dpCurrentDate;
+        return true;
+      },
+      busy: () => !!_dpSaveTimer || !!_dpProjSaveTimer || !!_dpDragSeid
+                  || Object.keys(_dpEditPending || {}).length > 0,
+      onRefresh: async () => { if (_dpCurrentDate) await loadDay(_dpCurrentDate); },
+    });
+  }
+
   // Update save indicator after initial load
   const initDot  = document.getElementById('dpSaveDot');
   const initStat = document.getElementById('dpSaveStatus');

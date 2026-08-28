@@ -989,11 +989,13 @@ async function fetchAllEvents(dateFrom, dateTo) {
 }
 
 // ── Load sessions for current MC ──────────────────────────────
-async function loadSessions() {
+// opts.silent: recarga sin pintar el "Loading…" — para el refresco en vivo, que
+// no debe hacer parpadear la grilla mientras el usuario la está mirando.
+async function loadSessions(opts) {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
   const grid = document.getElementById('calDaysGrid');
-  if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>`;
+  if (grid && !(opts && opts.silent)) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>`;
   const { data, error } = await fetchAllEvents(mc.start_date, mc.end_date);
   if (error) {
     if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">${tt('calendar.error_loading_sessions','Error loading sessions: {msg}',{msg:error})}</div>`;

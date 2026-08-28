@@ -1918,6 +1918,28 @@ document.addEventListener('DOMContentLoaded', () => {
   await loadSessions();
   await loadShareLink();
 
+  // ── Refresco en vivo ──────────────────────────────────────────
+  // Si otra persona (u otra pestaña) crea, mueve o borra algo del equipo activo,
+  // esta pantalla se repinta sola. Ver assets/cm-realtime.js.
+  if (window.cmLive && _clubId) {
+    window.cmLive.watch({
+      name: 'calendar',
+      tables: [
+        { table: 'training_sessions', filter: `club_id=eq.${_clubId}` },
+        { table: 'calendar_events',   filter: `club_id=eq.${_clubId}` },
+        { table: 'microcycles',       filter: `club_id=eq.${_clubId}` },
+      ],
+      // team_id null = fila vieja sin equipo: se deja pasar y decide el refetch.
+      relevant: row => !row.team_id || row.team_id === _activeTeamId,
+      onRefresh: async () => {
+        if (_calView === 'month')     { await renderMonthView(); return; }
+        if (_calView === 'list')      { await renderListView();  return; }
+        await loadSessions({ silent: true });
+        await refreshRibbonMatches();
+      },
+    });
+  }
+
   // Deep-link: scroll to and highlight specific event
   if (_urlHlId) requestAnimationFrame(() => {
     const el = document.querySelector(`.mc-evt[data-id="${_urlHlId}"]`);

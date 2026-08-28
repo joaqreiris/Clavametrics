@@ -1,0 +1,97 @@
+# Colaboración en vivo — Nivel 1 (hecho) y Nivel 2 (plan)
+
+Dos cosas distintas que se suelen mezclar bajo "tipo Google Docs":
+
+| | Qué se ve | Estado |
+|---|---|---|
+| **Nivel 1 — refresco en vivo** | Otro toca algo y tu pantalla se pone al día sola, sin recargar | **Hecho** (Calendar + Daily Planning) |
+| **Nivel 2 — edición concurrente** | Dos personas escriben lo mismo al mismo tiempo sin pisarse, con cursores/presencia | Planificado, abajo |
+
+---
+
+## Nivel 1 — cómo quedó
+
+Motor: [assets/cm-realtime.js](../assets/cm-realtime.js). Una sola API para toda la app:
+
+```js
+window.cmLive.watch({
+  name: 'calendar',
+  tables: [{ table: 'training_sessions', filter: `club_id=eq.${clubId}` }],
+  relevant: row => row.team_id === teamId,   // ignorar lo que no está en pantalla
+  busy: () => hayEdicionEnCurso(),           // no pisar al usuario
+  onRefresh: async () => { await loadSessions({ silent: true }); },
+});
+```
+
+Las cuatro reglas que hacen que no moleste:
+
+1. **Coalescing.** Una ráfaga de cambios (mover 8 ejercicios) provoca **una** recarga, no ocho.
+2. **Supresión de eco.** Si el cambio lo hizo esta misma pestaña no se recarga al toque. Se detecta interceptando `fetch`: todo `POST/PATCH/DELETE` a `/rest/v1/<tabla>` marca esa tabla como "escrita por mí" durante 4 s. Pasada la ventana igual se refresca una vez, por si el de al lado guardó en el mismo momento.
+3. **Nunca encima de la edición.** Si `busy()` es true (autosave en cola, drag, foco en un campo, modal abierto) no se repinta: aparece un chip **«Hay cambios nuevos · Actualizar»** y se aplica cuando el usuario suelta o hace clic.
+4. **Pestaña de fondo y reconexión.** Con la pestaña oculta se posterga; al volver, se aplica. Si se cayó el socket, al reconectar se hace un refresh para recuperar lo perdido.
+
+### Cableado actual
+
+| Pantalla | Tablas que escucha | Qué recarga |
+|---|---|---|
+| Calendar | `training_sessions`, `calendar_events`, `microcycles` | `loadSessions({silent:true})` + ribbon, o la vista mes/lista según corresponda |
+| Daily Planning | `training_sessions`, `session_exercises`, `session_participants`, `availability`, `treatments` | `loadDay(fecha actual)` |
+
+### Requisito de base de datos
+
+El bloque está al final de [db/schema.sql](../db/schema.sql). Sin correrlo el código no falla, simplemente **no llega nada**: agrega las tablas a la publicación `supabase_realtime` y les pone `REPLICA IDENTITY FULL` (si no, un DELETE viaja solo con el id y el filtro `club_id` lo descarta: los borrados no se verían).
+
+Verificación: `select tablename from pg_publication_tables where pubname='supabase_realtime' order by 1;`
+
+### Para sumar otra pantalla
+
+1. `<script src="assets/cm-realtime.js"></script>` después de `supabase-init.js`.
+2. `cmLive.watch({...})` al final del boot, apuntando `onRefresh` a la función de carga que ya existe.
+3. Si la tabla es nueva, agregarla a la publicación (mismo patrón que el bloque de `db/schema.sql`).
+
+Candidatas naturales: Gym Planner, Tactical Planning, Squad, Injuries, Load Monitor.
+
+---
+
+## Nivel 2 — plan
+
+### El problema real que falta resolver
+
+Hoy el autosave de Daily Planning (`dpAutoSaveSession`) escribe **la fila entera** de `training_sessions`, incluidos los jsonb `gps_targets` y `gym_content`. Si dos personas tienen la sesión abierta, la última en guardar pisa el objeto completo de la otra. No hay conflicto visible: el trabajo simplemente desaparece. Lo mismo en el Planner (pizarra) y en Lineup, que guardan un objeto de estado completo.
+
+El Nivel 1 lo hace **visible** (ves el cambio del otro), pero no lo **evita**.
+
+### Tres caminos, de barato a caro
+
+**A · Candado suave por presencia** — 2 a 3 días
+Cada pantalla de edición se une a un canal de presencia (`channel.track()`, ya usado en [assets/sidebar.js](../assets/sidebar.js) para los avatares "en línea") con clave `sesión:<id>`. Si ya hay alguien:
+- se muestra "Martín está editando esta sesión" con su avatar;
+- el segundo entra en modo lectura, con un botón "Editar igual" que avisa del riesgo;
+- al cerrar la pestaña el candado se libera solo (la presencia es efímera, no ensucia la DB).
+
+Cubre el 90% de los casos reales: en un cuerpo técnico casi nunca dos personas *quieren* editar la misma sesión a la vez; el problema es no enterarse.
+
+**B · Guardado por campo en vez de por objeto** — 1 a 2 semanas
+Dejar de mandar la fila entera. Cada cambio escribe solo lo suyo:
+- los ejercicios ya viven en `session_exercises` (una fila por ejercicio) → ahí alcanza con no reescribir hermanos;
+- los jsonb (`gps_targets`, `gym_content`) pasan a `jsonb_set` por clave, o a tabla propia;
+- agregar `updated_at` + chequeo optimista: si la fila cambió desde que la leí, no piso, recargo y reaplico.
+
+Con esto dos personas pueden trabajar en la misma sesión mientras toquen cosas distintas (uno los ejercicios, otro los targets de GPS). Sigue habiendo conflicto si tocan **el mismo** campo, resuelto como "gana el último", pero acotado a ese campo y no a la sesión entera.
+
+**C · CRDT (Yjs) para texto y pizarra** — 3 a 5 semanas
+Solo donde hace falta escribir *dentro del mismo texto o lienzo* a la vez: el campo de notas y el Planner (pizarra táctica). Yjs sobre `broadcast` de Supabase Realtime para el vivo, más un snapshot binario en la DB cada X segundos y al cerrar. Trae cursores ajenos y merge sin conflicto.
+Es el único que da la sensación literal de Google Docs, y el único que obliga a repensar cómo persiste esa pantalla. **No hacerlo antes de A y B.**
+
+### Orden recomendado
+
+1. **A** ya, sobre Daily Planning, Gym Planner y Planner. Barato y elimina la pérdida silenciosa de trabajo.
+2. **B** sobre `training_sessions` (los dos jsonb) y `session_exercises`. Es el arreglo de fondo.
+3. **C** solo si aparece el pedido concreto de escribir juntos en la pizarra o en las notas.
+
+### Cosas a tener en cuenta
+
+- **Presencia y RLS.** El canal de presencia debe ser por club (`presence:<club_id>:<recurso>`); nunca exponer nombres fuera del club.
+- **Escalado.** `REPLICA IDENTITY FULL` engorda el WAL en cada update. Con jsonb grandes y muchos clubes hay que medirlo; si molesta, sacar el `FULL` de `training_sessions` y filtrar los DELETE en el cliente.
+- **Límite de Realtime.** El plan de Supabase acota conexiones concurrentes y mensajes por segundo; un club con 15 personas y 5 pestañas cada uno son 75 conexiones. Revisar el plan antes de prender el Nivel 1 en todas las pantallas.
+- **Offline.** Nada de esto funciona sin conexión. El chip y el refresh al reconectar son la red de seguridad; el service worker no cachea escrituras.

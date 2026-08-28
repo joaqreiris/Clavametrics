@@ -7976,3 +7976,25 @@ create policy "wellness_scoped_update" on public.wellness as permissive for upda
   with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
 create policy "wellness_scoped_delete" on public.wellness as permissive for delete to authenticated
   using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Realtime · refresco en vivo (Nivel 1) — cliente: assets/cm-realtime.js
+-- Solo las tablas de la publicación supabase_realtime emiten cambios al cliente
+-- (con RLS aplicada). REPLICA IDENTITY FULL para que el DELETE llegue con la fila
+-- vieja: sin eso viaja solo la PK y el filtro club_id=eq.… lo descarta.
+-- Costo de FULL: los UPDATE/DELETE escriben la fila vieja entera en el WAL.
+-- ─────────────────────────────────────────────────────────────────────────────
+alter table public.training_sessions    replica identity full;
+alter table public.calendar_events      replica identity full;
+alter table public.microcycles          replica identity full;
+alter table public.session_exercises    replica identity full;
+alter table public.session_participants replica identity full;
+alter table public.treatments           replica identity full;
+alter publication supabase_realtime add table public.training_sessions;
+alter publication supabase_realtime add table public.calendar_events;
+alter publication supabase_realtime add table public.microcycles;
+alter publication supabase_realtime add table public.session_exercises;
+alter publication supabase_realtime add table public.session_participants;
+alter publication supabase_realtime add table public.treatments;
+-- Ya publicadas de antes: availability, messages, message_reactions, channel_reads,
+-- notifications, gps_sync_jobs.
