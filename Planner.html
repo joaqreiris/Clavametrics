@@ -1241,6 +1241,10 @@
               <button class="pl-ta-btn" type="button" data-align="right"   data-i18n-attr="title:planner.prop_text_align_right"   title="Right"><i class="ti ti-align-right"></i></button>
               <button class="pl-ta-btn" type="button" data-align="justify" data-i18n-attr="title:planner.prop_text_align_justify" title="Justify"><i class="ti ti-align-justified"></i></button>
             </div>
+            <div id="plPropDims" style="display:none;align-items:center;gap:8px">
+              <div class="psep" id="plPropDimsSep"></div>
+              <button class="pl-ta-btn" type="button" id="plPropDimsBtn" data-i18n-attr="title:planner.prop_dims_title" title="Show measurements in metres"><i class="ti ti-ruler-measure"></i></button>
+            </div>
           </div>
 
           <div id="plPolyDoneBar">
@@ -1703,7 +1707,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowWavy','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowWavy','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role','_showDims'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1733,8 +1737,8 @@
       obj.scaleX = s; obj.scaleY = s;
       return;
     }
-    // Zones (rect/circle/polygon) get a live metres readout as they're resized.
-    if (obj._type === 'zone' || obj._type === 'goal') { _clearGuides(); _showSizeGuides(obj); }
+    // Anything measurable (zones, goals, custom images) gets a live metres readout as it's resized.
+    if (_canMeasure(obj)) { _clearGuides(); _showSizeGuides(obj); }
   });
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
@@ -1824,6 +1828,107 @@
     const len = Math.hypot(x2 - x1, y2 - y1) * mpp;
     _addLabel((x1 + x2) / 2, (y1 + y2) / 2 - 12, _fmtM(len));
   }
+  // Same readout, shown for a moment right after an object is created (zones/goals are
+  // added at a fixed size rather than dragged out, so their size is never announced).
+  let _flashGuidesT = null;
+  function _flashSizeGuides(obj) {
+    _clearGuides(); _showSizeGuides(obj); fc.requestRenderAll();
+    clearTimeout(_flashGuidesT);
+    _flashGuidesT = setTimeout(() => { _clearGuides(); fc.requestRenderAll(); }, 1800);
+  }
+
+  // ── Pinned measurements (opt-in, per object) ────────────────────
+  // Painted straight onto the canvas context after every render instead of being added as
+  // fabric objects: they never touch history/serialization, always match the live geometry
+  // (move/resize/rotate/undo), and still land in the PNG/PDF export — html2canvas copies the
+  // canvas as painted. Only the `_showDims` flag is persisted (see ARROW_PROPS).
+  const DIM_TYPES = new Set(['zone', 'goal', 'arrow', 'custom_object']);
+  function _canMeasure(o) { return !!o && DIM_TYPES.has(o._type); }
+  function _dimChip(ctx, x, y, txt) {
+    ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, monospace';
+    const w = ctx.measureText(txt).width + 10, h = 16;
+    ctx.fillStyle = 'rgba(15,23,42,0.82)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, 4);
+    else ctx.rect(x - w / 2, y - h / 2, w, h);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, x, y);
+  }
+  // Dimension line along a→b, pushed `off` px along its normal (negative = outside a
+  // clockwise contour), with end ticks and the label chip.
+  function _dimSpan(ctx, ax, ay, bx, by, off, txt) {
+    const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L, ny = dx / L;
+    const x1 = ax + nx * off, y1 = ay + ny * off, x2 = bx + nx * off, y2 = by + ny * off;
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.moveTo(x1 - nx * 4, y1 - ny * 4); ctx.lineTo(x1 + nx * 4, y1 + ny * 4);
+    ctx.moveTo(x2 - nx * 4, y2 - ny * 4); ctx.lineTo(x2 + nx * 4, y2 + ny * 4);
+    ctx.stroke();
+    _dimChip(ctx, (x1 + x2) / 2 + nx * off * 0.62, (y1 + y2) / 2 + ny * off * 0.62, txt);
+  }
+  function _arrowGeom(o) {
+    const d = _arrowData.get(o._arrowId);
+    if (d) return d;
+    if (o._x1 == null) return null;
+    return { x1:o._x1, y1:o._y1, cx:o._cx, cy:o._cy, x2:o._x2, y2:o._y2, curved:!!o._arrowCurved };
+  }
+  function _arrowLength(d) {
+    if (!d.curved) return Math.hypot(d.x2 - d.x1, d.y2 - d.y1);
+    let len = 0, prev = _arrowBasePoint(d, 0);
+    for (let i = 1; i <= 24; i++) {
+      const p = _arrowBasePoint(d, i / 24);
+      len += Math.hypot(p.x - prev.x, p.y - prev.y); prev = p;
+    }
+    return len;
+  }
+  function _drawDimOverlay(ctx) {
+    if (!ctx) return;
+    const objs = fc.getObjects().filter(o => o._showDims && _canMeasure(o));
+    if (!objs.length) return;
+    const mpp = _metersPerPixel(); if (!mpp) return;
+    const vpt = fc.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const sx = p => p.x * vpt[0] + vpt[4];
+    const sy = p => p.y * vpt[3] + vpt[5];
+    ctx.save();
+    objs.forEach(o => {
+      if (o._type === 'arrow') {
+        // Endpoint geometry is absolute canvas space; inside a multi-selection the group
+        // transform hasn't been baked in yet, so skip until the selection is released.
+        if (o.group) return;
+        const d = _arrowGeom(o); if (!d) return;
+        const mid = _arrowBasePoint(d, 0.5);
+        const tl  = Math.hypot(mid.tx, mid.ty) || 1;
+        const nx  = -mid.ty / tl, ny = mid.tx / tl;
+        _dimChip(ctx, sx(mid) + nx * 15, sy(mid) + ny * 15, _fmtM(_arrowLength(d) * mpp));
+        return;
+      }
+      // Corners from the full transform matrix (parent group included), so the labels stay
+      // glued to the shape while it's rotated, scaled or dragged inside a multi-selection.
+      const m = o.calcTransformMatrix();
+      const w = o.width || 0, h = o.height || 0;
+      const P = (dx, dy) => fabric.util.transformPoint(new fabric.Point(dx, dy), m);
+      const a = P(-w / 2, -h / 2), b = P(w / 2, -h / 2), c = P(w / 2, h / 2);
+      const wM = Math.hypot(b.x - a.x, b.y - a.y) * mpp;
+      const hM = Math.hypot(c.x - b.x, c.y - b.y) * mpp;
+      // Push the dimension lines outside the shape — flipped objects wind the other way.
+      const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+      const off = cross < 0 ? 15 : -15;
+      if (o.type === 'circle') {                    // a circle has one meaningful figure
+        _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, '⌀ ' + _fmtM(wM));
+        return;
+      }
+      _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, _fmtM(wM));
+      _dimSpan(ctx, sx(b), sy(b), sx(c), sy(c), off, _fmtM(hM));
+    });
+    ctx.restore();
+  }
+  // Only the main render passes a ctx (renderTop fires the same event bare, for the
+  // selection layer) — painting on that one would double-draw every chip.
+  fc.on('after:render', e => { if (e && e.ctx) _drawDimOverlay(e.ctx); });
 
   fc.on('object:moving', e => {
     const obj = e.target; if (!obj) return;
@@ -1933,7 +2038,11 @@
       });
     }
 
-    _historyStack.push(JSON.stringify(fc.toJSON(ARROW_PROPS)));
+    // Transient overlays (alignment guides, metre labels) must never enter the timeline —
+    // an undo would otherwise resurrect them as unselectable pink ghosts.
+    const _snap = fc.toJSON(ARROW_PROPS);
+    _snap.objects = (_snap.objects || []).filter(o => o._type !== '_preview');
+    _historyStack.push(JSON.stringify(_snap));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
     _redoStack.length = 0;                 // a fresh change invalidates the redo timeline
     _syncUndoRedoButtons();
@@ -2068,6 +2177,7 @@
     obj.set({ ...center(), originX:'center', originY:'center' });
     fc.add(obj); fc.setActiveObject(obj); fc.renderAll();
     setTool('select');
+    if (_canMeasure(obj)) _flashSizeGuides(obj);   // announce the size of what was just dropped
   }
 
   function _nextPlayerNum(team) {
@@ -2411,13 +2521,15 @@
     return g;
   }
 
-  // Arrows resize via their endpoint handles, so the scale corners are noise (and easy to
-  // confuse with the endpoint circles). Only the rotation knob stays. hasControls isn't
-  // serialized, so this must be re-applied on every path that materialises a group
-  // (build, load-from-JSON, paste) or reloaded arrows come back with the full corner box.
+  // Arrows are reshaped ONLY through their endpoint handles: dragging an endpoint already sets
+  // both the direction and the length, so scale corners and the rotation knob were redundant —
+  // and the knob fought the handles (rotation lives in the group transform while the geometry
+  // lives in canvas coords, so it had to be baked back in on every release). No controls at all.
+  // hasControls isn't serialized, so this must be re-applied on every path that materialises a
+  // group (build, load-from-JSON, paste) or reloaded arrows come back with the full corner box.
   function _setArrowControls(grp) {
-    grp.set({ hasControls:true, hasBorders:false, cornerSize:11, touchCornerSize:24, transparentCorners:false });
-    grp.setControlsVisibility({ tl:false, tr:false, bl:false, br:false, ml:false, mt:false, mr:false, mb:false, mtr:true });
+    grp.set({ hasControls:false, hasBorders:false, lockRotation:true, cornerSize:11, touchCornerSize:24, transparentCorners:false });
+    grp.setControlsVisibility({ tl:false, tr:false, bl:false, br:false, ml:false, mt:false, mr:false, mb:false, mtr:false });
   }
 
   function _attachGroupHandlers(d) {
@@ -2478,6 +2590,7 @@
     const d=_arrowData.get(arrowId); if (!d) return;
     const old=d.grp;
     d.grp=_buildArrowGroup(d);
+    d.grp._showDims = !!old?._showDims;   // pinned metre label survives every reshape/rebuild
     const _prev=_suppressHistory;
     _suppressHistory=true; _rebuilding=true;
     fc.remove(old);
@@ -2687,6 +2800,9 @@
   const _propPlayerDiv      = document.getElementById('plPropPlayer');
   const _propPlayerColor    = document.getElementById('plPropPlayerColor');
   const _propPlayerName     = document.getElementById('plPropPlayerName');
+  const _propDimsDiv        = document.getElementById('plPropDims');
+  const _propDimsSep        = document.getElementById('plPropDimsSep');
+  const _propDimsBtn        = document.getElementById('plPropDimsBtn');
   const _propTextDiv        = document.getElementById('plPropText');
   const _propTextColor      = document.getElementById('plPropTextColor');
   const _propTextBg         = document.getElementById('plPropTextBg');
@@ -2784,6 +2900,7 @@
     _propGoalPostDiv.style.display='none'; _propPoleDiv.style.display='none';
     if (_propPlayerDiv) _propPlayerDiv.style.display='none';
     if (_propTextDiv) _propTextDiv.style.display='none';
+    if (_propDimsDiv) _propDimsDiv.style.display='none';
     if (obj._type==='text' && (obj.type==='i-text' || obj.type==='text')) {
       let _tf = obj.fill || '#ffffff';
       if (/^#[0-9a-f]{3}$/i.test(_tf)) _tf = '#' + _tf.slice(1).split('').map(c=>c+c).join('');
@@ -2827,6 +2944,15 @@
       _propPlayerDiv.style.display='flex'; _propBar.style.display='flex';
     } else {
       _propBar.style.display='none';
+    }
+    // Measurement toggle: offered for everything with a meaningful size (zones, goals,
+    // arrows/lines, custom images) — on its own when the object has no colour panel.
+    if (_propDimsDiv && _canMeasure(obj)) {
+      const hadPanel = _propBar.style.display === 'flex';
+      if (_propDimsSep) _propDimsSep.style.display = hadPanel ? 'block' : 'none';
+      _propDimsBtn?.classList.toggle('is-on', !!obj._showDims);
+      _propDimsDiv.style.display = 'flex';
+      _propBar.style.display = 'flex';
     }
     if (_propBar.style.display==='flex') _positionPropBar(obj);
   }
@@ -2876,6 +3002,14 @@
       document.addEventListener('mouseup', onUp);
     });
   })();
+
+  // Pin/unpin the metre readout on the selected object (persisted via _showDims).
+  _propDimsBtn?.addEventListener('click', () => {
+    const a = fc.getActiveObject(); if (!_canMeasure(a)) return;
+    a._showDims = !a._showDims;
+    _propDimsBtn.classList.toggle('is-on', !!a._showDims);
+    fc.requestRenderAll(); pushHistory();
+  });
 
   _propArrowColor?.addEventListener('input', () => {
     const a=fc.getActiveObject(); if (!a||a._type!=='arrow') return;
@@ -4540,6 +4674,7 @@
 
     const mdRaw = document.getElementById('plExMatchDay')?.value;
     const _oj = fc.toJSON(ARROW_PROPS);
+    _oj.objects = (_oj.objects || []).filter(o => o._type !== '_preview');   // never save transient guides
     // Persist geometry in field viewBox units (browser-independent) via the uniform meet-fit
     // transform. Runtime objects are untouched — only this serialized copy is normalized.
     const _fit = _fitParams();
