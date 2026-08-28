@@ -3047,7 +3047,7 @@ document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg
 const EVT_BG = {
   training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)',
   travel:'#ECFEFF', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)',
-  breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)', snack:'var(--cm-warning-bg)',
+  breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)', snack:'#F7FEE7',
   hotel:'var(--cm-bg-soft)', bus:'var(--cm-bg-soft)',
   press:'var(--cm-info-bg)', medical:'var(--cm-danger-bg)',
   walkthrough:'var(--cm-info-bg)', scouting:'var(--cm-bg-soft)',
@@ -3056,7 +3056,7 @@ const EVT_BG = {
 const EVT_CLR = {
   training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)',
   travel:'#06B6D4', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)',
-  breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)', snack:'var(--cm-warning)',
+  breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)', snack:'#65A30D',
   hotel:'var(--cm-fg-muted)', bus:'var(--cm-fg-muted)',
   press:'var(--cm-info)', medical:'var(--cm-danger)',
   walkthrough:'var(--cm-info)', scouting:'var(--cm-fg-muted)',
