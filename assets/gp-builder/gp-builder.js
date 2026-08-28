@@ -2732,7 +2732,21 @@
       }
 
       const _teamPids  = Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null;
-      const _chosenPid = window._gpPlayerId || window.gpState?.playerId || null;
+      // Jugador para las cards de nivel "player" que NO están pineadas.
+      //
+      // Salía de gpState.playerId, que sólo escribe el selector viejo
+      // (#playerPill) — y ese selector está oculto por CSS en todas las vistas
+      // desde que gpFilterBar pasó a ser la única fuente de filtrado. Resultado:
+      // una card "radar · player" que decía "Following filter · X" recibía
+      // playerId null y mostraba "No data for this selection", mientras la
+      // tabla de al lado —nivel squad, que filtra por FB.playerIds— sí
+      // encontraba las filas de ese mismo jugador.
+      //
+      // Con más de un jugador en la barra se deja null: una card por jugador no
+      // puede elegir cuál, y el resolver ya degrada a vacío.
+      const _fbPids = window.gpFilterBar?.getState?.()?.playerIds || [];
+      const _chosenPid = (_fbPids.length === 1 ? _fbPids[0] : null)
+                      || window._gpPlayerId || window.gpState?.playerId || null;
       const ctx = {
         clubId:   _clubId || window._gpClubId || null,
         // Use the chosen player as-is — no clamp to the current roster. The resolver
@@ -8142,7 +8156,14 @@
       metrics: baseIds.map(id => { const c = catalogMap.get(id) || {}; return { id, agg: 'avg', kind: c.kind || 'accum', unit: c.unit || '', custom: !!c.is_custom }; }),
       dimensions: [], range: { type: range }, comparison: null, style: {},
     };
-    const ctx = { clubId: _clubId, playerId: window._gpPlayerId || window.gpState?.playerId || null, mcId: currentMcId(),
+    // Mismo criterio que resolveAndRenderCard: el jugador sale de la barra, que
+    // es la única fuente de filtrado. gpState.playerId sólo lo escribe el
+    // selector viejo, hoy oculto por CSS en todas las vistas.
+    const _fbPids2 = window.gpFilterBar?.getState?.()?.playerIds || [];
+    const ctx = { clubId: _clubId,
+                  playerId: (_fbPids2.length === 1 ? _fbPids2[0] : null)
+                            || window._gpPlayerId || window.gpState?.playerId || null,
+                  mcId: currentMcId(),
                   teamId: window._gpTeamId || null,
                   teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null };
 

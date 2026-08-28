@@ -4014,7 +4014,14 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
     if (!aggregateSeries) return; // resolver not available as module in this context
 
     const _gs = window.gpState || {};
-    const ctx = { clubId, playerId: window.gpState?.playerId || null, mcId: window.gpState?.mcId || null,
+    // Mismo arreglo que en gp-builder: el jugador sale de la barra de filtros,
+    // que es la única fuente de filtrado. gpState.playerId sólo lo escribe el
+    // selector viejo (#playerPill), oculto por CSS en todas las vistas, así que
+    // una card de nivel "player" quedaba siempre sin jugador y sin datos.
+    const _fbPids3 = window.gpFilterBar?.getState?.()?.playerIds || [];
+    const ctx = { clubId,
+                  playerId: (_fbPids3.length === 1 ? _fbPids3[0] : null) || window.gpState?.playerId || null,
+                  mcId: window.gpState?.mcId || null,
                   teamId: window._gpTeamId || null,
                   teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null,
                   archivedPlayerIds: Array.isArray(window._gpArchivedPlayerIds) ? window._gpArchivedPlayerIds : [],
