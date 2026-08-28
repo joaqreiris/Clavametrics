@@ -83,6 +83,9 @@
   .ap-timeline { position:relative; height:40px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; overflow:hidden; margin-bottom:16px; }
   .ap-tl-seg { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; font:600 10px/1 var(--cm-font-sans); color:#fff; overflow:hidden; white-space:nowrap; box-shadow:inset -1px 0 0 rgba(255,255,255,.25); }
   .ap-tl-seg.no-count { background-image:repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,.20) 5px, rgba(255,255,255,.20) 10px); }
+  /* Fase superpuesta (parón FIFA): no ocupa su tramo de la secuencia, se dibuja
+     encima de la fase anfitriona sin partirla. */
+  .ap-tl-seg.is-overlay { top:3px; bottom:3px; z-index:2; border-radius:4px; box-shadow:0 0 0 1.5px var(--cm-surface); font-size:9px; letter-spacing:.06em; }
   .ap-tl-today { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--cm-fg-strong); z-index:3; }
   .ap-tl-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:var(--cm-body-sm); color:var(--cm-fg-faint); }
 
@@ -122,6 +125,7 @@
   .ap-tl-track { position:relative; }
   .ap-tl-band { position:absolute; top:0; bottom:0; border-radius:4px; display:flex; align-items:center; justify-content:center; font:600 9.5px/1 var(--cm-font-sans); color:#fff; overflow:hidden; white-space:nowrap; }
   .ap-tl-band.nocount { background-image:repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.22) 4px, rgba(255,255,255,.22) 8px); }
+  .ap-tl-band.is-overlay { top:3px; bottom:3px; z-index:2; box-shadow:0 0 0 1.5px var(--cm-surface); font-size:9px; }
   .ap-tl-dot { position:absolute; top:50%; transform:translate(-50%,-50%); width:9px; height:9px; border-radius:50%; }
   .ap-tl-today { position:absolute; top:0; bottom:0; width:2px; background:var(--cm-fg-strong); z-index:5; }
   .ap-tl-hint { position:absolute; left:2px; top:50%; transform:translateY(-50%); font:var(--cm-body-sm); color:var(--cm-fg-faint); }
@@ -715,8 +719,10 @@ function apRenderBig(){
   const done = apClamp(apDays(s.start_date, today), 0, tot);
   const pct = Math.round(done / tot * 100);
   const wkTot = Math.ceil(tot / 7), wkNow = apClamp(Math.ceil(done / 7), 0, wkTot);
-  // Active phase
-  const ph = phases.find(p => p.start_date <= today && p.end_date >= today);
+  // Active phase — la de la secuencia; una superpuesta (parón FIFA) se anota aparte
+  const inToday = p => p.start_date <= today && p.end_date >= today;
+  const ph   = phases.find(p => inToday(p) && !p.is_overlay) || phases.find(inToday);
+  const phOv = phases.find(p => inToday(p) && p.is_overlay && p !== ph);
 
   const card = (icon, lbl, val, sub, extra) =>
     `<div class="ap-kpi"><div class="k-lbl"><i class="ti ${icon}" style="font-size:14px"></i> ${lbl}</div><div class="k-val">${val}</div>${extra||''}${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
@@ -733,7 +739,7 @@ function apRenderBig(){
       `<div style="height:5px;border-radius:3px;background:var(--cm-border);margin-top:7px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--cm-accent)"></div></div>`) +
     card('ti-layers-subtract', tt('annual_planner.active_phase','Active phase'),
       ph ? ph.name : tt('annual_planner.between_phases','Between phases'),
-      ph ? `${tt('annual_planner.days_count',`${_phDays} days`,{count:_phDays})} · ${ph.counts_availability?tt('annual_planner.counts','counts'):tt('annual_planner.no_count','no count')}` : '');
+      ph ? `${tt('annual_planner.days_count',`${_phDays} days`,{count:_phDays})} · ${ph.counts_availability?tt('annual_planner.counts','counts'):tt('annual_planner.no_count','no count')}${phOv?` · ${phOv.name}`:''}` : '');
 
   // Match density per month
   const monthOf = d => d.slice(0,7);
@@ -814,12 +820,15 @@ function apRenderTimeline(){
   if (!_apPhases.length) {
     html = `<div class="ap-tl-empty">${tt('annual_planner.no_phases_add_below','No phases yet — add one below')}</div>`;
   } else {
-    _apPhases.forEach(p => {
+    // Las superpuestas (parón FIFA) se pintan después para quedar por encima
+    const ordered = _apPhases.slice().sort((a, b) => (a.is_overlay ? 1 : 0) - (b.is_overlay ? 1 : 0));
+    ordered.forEach(p => {
       let left = apClamp(apDays(_apSeasonStart, p.start_date) / total * 100, 0, 100);
       let width = apClamp(apDays(p.start_date, p.end_date) / total * 100, 0, 100 - left);
       const noCount = p.counts_availability ? '' : ' no-count';
-      const lbl = width > 9 ? p.name : '';
-      html += `<div class="ap-tl-seg${noCount}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}">${lbl}</div>`;
+      const overlay = p.is_overlay ? ' is-overlay' : '';
+      const lbl = width > (p.is_overlay ? 5 : 9) ? p.name : '';
+      html += `<div class="ap-tl-seg${noCount}${overlay}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}">${lbl}</div>`;
     });
   }
   const today = cmToday();
@@ -884,6 +893,7 @@ function apRenderPhasesList(){
     <div class="ap-phase-row">
       <input type="color" class="ap-dot-input" value="${p.color}" onchange="apUpdateColor('${p.id}', this.value)" title="Change color">
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:120px">${p.name}</span>
+      ${p.is_overlay ? `<span class="ap-badge" style="background:color-mix(in srgb, ${p.color} 16%, transparent);color:${p.color}" title="${tt('annual_planner.overlay_hint','Does not split the season — it sits on top of the phase that contains it')}">${tt('annual_planner.overlay','superimposed')}</span>` : ''}
       <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.start_date} → ${p.end_date}</span>
       <label class="ap-switch" style="margin-left:auto">
         <input type="checkbox" ${p.counts_availability ? 'checked' : ''} onchange="apToggleCounts('${p.id}', this.checked)"> ${tt('annual_planner.counts','counts')}
@@ -950,6 +960,7 @@ async function apAddPhase(){
     color,
     start_date: start, end_date: end,
     counts_availability: counts,
+    is_overlay: !!type?.is_overlay,
     sort_order: _apPhases.length
   });
   if (error) { alert(tt('annual_planner.could_not_add_phase','Could not add phase: ' + error.message, {msg:error.message})); return; }
@@ -963,9 +974,11 @@ async function apAddPhase(){
 }
 
 function apDefaultPhaseStart(){
-  if (!_apPhases.length) return _apSeasonStart;
-  let maxEnd = _apPhases[0].end_date;
-  _apPhases.forEach(p => { if (p.end_date > maxEnd) maxEnd = p.end_date; });
+  // Las superpuestas no mueven el arranque de la siguiente fase de la secuencia
+  const seq = _apPhases.filter(p => !p.is_overlay);
+  if (!seq.length) return _apSeasonStart;
+  let maxEnd = seq[0].end_date;
+  seq.forEach(p => { if (p.end_date > maxEnd) maxEnd = p.end_date; });
   const d = new Date(maxEnd + 'T00:00:00'); d.setDate(d.getDate() + 1);
   const next = d.toISOString().slice(0,10);
   return next > _apSeasonEnd ? _apSeasonEnd : next;
@@ -1990,11 +2003,18 @@ function apTLRender(){
   const tip = (o) => (_apTLTips.push(o) - 1);
   const range = (a, b) => `${apFmtShort(a)} → ${apFmtShort(b)}`;
 
-  const phases = _apTL.phases.length ? _apTL.phases.map(p => {
-    const { left, width } = apTLpos(p.start_date, p.end_date);
-    const t = tip({ title:p.name, color:p.color, lines:[range(p.start_date,p.end_date), p.counts_availability?tt('annual_planner.counts_availability','Counts for availability'):tt('annual_planner.does_not_count_availability','Does not count for availability')] });
-    return `<div class="ap-tl-band${p.counts_availability?'':' nocount'}" data-tip="${t}" style="left:${left}%;width:${width}%;background:${p.color}">${width>8?p.name:''}</div>`;
-  }).join('') : `<span class="ap-tl-hint">${tt('annual_planner.no_phases_yet','No phases yet')}</span>`;
+  const phases = _apTL.phases.length ? _apTL.phases
+    // Las superpuestas (parón FIFA) van al final para pintarse sobre su anfitriona
+    .slice().sort((a, b) => (a.is_overlay ? 1 : 0) - (b.is_overlay ? 1 : 0))
+    .map(p => {
+      const { left, width } = apTLpos(p.start_date, p.end_date);
+      const lines = [range(p.start_date, p.end_date),
+        p.counts_availability ? tt('annual_planner.counts_availability','Counts for availability') : tt('annual_planner.does_not_count_availability','Does not count for availability')];
+      if (p.is_overlay) lines.push(tt('annual_planner.overlay_hint','Does not split the season — it sits on top of the phase that contains it'));
+      const t = tip({ title:p.name, color:p.color, lines });
+      const ov = p.is_overlay ? ' is-overlay' : '';
+      return `<div class="ap-tl-band${p.counts_availability?'':' nocount'}${ov}" data-tip="${t}" style="left:${left}%;width:${width}%;background:${p.color}">${width>(p.is_overlay?4:8)?p.name:''}</div>`;
+    }).join('') : `<span class="ap-tl-hint">${tt('annual_planner.no_phases_yet','No phases yet')}</span>`;
 
   const matches = _apTL.matches.length ? _apTL.matches.map(m => {
     const pos = apClamp(apDays(_apSeasonStart, m.date) / total * 100, 0, 100);

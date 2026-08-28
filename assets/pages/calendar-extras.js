@@ -61,7 +61,7 @@ async function loadCalCompetitions() {
   const [{ data: comps }, { data: phases }] = await Promise.all([
     window.sb.from('competitions').select('id,name,comp_type,color')
       .eq('season_id', _calSeasonId).order('created_at'),
-    window.sb.from('season_phases').select('id,name,color,start_date,end_date,counts_availability')
+    window.sb.from('season_phases').select('id,name,color,start_date,end_date,counts_availability,is_overlay')
       .eq('season_id', _calSeasonId).order('start_date')
   ]);
   _calComps  = comps || [];
@@ -196,7 +196,9 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       .filter(p => p.end_date >= rbFrom && p.start_date <= rbTo)
       .sort((a, b) => a.start_date > b.start_date ? 1 : -1)
       .map(p => ({ ...p, _from: p.start_date < rbFrom ? rbFrom : p.start_date,
-                          _to:   p.end_date   > rbTo   ? rbTo   : p.end_date }));
+                          _to:   p.end_date   > rbTo   ? rbTo   : p.end_date }))
+      // Las superpuestas (parón FIFA) al final: se pintan sobre su fase anfitriona
+      .sort((a, b) => (a.is_overlay ? 1 : 0) - (b.is_overlay ? 1 : 0));
 
     phasesEl.innerHTML = '';
     linesEl.innerHTML  = '';
@@ -210,11 +212,12 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       const isFocus = _ribbonViewRange
         && _ribbonViewRange.from === p.start_date && _ribbonViewRange.to === p.end_date;
       const counts  = p.counts_availability !== false;
+      const overlay = !!p.is_overlay;
 
       const seg = document.createElement('div');
       seg.className = 'phase-seg'
-        + (counts ? '' : ' phase-seg--off')
-        + (isNow ? ' phase-seg--now' : '')
+        + (overlay ? ' phase-seg--overlay' : (counts ? '' : ' phase-seg--off'))
+        + (isNow && !overlay ? ' phase-seg--now' : '')
         + (isFocus ? ' phase-seg--focus' : '');
       seg.style.setProperty('--ph', p.color || 'var(--cm-border-strong)');
       seg.style.left  = (off * ppd) + 'px';
@@ -225,7 +228,13 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
             ? tt('calendar.phase_click_out','Click to see the whole season again')
             : tt('calendar.phase_click_in','Click to zoom the ribbon into this phase'));
       // El nombre sólo cuando hay lugar para leerlo; si no, queda el tooltip
-      if (days * ppd >= 56) {
+      const room = days * ppd;
+      if (overlay && room >= 26) {
+        const ic = document.createElement('i');
+        ic.className = 'ti ti-world phase-seg__icon';
+        seg.appendChild(ic);
+      }
+      if (room >= (overlay ? 74 : 56)) {
         const nm = document.createElement('span');
         nm.className = 'phase-seg__name';
         nm.textContent = p.name;
@@ -249,19 +258,20 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       });
       phasesEl.appendChild(seg);
 
-      // Fronteras: inicio de cada fase, y su fin cuando la siguiente no encadena
-      bounds.add(JSON.stringify([off, p.color]));
+      // Fronteras: inicio de cada fase y, si la siguiente no encadena, su fin.
+      // Una superpuesta marca sus dos bordes (interrumpe, no separa etapas).
       const nextDay = new Date(new Date(p._to + 'T00:00:00').getTime() + 86400000);
-      if (nextDay <= ribbonEnd && !visible.some(q => q._from === ymd(nextDay))) {
-        bounds.add(JSON.stringify([dayOffset(nextDay), p.color]));
+      bounds.add(JSON.stringify([off, p.color, overlay]));
+      if (nextDay <= ribbonEnd && (overlay || !visible.some(q => !q.is_overlay && q._from === ymd(nextDay)))) {
+        bounds.add(JSON.stringify([dayOffset(nextDay), p.color, overlay]));
       }
     });
 
     bounds.forEach(key => {
-      const [off, color] = JSON.parse(key);
+      const [off, color, isOv] = JSON.parse(key);
       if (off <= 0) return; // el borde izquierdo del track ya es un corte
       const line = document.createElement('div');
-      line.className = 'phase-line';
+      line.className = 'phase-line' + (isOv ? ' phase-line--overlay' : '');
       line.style.setProperty('--ph', color || 'var(--cm-border-strong)');
       line.style.left = (off * ppd + RIBBON_GUTTER) + 'px';
       linesEl.appendChild(line);

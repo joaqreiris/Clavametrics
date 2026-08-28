@@ -254,6 +254,39 @@
       color-mix(in srgb, var(--cm-fg) 12%, transparent) 5px 10px);
   }
   .phase-seg--off .phase-seg__name { color: var(--cm-fg-faint); }
+  /* Fase superpuesta (parón FIFA): muerde el riel dentro de su fase anfitriona,
+     sin partirla. Fondo opaco para tapar el tinte de abajo. */
+  .phase-seg--overlay {
+    z-index: 2;
+    top: 2px;
+    height: calc(100% - 4px);
+    padding: 0 6px;
+    gap: 4px;
+    background:
+      repeating-linear-gradient(-45deg,
+        transparent 0 4px,
+        color-mix(in srgb, var(--ph) 38%, transparent) 4px 8px),
+      var(--cm-surface);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ph) 55%, transparent);
+  }
+  .phase-seg--overlay:hover {
+    background:
+      repeating-linear-gradient(-45deg,
+        transparent 0 4px,
+        color-mix(in srgb, var(--ph) 55%, transparent) 4px 8px),
+      var(--cm-surface);
+  }
+  .phase-seg--overlay .phase-seg__name { color: color-mix(in srgb, var(--ph) 45%, var(--cm-fg-strong)); }
+  .phase-seg__icon {
+    flex: none;
+    font-size: 11px;
+    color: color-mix(in srgb, var(--ph) 45%, var(--cm-fg-strong));
+  }
+  /* El corte de una superpuesta es punteado: interrumpe, no separa etapas */
+  .phase-line--overlay {
+    border-left-style: dashed;
+    border-left-color: color-mix(in srgb, var(--ph) 55%, transparent);
+  }
   /* Corte vertical en cada frontera de fase: se ve dónde cambia la etapa
      aunque estés mirando las pills de abajo. Va antes de las chips en el DOM
      para quedar por detrás sin pelearse por z-index. */
@@ -267,7 +300,7 @@
     top: var(--ribbon-head-h);
     bottom: var(--cm-s-5);
     width: 0;
-    border-left: 1px solid color-mix(in srgb, var(--ph) 28%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--ph) 36%, transparent);
   }
 
   /* ── Microcycle row ── */

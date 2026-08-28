@@ -1826,9 +1826,13 @@ create table if not exists public.phase_types (
   default_counts_availability boolean default true not null,
   is_preset boolean default false not null,
   created_at timestamp with time zone default now(),
+  is_overlay boolean default false not null,
   constraint phase_types_pkey primary key (id)
 );
 CREATE INDEX idx_phase_types_club ON public.phase_types USING btree (club_id);
+-- is_overlay: el tipo NO forma parte de la secuencia de la temporada, se superpone a
+-- la fase que lo contiene (parón FIFA dentro de la primera vuelta). Las fases overlay
+-- no parten la fase anfitriona ni mueven el inicio de la siguiente.
 
 create table if not exists public.pinned_files (
   id uuid default gen_random_uuid() not null,
@@ -2319,9 +2323,13 @@ create table if not exists public.season_phases (
   counts_availability boolean default true not null,
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
+  is_overlay boolean default false not null,
   constraint season_phases_pkey primary key (id)
 );
 CREATE INDEX idx_season_phases_season ON public.season_phases USING btree (season_id);
+-- is_overlay: copia de phase_types.is_overlay al crear la fase (mismo patrón que
+-- color y counts_availability). Se dibuja encima de la fase anfitriona en vez de
+-- ocupar su propio tramo del ribbon / la timeline.
 
 create table if not exists public.seasons (
   id uuid default gen_random_uuid() not null,
