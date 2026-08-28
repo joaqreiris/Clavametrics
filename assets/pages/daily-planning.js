@@ -3275,6 +3275,10 @@ let _dpRoByRole = false, _dpLock = null;
       resource: `dp:${_dpTeamId}:${_dpCurrentDate}`,
       clubId:   _dpClubId,
       label:    tt('daily_planning.lock_label', 'this session'),
+      // Marca en vivo el campo donde está parado el otro (como la celda
+      // seleccionada en una planilla compartida). Sirve igual en modo lectura:
+      // ves qué está tocando el que tiene el candado.
+      fields:   'input[id^="dp"], textarea[id^="dp"], select[id^="dp"]',
       // Se corre ANTES de que el candado bloquee: si había algo a medio guardar
       // (el debounce del autosave, ediciones de tareas, targets de GPS), se
       // persiste ahora. Después de esto los guardados quedan frenados.

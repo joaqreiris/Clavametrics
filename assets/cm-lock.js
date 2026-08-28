@@ -46,6 +46,74 @@
   // necesita distinguirlas.
   const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+  // Un color estable por persona, para reconocerla de un vistazo sin leer el
+  // nombre (mismo criterio que los avatares de presencia del sidebar).
+  function colorDe(userId) {
+    let h = 0;
+    String(userId || '').split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) % 360; });
+    return `hsl(${h} 70% 45%)`;
+  }
+
+  // ── Campos ocupados ───────────────────────────────────────────────────────
+  // Marca en vivo el campo que el otro tiene abierto, como la celda seleccionada
+  // en una planilla compartida: un borde de su color y su nombre encima. No se
+  // toca el input — todo se dibuja en un overlay aparte, así no hay forma de
+  // ensuciar el formulario ni de robarle el foco a nadie.
+  const _marcas = new Map();   // fieldId → { caja, meta }
+  let _reposProgramado = false;
+
+  function reposicionar() {
+    _reposProgramado = false;
+    _marcas.forEach(({ caja }, id) => {
+      const campo = document.getElementById(id);
+      if (!campo) { caja.style.display = 'none'; return; }
+      const r = campo.getBoundingClientRect();
+      if (!r.width || r.bottom < 0 || r.top > innerHeight) { caja.style.display = 'none'; return; }
+      caja.style.display = '';
+      caja.style.top    = (r.top - 2) + 'px';
+      caja.style.left   = (r.left - 2) + 'px';
+      caja.style.width  = (r.width + 4) + 'px';
+      caja.style.height = (r.height + 4) + 'px';
+    });
+  }
+  function pedirRepos() {
+    if (_reposProgramado || !_marcas.size) return;
+    _reposProgramado = true;
+    requestAnimationFrame(reposicionar);
+  }
+  addEventListener('scroll', pedirRepos, true);
+  addEventListener('resize', pedirRepos);
+  // Red de seguridad para layouts que se mueven sin scroll ni resize (paneles
+  // que se abren, filas que se agregan).
+  setInterval(pedirRepos, 700);
+
+  function marcarCampos(ocupados) {
+    // ocupados: [{ field, name, userId }]
+    const vivos = new Set();
+    ocupados.forEach(o => {
+      if (!o.field || !document.getElementById(o.field)) return;
+      vivos.add(o.field);
+      let m = _marcas.get(o.field);
+      const color = colorDe(o.userId);
+      if (!m) {
+        const caja = document.createElement('div');
+        caja.setAttribute('style',
+          'position:fixed;z-index:9997;pointer-events:none;border-radius:7px;box-sizing:border-box');
+        caja.innerHTML = '<span style="position:absolute;top:-9px;left:6px;padding:1px 6px;border-radius:4px;' +
+          'color:#fff;font:600 10px/1.5 var(--cm-font-sans,system-ui);white-space:nowrap"></span>';
+        document.body.appendChild(caja);
+        m = { caja };
+        _marcas.set(o.field, m);
+      }
+      m.caja.style.border = `2px solid ${color}`;
+      const et = m.caja.firstElementChild;
+      et.style.background = color;
+      et.textContent = String(o.name || '').split(' ')[0];   // solo el nombre de pila: la etiqueta es chica
+    });
+    _marcas.forEach((m, id) => { if (!vivos.has(id)) { m.caja.remove(); _marcas.delete(id); } });
+    reposicionar();
+  }
+
   // ── Cartel ────────────────────────────────────────────────────────────────
   let _barEl = null;
   function bar() {
@@ -216,6 +284,12 @@
       } else {
         hideBar();
       }
+      // Campos que los demás tienen abiertos ahora mismo (todos los presentes en
+      // este recurso, no solo los editores: al que mira en modo lectura también
+      // le sirve ver dónde está metido el que edita).
+      if (opts.fields) {
+        marcarCampos(members.filter(m => m.userId !== me.userId && m.field));
+      }
       _owner = owner;
       wasOwner = isOwner;
       everSynced = true;
@@ -225,6 +299,31 @@
       if (!chan || !me) return;
       me.resource = resource; me.forced = forced;
       try { chan.track(me); } catch (_) {}
+    }
+
+    // Anuncia en qué campo está parado el usuario. Se manda al enfocar y al
+    // salir; el salto entre dos campos no manda un "salí" intermedio (se espera
+    // un instante), o la marca del otro parpadearía en cada tabulación.
+    let _blurTimer = null;
+    function seguirFoco() {
+      const anunciar = id => {
+        if (me.field === id) return;
+        me.field = id;
+        track();
+      };
+      document.addEventListener('focusin', e => {
+        const el = e.target;
+        if (!el || !el.id || !el.matches || !el.matches(opts.fields)) return;
+        clearTimeout(_blurTimer);
+        anunciar(el.id);
+      });
+      document.addEventListener('focusout', () => {
+        clearTimeout(_blurTimer);
+        _blurTimer = setTimeout(() => anunciar(null), 250);
+      });
+      // Al irse de la pestaña, soltar la marca: si no, queda un campo "ocupado"
+      // por alguien que se fue a otra ventana.
+      document.addEventListener('visibilitychange', () => { if (document.hidden) anunciar(null); });
     }
 
     async function connect() {
@@ -240,7 +339,9 @@
         since:  Date.now(),
         resource,
         forced: false,
+        field:  null,
       };
+      if (opts.fields) seguirFoco();
       chan = window.sb.channel(`cmlock-${opts.clubId}`, { config: { presence: { key: TAB_ID } } });
       chan.on('presence', { event: 'sync' }, () => apply(chan.presenceState()));
       chan.subscribe(status => { if (status === 'SUBSCRIBED') track(); });
@@ -270,6 +371,7 @@
       },
       release() {
         released = true;
+        marcarCampos([]);
         _guardState.blocked = false;
         if (opts.scope && scopeTouched.length) { unlockScope(opts.scope, scopeTouched); scopeTouched = []; }
         hideBar();

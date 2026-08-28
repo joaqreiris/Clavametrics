@@ -116,6 +116,19 @@ Tres modos según cómo guarde la pantalla:
 
 **`warnOnly`** es para las pantallas que guardan con un botón explícito. En Planner bloquear sería peor que el problema: te dejaría con un dibujo a medio hacer que no podés guardar. Entonces avisa quién más lo tiene abierto y, al pulsar Save, pregunta antes de reemplazar la versión del otro (`lock.otherEditor()`). Con un borrador que todavía no existe en la base el recurso va vacío y no compite con nadie.
 
+### Campos ocupados, en vivo
+
+`fields: '<selector>'` marca el campo donde está parado el otro: borde de su color y su nombre encima, como la celda seleccionada en una planilla compartida. Va sobre el mismo canal de presencia del candado — el meta lleva un campo `field` más — así que no agrega ni una conexión.
+
+- Se anuncia con `focusin` y se suelta con `focusout`, con 250 ms de respiro: saltar de un campo a otro no manda un "salí" intermedio, o la marca parpadearía en cada tabulación. Al ocultarse la pestaña también se suelta.
+- Los campos deben tener `id` — es lo que viaja por el canal.
+- Se dibuja en un overlay `position:fixed` aparte, nunca tocando el input: no hay forma de ensuciar el formulario ni de robarle el foco a nadie. Se reposiciona en scroll y resize, más un repaso cada 700 ms para los paneles que se abren sin ninguno de los dos eventos.
+- Sirve igual en modo lectura: el que mira ve qué está tocando el que tiene el candado.
+
+Activo en Daily Planning (`dp*`), Gym Planner (`gp*`) y Planner (`plEx*`).
+
+Lo que esto **no** es: ver las letras aparecer mientras el otro escribe, ni dos personas en el mismo campo a la vez. Eso es el paso 3 (CRDT).
+
 Falta: Lineup.
 
 **B · Guardado por campo en vez de por objeto** — 1 a 2 semanas

@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 let cmLock, syncCb, tracked, TAB, presence;
+const docListeners = {};
+const disparar = (evt, e) => (docListeners[evt] || []).forEach(cb => cb(e));
 
 // El helper lee chan.presenceState() en cada sync, así que la simulación pasa
 // por acá y no por el argumento del callback.
@@ -40,8 +42,12 @@ beforeAll(async () => {
     createElement: fakeEl,
     getElementById: () => null,
     querySelectorAll: () => [],
-    addEventListener() {},
+    addEventListener(evt, cb) { (docListeners[evt] = docListeners[evt] || []).push(cb); },
+    hidden: false,
   };
+  global.requestAnimationFrame = cb => cb();
+  global.addEventListener = () => {};
+  global.innerHeight = 800;
   await import('../../assets/cm-lock.js');
   cmLock = global.window.cmLock;
   TAB = cmLock.TAB_ID;
@@ -164,6 +170,26 @@ describe('cmLock.claim', () => {
     lock.setResource('dp:t1:2026-08-29');
     expect(tracked.resource).toBe('dp:t1:2026-08-29');
     expect(tracked.forced).toBe(false);   // el forzado no se arrastra al día nuevo
+  });
+
+  it('anuncia en qué campo está parado el usuario, y lo suelta al salir', async () => {
+    cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1', fields: 'input' });
+    await settle();
+    expect(tracked.field).toBeNull();
+
+    disparar('focusin', { target: { id: 'dpNotes', matches: () => true } });
+    expect(tracked.field).toBe('dpNotes');
+
+    // Saltar a otro campo no manda un "salí" intermedio: la marca del otro no
+    // debe parpadear en cada tabulación.
+    disparar('focusout', {});
+    disparar('focusin', { target: { id: 'dpStartTime', matches: () => true } });
+    expect(tracked.field).toBe('dpStartTime');
+
+    // Salir del formulario sí lo suelta, pasado el respiro.
+    disparar('focusout', {});
+    await new Promise(r => setTimeout(r, 300));   // este archivo usa timers reales
+    expect(tracked.field).toBeNull();
   });
 
   it('quien forzó queda como editor aunque no tenga el candado', async () => {
