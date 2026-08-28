@@ -1,6 +1,6 @@
 // Subir esta versión en cada despliegue que cambie assets: al activarse borra
 // los cachés de versiones anteriores.
-const CACHE_VERSION = 'clava-v5';
+const CACHE_VERSION = 'clava-v6';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 // Lo que usa TODA página autenticada. Se baja en la instalación para que la
@@ -59,6 +59,34 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// respondWith() exige una Response de verdad. caches.match() devuelve undefined
+// cuando no hay copia guardada, así que un `fetch().catch(() => caches.match())`
+// sin copia termina en respondWith(undefined) y el navegador corta con
+// "Failed to convert value to 'Response'": la navegación falla entera en vez de
+// degradar. Este envoltorio garantiza que siempre salga algo válido.
+const PAGINA_OFFLINE = `<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline</title>
+<style>body{margin:0;height:100vh;display:grid;place-items:center;background:#0f1115;color:#e8e8ea;
+font:500 15px/1.5 system-ui,-apple-system,sans-serif;text-align:center}
+div{padding:24px}button{margin-top:16px;padding:9px 18px;border:0;border-radius:8px;
+background:#0a7d3f;color:#fff;font:600 14px/1 inherit;cursor:pointer}</style>
+<div><p>No connection — this page could not be loaded.</p>
+<button onclick="location.reload()">Retry</button></div>`;
+
+function sinConexion(req) {
+  const esHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+  return new Response(esHTML ? PAGINA_OFFLINE : '', {
+    status: 503,
+    statusText: 'Offline',
+    headers: { 'Content-Type': esHTML ? 'text/html; charset=utf-8' : 'text/plain' },
+  });
+}
+// Toda promesa que llegue a respondWith() pasa por acá.
+function conFallback(promesa, req) {
+  return promesa.then(r => r || sinConexion(req)).catch(() => sinConexion(req));
+}
+
 function guardar(req, resp) {
   // Las respuestas opacas (CDN sin CORS) traen status 0 y son válidas igual.
   if (!resp || (resp.status !== 200 && resp.type !== 'opaque')) return resp;
@@ -73,7 +101,7 @@ function guardar(req, resp) {
 function redPrimeroConLimite(req) {
   return caches.match(req).then(guardada => {
     const red = fetch(req).then(r => guardar(req, r));
-    if (!guardada) return red.catch(() => caches.match(req));
+    if (!guardada) return conFallback(red, req);
     return new Promise(resolve => {
       let resuelto = false;
       const listo = (r) => { if (!resuelto && r) { resuelto = true; resolve(r); } };
@@ -100,14 +128,14 @@ self.addEventListener('fetch', (e) => {
   //    de contención para cuando no hay conexión.
   const isHTML = e.request.mode === 'navigate' || (e.request.headers.get('accept') || '').includes('text/html');
   if (isHTML) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    e.respondWith(conFallback(fetch(e.request).catch(() => caches.match(e.request)), e.request));
     return;
   }
 
   // 4) Librerías externas con la versión en la URL: del caché directo.
   if (esInmutableExterno(url)) {
     e.respondWith(
-      caches.match(e.request).then(c => c || fetch(e.request).then(r => guardar(e.request, r)))
+      conFallback(caches.match(e.request).then(c => c || fetch(e.request).then(r => guardar(e.request, r))), e.request)
     );
     return;
   }
@@ -115,7 +143,7 @@ self.addEventListener('fetch', (e) => {
   // 5) Traducciones: red primero SIN límite de espera. Servir un locales/*.json
   //    viejo deja media pantalla en otro idioma, y es preferible esperar.
   if (url.origin === self.location.origin && /^\/locales\/.*\.json$/i.test(url.pathname)) {
-    e.respondWith(fetch(e.request).then(r => guardar(e.request, r)).catch(() => caches.match(e.request)));
+    e.respondWith(conFallback(fetch(e.request).then(r => guardar(e.request, r)).catch(() => caches.match(e.request)), e.request));
     return;
   }
 
@@ -123,7 +151,7 @@ self.addEventListener('fetch', (e) => {
   //    normal se sigue sirviendo lo último —igual que antes—, pero una red
   //    lenta ya no deja la app esperando.
   if (url.origin === self.location.origin && /\.(js|css|json)$/i.test(url.pathname)) {
-    e.respondWith(redPrimeroConLimite(e.request));
+    e.respondWith(conFallback(redPrimeroConLimite(e.request), e.request));
     return;
   }
 
@@ -131,10 +159,10 @@ self.addEventListener('fetch', (e) => {
   //    por detrás.
   if (url.origin === self.location.origin) {
     e.respondWith(
-      caches.match(e.request).then(guardada => {
+      conFallback(caches.match(e.request).then(guardada => {
         const red = fetch(e.request).then(r => guardar(e.request, r)).catch(() => guardada);
         return guardada || red;
-      })
+      }), e.request)
     );
   }
   // 8) Cualquier otra cosa externa: no interferir.
