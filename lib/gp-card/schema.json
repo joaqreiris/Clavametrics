@@ -10,13 +10,13 @@
     "schema": { "const": "gp.card/v1" },
     "title": { "type": "string", "maxLength": 120 },
     "sort": {
-      "$comment": "Optional presentation-only sort. Table: { col, dir } per column. Bars: { by:'value'|'label', dir } reorders the categories. Does not change the data.",
+      "$comment": "Optional presentation-only sort. Table: { col, dir } per column. Bars: { by:'natural'|'value'|'label'|'original', dir } reorders the categories ('natural' = the dimension's own order: chronological for date/microcycle/MD, pitch line for position). Does not change the data.",
       "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["dir"],
       "properties": {
         "col": { "type": "string", "$comment": "Table viz: id of the column to sort by." },
-        "by": { "type": "string", "enum": ["value", "label"], "$comment": "Bars viz: sort categories by the primary bar value or by the category label." },
+        "by": { "type": "string", "enum": ["natural", "value", "label", "original"], "$comment": "Bars viz: sort categories by the dimension's natural order, the primary bar value, the category label, or leave them as the resolver emits them." },
         "dir": { "type": "string", "enum": ["asc", "desc"] }
       }
     },

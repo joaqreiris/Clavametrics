@@ -631,8 +631,9 @@
                // unset → cards without formatting stay byte-identical to today.
                ...(_normFmt(S.titleFormat)    ? { titleFormat:    _normFmt(S.titleFormat) }    : {}),
                ...(_normFmt(S.subtitleFormat) ? { subtitleFormat: _normFmt(S.subtitleFormat) } : {}) },
-      // Presentation-only sort. Table: { col, dir } por columna. Bars: { by:'value'|'label', dir }
-      // que reordena las categorías. Persistido para que el orden sobreviva al reload.
+      // Presentation-only sort. Table: { col, dir } por columna. Bars:
+      // { by:'natural'|'value'|'label'|'original', dir } que reordena las categorías
+      // (ver _sortKeyOf). Persistido para que el orden sobreviva al reload.
       ...((S.type === 'table' || S.type === 'bars') && S.sort ? { sort: S.sort } : {}),
       // Reference lines (bars): manual horizontal/vertical rules. Persisted top-level and spread
       // conditionally (same pattern as `sort`) so a card without lines stays byte-identical to today.
@@ -4467,33 +4468,65 @@
       if ([..._c0.values()].some(n => n >= 2)) nDims = 2;
     }
     // ── ORDEN DE CATEGORÍAS ───────────────────────────────────────────────────
-    // El botón de orden de la card fija config.sort = { by:'value'|'label', dir }.
-    //   · sin sort  → orden original (con 2 niveles se agrupa alfabético para los corchetes)
-    //   · by:'value'→ por el valor de la métrica de barras primaria (grupo, si hay 2 niveles)
-    //   · by:'label'→ alfabético por la etiqueta de categoría
+    // Modos (menú del chip, ver _barSortModes): natural / natural inverso / por valor
+    // (desc|asc) / alfabético (A→Z|Z→A) / original (tal cual lo emite el resolver).
+    // "Natural" = el orden PROPIO de la dimensión: cronológico para fecha, microciclo
+    // (por fecha de inicio real) y MD (MD-4 → MD), línea de campo para posición, y
+    // alfanumérico natural ("MC 2" antes que "MC 10") para el resto.
+    // Sin sort guardado el default es natural SOLO si la dimensión tiene orden propio;
+    // si no, se respeta el orden original (cards viejas no se reordenan solas).
     // Con 2 niveles el orden respeta la jerarquía: se reordenan los GRUPOS (nivel-1) y adentro
     // se mantiene el detalle contiguo, para que los corchetes no se partan.
-    const _barSort  = (config.sort && config.sort.by) ? config.sort : null;
-    const _sign     = _barSort && _barSort.dir === 'asc' ? 1 : -1;
+    const _sortKey  = _sortKeyOf(config);
+    const _dimIds   = (config.dimensions || []).map(d => d && d.id);
     const _primData = (datasets.find(d => !d._isLine) || {}).data || [];
     const _val      = i => { const v = Number(_primData[i]); return isNaN(v) ? -Infinity : v; };
+    const _lvl      = (i, L) => String(catDims[i][L] ?? '');
+    // Desempate/orden natural sobre TODOS los niveles de la categoría, cada uno con el
+    // criterio de su propia dimensión.
+    const _natAll = (a, b) => {
+      const n = Math.max(catDims[a].length, catDims[b].length);
+      for (let L = 0; L < n; L++) { const c = _natCmpFor(_dimIds[L])(_lvl(a, L), _lvl(b, L)); if (c) return c; }
+      return 0;
+    };
     let order = null;
-    if (nDims >= 2) {
-      // valor de grupo (nivel-1) = suma de la métrica primaria; se ordenan grupos, no barras sueltas.
-      const gv = new Map();
-      cats.forEach((_, i) => { const k = String(catDims[i][0]); gv.set(k, (gv.get(k) || 0) + _val(i)); });
-      order = cats.map((_, i) => i).sort((a, b) => {
-        if (_barSort && _barSort.by === 'value') {
-          const d = (gv.get(String(catDims[a][0])) - gv.get(String(catDims[b][0]))) * _sign;
-          if (d) return d;
-        }
-        return String(catDims[a][0]).localeCompare(String(catDims[b][0])) ||
-               String(catDims[a][1]).localeCompare(String(catDims[b][1]));
-      });
-    } else if (_barSort) {
-      order = cats.map((_, i) => i).sort((a, b) =>
-        _barSort.by === 'value' ? (_val(a) - _val(b)) * _sign
-                                : String(cats[a]).localeCompare(String(cats[b])) * _sign);
+    if (_sortKey === 'orig' && nDims >= 2) {
+      // "Original" con eje jerárquico: NO se reordena nada, sólo se juntan las categorías
+      // del mismo grupo (por orden de primera aparición) — si no, los corchetes del piso
+      // superior se parten en pedazos.
+      const seen = new Map();
+      cats.forEach((_, i) => { const k = _lvl(i, 0); if (!seen.has(k)) seen.set(k, seen.size); });
+      order = cats.map((_, i) => i).sort((a, b) => (seen.get(_lvl(a, 0)) - seen.get(_lvl(b, 0))) || (a - b));
+    } else if (_sortKey !== 'orig') {
+      if (nDims >= 2) {
+        // valor de grupo (nivel-1) = suma de la métrica primaria; se ordenan grupos, no barras sueltas.
+        const gv = new Map();
+        cats.forEach((_, i) => { const k = _lvl(i, 0); gv.set(k, (gv.get(k) || 0) + _val(i)); });
+        const nat0 = _natCmpFor(_dimIds[0]);
+        order = cats.map((_, i) => i).sort((a, b) => {
+          let d = 0;
+          switch (_sortKey) {
+            case 'val_desc':   d = gv.get(_lvl(b, 0)) - gv.get(_lvl(a, 0)); break;
+            case 'val_asc':    d = gv.get(_lvl(a, 0)) - gv.get(_lvl(b, 0)); break;
+            case 'alpha':      d = _alphaCmp(_lvl(a, 0), _lvl(b, 0)); break;
+            case 'alpha_desc': d = _alphaCmp(_lvl(b, 0), _lvl(a, 0)); break;
+            case 'nat_desc':   d = nat0(_lvl(b, 0), _lvl(a, 0)); break;
+            default:           d = nat0(_lvl(a, 0), _lvl(b, 0));
+          }
+          return d || _natAll(a, b);           // detalle contiguo y en su orden propio
+        });
+      } else {
+        order = cats.map((_, i) => i).sort((a, b) => {
+          switch (_sortKey) {
+            case 'val_desc':   return (_val(b) - _val(a)) || _natAll(a, b);
+            case 'val_asc':    return (_val(a) - _val(b)) || _natAll(a, b);
+            case 'alpha':      return _alphaCmp(cats[a], cats[b]);
+            case 'alpha_desc': return _alphaCmp(cats[b], cats[a]);
+            case 'nat_desc':   return -_natAll(a, b);
+            default:           return _natAll(a, b);
+          }
+        });
+      }
     }
     if (order) {
       const _snap = order.map(i => ({ c: cats[i], f: catFids[i], d: catDims[i] }));
@@ -4562,14 +4595,103 @@
   }
 
   // ── Orden de barras (chip in-card) ─────────────────────────────────────────
-  // Estados del ciclo: original → mayor→menor → menor→mayor → A→Z → original.
-  // Devuelve el ícono/etiqueta del estado ACTUAL (según sortObj) y el `next` al que salta.
-  function _barSortState(sortObj) {
-    const by = sortObj && sortObj.by, dir = sortObj && sortObj.dir;
-    if (by === 'value' && dir === 'desc') return { key:'vd', icon:'ti-sort-descending-2', label:_tt('gps_analysis.builder_sort_val_desc', 'High → low'), next:{ by:'value', dir:'asc' } };
-    if (by === 'value' && dir === 'asc')  return { key:'va', icon:'ti-sort-ascending-2',  label:_tt('gps_analysis.builder_sort_val_asc',  'Low → high'), next:{ by:'label', dir:'asc' } };
-    if (by === 'label')                   return { key:'az', icon:'ti-sort-a-z',           label:_tt('gps_analysis.builder_sort_alpha',    'A → Z'),      next:null };
-    return { key:'orig', icon:'ti-arrows-sort', label:_tt('gps_analysis.builder_sort_original', 'Original'), next:{ by:'value', dir:'desc' } };
+  // Modos: nat / nat_desc (orden PROPIO de la dimensión) · val_desc / val_asc (por el
+  // valor de la métrica primaria) · alpha / alpha_desc · orig (como lo emite el resolver).
+  // El chip abre un MENÚ con todos: el ciclo por clics escondía las opciones (nadie
+  // descubría que existían más de la que estaba puesta).
+
+  /** Comparador alfanumérico natural: "MC 2" va antes que "MC 10". */
+  const _alphaCmp = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+
+  /** MD-4 → MD-3 → … → MD → MD+1. Lo que no matchea va al final. */
+  function _mdOrd(v) {
+    const m = /MD\s*([+-]?\d+)?/i.exec(String(v));
+    if (!m) return 999;
+    return m[1] ? parseInt(m[1], 10) : 0;
+  }
+  /** Posición → índice de línea de campo (GK → ST) en cualquiera de las 3 granularidades. */
+  function _posOrd(v) {
+    const P = (typeof window !== 'undefined' && window.CM_POSITIONS) || {};
+    const s = String(v);
+    for (const L of [P.SELECTABLE, P.BASIC, P.GROUPS]) {
+      if (Array.isArray(L)) { const i = L.indexOf(s); if (i >= 0) return i; }
+    }
+    return 999;
+  }
+  /** nombre de microciclo → fecha de inicio real (la ventana que publica el filter bar).
+   *  Sin ella el nombre ordena alfanumérico, que ya respeta MC 2 < MC 10. */
+  function _mcStartByLabel() {
+    const lbl = (typeof window !== 'undefined' && window._gpMcLabelById) || {};
+    const rng = (typeof window !== 'undefined' && window._gpMcRangeById) || {};
+    const out = new Map();
+    Object.keys(lbl).forEach(id => { const st = rng[id] && rng[id].start; if (st && !out.has(lbl[id])) out.set(lbl[id], String(st)); });
+    return out;
+  }
+  /** ¿Qué clase de orden propio tiene esta dimensión? */
+  function _dimSortKind(dimId) {
+    if (dimId === 'session_date' || dimId === 'microcycle' || dimId === 'md_code') return 'chrono';
+    if (dimId === 'position') return 'line';
+    return 'alpha';
+  }
+  /** Comparador "natural" (ascendente) de una dimensión, sobre su valor de display. */
+  function _natCmpFor(dimId) {
+    if (dimId === 'md_code')    return (a, b) => (_mdOrd(a) - _mdOrd(b)) || _alphaCmp(a, b);
+    if (dimId === 'position')   return (a, b) => (_posOrd(a) - _posOrd(b)) || _alphaCmp(a, b);
+    if (dimId === 'microcycle') return (a, b) => {
+      const m = _mcStartByLabel(), x = m.get(String(a)), y = m.get(String(b));
+      if (x && y && x !== y) return x < y ? -1 : 1;
+      return _alphaCmp(a, b);
+    };
+    return _alphaCmp;   // session_date ya viene 'YYYY-MM-DD'; el resto, alfanumérico natural
+  }
+
+  /** Modo activo de una card. Sin sort guardado: natural si la dimensión tiene orden
+   *  propio, original si no (así ninguna card vieja se reordena sola). */
+  function _sortKeyOf(config) {
+    const by = config && config.sort && config.sort.by, dir = config && config.sort && config.sort.dir;
+    if (by === 'original') return 'orig';
+    if (by === 'value')    return dir === 'asc' ? 'val_asc' : 'val_desc';
+    if (by === 'label')    return dir === 'desc' ? 'alpha_desc' : 'alpha';
+    if (by === 'natural')  return dir === 'desc' ? 'nat_desc' : 'nat';
+    const dim0 = (config && config.dimensions || [])[0];
+    return _dimSortKind(dim0 && dim0.id) === 'alpha' ? 'orig' : 'nat';
+  }
+  /** Modo → objeto persistible en config.sort (null = default). */
+  function _sortObjOf(key) {
+    switch (key) {
+      case 'nat_desc':   return { by: 'natural', dir: 'desc' };
+      case 'val_desc':   return { by: 'value',   dir: 'desc' };
+      case 'val_asc':    return { by: 'value',   dir: 'asc'  };
+      case 'alpha':      return { by: 'label',   dir: 'asc'  };
+      case 'alpha_desc': return { by: 'label',   dir: 'desc' };
+      case 'orig':       return { by: 'original', dir: 'asc' };   // dir es inerte acá; el schema lo exige
+      default:           return { by: 'natural', dir: 'asc' };
+    }
+  }
+  /** Opciones del menú para una card, con la etiqueta del "natural" según su dimensión. */
+  function _barSortModes(config) {
+    const kind = _dimSortKind(((config && config.dimensions || [])[0] || {}).id);
+    const nat  = kind === 'chrono'
+      ? { asc: [_tt('gps_analysis.builder_sort_chrono',     'Chronological'),           'ti-calendar'],
+          desc:[_tt('gps_analysis.builder_sort_chrono_rev', 'Chronological (reverse)'), 'ti-calendar'] }
+      : kind === 'line'
+      ? { asc: [_tt('gps_analysis.builder_sort_line',       'By pitch line'),           'ti-users'],
+          desc:[_tt('gps_analysis.builder_sort_line_rev',   'By pitch line (reverse)'), 'ti-users'] }
+      : { asc: [_tt('gps_analysis.builder_sort_alpha',      'A → Z'),                   'ti-sort-a-z'],
+          desc:[_tt('gps_analysis.builder_sort_alpha_rev',  'Z → A'),                   'ti-sort-a-z'] };
+    const modes = [
+      { key: 'nat',      label: nat.asc[0],  icon: nat.asc[1] },
+      { key: 'nat_desc', label: nat.desc[0], icon: nat.desc[1] },
+      { key: 'val_desc', label: _tt('gps_analysis.builder_sort_val_desc', 'High → low'), icon: 'ti-sort-descending-2' },
+      { key: 'val_asc',  label: _tt('gps_analysis.builder_sort_val_asc',  'Low → high'), icon: 'ti-sort-ascending-2' },
+    ];
+    // Con dimensión sin orden propio, "natural" YA es el alfabético → no duplicamos ítems.
+    if (kind !== 'alpha') {
+      modes.push({ key: 'alpha',      label: _tt('gps_analysis.builder_sort_alpha',     'A → Z'), icon: 'ti-sort-a-z' });
+      modes.push({ key: 'alpha_desc', label: _tt('gps_analysis.builder_sort_alpha_rev', 'Z → A'), icon: 'ti-sort-a-z' });
+    }
+    modes.push({ key: 'orig', label: _tt('gps_analysis.builder_sort_original', 'Original'), icon: 'ti-arrows-sort' });
+    return modes;
   }
 
   function _renderSortChip(body, config) {
@@ -4580,28 +4702,53 @@
       chip.className = 'gp-sort-chip';
       chip.setAttribute('role', 'button'); chip.tabIndex = 0;
       body.appendChild(chip);
-      chip.addEventListener('click', e => { e.stopPropagation(); _cycleBarsSort(body); });
-      chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _cycleBarsSort(body); } });
+      const open = e => { e.stopPropagation(); _openBarsSortMenu(chip, body); };
+      chip.addEventListener('click', open);
+      chip.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } });
     }
-    const st = _barSortState(config.sort);
-    chip.title = _tt('gps_analysis.builder_sort_tooltip', 'Sort — click to cycle');
-    chip.innerHTML = `<i class="ti ${st.icon}"></i><span class="g">${esc(st.label)}</span>`;
-    chip.classList.toggle('is-on', st.key !== 'orig');
+    const key = _sortKeyOf(config);
+    const st  = _barSortModes(config).find(m => m.key === key) || { label: '', icon: 'ti-arrows-sort' };
+    chip.title = _tt('gps_analysis.builder_sort_tooltip', 'Sort — click to choose');
+    chip.innerHTML = `<i class="ti ${st.icon}"></i><span class="g">${esc(st.label)}</span>`
+      + `<i class="ti ti-chevron-down"></i>`;
+    chip.classList.toggle('is-on', key !== 'orig');
   }
 
-  /** Avanza el orden de una card de barras al siguiente estado del ciclo y persiste.
-   *  En el editor muta S.sort; en una card guardada, config.sort + updateDashboardCard. */
-  function _cycleBarsSort(body) {
+  /** Menú de orden de una card de barras. Sin makePopover (sólo vive en la página GPS
+   *  analysis) cae al ciclo simple, para no dejar el chip muerto. */
+  function _openBarsSortMenu(anchor, body) {
     const cardEl = body.closest('.gp-c'); if (!cardEl) return;
+    // El menú sólo necesita dimensiones + orden actual; en el editor se leen de S directamente
+    // (no hace falta armar el config entero para abrir una lista).
+    const config = (draftCard && cardEl === draftCard)
+      ? { dimensions: S.dimensions || [], sort: S.sort }
+      : cardEl.__config;
+    if (!config) return;
+    const cur   = _sortKeyOf(config);
+    const modes = _barSortModes(config);
+    if (typeof makePopover !== 'function') {                       // fallback: siguiente modo
+      const i = Math.max(0, modes.findIndex(m => m.key === cur));
+      _applyBarsSort(body, modes[(i + 1) % modes.length].key);
+      return;
+    }
+    makePopover(anchor, modes.map(m => ({
+      label: (m.key === cur ? '✓ ' : '') + m.label, icon: m.icon, key: m.key,
+    })), item => _applyBarsSort(body, item.key));
+  }
+
+  /** Fija el orden de una card de barras y persiste.
+   *  En el editor muta S.sort; en una card guardada, config.sort + updateDashboardCard. */
+  function _applyBarsSort(body, key) {
+    const cardEl = body.closest('.gp-c'); if (!cardEl) return;
+    const next = _sortObjOf(key);
     if (draftCard && cardEl === draftCard) {
-      S.sort = _barSortState(S.sort).next;   // el editor persiste al guardar la card
+      S.sort = next;                         // el editor persiste al guardar la card
       renderCard();
       return;
     }
     const config = cardEl.__config; if (!config) return;
-    const next = _barSortState(config.sort).next;
-    if (next) config.sort = next; else delete config.sort;
-    if (cardEl.__cfg) cardEl.__cfg.sort = next || null;
+    config.sort = next;
+    if (cardEl.__cfg) cardEl.__cfg.sort = next;
     resolveAndRenderCard(cardEl, config);
     const cardId = cardEl.dataset.cardId;
     if (_isUuid(cardId) && typeof window.updateDashboardCard === 'function') {
