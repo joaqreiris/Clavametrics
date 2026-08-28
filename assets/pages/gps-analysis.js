@@ -182,6 +182,18 @@ function _posPopover(pop, anchor) {
   requestAnimationFrame(() => {
     const pr = pop.getBoundingClientRect();
     if (pr.right > innerWidth - 8) pop.style.left = (innerWidth - pr.width - 8) + 'px';
+    // Listas largas: abrir hacia el lado con más aire y limitar la altura al espacio
+    // disponible, para que el popover pueda scrollear en vez de quedar cortado.
+    const GAP = 8;
+    const below = innerHeight - r.bottom - GAP;
+    const above = r.top - GAP;
+    if (pr.height > below && above > below) {                 // flip hacia arriba
+      pop.style.maxHeight = Math.max(120, above - 4) + 'px';
+      pop.style.top = 'auto';
+      pop.style.bottom = (innerHeight - r.top + 4) + 'px';
+    } else {
+      pop.style.maxHeight = Math.max(120, below - 4) + 'px';
+    }
   });
 }
 
