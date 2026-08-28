@@ -133,6 +133,29 @@ describe('cmLock.claim', () => {
     expect(states.at(-1).isOwner).toBe(true);
   });
 
+  it('warnOnly avisa pero no bloquea, y dice quién está del otro lado', async () => {
+    const states = [];
+    const lock = cmLock.claim({
+      resource: 'exercise:e1', clubId: 'c1', warnOnly: true,
+      onState: s => states.push(s),
+    });
+    await settle();
+
+    sync({ 'tab-otro': [other({ resource: 'exercise:e1' })], [TAB]: [meMeta({ since: 5000 })] });
+    expect(states.at(-1).isOwner).toBe(false);   // el candado es de Martín…
+    expect(lock.isOwner()).toBe(true);           // …pero acá nadie queda bloqueado
+    expect(lock.otherEditor().name).toBe('Martín');
+  });
+
+  it('sin recurso (borrador sin guardar) no compite con nadie', async () => {
+    const lock = cmLock.claim({ resource: '', clubId: 'c1', warnOnly: true });
+    await settle();
+
+    sync({ 'tab-otro': [other({ resource: '' })], [TAB]: [meMeta({ resource: '', since: 5000 })] });
+    expect(lock.otherEditor()).toBeNull();
+    expect(lock.isOwner()).toBe(true);
+  });
+
   it('al cambiar de día se anuncia el nuevo recurso', async () => {
     const lock = cmLock.claim({ resource: 'dp:t1:2026-08-28', clubId: 'c1' });
     await settle();

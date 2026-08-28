@@ -35,6 +35,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js?v=gps-avg"></script>
+<script src="assets/cm-lock.js"></script>
 <script src="assets/feature-teaser.js"></script>
 <script src="assets/exercise-folders.js"></script>
 <script src="assets/sidebar.js" defer></script>
@@ -3928,6 +3929,7 @@
 
   // ── Exercise library state ───────────────────────────────────────
   let currentExerciseId    = null;
+  let _plLock              = null;
   let exercises            = [];
   let _exQuery             = '';
   let currentManualOrient  = null;
@@ -4275,7 +4277,8 @@
     const {error}=await window.sb.from('exercises').delete().eq('id',id).eq('club_id',clubId);
     if(error){alert(tt('planner.error_prefix', `Error: ${error.message}`, {msg: error.message}));return;}
     if(currentExerciseId===id){
-      currentExerciseId=null; _curSourceType='canvas'; plSetImageMode(false); fc.clear(); fc.renderAll(); _arrowData.clear();
+      currentExerciseId=null;
+      if (_plLock) _plLock.setResource(''); _curSourceType='canvas'; plSetImageMode(false); fc.clear(); fc.renderAll(); _arrowData.clear();
       document.getElementById('plExSummarySection').style.display='none';
       document.getElementById('plExConfigSection').style.display='none';
       const lbl=document.getElementById('plFieldLabel'); if(lbl)lbl.textContent=tt('planner.no_exercise_selected','No exercise selected');
@@ -4376,6 +4379,7 @@
     const ex = exercises.find(e => e.id === id);
     if (!ex) return;
     currentExerciseId = id;
+    if (_plLock) _plLock.setResource('exercise:' + id);
 
     // Show config sections
     document.getElementById('plExSummarySection')?.style.setProperty('display', '');
@@ -4664,6 +4668,12 @@
   // First save with no row yet → INSERT (carrying the current canvas); later
   // saves → UPDATE. Never inserts on every stroke — only on explicit Save/New.
   async function saveExercise() {
+    // Otro lo tiene abierto: guardar reemplaza su versión entera, así que la
+    // decisión de pisar se toma a conciencia y no de casualidad.
+    const _otro = _plLock && _plLock.otherEditor();
+    if (_otro && currentExerciseId && !confirm(
+      tt('planner.confirm_overwrite_other', `${_otro.name} is editing this exercise. Save anyway and overwrite their version?`,
+         { name: _otro.name }))) return;
     const btn = document.getElementById('plSaveBtn');
     btn.disabled = true;
     btn.innerHTML = `<i class="ti ti-loader" style="font-size:14px"></i>${tt('common.saving','Saving…')}`;
@@ -4931,6 +4941,20 @@
   // loads that exercise into the canvas for editing. No param → empty (New exercise).
   const _deepId = new URLSearchParams(location.search).get('exercise');
   if (_deepId && exercises.some(e => e.id === _deepId)) await selectExercise(_deepId);
+
+  // ── Aviso de edición simultánea ──────────────────────────────────
+  // Modo warnOnly: acá se guarda con el botón Save, así que bloquear dejaría a
+  // alguien con un dibujo a medio hacer sin poder guardarlo. Se avisa quién más
+  // tiene el ejercicio abierto y, al guardar, se pregunta antes de pisar.
+  // Ver assets/cm-lock.js.
+  if (window.cmLock && clubId) {
+    _plLock = window.cmLock.claim({
+      resource: currentExerciseId ? 'exercise:' + currentExerciseId : '',
+      clubId,
+      label:    tt('planner.lock_label', 'this exercise'),
+      warnOnly: true,
+    });
+  }
 
   // ── Re-paint JS-generated chrome on language change ──────────────
   // Only re-render text-bearing UI; never touch the canvas objects / state.

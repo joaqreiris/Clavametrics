@@ -158,6 +158,9 @@
 
     function apply(state) {
       if (released || !me) return;
+      // Sin recurso no se compite por nada (un borrador que todavía no existe en
+      // la base): ni cartel ni bloqueo.
+      if (!resource) { _guardState.blocked = false; hideBar(); return; }
       const members = membersOf(state).filter(m => m.resource === resource);
       const owner   = members[0] || me;
       const editors = members.filter(m => m.forced || m.tabId === owner.tabId);
@@ -172,15 +175,23 @@
       if (!isOwner && !_guardState.blocked && opts.onLosing) {
         try { opts.onLosing(); } catch (e) { console.warn('[cmLock] flush', e); }
       }
-      _guardState.blocked = !isOwner;
-      if (opts.scope) {
+      // warnOnly: pantallas que guardan con un botón explícito (Planner). Ahí
+      // bloquear es peor que el problema — te deja con un dibujo a medio hacer
+      // que no podés guardar. Se avisa y la decisión de pisar es consciente.
+      _guardState.blocked = !isOwner && !opts.warnOnly;
+      if (opts.scope && !opts.warnOnly) {
         if (!isOwner && !scopeTouched.length) scopeTouched = lockScope(opts.scope);
         if (isOwner && scopeTouched.length)  { unlockScope(opts.scope, scopeTouched); scopeTouched = []; }
       }
       try { opts.onState && opts.onState({ isOwner, owner, others, forced }); } catch (e) { console.warn('[cmLock]', e); }
 
       const what = opts.label || tt('lock.this_page', 'this page');
-      if (!isOwner) {
+      if (!isOwner && opts.warnOnly) {
+        paintBar(`${avatarHtml(owner)}<span>${esc(tt('lock.editing_by',
+          `${owner.name} is editing ${what}`, { name: owner.name, what }))}` +
+          `<br><span style="color:var(--cm-fg-muted,#666);font-weight:400">` +
+          `${esc(tt('lock.warn_only_hint', 'You can keep working — saving will ask before overwriting'))}</span></span>`, 'warn');
+      } else if (!isOwner) {
         // El aviso dice explícitamente que los controles se esconden: sin eso, la
         // pantalla sin botones se lee como «desapareció el planning».
         paintBar(
@@ -205,6 +216,7 @@
       } else {
         hideBar();
       }
+      _owner = owner;
       wasOwner = isOwner;
       everSynced = true;
     }
@@ -235,8 +247,11 @@
     }
     connect();
 
+    let _owner = null;
     const api = {
       isOwner: () => !_guardState.blocked,
+      // Quién está editando esto, o null si soy yo (o no hay nadie más).
+      otherEditor: () => (_owner && me && _owner.userId !== me.userId) ? _owner : null,
       // Cambiar de día/sesión sin recargar: se anuncia el nuevo recurso y el
       // candado del anterior queda libre para el que estaba esperando.
       setResource(next) {

@@ -106,7 +106,17 @@ Tres capas de bloqueo, según lo que tenga cada pantalla:
 - **Gym Planner** usa `scope`: se apagan los cuerpos de las tarjetas y las acciones de sus encabezados, y quedan vivos el pager de días, el print y el PDF. Solo se revierte lo que apagó el helper — un campo que ya venía deshabilitado sigue así.
 - **`guard`** envuelve funciones globales (autosaves con timer ya lanzados, atajos) como red de seguridad para lo que no pasa por el DOM.
 
-Falta: Planner (la pizarra de ejercicios, `resource: exercise:<id>`) y Lineup.
+Tres modos según cómo guarde la pantalla:
+
+| Pantalla | Recurso | Modo |
+|---|---|---|
+| Daily Planning | `dp:<equipo>:<fecha>` | bloquea (reusa `_dpReadOnly`) |
+| Gym Planner | `gym:<equipo>:<fecha>` | bloquea (`scope`) |
+| Planner | `exercise:<id>` | **solo avisa** (`warnOnly`) |
+
+**`warnOnly`** es para las pantallas que guardan con un botón explícito. En Planner bloquear sería peor que el problema: te dejaría con un dibujo a medio hacer que no podés guardar. Entonces avisa quién más lo tiene abierto y, al pulsar Save, pregunta antes de reemplazar la versión del otro (`lock.otherEditor()`). Con un borrador que todavía no existe en la base el recurso va vacío y no compite con nadie.
+
+Falta: Lineup.
 
 **B · Guardado por campo en vez de por objeto** — 1 a 2 semanas
 Dejar de mandar la fila entera. Cada cambio escribe solo lo suyo:
