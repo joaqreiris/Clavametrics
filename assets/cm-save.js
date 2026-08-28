@@ -74,8 +74,15 @@
       const { data: fila } = await window.sb.from(o.table).select('*').eq('id', o.id).maybeSingle();
       if (!fila) return { status: 'gone', sent: cambios };
       // La página refresca lo que el usuario NO está editando, así ve lo del
-      // otro sin perder lo suyo.
-      if (o.onRemote) { try { o.onRemote(fila, cambios); } catch (e) { console.warn('[cmSave] onRemote', e); } }
+      // otro sin perder lo suyo. Si devuelve algo, reemplaza esas columnas en el
+      // reintento: es la vía para fusionar un jsonb clave por clave (mis
+      // métricas sobre las suyas) en vez de pisarle el objeto entero.
+      if (o.onRemote) {
+        try {
+          const rehecho = o.onRemote(fila, cambios);
+          if (rehecho && typeof rehecho === 'object') Object.assign(cambios, rehecho);
+        } catch (e) { console.warn('[cmSave] onRemote', e); }
+      }
       since = fila.updated_at || null;
     }
     // Dos intentos y la fila sigue moviéndose: alguien está guardando encima

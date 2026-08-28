@@ -37,6 +37,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/cm-realtime.js"></script>
 <script src="assets/cm-lock.js"></script>
+<script src="assets/cm-save.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="assets/gps-acwr.js"></script>
@@ -2674,7 +2675,7 @@ async function _gpLoadDayInner(dateStr) {
   // Load ALL of the day's sessions (same set as Daily Planning) so we can offer a switcher back to
   // the field session. The gym planner still edits the day's gym session.
   const { data: _rows } = await window.sb.from('training_sessions')
-    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content,match_day_offset')
+    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content,match_day_offset,updated_at,club_id,session_date')
     .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr).eq('is_historical', false)
     .order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true });
   _gpDaySessions = _rows || [];
@@ -2682,6 +2683,9 @@ async function _gpLoadDayInner(dateStr) {
   const sess = gymSessions[0] || null;
 
   _gpCurrentSessionId = sess?.id || null;
+  // Foto de lo que hay en la base + testigo de conflicto (ver assets/cm-save.js).
+  _gpSaved = sess ? gpRowToPayload(sess) : null;
+  _gpSince = sess?.updated_at || null;
   _gpPublished = sess?.published || false;
   _gpRenderSessionSwitch(dateStr);
 
@@ -2784,6 +2788,53 @@ function gpSaveNow() {
   gpAutoSave();
 }
 
+// Lo último que sabemos que hay en la base, en el mismo formato que el payload,
+// y su updated_at. Ver assets/cm-save.js.
+let _gpSaved = null, _gpSince = null;
+function gpRowToPayload(f) {
+  return {
+    club_id:          f.club_id,
+    session_date:     f.session_date,
+    session_type:     'gym',
+    title:            f.title || null,
+    session_time:     f.session_time ? String(f.session_time).slice(0, 5) : null,
+    duration:         f.duration ?? null,
+    location:         f.location || null,
+    notes:            f.notes || null,
+    estimated_rpe:    f.estimated_rpe || null,
+    match_day_offset: f.match_day_offset || null,
+    gym_content:      f.gym_content || null,
+  };
+}
+// Otro guardó la sesión de gym entre que la abrimos y que fuimos a escribir: se
+// refresca lo que el usuario NO está tocando y se reintenta lo suyo encima.
+const GP_REMOTE_FIELDS = {
+  title: 'gpTitle', session_time: 'gpStartTime', duration: 'gpDuration',
+  location: 'gpLocation', notes: 'gpNotes', estimated_rpe: 'gpEstRpe',
+};
+function gpApplyRemoteSession(fila, mios) {
+  const remoto = gpRowToPayload(fila);
+  const foco = document.activeElement && document.activeElement.id;
+  let tocados = 0;
+  Object.entries(GP_REMOTE_FIELDS).forEach(([col, id]) => {
+    if (mios && col in mios) return;
+    const el = document.getElementById(id);
+    if (!el || el.id === foco) return;
+    const v = remoto[col] == null ? '' : String(remoto[col]);
+    if (String(el.value == null ? '' : el.value) !== v) { el.value = v; tocados++; }
+  });
+  // El plan en sí (bloques, filas, roster) solo se repinta si el usuario no lo
+  // estaba editando: si lo tocó, manda lo suyo — fusionar un árbol así no se
+  // puede sin CRDT, y para eso está el candado.
+  if (!(mios && 'gym_content' in mios) && remoto.gym_content) {
+    try { gpApplyContent(remoto.gym_content); tocados++; } catch (e) { console.warn('[gym] repintar remoto', e); }
+  }
+  _gpSaved = remoto;
+  _gpSince = fila.updated_at || _gpSince;
+  if (tocados) gpToast(tt('gym_planner.remote_fields_updated',
+    'Someone else changed this gym session — what you were not editing was refreshed.'));
+}
+
 async function gpAutoSave() {
   // Día a medio cargar → reintentar en breve (guardar ahora escribiría estado stale).
   if (_gpDayLoading) { clearTimeout(_gpSaveTimer); _gpSaveTimer = setTimeout(gpAutoSave, 400); return; }
@@ -2815,13 +2866,23 @@ async function gpAutoSave() {
     gym_content:   content,
   };
   if (_gpCurrentSessionId) {
-    const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
-    if (error) { console.error('gym autosave failed:', error); _gpSaveDirty = true; return; }
+    const r = await window.cmSave.patch({
+      table: 'training_sessions', id: _gpCurrentSessionId, clubId: _gpClubId,
+      prev: _gpSaved, next: payload, since: _gpSince,
+      onRemote: gpApplyRemoteSession,
+    });
+    if (r.status === 'error') { console.error('gym autosave failed:', r.error); _gpSaveDirty = true; return; }
+    if (r.status === 'conflict') { gpToast(tt('gym_planner.save_conflict',
+      'Someone else is saving this gym session right now — try again in a moment.')); _gpSaveDirty = true; return; }
+    if (r.status !== 'noop') { _gpSince = r.updatedAt || _gpSince; _gpSaved = { ...(_gpSaved || {}), ...r.sent }; }
   } else {
     payload.team_id = _gpTeamId;
-    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id,updated_at').single();
     if (error) { console.error('gym autosave failed:', error); _gpSaveDirty = true; return; }
-    if (data?.id) { _gpCurrentSessionId = data.id; _gpUpdatePublishBtn(); }
+    if (data?.id) {
+      _gpCurrentSessionId = data.id; _gpUpdatePublishBtn();
+      _gpSaved = { ...payload }; _gpSince = data.updated_at || null;
+    }
   }
   if (_gpPartsDirty && _gpCurrentSessionId) await gpSyncParticipants();
   _gpSaveDirty = false;

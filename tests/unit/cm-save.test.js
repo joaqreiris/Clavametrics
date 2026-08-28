@@ -93,6 +93,23 @@ describe('cmSave.patch', () => {
     expect(refrescos[0].mios).toEqual({ notes: 'nuevas' });       // …y de qué NO tiene que tocar
   });
 
+  it('onRemote puede rehacer el patch: así se fusiona un jsonb clave por clave', async () => {
+    filasAfectadas = [false, true];
+    // En la base ya está el target de sprint que puso el otro.
+    filaEnBase = { id: 's1', gps_targets: { sprint: 200 }, updated_at: 't9' };
+
+    const r = await cmSave.patch({
+      table: 'training_sessions', id: 's1', clubId: 'c1',
+      prev: { gps_targets: {} }, next: { gps_targets: { dist: 5000 } }, since: 't1',
+      // Mis métricas encima de las suyas, en vez de devolverle el objeto entero
+      // como estaba en mi pantalla.
+      onRemote: fila => ({ gps_targets: { ...fila.gps_targets, dist: 5000 } }),
+    });
+
+    expect(r.status).toBe('merged');
+    expect(updates[1].patch.gps_targets).toEqual({ sprint: 200, dist: 5000 });   // sobreviven las dos
+  });
+
   it('si la fila sigue moviéndose corta en el segundo intento, no reintenta para siempre', async () => {
     filasAfectadas = [false, false];
     filaEnBase = { id: 's1', updated_at: 't9' };

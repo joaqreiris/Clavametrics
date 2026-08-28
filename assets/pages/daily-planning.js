@@ -1551,9 +1551,24 @@ let _dpProjSaveTimer = null;
 let _dpProjPending = null;   // { sid, snap } captured when a save is scheduled
 function _dpWriteTargets(sid, snap){
   if (!sid) return Promise.resolve();
-  return window.sb.from('training_sessions')
-    .update({ gps_targets: snap }).eq('id', sid).eq('club_id', _dpClubId)
-    .then(({ error }) => { if (error) console.warn('[gps_targets] save failed:', error.message); });
+  // gps_targets es un mapa métrica→valor, así que SÍ se puede fusionar: si otro
+  // tocó la sesión mientras tanto, se reintenta con las métricas de él más las
+  // que cambié yo encima, en vez de devolverle el objeto entero como estaba en
+  // mi pantalla. Ver assets/cm-save.js.
+  const prevTargets = (_dpSaved && _dpSaved.gps_targets) || {};
+  return window.cmSave.patch({
+    table: 'training_sessions', id: sid, clubId: _dpClubId,
+    prev: { gps_targets: prevTargets }, next: { gps_targets: snap }, since: _dpSince,
+    onRemote: (fila) => {
+      const mias = window.cmSave.diff(prevTargets, snap);
+      return { gps_targets: { ...(fila.gps_targets || {}), ...mias } };
+    },
+  }).then(r => {
+    if (r.status === 'error') { console.warn('[gps_targets] save failed:', r.error && r.error.message); return; }
+    if (r.status === 'noop') return;
+    _dpSince = r.updatedAt || _dpSince;
+    if (_dpSaved) _dpSaved.gps_targets = r.sent.gps_targets;
+  });
 }
 // Capture session id + a SNAPSHOT of targets NOW (not at fire time) so navigating
 // to another day before the debounce can't write to the wrong/empty session.
@@ -2377,6 +2392,9 @@ function dpRowToPayload(f) {
     microcycle_id:    f.microcycle_id || null,
     coach_id:         f.coach_id || null,
     club_id:          f.club_id,
+    // No va en el payload del autosave (los targets se guardan aparte), pero se
+    // guarda acá para poder fusionarlos métrica por métrica ante un conflicto.
+    gps_targets:      (f.gps_targets && typeof f.gps_targets === 'object') ? f.gps_targets : {},
   };
 }
 // Alguien guardó la sesión entre que la abrimos y que fuimos a escribir. Se

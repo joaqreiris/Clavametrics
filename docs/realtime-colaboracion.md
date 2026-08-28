@@ -141,7 +141,15 @@ Requiere el trigger de `updated_at` (al final de `db/schema.sql`). **La columna 
 
 Esto es lo único que cubre el caso **Calendar contra Daily Planning**: la misma fila la escriben cinco lugares distintos (Calendar, Daily Planning, Gym Planner, gps-sync, RPE) y ningún candado los une, porque están en pantallas distintas.
 
-Falta llevarlo a `gpAutoSave` (Gym Planner, que además manda `gym_content` entero) y a los `gps_targets`.
+Cableado en **Daily Planning**, **Gym Planner** y los **targets de GPS**:
+
+| Dónde | Qué se fusiona ante un conflicto |
+|---|---|
+| Cabecera de la sesión (Daily Planning / Gym Planner) | Campo por campo. Lo que el otro cambió se repinta; el campo con el cursor no se toca nunca |
+| `gps_targets` | **Métrica por métrica**: se reintenta con las suyas más las mías encima, no con mi objeto entero |
+| `gym_content` | Entero, gana el último. Es un árbol de bloques y filas: fusionarlo sin CRDT no se puede, y para eso está el candado (que en Gym Planner sí bloquea) |
+
+Para fusionar un jsonb, `onRemote` puede **devolver un objeto**: esas columnas reemplazan las del reintento. Así los targets se resuelven sin `jsonb_set` ni RPC.
 
 <details><summary>Plan original de B</summary>
 
