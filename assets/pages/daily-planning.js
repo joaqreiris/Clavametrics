@@ -1770,15 +1770,27 @@ async function dpRenderPrintSheet() {
     const mdBadge = md ? `<span style="display:inline-block;font:700 9px ${MONO};color:#fff;background:var(--club-accent);padding:2px 6px;border-radius:4px">MD ${esc(md)}</span>` : '';
     const cells = [];
     const t1 = val('dpStartTime'), t2 = val('dpEndTime');
-    if (t1||t2) cells.push({l:tt('daily_planning.sheet_time','Time'), v:`${esc(t1||'—')}–${esc(t2||'—')}`, span:1});
-    if (mcTxt)  cells.push({l:tt('daily_planning.sheet_microcycle','Microcycle'), v:esc(mcTxt), span:1});
-    if (md || mc?.rival) cells.push({l:tt('daily_planning.sheet_next_match','Next match'), v:`${mc?.rival?esc(mc.rival)+' ':''}${mdBadge}`, span:1});
+    if (t1||t2) cells.push({l:tt('daily_planning.sheet_time','Time'), v:`${esc(t1||'—')}–${esc(t2||'—')}`});
+    if (mcTxt)  cells.push({l:tt('daily_planning.sheet_microcycle','Microcycle'), v:esc(mcTxt)});
+    if (md || mc?.rival) cells.push({l:tt('daily_planning.sheet_next_match','Next match'), v:`${mc?.rival?esc(mc.rival)+' ':''}${mdBadge}`});
     const _orMap = {introductory:'daily_planning.introductory',activation:'daily_planning.activation',muscle_tension:'daily_planning.muscle_tension',speed:'daily_planning.speed',duration:'daily_planning.duration',recovery:'daily_planning.recovery'};
     const _foMap = {tactical:'daily_planning.tactical',individual:'daily_planning.individual',physical:'daily_planning.physical',sectorial:'daily_planning.sectorial'};
-    const or = val('dpOrientation'); if (or) cells.push({l:tt('daily_planning.sheet_orientation','Orientation'), v:esc(_orMap[or]?tt(_orMap[or],cap(or)):cap(or)), span:1});
-    const fo = val('dpFocus');       if (fo) cells.push({l:tt('daily_planning.sheet_focus','Focus'), v:esc(_foMap[fo]?tt(_foMap[fo],cap(fo)):cap(fo)), span:2});
-    const metaGrid = cells.length ? `<div class="dsp-brk" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
-      ${cells.map(c=>`<div style="grid-column:span ${c.span};background:#fff;padding:8px 11px">
+    const or = val('dpOrientation'); if (or) cells.push({l:tt('daily_planning.sheet_orientation','Orientation'), v:esc(_orMap[or]?tt(_orMap[or],cap(or)):cap(or))});
+    const fo = val('dpFocus');       if (fo) cells.push({l:tt('daily_planning.sheet_focus','Focus'), v:esc(_foMap[fo]?tt(_foMap[fo],cap(fo)):cap(fo))});
+    // El fondo gris del grid ES la línea divisoria, así que toda columna sin celda se
+    // imprime como un bloque gris vacío (pasaba con 5 datos: 4 arriba y Focus solo abajo).
+    // Por eso las filas se completan siempre: la última reparte las columnas sobrantes
+    // entre sus celdas, y con menos de 4 datos el grid usa exactamente esas columnas.
+    const _mgCols = Math.min(cells.length, 4) || 1;
+    const _mgLast = (cells.length % _mgCols) || _mgCols;   // cuántas celdas quedan en la última fila
+    const _mgFrom = cells.length - _mgLast;                // índice donde arranca esa última fila
+    const _mgSpan = i => {
+      if (i < _mgFrom) return 1;
+      const k = i - _mgFrom;
+      return Math.floor(_mgCols / _mgLast) + (k < (_mgCols % _mgLast) ? 1 : 0);
+    };
+    const metaGrid = cells.length ? `<div class="dsp-brk" style="display:grid;grid-template-columns:repeat(${_mgCols},1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      ${cells.map((c,i)=>`<div style="grid-column:span ${_mgSpan(i)};background:#fff;padding:8px 11px">
         <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF">${esc(c.l)}</div>
         <div style="font:${c.muted?'500 11.5px':'600 13px'} ${FONT};color:${c.muted?'#5B6470':'#15181D'};margin-top:3px">${c.v}</div>
       </div>`).join('')}
