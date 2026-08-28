@@ -676,7 +676,7 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes,team_id').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,team_id,date,adaptation_date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,adaptation_applied_at,adaptation_applied_by,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).or(`adaptation_date.eq.${dateStr},and(adaptation_date.is.null,date.eq.${dateStr})`),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets,gym_content,updated_at,coach_id,club_id,session_date').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('session_time', { ascending: true, nullsFirst: true }).order('created_at', { ascending: true })
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   _dpDaySessions = sessResult.data || [];
@@ -698,6 +698,11 @@ async function loadDay(dateStr) {
   _dpPreferredSessionId = sess?.id || null;
   _dpCurrentSessionId = sess?.id || null;
   _dpRenderSessionSwitch();   // after _dpCurrentSessionId, which marks the active tab
+  // Foto de lo que hay en la base: contra esto se compara para mandar SOLO lo
+  // que cambió, y `updated_at` es el testigo de que nadie la tocó mientras
+  // tanto. Ver assets/cm-save.js.
+  _dpSaved = sess ? dpRowToPayload(sess) : null;
+  _dpSince = sess?.updated_at || null;
   _dpPublished = sess?.published || false;
   _dpGpsTargets = (sess && sess.gps_targets && typeof sess.gps_targets === 'object') ? sess.gps_targets : {};
   const titleInput = document.getElementById('dpSessionTitle');
@@ -2352,6 +2357,54 @@ async function saveManualExercise() {
 }
 
 // ── Session info autosave ──
+// Lo último que sabemos que hay en la base (en el mismo formato que el payload,
+// para poder compararlos campo a campo) y su updated_at.
+let _dpSaved = null, _dpSince = null;
+const _dpHM = t => t ? String(t).slice(0, 5) : null;   // '08:30:00' (base) → '08:30' (input)
+function dpRowToPayload(f) {
+  return {
+    title:            f.title || 'Training',
+    session_date:     f.session_date,
+    session_type:     f.session_type,
+    session_time:     _dpHM(f.session_time),
+    end_time:         _dpHM(f.end_time),
+    duration:         f.duration ?? null,
+    orientation:      f.orientation || null,
+    focus:            f.focus || null,
+    match_day_offset: f.match_day_offset || null,
+    notes:            f.notes || null,
+    estimated_rpe:    f.estimated_rpe || null,
+    microcycle_id:    f.microcycle_id || null,
+    coach_id:         f.coach_id || null,
+    club_id:          f.club_id,
+  };
+}
+// Alguien guardó la sesión entre que la abrimos y que fuimos a escribir. Se
+// refresca en pantalla lo que el usuario NO está tocando (así ve lo del otro
+// sin perder lo suyo) y se reintenta el guardado sobre la versión nueva.
+const DP_REMOTE_FIELDS = {
+  title: 'dpSessionTitle', session_time: 'dpStartTime', end_time: 'dpEndTime',
+  notes: 'dpNotes', estimated_rpe: 'dpEstRpe', orientation: 'dpOrientation',
+  focus: 'dpFocus', match_day_offset: 'dpMatchDay', microcycle_id: 'dpMicrocycle',
+};
+function dpApplyRemoteSession(fila, mios) {
+  const remoto = dpRowToPayload(fila);
+  const foco = document.activeElement && document.activeElement.id;
+  let tocados = 0;
+  Object.entries(DP_REMOTE_FIELDS).forEach(([col, id]) => {
+    if (mios && col in mios) return;        // ese campo lo está cambiando el usuario
+    const el = document.getElementById(id);
+    if (!el || el.id === foco) return;      // nunca pisar el campo donde está el cursor
+    const v = remoto[col] == null ? '' : String(remoto[col]);
+    if (el.tagName === 'SELECT' && v && ![...el.options].some(o => o.value === v)) return;
+    if (String(el.value == null ? '' : el.value) !== v) { el.value = v; tocados++; }
+  });
+  _dpSaved = remoto;
+  _dpSince = fila.updated_at || _dpSince;
+  if (tocados) dpToast(tt('daily_planning.remote_fields_updated',
+    'Someone else changed this session — the fields you were not editing were refreshed.'));
+}
+
 async function dpAutoSaveSession() {
   const date = _dpCurrentDate;
   const dotEl  = document.getElementById('dpSaveDot');
@@ -2399,8 +2452,15 @@ async function dpAutoSaveSession() {
 
   let saveError = null;
   if (_dpCurrentSessionId) {
-    const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
-    saveError = error;
+    const r = await window.cmSave.patch({
+      table: 'training_sessions', id: _dpCurrentSessionId, clubId: _dpClubId,
+      prev: _dpSaved, next: payload, since: _dpSince,
+      onRemote: dpApplyRemoteSession,
+    });
+    if (r.status === 'error') saveError = r.error;
+    else if (r.status !== 'noop') { _dpSince = r.updatedAt || _dpSince; _dpSaved = { ...(_dpSaved || {}), ...r.sent }; }
+    if (r.status === 'conflict') dpToast(tt('daily_planning.save_conflict',
+      'Someone else is saving this session right now — try again in a moment.'));
   } else {
     // Anti-duplicate guard: a session for this day/team may already exist (e.g. created from
     // Calendar) even if loadDay didn't set _dpCurrentSessionId. Re-check before inserting a second one.
@@ -2414,8 +2474,12 @@ async function dpAutoSaveSession() {
     const existingId = existing?.[0]?.id || null;
     if (existingId) {
       _dpCurrentSessionId = existingId;
-      const { error } = await window.sb.from('training_sessions').update(payload).eq('id', existingId).eq('club_id', _dpClubId);
+      // Sesión creada en otra pantalla (típico: Calendar). Se escribe entera una
+      // vez —es la primera vez que la vemos— y a partir de ahí va por diff.
+      const { data: _upd, error } = await window.sb.from('training_sessions')
+        .update(payload).eq('id', existingId).eq('club_id', _dpClubId).select('updated_at');
       saveError = error;
+      if (!error) { _dpSaved = { ...payload }; _dpSince = _upd && _upd[0] ? _upd[0].updated_at : null; }
       if (!error) {
         await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId), loadGoalkeeperActivities(_dpCurrentSessionId)]);
         _dpUpdatePublishBtn();
@@ -2429,10 +2493,12 @@ async function dpAutoSaveSession() {
         return;
       }
       payload.team_id = _dpTeamId;
-      const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+      const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id,updated_at').single();
       saveError = error;
       if (!error && data?.id) {
         _dpCurrentSessionId = data.id;
+        _dpSaved = { ...payload };            // recién creada: la base y la pantalla coinciden
+        _dpSince = data.updated_at || null;
         _dpPreferredSessionId = data.id;
         // Add the freshly-created session to the day list so its tab appears immediately
         // (double-session AM/PM) without a full reload.

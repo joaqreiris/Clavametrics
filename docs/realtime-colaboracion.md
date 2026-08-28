@@ -129,7 +129,21 @@ Activo en Daily Planning (`dp*`), Gym Planner (`gp*`) y Planner (`plEx*`).
 
 Lo que esto **no** es: ver las letras aparecer mientras el otro escribe, ni dos personas en el mismo campo a la vez. Eso es el paso 3 (CRDT).
 
-Falta: Lineup.
+Lineup usa `warnOnly` también (`lineup:<id>`): el 11 se arma a cuatro manos y frenar a alguien a mitad del armado es peor que el problema.
+
+**B · Guardado por campo — HECHO (Daily Planning)**
+Motor en [assets/cm-save.js](../assets/cm-save.js). Dos defensas, en orden:
+
+1. **Solo viaja lo que cambió.** Se guarda una foto de lo que hay en la base (`_dpSaved`, en el mismo formato que el payload para poder compararlos campo a campo) y el autosave manda únicamente las claves distintas. Dos personas en campos distintos ya no se pisan: cada update toca su columna.
+2. **El update va condicionado a `updated_at`.** Si la fila cambió desde que la leímos, no afecta ninguna fila: se relee, se refresca en pantalla lo que el usuario NO está tocando (`onRemote`, que nunca pisa el campo donde está el cursor) y se reintenta sobre la versión nueva. Dos intentos como techo — si la fila sigue moviéndose, se avisa y se corta.
+
+Requiere el trigger de `updated_at` (al final de `db/schema.sql`). **La columna existía desde siempre pero nunca se llenaba**: las 786 filas tenían `updated_at = created_at`. Sin el trigger el paso 2 no detecta nada, pero tampoco molesta — se comporta como antes.
+
+Esto es lo único que cubre el caso **Calendar contra Daily Planning**: la misma fila la escriben cinco lugares distintos (Calendar, Daily Planning, Gym Planner, gps-sync, RPE) y ningún candado los une, porque están en pantallas distintas.
+
+Falta llevarlo a `gpAutoSave` (Gym Planner, que además manda `gym_content` entero) y a los `gps_targets`.
+
+<details><summary>Plan original de B</summary>
 
 **B · Guardado por campo en vez de por objeto** — 1 a 2 semanas
 Dejar de mandar la fila entera. Cada cambio escribe solo lo suyo:
@@ -138,6 +152,8 @@ Dejar de mandar la fila entera. Cada cambio escribe solo lo suyo:
 - agregar `updated_at` + chequeo optimista: si la fila cambió desde que la leí, no piso, recargo y reaplico.
 
 Con esto dos personas pueden trabajar en la misma sesión mientras toquen cosas distintas (uno los ejercicios, otro los targets de GPS). Sigue habiendo conflicto si tocan **el mismo** campo, resuelto como "gana el último", pero acotado a ese campo y no a la sesión entera.
+
+</details>
 
 **C · CRDT (Yjs) para texto y pizarra** — 3 a 5 semanas
 Solo donde hace falta escribir *dentro del mismo texto o lienzo* a la vez: el campo de notas y el Planner (pizarra táctica). Yjs sobre `broadcast` de Supabase Realtime para el vivo, más un snapshot binario en la DB cada X segundos y al cerrar. Trae cursores ajenos y merge sin conflicto.

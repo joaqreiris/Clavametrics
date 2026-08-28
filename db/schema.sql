@@ -8017,3 +8017,15 @@ begin
 end $$;
 -- Ya publicadas de antes: availability, messages, message_reactions, channel_reads,
 -- notifications, gps_sync_jobs.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- updated_at de training_sessions — testigo para el guardado sin pisar
+-- (assets/cm-save.js). La columna existía desde siempre pero NUNCA se llenaba:
+-- las 786 filas tenían updated_at = created_at. Sin este trigger, el chequeo
+-- «¿alguien tocó la fila desde que la leí?» no puede detectar nada.
+-- La función set_updated_at() ya existe (ver más arriba en este archivo).
+-- ─────────────────────────────────────────────────────────────────────────────
+drop trigger if exists training_sessions_set_updated_at on public.training_sessions;
+create trigger training_sessions_set_updated_at
+  before update on public.training_sessions
+  for each row execute function public.set_updated_at();

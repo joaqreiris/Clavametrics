@@ -167,6 +167,7 @@
 
   // ── Module-level lineup context (set in init)
   let _lineupId   = null;
+  let _lock       = null;
   let _clubId     = null;
   let _luTeamId   = null;
   async function luInitTeamSwitch (clubId) {
@@ -1307,6 +1308,20 @@
       const lineup = await getOrCreateLineup(_clubId, match.id);
       if (lineup) {
         _lineupId = lineup.id;
+        // Aviso de edición simultánea: el 11 se arma a cuatro manos (DT y
+        // ayudante) y esta fila la escriben los dos. No bloquea —frenar a
+        // alguien a mitad del armado es peor— solo avisa quién más está
+        // adentro y marca el campo donde está parado. Ver assets/cm-lock.js.
+        if (window.cmLock && _clubId) {
+          if (_lock) _lock.setResource('lineup:' + _lineupId);
+          else _lock = window.cmLock.claim({
+            resource: 'lineup:' + _lineupId,
+            clubId:   _clubId,
+            label:    tt('lineup.lock_label', 'this lineup'),
+            warnOnly: true,
+            fields:   'input[id^="lu"], select[id^="lu"], textarea[id^="lu"]',
+          });
+        }
         state.formation = lineup.formation || '4-3-3';
         if (lineup.poster_style) state.style = lineup.poster_style;
         if (lineup.language)     state.language = lineup.language;
