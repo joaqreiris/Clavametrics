@@ -5198,11 +5198,17 @@ begin
       where p.club_id = v_club
         and p.archived_at is null
         and p.status <> 'inactive'
-        -- Not expected to check in that day: sick, unavailable, or national-team (away).
+        -- Not expected to check in that day: sick, unavailable, national-team (away) o día
+        -- libre. day_off es relativo al equipo (availability.team_id): solo excluye si es
+        -- global o del equipo de esta sesión.
         and not exists (
           select 1 from public.availability a
           where a.player_id = p.id::text and a.date = v_date
-            and a.status in ('sick','unavailable','away')
+            and (
+              a.status in ('sick','unavailable','away')
+              or (a.status = 'day_off'
+                  and (a.team_id is null or v_team is null or a.team_id = v_team))
+            )
         )
         -- Quién se espera en ESTA sesión:
         --  · con convocatoria definida (session_participants) → solo los anotados, sean del equipo que sean
