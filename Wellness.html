@@ -36,6 +36,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="triage.js"></script>
 <style>
@@ -743,7 +744,21 @@
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadIfReady(); });
     }
     if (window._wellPollId) clearInterval(window._wellPollId);
-    window._wellPollId = setInterval(() => { if (document.visibilityState === 'visible') reloadIfReady(); }, 60000);
+    // Con realtime las respuestas entran al instante; el poll queda como red de
+    // seguridad por si el socket se cae sin avisar (por eso 5 min y no 1).
+    window._wellPollId = setInterval(() => { if (document.visibilityState === 'visible') reloadIfReady(); }, 300000);
+
+    // ── Refresco en vivo ──────────────────────────────────────────
+    // El jugador completa el cuestionario y aparece en el tablero sin recargar.
+    // Ver assets/cm-realtime.js.
+    if (window.cmLive && state.cid && !window._wellLiveWired) {
+      window._wellLiveWired = true;
+      window.cmLive.watch({
+        name: 'wellness',
+        tables: [{ table: 'wellness', filter: `club_id=eq.${state.cid}` }],
+        onRefresh: async () => { if (state.inited) await loadWellness(); },
+      });
+    }
   }
 
   /* ── Retry (error state) ── */

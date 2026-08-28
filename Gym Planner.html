@@ -35,6 +35,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="assets/gps-acwr.js"></script>
@@ -3448,6 +3449,33 @@ async function gpExportPDF() {
 
   await gpLoadCustomEquip();   // club custom materials → labels + add-material dropdown
   try { await gpLoadDay(initDate); } catch (e) { console.error('gpLoadDay failed', e); }
+
+  // ── Refresco en vivo ──────────────────────────────────────────
+  // El día se pone al día solo si otro toca la sesión de gym, la convocatoria,
+  // la disponibilidad o una adaptación del físio. Nunca con autosave en vuelo.
+  // Ver assets/cm-realtime.js.
+  if (window.cmLive && _gpClubId) {
+    window.cmLive.watch({
+      name: 'gym-planner',
+      tables: [
+        { table: 'training_sessions',    filter: `club_id=eq.${_gpClubId}` },
+        { table: 'session_participants', filter: `club_id=eq.${_gpClubId}` },
+        { table: 'availability',         filter: `club_id=eq.${_gpClubId}` },
+        { table: 'treatments',           filter: `club_id=eq.${_gpClubId}` },
+      ],
+      relevant: (row, p) => {
+        if (p.table === 'training_sessions')
+          return row.session_date === _gpCurrentDate && (!row.team_id || row.team_id === _gpTeamId);
+        if (p.table === 'session_participants')
+          return (_gpDaySessions || []).some(s => s.id === row.session_id);
+        if (p.table === 'availability') return row.date === _gpCurrentDate;
+        if (p.table === 'treatments')   return (row.adaptation_date || row.date) === _gpCurrentDate;
+        return true;
+      },
+      busy: () => !!_gpSaveTimer || !!_gpSaveDirty || !!_gpDayLoading,
+      onRefresh: async () => { if (_gpCurrentDate) await gpLoadDay(_gpCurrentDate); },
+    });
+  }
 
   // Re-render JS-generated chrome when the language changes (static tags are
   // handled by the runtime; these are computed strings/dates).

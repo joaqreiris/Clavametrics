@@ -36,6 +36,7 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -1584,6 +1585,22 @@ async function reloadPlayers() {
       else if (_activeView === 'depth') renderDepthChart();
     });
   });
+
+  // ── Aviso de cambios en vivo ──────────────────────────────────
+  // El roster se arma dentro del boot, así que no se puede refrescar solo sin
+  // partirlo en funciones: alguien da de alta un jugador o lo mueve de
+  // categoría y acá salta el chip para recargar. Ver assets/cm-realtime.js.
+  if (window.cmLive && _currentClubId) {
+    window.cmLive.watch({
+      name: 'squad',
+      manual: true,
+      tables: [
+        { table: 'players',      filter: `club_id=eq.${_currentClubId}` },
+        { table: 'player_teams', filter: `club_id=eq.${_currentClubId}` },
+      ],
+      onRefresh: () => location.reload(),
+    });
+  }
 })();
 </script>
 

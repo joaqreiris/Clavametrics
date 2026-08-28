@@ -203,6 +203,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 </head>
@@ -1002,6 +1003,25 @@ async function tpInitTeams(){
   await Promise.all([tpLoadMonth(), tpLoadCatalog()]);
   tpLoadStats();
   if (openDate) tpOpenDay(openDate);
+
+  // ── Refresco en vivo ──────────────────────────────────────────
+  // Otro entrenador carga o marca un objetivo y el mes se actualiza solo.
+  // Ver assets/cm-realtime.js.
+  if (window.cmLive && _tpClubId) {
+    window.cmLive.watch({
+      name: 'tactical',
+      tables: [
+        { table: 'tactical_objectives', filter: `club_id=eq.${_tpClubId}` },
+        { table: 'tactical_catalog',    filter: `club_id=eq.${_tpClubId}` },
+      ],
+      relevant: row => !row.team_id || row.team_id === _tpTeamId,
+      busy: () => !!_tpModalDay,          // con el día abierto en el modal, no repintar debajo
+      onRefresh: async () => {
+        await Promise.all([tpLoadMonth(), tpLoadCatalog()]);
+        tpLoadStats();
+      },
+    });
+  }
 
   const rerender = () => { tpRenderMonth(); tpLoadStats(); tpRenderCatalog(); if (_tpModalDay) { const d = _tpModalDay; tpOpenDay(d); } };
   window.CM_I18N?.ready?.then(() => rerender());

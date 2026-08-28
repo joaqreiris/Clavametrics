@@ -108,6 +108,27 @@ describe('cmLive.watch', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('en modo manual nunca refresca solo, y descarta el eco propio', async () => {
+    const onRefresh = vi.fn(async () => {});
+    const w = cmLive.watch({ name: 't7', manual: true, tables: [{ table: 'players' }], onRefresh });
+
+    // Cambio ajeno: avisa (chip) pero no recarga sin permiso.
+    fire(evt('players', { id: 'p1' }));
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(onRefresh).not.toHaveBeenCalled();
+
+    // El clic del chip sí recarga.
+    w.refreshNow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+
+    // Un cambio propio no debe dejar el chip colgado: se descarta.
+    window.fetch('https://x.supabase.co/rest/v1/players', { method: 'POST' });
+    fire(evt('players', { id: 'p2' }, 'INSERT'));
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it('recupera lo perdido cuando el canal se reconecta', async () => {
     const onRefresh = vi.fn(async () => {});
     cmLive.watch({ name: 't5', tables: [{ table: 'microcycles' }], onRefresh });

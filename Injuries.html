@@ -35,6 +35,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/rehab-create.js"></script>
 <script src="assets/cm-daterange.js"></script>
@@ -2093,6 +2094,21 @@ async function savePhaseStatus(status) {
   await resolveSquadSex();
   applySquadSex();
   await loadAll();
+
+  // ── Refresco en vivo ──────────────────────────────────────────
+  // El médico carga una lesión o cambia una fase y el resto del staff lo ve
+  // sin recargar. Ver assets/cm-realtime.js.
+  if (window.cmLive && _clubId) {
+    window.cmLive.watch({
+      name: 'injuries',
+      tables: [
+        { table: 'injuries',      filter: `club_id=eq.${_clubId}` },
+        { table: 'injury_phases', filter: `club_id=eq.${_clubId}` },
+        { table: 'availability',  filter: `club_id=eq.${_clubId}` },
+      ],
+      onRefresh: async () => { await loadAll(); },
+    });
+  }
 
   // ── Event wiring ──
   // Tab segments

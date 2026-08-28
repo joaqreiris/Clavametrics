@@ -42,6 +42,7 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/assessment-norms.js"></script>
 <script src="assets/rehab-create.js"></script>
@@ -344,6 +345,18 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
  }
  renderData();
  document.addEventListener('cm:langchanged', () => { renderData(); if (typeof applyFilters==='function') applyFilters(); });
+
+ // ── Aviso de cambios en vivo ──────────────────────────────────
+ // Los planes se traen una sola vez en el boot: se avisa con el chip en vez de
+ // refrescar solo. Ver assets/cm-realtime.js.
+ if (window.cmLive && clubId) {
+   window.cmLive.watch({
+     name: 'rehab-overview',
+     manual: true,
+     tables: [{ table: 'rehab_plans', filter: `club_id=eq.${clubId}` }],
+     onRefresh: () => location.reload(),
+   });
+ }
 
   // ── CONTROLS ──
   let activeFilter = 'all';

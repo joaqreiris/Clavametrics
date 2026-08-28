@@ -32,10 +32,29 @@ Las cuatro reglas que hacen que no moleste:
 
 ### Cableado actual
 
+**Se actualizan solas** (tienen una función de recarga que se puede volver a llamar):
+
 | Pantalla | Tablas que escucha | Qué recarga |
 |---|---|---|
 | Calendar | `training_sessions`, `calendar_events`, `microcycles` | `loadSessions({silent:true})` + ribbon, o la vista mes/lista según corresponda |
 | Daily Planning | `training_sessions`, `session_exercises`, `session_participants`, `availability`, `treatments` | `loadDay(fecha actual)` |
+| Gym Planner | `training_sessions`, `session_participants`, `availability`, `treatments` | `gpLoadDay(fecha actual)` |
+| Tactical Planning | `tactical_objectives`, `tactical_catalog` | `tpLoadMonth()` + `tpLoadCatalog()` + `tpLoadStats()` |
+| Injuries | `injuries`, `injury_phases`, `availability` | `loadAll()` |
+| RPE | `rpe`, `training_sessions` | `loadRpe()` + `loadOrphans()` |
+| Wellness | `wellness` | `loadWellness()` |
+
+**Solo avisan** (`manual: true`): su carga vive inline dentro del boot, así que no hay función que llamar. Muestran el chip y, con el clic, recargan la página. Partirlas en funciones para que se refresquen solas es trabajo aparte, pantalla por pantalla.
+
+| Pantalla | Tablas que escucha |
+|---|---|
+| Squad | `players`, `player_teams` |
+| Physio | `treatments`, `injuries` |
+| Rehab & Preventives | `rehab_plans` |
+
+En RPE y Wellness había un poll cada 60 s; con realtime pasó a 5 minutos y queda solo como red de seguridad por si se cae el socket sin avisar.
+
+Sin cablear todavía: Load Monitor y Club Overview (cargan desde `assets/load-monitor.js` y `assets/club-overview.js`; son vistas analíticas, el vivo aporta menos), Hub (ya escucha `treatments` e `injuries` por su cuenta) y Availability (tiene su propio realtime, más fino: actualiza la celda sin recargar la matriz).
 
 ### Requisito de base de datos
 
@@ -49,7 +68,7 @@ Verificación: `select tablename from pg_publication_tables where pubname='supab
 2. `cmLive.watch({...})` al final del boot, apuntando `onRefresh` a la función de carga que ya existe.
 3. Si la tabla es nueva, agregarla a la publicación (mismo patrón que el bloque de `db/schema.sql`).
 
-Candidatas naturales: Gym Planner, Tactical Planning, Squad, Injuries, Load Monitor.
+Si la pantalla no tiene función de recarga, `manual: true` + `onRefresh: () => location.reload()` es la salida honesta y sin riesgo.
 
 ---
 

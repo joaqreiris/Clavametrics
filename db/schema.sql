@@ -7990,11 +7990,34 @@ alter table public.microcycles          replica identity full;
 alter table public.session_exercises    replica identity full;
 alter table public.session_participants replica identity full;
 alter table public.treatments           replica identity full;
+alter table public.tactical_objectives  replica identity full;
+alter table public.tactical_catalog     replica identity full;
+alter table public.injuries             replica identity full;
+alter table public.injury_phases        replica identity full;
+alter table public.rpe                  replica identity full;
+alter table public.wellness             replica identity full;
+alter table public.rehab_plans          replica identity full;
+alter table public.players              replica identity full;
+alter table public.player_teams         replica identity full;
+alter table public.tasks                replica identity full;
+
 alter publication supabase_realtime add table public.training_sessions;
 alter publication supabase_realtime add table public.calendar_events;
 alter publication supabase_realtime add table public.microcycles;
 alter publication supabase_realtime add table public.session_exercises;
 alter publication supabase_realtime add table public.session_participants;
 alter publication supabase_realtime add table public.treatments;
+alter publication supabase_realtime add table public.tactical_objectives;
+alter publication supabase_realtime add table public.tactical_catalog;
+alter publication supabase_realtime add table public.injuries;
+alter publication supabase_realtime add table public.injury_phases;
+alter publication supabase_realtime add table public.rpe;
+alter publication supabase_realtime add table public.wellness;
+alter publication supabase_realtime add table public.rehab_plans;
+alter publication supabase_realtime add table public.players;
+alter publication supabase_realtime add table public.player_teams;
+-- tasks: Chat & Tasks ya se suscribía a esta tabla, pero al no estar publicada
+-- las tareas nunca llegaban en vivo. Publicarla arregla esa suscripción vieja.
+alter publication supabase_realtime add table public.tasks;
 -- Ya publicadas de antes: availability, messages, message_reactions, channel_reads,
 -- notifications, gps_sync_jobs.

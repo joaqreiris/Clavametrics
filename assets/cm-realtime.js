@@ -19,6 +19,11 @@
      });
      live.stop();   // al desmontar (se hace solo en beforeunload)
 
+   Opción `manual: true` para las pantallas cuya carga vive inline dentro del
+   boot (Squad, Physio, Rehab & Preventives): ahí no hay función que recargar,
+   así que nunca se refrescan solas — solo muestran el chip y, si el usuario
+   hace clic, `onRefresh` recarga la página.
+
    Reglas de convivencia con el usuario:
    · Si el cambio lo hizo esta misma pestaña (eco), no se refresca al toque —
      se espera a que amaine la ráfaga de guardados.
@@ -90,7 +95,9 @@
     if (document.body && document.body.classList.contains('is-dragging')) return true;
     const ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return true;
-    if (document.querySelector('dialog[open], [id$="Backdrop"].is-open, .cm-modal.is-open, .modal-ov.is-open')) return true;
+    // Modal abierto: la app los nombra de varias formas (#calEvtBackdrop, #modalPhase,
+    // .cm-modal…), así que se buscan por patrón en id y en clase.
+    if (document.querySelector('dialog[open], .is-open[id*="odal"], .is-open[id*="ackdrop"], [class*="modal"].is-open, [class*="Modal"].is-open')) return true;
     return false;
   }
 
@@ -115,6 +122,9 @@
       // Ráfaga de guardados propios en curso: esperar a que termine. El refresh
       // igual se hace después — así un cambio ajeno simultáneo no se pierde.
       if (opts.tables.some(t => wroteRecently(t.table))) { schedule(RETRY_MS); return; }
+      // Pantallas cuya carga vive inline en el boot (onRefresh = recargar la
+      // página): nunca se refrescan solas, solo avisan y esperan el clic.
+      if (opts.manual) { chipShow(api); return; }
       if (busy() || defaultBusy()) { chipShow(api); schedule(RETRY_MS); return; }
       pending = false; running = true;
       chipHide(api);
@@ -131,7 +141,11 @@
         // filtrar, así que se deja pasar y decide el refetch.
         try { if (row && Object.keys(row).length > 1 && !relevant(row, payload)) return; } catch (_) {}
       }
-      schedule(wroteRecently(payload.table) ? ECHO_MS : QUIET_MS);
+      const echo = wroteRecently(payload.table);
+      // En modo manual el eco se descarta del todo: la pantalla ya muestra lo
+      // que acaba de guardar, avisarle «hay cambios» sería mentirle.
+      if (echo && opts.manual) return;
+      schedule(echo ? ECHO_MS : QUIET_MS);
     }
 
     chan = window.sb.channel('cmlive-' + id);
