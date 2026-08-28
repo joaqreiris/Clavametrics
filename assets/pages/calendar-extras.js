@@ -1273,31 +1273,66 @@ function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; 
 // calcetines, cada prenda con su color. Un juego para el calentamiento y otro
 // para el partido — el de partido sólo se dibuja los días que hay partido.
 const DS_KIT_PIECES = ['shirt','shorts','socks'];
+const DS_KIT_GROUPS = ['warmup','match','gkWarmup','gkMatch'];
 const DS_KIT_SVG = {
   shirt: '<path d="M17.5 5 23 3c1.1 2.6 6.9 2.6 8 0l5.5 2 8.5 5.2-4.6 8.2-3.4-2V43H14.5V16.4l-3.4 2L6.5 10.2 15 5Z"/>',
   shorts:'<path d="M8.5 12h31l3 30H28.5l-4.5-17-4.5 17H5.5Z"/>',
   socks: '<path d="M10.5 6h10v31a5 5 0 0 1-10 0Z"/><path d="M27.5 6h10v31a5 5 0 0 1-10 0Z"/><path d="M10.5 12.5h10M27.5 12.5h10" stroke-width="1.4"/>',
 };
+// El golero lleva la camiseta de manga larga: misma silueta, mangas hasta el puño,
+// para que se distinga de un vistazo de la del jugador de campo.
+const DS_GK_SVG = {
+  shirt: '<path d="M16 5 21 3c1.2 2.6 7.6 2.6 8.8 0L35 5 45 10.5 40.5 38 35.4 37.2 35 18V43H16V18l-.4 19.2L10.5 38 6 10.5Z"/>',
+};
+// Paleta fija de colores de camiseta (los habituales del fútbol) para no tener que
+// buscar el tono en el cuadrante del selector nativo cada vez.
+const DS_KIT_COLOURS = ['#FFFFFF','#E8E8E8','#9AA0A6','#111111','#C81E3A','#7E1220','#E8820C','#F2C230','#D8F53A','#1FA84C','#0B5C2E','#8AC4EA','#2F5FD0','#0E1C3F','#7A2AA8','#8C5A2B'];
 function dsKitDefaults(accent){
   const a = /^#[0-9a-fA-F]{6}$/.test(accent||'') ? accent : '#2F5FD0';
-  return { on:true, matchOn:true,
+  const gk = { shirt:'#1FA84C', shorts:'#111111', socks:'#111111' };
+  return { on:true, matchOn:true, gkOn:true,
     warmup:{ shirt:a, shorts:'#FFFFFF', socks:a },
-    match: { shirt:a, shorts:'#FFFFFF', socks:a } };
+    match: { shirt:a, shorts:'#FFFFFF', socks:a },
+    gkWarmup:{ ...gk }, gkMatch:{ ...gk } };
 }
 function dsKitNorm(k, accent){
   const d = dsKitDefaults(accent);
-  const out = { on:k ? k.on !== false : true, matchOn:k ? k.matchOn !== false : true, warmup:{ ...d.warmup }, match:{ ...d.match } };
-  ['warmup','match'].forEach(g => DS_KIT_PIECES.forEach(p => {
-    const v = k && k[g] && k[g][p];
-    if (/^#[0-9a-fA-F]{6}$/.test(v||'')) out[g][p] = v;
-  }));
+  const out = { on:k ? k.on !== false : true, matchOn:k ? k.matchOn !== false : true, gkOn:k ? k.gkOn !== false : true };
+  DS_KIT_GROUPS.forEach(g => {
+    out[g] = { ...d[g] };
+    DS_KIT_PIECES.forEach(p => {
+      const v = k && k[g] && k[g][p];
+      if (/^#[0-9a-fA-F]{6}$/.test(v||'')) out[g][p] = v;
+    });
+  });
   return out;
 }
+function dsKitIsGk(group){ return String(group||'').startsWith('gk'); }
+function dsKitGkGroup(group){ return group === 'match' ? 'gkMatch' : 'gkWarmup'; }
 // Prenda dibujada: relleno del color elegido + contorno que se vea sobre claro y oscuro.
-function dsKitPiece(piece, colour, size){
+function dsKitPiece(piece, colour, size, gk){
   const c = /^#[0-9a-fA-F]{6}$/.test(colour||'') ? colour : '#FFFFFF';
   const stroke = dsReadableOn(c) === '#14171C' ? '#A9AFB8' : 'rgba(255,255,255,.45)';
-  return `<svg viewBox="0 0 48 48" width="${size}" height="${size}" fill="${c}" stroke="${stroke}" stroke-width="1.6" stroke-linejoin="round">${DS_KIT_SVG[piece]}</svg>`;
+  const path = (gk && DS_GK_SVG[piece]) || DS_KIT_SVG[piece];
+  return `<svg viewBox="0 0 48 48" width="${size}" height="${size}" fill="${c}" stroke="${stroke}" stroke-width="1.6" stroke-linejoin="round">${path}</svg>`;
+}
+// Colores guardados por el club (se persisten con la plantilla del equipo).
+function dsPalette(){ return (_dsState && Array.isArray(_dsState.kitPalette)) ? _dsState.kitPalette : []; }
+function dsPaletteAdd(hex){
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex||'')) return;
+  const h = hex.toUpperCase();
+  const list = dsPalette().filter(c => c.toUpperCase() !== h);
+  list.unshift(h);
+  _dsState.kitPalette = list.slice(0, 12);
+}
+function dsPaletteRemove(hex){
+  _dsState.kitPalette = dsPalette().filter(c => c.toUpperCase() !== String(hex||'').toUpperCase());
+}
+// Tras re-renderizar el editor, dejar abierta la paleta de la prenda que se estaba tocando.
+function dsReopenKitPop(id){
+  if (!id) return;
+  const pop = document.querySelector(`#dsEditor .ds-kitpop[data-kitpop="${id}"]`);
+  if (pop){ pop.hidden = false; try { pop.scrollIntoView({ block:'nearest' }); } catch(_){} }
 }
 function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
 // Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
@@ -1358,9 +1393,9 @@ async function dsPrefillFromEvents(){
 
 // Fixed sheet labels, translatable to a chosen output language regardless of the app locale.
 const DS_L = {
-  en:{ daily_plan:'Daily plan', schedule:'Schedule', no_events:'No timed events for this day yet.', vs:'vs', home:'Home', away:'Away', directions:'Get directions', scan:'Scan or tap to open Maps', match:'Match', kickoff:'Kick-off', kit:'Kit', kit_warmup:'Warm-up', kit_match:'Match' },
-  es:{ daily_plan:'Plan del día', schedule:'Cronograma', no_events:'Todavía no hay eventos con hora para este día.', vs:'vs', home:'Local', away:'Visitante', directions:'Cómo llegar', scan:'Escaneá o tocá para abrir Maps', match:'Partido', kickoff:'Kick-off', kit:'Uniforme', kit_warmup:'Calentamiento', kit_match:'Partido' },
-  pt:{ daily_plan:'Plano do dia', schedule:'Cronograma', no_events:'Ainda não há eventos com horário para este dia.', vs:'vs', home:'Casa', away:'Fora', directions:'Como chegar', scan:'Escaneie ou toque para abrir o Maps', match:'Jogo', kickoff:'Kick-off', kit:'Uniforme', kit_warmup:'Aquecimento', kit_match:'Jogo' },
+  en:{ daily_plan:'Daily plan', schedule:'Schedule', no_events:'No timed events for this day yet.', vs:'vs', home:'Home', away:'Away', directions:'Get directions', scan:'Scan or tap to open Maps', match:'Match', kickoff:'Kick-off', kit:'Kit', kit_warmup:'Warm-up', kit_match:'Match', kit_players:'Outfield', kit_gk:'Goalkeeper' },
+  es:{ daily_plan:'Plan del día', schedule:'Cronograma', no_events:'Todavía no hay eventos con hora para este día.', vs:'vs', home:'Local', away:'Visitante', directions:'Cómo llegar', scan:'Escaneá o tocá para abrir Maps', match:'Partido', kickoff:'Kick-off', kit:'Uniforme', kit_warmup:'Calentamiento', kit_match:'Partido', kit_players:'Jugadores', kit_gk:'Portero' },
+  pt:{ daily_plan:'Plano do dia', schedule:'Cronograma', no_events:'Ainda não há eventos com horário para este dia.', vs:'vs', home:'Casa', away:'Fora', directions:'Como chegar', scan:'Escaneie ou toque para abrir o Maps', match:'Jogo', kickoff:'Kick-off', kit:'Uniforme', kit_warmup:'Aquecimento', kit_match:'Jogo', kit_players:'Jogadores', kit_gk:'Goleiro' },
 };
 function dsLang(){ const l = _dsState && _dsState.lang; if (l && l !== 'auto') return l; try { return (ttLocale()||'en').slice(0,2); } catch(_){ return 'en'; } }
 function dsT(k){ const l = dsLang(); return (DS_L[l] && DS_L[l][k]) || DS_L.en[k] || k; }
@@ -1369,7 +1404,7 @@ function dsT(k){ const l = dsLang(); return (DS_L[l] && DS_L[l][k]) || DS_L.en[k
 // per club+team so the coach doesn't retype them. Cloud (Supabase) + local cache;
 // only date / MD tag / match / timeline refresh each open.
 function dsTmplKey(){ return `cm_daysheet_tmpl_${_clubId||''}_${_activeTeamId||''}`; }
-function dsTmplData(){ return { title:_dsState.title, accent:_dsState.accent, info:(_dsState.info||[]).filter(i => !i._ev), kit:_dsState.kit, venueUrl:_dsState.venueUrl||'', format:_dsState.format||'a4', lang:_dsState.lang||'auto' }; }
+function dsTmplData(){ return { title:_dsState.title, accent:_dsState.accent, info:(_dsState.info||[]).filter(i => !i._ev), kit:_dsState.kit, kitPalette:dsPalette(), venueUrl:_dsState.venueUrl||'', format:_dsState.format||'a4', lang:_dsState.lang||'auto' }; }
 let _dsSaveTimer = null, _dsQrTimer = null;
 function dsSaveTmpl(){
   if (!_dsState) return;
@@ -1399,6 +1434,7 @@ function dsApplyTmpl(t){
       _dsState.info = _dsState.info.filter(i => i !== legacy);
     } else if (!_dsState.kit) _dsState.kit = dsKitDefaults(_dsState.accent);
   } else _dsState.kit = dsKitNorm(t.kit, _dsState.accent);
+  if (Array.isArray(t.kitPalette)) _dsState.kitPalette = t.kitPalette.filter(c => /^#[0-9a-fA-F]{6}$/.test(c||'')).map(c => c.toUpperCase()).slice(0, 12);
   if (typeof t.venueUrl === 'string') _dsState.venueUrl = t.venueUrl;
   if (t.format) _dsState.format = t.format;
   if (t.lang) _dsState.lang = t.lang;
@@ -1537,7 +1573,7 @@ async function openDaySheet(){
     info: [
       { k: tt('calendar.daysheet.info_venue','Training venue'), v:'', wide:true },
     ],
-    kit: dsKitDefaults(accent),
+    kit: dsKitDefaults(accent), kitPalette: [],
     tl: [], match: null, venueUrl:'', venueQr:'', format:'a4', lang:'auto',
   };
   _dsCurrentPlanId = null; _dsPlanName = '';
@@ -1606,15 +1642,22 @@ function dsRenderSheet(){
     </div>` : '';
   // Kit block: warm-up always, match kit only on match days
   const k = s.kit || dsKitDefaults(s.accent);
-  const kitCol = (label, set) => `<div style="background:${paper};padding:12px 13px;text-align:center">
+  const showGk = k.gkOn !== false;
+  const kitRow = (set, size, gk) => `<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px">${DS_KIT_PIECES.map(p => dsKitPiece(p, (set||{})[p], size, gk)).join('')}</div>`;
+  const kitCol = (label, group) => `<div style="background:${paper};padding:12px 13px;text-align:center">
       <div style="font:700 9px/1 ${MONO};letter-spacing:.12em;text-transform:uppercase;color:${sub}">${esc(label)}</div>
-      <div style="margin-top:9px;display:flex;align-items:flex-end;justify-content:center;gap:12px">${DS_KIT_PIECES.map(p => dsKitPiece(p, (set||{})[p], story?36:42)).join('')}</div>
+      ${showGk ? `<div style="margin-top:8px;font:600 8px/1 ${MONO};letter-spacing:.1em;text-transform:uppercase;color:${sub};opacity:.75">${esc(dsT('kit_players'))}</div>` : ''}
+      <div style="margin-top:${showGk?6:9}px">${kitRow(k[group], story?36:42, false)}</div>
+      ${showGk ? `<div style="margin-top:11px;padding-top:10px;border-top:1px dashed ${line}">
+        <div style="font:600 8px/1 ${MONO};letter-spacing:.1em;text-transform:uppercase;color:${sub};opacity:.75">${esc(dsT('kit_gk'))}</div>
+        <div style="margin-top:6px">${kitRow(k[dsKitGkGroup(group)], story?30:36, true)}</div>
+      </div>` : ''}
     </div>`;
   const showMatchKit = k.matchOn !== false && !!m;
   const kitBlock = k.on === false ? '' : `<div style="margin-bottom:20px">
       <div style="font:700 10px/1 ${MONO};letter-spacing:.14em;text-transform:uppercase;color:${sub};margin:0 0 10px;display:flex;align-items:center;gap:9px">${esc(dsT('kit'))}<span style="flex:1;height:1px;background:${line}"></span></div>
       <div style="display:grid;grid-template-columns:${showMatchKit && !story ? '1fr 1fr' : '1fr'};gap:1px;background:${line};border:1px solid ${line};border-radius:11px;overflow:hidden">
-        ${kitCol(dsT('kit_warmup'), k.warmup)}${showMatchKit ? kitCol(dsT('kit_match'), k.match) : ''}
+        ${kitCol(dsT('kit_warmup'), 'warmup')}${showMatchKit ? kitCol(dsT('kit_match'), 'match') : ''}
       </div>
     </div>`;
   // Directions block (QR survives PNG; link is clickable in the live sheet)
@@ -1675,15 +1718,45 @@ function dsRenderEditor(){
   const kit = s.kit || (s.kit = dsKitDefaults(s.accent));
   const pieceLbl = { shirt:tt('calendar.daysheet.kit_shirt','Shirt'), shorts:tt('calendar.daysheet.kit_shorts','Shorts'), socks:tt('calendar.daysheet.kit_socks','Socks') };
   const kitOff = g => g === 'match' && kit.matchOn === false;   // apagado: sólo el título y su botón
+  // Cada prenda abre una paleta: colores fijos de camiseta + los que guardó el club,
+  // y abajo el selector nativo por si hace falta un tono exacto.
+  const kitPop = (g, p) => {
+    const cur = (kit[g][p] || '#FFFFFF').toUpperCase();
+    const id = `${g}:${p}`;
+    const sw = (c, saved) => `<span class="ds-swwrap">
+        <button type="button" class="ds-swm${cur === c.toUpperCase() ? ' on' : ''}" style="background:${c}" data-kitcol="${id}|${c}" title="${c}"></button>
+        ${saved ? `<button type="button" class="ds-swx" data-palrm="${c}" data-kitpop="${id}" title="${esc(tt('calendar.daysheet.kit_colour_forget','Remove from my colours'))}"><i class="ti ti-x"></i></button>` : ''}
+      </span>`;
+    const mine = dsPalette();
+    return `<div class="ds-colpop ds-kitpop" data-kitpop="${id}" hidden>
+      <div class="ds-popsec">${esc(tt('calendar.daysheet.kit_colours_preset','Common colours'))}</div>
+      <div class="ds-swrow">${sw(s.accent, false)}${DS_KIT_COLOURS.map(c => sw(c, false)).join('')}</div>
+      <div class="ds-popsec">${esc(tt('calendar.daysheet.kit_colours_mine','My colours'))}</div>
+      <div class="ds-swrow">
+        ${mine.length ? mine.map(c => sw(c, true)).join('') : `<span class="ds-popempty">${esc(tt('calendar.daysheet.kit_colours_none','Save a colour to reuse it'))}</span>`}
+      </div>
+      <div class="ds-poprow">
+        <input type="color" class="ds-color" data-kitset="${g}" data-kitpiece="${p}" value="${esc(cur)}">
+        <button type="button" class="ds-savecol" data-paladd="${id}"><i class="ti ti-plus"></i>${esc(tt('calendar.daysheet.kit_colour_save','Save this colour'))}</button>
+      </div>
+    </div>`;
+  };
+  const kitPieces = g => `<div class="ds-kitpieces">
+      ${DS_KIT_PIECES.map(p => `<div class="ds-kitpiece">
+        <button type="button" class="ds-kitbtn" data-kitopen="${g}:${p}" title="${esc(tt('calendar.daysheet.kit_pick','Change colour'))}">${dsKitPiece(p, kit[g][p], 34, dsKitIsGk(g))}</button>
+        <span>${esc(pieceLbl[p])}</span>
+        ${kitPop(g, p)}
+      </div>`).join('')}
+    </div>`;
   const kitSet = (g, label, extra) => `<div class="ds-kitset">
       <div class="ds-kithead"${kitOff(g)?' style="margin:0"':''}><span>${esc(label)}</span>${extra}</div>
-      ${kitOff(g) ? '' : `<div class="ds-kitpieces">
-        ${DS_KIT_PIECES.map(p => `<label class="ds-kitpiece">
-          ${dsKitPiece(p, kit[g][p], 34)}
-          <span>${esc(pieceLbl[p])}</span>
-          <input type="color" class="ds-color" data-kitset="${g}" data-kitpiece="${p}" value="${esc(kit[g][p] || '#FFFFFF')}">
-        </label>`).join('')}
-      </div>`}
+      ${kitOff(g) ? '' : `
+        ${kit.gkOn !== false ? `<div class="ds-kitrowlbl">${esc(tt('calendar.daysheet.kit_players','Outfield players'))}</div>` : ''}
+        ${kitPieces(g)}
+        ${kit.gkOn !== false ? `<div class="ds-kitgk">
+          <div class="ds-kitrowlbl">${esc(tt('calendar.daysheet.kit_gk','Goalkeeper'))}</div>
+          ${kitPieces(dsKitGkGroup(g))}
+        </div>` : ''}`}
     </div>`;
   const typeOpts = t => DS_TYPES.map(v => `<option value="${v}" ${t===v?'selected':''}>${esc(dsTypeLabel(v))}</option>`).join('');
   const tlRows = (s.tl||[]).map((r,ix) => `
@@ -1739,9 +1812,15 @@ function dsRenderEditor(){
     <div class="ds-grp">
       <h3>${esc(tt('calendar.daysheet.grp_kit','Kit'))}</h3>
       <div class="ds-hint">${esc(tt('calendar.daysheet.kit_hint','Shirt, shorts and socks with their colour. The match kit only shows on match days.'))}</div>
-      <div class="ds-seg" style="margin-bottom:${kit.on === false ? '0' : '12px'}">
-        <button type="button" data-kiton="1" class="${kit.on !== false ? 'on' : ''}"><i class="ti ti-shirt"></i>${esc(tt('calendar.daysheet.kit_show','Include'))}</button>
-        <button type="button" data-kiton="0" class="${kit.on === false ? 'on' : ''}"><i class="ti ti-eye-off"></i>${esc(tt('calendar.daysheet.kit_hide','Hide'))}</button>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:${kit.on === false ? '0' : '12px'}">
+        <div class="ds-seg">
+          <button type="button" data-kiton="1" class="${kit.on !== false ? 'on' : ''}"><i class="ti ti-shirt"></i>${esc(tt('calendar.daysheet.kit_show','Include'))}</button>
+          <button type="button" data-kiton="0" class="${kit.on === false ? 'on' : ''}"><i class="ti ti-eye-off"></i>${esc(tt('calendar.daysheet.kit_hide','Hide'))}</button>
+        </div>
+        ${kit.on === false ? '' : `<div class="ds-seg ds-seg-xs">
+          <button type="button" data-kitgk="1" class="${kit.gkOn !== false ? 'on' : ''}">${esc(tt('calendar.daysheet.kit_gk_show','With goalkeeper'))}</button>
+          <button type="button" data-kitgk="0" class="${kit.gkOn === false ? 'on' : ''}">${esc(tt('calendar.daysheet.kit_gk_hide','Outfield only'))}</button>
+        </div>`}
       </div>
       ${kit.on === false ? '' : `
         ${kitSet('warmup', tt('calendar.daysheet.kit_warmup','Warm-up'), '')}
@@ -1797,9 +1876,10 @@ function dsBindOnce(){
     // Colores del uniforme: pintar en vivo sin re-render del editor (el picker nativo
     // sigue abierto mientras se arrastra el color).
     if (t.dataset.kitset){
-      _dsState.kit[t.dataset.kitset][t.dataset.kitpiece] = t.value;
-      const prev = t.closest('.ds-kitpiece')?.querySelector('svg');
-      if (prev) prev.outerHTML = dsKitPiece(t.dataset.kitpiece, t.value, 34);
+      const g = t.dataset.kitset;
+      _dsState.kit[g][t.dataset.kitpiece] = t.value;
+      const prev = t.closest('.ds-kitpiece')?.querySelector('.ds-kitbtn svg');
+      if (prev) prev.outerHTML = dsKitPiece(t.dataset.kitpiece, t.value, 34, dsKitIsGk(g));
       dsRenderSheet(); dsSaveTmpl(); return;
     }
     if (t.dataset.k){
@@ -1823,6 +1903,25 @@ function dsBindOnce(){
     if (pl){ if (pl.dataset.plan === 'save') dsSavePlan(); else if (pl.dataset.plan === 'delete') dsDeletePlan(pl.dataset.id || _dsCurrentPlanId); return; }
     const tlr = e.target.closest('[data-tlrefresh]');
     if (tlr){ dsPrefillFromEvents().then(() => { dsSyncDate(); dsRenderEditor(); dsRenderSheet(); showCalToast(tt('calendar.daysheet.tl_reloaded','Timeline reloaded from the calendar')); }); return; }
+    // ── Uniforme: paleta por prenda ──
+    const kop = e.target.closest('[data-kitopen]');
+    if (kop){ const id = kop.dataset.kitopen; const pop = ed.querySelector(`.ds-kitpop[data-kitpop="${id}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop,.ds-icopop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
+    const kcol = e.target.closest('[data-kitcol]');
+    if (kcol){
+      const [id, c] = kcol.dataset.kitcol.split('|');
+      const [g, p] = id.split(':');
+      _dsState.kit[g][p] = c;
+      dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); dsReopenKitPop(id); return;
+    }
+    const padd = e.target.closest('[data-paladd]');
+    if (padd){
+      const [g, p] = padd.dataset.paladd.split(':');
+      dsPaletteAdd(_dsState.kit[g][p]);
+      dsRenderEditor(); dsSaveTmpl(); dsReopenKitPop(padd.dataset.paladd);
+      showCalToast(tt('calendar.daysheet.kit_colour_saved','Colour saved to your palette')); return;
+    }
+    const prm = e.target.closest('[data-palrm]');
+    if (prm){ dsPaletteRemove(prm.dataset.palrm); dsRenderEditor(); dsSaveTmpl(); dsReopenKitPop(prm.dataset.kitpop); return; }
     const cb = e.target.closest('[data-colbtn]');
     if (cb){ const ix = cb.dataset.colbtn; const pop = ed.querySelector(`.ds-colpop[data-pop="${ix}"]`); const wasOpen = pop && !pop.hidden; ed.querySelectorAll('.ds-colpop,.ds-icopop').forEach(p => p.hidden = true); if (pop) pop.hidden = wasOpen; return; }
     const icb = e.target.closest('[data-icobtn]');
@@ -1837,6 +1936,7 @@ function dsBindOnce(){
     const add = e.target.closest('[data-add]'); if (add){ if (add.dataset.add === 'info'){ _dsState.info.push({ k:tt('calendar.daysheet.new_item','New item'), v:'', wide:true }); dsSaveTmpl(); } else _dsState.tl.push({ t:'', type:'custom', label:tt('calendar.daysheet.new_moment','New moment'), sub:'' }); dsRenderEditor(); dsRenderSheet(); return; }
     const kon = e.target.closest('[data-kiton]'); if (kon){ _dsState.kit.on = kon.dataset.kiton === '1'; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     const kmt = e.target.closest('[data-kitmatch]'); if (kmt){ _dsState.kit.matchOn = kmt.dataset.kitmatch === '1'; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
+    const kgk = e.target.closest('[data-kitgk]'); if (kgk){ _dsState.kit.gkOn = kgk.dataset.kitgk === '1'; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     const fmt = e.target.closest('[data-fmt]'); if (fmt){ _dsState.format = fmt.dataset.fmt; dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
     const pre = e.target.closest('[data-preset]'); if (pre){ const L = { bring:tt('calendar.daysheet.preset_bring','What to bring'), meal:tt('calendar.daysheet.preset_meal','Nutrition'), medical:tt('calendar.daysheet.preset_medical','Medical notes'), dress:tt('calendar.daysheet.preset_dress','Dress code') }; _dsState.info.push({ k:L[pre.dataset.preset]||pre.dataset.preset, v:'', wide:true }); dsRenderEditor(); dsRenderSheet(); dsSaveTmpl(); return; }
   });
