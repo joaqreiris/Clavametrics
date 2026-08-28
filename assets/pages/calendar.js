@@ -43,7 +43,7 @@ const EVT_ICONS = {
   training:'ti-soccer-field', beach:'ti-beach', outdoor:'ti-run', gym:'ti-barbell', match:'ti-ball-football',
   recovery:'ti-heart-rate-monitor', travel:'ti-plane',
   meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop',
-  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
+  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen', snack:'ti-apple',
   hotel:'ti-bed', bus:'ti-bus',
   press:'ti-microphone', medical:'ti-stethoscope', physio:'ti-physotherapist',
   walkthrough:'ti-walk', scouting:'ti-binoculars',
@@ -62,6 +62,7 @@ function focusToClass(focus) {
   if (f === 'breakfast')                                     return 'breakfast';
   if (f === 'lunch')                                         return 'lunch';
   if (f === 'dinner')                                        return 'dinner';
+  if (f === 'snack')                                         return 'snack';
   if (f === 'hotel_checkin' || f === 'hotel_checkout')       return 'hotel';
   if (f === 'bus_departure' || f === 'bus_arrival')          return 'bus';
   if (f === 'press')                                         return 'press';
@@ -157,6 +158,7 @@ const VISIBLE_TO_DEFAULTS = {
   breakfast:     ['players','medical'],
   lunch:         ['players','medical'],
   dinner:        ['players','medical'],
+  snack:         ['players','medical'],
   hotel_checkin: ['players','medical'],
   hotel_checkout:['players','medical'],
   bus_departure: ['players','medical'],
@@ -1120,14 +1122,14 @@ async function renderWorkload() {
 // ── Event modal ───────────────────────────────────────────────
 const CAL_EVT_TYPES = [
   'match','recovery','travel','meeting','evaluation','video_session',
-  'breakfast','lunch','dinner',
+  'breakfast','lunch','dinner','snack',
   'hotel_checkin','hotel_checkout','bus_departure','bus_arrival',
   'press','medical_check','physio','walkthrough','scouting','day_off',
 ];
 
 const DURATION_DEFAULTS = {
   training:90, tactical:90, beach:75, outdoor:75, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
-  breakfast:45, lunch:60, dinner:60,
+  breakfast:45, lunch:60, dinner:60, snack:20,
   hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
   press:30, medical_check:30, physio:60, walkthrough:30, scouting:60,
   day_off:null,
@@ -1554,7 +1556,7 @@ function _positionPop(pop, anchor, width) {
 const EVT_TYPE_LABELS_EN = {
   training:'Training', tactical:'Training', gym:'Gym', match:'Match', recovery:'Recovery', travel:'Travel',
   meeting:'Meeting', evaluation:'Evaluation', video_session:'Video session',
-  breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner',
+  breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner', snack:'Snack',
   hotel_checkin:'Hotel check-in', hotel_checkout:'Hotel check-out',
   bus_departure:'Bus departure', bus_arrival:'Bus arrival',
   press:'Press conference', medical_check:'Medical check', physio:'Physio treatment',
@@ -1564,7 +1566,7 @@ const EVT_TYPE_LABELS_EN = {
 const EVT_TYPE_KEY = {
   training:'calendar.filter_training', tactical:'calendar.filter_training', gym:'calendar.type_gym', match:'calendar.type_match', recovery:'calendar.type_recovery', travel:'calendar.type_travel',
   meeting:'calendar.type_meeting', evaluation:'calendar.type_evaluation', video_session:'calendar.type_video_session',
-  breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner',
+  breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner', snack:'calendar.type_snack',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
@@ -2310,7 +2312,7 @@ async function saveEvt() {
   }
 
   // Validation: duplicate meal time (soft)
-  if (['breakfast','lunch','dinner'].includes(type) && startTimeVal && !_editEvtId) {
+  if (['breakfast','lunch','dinner','snack'].includes(type) && startTimeVal && !_editEvtId) {
     const clash = _sessions.find(s => s.session_date === date && s.session_type === type && s.start_time && s.start_time.slice(0,5) === startTimeVal.slice(0,5));
     if (clash && !confirm(tt('calendar.meal_exists_confirm','A {type} at {time} already exists on {date}. Save anyway?',{type:evtTypeLabel(type),time:startTimeVal.slice(0,5),date}))) {
       saving.style.display='none'; saveBtn.disabled=false; return;
@@ -2562,7 +2564,7 @@ const TYPE_ICONS = {
   training:'ti-soccer-field', beach:'ti-beach', outdoor:'ti-run', gym:'ti-barbell',
   recovery:'ti-heart-rate-monitor', walkthrough:'ti-walk',
   match:'ti-ball-football', scouting:'ti-binoculars',
-  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
+  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen', snack:'ti-apple',
   hotel_checkin:'ti-login', hotel_checkout:'ti-logout',
   bus_departure:'ti-bus', bus_arrival:'ti-bus', travel:'ti-plane',
   press:'ti-microphone', medical_check:'ti-stethoscope', physio:'ti-physotherapist', meeting:'ti-users',
@@ -3045,7 +3047,7 @@ document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg
 const EVT_BG = {
   training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)',
   travel:'#ECFEFF', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)',
-  breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)',
+  breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)', snack:'var(--cm-warning-bg)',
   hotel:'var(--cm-bg-soft)', bus:'var(--cm-bg-soft)',
   press:'var(--cm-info-bg)', medical:'var(--cm-danger-bg)',
   walkthrough:'var(--cm-info-bg)', scouting:'var(--cm-bg-soft)',
@@ -3054,7 +3056,7 @@ const EVT_BG = {
 const EVT_CLR = {
   training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)',
   travel:'#06B6D4', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)',
-  breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)',
+  breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)', snack:'var(--cm-warning)',
   hotel:'var(--cm-fg-muted)', bus:'var(--cm-fg-muted)',
   press:'var(--cm-info)', medical:'var(--cm-danger)',
   walkthrough:'var(--cm-info)', scouting:'var(--cm-fg-muted)',

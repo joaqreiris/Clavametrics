@@ -398,12 +398,12 @@ function showMatchPopover(anchor, items) {
 const UPCOMING_FILTER_GROUPS = [
   { label:'Training',  key:'calendar.grp_training',  types:['training','gym','recovery','walkthrough'] },
   { label:'Match',     key:'calendar.grp_match',     types:['match'] },
-  { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner'] },
+  { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner','snack'] },
   { label:'Logistics', key:'calendar.grp_logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
   { label:'Other',     key:'calendar.grp_other',     types:['press','medical_check','physio','scouting','video_session','meeting','evaluation','day_off','other'] },
 ];
 const UPCOMING_ALL_TYPES     = UPCOMING_FILTER_GROUPS.flatMap(g => g.types);
-const UPCOMING_DEFAULT_HIDDEN = new Set(['breakfast','lunch','dinner']);
+const UPCOMING_DEFAULT_HIDDEN = new Set(['breakfast','lunch','dinner','snack']);
 let _upcomingAllItems    = [];
 let _upcomingActFilters  = null; // Set of visible types (lazily loaded)
 
@@ -433,7 +433,7 @@ function _updateUpcomingFilterBadge() {
 const _UPCOMING_TYPE_KEYS = {
   match:'calendar.type_match', training:'calendar.filter_training', gym:'calendar.type_gym', travel:'calendar.type_travel', recovery:'calendar.type_recovery',
   tactical:'calendar.filter_training', conditioning:'calendar.filter_training', physical:'calendar.filter_training', other:'calendar.type_other',
-  breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner',
+  breakfast:'calendar.type_breakfast', lunch:'calendar.type_lunch', dinner:'calendar.type_dinner', snack:'calendar.type_snack',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
@@ -859,6 +859,7 @@ const CAL_TYPE_META = {
   breakfast:  { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   lunch:      { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   dinner:     { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
+  snack:      { abbr:'SNACK', fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Snack' },
   day_off:    { abbr:'OFF',   fg:'#9CA3AF', bg:'#F3F4F6', bd:'#D8DCE0', label:'Day off' },
   physio:     { abbr:'PHY',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Physio' },
   _fallback:  { abbr:'•',     fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' }
@@ -868,6 +869,7 @@ const CAL_TYPE_LABEL_KEY = {
   recovery:'calendar.type_label_recovery', travel:'calendar.type_label_travel', meeting:'calendar.type_label_meeting',
   evaluation:'calendar.type_label_evaluation', video:'calendar.type_label_video',
   breakfast:'calendar.type_label_meal', lunch:'calendar.type_label_meal', dinner:'calendar.type_label_meal',
+  snack:'calendar.type_label_snack',
   day_off:'calendar.type_label_day_off', physio:'calendar.type_label_physio', _fallback:'calendar.type_label_event',
 };
 function calMetaLabel(type){
@@ -1266,9 +1268,9 @@ async function dsDefaultDate(){
 function dsReadableOn(hex){ const h=hex.replace('#',''); const f=i=>parseInt(h.slice(i,i+2),16)/255; const lin=c=>c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4); const L=.2126*lin(f(0))+.7152*lin(f(2))+.0722*lin(f(4)); return L>.55?'#14171C':'#ffffff'; }
 function dsInitials(name){ const w=(name||'').trim().split(/\s+/); return (((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||(name||'?').slice(0,2)).toUpperCase(); }
 function dsTint(hex, amt){ const h=/^#[0-9a-fA-F]{6}$/.test(hex)?hex:'#2F5FD0'; const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); const m=c.map(v=>Math.round(v*amt+255*(1-amt))); return '#'+m.map(v=>v.toString(16).padStart(2,'0')).join(''); }
-function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
 // Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
-const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun' };
+const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun', snack:'snack' };
 function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
 
 async function dsInlineImg(url){

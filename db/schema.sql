@@ -226,7 +226,7 @@ create table if not exists public.calendar_events (
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
   constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
   constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
-  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text])))
+  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'snack'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text])))
 );
 CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
