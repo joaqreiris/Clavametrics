@@ -807,8 +807,8 @@ async function openManualGpsModal() {
   // 'replace' (default) pisa la fila del jugador; 'add' SUMA lo elegido a lo que ya tiene (GPS
   // encendido a mitad de sesión). Solo se ofrece si el jugador ya tiene datos.
   let applyMode = 'replace';
-  // Jugadores con trabajo NO-team en esta sesión (rehab / individual / top-up) → Modelo A
-  // (docs/gps-work-context.md): NO se resta nada, el jugador queda FUERA de la media entero.
+  // Jugadores con trabajo NO-team en esta sesión (rehab / individual / top-up). Solo para AVISAR:
+  // el recorte de sus valores lo hace el resolver (Modelo B, ver loadSession).
   let nonTeamPids = new Map();   // player_id → Set(contextos)
   const metricKeys = _MANUAL_GPS_METRICS.map(m=>m.k);
   const posByPlayer = {}; roster.forEach(p=>{ posByPlayer[p.id] = p.position || ''; });
@@ -959,15 +959,15 @@ async function openManualGpsModal() {
       (rzCounts[rz.status] = rzCounts[rz.status] || { n:0, label:rz.label, color:rz.color }).n++;
     });
     const rzHTML = Object.values(rzCounts).map(r => _reasonPill(r, r.n)).join(' ');
-    // Modelo A: quien hizo rehab / individual / top-up queda fuera de la media de la sesión (no se
-    // le resta nada, su volumen se ve completo). Se dice acá para que el promedio no sorprenda.
+    // A quien hizo rehab / individual / top-up se le recorta el aporte a la media (solo cuenta su
+    // trabajo de equipo). Se dice acá para que el promedio no sorprenda.
     const nonTeamVis = vis.filter(p => nonTeamPids.has(p.id) && statusOf(p.id) === 'real');
     const ctxNames = [...new Set(nonTeamVis.flatMap(p => [...nonTeamPids.get(p.id)]))].map(_ctxLabel).join(' · ');
     body.querySelector('#mgpStatus').innerHTML =
       `<span class="mgp-chip real">${vis.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
       + (est?` <span class="mgp-chip est">${est} ${tt('gps_analysis.manual_st_est','estimated')}</span>`:'')
       + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'')
-      + (nonTeamVis.length?` <span class="mgp-chip" title="${_esc(ctxNames)}">${tt('gps_analysis.manual_st_nonteam','{n} out of the average ({ctx})',{n:nonTeamVis.length,ctx:ctxNames})}</span>`:'')
+      + (nonTeamVis.length?` <span class="mgp-chip" title="${_esc(tt('gps_analysis.manual_st_nonteam_hint','Only their team work counts towards the average.'))}">${tt('gps_analysis.manual_st_nonteam','{n} trimmed to team work ({ctx})',{n:nonTeamVis.length,ctx:ctxNames})}</span>`:'')
       + (rzHTML?`<span class="mgp-status-rz">${rzHTML}</span>`:'');
   }
   function renderPlayerList() {
@@ -1084,8 +1084,8 @@ async function openManualGpsModal() {
       sDate ? window.sb.from('availability').select('player_id,status,team_id')
                 .eq('club_id', clubId).eq('date', sDate).in('player_id', roster.map(p=>p.id))
             : Promise.resolve({ data: [] }),
-      // Períodos rehab / individual / top-up de la sesión (pocas filas). Modelo A: el jugador que
-      // tenga uno queda FUERA de la media — no se le resta nada, su volumen se ve completo.
+      // Períodos rehab / individual / top-up de la sesión (pocas filas). Solo para poder DECIR de
+      // quién y de qué contexto se recortó; el recorte en sí lo hace el resolver más abajo.
       window.sb.from('gps_period_reports').select('player_id,work_context')
         .eq('club_id', clubId).eq('session_id', sid).neq('work_context', 'team'),
     ]);
@@ -1102,10 +1102,19 @@ async function openManualGpsModal() {
       const cur = availByPid[r.player_id];
       if (!cur || (cur.status === 'available' && r.status !== 'available')) availByPid[r.player_id] = r;
     });
-    // Base de las medias (equipo y posición). Modelo A: fuera de la media el trabajo no-team —
-    // por período (rehab/top-up dentro de una sesión de equipo) o por sesión entera etiquetada.
-    realReports = sessionReports.filter(r => !r.is_invalid && !EST_SOURCES.includes(r.source)
-      && !nonTeamPids.has(r.player_id) && (r.work_context || 'team') === 'team');
+    // Base de las medias (equipo y posición). Se pasa por el MISMO motor que el dashboard, el
+    // Modelo B del resolver: al jugador que hizo rehab / individual / top-up en esta sesión se le
+    // recortan los valores a sus períodos de EQUIPO (y si no tuvo ninguno, sale de la media). Así
+    // el promedio del modal es exactamente el que muestran los charts, Session control y Match
+    // performance. Sobre una COPIA: sessionReports tiene que seguir teniendo el total real del
+    // jugador, que es lo que se completa/suma más abajo.
+    let meanRows = sessionReports.map(r => ({ ...r }));
+    try {
+      const _ctxMod = await import('../../lib/gp-card/resolver.js');
+      meanRows = await _ctxMod.applyCtxToRows(window.sb, { clubId }, [sid], [], roster.map(p=>p.id), meanRows);
+    } catch (e) { console.warn('[manual gps] contexto no aplicado:', e?.message || e); }
+    realReports = meanRows.filter(r => !r.is_invalid && !EST_SOURCES.includes(r.source)
+      && (r.work_context || 'team') === 'team');
     teamAvg = _avg(realReports);
     renderStatus(); renderPlayers(); renderApply(); renderFields();
   }

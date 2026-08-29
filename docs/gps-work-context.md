@@ -1,55 +1,62 @@
-# GPS — Trabajo no-team (work_context): Modelo A
+# GPS — Trabajo no-team (work_context): Modelo B
 
-Regla de negocio estipulada (2026-08). Aplica a todo el módulo GPS.
+Regla de negocio vigente (2026-08-26, commit `da1fbac`). Aplica a todo el módulo GPS.
+Reemplaza al Modelo A, que queda al final como historia.
 
 ## El principio
 
 El **trabajo no-team** (`gps_period_reports.work_context` ∈ {`rehab`, `individual`, `topup`})
-es **SOLO VOLUMEN**:
+se **aísla por período**, y lo que se ve depende del filtro **Context** del bar (default: `team`):
 
-- **SUMA en los totales de cada jugador** → el volumen se ve **completo, siempre**, sin depender
-  de ningún filtro. Un jugador que hizo partido/entrenamiento + top-up/rehab muestra la suma real.
-- **Se EXCLUYE de TODAS las medias cross-player** → la media del equipo, la línea AVG, el rollup
-  de plantel y la media del día se calculan **solo con team**.
-- La exclusión es **por jugador entero**: si un jugador tuvo un período no-team en una sesión,
-  queda **fuera de la media de esa sesión** completo (no se le resta un pedazo). Su volumen igual
-  se ve en su fila.
-- La **media del equipo es SIEMPRE limpia** — no depende del filtro Context. El filtro Context
-  sirve para **aislar/ver** un contexto, no para ensuciar el promedio (Camino A).
+- Los valores de cada par **(sesión, jugador)** reflejan **exactamente** los contextos
+  seleccionados. Un jugador que hizo partido + top-up, mirando `Team`, muestra **solo su parte de
+  equipo** — sus valores se **recalculan** sumando únicamente sus períodos de ese contexto
+  (`time_played` y m/min salen de la duración real de esos períodos, nunca del total de sesión).
+- Si **ningún** período suyo cae en los contextos pedidos, la fila **desaparece** de la vista (con
+  `Team`, un jugador que solo hizo rehab no aparece).
+- Como las filas llegan **puras** al agregador, las medias ya no necesitan excluir a nadie: el
+  jugador con top-up **sigue contando** en la media, con su valor recortado.
+- Períodos con `work_context` NULL (data vieja sin etiquetar) cuentan como `team`.
 
 ## Por qué
 
-Un rehab o un top-up es carrera aparte: no representa lo que hizo el equipo. Si sumara a la media,
-rompería la realidad de la sesión. Pero el volumen es real y tiene que verse.
+Un rehab o un top-up es carrera aparte: no representa lo que hizo el equipo. El Modelo A lo
+resolvía **sacando al jugador entero** de la media, pero eso tiraba también su trabajo de equipo
+(y vaciaba la media del propio jugador → el bug de m/min = 0 en la tabla por jugador). El Modelo B
+recorta en vez de excluir: cada vista muestra la carga del contexto que se está mirando.
 
-Antes se **restaba** el volumen no-team del total de sesión para limpiar la media — eso limpiaba
-la media pero **corrompía el total** (el jugador aparecía con menos volumen del real). Modelo A
-separa las dos cosas: no resta (volumen completo) y excluye al jugador de las medias.
+Ojo con el total: la fila de `gps_reports` (grano sesión) **incluye** el volumen de los períodos
+no-team — el sync solo le descuenta los **minutos** del top-up, no la distancia. Por eso el recorte
+se hace siempre desde los períodos, no restando del total.
 
 ## Dónde se implementa
 
 | Capa | Qué hace |
 |---|---|
-| `lib/gp-card/resolver.js` · `fetchReports` | NO resta. Marca filas `_excludeMean` con `_nonTeamMeanKeys` (una fila `(session, player)` con período no-team). |
-| `lib/gp-card/resolver.js` · `aggregateSeries` | Medias (`avg`/`wavg`/`median`) y rollup de plantel excluyen filas/jugadores marcados; `total`/`max`/`min` usan a todos. Cada punto lleva `_nonTeam`. |
-| `assets/gp-builder/gp-builder.js` · líneas de referencia | Los `vals` de la línea AVG/mediana excluyen jugadores `_nonTeam`; las barras muestran el volumen completo. |
-| `assets/gps-session-control.js` | Mismo modelo: volumen completo + excluir de la media al jugador con período no-team (chip REHAB/TOP-UP/INDIV en la fila). |
-| `assets/gps-match-perf.js` | Mismo modelo: `_mpMarkNonTeam` marca `_excludeMean`; `_mpAggVal` excluye de las medias. Los charts TD/HI van por el resolver → ya cubiertos. |
+| `lib/gp-card/resolver.js` · `_applyCtxScope` | El motor: detecta pares «dirty» (con períodos fuera de los contextos pedidos) y les recalcula los valores desde sus períodos; sin ninguno, elimina la fila. Marca `_ctxAdj`. |
+| `lib/gp-card/resolver.js` · `_ctxPeriodRows` | Sintetiza filas para contextos no-team (un rehab que no tiene fila propia de sesión). |
+| `lib/gp-card/resolver.js` · `applyCtxToRows` | Orquestador **exportado** — el punto de entrada para las vistas con fetch propio. |
+| `assets/gps-session-control.js`, `assets/gps-match-perf.js`, `assets/gps-mc-compare.js` | Importan `applyCtxToRows` dinámicamente y lo aplican a sus filas. |
+| `assets/pages/gps-analysis-2.js` · modal «Add GPS data» | Igual: la media de equipo/posición que ofrece para rellenar sale de filas ya recortadas. |
+| Load Monitor / ACWR | A PROPÓSITO con totales completos (carga acumulada = todo lo corrido). |
 
 ## Detalles de datos
 
-- Los períodos viven en `gps_period_reports` (grano `(session, player, período)`); el total de
-  sesión está en `gps_reports` (una fila por `(session, player)`, `work_context` siempre `team` a
-  nivel sesión). El total de sesión **ya incluye** el volumen de los períodos no-team.
-- El **RPC fast-path** (`gps_player_agg`/`mc_agg`) filtra `team` y no resta; `hasNonTeamPeriods`
-  rutea al camino crudo cuando hay períodos no-team, así que el resolver (Modelo A) es la fuente de
-  verdad en esos casos. Si en el futuro se quiere que el RPC maneje no-team, hay que devolver el
-  volumen completo + una marca por jugador y actualizar la auditoría.
-- Los baselines de partido (× match avg, best-N, últimos) usan solo sesiones de PARTIDO, así que el
-  trabajo no-team (entrenamiento) queda afuera solo.
+- Los períodos viven en `gps_period_reports` (grano `(sesión, jugador, período)`); el total de
+  sesión está en `gps_reports` (una fila por `(sesión, jugador)`). En clubes con API el
+  `work_context` de SESIÓN no es durable (el re-sync diario hace delete+insert), así que la
+  etiqueta que manda es la del PERÍODO.
+- El **fast-path RPC** (`gps_player_agg`/`mc_agg`) no recorta; `hasNonTeamPeriods` rutea al camino
+  crudo cuando hay períodos no-team, así que el resolver es la fuente de verdad en esos casos.
+- Limitación conocida: las métricas EAV (`extra_metrics`) siguen mostrando el valor de sesión
+  completa en la vista recortada.
+- Los baselines de partido (× match avg, best-N, últimos) usan solo sesiones de PARTIDO.
 
-## Pendiente
+## Historia — Modelo A (2026-08-21 … 2026-08-26)
 
-- (Opcional/perf) RPC context-aware para no caer siempre al camino crudo con no-team.
-- (Opcional) modo "aislar contexto" real en la tabla principal (hoy el filtro Context filtra a
-  nivel sesión, que es todo `team`).
+El trabajo no-team era **solo volumen**: sumaba en los totales del jugador y lo **excluía entero**
+de todas las medias cross-player (`_excludeMean` / `_nonTeamMeanKeys` en el resolver, `_mpMarkNonTeam`
+en match-perf, chip REHAB/TOP-UP en session-control). Antes de eso (Fase 2b) la media se calculaba
+**restando** los períodos no-team del total de sesión, lo que limpiaba la media pero corrompía el
+total del jugador. Los tres enfoques quedaron reemplazados por el recorte dinámico de arriba; los
+checks de `_excludeMean` que sobreviven en `aggregateSeries` son no-ops.

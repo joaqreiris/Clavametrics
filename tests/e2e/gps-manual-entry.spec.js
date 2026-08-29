@@ -66,7 +66,17 @@ async function mockGps(page, opts = {}) {
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PLAYERS }));
   await page.route(`${SB}/rest/v1/seasons**`, r => r.fulfill({ json: [] }));
   await page.route(`${SB}/rest/v1/availability**`, r => r.fulfill({ json: [] }));
-  await page.route(`${SB}/rest/v1/gps_period_reports**`, r => r.fulfill({ json: opts.periods || [] }));
+  // Dos consultas distintas caen acá: la del modal y la del resolver piden los períodos AJENOS a
+  // los contextos mirados (work_context=not.in / neq), y el recorte del resolver pide los del
+  // contexto pedido (or=(work_context.in.(team),work_context.is.null)). Devolver la lista entera
+  // a las dos haría que el recorte sumara justo los períodos que hay que sacar.
+  await page.route(`${SB}/rest/v1/gps_period_reports**`, r => {
+    const url = decodeURIComponent(r.request().url());
+    const all = opts.periods || [];
+    const wantsTeam = url.includes('work_context.in.');
+    return r.fulfill({ json: all.filter(p => wantsTeam ? (!p.work_context || p.work_context === 'team')
+                                                       : (p.work_context && p.work_context !== 'team')) });
+  });
   await page.route(`${SB}/rest/v1/rpc/gps_session_ids_with_data`, r => r.fulfill({ json: [{ session_id: SESSION_ID, n: REPORTS.length }] }));
   // GET = lectura de la sesión; POST = el upsert que estamos verificando.
   await page.route(`${SB}/rest/v1/gps_reports**`, r => {
@@ -156,17 +166,21 @@ test.describe('GPS · carga manual', () => {
     await expect(page.locator('#mgpFields .mgp-note').first()).toContainText('3 CB');
   });
 
-  test('Modelo A: el jugador con período de top-up queda fuera de la media', async ({ page }) => {
-    // p2 hizo top-up en esta sesión → no entra al promedio de CB (y no se le resta nada).
-    await openModal(page, { periods: [{ player_id: 'p2', work_context: 'topup' }] });
+  test('el top-up se recorta de la media (Modelo B, igual que el dashboard)', async ({ page }) => {
+    // p2 corrió 2.000 m de top-up dentro de la sesión: su fila de sesión (9.100) los incluye, así
+    // que en la media tiene que contar solo su trabajo de equipo (7.100), no el total mixto.
+    await openModal(page, { periods: [
+      { session_id: SESSION_ID, player_id: 'p2', work_context: 'team',
+        duration_seconds: 4500, total_distance: 7100, high_speed_distance: 600, time_played: 75, max_speed: 31.4, avg_speed: 6.1 },
+      { session_id: SESSION_ID, player_id: 'p2', work_context: 'topup',
+        duration_seconds: 900, total_distance: 2000, high_speed_distance: 40, time_played: 15, max_speed: 24.0, avg_speed: 5.2 },
+    ] });
 
     await expect(page.locator('#mgpStatus')).toContainText('Top-up');
     await pickPlayer(page, 'Alfa');
     await page.locator('#mgpMode button[data-mode="avgpos"]').click();
-    // Quedan p1 (el propio, que reemplazando cuenta como uno más) y p3 → 2 de 3.
-    await expect(page.locator('#mgpFields .mgp-note').first()).toContainText('2 CB');
-    // Sumando, además se excluye al propio jugador: su fila es solo un tramo de la sesión.
-    await page.locator('#mgpApplyMode button[data-apply="add"]').click();
-    await expect(page.locator('#mgpFields .mgp-note').first()).toContainText('1 CB');
+    // Sigue promediando a los 3 CB, pero p2 entra recortado: (4200 + 7100 + 9100) / 3 = 6800.
+    await expect(page.locator('#mgpFields .mgp-note').first()).toContainText('3 CB');
+    await expect(page.locator('#mgpFields .mgp-grid').first()).toContainText('6800');
   });
 });
