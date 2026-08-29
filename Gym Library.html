@@ -1362,6 +1362,14 @@ function attachListeners() {
   document.getElementById('gm-media').addEventListener('change', e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    // El `accept` del input es sólo una sugerencia: se puede elegir "todos los archivos" o
+    // arrastrar cualquier cosa. Así entró un .mov de 19 MB que se guardó como media_type
+    // 'image' y se pintaba con <img> — nunca se veía, y se descargaba en cada carga.
+    if (!/^image\/(png|jpe?g|gif|webp|avif)$/.test(file.type)) {
+      alert(tt('gym_library.media_not_image', 'Only images are supported here (PNG, JPG, GIF or WebP). For a video, use the YouTube link field.'));
+      e.target.value = '';
+      return;
+    }
     _gmMediaFile = file;
     _gmMediaRemove = false;
     setMediaPreview(URL.createObjectURL(file));

@@ -3101,6 +3101,9 @@ function removePendingAtt(idx) {
 
 async function uploadAttachment(file) {
   const channelId = activeConv === 'group' ? 'group' : activeConv;
+  // Las capturas de pantalla llegan a varios MB y se leen perfecto a 1600px. Sólo se tocan
+  // las imágenes: PDFs y demás documentos suben tal cual.
+  file = await window.cmShrinkImage(file, { maxDim: 1600, maxBytes: 600 * 1024 });
   const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path      = `${currentUser.clubId}/${channelId}/${Date.now()}-${safeName}`;
   const { error } = await window.sb.storage.from('chat-attachments').upload(path, file, { cacheControl: window.CM_CACHE_IMMUTABLE, upsert: false });

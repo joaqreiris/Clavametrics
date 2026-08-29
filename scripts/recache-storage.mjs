@@ -48,16 +48,18 @@ async function walk(bucket, prefix = '', out = []) {
 }
 
 // Recomprime sólo si es una imagen rasterizada y el resultado es realmente más chico.
-// Los GIF (animados) y los SVG se dejan intactos: reencodearlos los rompe. Sale WebP, que
-// conserva la transparencia (importante para logos y escudos). El path NO cambia aunque
-// termine en .png — lo que manda al renderizar es el Content-Type, que sí se actualiza.
+// Sale WebP, que conserva la transparencia (importante para logos y escudos) y también la
+// animación de un GIF (`animated: true` procesa todos los cuadros, no sólo el primero).
+// Los SVG se dejan intactos. El path NO cambia aunque termine en .png o .gif — lo que manda
+// al renderizar es el Content-Type, que sí se actualiza.
 async function shrink(buf, mime, maxDim, maxBytes) {
   if (maxDim == null) return null;
-  if (!/^image\/(png|jpe?g|webp)$/.test(mime)) return null;
+  if (!/^image\/(png|jpe?g|webp|gif)$/.test(mime)) return null;
   if (buf.length <= maxBytes) return null;
-  const out = await sharp(buf)
+  const animated = mime === 'image/gif';
+  const out = await sharp(buf, animated ? { animated: true } : {})
     .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 85 })
+    .webp({ quality: animated ? 80 : 85 })
     .toBuffer();
   if (out.length >= buf.length) return null;
   return { buf: out, mime: 'image/webp' };
@@ -78,6 +80,7 @@ async function shrink(buf, mime, maxDim, maxBytes) {
 
 const mb = n => (n / 1048576).toFixed(2) + ' MB';
 let totBefore = 0, totAfter = 0, totFiles = 0, totFail = 0;
+const intrusos = [];   // archivos que no son imagen en buckets que sólo se pintan con <img>
 
 for (const b of BUCKETS) {
   const files = await walk(b.id);
@@ -85,6 +88,12 @@ for (const b of BUCKETS) {
   let before = 0, after = 0, shrunk = 0, failed = 0;
   for (const f of files) {
     try {
+      // Un no-imagen en un bucket de imágenes no se renderiza nunca, pero se descarga
+      // igual en cada carga. Así apareció un .mov de 19 MB guardado como media_type
+      // 'image'. No se borra desde acá — sólo se avisa.
+      if (b.maxDim != null && f.mime && !/^image\//.test(f.mime)) {
+        intrusos.push({ bucket: b.id, path: f.path, size: f.size, mime: f.mime });
+      }
       const dl = await sb.storage.from(b.id).download(f.path);
       if (dl.error) { console.warn(`  ! ${b.id}/${f.path}: no se pudo bajar (${dl.error.message})`); failed++; continue; }
       const src = Buffer.from(await dl.data.arrayBuffer());
@@ -109,3 +118,10 @@ for (const b of BUCKETS) {
 console.log(`\n${APPLY ? 'Aplicado' : 'DRY-RUN (nada se modificó; correr con --apply)'}`);
 console.log(`${totFiles} archivos · fallidos ${totFail} · ${mb(totBefore)} → ${mb(totAfter)} (ahorro ${mb(totBefore - totAfter)})`);
 console.log(`cacheControl objetivo: ${CACHE}s`);
+
+if (intrusos.length) {
+  console.log(`\n⚠ ${intrusos.length} archivo(s) que NO son imagen en buckets de imágenes.`);
+  console.log('  No se renderizan nunca, pero se descargan igual. Revisar y borrar a mano:');
+  intrusos.sort((a, b) => b.size - a.size)
+    .forEach(i => console.log(`  · ${i.bucket}/${i.path}  (${mb(i.size)}, ${i.mime})`));
+}
