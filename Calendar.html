@@ -702,10 +702,12 @@
     border-radius:4px;
     padding:3px 5px;
   }
+  /* MD fijado a mano en el microciclo (overrides de la versión anterior del chip). Se puede
+     sacar con «MD automático» del menú contextual del día. */
   .mc-day-md.is-manual { border-style: dashed; }
   /* Empate: el día está a la misma distancia del partido anterior y del siguiente (semana
      de copa + liga). No hay respuesta correcta, así que en vez de elegir en silencio se
-     marca y el usuario lo fija con el menú del chip. */
+     marca y se resuelve poniendo el MD en la planificación del día. */
   .mc-day-md.is-ambiguous {
     border-color: var(--cm-warn, #B45309);
     color: var(--cm-warn, #B45309);
@@ -728,21 +730,7 @@
     padding:3px 5px;
     margin-left:4px;
   }
-  .mc-md-menu {
-    position: absolute; z-index: 1000;
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
-    padding: 8px; min-width: 168px;
-    background: var(--cm-surface); border: 1px solid var(--cm-border);
-    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-  }
-  .mc-md-opt {
-    font: 600 11px/1 var(--cm-font-mono); color: var(--cm-fg);
-    background: var(--cm-bg-soft); border: 1px solid var(--cm-border-soft);
-    border-radius: 5px; padding: 6px 4px; cursor: pointer; text-align: center;
-  }
-  .mc-md-opt:hover { background: var(--cm-bg-sunk); }
-  .mc-md-opt.is-active { background: var(--cm-accent-soft); color: var(--cm-accent); border-color: var(--cm-accent); }
-  /* Right-click / Ctrl+click context menu (copy/paste events) */
+  /* Right-click / Ctrl+click context menu (copy/paste events, día libre, MD automático) */
   .cal-ctxmenu {
     position: absolute; z-index: 2000;
     display: flex; flex-direction: column; gap: 2px;

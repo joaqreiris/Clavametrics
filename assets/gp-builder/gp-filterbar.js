@@ -1301,8 +1301,8 @@
     window._gpMcForDate = _mcForDate;
 
     // ── MD derivado del microciclo (igual que Calendar/Load Planner) ──────────────
-    // El MD NO se guarda por sesión: es propiedad del microciclo = fecha(s) de partido + md_overrides
-    // (Calendar `applyMdChoice` escribe md_overrides, no la sesión). Para que el MD aparezca en GPS
+    // Este derivador NO mira la sesión: usa el microciclo = fecha(s) de partido + md_overrides
+    // viejos (el chip del Calendar ya no los escribe). Para que el MD aparezca en GPS
     // sin asignarlo a mano, lo derivamos por fecha: el override del microciclo que contiene el día
     // gana; si no, se calcula por cercanía al partido con el MISMO algoritmo/umbrales que
     // mdLabelFromSet de Load Planner. Formato ASCII ('MD-2'/'MD+1'/'MD'), consistente con lo guardado.

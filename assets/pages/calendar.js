@@ -427,28 +427,39 @@ function renderGrid() {
     const _md = window.cmMdForDate(dateStr, _mDates, { display: true });
     const mdLabel = _md.label;
     // Equidistant from a match before and a match after: there is no right answer, so the
-    // chip says so and the user settles it with the override menu (click the tag).
+    // chip says so and the day plan settles it (the MD of the session wins over the derived one).
     const mdAmbiguous = _md.ambiguous;
+    // Override viejo del microciclo: ya no se puede crear desde acá (el chip es de solo
+    // lectura), pero se sigue respetando como último recurso para no cambiar semanas ya
+    // armadas. Se limpia con «MD automático» del menú contextual del día.
     const dayOverride = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
     // MD de las sesiones del día (Daily Planning / Gym Planner), en forma canónica (cmMdNorm:
     // el tag derivado puede venir en U+2212 y la columna en ASCII/'MD0').
     const _mdN = window.cmMdNorm || (v => String(v || ''));
-    const sessMds = [...new Set(
-      daySessions.filter(s => s.source === 'session' && s.match_day_offset)
-        .map(s => _mdN(s.match_day_offset)).filter(Boolean)
-    )];
-    // Prioridad del chip del día: override manual (menú del chip) → DÍA DE PARTIDO (siempre
-    // 'MD': una sesión de la mañana no lo destrona) → MD UNÁNIME de las sesiones planificadas
-    // → derivado del partido más cercano. Con dos dinámicas (sesiones en desacuerdo) manda el
-    // derivado y cada grupo aparece como chip punteado aparte.
-    const unanimousMd = sessMds.length === 1 ? sessMds[0] : '';
-    const tagText  = hasDayOff ? 'OFF' : (dayOverride || (mdLabel === 'MD' ? 'MD' : (unanimousMd || mdLabel)));
+    const _mdsOf = list => [...new Set(list.map(s => _mdN(s.match_day_offset)).filter(Boolean))];
+    const _withMd = daySessions.filter(s => s.source === 'session' && s.match_day_offset);
+    // El gimnasio ACOMPAÑA a la dinámica de campo: solo define el MD del día cuando no hay
+    // ninguna sesión de campo que lo diga. Si no, un gym con el MD viejo pegado (copiar/pegar
+    // o mover de día) inventaba una segunda dinámica que no existe.
+    const _fieldMds = _mdsOf(_withMd.filter(s => s.session_type !== 'gym'));
+    const sessMds = _fieldMds.length ? _fieldMds : _mdsOf(_withMd.filter(s => s.session_type === 'gym'));
+    // Prioridad del chip del día: día libre → DÍA DE PARTIDO (siempre 'MD': una sesión de la
+    // mañana no lo destrona) → lo planificado en las sesiones (el chip lleva el de la primera
+    // del día; una segunda dinámica sale como chip punteado aparte) → override viejo →
+    // derivado del partido más cercano. El chip NO se edita acá: el MD se cambia en la
+    // planificación del día (Daily Planning / Gym Planner).
+    const tagText  = hasDayOff ? 'OFF'
+                   : mdLabel === 'MD' ? 'MD'
+                   : (sessMds[0] || dayOverride || mdLabel);
     const isMatchTag = tagText === 'MD';
     const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
-    const _showAmbiguous = mdAmbiguous && !dayOverride && !hasDayOff && mdLabel !== 'MD';
-    const _dayMdN = hasDayOff ? '' : _mdN(tagText);
-    const groupChips = hasDayOff ? '' : sessMds.filter(v => v && v !== _dayMdN)
+    const _fromOverride = !hasDayOff && !sessMds.length && !!dayOverride && mdLabel !== 'MD';
+    const _showAmbiguous = mdAmbiguous && !sessMds.length && !dayOverride && !hasDayOff && mdLabel !== 'MD';
+    const groupChips = hasDayOff ? '' : sessMds.slice(1)
       .map(v => `<span class="mc-day-md2" title="${tt('calendar.group_md_hint','Group MD — set per session in Daily Planning')}">${_esc(v)}</span>`).join('');
+    const mdTip = _showAmbiguous
+      ? tt('calendar.md_tie_hint','Same distance to the match before and the match after — set it in the day plan')
+      : tt('calendar.md_readonly_hint','Day type — set it in the day plan (Daily Planning / Gym Planner)');
 
     const eventsHtml = hasDayOff ? '' : isOff
       ? `<div class="mc-evt day-off">${tt('calendar.rest_day','Rest day')}</div>`
@@ -489,11 +500,7 @@ function renderGrid() {
       <div class="mc-day-head">
         <span class="mc-day-dow">${dayShort(d)}</span>
         <span class="mc-day-num">${d.getDate()}</span>
-        ${isPlayerView
-          ? (tagText ? `<span class="mc-day-md" style="${tagStyle}">${tagText}</span>` : '')
-          : (tagText
-              ? `<span class="mc-day-md${(!hasDayOff && dayOverride) ? ' is-manual' : ''}${_showAmbiguous ? ' is-ambiguous' : ''}" data-date="${dateStr}" style="${tagStyle};cursor:pointer" title="${_showAmbiguous ? tt('calendar.md_tie_hint','Same distance to the match before and the match after — click to choose') : tt('calendar.click_set_day_type','Click to set day type')}">${tagText}</span>`
-              : `<span class="mc-day-md mc-day-md-empty" data-date="${dateStr}" style="cursor:pointer;opacity:0.4" title="${tt('calendar.click_set_day_type','Click to set day type')}">+</span>`)}${groupChips}
+        ${tagText ? `<span class="mc-day-md${_fromOverride ? ' is-manual' : ''}${_showAmbiguous ? ' is-ambiguous' : ''}" style="${tagStyle}" title="${_esc(mdTip)}">${tagText}</span>` : ''}${groupChips}
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
@@ -502,7 +509,6 @@ function renderGrid() {
     </div>`;
   }
   grid.innerHTML = html;
-  ensureMdMenu(grid);
   ensureCtxMenu(grid);
 
   // Wire event clicks — un click abre el popover; doble click sobre un entrenamiento/gym
@@ -649,59 +655,10 @@ function renderGrid() {
   if (_calView !== 'player') loadTaskBadges();
 }
 
-// ── Manual MD override menu (per-day tag click) ───────────────
-let _mdMenu = null, _mdMenuWired = false;
-// Override menu options: Auto + the sport's own day codes + OFF. Football offers
-// MD-6…MD+3, basketball GD-3…GD+2 (assets/sport-packs.js → cmMdOptions).
-function mdMenuOptions() {
-  const codes = window.cmMdOptions ? window.cmMdOptions() : [];
-  return ['Auto', ...codes, 'OFF'];
-}
-
-function ensureMdMenu(grid) {
-  if (_mdMenuWired) return;
-  _mdMenuWired = true;
-  _mdMenu = document.createElement('div');
-  _mdMenu.className = 'mc-md-menu';
-  _mdMenu.style.display = 'none';
-  document.body.appendChild(_mdMenu);
-  // Delegated: grid innerHTML is rebuilt each render, so listen on the stable parent
-  grid.addEventListener('click', e => {
-    const tag = e.target.closest('.mc-day-md');
-    if (!tag || !tag.dataset.date) return;
-    e.stopPropagation();
-    openMdMenu(tag, tag.dataset.date);
-  });
-  document.addEventListener('click', e => {
-    if (_mdMenu.style.display !== 'none' && !_mdMenu.contains(e.target)) closeMdMenu();
-  });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMdMenu(); });
-}
-
-function openMdMenu(anchorEl, dateStr) {
-  const mc = _allMCs[_mcIdx];
-  if (!mc) return;
-  const hasDayOff = _sessions.some(s => s.session_date === dateStr && _isFullDayOff(s));
-  const override  = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
-  const active    = hasDayOff ? 'OFF' : (override || 'Auto');
-  _mdMenu.innerHTML = mdMenuOptions().map(opt =>
-    `<button type="button" class="mc-md-opt${opt === active ? ' is-active' : ''}" data-opt="${opt}">${opt}</button>`
-  ).join('');
-  _mdMenu.querySelectorAll('.mc-md-opt').forEach(b =>
-    b.addEventListener('click', ev => { ev.stopPropagation(); applyMdChoice(dateStr, b.dataset.opt); })
-  );
-  _mdMenu.style.display = 'block';
-  const r = anchorEl.getBoundingClientRect();
-  const mw = _mdMenu.offsetWidth, mh = _mdMenu.offsetHeight;
-  let left = r.left + window.scrollX;
-  let top  = r.bottom + window.scrollY + 4;
-  if (left + mw > window.scrollX + window.innerWidth) left = window.scrollX + window.innerWidth - mw - 8;
-  if (r.bottom + mh + 4 > window.innerHeight) top = r.top + window.scrollY - mh - 4;
-  _mdMenu.style.left = left + 'px';
-  _mdMenu.style.top  = top + 'px';
-}
-
-function closeMdMenu() { if (_mdMenu) _mdMenu.style.display = 'none'; }
+// El chip MD del día es de SOLO LECTURA: el día se etiqueta desde la planificación
+// (Daily Planning / Gym Planner / la sesión de partido), nunca desde acá, para que el
+// calendario no tape lo que se planificó. Marcar día libre y limpiar un override viejo
+// viven ahora en el menú contextual del día (click derecho).
 
 // ── Copy/paste context menu (right-click on Windows / Ctrl+click on Mac) ────────
 // The `contextmenu` DOM event fires for both a Windows right-click and a macOS
@@ -740,6 +697,22 @@ function ensureCtxMenu(grid) {
         sub: _clipEvt ? '' : tt('calendar.ctx_nothing_copied','nothing copied'),
         disabled: !_clipEvt,
         onClick: () => { if (_clipEvt) pasteEvtToDate(_clipEvt, targetDate); } });
+      // Día libre y limpieza de overrides viejos: antes vivían en el menú del chip MD, que
+      // ahora es de solo lectura (el MD se define en la planificación del día).
+      const _dayOff = _sessions.some(s => s.session_date === targetDate && _isFullDayOff(s));
+      const _mcNow  = _allMCs[_mcIdx];
+      items.push({ sep: true });
+      items.push(_dayOff
+        ? { icon: 'ti-calendar-plus', label: tt('calendar.ctx_undo_day_off','Undo day off'),
+            onClick: async () => { try { await removeDayOffOnDate(targetDate); await loadSessions(); }
+                                   catch (err) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:err.message||err})); } } }
+        : { icon: 'ti-beach', label: tt('calendar.ctx_set_day_off','Set day off'),
+            onClick: () => setDayOffOnDate(targetDate) });
+      if (_mcNow && _mcNow.md_overrides && _mcNow.md_overrides[targetDate]) {
+        items.push({ icon: 'ti-refresh', label: tt('calendar.ctx_md_auto','Use automatic MD'),
+          sub: _mcNow.md_overrides[targetDate],
+          onClick: () => clearMdOverrideOnDate(targetDate) });
+      }
     }
     if (!items.length) return;
     openCtxMenu(e.pageX, e.pageY, items);
@@ -805,6 +778,10 @@ async function pasteEvtToDate(clip, newDate) {
       delete payload.id; delete payload.created_at; delete payload.updated_at;
       delete payload.external_activity_id;  // GPS link is 1:1 (unique) — never copy it
       delete payload.rpe_avg;               // real feedback belongs to the original session
+      // El MD es del día, no de la sesión: pegada en otra fecha se recalcula (la planificación
+      // del día la vuelve a completar). Si no, el MD viejo viaja y el calendario muestra una
+      // segunda dinámica que no existe. El partido sí conserva su 'MD'.
+      if (payload.session_type !== 'match') payload.match_day_offset = null;
       payload.session_date = newDate;
       payload.recurrence_group_id = null;
       payload.published = false;
@@ -831,41 +808,46 @@ async function removeDayOffOnDate(dateStr) {
   if (error) throw new Error(error.message);
 }
 
-async function applyMdChoice(dateStr, opt) {
+// Marcar el día entero como libre (menú contextual del día). Limpia el override viejo del
+// microciclo para esa fecha: el día pasa a mostrar OFF y no hay MD que sostener.
+async function setDayOffOnDate(dateStr) {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
   try {
-    if (opt === 'OFF') {
-      const others = _sessions.filter(s => s.session_date === dateStr && s.session_type !== 'day_off');
-      if (others.length && !confirm(tt('calendar.other_events_set_dayoff','There are {n} other event(s) on {date}. Set day off anyway?',{n:others.length,date:dateStr}))) return;
-      const next = { ...(mc.md_overrides || {}) };
+    const others = _sessions.filter(s => s.session_date === dateStr && s.session_type !== 'day_off');
+    if (others.length && !confirm(tt('calendar.other_events_set_dayoff','There are {n} other event(s) on {date}. Set day off anyway?',{n:others.length,date:dateStr}))) return;
+    if (mc.md_overrides && mc.md_overrides[dateStr]) {
+      const next = { ...mc.md_overrides };
       delete next[dateStr];
       const { error: uerr } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
       if (uerr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:uerr.message})); return; }
       mc.md_overrides = next;
-      const existing = _sessions.some(s => s.session_date === dateStr && _isFullDayOff(s));
-      if (!existing) {
-        const clubId = _clubId || await window.getClubId();
-        const { error: ierr } = await window.sb.from('calendar_events').insert({
-          title: 'Day off', type: 'day_off', date: dateStr,
-          club_id: clubId, team_id: _activeTeamId, visible_to: ['players','medical']
-        });
-        if (ierr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:ierr.message})); return; }
-      }
-    } else {
-      await removeDayOffOnDate(dateStr);
-      const next = { ...(mc.md_overrides || {}) };
-      if (opt === 'Auto') delete next[dateStr];
-      else next[dateStr] = opt;
-      const { error: uerr } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
-      if (uerr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:uerr.message})); return; }
-      mc.md_overrides = next;
     }
-    closeMdMenu();
+    if (!_sessions.some(s => s.session_date === dateStr && _isFullDayOff(s))) {
+      const clubId = _clubId || await window.getClubId();
+      const { error: ierr } = await window.sb.from('calendar_events').insert({
+        title: 'Day off', type: 'day_off', date: dateStr,
+        club_id: clubId, team_id: _activeTeamId, visible_to: ['players','medical']
+      });
+      if (ierr) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:ierr.message})); return; }
+    }
     await loadSessions();
   } catch (e) {
     showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:(e?.message||e)}));
   }
+}
+
+// Sacar el MD fijado a mano en un día (overrides que quedaron de la versión anterior del
+// chip): el día vuelve a mostrar lo que digan las sesiones o el partido más cercano.
+async function clearMdOverrideOnDate(dateStr) {
+  const mc = _allMCs[_mcIdx];
+  if (!mc || !mc.md_overrides || !mc.md_overrides[dateStr]) return;
+  const next = { ...mc.md_overrides };
+  delete next[dateStr];
+  const { error } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
+  if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
+  mc.md_overrides = next;
+  await loadSessions();
 }
 
 // Canonical sort: timed events first (by start_time ASC), then no-time (by sort_order ASC), tiebreaker created_at ASC
@@ -926,6 +908,9 @@ async function handleCrossDayMove(evt, newDate) {
   const table   = evt.source === 'event' ? 'calendar_events' : 'training_sessions';
   const dateCol = evt.source === 'event' ? 'date' : 'session_date';
   const patch   = { [dateCol]: newDate };
+  // Mover de día invalida el MD guardado (era el del día viejo): se recalcula solo. El
+  // partido conserva el suyo.
+  if (evt.source === 'session' && evt.session_type !== 'match') patch.match_day_offset = null;
 
   // No-time events get placed at the end of the target day
   if (!evt.start_time) {

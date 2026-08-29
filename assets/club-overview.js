@@ -78,39 +78,43 @@
     return window.cmMdForDate(day, teamMatchDates(teamId)).label;
   }
   function mdNorm(v) { return window.cmMdNorm ? window.cmMdNorm(v) : String(v || ''); }
-  // MD del día — misma prioridad que el chip de Calendar: override manual del microciclo →
-  // MD UNÁNIME de las sesiones del día (Daily Planning / Gym Planner) → derivado del partido.
-  // Con dos dinámicas (sesiones en desacuerdo) manda el derivado y cada grupo se muestra
-  // aparte vía groupMdsFor()/mdBadge.
+  // MDs planificados del día, en orden de sesión. El gimnasio ACOMPAÑA a la dinámica de
+  // campo: solo cuenta si no hay ninguna sesión de campo que diga el MD (si no, un gym con
+  // el MD viejo pegado inventa una segunda dinámica que no existe). Mismo criterio que el
+  // chip del Calendar.
+  function sessMdsFor(teamId, y) {
+    const pick = gym => {
+      const out = [];
+      (state.data.sessions || []).forEach(s => {
+        if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
+        if ((s.session_type === 'gym') !== gym) return;
+        const v = mdNorm(s.match_day_offset);
+        if (v && !out.includes(v)) out.push(v);
+      });
+      return out;
+    };
+    const field = pick(false);
+    return field.length ? field : pick(true);
+  }
+  // MD del día — misma prioridad que el chip de Calendar: DÍA DE PARTIDO → lo planificado en
+  // las sesiones (Daily Planning / Gym Planner) → override viejo del microciclo → derivado
+  // del partido más cercano. Con dos dinámicas manda la primera sesión del día y el resto se
+  // muestra aparte vía groupMdsFor()/mdBadge.
   function mdFor(teamId, y) {
-    const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
-    if (mc && mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
     // Día de partido: siempre 'MD' — el MD de una sesión de entrenamiento del mismo día
     // (ej. activación matinal MD+1 del otro grupo) no destrona al partido.
     const hasMatch = (state.data.matches || []).some(m => m.team_id === teamId && m.date === y)
       || (state.data.sessions || []).some(s => s.team_id === teamId && s.session_date === y && s.session_type === 'match');
     if (hasMatch) return 'MD';
-    const mds = [];
-    (state.data.sessions || []).forEach(s => {
-      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
-      const v = mdNorm(s.match_day_offset);
-      if (v && !mds.includes(v)) mds.push(v);
-    });
-    if (mds.length === 1) return mds[0];
-    const derived = mdDiffLabel(teamId, y);
-    if (derived) return derived;
-    if (mds.length) return mds[0];   // sesiones en desacuerdo y ningún partido cerca
-    return '';
+    const mds = sessMdsFor(teamId, y);
+    if (mds.length) return mds[0];
+    const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
+    if (mc && mc.md_overrides && mc.md_overrides[y]) return mdNorm(mc.md_overrides[y]);
+    return mdDiffLabel(teamId, y) || '';
   }
-  // MDs de grupo del día: los match_day_offset (normalizados) distintos del MD del día.
+  // MDs de grupo del día: los planificados que no son el del chip principal.
   function groupMdsFor(teamId, y, dayMd) {
-    const out = [];
-    (state.data.sessions || []).forEach(s => {
-      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
-      const v = mdNorm(s.match_day_offset);
-      if (v && v !== dayMd && !out.includes(v)) out.push(v);
-    });
-    return out;
+    return sessMdsFor(teamId, y).filter(v => v !== dayMd);
   }
   function isPlanExpected(teamId, y) {
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
