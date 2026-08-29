@@ -28,6 +28,26 @@
   .ph-hero .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
   .ph-hero h1{font:600 28px/1.1 var(--sans);letter-spacing:-.02em;color:#fff;margin-bottom:6px}
   .ph-hero p{font:400 14px/1.45 var(--sans);color:#9CA3AF}
+  /* Cartel grande: qué sesión está calificando ahora mismo. En día de doble sesión es lo
+     primero que ve, con color e icono propios por tipo para que no confunda gym con campo. */
+  .now-rating{display:flex;align-items:center;gap:14px;margin:0 22px 20px;padding:15px 16px;border-radius:16px;border:1.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05)}
+  .now-rating .ic{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(255,255,255,.08)}
+  .now-rating .ic i{font-size:27px}
+  .now-rating .tx{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .now-rating .ey{font:600 10.5px/1 var(--mono);letter-spacing:.10em;text-transform:uppercase;color:#9CA3AF}
+  .now-rating strong{font:700 22px/1.15 var(--sans);color:#fff;letter-spacing:-.01em}
+  .now-rating .tm{font:500 12.5px/1 var(--mono);color:#9CA3AF}
+  .now-rating .step{margin-left:auto;flex-shrink:0;font:700 12px/1 var(--mono);color:#9CA3AF;background:rgba(255,255,255,.07);border-radius:999px;padding:7px 10px}
+  .now-rating.is-gym{border-color:rgba(167,139,250,.50);background:rgba(167,139,250,.10)}
+  .now-rating.is-gym .ic{background:rgba(167,139,250,.18)}
+  .now-rating.is-gym .ic i{color:#A78BFA}
+  .now-rating.is-field{border-color:rgba(74,222,128,.50);background:rgba(74,222,128,.10)}
+  .now-rating.is-field .ic{background:rgba(74,222,128,.18)}
+  .now-rating.is-field .ic i{color:var(--green-d)}
+  .now-rating.is-match{border-color:rgba(251,191,36,.50);background:rgba(251,191,36,.10)}
+  .now-rating.is-match .ic{background:rgba(251,191,36,.18)}
+  .now-rating.is-match .ic i{color:#FBBF24}
+  .now-rating.in-done{margin:16px 0 0;width:100%;max-width:380px;text-align:left}
   .ph-section{padding:0 22px;margin-bottom:22px}
   .ph-section .q-label{display:flex;align-items:center;gap:8px;margin-bottom:12px}
   .ph-section .q-label .ic{width:28px;height:28px;background:rgba(255,255,255,.05);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff}
@@ -67,8 +87,6 @@
   .next-card button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--green-d);color:#0A0A0A;font:700 14px/1 var(--sans);cursor:pointer}
   .next-card button.skip{margin-top:8px;background:transparent;color:#9CA3AF;font-weight:500;text-decoration:underline;padding:10px}
   /* Candado de doble sesión: paso actual + confirmación de lo ya enviado */
-  .prog{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);font:600 11.5px/1 var(--mono);letter-spacing:.04em;color:#9CA3AF}
-  .prog i{font-size:14px}
   .sent-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.35);font:600 12px/1 var(--sans);color:var(--green-d);margin-bottom:6px}
   .done-wrap .big.warn,.center .big.warn{color:#FBBF24}
   .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;color:#9CA3AF;padding:22px}
@@ -130,6 +148,7 @@ const T={
     pendSub:'You are on the list for it. Rate every session you took part in.',
     pendSent:'RPE sent',rateBtn:n=>'Rate the '+n+' session',skipBtn:"I wasn't in this session",
     progress:(i,n)=>'Session '+i+' of '+n,
+    ratingNow:'You are rating',sendFor:n=>'Send '+n+' RPE',missEy:'Still missing',
     parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
@@ -153,6 +172,7 @@ const T={
     pendSub:'Figuras en su lista. Califica cada sesión en la que estuviste.',
     pendSent:'RPE enviado',rateBtn:n=>'Calificar la sesión de '+n,skipBtn:'No estuve en esta sesión',
     progress:(i,n)=>'Sesión '+i+' de '+n,
+    ratingNow:'Estás calificando',sendFor:n=>'Enviar RPE de '+n,missEy:'Te falta cargar',
     parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
@@ -176,6 +196,7 @@ const T={
     pendSub:'Você está na lista dela. Avalie cada sessão em que esteve.',
     pendSent:'RPE enviado',rateBtn:n=>'Avaliar a sessão de '+n,skipBtn:'Não estive nesta sessão',
     progress:(i,n)=>'Sessão '+i+' de '+n,
+    ratingNow:'Você está avaliando',sendFor:n=>'Enviar RPE de '+n,missEy:'Falta enviar',
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
@@ -267,9 +288,27 @@ function pickDefault(){
   const started=un.filter(s=>mins(s)!=null&&mins(s)<=cur).sort((a,b)=>mins(b)-mins(a));
   return (started[0]||un[0]).id;
 }
+const sessType=s=>s.type==='gym'?L.sessGym:s.type==='match'?L.sessMatch:L.sessField;
+const sessIcon=s=>s.type==='gym'?'ti-barbell':s.type==='match'?'ti-trophy':'ti-run';
+const sessTime=s=>s.time?String(s.time).slice(0,5):'';
 function sessLabel(s){
-  const t=s.type==='gym'?L.sessGym:s.type==='match'?L.sessMatch:L.sessField;
-  return t+(s.time?' · '+String(s.time).slice(0,5):'');
+  return sessType(s)+(sessTime(s)?' · '+sessTime(s):'');
+}
+// Cartel grande arriba del formulario: "Estás calificando — GIMNASIO · 18:00". Solo con
+// dos o más sesiones en el día, que es cuando se puede confundir gym con campo.
+function sessBanner(s,ey,extra){
+  const cls=s.type==='gym'?'is-gym':s.type==='match'?'is-match':'is-field';
+  const req=requiredAll();
+  const step=req.length>=2
+    ? `<span class="step">${L.progress(req.filter(x=>x.answered||skipped.has(x.id)).length+1,req.length)}</span>`
+    : '';
+  return `<div class="now-rating ${cls}${extra||''}"><span class="ic"><i class="ti ${sessIcon(s)}"></i></span>
+    <div class="tx"><span class="ey">${ey}</span><strong>${esc(sessType(s))}</strong>${sessTime(s)?`<span class="tm">${esc(sessTime(s))}</span>`:''}</div>${step}</div>`;
+}
+function nowRatingHtml(){
+  if(scope!=='rpe'||sessions.length<2)return '';
+  const s=sessions.find(x=>x.id===sessPick);
+  return s?sessBanner(s,L.ratingNow):'';
 }
 // Alarma si la sesión elegida tiene convocatoria y el jugador no figura; si figura en la
 // otra pendiente, el aviso lo manda para allá.
@@ -287,7 +326,7 @@ function sessHtml(){
       const tag=s.answered?`<span class="tag"><i class="ti ti-check"></i> ${L.sentTag}</span>`
         :(s.listed?`<span class="tag for-you"><i class="ti ti-clipboard-check"></i> ${L.forYou}</span>`:'');
       return `<button class="sess-btn${s.id===sessPick?' is-on':''}${s.answered?' is-done':''}"${s.answered?' disabled':''} onclick="pickSess('${s.id}')">
-        <i class="ti ${ic}"></i>${sessLabel(s)}${tag}</button>`;
+        <i class="ti ${ic}"></i>${esc(sessLabel(s))}${tag}</button>`;
     }).join('')+`</div>`+sessWarnHtml()+`<div class="sess-hint">${L.whichSub}</div></div>`;
 }
 window.pickSess=id=>{const s=sessions.find(x=>x.id===id);if(!s||s.answered)return;sessPick=id;renderForm();};
@@ -316,14 +355,13 @@ function renderForm(){
          scaleHtml('soreness','ti-bandage',L.soreness,L.e_soreness,7)+
          scaleHtml('mood','ti-mood-smile',L.mood,L.e_mood,7)+bodyHtml()+noteHtml();
   }
-  // Con dos o más sesiones obligatorias, el jugador ve en qué paso va.
-  const _req=requiredAll();
-  const _prog=(scope==='rpe'&&_req.length>=2)
-    ? `<div class="prog"><i class="ti ti-list-check"></i>${L.progress(_req.filter(s=>s.answered||skipped.has(s.id)).length+1,_req.length)}</div>`
-    : '';
+  // El CTA repite la sesión, para que la última cosa que lee antes de enviar sea cuál es.
+  const _cur=scope==='rpe'&&sessions.length>1?sessions.find(x=>x.id===sessPick):null;
+  const _cta=_cur?L.sendFor(sessType(_cur)):L.send;
   app.innerHTML=`<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(esc(picked.name))}</button>`+
-    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(esc(picked.name.split(' ')[0]))}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p>${_prog}</div>`+
-    body+`<div class="ph-cta"><button id="submitBtn" onclick="submitForm()">${L.send}</button></div>`;
+    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(esc(picked.name.split(' ')[0]))}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p></div>`+
+    nowRatingHtml()+
+    body+`<div class="ph-cta"><button id="submitBtn" onclick="submitForm()">${esc(_cta)}</button></div>`;
 }
 window.setScale=(k,v)=>{state[k]=v;document.getElementById('v_'+k).textContent=v;
   document.querySelectorAll('#sc_'+k+' button').forEach((b,i)=>b.classList.toggle('is-on',i+1===v));};
@@ -357,15 +395,14 @@ async function finish(already){
 function renderPending(sent){
   const pend=requiredPending();
   const next=pend[0];
-  const done=requiredAll().filter(s=>s.answered||skipped.has(s.id)).length;
   app.innerHTML=`<div class="done-wrap">`+
     (sent?`<div class="sent-pill"><i class="ti ti-circle-check"></i>${L.pendSent}</div>`:'')+
     `<i class="ti ti-alert-triangle big warn"></i>`+
     `<div class="hl">${L.pendTitle(pend.length)}</div>`+
     `<div class="sub">${L.pendSub}</div>`+
-    (requiredAll().length>=2?`<div class="prog"><i class="ti ti-list-check"></i>${L.progress(done+1,requiredAll().length)}</div>`:'')+
-    `<div class="next-card is-alert"><div class="q"><i class="ti ti-alert-triangle"></i> ${L.missing(sessLabel(next))}</div>
-      <button onclick="rateNext('${next.id}')">${L.rateBtn(sessLabel(next))}</button>
+    sessBanner(next,L.missEy,' in-done')+
+    `<div class="next-card is-alert">
+      <button onclick="rateNext('${next.id}')">${esc(L.rateBtn(sessType(next)))}</button>
       <button class="skip" onclick="skipSess('${next.id}')">${L.skipBtn}</button></div>`+
     `</div>`;
 }
