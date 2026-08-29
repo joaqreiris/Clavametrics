@@ -203,11 +203,24 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 - **No** se tocó el acento verde: es el color de marca de ClavaMetrics, no vocabulario de
   deporte, y cada club ya lo pisa con `clubs.primary_color`.
 
-### Fase 2 — Plantel, alineación y pizarra
-- Squad: posiciones desde el pack, grupos y colores; ficha con envergadura/alcance y mano hábil cuando el pack lo pide.
-- Lineup: `formation` pasa a nullable; nº de titulares y de banca desde el pack; poster con plantillas por deporte; roles de cuerpo técnico desde el pack.
-- Planner: **habilitar el selector de deporte** que ya está escrito (`Planner.html:1659`) y atarlo al pack; agregar los objetos que faltan (aro, red, bolsa de tackle, escalera); reemplazar SSG/MSG/LSG por `drills.gameTypes`.
-- Agregar vóley y handball a `field-system.js` (son dos funciones de dibujo, el sistema ya está).
+### Fase 2 — Plantel, alineación y pizarra ⏳ A MEDIAS
+
+Hecho:
+- **Squad**: posiciones, grupos, colores, selects y chips de filtro desde el pack (fase 0).
+- **Pizarra**: superficie por deporte (parquet vs césped) y material propio de cada uno —
+  aro, silla, escalera de agilidad, bolsa de placaje, escudo de contacto (commit 6e90b9c).
+  SSG/MSG/LSG salen de `drills.gameTypes`; el flag de arquero se esconde donde no hay.
+- **Cancha de básquet**: arreglado un `ReferenceError` que la dejaba como césped liso desde
+  que se escribió (commit 4a12f84). Hay tests que renderizan las cinco canchas.
+
+Falta:
+- **Lineup**: sigue pidiendo formación «4-3-3» y once titulares. `formation` a nullable,
+  nº de titulares y banca del pack, poster por deporte, roles de cuerpo técnico del pack.
+- **Ficha del jugador**: envergadura, alcance de pie y mano hábil (el pack ya los declara
+  en `anthro`, nadie los lee).
+- **Selector de deporte en el Planner**: sigue deshabilitado; hoy la cancha la fija el club.
+- **Etiquetas de espacio**: «FIELD» y «AREA» siguen en vocabulario de campo.
+- Agregar vóley y handball a `field-system.js` (dos funciones de dibujo, el sistema ya está).
 
 ### Fase 3 — Planificación semanal ✅ HECHA (commit a9c67b8)
 - Hecho: el cálculo vivía **diez veces** con reglas distintas. Ahora está una sola vez en
@@ -219,14 +232,24 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
   bug ya afectaba a fútbol.
 - Empate entre el partido anterior y el siguiente: se marca y lo decide el usuario con el
   override, en vez de que la app elija en silencio.
-- Calendar: tipos de evento extra por deporte (shootaround, walkthrough ya existe).
-- Load Planner: referencias de partido por deporte (distancia en fútbol, PlayerLoad en básquet, saltos en vóley).
+
+Quedó fuera y pasa a la fase 4, porque depende de las métricas:
+- Load Planner: referencias de partido por deporte (distancia en fútbol, PlayerLoad en
+  básquet, saltos en vóley).
+- Calendar: tipos de evento extra por deporte (shootaround; walkthrough ya existe).
 
 ### Fase 4 — Rendimiento
 - Sembrar `gps_metric_definitions` desde el pack al crear el club (ya es por club: es cambio de datos, no de esquema).
 - GPS Analysis: renombrar el módulo a algo neutro ("Tracking" o "Carga externa") y hacer que las bandas de velocidad, el E:P y el Top-Up se apaguen cuando el pack dice `tracking:'imu'`.
 - Baselines "vs posición": usar el roll-up del pack (guards/wings/bigs, forwards/backs).
 - Evaluations: catálogo de tests y **bandas de referencia por deporte** (hoy son de fútbol y están hardcodeadas). Usar el patrón global+club de `assessment_test_defs`.
+- **Orientación física del Drill Designer** (m²/jugador → Activación / Fuerza / Velocidad /
+  Resistencia, umbrales 40/80/160). Investigado el 2026-08-29: **no existe un equivalente
+  en básquet**, y la relación se invierte — ahí menos espacio significa MÁS intensidad
+  (2v2 ~93% FCmax pico vs 5v5 84%). Además todo el básquet vive entre 20 y 70 m²/jugador,
+  o sea siempre dentro de la primera banda del semáforo de fútbol. Para deportes de cancha
+  el eje debe ser la **densidad de juego** derivada del formato (2v2 / 3v3 / 5v5) y de la
+  superficie usada, no los metros para correr. No copiar los umbrales de fútbol.
 
 ### Fase 5 — Partido
 - `match_reports`: mover las columnas específicas de fútbol a un `stats jsonb` con esquema declarado por el pack; dejar en columnas solo lo universal (fecha, rival, local/visitante, resultado, competición).
