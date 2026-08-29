@@ -705,6 +705,9 @@
           fullName: `${firstName} ${lastName}`.trim(),
           clubName,
           country: document.getElementById('country')?.value || null,
+          // Without this the sport picked on this form is lost: when Supabase asks for email
+          // confirmation the club is created later, by auth-callback.html, from this blob.
+          sport: selectedSport(),
         }));
         btn.disabled = false;
         btn.innerHTML = CREATE_ORG_BTN();

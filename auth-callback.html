@@ -70,7 +70,8 @@
         try {
           const pending = JSON.parse(pendingRaw);
           const { data: club, error: clubErr } = await window.sb.from('clubs')
-            .insert({ name: pending.clubName, country: pending.country || null })
+            .insert({ name: pending.clubName, country: pending.country || null,
+                      sport: pending.sport || 'football' })
             .select('id').single();
           if (clubErr) throw clubErr;
 
@@ -119,6 +120,8 @@
         const fullName = meta.full_name || meta.name || '';
         try {
           const stubName = (email.split('@')[0] || 'My Club').replace(/[._-]/g, ' ');
+          // OAuth sign-up: nobody ever saw the register form, so there is no sport to carry.
+          // It defaults to football and Onboarding asks for it on the next screen.
           const { data: club, error: clubErr } = await window.sb.from('clubs')
             .insert({ name: stubName })
             .select('id').single();

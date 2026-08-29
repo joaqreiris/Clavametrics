@@ -274,6 +274,8 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 </head>
 <body class="cm">
 
@@ -372,6 +374,15 @@
       <div class="cm-field">
         <label class="cm-label" for="club-country" data-i18n="onboarding.country">Country</label>
         <select id="club-country" class="cm-select"></select>
+      </div>
+
+      <!-- The sport drives positions, pitch, lineup, load metrics and the match-day model
+           (assets/sport-packs.js). Asked here as well as in the register form because
+           OAuth sign-ups and the email-confirmation path never see that form. -->
+      <div class="cm-field">
+        <label class="cm-label" for="club-sport" data-i18n="onboarding.sport">Sport</label>
+        <select id="club-sport" class="cm-select"></select>
+        <span class="cm-hint" data-i18n="onboarding.sportHint">Sets the positions, the pitch and the weekly model. You can change it later in Admin.</span>
       </div>
 
       <div class="cm-field">
@@ -501,7 +512,7 @@
       const newClubId = crypto.randomUUID();
       const { error: clubErr } = await window.sb
         .from('clubs')
-        .insert({ id: newClubId, name: clubName, plan: 'free' });
+        .insert({ id: newClubId, name: clubName, plan: 'free' });   // sport defaults to football; the form below asks for it
       if (clubErr) { alert(tt('onboarding.setupFailedClub', 'Setup failed (club): ') + clubErr.message); return; }
 
       const { error: profErr } = await window.sb.from('profiles').insert({
@@ -516,6 +527,18 @@
       window.resetSupabaseCache();
     }
 
+    // Options come from the pack registry, so adding a sport never means editing this page.
+    function fillSportSelect(selected) {
+      const sel = document.getElementById('club-sport');
+      if (!sel || !window.CMSport) return;
+      const keys = window.CMSport.list().concat('other');
+      sel.innerHTML = keys.map(k => {
+        const pack = window.CMSport.get(k);
+        const label = tt('sport.' + k, (pack && pack.label) || k);
+        return `<option value="${k}"${k === selected ? ' selected' : ''}>${label}</option>`;
+      }).join('');
+    }
+
     window.fillCountrySelect(document.getElementById('club-country'));
 
     // Load existing club data to pre-populate form
@@ -523,11 +546,12 @@
     if (clubId) {
       const { data: club } = await window.sb
         .from('clubs')
-        .select('name, country')
+        .select('name, country, sport')
         .eq('id', clubId)
         .single();
       if (club?.name)    document.getElementById('club-name').value = club.name;
       window.fillCountrySelect(document.getElementById('club-country'), club?.country || '');
+      fillSportSelect(club?.sport || 'football');
     }
     const { data: { user: _meUser } } = await window.sb.auth.getUser();
     const _emailEl = document.getElementById('ob-account-email');
@@ -563,12 +587,16 @@
       const clubId = await window.getClubId();
       if (!clubId) throw new Error(tt('onboarding.noClub', 'No club found. Try signing out and back in.'));
 
-      // Save confirmed-existing columns: name + country
+      // Save confirmed-existing columns: name + country + sport
+      const sport = document.getElementById('club-sport')?.value || 'football';
       const { error } = await window.sb
         .from('clubs')
-        .update({ name, country })
+        .update({ name, country, sport })
         .eq('id', clubId);
       if (error) throw error;
+      // The sport is mirrored in localStorage for the first paint of every page; refresh it
+      // now so the very next screen already speaks the right vocabulary.
+      try { localStorage.setItem('cm_sport', sport); } catch (_) {}
 
       // Guardar las categorías elegidas como teams (fuente única de categorías/planteles)
       const { error: catErr } = await window.sb.from('teams')
