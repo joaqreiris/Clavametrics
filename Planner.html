@@ -37,6 +37,7 @@
 <script src="assets/supabase-init.js?v=gps-avg"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/cm-lock.js"></script>
 <script src="assets/feature-teaser.js"></script>
 <script src="assets/exercise-folders.js"></script>
@@ -987,7 +988,8 @@
             <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="folders.new_nests_hint">"New folder" nests inside the folder selected above; leave it on "No folder" to create a top-level one.</div>
           </div>
 
-          <div class="pl-form-group">
+          <!-- Hidden by plApplySportToForm() in sports with no goalkeeper (basketball). -->
+          <div class="pl-form-group" id="plExGkGroup">
             <label style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">
               <input type="checkbox" id="plExGk" style="width:16px;height:16px;accent-color:var(--cm-accent)">
               <i class="ti ti-hand-stop" style="font-size:14px"></i><span data-i18n="planner.goalkeeper_exercise">Goalkeeper exercise</span>
@@ -1040,18 +1042,11 @@
 
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
-              <label class="pl-form-label" data-i18n="planner.match_day">Match Day</label>
+              <label class="pl-form-label" id="plExMatchDayLbl" data-i18n="planner.match_day">Match Day</label>
+              <!-- Options built by plFillMdSelect() from the sport pack: football counts
+                   MD−5…MD+3, basketball GD−3…GD+2. -->
               <select class="pl-form-input" id="plExMatchDay">
                 <option value="">—</option>
-                <option value="-5">MD−5</option>
-                <option value="-4">MD−4</option>
-                <option value="-3">MD−3</option>
-                <option value="-2">MD−2</option>
-                <option value="-1">MD−1</option>
-                <option value="0">MD</option>
-                <option value="1">MD+1</option>
-                <option value="2">MD+2</option>
-                <option value="3">MD+3</option>
               </select>
             </div>
             <div class="pl-form-field">
@@ -1085,9 +1080,7 @@
               <span class="pl-switch-lbl" id="plGameTypeLbl" data-i18n="planner.off">Off</span>
             </div>
             <div class="pl-toggle-row pl-gt-selector" id="plGameTypeBtns">
-              <button class="pl-toggle-btn" data-gt="SSG">SSG</button>
-              <button class="pl-toggle-btn" data-gt="MSG">MSG</button>
-              <button class="pl-toggle-btn" data-gt="LSG">LSG</button>
+              <!-- Filled by plApplySportToForm(): SSG/MSG/LSG in football, 3v3/4v4/5v5 in basketball -->
             </div>
           </div>
 
@@ -3908,13 +3901,13 @@
     btn.style.opacity = '0.6';
     const { data: { user: authUser } } = await window.sb.auth.getUser();
     if (!authUser) { btn.style.opacity = ''; alert(tt('planner.login_to_share', 'You must be logged in to share.')); return; }
-    const mdStr = ex.match_day != null ? `MD${ex.match_day >= 0 ? '+' : ''}${ex.match_day}` : null;
+    const mdStr = plMdLabel(ex.match_day);
     const INT_LABEL = { LOW:tt('planner.int_low_full','Low'), MEDIUM:tt('planner.int_medium_full','Medium'), HIGH:tt('planner.int_high_full','High'), VERY_HIGH:tt('planner.int_very_high_full','Very High') };
     const lines = [`📋 *${ex.name || tt('planner.untitled','Untitled')}*`];
     if (ex.players_count)  lines.push(`• ${tt('common.players','Players')}: ${ex.players_count}`);
     if (ex.field_width && ex.field_height) lines.push(`• ${tt('planner.field','Field')}: ${ex.field_width}×${ex.field_height} m`);
     if (ex.duration)       lines.push(`• ${tt('planner.duration','Duration')}: ${ex.duration} min`);
-    if (mdStr)             lines.push(`• ${tt('planner.match_day','Match Day')}: ${mdStr}`);
+    if (mdStr)             lines.push(`• ${plMdFieldLabel()}: ${mdStr}`);
     if (ex.intensity)      lines.push(`• ${tt('planner.intensity','Intensity')}: ${INT_LABEL[ex.intensity] || ex.intensity}`);
     if (ex.series)         lines.push(`• ${tt('planner.series','Series')}: ${ex.series}`);
     const content = lines.join('\n');
@@ -4069,9 +4062,75 @@
       b.classList.toggle('is-on', b.dataset.gt === val));
   }
   document.getElementById('plGameTypeToggle')?.addEventListener('change', e => setGameTypeEnabled(e.target.checked));
-  document.querySelectorAll('#plGameTypeBtns .pl-toggle-btn').forEach(b => {
-    b.addEventListener('click', () => setGameType(b.classList.contains('is-on') ? null : b.dataset.gt));
+  // Delegated: the buttons are rebuilt when the sport is confirmed.
+  document.getElementById('plGameTypeBtns')?.addEventListener('click', e => {
+    const b = e.target.closest('.pl-toggle-btn');
+    if (!b) return;
+    setGameType(b.classList.contains('is-on') ? null : b.dataset.gt);
   });
+
+  /* ── Sport-specific bits of the exercise form ──────────────────────────────
+     Three things on this panel are football vocabulary and nothing else:
+       · the match-day offsets (MD−5…MD+3 vs basketball's GD−3…GD+2),
+       · the goalkeeper flag, which several sports simply do not have,
+       · the small-sided-game sizes (SSG/MSG/LSG vs 3v3/4v4/5v5).
+     All three come from the pack, so a new sport needs no edit here. */
+
+  // Offset → label in the sport's own anchor: -2 becomes 'MD−2' in football and 'GD−2'
+  // in basketball. Used by the share text and the export sheet, which both used to build
+  // the string with 'MD' written in.
+  function plMdLabel(off) {
+    if (off === '' || off == null) return null;
+    const n = parseInt(off, 10);
+    if (isNaN(n)) return null;
+    const anchor = window.cmMdWindow ? window.cmMdWindow().anchor : 'MD';
+    return n === 0 ? anchor : anchor + (n < 0 ? '\u2212' : '+') + Math.abs(n);
+  }
+  // Label for the field itself. Goes through the pack's i18n redirect (fase 1) rather than
+  // gluing words together, so the translation stays one whole phrase per language.
+  function plMdFieldLabel() {
+    const key = window.CMSport ? window.CMSport.i18nKey('planner.match_day') : 'planner.match_day';
+    return tt(key, 'Match Day');
+  }
+
+  // Match-day options. exercises.match_day stores a NUMBER, so the value is the offset
+  // and only the label carries the sport's anchor.
+  function plFillMdSelect() {
+    const sel = document.getElementById('plExMatchDay');
+    if (!sel || !window.cmMdOptions) return;
+    const keep = sel.value;
+    const anchor = window.cmMdWindow ? window.cmMdWindow().anchor : 'MD';
+    const opts = window.cmMdOptions().map(code => {
+      const m = /^[A-Z]+([+-])(\d+)$/.exec(code);
+      const off = m ? (m[1] === '-' ? -parseInt(m[2], 10) : parseInt(m[2], 10)) : 0;
+      return `<option value="${off}">${code.replace('-', '\u2212')}</option>`;
+    }).join('');
+    sel.innerHTML = '<option value="">—</option>' + opts;
+    if (keep !== '' && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+  }
+
+  function plApplySportToForm() {
+    plFillMdSelect();
+
+    // Goalkeeper flag — meaningless in basketball, so the whole block goes away.
+    const gkGroup = document.getElementById('plExGkGroup');
+    if (gkGroup) {
+      const hasGk = window.CMSport ? window.CMSport.at('roster.hasGoalkeeper', true) : true;
+      gkGroup.style.display = hasGk ? '' : 'none';
+      if (!hasGk) { const cb = document.getElementById('plExGk'); if (cb) cb.checked = false; }
+    }
+
+    // Small-sided game sizes.
+    const gtBox = document.getElementById('plGameTypeBtns');
+    if (gtBox) {
+      const sizes = (window.CMSport && window.CMSport.at('drills.gameTypes', null)) || ['SSG', 'MSG', 'LSG'];
+      gtBox.innerHTML = sizes.map(v =>
+        `<button class="pl-toggle-btn" data-gt="${v}">${v}</button>`).join('');
+      setGameType(currentGameType);   // re-mark whatever was selected, if it still exists
+    }
+  }
+  plApplySportToForm();
+  window.addEventListener('cm:sport-change', plApplySportToForm);
 
   // ── Orientation helpers ─────────────────────────────────────────
   function calcOrientFromM2(m2) {
@@ -4948,7 +5007,7 @@
       const height   = document.getElementById('plExHeight')?.value;
       const duration = document.getElementById('plExDuration')?.value;
       const mdRaw    = document.getElementById('plExMatchDay')?.value;
-      const mdStr    = (mdRaw !== '' && mdRaw != null) ? `MD${parseInt(mdRaw) >= 0 ? '+' : ''}${mdRaw}` : '—';
+      const mdStr    = plMdLabel(mdRaw) || '—';
       const fieldStr = (width && height) ? `${width}×${height} m` : '—';
       const INT_LABEL = { LOW:tt('planner.int_low_full','Low'), MEDIUM:tt('planner.int_medium_full','Medium'), HIGH:tt('planner.int_high_full','High'), VERY_HIGH:tt('planner.int_very_high_full','Very High') };
       const intensityStr = currentIntensity ? (INT_LABEL[currentIntensity] || currentIntensity) : '—';
@@ -4986,7 +5045,7 @@
           <div class="meta-item"><div class="meta-label">${tt('common.players','Players')}</div><div class="meta-value">${players}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.dimensions','Dimensions')}</div><div class="meta-value">${fieldStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.duration','Duration')}</div><div class="meta-value">${duration ? duration + ' min' : '—'}</div></div>
-          <div class="meta-item"><div class="meta-label">${tt('planner.match_day','Match Day')}</div><div class="meta-value">${mdStr}</div></div>
+          <div class="meta-item"><div class="meta-label">${plMdFieldLabel()}</div><div class="meta-value">${mdStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.orientation','Orientation')}</div><div class="meta-value">${orientStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.intensity','Intensity')}</div><div class="meta-value">${intensityStr}</div></div>
           <div class="meta-item"><div class="meta-label">${tt('planner.focus','Focus')}</div><div class="meta-value">${escH(focusStr)}</div></div>
