@@ -339,3 +339,57 @@ describe('CMSport · surface is decided before the first frame', () => {
       expect(KNOWN, `${sport}`).toContain(p.field.surface));
   });
 });
+
+describe('sport packs · drill board kit', () => {
+  // Mirrors PL_OBJ_BTN in Planner.html: every key must map to a button that exists.
+  const OBJECT_KEYS = new Set([
+    'ball','cone','pole','barrier','goal','goalpost','mannequin',
+    'hoop','chair','ladder','tackle_bag','ruck_pad',
+  ]);
+
+  it('every declared object has a button behind it', () => {
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      (p.drills.objects || []).forEach(k =>
+        expect(OBJECT_KEYS.has(k), `${sport} asks for unknown object "${k}"`).toBe(true)));
+  });
+
+  it('every object is translated in all three languages', () => {
+    const locales = ['en', 'es', 'pt'].map(l =>
+      [l, JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', `${l}.json`), 'utf8'))]);
+    const used = new Set();
+    Object.values(PACKS).forEach(p => (p.drills.objects || []).forEach(k => used.add(k)));
+    const missing = [];
+    locales.forEach(([lang, dict]) => used.forEach(k => {
+      if (!(`planner.obj_${k}` in dict)) missing.push(`${lang}: planner.obj_${k}`);
+    }));
+    expect(missing).toEqual([]);
+  });
+
+  it('the universal kit is in every sport', () => {
+    // A cone and a ball are kit nobody trains without.
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      ['ball', 'cone', 'pole', 'barrier'].forEach(k =>
+        expect(p.drills.objects, `${sport}`).toContain(k)));
+  });
+
+  it('goals go to sports that have them, hoops to basketball', () => {
+    expect(PACKS.basketball.drills.objects).toContain('hoop');
+    expect(PACKS.basketball.drills.objects).not.toContain('goal');
+    expect(PACKS.basketball.drills.objects).not.toContain('goalpost');
+    expect(PACKS.football.drills.objects).toContain('goal');
+    expect(PACKS.football.drills.objects).not.toContain('hoop');
+    expect(PACKS.rugby.drills.objects).toEqual(expect.arrayContaining(['tackle_bag', 'ruck_pad']));
+  });
+
+  it('a sport with no goalkeeper is not offered goalkeeper kit', () => {
+    Object.entries(PACKS).forEach(([sport, p]) => {
+      if (p.roster.hasGoalkeeper) return;
+      expect(p.drills.objects, `${sport}`).not.toContain('goalpost');
+    });
+  });
+
+  it('small-sided formats are declared for every sport that plays them', () => {
+    ['football', 'futsal', 'basketball', 'rugby', 'hockey'].forEach(k =>
+      expect(PACKS[k].drills.gameTypes.length, k).toBeGreaterThan(0));
+  });
+});

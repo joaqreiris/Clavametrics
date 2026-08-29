@@ -1348,9 +1348,46 @@
                   <line x1="0" y1="2" x2="50" y2="22" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
                   <line x1="50" y1="2" x2="0" y2="22" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
                 </svg>
-                <span data-i18n="planner.obj_goal_post">Goal post</span>
+                <span data-i18n="planner.obj_goalpost">Goal post</span>
               </button>
               <button class="pl-dock-btn pl-drop-opt" title="Mannequin"><i class="ti ti-walk"></i><span data-i18n="planner.obj_mannequin">Mannequin</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Hoop">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="none">
+                  <rect x="5" y="3" width="14" height="2.6" rx="1" fill="currentColor"/>
+                  <line x1="12" y1="5.6" x2="12" y2="8" stroke="#E8622A" stroke-width="2"/>
+                  <circle cx="12" cy="14" r="5.6" stroke="#E8622A" stroke-width="2.2"/>
+                </svg>
+                <span data-i18n="planner.obj_hoop">Hoop</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Chair">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="currentColor">
+                  <rect x="4" y="3" width="16" height="3.4" rx="1.4"/>
+                  <rect x="4" y="8" width="16" height="13" rx="2.4" opacity="0.65"/>
+                </svg>
+                <span data-i18n="planner.obj_chair">Chair</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Ladder">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <line x1="3" y1="4" x2="21" y2="4"/><line x1="3" y1="20" x2="21" y2="20"/>
+                  <line x1="6" y1="4" x2="6" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="18" y1="4" x2="18" y2="20"/>
+                </svg>
+                <span data-i18n="planner.obj_ladder">Agility ladder</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="TackleBag">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="currentColor">
+                  <rect x="2" y="7" width="20" height="10" rx="5" opacity="0.85"/>
+                  <line x1="9" y1="7" x2="9" y2="17" stroke="#fff" stroke-width="1.4" opacity="0.7"/>
+                  <line x1="15" y1="7" x2="15" y2="17" stroke="#fff" stroke-width="1.4" opacity="0.7"/>
+                </svg>
+                <span data-i18n="planner.obj_tackle_bag">Tackle bag</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="RuckPad">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="currentColor">
+                  <path d="M3 6 Q12 2 21 6 L21 17 Q12 22 3 17 Z" opacity="0.85"/>
+                  <rect x="9" y="10.6" width="6" height="2.6" rx="1.3" fill="#fff" opacity="0.75"/>
+                </svg>
+                <span data-i18n="planner.obj_ruck_pad">Ruck pad</span>
+              </button>
               <div class="pl-drop-sep"></div>
               <div class="pl-myobj-head" data-i18n="planner.my_objects">My objects</div>
               <div id="plMyObjects"></div>
@@ -2429,6 +2466,79 @@
     grp._poleColor = color;
     finishAdd(grp, 'pole');
   }
+  /* ── Kit that football does not own ────────────────────────────────────────
+     All drawn from above, like everything else on this board, and sized against the
+     pitch the same way: a hoop reads as the ring seen from overhead with the backboard
+     as a bar behind it, not as a side-on basket. Which of these appear is decided by
+     the sport pack (drills.objects), not here. */
+
+  // Basket seen from above: backboard, ring, and the shadow that grounds it.
+  function addHoop(color = '#E8622A') {
+    const shadow = new fabric.Ellipse({ rx:15, ry:4.5, fill:'rgba(0,0,0,0.22)', top:12, originX:'center', originY:'center' });
+    const board  = new fabric.Rect({ width:34, height:5, rx:1.5, fill:'#F1F1EE', stroke:'rgba(0,0,0,0.35)', strokeWidth:1,
+                                     left:0, top:-13, originX:'center', originY:'center' });
+    const ring   = new fabric.Circle({ radius:10, fill:'', stroke:color, strokeWidth:3.4,
+                                       left:0, top:0, originX:'center', originY:'center', _role:'ring' });
+    const neck   = new fabric.Line([0, -10.5, 0, -13], { stroke:color, strokeWidth:3 });
+    const grp = new fabric.Group([shadow, board, neck, ring]);
+    grp._hoopColor = color;
+    finishAdd(grp, 'hoop');
+  }
+
+  // Folding chair from above — the stand-in defender of every shooting drill.
+  function addChair(color = '#3B82F6') {
+    const shadow = new fabric.Ellipse({ rx:12, ry:4, fill:'rgba(0,0,0,0.20)', top:13, originX:'center', originY:'center' });
+    const seat   = new fabric.Rect({ width:20, height:20, rx:3, fill:color, stroke:_shade(color,0.7), strokeWidth:1.2,
+                                     left:0, top:1, originX:'center', originY:'center', _role:'seat' });
+    const back   = new fabric.Rect({ width:20, height:5, rx:2, fill:_shade(color,0.7),
+                                     left:0, top:-11, originX:'center', originY:'center' });
+    const grp = new fabric.Group([shadow, back, seat]);
+    grp._chairColor = color;
+    finishAdd(grp, 'chair');
+  }
+
+  // Agility ladder: rails plus rungs, drawn to the real proportion of a 4 m ladder.
+  function addLadder(color = '#FACC15') {
+    const W = 26, L = 120, RUNGS = 7;
+    const figs = [
+      new fabric.Rect({ width:L, height:W, rx:2, fill:'rgba(0,0,0,0.10)', left:0, top:0, originX:'center', originY:'center' }),
+      new fabric.Line([-L/2, -W/2, L/2, -W/2], { stroke:color, strokeWidth:2.6, strokeLineCap:'round', _role:'rail' }),
+      new fabric.Line([-L/2,  W/2, L/2,  W/2], { stroke:color, strokeWidth:2.6, strokeLineCap:'round', _role:'rail' }),
+    ];
+    for (let i = 0; i <= RUNGS; i++) {
+      const x = -L/2 + (L / RUNGS) * i;
+      figs.push(new fabric.Line([x, -W/2, x, W/2], { stroke:color, strokeWidth:2, strokeLineCap:'round', _role:'rung' }));
+    }
+    const grp = new fabric.Group(figs);
+    grp._ladderColor = color;
+    finishAdd(grp, 'ladder');
+  }
+
+  // Rugby tackle bag: a padded cylinder lying on the ground.
+  function addTackleBag(color = '#1D4ED8') {
+    const shadow = new fabric.Ellipse({ rx:20, ry:6, fill:'rgba(0,0,0,0.22)', top:14, originX:'center', originY:'center' });
+    const body   = new fabric.Rect({ width:44, height:20, rx:10, fill:color, stroke:_shade(color,0.65), strokeWidth:1.4,
+                                     left:0, top:0, originX:'center', originY:'center', _role:'body' });
+    const strapA = new fabric.Line([-8, -10, -8, 10], { stroke:_shade(color,1.4), strokeWidth:2 });
+    const strapB = new fabric.Line([ 8, -10,  8, 10], { stroke:_shade(color,1.4), strokeWidth:2 });
+    const grp = new fabric.Group([shadow, body, strapA, strapB]);
+    grp._bagColor = color;
+    finishAdd(grp, 'tackle_bag');
+  }
+
+  // Ruck / hit shield: the curved pad held against the chest.
+  function addRuckPad(color = '#DC2626') {
+    const shadow = new fabric.Ellipse({ rx:16, ry:5, fill:'rgba(0,0,0,0.20)', top:15, originX:'center', originY:'center' });
+    const body   = new fabric.Path('M-16,-12 Q0,-18 16,-12 L16,10 Q0,16 -16,10 Z',
+                                   { fill:color, stroke:_shade(color,0.65), strokeWidth:1.4,
+                                     originX:'center', originY:'center', _role:'body' });
+    const grip   = new fabric.Rect({ width:12, height:4, rx:2, fill:_shade(color,1.45),
+                                     left:0, top:0, originX:'center', originY:'center' });
+    const grp = new fabric.Group([shadow, body, grip]);
+    grp._padColor = color;
+    finishAdd(grp, 'ruck_pad');
+  }
+
   function addGoal() {
     finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2, strokeUniform:true }), 'goal');
   }
@@ -3456,6 +3566,8 @@
     'Team3':() => addPlayer('t3'), 'Team4':() => addPlayer('t4'),
     'Ball':()=>addBall(), 'Cone':()=>addCone(), 'Pole':()=>addPole(),
     'Barrier':()=>addBarrier(), 'Goal':()=>addGoal(), 'GoalPost':()=>addGoalPost(), 'Mannequin':()=>addMannequin(),
+    'Hoop':()=>addHoop(), 'Chair':()=>addChair(), 'Ladder':()=>addLadder(),
+    'TackleBag':()=>addTackleBag(), 'RuckPad':()=>addRuckPad(),
     // (Line type is driven by the Lines composer panel — see wireLineComposer.)
     'Rectangle':()=>addZoneRect(), 'Circle':()=>addZoneCircle(),
     'Label':  ()=>{const t=new fabric.IText(tt('planner.text_default', 'Label'),{fill:'#fff',fontSize:14,fontFamily:'sans-serif'});finishAdd(t,'text');t.enterEditing();},
@@ -4109,8 +4221,32 @@
     if (keep !== '' && [...sel.options].some(o => o.value === keep)) sel.value = keep;
   }
 
+  // Objects menu → only the kit this sport owns. Keys are the pack's (drills.objects);
+  // the buttons are identified by their title, which is also what dockActions keys off.
+  const PL_OBJ_BTN = {
+    ball:'Ball', cone:'Cone', pole:'Pole', barrier:'Barrier', goal:'Goal',
+    goalpost:'GoalPost', mannequin:'Mannequin', hoop:'Hoop', chair:'Chair',
+    ladder:'Ladder', tackle_bag:'TackleBag', ruck_pad:'RuckPad',
+  };
+  function plApplySportToObjects() {
+    const menu = document.getElementById('plDropObjectsMenu');
+    if (!menu) return;
+    const keys = (window.CMSport && window.CMSport.at('drills.objects', null))
+      || ['ball','cone','pole','barrier','goal','goalpost','mannequin'];
+    const wanted = new Set(keys.map(k => PL_OBJ_BTN[k]).filter(Boolean));
+    Object.values(PL_OBJ_BTN).forEach(title => {
+      const btn = menu.querySelector(`.pl-drop-opt[title="${title}"]`);
+      if (btn) btn.style.display = wanted.has(title) ? '' : 'none';
+    });
+    // The menu button's own icon follows the sport's ball.
+    const trigger = menu.parentElement?.querySelector('.pl-drop-btn > i.ti');
+    const ballIcon = window.CMSport && window.CMSport.at('icons.ball', null);
+    if (trigger && ballIcon) trigger.className = 'ti ' + ballIcon;
+  }
+
   function plApplySportToForm() {
     plFillMdSelect();
+    plApplySportToObjects();
 
     // Goalkeeper flag — meaningless in basketball, so the whole block goes away.
     const gkGroup = document.getElementById('plExGkGroup');

@@ -371,8 +371,10 @@
       micro:     { anchor: 'MD', multiGamePerWeek: false,
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
+      // `objects` is the Objects menu of the drill board, in menu order. Ball, cone, pole
+      // and barrier are universal kit; the rest is what a given sport actually owns.
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'goal', 'goalpost', 'mannequin', 'zone', 'label'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
       anthro:    { dominantSide: 'foot', extra: [] },
       // Sidebar: nothing hidden, nothing renamed — football is the vocabulary the app
       // was written in. Other packs diff against this.
@@ -413,7 +415,7 @@
                    dayCodes: ['MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['2v2', '3v3', '4v4', '5v5'],
-                   objects: ['ball', 'cone', 'pole', 'goal', 'goalpost', 'mannequin', 'zone', 'label'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
       anthro:    { dominantSide: 'foot', extra: [] },
       // Indoor: the Top-Up calculator works off % of Vmax with 19.8/25.2 km/h fallbacks,
       // which nobody reaches on a 40 m court.
@@ -459,7 +461,7 @@
                    dayCodes: ['GD-3','GD-2','GD-1','GD','GD+1','GD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['1v1', '2v2', '3v3', '4v4', '5v5'],
-                   objects: ['ball', 'cone', 'hoop', 'chair', 'ladder', 'zone', 'label'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'hoop', 'chair', 'ladder', 'mannequin'] },
       anthro:    { dominantSide: 'hand', extra: ['wingspan', 'standing_reach'] },
       nav:       { hidden: ['top-up'], icons: { 'daily-planning': 'ti-ball-basketball' } },
       // Wording that differs from football, as i18n key → i18n key. Applied to any
@@ -507,7 +509,7 @@
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'zone', 'label'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'mannequin'] },
       anthro:    { dominantSide: 'foot', extra: [] },
       nav:       { hidden: [], icons: { 'daily-planning': 'ti-ball-american-football' } },
       i18n:      {},
@@ -545,7 +547,7 @@
                    dayCodes: ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'goal', 'mannequin', 'zone', 'label'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
       anthro:    { dominantSide: 'hand', extra: [] },
       nav:       { hidden: [], icons: {} },
       i18n:      {},
@@ -579,7 +581,7 @@
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'other'] },
-      drills:    { gameTypes: [], objects: ['ball', 'cone', 'pole', 'zone', 'label'] },
+      drills:    { gameTypes: [], objects: ['ball', 'cone', 'pole', 'barrier'] },
       anthro:    { dominantSide: 'hand', extra: [] },
       // No lineup, no match module: we do not know this sport's shape, so we do not
       // pretend to. Everything transversal (gym, wellness, medical, load) stays.
