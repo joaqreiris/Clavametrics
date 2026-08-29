@@ -298,13 +298,25 @@ html.cm-rail .hub-nav-grip{display:none}
     return out;
   }
 
+  // ── SPORT OVERRIDES ──────────────────────────────────────────
+  // The nav is written in football. A pack (assets/sport-packs.js) may hide the items its
+  // sport has no use for, swap an icon, or point an item at a different i18n key — so a
+  // basketball club reads "Game reports" and never sees the Top-Up calculator, whose whole
+  // model is % of Vmax with 19.8/25.2 km/h fallbacks that nobody reaches on a 28 m court.
+  function _sportNav() {
+    try { return (window.CMSport && window.CMSport.at('nav', null)) || { hidden: [], icons: {}, i18n: {} }; }
+    catch (_e) { return { hidden: [], icons: {}, i18n: {} }; }
+  }
+
   // ── RENDER ───────────────────────────────────────────────────
   function renderNav() {
     const savedAll = _navOrder();
+    const sportNav = _sportNav();
+    const hidden = new Set(sportNav.hidden || []);
     return NAV_GROUPS.map(g => `
       <div class="hub-nav-group" data-group-key="${g.label}">
         <div class="hub-nav-label" data-i18n="shell.group.${g.label.toLowerCase()}">${g.label}</div>
-        ${_orderItems(g.items, savedAll[g.label]).map(item => {
+        ${_orderItems(g.items, savedAll[g.label]).filter(item => !(item.key && hidden.has(item.key))).map(item => {
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
@@ -313,9 +325,12 @@ html.cm-rail .hub-nav-grip{display:none}
           const plt    = item.platformOnly ? ' data-platform-only' : '';
           const po     = item.planOnly ? ' data-plan-only' : '';   // gatea por plan, NO por RBAC
           const bks    = item.buckets ? ` data-buckets="${item.buckets.join(',')}"` : '';   // visible solo para estos buckets de rol
-          const i18nKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
+          const baseKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
+          // The sport may point this entry at different wording ("Game reports").
+          const i18nKey = (baseKey && window.CMSport) ? window.CMSport.i18nKey(baseKey) : baseKey;
           const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po}${bks} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          const icon   = (item.key && sportNav.icons && sportNav.icons[item.key]) || item.icon;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po}${bks} title="${item.label}"><i class="ti ${icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }

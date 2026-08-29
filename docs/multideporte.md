@@ -181,7 +181,7 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 
 ## 5. Plan por fases
 
-### Fase 0 — Cimientos (sin cambios visibles)
+### Fase 0 — Cimientos (sin cambios visibles) ✅ HECHA (commit e2915fa · SQL aplicado)
 1. Persistir el deporte en el Register (`Register.html:707`) y en el Onboarding.
 2. `ALTER TABLE teams ADD COLUMN sport text` + `clubs.sport` con check de valores válidos.
 3. Crear `assets/sport.js` + `assets/sport-packs/football.js` con **exactamente lo que
@@ -189,10 +189,19 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 4. Unificar `Squad.html:946` `POS_CFG` con `assets/positions.js` (la deuda que ya está anotada).
 5. Helper `cmSport()` global, cargado junto al sidebar, con caché igual que el club activo.
 
-### Fase 1 — Vocabulario e identidad
-- Claves i18n por deporte: `sport.<key>.match`, `.pitch`, `.goal`, `.lineup_count`.
-- Iconos y color de acento por deporte (sacar el verde césped fijo del Load Monitor).
-- Sidebar: esconder módulos que no aplican (Lineup en deportes sin formación fija, Top-Up en indoor) vía `club_modules` sembrado desde el pack.
+### Fase 1 — Vocabulario e identidad ✅ HECHA
+- `CMSport.word('match'|'surface'|'score')` → la palabra del deporte, ya traducida
+  (claves `sport.word.*` en los tres idiomas). Básquet juega un *game* en una *court* y
+  anota *points*; fútbol un *match* en un *pitch* y marca *goals*.
+- `CMSport.i18nKey()` + `applyI18nOverrides()`: el pack redirige claves i18n
+  (`shell.nav.match-reports` → `shell.nav.game_reports`). Una pantalla se suma con solo
+  tener la clave; no hay ramas por deporte en el código de página.
+- Iconos del nav por deporte (`nav.icons`) y contador de alineación (`XI` / `V` / `XV`).
+- El sidebar esconde los módulos que el deporte no usa (`nav.hidden`): Top-Up en indoor
+  —su modelo entero es % de Vmax con umbrales de 19,8/25,2 km/h—, y Lineup +
+  Match reports en el deporte genérico.
+- **No** se tocó el acento verde: es el color de marca de ClavaMetrics, no vocabulario de
+  deporte, y cada club ya lo pisa con `clubs.primary_color`.
 
 ### Fase 2 — Plantel, alineación y pizarra
 - Squad: posiciones desde el pack, grupos y colores; ficha con envergadura/alcance y mano hábil cuando el pack lo pide.
@@ -200,9 +209,16 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 - Planner: **habilitar el selector de deporte** que ya está escrito (`Planner.html:1659`) y atarlo al pack; agregar los objetos que faltan (aro, red, bolsa de tackle, escalera); reemplazar SSG/MSG/LSG por `drills.gameTypes`.
 - Agregar vóley y handball a `field-system.js` (son dos funciones de dibujo, el sistema ya está).
 
-### Fase 3 — Planificación semanal
-- Generalizar MD → **ancla de día** configurable (`MD` en fútbol, `GD` en básquet).
-- Soportar **varios partidos por microciclo**: el código de día debe resolverse contra el partido más cercano, no contra "el partido de la semana". Esto también arregla el problema que ya tenemos en fútbol con dobles sesiones.
+### Fase 3 — Planificación semanal ✅ HECHA (commit a9c67b8)
+- Hecho: el cálculo vivía **diez veces** con reglas distintas. Ahora está una sola vez en
+  `lib/day-context.js` (`cmMdForDate`), con ancla y ventana del pack (fútbol MD−6…MD+3,
+  básquet GD−3…GD+2) y el partido **más cercano** como referencia.
+- Corrección importante al diagnóstico original: era falso que "la app asume un partido por
+  semana". En fútbol también hay semanas de copa + liga, y Calendar, Load Planner, Annual
+  Planner y el filtro del gp-builder **ya** contaban bien; las otras seis pantallas no. El
+  bug ya afectaba a fútbol.
+- Empate entre el partido anterior y el siguiente: se marca y lo decide el usuario con el
+  override, en vez de que la app elija en silencio.
 - Calendar: tipos de evento extra por deporte (shootaround, walkthrough ya existe).
 - Load Planner: referencias de partido por deporte (distancia en fútbol, PlayerLoad en básquet, saltos en vóley).
 

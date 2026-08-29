@@ -354,6 +354,10 @@
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
                    objects: ['ball', 'cone', 'pole', 'goal', 'goalpost', 'mannequin', 'zone', 'label'] },
       anthro:    { dominantSide: 'foot', extra: [] },
+      // Sidebar: nothing hidden, nothing renamed — football is the vocabulary the app
+      // was written in. Other packs diff against this.
+      nav:       { hidden: [], icons: {} },
+      i18n:      {},
       icons:     { ball: 'ti-ball-football', field: 'ti-soccer-field' },
       vocab:     { match: 'match', surface: 'pitch', score: 'goal' },
     },
@@ -382,6 +386,10 @@
       drills:    { gameTypes: ['2v2', '3v3', '4v4', '5v5'],
                    objects: ['ball', 'cone', 'pole', 'goal', 'goalpost', 'mannequin', 'zone', 'label'] },
       anthro:    { dominantSide: 'foot', extra: [] },
+      // Indoor: the Top-Up calculator works off % of Vmax with 19.8/25.2 km/h fallbacks,
+      // which nobody reaches on a 40 m court.
+      nav:       { hidden: ['top-up'], icons: { 'daily-planning': 'ti-ball-football' } },
+      i18n:      {},
       icons:     { ball: 'ti-ball-football', field: 'ti-ball-football' },
       vocab:     { match: 'match', surface: 'court', score: 'goal' },
     },
@@ -415,6 +423,14 @@
       drills:    { gameTypes: ['1v1', '2v2', '3v3', '4v4', '5v5'],
                    objects: ['ball', 'cone', 'hoop', 'chair', 'ladder', 'zone', 'label'] },
       anthro:    { dominantSide: 'hand', extra: ['wingspan', 'standing_reach'] },
+      nav:       { hidden: ['top-up'], icons: { 'daily-planning': 'ti-ball-basketball' } },
+      // Wording that differs from football, as i18n key → i18n key. Applied to any
+      // [data-i18n] node by CMSport.applyI18nOverrides, so a screen opts in simply by
+      // having the key; nothing else changes.
+      i18n:      { 'shell.nav.match-reports':          'shell.nav.game_reports',
+                   'match_reports.match_reports':      'match_reports.game_reports',
+                   'match_reports.match_report':       'match_reports.game_report',
+                   'match_reports.search_match':       'match_reports.search_game' },
       icons:     { ball: 'ti-ball-basketball', field: 'ti-ball-basketball' },
       vocab:     { match: 'game', surface: 'court', score: 'point' },
     },
@@ -445,6 +461,8 @@
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
                    objects: ['ball', 'cone', 'pole', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'zone', 'label'] },
       anthro:    { dominantSide: 'foot', extra: [] },
+      nav:       { hidden: [], icons: { 'daily-planning': 'ti-ball-american-football' } },
+      i18n:      {},
       icons:     { ball: 'ti-ball-american-football', field: 'ti-ball-american-football' },
       vocab:     { match: 'match', surface: 'pitch', score: 'point' },
     },
@@ -472,6 +490,8 @@
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
                    objects: ['ball', 'cone', 'pole', 'goal', 'mannequin', 'zone', 'label'] },
       anthro:    { dominantSide: 'hand', extra: [] },
+      nav:       { hidden: [], icons: {} },
+      i18n:      {},
       icons:     { ball: 'ti-ball-tennis', field: 'ti-soccer-field' },
       vocab:     { match: 'match', surface: 'pitch', score: 'goal' },
     },
@@ -497,6 +517,10 @@
       tactics:   { categories: ['offensive', 'defensive', 'other'] },
       drills:    { gameTypes: [], objects: ['ball', 'cone', 'pole', 'zone', 'label'] },
       anthro:    { dominantSide: 'hand', extra: [] },
+      // No lineup, no match module: we do not know this sport's shape, so we do not
+      // pretend to. Everything transversal (gym, wellness, medical, load) stays.
+      nav:       { hidden: ['lineup', 'match-reports', 'top-up'], icons: { 'daily-planning': 'ti-layout-grid' } },
+      i18n:      {},
       icons:     { ball: 'ti-ball-football', field: 'ti-layout-grid' },
       vocab:     { match: 'match', surface: 'pitch', score: 'point' },
     },

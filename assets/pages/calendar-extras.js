@@ -975,6 +975,12 @@ const CAL_TYPE_LABEL_KEY = {
 function calMetaLabel(type){
   const meta = CAL_TYPE_META[type] || CAL_TYPE_META._fallback;
   const key = CAL_TYPE_LABEL_KEY[type] || CAL_TYPE_LABEL_KEY._fallback;
+  // A basketball club plays a game, not a match. Every other event type is the same
+  // word in every sport, so only this one is swapped (assets/sport-packs.js → vocab).
+  if (type === 'match' && window.CMSport) {
+    const w = window.CMSport.word('match');
+    if (w) return w;
+  }
   return tt(key, meta.label);
 }
 function calEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

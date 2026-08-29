@@ -89,7 +89,6 @@ describe('sport packs · i18n', () => {
   it('group and position keys are translated in every language', () => {
     const keys = new Set();
     Object.values(PACKS).forEach(p => {
-      keys.add(p.i18n);
       if (!p.positions) return;
       p.positions.groups.forEach(g => keys.add(g.i18n));
       Object.values(p.positions.labels).forEach(l => keys.add(l.i18n));
@@ -98,6 +97,128 @@ describe('sport packs · i18n', () => {
     locales.forEach(([lang, dict]) =>
       keys.forEach(k => { if (k && !(k in dict)) missing.push(`${lang}: ${k}`); }));
     expect(missing).toEqual([]);
+  });
+
+  it('every sport name is translated', () => {
+    const missing = [];
+    locales.forEach(([lang, dict]) =>
+      Object.values(PACKS).forEach(p => {
+        if (typeof p.i18n === 'string' && !(p.i18n in dict)) missing.push(`${lang}: ${p.i18n}`);
+      }));
+    // Sport names live under sport.<key>; the per-pack `i18n` field is the override map.
+    locales.forEach(([lang, dict]) =>
+      Object.keys(PACKS).forEach(k => {
+        if (!(`sport.${k}` in dict)) missing.push(`${lang}: sport.${k}`);
+      }));
+    expect(missing).toEqual([]);
+  });
+
+  it('i18n overrides point from a real key to a real key, in every language', () => {
+    const problems = [];
+    locales.forEach(([lang, dict]) =>
+      Object.entries(PACKS).forEach(([sport, p]) =>
+        Object.entries(p.i18n || {}).forEach(([from, to]) => {
+          if (!(from in dict)) problems.push(`${lang}: ${sport} overrides unknown key ${from}`);
+          if (!(to in dict))   problems.push(`${lang}: ${sport} points at missing key ${to}`);
+        })));
+    expect(problems).toEqual([]);
+  });
+
+  it('every vocab term has a word key, singular and plural', () => {
+    const missing = [];
+    locales.forEach(([lang, dict]) =>
+      Object.entries(PACKS).forEach(([sport, p]) =>
+        Object.values(p.vocab || {}).forEach(term => {
+          if (!(`sport.word.${term}` in dict))        missing.push(`${lang}: ${sport} → sport.word.${term}`);
+          if (!(`sport.word.${term}_plural` in dict)) missing.push(`${lang}: ${sport} → sport.word.${term}_plural`);
+        })));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe('sport packs · navigation', () => {
+  // Mirrors the module keys in assets/sidebar.js NAV_GROUPS.
+  const NAV_KEYS = new Set([
+    'club-overview','annual-planner','chat-tasks','planner','sessions-lib','daily-planning',
+    'tactical-planning','sessions-history','video-room','squad','lineup','availability',
+    'match-reports','evaluations','wellness','rpe','load-monitor','load-planner','gps',
+    'gym-planner','individual-sc','top-up','gym-library','clinical','injuries','treatments',
+    'rehab','nutrition',
+  ]);
+
+  it('hides only modules that actually exist in the nav', () => {
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      (p.nav.hidden || []).forEach(k =>
+        expect(NAV_KEYS.has(k), `${sport} hides unknown module "${k}"`).toBe(true)));
+  });
+
+  it('swaps icons only on modules that exist', () => {
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      Object.keys(p.nav.icons || {}).forEach(k =>
+        expect(NAV_KEYS.has(k), `${sport} re-icons unknown module "${k}"`).toBe(true)));
+  });
+
+  it('football hides nothing — it is the baseline the app was written in', () => {
+    expect(PACKS.football.nav.hidden).toEqual([]);
+    expect(PACKS.football.i18n).toEqual({});
+  });
+
+  it('indoor sports hide the Top-Up calculator', () => {
+    // Its whole model is % of Vmax with 19.8/25.2 km/h fallbacks — unreachable on a court.
+    ['basketball', 'futsal'].forEach(k => {
+      expect(PACKS[k].load.topUpEnabled).toBe(false);
+      expect(PACKS[k].nav.hidden).toContain('top-up');
+    });
+    // …and every pack that hides it must actually have it disabled, and vice versa.
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      expect(p.nav.hidden.includes('top-up'), `${sport}`).toBe(p.load.topUpEnabled === false));
+  });
+
+  it('a sport with no lineup or match model hides those modules', () => {
+    expect(PACKS.other.lineup.enabled).toBe(false);
+    expect(PACKS.other.nav.hidden).toEqual(expect.arrayContaining(['lineup', 'match-reports']));
+  });
+});
+
+describe('CMSport.word · sport vocabulary', () => {
+  const useSport = (key) => {
+    localStorage.setItem('cm_sport', key);
+    delete window.CMSport;
+    load('assets/sport.js');
+  };
+
+  it('falls back to English when no i18n runtime is present', () => {
+    useSport('football');
+    expect(window.CMSport.word('match')).toBe('Match');
+    expect(window.CMSport.word('surface')).toBe('Pitch');
+    expect(window.CMSport.word('score')).toBe('Goal');
+  });
+
+  it('basketball plays a game on a court for points', () => {
+    useSport('basketball');
+    expect(window.CMSport.word('match')).toBe('Game');
+    expect(window.CMSport.word('surface')).toBe('Court');
+    expect(window.CMSport.word('score')).toBe('Point');
+  });
+
+  it('pluralises', () => {
+    useSport('basketball');
+    expect(window.CMSport.word('match', { plural: true })).toBe('Games');
+    useSport('football');
+    expect(window.CMSport.word('match', { plural: true })).toBe('Matches');
+  });
+
+  it('returns nothing for a concept the pack does not name', () => {
+    useSport('football');
+    expect(window.CMSport.word('nonsense')).toBe('');
+  });
+
+  it('redirects i18n keys only where the pack says so', () => {
+    useSport('basketball');
+    expect(window.CMSport.i18nKey('shell.nav.match-reports')).toBe('shell.nav.game_reports');
+    expect(window.CMSport.i18nKey('shell.nav.squad')).toBe('shell.nav.squad');
+    useSport('football');
+    expect(window.CMSport.i18nKey('shell.nav.match-reports')).toBe('shell.nav.match-reports');
   });
 });
 

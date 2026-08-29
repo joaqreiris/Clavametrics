@@ -94,11 +94,22 @@
     if (typeof window.getClubId !== 'function') return;
     try { resolve(); } catch (_e) {}
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', autoResolve, { once: true });
-  } else {
-    autoResolve();
+  // Redirect the sport's i18n keys before the runtime paints. This listener is registered
+  // while sport.js is parsed — ahead of i18n.js, which the sidebar appends with defer — so
+  // it runs first and the very first paint already carries the sport's wording.
+  function applyOverrides() {
+    try { window.CMSport.applyI18nOverrides(document); } catch (_e) {}
   }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { applyOverrides(); autoResolve(); }, { once: true });
+  } else {
+    applyOverrides(); autoResolve();
+  }
+  // Confirmed sport differs from the cached one → re-point the keys and ask i18n to repaint.
+  window.addEventListener('cm:sport-change', () => {
+    applyOverrides();
+    try { if (window.CM_I18N && window.CM_I18N.applyTo) window.CM_I18N.applyTo(document); } catch (_e) {}
+  });
 
   window.CMSport = {
     /** Active sport key — synchronous, cached, never null. */
@@ -130,6 +141,58 @@
 
     /** Force a re-read (after an admin changes the club's sport). */
     refresh() { _promise = null; _confirmed = false; return resolve(); },
+
+    /** An i18n key, redirected to this sport's wording when the pack declares one.
+     *  Football returns every key unchanged — it is the vocabulary the app is written in. */
+    i18nKey(key) {
+      const map = this.at('i18n', null);
+      return (map && map[key]) || key;
+    },
+
+    /** Rewrite [data-i18n] / [data-i18n-ph] attributes in `root` onto this sport's keys.
+     *  Runs before the i18n runtime paints, so a screen opts in just by carrying the key —
+     *  no per-page branching on the sport. */
+    applyI18nOverrides(root) {
+      const map = this.at('i18n', null);
+      if (!map || !Object.keys(map).length) return;
+      const scope = root || document;
+      ['data-i18n', 'data-i18n-ph', 'data-i18n-html'].forEach(attr => {
+        scope.querySelectorAll('[' + attr + ']').forEach(el => {
+          const k = el.getAttribute(attr);
+          if (map[k]) el.setAttribute(attr, map[k]);
+        });
+      });
+    },
+
+    /** The sport's word for a concept, already translated.
+     *
+     *  A basketball club plays a GAME on a COURT and scores POINTS; a football club plays
+     *  a MATCH on a PITCH and scores GOALS. Each pack maps the concept onto its own term
+     *  (`vocab`), and the term resolves to an i18n key — so the distinction survives
+     *  translation instead of being hardcoded English.
+     *
+     *    CMSport.word('match')   → 'Game'    (basketball)  /  'Match'  (football)
+     *    CMSport.word('surface') → 'Court'                 /  'Pitch'
+     *    CMSport.word('score')   → 'Point'                 /  'Goal'
+     */
+    word(concept, opts) {
+      const vocab = this.at('vocab', {}) || {};
+      const term = vocab[concept];
+      if (!term) return '';
+      const plural = !!(opts && opts.plural);
+      const key = 'sport.word.' + term + (plural ? '_plural' : '');
+      const EN = {
+        match: 'Match', game: 'Game', pitch: 'Pitch', court: 'Court',
+        goal: 'Goal', point: 'Point',
+        match_plural: 'Matches', game_plural: 'Games', pitch_plural: 'Pitches',
+        court_plural: 'Courts', goal_plural: 'Goals', point_plural: 'Points',
+      };
+      const fb = EN[term + (plural ? '_plural' : '')] || term;
+      try {
+        const v = (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(key) : null;
+        return (v && v !== key) ? v : fb;
+      } catch (_e) { return fb; }
+    },
 
     /** Convenience: dot path into the active pack, with a fallback.
      *  CMSport.at('lineup.slots', 11) */
