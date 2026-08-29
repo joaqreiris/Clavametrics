@@ -5401,6 +5401,7 @@ declare
   v_link record; v_ok boolean; v_read int; v_hooper int;
   v_areas text[]; v_note text; v_pname text; v_team uuid; v_sid uuid; v_dur int; v_sdate date;
   v_tz int; v_local_date date; v_pick uuid; v_plegacy uuid; v_pany boolean;
+  v_explicit boolean := false;
 begin
   select * into v_link from public.share_links
    where token = p_token and revoked = false
@@ -5472,6 +5473,7 @@ begin
                or ts.team_id = v_plegacy
                or exists (select 1 from public.player_teams pt
                           where pt.player_id = p_player_id and pt.team_id = ts.team_id));
+        v_explicit := (v_sid is not null);
       end if;
       if v_sid is null then
         v_sid := public.resolve_rpe_session(v_link.club_id, p_player_id, v_local_date,
@@ -5480,10 +5482,14 @@ begin
       if v_sid is not null then
         -- Bloquea el duplicado de ESA sesión, y también si quedó un huérfano de hoy sin
         -- asignar (no se puede saber a qué sesión pertenecía; lo resuelve el staff).
+        -- Excepción: si el jugador ELIGIÓ la sesión en el survey (v_explicit), el huérfano no
+        -- lo traba — sabemos a qué sesión va este envío. Si no, en un día de doble sesión el
+        -- segundo RPE se perdía en silencio devolviendo 'already'.
         if exists (select 1 from public.rpe
                    where club_id = v_link.club_id and player_id = p_player_id
                      and (session_id = v_sid
-                          or (session_id is null
+                          or (not v_explicit
+                              and session_id is null
                               and coalesce(session_date, ((created_at at time zone 'UTC') - make_interval(mins => v_tz))::date) = v_local_date))) then
           return jsonb_build_object('ok', true, 'already', true);
         end if;

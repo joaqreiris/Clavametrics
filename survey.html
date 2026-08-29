@@ -65,6 +65,12 @@
   .next-card{width:100%;max-width:380px;margin-top:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;text-align:center}
   .next-card .q{font:500 14px/1.4 var(--sans);color:#EDEDED;margin-bottom:12px}
   .next-card button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--green-d);color:#0A0A0A;font:700 14px/1 var(--sans);cursor:pointer}
+  .next-card button.skip{margin-top:8px;background:transparent;color:#9CA3AF;font-weight:500;text-decoration:underline;padding:10px}
+  /* Candado de doble sesión: paso actual + confirmación de lo ya enviado */
+  .prog{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);font:600 11.5px/1 var(--mono);letter-spacing:.04em;color:#9CA3AF}
+  .prog i{font-size:14px}
+  .sent-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.35);font:600 12px/1 var(--sans);color:var(--green-d);margin-bottom:6px}
+  .done-wrap .big.warn,.center .big.warn{color:#FBBF24}
   .center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;color:#9CA3AF;padding:22px}
   .center .big{font-size:52px;color:var(--green-d)}
   .center .t{font:600 20px/1.3 var(--sans);color:#fff}
@@ -120,6 +126,10 @@ const T={
     listedOther:n=>'You are on the list for the '+n+' session. Sure you did this one?',
     confirmNotListed:'You are not on the list for this session. Send anyway?',
     missing:n=>'You still need to rate the '+n+' session — you are on its list.',
+    pendTitle:n=>n===1?'One session left':n+' sessions left',
+    pendSub:'You are on the list for it. Rate every session you took part in.',
+    pendSent:'RPE sent',rateBtn:n=>'Rate the '+n+' session',skipBtn:"I wasn't in this session",
+    progress:(i,n)=>'Session '+i+' of '+n,
     parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
@@ -139,6 +149,10 @@ const T={
     listedOther:n=>'Figurás en la lista de la sesión de '+n+'. ¿Seguro que estuviste en esta?',
     confirmNotListed:'No figurás en la lista de esta sesión. ¿Enviar igual?',
     missing:n=>'Te falta calificar la sesión de '+n+' — figurás en su lista.',
+    pendTitle:n=>n===1?'Te falta 1 sesión':'Te faltan '+n+' sesiones',
+    pendSub:'Figuras en su lista. Califica cada sesión en la que estuviste.',
+    pendSent:'RPE enviado',rateBtn:n=>'Calificar la sesión de '+n,skipBtn:'No estuve en esta sesión',
+    progress:(i,n)=>'Sesión '+i+' de '+n,
     parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
@@ -158,6 +172,10 @@ const T={
     listedOther:n=>'Você está na lista da sessão de '+n+'. Certeza de que fez esta?',
     confirmNotListed:'Você não está na lista desta sessão. Enviar mesmo assim?',
     missing:n=>'Falta avaliar a sessão de '+n+' — você está na lista dela.',
+    pendTitle:n=>n===1?'Falta 1 sessão':'Faltam '+n+' sessões',
+    pendSub:'Você está na lista dela. Avalie cada sessão em que esteve.',
+    pendSent:'RPE enviado',rateBtn:n=>'Avaliar a sessão de '+n,skipBtn:'Não estive nesta sessão',
+    progress:(i,n)=>'Sessão '+i+' de '+n,
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
@@ -173,6 +191,9 @@ const app=document.getElementById('app');
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const token=new URLSearchParams(location.search).get('token');
 let players=[],picked=null,scope='wellness',sessions=[],sessPick=null;
+// Sesiones obligatorias que el jugador declaró no haber hecho ("No estuve en esta"). Solo
+// vive en memoria: para el staff siguen figurando como pendientes en el board de RPE.
+const skipped=new Set();
 const state={sleepQ:4,mood:4,fatigue:4,stress:4,soreness:4,rpe:6,body:new Set(),note:''};
 const today=new Date().toLocaleDateString(L===T.en?'en-GB':'es-ES',{weekday:'long',day:'numeric',month:'short'});
 
@@ -202,7 +223,7 @@ function renderPick(){
 // Sesiones del día local del jugador (solo RPE con link genérico). Si falla, sessions
 // queda vacío y el submit cae al resolver automático del servidor, como siempre.
 async function loadSessions(){
-  sessions=[];sessPick=null;
+  sessions=[];sessPick=null;skipped.clear();   // otro jugador arranca con el candado limpio
   if(scope!=='rpe')return;
   try{
     const r=await sb.rpc('get_survey_sessions',{p_token:token,p_player_id:picked.id,p_tz:new Date().getTimezoneOffset()});
@@ -216,10 +237,30 @@ async function loadSessions(){
 // (session_participants) o si él figura en ella. Con la RPC vieja (sin has_list/listed)
 // todo da true y el comportamiento queda como antes.
 const expectsMe=s=>!s.has_list||!!s.listed;
+// ── Candado de doble sesión ───────────────────────────────────────────────────
+// Obligatorias = aquellas donde el staff lo convocó explícitamente (session_participants)
+// y que YA empezaron. Una sesión sin convocatoria armada (el default "entrenan todos los
+// disponibles") sigue siendo sugerencia, no candado: si no, un día de gym + campo obligaría
+// a dos RPE a quien no fue al gym. Las que todavía no empezaron tampoco traban.
+function sessMins(s){
+  if(!s.time)return null;
+  const h=parseInt(String(s.time).slice(0,2),10),m=parseInt(String(s.time).slice(3,5),10);
+  return isNaN(h)?null:h*60+(isNaN(m)?0:m);
+}
+function hasStarted(s){
+  const m=sessMins(s);
+  if(m==null)return true;               // sin hora no hay forma de saber → cuenta como iniciada
+  const now=new Date();
+  return m<=now.getHours()*60+now.getMinutes();
+}
+const isRequired=s=>!!s.listed&&hasStarted(s);
+const requiredAll=()=>sessions.filter(isRequired);
+const requiredPending=()=>requiredAll().filter(s=>!s.answered&&!skipped.has(s.id));
 function pickDefault(){
-  let un=sessions.filter(s=>!s.answered);
+  let un=sessions.filter(s=>!s.answered&&!skipped.has(s.id));
   if(!un.length)return null;
-  const mine=un.filter(expectsMe);   // preferir las sesiones donde figura en la convocatoria
+  const req=un.filter(isRequired);   // las obligatorias van primero
+  const mine=req.length?req:un.filter(expectsMe);
   if(mine.length)un=mine;
   const now=new Date(),cur=now.getHours()*60+now.getMinutes();
   const mins=s=>s.time?parseInt(s.time.slice(0,2),10)*60+parseInt(s.time.slice(3,5),10):null;
@@ -264,7 +305,7 @@ function noteHtml(){return `<div class="ph-section"><div class="q-label"><span c
 
 function renderForm(){
   // Día con sesiones y todas ya respondidas → no hay nada para calificar.
-  if(scope==='rpe'&&sessions.length&&sessions.every(s=>s.answered)){renderDone(null,true);return;}
+  if(scope==='rpe'&&sessions.length&&sessions.every(s=>s.answered||skipped.has(s.id))){renderDone(null,true);return;}
   let body;
   if(scope==='rpe'){
     body=sessHtml()+scaleHtml('rpe','ti-flame',L.rpeTitle,L.e_rpe)+bodyHtml()+noteHtml();
@@ -275,8 +316,13 @@ function renderForm(){
          scaleHtml('soreness','ti-bandage',L.soreness,L.e_soreness,7)+
          scaleHtml('mood','ti-mood-smile',L.mood,L.e_mood,7)+bodyHtml()+noteHtml();
   }
+  // Con dos o más sesiones obligatorias, el jugador ve en qué paso va.
+  const _req=requiredAll();
+  const _prog=(scope==='rpe'&&_req.length>=2)
+    ? `<div class="prog"><i class="ti ti-list-check"></i>${L.progress(_req.filter(s=>s.answered||skipped.has(s.id)).length+1,_req.length)}</div>`
+    : '';
   app.innerHTML=`<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(esc(picked.name))}</button>`+
-    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(esc(picked.name.split(' ')[0]))}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p></div>`+
+    header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(esc(picked.name.split(' ')[0]))}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p>${_prog}</div>`+
     body+`<div class="ph-cta"><button id="submitBtn" onclick="submitForm()">${L.send}</button></div>`;
 }
 window.setScale=(k,v)=>{state[k]=v;document.getElementById('v_'+k).textContent=v;
@@ -295,17 +341,49 @@ window.submitForm=async()=>{
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
   const already=data?.already===true;
   if(sessPick){const s=sessions.find(x=>x.id===sessPick);if(s)s.answered=true;}
+  // Doble sesión: si todavía le falta alguna donde está convocado, no cerramos el survey.
+  if(scope==='rpe'&&requiredPending().length){renderPending(!already);return;}
+  await finish(already);
+};
+// Cierre real: trae el historial de 7 días y muestra la pantalla final.
+async function finish(already){
   let hist=null;
   try { const r=await sb.rpc('get_survey_history',{p_token:token,p_player_id:picked.id});
         if(!r.error && r.data && !r.data.error) hist=r.data; } catch {}
   renderDone(hist, already);
+}
+// Pantalla intermedia: confirma lo enviado y empuja a la sesión que falta. Sin botón de
+// "terminar" — la única salida es calificarla o declarar que no estuvo.
+function renderPending(sent){
+  const pend=requiredPending();
+  const next=pend[0];
+  const done=requiredAll().filter(s=>s.answered||skipped.has(s.id)).length;
+  app.innerHTML=`<div class="done-wrap">`+
+    (sent?`<div class="sent-pill"><i class="ti ti-circle-check"></i>${L.pendSent}</div>`:'')+
+    `<i class="ti ti-alert-triangle big warn"></i>`+
+    `<div class="hl">${L.pendTitle(pend.length)}</div>`+
+    `<div class="sub">${L.pendSub}</div>`+
+    (requiredAll().length>=2?`<div class="prog"><i class="ti ti-list-check"></i>${L.progress(done+1,requiredAll().length)}</div>`:'')+
+    `<div class="next-card is-alert"><div class="q"><i class="ti ti-alert-triangle"></i> ${L.missing(sessLabel(next))}</div>
+      <button onclick="rateNext('${next.id}')">${L.rateBtn(sessLabel(next))}</button>
+      <button class="skip" onclick="skipSess('${next.id}')">${L.skipBtn}</button></div>`+
+    `</div>`;
+}
+// "No estuve en esta sesión": la saca del candado sin escribir nada en la DB, así el staff
+// la sigue viendo como pendiente en el board y decide qué hacer.
+window.skipSess=async id=>{
+  skipped.add(id);
+  if(requiredPending().length){renderPending(false);return;}
+  await finish(false);
 };
 // Si quedó otra sesión del día sin calificar, ofrecerla acá mismo (doble sesión: gym + campo).
 function nextHtml(){
   if(scope!=='rpe')return '';
   // Si figura en la convocatoria de una pendiente, esa va primero y el cartel es alarma
   // ("te falta esta"), no una sugerencia.
-  const next=sessions.find(s=>!s.answered&&s.listed)||sessions.find(s=>!s.answered);
+  // Las que declaró "no estuve" no se vuelven a ofrecer.
+  const open=sessions.filter(s=>!s.answered&&!skipped.has(s.id));
+  const next=open.find(s=>s.listed)||open[0];
   if(!next)return '';
   const alert=!!next.listed;
   return `<div class="next-card${alert?' is-alert':''}"><div class="q">${alert?`<i class="ti ti-alert-triangle"></i> `+L.missing(sessLabel(next)):L.also(sessLabel(next))}</div>
