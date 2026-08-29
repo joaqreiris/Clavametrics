@@ -6491,7 +6491,15 @@
     const { min, max, accent } = stats;
     switch (f.mode) {
       case 'bar': {
-        const w = max > min ? Math.max(2, Math.round((value - min) / (max - min) * 100)) : 100;
+        // Barra PROPORCIONAL al valor: la escala arranca en 0, así el ancho se lee como "cuánto
+        // de la columna" sin traducir nada. Antes iba de mínimo a máximo, lo que dejaba al menor
+        // SIEMPRE vacío aunque estuviera a un 5% del mayor (MC 04 con 422k contra 573k se veía en
+        // cero). Para ver quién es el techo y quién el piso están los formatos heat / icon.
+        // Con negativos (variaciones) no hay proporción posible, así que ahí la base es el mínimo.
+        const base = Math.min(0, min), span = max - base;
+        let w = span > 0 ? Math.round((value - base) / span * 100) : 100;
+        if (w <= 0 && value > base) w = 2;          // valor chico pero real: que igual se vea
+        w = Math.max(0, Math.min(100, w));
         return `<span class="tf-c bar"><span class="tf-fill" style="width:${w}%;background:${f.barColor || accent}"></span><span class="tf-val">${valTxt}</span></span>`;
       }
       case 'heat': {
