@@ -2145,6 +2145,11 @@ function renderTasks(tasks, view = 'my') {
 
   const clubId = await window.getClubId();
   let _hubTeamId = null;
+  // Equipos de ESTE club. Se pide ya, en paralelo con el perfil, para que
+  // validar el equipo guardado no sume un salto de red a la carga.
+  const _clubTeamsP = (clubId && window.getTeams)
+    ? window.getTeams(clubId).catch(() => null)
+    : Promise.resolve(null);
   try {
     const _prof = await window.getProfile();
     const _bucket = (_prof?.role || _prof?.club_role || '').toLowerCase();
@@ -2165,11 +2170,30 @@ function renderTasks(tasks, view = 'my') {
     const _saved = (window.getActiveTeamId && window.getActiveTeamId())
                 || sessionStorage.getItem('cal_active_team')
                 || localStorage.getItem('cal_active_team');
-    if (_saved && (_fullAccess || _myTeams.includes(_saved))) {
+    // "Válido" incluye que el equipo sea DE ESTE CLUB. Para admin/owner se
+    // aceptaba cualquier id guardado, y el id puede venir de otro club (el mismo
+    // usuario mira varios) o de un equipo ya borrado. El Hub calculaba entonces
+    // todo contra un equipo inexistente acá: plantel 0, sin lesiones, sin próximo
+    // partido, ACWR vacío. El selector del sidebar sí valida contra los equipos
+    // del club y corrige el almacenamiento, pero corre DESPUÉS (defer), así que
+    // el arreglo recién se veía al recargar. Si la consulta de equipos falla,
+    // fail-open: se respeta lo guardado, como antes.
+    const _clubTeamIds = (await _clubTeamsP)?.map(t => t.id) || null;
+    const _savedOk = _fullAccess
+      ? (!_clubTeamIds || _clubTeamIds.includes(_saved))
+      : _myTeams.includes(_saved);
+    if (_saved && _savedOk) {
       _hubTeamId = _saved;
     } else {
-      // 2. Fall back to a default team.
-      if (_fullAccess) { _hubTeamId = (await window.sb.rpc('primary_team_id')).data || null; }
+      // 2. Fall back to a default team. El por defecto también tiene que ser de
+      // este club: si primary_team_id no lo es, se usa el primero del club (el
+      // mismo criterio que el selector del sidebar) para que ambos coincidan.
+      if (_fullAccess) {
+        const _primary = (await window.sb.rpc('primary_team_id')).data || null;
+        _hubTeamId = (_primary && (!_clubTeamIds || _clubTeamIds.includes(_primary)))
+          ? _primary
+          : (_clubTeamIds?.[0] || null);
+      }
       else { _hubTeamId = _myTeams[0] || null; }
     }
 
