@@ -107,6 +107,26 @@
   }
   .hub-greet h1 .accent { color: var(--cm-fg-muted); font-weight: 500; }
   .hub-greet p { color: var(--cm-fg-muted); font: var(--cm-body); margin-top: 6px; }
+  /* El saludo y su bajada arrancan latiendo: antes tenían el nombre y el
+     microciclo de la maqueta escritos en el HTML ("Good morning, Joaquín",
+     "Microcycle 14"), y todos los usuarios los veían un instante hasta que
+     llegaba el dato real. */
+  .hub-greet .is-loading { color: transparent; position: relative; }
+  .hub-greet .is-loading::after {
+    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    border-radius: 6px;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--cm-fg) 7%, transparent) 25%,
+      color-mix(in srgb, var(--cm-fg) 12%, transparent) 37%,
+      color-mix(in srgb, var(--cm-fg) 7%, transparent) 63%);
+    background-size: 400% 100%;
+    animation: cm-kpi-shimmer 1.4s ease-in-out infinite;
+  }
+  .hub-greet h1.is-loading::after { width: min(340px, 62vw); height: 62%; }
+  .hub-greet p.is-loading::after  { width: min(440px, 78vw); height: 10px; }
+  @media (prefers-reduced-motion: reduce) {
+    .hub-greet .is-loading::after { animation: none; }
+  }
   .hub-greet .meta {
     margin-left: auto;
     display: flex; align-items: center; gap: 10px;
@@ -715,8 +735,10 @@
 
       <header class="hub-greet">
         <div>
-          <h1 id="greetMsg">Good morning, Joaquín <span class="accent">— here's what needs you today.</span></h1>
-          <p id="greetSub">Microcycle 14 · MD-3 · Training session today @ 17:00 at Centro de Entrenamiento.</p>
+          <!-- Vacíos a propósito: los llenan _renderGreetMsg() y renderGreetSub()
+               con el usuario y el microciclo reales. -->
+          <h1 id="greetMsg" class="is-loading">&nbsp;</h1>
+          <p id="greetSub" class="is-loading">&nbsp;</p>
         </div>
         <!-- Vacío a propósito: lo llena renderAvailabilityPills() con el dato real. Tenía
              22/3/2 hardcodeado de la maqueta y, como la función salía por early-return
@@ -1633,6 +1655,7 @@ function renderGreetSub(microcycle, session, today, nextMatch) {
     parts.push(txt);
   }
   el.textContent = parts.length ? parts.join(' · ') + '.' : tt('hub.no_sessions_today','No sessions scheduled today.');
+  el.classList.remove('is-loading');
 }
 
 function formatAgo(dateStr) {
@@ -2189,14 +2212,15 @@ function renderTasks(tasks, view = 'my') {
 
   // Populate sidebar user
   function _renderGreetMsg() {
-    if (!profile) return;
-    const name = window.cmDisplayName(profile) || tt('hub.user','User');
-    const parts = name.trim().split(/\s+/);
+    const gm = document.getElementById('greetMsg');
+    if (!gm) return;
     const h = new Date().getHours();
     const g = h < 12 ? tt('hub.good_morning','Good morning') : h < 18 ? tt('hub.good_afternoon','Good afternoon') : tt('hub.good_evening','Good evening');
-    const gm = document.getElementById('greetMsg');
-    if (gm) gm.innerHTML =
-      `${g}, ${parts[0]} <span class="accent">${tt('hub.heres_what_needs_you','— here\'s what needs you today.')}</span>`;
+    // Sin perfil todavía: saludamos sin nombre en vez de inventar uno.
+    const first = (profile ? (window.cmDisplayName(profile) || '') : '').trim().split(/\s+/)[0] || '';
+    gm.innerHTML =
+      `${g}${first ? ', ' + first : ''} <span class="accent">${tt('hub.heres_what_needs_you','— here\'s what needs you today.')}</span>`;
+    gm.classList.remove('is-loading');
   }
   _renderGreetMsg();
   window._hubRenderGreetMsg = _renderGreetMsg;
@@ -2207,7 +2231,13 @@ function renderTasks(tasks, view = 'my') {
   window._hubProfileRole = _myRole;
 
   // KPIs
-  if (!clubId) return;
+  if (!clubId) {
+    // Sin club no hay microciclo que contar: apagamos el esqueleto de la bajada
+    // para que no quede latiendo para siempre.
+    const _gs = document.getElementById('greetSub');
+    if (_gs) { _gs.textContent = ''; _gs.classList.remove('is-loading'); }
+    return;
+  }
 
   const { data: { session: _s } } = await window.sb.auth.getSession();
   const userId = _s?.user?.id ?? null;
