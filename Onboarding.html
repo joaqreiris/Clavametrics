@@ -609,10 +609,13 @@
       if (file.size > 2 * 1024 * 1024) { alert(tt('onboarding.maxSize2mb', 'Max 2 MB.')); input.value = ''; return; }
       const clubId = await window.getClubId();
       if (!clubId) { alert(tt('onboarding.noClubYet', 'No club yet. Reload and try again.')); return; }
-      const ext  = file.name.split('.').pop().toLowerCase();
+      // Shrink + cache forever: the logo renders in every page's sidebar, and the public
+      // URL below is versioned with ?v= on each upload, so stale bytes are impossible.
+      const small = await window.cmShrinkImage(file, { maxDim: 512, maxBytes: 120 * 1024 });
+      const ext  = (small.name.split('.').pop() || 'png').toLowerCase();
       const path = `${clubId}/logo.${ext}`;
       const { error: upErr } = await window.sb.storage
-        .from('club-logos').upload(path, file, { upsert: true, contentType: file.type, cacheControl: '60' });
+        .from('club-logos').upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
       if (upErr) { alert(tt('onboarding.uploadFailed', 'Upload failed: ') + upErr.message); return; }
       const { data: { publicUrl } } = window.sb.storage.from('club-logos').getPublicUrl(path);
       // La ruta es siempre la misma, así que la URL pública no cambia entre

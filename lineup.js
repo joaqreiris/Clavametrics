@@ -1196,11 +1196,15 @@
       // Upload to Storage using canonical path opponent-crests/{club_id}/{slug}.{ext}
       const rival = opponentName || _currentMatch?.opponent || 'rival';
       const slug  = window.slugifyOpponent ? window.slugifyOpponent(rival) : 'rival';
-      const ext   = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
+      const small = await window.cmShrinkImage(file, { maxDim: 256, maxBytes: 60 * 1024 });
+      const ext   = (small.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
       const path  = `opponent-crests/${_clubId || 'default'}/${slug}.${ext}`;
-      const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true });
+      const { error } = await window.sb.storage.from('club-assets').upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
       if (error) { showToast(tt('lineup.upload_failed', 'Upload failed: {msg}', { msg: error.message })); return; }
-      const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+      // The path is canonical per opponent, so re-uploading reuses the URL. Version it so
+      // the new crest actually shows instead of whatever the CDN and browser already hold.
+      const { data: { publicUrl: _rawUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+      const publicUrl = _rawUrl + '?v=' + Date.now();
 
       // Persist to calendar_events + opponent_branding
       if (matchId) {

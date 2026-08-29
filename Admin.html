@@ -1817,12 +1817,16 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     logoInput.addEventListener('change', async () => {
       const file = logoInput.files[0];
       if (!file) return;
-      const ext  = file.name.split('.').pop().toLowerCase();
+      // The logo sits in the sidebar of every page, so a short cacheControl means every
+      // navigation re-downloads it. The public URL is versioned with ?v= on each upload
+      // (below), so caching the bytes forever is safe — a new logo gets a new URL.
+      const small = await window.cmShrinkImage(file, { maxDim: 512, maxBytes: 120 * 1024 });
+      const ext  = (small.name.split('.').pop() || 'png').toLowerCase();
       const path = `${clubId}/logo.${ext}`;
 
       const { error: upErr } = await window.sb.storage
         .from('club-logos')
-        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '60' });
+        .upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
       if (upErr) { alert(tt('admin.upload_failed_x','Upload failed: {msg}',{ msg:upErr.message })); return; }
 
       const { data: { publicUrl } } = window.sb.storage

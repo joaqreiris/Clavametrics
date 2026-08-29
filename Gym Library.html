@@ -191,6 +191,8 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/exercise-folders.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="lib/exercise-taxonomy.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -543,11 +545,7 @@ async function reloadExercises(rebuild = true) {
   FOLDERS_GYM = window.CMFolders ? await window.CMFolders.load('gym') : [];
   try {
     const paths = ALL_EXERCISES.filter(e => e.media_type === 'image' && e.media_ref).map(e => e.media_ref);
-    let signed = {};
-    if (paths.length) {
-      const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
-      (urls || []).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
-    }
+    const signed = await window.cmSignedUrls('gym-exercise-media', paths);
     ALL_EXERCISES.forEach(e => { e._mediaImg = (e.media_type === 'image' && e.media_ref) ? (signed[e.media_ref] || null) : null; });
   } catch (_) {}
   if (rebuild) {
@@ -1087,10 +1085,18 @@ async function saveExercise() {
   const exId = editingId || insertedId;
   if (_gmMediaFile && exId) {
     try {
-      const ext = (_gmMediaFile.name.split('.').pop() || 'png').toLowerCase();
-      const path = `${CLUB_ID}/${exId}.${ext}`;
-      const up = await window.sb.storage.from('gym-exercise-media').upload(path, _gmMediaFile, { upsert: true, contentType: _gmMediaFile.type });
-      if (!up.error) await window.sb.from('gym_exercises').update({ media_type: 'image', media_ref: path }).eq('id', exId).eq('club_id', CLUB_ID);
+      // Shrink first (phone photos arrive at several MB for a thumbnail-sized cell), then
+      // upload under a NEW path each time: viewers cache these hard, so replacing a file in
+      // place would keep showing them the old one. The superseded file is removed below.
+      const file = await window.cmShrinkImage(_gmMediaFile, { maxDim: 1200, maxBytes: 400 * 1024 });
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `${CLUB_ID}/${exId}-${Date.now().toString(36)}.${ext}`;
+      const up = await window.sb.storage.from('gym-exercise-media').upload(path, file, { upsert: true, contentType: file.type, cacheControl: window.CM_CACHE_IMMUTABLE });
+      if (!up.error) {
+        const oldRef = (ALL_EXERCISES.find(e => e.id === exId) || {}).media_ref;
+        await window.sb.from('gym_exercises').update({ media_type: 'image', media_ref: path }).eq('id', exId).eq('club_id', CLUB_ID);
+        if (oldRef && oldRef !== path) { try { await window.sb.storage.from('gym-exercise-media').remove([oldRef]); } catch (_) {} }
+      }
       else alert(tt('gym_library.image_upload_failed', 'Image upload failed: ' + up.error.message, { msg: up.error.message }));
     } catch (err) { const m = (err && err.message) || err; alert(tt('gym_library.image_upload_failed', 'Image upload failed: ' + m, { msg: m })); }
   } else if (_gmMediaRemove && exId) {

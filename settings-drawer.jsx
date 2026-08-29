@@ -293,10 +293,13 @@ const SettingsDrawer = ({ open, onClose, profile, userId, setProfile, supabaseSe
       if (!uid || !window.sb) throw new Error('no session');
       let avatarUrl = pf.avatar_url || null;
       if (pfPhoto) {
-        const ext = ((pfPhoto.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
+        // A face renders at 40px — never ship the 8 MB original a phone hands us. The
+        // signed URL below changes on every upload, so caching forever is safe.
+        const photo = await window.cmShrinkImage(pfPhoto, { maxDim: 512, maxBytes: 150 * 1024 });
+        const ext = ((photo.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
         const path = uid + '/avatar.' + ext;
         const { error: upErr } = await window.sb.storage.from('profile-avatars')
-          .upload(path, pfPhoto, { upsert: true, contentType: pfPhoto.type || 'image/jpeg' });
+          .upload(path, photo, { upsert: true, contentType: photo.type || 'image/jpeg', cacheControl: window.CM_CACHE_IMMUTABLE });
         if (upErr) throw upErr;
         const { data: signed } = await window.sb.storage.from('profile-avatars').createSignedUrl(path, 315360000);
         avatarUrl = (signed && signed.signedUrl) || avatarUrl;

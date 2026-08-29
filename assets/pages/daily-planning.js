@@ -45,11 +45,7 @@ async function dpResolvePreviews(ids) {
     const { data: rows } = await window.sb.from('exercises')
       .select('id, preview_path, preview_png, objective, description, video_url').eq('club_id', _dpClubId).in('id', need);
     const paths = (rows||[]).filter(r => r.preview_path).map(r => r.preview_path);
-    let signed = {};
-    if (paths.length) {
-      const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
-      (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
-    }
+    const signed = await window.cmSignedUrls('drill-previews', paths);
     (rows||[]).forEach(r => {
       _dpPngCache[r.id] = r.preview_path ? (signed[r.preview_path] || null) : (r.preview_png || null);
       _dpDescCache[r.id] = { objective: r.objective || '', description: r.description || '', video_url: r.video_url || '' };
@@ -1217,8 +1213,8 @@ async function dpResolveGymImgs(list, reqSession, repaint) {
     .filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _dpGymImgCache))
     .map(g => g.media_ref))];
   if (!need.length) return;
-  const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(need, 3600);
-  (urls || []).forEach(u => { if (u && u.path) _dpGymImgCache[u.path] = u.signedUrl; });
+  const urls = await window.cmSignedUrls('gym-exercise-media', need);
+  Object.keys(urls).forEach(p => { _dpGymImgCache[p] = urls[p]; });
   if (reqSession != null && _dpCurrentSessionId !== reqSession) return;
   if (repaint) repaint();
 }
@@ -2152,17 +2148,11 @@ async function openLibModal(mode) {
       _dpGpsExSet = new Set((gps||[]).map(r => r.exercise_id));
     } catch(_) { _dpGpsExSet = new Set(); }
   }
-  // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback (mirrors Drill Designer).
+  // Resolve a display image per exercise: cached signed Storage URL with base64 fallback (mirrors Drill Designer).
   try {
     const paths = _libExercises.filter(e => e.preview_path).map(e => e.preview_path);
-    if (paths.length) {
-      const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
-      const signed = {};
-      (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
-      _libExercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
-    } else {
-      _libExercises.forEach(e => { e._previewImg = e.preview_png || null; });
-    }
+    const signed = await window.cmSignedUrls('drill-previews', paths);
+    _libExercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
   } catch(_) { _libExercises.forEach(e => { e._previewImg = e.preview_png || null; }); }
   if (_libMode === 'activation') {
     const isAct = e => (e.orientation || '').toUpperCase() === 'ACTIVATION';
@@ -2312,8 +2302,8 @@ async function openGymLibModal(mode) {
   const paths = [...new Set(_gymLibExercises.filter(e => e.media_type === 'image' && e.media_ref).map(e => e.media_ref))]
     .filter(p => !(p in _dpGymImgCache));
   if (paths.length) {
-    const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
-    (urls || []).forEach(u => { if (u && u.path) _dpGymImgCache[u.path] = u.signedUrl; });
+    const urls = await window.cmSignedUrls('gym-exercise-media', paths);
+    Object.keys(urls).forEach(p => { _dpGymImgCache[p] = urls[p]; });
   }
   dpBuildGymCatBar();
   filterGymLib();

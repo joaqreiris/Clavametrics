@@ -1017,8 +1017,8 @@ async function gpResolveSessionMedia(){
   const lib=await gpEnsureLib(); const byId={}; (lib||[]).forEach(e=>byId[e.id]=e);
   const paths=[], exByPath={};
   ids.forEach(id=>{ const e=byId[id]; if(e&&e.media_type==='image'&&e.media_ref&&!(id in _gpMediaCache)){ paths.push(e.media_ref); exByPath[e.media_ref]=id; } });
-  if(paths.length){ try{ const {data:urls}=await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths,3600);
-    (urls||[]).forEach(u=>{ if(u&&u.path&&u.signedUrl) _gpMediaCache[exByPath[u.path]]={type:'image',src:u.signedUrl}; }); }catch(_){} }
+  if(paths.length){ const urls=await window.cmSignedUrls('gym-exercise-media',paths);
+    Object.keys(urls).forEach(p=>{ if(exByPath[p]) _gpMediaCache[exByPath[p]]={type:'image',src:urls[p]}; }); }
   ids.forEach(id=>{ if(id in _gpMediaCache) return; const e=byId[id]; const yt=e&&gpYoutubeId(e.video_url);
     _gpMediaCache[id]= yt ? {type:'youtube',src:`https://img.youtube.com/vi/${yt}/mqdefault.jpg`} : null; });
 }
@@ -1334,10 +1334,8 @@ async function gpResolveLibMedia(){
   const lib = _gpLib || [];
   const paths = [], exByPath = {};
   lib.forEach(e => { if (e.media_type==='image' && e.media_ref && !(e.id in _gpMediaCache)) { paths.push(e.media_ref); exByPath[e.media_ref]=e.id; } });
-  for (let i=0;i<paths.length;i+=100){
-    try{ const { data:urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths.slice(i,i+100),3600);
-      (urls||[]).forEach(u => { if (u&&u.path&&u.signedUrl) _gpMediaCache[exByPath[u.path]]={type:'image',src:u.signedUrl}; }); }catch(_){}
-  }
+  const urls = await window.cmSignedUrls('gym-exercise-media', paths);   // helper batches by 100
+  Object.keys(urls).forEach(p => { if (exByPath[p]) _gpMediaCache[exByPath[p]]={type:'image',src:urls[p]}; });
   lib.forEach(e => { if (e.id in _gpMediaCache) return; const yt=gpYoutubeId(e.video_url);
     _gpMediaCache[e.id]= yt ? {type:'youtube',src:`https://img.youtube.com/vi/${yt}/mqdefault.jpg`} : null; });
   _gpLibMediaDone = true;

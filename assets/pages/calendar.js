@@ -2977,13 +2977,16 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
     const opName = document.getElementById('calEvtF_opponent')?.value.trim() || tt('calendar.rival_fallback','rival');
     const clubId = _clubId || await window.getClubId();
     const slug   = window.slugifyOpponent ? window.slugifyOpponent(opName) : 'rival';
-    const ext    = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
+    const small  = await window.cmShrinkImage(file, { maxDim: 256, maxBytes: 60 * 1024 });
+    const ext    = (small.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
     const path   = `opponent-crests/${clubId}/${slug}.${ext}`;
 
-    const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true });
+    const { error } = await window.sb.storage.from('club-assets').upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
     if (error) { showCalToast(tt('calendar.upload_failed','Upload failed: {msg}',{msg:error.message})); calCrestShowImg(null); _pendingCrestUrl = null; return; }
 
-    const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+    // Canonical path → same URL on re-upload; version it so the new crest wins the cache.
+    const { data: { publicUrl: _rawUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+    const publicUrl = _rawUrl + '?v=' + Date.now();
     _pendingCrestUrl = publicUrl;
     calCrestShowImg(publicUrl);
   });

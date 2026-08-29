@@ -1788,11 +1788,14 @@ function _gpAssignMatchForm(clubId, teamId, sessionId, date, currentSeasonId) {
     try {
       const opName = ov.querySelector('#arName').value.trim() || 'rival';
       const slug   = window.slugifyOpponent ? window.slugifyOpponent(opName) : 'rival';
-      const ext    = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const small  = await window.cmShrinkImage(file, { maxDim: 256, maxBytes: 60 * 1024 });
+      const ext    = (small.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
       const path   = `opponent-crests/${clubId}/${slug}.${ext}`;
-      const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true, contentType: file.type });
+      const { error } = await window.sb.storage.from('club-assets').upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
       if (error) throw error;
-      const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+      // Canonical path → same URL on re-upload; version it so the new crest wins the cache.
+      const { data: { publicUrl: _rawUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+      const publicUrl = _rawUrl + '?v=' + Date.now();
       crestIn.value = publicUrl; showPrev(publicUrl);
       upLbl.textContent = tt('gps_analysis.ar_replace_crest','Replace crest');
     } catch (e) {

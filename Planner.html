@@ -3503,10 +3503,8 @@
   // so this is robust to how the bucket migration was set up. Long TTL so the
   // URL stored inside objects_json keeps working; images are also re-signed on
   // load (see _resignCustomObjects) as a backstop.
-  const _OBJ_URL_TTL = 60 * 60 * 24 * 365 * 5; // ~5 years
   async function _signOne(path) {
-    const { data } = await window.sb.storage.from(FIELD_BUCKET).createSignedUrl(path, _OBJ_URL_TTL);
-    return data?.signedUrl || null;
+    return await window.cmSignedUrl(FIELD_BUCKET, path);
   }
   function _toast(msg, isError = false) {
     const t = Object.assign(document.createElement('div'), {
@@ -3607,11 +3605,11 @@
   async function _resignCustomObjects() {
     const imgs = fc.getObjects().filter(o => o.type === 'image' && o._objPath);
     if (!imgs.length) return;
-    const { data } = await window.sb.storage.from(FIELD_BUCKET)
-      .createSignedUrls(imgs.map(o => o._objPath), _OBJ_URL_TTL);
+    const signed = await window.cmSignedUrls(FIELD_BUCKET, imgs.map(o => o._objPath));
     let changed = false;
-    (data || []).forEach((res, i) => {
-      if (res?.signedUrl) { imgs[i].setSrc(res.signedUrl, () => fc.renderAll(), { crossOrigin: 'anonymous' }); changed = true; }
+    imgs.forEach(o => {
+      const url = signed[o._objPath];
+      if (url && o.getSrc() !== url) { o.setSrc(url, () => fc.renderAll(), { crossOrigin: 'anonymous' }); changed = true; }
     });
     if (changed) fc.renderAll();
   }
@@ -3627,9 +3625,7 @@
     const files = (data || []).filter(f => f.name && /\.(png|svg)$/i.test(f.name));
     if (!files.length) { host.innerHTML = `<div class="pl-myobj-empty">${tt('planner.no_custom_objects', 'No custom objects yet.')}</div>`; return; }
     const paths = files.map(f => `${uid}/${f.name}`);
-    const { data: signed } = await window.sb.storage.from(FIELD_BUCKET).createSignedUrls(paths, _OBJ_URL_TTL);
-    const urlFor = {};
-    (signed || []).forEach((s, i) => { if (s?.signedUrl) urlFor[paths[i]] = s.signedUrl; });
+    const urlFor = await window.cmSignedUrls(FIELD_BUCKET, paths);
     host.innerHTML = files.map((f, i) => {
       const path  = paths[i];
       const url   = urlFor[path] || '';
@@ -3651,6 +3647,7 @@
         if (!confirm(tt('planner.confirm_delete_object', 'Delete this object from your palette?'))) return;
         const { error: delErr } = await window.sb.storage.from(FIELD_BUCKET).remove([btn.dataset.del]);
         if (delErr) { _toast(tt('planner.could_not_delete', `Could not delete: ${delErr.message}`, {msg: delErr.message}), true); return; }
+        window.cmSignedUrlBust(FIELD_BUCKET, btn.dataset.del);
         loadCustomObjects();
       });
     });
@@ -3666,7 +3663,7 @@
     const enc  = _encName((name || '').trim() || tt('planner.default_object_name', 'Object'));
     const path = `${uid}/${enc}.${crypto.randomUUID()}.${ext}`;
     const { error } = await window.sb.storage.from(FIELD_BUCKET)
-      .upload(path, file, { contentType: isSvg ? 'image/svg+xml' : 'image/png', upsert: false });
+      .upload(path, file, { contentType: isSvg ? 'image/svg+xml' : 'image/png', upsert: false, cacheControl: window.CM_CACHE_IMMUTABLE });
     if (error) { _toast(tt('planner.upload_failed', `Upload failed: ${error.message}`, {msg: error.message}), true); return; }
     _toast(tt('planner.object_uploaded', 'Object uploaded'));
     await loadCustomObjects();
@@ -4225,17 +4222,11 @@
     // (its own + shared with it; visible_teams NULL/[] = whole club).
     const _scopeTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
     exercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _scopeTeam));
-    // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback.
+    // Resolve a display image per exercise: cached signed Storage URL with base64 fallback.
     try {
       const paths = exercises.filter(e => e.preview_path).map(e => e.preview_path);
-      if (paths.length) {
-        const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
-        const signed = {};
-        (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
-        exercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
-      } else {
-        exercises.forEach(e => { e._previewImg = e.preview_png || null; });
-      }
+      const signed = await window.cmSignedUrls('drill-previews', paths);
+      exercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
     } catch(_) { exercises.forEach(e => { e._previewImg = e.preview_png || null; }); }
     renderExerciseList();
   }
@@ -4444,8 +4435,8 @@
       _loadingExercise = false; _dirty = false; _historyStack = [];
       plSetImageMode(true, ex._previewImg || '');
       if (!ex._previewImg && ex.preview_path) {
-        window.sb.storage.from('drill-previews').createSignedUrl(ex.preview_path, 3600)
-          .then(({ data }) => { if (currentExerciseId === id && data?.signedUrl) plSetImageMode(true, data.signedUrl); });
+        window.cmSignedUrl('drill-previews', ex.preview_path)
+          .then(url => { if (currentExerciseId === id && url) plSetImageMode(true, url); });
       }
     } else {
       plSetImageMode(false);
@@ -4618,6 +4609,13 @@
       return (out && out.blob.size < file.size) ? out : asIs;
     } catch(_) { return asIs; }
   }
+  // Previews are signed once and then cached hard by every viewer's browser (see
+  // cmSignedUrls in supabase-init.js). So a re-save must land on a NEW path: overwriting
+  // in place would leave everyone else staring at the old drawing until their cache
+  // expired. _dropOldPreview deletes the file we just superseded, so nothing accumulates.
+  function _previewPath(exId, ext) {
+    return `${clubId}/${exId}-${Date.now().toString(36)}.${ext}`;
+  }
   // A preview re-encode can change the file extension (old .png → .webp): once the row
   // points at the new path, drop the stale file so the bucket doesn't accumulate both.
   async function _dropOldPreview(oldPath, newPath) {
@@ -4634,14 +4632,14 @@
     if (_imgPickMode === 'replace') {
       if (!currentExerciseId) return;
       const cf = await _compressImgFile(file);
-      const path = `${clubId}/${currentExerciseId}.${cf.ext}`;
-      const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type });
+      const path = _previewPath(currentExerciseId, cf.ext);
+      const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type, cacheControl: window.CM_CACHE_IMMUTABLE });
       if (up.error) { alert(tt('planner.upload_failed', `Upload failed: ${up.error.message}`, {msg: up.error.message})); return; }
       const _oldPath = exercises.find(e => e.id === currentExerciseId)?.preview_path;
       await window.sb.from('exercises').update({ preview_path: path, preview_png: null, source_type: 'image' }).eq('id', currentExerciseId);
       await _dropOldPreview(_oldPath, path);
-      const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(path, 3600);
-      const fresh = data?.signedUrl ? data.signedUrl + '#b=' + (++_imgCacheBust) : '';
+      const signedUrl = await window.cmSignedUrl('drill-previews', path);
+      const fresh = signedUrl ? signedUrl + '#b=' + (++_imgCacheBust) : '';
       plSetImageMode(true, fresh);
       await loadExercises();
       return;
@@ -4659,8 +4657,8 @@
     }).select('id').single();
     if (error || !row) { alert(tt('planner.error_creating_exercise', `Error creating exercise: ${error?.message || 'unknown'}`, {msg: error?.message || 'unknown'})); return; }
     const cf = await _compressImgFile(file);
-    const path = `${clubId}/${row.id}.${cf.ext}`;
-    const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type });
+    const path = _previewPath(row.id, cf.ext);
+    const up = await window.sb.storage.from('drill-previews').upload(path, cf.blob, { upsert: true, contentType: cf.blob.type, cacheControl: window.CM_CACHE_IMMUTABLE });
     if (up.error) { alert(tt('planner.upload_failed', `Upload failed: ${up.error.message}`, {msg: up.error.message})); }
     else { await window.sb.from('exercises').update({ preview_path: path, preview_png: null }).eq('id', row.id); }
     await loadExercises();
@@ -4828,9 +4826,9 @@
     if (!error) {
       if (currentExerciseId && _previewOut && _curSourceType !== 'image') {
         try {
-          const _pPath = `${clubId}/${currentExerciseId}.${_previewOut.ext}`;
+          const _pPath = _previewPath(currentExerciseId, _previewOut.ext);
           const _up = await window.sb.storage.from('drill-previews')
-            .upload(_pPath, _previewOut.blob, { upsert: true, contentType: _previewOut.blob.type });
+            .upload(_pPath, _previewOut.blob, { upsert: true, contentType: _previewOut.blob.type, cacheControl: window.CM_CACHE_IMMUTABLE });
           if (!_up.error) {
             const _oldPath = exercises.find(e => e.id === currentExerciseId)?.preview_path;
             await window.sb.from('exercises').update({ preview_path: _pPath, preview_png: null }).eq('id', currentExerciseId);

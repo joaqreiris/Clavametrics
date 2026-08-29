@@ -324,6 +324,8 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js?v=gps-avg"></script>
 <script src="assets/exercise-folders.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/cm-daterange.js"></script>
@@ -584,14 +586,10 @@
     }
   } catch(_) {}
 
-  // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback.
+  // Resolve a display image per exercise: cached signed Storage URL with base64 fallback.
   try {
     const paths = (allExercises||[]).filter(e => e.preview_path).map(e => e.preview_path);
-    let signed = {};
-    if (paths.length) {
-      const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
-      (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
-    }
+    const signed = await window.cmSignedUrls('drill-previews', paths);
     allExercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || null) : (e.preview_png || null); });
   } catch(_) { (allExercises||[]).forEach(e => { e._previewImg = e.preview_png || null; }); }
 

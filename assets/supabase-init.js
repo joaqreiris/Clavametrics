@@ -278,6 +278,136 @@
     return Object.assign({}, _flagCfgBase(key), (_flagsMap && _flagsMap[key] && _flagsMap[key].config) || {});
   };
 
+  // ── Signed Storage URLs, cached across page loads (Storage egress) ────────────
+  // A signed URL carries a one-off token, so re-signing the SAME file on every page load
+  // produces a DIFFERENT URL — the browser can't match it to anything in its cache and
+  // re-downloads the bytes every single time. That was ~83% of our Supabase egress: 107 MB
+  // of files went out as 5.4 GB in a month (each file ≈50×). Fix: sign once with a long TTL
+  // and REUSE the very same URL (persisted in localStorage), so the browser serves repeat
+  // views from its own disk cache and Storage is never touched again.
+  //
+  //   const map = await cmSignedUrls('drill-previews', paths);   // { path: url }
+  //   const url = await cmSignedUrl('drill-previews', path);     // single
+  //
+  // Only for buckets whose path→bytes mapping is STABLE. When a path is overwritten
+  // (upsert), call cmSignedUrlBust(bucket, path) so the next read re-signs; better still,
+  // upload under a new path — other users' caches only clear when the path changes.
+  // Deliberately NOT used for medical-documents: a week-long URL to clinical files has no
+  // business sitting in localStorage.
+  const _SU_KEY    = 'cm_signed_urls.v1';
+  const _SU_TTL    = 7 * 24 * 3600;          // token lifetime requested from Storage (s)
+  const _SU_MARGIN = 24 * 3600 * 1000;       // re-sign a day early so a URL never expires mid-view
+  let _suMem = null;                         // { "bucket/path": { u: url, e: expiryMs } }
+  function _suLoad() {
+    if (_suMem) return _suMem;
+    try { _suMem = JSON.parse(localStorage.getItem(_SU_KEY) || '{}') || {}; } catch (_e) { _suMem = {}; }
+    return _suMem;
+  }
+  let _suSaveT = null;
+  function _suSave() {
+    clearTimeout(_suSaveT);
+    _suSaveT = setTimeout(function () {
+      try {
+        const m = _suLoad(), now = Date.now();
+        for (const k in m) if (!m[k] || !(m[k].e > now)) delete m[k];   // prune expired
+        localStorage.setItem(_SU_KEY, JSON.stringify(m));
+      } catch (_e) { try { localStorage.removeItem(_SU_KEY); _suMem = {}; } catch (_e2) {} }
+    }, 300);
+  }
+  // Resolve many paths at once. Returns { path: signedUrl } for everything it could sign;
+  // paths that fail are simply absent (callers already fall back to no image).
+  window.cmSignedUrls = async function (bucket, paths) {
+    const out = {};
+    try {
+      const list = Array.from(new Set((paths || []).filter(Boolean).map(String)));
+      if (!list.length || !bucket || !window.sb || !window.sb.storage) return out;
+      const m = _suLoad(), now = Date.now(), miss = [];
+      list.forEach(p => {
+        const hit = m[bucket + '/' + p];
+        if (hit && hit.u && hit.e > now + _SU_MARGIN) out[p] = hit.u; else miss.push(p);
+      });
+      for (let i = 0; i < miss.length; i += 100) {      // Storage caps a sign batch at 100
+        const chunk = miss.slice(i, i + 100);
+        try {
+          const { data } = await window.sb.storage.from(bucket).createSignedUrls(chunk, _SU_TTL);
+          (data || []).forEach(d => {
+            if (!d || !d.path || !d.signedUrl) return;
+            out[d.path] = d.signedUrl;
+            m[bucket + '/' + d.path] = { u: d.signedUrl, e: Date.now() + _SU_TTL * 1000 };
+          });
+        } catch (_e) {}
+      }
+      if (miss.length) _suSave();
+    } catch (_e) {}
+    return out;
+  };
+  window.cmSignedUrl = async function (bucket, path) {
+    if (!path) return null;
+    const r = await window.cmSignedUrls(bucket, [path]);
+    return r[String(path)] || null;
+  };
+  // Synchronous peek — returns the cached URL or null without hitting the network.
+  window.cmSignedUrlCached = function (bucket, path) {
+    try {
+      const hit = _suLoad()[bucket + '/' + String(path || '')];
+      return (hit && hit.u && hit.e > Date.now() + _SU_MARGIN) ? hit.u : null;
+    } catch (_e) { return null; }
+  };
+  // Forget a path (call right after overwriting it with upsert:true).
+  window.cmSignedUrlBust = function (bucket, path) {
+    try { delete _suLoad()[bucket + '/' + String(path || '')]; _suSave(); } catch (_e) {}
+  };
+
+  // ── Uploads: shrink before sending, and let the browser keep it ───────────────
+  // Anything the user picks from a phone or a Mac arrives at several MB — we had 8.7 MB
+  // avatars being painted into a 40px circle. Scale the longest side down and re-encode
+  // as JPEG before uploading. Returns a File; on any failure returns the original, so a
+  // caller never has to handle this failing.
+  // Transparency is preserved: a PNG/WebP source is re-encoded as WebP (alpha intact), so a
+  // club logo or an opponent crest doesn't come back with a white box around it on a dark
+  // theme. Only a source that already had no alpha (JPEG) is flattened onto white.
+  window.cmShrinkImage = async function (file, opts) {
+    const o = opts || {};
+    const maxDim = o.maxDim || 1000, maxBytes = o.maxBytes || 2 * 1024 * 1024;
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;
+    if (/^image\/(gif|svg)/.test(file.type)) return file;      // animation/vector: re-encoding destroys it
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file);
+      });
+      const img = await new Promise((res, rej) => {
+        const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl;
+      });
+      let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (!w || !h) return file;
+      if (Math.max(w, h) > maxDim) { const k = maxDim / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const keepAlpha = /^image\/(png|webp)$/.test(file.type);
+      if (!keepAlpha) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
+      ctx.drawImage(img, 0, 0, w, h);
+      const enc = (type, q) => new Promise(r => { try { canvas.toBlob(r, type, q); } catch (_e) { r(null); } });
+      let type = keepAlpha ? 'image/webp' : 'image/jpeg', ext = keepAlpha ? 'webp' : 'jpg';
+      let q = 0.85;
+      let blob = await enc(type, q);
+      if (keepAlpha && (!blob || blob.type !== 'image/webp')) {   // no WebP encoder → keep PNG (alpha survives)
+        type = 'image/png'; ext = 'png'; blob = await enc(type);
+      }
+      while (blob && blob.size > maxBytes && q > 0.4 && type !== 'image/png') {
+        q -= 0.15; blob = await enc(type, q);
+      }
+      if (!blob || blob.size >= file.size) return file;        // already small enough
+      const base = (file.name || 'image').replace(/\.[^.]+$/, '') || 'image';
+      return new File([blob], base + '.' + ext, { type });
+    } catch (_e) { return file; }
+  };
+  // cacheControl for uploads. Storage's default is 3600 (1 h), which makes the browser
+  // re-ask for a file it already has every hour. Pass CM_CACHE_IMMUTABLE for content that
+  // never changes under its path; CM_CACHE_MUTABLE where a path IS overwritten in place
+  // (a day still saves most of the traffic, and a bust re-signs on the writer's side).
+  window.CM_CACHE_IMMUTABLE = '31536000';   // 1 year
+  window.CM_CACHE_MUTABLE   = '86400';      // 1 day
+
   // ── Shared display helpers (names + avatars) ─────────────────────────────────
   // One place decides how a person is shown across the app: never the raw email as a
   // name, photos when available (private 'profile-avatars' bucket, signed URLs cached),
@@ -309,22 +439,19 @@
     } catch (_e) { return '?'; }
   };
   // Resolve a usable avatar URL. Full URL → as-is. Storage path → signed URL from
-  // 'profile-avatars' (cached ~55 min; async — returns cached/null now, fills for next render).
-  const _cmSignedCache = new Map();   // path → { url, exp }
+  // 'profile-avatars', cached across page loads (see cmSignedUrls) so the same URL is
+  // reused and the browser serves the face from its own cache. Sync — returns the cached
+  // URL or null now and fills in for the next render.
   window.cmAvatarUrl = function (p) {
     try {
       if (!p || typeof p !== 'object') return null;
       const a = (p.avatar_url || '').trim();
       if (!a) return null;
       if (/^(https?:|data:|blob:)/i.test(a)) return a;         // already a full/usable URL
-      const c = _cmSignedCache.get(a);
-      if (c && c.exp > Date.now()) return c.url;
-      if (window.sb && window.sb.storage) {                    // fire-and-forget resolve for next render
-        window.sb.storage.from('profile-avatars').createSignedUrl(a, 3600)
-          .then(({ data }) => { if (data && data.signedUrl) _cmSignedCache.set(a, { url: data.signedUrl, exp: Date.now() + 55 * 60 * 1000 }); })
-          .catch(() => {});
-      }
-      return (c && c.url) || null;
+      const c = window.cmSignedUrlCached('profile-avatars', a);
+      if (c) return c;
+      window.cmSignedUrls('profile-avatars', [a]);             // fire-and-forget resolve for next render
+      return null;
     } catch (_e) { return null; }
   };
   // Self-contained avatar chip (inline-styled → renders correctly on any page): <img> when a

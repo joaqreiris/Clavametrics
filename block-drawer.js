@@ -92,10 +92,8 @@
     const paths = [], byPath = {};
     mapped.forEach(e => { if (e.media_type === 'image' && e.media_ref) { paths.push(e.media_ref); byPath[e.media_ref] = e; } });
     if (paths.length) {
-      try {
-        const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
-        (urls || []).forEach(u => { if (u && u.path && u.signedUrl && byPath[u.path]) byPath[u.path]._thumb = u.signedUrl; });
-      } catch (err) { console.warn('[block-drawer] media signed-url resolve failed:', err); }
+      const urls = await window.cmSignedUrls('gym-exercise-media', paths);
+      Object.keys(urls).forEach(p => { if (byPath[p]) byPath[p]._thumb = urls[p]; });
     }
     mapped.forEach(e => {
       if (e._thumb) return;

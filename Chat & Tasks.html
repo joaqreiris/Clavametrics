@@ -461,6 +461,8 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 </head>
@@ -3101,7 +3103,7 @@ async function uploadAttachment(file) {
   const channelId = activeConv === 'group' ? 'group' : activeConv;
   const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path      = `${currentUser.clubId}/${channelId}/${Date.now()}-${safeName}`;
-  const { error } = await window.sb.storage.from('chat-attachments').upload(path, file, { cacheControl: '3600', upsert: false });
+  const { error } = await window.sb.storage.from('chat-attachments').upload(path, file, { cacheControl: window.CM_CACHE_IMMUTABLE, upsert: false });
   if (error) { console.error('uploadAttachment failed:', error); throw error; }
   const { data: { publicUrl } } = window.sb.storage.from('chat-attachments').getPublicUrl(path);
   return { url: publicUrl };
@@ -3252,7 +3254,7 @@ async function savePinModal() {
     try {
       const safeName = pinModalFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path     = `${currentUser.clubId}/pinned/${Date.now()}-${safeName}`;
-      const { error: upErr } = await window.sb.storage.from('chat-attachments').upload(path, pinModalFile, { cacheControl: '3600', upsert: false });
+      const { error: upErr } = await window.sb.storage.from('chat-attachments').upload(path, pinModalFile, { cacheControl: window.CM_CACHE_IMMUTABLE, upsert: false });
       if (upErr) throw upErr;
       const { data: { publicUrl } } = window.sb.storage.from('chat-attachments').getPublicUrl(path);
       await pinFileDirectly(publicUrl, pinModalFile.name, getFileCategory(pinModalFile));

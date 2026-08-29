@@ -317,8 +317,7 @@
     try {
       const { data: rows } = await sb().from('exercises').select('id,preview_path,preview_png').eq('club_id', state.clubId).in('id', need);
       const paths = (rows || []).filter(r => r.preview_path).map(r => r.preview_path);
-      let signed = {};
-      if (paths.length) { const { data: urls } = await sb().storage.from('drill-previews').createSignedUrls(paths, 3600); (urls || []).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; }); }
+      const signed = await window.cmSignedUrls('drill-previews', paths);
       (rows || []).forEach(r => { _pngCache[r.id] = r.preview_path ? (signed[r.preview_path] || null) : (r.preview_png || null); });
     } catch (_) {}
     need.forEach(id => { if (!(id in _pngCache)) _pngCache[id] = null; });
@@ -327,7 +326,7 @@
     const need = [...new Set((exIds || []).filter(id => id && !(id in _gxCache)))];
     if (need.length) { try { const { data } = await sb().from('gym_exercises').select('id,name,media_type,media_ref,video_id,video_url').in('id', need); (data || []).forEach(g => { _gxCache[g.id] = g; }); } catch (_) {} need.forEach(id => { if (!(id in _gxCache)) _gxCache[id] = null; }); }
     const refs = [...new Set((exIds || []).map(id => _gxCache[id]).filter(g => g && g.media_type === 'image' && g.media_ref && !(g.media_ref in _gymImg)).map(g => g.media_ref))];
-    if (refs.length) { try { const { data: urls } = await sb().storage.from('gym-exercise-media').createSignedUrls(refs, 3600); (urls || []).forEach(u => { if (u && u.path) _gymImg[u.path] = u.signedUrl; }); } catch (_) {} }
+    if (refs.length) { const urls = await window.cmSignedUrls('gym-exercise-media', refs); Object.keys(urls).forEach(p => { _gymImg[p] = urls[p]; }); }
   }
   function videoEmbed(url) {
     const u = String(url || '').trim(); if (!u) return null;

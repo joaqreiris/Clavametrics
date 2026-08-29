@@ -1982,10 +1982,12 @@ async function reloadPlayers() {
       if (!photoFile) return null;
       const fileToUpload = await compressImage(photoFile, { maxDim: 1000, maxBytes: 2 * 1024 * 1024 });
       const path = `${clubId}/${playerId}.jpg`;
-      const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, fileToUpload, { upsert: true, contentType: 'image/jpeg' });
+      const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, fileToUpload, { upsert: true, contentType: 'image/jpeg', cacheControl: window.CM_CACHE_IMMUTABLE });
       if (upErr) { console.error('Photo upload failed:', upErr); showToast(tt('squad.photo_upload_failed','Photo upload failed: ' + upErr.message, { msg: upErr.message })); return null; }
+      // Faces show up on nearly every screen, so they're cached hard. The path is canonical
+      // per player, so version the URL — otherwise a new photo would never replace the old.
       const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
-      return urlData?.publicUrl || null;
+      return urlData?.publicUrl ? urlData.publicUrl + '?v=' + Date.now() : null;
     }
 
     let error, savedPlayerId, savedClubId;

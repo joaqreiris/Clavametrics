@@ -623,7 +623,8 @@
   // ── Linked exercise (drill drawing + specs beside the player) ─────────────────
   async function _vdSignPreview(ex) {
     if (ex && ex.preview_path) {
-      try { const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(ex.preview_path, 3600); if (data && data.signedUrl) return data.signedUrl; } catch {}
+      const url = await window.cmSignedUrl('drill-previews', ex.preview_path);
+      if (url) return url;
     }
     return (ex && ex.preview_png) || null;
   }

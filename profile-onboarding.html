@@ -192,10 +192,12 @@
         let avatarUrl = null;
         if (_photoFile) {
           try {
-            const ext = ((_photoFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
+            // Downscale before upload — a 40px avatar has no use for a multi-MB original.
+            const photo = await window.cmShrinkImage(_photoFile, { maxDim: 512, maxBytes: 150 * 1024 });
+            const ext = ((photo.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
             const path = uid + '/avatar.' + ext;
             const { error: upErr } = await window.sb.storage.from('profile-avatars')
-              .upload(path, _photoFile, { upsert: true, contentType: _photoFile.type || 'image/jpeg' });
+              .upload(path, photo, { upsert: true, contentType: photo.type || 'image/jpeg', cacheControl: window.CM_CACHE_IMMUTABLE });
             if (upErr) throw upErr;
             // Private bucket → a long-lived signed URL is what actually renders in <img>.
             const { data: signed } = await window.sb.storage.from('profile-avatars')
