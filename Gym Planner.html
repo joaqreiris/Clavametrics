@@ -38,6 +38,8 @@
 <script src="assets/cm-realtime.js"></script>
 <script src="assets/cm-lock.js"></script>
 <script src="assets/cm-save.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script defer src="assets/gps-acwr.js"></script>
@@ -328,7 +330,7 @@
               <select id="gpMicrocycle"><option value="">— Loading… —</option></select>
             </div>
             <div class="gp-f"><label data-i18n="gym_planner.match_day">Match day</label>
-              <select id="gpMatchDay"><option value="">—</option><option>MD−5</option><option>MD−4</option><option>MD−3</option><option>MD−2</option><option>MD−1</option><option>MD</option><option>MD+1</option><option>MD+2</option></select>
+              <select id="gpMatchDay"><option value="">—</option></select>
             </div>
             <div class="gp-f col-2"><label data-i18n="gym_planner.location_equipment">Location · equipment</label>
               <input id="gpLocation" data-i18n-ph="gym_planner.location_ph" placeholder="Gym A · platforms…">
@@ -2642,6 +2644,18 @@ async function gpLoadDay(dateStr) {
   // acaba de crear habilitados.
   if (_gpLock) { _gpLock.setResource(`gym:${_gpTeamId}:${dateStr}`); _gpLock.reapply(); }
 }
+// Match-day picker options come from the active sport pack: football counts MD−6…MD+3,
+// basketball GD−3…GD+2. Values stay ASCII (the canonical form cmMdNorm produces); only the
+// label shows the typographic minus. Older rows saved with U+2212 still match via cmMdNorm.
+function gpFillMdSelect(sel) {
+  if (!sel) return;
+  const keep = window.cmMdNorm ? window.cmMdNorm(sel.value) : sel.value;
+  const opts = (window.cmMdOptions ? window.cmMdOptions() : []);
+  sel.innerHTML = '<option value="">—</option>' +
+    opts.map(v => `<option value="${v}">${v.replace('-', '\u2212')}</option>`).join('');
+  if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
 async function _gpLoadDayInner(dateStr) {
   _gpCurrentDate = dateStr;
   const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2659,14 +2673,15 @@ async function _gpLoadDayInner(dateStr) {
 
   const mdSel = document.getElementById('gpMatchDay');
   if (mdSel) {
-    let mdLabel = '';
-    if (mc?.match_date) {
-      const diff = Math.round((new Date(mc.match_date + 'T00:00:00') - new Date(dateStr + 'T00:00:00')) / 86400000);
-      if (diff === 0) mdLabel = 'MD';
-      else if (diff > 0 && diff <= 5) mdLabel = 'MD−' + diff;
-      else if (diff < 0 && diff >= -2) mdLabel = 'MD+' + (-diff);
-    }
-    mdSel.value = [...mdSel.options].some(o => o.value === mdLabel) ? mdLabel : '';
+    gpFillMdSelect(mdSel);
+    // Shared engine (lib/day-context.js): nearest match wins on a two-match week, and the
+    // window comes from the sport. This used to read mc.match_date only, with a 5/2 window
+    // of its own — so a day the Calendar called MD−6 came up blank here, and on a cup week
+    // the two screens disagreed outright.
+    const range = window.cmMdRangeFor(dateStr);
+    const matchDates = await window.cmMatchDates(_gpClubId, _gpTeamId, range.from, range.to);
+    const md = window.cmMdForDate(dateStr, matchDates, { overrides: mc?.md_overrides });
+    mdSel.value = [...mdSel.options].some(o => o.value === md.label) ? md.label : '';
   }
 
   const mcLabel = mc ? mc.name : '';
@@ -2736,7 +2751,8 @@ async function _gpLoadDayInner(dateStr) {
     if (ctx.microcycle && mcSel && [...mcSel.options].some(o => o.value === String(ctx.microcycle.id))) { mcSel.value = String(ctx.microcycle.id); _gpCalFields.add('gpMicrocycle'); }
     // MD: SOLO relleno cuando la sesión no tiene match_day_offset propio (mismo criterio que
     // Daily Planning) — si el microciclo lo pisara, el autosave re-persistiría el derivado.
-    if (ctx.md && mdSel && !(sess && sess.match_day_offset) && [...mdSel.options].some(o => o.value === ctx.md)) { mdSel.value = ctx.md; _gpCalFields.add('gpMatchDay'); }
+    const _ctxMd = window.cmMdNorm ? window.cmMdNorm(ctx.md) : ctx.md;   // ctx.md carries U+2212; option values are ASCII
+    if (_ctxMd && mdSel && !(sess && sess.match_day_offset) && [...mdSel.options].some(o => o.value === _ctxMd)) { mdSel.value = _ctxMd; _gpCalFields.add('gpMatchDay'); }
     if (ctx.hasEvent && ctx.estimated_rpe) { setVal('gpEstRpe', ctx.estimated_rpe); _gpCalFields.add('gpEstRpe'); }
     gpMarkCalFields();
   } catch(_) {}

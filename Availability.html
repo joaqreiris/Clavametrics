@@ -36,6 +36,9 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -827,19 +830,13 @@
     // (diff>0) más cercano; si no hay próximo, el más reciente. Así cuenta MD-7…MD-1 al partido.
     const cover = MC_RANGES.filter(m => m.start_date <= date && date <= m.end_date);
     if (!cover.length) return '';
-    for (const m of cover) { const ov = m.md_overrides && m.md_overrides[date]; if (ov) return ov; } // override manual gana
-    const scored = cover.filter(m => m.match_date).map(m => ({ diff: daysBetween(date, m.match_date) }));
-    if (!scored.length) return '';
-    scored.sort((a, b) => {
-      const au = a.diff >= 0, bu = b.diff >= 0;
-      if (au !== bu) return au ? -1 : 1;           // próximos antes que pasados
-      return Math.abs(a.diff) - Math.abs(b.diff);  // el más cercano
-    });
-    const diff = scored[0].diff;
-    if (diff === 0) return 'MD';
-    if (diff > 0 && diff <= 10) return `MD−${diff}`;
-    if (diff < 0 && diff >= -3) return `MD+${Math.abs(diff)}`;
-    return '';
+    // Motor compartido (lib/day-context.js). Antes esta pantalla prefería SIEMPRE un partido
+    // futuro sobre uno pasado, aunque el pasado estuviera más cerca: el día después de la
+    // copa salía MD−3 (mirando al domingo) mientras el Calendar decía MD+1.
+    const overrides = {};
+    for (const m of cover) Object.assign(overrides, m.md_overrides || {});
+    const dates = cover.map(m => m.match_date).filter(Boolean);
+    return window.cmMdForDate(date, dates, { overrides, display: true }).label;
   }
 
   // Base class for a cell. A FUTURE day that's already planned (dayCountable) is editable and

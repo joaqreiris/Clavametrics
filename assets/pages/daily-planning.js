@@ -650,6 +650,41 @@ async function dpLoadTactical(dateStr) {
   } catch (_) { card.style.display = 'none'; }   // tabla aún no aplicada en la DB → ocultar el bloque
 }
 
+// ── Match day (MD) ───────────────────────────────────────────────────────────
+// Every match date around the day currently on screen, refreshed by loadDay. Kept in a
+// variable so the language-change repaint can rebuild the label without another fetch.
+let _dpMatchDates = [];
+
+// Options for the per-session MD picker, from the active sport pack. The match-day value
+// stays 'MD0' (not 'MD') because that is what this screen has always persisted in
+// training_sessions.match_day_offset; cmMdNorm collapses the two on read.
+function dpFillMdSelect() {
+  const sel = document.getElementById('dpMatchDay');
+  if (!sel || !window.cmMdOptions) return;
+  const keep = sel.value;
+  const anchor = (window.cmMdWindow ? window.cmMdWindow().anchor : 'MD');
+  const ph = sel.querySelector('option[value=""]');
+  const opts = window.cmMdOptions().map(code => {
+    const value = code === anchor ? anchor + '0' : code;
+    return `<option value="${value}">${code.replace('-', '\u2212')}</option>`;
+  }).join('');
+  sel.innerHTML = (ph ? ph.outerHTML : `<option value="">${tt('daily_planning.not_a_match_day','— Not a match day —')}</option>`) + opts;
+  if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+// Label + i18n for a date, through the shared engine (lib/day-context.js). This screen
+// used to diff against mc.match_date with no window at all: on a cup week it disagreed
+// with the Calendar, and far from a match it happily printed things like MD−14.
+function dpMdLabel(dateStr, mc) {
+  if (!window.cmMdForDate) return '';
+  const r = window.cmMdForDate(dateStr, _dpMatchDates, { overrides: mc && mc.md_overrides });
+  if (!r.label) return '';
+  if (r.source === 'override') return ' · ' + r.label;
+  if (r.offset === 0)  return ' · ' + tt('daily_planning.md_label', 'MD');
+  if (r.offset  <  0)  { const n = Math.abs(r.offset); return ' · ' + tt('daily_planning.md_minus', `MD−${n}`, { n }); }
+  return ' · ' + tt('daily_planning.md_plus', `MD+${r.offset}`, { n: r.offset });
+}
+
 async function loadDay(dateStr) {
   dpFlushTargets();   // persist any pending gps_targets to the OLD day before switching
   dpFlushEdits();     // persist any pending per-task edits (notes/series/work/rest) to the OLD day
@@ -667,8 +702,9 @@ async function loadDay(dateStr) {
       ? _dpMicrocycles.map(m => `<option value="${_dpEsc(m.id)}"${m.id === mc?.id ? ' selected' : ''}>${_dpEsc(m.name)}${m.rival ? ` · ${_dpEsc(tt('daily_planning.vs_rival', `vs ${m.rival}`, {rival: m.rival}))}` : ''}</option>`).join('')
       : `<option value="">${tt('daily_planning.no_microcycles', '— No microcycles —')}</option>`;
   }
-  const mcMdDiff = mc?.match_date ? Math.round((new Date(mc.match_date + 'T12:00:00') - new Date(dateStr + 'T12:00:00')) / 86400000) : null;
-  const mcMdLabel = mcMdDiff === null ? '' : mcMdDiff === 0 ? ' · ' + tt('daily_planning.md_label','MD') : mcMdDiff > 0 ? ' · ' + tt('daily_planning.md_minus', `MD−${mcMdDiff}`, {n: mcMdDiff}) : ' · ' + tt('daily_planning.md_plus', `MD+${Math.abs(mcMdDiff)}`, {n: Math.abs(mcMdDiff)});
+  const _mdRange = window.cmMdRangeFor(dateStr);
+  _dpMatchDates = await window.cmMatchDates(_dpClubId, _dpTeamId, _mdRange.from, _mdRange.to);
+  const mcMdLabel = dpMdLabel(dateStr, mc);
   const mcRivalLabel = mc?.rival ? ` · ${tt('daily_planning.vs_rival', `vs ${mc.rival}`, {rival: mc.rival})}` : '';
   const mcLabel = mc ? (mc.name + mcMdLabel + mcRivalLabel) : '';
   document.getElementById('dpCrumbDate').textContent = fmt + (mcMdLabel || '');
@@ -741,6 +777,7 @@ async function loadDay(dateStr) {
     // MD: SOLO relleno cuando la sesión no tiene match_day_offset propio. El MD guardado por
     // sesión manda (dos dinámicas el mismo día: grupo en MD+1 y grupo en MD-2); si el microciclo
     // lo pisara acá, el autosave re-persistiría el valor derivado y mataría el MD del grupo.
+    dpFillMdSelect();
     const mdSel = document.getElementById('dpMatchDay');
     const mdVal = ctx.md ? mdMap(ctx.md) : '';
     if (mdVal && mdSel && !(sess && sess.match_day_offset) && [...mdSel.options].some(o => o.value === mdVal)) { mdSel.value = mdVal; _dpCalFields.add('dpMatchDay'); }
@@ -3489,8 +3526,7 @@ let _dpRoByRole = false, _dpLock = null;
         const _crumb = document.getElementById('dpCrumbDate');
         // Rebuild crumb/pager labels (microcycle + MD) from current data.
         const mc = _dpMicrocycles.find(m => m.start_date <= _dpCurrentDate && _dpCurrentDate <= m.end_date);
-        const mcMdDiff = mc?.match_date ? Math.round((new Date(mc.match_date + 'T12:00:00') - new Date(_dpCurrentDate + 'T12:00:00')) / 86400000) : null;
-        const mcMdLabel = mcMdDiff === null ? '' : mcMdDiff === 0 ? ' · ' + tt('daily_planning.md_label','MD') : mcMdDiff > 0 ? ' · ' + tt('daily_planning.md_minus', `MD−${mcMdDiff}`, {n: mcMdDiff}) : ' · ' + tt('daily_planning.md_plus', `MD+${Math.abs(mcMdDiff)}`, {n: Math.abs(mcMdDiff)});
+        const mcMdLabel = dpMdLabel(_dpCurrentDate, mc);
         const mcRivalLabel = mc?.rival ? ` · ${tt('daily_planning.vs_rival', `vs ${mc.rival}`, {rival: mc.rival})}` : '';
         const today = cmToday();
         const subLabel = _dpCurrentDate === today ? tt('daily_planning.today','today') : '';

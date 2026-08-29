@@ -10,15 +10,15 @@
   const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d, minimumFractionDigits: d });
 
 
-  function mdCode(sessionDate, matchDate) {
-    if (!matchDate) return null;
-    const diff = Math.round((new Date(matchDate + 'T00:00:00') - new Date(sessionDate + 'T00:00:00')) / 86400000);
-    if (diff === 0) return 'MD';
-    if (diff > 0)  return `MD-${diff}`;
-    return `MD+${Math.abs(diff)}`;
+  // Shared engine (lib/day-context.js). This used to diff against a single match date with
+  // NO window at all, so a session two weeks from the microcycle's match still came out as
+  // 'MD-14'. Now the nearest match wins and anything outside the sport's window is blank.
+  function mdCode(sessionDate, matchDates) {
+    if (!window.cmMdForDate) return null;
+    return window.cmMdForDate(sessionDate, matchDates).label || null;
   }
 
-  function _mdCodeForSession(s, matchDate) {
+  function _mdCodeForSession(s, matchDates) {
     if (s.match_day_offset != null) {
       const n = s.match_day_offset;
       // DB stores the value as a formatted string ("MD", "MD-5", "MD+1") or a number
@@ -28,7 +28,16 @@
     }
     const attrCode = s.session_attributes?.md_code;
     if (attrCode) return attrCode;
-    return mdCode(s.session_date, matchDate);
+    return mdCode(s.session_date, matchDates);
+  }
+
+  // Every match date that can anchor a session's code: the microcycles loaded for this
+  // player plus any match session in the list itself.
+  function _pwMatchDates(sessions) {
+    const set = new Set();
+    Object.values(_mcMap || {}).forEach(m => { if (m && m.match_date) set.add(String(m.match_date).slice(0, 10)); });
+    (sessions || []).forEach(s => { if (s.session_type === 'match' && s.session_date) set.add(s.session_date); });
+    return [...set].sort();
   }
 
   function mdCssKey(code) {
@@ -227,7 +236,7 @@
         session: s,
         report:  (reports || []).find(r => r.session_id === s.id) || null,
         rpe:     rpeMap[s.id] ?? null,
-        mdCode:  _mdCodeForSession(s, matchDate),
+        mdCode:  _mdCodeForSession(s, _pwMatchDates(sessions)),
       }));
 
       _pwCurrentRows   = rows;

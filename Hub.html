@@ -35,6 +35,9 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/gps-acwr.js" defer></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
@@ -1633,10 +1636,10 @@ function renderGreetSub(microcycle, session, today, nextMatch) {
   const parts = [];
   if (microcycle) {
     parts.push(microcycle.name);
-    if (microcycle.match_date) {
-      const diff = Math.round((new Date(microcycle.match_date) - new Date(today)) / 86400000);
-      parts.push(diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`);
-    }
+    // Shared engine (lib/day-context.js): the sport's anchor and window, so this stops
+    // printing things like MD-21 in a mid-season break and says GD in a basketball club.
+    const _mdLbl = window.cmMdForDate(today, [microcycle.match_date, nextMatch?.date]).label;
+    if (_mdLbl) parts.push(_mdLbl);
   }
   // If current MC has no match_date, show nearest upcoming match as context
   if (!microcycle?.match_date && nextMatch?.rival) {
@@ -2542,10 +2545,10 @@ function renderTasks(tasks, view = 'my') {
     // Planner — MD-X label from current microcycle match_date
     const el = document.getElementById('modFootPlanner');
     if (el) {
-      if (mcRes.data?.match_date) {
-        const diff = Math.round((new Date(mcRes.data.match_date) - new Date(today)) / 86400000);
-        const label = diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`;
-        el.innerHTML = `<i class="ti ti-calendar"></i> ${tt('hub.label_ready','{label} ready',{label})}`;
+      const _mdFoot = mcRes.data?.match_date
+        ? window.cmMdForDate(today, [mcRes.data.match_date]).label : '';
+      if (_mdFoot) {
+        el.innerHTML = `<i class="ti ti-calendar"></i> ${tt('hub.label_ready','{label} ready',{label:_mdFoot})}`;
       } else if (mcRes.data) {
         el.innerHTML = `<i class="ti ti-calendar"></i> ${esc(mcRes.data.name)}`;
       } else {

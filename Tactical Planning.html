@@ -203,6 +203,9 @@
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/cm-realtime.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
@@ -384,18 +387,13 @@ function addDays(ds, n){ const [y,m,d] = ds.split('-').map(Number); const dt = n
 function mondayOf(ds){ const [y,m,d] = ds.split('-').map(Number); const dt = new Date(y, m-1, d); const off = (dt.getDay() + 6) % 7; return addDays(ds, -off); }
 function daysBetween(a, b){ const [ya,ma,da] = a.split('-').map(Number), [yb,mb,db] = b.split('-').map(Number); return Math.round((new Date(yb,mb-1,db) - new Date(ya,ma-1,da)) / 86400000); }
 
-// Same precedence as lib/day-context.js: manual md_overrides > diff vs match_date.
+// Shared engine (lib/day-context.js): manual override wins, then the NEAREST match — not
+// just this microcycle's own match_date, which on a two-match week gave a different answer
+// from the Calendar for the same day.
 function mdLabelFor(ds){
   const mc = _tpMcs.find(m => m.start_date <= ds && ds <= m.end_date);
-  if (!mc) return '';
-  if (mc.md_overrides && mc.md_overrides[ds]) return mc.md_overrides[ds];
-  if (mc.match_date) {
-    const diff = daysBetween(ds, mc.match_date);
-    if (diff === 0) return 'MD';
-    if (diff > 0 && diff <= 10) return 'MD−' + diff;
-    if (diff < 0 && diff >= -3) return 'MD+' + Math.abs(diff);
-  }
-  return '';
+  const dates = (_tpMcs || []).map(m => m.match_date).filter(Boolean);
+  return window.cmMdForDate(ds, dates, { overrides: mc && mc.md_overrides, display: true }).label;
 }
 
 function tpMissingTable(err){

@@ -2223,13 +2223,23 @@ async function _gpPendingCount() {
   window._gpPendingN = count || 0;
   return window._gpPendingN;
 }
-const _GP_MD_OPTS = ['', 'MD-5', 'MD-4', 'MD-3', 'MD-2', 'MD-1', 'MD0', 'MD+1', 'MD+2'];
-function _gpMdLabel(v) { return v === '' ? tt('gps_analysis.pending_not_md', '— Not a match day —') : (v === 'MD0' ? 'MD' : v); }
+// Day codes of the active sport (assets/sport-packs.js). The match-day value keeps the
+// 'MD0' form the sessions table stores; cmMdNorm collapses it with 'MD' on read.
+function _gpMdOpts() {
+  const anchor = window.cmMdWindow ? window.cmMdWindow().anchor : 'MD';
+  const codes = window.cmMdOptions ? window.cmMdOptions() : ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'];
+  return ['', ...codes.map(c => (c === anchor ? anchor + '0' : c))];
+}
+function _gpMdLabel(v) {
+  if (v === '') return tt('gps_analysis.pending_not_md', '— Not a match day —');
+  const anchor = window.cmMdWindow ? window.cmMdWindow().anchor : 'MD';
+  return v === anchor + '0' ? anchor : v;
+}
 // Tipos de sesión ofrecidos al crear desde la bandeja (los que tienen sentido con GPS de campo).
 const _GP_ST_LIST = ['training', 'match', 'outdoor', 'conditioning', 'recovery'];
 const _GP_ST_EN = { training: 'Training', match: 'Match', outdoor: 'Outdoor', conditioning: 'Conditioning', recovery: 'Recovery' };
 function _gpStLabel(t) { return tt('gps_analysis.st_' + t, _GP_ST_EN[t] || t); }
-function _gpMdOptsSel(sel) { return _GP_MD_OPTS.map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${_gpMdLabel(v)}</option>`).join(''); }
+function _gpMdOptsSel(sel) { return _gpMdOpts().map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${_gpMdLabel(v)}</option>`).join(''); }
 
 async function _gpOpenPendingPanel() {
   const clubId = window._gpClubId || await window.getClubId?.();

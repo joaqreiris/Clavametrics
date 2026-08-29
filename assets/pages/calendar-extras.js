@@ -979,15 +979,16 @@ function calMetaLabel(type){
 }
 function calEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function calCurrentMc(){ return _allMCs[_mcIdx] || null; }
+// MD label for a date, through the shared engine (lib/day-context.js). It used to diff
+// against mc.match_date alone — one match per week — so on a cup week the printed week
+// sheet and the day sheet disagreed with the calendar grid right next to them. Now every
+// match in _matchSessions counts and the nearest one wins, which is what the grid does.
+// display:true keeps the typographic minus these printed sheets have always shown.
 function calMdForDate(dateStr, mc){
-  if (!mc) return '';
-  if (mc.md_overrides && mc.md_overrides[dateStr]) return mc.md_overrides[dateStr];
-  if (!mc.match_date) return '';
-  const diff = daysBetween(dateStr, mc.match_date);   // match − date (matches on-screen grid)
-  if (diff === 0) return 'MD';
-  if (diff > 0 && diff <= 10) return `MD−${diff}`;
-  if (diff < 0 && diff >= -3) return `MD+${Math.abs(diff)}`;
-  return '';
+  const dates = (_matchSessions || []).map(s => s.session_date).filter(Boolean);
+  return window.cmMdForDate(dateStr, dates, {
+    overrides: mc && mc.md_overrides, display: true,
+  }).label;
 }
 function calFmtRange(a, b){
   try {

@@ -421,18 +421,14 @@ function renderGrid() {
       : allDaySessions;
     const isOff = daySessions.length === 0;
 
-    let mdLabel = '';
-    if (_mDates.length) {
-      if (_mDates.indexOf(dateStr) >= 0) mdLabel = 'MD';
-      else {
-        const next = _mDates.find(x => x > dateStr), prev = [..._mDates].slice().reverse().find(x => x < dateStr);
-        const cand = [];
-        if (next) { const dn = daysBetween(dateStr, next); if (dn >= 1 && dn <= 10) cand.push({ v: dn, lbl: `MD−${dn}` }); }
-        if (prev) { const dp = daysBetween(prev, dateStr); if (dp >= 1 && dp <= 3) cand.push({ v: dp, lbl: `MD+${dp}` }); }
-        cand.sort((a, b) => a.v - b.v);
-        if (cand.length) mdLabel = cand[0].lbl;
-      }
-    }
+    // Nearest-match label, now via the shared engine (lib/day-context.js) so the grid, the
+    // printed sheets, Daily Planning and the Gym Planner all answer the same thing. The
+    // override is read separately below because this grid renders it with its own styling.
+    const _md = window.cmMdForDate(dateStr, _mDates, { display: true });
+    const mdLabel = _md.label;
+    // Equidistant from a match before and a match after: there is no right answer, so the
+    // chip says so and the user settles it with the override menu (click the tag).
+    const mdAmbiguous = _md.ambiguous;
     const dayOverride = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
     // MD de las sesiones del día (Daily Planning / Gym Planner), en forma canónica (cmMdNorm:
     // el tag derivado puede venir en U+2212 y la columna en ASCII/'MD0').
@@ -449,6 +445,7 @@ function renderGrid() {
     const tagText  = hasDayOff ? 'OFF' : (dayOverride || (mdLabel === 'MD' ? 'MD' : (unanimousMd || mdLabel)));
     const isMatchTag = tagText === 'MD';
     const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
+    const _showAmbiguous = mdAmbiguous && !dayOverride && !hasDayOff && mdLabel !== 'MD';
     const _dayMdN = hasDayOff ? '' : _mdN(tagText);
     const groupChips = hasDayOff ? '' : sessMds.filter(v => v && v !== _dayMdN)
       .map(v => `<span class="mc-day-md2" title="${tt('calendar.group_md_hint','Group MD — set per session in Daily Planning')}">${_esc(v)}</span>`).join('');
@@ -495,7 +492,7 @@ function renderGrid() {
         ${isPlayerView
           ? (tagText ? `<span class="mc-day-md" style="${tagStyle}">${tagText}</span>` : '')
           : (tagText
-              ? `<span class="mc-day-md${(!hasDayOff && dayOverride) ? ' is-manual' : ''}" data-date="${dateStr}" style="${tagStyle};cursor:pointer" title="${tt('calendar.click_set_day_type','Click to set day type')}">${tagText}</span>`
+              ? `<span class="mc-day-md${(!hasDayOff && dayOverride) ? ' is-manual' : ''}${_showAmbiguous ? ' is-ambiguous' : ''}" data-date="${dateStr}" style="${tagStyle};cursor:pointer" title="${_showAmbiguous ? tt('calendar.md_tie_hint','Same distance to the match before and the match after — click to choose') : tt('calendar.click_set_day_type','Click to set day type')}">${tagText}</span>`
               : `<span class="mc-day-md mc-day-md-empty" data-date="${dateStr}" style="cursor:pointer;opacity:0.4" title="${tt('calendar.click_set_day_type','Click to set day type')}">+</span>`)}${groupChips}
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
@@ -654,7 +651,12 @@ function renderGrid() {
 
 // ── Manual MD override menu (per-day tag click) ───────────────
 let _mdMenu = null, _mdMenuWired = false;
-const MD_MENU_OPTIONS = ['Auto','MD','MD-1','MD-2','MD-3','MD-4','MD-5','MD-6','MD+1','MD+2','MD+3','OFF'];
+// Override menu options: Auto + the sport's own day codes + OFF. Football offers
+// MD-6…MD+3, basketball GD-3…GD+2 (assets/sport-packs.js → cmMdOptions).
+function mdMenuOptions() {
+  const codes = window.cmMdOptions ? window.cmMdOptions() : [];
+  return ['Auto', ...codes, 'OFF'];
+}
 
 function ensureMdMenu(grid) {
   if (_mdMenuWired) return;
@@ -682,7 +684,7 @@ function openMdMenu(anchorEl, dateStr) {
   const hasDayOff = _sessions.some(s => s.session_date === dateStr && _isFullDayOff(s));
   const override  = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
   const active    = hasDayOff ? 'OFF' : (override || 'Auto');
-  _mdMenu.innerHTML = MD_MENU_OPTIONS.map(opt =>
+  _mdMenu.innerHTML = mdMenuOptions().map(opt =>
     `<button type="button" class="mc-md-opt${opt === active ? ' is-active' : ''}" data-opt="${opt}">${opt}</button>`
   ).join('');
   _mdMenu.querySelectorAll('.mc-md-opt').forEach(b =>

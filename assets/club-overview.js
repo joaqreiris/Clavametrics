@@ -62,7 +62,21 @@
   function fmtHomeAway(h) { h = (h || '').toLowerCase(); return h === 'home' ? tt('common.home', 'Home') : h === 'away' ? tt('common.away', 'Away') : h === 'neutral' ? tt('common.neutral', 'Neutral') : ''; }
 
   // ── MD offset (por equipo y día) ──
-  function mdDiffLabel(target, day) { const diff = Math.round((parseYMD(target) - parseYMD(day)) / 86400000); if (diff === 0) return 'MD'; if (diff > 0 && diff <= 10) return 'MD-' + diff; if (diff < 0 && diff >= -3) return 'MD+' + (-diff); return ''; }
+  // Todas las fechas de partido del equipo en la ventana cargada — de calendar_events y de
+  // training_sessions. Antes esto miraba mc.match_date (un partido por semana) y, sin
+  // microciclo, caía al ÚLTIMO partido de la ventana; en una semana de copa + liga eso
+  // contradecía al Calendar, que ya contaba contra el partido más cercano.
+  function teamMatchDates(teamId) {
+    const out = new Set();
+    (state.data.matches || []).forEach(m => { if (m.team_id === teamId && m.date) out.add(m.date); });
+    (state.data.sessions || []).forEach(s => {
+      if (s.team_id === teamId && s.session_type === 'match' && s.session_date) out.add(s.session_date);
+    });
+    return [...out].sort();
+  }
+  function mdDiffLabel(teamId, day) {
+    return window.cmMdForDate(day, teamMatchDates(teamId)).label;
+  }
   function mdNorm(v) { return window.cmMdNorm ? window.cmMdNorm(v) : String(v || ''); }
   // MD del día — misma prioridad que el chip de Calendar: override manual del microciclo →
   // MD UNÁNIME de las sesiones del día (Daily Planning / Gym Planner) → derivado del partido.
@@ -83,10 +97,9 @@
       if (v && !mds.includes(v)) mds.push(v);
     });
     if (mds.length === 1) return mds[0];
-    if (mc && mc.match_date) return mdDiffLabel(mc.match_date, y);
-    if (mds.length) return mds[0];   // sin microciclo y sesiones en desacuerdo: comportamiento previo
-    const wm = (state.data.matches || []).filter(x => x.team_id === teamId).map(x => x.date).sort();
-    if (wm.length) return mdDiffLabel(wm[wm.length - 1], y);
+    const derived = mdDiffLabel(teamId, y);
+    if (derived) return derived;
+    if (mds.length) return mds[0];   // sesiones en desacuerdo y ningún partido cerca
     return '';
   }
   // MDs de grupo del día: los match_day_offset (normalizados) distintos del MD del día.
@@ -102,7 +115,7 @@
   function isPlanExpected(teamId, y) {
     const mc = (state.data.micros || []).find(m => m.team_id === teamId && m.start_date <= y && m.end_date >= y);
     if (!mc || !mc.match_date || y >= mc.match_date) return false;
-    const md = mdDiffLabel(mc.match_date, y);
+    const md = mdDiffLabel(teamId, y);
     return md === 'MD-1' || md === 'MD-2' || md === 'MD-3' || md === 'MD-4';
   }
 

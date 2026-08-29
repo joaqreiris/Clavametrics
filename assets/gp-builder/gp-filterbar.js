@@ -1313,17 +1313,10 @@
     (matchEvents || []).forEach(r => { if (r.date && _mTeamOk(r.team_id)) _matchSet.add(String(r.date).slice(0, 10)); });
     (matchSess   || []).forEach(r => { if (r.session_date && _mTeamOk(r.team_id)) _matchSet.add(String(r.session_date).slice(0, 10)); });
     const _matchArr = [..._matchSet].sort();
-    const _dDiff = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+    // Nearest match wins — the rule now lives in lib/day-context.js so the window follows
+    // the sport and every screen answers the same thing.
     function _mdFromMatches(ds) {
-      if (!_matchArr.length) return '';
-      if (_matchArr.indexOf(ds) >= 0) return 'MD';
-      const next = _matchArr.find(d => d > ds), prev = [..._matchArr].reverse().find(d => d < ds);
-      const cand = [];
-      if (next) { const dn = _dDiff(ds, next); if (dn >= 1 && dn <= 10) cand.push({ v: dn, lbl: 'MD-' + dn }); }
-      if (prev) { const dp = _dDiff(prev, ds); if (dp >= 1 && dp <= 3) cand.push({ v: dp, lbl: 'MD+' + dp }); }
-      if (!cand.length) return '';
-      cand.sort((a, b) => a.v - b.v);
-      return cand[0].lbl;
+      return window.cmMdForDate ? window.cmMdForDate(ds, _matchArr).label : '';
     }
     function _mdDerived(ds) {
       if (!ds) return '';

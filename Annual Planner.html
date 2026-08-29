@@ -37,6 +37,9 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" defer></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -1666,17 +1669,12 @@ function apMdDefaultType(label){
   return 'off';
 }
 
+// Nearest match wins, via the shared engine (lib/day-context.js). This used to count with
+// no window at all, so a day in a mid-season break came out as something like MD-23 and got
+// a day type assigned off it; now it falls outside the sport's window and reads as 'off'.
 function apMDinfo(ds, matchDates){
-  if (matchDates.includes(ds)) return { label:'MD', type:'match' };
-  let next = null, prev = null;
-  matchDates.forEach(d => { if (d >= ds && (!next || d < next)) next = d; if (d <= ds && (!prev || d > prev)) prev = d; });
-  const dNext = next ? Math.round(apDays(ds, next)) : 99;
-  const dPrev = prev ? Math.round(apDays(prev, ds)) : 99;
-  const useNext = dNext <= dPrev;
-  let label = '';
-  if (useNext && dNext < 99) label = 'MD-' + dNext;
-  else if (dPrev < 99) label = 'MD+' + dPrev;
-  return { label, type: apMdDefaultType(label || 'off') };
+  const r = window.cmMdForDate(ds, matchDates);
+  return { label: r.label, type: apMdDefaultType(r.label || 'off') };
 }
 
 async function apLoadTimeline(){
@@ -1753,7 +1751,7 @@ function apMicroEditorRender(){
   let dayCards = '';
   const cur = new Date(mi.start_date + 'T00:00:00'), endD = new Date(mi.end_date + 'T00:00:00');
   let guard = 0;
-  const MD_CHOICES = ['MD','MD-1','MD-2','MD-3','MD-4','MD-5','MD-6','MD+1','MD+2','MD+3'];
+  const MD_CHOICES = window.cmMdOptions ? window.cmMdOptions() : ['MD','MD-1','MD-2','MD-3','MD-4','MD-5','MD-6','MD+1','MD+2','MD+3'];
   while (cur <= endD && guard++ < 60){
     const ds = cur.toISOString().slice(0,10);
     const auto = apMDinfo(ds, microMatchDates);

@@ -36,6 +36,8 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/cm-realtime.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
@@ -701,6 +703,20 @@
     padding:3px 5px;
   }
   .mc-day-md.is-manual { border-style: dashed; }
+  /* Empate: el día está a la misma distancia del partido anterior y del siguiente (semana
+     de copa + liga). No hay respuesta correcta, así que en vez de elegir en silencio se
+     marca y el usuario lo fija con el menú del chip. */
+  .mc-day-md.is-ambiguous {
+    border-color: var(--cm-warn, #B45309);
+    color: var(--cm-warn, #B45309);
+    position: relative;
+  }
+  .mc-day-md.is-ambiguous::after {
+    content: '?';
+    position: absolute; top: -4px; right: -3px;
+    font: 700 8px/1 var(--cm-font-mono);
+    color: var(--cm-warn, #B45309);
+  }
   /* MD de un grupo (sesión con match_day_offset propio ≠ MD del día) — read-only, se asigna en Daily Planning */
   .mc-day-md2 {
     font:600 10px/1 var(--cm-font-mono);

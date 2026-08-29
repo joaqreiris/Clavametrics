@@ -263,6 +263,8 @@
   </div>
 </div>
 
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/gps-reader.js"></script>
 <script>
@@ -491,19 +493,11 @@ async function loadMicrocycle(){
   else { activeDate = (DAYS.find(d=>d.isFuture)||DAYS[0])?.date; }
   DAYS.forEach(d=>{ d.isActive = d.date===activeDate; });
 }
-// MD label from the actual match days: MD on a match, MD−n counting down to the next match
-// (within 10 days), MD+n after the last match (within 3). Nearest match wins on double weeks.
+// MD label from the actual match days. This screen already counted against the nearest
+// match; the rule now lives in lib/day-context.js so every screen shares it and the window
+// follows the sport. display:true keeps the typographic minus this grid has always shown.
 function mdLabelFromSet(ds, arr){
-  if(!arr.length) return '';
-  if(arr.indexOf(ds)>=0) return 'MD';
-  const dd=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000);
-  const next=arr.find(d=>d>ds), prev=[...arr].reverse().find(d=>d<ds);
-  const cand=[];
-  if(next){ const dn=dd(ds,next); if(dn>=1&&dn<=10) cand.push({v:dn,lbl:'MD−'+dn}); }
-  if(prev){ const dp=dd(prev,ds); if(dp>=1&&dp<=3) cand.push({v:dp,lbl:'MD+'+dp}); }
-  if(!cand.length) return '';
-  cand.sort((a,b)=>a.v-b.v);
-  return cand[0].lbl;
+  return window.cmMdForDate(ds, arr, { display: true }).label;
 }
 
 // session_ids for an exact set of dates / a date range (clubwide; scope reports by roster later).
