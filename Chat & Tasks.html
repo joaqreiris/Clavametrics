@@ -996,10 +996,11 @@ function renderPinnedFiles() {
     return `<div class="cr-file">
       <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
       <div class="body"><div class="t">${esc(f.file_name)}</div><div class="s">${formatTime(f.pinned_at)}</div></div>
-      <a href="${esc(f.file_url)}" download target="_blank" class="cr-file-dl" title="${esc(tt('chat_tasks.download', 'Download'))}"><i class="ti ti-download" style="font-size:12px"></i></a>
+      <a ${(() => { const u = attUrl(f.file_url); return u ? `href="${esc(u)}"` : ''; })()} data-att-src="${esc(f.file_url || '')}" download target="_blank" class="cr-file-dl" title="${esc(tt('chat_tasks.download', 'Download'))}"><i class="ti ti-download" style="font-size:12px"></i></a>
       <button class="cr-unpin" onclick="unpinFile('${f.id}')" title="${esc(tt('chat_tasks.unpin', 'Unpin'))}"><i class="ti ti-x" style="font-size:10px"></i></button>
     </div>`;
   }).join('');
+  paintAttachments(container);
 }
 
 // ── PINNED MESSAGES (per conversation) ──
@@ -1342,6 +1343,7 @@ function renderMessages() {
     renderedIds.add(msg.id);
   }
   wrap.innerHTML = html;
+  paintAttachments(wrap);
 }
 
 function renderMsgHTML(msg) {
@@ -1780,13 +1782,88 @@ function refreshReadTicks() {
   });
 }
 
+// ── ADJUNTOS DEL CHAT ──────────────────────────────────────────────────────────
+// El bucket 'chat-attachments' es PRIVADO: los archivos sólo se sirven con una URL
+// firmada, y la RLS de storage.objects sólo la concede a alguien del mismo club. Antes
+// era público, o sea que cualquiera con el link abría un PDF del staff sin estar logueado.
+//
+// En la base conviven tres formas de referenciar un adjunto, y las tres deben resolver:
+//   · la URL pública que se guardó mientras el bucket era público (histórico),
+//   · una URL ya firmada,
+//   · el path pelado '<club_id>/<canal>/<archivo>', que es lo que se guarda ahora.
+// Un link pegado a mano (YouTube, Drive) no matchea ninguna y se usa tal cual.
+const CHAT_BUCKET = 'chat-attachments';
+const _attSigned = {};   // path dentro del bucket → URL firmada
+
+function attPath(u) {
+  const s = String(u == null ? '' : u).trim();
+  if (!s) return null;
+  const m = s.match(/\/storage\/v1\/object\/(?:public|sign)\/chat-attachments\/([^?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  // Path pelado: empieza con el uuid del club. Con protocolo es un link externo.
+  if (!/^[a-z]+:/i.test(s) && /^[0-9a-f-]{36}\//i.test(s)) return s;
+  return null;
+}
+// Sincrónico, para usar dentro de las plantillas: la URL firmada si ya la tenemos, y ''
+// si todavía no — paintAttachments() la completa apenas llega.
+function attUrl(u) {
+  const p = attPath(u);
+  if (!p) return safeUrl(u);
+  return _attSigned[p] || '';
+}
+// Rellena los adjuntos que quedaron sin resolver. Se dispara después de cada render (y por
+// el observer de abajo), así cubre por igual la carga inicial, lo que entra por realtime y
+// lo que uno mismo acaba de mandar, sin tener que engancharse a cada punto de inserción.
+async function paintAttachments(root) {
+  const els = (root || document).querySelectorAll('[data-att-src]:not([data-att-done])');
+  if (!els.length) return;
+  const pending = [];
+  els.forEach(el => {
+    const p = attPath(el.getAttribute('data-att-src'));
+    if (p && !_attSigned[p]) pending.push(p);
+  });
+  if (pending.length) Object.assign(_attSigned, await window.cmSignedUrls(CHAT_BUCKET, pending));
+  els.forEach(el => {
+    const raw = el.getAttribute('data-att-src');
+    const p = attPath(raw);
+    const url = p ? _attSigned[p] : safeUrl(raw);
+    if (!url) return;                       // no se pudo firmar: se reintenta en el próximo render
+    el.setAttribute('data-att-done', '1');  // el data-att-src se conserva: attOpen() lo necesita
+    if (el.tagName === 'IMG') el.src = url;
+    else if (el.tagName === 'A') el.href = url;
+  });
+}
+// Abrir en pestaña nueva. Firma en el momento si el painter todavía no llegó, para que un
+// click apurado no termine en una pestaña en blanco.
+async function attOpen(el) {
+  const raw = el && el.getAttribute('data-att-src');
+  if (!raw) return;
+  const p = attPath(raw);
+  const url = p ? (_attSigned[p] || await window.cmSignedUrl(CHAT_BUCKET, p)) : safeUrl(raw);
+  if (url) window.open(url, '_blank');
+}
+// Un mensaje que llega por realtime, o el que uno acaba de mandar, se inserta en el DOM sin
+// pasar por renderMessages(). El observer los cubre sin tener que engancharse a cada punto.
+// Sólo mira childList: rellenar un src/href es un cambio de atributo, así que no se
+// retroalimenta, y el filtro :not([data-att-done]) corta cualquier pasada de más.
+(function watchAttachments() {
+  const body = document.getElementById('chatBody');
+  if (!body) { document.addEventListener('DOMContentLoaded', watchAttachments, { once: true }); return; }
+  if (!window.MutationObserver) return;
+  let t = null;
+  new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => paintAttachments(body), 60); })
+    .observe(body, { childList: true, subtree: true });
+})();
+
 function renderAttHTML(msg) {
-  if (msg.attachment_type === 'image' && msg.attachment_url) {
-    return `<div class="att-img-wrap"><img src="${esc(safeUrl(msg.attachment_url))}" class="att-img" loading="lazy" alt="${esc(msg.attachment_name || '')}" onclick="window.open('${esc(safeUrl(msg.attachment_url))}','_blank')"></div>`;
+  const ref = msg.attachment_url || '';
+  if (msg.attachment_type === 'image' && ref) {
+    const u = attUrl(ref);
+    return `<div class="att-img-wrap"><img ${u ? `src="${esc(u)}"` : ''} data-att-src="${esc(ref)}" class="att-img" loading="lazy" alt="${esc(msg.attachment_name || '')}" onclick="attOpen(this)"></div>`;
   }
   const { icon, color } = fileTypeIcon(msg.attachment_type);
   const size = formatFileSize(msg.attachment_size);
-  const open = msg.attachment_url ? ` onclick="window.open('${esc(safeUrl(msg.attachment_url))}','_blank')"` : '';
+  const open = ref ? ` data-att-src="${esc(ref)}" onclick="attOpen(this)"` : '';
   return `<div class="att"${open}>
     <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
     <div><div class="t">${esc(msg.attachment_name || tt('chat_tasks.file_fallback', 'File'))}</div>${size ? `<div class="s">${size}</div>` : ''}</div>
@@ -3108,8 +3185,9 @@ async function uploadAttachment(file) {
   const path      = `${currentUser.clubId}/${channelId}/${Date.now()}-${safeName}`;
   const { error } = await window.sb.storage.from('chat-attachments').upload(path, file, { cacheControl: window.CM_CACHE_IMMUTABLE, upsert: false });
   if (error) { console.error('uploadAttachment failed:', error); throw error; }
-  const { data: { publicUrl } } = window.sb.storage.from('chat-attachments').getPublicUrl(path);
-  return { url: publicUrl };
+  // Se guarda el PATH, no una URL: el bucket es privado y toda URL firmada vence. attUrl()
+  // firma en el momento de mostrarlo (ver "ADJUNTOS DEL CHAT").
+  return { url: path };
 }
 
 // ── URL DETECTION / LINK PREVIEW ──
@@ -3259,8 +3337,8 @@ async function savePinModal() {
       const path     = `${currentUser.clubId}/pinned/${Date.now()}-${safeName}`;
       const { error: upErr } = await window.sb.storage.from('chat-attachments').upload(path, pinModalFile, { cacheControl: window.CM_CACHE_IMMUTABLE, upsert: false });
       if (upErr) throw upErr;
-      const { data: { publicUrl } } = window.sb.storage.from('chat-attachments').getPublicUrl(path);
-      await pinFileDirectly(publicUrl, pinModalFile.name, getFileCategory(pinModalFile));
+      // Se guarda el path (bucket privado); se firma al mostrarlo.
+      await pinFileDirectly(path, pinModalFile.name, getFileCategory(pinModalFile));
       closePinModal();
     } catch (err) {
       console.error('Pin upload error:', err);
