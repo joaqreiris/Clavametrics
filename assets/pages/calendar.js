@@ -436,13 +436,12 @@ function renderGrid() {
     // MD de las sesiones del día (Daily Planning / Gym Planner), en forma canónica (cmMdNorm:
     // el tag derivado puede venir en U+2212 y la columna en ASCII/'MD0').
     const _mdN = window.cmMdNorm || (v => String(v || ''));
-    const _mdsOf = list => [...new Set(list.map(s => _mdN(s.match_day_offset)).filter(Boolean))];
-    const _withMd = daySessions.filter(s => s.source === 'session' && s.match_day_offset);
-    // El gimnasio ACOMPAÑA a la dinámica de campo: solo define el MD del día cuando no hay
-    // ninguna sesión de campo que lo diga. Si no, un gym con el MD viejo pegado (copiar/pegar
-    // o mover de día) inventaba una segunda dinámica que no existe.
-    const _fieldMds = _mdsOf(_withMd.filter(s => s.session_type !== 'gym'));
-    const sessMds = _fieldMds.length ? _fieldMds : _mdsOf(_withMd.filter(s => s.session_type === 'gym'));
+    // Toda sesión pesa igual: una dinámica de recuperación puede hacerse en gimnasio, en
+    // campo o como activación — el dónde no cambia que sea una dinámica con su propio MD.
+    const sessMds = [...new Set(
+      daySessions.filter(s => s.source === 'session' && s.match_day_offset)
+        .map(s => _mdN(s.match_day_offset)).filter(Boolean)
+    )];
     // Prioridad del chip del día: día libre → DÍA DE PARTIDO (siempre 'MD': una sesión de la
     // mañana no lo destrona) → lo planificado en las sesiones (el chip lleva el de la primera
     // del día; una segunda dinámica sale como chip punteado aparte) → override viejo →

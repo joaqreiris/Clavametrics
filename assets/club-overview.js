@@ -78,23 +78,17 @@
     return window.cmMdForDate(day, teamMatchDates(teamId)).label;
   }
   function mdNorm(v) { return window.cmMdNorm ? window.cmMdNorm(v) : String(v || ''); }
-  // MDs planificados del día, en orden de sesión. El gimnasio ACOMPAÑA a la dinámica de
-  // campo: solo cuenta si no hay ninguna sesión de campo que diga el MD (si no, un gym con
-  // el MD viejo pegado inventa una segunda dinámica que no existe). Mismo criterio que el
-  // chip del Calendar.
+  // MDs planificados del día, en orden de sesión. Toda sesión pesa igual: una dinámica de
+  // recuperación puede hacerse en gimnasio, en campo o como activación. Mismo criterio que
+  // el chip del Calendar.
   function sessMdsFor(teamId, y) {
-    const pick = gym => {
-      const out = [];
-      (state.data.sessions || []).forEach(s => {
-        if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
-        if ((s.session_type === 'gym') !== gym) return;
-        const v = mdNorm(s.match_day_offset);
-        if (v && !out.includes(v)) out.push(v);
-      });
-      return out;
-    };
-    const field = pick(false);
-    return field.length ? field : pick(true);
+    const out = [];
+    (state.data.sessions || []).forEach(s => {
+      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
+      const v = mdNorm(s.match_day_offset);
+      if (v && !out.includes(v)) out.push(v);
+    });
+    return out;
   }
   // MD del día — misma prioridad que el chip de Calendar: DÍA DE PARTIDO → lo planificado en
   // las sesiones (Daily Planning / Gym Planner) → override viejo del microciclo → derivado
