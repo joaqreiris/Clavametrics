@@ -63,6 +63,19 @@ async function shrink(buf, mime, maxDim, maxBytes) {
   return { buf: out, mime: 'image/webp' };
 }
 
+// Chequear la credencial ANTES de recorrer nada: sin esto, una key inválida hace que cada
+// list() falle y el bucket se reporte como "vacío", que parece un resultado y no un error.
+{
+  const { error } = await sb.storage.listBuckets();
+  if (error) {
+    console.error(`\nNo se pudo autenticar contra Storage: ${error.message}`);
+    console.error('Revisá SUPABASE_SERVICE_ROLE_KEY (Project Settings → API Keys → service_role).');
+    console.error('Ojo: si pegás varias líneas de una vez, el `read` se come la línea siguiente');
+    console.error('como si fuera la key. Corré el `read` solo, en su propia línea.');
+    process.exit(1);
+  }
+}
+
 const mb = n => (n / 1048576).toFixed(2) + ' MB';
 let totBefore = 0, totAfter = 0, totFiles = 0, totFail = 0;
 
