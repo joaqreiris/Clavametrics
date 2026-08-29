@@ -18,6 +18,10 @@ const URL_ = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!URL_ || !KEY) { console.error('Faltan SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY'); process.exit(1); }
 const APPLY = process.argv.includes('--apply');
+// --only=<texto>: procesar sólo los archivos cuyo "bucket/path" contenga ese texto. Sirve
+// para reintentar lo puntual que haya fallado sin volver a bajar y subir todo el Storage
+// (que es egress real). Sin el flag, se procesa todo.
+const ONLY = (process.argv.find(a => a.startsWith('--only=')) || '').slice('--only='.length);
 const sb = createClient(URL_, KEY, { auth: { persistSession: false } });
 
 const CACHE = '31536000';   // 1 año — coincide con window.CM_CACHE_IMMUTABLE en la app
@@ -83,8 +87,9 @@ let totBefore = 0, totAfter = 0, totFiles = 0, totFail = 0;
 const intrusos = [];   // archivos que no son imagen en buckets que sólo se pintan con <img>
 
 for (const b of BUCKETS) {
-  const files = await walk(b.id);
-  if (!files.length) { console.log(`${b.id}: vacío`); continue; }
+  let files = await walk(b.id);
+  if (ONLY) files = files.filter(f => `${b.id}/${f.path}`.includes(ONLY));
+  if (!files.length) { if (!ONLY) console.log(`${b.id}: vacío`); continue; }
   let before = 0, after = 0, shrunk = 0, failed = 0;
   for (const f of files) {
     try {
