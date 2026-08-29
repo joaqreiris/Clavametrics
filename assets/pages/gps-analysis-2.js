@@ -667,6 +667,31 @@ const _MANUAL_GPS_METRICS = [
   { k:'time_played', l:'Time played', u:'min' },
   { k:'distance_per_minute', l:'Distance / min', u:'m/min' },
 ];
+// Cuántos jugadores tienen datos por sesión → badge del picker + vista 'With data'.
+// Vía la MISMA RPC agregada que usa «Assign rivals» (distinct server-side, ~200 filas). Antes se
+// bajaban TODOS los gps_reports del club (MKD ≈ 4.3k filas = 5 páginas) bajo la RLS por-fila, que
+// es cara: eso era lo que hacía esperar al modal en "Loading…". Cacheado por club mientras dure la
+// página (se invalida al guardar). Fallback al barrido paginado si la RPC no está deployada.
+// Nota: la RPC no filtra is_invalid, así que una sesión cuyas únicas filas estén marcadas
+// inválidas puede aparecer con badge — mismo criterio que ya usa «Assign rivals».
+window.__mgpCountsCache = window.__mgpCountsCache || new Map();
+function _mgpSessionCounts(clubId) {
+  if (window.__mgpCountsCache.has(clubId)) return window.__mgpCountsCache.get(clubId);
+  const p = (async () => {
+    try {
+      const { data, error } = await window.sb.rpc('gps_session_ids_with_data', { p_club_id: clubId });
+      if (!error && Array.isArray(data)) return Object.fromEntries(data.map(r => [r.session_id, r.n]));
+    } catch (_e) { /* RPC ausente → fallback */ }
+    const rows = await window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id')
+      .eq('club_id', clubId).eq('is_invalid', false),
+      { label: 'manual-gps.reports', concurrency: 6 }).catch(() => []);
+    const out = {};
+    (rows || []).forEach(r => { out[r.session_id] = (out[r.session_id] || 0) + 1; });
+    return out;
+  })();
+  window.__mgpCountsCache.set(clubId, p);
+  return p;
+}
 async function openManualGpsModal() {
   const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const clubId = window._gpClubId || (await window.getClubId?.());
@@ -686,14 +711,8 @@ async function openManualGpsModal() {
   if (teamId) sQ = sQ.or(`team_id.eq.${teamId},team_id.is.null`);
   const [sessRes, rosterRes, dataRes, primRes, _seasons] = await Promise.all([
     sQ, _gpRoster(clubId, teamId),
-    // cmFetchAll: this read easily exceeds PostgREST's 1000-row cap (squad × season of sessions);
-    // a raw query silently truncates, so recent sessions counted as "no data" and vanished from
-    // the 'With data' view even though their GPS was imported fine.
-    window.cmFetchAll(() => window.sb.from('gps_reports').select('session_id')
-      .eq('club_id', clubId).eq('is_invalid', false),
-      // concurrency: clubs hold thousands of report rows (MKD ≈ 4k → 5 pages); parallel pages keep
-      // the modal open in ~2 round trips instead of one slow sequential crawl.
-      { label: 'manual-gps.reports', concurrency: 6 }).catch(() => []),
+    // { session_id: n } agregado server-side — ver _mgpSessionCounts.
+    _mgpSessionCounts(clubId),
     // Ids of players whose PRIMARY membership is this team (same is_primary filter Top-Up /
     // Evaluations use). Everyone else in the roster is an alternate training up from another team.
     teamId ? window.cmTeamPlayers(teamId, 'id').eq('player_teams.is_primary', true)
@@ -710,8 +729,7 @@ async function openManualGpsModal() {
   const hasGuests = roster.some(isGuest);
   // How many players already have data per session → shown as a badge so the user picks the
   // session that actually holds GPS (the Catapult one), not an empty duplicate.
-  const _dataCount = {};
-  (dataRes || []).forEach(r => { _dataCount[r.session_id] = (_dataCount[r.session_id] || 0) + 1; });
+  const _dataCount = dataRes || {};
   // Current season = the one whose range contains today; if today is off-season, fall back to the
   // most recent (seasons come newest-first). Used to hide LAST season's sessions from the picker.
   const _today = (window.cmToday ? window.cmToday() : new Date().toISOString().slice(0,10));
@@ -770,10 +788,28 @@ async function openManualGpsModal() {
       <button type="button" data-mode="manual">${tt('gps_analysis.manual_mode_manual','Manual')}</button>
       <button type="button" data-mode="complete">${tt('gps_analysis.manual_mode_complete','Complement')}</button>
     </div>
+    <div id="mgpApply" hidden>
+      <label class="mgp-lbl">${tt('gps_analysis.manual_apply','On save')}</label>
+      <div class="mgp-seg" id="mgpApplyMode">
+        <button type="button" data-apply="replace" class="is-on">${tt('gps_analysis.manual_apply_replace','Replace')}</button>
+        <button type="button" data-apply="add">${tt('gps_analysis.manual_apply_add','Add to existing')}</button>
+      </div>
+      <div id="mgpAddMinsWrap" hidden>
+        <label class="mgp-lbl">${tt('gps_analysis.manual_add_mins','Minutes to add (optional)')}</label>
+        <input type="number" step="any" min="0" id="mgpAddMins" class="mgp-in sm" style="max-width:160px" placeholder="45">
+        <div class="mgp-note">${tt('gps_analysis.manual_add_mins_hint','The average is scaled to these minutes before being added. Leave it blank to add it whole.')}</div>
+      </div>
+    </div>
     <div id="mgpFields"></div>
     <div class="mgp-foot"><button class="cm-btn is-ghost is-sm" id="mgpCancel">${tt('common.cancel','Cancel')}</button><button class="cm-btn is-primary is-sm" id="mgpSave">${tt('gps_analysis.manual_save','Save data')}</button></div>`;
 
   let mode = 'avg', sessionReports = [], realReports = [], teamAvg = {};
+  // 'replace' (default) pisa la fila del jugador; 'add' SUMA lo elegido a lo que ya tiene (GPS
+  // encendido a mitad de sesión). Solo se ofrece si el jugador ya tiene datos.
+  let applyMode = 'replace';
+  // Jugadores con trabajo NO-team en esta sesión (rehab / individual / top-up) → Modelo A
+  // (docs/gps-work-context.md): NO se resta nada, el jugador queda FUERA de la media entero.
+  let nonTeamPids = new Map();   // player_id → Set(contextos)
   const metricKeys = _MANUAL_GPS_METRICS.map(m=>m.k);
   const posByPlayer = {}; roster.forEach(p=>{ posByPlayer[p.id] = p.position || ''; });
   const EST_SOURCES = ['manual','avg','avg_pos','partial'];
@@ -781,8 +817,60 @@ async function openManualGpsModal() {
   const _avg = reps => { const out={}; _MANUAL_GPS_METRICS.forEach(m=>{ const vals=reps.map(r=>r[m.k]).filter(v=>v!=null&&isFinite(v)); out[m.k]=vals.length?+(vals.reduce((s,x)=>s+ +x,0)/vals.length).toFixed(2):null; }); return out; };
   const selPid = () => body.querySelector('#mgpPlayer')?.value;
   const selPos = () => posByPlayer[selPid()] || '';
-  const posReports = () => { const pos = selPos(); return pos ? realReports.filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
-  const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : teamAvg;
+  // Sumando, la fila del propio jugador es solo un TRAMO (media sesión): dejarla dentro de la media
+  // que se le va a sumar la hunde, así que se lo excluye de su propia referencia. Reemplazando, su
+  // fila es una sesión completa como cualquier otra y sí cuenta.
+  const _avgSrc = rows => applyMode==='add' ? rows.filter(r => r.player_id !== selPid()) : rows;
+  const posReports = () => { const pos = selPos(); return pos ? _avgSrc(realReports).filter(r => (posByPlayer[r.player_id]||'') === pos) : []; };
+  const currentAvg = () => mode==='avgpos' ? _avg(posReports()) : (applyMode==='add' ? _avg(_avgSrc(realReports)) : teamAvg);
+  const curRow = () => sessionReports.find(x => x.player_id === selPid()) || null;
+  const hasData = () => { const c = curRow(); return !!(c && !c.is_invalid); };
+  const _ctxLabel = c => tt('gps_analysis.ctx_'+c, { team:'Team', rehab:'Rehab', individual:'Individual', topup:'Top-up' }[c] || c);
+
+  // ── Sumar a lo existente ────────────────────────────────────────────────────
+  // Métricas de VOLUMEN: se suman los dos tramos. El resto no es aditivo — max_speed es el máximo,
+  // avg_speed la media ponderada por minutos y m/min se recalcula (Σdistancia / Σminutos), igual
+  // que la consolidación de períodos del importador.
+  const _MGP_SUM_COLS = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance',
+    'sprint_count','accelerations','decelerations','player_load','hmld','time_played'];
+  const _MGP_INT_COLS = ['sprint_count','time_played'];
+  // Prorratea una media de sesión COMPLETA al tramo que falta: la media del equipo es de todo el
+  // partido, así que sumarla entera sobre un jugador que ya tiene el 2º tiempo lo infla. Con
+  // minutos → se escala por minuto; sin minutos → se suma tal cual.
+  function _scaleVals(vals, mins) {
+    if (!(mins > 0) || !(vals.time_played > 0)) return { ...vals };
+    const f = mins / vals.time_played, out = { ...vals };
+    _MGP_SUM_COLS.forEach(k => { if (out[k] != null) out[k] = +(+out[k] * f).toFixed(2); });
+    out.time_played = mins;                       // max_speed / avg_speed no escalan
+    return out;
+  }
+  function _mergeAdd(base, add) {
+    const out = {};
+    _MGP_SUM_COLS.forEach(k => {
+      out[k] = (base[k] == null && add[k] == null) ? null : +((+base[k] || 0) + (+add[k] || 0)).toFixed(2);
+    });
+    const ms = [base.max_speed, add.max_speed].filter(v => v != null).map(Number);
+    out.max_speed = ms.length ? Math.max(...ms) : null;
+    let sw = 0, swd = 0;
+    [base, add].forEach(r => { if (r.avg_speed != null) { const w = (+r.time_played > 0) ? +r.time_played : 1; sw += +r.avg_speed * w; swd += w; } });
+    out.avg_speed = swd > 0 ? +(sw / swd).toFixed(2) : null;
+    out.distance_per_minute = (out.time_played > 0 && out.total_distance != null)
+      ? +(out.total_distance / out.time_played).toFixed(2)
+      : ((base.distance_per_minute != null || add.distance_per_minute != null) ? (base.distance_per_minute ?? add.distance_per_minute) : null);
+    _MGP_INT_COLS.forEach(k => { if (out[k] != null) out[k] = Math.round(out[k]); });
+    return out;
+  }
+  const addMins = () => { const v = parseFloat(body.querySelector('#mgpAddMins')?.value); return isFinite(v) && v > 0 ? v : 0; };
+  // Valores del tramo a agregar/guardar según el modo, ya prorrateados si corresponde.
+  function sourceVals() {
+    if (mode === 'manual') {
+      const out = {};
+      _MANUAL_GPS_METRICS.forEach(m => { const el = body.querySelector(`[data-mk="${m.k}"]`); const v = el ? el.value.trim() : ''; out[m.k] = (v === '') ? null : +v; });
+      return out;
+    }
+    const vals = currentAvg();
+    return applyMode === 'add' ? _scaleVals(vals, addMins()) : vals;
+  }
 
   // ── Availability reasons: WHY a player has no GPS this session (Availability page data) ──
   // availability rows for the session's date, keyed by player. Global statuses (injury/illness/
@@ -871,10 +959,15 @@ async function openManualGpsModal() {
       (rzCounts[rz.status] = rzCounts[rz.status] || { n:0, label:rz.label, color:rz.color }).n++;
     });
     const rzHTML = Object.values(rzCounts).map(r => _reasonPill(r, r.n)).join(' ');
+    // Modelo A: quien hizo rehab / individual / top-up queda fuera de la media de la sesión (no se
+    // le resta nada, su volumen se ve completo). Se dice acá para que el promedio no sorprenda.
+    const nonTeamVis = vis.filter(p => nonTeamPids.has(p.id) && statusOf(p.id) === 'real');
+    const ctxNames = [...new Set(nonTeamVis.flatMap(p => [...nonTeamPids.get(p.id)]))].map(_ctxLabel).join(' · ');
     body.querySelector('#mgpStatus').innerHTML =
       `<span class="mgp-chip real">${vis.length-miss-est} ${tt('gps_analysis.manual_st_real','with data')}</span>`
       + (est?` <span class="mgp-chip est">${est} ${tt('gps_analysis.manual_st_est','estimated')}</span>`:'')
       + (miss?` <span class="mgp-chip miss">${miss} ${tt('gps_analysis.manual_st_missing','missing')}</span>`:'')
+      + (nonTeamVis.length?` <span class="mgp-chip" title="${_esc(ctxNames)}">${tt('gps_analysis.manual_st_nonteam','{n} out of the average ({ctx})',{n:nonTeamVis.length,ctx:ctxNames})}</span>`:'')
       + (rzHTML?`<span class="mgp-status-rz">${rzHTML}</span>`:'');
   }
   function renderPlayerList() {
@@ -906,10 +999,43 @@ async function openManualGpsModal() {
     else if (rows.length) sel.value = rows[0].p.id;
     renderPlayerList();
   }
+  // Reemplazar ↔ Sumar: solo tiene sentido si el jugador YA tiene datos en la sesión. 'Complement'
+  // (merge campo a campo) trae su propia semántica, así que ahí no se ofrece.
+  function renderApply() {
+    const wrap = body.querySelector('#mgpApply');
+    const show = mode !== 'complete' && hasData();
+    if (!show) applyMode = 'replace';
+    wrap.hidden = !show;
+    body.querySelectorAll('#mgpApplyMode button').forEach(b => b.classList.toggle('is-on', b.dataset.apply === applyMode));
+    // El prorrateo por minutos escala una MEDIA de sesión completa; en manual el usuario ya escribe
+    // el tramo (incluido su time_played), así que no aplica.
+    body.querySelector('#mgpAddMinsWrap').hidden = !(show && applyMode === 'add' && mode !== 'manual');
+  }
+  // Cómo queda la fila si se guarda sumando: valor final + de dónde sale (guardado + agregado).
+  // Se recalcula con cada tecla en modo manual, por eso vive en su propio contenedor (re-renderizar
+  // el grid entero robaría el foco del input).
+  function renderPreview() {
+    const el = body.querySelector('#mgpPreview');
+    if (!el) return;
+    const cur = curRow();
+    if (applyMode !== 'add' || !cur) { el.innerHTML = ''; return; }
+    const add = sourceVals(), fin = _mergeAdd(cur, add);
+    const fmt = v => v == null ? '—' : (Math.round(v * 100) / 100);
+    el.innerHTML = `<div class="mgp-note">${tt('gps_analysis.manual_add_preview','Result = data already stored + what gets added:')}</div>`
+      + `<div class="mgp-grid">${_MANUAL_GPS_METRICS.filter(m => fin[m.k] != null).map(m =>
+          `<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${fmt(fin[m.k])}${m.u?' '+m.u:''}`
+          + `<small>${fmt(cur[m.k])} ${_MGP_SUM_COLS.includes(m.k) ? '+' : '·'} ${fmt(add[m.k])}</small></span></div>`).join('')}</div>`;
+  }
   function renderFields() {
     const wrap = body.querySelector('#mgpFields');
     if (mode==='manual') {
-      wrap.innerHTML = `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm"></label>`).join('')}</div>`;
+      const addNote = applyMode === 'add'
+        ? `<div class="mgp-note">${tt('gps_analysis.manual_add_manual_note','Type only the missing segment (including its minutes) — it gets added to the stored data.')}</div>` : '';
+      wrap.innerHTML = addNote
+        + `<div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<label class="mgp-cell"><span class="k">${m.l}${m.u?' ('+m.u+')':''}</span><input type="number" step="any" data-mk="${m.k}" class="mgp-in sm"></label>`).join('')}</div>`
+        + `<div id="mgpPreview"></div>`;
+      wrap.querySelectorAll('[data-mk]').forEach(i => i.addEventListener('input', renderPreview));
+      renderPreview();
       return;
     }
     if (mode==='complete') {
@@ -934,24 +1060,41 @@ async function openManualGpsModal() {
       note     = tt('gps_analysis.manual_avg_note','Saves this player with the team average of the selected session:');
       emptyMsg = tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.');
     }
+    // Sumando: lo que se muestra es el tramo YA prorrateado a los minutos pedidos (si se pidieron).
+    const shown = (applyMode === 'add') ? _scaleVals(vals, addMins()) : vals;
+    if (applyMode === 'add' && addMins() > 0 && vals.time_played > 0) {
+      note = tt('gps_analysis.manual_add_scaled','Average of the session ({full} min) scaled to {mins} min — this is what gets added:',
+        { full: Math.round(vals.time_played), mins: addMins() });
+    }
     wrap.innerHTML = hasAvg
       ? `<div class="mgp-note">${note}</div>
-         <div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${vals[m.k]!=null?vals[m.k]:'—'}${(vals[m.k]!=null&&m.u)?' '+m.u:''}</span></div>`).join('')}</div>`
+         <div class="mgp-grid">${_MANUAL_GPS_METRICS.map(m=>`<div class="mgp-cell"><span class="k">${m.l}</span><span class="v">${shown[m.k]!=null?shown[m.k]:'—'}${(shown[m.k]!=null&&m.u)?' '+m.u:''}</span></div>`).join('')}</div>
+         <div id="mgpPreview"></div>`
       : `<div class="mgp-empty">${emptyMsg}</div>`;
+    if (hasAvg) renderPreview();
   }
   async function loadSession() {
     const sid = body.querySelector('#mgpSession').value;
     const sDate = curSessions().find(s => s.id === sid)?.session_date || null;
-    const [gpsRes, avRes] = await Promise.all([
+    const [gpsRes, avRes, ctxRes] = await Promise.all([
       window.sb.from('gps_reports')
-        .select('player_id,source,is_invalid,'+metricKeys.join(','))
+        .select('player_id,source,is_invalid,work_context,'+metricKeys.join(','))
         .eq('session_id', sid).eq('club_id', clubId),
       // Availability for THIS session's date → drives the "why no GPS" reasons.
       sDate ? window.sb.from('availability').select('player_id,status,team_id')
                 .eq('club_id', clubId).eq('date', sDate).in('player_id', roster.map(p=>p.id))
             : Promise.resolve({ data: [] }),
+      // Períodos rehab / individual / top-up de la sesión (pocas filas). Modelo A: el jugador que
+      // tenga uno queda FUERA de la media — no se le resta nada, su volumen se ve completo.
+      window.sb.from('gps_period_reports').select('player_id,work_context')
+        .eq('club_id', clubId).eq('session_id', sid).neq('work_context', 'team'),
     ]);
     sessionReports = gpsRes.data || [];
+    nonTeamPids = new Map();
+    (ctxRes.data || []).forEach(r => {
+      if (!nonTeamPids.has(r.player_id)) nonTeamPids.set(r.player_id, new Set());
+      nonTeamPids.get(r.player_id).add(r.work_context);
+    });
     // One row per player/date is the norm; if several exist, keep the one that carries a real reason
     // (a global injury/illness/selección) over a plain 'available'.
     availByPid = {};
@@ -959,9 +1102,12 @@ async function openManualGpsModal() {
       const cur = availByPid[r.player_id];
       if (!cur || (cur.status === 'available' && r.status !== 'available')) availByPid[r.player_id] = r;
     });
-    realReports = sessionReports.filter(r=>!r.is_invalid && !EST_SOURCES.includes(r.source));
+    // Base de las medias (equipo y posición). Modelo A: fuera de la media el trabajo no-team —
+    // por período (rehab/top-up dentro de una sesión de equipo) o por sesión entera etiquetada.
+    realReports = sessionReports.filter(r => !r.is_invalid && !EST_SOURCES.includes(r.source)
+      && !nonTeamPids.has(r.player_id) && (r.work_context || 'team') === 'team');
     teamAvg = _avg(realReports);
-    renderStatus(); renderPlayers(); renderFields();
+    renderStatus(); renderPlayers(); renderApply(); renderFields();
   }
 
   body.querySelector('#mgpSesBtn').addEventListener('click', () => {
@@ -995,20 +1141,40 @@ async function openManualGpsModal() {
     body.querySelectorAll('#mgpTeamFilter button').forEach(x=>x.classList.toggle('is-on',x===b));
     renderStatus(); renderPlayers();
   }));
-  body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ if (mode==='avgpos' || mode==='complete') renderFields(); });
-  body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderFields(); }));
+  // Cambiar de jugador cambia también si se puede sumar (depende de que ÉL tenga datos) y la media
+  // por posición, así que se re-renderiza todo el bloque inferior.
+  body.querySelector('#mgpPlayer').addEventListener('change', ()=>{ renderApply(); renderFields(); });
+  body.querySelectorAll('#mgpMode button').forEach(b=>b.addEventListener('click',()=>{ mode=b.dataset.mode; body.querySelectorAll('#mgpMode button').forEach(x=>x.classList.toggle('is-on',x===b)); renderApply(); renderFields(); }));
+  body.querySelectorAll('#mgpApplyMode button').forEach(b=>b.addEventListener('click',()=>{ applyMode=b.dataset.apply; renderApply(); renderFields(); }));
+  body.querySelector('#mgpAddMins').addEventListener('input', renderFields);
   body.querySelector('#mgpCancel').addEventListener('click',()=>ov.remove());
   body.querySelector('#mgpSave').addEventListener('click', async () => {
     const sid = body.querySelector('#mgpSession').value, pid = selPid();
     if (!sid || !pid) return;
-    // 'complete' merges onto existing data by design, so it skips the overwrite prompt.
-    if (mode!=='complete' && statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
-    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false, source: mode==='manual'?'manual':(mode==='avgpos'?'avg_pos':(mode==='complete'?'partial':'avg')) };
-    if (mode==='manual') {
+    const cur = curRow();
+    // 'add' suma a lo guardado (GPS encendido a mitad de sesión) y 'complete' hace merge campo a
+    // campo: ninguno pisa nada, así que se saltean el aviso de sobrescritura.
+    const adding = applyMode === 'add' && mode !== 'complete' && !!cur && !cur.is_invalid;
+    if (!adding && mode!=='complete' && statusOf(pid)==='real' && !confirm(tt('gps_analysis.manual_overwrite','This player already has real data for this session. Overwrite it?'))) return;
+    const row = { club_id: clubId, session_id: sid, player_id: pid, is_invalid: false,
+      // Sumado = mezcla de real + estimado → 'partial', la misma marca que 'Complement'.
+      source: adding ? 'partial' : (mode==='manual'?'manual':(mode==='avgpos'?'avg_pos':(mode==='complete'?'partial':'avg'))) };
+    // El upsert no debe perder la etiqueta de contexto que ya tuviera la fila (rehab/individual…).
+    if (cur && cur.work_context) row.work_context = cur.work_context;
+    if (adding) {
+      const add = sourceVals();
+      if (!Object.values(add).some(v => v != null)) {
+        showToast(mode==='manual'
+          ? tt('gps_analysis.manual_add_empty','Type the values of the segment to add.')
+          : (mode==='avgpos' ? tt('gps_analysis.manual_avgpos_none','No other {pos} player has real data in this session — use Team average or Manual.',{pos:selPos()})
+                             : tt('gps_analysis.manual_avg_none','No real data in this session to average — use Manual mode.')), true);
+        return;
+      }
+      Object.assign(row, _mergeAdd(cur, add));
+    } else if (mode==='manual') {
       _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='')?null:+v; });
     } else if (mode==='complete') {
       // Upsert replaces the whole row, so seed every metric from the stored one; only typed inputs override.
-      const cur = sessionReports.find(x=>x.player_id===pid);
       if (!cur || cur.is_invalid) { showToast(tt('gps_analysis.manual_complete_nodata','This player has no data in this session yet — use Manual mode.'), true); return; }
       _MANUAL_GPS_METRICS.forEach(m=>{ const el=body.querySelector(`[data-mk="${m.k}"]`); const v=el?el.value.trim():''; row[m.k] = (v==='') ? cur[m.k] : +v; });
     } else {
@@ -1022,6 +1188,8 @@ async function openManualGpsModal() {
     const btn = body.querySelector('#mgpSave'); btn.disabled = true;
     const { error } = await window.sb.from('gps_reports').upsert(row, { onConflict:'player_id,session_id' });
     if (error) { btn.disabled=false; showToast(tt('gps_analysis.manual_save_fail','Save failed: ')+error.message, true); return; }
+    // Los conteos por sesión quedaron viejos (una sesión pudo pasar de 0 a 1 jugador con datos).
+    window.__mgpCountsCache?.delete(clubId);
     ov.remove();
     showToast(tt('gps_analysis.manual_saved','GPS data saved.'));
     window.refreshDashboard?.();
