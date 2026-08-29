@@ -221,6 +221,10 @@ create table if not exists public.calendar_events (
   player_ids uuid[],
   -- Solo type='travel': medio de transporte. Las horas de trayecto viven en duration_minutes.
   travel_mode text,
+  -- MD del trabajo (activación, recuperación…): una dinámica de grupo puede tener su propio MD
+  -- aunque el resto del plantel esté en otra. Misma convención que training_sessions:
+  -- ASCII 'MD-2'/'MD+1' y 'MD0' para el día de partido. NULL = lo resuelve el día.
+  match_day_offset text,
   constraint calendar_events_pkey primary key (id),
   constraint calendar_events_travel_mode_check CHECK ((travel_mode = ANY (ARRAY['bus'::text, 'flight'::text, 'train'::text, 'other'::text]))),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
@@ -410,6 +414,19 @@ create table if not exists public.clubs (
   -- el registro y se tiraba; ahora se persiste y es obligatorio. 'other' = deporte sin
   -- modelo propio (superficie en blanco, posiciones libres, sin módulo de partido).
   sport text default 'football'::text not null,
+  -- Identidad y ubicación del club. Se piden en el onboarding y hasta ahora se tiraban
+  -- (los campos existían en el formulario pero no había columna donde guardarlos).
+  --   short_name: hasta 6 caracteres, para camisetas, exports y encabezados angostos.
+  --   city:       texto libre; el país ya viene del registro.
+  --   timezone:   IANA ("America/Montevideo"). Se guarda para exports y planillas del día;
+  --               las fechas de la app siguen siendo locales del navegador (cmToday()).
+  short_name text,
+  city text,
+  timezone text,
+  -- Marca de onboarding terminado. Sin esto no se podía distinguir "club recién creado en
+  -- el registro" de "club ya configurado": el onboarding miraba si existía el club y, como
+  -- el registro ya lo crea, rebotaba a todo el mundo al Hub sin mostrar el paso.
+  onboarded_at timestamp with time zone,
   plan text default 'free'::text,
   stripe_customer_id text,
   billing_amount_cents integer,
@@ -426,7 +443,8 @@ create table if not exists public.clubs (
   constraint clubs_pkey primary key (id),
   constraint clubs_billing_status_check CHECK ((billing_status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
   constraint clubs_billing_provider_check CHECK ((billing_provider = 'paddle'::text)),
-  constraint clubs_sport_check CHECK ((sport = ANY (ARRAY['football'::text, 'futsal'::text, 'basketball'::text, 'rugby'::text, 'hockey'::text, 'other'::text])))
+  constraint clubs_sport_check CHECK ((sport = ANY (ARRAY['football'::text, 'futsal'::text, 'basketball'::text, 'rugby'::text, 'hockey'::text, 'other'::text]))),
+  constraint clubs_short_name_len CHECK ((short_name IS NULL OR char_length(short_name) <= 6))
 );
 CREATE INDEX clubs_id_idx ON public.clubs USING btree (id);
 CREATE UNIQUE INDEX idx_clubs_provider_customer ON public.clubs USING btree (billing_provider_customer_id) WHERE (billing_provider_customer_id IS NOT NULL);

@@ -436,10 +436,11 @@ function renderGrid() {
     // MD de las sesiones del día (Daily Planning / Gym Planner), en forma canónica (cmMdNorm:
     // el tag derivado puede venir en U+2212 y la columna en ASCII/'MD0').
     const _mdN = window.cmMdNorm || (v => String(v || ''));
-    // Toda sesión pesa igual: una dinámica de recuperación puede hacerse en gimnasio, en
+    // Todo trabajo pesa igual: una dinámica de recuperación puede hacerse en gimnasio, en
     // campo o como activación — el dónde no cambia que sea una dinámica con su propio MD.
+    // Por eso cuentan las dos fuentes: training_sessions y calendar_events.
     const sessMds = [...new Set(
-      daySessions.filter(s => s.source === 'session' && s.match_day_offset)
+      daySessions.filter(s => s.match_day_offset)
         .map(s => _mdN(s.match_day_offset)).filter(Boolean)
     )];
     // Prioridad del chip del día: día libre → DÍA DE PARTIDO (siempre 'MD': una sesión de la
@@ -761,6 +762,8 @@ async function pasteEvtToDate(clip, newDate) {
       payload.date = newDate;
       payload.recurrence_group_id = null;
       payload.published = false;
+      // El MD era el del día viejo: se vuelve a poner en el evento si corresponde.
+      if ('match_day_offset' in payload && payload.type !== 'match') payload.match_day_offset = null;
       payload.club_id = clubId;
       payload.team_id = _activeTeamId;
       payload.sort_order = payload.start_time ? null : _sessions.filter(s => s.session_date === newDate && !s.start_time).length;
@@ -909,7 +912,7 @@ async function handleCrossDayMove(evt, newDate) {
   const patch   = { [dateCol]: newDate };
   // Mover de día invalida el MD guardado (era el del día viejo): se recalcula solo. El
   // partido conserva el suyo.
-  if (evt.source === 'session' && evt.session_type !== 'match') patch.match_day_offset = null;
+  if (evt.session_type !== 'match' && evt.match_day_offset) patch.match_day_offset = null;
 
   // No-time events get placed at the end of the target day
   if (!evt.start_time) {
@@ -939,9 +942,11 @@ async function fetchAllEvents(dateFrom, dateTo) {
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,orientation,visible_to,recurrence_group_id,created_at,match_day_offset')
       .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
-    _evtQ(EVT_COLS + ',player_ids,travel_mode')
+    _evtQ(EVT_COLS + ',player_ids,travel_mode,match_day_offset')
   ]);
-  // Fallbacks: si travel_mode / player_ids todavía no existen en la DB, reintentar sin ellas
+  // Fallbacks: si match_day_offset / travel_mode / player_ids todavía no existen en la DB,
+  // reintentar sin ellas
+  if (evtRes.error && /match_day_offset/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids,travel_mode');
   if (evtRes.error && /travel_mode/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids');
   if (evtRes.error && /player_ids/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS);
   if (sessRes.error) return { error: sessRes.error.message };
@@ -965,6 +970,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     created_at: e.created_at || null,
     player_ids: e.player_ids || null,
     travel_mode: e.travel_mode || null,
+    match_day_offset: e.match_day_offset || null,
     source: 'event'
   }));
   // Dedup matches: a match can exist both as a calendar_events event and as a
@@ -1113,6 +1119,38 @@ const CAL_EVT_TYPES = [
   'hotel_checkin','hotel_checkout','bus_departure','bus_arrival',
   'press','medical_check','physio','walkthrough','scouting','day_off',
 ];
+
+// Tipos que pueden llevar MD propio: todo lo que es trabajo. El partido no está porque ya
+// es MD por definición, y la logística/obligaciones no son una dinámica.
+const MD_EVT_TYPES = ['training','tactical','beach','outdoor','gym','recovery','walkthrough'];
+
+// Opciones del selector de MD: las del deporte activo (fútbol MD−6…MD+3, básquet GD−3…GD+2).
+// El value queda ASCII (forma canónica de cmMdNorm) y solo la etiqueta lleva el menos
+// tipográfico, igual que en el Gym Planner.
+function calFillMdSelect(sel) {
+  if (!sel) return;
+  const keep = window.cmMdNorm ? window.cmMdNorm(sel.value) : sel.value;
+  const opts = window.cmMdOptions ? window.cmMdOptions() : [];
+  sel.innerHTML = `<option value="">${tt('calendar.md_auto','— Auto (from the day) —')}</option>`
+    + opts.map(v => `<option value="${v}">${v.replace('-', '−')}</option>`).join('');
+  if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+// Muestra la fila del MD solo para los tipos de trabajo y la deja lista para editar.
+function calSyncMdRow(type) {
+  const row = document.getElementById('calEvtMdRow');
+  if (row) row.style.display = MD_EVT_TYPES.includes(type) ? '' : 'none';
+}
+
+// Valor a persistir: convención de Daily Planning / Gym Planner (ASCII, 'MD0' para el día
+// de partido), para que cmMdNorm lo lea igual venga de donde venga.
+function calMdFieldValue(type) {
+  if (!MD_EVT_TYPES.includes(type)) return null;
+  const v = document.getElementById('calEvtF_md')?.value || '';
+  if (!v) return null;
+  const n = window.cmMdNorm ? window.cmMdNorm(v) : v.replace(/−/g, '-');
+  return n === 'MD' ? 'MD0' : n;
+}
 
 const DURATION_DEFAULTS = {
   training:90, tactical:90, beach:75, outdoor:75, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
@@ -1404,6 +1442,17 @@ function openEvtModal(session, defaultDate, focusTasks) {
   if (travelRow) travelRow.style.display = evtType === 'travel' ? '' : 'none';
   const travelSel = document.getElementById('calEvtF_travelMode');
   if (travelSel) travelSel.value = session?.travel_mode || '';
+
+  // MD del trabajo (activación, recuperación, gimnasio…): lo guardado manda; vacío = lo
+  // resuelve el día. Es EL lugar donde se cambia — el chip del calendario solo muestra.
+  const mdSel = document.getElementById('calEvtF_md');
+  if (mdSel) {
+    const saved = session?.match_day_offset ? (window.cmMdNorm ? window.cmMdNorm(session.match_day_offset) : session.match_day_offset) : '';
+    mdSel.value = '';
+    calFillMdSelect(mdSel);
+    mdSel.value = [...mdSel.options].some(o => o.value === saved) ? saved : '';
+  }
+  calSyncMdRow(evtType);
 
   // Day off scope: restaurar del evento (parcial si tiene player_ids) o default equipo entero
   _dayOffSel   = new Set((session?.player_ids || []).map(String));
@@ -2344,7 +2393,7 @@ async function saveEvt() {
     const groupId = crypto.randomUUID();
     let rows, table;
     if (isCalEvt) {
-      const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
+      const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo, match_day_offset: calMdFieldValue(type) };
       if (type === 'travel') basePayload.travel_mode = document.getElementById('calEvtF_travelMode')?.value || null;
       if (type === 'day_off') basePayload.player_ids = isPartialSave ? [..._dayOffSel] : null;
       if (type === 'match') {
@@ -2364,11 +2413,16 @@ async function saveEvt() {
     } else {
       // Session types (tactical/gym/other) must route to training_sessions, same as the non-recurrent branch.
       // recurrence_group_id ties the occurrences into a series (column added by migration).
-      const basePayload = { title, session_type: type, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId };
+      const basePayload = { title, session_type: type, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, match_day_offset: calMdFieldValue(type) };
       rows  = dates.map(d => ({ ...basePayload, session_date: d }));
       table = 'training_sessions';
     }
     ({ error } = await window.sb.from(table).insert(rows));
+    // Fallback: calendar_events.match_day_offset todavía no existe en la DB
+    if (error && /match_day_offset/i.test(error.message || '')) {
+      rows = rows.map(r => { const { match_day_offset, ...rest } = r; return rest; });
+      ({ error } = await window.sb.from(table).insert(rows));
+    }
     saving.style.display = 'none'; saveBtn.disabled = false;
     if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
     // Day off parcial recurrente → marcar libres en availability en cada fecha
@@ -2383,7 +2437,7 @@ async function saveEvt() {
   }
 
   if (isCalEvt) {
-    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, ...matchFieldsToClear };
+    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, match_day_offset: calMdFieldValue(type), ...matchFieldsToClear };
     payload.travel_mode = type === 'travel' ? (document.getElementById('calEvtF_travelMode')?.value || null) : null;
     if (type === 'day_off') payload.player_ids = isPartialSave ? [..._dayOffSel] : null;
     else if (prevType === 'day_off') payload.player_ids = null;   // dejó de ser day off
@@ -2414,14 +2468,15 @@ async function saveEvt() {
       payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
-    // Fallback: la columna travel_mode todavía no existe en la DB → reintentar sin ella
-    if (error && /travel_mode/i.test(error.message || '')) {
-      delete payload.travel_mode;
+    // Fallback: la columna todavía no existe en la DB → reintentar sin ella
+    if (error && /travel_mode|match_day_offset/i.test(error.message || '')) {
+      if (/travel_mode/i.test(error.message || '')) delete payload.travel_mode;
+      if (/match_day_offset/i.test(error.message || '')) delete payload.match_day_offset;
       if (_editEvtId && _editEvtSource === 'event') ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
       else ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
-    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo };
+    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo, match_day_offset: calMdFieldValue(type) };
     if (_editEvtId && _editEvtSource === 'session') {
       Object.assign(payload, sortOrderPatch);
       ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
@@ -2538,6 +2593,8 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   // travel: medio de transporte
   const travelRow = document.getElementById('calEvtTravelRow');
   if (travelRow) travelRow.style.display = t === 'travel' ? '' : 'none';
+  // MD: solo para tipos de trabajo
+  calSyncMdRow(t);
   // day_off: show scope row (whole team vs selected players)
   calSyncDayOffRow(t);
   // Update visible-to defaults to match new type (only on new events)

@@ -83,10 +83,13 @@
   // el chip del Calendar.
   function sessMdsFor(teamId, y) {
     const out = [];
+    const add = md => { const v = mdNorm(md); if (v && !out.includes(v)) out.push(v); };
     (state.data.sessions || []).forEach(s => {
-      if (s.team_id !== teamId || s.session_date !== y || !s.match_day_offset) return;
-      const v = mdNorm(s.match_day_offset);
-      if (v && !out.includes(v)) out.push(v);
+      if (s.team_id === teamId && s.session_date === y && s.match_day_offset) add(s.match_day_offset);
+    });
+    // Los eventos del calendario (activación, recuperación…) también pueden llevar su MD.
+    (state.data.calevents || []).forEach(e => {
+      if (e.team_id === teamId && e.date === y && e.match_day_offset) add(e.match_day_offset);
     });
     return out;
   }
@@ -150,10 +153,25 @@
 
     let sessQ = sb().from('training_sessions').select('id,team_id,title,session_type,session_date,session_time,duration,estimated_rpe,match_day_offset,gym_content').eq('club_id', cid).eq('is_historical', false).gte('session_date', from).lte('session_date', to);
     // Todos los eventos del calendario (no solo partidos): viajes, comidas, reuniones, día libre, etc.
-    let calQ = sb().from('calendar_events').select('id,team_id,date,start_time,end_time,title,opponent,home_away,competition,type,location,notes,duration_minutes').eq('club_id', cid).gte('date', from).lte('date', to);
+    const CAL_COLS = 'id,team_id,date,start_time,end_time,title,opponent,home_away,competition,type,location,notes,duration_minutes';
+    const calSel = extra => {
+      let q = sb().from('calendar_events').select(CAL_COLS + extra).eq('club_id', cid).gte('date', from).lte('date', to);
+      if (state.scopeTeam) q = q.eq('team_id', state.scopeTeam);
+      return q;
+    };
+    // match_day_offset en eventos es nuevo: si la columna todavía no está en la DB, reintentar
+    // sin ella en vez de quedarnos sin eventos.
+    const runCal = async () => {
+      try {
+        const r = await calSel(',match_day_offset');
+        if (!r || !r.error) return (r && r.data) || [];
+        if (!/match_day_offset/.test(r.error.message || '')) return [];
+      } catch (_) {}
+      return run(calSel(''));
+    };
     let mcQ = sb().from('microcycles').select('id,team_id,match_date,md_overrides,start_date,end_date').eq('club_id', cid).lte('start_date', to).gte('end_date', from);
     let lpQ = sb().from('load_plan').select('plan_date,metric,pct').eq('club_id', cid).gte('plan_date', from).lte('plan_date', to);
-    if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); calQ = calQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
+    if (state.scopeTeam) { sessQ = sessQ.eq('team_id', state.scopeTeam); mcQ = mcQ.eq('team_id', state.scopeTeam); lpQ = lpQ.eq('team_id', state.scopeTeam); }
     const ptQ = sb().from('player_teams').select('player_id,team_id').eq('club_id', cid);
     const avQ = sb().from('availability').select('player_id,status,team_id,notes').eq('club_id', cid).eq('date', today);
     const rpeQ = sb().from('rpe').select('session_id,player_id,load,session_date').eq('club_id', cid).gte('session_date', from).lte('session_date', to);
@@ -164,7 +182,7 @@
     const tzoff = new Date().getTimezoneOffset();
     const wellQ = sb().rpc('wellness_status', { p_club_id: cid, p_team_id: state.scopeTeam || null, p_date: today, p_tz_offset: tzoff });
 
-    const [sessions, cal, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), run(calQ), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
+    const [sessions, cal, micros, pteams, avail, rpe, lplan, players, injuries, wellness] = await Promise.all([run(sessQ), runCal(), run(mcQ), run(ptQ), run(avQ), run(rpeQ), run(lpQ), run(plQ), run(injQ), run(wellQ)]);
     const isMatch = e => (e.type || '').toLowerCase() === 'match';
     const matches = (cal || []).filter(isMatch);       // subconjunto de partidos (dedup + mdFor)
     const calevents = (cal || []).filter(e => !isMatch(e)); // resto: viajes, comidas, reuniones, etc.
