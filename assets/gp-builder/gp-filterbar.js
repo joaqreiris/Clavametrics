@@ -795,6 +795,13 @@
   }
 
   // ── Triggers (estados cerrado/activo) ───────────────────────────────────
+  // Etiqueta de respaldo mientras el valor todavía no tiene su opción cargada.
+  // Los valores que ya son legibles (MD-3, GK, match…) se muestran tal cual; un
+  // id crudo no le dice nada a nadie, así que va un placeholder hasta que llegan
+  // las opciones y updateTrigger vuelve a correr con el nombre real.
+  const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function _rawLabel(v) { return _UUID_RE.test(String(v)) ? '…' : String(v); }
+
   function updateTrigger(key) {
     const drop = root.querySelector(`.fb-drop[data-key="${key}"]`);
     const cfg  = DROPS.find(d => d.key === key);
@@ -822,9 +829,9 @@
       if (!sel.length) { drop.classList.remove('is-active'); labelEl.textContent = T(cfg.placeholder); updateGlobal(); return; }
     }
     if (sel.length === 1) {
-      labelEl.textContent = map.get(String(sel[0])) || sel[0];
+      labelEl.textContent = map.get(String(sel[0])) || _rawLabel(sel[0]);
     } else {
-      labelEl.textContent = map.get(String(sel[0])) || sel[0];
+      labelEl.textContent = map.get(String(sel[0])) || _rawLabel(sel[0]);
       countEl.textContent = String(sel.length);
       drop.classList.add('is-multi');
     }
@@ -1452,9 +1459,14 @@
     _optionsLoaded = true;   // habilita la red de seguridad del chip (updateTrigger)
     _loadedTeamId = _gpTeam != null ? String(_gpTeam) : '__none__';   // scope con el que quedaron cargadas las opciones
     applyChaining();   // si había filtros restaurados, deja _validCache listo
+    // Repintar SIEMPRE los chips al llegar las opciones, no sólo si se podó algo.
+    // mount() los dibuja con options todavía vacío: sin el mapa value→label, un
+    // filtro restaurado (microciclo, jugador) se quedaba mostrando su id crudo
+    // hasta que se abría el desplegable, que era lo único que volvía a pasar por
+    // updateTrigger. updateTrigger es idempotente: repetirlo no cuesta nada.
+    if (root) { DROPS.forEach(d => updateTrigger(d.key)); updateGlobal(); }
     if (_pruned) {
       try { persist(); } catch (_) {}
-      if (root) { DROPS.forEach(d => updateTrigger(d.key)); updateGlobal(); }
       fire();          // re-corre las cards ya sin el filtro fantasma
     }
 
