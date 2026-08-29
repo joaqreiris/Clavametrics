@@ -1568,6 +1568,39 @@ html.cm-rail .hub-nav-grip{display:none}
     window.addEventListener('pagehide', () => { try { chan.untrack(); window.sb.removeChannel(chan); } catch (_) {} });
   }
 
+  // The sport is served from localStorage on the first paint and confirmed against the DB
+  // a moment later. When they disagree — the first load after a club changes sport, or
+  // right after signing into a different club — the nav has already been built with the
+  // wrong vocabulary. Patch it in place instead of re-injecting the whole sidebar, which
+  // would drop the drag handlers, the notification panel and the presence wiring.
+  function _applySportToNav() {
+    const nav = _sportNav();
+    const hidden = new Set(nav.hidden || []);
+    document.querySelectorAll('.hub-nav-item[data-mod]').forEach(el => {
+      const key = el.dataset.mod;
+      if (hidden.has(key)) { el.remove(); return; }
+      const icon = nav.icons && nav.icons[key];
+      if (icon) {
+        const i = el.querySelector('i.ti');
+        if (i) i.className = 'ti ' + icon;
+      }
+      const txt = el.querySelector('.hub-nav-txt');
+      if (txt && window.CMSport) {
+        // Re-derive from the canonical key, not from whatever is on the node: this may be
+        // the second sport change in one session.
+        const base = 'shell.nav.' + key;
+        const mapped = window.CMSport.i18nKey(base);
+        if (mapped !== txt.getAttribute('data-i18n')) txt.setAttribute('data-i18n', mapped);
+      }
+    });
+    // Groups can end up empty once items are removed.
+    document.querySelectorAll('.hub-nav-group').forEach(g => {
+      if (!g.querySelector('.hub-nav-item')) g.style.display = 'none';
+    });
+    _applyI18n(document);
+  }
+  window.addEventListener('cm:sport-change', _applySportToNav);
+
   // ── BOOT ─────────────────────────────────────────────────────
   // Re-translate the whole shell whenever the i18n runtime boots or the user
   // switches language (covers the sidebar + the dynamically-built chrome panels).
