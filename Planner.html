@@ -363,14 +363,39 @@
     border:1px solid rgba(0,0,0,0.2);
     min-height:520px;
     --pf-grass:#2f7d4c; --pf-grass-2:#2b7446; --pf-line:rgba(255,255,255,0.92);
+    /* Thickness of the board seams; 0 = no seams (grass). */
+    --pf-seam:transparent; --pf-seam-gap:0px;
   }
   [data-theme="dark"] .pl-field {
     --pf-grass:#16331f; --pf-grass-2:#132c1b; --pf-line:rgba(255,255,255,0.74);
   }
+
+  /* ── Playing surface ───────────────────────────────────────────────────────
+     The ground is not the same question as the lines: basketball and futsal are
+     played on a wooden floor, so showing them mown grass reads as the wrong sport
+     before you even look at the markings. data-surface comes from the sport pack
+     (assets/sport-packs.js → field.surface), set on .pl-field by plRenderField.
+     Maple parquet: warm boards running lengthwise, with dark lines on top —
+     white markings would wash out against light wood. */
+  .pl-field[data-surface="wood"] {
+    --pf-grass:#D9AC6A; --pf-grass-2:#D2A25F; --pf-line:rgba(38,24,10,0.80);
+    --pf-seam:rgba(92,58,22,0.16); --pf-seam-gap:26px;
+  }
+  [data-theme="dark"] .pl-field[data-surface="wood"] {
+    --pf-grass:#7A5430; --pf-grass-2:#734E2C; --pf-line:rgba(255,255,255,0.82);
+    --pf-seam:rgba(0,0,0,0.22); --pf-seam-gap:26px;
+  }
+  /* Unmodelled sport: a neutral slab, no grass and no boards. */
+  .pl-field[data-surface="neutral"] {
+    --pf-grass:#8A8F86; --pf-grass-2:#868B82; --pf-line:rgba(255,255,255,0.90);
+  }
+
   /* Vector pitch — sits behind the Fabric canvas, never moves the objects */
   .pl-pitch {
     position:absolute; inset:0; z-index:0;
-    background:repeating-linear-gradient(90deg, var(--pf-grass) 0 9%, var(--pf-grass-2) 9% 18%);
+    background:
+      repeating-linear-gradient(0deg, var(--pf-seam) 0 1px, transparent 1px var(--pf-seam-gap)),
+      repeating-linear-gradient(90deg, var(--pf-grass) 0 9%, var(--pf-grass-2) 9% 18%);
   }
   .pl-pitch .pf-lines { position:absolute; inset:0; width:100%; height:100%; }
   .pl-field .canvas-container { position:relative; z-index:1; }
@@ -1663,8 +1688,22 @@
   function plRenderField(type, variant, orient) {
     const r = CMField.renderField(document.getElementById('plPitch'), type, variant, orient);
     _plField = { type:r.sport, variant:r.variant, orient:r.orient };
+    // The CSS paints the ground off this: grass for football, parquet for basketball.
+    // It lives on .pl-field (not on the pitch host) because the image overlay is its
+    // sibling and needs to inherit the same colours.
+    const fieldEl = document.querySelector('.pl-field');
+    if (fieldEl) fieldEl.setAttribute('data-surface', plSurfaceFor(r.sport));
     plSyncFieldSelector();
     return r;
+  }
+
+  // Surface material for a rendered sport. Comes from the pack when it is the club's own
+  // sport; otherwise from the field type, so a drill saved on another surface still paints
+  // right when it is reopened.
+  function plSurfaceFor(sportKey) {
+    const pack = (window.CMSport && window.CMSport.get(sportKey)) || null;
+    if (pack && pack.field && pack.field.surface) return pack.field.surface;
+    return ({ basketball: 'wood', futsal: 'wood', blank: 'neutral' })[sportKey] || 'grass';
   }
 
   // The user picks Full / Half / Blank and the orientation; the SPORT comes from the club
@@ -4444,8 +4483,12 @@
       if (currentExerciseId !== id) return;   // switched to another exercise while fetching
       _loadingExercise = true;
       // Restore the pitch first (loadFromJSON ignores the `field` key → objects untouched).
+      // A drill saved before the field was persisted has no `type`; fall back to the CLUB's
+      // sport rather than to football, or a basketball club would open its own older drills
+      // on a grass pitch.
       const _f = (ex.objects_json && ex.objects_json.field) || {};
-      plRenderField(_f.type, _f.variant, _f.orient);   // old/empty → football/full/h
+      const _fDef = plDefaultField();
+      plRenderField(_f.type || _fDef.type, _f.variant || _fDef.variant, _f.orient || _fDef.orient);
       if (ex.objects_json) {
         // New saves ('field1') carry viewBox-unit geometry → map to px for THIS canvas.
         // Legacy saves (no _coord) load as-is (unchanged) and convert on the next save.
@@ -4734,11 +4777,28 @@
       const ctx = out.getContext('2d');
       ctx.scale(SCALE, SCALE);
 
-      // 1) grass stripes — match .pl-pitch gradient (90deg, period = 18% of width)
+      // 1) surface — mirror the .pl-pitch gradient (90deg, period = 18% of width).
+      // The colours are READ from the live element: they change with the sport (grass vs
+      // parquet) and with the theme, and this used to have the two greens written in, so
+      // an exported basketball drill came out on a lawn.
+      const pitchEl = document.getElementById('plPitch');
+      const cs = pitchEl ? getComputedStyle(pitchEl) : null;
+      const cssVar = (name, fb) => {
+        const v = cs ? cs.getPropertyValue(name).trim() : '';
+        return v || fb;
+      };
+      const surf1 = cssVar('--pf-grass', '#2f7d4c'), surf2 = cssVar('--pf-grass-2', '#2b7446');
       const period = W * 0.18;
       for (let x = 0; x < W; x += period) {
-        ctx.fillStyle = '#2f7d4c'; ctx.fillRect(x, 0, period/2, H);
-        ctx.fillStyle = '#2b7446'; ctx.fillRect(x + period/2, 0, period/2, H);
+        ctx.fillStyle = surf1; ctx.fillRect(x, 0, period/2, H);
+        ctx.fillStyle = surf2; ctx.fillRect(x + period/2, 0, period/2, H);
+      }
+      // Board seams on a wooden floor (no-op on grass: the gap resolves to 0).
+      const seam = cssVar('--pf-seam', 'transparent');
+      const seamGap = parseFloat(cssVar('--pf-seam-gap', '0')) || 0;
+      if (seamGap > 0 && seam !== 'transparent') {
+        ctx.fillStyle = seam;
+        for (let y = 0; y < H; y += seamGap) ctx.fillRect(0, y, W, 1);
       }
 
       // 2) pitch LINES svg from #plPitch, drawn at 0,0,W,H (its own preserveAspectRatio matches the screen)

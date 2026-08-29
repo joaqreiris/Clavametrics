@@ -328,6 +328,11 @@
 
   /* ============================================================
      THE PACKS
+
+     field.surface — what the ground is MADE of, which is not the same question as
+     which lines to draw. Football and rugby are played on grass (mown stripes);
+     basketball and futsal on a wooden floor (parquet boards). The drill board reads
+     it to paint the right background instead of showing a basketball club a lawn.
      ============================================================ */
   const PACKS = {
 
@@ -335,7 +340,22 @@
       key: 'football',
       i18n: 'sport.football',
       label: 'Football',
-      field:     { type: 'football', variant: 'full', orient: 'h' },
+      // Categorías sugeridas en el onboarding. Antes la lista era fija (y de fútbol) para
+      // todos los deportes: un club de básquet elegía "Reservas / Sub-19" con un ícono de
+      // pelota de fútbol. Cada entrada es { id, i18n, hint, icon }; `primary: true` marca
+      // la que se crea como teams.is_primary. Son sugerencias: el usuario puede agregar
+      // categorías con nombre libre y renombrarlas después.
+      squads: [
+        { id: 'first',    i18n: 'onboarding.sq_first',    hint: 'onboarding.sq_h_senior',    icon: 'ti-trophy', primary: true },
+        { id: 'reserves', i18n: 'onboarding.sq_reserves', hint: 'onboarding.sq_h_senior_b',  icon: 'ti-users' },
+        { id: 'u19',      i18n: 'onboarding.sq_u19',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-football' },
+        { id: 'u17',      i18n: 'onboarding.sq_u17',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-football' },
+        { id: 'u15',      i18n: 'onboarding.sq_u15',      hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'u13',      i18n: 'onboarding.sq_u13',      hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'academy',  i18n: 'onboarding.sq_academy',  hint: 'onboarding.sq_h_academy',    icon: 'ti-baby-carriage' },
+        { id: 'women',    i18n: 'onboarding.sq_women',    hint: 'onboarding.sq_h_women',      icon: 'ti-gender-female' },
+      ],
+      field:     { type: 'football', variant: 'full', orient: 'h', surface: 'grass' },
       positions: FOOTBALL_POSITIONS,
       roster:    { onField: 11, benchMax: 12, unlimitedSubs: false, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 11,
@@ -366,7 +386,16 @@
       key: 'futsal',
       i18n: 'sport.futsal',
       label: 'Futsal',
-      field:     { type: 'futsal', variant: 'full', orient: 'h' },
+      squads: [
+        { id: 'first',    i18n: 'onboarding.sq_first',    hint: 'onboarding.sq_h_senior',     icon: 'ti-trophy', primary: true },
+        { id: 'reserves', i18n: 'onboarding.sq_reserves', hint: 'onboarding.sq_h_senior_b',   icon: 'ti-users' },
+        { id: 'u20',      i18n: 'onboarding.sq_u20',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-football' },
+        { id: 'u17',      i18n: 'onboarding.sq_u17',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-football' },
+        { id: 'u15',      i18n: 'onboarding.sq_u15',      hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'academy',  i18n: 'onboarding.sq_academy',  hint: 'onboarding.sq_h_academy',    icon: 'ti-baby-carriage' },
+        { id: 'women',    i18n: 'onboarding.sq_women',    hint: 'onboarding.sq_h_women',      icon: 'ti-gender-female' },
+      ],
+      field:     { type: 'futsal', variant: 'full', orient: 'h', surface: 'wood' },
       positions: FUTSAL_POSITIONS,
       roster:    { onField: 5, benchMax: 9, unlimitedSubs: true, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 5,
@@ -398,7 +427,16 @@
       key: 'basketball',
       i18n: 'sport.basketball',
       label: 'Basketball',
-      field:     { type: 'basketball', variant: 'full', orient: 'h' },
+      squads: [
+        { id: 'first',    i18n: 'onboarding.sq_first',   hint: 'onboarding.sq_h_senior',     icon: 'ti-trophy', primary: true },
+        { id: 'u19',      i18n: 'onboarding.sq_u19',     hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-basketball' },
+        { id: 'u17',      i18n: 'onboarding.sq_u17',     hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-basketball' },
+        { id: 'u15',      i18n: 'onboarding.sq_u15',     hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'u13',      i18n: 'onboarding.sq_u13',     hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'mini',     i18n: 'onboarding.sq_mini',    hint: 'onboarding.sq_h_mini',       icon: 'ti-baby-carriage' },
+        { id: 'women',    i18n: 'onboarding.sq_women',   hint: 'onboarding.sq_h_women',      icon: 'ti-gender-female' },
+      ],
+      field:     { type: 'basketball', variant: 'full', orient: 'h', surface: 'wood' },
       positions: BASKETBALL_POSITIONS,
       roster:    { onField: 5, benchMax: 10, unlimitedSubs: true, hasGoalkeeper: false },
       // No formation: a basketball starting five is a set of players, not a shape.
@@ -439,7 +477,16 @@
       key: 'rugby',
       i18n: 'sport.rugby',
       label: 'Rugby',
-      field:     { type: 'rugby', variant: 'full', orient: 'h' },
+      squads: [
+        { id: 'first_xv',  i18n: 'onboarding.sq_first_xv',  hint: 'onboarding.sq_h_senior',     icon: 'ti-trophy', primary: true },
+        { id: 'second_xv', i18n: 'onboarding.sq_second_xv', hint: 'onboarding.sq_h_senior_b',   icon: 'ti-users' },
+        { id: 'u19',       i18n: 'onboarding.sq_u19',       hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-american-football' },
+        { id: 'u17',       i18n: 'onboarding.sq_u17',       hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-american-football' },
+        { id: 'u15',       i18n: 'onboarding.sq_u15',       hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'academy',   i18n: 'onboarding.sq_academy',   hint: 'onboarding.sq_h_academy',    icon: 'ti-baby-carriage' },
+        { id: 'women',     i18n: 'onboarding.sq_women',     hint: 'onboarding.sq_h_women',      icon: 'ti-gender-female' },
+      ],
+      field:     { type: 'rugby', variant: 'full', orient: 'h', surface: 'grass' },
       positions: RUGBY_POSITIONS,
       roster:    { onField: 15, benchMax: 8, unlimitedSubs: false, hasGoalkeeper: false },
       lineup:    { enabled: true, hasFormation: false, slots: 15,
@@ -471,7 +518,16 @@
       key: 'hockey',
       i18n: 'sport.hockey',
       label: 'Field hockey',
-      field:     { type: 'hockey', variant: 'full', orient: 'h' },
+      squads: [
+        { id: 'first',    i18n: 'onboarding.sq_first',    hint: 'onboarding.sq_h_senior',     icon: 'ti-trophy', primary: true },
+        { id: 'reserves', i18n: 'onboarding.sq_reserves', hint: 'onboarding.sq_h_senior_b',   icon: 'ti-users' },
+        { id: 'u19',      i18n: 'onboarding.sq_u19',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-tennis' },
+        { id: 'u16',      i18n: 'onboarding.sq_u16',      hint: 'onboarding.sq_h_youth_comp', icon: 'ti-ball-tennis' },
+        { id: 'u14',      i18n: 'onboarding.sq_u14',      hint: 'onboarding.sq_h_youth_dev',  icon: 'ti-school' },
+        { id: 'academy',  i18n: 'onboarding.sq_academy',  hint: 'onboarding.sq_h_academy',    icon: 'ti-baby-carriage' },
+        { id: 'men',      i18n: 'onboarding.sq_men',      hint: 'onboarding.sq_h_men',        icon: 'ti-gender-male' },
+      ],
+      field:     { type: 'hockey', variant: 'full', orient: 'h', surface: 'grass' },
       positions: HOCKEY_POSITIONS,
       roster:    { onField: 11, benchMax: 7, unlimitedSubs: true, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 11,
@@ -502,7 +558,14 @@
       key: 'other',
       i18n: 'sport.other',
       label: 'Other sport',
-      field:     { type: 'blank', variant: 'blank', orient: 'h' },
+      field:     { type: 'blank', variant: 'blank', orient: 'h', surface: 'neutral' },
+      squads: [
+        { id: 'first',    i18n: 'onboarding.sq_first',    hint: 'onboarding.sq_h_senior',    icon: 'ti-trophy', primary: true },
+        { id: 'reserves', i18n: 'onboarding.sq_reserves', hint: 'onboarding.sq_h_senior_b',  icon: 'ti-users' },
+        { id: 'youth',    i18n: 'onboarding.sq_youth',    hint: 'onboarding.sq_h_youth_dev', icon: 'ti-school' },
+        { id: 'academy',  i18n: 'onboarding.sq_academy',  hint: 'onboarding.sq_h_academy',   icon: 'ti-baby-carriage' },
+        { id: 'women',    i18n: 'onboarding.sq_women',    hint: 'onboarding.sq_h_women',     icon: 'ti-gender-female' },
+      ],
       positions: null,                 // free text — never normalised, never rolled up
       roster:    { onField: null, benchMax: null, unlimitedSubs: true, hasGoalkeeper: false },
       lineup:    { enabled: false, hasFormation: false, slots: null, countLabel: '',
