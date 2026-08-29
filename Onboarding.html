@@ -64,9 +64,12 @@
     padding: 6px 8px;
     border-radius: 8px;
     transition: background var(--cm-dur-1);
-    cursor: pointer;
+    cursor: default;
   }
-  .ob-step:hover { background: var(--cm-side-item-active-bg); }
+  /* Sólo los pasos ya visitados son clicables: saltar hacia adelante se saltearía
+     la validación (y el guardado) del paso actual. */
+  .ob-step.is-reachable { cursor: pointer; }
+  .ob-step.is-reachable:hover { background: var(--cm-side-item-active-bg); }
   .ob-step-dot {
     grid-row: 1;
     grid-column: 1;
@@ -96,16 +99,19 @@
     background: var(--cm-side-accent);
     border-color: var(--cm-side-accent);
     color: var(--cm-side-bg);
+    font-size: 0;
   }
   .ob-step.is-done .ob-step-dot::before { content: ""; width: 12px; height: 6px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg) translate(1px,-2px); }
-  .ob-step.is-done .ob-step-dot { font-size: 0; }
   .ob-step.is-done .ob-step-title { color: var(--cm-side-fg); }
 
   .ob-step.is-current .ob-step-dot {
+    background: transparent;
     border-color: var(--cm-side-accent);
     color: var(--cm-side-accent);
     box-shadow: 0 0 0 4px var(--cm-side-item-active-bg);
+    font-size: 12px;
   }
+  .ob-step.is-current .ob-step-dot::before { content: none; }
   .ob-step.is-current .ob-step-title { color: var(--cm-side-fg); font-weight: 600; }
   .ob-step.is-current { background: var(--cm-side-item-active-bg); }
 
@@ -165,33 +171,43 @@
   }
   .ob-grid-full { grid-column: 1 / -1; }
 
-  /* Crest upload */
-  .ob-crest-row {
+  /* ── Identidad: lo que ya se pidió al crear la cuenta ──
+     El nombre del club, el país y el deporte se completaron en el registro. Repetirlos
+     como inputs vacíos hacía que el usuario los escribiera dos veces (o peor: los pisara
+     sin querer). Acá se muestran como confirmación, con "Editar" para corregirlos. */
+  .ob-ident {
     display: flex; align-items: center; gap: 16px;
-    padding: 16px;
-    border: 1px dashed var(--cm-border-strong);
+    padding: 16px 18px;
+    border: 1px solid var(--cm-border);
     border-radius: var(--cm-r-4);
     background: var(--cm-bg-soft);
+    margin-bottom: 20px;
   }
-  .ob-crest {
-    width: 72px; height: 72px;
+  .ob-ident-crest {
+    width: 64px; height: 64px;
     border-radius: var(--cm-r-3);
     background: var(--cm-surface);
     border: 1px solid var(--cm-border);
     display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    overflow: hidden;
+    flex-shrink: 0; overflow: hidden; position: relative;
+    cursor: pointer;
   }
-  .ob-crest img { width: 100%; height: 100%; object-fit: contain; }
-  .ob-crest .placeholder {
-    width: 28px; height: 28px;
-    color: var(--cm-fg-faint);
+  .ob-ident-crest img { width: 100%; height: 100%; object-fit: contain; }
+  .ob-ident-crest .placeholder { width: 26px; height: 26px; color: var(--cm-fg-faint); }
+  .ob-ident-crest .ob-crest-over {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); color: #fff;
+    opacity: 0; transition: opacity var(--cm-dur-1);
+    font-size: 18px;
   }
-  .ob-crest-info {
-    flex: 1;
-  }
-  .ob-crest-info h4 { font: 600 14px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); margin-bottom: 4px; }
-  .ob-crest-info p { font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .ob-ident-crest:hover .ob-crest-over { opacity: 1; }
+  .ob-ident-body { flex: 1; min-width: 0; }
+  .ob-ident-name { font: 600 18px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.01em; }
+  .ob-ident-meta { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .ob-ident-meta .dot { opacity: .5; }
+  .ob-ident-crest-hint { margin-top: 6px; font: var(--cm-meta); color: var(--cm-fg-faint); }
+  #ob-ident-edit[hidden] { display: none; }
 
   /* Category picker (Linear/Notion-feel chips) */
   .ob-cats {
@@ -208,50 +224,95 @@
     cursor: pointer;
     transition: all var(--cm-dur-1);
     text-align: left;
+    position: relative;
+    min-height: 104px;
   }
   .ob-cat:hover { border-color: var(--cm-border-strong); background: var(--cm-bg-soft); }
   .ob-cat .ti { font-size: 18px; color: var(--cm-fg-muted); }
   .ob-cat h5 { font: 600 13.5px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
-  .ob-cat p  { font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .ob-cat p  { font: var(--cm-meta); color: var(--cm-fg-muted); margin-top: auto; }
   .ob-cat.is-selected {
     border-color: var(--cm-accent);
     box-shadow: 0 0 0 3px var(--cm-focus-ring);
     background: var(--cm-accent-soft);
   }
   .ob-cat.is-selected .ti { color: var(--cm-accent); }
-
-  /* Plan picker */
-  .ob-plans {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-top: 8px;
+  .ob-cat-check {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 15px; color: var(--cm-accent);
+    opacity: 0; transition: opacity var(--cm-dur-1);
   }
-  .ob-plan {
-    padding: 18px 18px 20px;
+  .ob-cat.is-selected .ob-cat-check { opacity: 1; }
+  .ob-cat.is-add { border-style: dashed; justify-content: center; align-items: center; text-align: center; }
+  .ob-cat.is-add h5 { color: var(--cm-fg-muted); font-weight: 500; }
+  .ob-cat-remove {
+    position: absolute; top: 8px; right: 8px;
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 0; background: transparent; color: var(--cm-fg-faint);
+    cursor: pointer; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ob-cat-remove:hover { color: var(--cm-danger, #DC2626); background: var(--cm-bg-sunk); }
+
+  /* ── Staff invites ── */
+  .ob-staff-row {
+    display: grid;
+    grid-template-columns: 1fr 210px 32px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .ob-staff-del {
+    width: 32px; height: 32px; border-radius: var(--cm-r-2);
+    border: 1px solid transparent; background: transparent;
+    color: var(--cm-fg-faint); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ob-staff-del:hover { color: var(--cm-danger, #DC2626); background: var(--cm-bg-soft); border-color: var(--cm-border); }
+  .ob-staff-row.is-sent .cm-input-affix, .ob-staff-row.is-sent .cm-select { opacity: .55; }
+  .ob-staff-status { font: var(--cm-meta); margin: -4px 0 10px; }
+  .ob-staff-status.is-ok  { color: var(--cm-success, #15803D); }
+  .ob-staff-status.is-err { color: var(--cm-danger, #DC2626); }
+
+  /* ── Trial ── */
+  .ob-trial {
     border: 1px solid var(--cm-border);
     border-radius: var(--cm-r-4);
     background: var(--cm-surface);
-    cursor: pointer;
-    position: relative;
-    transition: all var(--cm-dur-1);
+    padding: 22px 24px;
   }
-  .ob-plan:hover { border-color: var(--cm-border-strong); }
-  .ob-plan.is-selected { border-color: var(--cm-accent); box-shadow: 0 0 0 3px var(--cm-focus-ring); }
-  .ob-plan-badge {
-    position: absolute; top: 12px; right: 12px;
-  }
-  .ob-plan-name { font: 600 14.5px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
-  .ob-plan-price { margin-top: 12px; font: 600 26px/1 var(--cm-font-sans); letter-spacing: -0.02em; color: var(--cm-fg-strong); }
-  .ob-plan-price small { font: 500 13px/1 var(--cm-font-sans); color: var(--cm-fg-muted); margin-left: 2px; }
-  .ob-plan-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-  .ob-plan-list li {
+  .ob-trial-top { display: flex; align-items: center; gap: 12px; }
+  .ob-trial-top > .ti { font-size: 20px; color: var(--cm-accent); }
+  .ob-trial-title { font: 600 16px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .ob-trial-sub { margin-top: 3px; font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .ob-trial-list { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
+  .ob-trial-list li {
     list-style: none;
     font: 500 12.5px/1.4 var(--cm-font-sans);
     color: var(--cm-fg-muted);
     display: flex; align-items: flex-start; gap: 8px;
   }
-  .ob-plan-list li .ti { font-size: 14px; color: var(--cm-success); flex-shrink: 0; margin-top: 1px; }
+  .ob-trial-list li .ti { font-size: 14px; color: var(--cm-success, #15803D); flex-shrink: 0; margin-top: 1px; }
+  .ob-trial-foot { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--cm-border); font: var(--cm-meta); color: var(--cm-fg-muted); }
+
+  /* Resumen de lo que quedó creado */
+  .ob-recap { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .ob-recap-row { display: flex; align-items: flex-start; gap: 10px; font: var(--cm-body-sm); color: var(--cm-fg); }
+  .ob-recap-row .ti { font-size: 15px; color: var(--cm-fg-muted); margin-top: 1px; }
+  .ob-recap-row b { font-weight: 600; color: var(--cm-fg-strong); }
+
+  /* Banda de error en línea — reemplaza los alert() del flujo anterior */
+  .ob-error {
+    display: none;
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: var(--cm-r-3);
+    border: 1px solid var(--cm-danger, #DC2626);
+    background: var(--cm-danger-soft, rgba(220,38,38,.08));
+    color: var(--cm-danger, #DC2626);
+    font: var(--cm-body-sm);
+  }
+  .ob-error.is-on { display: block; }
 
   /* Action bar */
   .ob-actions {
@@ -264,7 +325,19 @@
   .ob-actions .cm-meta { color: var(--cm-fg-muted); }
   .ob-actions .cm-kbd { background: var(--cm-bg-sunk); }
 
+  .ob-pane[hidden] { display: none; }
+
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  @media (max-width: 900px) {
+    .ob-page { grid-template-columns: 1fr; }
+    .ob-rail { position: static; height: auto; }
+    .ob-main, [data-theme="light"] .ob-main { padding: 28px 20px 48px; }
+    .ob-cats { grid-template-columns: repeat(2, 1fr); }
+    .ob-grid { grid-template-columns: 1fr; }
+    .ob-staff-row { grid-template-columns: 1fr 140px 32px; }
+    .ob-trial-list { grid-template-columns: 1fr; }
+  }
 </style>
 <!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
      Antes venía de un CDN externo: saludo DNS + TLS a otro servidor para un
@@ -292,182 +365,232 @@
       </div>
       <div>
         <div class="name">ClavaMetrics</div>
-        <div class="sub" data-i18n="onboarding.setupStep">Setup · 2 of 5</div>
+        <div class="sub" id="ob-rail-step">Setup · 2 / 5</div>
       </div>
     </div>
 
     <div class="ob-rail-eyebrow" data-i18n="onboarding.getStarted">Get started</div>
 
-    <div class="ob-steps">
-      <div class="ob-step is-done">
+    <div class="ob-steps" id="ob-steps">
+      <div class="ob-step is-done" data-step="account">
         <div class="ob-step-dot">1</div>
         <div class="ob-step-title" data-i18n="onboarding.stepAccount">Create account</div>
         <div class="ob-step-hint" id="ob-account-email">—</div>
       </div>
-      <div class="ob-step is-current">
+      <div class="ob-step" data-step="club">
         <div class="ob-step-dot">2</div>
         <div class="ob-step-title" data-i18n="onboarding.stepClub">Club details</div>
-        <div class="ob-step-hint" data-i18n="onboarding.stepClubHint">Name, crest, location</div>
+        <div class="ob-step-hint" data-i18n="onboarding.stepClubHint">Crest, city, timezone</div>
       </div>
-      <div class="ob-step">
+      <div class="ob-step" data-step="categories">
         <div class="ob-step-dot">3</div>
         <div class="ob-step-title" data-i18n="onboarding.stepCategories">Categories</div>
-        <div class="ob-step-hint" data-i18n="onboarding.stepCategoriesHint">First team, reserves, U-teams</div>
+        <div class="ob-step-hint" data-i18n="onboarding.stepCategoriesHint">The squads your club runs</div>
       </div>
-      <div class="ob-step">
+      <div class="ob-step" data-step="staff">
         <div class="ob-step-dot">4</div>
         <div class="ob-step-title" data-i18n="onboarding.stepStaff">Invite staff</div>
         <div class="ob-step-hint" data-i18n="onboarding.stepStaffHint">Performance, medical, coaches</div>
       </div>
-      <div class="ob-step">
+      <div class="ob-step" data-step="plan">
         <div class="ob-step-dot">5</div>
-        <div class="ob-step-title" data-i18n="onboarding.stepPlan">Pick a plan</div>
-        <div class="ob-step-hint" data-i18n="onboarding.stepPlanHint">Free for 30 days</div>
+        <div class="ob-step-title" data-i18n="onboarding.stepPlan">Start your trial</div>
+        <div class="ob-step-hint" id="ob-step-plan-hint" data-i18n="onboarding.stepPlanHint">Everything unlocked, no card</div>
       </div>
     </div>
 
     <div class="ob-rail-foot">
       <i class="ti ti-lifebuoy"></i>
-      <span><a class="cm-link is-quiet" href="#" data-i18n="onboarding.getHelp">Get help</a> · <span data-i18n="onboarding.support247">24/7 support</span></span>
+      <span><a class="cm-link is-quiet" href="Contact.html" data-i18n="onboarding.getHelp">Get help</a> · <span data-i18n="onboarding.support247">24/7 support</span></span>
     </div>
   </aside>
 
   <!-- ─── Main ─── -->
   <main class="ob-main">
 
-    <header class="ob-main-header">
-      <div class="ob-main-eyebrow"><i class="ti ti-building-stadium"></i><span data-i18n="onboarding.step2of5">Step 2 of 5</span></div>
-      <h1 data-i18n="onboarding.tellUsAboutClub">Tell us about your club</h1>
-      <p data-i18n-html="onboarding.clubIntro">This is what your players, staff and admins will see when they log in. You can change any of it later from <span class="cm-kbd">⌘</span> <span class="cm-kbd">,</span>.</p>
-    </header>
+    <!-- ═══ Paso 2 · Datos del club ═══ -->
+    <section class="ob-pane" data-pane="club">
+      <header class="ob-main-header">
+        <div class="ob-main-eyebrow"><i class="ti ti-building-stadium"></i><span data-i18n="onboarding.step2of5">Step 2 of 5</span></div>
+        <h1 data-i18n="onboarding.tellUsAboutClub">Finish setting up your club</h1>
+        <p data-i18n="onboarding.clubIntro">This is what your players, staff and admins will see when they log in. You can change any of it later from Admin.</p>
+      </header>
 
-    <!-- Crest -->
-    <div class="ob-crest-row" style="margin-bottom: 20px">
-      <div class="ob-crest" id="ob-crest">
-        <svg class="placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3Z"/>
-        </svg>
-      </div>
-      <div class="ob-crest-info">
-        <h4 data-i18n="onboarding.clubCrest">Club crest</h4>
-        <p data-i18n="onboarding.crestHint">SVG, PNG or JPG · Max 2&nbsp;MB · Square 1:1 recommended</p>
-      </div>
-      <input type="file" id="ob-logo-input" accept="image/*" style="display:none">
-      <button class="cm-btn is-outline is-sm" id="ob-logo-btn">
-        <i class="ti ti-upload" style="font-size:14px"></i> <span data-i18n="onboarding.upload">Upload</span>
-      </button>
-    </div>
-
-    <!-- Form grid -->
-    <div class="ob-grid">
-      <div class="cm-field ob-grid-full">
-        <label class="cm-label" for="club-name" data-i18n="onboarding.clubName">Club name</label>
-        <input id="club-name" class="cm-input" placeholder="e.g. Clava FC" data-i18n-ph="onboarding.clubNamePlaceholder">
-      </div>
-
-      <div class="cm-field">
-        <label class="cm-label" for="club-short" data-i18n="onboarding.shortName">Short name</label>
-        <input id="club-short" class="cm-input" placeholder="e.g. CLA" data-i18n-ph="onboarding.shortNamePlaceholder" maxlength="6">
-        <span class="cm-hint" data-i18n="onboarding.shortNameHint">Up to 6 chars. Shown on jerseys &amp; exports. (pending DB migration)</span>
-      </div>
-
-      <div class="cm-field">
-        <label class="cm-label" for="club-country" data-i18n="onboarding.country">Country</label>
-        <select id="club-country" class="cm-select"></select>
-      </div>
-
-      <!-- The sport drives positions, pitch, lineup, load metrics and the match-day model
-           (assets/sport-packs.js). Asked here as well as in the register form because
-           OAuth sign-ups and the email-confirmation path never see that form. -->
-      <div class="cm-field">
-        <label class="cm-label" for="club-sport" data-i18n="onboarding.sport">Sport</label>
-        <select id="club-sport" class="cm-select"></select>
-        <span class="cm-hint" data-i18n="onboarding.sportHint">Sets the positions, the pitch and the weekly model. You can change it later in Admin.</span>
-      </div>
-
-      <div class="cm-field">
-        <label class="cm-label" for="club-city" data-i18n="onboarding.city">City</label>
-        <div class="cm-input-affix">
-          <i class="ti ti-map-pin"></i>
-          <input id="club-city" placeholder="e.g. Rosario" data-i18n-ph="onboarding.cityPlaceholder">
+      <!-- Identidad ya cargada al crear la cuenta -->
+      <div class="ob-ident">
+        <div class="ob-ident-crest" id="ob-crest">
+          <svg class="placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3Z"/>
+          </svg>
+          <div class="ob-crest-over"><i class="ti ti-camera"></i></div>
         </div>
-        <span class="cm-hint" style="color:var(--cm-fg-muted);font-size:10px" data-i18n="onboarding.cityHint">Saved locally — pending DB migration to add city column.</span>
+        <div class="ob-ident-body">
+          <div class="ob-ident-name" id="ob-ident-name">—</div>
+          <div class="ob-ident-meta">
+            <span id="ob-ident-country">—</span>
+            <span class="dot">·</span>
+            <span id="ob-ident-sport">—</span>
+          </div>
+          <div class="ob-ident-crest-hint" data-i18n="onboarding.crestHint">Click the crest to upload · PNG, JPG or SVG · max 2 MB</div>
+        </div>
+        <input type="file" id="ob-logo-input" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">
+        <button class="cm-btn is-outline is-sm" id="ob-edit-ident">
+          <i class="ti ti-pencil" style="font-size:14px"></i> <span data-i18n="common.edit">Edit</span>
+        </button>
       </div>
 
-      <div class="cm-field">
-        <label class="cm-label" for="club-tz" data-i18n="onboarding.timezone">Timezone</label>
-        <select id="club-tz" class="cm-select">
-          <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires (UTC-3)</option>
-          <option value="America/Sao_Paulo">America/Sao_Paulo (UTC-3)</option>
-          <option value="America/Mexico_City">America/Mexico_City (UTC-6)</option>
-          <option value="Europe/Madrid">Europe/Madrid (UTC+1)</option>
-        </select>
+      <!-- Nombre, país y deporte: ocultos por defecto, se abren con "Editar" -->
+      <div class="ob-grid" id="ob-ident-edit" hidden style="margin-bottom:20px">
+        <div class="cm-field ob-grid-full">
+          <label class="cm-label" for="club-name" data-i18n="onboarding.clubName">Club name</label>
+          <input id="club-name" class="cm-input" placeholder="e.g. Clava FC" data-i18n-ph="onboarding.clubNamePlaceholder">
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="club-country" data-i18n="onboarding.country">Country</label>
+          <select id="club-country" class="cm-select"></select>
+        </div>
+        <!-- The sport drives positions, pitch, lineup, load metrics and the match-day model
+             (assets/sport-packs.js). Editable here because OAuth sign-ups and the
+             email-confirmation path never see the register form. -->
+        <div class="cm-field">
+          <label class="cm-label" for="club-sport" data-i18n="onboarding.sport">Sport</label>
+          <select id="club-sport" class="cm-select"></select>
+          <span class="cm-hint" data-i18n="onboarding.sportHint">Sets the positions, the pitch and the weekly model. You can change it later in Admin.</span>
+        </div>
       </div>
-    </div>
 
-    <!-- Categories selection -->
-    <div class="cm-divider" style="margin: 12px 0 28px"></div>
+      <div class="ob-grid">
+        <div class="cm-field">
+          <label class="cm-label" for="club-short" data-i18n="onboarding.shortName">Short name</label>
+          <input id="club-short" class="cm-input" placeholder="e.g. CLA" data-i18n-ph="onboarding.shortNamePlaceholder" maxlength="6">
+          <span class="cm-hint" data-i18n="onboarding.shortNameHint">Up to 6 characters. Used on exports and narrow headers.</span>
+        </div>
 
-    <div class="ob-main-header" style="margin-bottom: 16px">
-      <h1 style="font-size:20px" data-i18n="onboarding.categoriesQuestion">What categories does your club run?</h1>
-      <p style="margin-top:4px" data-i18n="onboarding.categoriesHelp">Pick all that apply. We'll create empty squads for each — you can rename or remove them later.</p>
-    </div>
+        <div class="cm-field">
+          <label class="cm-label" for="club-city" data-i18n="onboarding.city">City</label>
+          <div class="cm-input-affix">
+            <i class="ti ti-map-pin"></i>
+            <input id="club-city" placeholder="e.g. Rosario" data-i18n-ph="onboarding.cityPlaceholder">
+          </div>
+        </div>
 
-    <div class="ob-cats">
-      <div class="ob-cat" data-cat="First team">
-        <i class="ti ti-trophy"></i>
-        <h5 data-i18n="onboarding.catFirstTeam">First team</h5>
-        <p data-i18n="onboarding.catFirstTeamDesc">Senior · 25 players</p>
+        <div class="cm-field ob-grid-full">
+          <label class="cm-label" for="club-tz" data-i18n="onboarding.timezone">Timezone</label>
+          <select id="club-tz" class="cm-select"></select>
+          <span class="cm-hint" data-i18n="onboarding.timezoneHint">Detected from your device. Used on schedules, day sheets and exports.</span>
+        </div>
       </div>
-      <div class="ob-cat" data-cat="Reserves">
-        <i class="ti ti-users"></i>
-        <h5 data-i18n="onboarding.catReserves">Reserves</h5>
-        <p data-i18n="onboarding.catReservesDesc">Senior B / U23</p>
-      </div>
-      <div class="ob-cat" data-cat="U-19">
-        <i class="ti ti-ball-football"></i>
-        <h5 data-i18n="onboarding.catU19">U-19</h5>
-        <p data-i18n="onboarding.catU19Desc">Youth · competitive</p>
-      </div>
-      <div class="ob-cat" data-cat="U-17">
-        <i class="ti ti-school"></i>
-        <h5 data-i18n="onboarding.catU17">U-17</h5>
-        <p data-i18n="onboarding.catU17Desc">Youth · competitive</p>
-      </div>
-      <div class="ob-cat" data-cat="U-15">
-        <i class="ti ti-school"></i>
-        <h5 data-i18n="onboarding.catU15">U-15</h5>
-        <p data-i18n="onboarding.catU15Desc">Youth · development</p>
-      </div>
-      <div class="ob-cat" data-cat="U-13">
-        <i class="ti ti-school"></i>
-        <h5 data-i18n="onboarding.catU13">U-13</h5>
-        <p data-i18n="onboarding.catU13Desc">Youth · development</p>
-      </div>
-      <div class="ob-cat" data-cat="Academy">
-        <i class="ti ti-baby-carriage"></i>
-        <h5 data-i18n="onboarding.catAcademy">Academy</h5>
-        <p data-i18n="onboarding.catAcademyDesc">U-11 and below</p>
-      </div>
-      <div class="ob-cat" data-cat="Women">
-        <i class="ti ti-gender-female"></i>
-        <h5 data-i18n="onboarding.catWomen">Women</h5>
-        <p data-i18n="onboarding.catWomenDesc">First team</p>
-      </div>
-    </div>
 
-    <!-- Action bar -->
-    <div class="ob-actions">
-      <button class="cm-btn is-outline">
-        <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
+      <div class="ob-error" id="ob-err-club"></div>
+
+      <div class="ob-actions">
+        <a class="cm-btn is-outline" href="Login.html">
+          <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
+        </a>
+        <div class="ob-actions-spacer"></div>
+        <span class="cm-meta" data-i18n-html="onboarding.pressEnter">Press <span class="cm-kbd">↵</span> to continue</span>
+        <button class="cm-btn is-primary" data-next="club">
+          <span data-i18n="onboarding.continueToCategories">Continue to categories</span>
+          <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══ Paso 3 · Categorías ═══ -->
+    <section class="ob-pane" data-pane="categories" hidden>
+      <header class="ob-main-header">
+        <div class="ob-main-eyebrow"><i class="ti ti-users-group"></i><span data-i18n="onboarding.step3of5">Step 3 of 5</span></div>
+        <h1 data-i18n="onboarding.categoriesQuestion">What categories does your club run?</h1>
+        <p data-i18n="onboarding.categoriesHelp">Pick all that apply. We'll create an empty squad for each — you can rename, add or archive them later.</p>
+      </header>
+
+      <div class="ob-cats" id="ob-cats"></div>
+
+      <div class="ob-error" id="ob-err-categories"></div>
+
+      <div class="ob-actions">
+        <button class="cm-btn is-outline" data-back="club">
+          <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
+        </button>
+        <div class="ob-actions-spacer"></div>
+        <span class="cm-meta" id="ob-cats-count"></span>
+        <button class="cm-btn is-primary" data-next="categories">
+          <span data-i18n="onboarding.continueToStaff">Continue to staff</span>
+          <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══ Paso 4 · Staff ═══ -->
+    <section class="ob-pane" data-pane="staff" hidden>
+      <header class="ob-main-header">
+        <div class="ob-main-eyebrow"><i class="ti ti-mail-plus"></i><span data-i18n="onboarding.step4of5">Step 4 of 5</span></div>
+        <h1 data-i18n="onboarding.staffQuestion">Who else works with the squad?</h1>
+        <p data-i18n="onboarding.staffHelp">They'll get an email to set their password. The role decides which pages they land on — you can fine-tune the access later from Admin. Skipping is fine: you can invite people whenever you want.</p>
+      </header>
+
+      <div id="ob-staff-rows"></div>
+
+      <button class="cm-btn is-ghost is-sm" id="ob-staff-add" style="margin-top:4px">
+        <i class="ti ti-plus" style="font-size:14px"></i> <span data-i18n="onboarding.addAnother">Add another</span>
       </button>
-      <div class="ob-actions-spacer"></div>
-      <span class="cm-meta" data-i18n-html="onboarding.pressEnter">Press <span class="cm-kbd">↵</span> to continue</span>
-      <button class="cm-btn is-primary" id="obContinue" onclick="saveAndContinue()">
-        <span id="obContinueLabel" data-i18n="onboarding.continueToStaff">Continue to staff</span>
-        <i class="ti ti-arrow-right" style="font-size:16px"></i>
-      </button>
-    </div>
+
+      <div class="ob-error" id="ob-err-staff"></div>
+
+      <div class="ob-actions">
+        <button class="cm-btn is-outline" data-back="categories">
+          <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
+        </button>
+        <div class="ob-actions-spacer"></div>
+        <button class="cm-btn is-ghost" data-skip="staff" data-i18n="onboarding.skipForNow">Skip for now</button>
+        <button class="cm-btn is-primary" data-next="staff">
+          <span data-i18n="onboarding.sendInvites">Send invites</span>
+          <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══ Paso 5 · Prueba ═══ -->
+    <section class="ob-pane" data-pane="plan" hidden>
+      <header class="ob-main-header">
+        <div class="ob-main-eyebrow"><i class="ti ti-rocket"></i><span data-i18n="onboarding.step5of5">Step 5 of 5</span></div>
+        <h1 data-i18n="onboarding.planTitle">Your club is ready</h1>
+        <p data-i18n="onboarding.planHelp">Your trial starts now, with everything unlocked and no card required. Pick a plan whenever you're ready — nothing is deleted when the trial ends.</p>
+      </header>
+
+      <div class="ob-trial">
+        <div class="ob-trial-top">
+          <i class="ti ti-gift"></i>
+          <div>
+            <div class="ob-trial-title" data-i18n="onboarding.trialTitle">Free trial</div>
+            <div class="ob-trial-sub" id="ob-trial-sub">—</div>
+          </div>
+        </div>
+        <ul class="ob-trial-list">
+          <li><i class="ti ti-check"></i><span data-i18n="onboarding.trialFeat1">Planning, calendar and session builder</span></li>
+          <li><i class="ti ti-check"></i><span data-i18n="onboarding.trialFeat2">GPS analysis, load monitoring and reports</span></li>
+          <li><i class="ti ti-check"></i><span data-i18n="onboarding.trialFeat3">RPE, wellness and availability</span></li>
+          <li><i class="ti ti-check"></i><span data-i18n="onboarding.trialFeat4">Medical records, gym and evaluations</span></li>
+        </ul>
+        <div class="ob-trial-foot" data-i18n="onboarding.trialFoot">No card needed to start. We'll remind you before the trial ends.</div>
+      </div>
+
+      <div class="ob-recap" id="ob-recap"></div>
+
+      <div class="ob-error" id="ob-err-plan"></div>
+
+      <div class="ob-actions">
+        <button class="cm-btn is-outline" data-back="staff">
+          <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
+        </button>
+        <div class="ob-actions-spacer"></div>
+        <a class="cm-btn is-ghost" href="Pricing.html" data-i18n="onboarding.seePlans">See plans</a>
+        <button class="cm-btn is-primary" data-next="plan">
+          <span data-i18n="onboarding.enterWorkspace">Enter your workspace</span>
+          <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+      </div>
+    </section>
 
   </main>
 </div>
@@ -483,160 +606,611 @@
 
 <script>
   // i18n: translated string with fallback when the runtime isn't ready or key missing.
+  // El fallback también interpola {vars}: si no, un texto como "{n} días hasta {date}"
+  // salía crudo cada vez que el runtime todavía no había cargado.
   function tt(key, fallbackEN, vars) {
     const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
-    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+    if (v && v !== key) return v;
+    let out = fallbackEN != null ? fallbackEN : key;
+    if (vars) for (const k of Object.keys(vars)) out = out.split('{' + k + '}').join(vars[k]);
+    return out;
+  }
+  // Las tarjetas de categoría se arman en JS, así que hay que esperar a que el runtime
+  // de i18n tenga el idioma cargado: si no, un club veía "u19" en vez de "Sub-19" — y
+  // ese texto es el que termina guardado como nombre del plantel.
+  function i18nReady() {
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      (function poll() {
+        if (window.CM_I18N && window.CM_I18N.ready) { window.CM_I18N.ready.then(resolve, resolve); return; }
+        if (Date.now() - t0 > 3000) { resolve(); return; }   // fail-open: se usan los textos en inglés
+        setTimeout(poll, 40);
+      })();
+    });
+  }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /* ══════════════════════════════════════════════════════════════════════
+     ESTADO DEL ASISTENTE
+     El onboarding es una sola página con cuatro paneles. Cada paso guarda lo suyo al
+     avanzar, así una salida a mitad de camino no pierde nada: al volver, el club sigue
+     sin `onboarded_at` y el asistente se retoma donde quedó.
+     ══════════════════════════════════════════════════════════════════════ */
+  const STEPS = ['club', 'categories', 'staff', 'plan'];
+  const state = {
+    clubId: null,
+    club: {},            // fila de clubs
+    step: 'club',
+    seen: { club: true },
+    cats: [],            // [{ id, name, hint, icon, primary, selected, custom }]
+    existingTeams: [],   // nombres ya creados (para no duplicar al volver atrás)
+    hasPrimaryTeam: false,
+    invitesSent: 0,
+  };
+
+  function showError(step, msg) {
+    const el = document.getElementById('ob-err-' + step);
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('is-on');
+  }
+  function clearError(step) {
+    const el = document.getElementById('ob-err-' + step);
+    if (el) { el.textContent = ''; el.classList.remove('is-on'); }
   }
 
+  function goTo(step) {
+    if (!STEPS.includes(step)) return;
+    state.step = step;
+    state.seen[step] = true;
+    document.querySelectorAll('.ob-pane').forEach(p => { p.hidden = p.dataset.pane !== step; });
+    const idx = STEPS.indexOf(step);
+    document.querySelectorAll('#ob-steps .ob-step').forEach(el => {
+      const s = el.dataset.step;
+      const i = STEPS.indexOf(s);
+      el.classList.toggle('is-current', s === step);
+      // "account" queda siempre hecho: la cuenta se creó en el registro.
+      el.classList.toggle('is-done', s === 'account' || (i > -1 && i < idx));
+      el.classList.toggle('is-reachable', s !== 'account' && !!state.seen[s] && s !== step);
+    });
+    const rail = document.getElementById('ob-rail-step');
+    if (rail) rail.textContent = 'Setup · ' + (idx + 2) + ' / 5';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (step === 'plan') renderRecap();
+  }
+
+  document.getElementById('ob-steps').addEventListener('click', e => {
+    const el = e.target.closest('.ob-step');
+    if (el && el.classList.contains('is-reachable')) goTo(el.dataset.step);
+  });
+
+  /* ── Zona horaria ────────────────────────────────────────────────────────
+     Antes eran cuatro opciones escritas a mano (Buenos Aires, São Paulo, Ciudad de
+     México, Madrid): un club uruguayo no tenía la suya y se quedaba con la del país
+     de al lado. Ahora se detecta la del dispositivo y la lista sale del propio
+     navegador, agrupada por región y con el desfase UTC calculado. */
+  const TZ_FALLBACK = [
+    'America/Argentina/Buenos_Aires', 'America/Montevideo', 'America/Santiago',
+    'America/Asuncion', 'America/La_Paz', 'America/Lima', 'America/Bogota',
+    'America/Sao_Paulo', 'America/Mexico_City', 'America/New_York', 'America/Los_Angeles',
+    'Europe/Madrid', 'Europe/Lisbon', 'Europe/London', 'Europe/Paris', 'Europe/Rome',
+    'Europe/Berlin', 'Africa/Casablanca', 'Asia/Tokyo', 'Australia/Sydney', 'UTC',
+  ];
+  function tzOffsetLabel(tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+        .formatToParts(new Date());
+      const name = (parts.find(p => p.type === 'timeZoneName') || {}).value || '';
+      return name.replace('GMT', 'UTC') || 'UTC';
+    } catch (_e) { return ''; }
+  }
+  function detectedTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_e) { return ''; }
+  }
+  function fillTzSelect(selected) {
+    const sel = document.getElementById('club-tz');
+    if (!sel) return;
+    let list;
+    try { list = Intl.supportedValuesOf('timeZone'); } catch (_e) { list = null; }
+    if (!list || !list.length) list = TZ_FALLBACK.slice();
+    else list = list.slice();
+    const detected = detectedTz();
+    const value = selected || detected || 'UTC';
+    for (const extra of [detected, value]) {
+      if (extra && !list.includes(extra)) list.unshift(extra);
+    }
+
+    // Agrupadas por región (America/, Europe/…) para que la lista sea navegable.
+    const groups = new Map();
+    for (const tz of list) {
+      const region = tz.includes('/') ? tz.split('/')[0] : 'Other';
+      if (!groups.has(region)) groups.set(region, []);
+      groups.get(region).push(tz);
+    }
+    const opt = tz => `<option value="${esc(tz)}">${esc(tz.replace(/_/g, ' '))} (${esc(tzOffsetLabel(tz))})</option>`;
+    let html = '';
+    if (detected) html += `<optgroup label="${esc(tt('onboarding.tzDetected', 'Detected'))}">${opt(detected)}</optgroup>`;
+    for (const region of [...groups.keys()].sort()) {
+      html += `<optgroup label="${esc(region)}">${groups.get(region).sort().map(opt).join('')}</optgroup>`;
+    }
+    sel.innerHTML = html;
+    sel.value = value;
+  }
+
+  /* ── Paso 2: identidad ─────────────────────────────────────────────────── */
+  // Las opciones salen del registro de packs, así que sumar un deporte nunca obliga
+  // a tocar esta página.
+  function fillSportSelect(selected) {
+    const sel = document.getElementById('club-sport');
+    if (!sel || !window.CMSport) return;
+    const keys = window.CMSport.list();
+    if (!keys.includes('other')) keys.push('other');
+    sel.innerHTML = keys.map(k => {
+      const pack = window.CMSport.get(k);
+      const label = tt('sport.' + k, (pack && pack.label) || k);
+      return `<option value="${esc(k)}"${k === selected ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
+    sel.value = selected || 'football';
+  }
+
+  function currentSport() {
+    const sel = document.getElementById('club-sport');
+    return (sel && sel.value) || state.club.sport || 'football';
+  }
+
+  function paintIdentity() {
+    const name = (document.getElementById('club-name').value || '').trim();
+    const country = document.getElementById('club-country').value || '';
+    const pack = window.CMSport ? window.CMSport.get(currentSport()) : null;
+    document.getElementById('ob-ident-name').textContent = name || tt('onboarding.unnamedClub', 'Your club');
+    document.getElementById('ob-ident-country').textContent = country || tt('onboarding.noCountry', 'Country not set');
+    document.getElementById('ob-ident-sport').textContent = pack ? tt(pack.i18n, pack.label) : '';
+  }
+
+  document.getElementById('ob-edit-ident').addEventListener('click', () => {
+    const box = document.getElementById('ob-ident-edit');
+    box.hidden = !box.hidden;
+    if (!box.hidden) document.getElementById('club-name').focus();
+  });
+  ['club-name', 'club-country'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', paintIdentity);
+    el.addEventListener('change', paintIdentity);
+  });
+  // Cambiar el deporte cambia las categorías sugeridas: un club de básquet no tiene
+  // "Reservas / Sub-19" de fútbol.
+  document.getElementById('club-sport').addEventListener('change', () => {
+    paintIdentity();
+    buildCats();
+  });
+
+  /* ── Paso 3: categorías del deporte ────────────────────────────────────── */
+  // Red de seguridad si el runtime de i18n no llegara a cargar: el nombre elegido acá
+  // se guarda como nombre del plantel, así que nunca debe caer en el id crudo ("u19").
+  const SQUAD_EN = {
+    first: 'First team', reserves: 'Reserves', first_xv: 'First XV', second_xv: 'Second XV',
+    u20: 'U-20', u19: 'U-19', u17: 'U-17', u16: 'U-16', u15: 'U-15', u14: 'U-14', u13: 'U-13',
+    youth: 'Youth', academy: 'Academy', mini: 'Mini-basket', women: "Women's team", men: "Men's team",
+  };
+  const HINT_EN = {
+    'onboarding.sq_h_senior': 'Senior · main squad',
+    'onboarding.sq_h_senior_b': 'Senior B / U-23',
+    'onboarding.sq_h_youth_comp': 'Youth · competitive',
+    'onboarding.sq_h_youth_dev': 'Youth · development',
+    'onboarding.sq_h_academy': 'U-11 and below',
+    'onboarding.sq_h_mini': 'Up to 12 years old',
+    'onboarding.sq_h_women': "Women's squad",
+    'onboarding.sq_h_men': "Men's squad",
+  };
+  const squadName = s => tt(s.i18n, SQUAD_EN[s.id] || s.id);
+
+  function buildCats() {
+    const pack = window.CMSport ? window.CMSport.get(currentSport()) : null;
+    const presets = (pack && pack.squads) || [];
+    // Lo agregado a mano y lo ya creado sobreviven a un cambio de deporte.
+    const keep = state.cats.filter(c => c.custom || c.existing);
+    const keepNames = new Set(keep.map(c => c.name.toLowerCase()));
+    const have = new Set(state.existingTeams.map(n => n.toLowerCase()));
+    state.cats = presets
+      .filter(s => !keepNames.has(squadName(s).toLowerCase()))
+      .map((s, i) => {
+        const name = squadName(s);
+        return {
+          id: s.id,
+          name,
+          hint: tt(s.hint, HINT_EN[s.hint] || ''),
+          icon: s.icon || 'ti-users',
+          primary: !!s.primary,
+          // El primer equipo viene marcado: todo club tiene uno, y arrancar en cero
+          // obligaba a un click que nunca es una decisión real.
+          selected: have.has(name.toLowerCase()) || (i === 0 && !keep.length),
+          custom: false,
+          existing: have.has(name.toLowerCase()),
+        };
+      })
+      .concat(keep);
+    renderCats();
+  }
+  function renderCats() {
+    const cards = state.cats.map((c, i) => `
+      <div class="ob-cat${c.selected ? ' is-selected' : ''}" data-i="${i}">
+        <i class="ti ${esc(c.icon)}"></i>
+        <h5>${esc(c.name)}</h5>
+        <p>${esc(c.hint)}</p>
+        <i class="ti ti-circle-check-filled ob-cat-check"></i>
+        ${c.custom ? `<button class="ob-cat-remove" type="button" data-remove="${i}" title="${esc(tt('common.remove', 'Remove'))}"><i class="ti ti-x"></i></button>` : ''}
+      </div>`).join('');
+    document.getElementById('ob-cats').innerHTML = cards + `
+      <div class="ob-cat is-add" id="ob-cat-add">
+        <i class="ti ti-plus"></i>
+        <h5>${esc(tt('onboarding.addCategory', 'Add category'))}</h5>
+      </div>`;
+    updateCatsCount();
+  }
+  function updateCatsCount() {
+    const n = state.cats.filter(c => c.selected).length;
+    const el = document.getElementById('ob-cats-count');
+    if (el) el.textContent = n ? tt('onboarding.nSelected', '{n} selected', { n }) : '';
+  }
+  document.getElementById('ob-cats').addEventListener('click', e => {
+    const rm = e.target.closest('[data-remove]');
+    if (rm) { state.cats.splice(+rm.dataset.remove, 1); renderCats(); return; }
+
+    if (e.target.closest('#ob-cat-add')) {
+      const name = (prompt(tt('onboarding.addCategoryPrompt', 'Category name')) || '').trim();
+      if (!name) return;
+      if (state.cats.some(c => c.name.toLowerCase() === name.toLowerCase())) return;
+      state.cats.push({
+        id: 'custom_' + state.cats.length, name,
+        hint: tt('onboarding.customCategory', 'Added by you'),
+        icon: 'ti-users', primary: false, selected: true, custom: true, existing: false,
+      });
+      renderCats();
+      clearError('categories');
+      return;
+    }
+    const card = e.target.closest('.ob-cat[data-i]');
+    if (!card) return;
+    const c = state.cats[+card.dataset.i];
+    // Un equipo ya creado no se "desmarca" desde acá: se archiva desde Squad.
+    if (c.existing) return;
+    c.selected = !c.selected;
+    card.classList.toggle('is-selected', c.selected);
+    updateCatsCount();
+    clearError('categories');
+  });
+
+  /* ── Paso 4: invitaciones ──────────────────────────────────────────────── */
+  const STAFF_ROLES = [
+    ['coach', 'admin.role_coach', 'Head coach'],
+    ['assistant_coach', 'admin.role_assistant_coach', 'Assistant coach'],
+    ['sc_coach', 'admin.role_sc_coach', 'S&C coach'],
+    ['physio', 'admin.role_physio', 'Physio'],
+    ['analyst', 'admin.role_analyst', 'Analyst'],
+    ['nutritionist', 'admin.role_nutritionist', 'Nutritionist'],
+    ['gk_coach', 'admin.role_gk_coach', 'GK coach'],
+    ['team_manager', 'admin.role_team_manager', 'Team manager'],
+    ['director_football', 'admin.role_director_football', 'Director of football'],
+    ['head_performance', 'admin.role_head_performance', 'Head of performance'],
+    ['admin', 'admin.role_admin', 'Admin'],
+  ];
+  function addStaffRow(role) {
+    const row = document.createElement('div');
+    row.className = 'ob-staff-row';
+    row.innerHTML = `
+      <div class="cm-input-affix">
+        <i class="ti ti-mail"></i>
+        <input type="email" class="ob-staff-email" placeholder="${esc(tt('onboarding.staffEmailPlaceholder', 'name@club.com'))}" autocomplete="off">
+      </div>
+      <select class="cm-select ob-staff-role">
+        ${STAFF_ROLES.map(([v, k, en]) => `<option value="${esc(v)}"${v === role ? ' selected' : ''}>${esc(tt(k, en))}</option>`).join('')}
+      </select>
+      <button class="ob-staff-del" type="button" title="${esc(tt('common.remove', 'Remove'))}"><i class="ti ti-x"></i></button>`;
+    row.querySelector('.ob-staff-del').addEventListener('click', () => {
+      const status = row.nextElementSibling;
+      if (status && status.classList.contains('ob-staff-status')) status.remove();
+      row.remove();
+      if (!document.querySelectorAll('.ob-staff-row').length) addStaffRow('coach');
+    });
+    document.getElementById('ob-staff-rows').appendChild(row);
+  }
+  document.getElementById('ob-staff-add').addEventListener('click', () => addStaffRow('physio'));
+
+  function staffRowStatus(row, ok, msg) {
+    let s = row.nextElementSibling;
+    if (!s || !s.classList.contains('ob-staff-status')) {
+      s = document.createElement('div');
+      row.after(s);
+    }
+    s.className = 'ob-staff-status ' + (ok ? 'is-ok' : 'is-err');
+    s.textContent = msg;
+    row.classList.toggle('is-sent', ok);
+  }
+
+  /* ── Paso 5: prueba y resumen ──────────────────────────────────────────── */
+  function renderRecap() {
+    const cats = state.cats.filter(c => c.selected).map(c => c.name);
+    const rows = [
+      ['ti-building-stadium', tt('onboarding.recapClub', 'Club'), (document.getElementById('club-name').value || '').trim()],
+      ['ti-users-group', tt('onboarding.recapCategories', 'Categories'), cats.length ? cats.join(' · ') : '—'],
+      ['ti-mail', tt('onboarding.recapInvites', 'Invites sent'), String(state.invitesSent)],
+    ];
+    document.getElementById('ob-recap').innerHTML = rows.map(([icon, label, value]) =>
+      `<div class="ob-recap-row"><i class="ti ${icon}"></i><span>${esc(label)}: <b>${esc(value)}</b></span></div>`).join('');
+  }
+
+  function paintTrial() {
+    const sub = document.getElementById('ob-trial-sub');
+    if (!sub) return;
+    const ends = state.club.trial_ends_at ? new Date(state.club.trial_ends_at) : null;
+    if (!ends || isNaN(ends.getTime())) {
+      sub.textContent = tt('onboarding.trialGeneric', 'Everything unlocked while you try ClavaMetrics.');
+      return;
+    }
+    const days = Math.max(0, Math.ceil((ends - new Date()) / 86400000));
+    const date = ends.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    sub.textContent = tt('onboarding.trialUntil', '{n} days — everything unlocked until {date}', { n: days, date });
+    const hint = document.getElementById('ob-step-plan-hint');
+    if (hint) { hint.removeAttribute('data-i18n'); hint.textContent = tt('onboarding.trialDaysShort', 'Free for {n} days', { n: days }); }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     GUARDADO POR PASO
+     ══════════════════════════════════════════════════════════════════════ */
+  async function saveClub() {
+    const name = (document.getElementById('club-name').value || '').trim();
+    if (!name) {
+      showError('club', tt('onboarding.clubNameRequired', 'Club name is required.'));
+      document.getElementById('ob-ident-edit').hidden = false;
+      document.getElementById('club-name').focus();
+      return false;
+    }
+    const sport = currentSport();
+    const patch = {
+      name,
+      sport,
+      country:    document.getElementById('club-country').value || null,
+      short_name: (document.getElementById('club-short').value || '').trim().toUpperCase() || null,
+      city:       (document.getElementById('club-city').value || '').trim() || null,
+      timezone:   document.getElementById('club-tz').value || null,
+    };
+    const { error } = await window.sb.from('clubs').update(patch).eq('id', state.clubId);
+    if (error) { showError('club', error.message); return false; }
+    Object.assign(state.club, patch);
+    // El deporte se espeja en localStorage para el primer pintado de cada página; se
+    // refresca ahora para que la pantalla siguiente ya hable el vocabulario correcto.
+    try { localStorage.setItem('cm_sport', sport); } catch (_e) {}
+    if (window.CMSport && window.CMSport.refresh) { try { window.CMSport.refresh(); } catch (_e) {} }
+    if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
+    return true;
+  }
+
+  async function saveCategories() {
+    const picked = state.cats.filter(c => c.selected);
+    if (!picked.length) {
+      showError('categories', tt('onboarding.selectCategory', 'Pick at least one category.'));
+      return false;
+    }
+    // Volver atrás y avanzar de nuevo no debe duplicar equipos: teams tiene un único
+    // (club_id, name), así que sólo se insertan los que todavía no existen.
+    const have = new Set(state.existingTeams.map(n => n.toLowerCase()));
+    const toInsert = picked.filter(c => !have.has(c.name.toLowerCase()));
+    if (toInsert.length) {
+      // is_primary tiene un índice único parcial por club: se marca uno solo, y sólo si
+      // el club todavía no tenía primer equipo.
+      let primaryTaken = state.hasPrimaryTeam;
+      const rows = toInsert.map(c => {
+        const isPrimary = !primaryTaken && c.primary;
+        if (isPrimary) primaryTaken = true;
+        return { club_id: state.clubId, name: c.name, is_primary: isPrimary };
+      });
+      if (!primaryTaken) { rows[0].is_primary = true; primaryTaken = true; }
+      const { error } = await window.sb.from('teams').insert(rows);
+      if (error) { showError('categories', error.message); return false; }
+      state.existingTeams.push(...toInsert.map(c => c.name));
+      state.hasPrimaryTeam = primaryTaken;
+      toInsert.forEach(c => { c.existing = true; });
+    }
+    return true;
+  }
+
+  async function sendInvites() {
+    const rows = [...document.querySelectorAll('.ob-staff-row')];
+    const pending = rows.filter(r => !r.classList.contains('is-sent') && r.querySelector('.ob-staff-email').value.trim());
+    if (!pending.length) return true;   // nadie cargado → equivale a saltear
+
+    const redirectTo = new URL('auth-callback.html', window.location.href).href;
+    let failed = 0;
+    for (const row of pending) {
+      const email = row.querySelector('.ob-staff-email').value.trim().toLowerCase();
+      const role  = row.querySelector('.ob-staff-role').value;
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        staffRowStatus(row, false, tt('onboarding.invalidEmail', "That email doesn't look right."));
+        failed++;
+        continue;
+      }
+      try {
+        const { data: res, error } = await window.sb.functions.invoke('invite-staff', {
+          body: { email, role, redirectTo, clubId: state.clubId },
+        });
+        const apiError = (res && res.error) || (error && error.message);
+        if (apiError) throw new Error(apiError);
+        staffRowStatus(row, true, res && res.autoJoined
+          ? tt('onboarding.inviteJoined', 'Already had an account — added to the club.')
+          : tt('onboarding.inviteSent', 'Invite sent.'));
+        state.invitesSent++;
+      } catch (err) {
+        staffRowStatus(row, false, err.message || tt('onboarding.inviteFailed', 'Invite failed.'));
+        failed++;
+      }
+    }
+    if (failed) {
+      showError('staff', tt('onboarding.someInvitesFailed', "Some invites couldn't be sent. Fix them here, or skip and invite from Admin later."));
+      return false;
+    }
+    return true;
+  }
+
+  async function finish() {
+    const { error } = await window.sb.from('clubs')
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq('id', state.clubId);
+    if (error) { showError('plan', error.message); return false; }
+    if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
+    window.location.href = 'Hub.html';
+    return true;
+  }
+
+  /* ── Navegación ────────────────────────────────────────────────────────── */
+  let busy = false;
+  async function runStep(step, opts) {
+    if (busy) return;
+    const skip = !!(opts && opts.skip);
+    const btn = document.querySelector('[data-' + (skip ? 'skip' : 'next') + '="' + step + '"]');
+    clearError(step);
+    busy = true;
+    if (btn) btn.disabled = true;
+    try {
+      let ok = true;
+      if (step === 'club') ok = await saveClub();
+      else if (step === 'categories') ok = await saveCategories();
+      else if (step === 'staff') ok = skip ? true : await sendInvites();
+      else if (step === 'plan') ok = await finish();
+      if (!ok) return;
+      const next = STEPS[STEPS.indexOf(step) + 1];
+      if (next) goTo(next);
+    } catch (err) {
+      showError(step, err.message || tt('onboarding.saveFailed', 'Save failed'));
+    } finally {
+      busy = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  document.querySelectorAll('[data-next]').forEach(b =>
+    b.addEventListener('click', () => runStep(b.dataset.next)));
+  document.querySelectorAll('[data-skip]').forEach(b =>
+    b.addEventListener('click', () => runStep(b.dataset.skip, { skip: true })));
+  document.querySelectorAll('[data-back]').forEach(b =>
+    b.addEventListener('click', () => goTo(b.dataset.back)));
+
+  // "Press ↵ to continue" era decorativo: no había ningún listener detrás.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && ['TEXTAREA', 'BUTTON', 'A', 'SELECT'].includes(t.tagName)) return;
+    e.preventDefault();
+    runStep(state.step);
+  });
+
+  /* ══════════════════════════════════════════════════════════════════════
+     ARRANQUE
+     ══════════════════════════════════════════════════════════════════════ */
   async function boot() {
     if (!await window.requireAuth()) return;
 
-    let clubId = await window.getClubId();
+    state.clubId = await window.getClubId();
 
-    // Existing user (already has club) — skip onboarding, go straight to Hub
-    if (clubId) { window.location.replace('Hub.html'); return; }
-
-    // New OAuth user: no profile/club in DB yet — create them now
-    if (!clubId) {
+    // Sin club (usuario OAuth que llegó sin pasar por auth-callback): se crea uno mínimo
+    // para que la sesión tenga dónde escribir, y el asistente completa el resto.
+    if (!state.clubId) {
       const { data: { session } } = await window.sb.auth.getSession();
-      const user = session?.user;
+      const user = session && session.user;
       if (!user) return;
-
       const meta      = user.user_metadata || {};
       const fullName  = meta.full_name || meta.name || '';
-      const nameParts = fullName.trim().split(/\s+/);
-      const firstName = nameParts[0] || '';
-      const lastName  = nameParts.slice(1).join(' ') || '';
-      const clubName  = (firstName ? firstName + "'s Club" : user.email?.split('@')[0] + "'s Club");
+      const firstName = fullName.trim().split(/\s+/)[0] || '';
+      const clubName  = firstName ? firstName + "'s Club" : (user.email || '').split('@')[0] + "'s Club";
 
       const newClubId = crypto.randomUUID();
-      const { error: clubErr } = await window.sb
-        .from('clubs')
-        .insert({ id: newClubId, name: clubName, plan: 'free' });   // sport defaults to football; the form below asks for it
-      if (clubErr) { alert(tt('onboarding.setupFailedClub', 'Setup failed (club): ') + clubErr.message); return; }
+      // sport queda en football por defecto; el formulario de arriba lo deja cambiar.
+      const { error: clubErr } = await window.sb.from('clubs')
+        .insert({ id: newClubId, name: clubName, plan: 'free' });
+      if (clubErr) { showError('club', tt('onboarding.setupFailedClub', 'Setup failed (club): ') + clubErr.message); return; }
 
       const { error: profErr } = await window.sb.from('profiles').insert({
-        id:        user.id,
-        club_id:   newClubId,
-        email:     user.email,
-        full_name: fullName || user.email,
-        role:      'admin',
+        id: user.id, club_id: newClubId, email: user.email,
+        full_name: fullName || user.email, role: 'admin',
       });
-      if (profErr) { alert(tt('onboarding.setupFailedProfile', 'Setup failed (profile): ') + profErr.message); return; }
+      if (profErr) { showError('club', tt('onboarding.setupFailedProfile', 'Setup failed (profile): ') + profErr.message); return; }
 
       window.resetSupabaseCache();
+      state.clubId = await window.getClubId();
+      if (!state.clubId) return;
     }
 
-    // Options come from the pack registry, so adding a sport never means editing this page.
-    function fillSportSelect(selected) {
-      const sel = document.getElementById('club-sport');
-      if (!sel || !window.CMSport) return;
-      const keys = window.CMSport.list().concat('other');
-      sel.innerHTML = keys.map(k => {
-        const pack = window.CMSport.get(k);
-        const label = tt('sport.' + k, (pack && pack.label) || k);
-        return `<option value="${k}"${k === selected ? ' selected' : ''}>${label}</option>`;
-      }).join('');
-    }
+    const { data: club } = await window.sb.from('clubs')
+      .select('id, name, country, sport, short_name, city, timezone, logo_url, trial_ends_at, onboarded_at')
+      .eq('id', state.clubId).single();
+    state.club = club || {};
 
-    window.fillCountrySelect(document.getElementById('club-country'));
+    // El corte anterior era "¿tiene club? → al Hub". Como el registro crea el club antes
+    // de llegar acá, eso rebotaba a todo el mundo y nadie llegaba a ver el asistente: ni
+    // categorías, ni escudo, ni invitaciones. El corte correcto es si ya se terminó.
+    if (state.club.onboarded_at) { window.location.replace('Hub.html'); return; }
 
-    // Load existing club data to pre-populate form
-    clubId = await window.getClubId();
-    if (clubId) {
-      const { data: club } = await window.sb
-        .from('clubs')
-        .select('name, country, sport')
-        .eq('id', clubId)
-        .single();
-      if (club?.name)    document.getElementById('club-name').value = club.name;
-      window.fillCountrySelect(document.getElementById('club-country'), club?.country || '');
-      fillSportSelect(club?.sport || 'football');
-    }
-    const { data: { user: _meUser } } = await window.sb.auth.getUser();
-    const _emailEl = document.getElementById('ob-account-email');
-    if (_emailEl && _meUser?.email) _emailEl.textContent = _meUser.email;
+    if (window.CMSport && window.CMSport.ready) { try { await window.CMSport.ready(); } catch (_e) {} }
+    await i18nReady();
+
+    // Identidad (viene del registro) — visible y editable, no repetida como formulario.
+    document.getElementById('club-name').value = state.club.name || '';
+    window.fillCountrySelect(document.getElementById('club-country'), state.club.country || '');
+    fillSportSelect(state.club.sport || (window.CMSport && window.CMSport.key()) || 'football');
+    document.getElementById('club-short').value = state.club.short_name || '';
+    document.getElementById('club-city').value  = state.club.city || '';
+    fillTzSelect(state.club.timezone);
+    paintIdentity();
+    if (state.club.logo_url) paintCrest(state.club.logo_url);
+
+    // Equipos ya existentes (por si el asistente se retoma a mitad de camino).
+    const { data: teams } = await window.sb.from('teams')
+      .select('name, is_primary').eq('club_id', state.clubId).is('archived_at', null);
+    state.existingTeams = (teams || []).map(t => t.name);
+    state.hasPrimaryTeam = (teams || []).some(t => t.is_primary);
+    // Los equipos que ya existen y no coinciden con ningún preset se muestran igual, para
+    // que el paso refleje la realidad del club en vez de una lista teórica.
+    state.cats = state.existingTeams.map(n => ({
+      id: 'existing_' + n, name: n, hint: tt('onboarding.alreadyCreated', 'Already created'),
+      icon: 'ti-users', primary: false, selected: true, custom: false, existing: true,
+    }));
+    buildCats();
+
+    addStaffRow('coach');
+    addStaffRow('physio');
+    paintTrial();
+
+    const { data: { user: meUser } } = await window.sb.auth.getUser();
+    const emailEl = document.getElementById('ob-account-email');
+    if (emailEl && meUser && meUser.email) emailEl.textContent = meUser.email;
+
+    goTo('club');
     window.applyClubTheme();
   }
   boot();
 
-  async function saveAndContinue() {
-    const btn = document.getElementById('obContinue');
-
-    const name    = document.getElementById('club-name').value.trim();
-    const country = document.getElementById('club-country').value;
-    const categories = [...document.querySelectorAll('.ob-cat.is-selected')]
-      .map(el => el.dataset.cat || el.querySelector('h5')?.textContent?.trim())
-      .filter(Boolean);
-
-    if (!name) {
-      alert(tt('onboarding.clubNameRequired', 'Club name is required.'));
-      document.getElementById('club-name').focus();
-      return;
-    }
-    if (categories.length === 0) {
-      alert(tt('onboarding.selectCategory', 'Select at least one category.'));
-      return;
-    }
-
-    btn.disabled = true;
-    const _label = document.getElementById('obContinueLabel');
-    if (_label) { _label.removeAttribute('data-i18n'); _label.textContent = tt('common.saving', 'Saving…'); }
-
-    try {
-      const clubId = await window.getClubId();
-      if (!clubId) throw new Error(tt('onboarding.noClub', 'No club found. Try signing out and back in.'));
-
-      // Save confirmed-existing columns: name + country + sport
-      const sport = document.getElementById('club-sport')?.value || 'football';
-      const { error } = await window.sb
-        .from('clubs')
-        .update({ name, country, sport })
-        .eq('id', clubId);
-      if (error) throw error;
-      // The sport is mirrored in localStorage for the first paint of every page; refresh it
-      // now so the very next screen already speaks the right vocabulary.
-      try { localStorage.setItem('cm_sport', sport); } catch (_) {}
-
-      // Guardar las categorías elegidas como teams (fuente única de categorías/planteles)
-      const { error: catErr } = await window.sb.from('teams')
-        .insert(categories.map(cat => ({ club_id: clubId, name: cat })));
-      if (catErr) throw catErr;
-
-      // Pendiente de migración de schema (columnas aún no existen en clubs):
-      //   short_name, city, timezone → ALTER TABLE clubs ADD COLUMN ...
-
-      window.location.href = 'Hub.html';
-    } catch (err) {
-      btn.disabled = false;
-      if (_label) _label.textContent = tt('onboarding.continueToStaff', 'Continue to staff');
-      alert(err.message || tt('onboarding.saveFailed', 'Save failed'));
-    }
+  /* ── Escudo ────────────────────────────────────────────────────────────── */
+  function paintCrest(url) {
+    const crest = document.getElementById('ob-crest');
+    if (!crest) return;
+    crest.style.background = 'transparent';
+    crest.innerHTML = `<img src="${esc(url)}" alt="${esc(tt('onboarding.clubCrest', 'Club crest'))}">
+      <div class="ob-crest-over"><i class="ti ti-camera"></i></div>`;
   }
 
-  // Light click handlers for category chips & plans
-  document.querySelectorAll('.ob-cat').forEach(el => {
-    el.addEventListener('click', () => el.classList.toggle('is-selected'));
-  });
-  document.querySelectorAll('.ob-plan').forEach(el => {
-    el.addEventListener('click', () => {
-      document.querySelectorAll('.ob-plan').forEach(p => p.classList.remove('is-selected'));
-      el.classList.add('is-selected');
-    });
-  });
-
   (function wireLogoUpload() {
-    const btn = document.getElementById('ob-logo-btn');
     const input = document.getElementById('ob-logo-input');
     const crest = document.getElementById('ob-crest');
-    if (!btn || !input) return;
-    btn.addEventListener('click', () => input.click());
+    if (!input || !crest) return;
+    crest.addEventListener('click', () => input.click());
     input.addEventListener('change', async () => {
       const file = input.files[0];
       if (!file) return;
-      if (file.size > 2 * 1024 * 1024) { alert(tt('onboarding.maxSize2mb', 'Max 2 MB.')); input.value = ''; return; }
-      const clubId = await window.getClubId();
-      if (!clubId) { alert(tt('onboarding.noClubYet', 'No club yet. Reload and try again.')); return; }
+      clearError('club');
+      if (!/^image\//.test(file.type)) { showError('club', tt('onboarding.imagesOnly', 'Images only.')); input.value = ''; return; }
+      if (file.size > 2 * 1024 * 1024) { showError('club', tt('onboarding.maxSize2mb', 'Max 2 MB.')); input.value = ''; return; }
+      const clubId = state.clubId || await window.getClubId();
+      if (!clubId) { showError('club', tt('onboarding.noClubYet', 'No club yet. Reload and try again.')); return; }
       // Shrink + cache forever: the logo renders in every page's sidebar, and the public
       // URL below is versioned with ?v= on each upload, so stale bytes are impossible.
       const small = await window.cmShrinkImage(file, { maxDim: 512, maxBytes: 120 * 1024 });
@@ -644,7 +1218,7 @@
       const path = `${clubId}/logo.${ext}`;
       const { error: upErr } = await window.sb.storage
         .from('club-logos').upload(path, small, { upsert: true, contentType: small.type, cacheControl: window.CM_CACHE_IMMUTABLE });
-      if (upErr) { alert(tt('onboarding.uploadFailed', 'Upload failed: ') + upErr.message); return; }
+      if (upErr) { showError('club', tt('onboarding.uploadFailed', 'Upload failed: ') + upErr.message); return; }
       const { data: { publicUrl } } = window.sb.storage.from('club-logos').getPublicUrl(path);
       // La ruta es siempre la misma, así que la URL pública no cambia entre
       // subidas y el CDN sigue devolviendo el logo anterior. Se versiona ANTES
@@ -652,11 +1226,10 @@
       const versionedUrl = publicUrl + '?v=' + Date.now();
       const { data: dbData, error: dbErr } = await window.sb
         .from('clubs').update({ logo_url: versionedUrl }).eq('id', clubId).select('id');
-      if (dbErr) { alert(tt('onboarding.saveFailedColon', 'Save failed: ') + dbErr.message); return; }
-      if (!dbData?.length) { alert(tt('onboarding.savePermDenied', 'Save failed: permission denied.')); return; }
-      const displayUrl = versionedUrl;
-      if (crest) { crest.style.background = 'transparent'; crest.innerHTML = `<img src="${displayUrl}" alt="${tt('onboarding.clubCrest','Club crest')}" style="width:100%;height:100%;object-fit:contain">`; }
-      if (typeof window.setClubLogo === 'function') window.setClubLogo(displayUrl);
+      if (dbErr) { showError('club', tt('onboarding.saveFailedColon', 'Save failed: ') + dbErr.message); return; }
+      if (!dbData || !dbData.length) { showError('club', tt('onboarding.savePermDenied', 'Save failed: permission denied.')); return; }
+      paintCrest(versionedUrl);
+      if (typeof window.setClubLogo === 'function') window.setClubLogo(versionedUrl);
       else if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
       input.value = '';
     });

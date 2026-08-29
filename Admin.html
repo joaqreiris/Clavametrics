@@ -1929,9 +1929,25 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
         <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="admin.club_name">Club name</label>
         <input id="catClubName" type="text" data-i18n-ph="admin.club_name_ph" placeholder="Club name…" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="admin.short_name">Short name</label>
+          <input id="catClubShort" type="text" maxlength="6" data-i18n-ph="admin.short_name_ph" placeholder="CLA" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="admin.city">City</label>
+          <input id="catClubCity" type="text" data-i18n-ph="admin.city_ph" placeholder="City…" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <!-- El país era texto libre acá y un <select> en el registro: la misma base
+           terminaba con "Brasil" y "Brazil" según por dónde se hubiera cargado. -->
       <div>
         <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="admin.country">Country</label>
-        <input id="catClubCountry" type="text" data-i18n-ph="admin.country_ph" placeholder="Country…" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+        <select id="catClubCountry" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box"></select>
+      </div>
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px" data-i18n="admin.timezone">Timezone</label>
+        <select id="catClubTz" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box"></select>
       </div>
       <div id="catSaveMsg" style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-success,#16A34A);display:none" data-i18n="common.saved">Saved.</div>
       <div style="border-top:1px solid var(--cm-border);margin:2px 0"></div>
@@ -2148,18 +2164,30 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
   function openAddCategoryModal() {
     const nameEl    = document.getElementById('catClubName');
     const countryEl = document.getElementById('catClubCountry');
+    const shortEl   = document.getElementById('catClubShort');
+    const cityEl    = document.getElementById('catClubCity');
+    const tzEl      = document.getElementById('catClubTz');
     const msgEl     = document.getElementById('catSaveMsg');
     const orgName   = document.getElementById('adOrgName');
     if (nameEl && orgName) nameEl.value = orgName.firstChild?.textContent?.trim() || '';
-    if (countryEl) countryEl.value = '';
     if (msgEl) msgEl.style.display = 'none';
-    // Fetch current club data
-    window.getClub && window.getClub().then(club => {
+    if (countryEl) window.fillCountrySelect(countryEl, '', tt('register.selectCountry', 'Select country'));
+    if (tzEl) fillAdminTzSelect(tzEl, '');
+    // getClub() no trae short_name/city/timezone (su select está acotado a lo que usa
+    // el primer pintado de cada página), así que acá se leen directamente.
+    (async () => {
+      const cid = await window.getClubId();
+      if (!cid) return;
+      _catClubId = cid;
+      const { data: club } = await window.sb.from('clubs')
+        .select('name, country, short_name, city, timezone').eq('id', cid).single();
       if (!club) return;
-      _catClubId = club.id;
-      if (nameEl) nameEl.value = club.name || '';
-      if (countryEl) countryEl.value = club.country || '';
-    });
+      if (nameEl)    nameEl.value  = club.name || '';
+      if (shortEl)   shortEl.value = club.short_name || '';
+      if (cityEl)    cityEl.value  = club.city || '';
+      if (countryEl) window.fillCountrySelect(countryEl, club.country || '', tt('register.selectCountry', 'Select country'));
+      if (tzEl)      fillAdminTzSelect(tzEl, club.timezone || '');
+    })();
     document.getElementById('addCategoryBackdrop').style.display = 'flex';
     renderClubCategories();
   }
@@ -2220,21 +2248,53 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     renderClubCategories();
   }
 
+  // Lista de zonas horarias del propio navegador, con el desfase UTC calculado. Se
+  // comparte en espíritu con la del onboarding: nada de listas escritas a mano.
+  function fillAdminTzSelect(sel, selected) {
+    if (!sel) return;
+    let list;
+    try { list = Intl.supportedValuesOf('timeZone').slice(); } catch (_e) { list = []; }
+    if (!list.length) list = ['UTC'];
+    let detected = '';
+    try { detected = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_e) {}
+    for (const extra of [detected, selected]) {
+      if (extra && !list.includes(extra)) list.unshift(extra);
+    }
+    const off = tz => {
+      try {
+        const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+        return ((p.find(x => x.type === 'timeZoneName') || {}).value || '').replace('GMT', 'UTC');
+      } catch (_e) { return ''; }
+    };
+    sel.innerHTML = `<option value="">${tt('admin.timezone_none', 'Not set')}</option>` +
+      list.sort().map(tz => `<option value="${tz}">${tz.replace(/_/g, ' ')} (${off(tz)})</option>`).join('');
+    sel.value = selected || '';
+  }
+
   async function saveClubSettings() {
     if (!_catClubId) return;
     const name    = document.getElementById('catClubName').value.trim();
-    const country = document.getElementById('catClubCountry').value.trim();
+    const country = document.getElementById('catClubCountry').value;
+    const short   = document.getElementById('catClubShort').value.trim().toUpperCase();
+    const city    = document.getElementById('catClubCity').value.trim();
+    const tz      = document.getElementById('catClubTz').value;
     if (!name) { document.getElementById('catClubName').focus(); return; }
     const { error } = await window.sb.from('clubs')
-      .update({ name, country: country || null })
+      .update({
+        name,
+        country:    country || null,
+        short_name: short || null,
+        city:       city || null,
+        timezone:   tz || null,
+      })
       .eq('id', _catClubId);
-    if (!error) {
-      const msgEl = document.getElementById('catSaveMsg');
-      if (msgEl) { msgEl.style.display = 'block'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
-      // Refresh org bar name
-      const nameEl = document.getElementById('adOrgName');
-      if (nameEl && nameEl.firstChild) nameEl.firstChild.textContent = name + ' ';
-    }
+    if (error) { alert(error.message); return; }
+    const msgEl = document.getElementById('catSaveMsg');
+    if (msgEl) { msgEl.style.display = 'block'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
+    // Refresh org bar name
+    const nameEl = document.getElementById('adOrgName');
+    if (nameEl && nameEl.firstChild) nameEl.firstChild.textContent = name + ' ';
+    if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
   }
 
   document.querySelectorAll('.club:not(.is-add)').forEach(c => c.addEventListener('click', () => {

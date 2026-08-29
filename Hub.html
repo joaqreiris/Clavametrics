@@ -2213,6 +2213,22 @@ function renderTasks(tasks, view = 'my') {
     }
   } catch (_e) { /* fail-open — don't block the Hub on a transient error */ }
 
+  // Onboarding del CLUB (distinto del personal de arriba): si el asistente quedó a
+  // mitad de camino, el admin vuelve a él en vez de entrar a un espacio sin categorías
+  // ni escudo. Sólo aplica a admin/owner — un invitado no configura el club — y sólo
+  // ante un onboarded_at explícitamente nulo, para no encerrar a nadie por un error
+  // pasajero. Los clubes anteriores a esta columna van marcados por la migración.
+  try {
+    const _clubRole = (profile?.role || profile?.club_role || '').toLowerCase();
+    if (_clubRole === 'admin' || _clubRole === 'owner') {
+      const { data: _obClub, error: _obErr } = await window.sb
+        .from('clubs').select('onboarded_at').eq('id', clubId).single();
+      if (!_obErr && _obClub && _obClub.onboarded_at === null) {
+        window.location.replace('Onboarding.html'); return;
+      }
+    }
+  } catch (_e) { /* fail-open */ }
+
   // Populate sidebar user
   function _renderGreetMsg() {
     const gm = document.getElementById('greetMsg');
