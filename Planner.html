@@ -373,20 +373,26 @@
   /* ── Playing surface ───────────────────────────────────────────────────────
      The ground is not the same question as the lines: basketball and futsal are
      played on a wooden floor, so showing them mown grass reads as the wrong sport
-     before you even look at the markings. data-surface comes from the sport pack
-     (assets/sport-packs.js → field.surface), set on .pl-field by plRenderField.
+     before you even look at the markings.
+
+     data-surface lives on <html>, stamped SYNCHRONOUSLY by assets/sport.js before
+     this element is even parsed. Putting it on .pl-field instead meant the page
+     painted grass and swapped to parquet a beat later, in front of the user.
+     plRenderField re-stamps the same attribute when a saved drill carries a pitch
+     that is not the club's own.
+
      Maple parquet: warm boards running lengthwise, with dark lines on top —
      white markings would wash out against light wood. */
-  .pl-field[data-surface="wood"] {
+  :root[data-surface="wood"] .pl-field {
     --pf-grass:#D9AC6A; --pf-grass-2:#D2A25F; --pf-line:rgba(38,24,10,0.80);
     --pf-seam:rgba(92,58,22,0.16); --pf-seam-gap:26px;
   }
-  [data-theme="dark"] .pl-field[data-surface="wood"] {
+  :root[data-theme="dark"][data-surface="wood"] .pl-field {
     --pf-grass:#7A5430; --pf-grass-2:#734E2C; --pf-line:rgba(255,255,255,0.82);
     --pf-seam:rgba(0,0,0,0.22); --pf-seam-gap:26px;
   }
   /* Unmodelled sport: a neutral slab, no grass and no boards. */
-  .pl-field[data-surface="neutral"] {
+  :root[data-surface="neutral"] .pl-field {
     --pf-grass:#8A8F86; --pf-grass-2:#868B82; --pf-line:rgba(255,255,255,0.90);
   }
 
@@ -1688,11 +1694,10 @@
   function plRenderField(type, variant, orient) {
     const r = CMField.renderField(document.getElementById('plPitch'), type, variant, orient);
     _plField = { type:r.sport, variant:r.variant, orient:r.orient };
-    // The CSS paints the ground off this: grass for football, parquet for basketball.
-    // It lives on .pl-field (not on the pitch host) because the image overlay is its
-    // sibling and needs to inherit the same colours.
-    const fieldEl = document.querySelector('.pl-field');
-    if (fieldEl) fieldEl.setAttribute('data-surface', plSurfaceFor(r.sport));
+    // Point the surface at whatever pitch actually got rendered. Same attribute
+    // sport.js stamps before the first frame, so there is one source of truth and no
+    // specificity fight between the club's sport and a saved drill's own pitch.
+    document.documentElement.setAttribute('data-surface', plSurfaceFor(r.sport));
     plSyncFieldSelector();
     return r;
   }

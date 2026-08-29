@@ -56,6 +56,27 @@
     try { localStorage.setItem(LS_KEY, k); } catch (_e) {}
   }
 
+  /* ---- paint the surface before the first frame ---------------------------
+     The drill board's ground (grass vs parquet) is a CSS decision, but the sport
+     only arrives with the JS. Without this the page paints a football pitch and
+     swaps to a basketball floor a moment later, in front of the user — the same
+     flash boot-brand.js removes for the club crest and accent.
+
+     This script is synchronous and runs before .pl-field is even parsed, so
+     stamping <html> here means the very first paint is already right. It is the
+     ONE source of truth for the surface: plRenderField updates the same attribute
+     when a saved drill carries a different pitch. */
+  function stampSurface(sportKey) {
+    try {
+      const pack = PACKS[sportKey];
+      const surface = (pack && pack.field && pack.field.surface) || 'grass';
+      const el = document.documentElement;
+      el.setAttribute('data-sport', sportKey);
+      el.setAttribute('data-surface', surface);
+    } catch (_e) {}
+  }
+  stampSurface(_key);
+
   /* ---- resolve from the club (once per page load) -------------------------- */
   function resolve() {
     if (_promise) return _promise;
@@ -72,6 +93,7 @@
         if (next !== _key) {
           _key = next;
           cacheKey(next);
+          stampSurface(next);
           try {
             window.dispatchEvent(new CustomEvent('cm:sport-change', { detail: { sport: next } }));
           } catch (_e) {}
@@ -138,6 +160,10 @@
 
     /** True once the DB answered — i.e. key() is no longer just the cached guess. */
     isConfirmed() { return _confirmed; },
+
+    /** Stamp <html> with a surface material. The drill board calls this when it renders
+     *  a pitch that is not the club's own (an old drill saved on another surface). */
+    stampSurface(sportKey) { stampSurface(sportKey || _key); },
 
     /** Force a re-read (after an admin changes the club's sport). */
     refresh() { _promise = null; _confirmed = false; return resolve(); },

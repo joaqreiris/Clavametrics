@@ -14,6 +14,11 @@ let PACKS, SUPPORTED;
 beforeAll(() => {
   globalThis.window = { addEventListener() {}, document: { readyState: 'complete' } };
   globalThis.document = globalThis.window.document;
+  globalThis.document.documentElement = {
+    _a: {},
+    setAttribute(k, v) { this._a[k] = v; },
+    getAttribute(k) { return this._a[k] ?? null; },
+  };
   globalThis.localStorage = {
     _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = v; },
   };
@@ -184,6 +189,7 @@ describe('CMSport.word · sport vocabulary', () => {
   const useSport = (key) => {
     localStorage.setItem('cm_sport', key);
     delete window.CMSport;
+    document.documentElement._a = {};
     load('assets/sport.js');
   };
 
@@ -280,5 +286,56 @@ describe('positions · switching sport', () => {
     useSport('quidditch');
     expect(window.CMSport.key()).toBe('football');
     expect(window.cmPositionBasic('LB')).toBe('FB');
+  });
+});
+
+describe('CMSport · surface is decided before the first frame', () => {
+  const useSport = (key) => {
+    localStorage.setItem('cm_sport', key);
+    delete window.CMSport;
+    document.documentElement._a = {};
+    load('assets/sport.js');
+  };
+
+  // The drill board paints its ground from CSS, but the sport only arrives with the JS.
+  // sport.js stamps <html> as it is parsed — before .pl-field even exists — so the first
+  // paint is already right. Without it the page showed grass and swapped to parquet a
+  // beat later, in front of the user.
+  it('stamps the sport and its surface on <html> at load time', () => {
+    useSport('basketball');
+    expect(document.documentElement.getAttribute('data-sport')).toBe('basketball');
+    expect(document.documentElement.getAttribute('data-surface')).toBe('wood');
+  });
+
+  it('grass sports stay on grass', () => {
+    ['football', 'rugby', 'hockey'].forEach(k => {
+      useSport(k);
+      expect(document.documentElement.getAttribute('data-surface'), k).toBe('grass');
+    });
+  });
+
+  it('futsal is played indoors on boards too', () => {
+    useSport('futsal');
+    expect(document.documentElement.getAttribute('data-surface')).toBe('wood');
+  });
+
+  it('an unknown sport falls back to football, and so does its surface', () => {
+    useSport('quidditch');
+    expect(document.documentElement.getAttribute('data-sport')).toBe('football');
+    expect(document.documentElement.getAttribute('data-surface')).toBe('grass');
+  });
+
+  it('can be re-stamped for a drill saved on another pitch', () => {
+    useSport('basketball');
+    window.CMSport.stampSurface('football');
+    expect(document.documentElement.getAttribute('data-surface')).toBe('grass');
+    // …and the club's own sport is unchanged underneath.
+    expect(window.CMSport.key()).toBe('basketball');
+  });
+
+  it('every pack declares a surface the stylesheet knows how to paint', () => {
+    const KNOWN = ['grass', 'wood', 'neutral'];
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      expect(KNOWN, `${sport}`).toContain(p.field.surface));
   });
 });
