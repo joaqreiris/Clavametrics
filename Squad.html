@@ -1266,7 +1266,7 @@ function renderTable() {
       const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
       const initials = (((p.first_name||'')[0] || '') + ((p.last_name||'')[0] || '')).toUpperCase() || fullName.slice(0,2).toUpperCase();
       const avInner = p.photo_url
-        ? `<img src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        ? `<img data-cm-photo-src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
         : esc(initials);
       const num     = p.number || '—';
       const age     = calcAge(p.date_of_birth);
@@ -1837,7 +1837,7 @@ async function reloadPlayers() {
     const preview = document.getElementById('sqF_photoPreview');
     if (preview) {
       if (player?.photo_url) {
-        preview.innerHTML = `<img src="${esc(player.photo_url)}" style="width:100%;height:100%;object-fit:cover" alt="">`;
+        preview.innerHTML = `<img data-cm-photo-src="${esc(player.photo_url)}" style="width:100%;height:100%;object-fit:cover" alt="">`;
       } else {
         preview.textContent = (((player?.first_name||'')[0]||'') + ((player?.last_name||'')[0]||'')).toUpperCase() || '?';
       }
@@ -1981,13 +1981,15 @@ async function reloadPlayers() {
     async function uploadPhoto(playerId, clubId) {
       if (!photoFile) return null;
       const fileToUpload = await compressImage(photoFile, { maxDim: 1000, maxBytes: 2 * 1024 * 1024 });
-      const path = `${clubId}/${playerId}.jpg`;
+      // Cada foto va a un path NUEVO y se borra la anterior. El bucket es privado y las URLs
+      // firmadas se cachean una semana: si se sobrescribiera el mismo path, el resto del staff
+      // seguiría viendo la cara vieja hasta que venciera su cache.
+      const path = `${clubId}/${playerId}-${Date.now().toString(36)}.jpg`;
       const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, fileToUpload, { upsert: true, contentType: 'image/jpeg', cacheControl: window.CM_CACHE_IMMUTABLE });
       if (upErr) { console.error('Photo upload failed:', upErr); showToast(tt('squad.photo_upload_failed','Photo upload failed: ' + upErr.message, { msg: upErr.message })); return null; }
-      // Faces show up on nearly every screen, so they're cached hard. The path is canonical
-      // per player, so version the URL — otherwise a new photo would never replace the old.
-      const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
-      return urlData?.publicUrl ? urlData.publicUrl + '?v=' + Date.now() : null;
+      const prev = window.cmPhotoPath ? window.cmPhotoPath((_allPlayers.find(p => p.id === playerId) || {}).photo_url) : null;
+      if (prev && prev !== path) { try { await window.sb.storage.from('player-photos').remove([prev]); } catch (_) {} }
+      return path;   // se guarda el path; se firma al mostrarlo (ver supabase-init.js)
     }
 
     let error, savedPlayerId, savedClubId;
@@ -2124,7 +2126,7 @@ async function reloadPlayers() {
       const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
       const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
       const cardAvInner = p.photo_url
-        ? `<img src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        ? `<img data-cm-photo-src="${esc(p.photo_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
         : esc(initials);
       const pos = (p.position||'').toUpperCase();
       const pcfg = POS_CFG[pos] || { css:'', pill: pos };

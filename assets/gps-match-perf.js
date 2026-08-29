@@ -387,7 +387,7 @@
     const full  = `${p.first_name || ''} ${p.last_name || ''}`.trim();
     const ini   = (((p.first_name || '')[0] || '') + ((p.last_name || '')[0] || '')).toUpperCase();
     const photo = p.photo_url
-      ? `<img src="${esc(p.photo_url)}" alt="${esc(full)}">`
+      ? `<img data-cm-photo-src="${esc(p.photo_url)}" alt="${esc(full)}">`
       : `<span class="ini">${esc(ini || '?')}</span>`;
     const age = p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth).getTime()) / 31557600000) : null;
     const bio = [age != null ? tt('gps_analysis.mp_player_age', '{n} yrs', { n: age }) : null, p.nationality || null]

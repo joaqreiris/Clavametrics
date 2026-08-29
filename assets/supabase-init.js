@@ -471,14 +471,28 @@
     } catch (_e) { return ''; }
   };
 
-  // ── Player photos (players.photo_url → public URL in the 'player-photos' bucket) ──────────
-  // Unlike staff avatars (profile-avatars, signed), player photos are plain public URLs. We keep a
-  // per-club id→url cache so any page can paint a face over its existing initials avatar without
-  // having to change its own DB query — just prime the cache once (cmLoadPlayerPhotos) in boot.
-  const _cmPlayerPhotoCache = new Map();      // String(playerId) → url ('' = known, no photo)
+  // ── Player photos ('player-photos' bucket, PRIVATE → signed URLs) ─────────────────────────
+  // The bucket used to be public, with a read policy of "anyone, any club". A face is personal
+  // data (and in youth squads, a minor's), so it's now private and read is scoped to the club.
+  //
+  // players.photo_url holds one of two things, and both must resolve: the public URL saved
+  // while the bucket was public (sometimes with a ?v= cache-buster), or the bare storage path,
+  // which is what gets saved now. cmLoadPlayerPhotos signs them in one batch and caches the
+  // SIGNED url by player id, so every existing helper keeps working untouched.
+  const PLAYER_BUCKET = 'player-photos';
+  const _cmPlayerPhotoCache = new Map();      // String(playerId) → signed url ('' = known, no photo)
   let _cmPlayerPhotoClub = null;
   let _cmPlayerPhotoPromise = null;
-  // Load every player's photo_url for a club once and cache it by id. Safe to call repeatedly.
+  // Storage path out of whatever is stored. null when it isn't ours (an external link).
+  window.cmPhotoPath = function (u) {
+    const s = String(u == null ? '' : u).trim();
+    if (!s) return null;
+    const m = s.match(/\/storage\/v1\/object\/(?:public|sign)\/player-photos\/([^?#]+)/);
+    if (m) return decodeURIComponent(m[1]);
+    if (!/^[a-z]+:/i.test(s) && /^[0-9a-f-]{36}\//i.test(s)) return s.split('?')[0];
+    return null;
+  };
+  // Load every player's photo for a club once and cache the signed URL by id. Safe to repeat.
   window.cmLoadPlayerPhotos = function (clubId) {
     try {
       if (!clubId || !window.sb) return Promise.resolve(_cmPlayerPhotoCache);
@@ -486,8 +500,17 @@
       _cmPlayerPhotoClub = clubId;
       _cmPlayerPhotoPromise = window.sb.from('players').select('id,photo_url').eq('club_id', clubId)
         .then(({ data }) => {
-          (data || []).forEach(r => { if (r && r.id != null) _cmPlayerPhotoCache.set(String(r.id), (r.photo_url || '').trim()); });
-          return _cmPlayerPhotoCache;
+          const rows = (data || []).filter(r => r && r.id != null);
+          const paths = rows.map(r => window.cmPhotoPath(r.photo_url)).filter(Boolean);
+          return window.cmSignedUrls(PLAYER_BUCKET, paths).then(signed => {
+            rows.forEach(r => {
+              const raw = (r.photo_url || '').trim();
+              const p = window.cmPhotoPath(raw);
+              // An external link (not in our bucket) is kept as-is; ours becomes the signed URL.
+              _cmPlayerPhotoCache.set(String(r.id), p ? (signed[p] || '') : (/^(https?:|data:)/i.test(raw) ? raw : ''));
+            });
+            return _cmPlayerPhotoCache;
+          });
         })
         .catch(() => _cmPlayerPhotoCache);
       return _cmPlayerPhotoPromise;
@@ -498,12 +521,30 @@
     try {
       if (x && typeof x === 'object') {
         const u = (x.photo_url || x.photoUrl || '').trim();
+        const p = window.cmPhotoPath(u);
+        if (p) {                                   // ours → signed, or nothing until it's signed
+          const hit = window.cmSignedUrlCached(PLAYER_BUCKET, p);
+          if (hit) return hit;
+          window.cmSignedUrls(PLAYER_BUCKET, [p]); // fire-and-forget for the next render
+          if (x.id != null && _cmPlayerPhotoCache.has(String(x.id))) return _cmPlayerPhotoCache.get(String(x.id)) || '';
+          return '';
+        }
         if (/^(https?:|data:|blob:)/i.test(u)) return u;
         if (x.id != null && _cmPlayerPhotoCache.has(String(x.id))) return _cmPlayerPhotoCache.get(String(x.id)) || '';
         return '';
       }
       if (x != null) return _cmPlayerPhotoCache.get(String(x)) || '';
       return '';
+    } catch (_e) { return ''; }
+  };
+  // Async twin: guarantees the URL instead of returning '' while it's still being signed. Use
+  // where there is no re-render to fall back on — PDF export, canvas, one-shot DOM writes.
+  window.cmPlayerPhotoUrlAsync = async function (x) {
+    try {
+      const raw = (x && typeof x === 'object') ? (x.photo_url || x.photoUrl || '') : x;
+      const p = window.cmPhotoPath(raw);
+      if (p) return (await window.cmSignedUrl(PLAYER_BUCKET, p)) || '';
+      return window.cmPlayerPhotoUrl(x);
     } catch (_e) { return ''; }
   };
   // Inline CSS declarations that paint the player's photo as a cover background over an existing
@@ -544,10 +585,42 @@
       probe.src = url;
     } catch (_e) { }
   }
+  // Second entry point, for pages that already hold the player row and painted photo_url
+  // straight into an <img src>. Now the bucket is private that string isn't a usable URL,
+  // so they emit `data-cm-photo-src="<photo_url>"` (no src) and this fills it in once the
+  // signature lands. Works on an <img> (sets src) or on any element (background-image).
+  window.cmPaintPhotoSrcs = async function (root) {
+    try {
+      const els = (root || document).querySelectorAll('[data-cm-photo-src]:not([data-cm-photo-src-done])');
+      if (!els.length) return;
+      const need = [];
+      els.forEach(el => {
+        const p = window.cmPhotoPath(el.getAttribute('data-cm-photo-src'));
+        if (p && !window.cmSignedUrlCached(PLAYER_BUCKET, p)) need.push(p);
+      });
+      if (need.length) await window.cmSignedUrls(PLAYER_BUCKET, need);
+      els.forEach(el => {
+        const ref = el.getAttribute('data-cm-photo-src') || '';
+        const p = window.cmPhotoPath(ref);
+        const url = p ? window.cmSignedUrlCached(PLAYER_BUCKET, p)
+                      : (/^(https?:|data:|blob:)/i.test(ref) ? ref : '');
+        if (!url) return;                                   // retried on the next pass
+        el.setAttribute('data-cm-photo-src-done', '1');
+        if (el.tagName === 'IMG') el.src = url;
+        else {
+          el.style.backgroundImage = `url('${String(url).replace(/'/g, "%27")}')`;
+          el.style.backgroundSize = 'cover';
+          el.style.backgroundPosition = 'center center';
+          el.style.backgroundRepeat = 'no-repeat';
+        }
+      });
+    } catch (_e) { }
+  };
   // Paint every data-cm-photo element under `root` (default: whole document).
   window.cmPaintPlayerPhotos = function (root) {
     try {
       (root || document).querySelectorAll('[data-cm-photo]').forEach(_cmPaintPhotoEl);
+      window.cmPaintPhotoSrcs(root);
     } catch (_e) { }
   };
   let _cmPhotoObs = null, _cmPhotoObsQueued = false;
@@ -570,6 +643,15 @@
     p.then(function () { _cmEnsurePhotoObserver(); window.cmPaintPlayerPhotos(document); }).catch(function () { });
     return p;
   };
+  // The observer used to start only via cmLoadPlayerPhotos, but the pages that render
+  // photo_url themselves (Player, Dossier, Squad, Clinical Records…) never call it — and with
+  // a private bucket their faces need signing too. Start it on its own so data-cm-photo-src
+  // works everywhere. Cheap: it's a querySelectorAll on one uncommon attribute.
+  (function _cmPhotoBoot() {
+    if (!document.body) { document.addEventListener('DOMContentLoaded', _cmPhotoBoot, { once: true }); return; }
+    _cmEnsurePhotoObserver();
+    window.cmPaintPhotoSrcs(document);
+  })();
 
   let _superAdmin = null;
   window.isSuperAdmin = function () {

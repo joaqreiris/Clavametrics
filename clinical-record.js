@@ -2068,10 +2068,10 @@ function getBodyCoords(area) {
       const photo = document.getElementById('cr-photo');
       if (photo) {
         if (player.photo_url) {
-          photo.style.backgroundImage = "url('" + esc(player.photo_url) + "')";
-          photo.style.backgroundSize = 'cover';
-          photo.style.backgroundPosition = 'center';
+          // Bucket privado: se pinta cuando llega la firma (cmPaintPhotoSrcs).
+          photo.setAttribute('data-cm-photo-src', player.photo_url);
           photo.textContent = '';
+          window.cmPaintPhotoSrcs && window.cmPaintPhotoSrcs(photo.parentNode || document);
         } else {
           photo.textContent = (((player.first_name || '').trim()[0] || '') + ((player.last_name || '').trim()[0] || '')) || '—';
         }

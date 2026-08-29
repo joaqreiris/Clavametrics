@@ -444,7 +444,8 @@
     tb.innerHTML = rows.map(p => {
       const s = STATUS[p.st] || STATUS.unavailable;
       const posColor = POS_COLOR[p.pos] || 'var(--cm-fg-muted)';
-      const photoStyle = p.photo ? ' style="background-image:url(\'' + esc(p.photo) + '\')"' : '';
+      // Bucket privado: el painter global rellena el background cuando llega la firma.
+      const photoStyle = p.photo ? ' data-cm-photo-src="' + esc(p.photo) + '"' : '';
       const photoInner = p.photo ? '' : esc(p.init);
       const af = p.avail == null ? '' : p.avail >= 85 ? '' : p.avail >= 60 ? 'warn' : 'bad';
       const availCell = (p.avail == null)

@@ -898,7 +898,9 @@
         st.textContent = tt('evaluations.report_no_data','This player has no recorded tests yet.');
         return;
       }
-      var photoData = await evrPhotoData(data.player.photo_url);
+      // Bucket privado: hay que firmar antes de bajarla a base64 para el PDF. Sin re-render
+      // que salve la situación acá, así que se espera la firma en vez de leer el cache.
+      var photoData = await evrPhotoData(await window.cmPlayerPhotoUrlAsync(data.player));
       host.innerHTML = evrSheetHtml(data.player, sections, photoData);
       // reveal off-screen so html2canvas can measure and capture it
       host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';

@@ -5548,9 +5548,18 @@
     _avatarCacheClub = _clubId;
     _avatarCache = window.cmFetchAll(() => window.sb.from('players')
       .select('id, photo_url').eq('club_id', _clubId).not('photo_url', 'is', null), { label: 'scatter.avatars' })
-      .then(rows => {
+      .then(async rows => {
+        // Bucket privado: se firma en lote antes de que las caras se dibujen en el canvas.
         const m = new Map();
-        (rows || []).forEach(p => { if (p.id && p.photo_url) m.set(p.id, p.photo_url); });
+        const pathOf = window.cmPhotoPath || (() => null);
+        const paths = (rows || []).map(p => pathOf(p.photo_url)).filter(Boolean);
+        const signed = (paths.length && window.cmSignedUrls) ? await window.cmSignedUrls('player-photos', paths) : {};
+        (rows || []).forEach(p => {
+          if (!p.id || !p.photo_url) return;
+          const path = pathOf(p.photo_url);
+          const url = path ? signed[path] : p.photo_url;
+          if (url) m.set(p.id, url);
+        });
         return m;
       }, () => new Map());
     return _avatarCache;
