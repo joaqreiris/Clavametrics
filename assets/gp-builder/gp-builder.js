@@ -1816,6 +1816,13 @@
           ln.showValue = !ln.showValue;
           renderRefLines(); renderCard(); return;
         }
+        // "una línea por grupo del eje" toggle (per line): la media se abre en una por microciclo
+        // (o por el 2º nivel que tenga el eje) en vez de una sola que los mezcla.
+        if (e.target.closest('[data-rl-split]')) {
+          const ln = S.referenceLines?.[idx]; if (!ln) return;
+          ln.split = !ln.split;
+          renderRefLines(); renderCard(); return;
+        }
         // line ↔ band: changes which controls the row shows (value2 / fill) → rebuild the list.
         const typeBtn = e.target.closest('[data-rl-type]');
         if (typeBtn) {
@@ -2174,6 +2181,9 @@
     // the stat over that metric and draws it on the metric's own axis (bar vs combo-line/y1).
     const metricInfos = (!isScatter && S && S.type === 'bars') ? _metricInfos(S) : [];
     const showMetricSel = metricInfos.length >= 2;
+    // Partir la media por grupo solo tiene sentido con el eje en 2 niveles (jugador × microciclo):
+    // el 2º nivel es el que define los grupos.
+    const canSplit = !isScatter && (S?.dimensions || []).length >= 2;
     const primMetId = _primaryMetricId(metricInfos);
     const metricSel = (ln) => {
       if (!showMetricSel) return '';
@@ -2222,6 +2232,7 @@
         ${band ? slot(ln.value2, ln.sdN2, ln.sdDir2, 'rl-val2mode', 'rl-value2', 'rl-sdn2', _tt('gps_analysis.builder_ref_band_to', 'To')) : ''}
         <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 88px;${inputCss}">
         <button type="button" data-rl-showval title="${esc(_tt('gps_analysis.builder_ref_show_value', 'Show value in label'))}" style="flex:0 0 auto;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:700 11px/1 var(--cm-font-sans);background:${ln.showValue ? 'var(--cm-accent,#15803D)' : 'var(--cm-bg)'};color:${ln.showValue ? '#fff' : 'var(--cm-fg-muted)'}">#</button>
+        ${canSplit ? `<button type="button" data-rl-split title="${esc(_tt('gps_analysis.builder_ref_split', 'One line per group of the axis (microcycle, date…), with the % change between them'))}" style="flex:0 0 auto;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;background:${ln.split ? 'var(--cm-accent,#15803D)' : 'var(--cm-bg)'};color:${ln.split ? '#fff' : 'var(--cm-fg-muted)'}"><i class="ti ti-arrows-split-2" style="font-size:13px;vertical-align:-2px"></i></button>` : ''}
         <div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-style="solid"  class="${ln.style !== 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_solid', 'Solid'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-style="dashed" class="${ln.style === 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_dashed', 'Dashed'))}"><i class="ti ti-line-dashed"></i></button>
@@ -3855,6 +3866,37 @@
   // Alto reservado para el piso superior del eje jerárquico (línea + texto).
   const _BAR_TIER_H = 26;   // piso inferior (barras verticales): alto de la tira de grupo
   const _BAR_TIER_W = 26;   // tira izquierda (barras horizontales): ancho de la tira de grupo
+  const _BAR_TIER_H_MAX = 96;   // techo del alto reservado con nombres rotados
+  const _BAR_TIER_FONT = '600 10px Geist, Inter, sans-serif';
+
+  // ¿Los nombres del piso de grupo (jugador, posición…) entran DERECHOS bajo su corchete?
+  // Con 29 jugadores el ancho por grupo es ~50 px y todos terminaban en «TAKAR…»: ilegibles.
+  // Cuando no entran se dibujan inclinados 45° y se leen completos, igual que ya hacen los ticks
+  // de la escala. Devuelve { rot, h }: rot = radianes (0 = derecho) y h = alto a reservar.
+  // Se llama en afterFit (para reservar el alto) y en el draw (para dibujar) con el MISMO ctx →
+  // una sola verdad, sin que el texto se salga del hueco que se le guardó.
+  function _barTierFit(ctx, dims, stepPx) {
+    const out = { rot: 0, h: _BAR_TIER_H };
+    if (!ctx || !Array.isArray(dims) || !dims.length) return out;
+    // Ancho disponible por grupo = paso × cuántas categorías consecutivas comparte (2 con MC 03/04).
+    let tightest = 0, widestPx = 0, run = 1;
+    const labelAt = i => (dims[i] && dims[i][0] != null) ? String(dims[i][0]) : '';
+    ctx.save(); ctx.font = _BAR_TIER_FONT;
+    for (let i = 0; i < dims.length; i++) {
+      const isLast = i === dims.length - 1;
+      if (!isLast && labelAt(i + 1) === labelAt(i)) { run++; continue; }
+      const w = ctx.measureText(labelAt(i)).width;
+      if (w / run > tightest) tightest = w / run;    // el grupo más apretado decide si hay que rotar
+      if (w > widestPx) widestPx = w;                // el texto más largo decide cuánto alto reservar
+      run = 1;
+    }
+    if (tightest > Math.max(0, (stepPx || 0) - 6)) {
+      out.rot = -Math.PI / 4;
+      out.h = Math.min(_BAR_TIER_H_MAX, Math.round(widestPx * Math.SQRT1_2) + 18);
+    }
+    ctx.restore();
+    return out;
+  }
   /** Trunca `txt` con «…» para que entre en maxW px con la fuente actual de ctx. */
   function _ellipsize(ctx, txt, maxW) {
     const s = String(txt == null ? '' : txt);
@@ -3915,14 +3957,18 @@
       const step = n > 1 ? Math.abs(px(1) - px(0)) : span;
       const half = (step || 0) / 2;
       ctx.save();
-      ctx.font = '600 10px Geist, Inter, sans-serif';
+      ctx.font = _BAR_TIER_FONT;    // la MISMA que midió _barTierFit al reservar el alto
       ctx.strokeStyle = 'rgba(148,163,184,0.55)';
       ctx.fillStyle = '#6B7280';
       ctx.lineWidth = 1;
       if (!horizontal) {
         // ── Piso INFERIOR (barras verticales): corchete horizontal + label centrado ──
-        const yLine = sc.bottom - _BAR_TIER_H + 9;
-        const yText = sc.bottom - 5;
+        // El alto de la tira lo fijó afterFit (_barTierFit): 26 px con los nombres derechos, más
+        // si hubo que inclinarlos porque no entraban. Se lee de la escala para dibujar en el
+        // MISMO hueco que se reservó.
+        const tier  = sc.$gpTier || { rot: 0, h: _BAR_TIER_H };
+        const yLine = sc.bottom - tier.h + 9;
+        const yText = tier.rot ? yLine + 14 : sc.bottom - 5;
         ctx.textBaseline = 'alphabetic';
         for (const g of groups) {
           const L = Math.max(chartArea.left,  px(g.start) - half + 2);
@@ -3933,10 +3979,23 @@
           ctx.stroke();
           // Región clickeable (zoom): vive DEBAJO del chartArea → nunca se solapa con las barras.
           chart.$gpGroupHits.push({ x0: L, x1: R, y0: yLine - 2, y1: sc.bottom, label: g.label });
-          const maxW = R - L - 6;                            // labels largos → ellipsis, sin pisar al vecino
-          if (maxW < 12) continue;
-          ctx.textAlign = 'center';
-          ctx.fillText(_ellipsize(ctx, g.label, maxW), (L + R) / 2, yText);
+          if (tier.rot) {
+            // Inclinado 45°: el texto arranca en el centro del corchete y baja hacia la izquierda,
+            // así cada nombre pasa por debajo de sus propias barras. El largo lo limita el alto
+            // reservado (diagonal), no el ancho del grupo → entran completos.
+            const maxTxt = (tier.h - 18) * Math.SQRT2;
+            ctx.save();
+            ctx.translate((L + R) / 2, yText);
+            ctx.rotate(tier.rot);
+            ctx.textAlign = 'right';
+            ctx.fillText(_ellipsize(ctx, g.label, maxTxt), 0, 0);
+            ctx.restore();
+          } else {
+            const maxW = R - L - 6;                          // labels largos → ellipsis, sin pisar al vecino
+            if (maxW < 12) continue;
+            ctx.textAlign = 'center';
+            ctx.fillText(_ellipsize(ctx, g.label, maxW), (L + R) / 2, yText);
+          }
         }
       } else {
         // ── Tira IZQUIERDA (barras horizontales): corchete vertical + label rotado ──
@@ -4123,6 +4182,22 @@
     return null;
   }
 
+  // Valores partidos por el 2º nivel del eje (dims[1]: microciclo, fecha…), en ORDEN de aparición.
+  // Alimenta las líneas de referencia «por grupo»: en vez de una media que mezcla MC 03 y MC 04,
+  // una por microciclo — y la distancia entre las dos ES la variación media del plantel.
+  // Excluye no-team igual que la media global (Modelo B ya recortó los valores).
+  function _valsByGroup(points) {
+    const m = new Map();
+    (points || []).forEach(p => {
+      if (p.y == null || p._nonTeam || !Array.isArray(p.dims) || p.dims.length < 2) return;
+      const g = String(p.dims[1] ?? '');
+      if (!g) return;
+      if (!m.has(g)) m.set(g, []);
+      m.get(g).push(Number(p.y));
+    });
+    return m;
+  }
+
   // Shared sanitizer for referenceLines (bars + scatter). Each item → a normalized LINE or BAND with
   // RESOLVED numeric value/value2: a fixed number stays as-is; an auto token is computed here over the
   // VISIBLE data via valuesFor(item) — so option B (axis max) sees the computed value and the line
@@ -4143,6 +4218,8 @@
         value:  resolve(r.value,  r.sdN,  r.sdDir),
         value2: type === 'band' ? resolve(r.value2, r.sdN2, r.sdDir2) : null,
         fill: r.fill === 'bordered' ? 'bordered' : 'solid',
+        grpKey: r.__grpName != null ? r.__grpName : null,   // línea «por grupo» (ver _splitRefByGroup)
+        suffix: r.suffix || '',
         label: r.label || '', color: r.color || '#DC2626',
         style: r.style === 'dashed' ? 'dashed' : 'solid',
         opacity: r.opacity == null ? 1 : Math.max(0, Math.min(1, Number(r.opacity))),
@@ -4155,11 +4232,14 @@
   // per-line "show value" toggle is on ("Average (847)", or "110–130" for a band).
   function _refLabelText(ln) {
     const base = (ln.label != null && String(ln.label).trim()) ? String(ln.label).trim() : '';
-    if (!ln.showValue) return base;
+    // `suffix` va SIEMPRE al final (después del número): lo usa el Δ% entre líneas por grupo,
+    // que se lee como cierre — "AVG MC 04 (280) +13%".
+    const tail = ln.suffix ? ' ' + ln.suffix : '';
+    if (!ln.showValue) return base + tail;
     const r1 = v => fmt(Math.round(Number(v) * 10) / 10);
     const isBand = ln.type === 'band' && Number.isFinite(Number(ln.value2));
     const num = isBand ? `${r1(ln.value)}–${r1(ln.value2)}` : (Number.isFinite(Number(ln.value)) ? r1(ln.value) : '');
-    return num ? (base ? `${base} (${num})` : num) : base;
+    return (num ? (base ? `${base} (${num})` : num) : base) + tail;
   }
 
   // Editor: apply an auto-mode dropdown choice to a raw S item (value or value2 slot).
@@ -4397,16 +4477,17 @@
         // vals para líneas de referencia (AVG/mediana/…) = SOLO team: excluye jugadores no-team
         // (_nonTeam) para que la media del equipo quede limpia. Las barras (data) muestran todo.
         const vals = s.points.filter(p => p.y != null && !p._nonTeam).map(p => Number(p.y));
+        const valsByGrp = _valsByGroup(s.points);
         if (isLine[i]) {                            // combo: línea REAL (no Δ%) en el eje secundario
           const lc = config.style?.colors?.[s.label] || lineCol;
-          refMetricMap.set(s.label, { vals, isLine: true, color: lc });
+          refMetricMap.set(s.label, { vals, valsByGrp, isLine: true, color: lc });
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
             borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
             pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true, _rel: false };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
-        refMetricMap.set(s.label, { vals, isLine: false, color: col });
+        refMetricMap.set(s.label, { vals, valsByGrp, isLine: false, color: col });
         if (primaryMetricId == null) primaryMetricId = s.label;
         // Δ% activo en esta métrica → color por signo (o por banda si está configurada; misma
         // lógica que la etiqueta). Barra sin dato de cambio (primer MC) = color de la métrica.
@@ -4446,7 +4527,23 @@
     // so a high line still lands inside the plot.
     const _refPrimaryVals = refMetricMap.get(primaryMetricId)?.vals
       || (barDs[0]?.data || []).filter(v => v != null).map(Number);
-    const refLines = _sanitizeRefItems(config.referenceLines, item => {
+    // Líneas «por grupo»: con el eje partido en dos niveles (jugador × microciclo), una media
+    // global mezcla los dos microciclos y no dice nada de cómo se movió el plantel. Con `split`
+    // activo, la línea se abre en UNA por valor del 2º nivel — la separación entre ambas es la
+    // variación media, y el Δ% se escribe en la etiqueta de la segunda en adelante.
+    const _splitRefByGroup = (list) => (list || []).flatMap(r => {
+      if (!r || !r.split || !_isRefToken(r.value)) return [r];
+      const m = (r.metricId && refMetricMap.get(r.metricId)) || refMetricMap.get(primaryMetricId);
+      const byGrp = m && m.valsByGrp;
+      if (!byGrp || byGrp.size < 2) return [r];             // un solo grupo → nada que partir
+      const base = (r.label || '').trim();
+      return [...byGrp.entries()].map(([g, vals]) => ({
+        ...r, __grpName: g, __grpVals: vals,
+        label: base ? `${base} ${g}` : g,
+      }));
+    });
+    const refLines = _sanitizeRefItems(_splitRefByGroup(config.referenceLines), item => {
+      if (Array.isArray(item.__grpVals)) return item.__grpVals;
       const m = item.metricId && refMetricMap.get(item.metricId);
       return m ? m.vals : _refPrimaryVals;
     });
@@ -4454,6 +4551,17 @@
       const m = ln.metricId && refMetricMap.get(ln.metricId);
       ln.onLineAxis = !horizontal && hasLine && !!(m && m.isLine);   // combo line metric → y1
     });
+    // Δ% de cada grupo contra el PRIMERO (el más viejo en el orden en que llegan las categorías):
+    // es la lectura que pide la card — cuánto subió o bajó el plantel de un microciclo al otro.
+    const _grpLines = refLines.filter(l => l.grpKey != null);
+    if (_grpLines.length >= 2) {
+      const first = Number(_grpLines[0].value);
+      _grpLines.forEach((l, i) => {
+        if (i === 0 || !Number.isFinite(first) || first === 0 || !Number.isFinite(Number(l.value))) return;
+        const d = (Number(l.value) - first) / first * 100;
+        l.suffix = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(Math.abs(d) < 10 ? 1 : 0) + '%';
+      });
+    }
     const _refValsFor = pred => refLines.filter(pred).flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v)));
     const refMax  = Math.max(0, ..._refValsFor(r => !r.onLineAxis));   // grows the bar value-axis
     const refMax1 = Math.max(0, ..._refValsFor(r =>  r.onLineAxis));   // grows the y1 (combo) axis
@@ -4843,7 +4951,16 @@
         // hueco por debajo de ella → el piso superior se solaparía con la leyenda. Creciendo
         // la escala, la leyenda se corre sola y queda espacio limpio bajo los ticks. Además
         // no toca el cálculo de layout.padding → una card sin anidar queda idéntica.
-        ...(_nested ? { afterFit: sc => { if (d.horizontal) sc.width += _BAR_TIER_W; else sc.height += _BAR_TIER_H; } } : {}),
+        // Reserva de la tira de grupo. En vertical el alto NO es fijo: si los nombres no entran
+        // derechos bajo su corchete se inclinan, y ahí hace falta más alto (_barTierFit). El
+        // resultado queda en la escala para que el plugin dibuje exactamente en ese hueco.
+        ...(_nested ? { afterFit: sc => {
+          if (d.horizontal) { sc.width += _BAR_TIER_W; return; }
+          const n = (d.catDims || []).length || 1;
+          const tier = _barTierFit(sc.ctx || (sc.chart && sc.chart.ctx), d.catDims, sc.width / n);
+          sc.$gpTier = tier;
+          sc.height += tier.h;
+        } } : {}),
       };
       const scales = {};
       scales[d.horizontal ? 'x' : 'y'] = valueScale;     // value axis follows orientation
