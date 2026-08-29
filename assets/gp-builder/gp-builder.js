@@ -1820,7 +1820,10 @@
         // (o por el 2º nivel que tenga el eje) en vez de una sola que los mezcla.
         if (e.target.closest('[data-rl-split]')) {
           const ln = S.referenceLines?.[idx]; if (!ln) return;
-          ln.split = !ln.split;
+          // off → 'last' (una línea, la del grupo más reciente, + chip con la variación)
+          //     → 'all' (una línea por grupo) → off.
+          const cur = ln.split === 'all' ? 'all' : (ln.split ? 'last' : 'off');   // true (cards previas) = 'last'
+          ln.split = cur === 'off' ? 'last' : (cur === 'last' ? 'all' : false);
           renderRefLines(); renderCard(); return;
         }
         // line ↔ band: changes which controls the row shows (value2 / fill) → rebuild the list.
@@ -2243,7 +2246,18 @@
         ${band ? slot(ln.value2, ln.sdN2, ln.sdDir2, 'rl-val2mode', 'rl-value2', 'rl-sdn2', _tt('gps_analysis.builder_ref_band_to', 'To')) : ''}
         <input type="text" data-rl-label value="${esc(ln.label || '')}" placeholder="${esc(_tt('gps_analysis.builder_ref_line_label', 'Label'))}" style="flex:1 1 88px;${inputCss}">
         <button type="button" data-rl-showval title="${esc(_tt('gps_analysis.builder_ref_show_value', 'Show value in label'))}" style="flex:0 0 auto;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:700 11px/1 var(--cm-font-sans);background:${ln.showValue ? 'var(--cm-accent,#15803D)' : 'var(--cm-bg)'};color:${ln.showValue ? '#fff' : 'var(--cm-fg-muted)'}">#</button>
-        ${canSplit ? `<button type="button" data-rl-split title="${esc(_tt('gps_analysis.builder_ref_split', 'One line per group of the axis (microcycle, date…), with the % change between them'))}" style="flex:0 0 auto;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;background:${ln.split ? 'var(--cm-accent,#15803D)' : 'var(--cm-bg)'};color:${ln.split ? '#fff' : 'var(--cm-fg-muted)'}"><i class="ti ti-arrows-split-2" style="font-size:13px;vertical-align:-2px"></i></button>` : ''}
+        ${canSplit ? (() => {
+          // Tres estados: apagado → la media del grupo más reciente + chip con la variación →
+          // una línea por grupo. El título dice qué hace el PRÓXIMO click, que es lo que el
+          // usuario necesita saber para animarse a probarlo.
+          const st = ln.split === 'all' ? 'all' : (ln.split ? 'last' : 'off');
+          const tip = st === 'off'
+            ? _tt('gps_analysis.builder_ref_split_off',  'Split the average by axis group (microcycle, date…): shows the most recent one plus the % change')
+            : st === 'last'
+            ? _tt('gps_analysis.builder_ref_split_last', 'Showing the most recent group + the % change — click for one line per group')
+            : _tt('gps_analysis.builder_ref_split_all',  'One line per group — click to turn it off');
+          return `<button type="button" data-rl-split title="${esc(tip)}" style="flex:0 0 auto;height:26px;padding:0 7px;display:inline-flex;align-items:center;gap:3px;border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;background:${st === 'off' ? 'var(--cm-bg)' : 'var(--cm-accent,#15803D)'};color:${st === 'off' ? 'var(--cm-fg-muted)' : '#fff'}"><i class="ti ti-arrows-split-2" style="font-size:13px"></i>${st === 'all' ? '<span style="font:700 9px/1 var(--cm-font-sans)">ALL</span>' : ''}</button>`;
+        })() : ''}
         <div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-style="solid"  class="${ln.style !== 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_solid', 'Solid'))}"><i class="ti ti-minus"></i></button>
           <button type="button" data-rl-style="dashed" class="${ln.style === 'dashed' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_line_dashed', 'Dashed'))}"><i class="ti ti-line-dashed"></i></button>
@@ -4541,16 +4555,20 @@
     // global mezcla los dos microciclos y no dice nada de cómo se movió el plantel. Con `split`
     // activo, la línea se abre en UNA por valor del 2º nivel — la separación entre ambas es la
     // variación media, y el Δ% se escribe en la etiqueta de la segunda en adelante.
+    // `split`: 'last' (default del toggle) dibuja SOLO la media del último grupo — dos rayas casi
+    // pegadas ensucian más de lo que explican, y la variación se lee mejor en el chip del
+    // encabezado. 'all' (segundo click) sí dibuja una por grupo. `true` = 'all' (cards viejas).
     const _splitRefByGroup = (list) => (list || []).flatMap(r => {
       if (!r || !r.split || !_isRefToken(r.value)) return [r];
       const m = (r.metricId && refMetricMap.get(r.metricId)) || refMetricMap.get(primaryMetricId);
       const byGrp = m && m.valsByGrp;
       if (!byGrp || byGrp.size < 2) return [r];             // un solo grupo → nada que partir
       const base = (r.label || '').trim();
-      return [...byGrp.entries()].map(([g, vals]) => ({
+      const all = [...byGrp.entries()].map(([g, vals]) => ({
         ...r, __grpName: g, __grpVals: vals,
         label: base ? `${base} ${g}` : g,
       }));
+      return r.split === 'all' ? all : [all[all.length - 1]];
     });
     const refLines = _sanitizeRefItems(_splitRefByGroup(config.referenceLines), item => {
       if (Array.isArray(item.__grpVals)) return item.__grpVals;
@@ -4561,16 +4579,29 @@
       const m = ln.metricId && refMetricMap.get(ln.metricId);
       ln.onLineAxis = !horizontal && hasLine && !!(m && m.isLine);   // combo line metric → y1
     });
-    // Δ% de cada grupo contra el PRIMERO (el más viejo en el orden en que llegan las categorías):
-    // es la lectura que pide la card — cuánto subió o bajó el plantel de un microciclo al otro.
-    const _grpLines = refLines.filter(l => l.grpKey != null);
-    if (_grpLines.length >= 2) {
-      const first = Number(_grpLines[0].value);
-      _grpLines.forEach((l, i) => {
-        if (i === 0 || !Number.isFinite(first) || first === 0 || !Number.isFinite(Number(l.value))) return;
-        const d = (Number(l.value) - first) / first * 100;
-        l.suffix = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(Math.abs(d) < 10 ? 1 : 0) + '%';
-      });
+    // Variación del PLANTEL entre el primer y el último grupo del eje: se compara el mismo
+    // estadístico de cada uno (media contra media). OJO, no es lo mismo que promediar los % de
+    // cada jugador — ese promedio lo dominan los de poco volumen (un suplente que pasa de 500 a
+    // 1.000 m es +100%). Alimenta el chip del encabezado y el sufijo de la línea del último grupo.
+    let grpDelta = null;
+    const _splitLn = (config.referenceLines || []).find(r => r && r.split && _isRefToken(r.value));
+    if (_splitLn) {
+      const m = (_splitLn.metricId && refMetricMap.get(_splitLn.metricId)) || refMetricMap.get(primaryMetricId);
+      const byGrp = m && m.valsByGrp;
+      if (byGrp && byGrp.size >= 2) {
+        const ks = [...byGrp.keys()], last = ks[ks.length - 1];
+        const a = _refStat(_splitLn.value, byGrp.get(ks[0]),  _splitLn.sdN, _splitLn.sdDir);
+        const b = _refStat(_splitLn.value, byGrp.get(last), _splitLn.sdN, _splitLn.sdDir);
+        if (Number.isFinite(a) && a !== 0 && Number.isFinite(b)) {
+          grpDelta = { from: ks[0], to: last, pct: (b - a) / a * 100 };
+        }
+      }
+    }
+    if (grpDelta) {
+      const pct = grpDelta.pct;
+      const txt = (pct >= 0 ? '+' : '−') + Math.abs(pct).toFixed(Math.abs(pct) < 10 ? 1 : 0) + '%';
+      refLines.forEach(l => { if (l.grpKey === grpDelta.to) l.suffix = txt; });
+      grpDelta.text = txt;
     }
     const _refValsFor = pred => refLines.filter(pred).flatMap(r => [r.value, r.value2].filter(v => Number.isFinite(v)));
     const refMax  = Math.max(0, ..._refValsFor(r => !r.onLineAxis));   // grows the bar value-axis
@@ -4700,6 +4731,7 @@
              mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
              mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
              horizontal, stacked, hasLine, max1, step1, min1, relBands: config.style?.relBands || null, referenceLines: refLines,
+             grpDelta,
              height, color: accent };
   }
 
@@ -4824,6 +4856,26 @@
     }
     modes.push({ key: 'orig', label: _tt('gps_analysis.builder_sort_original', 'Original'), icon: 'ti-arrows-sort' });
     return modes;
+  }
+
+  // Chip de VARIACIÓN entre grupos (microciclo → microciclo). Vive al lado del de orden, arriba a
+  // la derecha del chart. Es la lectura de plantel que dos líneas casi pegadas no dan bien: un
+  // número, no una posición en el eje. Se dibuja solo si la card tiene la línea «por grupo».
+  function _renderDeltaChip(body, gd) {
+    let chip = body.querySelector(':scope > .gp-delta-chip');
+    if (!gd || !gd.text) { if (chip) chip.remove(); return; }
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'gp-delta-chip';
+      body.appendChild(chip);
+    }
+    const up = gd.pct >= 0;
+    chip.classList.toggle('is-up', up);
+    chip.classList.toggle('is-dn', !up);
+    chip.title = _tt('gps_analysis.builder_grp_delta_hint',
+      'Change of the squad average between {from} and {to}. It is not the average of each player’s %.',
+      { from: gd.from, to: gd.to });
+    chip.innerHTML = `<span class="g">${esc(gd.from)} → ${esc(gd.to)}</span><b>${esc(gd.text)}</b>`;
   }
 
   function _renderSortChip(body, config) {
@@ -5058,6 +5110,7 @@
       body.__chart.$gpNested  = !!_nested;
       _renderZoomChip(body, d.zoomGroup);
       _renderSortChip(body, config);
+      _renderDeltaChip(body, d.grpDelta);
     };
     mount();
   }

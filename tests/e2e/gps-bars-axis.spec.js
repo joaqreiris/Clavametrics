@@ -2,7 +2,8 @@
 // Eje jerárquico de la card de barras (jugador × microciclo) — las dos cosas que no se ven
 // leyendo el código y sí en el canvas:
 //   1. Línea de referencia «por grupo» (split): en vez de UNA media que mezcla los dos
-//      microciclos, una por microciclo, con el Δ% entre ambas en la etiqueta de la segunda.
+//      microciclos, la del más reciente + el chip con la variación ('last'), o una por
+//      microciclo ('all'). Las cards guardadas con split:true caen en 'last'.
 //   2. Los nombres del piso de grupo se inclinan cuando no entran derechos (antes: «TAKAR…»).
 //
 // Se monta una card de builder REAL desde dashboard_cards (mock de red) y se leen los valores
@@ -62,7 +63,7 @@ const CARD_CONFIG = {
   referenceLines: [{ id: 'rl_1', value: 'mean', split: true, label: 'AVG', showValue: true, color: '#DC2626', style: 'dashed', opacity: 1 }],
 };
 
-async function mount(page, { names, split = true }) {
+async function mount(page, { names, split = 'last' }) {
   const players = buildPlayers(names);
   const reports = buildReports(players);
   const cfg = { ...CARD_CONFIG, referenceLines: [{ ...CARD_CONFIG.referenceLines[0], split }] };
@@ -109,6 +110,7 @@ function readChart(page) {
     return {
       lines: (ch.options.plugins.gpbRefLines?.lines || []).map(l => ({ label: l.label, value: l.value, suffix: l.suffix, grpKey: l.grpKey })),
       tier:  ch.scales.x?.$gpTier || null,
+      chip:  (document.querySelector('.gp-c[data-card-id="card-1"] .gp-delta-chip') || {}).textContent || null,
       // Valores del 2º nivel del eje (microciclo) en orden de aparición: es contra esto que
       // tienen que corresponderse las líneas por grupo. El NOMBRE del microciclo lo resuelve la
       // filter bar (window._gpMcLabelById), que bajo mock no está poblada → acá llegan los ids.
@@ -124,28 +126,41 @@ const LONG = Array.from({ length: 8 }, (_, i) =>
   ({ first: 'Jugador' + i, last: 'Villalobos Etcheverry ' + i }));
 
 test.describe('GPS · eje jerárquico de barras', () => {
-  test('la media se parte en una línea por microciclo, con el Δ% entre ambas', async ({ page }) => {
-    await mount(page, { names: SHORT, split: true });
-    const { lines, lvl2 } = await readChart(page);
+  test('split «last»: una sola media, la del microciclo más reciente, + chip con la variación', async ({ page }) => {
+    await mount(page, { names: SHORT, split: true });   // true = cards guardadas antes del ciclo de 3 estados
+    const { lines, lvl2, chip } = await readChart(page);
 
     expect(lvl2).toHaveLength(2);                        // dos microciclos en el eje
-    expect(lines).toHaveLength(2);                       // → una línea cada uno
-    expect(lines.map(l => l.grpKey)).toEqual(lvl2);      // y en el mismo orden
-    expect(lines[0].value).toBeCloseTo(5000, 0);
-    expect(lines[1].value).toBeCloseTo(6000, 0);
-    expect(lines[0].label).toBe('AVG ' + lvl2[0]);       // la etiqueta nombra su grupo
-    expect(lines[1].label).toBe('AVG ' + lvl2[1]);
-    expect(lines[0].suffix || '').toBe('');              // la primera es la referencia
-    expect(lines[1].suffix).toBe('+20%');                // 5000 → 6000
+    expect(lines).toHaveLength(1);                       // pero UNA sola línea
+    expect(lines[0].grpKey).toBe(lvl2[1]);               // la del más reciente
+    expect(lines[0].value).toBeCloseTo(6000, 0);
+    expect(lines[0].label).toBe('AVG ' + lvl2[1]);
+    expect(lines[0].suffix).toBe('+20%');                // 5000 → 6000
+    expect(chip).toContain('+20%');                      // y el chip lo dice en el encabezado
+    expect(chip).toContain(lvl2[0]);
+    expect(chip).toContain(lvl2[1]);
   });
 
-  test('sin split queda una sola media, la de todos los datos juntos', async ({ page }) => {
+  test('split «all»: una línea por microciclo, con el Δ% en la del último', async ({ page }) => {
+    await mount(page, { names: SHORT, split: 'all' });
+    const { lines, lvl2 } = await readChart(page);
+
+    expect(lines).toHaveLength(2);
+    expect(lines.map(l => l.grpKey)).toEqual(lvl2);
+    expect(lines[0].value).toBeCloseTo(5000, 0);
+    expect(lines[1].value).toBeCloseTo(6000, 0);
+    expect(lines[0].suffix || '').toBe('');              // la primera es la referencia
+    expect(lines[1].suffix).toBe('+20%');
+  });
+
+  test('sin split queda una sola media, la de todos los datos juntos, y sin chip', async ({ page }) => {
     await mount(page, { names: SHORT, split: false });
-    const { lines } = await readChart(page);
+    const { lines, chip } = await readChart(page);
 
     expect(lines).toHaveLength(1);
     expect(lines[0].value).toBeCloseTo(5500, 0);  // media de los 6 valores
     expect(lines[0].grpKey).toBeNull();
+    expect(chip).toBeNull();
   });
 
   test('nombres cortos: la tira de grupo los deja derechos', async ({ page }) => {
