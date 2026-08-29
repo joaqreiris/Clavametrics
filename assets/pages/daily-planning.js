@@ -618,11 +618,21 @@ async function dpLoadTactical(dateStr) {
   // para técnico/PF/dirección/admin — mismo criterio que el modo solo lectura.
   const canEditTac = !window._dpReadOnly;
   try {
-    const { data, error } = await window.sb.from('tactical_objectives')
-      .select('id,category,title,done')
-      .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', dateStr)
-      .order('position').order('created_at');
+    // Las categorías son del equipo (renombrables/ampliables): el color del punto
+    // sale de ahí, no de una lista fija. Si falla, el chip igual se muestra.
+    const [{ data, error }, catsRes] = await Promise.all([
+      window.sb.from('tactical_objectives')
+        .select('id,category,title,done')
+        .eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('date', dateStr)
+        .order('position').order('created_at'),
+      window.cmTacticalCats ? window.cmTacticalCats.load(_dpClubId, _dpTeamId) : Promise.resolve(null),
+    ]);
     if (error) throw error;
+    const catColor = key => {
+      if (!window.cmTacticalCats) return 'var(--cm-fg-faint)';
+      const c = (catsRes && catsRes.cats || []).find(x => x.key === key);
+      return window.cmTacticalCats.colorVar(c);   // categoría borrada → gris, el chip se sigue viendo
+    };
     if (dateStr !== _dpCurrentDate) return;   // el usuario ya cambió de día
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const link = document.getElementById('dpTacticalLink');
@@ -633,7 +643,7 @@ async function dpLoadTactical(dateStr) {
       box.innerHTML = '<span style="font:500 12px var(--cm-font-sans);color:var(--cm-fg-muted)" data-i18n="daily_planning.no_tactical">No tactical objectives for this day.</span>';
       if (window.CM_I18N && CM_I18N.applyTo) CM_I18N.applyTo(box);
     } else {
-      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}${canEditTac ? '' : ' is-ro'}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:var(--dpt-${esc(o.category)})"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
+      box.innerHTML = rows.map(o => `<button type="button" class="dp-tacchip${o.done ? ' done' : ''}${canEditTac ? '' : ' is-ro'}" data-id="${esc(o.id)}" title="${esc(o.title)}"><span class="dot" style="background:${catColor(o.category)}"></span><span class="t">${esc(o.title)}</span><i class="ti ti-check"></i></button>`).join('');
       if (canEditTac) box.querySelectorAll('.dp-tacchip').forEach(b => b.addEventListener('click', async () => {
         const row = rows.find(r => r.id === b.getAttribute('data-id')); if (!row) return;
         row.done = !row.done;
