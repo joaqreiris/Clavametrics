@@ -166,3 +166,24 @@ test.describe('GPS · eje jerárquico de barras', () => {
   });
 });
 
+
+
+test('la X de borrar la línea de referencia se ve sin scrollear y la borra', async ({ page }) => {
+  await mount(page, { names: SHORT, split: true });
+  await page.evaluate(() => window.GpBuilder.openForEdit(document.querySelector('.gp-c[data-card-id="card-1"]')));
+  await page.locator('#gpbPanel [data-tab="style"]').first().click();
+
+  const del = page.locator('#gpbRefLines [data-rl-del]').first();
+  await expect(del).toBeVisible();
+  // Arriba del todo de su fila: la X vive en el encabezado, no al final de cinco renglones.
+  const gap = await page.evaluate(() => {
+    const row = document.querySelector('#gpbRefLines [data-rl-idx]');
+    const d = row.querySelector('[data-rl-del]');
+    return d.getBoundingClientRect().top - row.getBoundingClientRect().top;
+  });
+  expect(gap).toBeLessThan(30);
+
+  await del.click();
+  await expect(page.locator('#gpbRefLines [data-rl-idx]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window.GpBuilder.currentConfig()?.referenceLines || []).length)).toBe(0);
+});

@@ -2216,8 +2216,19 @@
       const band = ln.type === 'band';
       const onX  = ln.axis === 'x';
       const fromPh = band ? _tt('gps_analysis.builder_ref_band_from', 'From') : _tt('gps_analysis.builder_ref_line_value', 'Value');
+      // Encabezado propio por línea: nombre + la X de borrar SIEMPRE arriba a la derecha. Antes la
+      // X era el último de once controles que se envuelven en cinco renglones (la fila mide ~180 px
+      // de alto): quedaba fuera de la vista y "no se podía borrar la línea".
+      const rlName = (ln.label && String(ln.label).trim())
+        || (_isRefToken(ln.value) ? (MODES.find(([k]) => k === (ln.value === 'sd' ? (ln.sdDir === '-' ? 'sd-' : 'sd+') : ln.value))?.[1] || '') : '')
+        || _tt('gps_analysis.builder_ref_line_value', 'Value');
       return `
       <div data-rl-idx="${i}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.18)">
+        <div style="display:flex;align-items:center;gap:6px;width:100%;min-width:0">
+          <span style="width:8px;height:8px;flex:0 0 auto;border-radius:2px;background:${esc(ln.color || '#DC2626')}"></span>
+          <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 11px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)">${esc(rlName)}${band ? ' · ' + esc(_tt('gps_analysis.builder_ref_type_band', 'Band')) : ''}</span>
+          <button type="button" data-rl-del title="${esc(_tt('gps_analysis.builder_ref_line_remove', 'Remove line'))}" style="width:22px;height:22px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--cm-fg-muted);cursor:pointer;border-radius:6px"><i class="ti ti-x"></i></button>
+        </div>
         <input type="color" data-rl-color value="${esc(ln.color || '#DC2626')}" title="${esc(_tt('gps_analysis.builder_ref_line_color', 'Line color'))}" style="width:26px;height:26px;flex:0 0 auto;padding:0;border:1px solid var(--cm-border);border-radius:6px;background:none;cursor:pointer">
         ${isScatter ? `<div class="es-seg" style="flex:0 0 auto">
           <button type="button" data-rl-axis="y" class="${!onX ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_axis_y', 'Y axis'))}">Y</button>
@@ -2242,7 +2253,6 @@
           <button type="button" data-rl-fill="bordered" class="${ln.fill === 'bordered' ? 'is-on' : ''}" title="${esc(_tt('gps_analysis.builder_ref_fill_bordered', 'Fill + borders'))}"><i class="ti ti-border-outer"></i></button>
         </div>` : ''}
         <input type="range" data-rl-opacity min="0" max="1" step="0.05" value="${ln.opacity != null ? ln.opacity : 1}" title="${esc(_tt('gps_analysis.builder_ref_line_opacity', 'Opacity'))}" style="width:48px;flex:0 0 auto;cursor:pointer">
-        <button type="button" data-rl-del title="${esc(_tt('gps_analysis.builder_ref_line_remove', 'Remove line'))}" style="width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--cm-fg-muted);cursor:pointer;border-radius:6px"><i class="ti ti-x"></i></button>
       </div>`;
     }).join('');
   }
