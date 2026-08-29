@@ -1000,12 +1000,22 @@
     // ── PLAN PAGO (upgrade o downgrade) ──────────────────────────────────────
     if (isComp){ compNote(); return; }
 
-    if (hasPaddleSub){
+    // Siempre se le pregunta primero al server, aunque ESTA categoría no tenga
+    // suscripción: si el club ya tiene una, hay que sumarle un ítem en vez de abrir un
+    // segundo checkout (segunda tarjeta, segunda factura). El server responde
+    // needs_checkout sólo cuando el club no tiene ninguna suscripción de Paddle.
+    {
       confirmBtn.disabled = true;
       try{
         const { data:prev, error:pErr } = await sb.functions.invoke('paddle-change-plan', { body:{ team_id: teamId, plan_slug: slug, cycle, preview:true } });
         if (prev?.needs_checkout){
           // el server confirma que NO hay sub real → recién ahí cae al checkout de abajo
+        } else if (prev?.error === 'cycle_mismatch'){
+          // La suscripción del club ya corre en un ciclo: mezclar mensual y anual en la
+          // misma factura no es posible.
+          alert(tt('plan_picker.cycle_mismatch','Tu club ya tiene una suscripción {cycle}. Todas las categorías comparten el mismo ciclo de facturación.',
+            { cycle: prev.sub_cycle === 'annual' ? tt('plan_picker.cycle_annual','Annual') : tt('plan_picker.cycle_monthly','Monthly') }));
+          return;
         } else if (pErr || prev?.error){
           // Hay sub activa pero el cambio/preview falló → NO abrir un checkout de precio
           // completo (cobraría todo de nuevo). Avisar y frenar.
@@ -1054,7 +1064,11 @@
     Paddle.Checkout.open({
       items: [{ priceId, quantity: 1 }],
       customer: email ? { email } : undefined,
-      customData: { team_id: teamId, club_id: clubId, plan_slug: slug, cycle },
+      // `teams` es el reparto que el webhook usa para saber qué categoría lleva qué plan
+      // dentro de la suscripción (una suscripción cubre varias categorías). Acá es una
+      // sola; team_id/plan_slug se mantienen por compatibilidad con lo ya cobrado.
+      customData: { team_id: teamId, club_id: clubId, plan_slug: slug, cycle,
+                    teams: [{ team_id: teamId, plan_slug: slug }] },
       settings: { displayMode:'overlay', theme:'light', successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(slug) }
     });
   });

@@ -1155,39 +1155,53 @@
     updateCalcTotal();
   });
 
-  // Fase 1 del cobro: un checkout de Paddle es UNA suscripción para UN equipo
-  // (customData.team_id), así que acá se cobra la categoría más cara y el resto queda
-  // a un clic desde Admin. El checkout consolidado necesita repartir una suscripción
-  // entre varios equipos en el webhook, y eso va aparte.
+  // Cobro consolidado: TODAS las categorías pagas entran en el mismo checkout, así el
+  // club deja la tarjeta una vez y recibe una sola factura. Dos categorías con el mismo
+  // plan viajan como un ítem con quantity 2 — Paddle sólo ve cantidades por precio, así
+  // que el reparto (qué categoría lleva qué plan) va en customData.teams y el webhook lo
+  // usa para escribir una fila de subscriptions por categoría.
   document.getElementById('ob-buy-now').addEventListener('click', async () => {
     clearError('plan');
-    const paid = state.teams
+    const cycleKey = state.cycle === 'annual' ? 'yearly' : 'monthly';
+    const picks = state.teams
       .map(t => ({ team: t, plan: planBySlug(state.picks[t.id]) }))
-      .filter(x => x.plan && Number(x.plan.price_monthly) > 0)
-      .sort((a, b) => Number(b.plan.price_monthly) - Number(a.plan.price_monthly));
+      .filter(x => x.plan);
+    const paid = picks.filter(x => Number(x.plan.price_monthly) > 0);
     if (!paid.length) return;
-    const { team, plan } = paid[0];
-    const priceId = (state.priceIds[plan.slug] || {})[state.cycle === 'annual' ? 'yearly' : 'monthly'];
-    if (!priceId || !window.Paddle) {
+
+    // Ítems agrupados por precio.
+    const qty = new Map();
+    for (const { plan } of paid) {
+      const priceId = (state.priceIds[plan.slug] || {})[cycleKey];
+      if (!priceId) {
+        showError('plan', tt('onboarding.checkoutUnavailable', "Checkout isn't available right now. Start the trial and subscribe from Admin."));
+        return;
+      }
+      qty.set(priceId, (qty.get(priceId) || 0) + 1);
+    }
+    if (!window.Paddle) {
       showError('plan', tt('onboarding.checkoutUnavailable', "Checkout isn't available right now. Start the trial and subscribe from Admin."));
       return;
     }
-    if (paid.length > 1) {
-      const rest = paid.slice(1).map(x => x.team.name).join(', ');
-      if (!confirm(tt('onboarding.buyOneFirst', 'We\'ll charge {team} ({plan}) now. The rest ({rest}) you activate from Admin in one click. Continue?',
-        { team: team.name, plan: plan.name, rest }))) return;
-    }
+
+    // El reparto incluye las categorías en Free: forman parte del club y así el webhook
+    // las conoce desde el arranque. Si fueran tantas que no entran en custom_data
+    // (Paddle lo limita), se mandan sólo las pagas y las demás se infieren como Free.
+    let teams = picks.map(x => ({ team_id: x.team.id, plan_slug: x.plan.slug }));
+    if (JSON.stringify(teams).length > 4000) teams = paid.map(x => ({ team_id: x.team.id, plan_slug: x.plan.slug }));
+
+    const { data: { user } } = await window.sb.auth.getUser();
     // El asistente queda cerrado ANTES de abrir el pago: si no, al volver del checkout
     // el Hub lo mandaría de nuevo acá.
-    const { data: { user } } = await window.sb.auth.getUser();
     await window.sb.from('clubs').update({ onboarded_at: new Date().toISOString() }).eq('id', state.clubId);
+    const top = paid.slice().sort((a, b) => Number(b.plan.price_monthly) - Number(a.plan.price_monthly))[0];
     Paddle.Checkout.open({
-      items: [{ priceId, quantity: 1 }],
+      items: [...qty.entries()].map(([priceId, quantity]) => ({ priceId, quantity })),
       customer: user && user.email ? { email: user.email } : undefined,
-      customData: { team_id: team.id, club_id: state.clubId, plan_slug: plan.slug, cycle: state.cycle },
+      customData: { club_id: state.clubId, cycle: state.cycle, teams },
       settings: {
         displayMode: 'overlay', theme: 'light',
-        successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(plan.slug),
+        successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(top.plan.slug),
       },
     });
   });

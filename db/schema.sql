@@ -2472,10 +2472,17 @@ create table if not exists public.subscriptions (
   scheduled_plan_id uuid,
   scheduled_change_at timestamp with time zone,
   constraint subscriptions_pkey primary key (id),
-  constraint subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id),
   constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
   constraint subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text])))
 );
+-- Una suscripción de Paddle cubre VARIAS categorías (un ítem por categoría), para que el
+-- club pague una sola vez y reciba una sola factura. Por eso la clave dejó de ser la
+-- suscripción sola —que obligaba a una suscripción por equipo— y pasó a ser el par
+-- (suscripción, equipo). Las filas de cortesía no tienen suscripción de Paddle: el índice
+-- es parcial para no chocar entre ellas.
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_provider_team_key
+  ON public.subscriptions USING btree (provider_subscription_id, team_id)
+  WHERE (provider_subscription_id IS NOT NULL);
 CREATE UNIQUE INDEX uniq_sub_active_per_team ON public.subscriptions USING btree (team_id) WHERE (status = ANY (ARRAY['active'::text, 'trialing'::text, 'past_due'::text, 'paused'::text]));
 CREATE INDEX idx_subscriptions_team ON public.subscriptions USING btree (team_id);
 CREATE INDEX idx_subscriptions_club ON public.subscriptions USING btree (club_id);
@@ -2539,6 +2546,33 @@ create table if not exists public.task_reminders (
 );
 CREATE INDEX task_reminders_due_idx ON public.task_reminders USING btree (remind_at) WHERE (sent_at IS NULL);
 
+-- Tactical Planning: categorías por club/equipo (renombrables y ampliables).
+-- Sin filas para un equipo = usa las seis de fábrica (lib/tactical-cats.js). Al primer
+-- cambio se materializan las seis y a partir de ahí manda esta tabla.
+-- key: 'offensive'… para las de fábrica, 'c_<8hex>' para las nuevas. name NULL = nombre
+-- traducido de fábrica. color = tono de la paleta ('green','blue',…), no un hex.
+create table if not exists public.tactical_categories (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  key text not null,
+  name text,
+  color text,
+  position integer default 0 not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  constraint tactical_categories_pkey primary key (id),
+  constraint tactical_categories_key_uq unique (club_id, team_id, key),
+  constraint tactical_categories_key_check CHECK ((length(btrim(key)) > 0))
+);
+CREATE INDEX idx_tactical_categories_club_team ON public.tactical_categories USING btree (club_id, team_id);
+alter table public.tactical_categories enable row level security;
+create policy "tactical_categories_scoped" on public.tactical_categories as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "tactical_categories_super_all" on public.tactical_categories as permissive for all to authenticated
+  using (is_super_admin()) with check (is_super_admin());
+
 -- Tactical Planning: catálogo de objetivos/subobjetivos por equipo (preparación previa del año).
 -- Dos niveles: raíz (parent_id NULL, con category) y subobjetivo (parent_id → raíz, category NULL).
 create table if not exists public.tactical_catalog (
@@ -2553,7 +2587,9 @@ create table if not exists public.tactical_catalog (
   created_at timestamp with time zone default now() not null,
   constraint tactical_catalog_pkey primary key (id),
   constraint tactical_catalog_parent_fk FOREIGN KEY (parent_id) REFERENCES public.tactical_catalog(id) ON DELETE CASCADE,
-  constraint tactical_catalog_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text]))))
+  -- category es la key de tactical_categories: ya no es una lista cerrada (el club
+  -- puede crear las suyas). Sin FK porque las de fábrica no tienen fila propia.
+  constraint tactical_catalog_category_check CHECK (((category IS NULL) OR (length(btrim(category)) > 0)))
 );
 CREATE INDEX idx_tactical_catalog_club_team ON public.tactical_catalog USING btree (club_id, team_id);
 alter table public.tactical_catalog enable row level security;
@@ -2581,7 +2617,8 @@ create table if not exists public.tactical_objectives (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   constraint tactical_objectives_pkey primary key (id),
-  constraint tactical_objectives_category_check CHECK ((category = ANY (ARRAY['offensive'::text, 'defensive'::text, 'transition_off'::text, 'transition_def'::text, 'set_pieces'::text, 'other'::text]))),
+  -- ídem tactical_catalog: key libre, la lista la manda tactical_categories.
+  constraint tactical_objectives_category_check CHECK ((length(btrim(category)) > 0)),
   constraint tactical_objectives_cat_obj_fk FOREIGN KEY (catalog_objective_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL,
   constraint tactical_objectives_cat_sub_fk FOREIGN KEY (catalog_sub_id) REFERENCES public.tactical_catalog(id) ON DELETE SET NULL
 );
@@ -8032,6 +8069,7 @@ begin
   foreach t in array array[
     'training_sessions','calendar_events','microcycles','session_exercises',
     'session_participants','treatments','tactical_objectives','tactical_catalog',
+    'tactical_categories',
     'injuries','injury_phases','rpe','wellness','rehab_plans','players',
     'player_teams','tasks'
   ] loop

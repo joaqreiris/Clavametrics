@@ -3,7 +3,18 @@
  *
  * Gestiona cambios sobre una suscripción de Paddle YA existente. Esto NO se puede
  * hacer desde el cliente (`Paddle.Checkout.open` solo CREA transacciones nuevas y
- * cobraría el plan entero). Acciones:
+ * cobraría el plan entero).
+ *
+ * UNA SUSCRIPCIÓN, VARIAS CATEGORÍAS
+ * La suscripción del club cubre todas sus categorías (un ítem por categoría paga; dos
+ * categorías con el mismo plan viajan como un ítem con quantity 2). Como un PATCH con
+ * `items` REEMPLAZA la lista entera, cada cambio reconstruye todos los ítems a partir
+ * del reparto guardado en `subscriptions` — mandar sólo el ítem que cambia borraría las
+ * demás categorías del club. El reparto se reenvía en `custom_data` para que el webhook
+ * lo lea. Cambiar una categoría a Free = quitarle el ítem, no cancelar la suscripción;
+ * la cancelación real queda para cuando era la última categoría paga.
+ *
+ * Acciones:
  *
  *   action:'change' (default)
  *     · UPGRADE  (plan destino > actual): PATCH con proration_billing_mode
@@ -92,15 +103,42 @@ Deno.serve(async (req) => {
     if (!isSuper && team.club_id !== caller?.club_id) return json({ error: 'Not authorized' }, 403);
 
     // ── Suscripción de Paddle activa del equipo (no comp) ──
-    const { data: sub } = await admin.from('subscriptions')
+    const { data: ownSub } = await admin.from('subscriptions')
       .select('id, provider_subscription_id, is_comp, status, plan_id, billing_cycle, current_period_end, scheduled_plan_id, scheduled_change_at')
       .eq('team_id', team_id).eq('status', 'active').maybeSingle();
+
+    // Una suscripción de Paddle cubre varias categorías del club. Si ESTA categoría
+    // todavía no está adentro pero el club ya tiene una suscripción, no corresponde
+    // abrir un checkout nuevo (sería una segunda tarjeta y una segunda factura): se le
+    // suma un ítem a la que ya existe.
+    let sub: any = ownSub;
+    let adding = false;
+    if ((!sub || sub.is_comp || !sub.provider_subscription_id) && act === 'change') {
+      const { data: clubSub } = await admin.from('subscriptions')
+        .select('id, provider_subscription_id, is_comp, status, plan_id, billing_cycle, current_period_end, scheduled_plan_id, scheduled_change_at')
+        .eq('club_id', team.club_id).eq('status', 'active').eq('is_comp', false)
+        .not('provider_subscription_id', 'is', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (clubSub) { sub = clubSub; adding = true; }
+    }
     if (!sub || sub.is_comp || !sub.provider_subscription_id) {
       // No hay sub de Paddle que modificar → el cliente debe abrir checkout nuevo.
       // 200 (no 409) para que el cliente pueda leer el flag en `data`.
       return json({ needs_checkout: true }, 200);
     }
     const subId = sub.provider_subscription_id;
+    // El ciclo lo fija la suscripción: no se pueden mezclar mensual y anual en la misma.
+    const subCycle: 'monthly' | 'annual' = sub.billing_cycle === 'yearly' ? 'annual' : 'monthly';
+
+    // ── Reparto vigente: qué categoría lleva qué plan dentro de esta suscripción ──
+    // Es la fuente de verdad del reparto (Paddle solo ve cantidades por precio: dos
+    // categorías con el mismo plan viajan como un ítem con quantity 2).
+    const { data: mapRows } = await admin.from('subscriptions')
+      .select('team_id, plan_id')
+      .eq('provider_subscription_id', subId)
+      .in('status', ['active', 'trialing', 'past_due', 'paused']);
+    const mapping = new Map<string, string>();               // team_id → plan_id
+    for (const r of mapRows || []) mapping.set(r.team_id, r.plan_id);
 
     const paddle = (path: string, method: string, body?: unknown) =>
       fetch(`${API_BASE}${path}`, {
@@ -109,9 +147,64 @@ Deno.serve(async (req) => {
         body: body ? JSON.stringify(body) : undefined,
       });
 
+    // ── Catálogo de planes ──
+    const { data: plansRows } = await admin.from('plans')
+      .select('id, slug, sort_order, provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live');
+    const plans: Record<string, any> = {};
+    (plansRows || []).forEach((p) => { plans[p.slug] = p; plans[p.id] = p; });
+    const FREE = 'initiation';
+
+    // Los ítems de la suscripción se reconstruyen ENTEROS en cada cambio: un PATCH con
+    // `items` reemplaza la lista, así que mandar sólo el ítem que cambia borraría las
+    // demás categorías del club. Las que quedan en Free no tienen precio y por eso no
+    // aportan ítem — pero siguen en el reparto, para que el webhook sepa de ellas.
+    const buildItems = (map: Map<string, string>) => {
+      const qty = new Map<string, number>();
+      for (const planId of map.values()) {
+        const p = plans[planId];
+        if (!p || p.slug === FREE) continue;
+        const priceId = priceOf(p, subCycle);
+        if (!priceId) continue;
+        qty.set(priceId, (qty.get(priceId) ?? 0) + 1);
+      }
+      return [...qty.entries()].map(([price_id, quantity]) => ({ price_id, quantity }));
+    };
+    // El reparto viaja en custom_data para que el webhook lo lea en la creación; en los
+    // eventos siguientes manda lo que tengamos guardado, que es esto mismo.
+    const customData = (map: Map<string, string>) => ({
+      club_id: team.club_id,
+      cycle: subCycle,
+      teams: [...map.entries()].map(([tid, pid]) => ({ team_id: tid, plan_slug: plans[pid]?.slug ?? null })),
+    });
+
     // ── Cancelar → Free (a fin de período) ──
+    // Si la suscripción cubre varias categorías, cancelarla entera dejaría al club sin
+    // las otras: se baja SÓLO esta a Free (mismo mecanismo que un downgrade, con las
+    // features vigentes hasta fin del período ya pago). La cancelación de verdad queda
+    // para cuando esta era la última categoría paga.
     if (act === 'cancel') {
-      if (preview) return json({ ok: true, preview: true, cancel: true, effective_at: sub.current_period_end });
+      const others = new Map(mapping);
+      others.delete(team_id);
+      const someoneElsePays = buildItems(others).length > 0;
+
+      if (preview) return json({ ok: true, preview: true, cancel: true, partial: someoneElsePays, effective_at: sub.current_period_end });
+
+      if (someoneElsePays) {
+        const next = new Map(mapping);
+        next.set(team_id, plans[FREE]?.id ?? '');
+        const res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
+          items: buildItems(next),
+          custom_data: customData(next),
+          proration_billing_mode: 'do_not_bill',
+        });
+        const payload = await res.json();
+        if (!res.ok) {
+          console.error('Paddle remove item failed', res.status, JSON.stringify(payload));
+          return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        }
+        return json({ ok: true, cancel: true, partial: true, effective_at: sub.current_period_end });
+      }
+
       const res = await paddle(`/subscriptions/${subId}/cancel`, 'POST', { effective_from: 'next_billing_period' });
       const payload = await res.json();
       if (!res.ok) {
@@ -163,14 +256,13 @@ Deno.serve(async (req) => {
         // Quitar la cancelación programada.
         res = await paddle(`/subscriptions/${subId}`, 'PATCH', { scheduled_change: null });
       } else {
-        // Downgrade programado: volver al plan ALTO actual, sin cobro (aún dentro
-        // del período ya pago).
-        const { data: curPlan } = await admin.from('plans')
-          .select('provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live').eq('id', sub.plan_id).maybeSingle();
-        const priceId = priceOf(curPlan, sub.billing_cycle === 'yearly' ? 'annual' : 'monthly');
-        if (!priceId) return json({ error: 'Sin price_id del plan actual' }, 422);
+        // Downgrade programado: volver al plan ALTO actual, sin cobro (aún dentro del
+        // período ya pago). Se reconstruyen todos los ítems: `mapping` ya trae el plan
+        // vigente de cada categoría (el alto, porque el agendado no se aplicó todavía).
+        const items = buildItems(mapping);
+        if (!items.length) return json({ error: 'Sin price_id del plan actual' }, 422);
         res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
-          items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: 'do_not_bill',
+          items, custom_data: customData(mapping), proration_billing_mode: 'do_not_bill',
         });
       }
       const payload = await res.json();
@@ -185,17 +277,18 @@ Deno.serve(async (req) => {
       return json({ ok: true, undo: true });
     }
 
-    // ── Cambio de plan (upgrade / downgrade) ──
-    const { data: plansRows } = await admin.from('plans')
-      .select('id, slug, sort_order, provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live');
-    const plans: Record<string, any> = {};
-    (plansRows || []).forEach((p) => { plans[p.slug] = p; plans[p.id] = p; });
+    // ── Cambio de plan (upgrade / downgrade / alta de una categoría) ──
     const target = plans[plan_slug];
-    const current = plans[sub.plan_id];
+    // El plan actual es el de ESTA categoría dentro de la suscripción. Si la categoría
+    // todavía no está adentro (se le suma un ítem), viene de Free.
+    const current = adding ? plans[FREE] : plans[mapping.get(team_id) ?? sub.plan_id];
     if (!target) return json({ error: 'Plan destino no encontrado' }, 404);
-
-    const priceId = priceOf(target, cycle);
-    if (!priceId) return json({ error: 'El plan destino no tiene price_id de Paddle para este ciclo' }, 422);
+    if (target.slug !== FREE && !priceOf(target, subCycle)) {
+      return json({ error: 'El plan destino no tiene price_id de Paddle para este ciclo' }, 422);
+    }
+    // El ciclo lo manda la suscripción: si el cliente pide otro, se avisa en vez de
+    // crear una mezcla de mensual y anual que Paddle factura junta.
+    if (cycle && cycle !== subCycle) return json({ error: 'cycle_mismatch', sub_cycle: subCycle }, 400);
 
     const curSort = current?.sort_order ?? 0;
     const tgtSort = target.sort_order ?? 0;
@@ -203,24 +296,29 @@ Deno.serve(async (req) => {
     const isDowngrade = tgtSort < curSort;
     const mode = isDowngrade ? 'do_not_bill' : 'prorated_immediately';
 
+    const next = new Map(mapping);
+    next.set(team_id, target.id);
+    const items = buildItems(next);
+    if (!items.length) return json({ error: 'no_paid_items' }, 422);   // todo a Free → usar action:'cancel'
+
     if (preview) {
       // En downgrade no hay cargo ahora: informamos la fecha efectiva (fin de período).
       if (isDowngrade) return json({ ok: true, preview: true, downgrade: true, effective_at: sub.current_period_end });
       // Upgrade: preview real del prorrateo.
       const res = await paddle(`/subscriptions/${subId}/preview`, 'PATCH', {
-        items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: mode,
+        items, proration_billing_mode: mode,
       });
       const payload = await res.json();
       if (!res.ok) {
         console.error('Paddle preview failed', res.status, JSON.stringify(payload));
         return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
       }
-      return json({ ok: true, preview: true, downgrade: false, update_summary: payload?.data?.update_summary ?? null });
+      return json({ ok: true, preview: true, downgrade: false, adding, update_summary: payload?.data?.update_summary ?? null });
     }
 
     // Aplicar
     const res = await paddle(`/subscriptions/${subId}`, 'PATCH', {
-      items: [{ price_id: priceId, quantity: 1 }], proration_billing_mode: mode,
+      items, custom_data: customData(next), proration_billing_mode: mode,
     });
     const payload = await res.json();
     if (!res.ok) {
