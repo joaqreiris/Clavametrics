@@ -184,6 +184,11 @@
     [1, -1].forEach(dir => {
       const gx = dir > 0 ? P.x0 : P.x1;
       const hoopX = gx + dir * P.pw * 0.056;
+      // Which way the arcs bow. Declared up front: it used to sit below the restricted-area
+      // path that reads it, and a `const` read before its declaration throws (temporal dead
+      // zone) — so this function died on its first call and the court came out as bare
+      // grass with no lines at all.
+      const sweep = dir > 0 ? 1 : 0;
       // key + free-throw circle
       g.appendChild(rect(dir > 0 ? gx : gx - keyDepth, P.cy - keyHalf, keyDepth, keyHalf * 2));
       g.appendChild(circ(gx + dir * keyDepth, P.cy, P.ph * 0.12));
@@ -195,7 +200,7 @@
       g.appendChild(path(`M ${hoopX} ${P.cy - rr} A ${rr} ${rr} 0 0 ${sweep} ${hoopX} ${P.cy + rr}`));
       // three-point line: corner straights + arc
       const dxArc = Math.sqrt(Math.max(0, R3 * R3 - cH * cH));
-      const ax = hoopX + dir * dxArc, sweep = dir > 0 ? 1 : 0;
+      const ax = hoopX + dir * dxArc;
       g.appendChild(line(gx, P.cy - cH, ax, P.cy - cH));
       g.appendChild(line(gx, P.cy + cH, ax, P.cy + cH));
       g.appendChild(path(`M ${ax} ${P.cy - cH} A ${R3} ${R3} 0 0 ${sweep} ${ax} ${P.cy + cH}`));
