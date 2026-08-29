@@ -2420,6 +2420,18 @@ function renderTasks(tasks, view = 'my') {
     btn.addEventListener('click', () => { if (!btn.disabled) _setTaskView(btn.dataset.view); });
   });
 
+  // gps-acwr.js entra con `defer`: no corre hasta que el navegador termina de
+  // parsear el HTML y de bajar ese archivo. Este bloque asíncrono puede llegar
+  // acá ANTES (las consultas a Supabase salen en paralelo), y entonces
+  // window.gpsACWR todavía no existe: el cálculo se saltea EN SILENCIO y el KPI
+  // se queda en «—» para siempre. Al recargar el script ya está en caché, gana
+  // la carrera y por eso "aparece a la segunda". Esperar a DOMContentLoaded lo
+  // resuelve: por especificación todos los `defer` se ejecutan antes de ese
+  // evento, así que a partir de acá gpsACWR está garantizado.
+  if (document.readyState === 'loading') {
+    await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
+  }
+
   let acwrWarningCount = 0;
   if (!rpeRes.error && rpeRes.data?.length && window.gpsACWR) {
     // Unified ACWR: same engine + model as the rest of the app (club_gps_settings.acwr_model,
