@@ -295,6 +295,55 @@
   .ob-trial-list li .ti { font-size: 14px; color: var(--cm-success, #15803D); flex-shrink: 0; margin-top: 1px; }
   .ob-trial-foot { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--cm-border); font: var(--cm-meta); color: var(--cm-fg-muted); }
 
+  /* ── Calculadora de precio (paso 5) ── */
+  .ob-calc {
+    margin-top: 16px;
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    background: var(--cm-surface);
+    overflow: hidden;
+  }
+  .ob-calc-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--cm-border);
+    background: var(--cm-bg-soft);
+  }
+  .ob-calc-title { font: 600 14px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .ob-calc-sub { margin-top: 3px; font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .ob-cycle { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--cm-bg-sunk); flex-shrink: 0; }
+  .ob-cycle button {
+    border: 0; background: transparent; cursor: pointer;
+    padding: 6px 12px; border-radius: 999px;
+    font: 500 12px/1 var(--cm-font-sans); color: var(--cm-fg-muted);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ob-cycle button.is-on { background: var(--cm-surface); color: var(--cm-fg-strong); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .ob-cycle .save { font: 600 10.5px/1 var(--cm-font-sans); color: var(--cm-success, #15803D); }
+  .ob-calc-rows { padding: 6px 18px; }
+  .ob-calc-row {
+    display: grid; grid-template-columns: 1fr 190px 88px;
+    gap: 12px; align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--cm-border);
+  }
+  .ob-calc-row:last-child { border-bottom: 0; }
+  .ob-calc-row .name { font: 500 13px/1.2 var(--cm-font-sans); color: var(--cm-fg); }
+  .ob-calc-row .amt { font: 600 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); text-align: right; }
+  .ob-calc-row .amt.is-free { color: var(--cm-fg-faint); font-weight: 500; }
+  .ob-calc-row select { height: 32px; font: var(--cm-body-sm); }
+  .ob-calc-total {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--cm-border);
+    background: var(--cm-bg-soft);
+  }
+  .ob-calc-total-label { font: 500 13px/1.2 var(--cm-font-sans); color: var(--cm-fg); }
+  .ob-calc-save { margin-top: 3px; font: var(--cm-meta); color: var(--cm-success, #15803D); }
+  .ob-calc-amount { font: 600 22px/1 var(--cm-font-sans); letter-spacing: -0.02em; color: var(--cm-fg-strong); }
+  .ob-buy-note { margin-top: 10px; font: var(--cm-meta); color: var(--cm-fg-muted); text-align: right; }
+  .ob-buy-note[hidden] { display: none; }
+
   /* Resumen de lo que quedó creado */
   .ob-recap { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
   .ob-recap-row { display: flex; align-items: flex-start; gap: 10px; font: var(--cm-body-sm); color: var(--cm-fg); }
@@ -349,6 +398,9 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
+<!-- Paddle: el paso 5 deja contratar sin salir del asistente. defer porque nada del
+     primer pintado lo necesita — sólo se usa al llegar al último paso. -->
+<script defer src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 </head>
 <body class="cm">
 
@@ -575,6 +627,32 @@
         <div class="ob-trial-foot" data-i18n="onboarding.trialFoot">No card needed to start. We'll remind you before the trial ends.</div>
       </div>
 
+      <!-- Calculadora: el precio es POR CATEGORÍA, así que el total depende del plan que
+           lleve cada una. En este momento el club todavía no cargó jugadores, así que no
+           se puede deducir: se pregunta, con una preselección razonable. -->
+      <div class="ob-calc">
+        <div class="ob-calc-head">
+          <div>
+            <div class="ob-calc-title" data-i18n="onboarding.calcTitle">What it costs after the trial</div>
+            <div class="ob-calc-sub" data-i18n="onboarding.calcSub">One plan per category — the ones under 15 players stay free forever.</div>
+          </div>
+          <div class="ob-cycle" id="ob-cycle">
+            <button type="button" class="is-on" data-cycle="monthly" data-i18n="onboarding.cycleMonthly">Monthly</button>
+            <button type="button" data-cycle="annual"><span data-i18n="onboarding.cycleAnnual">Annual</span> <span class="save" data-i18n="onboarding.twoMonthsFree">2 months free</span></button>
+          </div>
+        </div>
+
+        <div class="ob-calc-rows" id="ob-calc-rows"></div>
+
+        <div class="ob-calc-total">
+          <div>
+            <div class="ob-calc-total-label" data-i18n="onboarding.calcTotal">Total after the trial</div>
+            <div class="ob-calc-save" id="ob-calc-save"></div>
+          </div>
+          <div class="ob-calc-amount" id="ob-calc-amount">—</div>
+        </div>
+      </div>
+
       <div class="ob-recap" id="ob-recap"></div>
 
       <div class="ob-error" id="ob-err-plan"></div>
@@ -584,12 +662,15 @@
           <i class="ti ti-arrow-left" style="font-size:16px"></i> <span data-i18n="common.back">Back</span>
         </button>
         <div class="ob-actions-spacer"></div>
-        <a class="cm-btn is-ghost" href="Pricing.html" data-i18n="onboarding.seePlans">See plans</a>
+        <button class="cm-btn is-ghost" id="ob-buy-now" hidden>
+          <i class="ti ti-credit-card" style="font-size:15px"></i> <span data-i18n="onboarding.buyNow">Subscribe now</span>
+        </button>
         <button class="cm-btn is-primary" data-next="plan">
-          <span data-i18n="onboarding.enterWorkspace">Enter your workspace</span>
+          <span data-i18n="onboarding.enterWorkspace">Start the trial</span>
           <i class="ti ti-arrow-right" style="font-size:16px"></i>
         </button>
       </div>
+      <div class="ob-buy-note" id="ob-buy-note" hidden data-i18n="onboarding.buyNote">Subscribing charges the first period today and ends the trial. You can also do it later from Admin, category by category.</div>
     </section>
 
   </main>
@@ -647,6 +728,11 @@
     existingTeams: [],   // nombres ya creados (para no duplicar al volver atrás)
     hasPrimaryTeam: false,
     invitesSent: 0,
+    teams: [],           // [{ id, name, is_primary }] — creados o preexistentes
+    plans: [],           // filas de `plans`, para la calculadora del paso 5
+    priceIds: {},        // slug → { monthly, yearly } (según el entorno de Paddle)
+    cycle: 'monthly',
+    picks: {},           // team_id → slug de plan elegido en la calculadora
   };
 
   function showError(step, msg) {
@@ -677,7 +763,10 @@
     const rail = document.getElementById('ob-rail-step');
     if (rail) rail.textContent = 'Setup · ' + (idx + 2) + ' / 5';
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (step === 'plan') renderRecap();
+    if (step === 'plan') {
+      renderRecap();
+      loadPlans().then(renderCalc).catch(() => {});
+    }
   }
 
   document.getElementById('ob-steps').addEventListener('click', e => {
@@ -940,6 +1029,169 @@
       `<div class="ob-recap-row"><i class="ti ${icon}"></i><span>${esc(label)}: <b>${esc(value)}</b></span></div>`).join('');
   }
 
+  /* ── Calculadora de precio ──────────────────────────────────────────────
+     El cobro es por categoría (una suscripción por team), así que el total sale de
+     sumar el plan de cada una. Como el club todavía no cargó jugadores, no se puede
+     inferir el tamaño de cada plantel: se preselecciona el primer equipo en el plan
+     con GPS y el resto en Free, y el usuario ajusta. */
+  const PADDLE_TOKEN_SANDBOX = 'test_effd5adff10614f5ee3b57a539b';
+  const PADDLE_TOKEN_LIVE    = 'live_396e5136a2baa76cc348ef38a05';   // client-side token (público)
+  let PADDLE_ENV = 'sandbox';
+
+  async function loadPlans() {
+    if (state.plans.length) return;
+    try {
+      const { data } = await window.sb.rpc('paddle_env');
+      if (data === 'production') PADDLE_ENV = 'production';
+    } catch (_e) {}
+    if (window.Paddle) {
+      try {
+        Paddle.Environment.set(PADDLE_ENV);
+        Paddle.Initialize({ token: PADDLE_ENV === 'production' ? PADDLE_TOKEN_LIVE : PADDLE_TOKEN_SANDBOX });
+      } catch (_e) {}
+    }
+    const { data: plans } = await window.sb.from('plans')
+      .select('slug, name, price_monthly, price_yearly, max_players, sort_order, is_active, provider_price_monthly_id, provider_price_yearly_id, provider_price_monthly_id_live, provider_price_yearly_id_live')
+      .order('sort_order');
+    state.plans = (plans || []).filter(p => p.is_active !== false);
+    state.plans.forEach(p => {
+      state.priceIds[p.slug] = PADDLE_ENV === 'production'
+        ? { monthly: p.provider_price_monthly_id_live, yearly: p.provider_price_yearly_id_live }
+        : { monthly: p.provider_price_monthly_id,      yearly: p.provider_price_yearly_id };
+    });
+  }
+
+  const planBySlug = slug => state.plans.find(p => p.slug === slug) || null;
+  const freeSlug   = () => (state.plans.find(p => Number(p.price_monthly) === 0) || { slug: 'initiation' }).slug;
+  const money      = n => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
+
+  function defaultPick(team) {
+    if (!state.plans.length) return freeSlug();
+    if (!team.is_primary) return freeSlug();
+    // El primer equipo es el que usa GPS y carga: se sugiere el plan intermedio de
+    // los pagos, no el más caro.
+    const paid = state.plans.filter(p => Number(p.price_monthly) > 0);
+    return (paid[Math.min(1, paid.length - 1)] || paid[0] || { slug: freeSlug() }).slug;
+  }
+
+  function renderCalc() {
+    const host = document.getElementById('ob-calc-rows');
+    if (!host) return;
+    if (!state.plans.length) { host.innerHTML = ''; return; }
+    const teams = state.teams.slice().sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+    host.innerHTML = teams.map(t => {
+      if (!state.picks[t.id]) state.picks[t.id] = defaultPick(t);
+      const slug = state.picks[t.id];
+      const p = planBySlug(slug);
+      const amount = state.cycle === 'annual' ? Number(p && p.price_yearly) : Number(p && p.price_monthly);
+      const options = state.plans.map(pl => {
+        const price = state.cycle === 'annual' ? Number(pl.price_yearly) : Number(pl.price_monthly);
+        const label = pl.name + (price > 0 ? ' — ' + money(price) : ' — ' + tt('onboarding.priceFree', 'free'));
+        return `<option value="${esc(pl.slug)}"${pl.slug === slug ? ' selected' : ''}>${esc(label)}</option>`;
+      }).join('');
+      return `<div class="ob-calc-row">
+        <div class="name">${esc(t.name)}</div>
+        <select class="cm-select" data-team="${esc(t.id)}">${options}</select>
+        <div class="amt${amount > 0 ? '' : ' is-free'}">${amount > 0 ? esc(money(amount)) : esc(tt('onboarding.priceFree', 'free'))}</div>
+      </div>`;
+    }).join('');
+    updateCalcTotal();
+  }
+
+  function calcTotals() {
+    let monthly = 0, yearly = 0;
+    for (const t of state.teams) {
+      const p = planBySlug(state.picks[t.id]);
+      if (!p) continue;
+      monthly += Number(p.price_monthly) || 0;
+      yearly  += Number(p.price_yearly)  || 0;
+    }
+    return { monthly, yearly };
+  }
+
+  function updateCalcTotal() {
+    const { monthly, yearly } = calcTotals();
+    const amtEl  = document.getElementById('ob-calc-amount');
+    const saveEl = document.getElementById('ob-calc-save');
+    const buyBtn = document.getElementById('ob-buy-now');
+    const note   = document.getElementById('ob-buy-note');
+    const annual = state.cycle === 'annual';
+    if (amtEl) {
+      amtEl.textContent = (annual ? yearly : monthly) > 0
+        ? money(annual ? yearly : monthly) + (annual ? tt('onboarding.perYear', ' / yr') : tt('onboarding.perMonth', ' / mo'))
+        : tt('onboarding.priceFreeTotal', 'Free');
+    }
+    if (saveEl) {
+      // El anual ya vale diez meses: se dice así, que es lo que se entiende, en vez
+      // de un porcentaje que no le mueve el ánimo a nadie.
+      const save = monthly * 12 - yearly;
+      saveEl.textContent = (annual && save > 0)
+        ? tt('onboarding.annualSave', 'You save {amount} a year', { amount: money(save) })
+        : (!annual && monthly > 0 ? tt('onboarding.annualHint', 'Annual: 2 months free') : '');
+    }
+    const payable = monthly > 0;
+    if (buyBtn) buyBtn.hidden = !payable;
+    if (note)   note.hidden   = !payable;
+  }
+
+  document.getElementById('ob-cycle').addEventListener('click', e => {
+    const b = e.target.closest('[data-cycle]');
+    if (!b) return;
+    state.cycle = b.dataset.cycle;
+    document.querySelectorAll('#ob-cycle button').forEach(x => x.classList.toggle('is-on', x === b));
+    renderCalc();
+  });
+  // Cambiar un plan repinta sólo su importe y el total: redibujar la tabla entera
+  // reemplazaba el <select> que el usuario acababa de tocar y le robaba el foco.
+  document.getElementById('ob-calc-rows').addEventListener('change', e => {
+    const sel = e.target.closest('[data-team]');
+    if (!sel) return;
+    state.picks[sel.dataset.team] = sel.value;
+    const p = planBySlug(sel.value);
+    const amount = state.cycle === 'annual' ? Number(p && p.price_yearly) : Number(p && p.price_monthly);
+    const cell = sel.closest('.ob-calc-row').querySelector('.amt');
+    cell.textContent = amount > 0 ? money(amount) : tt('onboarding.priceFree', 'free');
+    cell.classList.toggle('is-free', !(amount > 0));
+    updateCalcTotal();
+  });
+
+  // Fase 1 del cobro: un checkout de Paddle es UNA suscripción para UN equipo
+  // (customData.team_id), así que acá se cobra la categoría más cara y el resto queda
+  // a un clic desde Admin. El checkout consolidado necesita repartir una suscripción
+  // entre varios equipos en el webhook, y eso va aparte.
+  document.getElementById('ob-buy-now').addEventListener('click', async () => {
+    clearError('plan');
+    const paid = state.teams
+      .map(t => ({ team: t, plan: planBySlug(state.picks[t.id]) }))
+      .filter(x => x.plan && Number(x.plan.price_monthly) > 0)
+      .sort((a, b) => Number(b.plan.price_monthly) - Number(a.plan.price_monthly));
+    if (!paid.length) return;
+    const { team, plan } = paid[0];
+    const priceId = (state.priceIds[plan.slug] || {})[state.cycle === 'annual' ? 'yearly' : 'monthly'];
+    if (!priceId || !window.Paddle) {
+      showError('plan', tt('onboarding.checkoutUnavailable', "Checkout isn't available right now. Start the trial and subscribe from Admin."));
+      return;
+    }
+    if (paid.length > 1) {
+      const rest = paid.slice(1).map(x => x.team.name).join(', ');
+      if (!confirm(tt('onboarding.buyOneFirst', 'We\'ll charge {team} ({plan}) now. The rest ({rest}) you activate from Admin in one click. Continue?',
+        { team: team.name, plan: plan.name, rest }))) return;
+    }
+    // El asistente queda cerrado ANTES de abrir el pago: si no, al volver del checkout
+    // el Hub lo mandaría de nuevo acá.
+    const { data: { user } } = await window.sb.auth.getUser();
+    await window.sb.from('clubs').update({ onboarded_at: new Date().toISOString() }).eq('id', state.clubId);
+    Paddle.Checkout.open({
+      items: [{ priceId, quantity: 1 }],
+      customer: user && user.email ? { email: user.email } : undefined,
+      customData: { team_id: team.id, club_id: state.clubId, plan_slug: plan.slug, cycle: state.cycle },
+      settings: {
+        displayMode: 'overlay', theme: 'light',
+        successUrl: window.location.origin + '/Admin.html?welcome=' + encodeURIComponent(plan.slug),
+      },
+    });
+  });
+
   function paintTrial() {
     const sub = document.getElementById('ob-trial-sub');
     if (!sub) return;
@@ -1006,9 +1258,12 @@
         return { club_id: state.clubId, name: c.name, is_primary: isPrimary };
       });
       if (!primaryTaken) { rows[0].is_primary = true; primaryTaken = true; }
-      const { error } = await window.sb.from('teams').insert(rows);
+      // Los ids vuelven del insert: el paso 5 los necesita para cobrar por categoría
+      // (subscriptions.team_id) sin tener que releer la tabla.
+      const { data: created, error } = await window.sb.from('teams').insert(rows).select('id, name, is_primary');
       if (error) { showError('categories', error.message); return false; }
       state.existingTeams.push(...toInsert.map(c => c.name));
+      state.teams.push(...(created || []));
       state.hasPrimaryTeam = primaryTaken;
       toInsert.forEach(c => { c.existing = true; });
     }
@@ -1165,9 +1420,10 @@
 
     // Equipos ya existentes (por si el asistente se retoma a mitad de camino).
     const { data: teams } = await window.sb.from('teams')
-      .select('name, is_primary').eq('club_id', state.clubId).is('archived_at', null);
-    state.existingTeams = (teams || []).map(t => t.name);
-    state.hasPrimaryTeam = (teams || []).some(t => t.is_primary);
+      .select('id, name, is_primary').eq('club_id', state.clubId).is('archived_at', null);
+    state.teams = teams || [];
+    state.existingTeams = state.teams.map(t => t.name);
+    state.hasPrimaryTeam = state.teams.some(t => t.is_primary);
     // Los equipos que ya existen y no coinciden con ningún preset se muestran igual, para
     // que el paso refleje la realidad del club en vez de una lista teórica.
     state.cats = state.existingTeams.map(n => ({
