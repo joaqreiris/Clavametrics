@@ -225,6 +225,9 @@ create table if not exists public.calendar_events (
   -- aunque el resto del plantel esté en otra. Misma convención que training_sessions:
   -- ASCII 'MD-2'/'MD+1' y 'MD0' para el día de partido. NULL = lo resuelve el día.
   match_day_offset text,
+  -- Solo para type='prevention': la asistencia no se negocia. Se pinta en rojo en la
+  -- semana (app, PDF/PNG y link del jugador) con la nota del evento debajo.
+  is_mandatory boolean default false not null,
   constraint calendar_events_pkey primary key (id),
   constraint calendar_events_travel_mode_check CHECK ((travel_mode = ANY (ARRAY['bus'::text, 'flight'::text, 'train'::text, 'other'::text]))),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
@@ -3787,6 +3790,7 @@ BEGIN
           'competition',      e.competition,
           'crest_url',        e.rival_crest_url,
           'md',               e.match_day_offset,
+          'mandatory',        COALESCE(e.is_mandatory, false),
           'partial',          (e.player_ids IS NOT NULL AND array_length(e.player_ids, 1) > 0)
         ) AS row
       FROM calendar_events e
@@ -3815,6 +3819,7 @@ BEGIN
           'competition',      NULL,
           'crest_url',        NULL,
           'md',               t.match_day_offset,
+          'mandatory',        false,
           'partial',          false
         )
       FROM training_sessions t

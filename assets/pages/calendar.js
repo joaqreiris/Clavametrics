@@ -47,6 +47,7 @@ const EVT_ICONS = {
   breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen', snack:'ti-apple',
   hotel:'ti-bed', bus:'ti-bus',
   press:'ti-microphone', medical:'ti-stethoscope', physio:'ti-physotherapist',
+  prevention:'ti-shield-check',
   walkthrough:'ti-walk', scouting:'ti-binoculars',
   'day-off':'ti-beach',
 };
@@ -488,10 +489,15 @@ function renderGrid() {
           const leadEl = (cat === 'match' && s.rival_crest_url)
             ? `<img src="${_esc(s.rival_crest_url)}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
             : `<i class="ti ${icon}"></i>`;
-          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + _esc(s.session_type) : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
+          // Preventivo obligatorio: se marca en rojo y arrastra su nota debajo, porque
+          // "obligatorio" sin decir qué hay que hacer no le sirve a nadie.
+          const isMandatory = cat === 'prevention' && s.is_mandatory;
+          const sub = (isMandatory && s.notes)
+            ? `<span class="sub">${_esc(s.notes)}</span>` : '';
+          return `<div class="mc-evt ${cat}${isOutdoorTrain ? ' st-' + _esc(s.session_type) : ''}${isMandatory ? ' is-mandatory' : ''}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
-            <span class="name" title="${_esc(evtName + durSuffix)}">${_esc(evtName)}${_esc(durSuffix)}</span>${au}
+            <span class="name" title="${_esc(evtName + durSuffix)}">${_esc(evtName)}${_esc(durSuffix)}</span>${au}${sub}
           </div>`;
         }).join('') || `<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">${tt('calendar.hidden_by_filter','Hidden by filter')}</div>`;
 
@@ -944,10 +950,11 @@ async function fetchAllEvents(dateFrom, dateTo) {
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,orientation,visible_to,recurrence_group_id,created_at,match_day_offset')
       .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
-    _evtQ(EVT_COLS + ',player_ids,travel_mode,match_day_offset')
+    _evtQ(EVT_COLS + ',player_ids,travel_mode,match_day_offset,is_mandatory')
   ]);
-  // Fallbacks: si match_day_offset / travel_mode / player_ids todavía no existen en la DB,
-  // reintentar sin ellas
+  // Fallbacks: si is_mandatory / match_day_offset / travel_mode / player_ids todavía no
+  // existen en la DB, reintentar sin ellas
+  if (evtRes.error && /is_mandatory/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids,travel_mode,match_day_offset');
   if (evtRes.error && /match_day_offset/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids,travel_mode');
   if (evtRes.error && /travel_mode/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS + ',player_ids');
   if (evtRes.error && /player_ids/.test(evtRes.error.message || '')) evtRes = await _evtQ(EVT_COLS);
@@ -973,6 +980,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     player_ids: e.player_ids || null,
     travel_mode: e.travel_mode || null,
     match_day_offset: e.match_day_offset || null,
+    is_mandatory: !!e.is_mandatory,
     source: 'event'
   }));
   // Dedup matches: a match can exist both as a calendar_events event and as a
@@ -1142,6 +1150,16 @@ function calFillMdSelect(sel) {
 function calSyncMdRow(type) {
   const row = document.getElementById('calEvtMdRow');
   if (row) row.style.display = MD_EVT_TYPES.includes(type) ? '' : 'none';
+}
+
+// «Asistencia obligatoria» solo tiene sentido en los preventivos: el resto de los eventos
+// o son de todo el plantel o son opcionales por naturaleza.
+function calSyncMandatoryRow(type) {
+  const row = document.getElementById('calEvtMandatoryRow');
+  if (!row) return;
+  const on = type === 'prevention';
+  row.style.display = on ? '' : 'none';
+  if (!on) { const cb = document.getElementById('calEvtF_mandatory'); if (cb) cb.checked = false; }
 }
 
 // Valor a persistir: convención de Daily Planning / Gym Planner (ASCII, 'MD0' para el día
@@ -1455,6 +1473,10 @@ function openEvtModal(session, defaultDate, focusTasks) {
     mdSel.value = [...mdSel.options].some(o => o.value === saved) ? saved : '';
   }
   calSyncMdRow(evtType);
+
+  const mandCb = document.getElementById('calEvtF_mandatory');
+  if (mandCb) mandCb.checked = !!session?.is_mandatory;
+  calSyncMandatoryRow(evtType);
 
   // Day off scope: restaurar del evento (parcial si tiene player_ids) o default equipo entero
   _dayOffSel   = new Set((session?.player_ids || []).map(String));
@@ -2399,6 +2421,7 @@ async function saveEvt() {
     if (isCalEvt) {
       const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo, match_day_offset: calMdFieldValue(type) };
       if (type === 'travel') basePayload.travel_mode = document.getElementById('calEvtF_travelMode')?.value || null;
+      if (type === 'prevention') basePayload.is_mandatory = !!document.getElementById('calEvtF_mandatory')?.checked;
       if (type === 'day_off') basePayload.player_ids = isPartialSave ? [..._dayOffSel] : null;
       if (type === 'match') {
         basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
@@ -2422,9 +2445,10 @@ async function saveEvt() {
       table = 'training_sessions';
     }
     ({ error } = await window.sb.from(table).insert(rows));
-    // Fallback: calendar_events.match_day_offset todavía no existe en la DB
-    if (error && /match_day_offset/i.test(error.message || '')) {
-      rows = rows.map(r => { const { match_day_offset, ...rest } = r; return rest; });
+    // Fallback: calendar_events.match_day_offset / is_mandatory todavía no existen en la DB
+    if (error && /match_day_offset|is_mandatory/i.test(error.message || '')) {
+      const drop = /is_mandatory/i.test(error.message || '') ? 'is_mandatory' : 'match_day_offset';
+      rows = rows.map(r => { const rest = { ...r }; delete rest[drop]; return rest; });
       ({ error } = await window.sb.from(table).insert(rows));
     }
     saving.style.display = 'none'; saveBtn.disabled = false;
@@ -2443,6 +2467,8 @@ async function saveEvt() {
   if (isCalEvt) {
     const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, match_day_offset: calMdFieldValue(type), ...matchFieldsToClear };
     payload.travel_mode = type === 'travel' ? (document.getElementById('calEvtF_travelMode')?.value || null) : null;
+    // Solo los preventivos pueden ser obligatorios; si el evento cambió de tipo, se limpia.
+    payload.is_mandatory = type === 'prevention' && !!document.getElementById('calEvtF_mandatory')?.checked;
     if (type === 'day_off') payload.player_ids = isPartialSave ? [..._dayOffSel] : null;
     else if (prevType === 'day_off') payload.player_ids = null;   // dejó de ser day off
     if (type === 'match') {
@@ -2473,9 +2499,10 @@ async function saveEvt() {
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
     // Fallback: la columna todavía no existe en la DB → reintentar sin ella
-    if (error && /travel_mode|match_day_offset/i.test(error.message || '')) {
+    if (error && /travel_mode|match_day_offset|is_mandatory/i.test(error.message || '')) {
       if (/travel_mode/i.test(error.message || '')) delete payload.travel_mode;
       if (/match_day_offset/i.test(error.message || '')) delete payload.match_day_offset;
+      if (/is_mandatory/i.test(error.message || '')) delete payload.is_mandatory;
       if (_editEvtId && _editEvtSource === 'event') ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
       else ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
@@ -2599,6 +2626,8 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   if (travelRow) travelRow.style.display = t === 'travel' ? '' : 'none';
   // MD: solo para tipos de trabajo
   calSyncMdRow(t);
+  // prevention: fila de «asistencia obligatoria»
+  calSyncMandatoryRow(t);
   // day_off: show scope row (whole team vs selected players)
   calSyncDayOffRow(t);
   // Update visible-to defaults to match new type (only on new events)

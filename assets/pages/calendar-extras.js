@@ -953,30 +953,65 @@ async function revokeShareLink() {
 }
 
 // ── Dedicated print sheets (ClavaMetrics "Microcycle Week Plan") ──
+// Todo tipo que se pueda cargar en el calendario tiene que estar acá: lo que cae en
+// _fallback se imprime con un punto anónimo, y en una hoja llena de eventos de logística
+// («llegada al hotel», «salida del bus») ese punto no dice nada.
 const CAL_TYPE_META = {
   training:   { abbr:'TRA',   fg:'#1E40AF', bg:'#EFF4FF', bd:'#C7D7FE', label:'Training' },
+  tactical:   { abbr:'TRA',   fg:'#1E40AF', bg:'#EFF4FF', bd:'#C7D7FE', label:'Training' },
+  conditioning:{abbr:'TRA',   fg:'#1E40AF', bg:'#EFF4FF', bd:'#C7D7FE', label:'Training' },
+  beach:      { abbr:'BEACH', fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Beach session' },
+  outdoor:    { abbr:'OUT',   fg:'#0F766E', bg:'#ECFDF5', bd:'#A7F3D0', label:'Outdoor endurance' },
   gym:        { abbr:'GYM',   fg:'#5B21B6', bg:'#F5F2FF', bd:'#DDD3FB', label:'Gym' },
+  prevention: { abbr:'PREV',  fg:'#9D174D', bg:'#FDF2F8', bd:'#FBCFE8', label:'Prevention work' },
   match:      { abbr:'MATCH', fg:'#991B1B', bg:'#FCE9E9', bd:'#F1B9B9', label:'Match' },
   recovery:   { abbr:'REC',   fg:'#14532D', bg:'#ECFBF1', bd:'#BBEBCB', label:'Recovery' },
+  walkthrough:{ abbr:'ACT',   fg:'#1D4ED8', bg:'#F5F8FF', bd:'#DCE6FD', label:'Walkthrough' },
   travel:     { abbr:'TRV',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Travel' },
+  bus_departure:{abbr:'BUS',  fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Bus departure' },
+  bus_arrival:{ abbr:'BUS',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Bus arrival' },
+  hotel_checkin:{abbr:'HOTEL',fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Hotel check-in' },
+  hotel_checkout:{abbr:'HOTEL',fg:'#475569',bg:'#F1F5F9', bd:'#CBD5E1', label:'Hotel check-out' },
   meeting:    { abbr:'MTG',   fg:'#1E3A8A', bg:'#EFF6FF', bd:'#BFDBFE', label:'Meeting' },
   evaluation: { abbr:'EVA',   fg:'#14532D', bg:'#F0FDF4', bd:'#BBF7D0', label:'Evaluation' },
   video:      { abbr:'VID',   fg:'#334155', bg:'#F1F4F8', bd:'#D8E0EA', label:'Video' },
+  video_session:{abbr:'VID',  fg:'#334155', bg:'#F1F4F8', bd:'#D8E0EA', label:'Video' },
+  scouting:   { abbr:'SCO',   fg:'#334155', bg:'#F1F4F8', bd:'#D8E0EA', label:'Scouting' },
+  press:      { abbr:'PRESS', fg:'#334155', bg:'#F1F4F8', bd:'#D8E0EA', label:'Press conference' },
+  medical_check:{abbr:'MED',  fg:'#9F1239', bg:'#FFF1F2', bd:'#FECDD3', label:'Medical check' },
   breakfast:  { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   lunch:      { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   dinner:     { abbr:'MEAL',  fg:'#92400E', bg:'#FEF4E6', bd:'#F3D9A6', label:'Meal' },
   snack:      { abbr:'SNACK', fg:'#3F6212', bg:'#F7FEE7', bd:'#D9F99D', label:'Snack' },
   day_off:    { abbr:'OFF',   fg:'#9CA3AF', bg:'#F3F4F6', bd:'#D8DCE0', label:'Day off' },
   physio:     { abbr:'PHY',   fg:'#155E75', bg:'#ECFEFF', bd:'#A5F3FC', label:'Physio' },
+  other:      { abbr:'EVT',   fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' },
+  // Preventivo obligatorio: no es un tipo aparte, es cómo se pinta 'prevention' cuando
+  // la asistencia no se negocia (ver calCardMeta).
+  _mandatory: { abbr:'PREV!', fg:'#B91C1C', bg:'#FEF2F2', bd:'#FCA5A5', label:'Prevention work' },
   _fallback:  { abbr:'•',     fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' }
 };
+// Meta de un evento concreto: igual que CAL_TYPE_META[tipo], salvo el preventivo
+// obligatorio, que va en rojo.
+function calCardMeta(e) {
+  if (e && e.session_type === 'prevention' && e.is_mandatory) return CAL_TYPE_META._mandatory;
+  return CAL_TYPE_META[e && e.session_type] || CAL_TYPE_META._fallback;
+}
 const CAL_TYPE_LABEL_KEY = {
-  training:'calendar.type_label_training', gym:'calendar.type_label_gym', match:'calendar.type_label_match',
-  recovery:'calendar.type_label_recovery', travel:'calendar.type_label_travel', meeting:'calendar.type_label_meeting',
-  evaluation:'calendar.type_label_evaluation', video:'calendar.type_label_video',
+  training:'calendar.type_label_training', tactical:'calendar.type_label_training', conditioning:'calendar.type_label_training',
+  beach:'calendar.type_beach', outdoor:'calendar.type_outdoor',
+  gym:'calendar.type_label_gym', prevention:'calendar.type_prevention', match:'calendar.type_label_match',
+  recovery:'calendar.type_label_recovery', walkthrough:'calendar.type_walkthrough_short',
+  travel:'calendar.type_label_travel', bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
+  hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
+  meeting:'calendar.type_label_meeting',
+  evaluation:'calendar.type_label_evaluation', video:'calendar.type_label_video', video_session:'calendar.type_label_video',
+  scouting:'calendar.type_scouting', press:'calendar.type_press', medical_check:'calendar.type_medical_check',
   breakfast:'calendar.type_label_meal', lunch:'calendar.type_label_meal', dinner:'calendar.type_label_meal',
   snack:'calendar.type_label_snack',
-  day_off:'calendar.type_label_day_off', physio:'calendar.type_label_physio', _fallback:'calendar.type_label_event',
+  day_off:'calendar.type_label_day_off', physio:'calendar.type_label_physio',
+  other:'calendar.type_label_event',
+  _mandatory:'calendar.type_prevention', _fallback:'calendar.type_label_event',
 };
 function calMetaLabel(type){
   const meta = CAL_TYPE_META[type] || CAL_TYPE_META._fallback;
@@ -1083,20 +1118,22 @@ async function calBuildWeekSheet(){
       <span style="font:italic 500 10px ${FONT};color:#9CA3AF">${esc(tt('calendar.print_day_off','Day off'))}</span>
       <span style="font:700 7.5px ${MONO};color:#9CA3AF;border:1px dashed #C9CDD3;padding:1px 5px;border-radius:3px">OFF</span></div>`;
     const cardHtml = e => {
-      const meta = CAL_TYPE_META[e.session_type] || CAL_TYPE_META._fallback;
+      const meta = calCardMeta(e);
       const isMatch = e.session_type === 'match';
+      const isMand  = e.session_type === 'prevention' && e.is_mandatory;
       const time = _fmtTime(e.start_time);
       const title = isMatch ? `vs ${esc(e.opponent || e.title || tt('calendar.match_word','Match'))}` : esc(e.title || calMetaLabel(e.session_type));
       const subRaw = isMatch
         ? [haLabel(e.home_away), e.competition||''].filter(Boolean).join(' · ')
         : (e.notes || '');
-      return `<div style="background:#FBFBFA;border:1px solid #ECECE9;border-left:3px solid ${meta.fg};border-radius:6px;padding:6px 8px;break-inside:avoid">
+      // El preventivo obligatorio se lee como el partido: fondo y texto en rojo.
+      return `<div style="background:${isMand?meta.bg:'#FBFBFA'};border:1px solid ${isMand?meta.bd:'#ECECE9'};border-left:3px solid ${meta.fg};border-radius:6px;padding:6px 8px;break-inside:avoid">
         <div style="display:flex;align-items:center;gap:5px">
-          ${time?`<span style="font:500 9.5px ${MONO};color:#8A93A0">${esc(time)}</span>`:''}
-          <span style="margin-left:auto;background:${meta.bg};color:${meta.fg};border:1px solid ${meta.bd};font:700 7.5px ${MONO};letter-spacing:.04em;padding:1px 5px;border-radius:3px">${esc(meta.abbr)}</span>
+          ${time?`<span style="font:500 9.5px ${MONO};color:${isMand?meta.fg:'#8A93A0'}">${esc(time)}</span>`:''}
+          <span style="margin-left:auto;background:${isMand?'#fff':meta.bg};color:${meta.fg};border:1px solid ${meta.bd};font:700 7.5px ${MONO};letter-spacing:.04em;padding:1px 5px;border-radius:3px">${esc(meta.abbr)}</span>
         </div>
-        <div style="font:600 11px ${FONT};color:${isMatch?'#991B1B':'#15181D'};margin-top:3px">${title}</div>
-        ${subRaw?`<div style="font:500 8.5px ${MONO};color:#9CA3AF;margin-top:2px">${esc(subRaw)}</div>`:''}
+        <div style="font:${isMand?700:600} 11px ${FONT};color:${isMatch||isMand?meta.fg:'#15181D'};margin-top:3px">${title}</div>
+        ${subRaw?`<div style="font:500 8.5px ${MONO};color:${isMand?meta.fg:'#9CA3AF'};margin-top:2px">${esc(subRaw)}</div>`:''}
       </div>`;
     };
     const dayCol = ds => {
@@ -1119,7 +1156,7 @@ async function calBuildWeekSheet(){
       : `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font:500 12px ${FONT}">${esc(tt('calendar.print_no_mc_selected','No microcycle selected.'))}</div>`;
 
     // 4) Footer (legend + club·team, then mono line)
-    const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
+    const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Prevention','prevention'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
     const legend = legendTypes.map(([lab,t])=>{ const m=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${m.bg};border:1px solid ${m.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('');
     const footMid = [];
     if (mc?.name) footMid.push(mc.name);
@@ -1207,7 +1244,7 @@ async function calBuildMonthSheet(){
     const dayOffPill = `<div style="display:flex;align-items:center;padding:2px 5px;border-radius:5px;border:1px dashed #D8DCE0;color:#9CA3AF;font:italic 600 9px ${FONT}">OFF</div>`;
     const pill = e => {
       if (_isFullDayOff(e)) return dayOffPill;
-      const meta = CAL_TYPE_META[e.session_type] || CAL_TYPE_META._fallback;
+      const meta = calCardMeta(e);
       const t = _fmtTime(e.start_time);
       const nm = e.session_type === 'match'
         ? ('vs ' + (e.opponent || e.title || tt('calendar.match_word','Match')))
@@ -1241,7 +1278,7 @@ async function calBuildMonthSheet(){
     const grid = `<div style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:8px;overflow:hidden;margin-bottom:12px">${cells.map(dayCell).join('')}</div>`;
 
     // 4) Footer
-    const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
+    const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Prevention','prevention'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
     const legend = legendTypes.map(([lab,t])=>{ const meta=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${meta.bg};border:1px solid ${meta.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('');
     const footer = `<div style="margin-top:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">

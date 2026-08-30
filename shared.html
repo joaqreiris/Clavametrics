@@ -324,6 +324,16 @@
   }
   .sh-evt.is-match .sh-evt-title { font-weight: 700; }
 
+  /* Preventivo obligatorio: no es una sugerencia, así que se pinta como el partido. */
+  .sh-evt.is-mandatory { background: color-mix(in srgb, var(--c-match) 7%, transparent); }
+  .sh-evt.is-mandatory .sh-evt-title { font-weight: 700; color: var(--c-match); }
+  .sh-evt.is-mandatory .sh-evt-note { border-left-color: var(--c-match); }
+  .sh-evt-req {
+    font: 700 9.5px/1 var(--sh-mono); letter-spacing: .05em; text-transform: uppercase;
+    padding: 3px 6px; border-radius: 4px;
+    background: var(--c-match); color: #fff;
+  }
+
   /* ── Legend ── */
   .sh-legend {
     display: flex; flex-wrap: wrap; gap: 6px 12px;
@@ -841,7 +851,12 @@
     if (e.home_away) bits.push('<span class="bit">' + esc(haLabel(e.home_away)) + '</span>');
     if (e.partial) bits.push('<span class="bit"><i class="ti ti-users-group"></i>' + esc(tt('player_week.some_players', 'Some players only')) + '</span>');
 
-    return '<div class="sh-evt' + (e.event_type === 'match' ? ' is-match' : '') + '" style="--ec:' + color + '">' +
+    // El preventivo obligatorio se muestra en rojo, no en el rosa del preventivo suelto.
+    var mandatory = e.event_type === 'prevention' && e.mandatory;
+    if (mandatory) color = 'var(--c-match)';
+
+    return '<div class="sh-evt' + (e.event_type === 'match' ? ' is-match' : '') +
+        (mandatory ? ' is-mandatory' : '') + '" style="--ec:' + color + '">' +
       '<div class="sh-evt-time' + (start ? '' : ' is-free') + '">' +
         (start ? esc(start) + (end && end !== start ? '<span class="end">' + esc(end) + '</span>' : '')
                : esc(tt('player_week.no_time', 'No time'))) +
@@ -851,6 +866,7 @@
         '<div class="sh-evt-title"><i class="ti ' + typeIcon(e.event_type) + '"></i><span class="txt">' + esc(title) + '</span></div>' +
         '<div class="sh-evt-sub">' +
           '<span class="sh-evt-kind">' + esc(label) + '</span>' +
+          (mandatory ? '<span class="sh-evt-req">' + esc(tt('player_week.mandatory', 'Mandatory')) + '</span>' : '') +
           (start && e.duration_minutes ? '<span class="bit">' + e.duration_minutes + '′</span>' : '') +
           bits.join('') +
         '</div>' +
