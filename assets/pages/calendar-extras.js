@@ -988,7 +988,7 @@ const CAL_TYPE_META = {
   other:      { abbr:'EVT',   fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' },
   // Preventivo obligatorio: no es un tipo aparte, es cómo se pinta 'prevention' cuando
   // la asistencia no se negocia (ver calCardMeta).
-  _mandatory: { abbr:'PREV!', fg:'#B91C1C', bg:'#FEF2F2', bd:'#FCA5A5', label:'Prevention work' },
+  _mandatory: { abbr:'PREV', fg:'#B91C1C', bg:'#FEF2F2', bd:'#FCA5A5', label:'Prevention work' },
   _fallback:  { abbr:'•',     fg:'#475569', bg:'#F1F5F9', bd:'#CBD5E1', label:'Event' }
 };
 // Meta de un evento concreto: igual que CAL_TYPE_META[tipo], salvo el preventivo
@@ -996,6 +996,12 @@ const CAL_TYPE_META = {
 function calCardMeta(e) {
   if (e && e.session_type === 'prevention' && e.is_mandatory) return CAL_TYPE_META._mandatory;
   return CAL_TYPE_META[e && e.session_type] || CAL_TYPE_META._fallback;
+}
+// ¿La hoja tiene algún preventivo obligatorio? Decide si se imprime la nota al pie que
+// explica el asterisco. Recibe el mapa fecha → eventos que ya arman las dos hojas.
+function calHasMandatory(byDay) {
+  return Object.values(byDay || {}).some(list =>
+    (list || []).some(e => e.session_type === 'prevention' && e.is_mandatory));
 }
 const CAL_TYPE_LABEL_KEY = {
   training:'calendar.type_label_training', tactical:'calendar.type_label_training', conditioning:'calendar.type_label_training',
@@ -1126,13 +1132,14 @@ async function calBuildWeekSheet(){
       const subRaw = isMatch
         ? [haLabel(e.home_away), e.competition||''].filter(Boolean).join(' · ')
         : (e.notes || '');
-      // El preventivo obligatorio se lee como el partido: fondo y texto en rojo.
+      // El preventivo obligatorio se lee como el partido: fondo y texto en rojo, más un
+      // asterisco que remite a la nota al pie (junto a la leyenda de colores).
       return `<div style="background:${isMand?meta.bg:'#FBFBFA'};border:1px solid ${isMand?meta.bd:'#ECECE9'};border-left:3px solid ${meta.fg};border-radius:6px;padding:6px 8px;break-inside:avoid">
         <div style="display:flex;align-items:center;gap:5px">
           ${time?`<span style="font:500 9.5px ${MONO};color:${isMand?meta.fg:'#8A93A0'}">${esc(time)}</span>`:''}
-          <span style="margin-left:auto;background:${isMand?'#fff':meta.bg};color:${meta.fg};border:1px solid ${meta.bd};font:700 7.5px ${MONO};letter-spacing:.04em;padding:1px 5px;border-radius:3px">${esc(meta.abbr)}</span>
+          <span style="margin-left:auto;background:${isMand?'#fff':meta.bg};color:${meta.fg};border:1px solid ${meta.bd};font:700 7.5px ${MONO};letter-spacing:.04em;padding:1px 5px;border-radius:3px">${esc(meta.abbr)}${isMand?' *':''}</span>
         </div>
-        <div style="font:${isMand?700:600} 11px ${FONT};color:${isMatch||isMand?meta.fg:'#15181D'};margin-top:3px">${title}</div>
+        <div style="font:${isMand?700:600} 11px ${FONT};color:${isMatch||isMand?meta.fg:'#15181D'};margin-top:3px">${title}${isMand?' *':''}</div>
         ${subRaw?`<div style="font:500 8.5px ${MONO};color:${isMand?meta.fg:'#9CA3AF'};margin-top:2px">${esc(subRaw)}</div>`:''}
       </div>`;
     };
@@ -1157,7 +1164,10 @@ async function calBuildWeekSheet(){
 
     // 4) Footer (legend + club·team, then mono line)
     const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Prevention','prevention'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
-    const legend = legendTypes.map(([lab,t])=>{ const m=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${m.bg};border:1px solid ${m.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('');
+    const legend = legendTypes.map(([lab,t])=>{ const m=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${m.bg};border:1px solid ${m.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('')
+      // El asterisco de la tarjeta se explica acá, al lado de los colores, y solo si la
+      // semana tiene algún preventivo obligatorio.
+      + (calHasMandatory(byDay) ? `<span style="display:inline-flex;align-items:center;gap:4px;font:600 9px ${FONT};color:${CAL_TYPE_META._mandatory.fg}"><span style="font:700 10px ${MONO}">*</span>${esc(tt('calendar.mandatory_attendance','Attendance is mandatory'))}</span>` : '');
     const footMid = [];
     if (mc?.name) footMid.push(mc.name);
     if (mc) footMid.push(calFmtRange(mc.start_date, mc.end_date));
@@ -1246,9 +1256,10 @@ async function calBuildMonthSheet(){
       if (_isFullDayOff(e)) return dayOffPill;
       const meta = calCardMeta(e);
       const t = _fmtTime(e.start_time);
-      const nm = e.session_type === 'match'
+      const nm = (e.session_type === 'match'
         ? ('vs ' + (e.opponent || e.title || tt('calendar.match_word','Match')))
-        : (e.title || calMetaLabel(e.session_type) || meta.abbr);
+        : (e.title || calMetaLabel(e.session_type) || meta.abbr))
+        + (e.session_type === 'prevention' && e.is_mandatory ? ' *' : '');
       const marker = (e.session_type === 'match' && e.rival_crest_url)
         ? `<img src="${esc(e.rival_crest_url)}" alt="" style="width:11px;height:11px;border-radius:2px;object-fit:contain;flex:none;background:#fff">`
         : `<span style="width:6px;height:6px;border-radius:50%;background:${meta.fg};flex:none"></span>`;
@@ -1279,7 +1290,8 @@ async function calBuildMonthSheet(){
 
     // 4) Footer
     const legendTypes = [['Training','training'],['Gym','gym'],['Match','match'],['Recovery','recovery'],['Prevention','prevention'],['Meeting','meeting'],['Meal','breakfast'],['Video','video']];
-    const legend = legendTypes.map(([lab,t])=>{ const meta=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${meta.bg};border:1px solid ${meta.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('');
+    const legend = legendTypes.map(([lab,t])=>{ const meta=CAL_TYPE_META[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;font:500 9px ${FONT};color:#5B6470"><span style="width:9px;height:9px;border-radius:2px;background:${meta.bg};border:1px solid ${meta.bd}"></span>${esc(calMetaLabel(t))}</span>`; }).join('')
+      + (calHasMandatory(byDay) ? `<span style="display:inline-flex;align-items:center;gap:4px;font:600 9px ${FONT};color:${CAL_TYPE_META._mandatory.fg}"><span style="font:700 10px ${MONO}">*</span>${esc(tt('calendar.mandatory_attendance','Attendance is mandatory'))}</span>` : '');
     const footer = `<div style="margin-top:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
         <div style="display:flex;flex-wrap:wrap;gap:10px">${legend}</div>

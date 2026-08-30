@@ -329,10 +329,10 @@
   .sh-evt.is-mandatory .sh-evt-title { font-weight: 700; color: var(--c-match); }
   .sh-evt.is-mandatory .sh-evt-note { border-left-color: var(--c-match); }
   .sh-evt-req {
-    font: 700 9.5px/1 var(--sh-mono); letter-spacing: .05em; text-transform: uppercase;
-    padding: 3px 6px; border-radius: 4px;
-    background: var(--c-match); color: #fff;
+    display: flex; align-items: center; gap: 5px; margin-top: 6px;
+    font: 600 11.5px/1.3 var(--sh-font); color: var(--c-match);
   }
+  .sh-evt-req .ti { font-size: 13px; flex-shrink: 0; }
 
   /* ── Legend ── */
   .sh-legend {
@@ -866,10 +866,11 @@
         '<div class="sh-evt-title"><i class="ti ' + typeIcon(e.event_type) + '"></i><span class="txt">' + esc(title) + '</span></div>' +
         '<div class="sh-evt-sub">' +
           '<span class="sh-evt-kind">' + esc(label) + '</span>' +
-          (mandatory ? '<span class="sh-evt-req">' + esc(tt('player_week.mandatory', 'Mandatory')) + '</span>' : '') +
           (start && e.duration_minutes ? '<span class="bit">' + e.duration_minutes + '′</span>' : '') +
           bits.join('') +
         '</div>' +
+        (mandatory ? '<div class="sh-evt-req"><i class="ti ti-alert-circle-filled"></i>' +
+            esc(tt('calendar.mandatory_attendance', 'Attendance is mandatory')) + '</div>' : '') +
         (e.notes ? '<div class="sh-evt-note">' + esc(e.notes) + '</div>' : '') +
       '</div>' +
     '</div>';
