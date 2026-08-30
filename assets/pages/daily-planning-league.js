@@ -49,6 +49,25 @@
       '.dplg-chip .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}',
       '@media(prefers-color-scheme:dark){.dplg-chip{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.4);color:#FCD34D}}',
       ':root[data-theme="dark"] .dplg-chip{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.4);color:#FCD34D}',
+      /* switch «cuenta para la liga» */
+      '.dplg-sw{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--cm-border);background:var(--cm-bg);color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans);cursor:pointer;flex-shrink:0}',
+      '.dplg-sw .tr{width:20px;height:11px;border-radius:999px;background:var(--cm-border-strong);position:relative;flex-shrink:0;transition:background .15s ease}',
+      '.dplg-sw .tr b{position:absolute;top:1px;left:1px;width:9px;height:9px;border-radius:50%;background:#fff;transition:transform .15s ease}',
+      '.dplg-sw:hover{border-color:#D97706;color:#D97706}',
+      '.dplg-sw.is-on{border-color:#F59E0B;background:#FFFBEB;color:#92400E}',
+      '.dplg-sw.is-on .tr{background:#D97706}',
+      '.dplg-sw.is-on .tr b{transform:translateX(9px)}',
+      '@media(prefers-color-scheme:dark){.dplg-sw.is-on{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.45);color:#FCD34D}}',
+      ':root[data-theme="dark"] .dplg-sw.is-on{background:rgba(217,119,6,.14);border-color:rgba(217,119,6,.45);color:#FCD34D}',
+      /* «pendiente de resultado»: la tarea cuenta pero nadie cargó quién ganó */
+      '.dplg-pend{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;border:1px dashed #F59E0B;background:transparent;color:#B45309;font:600 11px/1 var(--cm-font-sans);cursor:pointer}',
+      '@media(prefers-color-scheme:dark){.dplg-pend{color:#FCD34D;border-color:rgba(245,158,11,.55)}}',
+      ':root[data-theme="dark"] .dplg-pend{color:#FCD34D;border-color:rgba(245,158,11,.55)}',
+      /* resumen del día */
+      '.dplg-day{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:0 0 10px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}',
+      '.dplg-day .warn{color:#B45309;font-weight:600}',
+      '@media(prefers-color-scheme:dark){.dplg-day .warn{color:#FCD34D}}',
+      ':root[data-theme="dark"] .dplg-day .warn{color:#FCD34D}',
       /* modal */
       '.dplg-back{position:fixed;inset:0;background:rgba(8,10,12,.62);backdrop-filter:blur(6px);z-index:1100;display:none;align-items:center;justify-content:center;padding:20px}',
       '.dplg-back.is-open{display:flex}',
@@ -95,29 +114,97 @@
   }
 
   // ── Fila dentro de la card de la tarea ─────────────────────────────────────
-  // Se muestra si la tarea tiene 2+ grupos con jugadores (o si ya tiene resultado).
+  // Dos estados bien separados, para que nunca haya que adivinar qué puntúa:
+  //   switch APAGADO → la tarea no existe para la liga
+  //   switch ENCENDIDO → cuenta; y mientras no tenga resultado avisa "pendiente"
+  // La marca se guarda como un evento sin resultados, así que no hace falta una
+  // columna nueva en session_exercises y el olvido queda a la vista.
+  // Se muestra en tareas que tienen grupos (o que ya están marcadas): una tarea
+  // sin grupos no es un enfrentamiento.
   window.dpLgRow = function (e) {
     if (!L() || !L().isOn() || !e) return '';
     var ev = _events.bySeid[e.id] || null;
     var groups = (window._dpExGroups ? window._dpExGroups(e) : []).filter(function (g) { return (g.players || []).length; });
-    if (!ev && groups.length < 2) return '';
-    var inner;
-    if (ev) {
-      var gs = ev.groups || [];
-      var wins = gs.filter(function (g) { return g.outcome === 'win'; });
-      var allDraw = gs.length && gs.every(function (g) { return g.outcome === 'draw'; });
-      var label = allDraw ? T('league.draw', 'Draw')
-        : wins.length ? wins.map(function (g) { return g.name || '—'; }).join(' · ')
-        : T('league.no_result', 'No result yet');
-      var color = wins.length === 1 ? (wins[0].color || '#D97706') : '#D97706';
-      inner = '<button class="dplg-chip" onclick="dpLgOpen(\'' + e.id + '\')" title="' + esc(T('league.edit_result', 'Edit result')) + '">'
-            + '<span class="dot" style="background:' + esc(color) + '"></span>'
-            + '<i class="ti ti-trophy" style="font-size:12px"></i>' + esc(label) + '</button>';
-    } else {
-      inner = '<button class="dplg-btn" onclick="dpLgOpen(\'' + e.id + '\')">'
-            + '<i class="ti ti-trophy" style="font-size:12px"></i>' + esc(T('league.mark_result', 'League result')) + '</button>';
-    }
-    return '<div class="dplg-row no-print" data-lg="' + e.id + '">' + inner + '</div>';
+    if (!ev && !groups.length) return '';
+
+    var on = !!ev;
+    var sw = '<button class="dplg-sw' + (on ? ' is-on' : '') + '" onclick="dpLgToggleTask(\'' + e.id + '\')"'
+           + ' title="' + esc(T('league.counts_hint', 'Only the tasks you mark give out points.')) + '">'
+           + '<span class="tr"><b></b></span><i class="ti ti-trophy" style="font-size:12px"></i>'
+           + esc(T('league.counts', 'Counts for the league')) + '</button>';
+    if (!on) return '<div class="dplg-row no-print" data-lg="' + e.id + '">' + sw + '</div>';
+
+    var state = eventState(ev);
+    var inner = state.hasResult
+      ? '<button class="dplg-chip" onclick="dpLgOpen(\'' + e.id + '\')" title="' + esc(T('league.edit_result', 'Edit result')) + '">'
+        + '<span class="dot" style="background:' + esc(state.color) + '"></span>' + esc(state.label) + '</button>'
+      : '<button class="dplg-pend" onclick="dpLgOpen(\'' + e.id + '\')">'
+        + '<i class="ti ti-alert-triangle" style="font-size:12px"></i>' + esc(T('league.pending', 'Result pending')) + '</button>';
+    return '<div class="dplg-row no-print" data-lg="' + e.id + '">' + sw + inner + '</div>';
+  };
+
+  // Badge para la planilla impresa (dpRenderPrintSheet). El sheet se arma con
+  // estilos inline y sin las variables de tema de la app, así que va con colores
+  // literales. Devuelve '' si la tarea no cuenta para la liga.
+  window.dpLgPrintBadge = function (seid, FONT, MONO) {
+    if (!L() || !L().isOn()) return '';
+    var ev = _events.bySeid[seid];
+    if (!ev) return '';
+    var st = eventState(ev);
+    var txt = st.hasResult ? st.label : T('league.print_tag', 'LEAGUE');
+    return '<span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:1px;'
+      + 'background:#FFFBEB;border:1px solid #FDE68A;border-radius:4px;padding:1px 6px;'
+      + 'font:700 8.5px ' + (MONO || 'monospace') + ';letter-spacing:.04em;color:#92400E;text-transform:uppercase">'
+      + '&#9733; ' + esc(txt) + '</span>';
+  };
+
+  // Cómo está un evento: ¿ya tiene resultado? ¿quién ganó?
+  function eventState(ev) {
+    var gs = (ev && ev.groups) || [];
+    var hasResult = !!(ev && ev.results && ev.results.length);
+    if (!hasResult) return { hasResult: false, label: T('league.pending', 'Result pending'), color: '#D97706' };
+    var wins = gs.filter(function (g) { return g.outcome === 'win'; });
+    var allDraw = gs.length > 0 && gs.every(function (g) { return g.outcome === 'draw'; });
+    return {
+      hasResult: true,
+      label: allDraw ? T('league.draw', 'Draw')
+           : wins.length ? wins.map(function (g) { return g.name || '—'; }).join(' · ')
+           : T('league.no_result', 'No result yet'),
+      color: wins.length === 1 ? (wins[0].color || '#D97706') : '#D97706',
+    };
+  }
+
+  // Marcar / desmarcar una tarea como competitiva. Marcar crea el evento sin
+  // resultados (queda "pendiente"); desmarcar lo borra — con confirmación si ya
+  // había puntos repartidos, porque eso saca puntos de la tabla del mes.
+  window.dpLgToggleTask = async function (seid) {
+    if (!L() || !L().isOn() || _busy) return;
+    var c = ctx();
+    if (c.readOnly) { toast(T('daily_planning.readonly_toast', "View only — you can't edit this planning.")); return; }
+    if (!c.clubId || !c.teamId || !c.date) return;
+    var ev = _events.bySeid[seid] || null;
+    _busy = true;
+    try {
+      if (ev) {
+        if (ev.results && ev.results.length && !confirm(T('league.untick_confirm', 'This task already gave out points. Remove it from the league?'))) return;
+        if (!(await L().removeEvent(ev.id))) { toast(T('league.save_error', "Couldn't save the result.")); return; }
+      } else {
+        var task = window._dpFindTask ? window._dpFindTask(seid) : null;
+        var season = await L().ensureSeason(c.clubId, c.teamId, c.date);
+        if (!season) { toast(T('league.season_error', "Couldn't open this month's league.")); return; }
+        if (season.status === 'closed') { toast(T('league.season_closed', 'This month is closed — no more results.')); return; }
+        _season = season;
+        var groups = (task && window._dpExGroups ? window._dpExGroups(task) : [])
+          .filter(function (g) { return (g.players || []).length; })
+          .map(function (g) { return { id: g.id, name: g.name, color: g.color, players: (g.players || []).map(String), outcome: null }; });
+        var saved = await L().saveEvent({
+          club_id: c.clubId, team_id: c.teamId, season_id: season.id, event_date: c.date,
+          session_exercise_id: seid, title: (task && task.name) || null, groups: groups, results: [],
+        });
+        if (!saved) { toast(T('league.save_error', "Couldn't save the result.")); return; }
+      }
+      await window.dpLgSyncDay();
+    } finally { _busy = false; }
   };
 
   // ── Carga del día ──────────────────────────────────────────────────────────
@@ -150,19 +237,29 @@
     var btn = document.getElementById('dpLgNewBtn');
     if (btn) btn.style.display = (L() && L().isOn()) ? '' : 'none';
     if (!L() || !L().isOn()) { host.innerHTML = ''; return; }
-    host.innerHTML = (_events.loose || []).map(function (ev) {
-      var gs = ev.groups || [];
-      var wins = gs.filter(function (g) { return g.outcome === 'win'; });
-      var allDraw = gs.length && gs.every(function (g) { return g.outcome === 'draw'; });
-      var label = allDraw ? T('league.draw', 'Draw')
-        : wins.length ? wins.map(function (g) { return g.name || '—'; }).join(' · ')
-        : T('league.no_result', 'No result yet');
-      var n = gs.reduce(function (s, g) { return s + (g.players || []).length; }, 0);
-      return '<button class="dplg-chip" style="margin:0 6px 6px 0" onclick="dpLgOpenEvent(\'' + ev.id + '\')">'
+
+    // Resumen del día: cuántas tareas cuentan y cuántas quedaron sin resultado.
+    // El pendiente importa: si nadie carga quién ganó, esa tarea no reparte
+    // puntos y el total del mes queda corto sin que nadie se entere.
+    var all = _events.all || [];
+    var pend = all.filter(function (ev) { return !(ev.results && ev.results.length); }).length;
+    var summary = all.length
+      ? '<div class="dplg-day"><i class="ti ti-trophy" style="font-size:13px"></i>'
+        + '<span>' + esc(T('league.day_count', all.length + ' league tasks', { count: all.length })) + '</span>'
+        + (pend ? '<span class="warn">· ' + esc(T('league.day_pending', pend + ' without a result', { count: pend })) + '</span>' : '')
+        + '</div>'
+      : '';
+
+    var loose = (_events.loose || []).map(function (ev) {
+      var st = eventState(ev);
+      var n = (ev.groups || []).reduce(function (s, g) { return s + (g.players || []).length; }, 0);
+      var cls = st.hasResult ? 'dplg-chip' : 'dplg-pend';
+      return '<button class="' + cls + '" style="margin:0 6px 6px 0" onclick="dpLgOpenEvent(\'' + ev.id + '\')">'
            + '<i class="ti ti-trophy" style="font-size:12px"></i>'
-           + esc(ev.title || T('league.loose_event', 'Field matchup')) + ' · ' + esc(label)
+           + esc(ev.title || T('league.loose_event', 'Field matchup')) + ' · ' + esc(st.label)
            + ' <span style="opacity:.7">(' + n + ')</span></button>';
     }).join('');
+    host.innerHTML = summary + loose;
   }
 
   // ── Modal ──────────────────────────────────────────────────────────────────
@@ -219,7 +316,12 @@
     if (!task) return;
     var ev = _events.bySeid[seid] || null;
     var planGroups = (window._dpExGroups ? window._dpExGroups(task) : []).filter(function (g) { return (g.players || []).length; });
-    _lg = stateFromEvent(ev, planGroups, task.name || '');
+    // Mientras no haya resultado, el PLAN manda: se marca la tarea el lunes, se
+    // reacomodan los grupos el martes y el resultado del miércoles usa los de ese
+    // día. Una vez cargado el resultado, gobierna el snapshot congelado.
+    var pending = !(ev && ev.results && ev.results.length);
+    _lg = stateFromEvent(pending ? null : ev, planGroups, task.name || '');
+    if (ev) _lg.eventId = ev.id;
     _lg.seid = seid;
     openWith(task.name || T('league.loose_event', 'Field matchup'));
   };

@@ -2019,7 +2019,7 @@ async function dpRenderPrintSheet() {
           ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
         </div>
         <div style="padding:8px 10px 9px">
-          <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
+          <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}${window.dpLgPrintBadge ? window.dpLgPrintBadge(e.id, FONT, MONO) : ''}</div>
           ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
           ${workLine ? `<div style="font:500 10.5px ${MONO};color:#15803D;margin-top:4px">${esc(workLine)}</div>` : ''}
           ${obj ? `<div style="font:400 10.5px/1.4 ${FONT};color:#5B6470;margin-top:4px"><b style="font-weight:600;color:#3C4149">${esc(tt('daily_planning.objective_label','Objective'))}:</b> ${esc(obj)}</div>` : ''}
