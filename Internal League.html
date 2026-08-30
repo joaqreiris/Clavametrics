@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="league.title_tab">Internal league — ClavaMetrics</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://xesrumijvdmqjrufgeka.supabase.co" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
+<script src="assets/boot-brand.js"></script>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<style>
+  /* Topbar estándar (mismo cromo que Calendar / Tactical Planning) */
+  .hub-topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);background:color-mix(in srgb, var(--cm-bg) 92%, transparent);backdrop-filter:saturate(160%) blur(10px);position:sticky;top:0;z-index:50}
+  .hub-crumb{display:flex;align-items:center;gap:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .hub-crumb .ti{font-size:14px}
+  .hub-crumb .sep{color:var(--cm-fg-faint)}
+  .hub-crumb a{color:var(--cm-fg-muted);text-decoration:none}
+  .hub-crumb a:hover{color:var(--cm-fg-strong)}
+  .hub-crumb .now{color:var(--cm-fg-strong);font-weight:600}
+  .hub-search{margin-left:auto;width:280px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg-muted)}
+  .hub-search input{flex:1;min-width:0;border:0;outline:none;background:transparent;font:var(--cm-body-sm);color:var(--cm-fg)}
+  .hub-search .ti{font-size:16px}
+  .hub-topbar .actions{display:flex;align-items:center;gap:8px}
+
+  .lg-wrap{max-width:1040px;margin:0 auto;padding:20px 16px 90px}
+  .lg-h{margin:0 0 3px;font:var(--cm-h2);color:var(--cm-fg-strong)}
+  .lg-sub{margin:0 0 18px;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
+
+  .lg-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);margin-bottom:16px;overflow:hidden}
+  .lg-card-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--cm-border);flex-wrap:wrap}
+  .lg-card-h h3{margin:0;font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);display:flex;align-items:center;gap:8px}
+  .lg-card-h h3 .ti{font-size:16px;color:var(--cm-fg-muted)}
+  .lg-card-h .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .lg-card-b{padding:14px 16px}
+
+  /* pager de mes */
+  .lg-pager{display:flex;align-items:center;gap:2px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:9px;padding:2px}
+  .lg-pager button{width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-muted);border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .lg-pager button:hover{background:var(--cm-surface);color:var(--cm-fg-strong)}
+  .lg-pager .label{min-width:132px;text-align:center;font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);text-transform:capitalize}
+
+  .lg-state{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase}
+  .lg-state.open{background:var(--cm-accent-soft,#ECFDF5);color:var(--cm-accent,#15803D);border:1px solid var(--cm-accent-bd,#BBF7D0)}
+  .lg-state.closed{background:var(--cm-bg-sunk);color:var(--cm-fg-muted);border:1px solid var(--cm-border)}
+
+  /* KPIs */
+  .lg-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--cm-border);border-bottom:1px solid var(--cm-border)}
+  .lg-kpi{background:var(--cm-surface);padding:12px 14px}
+  .lg-kpi .k{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .lg-kpi .v{margin-top:6px;font:700 19px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .lg-kpi .n{margin-top:3px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* tabla */
+  .lg-tw{overflow-x:auto}
+  table.lg-t{width:100%;border-collapse:collapse;min-width:620px}
+  .lg-t th{font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint);text-align:right;padding:9px 8px;border-bottom:1px solid var(--cm-border);white-space:nowrap;position:sticky;top:0;background:var(--cm-surface)}
+  .lg-t th.l,.lg-t td.l{text-align:left}
+  .lg-t td{padding:8px;border-bottom:1px solid var(--cm-border-soft);font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);text-align:right;white-space:nowrap}
+  .lg-t tbody tr:hover td{background:var(--cm-bg-soft)}
+  .lg-t .pos{font:700 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);width:34px}
+  .lg-t .who{display:flex;align-items:center;gap:8px;min-width:0}
+  .lg-t .num{font:600 9.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:4px;padding:2px 4px;flex-shrink:0}
+  .lg-t .nm{font-weight:600;color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis}
+  .lg-t .gk{font:600 8.5px/1 var(--cm-font-mono);color:#7C3AED;border:1px solid rgba(124,58,237,.35);border-radius:3px;padding:2px 4px;flex-shrink:0}
+  .lg-t .pts{font:700 13.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .lg-t .avg{font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-accent,#15803D)}
+  .lg-t .mut{color:var(--cm-fg-muted)}
+  .lg-t .streak{font:600 11px/1 var(--cm-font-mono);color:#D97706}
+  .lg-t tr.eat td{background:color-mix(in srgb, var(--cm-accent,#15803D) 7%, transparent)}
+  .lg-t tr.eat:hover td{background:color-mix(in srgb, var(--cm-accent,#15803D) 12%, transparent)}
+  .lg-t tr.pay td{background:color-mix(in srgb, #DC2626 7%, transparent)}
+  .lg-t tr.pay:hover td{background:color-mix(in srgb, #DC2626 12%, transparent)}
+  .lg-t tr.cut td{padding:0;border-bottom:0}
+  .lg-cut{display:flex;align-items:center;gap:8px;padding:7px 8px;font:700 9.5px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .lg-cut::before,.lg-cut::after{content:"";flex:1;height:1px;background:repeating-linear-gradient(90deg,var(--cm-border) 0 5px,transparent 5px 10px)}
+
+  .lg-empty{padding:34px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .lg-empty .ti{font-size:26px;display:block;margin-bottom:9px;color:var(--cm-fg-faint)}
+
+  .lg-note{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:9px;font:400 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted);margin:12px 16px 14px}
+  .lg-note .ti{font-size:15px;color:var(--cm-fg-faint);flex-shrink:0;margin-top:1px}
+
+  /* historial */
+  .lg-hist{display:flex;flex-wrap:wrap;gap:8px}
+  .lg-hist button{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-surface);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);cursor:pointer}
+  .lg-hist button:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+  .lg-hist button.on{border-color:var(--cm-accent);background:var(--cm-accent-soft,#ECFDF5);color:var(--cm-accent);font-weight:600}
+  .lg-hist button .ti{font-size:13px}
+
+  /* modal de ajustes */
+  .lg-back{position:fixed;inset:0;background:rgba(8,10,12,.62);backdrop-filter:blur(6px);z-index:1100;display:none;align-items:center;justify-content:center;padding:20px}
+  .lg-back.is-open{display:flex}
+  .lg-modal{width:min(420px,100%);background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden}
+  .lg-modal h4{margin:0;font:650 14.5px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .lg-mh{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--cm-border-soft)}
+  .lg-mh .x{margin-left:auto;width:28px;height:28px;border:0;background:none;color:var(--cm-fg-muted);font:400 18px/1 var(--cm-font-sans);cursor:pointer;border-radius:6px}
+  .lg-mh .x:hover{background:var(--cm-bg-soft)}
+  .lg-mb{padding:14px 16px;display:flex;flex-direction:column;gap:13px}
+  .lg-f label{display:block;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint);margin-bottom:5px}
+  .lg-f input{width:100%;height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:500 13px/1 var(--cm-font-sans);outline:none}
+  .lg-f input:focus{border-color:var(--cm-accent)}
+  .lg-f .hint{margin-top:5px;font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .lg-mf{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--cm-border-soft);background:var(--cm-bg-soft)}
+  .lg-mf .grow{flex:1}
+
+  #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+
+  @media (max-width: 720px){
+    .hub-search{display:none}
+    .lg-wrap{padding:16px 12px 80px}
+  }
+</style>
+
+<script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sport-packs.js"></script>
+<script src="assets/sport.js"></script>
+<script src="assets/league.js"></script>
+<script src="assets/sidebar.js" defer></script>
+<script src="assets/global-search.js" defer></script>
+</head>
+<body class="cm">
+<div id="appBoot" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
+  <div style="width:30px;height:30px;border:3px solid var(--cm-border,rgba(120,130,145,.3));border-top-color:var(--cm-accent,#16A34A);border-radius:50%;animation:appspin .7s linear infinite"></div>
+</div>
+<style>@keyframes appspin{to{transform:rotate(360deg)}}</style>
+<script>(function(){var d=false;function h(){if(d)return;d=true;var b=document.getElementById('appBoot');if(b){b.style.transition='opacity .18s';b.style.opacity='0';setTimeout(function(){b.remove();},220);}}var t=setTimeout(h,1200);if(window.MutationObserver){var mo=new MutationObserver(function(){clearTimeout(t);t=setTimeout(h,500);});document.addEventListener('DOMContentLoaded',function(){if(document.body)mo.observe(document.body,{childList:true,subtree:true});});}setTimeout(h,6000);})();</script>
+
+<div class="hub-shell">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <header class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="lgTeamSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
+      </div>
+      <div class="hub-crumb">
+        <i class="ti ti-trophy"></i>
+        <a href="#" data-i18n="shell.group.technical">Technical</a>
+        <span class="sep">/</span>
+        <span class="now" data-i18n="league.nav">Internal league</span>
+      </div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="common.search" placeholder="Search…"></div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </header>
+
+    <div class="lg-wrap">
+      <h1 class="lg-h" data-i18n="league.heading">Internal league</h1>
+      <p class="lg-sub" data-i18n="league.subtitle">Points from the tasks marked in the daily planning. At the end of the month the bottom of the table buys the top of the table a meal.</p>
+
+      <!-- ===== TABLA DEL MES ===== -->
+      <div class="lg-card">
+        <div class="lg-card-h">
+          <h3><i class="ti ti-trophy"></i><span id="lgMonthTitle" data-i18n="league.table_title">Table</span></h3>
+          <span class="lg-state open" id="lgState" style="display:none">—</span>
+          <div class="right">
+            <button class="cm-btn is-ghost is-sm" id="lgCfgBtn" title="" data-i18n-attr="title:league.settings"><i class="ti ti-adjustments" style="font-size:14px"></i></button>
+            <button class="cm-btn is-outline is-sm" id="lgTodayBtn" data-i18n="league.this_month">This month</button>
+            <div class="lg-pager">
+              <button id="lgPrevBtn"><i class="ti ti-chevron-left"></i></button>
+              <span class="label" id="lgMonthLabel">…</span>
+              <button id="lgNextBtn"><i class="ti ti-chevron-right"></i></button>
+            </div>
+            <button class="cm-btn is-primary is-sm" id="lgCloseBtn" style="display:none"><i class="ti ti-lock" style="font-size:14px"></i><span data-i18n="league.close_month">Close month</span></button>
+          </div>
+        </div>
+        <div class="lg-kpis" id="lgKpis"></div>
+        <div class="lg-tw" id="lgTable"></div>
+        <div class="lg-note" id="lgNote" style="display:none"><i class="ti ti-info-circle"></i><span id="lgNoteTxt"></span></div>
+      </div>
+
+      <!-- ===== SIN CLASIFICAR ===== -->
+      <div class="lg-card" id="lgUnrankedCard" style="display:none">
+        <div class="lg-card-h">
+          <h3><i class="ti ti-user-off"></i><span data-i18n="league.unranked_title">Not classified</span></h3>
+          <span class="ct" id="lgUnrankedCt" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"></span>
+        </div>
+        <div class="lg-tw" id="lgUnranked"></div>
+      </div>
+
+      <!-- ===== HISTORIAL ===== -->
+      <div class="lg-card" id="lgHistCard" style="display:none">
+        <div class="lg-card-h">
+          <h3><i class="ti ti-history"></i><span data-i18n="league.history_title">Closed months</span></h3>
+        </div>
+        <div class="lg-card-b"><div class="lg-hist" id="lgHist"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Ajustes de la liga -->
+<div class="lg-back" id="lgCfgBack">
+  <div class="lg-modal">
+    <div class="lg-mh"><h4 data-i18n="league.settings">League settings</h4><button class="x" id="lgCfgClose">&times;</button></div>
+    <div class="lg-mb">
+      <div class="lg-f">
+        <label data-i18n="league.cfg_name">Month name</label>
+        <input type="text" id="lgCfgName" maxlength="60">
+      </div>
+      <div class="lg-f">
+        <label data-i18n="league.cfg_cut">How many pay and how many eat</label>
+        <input type="number" id="lgCfgCut" min="0" max="30" step="1">
+        <div class="hint" data-i18n="league.cfg_cut_hint">The top N of the table eat, the bottom N pay. If the squad is small the line drops to the middle so nobody is on both sides.</div>
+      </div>
+      <div class="lg-f">
+        <label data-i18n="league.cfg_min">Minimum participation (%)</label>
+        <input type="number" id="lgCfgMin" min="0" max="100" step="5">
+        <div class="hint" data-i18n="league.cfg_min_hint">Share of the month's league tasks a player has to play to make the table. Below that they show up as not classified, so an injury doesn't sink them.</div>
+      </div>
+    </div>
+    <div class="lg-mf">
+      <button class="cm-btn is-ghost is-sm" id="lgCfgReopen" style="display:none"><i class="ti ti-lock-open" style="font-size:14px"></i><span data-i18n="league.reopen_month">Reopen month</span></button>
+      <span class="grow"></span>
+      <button class="cm-btn is-ghost is-sm" id="lgCfgCancel" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="lgCfgSave" data-i18n="common.save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="assets/pages/internal-league.js" defer></script>
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: 'hybrid', accent: 'green' };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+</body>
+</html>

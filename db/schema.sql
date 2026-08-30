@@ -8171,6 +8171,9 @@ create table if not exists public.internal_league_seasons (
   -- Fracción de eventos del mes que hay que jugar para entrar a la tabla. El que
   -- no llega aparece "sin clasificar": el lesionado no baja por ausencia.
   min_participation numeric(3,2) default 0.60 not null,
+  -- Cuántos comen y cuántos pagan. La página nunca deja que los dos lados se
+  -- solapen: con 16 clasificados y corte 10, comen 8 y pagan 8.
+  cut_size smallint default 10 not null,
   points_win smallint default 3 not null,
   points_draw smallint default 1 not null,
   points_loss smallint default 0 not null,
@@ -8185,6 +8188,7 @@ create table if not exists public.internal_league_seasons (
   constraint internal_league_seasons_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text]))),
   constraint internal_league_seasons_dates_check CHECK ((end_date >= start_date)),
   constraint internal_league_seasons_min_part_check CHECK ((min_participation >= 0 AND min_participation <= 1)),
+  constraint internal_league_seasons_cut_size_check CHECK ((cut_size >= 0 AND cut_size <= 50)),
   constraint internal_league_seasons_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
   constraint internal_league_seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE
 );

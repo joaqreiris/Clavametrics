@@ -134,6 +134,20 @@ describe('tabla del mes', () => {
     expect(by.p1.position).toBe(2);
   });
 
+  it('lleva la racha de victorias en curso y la mejor del mes', () => {
+    // p1: gana, gana, pierde, gana, gana, gana → racha actual 3, mejor 3.
+    // p2: gana, gana, empata → el empate corta la racha (es de ganadas, no de invicto).
+    const seq = { p1: ['win','win','loss','win','win','win'], p2: ['win','win','draw'] };
+    const rs = [];
+    Object.entries(seq).forEach(([pid, outs]) => outs.forEach((o, i) => {
+      rs.push({ player_id: pid, outcome: o, points: o === 'win' ? 3 : o === 'draw' ? 1 : 0, event_date: `2026-08-${String(i + 1).padStart(2, '0')}` });
+    }));
+    const { rows } = L.standings(season, rs, 6, [{ id: 'p1' }, { id: 'p2' }]);
+    const by = Object.fromEntries(rows.map(r => [r.player_id, r]));
+    expect([by.p1.streak, by.p1.best_streak]).toEqual([3, 3]);
+    expect([by.p2.streak, by.p2.best_streak]).toEqual([0, 2]);
+  });
+
   it('ordena por puntos por tarea, no por total', () => {
     // Un suplente que juega poco pero gana siempre no puede quedar debajo de uno
     // que jugó todo con peor rendimiento… siempre que llegue al mínimo.
@@ -143,5 +157,41 @@ describe('tabla del mes', () => {
     const { rows } = L.standings(season, rs, 10, [{ id: 'a' }, { id: 'b' }]);
     expect(rows.map(r => r.player_id)).toEqual(['b', 'a']);
     expect(rows[0].ranked).toBe(true);
+  });
+});
+
+describe('línea de corte (quién come y quién paga)', () => {
+  const mk = n => Array.from({ length: n }, (_, i) => ({ player_id: 'p' + i, ranked: true }));
+
+  it('con plantel grande respeta el corte pedido', () => {
+    const c = L.cuts(mk(24), 10);
+    expect(c.size).toBe(10);
+    expect(c.topIds.has('p0')).toBe(true);
+    expect(c.bottomIds.has('p23')).toBe(true);
+    expect(c.topIds.has('p10')).toBe(false);   // el 11° no come
+    expect(c.bottomIds.has('p13')).toBe(false);
+  });
+
+  it('con plantel chico baja la línea al medio en vez de solapar los dos lados', () => {
+    // 16 clasificados y un corte de 10: si respetara el 10 pedido, seis jugadores
+    // estarían a la vez entre los que comen y entre los que pagan.
+    const c = L.cuts(mk(16), 10);
+    expect(c.size).toBe(8);
+    const both = [...c.topIds].filter(id => c.bottomIds.has(id));
+    expect(both).toEqual([]);
+  });
+
+  it('nunca mete en el corte a los que no clasificaron', () => {
+    const rows = mk(12).concat([{ player_id: 'x1', ranked: false }, { player_id: 'x2', ranked: false }]);
+    const c = L.cuts(rows, 4);
+    expect(c.total).toBe(12);
+    expect(c.bottomIds.has('x1')).toBe(false);
+    expect(c.bottomIds.has('x2')).toBe(false);
+    expect(c.bottomIds.has('p11')).toBe(true);
+  });
+
+  it('con corte 0 no marca a nadie', () => {
+    const c = L.cuts(mk(10), 0);
+    expect([c.size, c.topIds.size, c.bottomIds.size]).toEqual([0, 0, 0]);
   });
 });

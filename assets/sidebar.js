@@ -235,6 +235,9 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
       { href: 'Tactical%20Planning.html', icon: 'ti-target',         label: 'Tactical planning', key: 'tactical-planning', buckets: ['admin','coach','sc','direction'] },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
+      // Prototipo por club: sin `key` a propósito (no lleva data-mod, así que el
+      // gating de módulos no lo puede tocar) — el único gate es el flag.
+      { href: 'Internal%20League.html', icon: 'ti-trophy',           label: 'Internal league',  i18n: 'league.nav', flag: 'internal_league' },
       { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room',       key: 'video-room' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
       { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI', key: 'lineup' },
@@ -325,12 +328,13 @@ html.cm-rail .hub-nav-grip{display:none}
           const plt    = item.platformOnly ? ' data-platform-only' : '';
           const po     = item.planOnly ? ' data-plan-only' : '';   // gatea por plan, NO por RBAC
           const bks    = item.buckets ? ` data-buckets="${item.buckets.join(',')}"` : '';   // visible solo para estos buckets de rol
+          const flg    = item.flag ? ` data-flag="${item.flag}"` : '';   // prototipo por club (club_feature_flags)
           const baseKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
           // The sport may point this entry at different wording ("Game reports").
           const i18nKey = (baseKey && window.CMSport) ? window.CMSport.i18nKey(baseKey) : baseKey;
           const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
           const icon   = (item.key && sportNav.icons && sportNav.icons[item.key]) || item.icon;
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po}${bks} title="${item.label}"><i class="ti ${icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${dir}${mod}${plt}${po}${bks}${flg} title="${item.label}"><i class="ti ${icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -675,6 +679,25 @@ html.cm-rail .hub-nav-grip{display:none}
       try { _isPA = await window.isSuperAdmin(); } catch (e) {}
       if (!_isPA) document.querySelectorAll('[data-platform-only]').forEach(el => el.remove());
     }
+    // Gating por flag de club (data-flag="clave"): prototipos que solo ve el club
+    // que los está probando. FAIL-CLOSED — si el flag no se puede leer, el ítem se
+    // va: mejor que un club vea de menos a que vea una feature a medio hornear.
+    // Ni siquiera el super admin lo saltea: el flag es del club, no del usuario.
+    try {
+      const flagged = [...document.querySelectorAll('[data-flag]')];
+      if (flagged.length) {
+        if (typeof window.clubHasFlag !== 'function') flagged.forEach(el => el.remove());
+        else {
+          const res = await Promise.all(flagged.map(async el => {
+            let ok = false;
+            try { ok = await window.clubHasFlag(el.dataset.flag); } catch (_) { ok = false; }
+            return { el, ok };
+          }));
+          res.forEach(({ el, ok }) => { if (!ok) el.remove(); });
+        }
+      }
+    } catch (_) { document.querySelectorAll('[data-flag]').forEach(el => el.remove()); }
+
     // Ocultar grupos que quedaron sin items
     document.querySelectorAll('.hub-nav-group').forEach(g => {
       if (!g.querySelector('.hub-nav-item')) g.style.display = 'none';

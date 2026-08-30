@@ -227,6 +227,72 @@
     return true;
   }
 
+  // ── Temporadas (la página de la liga) ──────────────────────────────────────
+  // Historial: los meses de este equipo, del más nuevo al más viejo.
+  async function listSeasons(clubId, teamId) {
+    if (!clubId || !teamId) return [];
+    var q = await window.sb.from('internal_league_seasons').select('*')
+      .eq('club_id', clubId).eq('team_id', teamId).order('start_date', { ascending: false });
+    return q.data || [];
+  }
+
+  // Un mes completo: la temporada, sus enfrentamientos y todos los resultados,
+  // con la fecha del evento pegada a cada resultado (para las rachas).
+  async function loadSeason(seasonId) {
+    var empty = { season: null, events: [], results: [] };
+    if (!seasonId) return empty;
+    var s = await window.sb.from('internal_league_seasons').select('*').eq('id', seasonId).maybeSingle();
+    if (!s.data) return empty;
+    var ev = await window.sb.from('internal_league_events')
+      .select('id,event_date,session_exercise_id,title,groups')
+      .eq('season_id', seasonId).order('event_date').order('created_at');
+    var events = ev.data || [];
+    var rs = await window.sb.from('internal_league_results')
+      .select('event_id,player_id,group_id,outcome,points,goals_against,is_keeper,is_manual')
+      .eq('season_id', seasonId);
+    var dateOf = {}, orderOf = {};
+    events.forEach(function (e, i) { dateOf[e.id] = e.event_date; orderOf[e.id] = i; });
+    var results = (rs.data || []).map(function (r) {
+      return Object.assign({}, r, { event_date: dateOf[r.event_id] || null, _ord: orderOf[r.event_id] || 0 });
+    });
+    return { season: s.data, events: events, results: results };
+  }
+
+  async function closeSeason(seasonId) {
+    var q = await window.sb.from('internal_league_seasons')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .eq('id', seasonId).select().maybeSingle();
+    if (q.error) { console.warn('[league] closeSeason:', q.error.message); return null; }
+    return q.data;
+  }
+  async function reopenSeason(seasonId) {
+    var q = await window.sb.from('internal_league_seasons')
+      .update({ status: 'open', closed_at: null }).eq('id', seasonId).select().maybeSingle();
+    if (q.error) { console.warn('[league] reopenSeason:', q.error.message); return null; }
+    return q.data;
+  }
+  async function updateSeason(seasonId, patch) {
+    var q = await window.sb.from('internal_league_seasons').update(patch).eq('id', seasonId).select().maybeSingle();
+    if (q.error) { console.warn('[league] updateSeason:', q.error.message); return null; }
+    return q.data;
+  }
+
+  // Quién come y quién paga. Solo entre los CLASIFICADOS: el que no llegó al
+  // mínimo de participación no puede quedar castigado por no haber estado.
+  // Con menos del doble del corte, la línea cae al medio y nadie queda en tierra
+  // de nadie (10 y 10 sobre 16 jugadores serían 8 y 8, no 10 y 10 solapados).
+  function cuts(rows, cutSize) {
+    var ranked = (rows || []).filter(function (r) { return r.ranked; });
+    var n = ranked.length;
+    var size = Math.max(0, Math.min(Number(cutSize) || 0, Math.floor(n / 2)));
+    return {
+      size: size,
+      total: n,
+      topIds: new Set(ranked.slice(0, size).map(function (r) { return r.player_id; })),
+      bottomIds: new Set(size ? ranked.slice(n - size).map(function (r) { return r.player_id; }) : []),
+    };
+  }
+
   // ── Tabla del mes ──────────────────────────────────────────────────────────
   // Ordena por PUNTOS POR TAREA, no por total: el que se perdió una semana por
   // una sobrecarga no puede caer al fondo por ausente. El que no llega al mínimo
@@ -235,13 +301,24 @@
     var total = eventCount || 0;
     var minPlayed = Math.ceil(total * ((season && season.min_participation != null) ? Number(season.min_participation) : minParticipation()));
     var by = {};
-    (results || []).forEach(function (r) {
+    // Cronológico para poder leer rachas: si los resultados no traen fecha
+    // (llamadas viejas / tests), el orden de entrada ya sirve.
+    var ordered = (results || []).slice().sort(function (a, b) {
+      var ad = a.event_date || '', bd = b.event_date || '';
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      return (a._ord || 0) - (b._ord || 0);
+    });
+    ordered.forEach(function (r) {
       var pid = String(r.player_id);
-      var e = by[pid] || (by[pid] = { player_id: pid, played: 0, win: 0, draw: 0, loss: 0, points: 0, goals_against: 0, keeper_events: 0 });
+      var e = by[pid] || (by[pid] = { player_id: pid, played: 0, win: 0, draw: 0, loss: 0, points: 0, goals_against: 0, keeper_events: 0, streak: 0, best_streak: 0 });
       e.played++;
       e[r.outcome]++;
       e.points += Number(r.points) || 0;
       if (r.is_keeper) { e.keeper_events++; if (r.goals_against != null) e.goals_against += Number(r.goals_against) || 0; }
+      // Racha de victorias: la actual se corta con cualquier resultado que no sea
+      // ganar (el empate también la corta — es una racha de ganadas, no de invicto).
+      if (r.outcome === 'win') { e.streak++; if (e.streak > e.best_streak) e.best_streak = e.streak; }
+      else e.streak = 0;
     });
     var byId = {};
     (players || []).forEach(function (p) { byId[String(p.id)] = p; });
@@ -272,6 +349,8 @@
     monthBounds: monthBounds, monthLabel: monthLabel,
     ensureSeason: ensureSeason, seasonFor: seasonFor,
     compute: compute, loadDay: loadDay, saveEvent: saveEvent, removeEvent: removeEvent,
-    standings: standings,
+    standings: standings, cuts: cuts,
+    listSeasons: listSeasons, loadSeason: loadSeason,
+    closeSeason: closeSeason, reopenSeason: reopenSeason, updateSeason: updateSeason,
   };
 })();
