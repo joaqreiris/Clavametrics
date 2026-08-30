@@ -393,3 +393,62 @@ describe('sport packs · drill board kit', () => {
       expect(PACKS[k].drills.gameTypes.length, k).toBeGreaterThan(0));
   });
 });
+
+describe('sport packs · lineup shapes', () => {
+  const withLineup = () => Object.entries(PACKS).filter(([, p]) => p.lineup.enabled);
+
+  it('every shape fields exactly as many players as the sport starts', () => {
+    withLineup().forEach(([sport, p]) =>
+      Object.entries(p.lineup.shapes).forEach(([name, spots]) =>
+        expect(spots.length, `${sport} · ${name}`).toBe(p.lineup.slots)));
+  });
+
+  it('every spot sits on the pitch and names a real roll-up', () => {
+    withLineup().forEach(([sport, p]) => {
+      const basics = new Set(p.positions ? p.positions.basics : []);
+      Object.entries(p.lineup.shapes).forEach(([name, spots]) =>
+        spots.forEach((sp, i) => {
+          expect(sp.x >= 0 && sp.x <= 100, `${sport}/${name}[${i}].x=${sp.x}`).toBe(true);
+          expect(sp.y >= 0 && sp.y <= 100, `${sport}/${name}[${i}].y=${sp.y}`).toBe(true);
+          expect(basics.has(sp.role), `${sport}/${name}[${i}].role=${sp.role}`).toBe(true);
+        }));
+    });
+  });
+
+  it('a sport with a goalkeeper puts exactly one in every shape', () => {
+    withLineup().forEach(([sport, p]) => {
+      if (!p.roster.hasGoalkeeper) return;
+      Object.entries(p.lineup.shapes).forEach(([name, spots]) =>
+        expect(spots.filter(s => s.role === 'GK').length, `${sport} · ${name}`).toBe(1));
+    });
+  });
+
+  it('a sport without a goalkeeper has none anywhere', () => {
+    withLineup().forEach(([sport, p]) => {
+      if (p.roster.hasGoalkeeper) return;
+      Object.values(p.lineup.shapes).forEach(spots =>
+        expect(spots.some(s => s.role === 'GK'), sport).toBe(false));
+    });
+  });
+
+  it('the shapes match the sport, not football', () => {
+    expect(Object.keys(PACKS.basketball.lineup.shapes)).toEqual(['5-out', '4-out-1-in', '3-out-2-in']);
+    expect(Object.keys(PACKS.futsal.lineup.shapes)).toEqual(['3-1', '2-2', '4-0']);
+    // Rugby genuinely has one shape: the fifteen shirts are the positions.
+    expect(Object.keys(PACKS.rugby.lineup.shapes)).toEqual(['XV']);
+    expect(Object.keys(PACKS.football.lineup.shapes)).toContain('4-3-3');
+  });
+
+  it('every sport with a lineup offers at least one shape', () => {
+    withLineup().forEach(([sport, p]) =>
+      expect(Object.keys(p.lineup.shapes).length, sport).toBeGreaterThan(0));
+  });
+
+  it('no two spots land on top of each other', () => {
+    withLineup().forEach(([sport, p]) =>
+      Object.entries(p.lineup.shapes).forEach(([name, spots]) => {
+        const seen = new Set(spots.map(s => `${s.x},${s.y}`));
+        expect(seen.size, `${sport} · ${name} has overlapping spots`).toBe(spots.length);
+      }));
+  });
+});

@@ -327,6 +327,130 @@
   };
 
   /* ============================================================
+     LINEUP SHAPES
+
+     name → the eleven (or five, or fifteen) spots, as { role, x, y } in PERCENT of the
+     poster stage, with the team attacking UP: y=90 is our own goal, y=8 the opponent's.
+     `role` is a roll-up code from the same sport's position model, and is only a hint —
+     it labels the empty slot and pre-filters the player picker.
+
+     This lived inside lineup.js as a football-only table. Basketball is not "football
+     without a formation": it has real spacing systems (5-out, 4-out-1-in), and so does
+     futsal (3-1, 2-2, 4-0). Rugby is the one that genuinely has a single shape, because
+     the fifteen shirts ARE the positions.
+     ============================================================ */
+
+  const FOOTBALL_SHAPES = {
+    '4-3-3': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'FB', x: 14, y: 70 }, { role: 'CB', x: 36, y: 73 },
+      { role: 'CB', x: 64, y: 73 }, { role: 'FB', x: 86, y: 70 },
+      { role: 'MF', x: 28, y: 50 }, { role: 'MF', x: 50, y: 56 }, { role: 'MF', x: 72, y: 50 },
+      { role: 'WG', x: 14, y: 24 }, { role: 'ST', x: 50, y: 18 }, { role: 'WG', x: 86, y: 24 },
+    ],
+    '4-4-2': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'FB', x: 14, y: 70 }, { role: 'CB', x: 36, y: 73 },
+      { role: 'CB', x: 64, y: 73 }, { role: 'FB', x: 86, y: 70 },
+      { role: 'WG', x: 14, y: 45 }, { role: 'MF', x: 38, y: 50 },
+      { role: 'MF', x: 62, y: 50 }, { role: 'WG', x: 86, y: 45 },
+      { role: 'ST', x: 36, y: 20 }, { role: 'ST', x: 64, y: 20 },
+    ],
+    '4-2-3-1': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'FB', x: 14, y: 70 }, { role: 'CB', x: 36, y: 73 },
+      { role: 'CB', x: 64, y: 73 }, { role: 'FB', x: 86, y: 70 },
+      { role: 'MF', x: 36, y: 55 }, { role: 'MF', x: 64, y: 55 },
+      { role: 'WG', x: 16, y: 32 }, { role: 'MF', x: 50, y: 36 }, { role: 'WG', x: 84, y: 32 },
+      { role: 'ST', x: 50, y: 16 },
+    ],
+    '3-5-2': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'CB', x: 24, y: 74 }, { role: 'CB', x: 50, y: 76 }, { role: 'CB', x: 76, y: 74 },
+      { role: 'FB', x: 10, y: 50 }, { role: 'MF', x: 32, y: 54 }, { role: 'MF', x: 50, y: 50 },
+      { role: 'MF', x: 68, y: 54 }, { role: 'FB', x: 90, y: 50 },
+      { role: 'ST', x: 38, y: 20 }, { role: 'ST', x: 62, y: 20 },
+    ],
+    '5-3-2': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'FB', x: 12, y: 64 }, { role: 'CB', x: 30, y: 74 }, { role: 'CB', x: 50, y: 76 },
+      { role: 'CB', x: 70, y: 74 }, { role: 'FB', x: 88, y: 64 },
+      { role: 'MF', x: 30, y: 46 }, { role: 'MF', x: 50, y: 50 }, { role: 'MF', x: 70, y: 46 },
+      { role: 'ST', x: 38, y: 20 }, { role: 'ST', x: 62, y: 20 },
+    ],
+    '3-4-3': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'CB', x: 24, y: 74 }, { role: 'CB', x: 50, y: 76 }, { role: 'CB', x: 76, y: 74 },
+      { role: 'FB', x: 12, y: 50 }, { role: 'MF', x: 38, y: 54 },
+      { role: 'MF', x: 62, y: 54 }, { role: 'FB', x: 88, y: 50 },
+      { role: 'WG', x: 18, y: 22 }, { role: 'ST', x: 50, y: 18 }, { role: 'WG', x: 82, y: 22 },
+    ],
+  };
+
+  // Basketball spacing systems, named the way coaches name them: how many players start
+  // outside the arc and how many in the post.
+  const BASKETBALL_SHAPES = {
+    '5-out': [
+      { role: 'G', x: 50, y: 64 }, { role: 'G', x: 17, y: 50 }, { role: 'W', x: 83, y: 50 },
+      { role: 'B', x: 28, y: 26 }, { role: 'B', x: 72, y: 26 },
+    ],
+    '4-out-1-in': [
+      { role: 'G', x: 50, y: 64 }, { role: 'G', x: 16, y: 48 }, { role: 'W', x: 84, y: 48 },
+      { role: 'B', x: 30, y: 28 }, { role: 'B', x: 50, y: 17 },
+    ],
+    '3-out-2-in': [
+      { role: 'G', x: 50, y: 60 }, { role: 'G', x: 19, y: 46 }, { role: 'W', x: 81, y: 46 },
+      { role: 'B', x: 33, y: 22 }, { role: 'B', x: 67, y: 22 },
+    ],
+  };
+
+  // Futsal: the classic rotations, with the goalkeeper always at the back.
+  const FUTSAL_SHAPES = {
+    '3-1': [
+      { role: 'GK', x: 50, y: 90 }, { role: 'FX', x: 50, y: 72 },
+      { role: 'AL', x: 18, y: 48 }, { role: 'AL', x: 82, y: 48 }, { role: 'PV', x: 50, y: 20 },
+    ],
+    '2-2': [
+      { role: 'GK', x: 50, y: 90 }, { role: 'FX', x: 30, y: 66 }, { role: 'FX', x: 70, y: 66 },
+      { role: 'PV', x: 30, y: 28 }, { role: 'PV', x: 70, y: 28 },
+    ],
+    '4-0': [
+      { role: 'GK', x: 50, y: 90 }, { role: 'AL', x: 20, y: 60 }, { role: 'AL', x: 80, y: 60 },
+      { role: 'AL', x: 34, y: 32 }, { role: 'AL', x: 66, y: 32 },
+    ],
+  };
+
+  // Rugby has one shape because the fifteen shirts ARE the positions: pack at the back,
+  // half backs, centres, back three.
+  const RUGBY_SHAPES = {
+    'XV': [
+      { role: 'FR', x: 30, y: 82 }, { role: 'FR', x: 50, y: 85 }, { role: 'FR', x: 70, y: 82 },
+      { role: 'SR', x: 40, y: 72 }, { role: 'SR', x: 60, y: 72 },
+      { role: 'BR', x: 22, y: 66 }, { role: 'BR', x: 78, y: 66 }, { role: 'BR', x: 50, y: 64 },
+      { role: 'HB', x: 46, y: 52 }, { role: 'HB', x: 34, y: 43 },
+      { role: 'CTR', x: 52, y: 35 }, { role: 'CTR', x: 68, y: 30 },
+      { role: 'B3', x: 13, y: 26 }, { role: 'B3', x: 88, y: 26 }, { role: 'B3', x: 50, y: 15 },
+    ],
+  };
+
+  const HOCKEY_SHAPES = {
+    '4-3-3': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'DEF', x: 14, y: 70 }, { role: 'DEF', x: 36, y: 73 },
+      { role: 'DEF', x: 64, y: 73 }, { role: 'DEF', x: 86, y: 70 },
+      { role: 'MID', x: 28, y: 50 }, { role: 'MID', x: 50, y: 56 }, { role: 'MID', x: 72, y: 50 },
+      { role: 'FWD', x: 14, y: 24 }, { role: 'FWD', x: 50, y: 18 }, { role: 'FWD', x: 86, y: 24 },
+    ],
+    '3-3-3-1': [
+      { role: 'GK', x: 50, y: 90 },
+      { role: 'DEF', x: 24, y: 76 }, { role: 'DEF', x: 50, y: 78 }, { role: 'DEF', x: 76, y: 76 },
+      { role: 'MID', x: 22, y: 58 }, { role: 'MID', x: 50, y: 60 }, { role: 'MID', x: 78, y: 58 },
+      { role: 'MID', x: 20, y: 38 }, { role: 'FWD', x: 50, y: 36 }, { role: 'FWD', x: 80, y: 38 },
+      { role: 'FWD', x: 50, y: 16 },
+    ],
+  };
+
+  /* ============================================================
      THE PACKS
 
      field.surface — what the ground is MADE of, which is not the same question as
@@ -359,7 +483,7 @@
       positions: FOOTBALL_POSITIONS,
       roster:    { onField: 11, benchMax: 12, unlimitedSubs: false, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 11,
-                   countLabel: 'XI',
+                   countLabel: 'XI', shapes: FOOTBALL_SHAPES,
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'goals', sanctions: 'cards',
@@ -401,7 +525,7 @@
       positions: FUTSAL_POSITIONS,
       roster:    { onField: 5, benchMax: 9, unlimitedSubs: true, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 5,
-                   countLabel: 'V',
+                   countLabel: 'V', shapes: FUTSAL_SHAPES,
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       // Futsal runs stopped-clock halves and ACCUMULATED fouls (6th = double penalty),
       // which is a different sanction model from football's cards.
@@ -420,7 +544,7 @@
       // Indoor: the Top-Up calculator works off % of Vmax with 19.8/25.2 km/h fallbacks,
       // which nobody reaches on a 40 m court.
       nav:       { hidden: ['top-up'], icons: { 'daily-planning': 'ti-ball-football' } },
-      i18n:      {},
+      i18n:      { 'lineup.starting_xi': 'lineup.starting_five', 'lineup.xi': 'lineup.five' },
       icons:     { ball: 'ti-ball-football', field: 'ti-ball-football' },
       vocab:     { match: 'match', surface: 'court', score: 'goal' },
     },
@@ -441,9 +565,9 @@
       field:     { type: 'basketball', variant: 'full', orient: 'h', surface: 'wood' },
       positions: BASKETBALL_POSITIONS,
       roster:    { onField: 5, benchMax: 10, unlimitedSubs: true, hasGoalkeeper: false },
-      // No formation: a basketball starting five is a set of players, not a shape.
-      lineup:    { enabled: true, hasFormation: false, slots: 5,
-                   countLabel: 'V',
+      // Basketball does have shapes — they are spacing systems, not defensive lines.
+      lineup:    { enabled: true, hasFormation: true, slots: 5,
+                   countLabel: 'V', shapes: BASKETBALL_SHAPES,
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 10 }, periodLabel: 'quarter',
                    scoring: 'points', sanctions: 'fouls',
@@ -471,7 +595,9 @@
                    'match_reports.match_reports':      'match_reports.game_reports',
                    'match_reports.match_report':       'match_reports.game_report',
                    'match_reports.search_match':       'match_reports.search_game',
-                   'planner.match_day':                'planner.game_day' },
+                   'planner.match_day':                'planner.game_day',
+                   'lineup.starting_xi':               'lineup.starting_five',
+                   'lineup.xi':                        'lineup.five' },
       icons:     { ball: 'ti-ball-basketball', field: 'ti-ball-basketball' },
       vocab:     { match: 'game', surface: 'court', score: 'point' },
     },
@@ -493,7 +619,7 @@
       positions: RUGBY_POSITIONS,
       roster:    { onField: 15, benchMax: 8, unlimitedSubs: false, hasGoalkeeper: false },
       lineup:    { enabled: true, hasFormation: false, slots: 15,
-                   countLabel: 'XV',
+                   countLabel: 'XV', shapes: RUGBY_SHAPES,
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 40 }, periodLabel: 'half',
                    scoring: 'points', sanctions: 'cards',
@@ -512,7 +638,7 @@
                    objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'mannequin'] },
       anthro:    { dominantSide: 'foot', extra: [] },
       nav:       { hidden: [], icons: { 'daily-planning': 'ti-ball-american-football' } },
-      i18n:      {},
+      i18n:      { 'lineup.starting_xi': 'lineup.starting_xv', 'lineup.xi': 'lineup.xv' },
       icons:     { ball: 'ti-ball-american-football', field: 'ti-ball-american-football' },
       vocab:     { match: 'match', surface: 'pitch', score: 'point' },
     },
@@ -534,7 +660,7 @@
       positions: HOCKEY_POSITIONS,
       roster:    { onField: 11, benchMax: 7, unlimitedSubs: true, hasGoalkeeper: true },
       lineup:    { enabled: true, hasFormation: true, slots: 11,
-                   countLabel: 'XI',
+                   countLabel: 'XI', shapes: HOCKEY_SHAPES,
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 15 }, periodLabel: 'quarter',
                    scoring: 'goals', sanctions: 'cards',
@@ -571,7 +697,7 @@
       ],
       positions: null,                 // free text — never normalised, never rolled up
       roster:    { onField: null, benchMax: null, unlimitedSubs: true, hasGoalkeeper: false },
-      lineup:    { enabled: false, hasFormation: false, slots: null, countLabel: '',
+      lineup:    { enabled: false, hasFormation: false, slots: null, countLabel: '', shapes: {},
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'points', sanctions: null,

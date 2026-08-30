@@ -13,86 +13,20 @@
   // ── Formations: positions are (x%, y%) on the poster pitch.
   //    Pitch is rendered with our team attacking UP (so y=92 = own goal,
   //    y=8 = opponent goal). GK sits at the bottom.
-  const FORMATIONS = {
-    '4-3-3': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'FB', x: 14, y: 70 }, // LB
-      { role: 'CB', x: 36, y: 73 }, // LCB
-      { role: 'CB', x: 64, y: 73 }, // RCB
-      { role: 'FB', x: 86, y: 70 }, // RB
-      { role: 'MF', x: 28, y: 50 }, // LCM
-      { role: 'MF', x: 50, y: 56 }, // DM
-      { role: 'MF', x: 72, y: 50 }, // RCM
-      { role: 'WG', x: 14, y: 24 }, // LW
-      { role: 'ST', x: 50, y: 18 }, // CF
-      { role: 'WG', x: 86, y: 24 }, // RW
-    ],
-    '4-4-2': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'FB', x: 14, y: 70 },
-      { role: 'CB', x: 36, y: 73 },
-      { role: 'CB', x: 64, y: 73 },
-      { role: 'FB', x: 86, y: 70 },
-      { role: 'WG', x: 14, y: 45 },
-      { role: 'MF', x: 38, y: 50 },
-      { role: 'MF', x: 62, y: 50 },
-      { role: 'WG', x: 86, y: 45 },
-      { role: 'ST', x: 36, y: 20 },
-      { role: 'ST', x: 64, y: 20 },
-    ],
-    '4-2-3-1': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'FB', x: 14, y: 70 },
-      { role: 'CB', x: 36, y: 73 },
-      { role: 'CB', x: 64, y: 73 },
-      { role: 'FB', x: 86, y: 70 },
-      { role: 'MF', x: 36, y: 55 },
-      { role: 'MF', x: 64, y: 55 },
-      { role: 'WG', x: 16, y: 32 },
-      { role: 'MF', x: 50, y: 36 }, // 10
-      { role: 'WG', x: 84, y: 32 },
-      { role: 'ST', x: 50, y: 16 },
-    ],
-    '3-5-2': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'CB', x: 24, y: 74 },
-      { role: 'CB', x: 50, y: 76 },
-      { role: 'CB', x: 76, y: 74 },
-      { role: 'FB', x: 10, y: 50 }, // LWB
-      { role: 'MF', x: 32, y: 54 },
-      { role: 'MF', x: 50, y: 50 },
-      { role: 'MF', x: 68, y: 54 },
-      { role: 'FB', x: 90, y: 50 }, // RWB
-      { role: 'ST', x: 38, y: 20 },
-      { role: 'ST', x: 62, y: 20 },
-    ],
-    '5-3-2': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'FB', x: 12, y: 64 },
-      { role: 'CB', x: 30, y: 74 },
-      { role: 'CB', x: 50, y: 76 },
-      { role: 'CB', x: 70, y: 74 },
-      { role: 'FB', x: 88, y: 64 },
-      { role: 'MF', x: 30, y: 46 },
-      { role: 'MF', x: 50, y: 50 },
-      { role: 'MF', x: 70, y: 46 },
-      { role: 'ST', x: 38, y: 20 },
-      { role: 'ST', x: 62, y: 20 },
-    ],
-    '3-4-3': [
-      { role: 'GK', x: 50, y: 90 },
-      { role: 'CB', x: 24, y: 74 },
-      { role: 'CB', x: 50, y: 76 },
-      { role: 'CB', x: 76, y: 74 },
-      { role: 'FB', x: 12, y: 50 },
-      { role: 'MF', x: 38, y: 54 },
-      { role: 'MF', x: 62, y: 54 },
-      { role: 'FB', x: 88, y: 50 },
-      { role: 'WG', x: 18, y: 22 },
-      { role: 'ST', x: 50, y: 18 },
-      { role: 'WG', x: 82, y: 22 },
-    ],
-  };
+  // ── Lineup shapes ────────────────────────────────────────────
+  // The spots come from the club's sport pack (assets/sport-packs.js → lineup.shapes):
+  // football's 4-3-3, basketball's 5-out, rugby's single XV. This file used to carry a
+  // football-only table, which is why a basketball club was asked for a back four.
+  // An i18n key redirected to this sport's wording, when the pack declares one.
+  function _sportKey (k) { return window.CMSport ? window.CMSport.i18nKey(k) : k; }
+
+  function shapes () {
+    const s = (window.CMSport && window.CMSport.at('lineup.shapes', null)) || null;
+    return (s && Object.keys(s).length) ? s : {};
+  }
+  function shapeNames () { return Object.keys(shapes()); }
+  function defaultShape () { return shapeNames()[0] || ''; }
+  function spotsFor (name) { return shapes()[name] || shapes()[defaultShape()] || []; }
 
   // ── Country flags ────────────────────────────────────────────
   // `players.nationality` is FREE TEXT ("Brazil", "Brasil", "Camboya"…). The old code took the
@@ -152,7 +86,7 @@
 
   // ── State (players populated async from Supabase)
   let state = {
-    formation: '4-3-3',
+    formation: '',   // set from the sport pack in boot()
     style: 'editorial',
     starters: [],
     subs: [],
@@ -228,7 +162,7 @@
     return {
       lineup:       tt('lineup.lineup', 'Lineup'),
       lineupHilite: tt('lineup.official', 'Official'),
-      starting:     tt('lineup.starting_xi', 'Starting XI'),
+      starting:     tt(_sportKey('lineup.starting_xi'), 'Starting XI'),
       substitutes:  tt('lineup.substitutes', 'Substitutes'),
       coach:        tt('lineup.head_coach', 'HEAD COACH'),
       matchday:     tt('common.date', 'Date'),
@@ -248,7 +182,7 @@
     // Remove existing spots
     stage.querySelectorAll('.pst-spot').forEach(n => n.remove());
 
-    const positions = FORMATIONS[state.formation];
+    const positions = spotsFor(state.formation);
     state.starters.forEach((p, i) => {
       if (!p) return;
       const pos = positions[i] || { x: 50, y: 50 };
@@ -304,7 +238,7 @@
         <div class="lu-skeleton sk-tag"></div>
       </div>`;
 
-    const positions = FORMATIONS[state.formation];
+    const positions = spotsFor(state.formation);
 
     if (_playersLoading && !state.starters.some(Boolean)) {
       xi.innerHTML = positions.map(() => skeletonRow()).join('');
@@ -375,6 +309,11 @@
 
   // ── Formation switcher
   function applyFormation () {
+    if (state.formation && !shapeNames().includes(state.formation)) {
+      // A lineup saved under another sport (or before the packs existed) names a shape
+      // this sport does not have — fall back instead of rendering an empty pitch.
+      state.formation = defaultShape();
+    }
     document.querySelectorAll('.lu-form-btn').forEach(b => {
       b.classList.toggle('is-on', b.dataset.form === state.formation);
     });
@@ -393,7 +332,9 @@
     const stage = document.querySelector('.pst-pitch');
     if (!stage || stage.querySelector('.pf-lines')) return;
     if (!window.CMField) { console.warn('[lineup] CMField not loaded — pitch markings skipped'); return; }
-    window.CMField.renderField(stage, 'football', 'full', 'v');
+    // Same surface the drill board uses: a basketball lineup is posed on a court.
+    const f = (window.CMSport && window.CMSport.at('field', null)) || {};
+    window.CMField.renderField(stage, f.type || 'football', 'full', 'v');
   }
 
   // ── Match countdown (days until match_date)
@@ -420,13 +361,26 @@
     });
   }
 
-  // ── Formation buttons
+  // ── Formation buttons — built from the pack, so a new sport needs no markup here.
+  function renderFormationButtons () {
+    const row = document.querySelector('[data-form-row]');
+    if (!row) return;
+    const names = shapeNames();
+    // Rugby has exactly one shape: a picker with a single option is noise, so the whole
+    // row goes away and the label just states it.
+    row.style.display = names.length > 1 ? '' : 'none';
+    row.innerHTML = names.map(n =>
+      `<button class="lu-form-btn${n === state.formation ? ' is-on' : ''}" data-form="${n}">${n}</button>`
+    ).join('');
+  }
   function wireFormations () {
-    document.querySelectorAll('.lu-form-btn').forEach(b => {
-      b.addEventListener('click', () => {
-        state.formation = b.dataset.form;
-        applyFormation();
-      });
+    renderFormationButtons();
+    // Delegated: the buttons are rebuilt when the sport is confirmed.
+    document.querySelector('[data-form-row]')?.addEventListener('click', e => {
+      const b = e.target.closest('.lu-form-btn');
+      if (!b) return;
+      state.formation = b.dataset.form;
+      applyFormation();
     });
   }
 
@@ -663,7 +617,7 @@
   function openPicker (slotIdx, kind, anchor) {
     closePicker();
     const posHint = kind === 'xi'
-      ? (FORMATIONS[state.formation][slotIdx]?.role || 'ANY')
+      ? (spotsFor(state.formation)[slotIdx]?.role || 'ANY')
       : 'ANY';
 
     const panel = document.createElement('div');
@@ -933,7 +887,7 @@
       : 'id,formation,status,poster_style,language,style_config';
     const { data: created } = await window.sb
       .from('lineups')
-      .insert({ club_id: clubId, match_id: matchId, formation: '4-3-3', status: 'draft' })
+      .insert({ club_id: clubId, match_id: matchId, formation: defaultShape() || '—', status: 'draft' })
       .select(selCols)
       .single();
     return created;
@@ -1254,6 +1208,7 @@
 
   // ── Init
   document.addEventListener('DOMContentLoaded', async () => {
+    state.formation = defaultShape();   // the sport decides the opening shape
     injectPitchLines();
     wireTabs();
     wireFormations();
@@ -1262,9 +1217,23 @@
     wireComposerDelegation();
     wireBenchCtl();
 
-    // Wire formation + style save debounce (no Supabase needed, safe to do now)
-    document.querySelectorAll('.lu-form-btn').forEach(b => {
-      b.addEventListener('click', () => scheduleSave());
+    // The sport is served from cache on the first paint and confirmed against the DB a
+    // moment later. If it changed, the shapes, the pitch and the slot count are all wrong
+    // on screen — rebuild rather than make the user reload.
+    window.addEventListener('cm:sport-change', () => {
+      const stage = document.querySelector('.pst-pitch');
+      stage?.querySelector('.pf-lines')?.remove();
+      injectPitchLines();
+      if (!shapeNames().includes(state.formation)) state.formation = defaultShape();
+      renderFormationButtons();
+      applyFormation();
+      renderComposer();
+    });
+
+    // Save debounce on formation + style. Delegated for the formation row because those
+    // buttons are rebuilt whenever the sport changes.
+    document.querySelector('[data-form-row]')?.addEventListener('click', e => {
+      if (e.target.closest('.lu-form-btn')) scheduleSave();
     });
     document.querySelectorAll('.style-tab').forEach(b => {
       b.addEventListener('click', () => scheduleSave());
