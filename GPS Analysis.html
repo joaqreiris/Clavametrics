@@ -967,39 +967,7 @@
   .sc-player-cell { display:flex; align-items:center; gap:8px; }
   .sc-player-cell .gp-mav { width:26px; height:26px; border-radius:50%; background:var(--cm-accent-soft); color:var(--cm-accent); font:700 10px/26px var(--cm-font-sans); text-align:center; flex-shrink:0; }
 
-  /* ── Informe imprimible (assets/pages/gps-export.js) ──────────────────────
-     La hoja vive oculta y solo se muestra mientras se captura (PDF) o se imprime.
-     Es el informe: encabezado + filtros + resumen + las cards, nada de interfaz. */
-  #gpPrintSheet { display:none; }
-  .gps-sheet { background:#fff; color:#0f172a; padding:22px 24px 26px; box-sizing:border-box; font-family:var(--cm-font-sans); }
-  .gps-hd { display:flex; align-items:center; gap:16px; padding-bottom:12px; border-bottom:2px solid #0f172a; }
-  .gps-hd-l { display:flex; align-items:center; gap:9px; flex:1 1 0; min-width:0; }
-  .gps-crest { width:38px; height:38px; object-fit:contain; flex-shrink:0; }
-  .gps-club { font:600 12px/1.2 var(--cm-font-sans); color:#475569; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .gps-hd-c { flex:0 1 auto; text-align:center; min-width:0; }
-  .gps-hd-c h1 { margin:0; font:700 19px/1.25 var(--cm-font-sans); color:#0f172a; }
-  .gps-hd-c .gps-sub { margin-top:3px; font:500 11.5px/1.2 var(--cm-font-sans); color:#64748b; }
-  .gps-hd-r { flex:1 1 0; display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
-  .gps-hd-r .gps-dl { font:600 8.5px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; }
-  .gps-hd-r .gps-dv { font:600 12px/1.2 var(--cm-font-sans); color:#0f172a; white-space:nowrap; }
-  .gps-filters { display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; margin-top:11px; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; }
-  .gps-filters .k { font:600 8.5px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; }
-  .gps-fchip { font:500 10.5px/1.35 var(--cm-font-sans); color:#334155; }
-  .gps-fchip b { font-weight:700; color:#0f172a; }
-  .gps-fchip + .gps-fchip::before { content:'·'; margin-right:6px; color:#cbd5e1; }
-  .gps-intro { margin-top:11px; font:400 11.5px/1.55 var(--cm-font-sans); color:#334155; }
-  .gps-cards { margin-top:14px; }
-  /* Cada banda = una fila del dashboard (una card, o dos lado a lado). Es la unidad que se
-     captura y se coloca en el PDF: por eso ninguna card queda partida entre dos páginas. */
-  .gps-band { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
-  /* El grid nace en opacity:0 y lo revela .layout-ready al aplicar el layout — en la hoja clonada
-     eso dejaba las cards invisibles (páginas en blanco). Acá siempre visibles y sin sombra. */
-  .gps-sheet .gp-grid, .gps-sheet .gp-c { opacity:1 !important; }
-  .gps-sheet .gp-c { box-shadow:none; border:1px solid #e2e8f0 !important; outline:none !important; background:#fff; break-inside:avoid; }
-  .gps-sheet .gp-c-h { border-bottom:1px solid #eef2f7; }
-  .gps-note { margin:6px 12px 10px; padding-left:9px; border-left:2px solid #cbd5e1;
-    font:500 10.5px/1.45 var(--cm-font-sans); color:#475569; }
-  /* Modal de exportación */
+  /* Modal de exportación (el informe se compone en el PDF, no hay hoja HTML) */
   .gx-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; }
   .gx-f { display:flex; flex-direction:column; gap:5px; margin-top:10px; }
   .gx-l { font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
@@ -1020,14 +988,6 @@
     font:500 11px/1.4 var(--cm-font-sans); color:var(--cm-warning,#D97706); }
   .gx-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
   .gx-foot .ti { font-size:14px; }
-  /* Impresión nativa: solo la hoja. */
-  body.gps-printing > *:not(#gpPrintSheet) { display:none !important; }
-  body.gps-printing #gpPrintSheet { display:block !important; }
-  @media print {
-    @page { size:A4; margin:10mm; }
-    body.gps-printing .gps-sheet { width:100% !important; padding:0; }
-    body.gps-printing .gp-c { break-inside:avoid; page-break-inside:avoid; }
-  }
 </style>
 </head>
 <body class="cm">

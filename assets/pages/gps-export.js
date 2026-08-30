@@ -5,11 +5,12 @@
    de filtros, sin botones. El layout es el que armó el usuario en su dashboard
    (mismas posiciones y tamaños), porque ese orden ES la lectura que quiso darle.
 
-   El PDF se COMPONE con jsPDF (texto vectorial + la imagen de cada canvas de
-   Chart.js), no se captura la pantalla: html2canvas re-resuelve el CSS de la app
-   y dibuja los textos chicos casi invisibles. jsPDF se descarga recién al pulsar
-   Exportar, para no meter un <script> bloqueante en el arranque de la página.
-   El botón Imprimir sí usa una hoja HTML — ahí pinta el navegador y se ve bien.
+   El informe se COMPONE con jsPDF: los textos con pdf.text (vectoriales, nítidos
+   y seleccionables) y cada gráfico con la imagen de su canvas de Chart.js. NO se
+   captura la pantalla — clonar las cards a una hoja HTML da textos fantasma
+   (probado a fondo: ver la memoria del proyecto), así que Imprimir y Exportar
+   usan el MISMO camino: uno abre el visor con el diálogo listo, el otro descarga.
+   jsPDF se baja recién al pulsar el botón, para no cargar nada en el arranque.
    ──────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';
@@ -81,209 +82,13 @@
     try { return fb.describeActive(); } catch (_) { return []; }
   }
 
-  // ── Hoja imprimible ─────────────────────────────────────────────────────
-  function sheetHost() {
-    let host = document.getElementById(SHEET_ID);
-    if (!host) {
-      host = document.createElement('div');
-      host.id = SHEET_ID;
-      document.body.appendChild(host);
-    }
-    return host;
-  }
-
-  /**
-   * Arma la hoja: encabezado + filtros + resumen + clon del grid con las cards elegidas.
-   * Los <canvas> se copian como imágenes (un clone() los deja en blanco) y todo lo interactivo
-   * (botones, chips de orden, selectores) se descarta.
-   */
-  function buildSheet(opts) {
-    const host = sheetHost();
-    const grid = activeGrid();
-    const width = Math.max(SHEET_MIN, Math.min(SHEET_MAX, Math.round(grid?.getBoundingClientRect().width || 1200)));
-
-    const fl = opts.showFilters ? filterLines() : [];
-    const filtersHTML = fl.length
-      ? `<div class="gps-filters"><span class="k">${esc(T('gps_analysis.export_filters', 'Filters applied'))}</span>`
-        + fl.map(f => `<span class="gps-fchip"><b>${esc(f.name)}:</b> ${esc(f.values)}</span>`).join('')
-        + `</div>`
-      : '';
-
-    host.innerHTML =
-      `<div class="gps-sheet" style="width:${width + SHEET_PAD * 2}px">
-         <div class="gps-hd">
-           <div class="gps-hd-l">${opts.crest ? `<img class="gps-crest" src="${esc(opts.crest)}" alt="">` : ''}
-             <span class="gps-club">${esc(opts.clubName || '')}</span></div>
-           <div class="gps-hd-c">
-             <h1>${esc(opts.title || '')}</h1>
-             <div class="gps-sub">${esc(opts.subtitle || '')}</div>
-           </div>
-           <div class="gps-hd-r"><span class="gps-dl">${esc(T('gps_analysis.export_date', 'Report date'))}</span>
-             <span class="gps-dv">${esc(opts.dateLabel || '')}</span></div>
-         </div>
-         ${filtersHTML}
-         ${opts.intro ? `<div class="gps-intro">${esc(opts.intro).replace(/\n/g, '<br>')}</div>` : ''}
-         <div class="gps-cards"></div>
-       </div>`;
-
-    // Las cards se agrupan en BANDAS (las filas del dashboard: una card sola, o dos lado a lado).
-    // Cada banda es un bloque independiente — así el PDF se arma bloque por bloque en vez de una
-    // sola imagen gigantesca, que en dashboards largos revienta el límite de tamaño del canvas
-    // (era el «Could not build the PDF»), y de paso ningún corte cae dentro de una card.
-    const cardsHost = host.querySelector('.gps-cards');
-    const items = opts.cards.map(c => {
-      const el = c.el;
-      const num = k => parseFloat(getComputedStyle(el).getPropertyValue(k));
-      return { c, x: num('--gp-x'), y: num('--gp-y'), w: num('--gp-w'), h: el.getBoundingClientRect().height };
-    });
-    const free = items.every(i => isFinite(i.x) && isFinite(i.y) && isFinite(i.w));
-    if (free) items.sort((a, b) => a.y - b.y || a.x - b.x);
-
-    const bands = [];
-    items.forEach(it => {
-      const last = bands[bands.length - 1];
-      // Entra en la banda abierta si arranca antes de que esa banda termine (están lado a lado).
-      if (free && last && it.y < last.end - 0.5) { last.items.push(it); last.end = Math.max(last.end, it.y + (parseFloat(getComputedStyle(it.c.el).getPropertyValue('--gp-h')) || 1)); }
-      else bands.push({ items: [it], end: free ? it.y + (parseFloat(getComputedStyle(it.c.el).getPropertyValue('--gp-h')) || 1) : 0 });
-    });
-
-    bands.forEach(band => {
-      const row = document.createElement('div');
-      row.className = 'gps-band';
-      band.items.forEach(it => {
-        const clone = it.c.el.cloneNode(true);
-        bakeStyles(it.c.el, clone);      // primero: scrub borra nodos y desalinearía el recorrido
-        copyCanvases(it.c.el, clone);
-        scrub(clone);
-        // Ancho proporcional a las columnas que ocupaba (flex-grow) y su alto real del dashboard.
-        clone.style.flex = `${free ? it.w : 12} 1 0`;
-        clone.style.maxWidth = 'none';
-        clone.style.height = Math.round(it.h) + 'px';
-        if (it.c.note) {
-          const n = document.createElement('div');
-          n.className = 'gps-note';
-          n.textContent = it.c.note;
-          clone.style.height = 'auto';        // la nota necesita su lugar bajo el gráfico
-          clone.style.minHeight = Math.round(it.h) + 'px';
-          clone.appendChild(n);
-        }
-        row.appendChild(clone);
-      });
-      cardsHost.appendChild(row);
-    });
-    const sheet = host.querySelector('.gps-sheet');
-    inlineThemeVars(sheet);
-    return sheet;
-  }
-
-  // html2canvas clona el documento en un iframe y ahí las custom properties del :root (los tokens
-  // --cm-*) NO llegan: todo lo que la app pinta con var(--cm-fg-strong) o var(--cm-border) sale
-  // fantasma y los acentos caen a su valor por defecto (las cards salían lavadas con borde verde).
-  // Se copian sobre la hoja, y los tokens de superficie se fijan CLAROS para que el informe sea
-  // imprimible aunque se esté trabajando en tema oscuro.
-  const LIGHT = {
-    '--cm-bg': '#FFFFFF', '--cm-bg-soft': '#FAFAF9', '--cm-bg-sunk': '#F4F4F2',
-    '--cm-surface': '#FFFFFF', '--cm-surface-2': '#FAFAF9',
-    '--cm-fg': '#0A0A0A', '--cm-fg-strong': '#000000', '--cm-fg-muted': '#6B7280', '--cm-fg-faint': '#9CA3AF',
-    '--cm-border': '#E5E7EB', '--cm-border-soft': '#EFEFED', '--cm-border-strong': '#D4D4D2',
-  };
-  function inlineThemeVars(sheet) {
-    const cs = getComputedStyle(document.documentElement);
-    try {
-      for (const name of cs) {
-        if (name.startsWith('--cm-')) {
-          const v = cs.getPropertyValue(name);
-          if (v) sheet.style.setProperty(name, v.trim());
-        }
-      }
-    } catch (_) { /* navegador que no itera custom props → quedan los del bloque claro */ }
-    Object.entries(LIGHT).forEach(([k, v]) => sheet.style.setProperty(k, v));
-  }
-
-  // html2canvas re-resuelve el CSS en un iframe propio y ahí las clases + tokens de la app no
-  // llegan igual: las cards salían fantasma (títulos casi invisibles, bordes verdes) mientras el
-  // encabezado —escrito con colores fijos— salía perfecto. En vez de pelear con eso, el clon se
-  // vuelve AUTOSUFICIENTE: se copian a estilo inline los valores ya computados del elemento real,
-  // que es lo que se ve en pantalla. Deja de importar qué CSS entienda el capturador.
-  const SAFE_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-  const SAFE_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-  const BAKE = ['color', 'background-color', 'border-top-color', 'border-right-color',
-    'border-bottom-color', 'border-left-color', 'border-top-width', 'border-right-width',
-    'border-bottom-width', 'border-left-width', 'border-style', 'border-radius',
-    'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
-    'text-align', 'text-transform', 'text-decoration-line', 'opacity'];
-  function bakeStyles(src, dst) {
-    const a = document.createTreeWalker(src, NodeFilter.SHOW_ELEMENT);
-    const b = document.createTreeWalker(dst, NodeFilter.SHOW_ELEMENT);
-    const pair = (o, c) => {
-      if (!o || !c) return;
-      const cs = getComputedStyle(o);
-      BAKE.forEach(k => { const v = cs.getPropertyValue(k); if (v) c.style.setProperty(k, v); });
-      // La fuente NO se copia: html2canvas re-carga las webfonts dentro de su propio iframe y
-      // mientras tanto dibuja el texto INVISIBLE (font-display: block). Con Geist las cards salían
-      // fantasma; con la pila del sistema el texto se dibuja siempre. Se respeta si es monoespaciada.
-      c.style.setProperty('font-family', /mono/i.test(cs.fontFamily) ? SAFE_MONO : SAFE_SANS);
-      // Los degradados y sombras no aportan al informe impreso y son la otra fuente de artefactos.
-      c.style.setProperty('background-image', 'none');
-      c.style.setProperty('box-shadow', 'none');
-    };
-    pair(src, dst);
-    let o = a.nextNode(), c = b.nextNode();
-    while (o && c) { pair(o, c); o = a.nextNode(); c = b.nextNode(); }
-  }
-
-  /** Pasa el contenido pintado de cada <canvas> del original a un <img> en el clon (mismo orden). */
-  function copyCanvases(src, dst) {
-    const a = [...src.querySelectorAll('canvas')], b = [...dst.querySelectorAll('canvas')];
-    b.forEach((cv, i) => {
-      const orig = a[i];
-      if (!orig) return;
-      let url = '';
-      try { url = orig.toDataURL('image/png'); } catch (_) { return; }
-      const img = document.createElement('img');
-      img.src = url;
-      const r = orig.getBoundingClientRect();
-      img.style.cssText = `width:${Math.round(r.width)}px;height:${Math.round(r.height)}px;display:block`;
-      cv.replaceWith(img);
-    });
-  }
-
-  /** Saca del clon todo lo que es interfaz y no informe. */
-  function scrub(el) {
-    el.removeAttribute('id');
-    el.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
-    el.querySelectorAll(
-      'button, .gp-kpi-actions, .gp-c-actions, .size-toggle, .gp-sort-chip, .gp-zoom-chip,' +
-      '.gp-c-picks, .gp-c-menu, .gp-add, [data-del], [contenteditable]'
-    ).forEach(n => n.remove());
-    el.querySelectorAll('[contenteditable]').forEach(n => n.removeAttribute('contenteditable'));
-  }
-
-  // ── Exportar ────────────────────────────────────────────────────────────
-  async function inlineImages(root) {
-    const imgs = [...root.querySelectorAll('img')].filter(im => {
-      const s = im.getAttribute('src') || '';
-      return s && !s.startsWith('data:');
-    });
-    await Promise.all(imgs.map(async im => {
-      try {
-        const resp = await fetch(im.src, { mode: 'cors', cache: 'force-cache' });
-        if (!resp.ok) return;
-        const blob = await resp.blob();
-        const dataUrl = await new Promise((res, rej) => {
-          const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob);
-        });
-        await new Promise(res => { im.onload = im.onerror = res; im.src = dataUrl; });
-      } catch (_) { /* se queda con el src original */ }
-    }));
-  }
-
-  /** Carga una librería por <script> si el CDN no la dejó lista al abrir la página. */
+  /** Carga jsPDF por <script> la primera vez que se exporta (nada pesa en el arranque). */
   function loadLib(src, check) {
     if (check()) return Promise.resolve();
     return new Promise((res, rej) => {
       const sc = document.createElement('script');
-      sc.src = src; sc.onload = () => (check() ? res() : rej(new Error('lib no disponible: ' + src)));
+      sc.src = src;
+      sc.onload = () => (check() ? res() : rej(new Error('lib no disponible: ' + src)));
       sc.onerror = () => rej(new Error('no se pudo cargar ' + src));
       document.head.appendChild(sc);
     });
@@ -488,7 +293,7 @@
     } catch (_) { return ''; }
   }
 
-  async function exportPdf(opts) {
+  async function exportPdf(opts, mode) {
     await loadLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
     const jsPDF = window.jspdf.jsPDF;
     const pdf = new jsPDF({ orientation: opts.orientation, unit: 'mm', format: 'a4', compress: true });
@@ -527,9 +332,20 @@
     const total = pdf.internal.getNumberOfPages();
     for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
     // Resumen de lo que se dibujó — lo leen los tests y sirve para diagnosticar un informe raro.
-    window.__gxLast = { pages: total, cards: opts.cards.length,
+    window.__gxLast = { pages: total, cards: opts.cards.length, mode: mode || 'save',
       kinds: opts.cards.reduce((a, c) => { const k = cardKind(c.el); a[k] = (a[k] || 0) + 1; return a; }, {}) };
+    if (mode === 'print') {
+      // Imprimir = EL MISMO informe, abierto en el visor de PDF con el diálogo de impresión listo.
+      // Antes se imprimía un clon HTML del dashboard y salía lavado; con un solo camino de render
+      // lo que se imprime es exactamente lo que se descarga.
+      pdf.autoPrint();
+      const url = pdf.output('bloburl');
+      const w = window.open(url, '_blank');
+      if (!w) { pdf.save(fileName(opts)); return 'saved'; }   // bloqueador de popups → se descarga
+      return 'printed';
+    }
     pdf.save(fileName(opts));
+    return 'saved';
   }
 
   /** Agrupa las cards elegidas en filas del dashboard (una sola, o dos lado a lado). */
@@ -568,21 +384,6 @@
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'gps-report';
     return `${opts.dateISO || ''}_${slug}.pdf`.replace(/^_/, '');
-  }
-
-  /** Impresión nativa: la misma hoja, visible, con todo lo demás oculto por CSS. */
-  function printSheet(opts) {
-    const host = sheetHost();
-    buildSheet(opts);
-    host.style.cssText = 'display:block';
-    document.body.classList.add('gps-printing');
-    const done = () => {
-      document.body.classList.remove('gps-printing');
-      host.style.cssText = ''; host.innerHTML = '';
-      window.removeEventListener('afterprint', done);
-    };
-    window.addEventListener('afterprint', done);
-    setTimeout(() => window.print(), 120);
   }
 
   // ── Modal ───────────────────────────────────────────────────────────────
@@ -678,13 +479,9 @@
     });
 
     body.querySelector('#gxCancel').addEventListener('click', () => ov.remove());
-    body.querySelector('#gxPrint').addEventListener('click', () => {
-      const o = collect();
-      if (!o.cards.length) { window.showToast?.(T('gps_analysis.export_pick_one', 'Pick at least one card.'), true); return; }
-      ov.remove();
-      printSheet(o);
-    });
-    body.querySelector('#gxPdf').addEventListener('click', async (e) => {
+    // Imprimir y Exportar arman EL MISMO informe; solo cambia el final (visor con el diálogo de
+    // impresión, o descarga). Un único camino de render = lo que se imprime es lo que se descarga.
+    const run = async (e, mode) => {
       const o = collect();
       if (!o.cards.length) { window.showToast?.(T('gps_analysis.export_pick_one', 'Pick at least one card.'), true); return; }
       const btn = e.currentTarget;
@@ -692,18 +489,20 @@
       btn.disabled = true;
       btn.innerHTML = `<i class="ti ti-loader-2"></i>${T('gps_analysis.export_generating', 'Generating…')}`;
       try {
-        await exportPdf(o);
+        await exportPdf(o, mode);
         ov.remove();
       } catch (err) {
         console.error('[gps export]', err);
-        window.showToast?.(T('gps_analysis.export_failed', 'Could not build the PDF. Try Print → Save as PDF.')
+        window.showToast?.(T('gps_analysis.export_failed', 'Could not build the report.')
           + ' [' + ((err && err.message) ? err.message : err) + ']', true);
         btn.disabled = false; btn.innerHTML = old;
       }
-    });
+    };
+    body.querySelector('#gxPrint').addEventListener('click', e => run(e, 'print'));
+    body.querySelector('#gxPdf').addEventListener('click', e => run(e, 'save'));
   }
 
   window.gpOpenExportModal = openExportModal;
-  window.__gxBuild = buildSheet;      // expuesto para los tests (arma la hoja sin generar el PDF)
+  window.__gxExport = exportPdf;      // expuesto para los tests
   document.getElementById('gpExportBtn')?.addEventListener('click', openExportModal);
 })();

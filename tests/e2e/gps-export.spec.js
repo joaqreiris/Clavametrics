@@ -1,9 +1,9 @@
 // @ts-check
 // Informe PDF de GPS Analysis (assets/pages/gps-export.js).
 //
-// Lo que importa verificar es la HOJA que se captura, no el binario del PDF: que lleve el
-// encabezado (escudo · título · fecha), los filtros en texto, el resumen, y SOLO las cards
-// elegidas — con sus gráficos convertidos a imagen y sin un solo botón de la interfaz.
+// El informe se COMPONE en el PDF (texto vectorial + la imagen de cada gráfico), no se captura
+// la pantalla. Lo verificable desde afuera: qué ofrece el modal, que solo entren las cards
+// marcadas y que el archivo salga y sea un PDF válido. window.__gxLast lleva el resumen.
 //
 // Reusa el andamiaje de gps-bars-axis.spec.js: una card de builder real montada desde
 // dashboard_cards mockeado.
@@ -79,73 +79,47 @@ async function openDashboard(page) {
   ), { timeout: 30_000, message: 'las cards nunca se dibujaron' }).toBeGreaterThan(0);
 }
 
-/** Abre el modal y arma la hoja con las opciones dadas, sin llegar a generar el PDF. */
-async function buildSheet(page, { uncheckFirst = false, note = '', intro = '' } = {}) {
+/** Abre el modal, opcionalmente escribe notas y desmarca la primera card. */
+async function openModal(page, { uncheckFirst = false, note = '', intro = '' } = {}) {
   await page.locator('#gpExportBtn').click();
   await expect(page.locator('#gxBody')).toBeVisible();
   if (intro) await page.locator('#gxIntro').fill(intro);
-  if (note)  await page.locator('[data-gx-note="1"]').fill(note);
-  if (uncheckFirst) await page.locator('[data-gx-on="0"]').uncheck();
-  // Se arma la hoja con las mismas opciones que usaría el PDF, sin invocar html2canvas.
-  return page.evaluate(() => {
-    const b = document.getElementById('gxBody');
-    const cards = [...document.querySelectorAll('.gp-view.is-on .gp-c')].filter(c => c.offsetParent !== null);
-    const opts = {
-      title: b.querySelector('#gxTitle').value, dateISO: b.querySelector('#gxDate').value,
-      dateLabel: '30 de agosto de 2026', intro: b.querySelector('#gxIntro').value.trim(),
-      crest: '', clubName: 'MOI Kompong DEWA', showFilters: true, orientation: 'portrait',
-      subtitle: 'First team',
-      cards: cards.map((el, i) => ({ el, note: (b.querySelector(`[data-gx-note="${i}"]`) || {}).value || '' }))
-        .filter((_, i) => b.querySelector(`[data-gx-on="${i}"]`).checked),
-    };
-    window.__gxSheet = window.__gxBuild(opts);
-    const sheet = window.__gxSheet;
-    return {
-      title: sheet.querySelector('.gps-hd-c h1').textContent,
-      subtitle: sheet.querySelector('.gps-hd-c .gps-sub').textContent,
-      date: sheet.querySelector('.gps-hd-r .gps-dv').textContent,
-      club: sheet.querySelector('.gps-club').textContent,
-      intro: sheet.querySelector('.gps-intro')?.textContent || null,
-      cards: sheet.querySelectorAll('.gp-c').length,
-      canvases: sheet.querySelectorAll('canvas').length,
-      imgs: sheet.querySelectorAll('.gp-c img').length,
-      buttons: sheet.querySelectorAll('button').length,
-      notes: [...sheet.querySelectorAll('.gps-note')].map(n => n.textContent),
-      filters: sheet.querySelector('.gps-filters')?.textContent || null,
-      sidebar: sheet.querySelectorAll('aside, .gp-fbar, #gpFilterBar').length,
-      onScreen: cards.length,
-      checked: b.querySelectorAll('[data-gx-on]:checked').length,
-      // Las cards que siguen cargando o no tienen datos se listan pero vienen desmarcadas.
-      noData: b.querySelectorAll('.gx-nod').length,
-    };
-  });
+  if (note) await page.locator('[data-gx-note="1"]').fill(note);
+  if (uncheckFirst) {
+    const first = page.locator('#gxCards [data-gx-on]:checked').first();
+    await first.uncheck();
+  }
+  return page.evaluate(() => ({
+    onScreen: [...document.querySelectorAll('.gp-view.is-on .gp-c')].filter(c => c.offsetParent !== null).length,
+    checked: document.querySelectorAll('#gxBody [data-gx-on]:checked').length,
+    noData: document.querySelectorAll('#gxBody .gx-nod').length,
+  }));
 }
 
 test.describe('GPS · informe PDF', () => {
-  test('la hoja lleva encabezado, cards y ningún resto de la interfaz', async ({ page }) => {
+  test('el modal lista las cards del dashboard y desmarca las que no tienen datos', async ({ page }) => {
     await openDashboard(page);
-    const s = await buildSheet(page, { intro: 'Comparativa entre microciclo 3 y 4.', note: 'Carga estable.' });
+    const m = await openModal(page);
 
-    expect(s.title).toBe('Player Week Report');         // título por defecto = el dashboard
-    expect(s.subtitle).toBe('First team');              // equipo (+ rango) van abajo, sin repetir
-    expect(s.title).not.toMatch(/loading/i);            // nunca el estado de carga del switcher
-    expect(s.date).toBeTruthy();
-    expect(s.club).toBe('MOI Kompong DEWA');
-    expect(s.intro).toContain('microciclo 3 y 4');
-    expect(s.cards).toBe(s.checked);                    // exactamente las cards marcadas
-    expect(s.noData).toBeGreaterThan(0);                // hay alguna sin datos…
-    expect(s.checked).toBe(s.onScreen - s.noData);      // …y viene desmarcada, para no imprimir un spinner
-    expect(s.canvases).toBe(0);                         // los gráficos van como imagen…
-    expect(s.imgs).toBeGreaterThan(0);                  // …ya pintada
-    expect(s.buttons).toBe(0);                          // sin un solo botón de la interfaz
-    expect(s.sidebar).toBe(0);                          // ni barra lateral ni filtros interactivos
-    expect(s.notes).toEqual(['Carga estable.']);        // la nota va bajo SU card
+    expect(m.onScreen).toBeGreaterThan(0);
+    expect(m.noData).toBeGreaterThan(0);              // hay alguna card en blanco…
+    expect(m.checked).toBe(m.onScreen - m.noData);    // …y viene desmarcada, para no imprimirla
+    // El título por defecto es el dashboard, sin el «Loading…» del switcher de equipo.
+    const title = await page.locator('#gxTitle').inputValue();
+    expect(title).toBe('Player Week Report');
+    expect(title).not.toMatch(/loading/i);
   });
 
   test('se puede dejar una card afuera del informe', async ({ page }) => {
     await openDashboard(page);
-    const s = await buildSheet(page, { uncheckFirst: true });
-    expect(s.cards).toBe(s.checked);
+    const m = await openModal(page, { uncheckFirst: true });
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      page.locator('#gxPdf').click(),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/\.pdf$/);
+    const last = await page.evaluate(() => window.__gxLast);
+    expect(last.cards).toBe(m.checked);               // solo las marcadas entraron al informe
   });
 
   test('el botón Exportar PDF genera y descarga el archivo', async ({ page }) => {
@@ -168,10 +142,9 @@ test.describe('GPS · informe PDF', () => {
     expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
     const last = await page.evaluate(() => window.__gxLast);
     expect(last.pages).toBeGreaterThan(0);
-    expect(last.cards).toBe(6);                    // las 6 marcadas (la 7ª va sin datos)
+    expect(last.cards).toBeGreaterThan(0);         // las cards marcadas entraron
     expect(last.kinds.chart).toBeGreaterThan(0);   // y los gráficos entraron como tales
     await expect(page.locator('#gxBody')).toHaveCount(0);
-    // La hoja se desmonta: no queda basura en el DOM de la página.
-    expect(await page.evaluate(() => document.getElementById('gpPrintSheet')?.innerHTML || '')).toBe('');
+    expect(last.mode).toBe('save');
   });
 });
