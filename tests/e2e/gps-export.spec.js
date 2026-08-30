@@ -169,5 +169,4 @@ test.describe('GPS · informe PDF', () => {
     // La hoja se desmonta: no queda basura en el DOM de la página.
     expect(await page.evaluate(() => document.getElementById('gpPrintSheet')?.innerHTML || '')).toBe('');
   });
-
 });

@@ -121,49 +121,51 @@
          <div class="gps-cards"></div>
        </div>`;
 
+    // Las cards se agrupan en BANDAS (las filas del dashboard: una card sola, o dos lado a lado).
+    // Cada banda es un bloque independiente — así el PDF se arma bloque por bloque en vez de una
+    // sola imagen gigantesca, que en dashboards largos revienta el límite de tamaño del canvas
+    // (era el «Could not build the PDF»), y de paso ningún corte cae dentro de una card.
     const cardsHost = host.querySelector('.gps-cards');
-    const gridClone = grid.cloneNode(false);              // mismas clases/estilos de grilla, sin hijos
-    gridClone.classList.remove('is-edit');
-    gridClone.classList.add('layout-ready');   // el grid nace invisible hasta que se aplica el layout
-    gridClone.removeAttribute('id');
-    gridClone.style.width = width + 'px';
-    cardsHost.appendChild(gridClone);
-
-    opts.cards.forEach(c => {
-      const clone = c.el.cloneNode(true);
-      copyCanvases(c.el, clone);
-      scrub(clone);
-      if (c.note) {
-        const n = document.createElement('div');
-        n.className = 'gps-note';
-        n.textContent = c.note;
-        clone.appendChild(n);
-      }
-      gridClone.appendChild(clone);
+    const items = opts.cards.map(c => {
+      const el = c.el;
+      const num = k => parseFloat(getComputedStyle(el).getPropertyValue(k));
+      return { c, x: num('--gp-x'), y: num('--gp-y'), w: num('--gp-w'), h: el.getBoundingClientRect().height };
     });
-    compact([...gridClone.children]);
-    return host.querySelector('.gps-sheet');
-  }
+    const free = items.every(i => isFinite(i.x) && isFinite(i.y) && isFinite(i.w));
+    if (free) items.sort((a, b) => a.y - b.y || a.x - b.x);
 
-  /**
-   * Sube las cards para tapar los huecos que dejan las excluidas, sin cambiar su columna ni su
-   * tamaño: el dashboard se lee igual (lo que estaba al lado sigue al lado) pero el informe no
-   * arranca con media hoja en blanco. El grid libre posiciona por --gp-x/--gp-y/--gp-w/--gp-h.
-   */
-  function compact(clones) {
-    const num = (el, k) => parseFloat(el.style.getPropertyValue(k));
-    const items = clones.map(el => ({ el, x: num(el, '--gp-x'), y: num(el, '--gp-y'), w: num(el, '--gp-w'), h: num(el, '--gp-h') }));
-    if (!items.length || items.some(i => !isFinite(i.x) || !isFinite(i.y) || !isFinite(i.w) || !isFinite(i.h))) return;
-    items.sort((a, b) => a.y - b.y || a.x - b.x);
-    const bottom = new Array(12).fill(0);
+    const bands = [];
     items.forEach(it => {
-      const x0 = Math.max(0, Math.min(11, Math.round(it.x)));
-      const x1 = Math.min(12, x0 + Math.max(1, Math.round(it.w)));
-      let y = 0;
-      for (let i = x0; i < x1; i++) y = Math.max(y, bottom[i]);
-      it.el.style.setProperty('--gp-y', String(y));
-      for (let i = x0; i < x1; i++) bottom[i] = y + it.h;
+      const last = bands[bands.length - 1];
+      // Entra en la banda abierta si arranca antes de que esa banda termine (están lado a lado).
+      if (free && last && it.y < last.end - 0.5) { last.items.push(it); last.end = Math.max(last.end, it.y + (parseFloat(getComputedStyle(it.c.el).getPropertyValue('--gp-h')) || 1)); }
+      else bands.push({ items: [it], end: free ? it.y + (parseFloat(getComputedStyle(it.c.el).getPropertyValue('--gp-h')) || 1) : 0 });
     });
+
+    bands.forEach(band => {
+      const row = document.createElement('div');
+      row.className = 'gps-band';
+      band.items.forEach(it => {
+        const clone = it.c.el.cloneNode(true);
+        copyCanvases(it.c.el, clone);
+        scrub(clone);
+        // Ancho proporcional a las columnas que ocupaba (flex-grow) y su alto real del dashboard.
+        clone.style.flex = `${free ? it.w : 12} 1 0`;
+        clone.style.maxWidth = 'none';
+        clone.style.height = Math.round(it.h) + 'px';
+        if (it.c.note) {
+          const n = document.createElement('div');
+          n.className = 'gps-note';
+          n.textContent = it.c.note;
+          clone.style.height = 'auto';        // la nota necesita su lugar bajo el gráfico
+          clone.style.minHeight = Math.round(it.h) + 'px';
+          clone.appendChild(n);
+        }
+        row.appendChild(clone);
+      });
+      cardsHost.appendChild(row);
+    });
+    return host.querySelector('.gps-sheet');
   }
 
   /** Pasa el contenido pintado de cada <canvas> del original a un <img> en el clon (mismo orden). */
@@ -212,10 +214,23 @@
     }));
   }
 
-  async function exportPdf(opts, btn) {
+  /** Carga una librería por <script> si el CDN no la dejó lista al abrir la página. */
+  function loadLib(src, check) {
+    if (check()) return Promise.resolve();
+    return new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = src; sc.onload = () => (check() ? res() : rej(new Error('lib no disponible: ' + src)));
+      sc.onerror = () => rej(new Error('no se pudo cargar ' + src));
+      document.head.appendChild(sc);
+    });
+  }
+
+  async function exportPdf(opts) {
+    // Si el CDN falló al cargar la página (red lenta, bloqueo), se reintenta acá antes de rendirse.
+    await loadLib('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', () => !!window.html2canvas);
+    await loadLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
     const html2canvas = window.html2canvas;
-    const jsPDF = window.jspdf && window.jspdf.jsPDF;
-    if (!html2canvas || !jsPDF) throw new Error('PDF libraries not loaded');
+    const jsPDF = window.jspdf.jsPDF;
 
     const host = sheetHost();
     const sheet = buildSheet(opts);
@@ -223,50 +238,50 @@
     try {
       await inlineImages(sheet);
       await new Promise(r => setTimeout(r, 60));                 // deja asentar las imágenes recién puestas
-      const canvas = await html2canvas(sheet, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      const JPEG_Q = 0.92;
+
       const pdf = new jsPDF({ orientation: opts.orientation, unit: 'mm', format: 'a4', compress: true });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const MARGIN = 8, FOOT = 10;                               // mm: aire arriba y pie de página
-      const pxPerMm = canvas.width / pageW;
-      const scale = canvas.width / sheet.offsetWidth;            // css px → px del canvas capturado
+      const M = 8, FOOT = 11, GAP = 3;                           // mm
+      const contentW = pageW - M * 2;
+      const usableH = pageH - M - FOOT;
 
-      // Cajas que NO se pueden partir: cada card (y el encabezado). El corte de página se sube
-      // hasta el borde inferior más cercano que no atraviese ninguna.
-      const top0 = sheet.getBoundingClientRect().top;
-      const box = n => { const r = n.getBoundingClientRect(); return { top: (r.top - top0) * scale, bottom: (r.bottom - top0) * scale }; };
-      const boxes = [...sheet.querySelectorAll('.gp-c, .gps-hd, .gps-filters, .gps-intro')].map(box);
-      const straddles = y => boxes.some(b => y > b.top + 1 && y < b.bottom - 1);
-      const safeCut = (start, maxEnd) => {
-        if (maxEnd >= canvas.height) return canvas.height;
-        const cands = boxes.map(b => Math.ceil(b.bottom)).filter(y => y > start + 10 && y <= maxEnd && !straddles(y));
-        if (cands.length) return Math.max(...cands);
-        const hit = boxes.find(b => maxEnd > b.top + 1 && maxEnd < b.bottom - 1);
-        if (hit && hit.top > start + 10) return Math.floor(hit.top);   // card entera a la página siguiente
-        return maxEnd;                                                 // una card más alta que la hoja
-      };
-
-      const slices = [];
-      let sy = 0;
-      const usableMm = pageH - MARGIN - FOOT;
-      while (sy < canvas.height) {
-        const cut = safeCut(sy, sy + Math.max(1, Math.floor(usableMm * pxPerMm)));
-        const h = Math.max(1, cut - sy);
-        const c = document.createElement('canvas');
-        c.width = canvas.width; c.height = h;
-        const cx = c.getContext('2d');
-        cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, c.width, c.height);   // el JPEG no tiene alfa
-        cx.drawImage(canvas, 0, sy, canvas.width, h, 0, 0, canvas.width, h);
-        slices.push({ url: c.toDataURL('image/jpeg', JPEG_Q), hmm: h / pxPerMm });
-        sy += h;
+      // BLOQUE POR BLOQUE (encabezado, filtros, resumen y cada banda de cards) en vez de una única
+      // captura de toda la hoja: un dashboard largo genera un canvas que supera el máximo del
+      // navegador y html2canvas devuelve una imagen vacía o falla — ese era el error al exportar.
+      const blocks = [...sheet.children].filter(n => n.offsetHeight > 0);
+      const parts = [];
+      for (const b of blocks) {
+        if (b.classList.contains('gps-cards')) {
+          for (const band of b.children) if (band.offsetHeight > 0) parts.push(band);
+        } else parts.push(b);
       }
 
-      slices.forEach((s, i) => {
-        if (i > 0) pdf.addPage();
-        pdf.addImage(s.url, 'JPEG', 0, MARGIN, pageW, s.hmm);
-        drawFooter(pdf, pageW, pageH, i + 1, slices.length, opts);
-      });
+      let y = M, page = 1, drawn = 0;
+      for (const el of parts) {
+        let img;
+        try {
+          const c = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          img = { url: c.toDataURL('image/jpeg', 0.92), w: c.width, h: c.height };
+        } catch (e) {
+          console.warn('[gps export] bloque omitido:', e);        // una card rota no tira el informe
+          continue;
+        }
+        let hmm = (img.h / img.w) * contentW;
+        let wmm = contentW;
+        if (hmm > usableH - M) {                                  // bloque más alto que la hoja → se achica
+          const k = (usableH - M) / hmm;
+          hmm *= k; wmm *= k;
+        }
+        if (drawn && y + hmm > pageH - FOOT) { pdf.addPage(); page++; y = M; }
+        pdf.addImage(img.url, 'JPEG', M + (contentW - wmm) / 2, y, wmm, hmm);
+        y += hmm + GAP;
+        drawn++;
+      }
+      if (!drawn) throw new Error('no se pudo capturar ninguna card');
+
+      const total = pdf.internal.getNumberOfPages();
+      for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
       pdf.save(fileName(opts));
     } finally {
       host.style.cssText = '';
@@ -343,7 +358,7 @@
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
 
     const ov = window.makeModal(T('gps_analysis.export_title', 'Export report'),
-      `<div id="gxBody" style="min-width:560px;max-width:640px">
+      `<div id="gxBody" style="min-width:0">
          <div class="gx-row">
            <label class="gx-f" style="flex:1 1 260px"><span class="gx-l">${T('gps_analysis.export_rep_title', 'Report title')}</span>
              <input type="text" id="gxTitle" class="gx-in" value="${esc(defTitle)}"></label>
@@ -378,6 +393,10 @@
        </div>`);
 
     const body = ov.querySelector('#gxBody');
+    // .gp-modal mide 560 px fijos y este contenido (dos columnas de cards + notas) no entra:
+    // los controles de la derecha quedaban cortados.
+    const shell = ov.querySelector('.gp-modal');
+    if (shell) { shell.style.width = '720px'; shell.style.maxWidth = '95vw'; }
     let orientation = 'portrait';
     body.querySelectorAll('#gxOrient button').forEach(b => b.addEventListener('click', () => {
       orientation = b.dataset.o;
@@ -413,11 +432,12 @@
       btn.disabled = true;
       btn.innerHTML = `<i class="ti ti-loader-2"></i>${T('gps_analysis.export_generating', 'Generating…')}`;
       try {
-        await exportPdf(o, btn);
+        await exportPdf(o);
         ov.remove();
       } catch (err) {
         console.error('[gps export]', err);
-        window.showToast?.(T('gps_analysis.export_failed', 'Could not build the PDF. Try Print → Save as PDF.'), true);
+        window.showToast?.(T('gps_analysis.export_failed', 'Could not build the PDF. Try Print → Save as PDF.')
+          + ' [' + ((err && err.message) ? err.message : err) + ']', true);
         btn.disabled = false; btn.innerHTML = old;
       }
     });
