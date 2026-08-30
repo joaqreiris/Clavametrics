@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Player Schedule — ClavaMetrics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title data-i18n="player_week.title_tab">Week plan — ClavaMetrics</title>
+<meta name="theme-color" content="#0F172A">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
 <!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
      Antes venía de un CDN externo: saludo DNS + TLS a otro servidor para un
@@ -12,20 +14,79 @@
      como "@2", o sea la última 2.x que hubiera ese día: una publicación del
      paquete podía romper la app sin que tocáramos nada. -->
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
+<script src="assets/i18n.js" defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --sh-bg:     #F8FAFC;
-    --sh-surf:   #FFFFFF;
-    --sh-border: #E2E8F0;
-    --sh-fg:     #0F172A;
-    --sh-fg-2:   #475569;
-    --sh-fg-3:   #94A3B8;
-    --sh-accent: #2563EB;
-    --sh-r:      10px;
-    --sh-font:   -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --sh-mono:   'SF Mono', 'Fira Code', ui-monospace, monospace;
+    --sh-bg:      #F1F5F9;
+    --sh-surf:    #FFFFFF;
+    --sh-surf-2:  #F8FAFC;
+    --sh-border:  #E2E8F0;
+    --sh-border-2:#CBD5E1;
+    --sh-fg:      #0F172A;
+    --sh-fg-2:    #475569;
+    --sh-fg-3:    #94A3B8;
+    /* Lo pisa el color del club apenas carga (ver applyBrand). */
+    --sh-accent:  #15803D;
+    --sh-accent-fg:#FFFFFF;
+    --sh-r:       14px;
+    --sh-r-sm:    10px;
+    --sh-font:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --sh-mono:    'SF Mono', 'Fira Code', ui-monospace, monospace;
+    --sh-shadow:  0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
+
+    /* Categorías de evento: un color por familia, reusado en punto, icono y borde. */
+    --c-match:   #DC2626;
+    --c-field:   #2563EB;
+    --c-gym:     #7C3AED;
+    --c-prev:    #DB2777;
+    --c-recov:   #059669;
+    --c-beach:   #D97706;
+    --c-outdoor: #0D9488;
+    --c-meal:    #EA580C;
+    --c-snack:   #65A30D;
+    --c-travel:  #0891B2;
+    --c-hotel:   #475569;
+    --c-press:   #475569;
+    --c-video:   #475569;
+    --c-meet:    #4F46E5;
+    --c-eval:    #16A34A;
+    --c-med:     #0EA5E9;
+    --c-off:     #94A3B8;
+    --c-other:   #64748B;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sh-bg:      #0B1120;
+      --sh-surf:    #131C2E;
+      --sh-surf-2:  #1B2436;
+      --sh-border:  #263141;
+      --sh-border-2:#334155;
+      --sh-fg:      #F1F5F9;
+      --sh-fg-2:    #B6C2D2;
+      --sh-fg-3:    #7B8899;
+      --sh-shadow:  none;
+      --c-match:   #F87171;
+      --c-field:   #60A5FA;
+      --c-gym:     #A78BFA;
+      --c-prev:    #F472B6;
+      --c-recov:   #34D399;
+      --c-beach:   #FBBF24;
+      --c-outdoor: #2DD4BF;
+      --c-meal:    #FB923C;
+      --c-snack:   #A3E635;
+      --c-travel:  #22D3EE;
+      --c-hotel:   #94A3B8;
+      --c-press:   #94A3B8;
+      --c-video:   #94A3B8;
+      --c-meet:    #818CF8;
+      --c-eval:    #4ADE80;
+      --c-med:     #38BDF8;
+      --c-off:     #64748B;
+      --c-other:   #94A3B8;
+    }
   }
 
   body {
@@ -34,198 +95,257 @@
     font-family: var(--sh-font);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   /* ── Header ── */
   .sh-header {
     background: var(--sh-surf);
     border-bottom: 1px solid var(--sh-border);
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px) * 0);
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    display: flex; align-items: center; gap: 12px;
+    position: sticky; top: 0; z-index: 20;
   }
-  .sh-logo {
-    width: 40px; height: 40px; border-radius: 50%;
-    object-fit: contain;
-    border: 1px solid var(--sh-border);
-    flex-shrink: 0;
+  .sh-logo, .sh-logo-fallback {
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
   }
+  .sh-logo { object-fit: contain; background: var(--sh-surf-2); border: 1px solid var(--sh-border); }
   .sh-logo-fallback {
-    width: 40px; height: 40px; border-radius: 50%;
-    background: var(--sh-bg); border: 1px solid var(--sh-border);
+    background: var(--sh-accent); color: var(--sh-accent-fg);
     display: flex; align-items: center; justify-content: center;
-    font: 700 16px/1 var(--sh-font); color: var(--sh-fg-3);
-    flex-shrink: 0;
+    font: 700 15px/1 var(--sh-font); letter-spacing: .02em;
   }
   .sh-header-text { flex: 1; min-width: 0; }
-  .sh-club-name { font: 700 16px/1.2 var(--sh-font); color: var(--sh-fg); }
-  .sh-range { font: 500 12px/1.3 var(--sh-mono); color: var(--sh-fg-3); margin-top: 2px; }
+  .sh-club-name {
+    font: 700 15px/1.2 var(--sh-font); color: var(--sh-fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sh-range {
+    font: 500 11.5px/1.3 var(--sh-mono); color: var(--sh-fg-3);
+    margin-top: 3px; text-transform: uppercase; letter-spacing: .04em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .sh-ics-btn {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 14px; border-radius: 8px;
-    border: 1px solid var(--sh-border); background: var(--sh-surf);
-    color: var(--sh-fg-2); font: 500 13px/1 var(--sh-font);
-    cursor: pointer; text-decoration: none; white-space: nowrap;
-    flex-shrink: 0;
+    padding: 9px 12px; border-radius: 10px;
+    border: 1px solid var(--sh-border-2); background: var(--sh-surf);
+    color: var(--sh-fg-2); font: 600 12.5px/1 var(--sh-font);
+    cursor: pointer; text-decoration: none; white-space: nowrap; flex-shrink: 0;
   }
-  .sh-ics-btn:hover { border-color: var(--sh-accent); color: var(--sh-accent); }
+  .sh-ics-btn:active { transform: scale(.97); }
   .sh-ics-btn .ti { font-size: 15px; }
+  .sh-ics-btn .lbl { display: none; }
+  @media (min-width: 420px) { .sh-ics-btn .lbl { display: inline; } }
 
   /* ── Content ── */
-  .sh-main { padding: 20px 16px 64px; max-width: 600px; margin: 0 auto; }
+  .sh-main { padding: 16px 14px 48px; max-width: 620px; margin: 0 auto; }
 
-  /* ── MC info banner ── */
-  .sh-mc-banner {
-    background: var(--sh-surf);
-    border: 1px solid var(--sh-border);
-    border-radius: var(--sh-r);
-    padding: 14px 16px;
-    margin-bottom: 20px;
-    display: flex; align-items: center; gap: 10px;
+  /* ── Match hero ── */
+  .sh-match {
+    position: relative; overflow: hidden;
+    background: var(--sh-surf); border: 1px solid var(--sh-border);
+    border-radius: var(--sh-r); box-shadow: var(--sh-shadow);
+    margin-bottom: 14px;
   }
-  .sh-mc-banner .ic {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: #EFF6FF; color: #2563EB;
+  .sh-match::before {
+    content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: var(--sh-accent);
+  }
+  .sh-match-top {
+    display: flex; align-items: center; gap: 8px;
+    padding: 14px 16px 0;
+    font: 700 10.5px/1 var(--sh-mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--sh-accent);
+  }
+  .sh-match-body { padding: 12px 16px 16px; display: flex; align-items: center; gap: 14px; }
+  .sh-match-crest {
+    width: 52px; height: 52px; border-radius: 12px; flex-shrink: 0;
+    background: var(--sh-surf-2); border: 1px solid var(--sh-border);
     display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    object-fit: contain;
+    font: 700 17px/1 var(--sh-font); color: var(--sh-fg-3);
   }
-  .sh-mc-banner .ic .ti { font-size: 16px; }
-  .sh-mc-name { font: 700 14px/1.2 var(--sh-font); color: var(--sh-fg); }
-  .sh-mc-sub { font: 500 12px/1.3 var(--sh-mono); color: var(--sh-fg-3); margin-top: 2px; }
+  .sh-match-info { flex: 1; min-width: 0; }
+  .sh-match-rival { font: 700 20px/1.15 var(--sh-font); color: var(--sh-fg); }
+  .sh-match-when {
+    font: 600 13px/1.3 var(--sh-font); color: var(--sh-fg-2); margin-top: 5px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .sh-match-where {
+    font: 500 12px/1.3 var(--sh-font); color: var(--sh-fg-3); margin-top: 3px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sh-match-where .ti { font-size: 13px; }
+  .sh-ha {
+    font: 700 10px/1 var(--sh-mono); letter-spacing: .07em; text-transform: uppercase;
+    padding: 4px 7px; border-radius: 5px;
+    background: var(--sh-surf-2); color: var(--sh-fg-2); border: 1px solid var(--sh-border);
+  }
+  .sh-ha.is-home { background: color-mix(in srgb, var(--sh-accent) 12%, transparent); color: var(--sh-accent); border-color: color-mix(in srgb, var(--sh-accent) 30%, transparent); }
 
-  /* ── Day group ── */
-  .sh-day { margin-bottom: 12px; }
-  .sh-day-label {
+  /* ── Week strip ── */
+  /* Las columnas las fija el JS con la cantidad real de días: un microciclo puede durar
+     8 o 10 días y con 7 fijas el resto caía a una segunda fila suelta. */
+  .sh-strip {
+    display: grid; gap: 5px;
+    margin-bottom: 18px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .sh-strip::-webkit-scrollbar { display: none; }
+  .sh-strip-cell {
+    background: var(--sh-surf); border: 1px solid var(--sh-border);
+    border-radius: var(--sh-r-sm); padding: 7px 2px 6px;
+    text-align: center; cursor: pointer; text-decoration: none;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    min-height: 62px;
+  }
+  .sh-strip-cell .dw {
+    font: 700 9px/1 var(--sh-mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--sh-fg-3);
+  }
+  .sh-strip-cell .dn { font: 700 15px/1 var(--sh-font); color: var(--sh-fg); }
+  .sh-strip-cell .md {
+    font: 600 8.5px/1 var(--sh-mono); color: var(--sh-fg-3); letter-spacing: .02em;
+  }
+  .sh-strip-cell.is-today { border-color: var(--sh-accent); background: color-mix(in srgb, var(--sh-accent) 8%, var(--sh-surf)); }
+  .sh-strip-cell.is-today .dn, .sh-strip-cell.is-today .dw { color: var(--sh-accent); }
+  .sh-strip-cell.is-match { border-color: var(--c-match); }
+  .sh-strip-cell.is-match .md { color: var(--c-match); font-weight: 700; }
+  .sh-strip-cell.is-empty { opacity: .5; }
+  .sh-strip-dots { display: flex; gap: 2px; justify-content: center; flex-wrap: wrap; min-height: 5px; }
+  .sh-strip-dots i { width: 5px; height: 5px; border-radius: 50%; display: block; }
+
+  /* ── Day card ── */
+  .sh-day {
+    background: var(--sh-surf); border: 1px solid var(--sh-border);
+    border-radius: var(--sh-r); box-shadow: var(--sh-shadow);
+    margin-bottom: 10px; overflow: hidden;
+    scroll-margin-top: 82px;
+  }
+  .sh-day.is-today { border-color: var(--sh-accent); }
+  .sh-day-head {
     display: flex; align-items: center; gap: 10px;
-    padding: 8px 0 6px;
+    padding: 12px 16px; border-bottom: 1px solid var(--sh-border);
+    background: var(--sh-surf-2);
   }
-  .sh-day-date {
-    background: var(--sh-surf);
-    border: 1px solid var(--sh-border);
-    border-radius: 8px;
-    text-align: center;
-    padding: 5px 10px;
-    min-width: 52px;
-    flex-shrink: 0;
-  }
-  .sh-day-date .m { font: 600 9px/1 var(--sh-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--sh-fg-3); }
-  .sh-day-date .d { font: 700 18px/1 var(--sh-font); color: var(--sh-fg); margin-top: 2px; }
-  .sh-day-date.is-today { border-color: var(--sh-accent); background: #EFF6FF; }
-  .sh-day-date.is-today .m { color: var(--sh-accent); }
-  .sh-day-date.is-today .d { color: var(--sh-accent); }
+  .sh-day.is-empty .sh-day-head { border-bottom: none; }
+  .sh-day-num { font: 700 17px/1 var(--sh-font); color: var(--sh-fg); min-width: 22px; }
   .sh-day-dow {
-    font: 600 13px/1 var(--sh-font); color: var(--sh-fg-2);
-    flex: 1;
+    flex: 1; min-width: 0;
+    font: 600 13px/1.2 var(--sh-font); color: var(--sh-fg-2);
+    text-transform: capitalize;
   }
-  .sh-day-tag {
-    font: 600 10px/1 var(--sh-mono); letter-spacing: 0.05em;
-    padding: 3px 7px; border-radius: 5px;
-    background: #FEF3C7; color: #92400E;
+  .sh-day-dow .mon { color: var(--sh-fg-3); font-weight: 500; text-transform: none; }
+  .sh-today-pill {
+    font: 700 9.5px/1 var(--sh-mono); letter-spacing: .07em; text-transform: uppercase;
+    padding: 4px 7px; border-radius: 5px;
+    background: var(--sh-accent); color: var(--sh-accent-fg);
   }
-  .sh-day-tag.is-md { background: #FEE2E2; color: #991B1B; }
+  .sh-md-pill {
+    font: 700 10px/1 var(--sh-mono); letter-spacing: .04em;
+    padding: 4px 7px; border-radius: 5px;
+    background: var(--sh-surf); color: var(--sh-fg-2); border: 1px solid var(--sh-border-2);
+  }
+  .sh-md-pill.is-md { background: var(--c-match); color: #fff; border-color: var(--c-match); }
 
-  /* ── Event card ── */
+  /* ── Event row (timeline) ── */
   .sh-evt {
-    background: var(--sh-surf);
-    border: 1px solid var(--sh-border);
-    border-radius: var(--sh-r);
-    padding: 14px 16px;
-    display: flex; align-items: flex-start; gap: 12px;
-    margin-bottom: 8px;
-    cursor: default;
+    display: flex; gap: 12px; padding: 12px 16px;
+    border-bottom: 1px solid var(--sh-border);
   }
-  .sh-evt-icon {
-    width: 36px; height: 36px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+  .sh-evt:last-child { border-bottom: none; }
+  .sh-evt-time {
+    width: 46px; flex-shrink: 0; padding-top: 1px;
+    font: 700 13px/1.2 var(--sh-mono); color: var(--sh-fg);
+    text-align: right;
   }
-  .sh-evt-icon .ti { font-size: 16px; }
+  .sh-evt-time .end { display: block; font: 500 10.5px/1.2 var(--sh-mono); color: var(--sh-fg-3); margin-top: 2px; }
+  .sh-evt-time.is-free { font: 600 10px/1.2 var(--sh-mono); color: var(--sh-fg-3); text-transform: uppercase; letter-spacing: .04em; }
+  .sh-evt-rail { width: 3px; border-radius: 2px; flex-shrink: 0; background: var(--ec, var(--c-other)); }
   .sh-evt-body { flex: 1; min-width: 0; }
-  .sh-evt-title { font: 700 14px/1.2 var(--sh-font); color: var(--sh-fg); }
-  .sh-evt-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-  .sh-evt-time { font: 500 12px/1 var(--sh-mono); color: var(--sh-fg-3); display: flex; align-items: center; gap: 4px; }
-  .sh-evt-time .ti { font-size: 12px; }
-  .sh-evt-loc  { font: 500 12px/1 var(--sh-font); color: var(--sh-fg-3); display: flex; align-items: center; gap: 4px; }
-  .sh-evt-loc .ti { font-size: 12px; }
-  .sh-evt-type-badge {
-    font: 600 10px/1 var(--sh-mono); letter-spacing: 0.04em; text-transform: uppercase;
-    padding: 2px 7px; border-radius: 4px;
+  .sh-evt-title {
+    font: 600 14px/1.3 var(--sh-font); color: var(--sh-fg);
+    display: flex; align-items: center; gap: 7px;
   }
-
-  /* Type colors */
-  .sh-evt.t-match       { border-left: 3px solid #EF4444; }
-  .sh-evt.t-match .sh-evt-icon { background: #FEF2F2; color: #EF4444; }
-  .sh-evt.t-match .sh-evt-type-badge { background: #FEF2F2; color: #B91C1C; }
-  .sh-evt.t-training    { border-left: 3px solid #3B82F6; }
-  .sh-evt.t-training .sh-evt-icon { background: #EFF6FF; color: #3B82F6; }
-  .sh-evt.t-training .sh-evt-type-badge { background: #EFF6FF; color: #1D4ED8; }
-  .sh-evt.t-gym         { border-left: 3px solid #8B5CF6; }
-  .sh-evt.t-gym .sh-evt-icon { background: #F5F3FF; color: #8B5CF6; }
-  .sh-evt.t-gym .sh-evt-type-badge { background: #F5F3FF; color: #6D28D9; }
-  .sh-evt.t-recovery    { border-left: 3px solid #10B981; }
-  .sh-evt.t-recovery .sh-evt-icon { background: #ECFDF5; color: #10B981; }
-  .sh-evt.t-recovery .sh-evt-type-badge { background: #ECFDF5; color: #047857; }
-  .sh-evt.t-travel      { border-left: 3px solid #F59E0B; }
-  .sh-evt.t-travel .sh-evt-icon { background: #FFFBEB; color: #F59E0B; }
-  .sh-evt.t-travel .sh-evt-type-badge { background: #FFFBEB; color: #B45309; }
-  .sh-evt.t-other       { border-left: 3px solid #94A3B8; }
-  .sh-evt.t-other .sh-evt-icon { background: #F1F5F9; color: #64748B; }
-  .sh-evt.t-other .sh-evt-type-badge { background: #F1F5F9; color: #475569; }
+  .sh-evt-title .ti { font-size: 15px; color: var(--ec, var(--c-other)); flex-shrink: 0; }
+  .sh-evt-title .txt { min-width: 0; overflow-wrap: anywhere; }
+  .sh-evt-sub {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px;
+    font: 500 11.5px/1.3 var(--sh-font); color: var(--sh-fg-3);
+  }
+  .sh-evt-sub .bit { display: inline-flex; align-items: center; gap: 3px; }
+  .sh-evt-sub .bit .ti { font-size: 12px; }
+  .sh-evt-kind {
+    font: 700 9.5px/1 var(--sh-mono); letter-spacing: .05em; text-transform: uppercase;
+    padding: 3px 6px; border-radius: 4px;
+    color: var(--ec, var(--c-other));
+    background: color-mix(in srgb, var(--ec, var(--c-other)) 12%, transparent);
+  }
+  .sh-evt-note {
+    margin-top: 7px; padding: 8px 10px;
+    background: var(--sh-surf-2); border-radius: 8px;
+    border-left: 2px solid var(--sh-border-2);
+    font: 500 12.5px/1.45 var(--sh-font); color: var(--sh-fg-2);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .sh-evt.is-match .sh-evt-title { font-weight: 700; }
 
   /* ── Rest day ── */
   .sh-rest {
-    padding: 10px 0 2px;
-    font: 500 12.5px/1 var(--sh-font);
-    color: var(--sh-fg-3);
-    font-style: italic;
+    padding: 14px 16px; display: flex; align-items: center; gap: 8px;
+    font: 500 13px/1.3 var(--sh-font); color: var(--sh-fg-3);
   }
+  .sh-rest .ti { font-size: 15px; }
+
+  /* ── Legend ── */
+  .sh-legend {
+    display: flex; flex-wrap: wrap; gap: 6px 12px;
+    margin: 18px 2px 0;
+    font: 500 11px/1 var(--sh-font); color: var(--sh-fg-3);
+  }
+  .sh-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sh-legend i { width: 7px; height: 7px; border-radius: 50%; display: block; }
 
   /* ── Empty / error ── */
   .sh-empty {
-    text-align: center; padding: 60px 20px;
-    color: var(--sh-fg-3); font: 500 14px/1.6 var(--sh-font);
+    text-align: center; padding: 56px 24px;
+    color: var(--sh-fg-3); font: 500 13.5px/1.6 var(--sh-font);
   }
-  .sh-empty .icon { font-size: 48px; display: block; margin-bottom: 12px; opacity: 0.4; }
-  .sh-empty strong { display: block; font: 700 18px/1.3 var(--sh-font); color: var(--sh-fg-2); margin-bottom: 8px; }
+  .sh-empty .icon { font-size: 42px; display: block; margin-bottom: 14px; opacity: .35; }
+  .sh-empty strong { display: block; font: 700 17px/1.3 var(--sh-font); color: var(--sh-fg-2); margin-bottom: 8px; }
 
   /* ── Footer ── */
   .sh-footer {
-    text-align: center; padding: 24px 16px;
-    font: 500 11.5px/1.3 var(--sh-mono); color: var(--sh-fg-3);
+    text-align: center; padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    font: 500 11px/1.4 var(--sh-mono); color: var(--sh-fg-3);
   }
-  .sh-footer a { color: var(--sh-accent); text-decoration: none; }
+  .sh-footer a { color: var(--sh-fg-2); text-decoration: none; }
 
   /* ── Spinner ── */
-  .sh-spinner {
-    display: flex; align-items: center; justify-content: center;
-    padding: 60px; color: var(--sh-fg-3);
-  }
-  .sh-spinner .ti { font-size: 32px; animation: spin 1s linear infinite; }
+  .sh-spinner { display: flex; align-items: center; justify-content: center; padding: 64px; color: var(--sh-fg-3); }
+  .sh-spinner .ti { font-size: 30px; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .sh-spinner .ti { animation: none; } }
 
   @media print {
-    .sh-ics-btn, .sh-footer { display: none !important; }
+    .sh-ics-btn, .sh-footer, .sh-strip { display: none !important; }
     body { background: #fff; }
-    .sh-evt { break-inside: avoid; }
+    .sh-header { position: static; }
+    .sh-day, .sh-match { break-inside: avoid; box-shadow: none; }
   }
 </style>
 </head>
 <body>
 
 <header class="sh-header">
-  <div class="sh-logo-fallback" id="shLogoWrap">
-    <i class="ti ti-shield-half" style="font-size:20px"></i>
-  </div>
+  <div class="sh-logo-fallback" id="shLogoWrap"><i class="ti ti-shield-half" style="font-size:19px"></i></div>
   <div class="sh-header-text">
-    <div class="sh-club-name" id="shClubName">Loading…</div>
+    <div class="sh-club-name" id="shClubName" data-i18n="player_week.loading">Loading…</div>
     <div class="sh-range" id="shRange"></div>
   </div>
   <a href="#" class="sh-ics-btn" id="shIcsBtn" style="display:none">
-    <i class="ti ti-calendar-down"></i>Add to calendar
+    <i class="ti ti-calendar-plus"></i><span class="lbl" data-i18n="player_week.add_to_calendar">Add to calendar</span>
   </a>
 </header>
 
@@ -234,261 +354,455 @@
 </main>
 
 <footer class="sh-footer">
-  Powered by <a href="https://clavametrics.vercel.app" target="_blank">ClavaMetrics</a>
+  <span data-i18n="player_week.powered_by">Powered by</span>
+  <a href="https://clavametrics.app" target="_blank" rel="noopener">ClavaMetrics</a>
 </footer>
 
 <script>
-(async () => {
-  const SB_URL = 'https://xesrumijvdmqjrufgeka.supabase.co';
-  const SB_KEY = 'sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
-  const sb = supabase.createClient(SB_URL, SB_KEY);
+(function () {
+  'use strict';
+  var SB_URL = 'https://xesrumijvdmqjrufgeka.supabase.co';
+  var SB_KEY = 'sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
 
-  const params = new URLSearchParams(location.search);
-  const token  = params.get('token');
+  var main  = document.getElementById('shMain');
+  var TOKEN = new URLSearchParams(location.search).get('token');
 
-  const main   = document.getElementById('shMain');
-  // Local calendar date (not UTC — avoids an off-by-one for users east of UTC).
-  const _d = new Date();
-  const today  = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0');
-
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  // Escapa datos de DB (títulos/rival/ubicación) antes de inyectar a innerHTML — página pública.
-  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-
-  function show404(msg) {
-    document.title = 'Schedule not found — ClavaMetrics';
-    main.innerHTML = `<div class="sh-empty">
-      <i class="ti ti-calendar-off icon"></i>
-      <strong>Schedule not found</strong>
-      ${msg || 'This link may have expired or been revoked.'}
-    </div>`;
+  // ── helpers ──────────────────────────────────────────────────
+  function tt(key, en, vars) {
+    if (window.CM_I18N && CM_I18N.t) { var v = CM_I18N.t(key, vars); if (v != null && v !== key) return v; }
+    var s = (en != null ? en : key);
+    if (vars) s = s.replace(/\{(\w+)\}/g, function (_, k) { return vars[k] != null ? vars[k] : '{' + k + '}'; });
+    return s;
+  }
+  function lang() { return (window.CM_I18N && CM_I18N.current) || document.documentElement.lang || 'es'; }
+  // Escapa datos de DB (títulos, rival, ubicación, notas) — esto es una página pública.
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function initials(n) {
+    return String(n || '').split(/\s+/).map(function (w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 3) || '—';
+  }
+  // Fecha de HOY en calendario local: con toISOString un jugador al este de UTC ve el día
+  // de mañana marcado como hoy.
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function ymd(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // Mediodía para que el cambio de horario de verano no corra el día.
+  function parseDay(s) { return new Date(s + 'T12:00:00'); }
+  function fmtDate(s, opts) { return parseDay(s).toLocaleDateString(lang(), opts); }
+  function hhmm(t) { return t ? String(t).slice(0, 5) : ''; }
+  // Hora de fin: la explícita si está cargada, si no la que sale de la duración.
+  function endOf(e) {
+    if (e.end_time) return hhmm(e.end_time);
+    if (!e.start_time || !e.duration_minutes) return '';
+    var m = parseInt(String(e.start_time).slice(0, 2), 10) * 60 + parseInt(String(e.start_time).slice(3, 5), 10) + e.duration_minutes;
+    return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
   }
 
-  if (!token) { show404('No token provided in the URL.'); return; }
+  // ── catálogo de tipos: familia de color + icono + etiqueta ────
+  // Las etiquetas reusan las claves del Calendar, así el jugador lee lo mismo que el staff.
+  var T = {
+    training:      ['field',   'ti-soccer-field',       'calendar.filter_training',          'Training'],
+    tactical:      ['field',   'ti-soccer-field',       'calendar.filter_training',          'Training'],
+    conditioning:  ['field',   'ti-run',                'calendar.filter_training',          'Training'],
+    walkthrough:   ['field',   'ti-walk',               'calendar.type_walkthrough_short',   'Walkthrough'],
+    beach:         ['beach',   'ti-beach',              'calendar.type_beach',               'Beach session'],
+    outdoor:       ['outdoor', 'ti-run',                'calendar.type_outdoor',             'Outdoor endurance'],
+    gym:           ['gym',     'ti-barbell',            'calendar.type_gym',                 'Gym'],
+    prevention:    ['prev',    'ti-shield-check',       'calendar.type_prevention',          'Prevention work'],
+    recovery:      ['recov',   'ti-heart-rate-monitor', 'calendar.type_recovery',            'Recovery'],
+    match:         ['match',   'ti-ball-football',      'calendar.type_match',               'Match'],
+    scouting:      ['video',   'ti-binoculars',         'calendar.type_scouting',            'Scouting'],
+    video_session: ['video',   'ti-device-desktop',     'calendar.type_video_session',       'Video session'],
+    meeting:       ['meet',    'ti-users',              'calendar.type_meeting',             'Meeting'],
+    evaluation:    ['eval',    'ti-clipboard-list',     'calendar.type_evaluation',          'Evaluation'],
+    breakfast:     ['meal',    'ti-coffee',             'calendar.type_breakfast',           'Breakfast'],
+    lunch:         ['meal',    'ti-soup',               'calendar.type_lunch',               'Lunch'],
+    dinner:        ['meal',    'ti-tools-kitchen',      'calendar.type_dinner',              'Dinner'],
+    snack:         ['snack',   'ti-apple',              'calendar.type_snack',               'Snack'],
+    travel:        ['travel',  'ti-plane',              'calendar.type_travel',              'Travel'],
+    bus_departure: ['travel',  'ti-bus',                'calendar.type_bus_departure',       'Bus departure'],
+    bus_arrival:   ['travel',  'ti-bus',                'calendar.type_bus_arrival',         'Bus arrival'],
+    hotel_checkin: ['hotel',   'ti-login',              'calendar.type_hotel_checkin',       'Hotel check-in'],
+    hotel_checkout:['hotel',   'ti-logout',             'calendar.type_hotel_checkout',      'Hotel check-out'],
+    press:         ['press',   'ti-microphone',         'calendar.type_press',               'Press conference'],
+    medical_check: ['med',     'ti-stethoscope',        'calendar.type_medical_check',       'Medical check'],
+    physio:        ['med',     'ti-physotherapist',     'calendar.type_physio',              'Physio treatment'],
+    day_off:       ['off',     'ti-beach',              'calendar.type_day_off',             'Day off'],
+    other:         ['other',   'ti-calendar-event',     'calendar.type_other',               'Other']
+  };
+  function meta(t) { return T[String(t || '').toLowerCase()] || T.other; }
+  function typeColor(t) { return 'var(--c-' + meta(t)[0] + ')'; }
+  function typeIcon(t)  { return meta(t)[1]; }
+  function typeLabel(t) { var m = meta(t); return tt(m[2], m[3]); }
 
-  // Call RPC — anon access, SECURITY DEFINER function validates token
-  const { data, error } = await sb.rpc('get_shared_calendar', { p_token: token });
+  // Familias que se muestran en la leyenda y en los puntitos de la tira semanal.
+  var LEGEND = [
+    ['match',  'calendar.type_match',        'Match'],
+    ['field',  'calendar.filter_training',   'Training'],
+    ['gym',    'calendar.type_gym',          'Gym'],
+    ['prev',   'calendar.type_prevention',   'Prevention work'],
+    ['recov',  'calendar.type_recovery',     'Recovery'],
+    ['travel', 'calendar.type_travel',       'Travel']
+  ];
 
-  if (error || !data || data.error) {
-    show404(data?.error === 'invalid_token' ? 'This link has expired or been revoked.' : null);
-    return;
+  function show(title, body, icon) {
+    document.title = title + ' — ClavaMetrics';
+    main.innerHTML = '<div class="sh-empty"><i class="ti ' + (icon || 'ti-calendar-off') + ' icon"></i>' +
+      '<strong>' + esc(title) + '</strong>' + esc(body) + '</div>';
   }
 
-  const club   = data.club   || {};
-  const mc     = data.mc     || null;
-  const events = data.events || [];
-  const dateFrom = data.date_from;
-  const dateTo   = data.date_to;
-
-  // Header
-  document.getElementById('shClubName').textContent = club.name || 'Player Schedule';
-  if (dateFrom && dateTo) {
-    const f = new Date(dateFrom + 'T12:00:00');
-    const t = new Date(dateTo   + 'T12:00:00');
-    document.getElementById('shRange').textContent =
-      `${MONTHS[f.getMonth()]} ${f.getDate()} → ${MONTHS[t.getMonth()]} ${t.getDate()}, ${t.getFullYear()}`;
-  }
-  if (mc) document.title = `${club.name || 'Club'} · ${mc.name || 'Schedule'}`;
-  else document.title = `${club.name || 'Club'} · Schedule`;
-
-  // Club logo
-  if (club.logo_url) {
-    const img = document.createElement('img');
-    img.className = 'sh-logo';
-    img.src = club.logo_url;
-    img.alt = club.name || 'Club';
-    img.onerror = () => {};
-    document.getElementById('shLogoWrap').replaceWith(img);
-  }
-
-  // MC banner
-  let mcBannerHtml = '';
-  if (mc) {
-    const matchLabel = mc.match_date
-      ? `MD: ${new Date(mc.match_date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}` + (mc.rival ? ` vs ${esc(mc.rival)}` : '')
-      : '';
-    mcBannerHtml = `<div class="sh-mc-banner">
-      <div class="ic"><i class="ti ti-calendar-stats"></i></div>
-      <div>
-        <div class="sh-mc-name">${esc(mc.name || 'Microcycle')}</div>
-        ${matchLabel ? `<div class="sh-mc-sub">${matchLabel}</div>` : ''}
-      </div>
-    </div>`;
-  }
-
-  // Build date range
-  function daysInRange(from, to) {
-    const days = [];
-    let cur = new Date(from + 'T12:00:00');
-    const end = new Date(to + 'T12:00:00');
-    while (cur <= end) {
-      days.push(cur.toISOString().slice(0,10));
-      cur = new Date(cur.getTime() + 86400000);
+  // ── marca del club ───────────────────────────────────────────
+  function applyBrand(club) {
+    var c = String(club.primary_color || '').trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c)) {
+      document.documentElement.style.setProperty('--sh-accent', c);
+      // Texto blanco o negro sobre el color del club, según su luminancia.
+      var h = c.length === 4 ? c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c.slice(1);
+      var L = (0.299 * parseInt(h.slice(0, 2), 16) + 0.587 * parseInt(h.slice(2, 4), 16) + 0.114 * parseInt(h.slice(4, 6), 16)) / 255;
+      document.documentElement.style.setProperty('--sh-accent-fg', L > 0.62 ? '#0F172A' : '#FFFFFF');
     }
-    return days;
+    var wrap = document.getElementById('shLogoWrap');
+    if (club.logo_url) {
+      var img = new Image();
+      img.className = 'sh-logo';
+      img.alt = club.name || '';
+      img.onload = function () { wrap.replaceWith(img); };
+      img.src = club.logo_url;
+    } else {
+      wrap.textContent = initials(club.short_name || club.name);
+    }
   }
 
-  const days = daysInRange(dateFrom, dateTo);
-
-  // Group events by date
-  const evtMap = {};
-  events.forEach(e => {
-    const d = (e.event_date || '').slice(0,10);
-    if (!evtMap[d]) evtMap[d] = [];
-    evtMap[d].push(e);
-  });
-
-  // Type → category mapping
-  function typeClass(t) {
-    if (!t) return 't-other';
-    const f = t.toLowerCase();
-    if (f === 'match') return 't-match';
-    if (['gym'].includes(f)) return 't-gym';
-    if (['recovery'].includes(f)) return 't-recovery';
-    if (['travel','bus_departure','bus_arrival','hotel_checkin','hotel_checkout'].includes(f)) return 't-travel';
-    if (['tactical','conditioning','walkthrough','other'].includes(f)) return 't-training';
-    return 't-other';
-  }
-  function typeIcon(t) {
-    const f = (t || '').toLowerCase();
-    if (f === 'match') return 'ti-ball-football';
-    if (f === 'gym') return 'ti-barbell';
-    if (f === 'recovery') return 'ti-heart-rate-monitor';
-    if (f === 'travel' || f.startsWith('bus')) return 'ti-plane';
-    if (f.startsWith('hotel')) return 'ti-bed';
-    if (f === 'snack') return 'ti-apple';
-    if (f === 'breakfast' || f === 'lunch' || f === 'dinner') return 'ti-tools-kitchen';
-    if (f === 'press') return 'ti-microphone';
-    if (f === 'medical_check') return 'ti-stethoscope';
-    if (f === 'physio') return 'ti-physotherapist';
-    if (f === 'day_off') return 'ti-beach';
-    return 'ti-soccer-field';
-  }
-  function typeLabel(t) {
-    return (t || 'other').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  // Build event HTML
-  function renderEvt(e) {
-    const cat  = typeClass(e.event_type);
-    const icon = typeIcon(e.event_type);
-    const timeStr = e.start_time ? e.start_time.slice(0,5) : '';
-    const dur  = e.duration_minutes ? `${e.duration_minutes}′` : '';
-    const titleText = e.title || typeLabel(e.event_type);
-    const oppLine = e.opponent
-      ? `<span>vs ${esc(e.opponent)}${e.home_away ? ' · ' + (e.home_away === 'home' ? 'Home' : e.home_away === 'away' ? 'Away' : 'Neutral') : ''}</span>`
-      : '';
-    return `<div class="sh-evt ${cat}">
-      <div class="sh-evt-icon"><i class="ti ${icon}"></i></div>
-      <div class="sh-evt-body">
-        <div class="sh-evt-title">${esc(titleText)}</div>
-        <div class="sh-evt-meta">
-          <span class="sh-evt-type-badge">${esc(typeLabel(e.event_type))}</span>
-          ${timeStr ? `<span class="sh-evt-time"><i class="ti ti-clock"></i>${timeStr}${dur ? ' · ' + dur : ''}</span>` : dur ? `<span class="sh-evt-time">${dur}</span>` : ''}
-          ${e.location ? `<span class="sh-evt-loc"><i class="ti ti-map-pin"></i>${esc(e.location)}</span>` : ''}
-          ${oppLine}
-        </div>
-      </div>
-    </div>`;
-  }
-
-  // MC match date offset label
-  function mdTag(dateStr, mc) {
-    if (!mc?.match_date) return '';
-    const diff = Math.round((new Date(mc.match_date+'T12:00:00') - new Date(dateStr+'T12:00:00')) / 86400000);
-    if (diff === 0) return '<span class="sh-day-tag is-md">MD</span>';
-    if (diff > 0 && diff <= 10) return `<span class="sh-day-tag">MD-${diff}</span>`;
-    if (diff < 0 && diff >= -3) return `<span class="sh-day-tag">MD+${Math.abs(diff)}</span>`;
+  // ── microciclo: etiqueta MD/GD del día ───────────────────────
+  function mdPrefix(sport) { return sport === 'basketball' ? 'GD' : 'MD'; }
+  // Prioridad: el día que ES partido es el ancla; si no, manda el offset guardado en el
+  // evento; y recién si no hay ninguno se calcula contra la fecha del partido.
+  function mdFor(dateStr, anchorDate, evts, sport) {
+    var p = mdPrefix(sport);
+    if (evts.some(function (e) { return e.event_type === 'match'; })) return p;
+    for (var i = 0; i < evts.length; i++) {
+      var raw = evts[i].md;
+      if (raw) return String(raw).replace(/^(MD|GD)0$/, '$1').replace('-', '−');
+    }
+    if (!anchorDate) return '';
+    var diff = Math.round((parseDay(anchorDate) - parseDay(dateStr)) / 86400000);
+    if (diff === 0) return p;
+    if (diff > 0 && diff <= 10) return p + '−' + diff;
+    if (diff < 0 && diff >= -4) return p + '+' + Math.abs(diff);
     return '';
   }
 
-  // Render all days
-  let hasAnyEvent = false;
-  let daysHtml = '';
-  days.forEach(dateStr => {
-    const d     = new Date(dateStr + 'T12:00:00');
-    const isToday = dateStr === today;
-    const evts  = evtMap[dateStr] || [];
-    if (!evts.length) return; // skip days with no player events
-
-    hasAnyEvent = true;
-    const dayOfWeek = DAYS[d.getDay()];
-    const dateClass = isToday ? 'sh-day-date is-today' : 'sh-day-date';
-
-    daysHtml += `<div class="sh-day">
-      <div class="sh-day-label">
-        <div class="${dateClass}">
-          <div class="m">${MONTHS[d.getMonth()].toUpperCase()}</div>
-          <div class="d">${d.getDate()}</div>
-        </div>
-        <div class="sh-day-dow">${dayOfWeek}${isToday ? ' · Today' : ''}</div>
-        ${mdTag(dateStr, mc)}
-      </div>
-      ${evts.map(renderEvt).join('')}
-    </div>`;
-  });
-
-  if (!hasAnyEvent) {
-    main.innerHTML = mcBannerHtml + `<div class="sh-empty">
-      <i class="ti ti-calendar-event icon"></i>
-      <strong>No events shared yet</strong>
-      The coaching staff hasn't published any events for this period.
-    </div>`;
-    return;
+  // Un partido suele quedar cargado en las dos tablas (evento del calendario + sesión),
+  // así que al jugador le llegaba dos veces. Misma fecha, tipo, hora y título = el mismo
+  // acto: se queda el registro con más datos cargados (rival, escudo, lugar).
+  function dedupe(events) {
+    var byKey = {};
+    var out = [];
+    events.forEach(function (e) {
+      var k = [e.event_date, e.event_type, e.start_time || '', String(e.title || '').trim().toLowerCase()].join('|');
+      var score = ['opponent', 'crest_url', 'location', 'notes', 'competition', 'home_away', 'duration_minutes', 'end_time']
+        .reduce(function (n, f) { return n + (e[f] ? 1 : 0); }, 0);
+      if (!(k in byKey)) { byKey[k] = { i: out.length, score: score }; out.push(e); return; }
+      if (score > byKey[k].score) { out[byKey[k].i] = e; byKey[k].score = score; }
+    });
+    return out;
   }
 
-  main.innerHTML = mcBannerHtml + daysHtml;
+  function haLabel(ha) {
+    if (ha === 'home')    return tt('calendar.home', 'Home');
+    if (ha === 'away')    return tt('calendar.away', 'Away');
+    if (ha === 'neutral') return tt('calendar.neutral', 'Neutral');
+    return '';
+  }
 
-  // "Add to calendar" — generate .ics
-  const icsBtn = document.getElementById('shIcsBtn');
-  if (icsBtn && events.length) {
-    icsBtn.style.display = '';
-    icsBtn.addEventListener('click', e => {
-      e.preventDefault();
-      const lines = [
-        'BEGIN:VCALENDAR', 'VERSION:2.0',
-        `PRODID:-//ClavaMetrics//Player Schedule//EN`,
-        `X-WR-CALNAME:${club.name || 'Club'} Schedule`,
-        'X-WR-TIMEZONE:UTC',
-      ];
-      events.forEach(evt => {
-        const d = (evt.event_date || '').slice(0,10).replace(/-/g,'');
-        const uid = `${evt.id}@clavametrics`;
-        const summary = (evt.title || typeLabel(evt.event_type)).replace(/[,;\\]/g, ' ');
+  // ── render ───────────────────────────────────────────────────
+  var _data = null;
+
+  function render(data) {
+    var club   = data.club || {};
+    var team   = data.team || null;
+    var mc     = data.mc   || null;
+    var events = dedupe(data.events || []);
+    var sport  = club.sport || 'football';
+    var today  = todayStr();
+
+    // Cabecera
+    var clubLine = club.name || tt('player_week.week_plan', 'Week plan');
+    if (team && team.name) clubLine += ' · ' + team.name;
+    document.getElementById('shClubName').removeAttribute('data-i18n');
+    document.getElementById('shClubName').textContent = clubLine;
+
+    var rangeTxt = '';
+    if (data.date_from && data.date_to) {
+      var f = parseDay(data.date_from), t = parseDay(data.date_to);
+      var sameMonth = f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear();
+      rangeTxt = fmtDate(data.date_from, sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' }) +
+                 ' – ' + fmtDate(data.date_to, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    if (mc && mc.name) rangeTxt = mc.name + (rangeTxt ? ' · ' + rangeTxt : '');
+    document.getElementById('shRange').textContent = rangeTxt;
+    document.title = clubLine + ' — ' + tt('player_week.week_plan', 'Week plan');
+
+    // Eventos por día
+    var byDay = {};
+    events.forEach(function (e) {
+      var d = String(e.event_date || '').slice(0, 10);
+      if (!d) return;
+      (byDay[d] = byDay[d] || []).push(e);
+    });
+
+    // Rango completo: se muestran TODOS los días, también los vacíos, para que la semana
+    // se lea entera y un día sin nada quede explícito en vez de desaparecer.
+    var days = [];
+    var cur = parseDay(data.date_from), end = parseDay(data.date_to);
+    while (cur <= end && days.length < 60) { days.push(ymd(cur)); cur = new Date(cur.getTime() + 86400000); }
+
+    // ── card del partido ──
+    // Con dos partidos en la semana se destaca el que todavía no se jugó; si ya pasaron
+    // todos, el último.
+    var html = '';
+    var matches = events.filter(function (e) { return e.event_type === 'match'; });
+    var matchEvt = matches.filter(function (e) { return e.event_date >= today; })[0] || matches[matches.length - 1] || null;
+    var mDate = (matchEvt && matchEvt.event_date) || (mc && mc.match_date) || null;
+    // Ancla para las etiquetas MD del resto de los días.
+    var anchor = (mc && mc.match_date) || mDate;
+    if (mDate) {
+      var rival   = (matchEvt && matchEvt.opponent) || (mc && mc.rival) || '';
+      var ha      = (matchEvt && matchEvt.home_away) || (mc && mc.home_away) || '';
+      var mTime   = hhmm(matchEvt && matchEvt.start_time) || hhmm(mc && mc.match_time);
+      var venue   = (matchEvt && matchEvt.location) || (mc && mc.stadium) || '';
+      var crest   = matchEvt && matchEvt.crest_url;
+      var comp    = matchEvt && matchEvt.competition;
+      var isPast  = mDate < today;
+
+      html += '<section class="sh-match">' +
+        '<div class="sh-match-top"><i class="ti ti-ball-football"></i>' +
+          esc(isPast ? tt('player_week.match_of_week', 'Match of the week') : tt('player_week.next_match', 'Next match')) +
+        '</div>' +
+        '<div class="sh-match-body">' +
+          (crest ? '<img class="sh-match-crest" src="' + esc(crest) + '" alt="">'
+                 : '<div class="sh-match-crest">' + esc(initials(rival)) + '</div>') +
+          '<div class="sh-match-info">' +
+            '<div class="sh-match-rival">' + esc(rival || tt('player_week.match_tbd', 'Rival to be confirmed')) + '</div>' +
+            '<div class="sh-match-when">' +
+              '<span>' + esc(fmtDate(mDate, { weekday: 'long', day: 'numeric', month: 'long' })) + (mTime ? ' · ' + mTime : '') + '</span>' +
+              (ha ? '<span class="sh-ha' + (ha === 'home' ? ' is-home' : '') + '">' + esc(haLabel(ha)) + '</span>' : '') +
+            '</div>' +
+            (venue || comp
+              ? '<div class="sh-match-where"><i class="ti ti-map-pin"></i>' +
+                  esc([venue, comp ? tt('calendar.comp_' + comp, comp) : ''].filter(Boolean).join(' · ')) +
+                '</div>'
+              : '') +
+          '</div>' +
+        '</div>' +
+      '</section>';
+    }
+
+    // ── tira de la semana ──
+    if (days.length <= 21) {
+      // Hasta 9 días entran a lo ancho; más que eso, la tira se desliza.
+      html += '<nav class="sh-strip" style="' + (days.length <= 9
+        ? 'grid-template-columns:repeat(' + days.length + ',1fr)'
+        : 'grid-auto-flow:column;grid-auto-columns:46px') + '">';
+      days.forEach(function (ds) {
+        var evts = byDay[ds] || [];
+        var d = parseDay(ds);
+        var md = mdFor(ds, anchor, evts, sport);
+        var isMatch = evts.some(function (e) { return e.event_type === 'match'; });
+        var fams = [];
+        evts.forEach(function (e) { var f = meta(e.event_type)[0]; if (fams.indexOf(f) < 0 && f !== 'meal' && f !== 'snack') fams.push(f); });
+        html += '<a class="sh-strip-cell' + (ds === today ? ' is-today' : '') + (isMatch ? ' is-match' : '') +
+                  (evts.length ? '' : ' is-empty') + '" href="#d' + ds + '">' +
+          '<span class="dw">' + esc(fmtDate(ds, { weekday: 'narrow' })) + '</span>' +
+          '<span class="dn">' + d.getDate() + '</span>' +
+          '<span class="sh-strip-dots">' + fams.slice(0, 4).map(function (f) {
+            return '<i style="background:var(--c-' + f + ')"></i>';
+          }).join('') + '</span>' +
+          '<span class="md">' + esc(md) + '</span>' +
+        '</a>';
+      });
+      html += '</nav>';
+    }
+
+    // ── días ──
+    var anyEvent = false;
+    var lastMonth = null;
+    days.forEach(function (ds) {
+      var evts = (byDay[ds] || []).slice();
+      if (evts.length) anyEvent = true;
+      var isToday = ds === today;
+      var md = mdFor(ds, anchor, evts, sport);
+      var isMatchDay = evts.some(function (e) { return e.event_type === 'match'; });
+      var dayOff = evts.length === 1 && evts[0].event_type === 'day_off' && !evts[0].partial;
+
+      // El mes solo se escribe cuando cambia: repetirlo en cada día ensucia y en español
+      // "Lunes ago" se lee como si dijera "hace".
+      var month = parseDay(ds).getMonth();
+      var showMonth = month !== lastMonth;
+      lastMonth = month;
+
+      html += '<section class="sh-day' + (isToday ? ' is-today' : '') + (evts.length && !dayOff ? '' : ' is-empty') + '" id="d' + ds + '">' +
+        '<div class="sh-day-head">' +
+          '<span class="sh-day-num">' + parseDay(ds).getDate() + '</span>' +
+          '<span class="sh-day-dow">' + esc(fmtDate(ds, { weekday: 'long' })) +
+            (showMonth ? ' <span class="mon">' + esc(fmtDate(ds, { month: 'long' })) + '</span>' : '') + '</span>' +
+          (isToday ? '<span class="sh-today-pill">' + esc(tt('player_week.today', 'Today')) + '</span>' : '') +
+          (md ? '<span class="sh-md-pill' + (isMatchDay ? ' is-md' : '') + '">' + esc(md) + '</span>' : '') +
+        '</div>';
+
+      if (!evts.length) {
+        html += '<div class="sh-rest"><i class="ti ti-zzz"></i>' + esc(tt('player_week.nothing_scheduled', 'Nothing scheduled')) + '</div>';
+      } else if (dayOff) {
+        html += '<div class="sh-rest"><i class="ti ti-beach"></i>' + esc(tt('calendar.type_day_off', 'Day off')) + '</div>';
+      } else {
+        html += evts.map(renderEvt).join('');
+      }
+      html += '</section>';
+    });
+
+    // ── leyenda ──
+    html += '<div class="sh-legend">' + LEGEND.map(function (l) {
+      return '<span><i style="background:var(--c-' + l[0] + ')"></i>' + esc(tt(l[1], l[2])) + '</span>';
+    }).join('') + '</div>';
+
+    if (!anyEvent) {
+      main.innerHTML = html.split('<nav class="sh-strip">')[0] +
+        '<div class="sh-empty"><i class="ti ti-calendar-event icon"></i>' +
+        '<strong>' + esc(tt('player_week.empty_title', 'Nothing published yet')) + '</strong>' +
+        esc(tt('player_week.empty_body', 'The coaching staff has not shared any events for this period yet.')) + '</div>';
+      return;
+    }
+
+    main.innerHTML = html;
+
+    // Arranca en el día de hoy si cae dentro de la semana compartida.
+    if (byDay[today] || days.indexOf(today) >= 0) {
+      var el = document.getElementById('d' + today);
+      if (el) el.scrollIntoView({ block: 'center' });
+    }
+
+    wireIcs(club, events);
+  }
+
+  function renderEvt(e) {
+    var color = typeColor(e.event_type);
+    var start = hhmm(e.start_time);
+    var end   = endOf(e);
+    var label = typeLabel(e.event_type);
+    var title = (e.title && String(e.title).trim()) || label;
+    var bits  = [];
+
+    // El partido suele venir titulado "vs Rival": repetir el rival abajo sobra, alcanza
+    // con decir si se juega de local o de visitante.
+    var titleHasRival = !!(e.opponent && title.toLowerCase().indexOf(String(e.opponent).toLowerCase()) >= 0);
+
+    if (!start && e.duration_minutes) bits.push('<span class="bit"><i class="ti ti-hourglass"></i>' + e.duration_minutes + '′</span>');
+    if (e.location) bits.push('<span class="bit"><i class="ti ti-map-pin"></i>' + esc(e.location) + '</span>');
+    if (e.opponent && !titleHasRival) bits.push('<span class="bit">' + esc(tt('player_week.vs', 'vs') + ' ' + e.opponent) + '</span>');
+    if (e.home_away) bits.push('<span class="bit">' + esc(haLabel(e.home_away)) + '</span>');
+    if (e.partial) bits.push('<span class="bit"><i class="ti ti-users-group"></i>' + esc(tt('player_week.some_players', 'Some players only')) + '</span>');
+
+    return '<div class="sh-evt' + (e.event_type === 'match' ? ' is-match' : '') + '" style="--ec:' + color + '">' +
+      '<div class="sh-evt-time' + (start ? '' : ' is-free') + '">' +
+        (start ? esc(start) + (end && end !== start ? '<span class="end">' + esc(end) + '</span>' : '')
+               : esc(tt('player_week.no_time', 'No time'))) +
+      '</div>' +
+      '<div class="sh-evt-rail"></div>' +
+      '<div class="sh-evt-body">' +
+        '<div class="sh-evt-title"><i class="ti ' + typeIcon(e.event_type) + '"></i><span class="txt">' + esc(title) + '</span></div>' +
+        '<div class="sh-evt-sub">' +
+          '<span class="sh-evt-kind">' + esc(label) + '</span>' +
+          (start && e.duration_minutes ? '<span class="bit">' + e.duration_minutes + '′</span>' : '') +
+          bits.join('') +
+        '</div>' +
+        (e.notes ? '<div class="sh-evt-note">' + esc(e.notes) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── "Agregar al calendario" (.ics) ───────────────────────────
+  function wireIcs(club, events) {
+    var btn = document.getElementById('shIcsBtn');
+    if (!btn || !events.length) return;
+    btn.style.display = '';
+    btn.onclick = function (ev) {
+      ev.preventDefault();
+      // Sin zona horaria: las horas se cargan como hora local del club, que es la que el
+      // jugador tiene que respetar aunque viaje.
+      var lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ClavaMetrics//Player Week//EN',
+                   'X-WR-CALNAME:' + (club.name || 'Club'), 'CALSCALE:GREGORIAN'];
+      events.forEach(function (e) {
+        if (e.event_type === 'day_off') return;
+        var d = String(e.event_date || '').slice(0, 10).replace(/-/g, '');
+        if (!d) return;
+        var clean = function (s) { return String(s == null ? '' : s).replace(/[\\;,]/g, ' ').replace(/\r?\n/g, ' '); };
         lines.push('BEGIN:VEVENT');
-        lines.push(`UID:${uid}`);
-        if (evt.start_time) {
-          const t = evt.start_time.slice(0,5).replace(':','') + '00';
-          lines.push(`DTSTART:${d}T${t}Z`);
-          if (evt.duration_minutes) {
-            const endMin = parseInt(evt.start_time.slice(0,2)) * 60 + parseInt(evt.start_time.slice(3,5)) + evt.duration_minutes;
-            const endH = String(Math.floor(endMin/60) % 24).padStart(2,'0');
-            const endM = String(endMin % 60).padStart(2,'0');
-            lines.push(`DTEND:${d}T${endH}${endM}00Z`);
-          } else {
-            lines.push(`DTEND:${d}T${t}Z`);
-          }
+        lines.push('UID:' + e.id + '@clavametrics');
+        if (e.start_time) {
+          var st = hhmm(e.start_time).replace(':', '') + '00';
+          var en = endOf(e);
+          lines.push('DTSTART:' + d + 'T' + st);
+          lines.push('DTEND:' + d + 'T' + (en ? en.replace(':', '') + '00' : st));
         } else {
-          lines.push(`DTSTART;VALUE=DATE:${d}`);
-          lines.push(`DTEND;VALUE=DATE:${d}`);
+          lines.push('DTSTART;VALUE=DATE:' + d);
+          lines.push('DTEND;VALUE=DATE:' + d);
         }
-        lines.push(`SUMMARY:${summary}`);
-        if (evt.location) lines.push(`LOCATION:${evt.location.replace(/[,;\\]/g,' ')}`);
-        if (evt.opponent) lines.push(`DESCRIPTION:vs ${evt.opponent}${evt.home_away ? ' ('+evt.home_away+')' : ''}`);
+        lines.push('SUMMARY:' + clean((e.title && e.title.trim()) || typeLabel(e.event_type)));
+        if (e.location) lines.push('LOCATION:' + clean(e.location));
+        var desc = [];
+        if (e.opponent) desc.push(tt('player_week.vs', 'vs') + ' ' + e.opponent + (e.home_away ? ' (' + haLabel(e.home_away) + ')' : ''));
+        if (e.notes) desc.push(e.notes);
+        if (desc.length) lines.push('DESCRIPTION:' + clean(desc.join(' — ')));
         lines.push('END:VEVENT');
       });
       lines.push('END:VCALENDAR');
 
-      const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
+      var blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
       a.href = url;
-      a.download = `${(club.name || 'schedule').replace(/\s+/g,'-').toLowerCase()}.ics`;
+      a.download = String(club.name || 'schedule').replace(/\s+/g, '-').toLowerCase() + '.ics';
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    };
   }
+
+  // ── carga ────────────────────────────────────────────────────
+  async function load() {
+    if (window.CM_I18N && CM_I18N.ready) { try { await CM_I18N.ready; } catch (_) {} }
+    document.documentElement.lang = lang();
+
+    if (!TOKEN) {
+      show(tt('player_week.not_found_title', 'Plan not found'),
+           tt('player_week.no_token', 'This link is incomplete — ask the staff to send it again.'));
+      return;
+    }
+
+    var sb = supabase.createClient(SB_URL, SB_KEY);
+    var res;
+    try {
+      res = await sb.rpc('get_shared_calendar', { p_token: TOKEN });
+    } catch (_) { res = { error: true }; }
+
+    if (res.error || !res.data || res.data.error) {
+      show(tt('player_week.not_found_title', 'Plan not found'),
+           tt('player_week.revoked', 'This link expired or was revoked by the coaching staff.'));
+      return;
+    }
+    _data = res.data;
+    render(_data);
+  }
+
+  document.addEventListener('cm:langchanged', function () { if (_data) render(_data); });
+  if (document.readyState !== 'loading') load();
+  else document.addEventListener('DOMContentLoaded', load);
 })();
 </script>
 

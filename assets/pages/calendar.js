@@ -69,6 +69,7 @@ function focusToClass(focus) {
   if (f === 'press')                                         return 'press';
   if (f === 'medical_check')                                 return 'medical';
   if (f === 'physio')                                        return 'physio';
+  if (f === 'prevention')                                    return 'prevention';
   if (f === 'walkthrough')                                   return 'walkthrough';
   if (f === 'scouting')                                      return 'scouting';
   if (f === 'day_off')                                       return 'day-off';
@@ -173,6 +174,7 @@ const VISIBLE_TO_DEFAULTS = {
   video_session: [],
   medical_check: ['medical'],
   physio:        ['players','medical'],
+  prevention:    ['players','medical'],
 };
 
 function getVisibleToFromChips() {
@@ -1117,7 +1119,7 @@ const CAL_EVT_TYPES = [
   'match','recovery','travel','meeting','evaluation','video_session',
   'breakfast','lunch','dinner','snack',
   'hotel_checkin','hotel_checkout','bus_departure','bus_arrival',
-  'press','medical_check','physio','walkthrough','scouting','day_off',
+  'press','medical_check','physio','prevention','walkthrough','scouting','day_off',
 ];
 
 // Tipos que pueden llevar MD propio: todo lo que es trabajo. El partido no está porque ya
@@ -1156,7 +1158,7 @@ const DURATION_DEFAULTS = {
   training:90, tactical:90, beach:75, outdoor:75, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
   breakfast:45, lunch:60, dinner:60, snack:20,
   hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
-  press:30, medical_check:30, physio:60, walkthrough:30, scouting:60,
+  press:30, medical_check:30, physio:60, prevention:20, walkthrough:30, scouting:60,
   day_off:null,
 };
 
@@ -1596,6 +1598,7 @@ const EVT_TYPE_LABELS_EN = {
   hotel_checkin:'Hotel check-in', hotel_checkout:'Hotel check-out',
   bus_departure:'Bus departure', bus_arrival:'Bus arrival',
   press:'Press conference', medical_check:'Medical check', physio:'Physio treatment',
+  prevention:'Prevention work',
   walkthrough:'Walkthrough', scouting:'Scouting', day_off:'Day off', other:'Other',
   conditioning:'Training', beach:'Beach session', outdoor:'Outdoor endurance',
 };
@@ -1606,6 +1609,7 @@ const EVT_TYPE_KEY = {
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
+  prevention:'calendar.type_prevention',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting', day_off:'calendar.type_day_off', other:'calendar.type_other',
   conditioning:'calendar.filter_training', beach:'calendar.type_beach', outdoor:'calendar.type_outdoor',
 };
@@ -2611,7 +2615,8 @@ const TYPE_ICONS = {
   breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen', snack:'ti-apple',
   hotel_checkin:'ti-login', hotel_checkout:'ti-logout',
   bus_departure:'ti-bus', bus_arrival:'ti-bus', travel:'ti-plane',
-  press:'ti-microphone', medical_check:'ti-stethoscope', physio:'ti-physotherapist', meeting:'ti-users',
+  press:'ti-microphone', medical_check:'ti-stethoscope', physio:'ti-physotherapist',
+  prevention:'ti-shield-check', meeting:'ti-users',
   evaluation:'ti-clipboard-list', video_session:'ti-device-desktop',
   day_off:'ti-bed', other:'ti-dots',
 };

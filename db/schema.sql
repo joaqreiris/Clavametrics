@@ -230,7 +230,9 @@ create table if not exists public.calendar_events (
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
   constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
   constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
-  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'snack'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text])))
+  -- 'prevention' = preventivos obligatorios. Es informativo puro: avisa al jugador que
+  -- ese día pasa por el gym, sin colgarse del Gym Planner ni de Daily Planning.
+  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'snack'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text, 'prevention'::text])))
 );
 CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
@@ -3704,8 +3706,10 @@ DECLARE
   v_link      share_links;
   v_date_from date;
   v_date_to   date;
+  v_team_id   uuid;
   v_events    jsonb;
   v_club      jsonb;
+  v_team      jsonb;
   v_mc        jsonb;
 BEGIN
   SELECT * INTO v_link
@@ -3718,18 +3722,24 @@ BEGIN
     RETURN jsonb_build_object('error', 'invalid_token');
   END IF;
 
+  -- Equipo del link. Los links viejos se guardaron sin team_id: en ese caso se hereda
+  -- del microciclo, para que un jugador nunca vea la agenda de otra categoría.
+  v_team_id := v_link.team_id;
+
   -- Determine date range
   IF v_link.mc_id IS NOT NULL THEN
     SELECT
-      start_date::date,
-      end_date::date,
+      m.start_date::date,
+      m.end_date::date,
+      COALESCE(v_link.team_id, m.team_id),
       jsonb_build_object(
-        'id', id, 'name', name,
-        'start_date', start_date, 'end_date', end_date,
-        'match_date', match_date, 'rival', rival, 'home_away', home_away
+        'id', m.id, 'name', m.name,
+        'start_date', m.start_date, 'end_date', m.end_date,
+        'match_date', m.match_date, 'match_time', m.match_time,
+        'rival', m.rival, 'home_away', m.home_away, 'stadium', m.stadium
       )
-    INTO v_date_from, v_date_to, v_mc
-    FROM microcycles WHERE id = v_link.mc_id;
+    INTO v_date_from, v_date_to, v_team_id, v_mc
+    FROM microcycles m WHERE m.id = v_link.mc_id;
   ELSIF v_link.week_start IS NOT NULL THEN
     v_date_from := v_link.week_start;
     v_date_to   := v_link.week_start + 6;
@@ -3738,55 +3748,86 @@ BEGIN
     v_date_to   := CURRENT_DATE + 30;
   END IF;
 
-  -- Club info (non-sensitive fields only)
-  SELECT jsonb_build_object('name', name, 'logo_url', logo_url)
-    INTO v_club FROM clubs WHERE id = v_link.club_id;
+  -- Microciclo borrado después de generar el link: sin rango no hay nada que mostrar.
+  IF v_date_from IS NULL OR v_date_to IS NULL THEN
+    RETURN jsonb_build_object('error', 'invalid_token');
+  END IF;
 
-  -- Collect events visible to players, from both tables
-  SELECT jsonb_agg(row ORDER BY (row->>'event_date'), (row->>'start_time') NULLS LAST)
+  -- Club info (non-sensitive fields only)
+  SELECT jsonb_build_object(
+           'name', c.name, 'short_name', c.short_name,
+           'logo_url', c.logo_url, 'primary_color', c.primary_color,
+           'sport', c.sport)
+    INTO v_club FROM clubs c WHERE c.id = v_link.club_id;
+
+  SELECT jsonb_build_object('id', t.id, 'name', t.name)
+    INTO v_team FROM teams t WHERE t.id = v_team_id;
+
+  -- Collect events visible to players, from both tables.
+  -- Ordenado en columnas reales (no sobre el texto del jsonb) para que la hora respete
+  -- NULLS LAST y el desempate use el orden manual del día.
+  SELECT jsonb_agg(sub.row ORDER BY sub.d, sub.t NULLS LAST, sub.so)
     INTO v_events
     FROM (
       -- calendar_events
-      SELECT jsonb_build_object(
-        'id',               e.id::text,
-        'title',            e.title,
-        'event_type',       e.type,
-        'event_date',       e.date::text,
-        'start_time',       e.start_time,
-        'duration_minutes', e.duration_minutes,
-        'location',         e.location,
-        'opponent',         e.opponent,
-        'home_away',        e.home_away,
-        'competition',      e.competition
-      ) AS row
+      SELECT e.date AS d, e.start_time AS t, COALESCE(e.sort_order, 0) AS so,
+        jsonb_build_object(
+          'id',               e.id::text,
+          'source',           'event',
+          'title',            e.title,
+          'event_type',       e.type,
+          'event_date',       e.date::text,
+          'start_time',       e.start_time,
+          'end_time',         e.end_time,
+          'duration_minutes', e.duration_minutes,
+          'location',         e.location,
+          'notes',            e.notes,
+          'opponent',         e.opponent,
+          'home_away',        e.home_away,
+          'competition',      e.competition,
+          'crest_url',        e.rival_crest_url,
+          'md',               e.match_day_offset,
+          'partial',          (e.player_ids IS NOT NULL AND array_length(e.player_ids, 1) > 0)
+        ) AS row
       FROM calendar_events e
       WHERE e.club_id = v_link.club_id
         AND 'players' = ANY(COALESCE(e.visible_to, ARRAY['staff']))
         AND e.date >= v_date_from
         AND e.date <= v_date_to
+        AND (v_team_id IS NULL OR e.team_id = v_team_id)
       UNION ALL
-      -- training_sessions
-      SELECT jsonb_build_object(
-        'id',               t.id::text,
-        'title',            t.title,
-        'event_type',       t.session_type,
-        'event_date',       t.session_date::text,
-        'start_time',       t.session_time,
-        'duration_minutes', t.duration,
-        'location',         NULL,
-        'opponent',         NULL,
-        'home_away',        NULL,
-        'competition',      NULL
-      ) AS row
+      -- training_sessions. Las notas NO se exponen: son de planificación interna, a
+      -- diferencia de las de un evento, que el staff escribe sabiendo quién lo ve.
+      SELECT t.session_date, t.session_time, COALESCE(t.sort_order, 0),
+        jsonb_build_object(
+          'id',               t.id::text,
+          'source',           'session',
+          'title',            COALESCE(NULLIF(t.title, ''), t.session_label),
+          'event_type',       t.session_type,
+          'event_date',       t.session_date::text,
+          'start_time',       t.session_time,
+          'end_time',         t.end_time,
+          'duration_minutes', t.duration,
+          'location',         t.location,
+          'notes',            NULL,
+          'opponent',         NULL,
+          'home_away',        NULL,
+          'competition',      NULL,
+          'crest_url',        NULL,
+          'md',               t.match_day_offset,
+          'partial',          false
+        )
       FROM training_sessions t
       WHERE t.club_id = v_link.club_id
         AND 'players' = ANY(COALESCE(t.visible_to, ARRAY['staff']))
         AND t.session_date >= v_date_from
         AND t.session_date <= v_date_to
+        AND (v_team_id IS NULL OR t.team_id = v_team_id)
     ) sub;
 
   RETURN jsonb_build_object(
     'club',       v_club,
+    'team',       v_team,
     'mc',         v_mc,
     'date_from',  v_date_from,
     'date_to',    v_date_to,
@@ -8095,4 +8136,137 @@ end $$;
 drop trigger if exists training_sessions_set_updated_at on public.training_sessions;
 create trigger training_sessions_set_updated_at
   before update on public.training_sessions
+  for each row execute function public.set_updated_at();
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- LIGA INTERNA (prototipo · flag de club `internal_league`)
+-- Competencia entre jugadores dentro del entrenamiento: cada tarea competitiva
+-- reparte 3/1/0 a los integrantes del grupo ganador / empatado / perdedor, y a
+-- fin de mes los últimos le pagan una comida a los primeros.
+--
+-- Tres tablas, un nivel cada una:
+--   league_seasons  — el mes (uno por equipo). Cerrarlo congela la tabla.
+--   league_events   — un enfrentamiento. Ligado a un session_exercises (la tarea
+--                     del Daily Planning) o suelto, para lo que se arma en el campo.
+--   league_results  — una fila POR JUGADOR por evento. Materializada a propósito:
+--                     así se puede corregir a uno solo sin tocar a los demás.
+--
+-- `league_events.groups` es un SNAPSHOT de session_exercises.player_groups al
+-- momento de cargar el resultado. Si mañana alguien reedita los grupos de esa
+-- tarea, la liga no se mueve: lo que pasó, pasó.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.league_seasons (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  name text not null,
+  start_date date not null,
+  end_date date not null,
+  status text default 'open'::text not null,
+  -- Fracción de eventos del mes que hay que jugar para entrar a la tabla. El que
+  -- no llega aparece "sin clasificar": el lesionado no baja por ausencia.
+  min_participation numeric(3,2) default 0.60 not null,
+  points_win smallint default 3 not null,
+  points_draw smallint default 1 not null,
+  points_loss smallint default 0 not null,
+  -- Link público para los jugadores (Edge Function con service role; RLS sigue cerrada).
+  share_token uuid default gen_random_uuid() not null,
+  shared boolean default false not null,
+  closed_at timestamp with time zone,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint league_seasons_pkey primary key (id),
+  constraint league_seasons_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text]))),
+  constraint league_seasons_dates_check CHECK ((end_date >= start_date)),
+  constraint league_seasons_min_part_check CHECK ((min_participation >= 0 AND min_participation <= 1)),
+  constraint league_seasons_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint league_seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE
+);
+-- Un mes = una temporada por equipo (el upsert del cliente se apoya en este unique).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_league_seasons_team_start ON public.league_seasons USING btree (team_id, start_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_league_seasons_share_token ON public.league_seasons USING btree (share_token);
+CREATE INDEX IF NOT EXISTS idx_league_seasons_club_team ON public.league_seasons USING btree (club_id, team_id, start_date DESC);
+
+create table if not exists public.league_events (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  season_id uuid not null,
+  event_date date not null,
+  -- NULL = enfrentamiento suelto (los grupos se armaron en el campo, no en la app).
+  session_exercise_id uuid,
+  title text,
+  groups jsonb default '[]'::jsonb not null,
+  created_by uuid,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint league_events_pkey primary key (id),
+  constraint league_events_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint league_events_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
+  constraint league_events_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.league_seasons(id) ON DELETE CASCADE,
+  -- Se borra la tarea del plan → el resultado sobrevive como enfrentamiento suelto.
+  constraint league_events_session_exercise_id_fkey FOREIGN KEY (session_exercise_id) REFERENCES public.session_exercises(id) ON DELETE SET NULL
+);
+-- Una tarea del plan puntúa una sola vez.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_league_events_session_exercise ON public.league_events USING btree (session_exercise_id) WHERE (session_exercise_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_league_events_season_date ON public.league_events USING btree (season_id, event_date);
+CREATE INDEX IF NOT EXISTS idx_league_events_club_team_date ON public.league_events USING btree (club_id, team_id, event_date);
+
+create table if not exists public.league_results (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  season_id uuid not null,
+  event_id uuid not null,
+  player_id uuid not null,
+  group_id text,
+  outcome text not null,
+  points smallint default 0 not null,
+  -- Arqueros: con rotación no puntúan por el resultado del equipo sino por goles
+  -- recibidos comparados entre ellos (menos goles gana, empatados en goles empatan).
+  goals_against smallint,
+  is_keeper boolean default false not null,
+  -- Corregido a mano desde el modal: un recálculo del grupo no lo pisa.
+  is_manual boolean default false not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint league_results_pkey primary key (id),
+  constraint league_results_outcome_check CHECK ((outcome = ANY (ARRAY['win'::text, 'draw'::text, 'loss'::text]))),
+  constraint league_results_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint league_results_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
+  constraint league_results_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.league_seasons(id) ON DELETE CASCADE,
+  constraint league_results_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.league_events(id) ON DELETE CASCADE,
+  constraint league_results_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_league_results_event_player ON public.league_results USING btree (event_id, player_id);
+CREATE INDEX IF NOT EXISTS idx_league_results_season_player ON public.league_results USING btree (season_id, player_id);
+
+-- RLS: mismo predicado que tactical_objectives — staff del club, acotado al equipo.
+alter table public.league_seasons enable row level security;
+create policy "league_seasons_scoped" on public.league_seasons as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.league_events enable row level security;
+create policy "league_events_scoped" on public.league_events as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.league_results enable row level security;
+create policy "league_results_scoped" on public.league_results as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+drop trigger if exists league_seasons_set_updated_at on public.league_seasons;
+create trigger league_seasons_set_updated_at
+  before update on public.league_seasons
+  for each row execute function public.set_updated_at();
+drop trigger if exists league_events_set_updated_at on public.league_events;
+create trigger league_events_set_updated_at
+  before update on public.league_events
+  for each row execute function public.set_updated_at();
+drop trigger if exists league_results_set_updated_at on public.league_results;
+create trigger league_results_set_updated_at
+  before update on public.league_results
   for each row execute function public.set_updated_at();

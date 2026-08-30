@@ -500,7 +500,7 @@ const UPCOMING_FILTER_GROUPS = [
   { label:'Match',     key:'calendar.grp_match',     types:['match'] },
   { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner','snack'] },
   { label:'Logistics', key:'calendar.grp_logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
-  { label:'Other',     key:'calendar.grp_other',     types:['press','medical_check','physio','scouting','video_session','meeting','evaluation','day_off','other'] },
+  { label:'Other',     key:'calendar.grp_other',     types:['prevention','press','medical_check','physio','scouting','video_session','meeting','evaluation','day_off','other'] },
 ];
 const UPCOMING_ALL_TYPES     = UPCOMING_FILTER_GROUPS.flatMap(g => g.types);
 const UPCOMING_DEFAULT_HIDDEN = new Set(['breakfast','lunch','dinner','snack']);
@@ -537,6 +537,7 @@ const _UPCOMING_TYPE_KEYS = {
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
+  prevention:'calendar.type_prevention',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting',
   day_off:'calendar.type_day_off', meeting:'calendar.type_meeting', evaluation:'calendar.type_evaluation', video_session:'calendar.type_video_session',
 };
@@ -867,6 +868,10 @@ async function showImportPreview(fixtures) {
 })();
 
 // ── Share with players ────────────────────────────────────────
+// El link es por microciclo Y por equipo: un mismo MC puede estar compartido con varias
+// categorías y cada una tiene que ver solo su agenda. Los links viejos se guardaron sin
+// team_id, así que también valen para el equipo activo (la RPC los acota por el equipo
+// del microciclo) — por eso el filtro acepta el equipo actual o nulo.
 async function loadShareLink() {
   if (!_clubId) return;
   const mc = _allMCs[_mcIdx];
@@ -877,6 +882,7 @@ async function loadShareLink() {
     .eq('scope', 'players')
     .eq('revoked', false)
     .eq('mc_id', mc.id)
+    .or(_activeTeamId ? `team_id.eq.${_activeTeamId},team_id.is.null` : 'team_id.is.null')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -926,7 +932,7 @@ async function generateShareLink() {
   if (!mc || !_clubId) return;
   const token = crypto.randomUUID();
   const { data, error } = await window.sb.from('share_links').insert({
-    club_id: _clubId, scope: 'players', token, mc_id: mc.id,
+    club_id: _clubId, scope: 'players', token, mc_id: mc.id, team_id: _activeTeamId || null,
   }).select().single();
   if (error) { showCalToast(tt('calendar.error_prefix','Error: {msg}',{msg:error.message})); return; }
   _activeShareLink = data;
@@ -1441,7 +1447,7 @@ function dsReopenKitPop(id){
   const pop = document.querySelector(`#dsEditor .ds-kitpop[data-kitpop="${id}"]`);
   if (pop){ pop.hidden = false; try { pop.scrollIntoView({ block:'nearest' }); } catch(_){} }
 }
-function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',prevention:'gym',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
 // Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
 const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun', snack:'snack' };
 function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
