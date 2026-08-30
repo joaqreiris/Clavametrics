@@ -5,10 +5,11 @@
    de filtros, sin botones. El layout es el que armó el usuario en su dashboard
    (mismas posiciones y tamaños), porque ese orden ES la lectura que quiso darle.
 
-   Motor: html2canvas + jsPDF, el mismo camino ya probado en Daily Planning
-   (assets/pages/daily-planning.js · dpExportPDF): se captura una hoja armada
-   aparte y se corta en páginas por límites seguros, de modo que una card nunca
-   queda partida al medio.
+   El PDF se COMPONE con jsPDF (texto vectorial + la imagen de cada canvas de
+   Chart.js), no se captura la pantalla: html2canvas re-resuelve el CSS de la app
+   y dibuja los textos chicos casi invisibles. jsPDF se descarga recién al pulsar
+   Exportar, para no meter un <script> bloqueante en el arranque de la página.
+   El botón Imprimir sí usa una hoja HTML — ahí pinta el navegador y se ve bien.
    ──────────────────────────────────────────────────────────────────────── */
 (function () {
   'use strict';

@@ -1164,6 +1164,14 @@
     // que reload() corra con el equipo resuelto.
     const _mcTeamOk = m => m.team_id == null || (!!_gpTeam && String(m.team_id) === String(_gpTeam));
     const mcs = (_mcsRaw || []).filter(_mcTeamOk);
+    // Fallo silencioso clásico: si el equipo todavía no se resolvió, el filtro de arriba descarta
+    // TODOS los microciclos del club y el usuario ve «No club data yet» + la columna Microcycle en
+    // «—», sin ningún error. Queda dicho en consola para reconocerlo de una (el reload() con el
+    // equipo ya resuelto lo repara solo).
+    if (!mcs.length && (_mcsRaw || []).length) {
+      console.warn(`[gpFilterBar] ${_mcsRaw.length} microciclo(s) del club descartados: equipo activo`
+        + ` sin resolver (_gpTeam=${_gpTeam}). Se repuebla en el próximo reload().`);
+    }
     // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
     // Dedup: la tabla `seasons` NO tiene unique constraint y se crean filas con el mismo
     // nombre desde varios lados (Annual Planner, el "New season" de GPS, o una por equipo) →

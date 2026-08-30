@@ -1591,10 +1591,9 @@
 <script src="assets/gps-vs-session.js"></script>
 
 <script src="assets/pages/gps-analysis-filterbar.js" defer></script>
-<!-- Informe PDF de las cards (defer: corre después del DOM y de la filter bar, de la que lee
-     los filtros aplicados). Las librerías van sin defer, como en Daily Planning. -->
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<!-- Informe PDF de las cards. jsPDF NO se carga acá: la baja gps-export.js al pulsar Exportar
+     (loadLib). Dos <script> de CDN bloqueantes en medio del boot retrasan todos los defer y
+     alteran el arranque de la filter bar, que tiene una carrera conocida con el equipo activo. -->
 <script src="assets/pages/gps-export.js" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
