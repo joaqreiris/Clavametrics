@@ -8145,17 +8145,17 @@ create trigger training_sessions_set_updated_at
 -- fin de mes los últimos le pagan una comida a los primeros.
 --
 -- Tres tablas, un nivel cada una:
---   league_seasons  — el mes (uno por equipo). Cerrarlo congela la tabla.
---   league_events   — un enfrentamiento. Ligado a un session_exercises (la tarea
+--   internal_league_seasons  — el mes (uno por equipo). Cerrarlo congela la tabla.
+--   internal_league_events   — un enfrentamiento. Ligado a un session_exercises (la tarea
 --                     del Daily Planning) o suelto, para lo que se arma en el campo.
---   league_results  — una fila POR JUGADOR por evento. Materializada a propósito:
+--   internal_league_results  — una fila POR JUGADOR por evento. Materializada a propósito:
 --                     así se puede corregir a uno solo sin tocar a los demás.
 --
--- `league_events.groups` es un SNAPSHOT de session_exercises.player_groups al
+-- `internal_league_events.groups` es un SNAPSHOT de session_exercises.player_groups al
 -- momento de cargar el resultado. Si mañana alguien reedita los grupos de esa
 -- tarea, la liga no se mueve: lo que pasó, pasó.
 -- ─────────────────────────────────────────────────────────────────────────────
-create table if not exists public.league_seasons (
+create table if not exists public.internal_league_seasons (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   team_id uuid not null,
@@ -8176,19 +8176,19 @@ create table if not exists public.league_seasons (
   created_by uuid,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint league_seasons_pkey primary key (id),
-  constraint league_seasons_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text]))),
-  constraint league_seasons_dates_check CHECK ((end_date >= start_date)),
-  constraint league_seasons_min_part_check CHECK ((min_participation >= 0 AND min_participation <= 1)),
-  constraint league_seasons_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
-  constraint league_seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE
+  constraint internal_league_seasons_pkey primary key (id),
+  constraint internal_league_seasons_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text]))),
+  constraint internal_league_seasons_dates_check CHECK ((end_date >= start_date)),
+  constraint internal_league_seasons_min_part_check CHECK ((min_participation >= 0 AND min_participation <= 1)),
+  constraint internal_league_seasons_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint internal_league_seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE
 );
 -- Un mes = una temporada por equipo (el upsert del cliente se apoya en este unique).
-CREATE UNIQUE INDEX IF NOT EXISTS uq_league_seasons_team_start ON public.league_seasons USING btree (team_id, start_date);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_league_seasons_share_token ON public.league_seasons USING btree (share_token);
-CREATE INDEX IF NOT EXISTS idx_league_seasons_club_team ON public.league_seasons USING btree (club_id, team_id, start_date DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_internal_league_seasons_team_start ON public.internal_league_seasons USING btree (team_id, start_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_internal_league_seasons_share_token ON public.internal_league_seasons USING btree (share_token);
+CREATE INDEX IF NOT EXISTS idx_internal_league_seasons_club_team ON public.internal_league_seasons USING btree (club_id, team_id, start_date DESC);
 
-create table if not exists public.league_events (
+create table if not exists public.internal_league_events (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   team_id uuid not null,
@@ -8201,19 +8201,19 @@ create table if not exists public.league_events (
   created_by uuid,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint league_events_pkey primary key (id),
-  constraint league_events_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
-  constraint league_events_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
-  constraint league_events_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.league_seasons(id) ON DELETE CASCADE,
+  constraint internal_league_events_pkey primary key (id),
+  constraint internal_league_events_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint internal_league_events_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
+  constraint internal_league_events_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.internal_league_seasons(id) ON DELETE CASCADE,
   -- Se borra la tarea del plan → el resultado sobrevive como enfrentamiento suelto.
-  constraint league_events_session_exercise_id_fkey FOREIGN KEY (session_exercise_id) REFERENCES public.session_exercises(id) ON DELETE SET NULL
+  constraint internal_league_events_session_exercise_id_fkey FOREIGN KEY (session_exercise_id) REFERENCES public.session_exercises(id) ON DELETE SET NULL
 );
 -- Una tarea del plan puntúa una sola vez.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_league_events_session_exercise ON public.league_events USING btree (session_exercise_id) WHERE (session_exercise_id IS NOT NULL);
-CREATE INDEX IF NOT EXISTS idx_league_events_season_date ON public.league_events USING btree (season_id, event_date);
-CREATE INDEX IF NOT EXISTS idx_league_events_club_team_date ON public.league_events USING btree (club_id, team_id, event_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_internal_league_events_session_exercise ON public.internal_league_events USING btree (session_exercise_id) WHERE (session_exercise_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_internal_league_events_season_date ON public.internal_league_events USING btree (season_id, event_date);
+CREATE INDEX IF NOT EXISTS idx_internal_league_events_club_team_date ON public.internal_league_events USING btree (club_id, team_id, event_date);
 
-create table if not exists public.league_results (
+create table if not exists public.internal_league_results (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   team_id uuid not null,
@@ -8231,42 +8231,42 @@ create table if not exists public.league_results (
   is_manual boolean default false not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint league_results_pkey primary key (id),
-  constraint league_results_outcome_check CHECK ((outcome = ANY (ARRAY['win'::text, 'draw'::text, 'loss'::text]))),
-  constraint league_results_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
-  constraint league_results_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
-  constraint league_results_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.league_seasons(id) ON DELETE CASCADE,
-  constraint league_results_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.league_events(id) ON DELETE CASCADE,
-  constraint league_results_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE CASCADE
+  constraint internal_league_results_pkey primary key (id),
+  constraint internal_league_results_outcome_check CHECK ((outcome = ANY (ARRAY['win'::text, 'draw'::text, 'loss'::text]))),
+  constraint internal_league_results_club_id_fkey FOREIGN KEY (club_id) REFERENCES public.clubs(id) ON DELETE CASCADE,
+  constraint internal_league_results_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE,
+  constraint internal_league_results_season_id_fkey FOREIGN KEY (season_id) REFERENCES public.internal_league_seasons(id) ON DELETE CASCADE,
+  constraint internal_league_results_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.internal_league_events(id) ON DELETE CASCADE,
+  constraint internal_league_results_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_league_results_event_player ON public.league_results USING btree (event_id, player_id);
-CREATE INDEX IF NOT EXISTS idx_league_results_season_player ON public.league_results USING btree (season_id, player_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_internal_league_results_event_player ON public.internal_league_results USING btree (event_id, player_id);
+CREATE INDEX IF NOT EXISTS idx_internal_league_results_season_player ON public.internal_league_results USING btree (season_id, player_id);
 
 -- RLS: mismo predicado que tactical_objectives — staff del club, acotado al equipo.
-alter table public.league_seasons enable row level security;
-create policy "league_seasons_scoped" on public.league_seasons as permissive for all to authenticated
+alter table public.internal_league_seasons enable row level security;
+create policy "internal_league_seasons_scoped" on public.internal_league_seasons as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
-alter table public.league_events enable row level security;
-create policy "league_events_scoped" on public.league_events as permissive for all to authenticated
+alter table public.internal_league_events enable row level security;
+create policy "internal_league_events_scoped" on public.internal_league_events as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
-alter table public.league_results enable row level security;
-create policy "league_results_scoped" on public.league_results as permissive for all to authenticated
+alter table public.internal_league_results enable row level security;
+create policy "internal_league_results_scoped" on public.internal_league_results as permissive for all to authenticated
   using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
   with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 
-drop trigger if exists league_seasons_set_updated_at on public.league_seasons;
-create trigger league_seasons_set_updated_at
-  before update on public.league_seasons
+drop trigger if exists internal_league_seasons_set_updated_at on public.internal_league_seasons;
+create trigger internal_league_seasons_set_updated_at
+  before update on public.internal_league_seasons
   for each row execute function public.set_updated_at();
-drop trigger if exists league_events_set_updated_at on public.league_events;
-create trigger league_events_set_updated_at
-  before update on public.league_events
+drop trigger if exists internal_league_events_set_updated_at on public.internal_league_events;
+create trigger internal_league_events_set_updated_at
+  before update on public.internal_league_events
   for each row execute function public.set_updated_at();
-drop trigger if exists league_results_set_updated_at on public.league_results;
-create trigger league_results_set_updated_at
-  before update on public.league_results
+drop trigger if exists internal_league_results_set_updated_at on public.internal_league_results;
+create trigger internal_league_results_set_updated_at
+  before update on public.internal_league_results
   for each row execute function public.set_updated_at();

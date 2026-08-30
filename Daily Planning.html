@@ -532,7 +532,12 @@
         <div class="dp-card-h">
           <h3 data-i18n="daily_planning.field_exercises">Field exercises</h3>
           <span class="ct" id="dpExCt">—</span>
+          <!-- Liga interna (flag internal_league): enfrentamiento armado en el campo, sin tarea del plan -->
+          <button class="cm-btn is-ghost is-sm no-print" id="dpLgNewBtn" style="height:26px;padding:0 9px;margin-left:10px;display:none" onclick="dpLgNewLoose()"><i class="ti ti-trophy" style="font-size:13px"></i><span data-i18n="league.new_loose">Field matchup</span></button>
           <span class="dp-gps-legend no-print" style="margin-left:auto" title="" data-i18n-attr="title:daily_planning.has_gps_short"><span class="dp-gps-dot"><i class="ti ti-check"></i></span><span data-i18n="daily_planning.gps_legend">has GPS data</span></span>
+        </div>
+        <div class="no-print" id="dpLgLoose" style="padding:0 16px">
+          <!-- Liga interna: enfrentamientos sueltos del día — populated by dpLgSyncDay() -->
         </div>
         <div class="dp-ex-grid" id="dpExGrid">
           <!-- Populated by loadSessionExercises() -->
@@ -665,6 +670,10 @@
 <div id="settings-host"></div>
 
 <script src="assets/pages/daily-planning.js" defer></script>
+<!-- Liga interna (prototipo · flag de club internal_league). Se carga después de la
+     página porque se engancha a sus grupos ya renderizados. -->
+<script src="assets/league.js" defer></script>
+<script src="assets/pages/daily-planning-league.js" defer></script>
 
 <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>

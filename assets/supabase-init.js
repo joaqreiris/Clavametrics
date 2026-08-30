@@ -235,6 +235,15 @@
         },
       },
     },
+    // Liga interna: competencia entre jugadores en las tareas del entrenamiento.
+    // Prototipo — encendido por override solo para el club que lo está probando.
+    internal_league: {
+      enabled: false,
+      config: {
+        points: { win: 3, draw: 1, loss: 0 },
+        min_participation: 0.60,   // fracción de eventos del mes para entrar a la tabla
+      },
+    },
   };
   let _flagsPromise = null;
   let _flagsMap     = null;   // flag_key → { enabled, config } — per-club OVERRIDES only

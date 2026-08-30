@@ -303,7 +303,10 @@ function dpExGroupsRow(e){
   }).join('');
   const canCopy = _dpTasksWithGroups(e.id).length > 0;
   const actions = `<div class="dp-exg-actions"><button class="dp-exp-add" onclick="dpExAddGroup('${e.id}')">＋ ${tt('daily_planning.add_group','Add group')}</button>${canCopy ? `<button class="dp-exp-add" onclick="dpOpenCopyGroups('${e.id}',this)"><i class="ti ti-copy" style="font-size:12px;vertical-align:-1px"></i> ${tt('daily_planning.copy_groups','Copy from…')}</button>` : ''}</div>`;
-  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}${actions}</div>`;
+  // Liga interna (prototipo, flag internal_league): marcar quién ganó esta tarea.
+  // Devuelve '' si el club no tiene la liga o la tarea no tiene dos grupos.
+  const league = window.dpLgRow ? window.dpLgRow(e) : '';
+  return `<div class="dp-ex-players no-print" data-exp="${e.id}"><span class="lbl">${tt('daily_planning.groups_label','Groups')}</span>${rows}${actions}${league}</div>`;
 }
 // Other tasks in this session that already have at least one non-empty group.
 function _dpAllTasks(){ return [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ]; }
@@ -1075,7 +1078,14 @@ function renderExerciseList(exercises) {
   }
   dpInitReorder();
   dpPaintGpsBadges();
+  if (window.dpLgSyncDay) window.dpLgSyncDay();   // liga interna: resultados del día
 }
+
+// Contexto que necesita el módulo de la liga interna (assets/pages/daily-planning-league.js).
+// Puente explícito para no depender del orden de evaluación de las variables de este archivo.
+window._dpLgCtx = function () {
+  return { clubId: _dpClubId, teamId: _dpTeamId, date: _dpCurrentDate, readOnly: !!window._dpReadOnly };
+};
 
 // Next position = end of the list (max existing position + 1) so new cards always
 // append to the right, never land mid-list when positions aren't contiguous.
