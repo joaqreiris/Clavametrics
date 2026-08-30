@@ -161,10 +161,15 @@ test.describe('GPS · informe PDF', () => {
     ]);
     // Nombre derivado del título + la fecha del informe, y el modal se cierra al terminar.
     expect(dl.suggestedFilename()).toMatch(/informe-de-prueba\.pdf$/);
-    // Un PDF con los gráficos dentro pesa; si saliera vacío (captura fallida) rondaría los pocos KB.
-    const path = await dl.path();
-    const { size } = await (await import('node:fs/promises')).stat(path);
-    expect(size).toBeGreaterThan(20_000);
+    // El informe se compone vectorial (texto + la imagen de cada gráfico), así que pesa poco:
+    // lo que hay que verificar es que sea un PDF válido y que haya dibujado TODAS las cards.
+    const fs = await import('node:fs/promises');
+    const buf = await fs.readFile(await dl.path());
+    expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+    const last = await page.evaluate(() => window.__gxLast);
+    expect(last.pages).toBeGreaterThan(0);
+    expect(last.cards).toBe(6);                    // las 6 marcadas (la 7ª va sin datos)
+    expect(last.kinds.chart).toBeGreaterThan(0);   // y los gráficos entraron como tales
     await expect(page.locator('#gxBody')).toHaveCount(0);
     // La hoja se desmonta: no queda basura en el DOM de la página.
     expect(await page.evaluate(() => document.getElementById('gpPrintSheet')?.innerHTML || '')).toBe('');

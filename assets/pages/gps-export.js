@@ -23,6 +23,10 @@
   // en escala 1:1 (son bitmaps: estirarlos los deja borrosos) y conserva la proporción de las cards.
   const SHEET_MIN = 900, SHEET_MAX = 1600;
   const SHEET_PAD = 24;   // padding lateral de la hoja (coincide con .gps-sheet en el CSS)
+  // Fuera de pantalla pero POR ENCIMA de todo: con z-index negativo la hoja queda detrás del fondo
+  // del body y la captura sale lavada (se fotografía ese fondo encima). pointer-events:none para
+  // que jamás intercepte un clic mientras se genera.
+  const OFFSCREEN = 'display:block;position:fixed;left:-10000px;top:0;z-index:2147483000;pointer-events:none';
 
   // ── Contexto del informe ────────────────────────────────────────────────
   const DASH_NAMES = { ind: 'Player Week Report', grp: 'Session Control',
@@ -147,6 +151,7 @@
       row.className = 'gps-band';
       band.items.forEach(it => {
         const clone = it.c.el.cloneNode(true);
+        bakeStyles(it.c.el, clone);      // primero: scrub borra nodos y desalinearía el recorrido
         copyCanvases(it.c.el, clone);
         scrub(clone);
         // Ancho proporcional a las columnas que ocupaba (flex-grow) y su alto real del dashboard.
@@ -165,7 +170,65 @@
       });
       cardsHost.appendChild(row);
     });
-    return host.querySelector('.gps-sheet');
+    const sheet = host.querySelector('.gps-sheet');
+    inlineThemeVars(sheet);
+    return sheet;
+  }
+
+  // html2canvas clona el documento en un iframe y ahí las custom properties del :root (los tokens
+  // --cm-*) NO llegan: todo lo que la app pinta con var(--cm-fg-strong) o var(--cm-border) sale
+  // fantasma y los acentos caen a su valor por defecto (las cards salían lavadas con borde verde).
+  // Se copian sobre la hoja, y los tokens de superficie se fijan CLAROS para que el informe sea
+  // imprimible aunque se esté trabajando en tema oscuro.
+  const LIGHT = {
+    '--cm-bg': '#FFFFFF', '--cm-bg-soft': '#FAFAF9', '--cm-bg-sunk': '#F4F4F2',
+    '--cm-surface': '#FFFFFF', '--cm-surface-2': '#FAFAF9',
+    '--cm-fg': '#0A0A0A', '--cm-fg-strong': '#000000', '--cm-fg-muted': '#6B7280', '--cm-fg-faint': '#9CA3AF',
+    '--cm-border': '#E5E7EB', '--cm-border-soft': '#EFEFED', '--cm-border-strong': '#D4D4D2',
+  };
+  function inlineThemeVars(sheet) {
+    const cs = getComputedStyle(document.documentElement);
+    try {
+      for (const name of cs) {
+        if (name.startsWith('--cm-')) {
+          const v = cs.getPropertyValue(name);
+          if (v) sheet.style.setProperty(name, v.trim());
+        }
+      }
+    } catch (_) { /* navegador que no itera custom props → quedan los del bloque claro */ }
+    Object.entries(LIGHT).forEach(([k, v]) => sheet.style.setProperty(k, v));
+  }
+
+  // html2canvas re-resuelve el CSS en un iframe propio y ahí las clases + tokens de la app no
+  // llegan igual: las cards salían fantasma (títulos casi invisibles, bordes verdes) mientras el
+  // encabezado —escrito con colores fijos— salía perfecto. En vez de pelear con eso, el clon se
+  // vuelve AUTOSUFICIENTE: se copian a estilo inline los valores ya computados del elemento real,
+  // que es lo que se ve en pantalla. Deja de importar qué CSS entienda el capturador.
+  const SAFE_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  const SAFE_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const BAKE = ['color', 'background-color', 'border-top-color', 'border-right-color',
+    'border-bottom-color', 'border-left-color', 'border-top-width', 'border-right-width',
+    'border-bottom-width', 'border-left-width', 'border-style', 'border-radius',
+    'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+    'text-align', 'text-transform', 'text-decoration-line', 'opacity'];
+  function bakeStyles(src, dst) {
+    const a = document.createTreeWalker(src, NodeFilter.SHOW_ELEMENT);
+    const b = document.createTreeWalker(dst, NodeFilter.SHOW_ELEMENT);
+    const pair = (o, c) => {
+      if (!o || !c) return;
+      const cs = getComputedStyle(o);
+      BAKE.forEach(k => { const v = cs.getPropertyValue(k); if (v) c.style.setProperty(k, v); });
+      // La fuente NO se copia: html2canvas re-carga las webfonts dentro de su propio iframe y
+      // mientras tanto dibuja el texto INVISIBLE (font-display: block). Con Geist las cards salían
+      // fantasma; con la pila del sistema el texto se dibuja siempre. Se respeta si es monoespaciada.
+      c.style.setProperty('font-family', /mono/i.test(cs.fontFamily) ? SAFE_MONO : SAFE_SANS);
+      // Los degradados y sombras no aportan al informe impreso y son la otra fuente de artefactos.
+      c.style.setProperty('background-image', 'none');
+      c.style.setProperty('box-shadow', 'none');
+    };
+    pair(src, dst);
+    let o = a.nextNode(), c = b.nextNode();
+    while (o && c) { pair(o, c); o = a.nextNode(); c = b.nextNode(); }
   }
 
   /** Pasa el contenido pintado de cada <canvas> del original a un <img> en el clon (mismo orden). */
@@ -225,68 +288,264 @@
     });
   }
 
-  async function exportPdf(opts) {
-    // Si el CDN falló al cargar la página (red lenta, bloqueo), se reintenta acá antes de rendirse.
-    await loadLib('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', () => !!window.html2canvas);
-    await loadLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
-    const html2canvas = window.html2canvas;
-    const jsPDF = window.jspdf.jsPDF;
+  // ── Composición del PDF ─────────────────────────────────────────────────
+  // NO se captura HTML: html2canvas re-resuelve el CSS de la app en un iframe propio y ahí los
+  // textos chicos salen fantasma (medido: el título de una card se dibujaba en gris 240 sobre
+  // blanco, mientras un texto de control salía negro). Se compone el informe directamente:
+  // los textos con pdf.text —vectoriales, nítidos a cualquier zoom y seleccionables— y cada
+  // gráfico con la imagen de SU canvas de Chart.js, que ya está pintado y no pasa por ningún
+  // intermediario. Sale más fiel, más liviano y sin depender de un capturador.
+  const PDF = {
+    M: 10, FOOT: 12, GAP: 4, PAD: 3,            // mm
+    fg: [15, 23, 42], muted: [100, 116, 139], faint: [148, 163, 184], line: [226, 232, 240],
+  };
+  const mmOf = (px, k) => px * k;
 
-    const host = sheetHost();
-    const sheet = buildSheet(opts);
-    host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
-    try {
-      await inlineImages(sheet);
-      await new Promise(r => setTimeout(r, 60));                 // deja asentar las imágenes recién puestas
+  function setFont(pdf, size, weight, color) {
+    pdf.setFont('helvetica', weight || 'normal');
+    pdf.setFontSize(size);
+    const c = color || PDF.fg;
+    pdf.setTextColor(c[0], c[1], c[2]);
+  }
+  /** Texto recortado a un ancho, con «…» — evita que un título largo pise al vecino. */
+  function clip(pdf, txt, wmm) {
+    let t = String(txt == null ? '' : txt).trim();
+    if (!t) return '';
+    if (pdf.getTextWidth(t) <= wmm) return t;
+    while (t.length > 1 && pdf.getTextWidth(t + '…') > wmm) t = t.slice(0, -1);
+    return t + '…';
+  }
 
-      const pdf = new jsPDF({ orientation: opts.orientation, unit: 'mm', format: 'a4', compress: true });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const M = 8, FOOT = 11, GAP = 3;                           // mm
-      const contentW = pageW - M * 2;
-      const usableH = pageH - M - FOOT;
-
-      // BLOQUE POR BLOQUE (encabezado, filtros, resumen y cada banda de cards) en vez de una única
-      // captura de toda la hoja: un dashboard largo genera un canvas que supera el máximo del
-      // navegador y html2canvas devuelve una imagen vacía o falla — ese era el error al exportar.
-      const blocks = [...sheet.children].filter(n => n.offsetHeight > 0);
-      const parts = [];
-      for (const b of blocks) {
-        if (b.classList.contains('gps-cards')) {
-          for (const band of b.children) if (band.offsetHeight > 0) parts.push(band);
-        } else parts.push(b);
-      }
-
-      let y = M, page = 1, drawn = 0;
-      for (const el of parts) {
-        let img;
-        try {
-          const c = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          img = { url: c.toDataURL('image/jpeg', 0.92), w: c.width, h: c.height };
-        } catch (e) {
-          console.warn('[gps export] bloque omitido:', e);        // una card rota no tira el informe
-          continue;
-        }
-        let hmm = (img.h / img.w) * contentW;
-        let wmm = contentW;
-        if (hmm > usableH - M) {                                  // bloque más alto que la hoja → se achica
-          const k = (usableH - M) / hmm;
-          hmm *= k; wmm *= k;
-        }
-        if (drawn && y + hmm > pageH - FOOT) { pdf.addPage(); page++; y = M; }
-        pdf.addImage(img.url, 'JPEG', M + (contentW - wmm) / 2, y, wmm, hmm);
-        y += hmm + GAP;
-        drawn++;
-      }
-      if (!drawn) throw new Error('no se pudo capturar ninguna card');
-
-      const total = pdf.internal.getNumberOfPages();
-      for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
-      pdf.save(fileName(opts));
-    } finally {
-      host.style.cssText = '';
-      host.innerHTML = '';
+  /** Encabezado del informe. Devuelve el y (mm) donde sigue el contenido. */
+  function drawHeader(pdf, opts, x, y, w) {
+    const right = x + w;
+    let textLeft = x;
+    if (opts.crestData) {
+      try { pdf.addImage(opts.crestData, 'PNG', x, y - 1, 11, 11); textLeft = x + 13; } catch (_) { /* sin escudo */ }
     }
+    setFont(pdf, 9, 'bold');
+    pdf.text(clip(pdf, opts.clubName, w * 0.28), textLeft, y + 5.5);
+
+    setFont(pdf, 14, 'bold');
+    pdf.text(clip(pdf, opts.title, w * 0.46), x + w / 2, y + 4, { align: 'center' });
+    if (opts.subtitle) {
+      setFont(pdf, 8.5, 'normal', PDF.muted);
+      pdf.text(clip(pdf, opts.subtitle, w * 0.46), x + w / 2, y + 8.5, { align: 'center' });
+    }
+    setFont(pdf, 6, 'normal', PDF.faint);
+    pdf.text(String(T('gps_analysis.export_date', 'Report date')).toUpperCase(), right, y + 1.5, { align: 'right' });
+    setFont(pdf, 9, 'bold');
+    pdf.text(opts.dateLabel || '', right, y + 6, { align: 'right' });
+
+    let yy = y + 12;
+    pdf.setDrawColor(15, 23, 42); pdf.setLineWidth(0.4);
+    pdf.line(x, yy, right, yy);
+    return yy + 5;
+  }
+
+  /** Bloque de filtros aplicados. Devuelve el nuevo y. */
+  function drawFilters(pdf, lines, x, y, w) {
+    if (!lines.length) return y;
+    const parts = lines.map(f => `${f.name}: ${f.values}`);
+    setFont(pdf, 7.5, 'normal', PDF.muted);
+    const wrapped = pdf.splitTextToSize(parts.join('   ·   '), w - PDF.PAD * 2 - 20);
+    const h = wrapped.length * 3.6 + 5;
+    pdf.setFillColor(248, 250, 252); pdf.setDrawColor(...PDF.line); pdf.setLineWidth(0.2);
+    pdf.roundedRect(x, y, w, h, 1.5, 1.5, 'FD');
+    setFont(pdf, 5.8, 'bold', PDF.faint);
+    pdf.text(String(T('gps_analysis.export_filters', 'Filters applied')).toUpperCase(), x + PDF.PAD, y + 4);
+    setFont(pdf, 7.5, 'normal', PDF.muted);
+    pdf.text(wrapped, x + PDF.PAD + 19, y + 4);
+    return y + h + PDF.GAP;
+  }
+
+  /** Qué hay adentro de una card, para saber cómo dibujarla. */
+  function cardKind(el) {
+    if (el.querySelector('canvas')) return 'chart';
+    if (el.querySelector('table')) return 'table';
+    if (el.querySelector('.gp-kpi')) return 'kpi';
+    return 'other';
+  }
+
+  /** Dibuja una card completa en (x,y) con ancho w; devuelve el alto usado en mm. */
+  async function drawCard(pdf, card, x, y, w, k) {
+    const el = card.el;
+    const hpx = el.getBoundingClientRect().height;
+    let h = Math.max(18, mmOf(hpx, k));
+
+    const ttl = el.querySelector('.gp-c-h .ttl');
+    const sub = el.querySelector('.gp-c-h .sub');
+    const headH = ttl ? 7 : 0;
+
+    // Marco
+    pdf.setDrawColor(...PDF.line); pdf.setLineWidth(0.2); pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(x, y, w, h, 1.5, 1.5, 'FD');
+
+    if (ttl) {
+      setFont(pdf, 9, 'bold');
+      const tw = pdf.getTextWidth(clip(pdf, ttl.textContent, w * 0.6));
+      pdf.text(clip(pdf, ttl.textContent, w * 0.6), x + PDF.PAD, y + 5);
+      if (sub && sub.textContent.trim()) {
+        setFont(pdf, 7, 'normal', PDF.muted);
+        pdf.text(clip(pdf, sub.textContent, w - tw - PDF.PAD * 3), x + PDF.PAD + tw + 2, y + 5);
+      }
+      pdf.setDrawColor(238, 242, 247);
+      pdf.line(x, y + headH, x + w, y + headH);
+    }
+
+    const bodyY = y + headH + 1.5;
+    const bodyH = h - headH - 3 - (card.note ? 6 : 0);
+    const kind = cardKind(el);
+
+    if (kind === 'chart') {
+      const cv = el.querySelector('canvas');
+      try {
+        const url = cv.toDataURL('image/png');
+        const r = cv.getBoundingClientRect();
+        // Encaja el gráfico en la caja libre respetando su proporción.
+        const boxW = w - PDF.PAD * 2, boxH = Math.max(8, bodyH);
+        const ar = (r.height || 1) / (r.width || 1);
+        let iw = boxW, ih = iw * ar;
+        if (ih > boxH) { ih = boxH; iw = ih / ar; }
+        pdf.addImage(url, 'PNG', x + (w - iw) / 2, bodyY, iw, ih);
+      } catch (e) { console.warn('[gps export] gráfico omitido:', e); }
+    } else if (kind === 'kpi') {
+      drawKpi(pdf, el, x, bodyY, w, bodyH);
+    } else if (kind === 'table') {
+      drawTable(pdf, el.querySelector('table'), x, bodyY, w, bodyH);
+    } else {
+      // Texto suelto (estados «elegí un jugador», leyendas): al menos se lee.
+      setFont(pdf, 8, 'normal', PDF.muted);
+      const txt = (el.querySelector('.gp-c-b')?.innerText || '').trim().split('\n').filter(Boolean).slice(0, 6).join(' · ');
+      if (txt) pdf.text(pdf.splitTextToSize(txt, w - PDF.PAD * 2), x + PDF.PAD, bodyY + 4);
+    }
+
+    if (card.note) {
+      const ny = y + h - 3.5;
+      pdf.setDrawColor(203, 213, 225); pdf.setLineWidth(0.5);
+      pdf.line(x + PDF.PAD, ny - 3, x + PDF.PAD, ny + 0.5);
+      setFont(pdf, 7.5, 'normal', PDF.muted);
+      pdf.text(clip(pdf, card.note, w - PDF.PAD * 2 - 2), x + PDF.PAD + 1.5, ny);
+    }
+    return h;
+  }
+
+  /** KPI: el número grande y su etiqueta, tal como se leen en pantalla. */
+  function drawKpi(pdf, el, x, y, w, h) {
+    const tiles = [...el.querySelectorAll('.gp-kpi')];
+    const list = tiles.length ? tiles : [el];
+    const cw = w / list.length;
+    list.forEach((t, i) => {
+      const v = (t.querySelector('.v')?.textContent || t.querySelector('.value')?.textContent || '').trim();
+      const l = (t.querySelector('.l')?.textContent || t.querySelector('.k')?.textContent || '').trim();
+      const cx = x + cw * i + cw / 2;
+      setFont(pdf, Math.min(18, Math.max(10, h * 0.42)), 'bold');
+      if (v) pdf.text(clip(pdf, v, cw - 4), cx, y + h / 2 + 1, { align: 'center' });
+      if (l) { setFont(pdf, 7, 'normal', PDF.muted); pdf.text(clip(pdf, l, cw - 4), cx, y + h / 2 + 6, { align: 'center' }); }
+    });
+  }
+
+  /** Tabla: se redibuja fila por fila (texto real, no una foto). */
+  function drawTable(pdf, table, x, y, w, h) {
+    if (!table) return;
+    const head = [...table.querySelectorAll('thead th')].map(t => t.innerText.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(td => td.innerText.trim()));
+    if (!head.length && !rows.length) return;
+    const cols = Math.max(head.length, rows[0]?.length || 0);
+    if (!cols) return;
+    const rowH = 4.2, avail = Math.max(0, h - 2);
+    const maxRows = Math.max(0, Math.floor(avail / rowH) - 1);
+    const cw = (w - PDF.PAD * 2) / cols;
+    let yy = y + 3.5;
+    if (head.length) {
+      setFont(pdf, 6.2, 'bold', PDF.muted);
+      head.forEach((t, i) => pdf.text(clip(pdf, t.toUpperCase(), cw - 1), x + PDF.PAD + cw * i, yy));
+      pdf.setDrawColor(...PDF.line); pdf.setLineWidth(0.2);
+      pdf.line(x + PDF.PAD, yy + 1.2, x + w - PDF.PAD, yy + 1.2);
+      yy += rowH;
+    }
+    rows.slice(0, maxRows).forEach((r, ri) => {
+      if (ri % 2) { pdf.setFillColor(250, 250, 249); pdf.rect(x + PDF.PAD - 0.5, yy - 3, w - PDF.PAD * 2 + 1, rowH, 'F'); }
+      setFont(pdf, 6.6, 'normal');
+      r.slice(0, cols).forEach((t, i) => pdf.text(clip(pdf, t, cw - 1), x + PDF.PAD + cw * i, yy));
+      yy += rowH;
+    });
+    if (rows.length > maxRows) {
+      setFont(pdf, 6.2, 'normal', PDF.faint);
+      pdf.text(T('gps_analysis.export_rows_more', '+{n} more rows', { n: rows.length - maxRows }), x + PDF.PAD, yy);
+    }
+  }
+
+  /** Escudo del club → data URI (jsPDF no acepta una URL remota). */
+  async function crestData(url) {
+    if (!url) return '';
+    try {
+      const resp = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+      if (!resp.ok) return '';
+      const blob = await resp.blob();
+      return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsDataURL(blob); });
+    } catch (_) { return ''; }
+  }
+
+  async function exportPdf(opts) {
+    await loadLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
+    const jsPDF = window.jspdf.jsPDF;
+    const pdf = new jsPDF({ orientation: opts.orientation, unit: 'mm', format: 'a4', compress: true });
+    const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+    const x0 = PDF.M, contentW = pageW - PDF.M * 2, bottom = pageH - PDF.FOOT;
+
+    opts.crestData = await crestData(opts.crest);
+    let y = drawHeader(pdf, opts, x0, PDF.M + 2, contentW);
+    if (opts.showFilters) y = drawFilters(pdf, filterLines(), x0, y, contentW);
+    if (opts.intro) {
+      setFont(pdf, 8.5, 'normal', [51, 65, 85]);
+      const lines = pdf.splitTextToSize(opts.intro, contentW);
+      pdf.text(lines, x0, y + 3);
+      y += lines.length * 4 + PDF.GAP;
+    }
+
+    // Escala px→mm tomada del ancho del grid, para que las cards guarden su proporción real.
+    const gridW = activeGrid()?.getBoundingClientRect().width || 1200;
+    const k = contentW / gridW;
+
+    for (const band of bandsOf(opts.cards)) {
+      const hs = band.map(c => Math.max(18, mmOf(c.el.getBoundingClientRect().height, k)));
+      const bandH = Math.max(...hs);
+      if (y + bandH > bottom && y > PDF.M + 2) { pdf.addPage(); y = PDF.M + 2; }
+      let cx = x0;
+      const totalW = band.reduce((n, c) => n + (isFinite(c.w) ? c.w : 12), 0);
+      for (const c of band) {
+        const cwCols = isFinite(c.w) ? c.w : 12;
+        const cw = (contentW - PDF.GAP * (band.length - 1)) * (cwCols / Math.max(totalW, cwCols));
+        await drawCard(pdf, c, cx, y, cw, k);
+        cx += cw + PDF.GAP;
+      }
+      y += bandH + PDF.GAP;
+    }
+
+    const total = pdf.internal.getNumberOfPages();
+    for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
+    // Resumen de lo que se dibujó — lo leen los tests y sirve para diagnosticar un informe raro.
+    window.__gxLast = { pages: total, cards: opts.cards.length,
+      kinds: opts.cards.reduce((a, c) => { const k = cardKind(c.el); a[k] = (a[k] || 0) + 1; return a; }, {}) };
+    pdf.save(fileName(opts));
+  }
+
+  /** Agrupa las cards elegidas en filas del dashboard (una sola, o dos lado a lado). */
+  function bandsOf(cards) {
+    const num = (el, key) => parseFloat(getComputedStyle(el).getPropertyValue(key));
+    const items = cards.map(c => ({ ...c, x: num(c.el, '--gp-x'), y: num(c.el, '--gp-y'),
+      w: num(c.el, '--gp-w'), h: num(c.el, '--gp-h') }));
+    const free = items.every(i => isFinite(i.x) && isFinite(i.y) && isFinite(i.w) && isFinite(i.h));
+    if (!free) return items.map(i => [i]);
+    items.sort((a, b) => a.y - b.y || a.x - b.x);
+    const out = [];
+    let end = -1;
+    items.forEach(it => {
+      if (out.length && it.y < end - 0.5) { out[out.length - 1].push(it); end = Math.max(end, it.y + it.h); }
+      else { out.push([it]); end = it.y + it.h; }
+    });
+    return out;
   }
 
   /** Pie de página VECTORIAL (no se pixela): marca a la izquierda, título al centro, página a la derecha. */
