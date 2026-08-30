@@ -1577,6 +1577,21 @@
   // ── API pública ─────────────────────────────────────────────────────────
   window.gpFilterBar = {
     getState,
+    // Filtros activos EN TEXTO, para explicar en un informe qué se está mirando.
+    // [{ key, name, values }] con los mismos labels que muestran los triggers de la barra
+    // (nombres de jugador / microciclo, no ids) y el rango de fechas ya formateado.
+    describeActive() {
+      const out = [];
+      DROPS.forEach(cfg => {
+        if (!isActive(cfg.key)) return;
+        const name = T(FILTER_LABELS[cfg.key] || cfg.placeholder);
+        if (cfg.key === 'date') { out.push({ key: cfg.key, name, values: dateLabel() }); return; }
+        const map = new Map((options[cfg.key] || []).map(o => [String(o.value), o.label]));
+        const vals = state[cfg.key].map(v => map.get(String(v)) || _rawLabel(v));
+        out.push({ key: cfg.key, name, values: vals.join(', ') });
+      });
+      return out;
+    },
     // Player options shown in the global filter (current roster ∪ anyone with GPS
     // data in this team's sessions). Reused by the per-card player picker.
     getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
