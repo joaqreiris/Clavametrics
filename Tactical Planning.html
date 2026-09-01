@@ -98,6 +98,9 @@
   .tp-week-scroll{overflow-x:auto;padding-bottom:4px}
   .tp-week-svg .seg:hover{opacity:.82}
   .tp-sec-t{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:0 0 10px}
+  .tp-sec-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .tp-sec-head .tp-seg{margin-left:auto}
+  .tp-seg-inline button{padding:5px 9px;font-size:11px}
   .tp-sec{margin-top:20px;padding-top:16px;border-top:1px dashed var(--cm-border)}
   .tp-sec:first-child{margin-top:0;padding-top:0;border-top:0}
 
@@ -171,9 +174,15 @@
   .tp-cat-obj .main{flex:1;min-width:0}
   .tp-cat-obj .nm{font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);overflow-wrap:anywhere}
   .tp-cat-obj .acts{display:flex;gap:2px;flex:none;align-self:flex-start}
-  .tp-cat-obj .mini{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:14px;padding:4px;border-radius:6px}
-  .tp-cat-obj .mini:hover{background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
-  .tp-cat-obj .mini.del:hover{color:var(--cm-danger)}
+  .tp-cat-obj .mini{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:14px;padding:4px;border-radius:6px;line-height:1}
+  .tp-cat-obj .mini:hover:not(:disabled){background:var(--cm-bg-soft);color:var(--cm-fg-strong)}
+  .tp-cat-obj .mini:disabled{opacity:.3;cursor:default}
+  .tp-cat-obj .mini.del:hover:not(:disabled){color:var(--cm-danger)}
+  /* subir/bajar: el orden del catálogo ES el orden del desplegable al planificar */
+  .tp-cat-obj .ord{display:flex;flex-direction:column;gap:1px;flex:none}
+  .tp-cat-obj .ord .mini{padding:1px 4px;font-size:12px}
+  .tp-cat-sub .ord{flex-direction:row;gap:0}
+  .tp-cat-sub .ord .mini{padding:2px 3px;font-size:12px}
   .tp-cat-subs{display:flex;flex-direction:column;gap:4px;margin-top:8px}
   .tp-cat-sub{display:flex;align-items:center;gap:8px;font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg);padding:5px 8px;border-radius:8px;background:var(--cm-bg-soft)}
   .tp-cat-sub .bull{width:5px;height:5px;border-radius:99px;background:var(--cm-fg-faint);flex:none}
@@ -432,6 +441,7 @@ let _tpMcs = [];                             // microcycles overlapping the visi
 let _tpSessDates = new Set();                // dates with a planned training session
 let _tpMatches = {};                         // date -> opponent
 let _tpRange = 'month', _tpOnlyDone = false;
+let _tpBreak = 'objective';                  // desglose del gráfico mensual: objetivo | subobjetivo
 let _tpSeason = null;                        // {start_date,end_date} | null
 let _tpModalDay = null, _tpEditId = null, _tpFormCat = 'offensive';
 let _tpCatalog = [];                         // catálogo objetivos + subobjetivos (2 niveles, por equipo)
@@ -516,7 +526,10 @@ async function tpLoadStats(){
   const [from, to] = tpRangeDates();
   let rows = [];
   if (!_tpTableMissing) {
-    const r = await window.sb.from('tactical_objectives').select('date,category,done')
+    // title + catalog_* son lo que permite desglosar por objetivo y por subobjetivo:
+    // title es el snapshot (sobrevive a que el catálogo cambie) y los catalog_* dan la
+    // agrupación estable cuando el objetivo del día salió del catálogo.
+    const r = await window.sb.from('tactical_objectives').select('date,category,done,title,catalog_objective_id,catalog_sub_id')
       .eq('club_id', _tpClubId).eq('team_id', _tpTeamId).gte('date', from).lte('date', to).limit(5000);
     if (r.error) { tpMissingTable(r.error); }
     rows = r.data || [];
@@ -614,6 +627,10 @@ function tpRenderStats(body, rows, from, to){
   });
   html += `</div></div>`;
 
+  // desglose por objetivo / subobjetivo, en % de cada mes
+  const months = tpMonthKeys(from, to);
+  html += tpBreakSection(use, months, rangeTxt);
+
   // weekly evolution — stacked columns, SVG, theme-aware
   html += `<div class="tp-sec"><p class="tp-sec-t">${esc(tt('tactical.weekly_title','Contents per week'))}</p><div class="tp-week-scroll">${tpWeeklySvg(weeks, wk, cats)}</div></div>`;
 
@@ -633,6 +650,174 @@ function tpRenderStats(body, rows, from, to){
   html += `<td>${total}</td></tr></tbody></table></div></details></div>`;
 
   body.innerHTML = html;
+  // El desglose repinta con los MISMOS datos ya traídos: cambiar de objetivo a
+  // subobjetivo no vuelve a consultar la base.
+  body.querySelectorAll('#tpBreakSeg button').forEach(b => b.addEventListener('click', () => {
+    _tpBreak = b.getAttribute('data-b');
+    tpRenderStats(body, rows, from, to);
+  }));
+}
+
+// ── desglose por objetivo / subobjetivo, en % de cada mes ────────────
+// Cuánto de lo trabajado en cada mes se fue a cada objetivo (o a cada subobjetivo).
+// Las columnas están normalizadas al 100% del mes: la pregunta no es "cuántos
+// objetivos hubo en marzo" (eso ya lo dice el gráfico semanal) sino "de lo de marzo,
+// qué proporción fue a cada cosa".
+
+// Meses del rango, en orden, como 'YYYY-MM'.
+function tpMonthKeys(from, to){
+  const out = [];
+  let y = +from.slice(0, 4), m = +from.slice(5, 7);
+  const ly = +to.slice(0, 4), lm = +to.slice(5, 7);
+  while (y < ly || (y === ly && m <= lm)) { out.push(`${y}-${pad2(m)}`); m++; if (m > 12) { m = 1; y++; } }
+  return out;
+}
+function fmtMonth(mk){
+  const [y, m] = mk.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(ttLocale(), { month: 'short', year: '2-digit' });
+}
+
+// Un objetivo del día viene del catálogo (catalog_*) o es texto libre. Se agrupa por
+// el id del catálogo cuando lo tiene y, si no, por el propio texto: así el mismo
+// "Bloque medio" escrito a mano en dos días cuenta como un solo objetivo. El nombre
+// sale del catálogo si sigue existiendo y, si lo borraron, del título guardado.
+function tpBreakItem(r){
+  const parts = String(r.title || '').split(' · ');
+  // El objetivo raíz: lo mismo para los dos niveles, y la base del subobjetivo.
+  const root = r.catalog_objective_id
+    ? { key: 'o:' + r.catalog_objective_id, name: (_tpCatalog.find(x => x.id === r.catalog_objective_id) || {}).name || parts[0] || '—' }
+    : { key: 't:' + (parts[0] || '—'), name: parts[0] || '—' };
+  if (_tpBreak !== 'sub') return { key: root.key, name: root.name, cat: r.category };
+  if (r.catalog_sub_id) {
+    const s = _tpCatalog.find(x => x.id === r.catalog_sub_id);
+    return { key: 's:' + r.catalog_sub_id, name: root.name + ' · ' + (s ? s.name : (parts.slice(1).join(' · ') || '—')), cat: r.category };
+  }
+  if (parts.length > 1) return { key: 'ts:' + r.title, name: r.title, cat: r.category };
+  // Sin subobjetivo no se juntan todos en una bolsa: se cuentan bajo SU objetivo, que
+  // es la pregunta útil (de lo que trabajé de "Salida", cuánto quedó sin desglosar).
+  return { key: 'n:' + root.key, name: root.name + ' · ' + tt('tactical.break_no_sub','no sub-objective'), cat: r.category };
+}
+
+// Un objetivo no tiene color propio: hereda el de su categoría. Para separar varios
+// objetivos de la misma familia se van aclarando hacia el fondo — se sigue leyendo
+// "esto es todo defensivo" sin inventar tonos fuera de la paleta validada.
+function tpShade(catKey, i){
+  const base = catColor(catKey);
+  const steps = [100, 74, 54, 40, 28];
+  const p = steps[i % steps.length];
+  return p === 100 ? base : `color-mix(in srgb, ${base} ${p}%, var(--cm-surface))`;
+}
+
+const TP_BREAK_MAX = 12;   // más de esto en la leyenda no se lee: el resto va a "Otros"
+
+function tpBreakData(use, months){
+  const map = new Map();
+  use.forEach(r => {
+    const it = tpBreakItem(r);
+    let e = map.get(it.key);
+    if (!e) { e = { key: it.key, name: it.name, cat: it.cat, total: 0, m: {} }; months.forEach(k => e.m[k] = 0); map.set(it.key, e); }
+    e.total++;
+    const mk = String(r.date).slice(0, 7);
+    if (e.m[mk] != null) e.m[mk]++;
+  });
+  let items = [...map.values()];
+  if (items.length > TP_BREAK_MAX) {
+    const byTotal = items.slice().sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    const keep = byTotal.slice(0, TP_BREAK_MAX - 1);
+    const rest = byTotal.slice(TP_BREAK_MAX - 1);
+    const other = { key: '_other', name: tt('tactical.break_other','Others'), cat: null, total: 0, m: {}, isOther: true };
+    months.forEach(k => other.m[k] = 0);
+    rest.forEach(r => { other.total += r.total; months.forEach(k => other.m[k] += r.m[k]); });
+    other.n = rest.length;
+    items = keep.concat([other]);
+  }
+  items.sort((a, b) => (a.isOther ? 1 : 0) - (b.isOther ? 1 : 0) || (catIdx(a.cat) - catIdx(b.cat)) || (b.total - a.total) || a.name.localeCompare(b.name));
+  const seen = {};
+  items.forEach(it => {
+    if (it.isOther) { it.color = 'var(--cm-fg-faint)'; return; }
+    const n = seen[it.cat] || 0;
+    it.color = tpShade(it.cat, n);
+    seen[it.cat] = n + 1;
+  });
+  return items;
+}
+
+function tpBreakSection(use, months, rangeTxt){
+  const items = tpBreakData(use, months);
+  const monTot = {}; months.forEach(k => monTot[k] = items.reduce((s, it) => s + it.m[k], 0));
+  const total = items.reduce((s, it) => s + it.total, 0);
+  const pct = (n, d) => d ? Math.round(n * 100 / d) : 0;
+  const seg = `<div class="tp-seg tp-seg-inline" id="tpBreakSeg">
+    <button data-b="objective" class="${_tpBreak === 'objective' ? 'on' : ''}">${esc(tt('tactical.break_objectives','Objectives'))}</button>
+    <button data-b="sub" class="${_tpBreak === 'sub' ? 'on' : ''}">${esc(tt('tactical.break_subs','Sub-objectives'))}</button>
+  </div>`;
+  let h = `<div class="tp-sec"><div class="tp-sec-head"><p class="tp-sec-t" style="margin:0">${esc(tt('tactical.break_title','Share of each objective per month'))} <span style="letter-spacing:0;text-transform:none;color:var(--cm-fg-faint)">· ${esc(rangeTxt)}</span></p>${seg}</div>`;
+  if (!items.length) return h + `<div class="tp-empty" style="padding:16px 8px">${esc(tt('tactical.empty_stats','No objectives in this range yet.'))}</div></div>`;
+
+  h += `<div class="tp-week-scroll">${tpMonthlyPctSvg(months, items, monTot)}</div>`;
+  h += `<div class="tp-legend">` + items.map(it =>
+    `<div class="li"><span class="dot" style="background:${it.color}"></span>${esc(it.name)}${it.isOther && it.n ? ` <small>(${it.n})</small>` : ''} <b>${pct(it.total, total)}%</b> <small>(${it.total})</small></div>`
+  ).join('') + `</div>`;
+
+  // gemela en tabla: el % exacto de cada objetivo en cada mes
+  h += `<details class="tp-details" style="margin-top:10px"><summary>${esc(tt('tactical.table_toggle','View as table'))}</summary><div class="tp-tbl-scroll"><table class="tp-tbl"><thead><tr><th>${esc(_tpBreak === 'sub' ? tt('tactical.break_subs','Sub-objectives') : tt('tactical.break_objectives','Objectives'))}</th>`;
+  months.forEach(k => { h += `<th>${esc(fmtMonth(k))}</th>`; });
+  h += `<th>${esc(tt('tactical.total','Total'))}</th></tr></thead><tbody>`;
+  items.forEach(it => {
+    h += `<tr><td>${esc(it.name)}</td>`;
+    months.forEach(k => { h += `<td>${it.m[k] ? pct(it.m[k], monTot[k]) + '%' : '—'}</td>`; });
+    h += `<td>${pct(it.total, total)}%</td></tr>`;
+  });
+  h += `<tr><td>${esc(tt('tactical.total','Total'))}</td>`;
+  months.forEach(k => { h += `<td>${monTot[k] || '—'}</td>`; });
+  h += `<td>${total}</td></tr></tbody></table></div></details></div>`;
+  return h;
+}
+
+// Columnas normalizadas al 100% de cada mes. Los meses sin nada quedan como hueco
+// marcado: un mes vacío es información, no algo que haya que esconder.
+function tpMonthlyPctSvg(months, items, monTot){
+  const BW = 46, GAP = 26, PADL = 34, PADR = 8, PLOT_H = 170, PADT = 8, XLBL = 22;
+  const W = PADL + months.length * (BW + GAP) + PADR;
+  const H = PADT + PLOT_H + XLBL;
+  const yPix = p => PADT + PLOT_H - (p / 100) * PLOT_H;
+  let s = `<svg class="tp-week-svg" width="${Math.max(W, 320)}" height="${H}" viewBox="0 0 ${Math.max(W, 320)} ${H}" role="img" style="display:block">`;
+  [0, 25, 50, 75, 100].forEach(v => {
+    const yy = yPix(v);
+    s += `<line x1="${PADL}" y1="${yy}" x2="${Math.max(W, 320) - PADR}" y2="${yy}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+    s += `<text x="${PADL - 7}" y="${yy + 3}" text-anchor="end" font-family="var(--cm-font-mono)" font-size="9" fill="var(--cm-fg-faint)">${v}%</text>`;
+  });
+  months.forEach((mk, i) => {
+    const x = PADL + i * (BW + GAP) + GAP / 2;
+    const tot = monTot[mk];
+    if (!tot) {
+      s += `<rect x="${x}" y="${yPix(100)}" width="${BW}" height="${PLOT_H}" fill="var(--cm-bg-sunk)" rx="4"/>`;
+      s += `<text x="${x + BW / 2}" y="${PADT + PLOT_H / 2}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="10" fill="var(--cm-fg-faint)">—</text>`;
+    } else {
+      let acc = 0, drawn = 0;
+      items.forEach(it => {
+        const v = it.m[mk];
+        if (!v) return;
+        drawn += v;
+        const p = v * 100 / tot;
+        const y0 = yPix(acc), y1 = yPix(acc + p);
+        const gap = acc > 0 ? 2 : 0;
+        const isTop = drawn === tot;
+        const h = Math.max(1, y0 - gap - y1);
+        const ttl = `<title>${esc(fmtMonth(mk))} · ${esc(it.name)}: ${Math.round(p)}% (${v})</title>`;
+        if (isTop && h >= 4) {
+          const r = Math.min(4, BW / 2);
+          s += `<path class="seg" d="M${x},${y0 - gap} L${x},${y1 + r} Q${x},${y1} ${x + r},${y1} L${x + BW - r},${y1} Q${x + BW},${y1} ${x + BW},${y1 + r} L${x + BW},${y0 - gap} Z" fill="${it.color}">${ttl}</path>`;
+        } else {
+          s += `<rect class="seg" x="${x}" y="${y1}" width="${BW}" height="${h}" fill="${it.color}">${ttl}</rect>`;
+        }
+        acc += p;
+      });
+    }
+    s += `<text x="${x + BW / 2}" y="${H - 7}" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="9" fill="var(--cm-fg-muted)">${esc(fmtMonth(mk))}</text>`;
+  });
+  s += `</svg>`;
+  return s;
 }
 
 function fmtShort(ds){
@@ -894,14 +1079,18 @@ function tpRenderCatalog(){
       const objs = roots.filter(r => (r.category || 'other') === c.key);
       if (!objs.length) return;
       html += `<div class="tp-cat-group"><div class="gh"><span class="dot" style="background:${catColor(c.key)}"></span>${esc(catLabel(c.key))}</div>`;
-      objs.forEach(o => {
+      objs.forEach((o, oi) => {
         const subs = catSubs(o.id);
         html += `<div class="tp-cat-obj">
           <span class="cbar" style="background:${catColor(c.id)}"></span>
           <div class="main">
             <div class="nm">${esc(o.name)}</div>
-            ${subs.length ? `<div class="tp-cat-subs">${subs.map(s => `
+            ${subs.length ? `<div class="tp-cat-subs">${subs.map((s, si) => `
               <div class="tp-cat-sub"><span class="bull"></span><span class="t">${esc(s.name)}</span>
+                <div class="ord">
+                  <button class="mini" data-cat-act="up" data-id="${s.id}"${si === 0 ? ' disabled' : ''} title="${esc(tt('tactical.category_up','Move up'))}"><i class="ti ti-chevron-up"></i></button>
+                  <button class="mini" data-cat-act="down" data-id="${s.id}"${si === subs.length - 1 ? ' disabled' : ''} title="${esc(tt('tactical.category_down','Move down'))}"><i class="ti ti-chevron-down"></i></button>
+                </div>
                 <button class="mini" data-cat-act="rename" data-id="${s.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
                 <button class="mini del" data-cat-act="del-sub" data-id="${s.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
               </div>`).join('')}</div>` : ''}
@@ -911,6 +1100,10 @@ function tpRenderCatalog(){
             </div>
           </div>
           <div class="acts">
+            <div class="ord">
+              <button class="mini" data-cat-act="up" data-id="${o.id}"${oi === 0 ? ' disabled' : ''} title="${esc(tt('tactical.category_up','Move up'))}"><i class="ti ti-chevron-up"></i></button>
+              <button class="mini" data-cat-act="down" data-id="${o.id}"${oi === objs.length - 1 ? ' disabled' : ''} title="${esc(tt('tactical.category_down','Move down'))}"><i class="ti ti-chevron-down"></i></button>
+            </div>
             <button class="mini" data-cat-act="rename" data-id="${o.id}" title="${esc(tt('common.edit','Edit'))}"><i class="ti ti-pencil"></i></button>
             <button class="mini del" data-cat-act="del-obj" data-id="${o.id}" title="${esc(tt('common.delete','Delete'))}"><i class="ti ti-trash"></i></button>
           </div>
@@ -932,9 +1125,36 @@ function tpRenderCatFormPick(){
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _tpCatFormCat = b.getAttribute('data-cat'); tpRenderCatFormPick(); }));
 }
 
+// Subir/bajar dentro de sus hermanos (los objetivos, dentro de su categoría; los
+// subobjetivos, dentro de su objetivo). Es el mismo orden que ve el desplegable al
+// planificar un día, así que lo más usado se deja arriba y se elige de un vistazo.
+// Se renumera 0..n-1 en vez de intercambiar dos posiciones: los datos viejos traen
+// posiciones repetidas (todo en 0) y un intercambio simple no movería nada.
+async function tpCatMove(id, dir){
+  const row = _tpCatalog.find(r => r.id === id);
+  if (!row) return;
+  const sibs = row.parent_id
+    ? catSubs(row.parent_id)
+    : catRoots().filter(r => (r.category || 'other') === (row.category || 'other'));
+  const i = sibs.findIndex(r => r.id === id);
+  const j = dir === 'up' ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= sibs.length) return;
+  const arr = sibs.slice();
+  arr.splice(j, 0, arr.splice(i, 1)[0]);
+  const moved = arr.map((r, k) => ({ row: r, pos: k })).filter(x => x.row.position !== x.pos);
+  if (!moved.length) return;
+  const res = await Promise.all(moved.map(x =>
+    window.sb.from('tactical_catalog').update({ position: x.pos }).eq('id', x.row.id)));
+  const err = res.find(x => x.error);
+  if (err) throw err.error;
+  moved.forEach(x => { x.row.position = x.pos; });
+}
+
 async function tpCatAction(act, id){
   try {
-    if (act === 'add-sub') {
+    if (act === 'up' || act === 'down') {
+      await tpCatMove(id, act);
+    } else if (act === 'add-sub') {
       const inp = document.querySelector(`input[data-addsub="${id}"]`);
       const name = (inp && inp.value.trim()) || '';
       if (!name) { if (inp) inp.focus(); return; }
