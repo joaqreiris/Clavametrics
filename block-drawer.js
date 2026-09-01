@@ -303,129 +303,157 @@
     return [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
   }
 
-  function renderStep2() {
-    // filters
-    const regionChips = REGIONS.map(r => h('button', {
-      class: 'bd-filter-chip' + (state.region === r ? ' is-on' : ''),   // state.region = categoría seleccionada
-      onclick: () => { state.region = r; renderBody(); renderFooter(); }
-    }, r === 'All' ? 'All' : (r.charAt(0).toUpperCase() + r.slice(1))));
-    const equipChips = EQUIPS.map(eq => h('button', {
-      class: 'bd-filter-chip' + (state.equip === eq ? ' is-on' : ''),
-      onclick: () => { state.equip = eq; renderBody(); renderFooter(); }
-    }, eq));
-    const customTog = h('div', { class: 'bd-toggle-row' },
-      h('span', { class: 'lbl' }, 'Club custom only'),
-      h('div', {
-        class: 'bd-toggle' + (state.customOnly ? ' is-on' : ''),
-        onclick: () => { state.customOnly = !state.customOnly; renderBody(); }
-      })
-    );
-    const filters = h('div', { class: 'bd-filters' },
-      h('div', null, h('div', { class: 'group-l' }, 'Category'), h('div', { class: 'chips' }, ...regionChips)),
-      h('div', null, h('div', { class: 'group-l' }, 'Equipment'), h('div', { class: 'chips' }, ...equipChips)),
-      h('div', null, h('div', { class: 'group-l' }, 'Source'), customTog)
-    );
+  // ─── Step 2 · exercise picker ───
+  // The list repaints on its own (refreshExList) instead of re-rendering the whole
+  // step: rebuilding the body on every keystroke destroyed the search input, which
+  // lost focus and swallowed the next letters.
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  const exInitials = n => String(n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
+  const THUMB_BOX = 'width:28px;height:28px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center';
+  const initialsThumb = ex => h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
+  // Thumb with graceful degradation: YouTube's img.youtube.com is blocked by some
+  // ad/privacy blockers and corporate DNS — retry on i.ytimg.com (same CDN, different
+  // host), then fall back to the initials chip so the row never shows a broken image.
+  const exThumb = ex => {
+    if (!ex._thumb) return initialsThumb(ex);
+    const box = h('span', { class: 'bd-ex-thumb', style: THUMB_BOX });
+    const img = h('img', {
+      src: ex._thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer',
+      style: 'width:100%;height:100%;object-fit:cover;display:block'
+    });
+    img.addEventListener('error', () => {
+      const alt = String(ex._thumb).replace('https://img.youtube.com/', 'https://i.ytimg.com/');
+      if (alt !== img.getAttribute('src') && !img.dataset.retried) { img.dataset.retried = '1'; img.src = alt; return; }
+      box.replaceWith(initialsThumb(ex));
+    });
+    box.appendChild(img);
+    return box;
+  };
 
-    // list — loading state until the library has been fetched for this context
-    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-    const exInitials = n => String(n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
-    const THUMB_BOX = 'width:28px;height:28px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center';
-    const initialsThumb = ex => h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
-    // Thumb with graceful degradation: YouTube's img.youtube.com is blocked by some
-    // ad/privacy blockers and corporate DNS — retry on i.ytimg.com (same CDN, different
-    // host), then fall back to the initials chip so the row never shows a broken image.
-    const exThumb = ex => {
-      if (!ex._thumb) return initialsThumb(ex);
-      const box = h('span', { class: 'bd-ex-thumb', style: THUMB_BOX });
-      const img = h('img', {
-        src: ex._thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer',
-        style: 'width:100%;height:100%;object-fit:cover;display:block'
-      });
-      img.addEventListener('error', () => {
-        const alt = String(ex._thumb).replace('https://img.youtube.com/', 'https://i.ytimg.com/');
-        if (alt !== img.getAttribute('src') && !img.dataset.retried) { img.dataset.retried = '1'; img.src = alt; return; }
-        box.replaceWith(initialsThumb(ex));
-      });
-      box.appendChild(img);
-      return box;
-    };
-    let listInner;
+  let _exListBox = null;   // live .bd-ex-list node, repainted in place
+
+  function filteredLib() {
+    const q = state.query.trim().toLowerCase();
+    const out = LIB.filter(ex => {
+      if (state.region !== 'All' && ex.type !== state.region) return false;   // state.region = category
+      if (state.equip !== 'Any' && ex.equip !== state.equip) return false;
+      if (state.customOnly && !ex.custom) return false;
+      if (q && !((ex.name + ' ' + ex.region + ' ' + ex.type).toLowerCase().includes(q))) return false;
+      return true;
+    });
+    // Preventive risk suggestion: float risk-relevant exercises to the top.
+    if (state.riskMap) out.sort((a, b) => ((riskFor(b) ? riskFor(b).score : 0) - (riskFor(a) ? riskFor(a).score : 0)));
+    return out;
+  }
+
+  function exListItems() {
     if (!libCache[state.context]) {
-      listInner = h('div', { class: 'bd-empty' },
+      return [h('div', { class: 'bd-empty' },
         h('i', { class: 'ti ti-loader-2' }),
-        h('div', null, 'Loading exercise library…'));
-    } else {
-      const filtered = LIB.filter(ex => {
-        if (state.region !== 'All' && ex.type !== state.region) return false;  // filtra por categoría
-        if (state.equip !== 'Any' && ex.equip !== state.equip) return false;
-        if (state.customOnly && !ex.custom) return false;
-        if (state.query && !((ex.name + ' ' + ex.region + ' ' + ex.type).toLowerCase().includes(state.query.toLowerCase()))) return false;
-        return true;
-      });
-
-      // Preventive risk suggestion: float risk-relevant exercises to the top (stable, no filtering).
-      if (state.riskMap) filtered.sort((a, b) => ((riskFor(b) ? riskFor(b).score : 0) - (riskFor(a) ? riskFor(a).score : 0)));
-
-      listInner = filtered.length === 0
-        ? h('div', { class: 'bd-empty' },
-            h('i', { class: 'ti ti-mood-empty' }),
-            h('div', null, 'No exercises match these filters.'),
-            h('div', { style: 'margin-top:6px' }, 'Try widening the region or equipment.'))
-        : filtered.map(ex => {
-            const on = state.selected.includes(ex.id);
-            return h('div', {
-              class: 'bd-ex' + (on ? ' is-on' : '') + (ex.custom ? ' is-custom' : ''),
-              onclick: () => {
-                const i = state.selected.indexOf(ex.id);
-                if (i >= 0) {
-                  state.selected.splice(i, 1);
-                  delete state.sets[ex.id];
-                } else {
-                  state.selected.push(ex.id);
-                  // sets/reps belong to the plan, not the library — seed blank rows
-                  state.sets[ex.id] = seedSets(ex);
-                }
-                renderBody(); renderFooter();
-              }
-            },
-              h('div', { class: 'check' }),
-              exThumb(ex),
-              h('div', { class: 'body' },
-                h('div', { class: 'name' }, ex.name),
-                (function () {
-                  const rk = riskFor(ex);
-                  return rk ? h('span', {
-                    class: 'bd-risk-chip',
-                    title: _tt('block_drawer.risk_suggested', 'Suggested — injury history'),
-                    style: 'display:inline-flex;align-items:center;gap:3px;margin-top:3px;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-danger,#DC2626);background:rgba(220,38,38,.1);padding:3px 6px;border-radius:5px'
-                  }, '⚠ ' + rk.label) : null;
-                })(),
-                h('div', { class: 'meta' },
-                  h('span', null, ex.region),
-                  ex.equip ? h('span', { class: 'sep' }, '·') : null,
-                  ex.equip ? h('span', null, ex.equip) : null,
-                  ex.type ? h('span', { class: 'sep' }, '·') : null,
-                  ex.type ? h('span', null, cap(ex.type)) : null
-                )
-              ),
-              ex.complexity ? h('div', { class: 'defaults' }, ex.complexity) : null
-            );
-          });
+        h('div', null, _tt('block_drawer.loading_library', 'Loading exercise library…')))];
     }
+    const filtered = filteredLib();
+    if (!filtered.length) {
+      return [h('div', { class: 'bd-empty' },
+        h('i', { class: 'ti ti-mood-empty' }),
+        h('div', null, _tt('block_drawer.no_match', 'No exercises match these filters.')),
+        h('div', { style: 'margin-top:6px' }, _tt('block_drawer.no_match_hint', 'Try widening the category or equipment.')))];
+    }
+    return filtered.map(ex => {
+      const on = state.selected.includes(ex.id);
+      return h('div', {
+        class: 'bd-ex' + (on ? ' is-on' : '') + (ex.custom ? ' is-custom' : ''),
+        onclick: () => {
+          const i = state.selected.indexOf(ex.id);
+          if (i >= 0) { state.selected.splice(i, 1); delete state.sets[ex.id]; }
+          else {
+            state.selected.push(ex.id);
+            state.sets[ex.id] = seedSets(ex);        // sets belong to the plan, not the library
+          }
+          refreshExList(); renderFooter(); renderSteps();
+        }
+      },
+        h('div', { class: 'check' }),
+        exThumb(ex),
+        h('div', { class: 'body' },
+          h('div', { class: 'name' }, ex.name),
+          (function () {
+            const rk = riskFor(ex);
+            return rk ? h('span', {
+              class: 'bd-risk-chip',
+              title: _tt('block_drawer.risk_suggested', 'Suggested — injury history'),
+              style: 'display:inline-flex;align-items:center;gap:3px;margin-top:3px;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-danger,#DC2626);background:rgba(220,38,38,.1);padding:3px 6px;border-radius:5px'
+            }, '⚠ ' + rk.label) : null;
+          })(),
+          h('div', { class: 'meta' },
+            h('span', null, ex.region),
+            ex.equip ? h('span', { class: 'sep' }, '·') : null,
+            ex.equip ? h('span', null, ex.equip) : null,
+            ex.type ? h('span', { class: 'sep' }, '·') : null,
+            ex.type ? h('span', null, cap(ex.type)) : null
+          )
+        ),
+        ex.complexity ? h('div', { class: 'defaults' }, ex.complexity) : null
+      );
+    });
+  }
 
+  function refreshExList() {
+    if (!_exListBox || !_exListBox.isConnected) return;
+    _exListBox.innerHTML = '';
+    exListItems().forEach(n => _exListBox.appendChild(n));
+  }
+
+  function renderStep2() {
+    // filters — chips update their own state so the search box keeps focus/caret
+    const chipRow = (values, get, set) => {
+      const row = h('div', { class: 'chips' });
+      values.forEach(v => {
+        const chip = h('button', {
+          class: 'bd-filter-chip' + (get() === v ? ' is-on' : ''),
+          onclick: () => {
+            set(v);
+            Array.from(row.children).forEach(c => c.classList.toggle('is-on', c === chip));
+            refreshExList();
+          }
+        }, v === 'All' ? _tt('block_drawer.all', 'All') : v === 'Any' ? _tt('block_drawer.any', 'Any') : cap(v));
+        row.appendChild(chip);
+      });
+      return row;
+    };
+    const regionChips = chipRow(REGIONS, () => state.region, v => { state.region = v; });
+    const equipChips  = chipRow(EQUIPS,  () => state.equip,  v => { state.equip  = v; });
+    const customTog = h('div', { class: 'bd-toggle-row' },
+      h('span', { class: 'lbl' }, _tt('block_drawer.club_custom_only', 'Club custom only')),
+      h('div', { class: 'bd-toggle' + (state.customOnly ? ' is-on' : '') })
+    );
+    customTog.addEventListener('click', () => {
+      state.customOnly = !state.customOnly;
+      customTog.querySelector('.bd-toggle').classList.toggle('is-on', state.customOnly);
+      refreshExList();
+    });
+    const filters = h('div', { class: 'bd-filters' },
+      h('div', null, h('div', { class: 'group-l' }, _tt('block_drawer.category', 'Category')), regionChips),
+      h('div', null, h('div', { class: 'group-l' }, _tt('block_drawer.equipment', 'Equipment')), equipChips),
+      h('div', null, h('div', { class: 'group-l' }, _tt('block_drawer.source', 'Source')), customTog)
+    );
+
+    _exListBox = h('div', { class: 'bd-ex-list' }, ...exListItems());
+    const searchInput = h('input', {
+      type: 'text',
+      placeholder: _tt('block_drawer.search_exercises', 'Search exercises…'),
+      value: state.query,
+      oninput: (e) => { state.query = e.target.value; refreshExList(); }
+    });
     const list = h('div', { class: 'bd-list-col' },
       h('div', { class: 'bd-search' },
         h('i', { class: 'ti ti-search' }),
-        h('input', {
-          type: 'text',
-          placeholder: 'Search exercises…',
-          value: state.query,
-          oninput: (e) => { state.query = e.target.value; renderBody(); }
-        }),
+        searchInput,
         h('span', { class: 'cm-kbd' }, '/')
       ),
-      h('div', { class: 'bd-ex-list' }, ...(Array.isArray(listInner) ? listInner : [listInner]))
+      _exListBox
     );
+    setTimeout(() => { try { searchInput.focus(); } catch (_) {} }, 30);
 
     return h('div', { class: 'bd-step-content' },
       h('div', { class: 'bd-pick' }, filters, list)
