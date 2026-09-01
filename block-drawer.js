@@ -330,9 +330,25 @@
     const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
     const exInitials = n => String(n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
     const THUMB_BOX = 'width:28px;height:28px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center';
-    const exThumb = ex => ex._thumb
-      ? h('span', { class: 'bd-ex-thumb', style: THUMB_BOX, html: `<img src="${ex._thumb}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">` })
-      : h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
+    const initialsThumb = ex => h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
+    // Thumb with graceful degradation: YouTube's img.youtube.com is blocked by some
+    // ad/privacy blockers and corporate DNS — retry on i.ytimg.com (same CDN, different
+    // host), then fall back to the initials chip so the row never shows a broken image.
+    const exThumb = ex => {
+      if (!ex._thumb) return initialsThumb(ex);
+      const box = h('span', { class: 'bd-ex-thumb', style: THUMB_BOX });
+      const img = h('img', {
+        src: ex._thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer',
+        style: 'width:100%;height:100%;object-fit:cover;display:block'
+      });
+      img.addEventListener('error', () => {
+        const alt = String(ex._thumb).replace('https://img.youtube.com/', 'https://i.ytimg.com/');
+        if (alt !== img.getAttribute('src') && !img.dataset.retried) { img.dataset.retried = '1'; img.src = alt; return; }
+        box.replaceWith(initialsThumb(ex));
+      });
+      box.appendChild(img);
+      return box;
+    };
     let listInner;
     if (!libCache[state.context]) {
       listInner = h('div', { class: 'bd-empty' },
