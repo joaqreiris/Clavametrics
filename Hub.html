@@ -2794,8 +2794,14 @@ function renderTasks(tasks, view = 'my') {
   }
 
   const [_squadSparkRes, _wellSparkRes, _injSparkRes] = await Promise.all([
-    window.sb.from('availability').select('date, status')
-      .eq('club_id', clubId).gte('date', sparkStart).lte('date', today),
+    // Paginado (cmFetchAll): un club entero por varias semanas pasa las 1000 filas que
+    // PostgREST devuelve de una sola vez, y el sparkline salía calculado a medias.
+    (async () => {
+      try {
+        return { data: await window.cmFetchAll(() => window.sb.from('availability').select('date, status')
+          .eq('club_id', clubId).gte('date', sparkStart).lte('date', today), { label: 'hub.availability', orderBy: 'date' }) };
+      } catch (e) { console.warn('[Hub] availability spark:', e?.message); return { data: [] }; }
+    })(),
     window.sb.from('wellness').select('submitted_at, sleep_quality, mood, fatigue, stress, soreness')
       .eq('club_id', clubId)
       .gte('submitted_at', sparkStart + 'T00:00:00')

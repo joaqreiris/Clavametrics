@@ -388,9 +388,11 @@
       }
       const inNonCounting = (d) => nonCounting.some(p => d >= p.start_date && d <= p.end_date);
       // Sin temporada vigente → no medimos disponibilidad (todos quedan en "—").
-      const { data: av } = win ? (await window.sb.from('availability')
+      // Paginado (cmFetchAll): la ventana es una temporada entera → muy por encima de las
+      // 1000 filas de un solo request, y el % de disponibilidad salía sobre datos cortados.
+      const av = win ? await window.cmFetchAll(() => window.sb.from('availability')
         .select('player_id, status, date').eq('club_id', _clubId).in('player_id', ids)
-        .gte('date', win.start).lte('date', win.end)) : { data: [] };
+        .gte('date', win.start).lte('date', win.end), { label: 'clinical.availability', orderBy: 'date' }) : [];
       const agg = {};
       (av || []).forEach(r => { if (inNonCounting(r.date)) return; const a = agg[r.player_id] || (agg[r.player_id] = { t: 0, ok: 0 }); a.t++; if (r.status === 'available') a.ok++; });
       Object.keys(agg).forEach(pid => { availByPlayer[pid] = agg[pid].t ? Math.round(agg[pid].ok / agg[pid].t * 100) : null; });

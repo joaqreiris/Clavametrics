@@ -1249,6 +1249,29 @@
     return q;
   }
 
+  // ── Fetch paginado de availability ──
+  // PostgREST corta la respuesta en 1000 filas por defecto. Un plantel de 30 jugadores por un
+  // mes ya son ~1030 filas: las que quedan afuera nunca llegan al navegador y sus celdas se
+  // pintan con el estado por DEFECTO (verde) — el dato guardado "desaparece" al recargar.
+  // build(from, to) arma la query con .range(from, to); se pide de a 1000 hasta que una
+  // página vuelve incompleta. Devuelve la misma forma { data, error } que el builder.
+  // Cada query ordena por (player_id, date) = la clave primaria: sin un orden TOTAL el
+  // reparto de filas entre páginas no está garantizado y se pueden perder/repetir filas
+  // justo en el borde — exactamente el bug que esto viene a arreglar.
+  async function avFetchAllRows(build) {
+    const PAGE = 1000;
+    let out = [], from = 0;
+    for (;;) {
+      const { data, error } = await build(from, from + PAGE - 1);
+      if (error) return { data: out, error };
+      const rows = data || [];
+      out = out.concat(rows);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+    return { data: out, error: null };
+  }
+
   // ── Init ──
   async function init() {
     if (!(await window.guardModule())) return;   // guard redirect: keep the overlay, page navigates away
@@ -1386,8 +1409,9 @@
           return data || [];
         } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); return []; }
       })(),
-      window.sb.from('availability').select('player_id, date, status, minutes, match_kind, team_id, notes')
-        .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
+      avFetchAllRows((a, b) => window.sb.from('availability').select('player_id, date, status, minutes, match_kind, team_id, notes')
+        .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd)
+        .order('player_id').order('date').range(a, b)),
       window.sb.from('availability').select('player_id, status, minutes, team_id')
         .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
       (async () => {   // matches (red MD indicators) — scoped al equipo activo, no a todo el club
@@ -2317,10 +2341,13 @@
     if (!players.length) { host.innerHTML = `<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">${tt('availability.statsNoPlayers','No players in this team.')}</div>`; return; }
     const pids = players.map(p => p.id);
 
-    const { data: availRaw } = await window.sb.from('availability')
+    // Paginado: el rango de stats suele ser una temporada entera → muy por encima de las
+    // 1000 filas que devuelve PostgREST de una sola vez.
+    const { data: availRaw } = await avFetchAllRows((a, b) => window.sb.from('availability')
       .select('player_id, date, status, minutes, match_kind, team_id')
       .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
-      .gte('date', from).lte('date', to);
+      .gte('date', from).lte('date', to)
+      .order('player_id').order('date').range(a, b));
     // Fila relativa cuyo team_id ≠ equipo visto = ese día el jugador entrenó con OTRO
     // equipo (un sub-18 con el 2do, un 2do con el 1ro, etc.). Antes se descartaba y el
     // día desaparecía de las stats; ahora se cuenta como categoría "Otro equipo" para
@@ -2620,8 +2647,9 @@
       const [{ data: cPlayers }, { data: cRows }] = await Promise.all([
         window.sb.from('players').select('id, first_name, last_name, team_id')
           .eq('club_id', CLUB_ID).is('archived_at', null),
-        window.sb.from('availability').select('player_id, date, status, team_id')
-          .eq('club_id', CLUB_ID).gte('date', from).lte('date', to),
+        avFetchAllRows((a, b) => window.sb.from('availability').select('player_id, date, status, team_id')
+          .eq('club_id', CLUB_ID).gte('date', from).lte('date', to)
+          .order('player_id').order('date').range(a, b)),
       ]);
       const pById = new Map((cPlayers || []).map(p => [p.id, p]));
       // Movimiento = fila relativa cuyo team_id ≠ equipo base (players.team_id) del jugador.
