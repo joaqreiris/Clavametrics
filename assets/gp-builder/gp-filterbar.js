@@ -1563,12 +1563,36 @@
         // restaurados y las cards en su estado "Loading…" (sin flash de datos equivocados).
         if (_hasTeamSel && !window._gpTeamId) {
           restore();
-          // Red de seguridad: si por lo que sea reload() nunca llega, cargamos igual a los 6s.
-          setTimeout(() => {
-            if (_loadedTeamId == null) {
-              loadData().then(() => { try { fireNow(); } catch (_) {} }).catch(e => console.warn('gpFilterBar boot-fallback:', e));
-            }
-          }, 6000);
+          // Red de seguridad: si por lo que sea reload() nunca llega, cargamos igual — pero NUNCA
+          // con scope club-wide mientras el equipo pueda estar todavía por resolverse. Esa carga
+          // provisoria traía las opciones de TODAS las categorías (jugadores, fechas, rivales, las
+          // tres «2026/27»…) y, como el single-flight reusa la promesa en vuelo, el reload() de
+          // gpsInitTeamSwitch se volvía no-op → la barra quedaba club-wide hasta un F5.
+          // Reintentamos cada segundo hasta que pase una de estas tres:
+          //   · llega el equipo            → NO cargamos acá: el reload() es la única carga (scope ok);
+          //   · el selector dice "sin categorías" (dataset.gpsReady='noteams') → cargar sin equipo
+          //     es lo correcto para ese usuario;
+          //   · se agota el tope (30s)     → gpsInitTeamSwitch falló; cargamos igual antes que
+          //                                   dejar la barra vacía para siempre.
+          // OJO: acá NO se agrega ninguna carga extra al arranque normal — se QUITA la provisoria.
+          // El pipeline de layout se auto-persiste durante el boot, así que un render de más puede
+          // cementar posiciones a medio montar (ver _reconcileLayoutWithGrid en gps-analysis.js).
+          let _tries = 0, _teamTries = 0;
+          const _lateBoot = () => {
+            if (_loadedTeamId != null || _loadDataP) return;            // ya cargó / cargando
+            const _sel = document.getElementById('gpsTeamSelect');
+            const _noTeams = !!_sel && _sel.dataset.gpsReady === 'noteams';
+            if (window._gpTeamId) {
+              // El equipo ya está resuelto → la carga esperada es el reload() de gpsInitTeamSwitch.
+              // Si no llegó en ~4s (falló o nunca se llamó), cargamos nosotros: acá ya es seguro,
+              // el scope sale bien porque _gpTeamId existe. Es la misma red de seguridad de antes.
+              if (++_teamTries < 4) { setTimeout(_lateBoot, 1000); return; }
+              console.warn('[gpFilterBar] el reload() del team-switch no llegó — cargando con el equipo ya resuelto');
+            } else if (!_noTeams && ++_tries < 30) { setTimeout(_lateBoot, 1000); return; }
+            else console.warn(`[gpFilterBar] carga sin equipo (${_noTeams ? 'usuario sin categorías' : 'gpsInitTeamSwitch no resolvió en 30s'})`);
+            loadData().then(() => { try { fireNow(); } catch (_) {} }).catch(e => console.warn('gpFilterBar boot-fallback:', e));
+          };
+          setTimeout(_lateBoot, 1000);
           return;
         }
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }

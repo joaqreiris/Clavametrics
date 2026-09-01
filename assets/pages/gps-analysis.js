@@ -4482,7 +4482,11 @@ async function _detectSmartDefault(clubId, userId) {
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('gpsTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    // dataset.gpsReady = "esta resolución YA terminó". Lo lee el filterbar para distinguir
+    // «todavía no se resolvió el equipo» (esperar: el reload de abajo será la única carga, con
+    // el scope correcto) de «este usuario no tiene categorías» (cargar sin equipo es lo correcto).
+    // Sin esa señal, el filterbar tenía que adivinar por tiempo y cargaba club-wide de más.
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; sel.dataset.gpsReady = 'noteams'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     window._gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${_gpEsc(t.id)}" ${t.id===window._gpTeamId?'selected':''}>${_gpEsc(t.name)}</option>`).join('');
