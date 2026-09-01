@@ -610,6 +610,11 @@ create table if not exists public.exercises (
   description text,
   visible_teams uuid[],
   origin_team_id uuid,
+  -- Visibilidad PERSONAL del creador (no es compartir): categorías donde quien creó la tarea
+  -- quiere encontrarla, para el staff que trabaja en dos equipos y repite ejercicios entre ellos.
+  -- Solo la aplica el propio created_by y solo sobre equipos a los que sigue perteneciendo
+  -- (member_teams); el resto del cuerpo técnico no ve nada distinto. Filtro en cmExVisibleForTeam.
+  owner_teams uuid[],
   video_url text,
   preview_svg text,
   preview_png text,

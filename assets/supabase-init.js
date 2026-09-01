@@ -141,14 +141,16 @@
         // Cargar tu profile REAL (tu id), independiente del club override
         if (!_profile) {
           const { data: realProf } = await window.sb.from('profiles')
-            .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone').eq('id', user.id).single();
+            .select('id, club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone').eq('id', user.id).single();
           if (realProf) { _profile = realProf; window.__cm_profile = realProf; syncProfileTimezone(user.id, realProf.timezone); }
         }
         _clubId = _ov;
         return _clubId;
       }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
-        .select('club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone')
+        // `id` es imprescindible: varias páginas guardan created_by con profile?.id y, sin la
+        // columna, quedaba undefined → filas sin autor (rompía la visibilidad personal de tareas).
+        .select('id, club_id, role, club_role, full_name, first_name, last_name, email, job_title, avatar_url, onboarded, timezone')
         .eq('id', user.id)
         .single();
       if (profileErr) console.warn('[supabase-init] profile fetch error:', profileErr.message);
@@ -784,16 +786,48 @@
     } catch (e) { return null; }
   };
 
+  // ── Mis categorías (member_teams) ────────────────────────────────
+  // Quién soy + a qué equipos pertenezco. Lo usa la política de ejercicios para que las
+  // tareas del staff multi-categoría le sigan a la persona. Cache de sesión: una sola
+  // consulta por pestaña. _cmMyScope queda como lectura SÍNCRONA para los filtros.
+  let _cmMyScope = { uid: null, teams: [] };
+  let _cmScopePromise = null;
+  window.cmMyScope = function () {
+    if (_cmScopePromise) return _cmScopePromise;
+    _cmScopePromise = (async () => {
+      try {
+        // El uid sale de auth.getUser(): el select de profiles de getClubId() no trae `id`.
+        const clubId = await window.getClubId();
+        const { data: { user } } = await window.sb.auth.getUser();
+        if (!user?.id || !clubId) return _cmMyScope;
+        const { data } = await window.sb.from('member_teams')
+          .select('team_id').eq('club_id', clubId).eq('profile_id', user.id);
+        _cmMyScope = { uid: user.id, teams: (data || []).map(r => r.team_id).filter(Boolean) };
+      } catch (_) { /* sin scope: la política queda como antes */ }
+      return _cmMyScope;
+    })();
+    return _cmScopePromise;
+  };
+
   // Política de visibilidad de ejercicios del drill designer: un ejercicio se ve para un
   // equipo solo si es su equipo de origen o está compartido con él (visible_teams).
   // visible_teams NULL/[] = compartido con todo el club ("todas las categorías", elección
   // explícita del creador). Sin equipo activo (teamId null) no se oculta nada.
+  //
+  // owner_teams = categorías EXTRA donde el creador quiere ver SUS PROPIAS tareas (staff que
+  // trabaja en dos categorías y repite ejercicios). Es visibilidad personal, no compartir:
+  // solo la ve quien la creó, y solo en equipos a los que sigue perteneciendo. Requiere que la
+  // página haya hecho `await window.cmMyScope()` antes de filtrar (si no, se comporta como antes).
   window.cmExVisibleForTeam = function (ex, teamId) {
     if (!teamId || !ex) return true;
     if (ex.origin_team_id === teamId) return true;
     const vt = ex.visible_teams;
     if (!vt || vt.length === 0) return true;
-    return vt.includes(teamId);
+    if (vt.includes(teamId)) return true;
+    const ot = ex.owner_teams;
+    return !!(_cmMyScope.uid && ex.created_by === _cmMyScope.uid
+      && Array.isArray(ot) && ot.includes(teamId)
+      && _cmMyScope.teams.includes(teamId));
   };
 
   let _planPromise = null;

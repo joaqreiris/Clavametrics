@@ -971,9 +971,20 @@
             <label class="pl-form-label" style="display:flex;align-items:center;gap:6px"><i class="ti ti-brand-youtube" style="font-size:14px"></i><span data-i18n="planner.video_link">Video link</span></label>
             <input type="url" class="pl-form-input" id="plExVideo" data-i18n-ph="planner.video_link_ph" placeholder="YouTube, Vimeo, Google Drive…">
           </div>
-          <!-- Visibility by category retired (2026-08-28): an exercise now belongs to the team it
-               was created in, full stop — no sharing across categories. Legacy rows with no origin
-               team stay club-wide (cmExVisibleForTeam treats NULL/[] as "everyone"). -->
+          <!-- Visibility by category retired (2026-08-28): an exercise belongs to the team it was
+               created in — no sharing across categories with the rest of the staff. Legacy rows with
+               no origin team stay club-wide (cmExVisibleForTeam treats NULL/[] as "everyone").
+               What DID come back (owner_teams) is personal, not sharing: staff working in two
+               categories can tick in which of THEIR OWN categories they want to find their drill.
+               Nobody else's library changes. Hidden for single-team users and for other people's
+               drills (plRenderOwnerTeams). -->
+          <div class="pl-form-group" id="plExOwnerGroup" style="display:none">
+            <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
+              <i class="ti ti-users" style="font-size:14px"></i><span data-i18n="planner.owner_teams">Show in my categories</span>
+            </label>
+            <div id="plExOwnerList" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px" data-i18n="planner.owner_teams_hint">Only you see this drill in the ticked categories — it is not shared with the rest of the staff.</div>
+          </div>
 
           <div class="pl-form-group">
             <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
@@ -4447,7 +4458,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,dose_mode,reps,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,origin_team_id,owner_teams,created_by,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -4458,7 +4469,9 @@
     }
 
     // Team policy: the designer only lists exercises visible to the active team
-    // (its own + shared with it; visible_teams NULL/[] = whole club).
+    // (its own + shared with it; visible_teams NULL/[] = whole club, owner_teams = MIS
+    // propias tareas traídas desde otra categoría mía).
+    try { await window.cmMyScope(); } catch (_) {}
     const _scopeTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
     exercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _scopeTeam));
     // Resolve a display image per exercise: cached signed Storage URL with base64 fallback.
@@ -4505,6 +4518,7 @@
       // duplicates a shared drill gets an editable copy visible in their own library.
       visible_teams: _dupTeam ? [_dupTeam] : src.visible_teams,
       origin_team_id: _dupTeam || src.origin_team_id || null,
+      owner_teams: plOwnerTeamsDefault(),   // la copia es mía: la veo en todas mis categorías
       video_url: src.video_url || null
     };
     const { data, error } = await window.sb.from('exercises').insert(payload).select().single();
@@ -4654,6 +4668,7 @@
     { const _v = document.getElementById('plExVideo'); if (_v) _v.value = ex.video_url || ''; }
     plRenderFolderSelect(ex.folder_id || '');
     { const _gk = document.getElementById('plExGk'); if (_gk) _gk.checked = !!ex.is_goalkeeper; }
+    plRenderOwnerTeams(ex);
 
     // Suggest space/players from the name when the stored fields are empty (editable).
     _plAutofillMeasuresFromName();
@@ -4787,7 +4802,8 @@
       name:       tt('planner.new_exercise', 'New exercise'),
       created_by: profile?.id || null,
       visible_teams: _activeTeam ? [_activeTeam] : null,
-      origin_team_id: _activeTeam || null   // stamp the originating team (immutable)
+      origin_team_id: _activeTeam || null,  // stamp the originating team (immutable)
+      owner_teams: plOwnerTeamsDefault()    // mis categorías (visibilidad personal del creador)
     }).select().single();
     if (!error && data) {
       await loadExercises();
@@ -4896,7 +4912,8 @@
       source_type:   'image',
       created_by:    profile?.id || null,
       visible_teams: _activeTeam ? [_activeTeam] : null,
-      origin_team_id: _activeTeam || null   // stamp the originating team (immutable)
+      origin_team_id: _activeTeam || null,  // stamp the originating team (immutable)
+      owner_teams:   plOwnerTeamsDefault()  // mis categorías (visibilidad personal del creador)
     }).select('id').single();
     if (error || !row) { alert(tt('planner.error_creating_exercise', `Error creating exercise: ${error?.message || 'unknown'}`, {msg: error?.message || 'unknown'})); return; }
     const cf = await _compressImgFile(file);
@@ -5065,6 +5082,17 @@
     const _isNetErr = (e) => /load failed|failed to fetch|networkerror/i.test(e?.message || '');
     let error;
     if (currentExerciseId) {
+      // owner_teams: solo si el bloque «Ver en mis categorías» está a la vista (tarea mía y 2+
+      // categorías). undefined = no mandar el campo, para no pisar la elección de otro.
+      const _cur = exercises.find(e => e.id === currentExerciseId);
+      const _ot  = plOwnerTeamsValue(_cur?.origin_team_id || null);
+      if (_ot) {
+        payload.owner_teams = _ot;
+        // Tareas viejas sin autor (created_by quedó NULL por el bug de profile.id): sin autor la
+        // visibilidad personal no puede aplicarse. La sella quien la edita, y solo cuando pide
+        // verla en otra de sus categorías.
+        if (!_cur?.created_by && _ot.length > 1 && _plMyScope.uid) payload.created_by = _plMyScope.uid;
+      }
       ({ error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId));
       if (error && _isNetErr(error)) {
         ({ error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId));
@@ -5073,7 +5101,8 @@
       // First save: INSERT the draft (canvas + meta) and adopt the new row.
       const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
       const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null, origin_team_id: _activeTeam || null,
-        visible_teams: _activeTeam ? [_activeTeam] : null };
+        visible_teams: _activeTeam ? [_activeTeam] : null,
+        owner_teams: plOwnerTeamsValue(_activeTeam) || plOwnerTeamsDefault() };
       let res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
       if (res.error && _isNetErr(res.error)) {
         res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
@@ -5269,7 +5298,56 @@
   async function plLoadTeams() {
     const cid = await window.getClubId();
     _plTeams = await window.getTeams(cid);
+    try { _plMyScope = await window.cmMyScope(); } catch (_) {}
     await plLoadFolders();
+    // Borrador todavía sin guardar: mostrar las casillas ya, para elegir antes del primer guardado.
+    if (!document.querySelector('.pl-ex.is-active')) plRenderOwnerTeams(null);
+  }
+
+  // ── Mis categorías: dónde quiero ver MIS PROPIAS tareas ──────────
+  // owner_teams NO es compartir: es visibilidad personal del creador, para el staff que trabaja
+  // en dos categorías (2º equipo + sub-18) y repite ejercicios entre ellas. Nadie más ve la tarea
+  // fuera de su equipo de origen. El bloque solo aparece si pertenezco a 2+ categorías y la tarea
+  // abierta es mía.
+  let _plMyScope = { uid: null, teams: [] };
+  function plMyTeamRows() {
+    return (_plTeams || []).filter(t => (_plMyScope.teams || []).includes(t.id));
+  }
+  // Default de una tarea nueva: todas mis categorías (el creador destilda lo que no quiera).
+  function plOwnerTeamsDefault() {
+    const mine = plMyTeamRows();
+    return mine.length > 1 ? mine.map(t => t.id) : null;
+  }
+  function plRenderOwnerTeams(ex) {
+    const group = document.getElementById('plExOwnerGroup');
+    const list  = document.getElementById('plExOwnerList');
+    if (!group || !list) return;
+    const mine   = plMyTeamRows();
+    const isMine = !ex || !ex.created_by || ex.created_by === _plMyScope.uid;
+    if (mine.length < 2 || !isMine) { group.style.display = 'none'; list.innerHTML = ''; return; }
+    // El equipo de origen siempre queda marcado y bloqueado: ahí es donde vive la tarea.
+    const origin = (ex && ex.origin_team_id) || _plActiveTeam();
+    const sel = new Set(Array.isArray(ex && ex.owner_teams) ? ex.owner_teams : mine.map(t => t.id));
+    group.style.display = '';
+    list.innerHTML = mine.map(t => {
+      const fixed = t.id === origin;
+      const on    = fixed || sel.has(t.id);
+      return `<label style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:${fixed?'default':'pointer'};opacity:${fixed?'.7':'1'}">`
+        + `<input type="checkbox" class="pl-owner-team" value="${escH(t.id)}"${on?' checked':''}${fixed?' disabled':''} style="width:16px;height:16px;accent-color:var(--cm-accent)">`
+        + `<span>${escH(t.name)}</span>`
+        + (fixed ? `<span style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${escH(tt('planner.owner_teams_origin','origin'))}</span>` : '')
+        + `</label>`;
+    }).join('');
+  }
+  // Valor a guardar: lo marcado + el equipo de origen (no se puede destildar).
+  // undefined = no tocar la columna (usuario de una sola categoría o tarea ajena).
+  function plOwnerTeamsValue(originTeamId) {
+    const group = document.getElementById('plExOwnerGroup');
+    if (!group || group.style.display === 'none') return undefined;
+    const ids = [...document.querySelectorAll('#plExOwnerList .pl-owner-team')]
+      .filter(cb => cb.checked).map(cb => cb.value);
+    if (originTeamId && !ids.includes(originTeamId)) ids.push(originTeamId);
+    return ids;
   }
   const _plActiveTeam = () => sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
   async function plLoadFolders() {
@@ -5280,6 +5358,15 @@
     const sel = document.getElementById('plExFolder');
     if (!sel || !window.CMFolders) return;
     sel.innerHTML = window.CMFolders.optionsHtml(_plFolders, { teamId: _plActiveTeam(), selectedId });
+    // La carpeta de la tarea puede ser de OTRA categoría mía (owner_teams): optionsHtml no la lista
+    // y el select caería en "sin carpeta", borrándola al guardar. La inyectamos para conservarla.
+    if (selectedId && sel.value !== selectedId) {
+      const f = (_plFolders || []).find(x => x.id === selectedId);
+      if (f) {
+        sel.insertAdjacentHTML('beforeend', `<option value="${escH(f.id)}" selected>${escH(f.name)}</option>`);
+        sel.value = selectedId;
+      }
+    }
   }
   // "New folder" nests under whatever is selected and belongs to the active team, like the
   // exercises inside it.

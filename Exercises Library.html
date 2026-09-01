@@ -560,7 +560,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,origin_team_id,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,origin_team_id,owner_teams,created_by,video_url,folder_id,is_goalkeeper,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -572,6 +572,8 @@
 
   // Team policy: only exercises visible to the active team (its own + shared with it).
   // visible_teams NULL/[] = explicitly shared with the whole club.
+  // cmMyScope() = quién soy + mis categorías, para que MIS tareas de otra categoría (owner_teams) aparezcan.
+  try { await window.cmMyScope(); } catch (_) {}
   const _slScopeTeam = window.getActiveTeamId ? window.getActiveTeamId() : null;
   let allExercises = (data || []).filter(ex => window.cmExVisibleForTeam(ex, _slScopeTeam));
 

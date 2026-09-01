@@ -122,7 +122,7 @@
         .ilike('name', like)
         .limit(5),
       window.sb.from('exercises')
-        .select('id,name,players_count,field_width,field_height,visible_teams,origin_team_id')
+        .select('id,name,players_count,field_width,field_height,visible_teams,origin_team_id,owner_teams,created_by')
         .eq('club_id', clubId)
         .ilike('name', like)
         .limit(15)
@@ -133,7 +133,9 @@
     const matches     = cRes.data  || [];
     const microcycles = mRes.data  || [];
     const exercises   = eRes.data  || [];
-    // Team policy: field drills only surface for the active team (own + shared with it).
+    // Team policy: field drills only surface for the active team (own + shared with it,
+    // más las propias traídas desde otra categoría del usuario vía owner_teams).
+    try { await window.cmMyScope(); } catch (_) {}
     const _gsTeam     = window.getActiveTeamId ? window.getActiveTeamId() : null;
     const drills      = (dRes.data || []).filter(ex => window.cmExVisibleForTeam(ex, _gsTeam)).slice(0, 5);
 
