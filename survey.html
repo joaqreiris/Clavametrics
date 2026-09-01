@@ -143,9 +143,9 @@ const T={
     forYou:'On your list',notOnList:'You are not on the list for this session.',
     listedOther:n=>'You are on the list for the '+n+' session. Sure you did this one?',
     confirmNotListed:'You are not on the list for this session. Send anyway?',
-    missing:n=>'You still need to rate the '+n+' session — you are on its list.',
+    missing:n=>'You still need to rate the '+n+' session.',
     pendTitle:n=>n===1?'One session left':n+' sessions left',
-    pendSub:'You are on the list for it. Rate every session you took part in.',
+    pendSub:'Rate every session you took part in. If you were not there, just say so.',
     pendSent:'RPE sent',rateBtn:n=>'Rate the '+n+' session',skipBtn:"I wasn't in this session",
     progress:(i,n)=>'Session '+i+' of '+n,
     ratingNow:'You are rating',sendFor:n=>'Send '+n+' RPE',missEy:'Still missing',
@@ -167,9 +167,9 @@ const T={
     forYou:'En tu lista',notOnList:'No figurás en la lista de esta sesión.',
     listedOther:n=>'Figurás en la lista de la sesión de '+n+'. ¿Seguro que estuviste en esta?',
     confirmNotListed:'No figurás en la lista de esta sesión. ¿Enviar igual?',
-    missing:n=>'Te falta calificar la sesión de '+n+' — figurás en su lista.',
+    missing:n=>'Te falta calificar la sesión de '+n+'.',
     pendTitle:n=>n===1?'Te falta 1 sesión':'Te faltan '+n+' sesiones',
-    pendSub:'Figuras en su lista. Califica cada sesión en la que estuviste.',
+    pendSub:'Califica cada sesión en la que estuviste. Si no estuviste, avísanos.',
     pendSent:'RPE enviado',rateBtn:n=>'Calificar la sesión de '+n,skipBtn:'No estuve en esta sesión',
     progress:(i,n)=>'Sesión '+i+' de '+n,
     ratingNow:'Estás calificando',sendFor:n=>'Enviar RPE de '+n,missEy:'Te falta cargar',
@@ -191,9 +191,9 @@ const T={
     forYou:'Na sua lista',notOnList:'Você não está na lista desta sessão.',
     listedOther:n=>'Você está na lista da sessão de '+n+'. Certeza de que fez esta?',
     confirmNotListed:'Você não está na lista desta sessão. Enviar mesmo assim?',
-    missing:n=>'Falta avaliar a sessão de '+n+' — você está na lista dela.',
+    missing:n=>'Falta avaliar a sessão de '+n+'.',
     pendTitle:n=>n===1?'Falta 1 sessão':'Faltam '+n+' sessões',
-    pendSub:'Você está na lista dela. Avalie cada sessão em que esteve.',
+    pendSub:'Avalie cada sessão em que esteve. Se não esteve, é só avisar.',
     pendSent:'RPE enviado',rateBtn:n=>'Avaliar a sessão de '+n,skipBtn:'Não estive nesta sessão',
     progress:(i,n)=>'Sessão '+i+' de '+n,
     ratingNow:'Você está avaliando',sendFor:n=>'Enviar RPE de '+n,missEy:'Falta enviar',
@@ -259,10 +259,12 @@ async function loadSessions(){
 // todo da true y el comportamiento queda como antes.
 const expectsMe=s=>!s.has_list||!!s.listed;
 // ── Candado de doble sesión ───────────────────────────────────────────────────
-// Obligatorias = aquellas donde el staff lo convocó explícitamente (session_participants)
-// y que YA empezaron. Una sesión sin convocatoria armada (el default "entrenan todos los
-// disponibles") sigue siendo sugerencia, no candado: si no, un día de gym + campo obligaría
-// a dos RPE a quien no fue al gym. Las que todavía no empezaron tampoco traban.
+// Obligatorias = todas las sesiones del día que YA empezaron y que lo esperan: las que no
+// tienen convocatoria armada (el default "entrenan todos los disponibles") cuentan igual que
+// aquellas donde el staff lo convocó explícitamente. El staff no tiene que cargar la lista
+// para que el RPE del gym sea obligatorio; si el jugador no estuvo, lo declara con el botón
+// "No estuve en esta sesión". Solo queda afuera la sesión con lista que NO lo incluye —
+// ahí el staff ya dijo que no iba. Las que todavía no empezaron tampoco traban.
 function sessMins(s){
   if(!s.time)return null;
   const h=parseInt(String(s.time).slice(0,2),10),m=parseInt(String(s.time).slice(3,5),10);
@@ -274,7 +276,7 @@ function hasStarted(s){
   const now=new Date();
   return m<=now.getHours()*60+now.getMinutes();
 }
-const isRequired=s=>!!s.listed&&hasStarted(s);
+const isRequired=s=>expectsMe(s)&&hasStarted(s);
 const requiredAll=()=>sessions.filter(isRequired);
 const requiredPending=()=>requiredAll().filter(s=>!s.answered&&!skipped.has(s.id));
 function pickDefault(){
@@ -420,9 +422,9 @@ function nextHtml(){
   // ("te falta esta"), no una sugerencia.
   // Las que declaró "no estuve" no se vuelven a ofrecer.
   const open=sessions.filter(s=>!s.answered&&!skipped.has(s.id));
-  const next=open.find(s=>s.listed)||open[0];
+  const next=open.find(isRequired)||open.find(s=>s.listed)||open[0];
   if(!next)return '';
-  const alert=!!next.listed;
+  const alert=isRequired(next);
   return `<div class="next-card${alert?' is-alert':''}"><div class="q">${alert?`<i class="ti ti-alert-triangle"></i> `+L.missing(sessLabel(next)):L.also(sessLabel(next))}</div>
     <button onclick="rateNext('${next.id}')">${L.alsoBtn}</button></div>`;
 }
