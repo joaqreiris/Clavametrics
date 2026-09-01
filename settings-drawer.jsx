@@ -877,23 +877,11 @@ window.SettingsDrawer  = SettingsDrawer;
 window.openCMSettings  = null;
 window.initCMSettings  = initSettings;
 
-function updateBellBadge(count) {
-  const btn = document.querySelector('[title="Notifications"],[aria-label="Notifications"]');
-  if (!btn) return;
-  let badge = btn.querySelector('.cm-bell-badge');
-  if (count <= 0) { badge && badge.remove(); return; }
-  if (!badge) {
-    badge = document.createElement('span');
-    badge.className = 'cm-bell-badge';
-    Object.assign(badge.style, {
-      position:'absolute', top:'3px', right:'3px',
-      width:'7px', height:'7px', borderRadius:'50%',
-      background:'var(--cm-danger,#DC2626)', pointerEvents:'none',
-    });
-    btn.style.position = 'relative';
-    btn.appendChild(badge);
-  }
-}
+// El contador de la campana lo pinta sidebar.js (#cm-nbadge, con el número y filtrado por
+// equipo). Acá vivía un segundo indicador — un puntito rojo — que buscaba el botón por
+// title/aria-label "Notifications": no existen en 23 de las 37 páginas con campana, y en las
+// otras 14 i18n los traduce, así que no aparecía casi nunca. Se eliminó en vez de arreglarlo:
+// hacerlo funcionar habría puesto dos marcas encima de la misma campana.
 
 function SettingsHost() {
   const [open, setOpen]             = React.useState(false);
@@ -939,12 +927,7 @@ function SettingsHost() {
           }
         });
 
-      // Count existing unread notifications
-      window.sb.from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', uid)
-        .eq('read', false)
-        .then(({ count }) => { if (count > 0) updateBellBadge(count); });
+      // (el conteo de no leídos lo hace sidebar.js; acá sólo escuchamos para el popup)
 
       // Subscribe to new notifications via realtime
       channelRef.current = window.sb
@@ -956,11 +939,6 @@ function SettingsHost() {
           const n = payload.new;
           const id = Date.now() + Math.random();
           setPopups(prev => [...prev, { ...n, _popupId: id }]);
-          // Increment bell badge
-          const btn = document.querySelector('[title="Notifications"],[aria-label="Notifications"]');
-          const cur = btn ? parseInt(btn.dataset.unread || '0', 10) : 0;
-          if (btn) btn.dataset.unread = cur + 1;
-          updateBellBadge(cur + 1);
         })
         .subscribe();
     });
