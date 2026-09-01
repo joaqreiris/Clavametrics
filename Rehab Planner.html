@@ -312,9 +312,9 @@
             <div class="rp-panel-h">
               <h3><i class="ti ti-target-arrow"></i> <span data-i18n="rehab_planner.block_detail">Block detail</span></h3>
               <div class="right">
-                <button class="ic-btn" data-i18n-attr="title:rehab_planner.edit_block" title="Edit block"><i class="ti ti-pencil"></i></button>
-                <button class="ic-btn" data-i18n-attr="title:rehab_planner.duplicate" title="Duplicate"><i class="ti ti-copy"></i></button>
-                <button class="ic-btn" data-i18n-attr="title:rehab_planner.remove" title="Remove"><i class="ti ti-trash"></i></button>
+                <button class="ic-btn" id="rp-block-edit" data-i18n-attr="title:rehab_planner.edit_block" title="Edit block"><i class="ti ti-pencil"></i></button>
+                <button class="ic-btn" id="rp-block-dup" data-i18n-attr="title:rehab_planner.duplicate" title="Duplicate"><i class="ti ti-copy"></i></button>
+                <button class="ic-btn" id="rp-block-del" data-i18n-attr="title:rehab_planner.remove" title="Remove"><i class="ti ti-trash"></i></button>
               </div>
             </div>
             <div class="rp-panel-b">
@@ -695,7 +695,7 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           { reps: '10', load: '', tempo: '', rest: '60s' },
           { reps: '10', load: '', tempo: '', rest: '60s' }
         ];
-        const days = [0, 2, 4].map(n => new Date(currentWeekStart.getTime() + n * DAY).toISOString().slice(0, 10));
+        const days = [0, 2, 4].map(n => window.cmYMD(new Date(currentWeekStart.getTime() + n * DAY)));
         const sessions = picks.map((p, i) => {
           let names = pickExercises(p.zk);
           if (!names.length) names = genericFallback();
@@ -775,8 +775,8 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
       .from('rehab_sessions')
       .select('*')
       .eq('plan_id', planId)
-      .gte('date', ws.toISOString().slice(0,10))
-      .lte('date', we.toISOString().slice(0,10))
+      .gte('date', window.cmYMD(ws))   // fecha LOCAL: con toISOString, al este de UTC (p.ej. UTC+7)
+      .lte('date', window.cmYMD(we))   // la semana se corría un día y los bloques caían en el día equivocado
       .order('date');
     window._rpSessionsMap = {};
     (sessions || []).forEach(s => { window._rpSessionsMap[s.id] = s; });
@@ -841,7 +841,8 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
       exercises:    d.exercises?.length ? d.exercises : null
     };
     if (d.mode === 'edit' && sid) {
-      await window.sb.from('rehab_sessions').update(fields).eq('id', sid);
+      const { error } = await window.sb.from('rehab_sessions').update(fields).eq('id', sid);
+      if (error) { console.error('[planner] session update error', error); rpToast(tt('rehab_planner.action_failed', 'Could not save the change') + ': ' + (error.message || error.code || '')); return; }
     } else {
       if (!d.dayDate) return;
       const { error } = await window.sb.from('rehab_sessions').insert({
@@ -1038,9 +1039,12 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
   });
 
   // ── Side panel action buttons ──
-  const editBtn   = document.querySelector('.rp-panel-card .ic-btn[title="Edit block"]');
-  const copyBtn   = document.querySelector('.rp-panel-card .ic-btn[title="Duplicate"]');
-  const deleteBtn = document.querySelector('.rp-panel-card .ic-btn[title="Remove"]');
+  // Por id, NUNCA por title: el title lo reescribe i18n (data-i18n-attr) antes de que este
+  // bloque corra, así que buscarlo por 'Edit block' devolvía null en español/portugués y los
+  // tres botones quedaban muertos (sólo funcionaban con la app en inglés).
+  const editBtn   = document.getElementById('rp-block-edit');
+  const copyBtn   = document.getElementById('rp-block-dup');
+  const deleteBtn = document.getElementById('rp-block-del');
 
   if (editBtn) {
     editBtn.removeAttribute('onclick');
@@ -1070,11 +1074,12 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
     copyBtn.addEventListener('click', async () => {
       const s = window._rpSel;
       if (!s?.sessionId) return;
-      await window.sb.from('rehab_sessions').insert({
+      const { error } = await window.sb.from('rehab_sessions').insert({
         plan_id: planId, club_id: clubId, date: s.dayDate,
         name: s.name + ' ' + tt('rehab_planner.copy_suffix', '(copy)'), color: TYPE_COLOR_MAP[s.type] || '#64748B',
         duration_min: s.dur, notes: s.notes || null
       });
+      if (error) { console.error('[rehab] duplicate block failed:', error); rpToast(tt('rehab_planner.action_failed', 'Could not save the change') + ': ' + (error.message || error.code || '')); return; }
       await rpReloadWeek();
     });
   }
@@ -1084,7 +1089,14 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
       const s = window._rpSel;
       if (!s?.sessionId) return;
       if (!confirm(tt('rehab_planner.confirm_delete_block', 'Delete "{name}"?', { name: s.name }))) return;
-      await window.sb.from('rehab_sessions').delete().eq('id', s.sessionId);
+      // select() para saber si RLS dejó 0 filas: sin esto el borrado bloqueado no devuelve error
+      // y el bloque «reaparece» al recargar la semana, que se lee como «no me deja borrar».
+      const { data: del, error: delErr } = await window.sb.from('rehab_sessions').delete().eq('id', s.sessionId).select('id');
+      if (delErr || !del?.length) {
+        console.error('[rehab] delete block failed:', delErr);
+        rpToast(tt('rehab_planner.action_failed', 'Could not save the change') + (delErr ? ': ' + (delErr.message || delErr.code || '') : ''));
+        return;
+      }
       window._rpSel = null;
       const panelB = document.querySelector('.rp-panel-card .rp-panel-b');
       if (panelB) panelB.innerHTML = `<div style="padding:8px 0;font:var(--cm-body-sm);color:var(--cm-fg-muted)">${tt('rehab_planner.select_block_hint','Select a block to see details.')}</div>`;
@@ -1280,7 +1292,7 @@ function rpBuildWeek(weekStart, sessions) {
   const today = new Date(); today.setHours(0,0,0,0);
   return DAYS.map((dow, i) => {
     const date = new Date(weekStart.getTime() + i * DAY);
-    const iso  = date.toISOString().slice(0,10);
+    const iso  = window.cmYMD(date);   // local, no UTC (ver loadWeek)
     const isToday = date.getTime() === today.getTime();
     const blocks = sessions
       .filter(s => s.date === iso)

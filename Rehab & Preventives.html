@@ -212,8 +212,10 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
   window.rpvDeletePlan = async function(planId, btnEl){
     if (!confirm(tt('rehab_planner.delete_plan_confirm', 'Delete this plan? This cannot be undone.'))) return;
     if (btnEl) btnEl.disabled = true;
-    const { error } = await window.sb.from('rehab_plans').delete().eq('id', planId).eq('club_id', clubId);
-    if (error){ if (btnEl) btnEl.disabled = false; console.error('[rehab] delete plan failed:', error); rpvToast(tt('rehab_planner.delete_failed', 'Could not delete plan') + ': ' + (error.message || error.code || ''), true); return; }
+    // select() para distinguir «borrado» de «RLS lo filtró»: sin él, 0 filas afectadas no da error
+    // y la fila desaparece de la tabla pero vuelve al recargar.
+    const { data: del, error } = await window.sb.from('rehab_plans').delete().eq('id', planId).eq('club_id', clubId).select('id');
+    if (error || !del?.length){ if (btnEl) btnEl.disabled = false; console.error('[rehab] delete plan failed:', error); rpvToast(tt('rehab_planner.delete_failed', 'Could not delete plan') + (error ? ': ' + (error.message || error.code || '') : ''), true); return; }
     btnEl?.closest('tr')?.remove();
     rpvToast(tt('rehab_planner.deleted', 'Plan deleted'));
   };
