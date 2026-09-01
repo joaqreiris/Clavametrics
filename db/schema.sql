@@ -2155,6 +2155,12 @@ create table if not exists public.players (
   positions text[],
   archived_at timestamp with time zone,
   joined_date date,
+  -- Antropometría específica de deportes de altura (básquet, vóley): la envergadura y el
+  -- alcance de pie son datos de ficha, no medidas de seguimiento — por eso viven acá y no
+  -- en player_anthropometrics, que es una serie temporal. Las pide el sport pack vía
+  -- anthro.extra; en fútbol ni se muestran.
+  wingspan numeric(5,2),
+  standing_reach numeric(5,2),
   constraint players_pkey primary key (id),
   constraint players_dominant_foot_check CHECK ((dominant_foot = ANY (ARRAY['left'::text, 'right'::text, 'both'::text, NULL::text]))),
   constraint players_status_check CHECK ((status = ANY (ARRAY['available'::text, 'injured'::text, 'modified'::text, 'unavailable'::text])))

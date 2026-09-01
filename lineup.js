@@ -142,7 +142,6 @@
       substitutes: 'Substitutes',
       coach: 'HEAD COACH',
       assistant: 'ASSISTANT',
-      gkCoach: 'GK COACH',
       fitness: 'PERFORMANCE',
       matchday: 'Date',
       kickoff: 'Kick-off',

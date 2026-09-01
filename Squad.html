@@ -655,6 +655,18 @@
           <input type="number" id="sqF_weight_kg" placeholder="e.g. 76" min="40" max="120" data-i18n-ph="squad.eg_76">
         </div>
       </div>
+      <!-- Shown only when the sport pack asks for them (anthro.extra) — a wing's reach
+           matters in basketball and volleyball, nowhere else. -->
+      <div class="sq-modal-row" id="sqAnthroExtra" style="display:none">
+        <div class="sq-modal-field">
+          <label for="sqF_wingspan" data-i18n="squad.wingspan">Wingspan (cm)</label>
+          <input type="number" id="sqF_wingspan" placeholder="e.g. 205" min="140" max="260" data-i18n-ph="squad.eg_205">
+        </div>
+        <div class="sq-modal-field">
+          <label for="sqF_standing_reach" data-i18n="squad.standing_reach">Standing reach (cm)</label>
+          <input type="number" id="sqF_standing_reach" placeholder="e.g. 265" min="160" max="320" data-i18n-ph="squad.eg_265">
+        </div>
+      </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
           <label for="sqF_dominant_foot" data-i18n="squad.dominant_foot">Dominant foot</label>
@@ -985,10 +997,22 @@ window.addEventListener('cm:sport-change', () => {
   buildPositionTables();
   fillPositionFilters();
   fillPositionSelects();
+  applySportToPlayerForm();
   try { if (typeof window.sqRepaint === 'function') window.sqRepaint(); } catch (_e) {}
 });
 
 function ttGroup(name){ return tt(_GROUP_KEYS[name] || '', name); }
+
+// Extra body measurements this sport cares about. Basketball and volleyball recruit on
+// reach, so wingspan and standing reach are ficha data there; in football they are noise.
+function sportAnthroExtra() {
+  try { return (window.CMSport && window.CMSport.at('anthro.extra', [])) || []; }
+  catch (_e) { return []; }
+}
+function applySportToPlayerForm() {
+  const row = document.getElementById('sqAnthroExtra');
+  if (row) row.style.display = sportAnthroExtra().length ? '' : 'none';
+}
 
 // Normalize a free-text position (CSV import, etc.) to a code POS_CFG understands.
 // Delegates to the shared vocabulary; keeps the old contract of echoing the cleaned-up
@@ -1432,7 +1456,7 @@ async function reloadPlayers() {
   }
   // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
   // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
-  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,joined_date,height,weight,dominant_foot,status,photo_url,team_id,archived_at';
+  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,joined_date,height,weight,dominant_foot,wingspan,standing_reach,status,photo_url,team_id,archived_at';
   const _archivedView = _currentTeamId === '__archived__';
   let q = window.sb.from('players')
     .select((_currentTeamId && !_archivedView) ? `${_cols},player_teams!inner(team_id)` : _cols)
@@ -1799,6 +1823,9 @@ async function reloadPlayers() {
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
     document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
     document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
+    document.getElementById('sqF_wingspan').value       = player?.wingspan       || '';
+    document.getElementById('sqF_standing_reach').value = player?.standing_reach || '';
+    applySportToPlayerForm();
     document.getElementById('sqF_status').value      = player?.status          || 'available';
     // Teams / Categories multi-select: pre-seleccionar las membresías del player.
     document.getElementById('sqF_teamsWrap')?.classList.toggle('is-ro', !_fullAccess);
@@ -1911,6 +1938,11 @@ async function reloadPlayers() {
       weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
     };
+    // Reach measurements only travel for sports that ask for them (anthro.extra).
+    if (sportAnthroExtra().length) {
+      payload.wingspan       = parseFloat(document.getElementById('sqF_wingspan').value) || null;
+      payload.standing_reach = parseFloat(document.getElementById('sqF_standing_reach').value) || null;
+    }
 
     // Teams / Categories: el set elegido en el multi-select. La RLS de `players` (para roles
     // no-admin) exige que el jugador pertenezca a UNO DE SUS equipos → si no se tildó ninguno,

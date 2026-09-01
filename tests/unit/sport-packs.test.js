@@ -452,3 +452,41 @@ describe('sport packs · lineup shapes', () => {
       }));
   });
 });
+
+describe('sport packs · body measurements', () => {
+  it('names a dominant side the player form can label', () => {
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      expect(['foot', 'hand'], sport).toContain(p.anthro.dominantSide));
+  });
+
+  it('stick and ball-in-hand sports ask for the hand, not the foot', () => {
+    ['basketball', 'hockey'].forEach(k => expect(PACKS[k].anthro.dominantSide, k).toBe('hand'));
+    ['football', 'futsal', 'rugby'].forEach(k => expect(PACKS[k].anthro.dominantSide, k).toBe('foot'));
+  });
+
+  it('extra measurements map to real player columns', () => {
+    // Mirrors the columns added to players in db/schema.sql.
+    const COLUMNS = new Set(['wingspan', 'standing_reach']);
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      (p.anthro.extra || []).forEach(k =>
+        expect(COLUMNS.has(k), `${sport} asks for unknown measurement "${k}"`).toBe(true)));
+  });
+
+  it('every extra measurement is labelled in all three languages', () => {
+    const locales = ['en', 'es', 'pt'].map(l =>
+      [l, JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', `${l}.json`), 'utf8'))]);
+    const used = new Set();
+    Object.values(PACKS).forEach(p => (p.anthro.extra || []).forEach(k => used.add(k)));
+    const missing = [];
+    locales.forEach(([lang, dict]) => used.forEach(k => {
+      if (!(`squad.${k}` in dict)) missing.push(`${lang}: squad.${k}`);
+    }));
+    expect(missing).toEqual([]);
+  });
+
+  it('a sport that recruits on reach asks for it', () => {
+    // Basketball scouts wingspan and standing reach; football has no use for either.
+    expect(PACKS.basketball.anthro.extra).toEqual(['wingspan', 'standing_reach']);
+    expect(PACKS.football.anthro.extra).toEqual([]);
+  });
+});
