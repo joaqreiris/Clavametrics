@@ -1037,18 +1037,10 @@
   // disparaba fireNow → doble render separado en el tiempo. Si ya hay una carga en curso, se
   // reusa la misma promesa: una sola loadData, y los fireNow de ambos callers caen juntos (el
   // debounce de rerenderActiveCards los coalesce en un solo pase).
-  // OJO: el single-flight es POR EQUIPO. Si se reusaba la promesa en vuelo sin mirar el equipo,
-  // la secuencia boot-fallback(6s, _gpTeamId todavía null) → reload() de gpsInitTeamSwitch
-  // devolvía la carga club-wide y NUNCA se recargaba con el equipo → opciones de TODO el club
-  // (p. ej. las tres «2026/27», una por equipo, en el panel de fechas) hasta un F5.
-  let _loadDataP = null, _loadDataTeam = null;
+  let _loadDataP = null;
   function loadData() {
-    const tid = window._gpTeamId != null ? String(window._gpTeamId) : '__none__';
-    if (_loadDataP && _loadDataTeam === tid) return _loadDataP;
-    const prev = _loadDataP || Promise.resolve();   // encadenar: no dos barridos en paralelo
-    _loadDataTeam = tid;
-    _loadDataP = prev.catch(() => {}).then(() => _loadDataImpl())
-      .finally(() => { if (_loadDataTeam === tid) { _loadDataP = null; _loadDataTeam = null; } });
+    if (_loadDataP) return _loadDataP;
+    _loadDataP = _loadDataImpl().finally(() => { _loadDataP = null; });
     return _loadDataP;
   }
   async function _loadDataImpl() {
@@ -1183,21 +1175,21 @@
     // Team-or-null seasons, newest first — the "pick a season" list in the date panel.
     // Dedup: la tabla `seasons` NO tiene unique constraint y se crean filas con el mismo
     // nombre desde varios lados (Annual Planner, el "New season" de GPS, o una por equipo) →
-    // «2026/27» aparecía 3 veces. Colapsamos por (nombre|inicio|fin) prefiriendo la fila del
-    // equipo sobre la club-wide (null) — misma regla "el equipo gana" que _mcForDate.
+    // «2026/27» aparecía 3 veces. Colapsamos por NOMBRE (no por nombre+ventana): hay UNA FILA POR
+    // EQUIPO con el mismo nombre y ventanas DISTINTAS, así que la clave con fechas no las juntaba
+    // y, si la carga corría antes de resolverse el equipo (boot con _gpTeam null → pasa el filtro
+    // de abajo), se veían las tres. Un solo botón por nombre, con esta prioridad: la del equipo
+    // activo > la club-wide (team_id null) > la primera (la query ya viene por start_date desc).
     {
-      const _snKey = s => `${s.name}|${String(s.start_date).slice(0, 10)}|${s.end_date ? String(s.end_date).slice(0, 10) : ''}`;
-      const _isTeamSn = s => _gpTeam != null && s.team_id != null && String(s.team_id) === String(_gpTeam);
+      const _snKey = s => String(s.name || '');
+      const _snRank = s => (_gpTeam != null && s.team_id != null && String(s.team_id) === String(_gpTeam)) ? 0
+                         : (s.team_id == null ? 1 : 2);
       const _snMap = new Map();
-      // ESTRICTO, igual que _mcTeamOk: null (club-wide) siempre pasa; el equipo activo pasa; otro
-      // equipo NUNCA — ni siquiera si _gpTeam llegó null por una race (antes `!_gpTeam` dejaba
-      // pasar TODAS → «2026/27» tres veces, una por equipo, con ventanas distintas). Con _gpTeam
-      // sin resolver se ven solo las club-wide hasta que reload() corra con el equipo.
       (seasons || [])
-        .filter(s => s.team_id == null || (!!_gpTeam && String(s.team_id) === String(_gpTeam)))
+        .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
         .forEach(s => {
           const k = _snKey(s), prev = _snMap.get(k);
-          if (!prev || (_isTeamSn(s) && !_isTeamSn(prev))) _snMap.set(k, s);   // el del equipo desplaza al NULL
+          if (!prev || _snRank(s) < _snRank(prev)) _snMap.set(k, s);   // el del equipo desplaza al resto
         });
       _seasons = [..._snMap.values()].sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
     }
