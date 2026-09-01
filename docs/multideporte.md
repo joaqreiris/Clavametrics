@@ -203,24 +203,25 @@ diferencias (un club que usa nombres propios de posiciones, o que agrega un test
 - **No** se tocó el acento verde: es el color de marca de ClavaMetrics, no vocabulario de
   deporte, y cada club ya lo pisa con `clubs.primary_color`.
 
-### Fase 2 — Plantel, alineación y pizarra ⏳ A MEDIAS
+### Fase 2 — Plantel, alineación y pizarra ✅ HECHA
 
-Hecho:
-- **Squad**: posiciones, grupos, colores, selects y chips de filtro desde el pack (fase 0).
-- **Pizarra**: superficie por deporte (parquet vs césped) y material propio de cada uno —
-  aro, silla, escalera de agilidad, bolsa de placaje, escudo de contacto (commit 6e90b9c).
-  SSG/MSG/LSG salen de `drills.gameTypes`; el flag de arquero se esconde donde no hay.
+- **Squad**: posiciones, grupos, colores, selects y chips desde el pack (fase 0). Ficha con
+  «mano hábil» donde corresponde, y envergadura + alcance de pie solo en los deportes que
+  fichan por alcance (`anthro.extra` → columnas `players.wingspan` / `players.standing_reach`).
+- **Pizarra** (6e90b9c): superficie por deporte (`field.surface`), material propio —aro,
+  silla, escalera, bolsa de placaje, escudo— filtrado por `drills.objects`, juegos reducidos
+  de `drills.gameTypes`, y el flag de arquero escondido donde no hay arquero.
+- **Lineup** (7a02f77): las disposiciones son del pack (`lineup.shapes`). Básquet **no** es
+  «fútbol sin formación»: tiene sistemas de espaciado reales (5-out / 4-out-1-in /
+  3-out-2-in), futsal 3-1 / 2-2 / 4-0, hockey 4-3-3 / 3-3-3-1. Rugby sí tiene una sola —las
+  quince camisetas SON las posiciones— y ahí el selector se oculta. La cancha del póster es
+  la del deporte.
 - **Cancha de básquet**: arreglado un `ReferenceError` que la dejaba como césped liso desde
-  que se escribió (commit 4a12f84). Hay tests que renderizan las cinco canchas.
+  que se escribió (4a12f84). Hay tests que renderizan las cinco canchas.
 
-Falta:
-- **Lineup**: sigue pidiendo formación «4-3-3» y once titulares. `formation` a nullable,
-  nº de titulares y banca del pack, poster por deporte, roles de cuerpo técnico del pack.
-- **Ficha del jugador**: envergadura, alcance de pie y mano hábil (el pack ya los declara
-  en `anthro`, nadie los lee).
-- **Selector de deporte en el Planner**: sigue deshabilitado; hoy la cancha la fija el club.
-- **Etiquetas de espacio**: «FIELD» y «AREA» siguen en vocabulario de campo.
-- Agregar vóley y handball a `field-system.js` (dos funciones de dibujo, el sistema ya está).
+**Fuera de alcance a propósito:** vóley y handball en `field-system.js`. El plan original los
+listaba acá, pero quedaron fuera de la v1 por decisión del 2026-08-28: dibujar sus canchas sin
+un pack que las use es trabajo que nadie ejecuta. Se hacen cuando entren esos deportes.
 
 ### Fase 3 — Planificación semanal ✅ HECHA (commit a9c67b8)
 - Hecho: el cálculo vivía **diez veces** con reglas distintas. Ahora está una sola vez en
