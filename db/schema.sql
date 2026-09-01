@@ -3998,13 +3998,16 @@ begin
 end; $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.get_survey_players(p_token text)
+-- p_tz = getTimezoneOffset() del browser, para resolver el DÍA LOCAL del jugador (mismo
+-- patrón que get_survey_sessions). La firma vieja de 1 arg se dropea: con las dos, PostgREST
+-- no sabe cuál llamar.
+CREATE OR REPLACE FUNCTION public.get_survey_players(p_token text, p_tz integer DEFAULT 0)
  RETURNS TABLE(id uuid, name text)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare v_link record;
+declare v_link record; v_local_date date;
 begin
   select * into v_link from public.share_links
    where token = p_token and revoked = false
@@ -4012,12 +4015,29 @@ begin
      and scope in ('wellness','rpe','survey');
   if not found then return; end if;
 
+  v_local_date := ((now() at time zone 'UTC') - make_interval(mins => coalesce(p_tz, 0)))::date;
+
   return query
     select p.id,
            coalesce(nullif(trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')), ''), 'Player') as name
     from public.players p
     where p.club_id = v_link.club_id
       and p.archived_at is null
+      -- En links de RPE no aparece el que ese día no entrenó: selección/ausente (away),
+      -- no disponible, enfermo o día libre — mismo criterio que session_rpe_status, así el
+      -- board del staff y la lista del jugador cuentan a los mismos. El LESIONADO sí aparece
+      -- (suele hacer gimnasio o rehab y su RPE cuenta). day_off es relativo al equipo: solo
+      -- saca si es global o del equipo del link. En wellness siguen todos — el parte diario
+      -- lo carga cualquiera, esté o no para entrenar.
+      and (v_link.scope <> 'rpe' or not exists (
+            select 1 from public.availability a
+            where a.player_id = p.id::text and a.date = v_local_date
+              and (
+                a.status in ('sick','unavailable','away')
+                or (a.status = 'day_off'
+                    and (a.team_id is null or v_link.team_id is null or a.team_id = v_link.team_id))
+              )
+          ))
       -- Link atado a una sesión con convocatoria (session_participants) → solo los anotados,
       -- sean del equipo que sean. Sin convocatoria (o link sin sesión) → roster del equipo vía
       -- player_teams (incluye invitados), con fallback a players.team_id.

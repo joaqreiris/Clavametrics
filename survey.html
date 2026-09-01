@@ -226,7 +226,9 @@ async function init(){
   const meta=await sb.rpc('get_survey_meta',{p_token:token});
   if(meta.error||!meta.data?.valid){show404(meta.error?.message);return;}
   scope=meta.data.scope;
-  const {data,error}=await sb.rpc('get_survey_players',{p_token:token});
+  // p_tz: el día local del jugador decide a quién saca la lista de RPE (selección, enfermo,
+  // no disponible, día libre). Con la RPC vieja de 1 arg el extra se ignora y no filtra nada.
+  const {data,error}=await sb.rpc('get_survey_players',{p_token:token,p_tz:new Date().getTimezoneOffset()});
   if(error||!data||!data.length){show404(error?.message);return;}
   players=data;renderPick();
 }
