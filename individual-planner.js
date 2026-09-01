@@ -9,83 +9,72 @@
     return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
   }
 
-  // ─── Sample week: Lautaro Vergara · CB · Capacity block W4 ───
-  const WEEK = [
-    {
-      dow: 'Mon', dom: 26, mode: ['gym', 'recov'],
-      blocks: [
-        { type: 'mob', name: 'Recovery mobility', dur: 18, exercises: 5, au: 28, resp: 'physio',
-          notes: 'Day after high-load session.' },
-        { type: 'str', name: 'Posterior chain · accessory', dur: 24, exercises: 4, au: 152, resp: 'sc',
-          goal: 'Maintenance · 65% 1RM' },
-        { type: 'cool', name: 'Cooldown · stretch', dur: 8, exercises: 2, au: 10, resp: 'sc' }
-      ]
-    },
-    {
-      dow: 'Tue', dom: 27, mode: ['pitch', 'gym'],
-      blocks: [
-        { type: 'warmup', name: 'RAMP', dur: 12, exercises: 4, au: 22, resp: 'sc' },
-        { type: 'skills', name: 'Team session · tactical', dur: 75, exercises: 0, au: 420, resp: 'coach',
-          gps: [{ l: 'TD', v: '5.2 km' }, { l: 'HSR', v: '320 m' }] },
-        { type: 'str', name: 'Strength · upper body', dur: 32, exercises: 5, au: 224, resp: 'sc',
-          goal: '80% 1RM · velocity 0.45 m/s' }
-      ]
-    },
-    {
-      dow: 'Wed', dom: 28, mode: ['pitch'], today: true,
-      blocks: [
-        { type: 'warmup', name: 'Movement prep · running', dur: 14, exercises: 5, au: 28, resp: 'sc' },
-        { type: 'cond', name: 'Aerobic capacity intervals', dur: 42, exercises: 3, au: 412, resp: 'sc', selected: true,
-          goal: '15:15 · 90% MAS',
-          gps: [{ l: 'TD', v: '3.6 km' }, { l: 'HSR', v: '680 m' }, { l: 'Vmax', v: '7.4 m/s' }, { l: 'Sprints', v: '14' }],
-          notes: 'Outdoor. Re-test MAS end of W5.' },
-        { type: 'cool', name: 'Cooldown', dur: 8, exercises: 1, au: 10, resp: 'sc' }
-      ]
-    },
-    {
-      dow: 'Thu', dom: 29, mode: ['pitch', 'gym'],
-      blocks: [
-        { type: 'warmup', name: 'RAMP', dur: 12, exercises: 4, au: 22, resp: 'sc' },
-        { type: 'skills', name: 'Team session · finishing', dur: 65, exercises: 0, au: 360, resp: 'coach',
-          gps: [{ l: 'TD', v: '4.6 km' }, { l: 'HSR', v: '280 m' }] },
-        { type: 'str', name: 'Strength · lower body', dur: 38, exercises: 5, au: 286, resp: 'sc',
-          goal: '85% 1RM · CMJ post-block',
-          notes: 'Cluster sets on back squat.' }
-      ]
-    },
-    {
-      dow: 'Fri', dom: 30, mode: ['pitch'],
-      blocks: [
-        { type: 'warmup', name: 'Activation', dur: 14, exercises: 5, au: 24, resp: 'sc' },
-        { type: 'skills', name: 'Team session · set pieces', dur: 55, exercises: 0, au: 280, resp: 'coach' },
-        { type: 'cool', name: 'Cooldown', dur: 10, exercises: 2, au: 12, resp: 'physio' }
-      ]
-    },
-    {
-      dow: 'Sat', dom: 31, rest: true
-    },
-    {
-      dow: 'Sun', dom: 1, mode: ['pitch'],
-      blocks: [
-        { type: 'warmup', name: 'Match warm-up', dur: 25, exercises: 5, au: 80, resp: 'sc' },
-        { type: 'skills', name: 'Match · vs. River', dur: 95, exercises: 0, au: 720, resp: 'coach',
-          gps: [{ l: 'TD', v: '10.4 km' }, { l: 'HSR', v: '720 m' }, { l: 'Sprints', v: '22' }] }
-      ]
-    }
-  ];
-
   // ─── Module state: the plan currently loaded into the engine ───
   window.__ipData = window.__ipData || { plan: null, phases: [] };
 
+  // ─── Real calendar week for the plan ───
+  // The week grid comes from the plan's start_date (+ its current programme week),
+  // never from wall-clock "now" and never from hardcoded sample dates.
+  const ipLocale = () => (window.CM_I18N && window.CM_I18N.current) || 'en-GB';
+  const ipYMD = (d) => (window.cmYMD ? window.cmYMD(d)
+    : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+  const ipToday = () => (window.cmToday ? window.cmToday() : ipYMD(new Date()));
+
+  // 'YYYY-MM-DD' → local Date (never `new Date(str)`, which parses date-only as UTC).
+  function ipParseYMD(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  // Monday of the week the plan's current programme week falls on.
+  function ipWeekMonday() {
+    const plan = window.__ipData && window.__ipData.plan;
+    const base = ipParseYMD(plan && plan.start_date) || new Date();
+    const mon = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));        // back to Monday
+    const wk = Math.max(1, Number(plan && plan.programme_week) || 1);
+    mon.setDate(mon.getDate() + (wk - 1) * 7);                    // + programme-week offset
+    return mon;
+  }
+
+  // 7 day headers { dow, dom, date, monthShort, today } for the plan's current week.
+  function ipWeekDates() {
+    const mon = ipWeekMonday(), today = ipToday(), loc = ipLocale();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i);
+      let dow, monthShort;
+      try {
+        dow = d.toLocaleDateString(loc, { weekday: 'short' });
+        monthShort = d.toLocaleDateString(loc, { month: 'short' });
+      } catch (_) {
+        dow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i];
+        monthShort = String(d.getMonth() + 1);
+      }
+      const date = ipYMD(d);
+      return { dow, dom: d.getDate(), date, monthShort, today: date === today };
+    });
+  }
+
   // Empty week scaffold (7 day cards, no blocks) — used when a plan has no content yet.
-  const EMPTY_WEEK = WEEK.map(d => ({ dow: d.dow, dom: d.dom, today: !!d.today, mode: [], blocks: [] }));
+  const emptyWeek = () => ipWeekDates().map(d => ({
+    dow: d.dow, dom: d.dom, date: d.date, monthShort: d.monthShort, today: d.today, mode: [], blocks: []
+  }));
 
   // Resolve the day/blocks array the views render from: plan.content (array or {days:[…]})
   // falling back to the empty scaffold so an empty/new plan still renders a week grid.
+  // Day headers are re-stamped from the real calendar week on every read, so content
+  // saved earlier never shows stale day numbers or a stale TODAY marker.
   function weekData() {
     const c = window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null;
     const days = Array.isArray(c) ? c : (c && Array.isArray(c.days) ? c.days : null);
-    return (days && days.length) ? days : EMPTY_WEEK;
+    if (!days || !days.length) return emptyWeek();
+    const dates = ipWeekDates();
+    return days.map((d, i) => {
+      const dt = dates[i];
+      return dt ? Object.assign({}, d, {
+        dow: dt.dow, dom: dt.dom, date: dt.date, monthShort: dt.monthShort, today: dt.today
+      }) : d;
+    });
   }
 
   // Materialize plan.content.days from the scaffold on first edit, so mutations persist.
@@ -95,9 +84,7 @@
     let c = plan.content;
     if (!c || typeof c !== 'object') c = {};
     if (Array.isArray(c)) c = { days: c };
-    if (!Array.isArray(c.days) || !c.days.length) {
-      c.days = EMPTY_WEEK.map(d => ({ dow: d.dow, dom: d.dom, today: !!d.today, mode: [], blocks: [] }));
-    }
+    if (!Array.isArray(c.days) || !c.days.length) c.days = emptyWeek();
     plan.content = c;
     return c.days;
   }
@@ -236,7 +223,7 @@
     weekData().forEach(day => {
       const dh = document.createElement('tr');
       dh.className = 'is-day-h';
-      dh.innerHTML = `<td colspan="8">${esc(day.dow)}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
+      dh.innerHTML = `<td colspan="8">${esc(day.dow)}, ${esc(day.monthShort || '')} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
       tbody.appendChild(dh);
       if (day.rest) {
         const r = document.createElement('tr');
@@ -336,12 +323,17 @@
     }).join('');
   }
 
-  // Week pager label ← real programme week (no fake dates).
+  // Week pager label ← real programme week + the calendar dates it covers.
   function updatePager() {
     const plan = window.__ipData && window.__ipData.plan;
     const wk = (plan && plan.programme_week) || 1;
     const el = document.getElementById('ip-pager-week');
-    if (el) el.textContent = tt('individual_planner.week_n', 'Week ' + wk, { n: wk });
+    if (!el) return;
+    let label = tt('individual_planner.week_n', 'Week ' + wk, { n: wk });
+    const days = ipWeekDates();
+    const a = days[0], b = days[6];
+    if (a && b) label += ` · ${a.dom} ${a.monthShort} – ${b.dom} ${b.monthShort}`;
+    el.textContent = label;
   }
 
   // Block-detail side panel ← the selected real block, or an empty state.
