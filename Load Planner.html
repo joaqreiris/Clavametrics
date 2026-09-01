@@ -149,6 +149,15 @@
   td.lp-cell.x-ok{background:rgba(22,163,74,.10)} .lp-cell.x-ok .lp-cbar i{background:var(--cm-success,#16a34a)}
   td.lp-cell.x-over{background:rgba(220,38,38,.10)} .lp-cell.x-over .lp-cbar i{background:var(--cm-danger,#dc2626)}
   .lp-badge{display:inline-block;font-size:8px;font-weight:800;padding:0 3px;border-radius:4px;background:#ede9fe;color:#6d28d9;vertical-align:middle}
+  .lp-badge.w{background:#fef3c7;color:#92400e}
+  /* match-reference filter row */
+  .lp-refrow{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 16px}
+  .lp-reff{display:inline-flex;flex-direction:column;gap:4px}
+  .lp-reff>span{font:600 10px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-faint)}
+  .lp-select.is-sm{height:30px;font-size:12px;padding:0 28px 0 10px}
+  .lp-refcount{align-self:flex-end;font:700 11.5px var(--cm-font-mono);color:var(--cm-fg-muted);background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:999px;padding:5px 10px}
+  .lp-refcount.warn{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+  .lp-refwarn{align-self:flex-end;font-size:11px;color:#92400e;max-width:420px;line-height:1.35}
   .lp-setcell{color:var(--cm-accent);text-decoration:underline;text-underline-offset:2px;font-size:11px}
   .lp-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:3px;vertical-align:middle}
   .d-high{background:var(--cm-success)}.d-med{background:var(--cm-warning)}.d-none{background:var(--cm-border-strong,#cbd5e1)}
@@ -315,6 +324,13 @@ let MCRAW={}, TREND=[];      // mcId→pid→metric→total + ordered [{id,name}
 let PLAYER_SEL=new Set();    // selected players (GKs off by default)
 let REF_MAX={}, REF_AVG={}, ACCRUED={}, ADAY={}, PREV={};
 let sortK='proj', sortD=-1;
+// Which matches feed the reference. Shared by the whole staff (table load_settings), not per browser.
+// Defaults are conservative: current season, every match, no minimum — nobody's numbers move
+// until someone actually sets a filter.
+let REFCFG={ season:'current', kind:'all', minMin:0 };
+let SEASONS=[];        // seasons of the active team (oldest → newest)
+let MATCHKIND={};      // 'YYYY-MM-DD' → 'friendly' | 'official'
+let REFSTATS={ matches:0, total:0 };   // match days passing the filter / in total
 // MD taper (% of match per day) — Periodización Integral: P-4=45, P-3=60, P-2=25, P-1=35
 const MD_TAPER={ 'MD-6':40,'MD-5':45,'MD-4':45,'MD-3':60,'MD-2':25,'MD-1':35,'MD+1':20,'MD+2':0,'MD+3':0 };  // claves ASCII: lookup vía cmMdNorm en _dayW
 const bandMid=m=>{ const b=BANDS[m]; return b?(b[0]+b[1])/2:null; };
@@ -395,7 +411,7 @@ async function reload(){
   document.getElementById('lpBody').innerHTML='<div class="lp-loading">'+tt('load_planner.loading','Loading…')+'</div>';
   const _T0=performance.now(), _lap=(l,s)=>console.log(`[lp] ${l}: ${Math.round(performance.now()-s)}ms`);
   try{
-    let s=performance.now(); await Promise.all([ loadRoster(), loadManual() ]); _lap('roster+manual',s);
+    let s=performance.now(); await Promise.all([ loadRoster(), loadManual(), loadSettings(), loadSeasons(), loadMatchKinds() ]); _lap('roster+manual+settings',s);
     restorePrefs();
     const refsP = loadMatchRefs();   // heaviest (all match reports) — overlap with the microcycle fetch
     s=performance.now(); await loadMicrocycle(); _lap('microcycle',s);
@@ -420,12 +436,12 @@ async function loadRoster(){
 function activePlayers(){ return displayRoster().filter(p=>PLAYER_SEL.has(p.id)); }
 // #6 — persist band/player/alternates selection per club+team
 function _prefKey(){ return 'lp:'+CLUB+':'+TEAM; }
-function savePrefs(){ try{ localStorage.setItem(_prefKey(), JSON.stringify({ bands:[...VISIBLE], players:[...PLAYER_SEL], showAlt:SHOW_ALT, targets:TARGETS })); }catch(e){} }
+// personal view preferences only — the weekly targets moved to load_settings (shared by the staff)
+function savePrefs(){ try{ localStorage.setItem(_prefKey(), JSON.stringify({ bands:[...VISIBLE], players:[...PLAYER_SEL], showAlt:SHOW_ALT })); }catch(e){} }
 function restorePrefs(){ let p={}; try{ p=JSON.parse(localStorage.getItem(_prefKey())||'{}'); }catch(e){}
   if(Array.isArray(p.bands)){ const s=new Set(p.bands.filter(m=>METRICS.includes(m))); if(s.size) VISIBLE=s; }
   if(Array.isArray(p.players)) PLAYER_SEL=new Set(p.players.filter(id=>ROSTER.some(r=>r.id===id)));
   if(typeof p.showAlt==='boolean') SHOW_ALT=p.showAlt;
-  if(p.targets && typeof p.targets==='object') TARGETS=p.targets;
   if(!VISIBLE.has(FOCUS)) FOCUS=visMetrics()[0]||FOCUS;
 }
 // Alternates who actually train with THIS team on the next training day (explicit availability row)
@@ -443,6 +459,69 @@ async function loadManual(){
   MANUAL={};
   const {data}=await window.sb.from('player_match_refs').select('player_id,metric,ref_value').eq('club_id',CLUB);
   (data||[]).forEach(r=>{ (MANUAL[r.player_id]=MANUAL[r.player_id]||{})[r.metric]=r.ref_value; });
+}
+
+// ── shared settings: weekly targets + which matches feed the reference ─────────
+// These belong to the TEAM, not to the browser: two coaches opening the same screen
+// must see the same targets and the same reference. (Band/player selection stays local —
+// that one really is a personal view preference.)
+async function loadSettings(){
+  TARGETS={}; REFCFG={ season:'current', kind:'all', minMin:0 };
+  let row=null;
+  try{ const {data}=await window.sb.from('load_settings').select('ref_season,ref_match_kind,ref_min_minutes,targets')
+        .eq('club_id',CLUB).eq('team_id',TEAM).maybeSingle(); row=data||null; }catch(e){ console.warn('[lp] settings',e); }
+  if(row){
+    REFCFG={ season:row.ref_season||'current', kind:row.ref_match_kind||'all', minMin:+(row.ref_min_minutes||0) };
+    TARGETS=(row.targets&&typeof row.targets==='object')?row.targets:{};
+    return;
+  }
+  // no row yet → carry over the targets this browser had saved locally, once.
+  try{ const p=JSON.parse(localStorage.getItem(_prefKey())||'{}');
+    if(p.targets && typeof p.targets==='object' && Object.keys(p.targets).length){ TARGETS=p.targets; await saveSettings(); } }catch(e){}
+}
+async function saveSettings(){
+  if(!CLUB||!TEAM) return;
+  try{ await window.sb.from('load_settings').upsert({ club_id:CLUB, team_id:TEAM,
+        ref_season:REFCFG.season, ref_match_kind:REFCFG.kind, ref_min_minutes:REFCFG.minMin,
+        targets:TARGETS, updated_at:new Date().toISOString(), updated_by:PROFILE?.id },{onConflict:'club_id,team_id'});
+  }catch(e){ console.warn('[lp] save settings',e); }
+}
+// Seasons of the active team (they are per team, and a club-wide one has team_id null).
+async function loadSeasons(){
+  SEASONS=[];
+  try{ const {data}=await window.sb.from('seasons').select('id,name,start_date,end_date,team_id')
+        .eq('club_id',CLUB).order('start_date',{ascending:true});
+    SEASONS=(data||[]).filter(s=>!s.team_id||s.team_id===TEAM);
+  }catch(e){ console.warn('[lp] seasons',e); }
+}
+// Official vs friendly. Only the Calendar knows: a match imported from GPS exists just as a
+// training_sessions row, with no competition. Those count as official so that turning on
+// "official only" never empties the reference of a club that doesn't fill the field in.
+async function loadMatchKinds(){
+  MATCHKIND={};
+  try{ const {data}=await window.sb.from('calendar_events').select('date,competition,team_id')
+        .eq('club_id',CLUB).eq('type','match');
+    (data||[]).forEach(r=>{ if(!r.date) return; if(r.team_id&&r.team_id!==TEAM) return;
+      const k = r.competition==='friendly' ? 'friendly' : 'official';
+      if(MATCHKIND[r.date]!=='official') MATCHKIND[r.date]=k;   // two events the same day → official wins
+    });
+  }catch(e){ console.warn('[lp] match kinds',e); }
+}
+// Date window of the selected season ('all' → no window).
+function seasonWindow(){
+  if(REFCFG.season==='all'||!SEASONS.length) return null;
+  let s=null;
+  if(REFCFG.season==='current'){ const t=window.cmToday();
+    s=SEASONS.find(x=>x.start_date<=t&&x.end_date>=t) || SEASONS[SEASONS.length-1] || null; }
+  else s=SEASONS.find(x=>x.id===REFCFG.season)||null;
+  return s? { from:s.start_date, to:s.end_date, name:s.name } : null;
+}
+const refFilterOn=()=> !!seasonWindow() || REFCFG.kind!=='all' || REFCFG.minMin>0;
+// Does this match DAY feed the reference? (minutes are per player, checked on the row)
+function matchDayPasses(date){
+  const w=seasonWindow(); if(w && (date<w.from||date>w.to)) return false;
+  if(REFCFG.kind!=='all' && (MATCHKIND[date]||'official')!==REFCFG.kind) return false;
+  return true;
 }
 
 async function loadMicrocycle(){
@@ -509,16 +588,33 @@ async function _sessIds(byDates, from, to){
   return {sids, sidDate};
 }
 const REF_TTL=10*60*1000;
-function _refKey(){ return 'lpref:'+CLUB+':'+TEAM; }
-function saveRefCache(){ try{ localStorage.setItem(_refKey(), JSON.stringify({ts:Date.now(), max:REF_MAX, avg:REF_AVG})); }catch(e){} }
-function invalidateRefCache(){ try{ localStorage.removeItem(_refKey()); }catch(e){} }
+// the filter is part of the key: changing it must not read back a reference computed with another one
+function _refKey(){ return 'lpref:'+CLUB+':'+TEAM+':'+REFCFG.season+':'+REFCFG.kind+':'+REFCFG.minMin; }
+function saveRefCache(){ try{ localStorage.setItem(_refKey(), JSON.stringify({ts:Date.now(), max:REF_MAX, avg:REF_AVG, stats:REFSTATS})); }catch(e){} }
+function invalidateRefCache(){ try{ const pre='lpref:'+CLUB+':'+TEAM;
+  Object.keys(localStorage).filter(k=>k.indexOf(pre)===0).forEach(k=>localStorage.removeItem(k)); }catch(e){} }
+
+// best-5 (max) and last-5 normalised to 90' (avg) over a given set of match rows
+function _computeRef(arr,m){
+  const vals=arr.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null).sort((a,b)=>b-a).slice(0,REF_N);
+  const max = vals.length>=MIN_MATCHES
+    ? { value:+(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2), count:vals.length, conf:vals.length>=REF_N?'high':'med', manual:false } : null;
+  const recent=arr.filter(r=>r._d).sort((a,b)=>a._d<b._d?1:a._d>b._d?-1:0).slice(0,REF_N);
+  const nvNorm=recent.map(r=>r[m]==null?null:(r._tp>0?(+r[m])/r._tp*90:null)).filter(v=>v!=null);
+  const nvRaw =recent.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null);
+  const use = nvNorm.length>=MIN_MATCHES? nvNorm : (nvRaw.length>=MIN_MATCHES? nvRaw : null);
+  const avg = use
+    ? { value:+(use.reduce((s,v)=>s+v,0)/use.length).toFixed(2), count:use.length, conf:use.length>=REF_N?'high':'med', per90:nvNorm.length>=MIN_MATCHES } : null;
+  return {max,avg};
+}
 
 async function loadMatchRefs(){
   REF_MAX={}; REF_AVG={};
   ROSTER.forEach(p=>{ REF_MAX[p.id]={}; REF_AVG[p.id]={}; METRICS.forEach(m=>{ REF_MAX[p.id][m]={value:null,count:0,conf:'none',manual:false}; REF_AVG[p.id][m]={value:null,count:0,conf:'none'}; }); });
+  REFSTATS={matches:0,total:0};
   const pids=ROSTER.map(p=>p.id); if(!pids.length||!METRICS.length){ applyManual(); return; }
   // cache hit → instant (manual overrides still applied on top)
-  try{ const c=JSON.parse(localStorage.getItem(_refKey())||'null'); if(c && Date.now()-c.ts<REF_TTL && c.max && c.avg){ ROSTER.forEach(p=>{ if(c.max[p.id]) REF_MAX[p.id]=c.max[p.id]; if(c.avg[p.id]) REF_AVG[p.id]=c.avg[p.id]; }); applyManual(); return; } }catch(e){}
+  try{ const c=JSON.parse(localStorage.getItem(_refKey())||'null'); if(c && Date.now()-c.ts<REF_TTL && c.max && c.avg){ ROSTER.forEach(p=>{ if(c.max[p.id]) REF_MAX[p.id]=c.max[p.id]; if(c.avg[p.id]) REF_AVG[p.id]=c.avg[p.id]; }); if(c.stats) REFSTATS=c.stats; applyManual(); return; } }catch(e){}
   let set; try{ set=await window.gpsGetMatchDates(CLUB); }catch(e){ set=null; }
   if(!set||!set.size){ applyManual(); return; }
   const {sids,sidDate}=await _sessIds([...set]);
@@ -529,16 +625,28 @@ async function loadMatchRefs(){
     .eq('club_id',CLUB).in('player_id',pids).eq('is_invalid',false).in('session_id',sids),{label:'lp-matchrefs'}).catch(e=>{ console.warn('[lp] matchrefs',e); return []; });
   const by={};
   (rows||[]).forEach(r=>{ (by[r.player_id]=by[r.player_id]||[]).push(Object.assign({},r,{_d:sidDate[r.session_id],_tp:+(r.time_played||0)})); });
+  // count only match days that actually have GPS for this roster — a fixture with no data
+  // in the calendar would otherwise inflate the "x of y" counter.
+  const played=new Set(); (rows||[]).forEach(r=>{ const d=sidDate[r.session_id]; if(d) played.add(d); });
+  REFSTATS={ total:played.size, matches:[...played].filter(matchDayPasses).length };
+  const filtering=refFilterOn(), minMin=REFCFG.minMin;
+  // a row passes when its match day passes AND the player was on long enough. No minutes
+  // recorded is treated as not meeting a minutes filter — the fallback below covers it.
+  const rowPasses=r=> matchDayPasses(r._d) && (!minMin || r._tp>=minMin);
   ROSTER.forEach(p=>{
-    const arr=by[p.id]||[];
-    const recent=arr.filter(r=>r._d).sort((a,b)=>a._d<b._d?1:a._d>b._d?-1:0).slice(0,REF_N);
+    const all=by[p.id]||[];
+    const sel=filtering? all.filter(rowPasses) : all;
     METRICS.forEach(m=>{
-      const vals=arr.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null).sort((a,b)=>b-a).slice(0,REF_N);
-      if(vals.length>=MIN_MATCHES){ REF_MAX[p.id][m]={ value:+(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2), count:vals.length, conf:vals.length>=REF_N?'high':'med', manual:false }; }
-      const nvNorm=recent.map(r=>r[m]==null?null:(r._tp>0?(+r[m])/r._tp*90:null)).filter(v=>v!=null);
-      const nvRaw =recent.map(r=>r[m]==null?null:+r[m]).filter(v=>v!=null);
-      const use = nvNorm.length>=MIN_MATCHES? nvNorm : (nvRaw.length>=MIN_MATCHES? nvRaw : null);
-      if(use){ REF_AVG[p.id][m]={ value:+(use.reduce((s,v)=>s+v,0)/use.length).toFixed(2), count:use.length, conf:use.length>=REF_N?'high':'med', per90:nvNorm.length>=MIN_MATCHES }; }
+      const s=_computeRef(sel,m);
+      let mx=s.max, av=s.avg;
+      // fewer than 3 matches under the filter → widen to the whole history for this
+      // player/metric and flag it, so nobody is left without a reference mid-season.
+      if(filtering && (!mx||!av)){ const a=_computeRef(all,m);
+        if(!mx && a.max) mx=Object.assign(a.max,{widened:true});
+        if(!av && a.avg) av=Object.assign(a.avg,{widened:true});
+      }
+      if(mx) REF_MAX[p.id][m]=mx;
+      if(av) REF_AVG[p.id][m]=av;
     });
   });
   saveRefCache(); applyManual();
@@ -606,7 +714,7 @@ function cellData(p,m){
   const remX=plannedX(m,true);
   const projX= refMax? (xMax!=null?xMax:0)+remX : null;
   const projAbs= refMax!=null? acc+remX*refMax : null;
-  return { refMax, refAvg, acc, xMax, xAvg, remX, projX, projAbs, manual:rm.manual, conf:rm.conf };
+  return { refMax, refAvg, acc, xMax, xAvg, remX, projX, projAbs, manual:rm.manual, conf:rm.conf, widened:!!rm.widened, refCount:rm.count };
 }
 function statusOf(projX,m){ const band=BANDS[m]; if(!band||projX==null) return {cls:'',pctW:Math.min(100,(projX||0)/4*100)};
   const cls=projX<band[0]?'x-under':projX<=band[1]?'x-ok':'x-over'; return {cls,pctW:Math.min(100,projX/(band[1]*1.3)*100)}; }
@@ -617,9 +725,9 @@ function render(){
     ? `${MC.name||tt('load_planner.microcycle','Microcycle')} · ${DAYS[0]?.date} → ${DAYS[DAYS.length-1]?.date}`+(MC.rival?` · vs ${MC.rival}`:'')
     : tt('load_planner.no_mc','No microcycle for this week — showing Mon–Sun');
   ensureLayout();
-  document.getElementById('lpTop').innerHTML = chipsHTML()+targetsHTML()+gridHTML()+kpiHTML();
+  document.getElementById('lpTop').innerHTML = chipsHTML()+refCfgHTML()+targetsHTML()+gridHTML()+kpiHTML();
   document.getElementById('lpBottom').innerHTML = matrixHTML();
-  wireChips(); wireTargets(); wireGrid(); wireMatrix();
+  wireChips(); wireRefCfg(); wireTargets(); wireGrid(); wireMatrix();
   renderTrend();
 }
 function ensureLayout(){
@@ -632,14 +740,51 @@ function ensureLayout(){
      <div id="lpBottom"></div>`;
 }
 
+// how many active players ended up with a widened (fallback) reference on the focus metric
+function widenedPlayers(){
+  return activePlayers().filter(p=>METRICS.some(m=>{ const r=REF_MAX[p.id]&&REF_MAX[p.id][m]; return r&&r.widened; })).length;
+}
+function refCfgHTML(){
+  const w=seasonWindow(), wide=widenedPlayers();
+  const seasonSel=[`<option value="current"${REFCFG.season==='current'?' selected':''}>${tt('load_planner.season_current','Current season')}</option>`,
+                   `<option value="all"${REFCFG.season==='all'?' selected':''}>${tt('load_planner.season_all','All history')}</option>`]
+    .concat(SEASONS.slice().reverse().map(s=>`<option value="${s.id}"${REFCFG.season===s.id?' selected':''}>${esc(s.name)}</option>`)).join('');
+  const kinds=[['all',tt('load_planner.kind_all','All matches')],['official',tt('load_planner.kind_official','Official only')],['friendly',tt('load_planner.kind_friendly','Friendlies only')]]
+    .map(([v,l])=>`<option value="${v}"${REFCFG.kind===v?' selected':''}>${l}</option>`).join('');
+  const mins=[0,45,60,70,75,80].map(v=>`<option value="${v}"${REFCFG.minMin===v?' selected':''}>${v?v+"'":tt('load_planner.min_off','No minimum')}</option>`).join('');
+  // total 0 = the club has no match GPS at all; that is not a filter problem, so no warning
+  const none=REFSTATS.total>0&&REFSTATS.matches===0, few=REFSTATS.matches>0&&REFSTATS.matches<MIN_MATCHES;
+  const count=`<span class="lp-refcount ${none||few?'warn':''}">${REFSTATS.matches}/${REFSTATS.total} ${tt('load_planner.matches_in_ref','matches feed the reference')}</span>`;
+  const warn = none
+    ? `<span class="lp-refwarn">${tt('load_planner.ref_none','No match passes this filter — every player falls back to their whole history.')}</span>`
+    : few ? `<span class="lp-refwarn">${tt('load_planner.ref_few','Fewer than 3 matches: most players will fall back to their whole history.')}</span>`
+    : wide ? `<span class="lp-refwarn">≈ ${wide} ${tt('load_planner.ref_widened_n','players widened — they had fewer than 3 matches under this filter.')}</span>` : '';
+  return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.ref_cfg','Match reference')}</span>
+      <span class="m">${tt('load_planner.ref_cfg_hint','which matches build each player\'s best-5 and last-5 — shared with the whole staff')}</span></div>
+    <div class="lp-refrow">
+      <label class="lp-reff"><span>${tt('load_planner.f_season','Season')}</span><select class="lp-select is-sm" id="lpRefSeason">${seasonSel}</select></label>
+      <label class="lp-reff"><span>${tt('load_planner.f_kind','Matches')}</span><select class="lp-select is-sm" id="lpRefKind">${kinds}</select></label>
+      <label class="lp-reff"><span>${tt('load_planner.f_min','Minutes played')}</span><select class="lp-select is-sm" id="lpRefMin">${mins}</select></label>
+      ${count}${warn}
+      <span class="lp-mini" style="margin-left:auto">${w?esc(w.name):tt('load_planner.season_all','All history')}${w?` · ${w.from} → ${w.to}`:''}</span>
+    </div></div>`;
+}
+function wireRefCfg(){
+  const apply=async(patch)=>{ Object.assign(REFCFG,patch); invalidateRefCache(); await saveSettings(); await reload(); };
+  const s=document.getElementById('lpRefSeason'); if(s) s.onchange=()=>apply({season:s.value});
+  const k=document.getElementById('lpRefKind');   if(k) k.onchange=()=>apply({kind:k.value});
+  const n=document.getElementById('lpRefMin');    if(n) n.onchange=()=>apply({minMin:+n.value||0});
+}
+
 function targetsHTML(){
   const cells=visMetrics().map(m=>{ const t=targetOf(m); return `<div class="lp-tgt"><span class="lbl">${shortLabel(m)}</span><input type="number" min="0" max="20" step="0.05" value="${t!=null?(+t).toFixed(2):''}" data-tm="${m}" placeholder="—"><span class="x">×</span></div>`; }).join('');
   return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.week_target','Weekly target · × match')}</span>
      <span class="m">${tt('load_planner.week_target_hint','the ×match each metric should reach in the week — «To target» distributes it across the days')}</span></div>
+    <div class="lp-refrow" style="border-bottom:0;padding-bottom:0"><span class="lp-mini">${tt('load_planner.targets_shared','Saved for the whole team — every coach sees these numbers.')}</span></div>
     <div class="lp-tgtrow">${cells}</div></div>`;
 }
 function wireTargets(){
-  document.querySelectorAll('.lp-tgt input[data-tm]').forEach(inp=>inp.onchange=()=>{ const m=inp.dataset.tm, v=inp.value.trim(); if(v==='') delete TARGETS[m]; else TARGETS[m]=+v; savePrefs(); render(); });
+  document.querySelectorAll('.lp-tgt input[data-tm]').forEach(inp=>inp.onchange=async()=>{ const m=inp.dataset.tm, v=inp.value.trim(); if(v==='') delete TARGETS[m]; else TARGETS[m]=+v; await saveSettings(); render(); });
 }
 function chipsHTML(){
   const altCount=ROSTER.filter(p=>p.isAlt).length;
@@ -784,10 +929,11 @@ function matrixHTML(){
     const cells=cols.map(m=>{ const c=cellData(p,m),st=statusOf(c.projX,m),mm=metaOf(m);
       if(c.refMax==null) return `<td class="lp-cell" data-pid="${p.id}" data-m="${m}"><span class="lp-setcell">${tt('load_planner.set','set')}</span></td>`;
       const dot=c.manual?'<span class="lp-badge">M</span>':`<span class="lp-dot ${c.conf==='high'?'d-high':c.conf==='med'?'d-med':'d-none'}"></span>`;
+      const wide=c.widened?`<span class="lp-badge w" title="${tt('load_planner.widened','Fewer than 3 matches under the current filter — this reference uses the player\'s whole history.')}">≈</span>`:'';
       return `<td class="lp-cell ${st.cls}" data-pid="${p.id}" data-m="${m}" title="ref máx ${fmtN(c.refMax,mm.dec)} · ref prom ${fmtN(c.refAvg,mm.dec)} ${esc(mm.unit)} · ${tt('load_planner.now','now')} ${c.xMax!=null?c.xMax.toFixed(2):'0.00'}× · ${tt('load_planner.proj','proj')} ${c.projX!=null?c.projX.toFixed(2):'—'}×">
         <div class="cx">${c.xMax!=null?c.xMax.toFixed(2)+'×':'—'} <span class="clbl">${tt('load_planner.vs_max','vs máx')}</span></div>
         <div class="cavg">${c.xAvg!=null?c.xAvg.toFixed(2)+'× <span class="clbl">'+tt('load_planner.vs_avg','vs prom')+'</span>':'<span style="opacity:.35">'+tt('load_planner.vs_avg','vs prom')+' —</span>'}</div>
-        <div class="cref">${fmtN(c.refMax,mm.dec)} ${dot}</div>
+        <div class="cref">${fmtN(c.refMax,mm.dec)} ${dot}${wide}</div>
         <span class="lp-cbar"><i style="width:${st.pctW}%"></i></span></td>`;
     }).join('');
     const altBadge=p.isAlt?` <span class="lp-badge" title="${tt('load_planner.alt_player','Alternate — primary team is another')}">ALT</span>`:'';
@@ -795,6 +941,7 @@ function matrixHTML(){
   }).join('');
   return `<div class="lp-card"><div class="lp-card-h"><span class="t">${tt('load_planner.player_breakdown','Player breakdown')}</span>
       <div class="lp-legend"><span>${tt('load_planner.big_is','big = ×max (best-5) · small = ×avg (last-5/90)')}</span>
+        <span><span class="lp-badge w">≈</span> ${tt('load_planner.legend_widened','widened reference')}</span>
         <span><i style="background:rgba(14,165,233,.4)"></i>${tt('load_planner.under','under')}</span><span><i style="background:rgba(22,163,74,.5)"></i>${tt('load_planner.inband','in band')}</span><span><i style="background:rgba(220,38,38,.5)"></i>${tt('load_planner.over','over')}</span></div></div>
     <div class="lp-tblwrap"><table class="lp-tbl"><thead>${head}</thead><tbody>${body}</tbody></table></div></div>`;
 }

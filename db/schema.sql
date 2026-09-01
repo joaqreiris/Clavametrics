@@ -992,6 +992,40 @@ create policy "club members manage load_plan" on public.load_plan as permissive 
   using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
   with check ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
 
+-- load_settings: Load Planner settings SHARED by the staff of a team (one row per team).
+-- Two things used to live only in the browser's localStorage, so every coach saw different
+-- numbers on the same screen:
+--   · the weekly ×match targets (targets: metric → number)
+--   · which matches feed the best-5 / last-5 reference (ref_*)
+-- ref_season: 'current' (the season covering today) | 'all' | a seasons.id
+-- ref_match_kind: 'all' | 'official' | 'friendly'. A match is a FRIENDLY only when its
+--   calendar_events row says competition='friendly'; anything else (league/cup/international,
+--   unset, or a match that only exists as a training_sessions row) counts as official, so
+--   clubs that never fill in the competition field don't lose their whole reference.
+-- ref_min_minutes: minimum minutes played for a match to feed a player's reference (0 = off).
+-- When a filter leaves a player under 3 matches, the app falls back to the unfiltered set for
+-- that player/metric and flags the cell — nobody is left without a reference.
+create table if not exists public.load_settings (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid not null,
+  ref_season text not null default 'current',
+  ref_match_kind text not null default 'all',
+  ref_min_minutes integer not null default 0,
+  targets jsonb not null default '{}'::jsonb,
+  updated_at timestamp with time zone default now(),
+  updated_by uuid,
+  constraint load_settings_pkey primary key (id),
+  constraint load_settings_uq UNIQUE (club_id, team_id),
+  constraint load_settings_kind_chk CHECK (ref_match_kind in ('all','official','friendly')),
+  constraint load_settings_min_chk CHECK (ref_min_minutes >= 0 and ref_min_minutes <= 120)
+);
+
+alter table public.load_settings enable row level security;
+create policy "club members manage load_settings" on public.load_settings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id FROM profiles WHERE (profiles.id = auth.uid()))));
+
 create table if not exists public.gps_reports (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
