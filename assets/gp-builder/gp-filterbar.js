@@ -1037,10 +1037,18 @@
   // disparaba fireNow → doble render separado en el tiempo. Si ya hay una carga en curso, se
   // reusa la misma promesa: una sola loadData, y los fireNow de ambos callers caen juntos (el
   // debounce de rerenderActiveCards los coalesce en un solo pase).
-  let _loadDataP = null;
+  // OJO: el single-flight es POR EQUIPO. Si se reusaba la promesa en vuelo sin mirar el equipo,
+  // la secuencia boot-fallback(6s, _gpTeamId todavía null) → reload() de gpsInitTeamSwitch
+  // devolvía la carga club-wide y NUNCA se recargaba con el equipo → opciones de TODO el club
+  // (p. ej. las tres «2026/27», una por equipo, en el panel de fechas) hasta un F5.
+  let _loadDataP = null, _loadDataTeam = null;
   function loadData() {
-    if (_loadDataP) return _loadDataP;
-    _loadDataP = _loadDataImpl().finally(() => { _loadDataP = null; });
+    const tid = window._gpTeamId != null ? String(window._gpTeamId) : '__none__';
+    if (_loadDataP && _loadDataTeam === tid) return _loadDataP;
+    const prev = _loadDataP || Promise.resolve();   // encadenar: no dos barridos en paralelo
+    _loadDataTeam = tid;
+    _loadDataP = prev.catch(() => {}).then(() => _loadDataImpl())
+      .finally(() => { if (_loadDataTeam === tid) { _loadDataP = null; _loadDataTeam = null; } });
     return _loadDataP;
   }
   async function _loadDataImpl() {
@@ -1181,8 +1189,12 @@
       const _snKey = s => `${s.name}|${String(s.start_date).slice(0, 10)}|${s.end_date ? String(s.end_date).slice(0, 10) : ''}`;
       const _isTeamSn = s => _gpTeam != null && s.team_id != null && String(s.team_id) === String(_gpTeam);
       const _snMap = new Map();
+      // ESTRICTO, igual que _mcTeamOk: null (club-wide) siempre pasa; el equipo activo pasa; otro
+      // equipo NUNCA — ni siquiera si _gpTeam llegó null por una race (antes `!_gpTeam` dejaba
+      // pasar TODAS → «2026/27» tres veces, una por equipo, con ventanas distintas). Con _gpTeam
+      // sin resolver se ven solo las club-wide hasta que reload() corra con el equipo.
       (seasons || [])
-        .filter(s => !_gpTeam || s.team_id == null || String(s.team_id) === String(_gpTeam))
+        .filter(s => s.team_id == null || (!!_gpTeam && String(s.team_id) === String(_gpTeam)))
         .forEach(s => {
           const k = _snKey(s), prev = _snMap.get(k);
           if (!prev || (_isTeamSn(s) && !_isTeamSn(prev))) _snMap.set(k, s);   // el del equipo desplaza al NULL
