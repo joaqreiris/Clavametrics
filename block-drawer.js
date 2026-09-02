@@ -344,14 +344,18 @@
   // lost focus and swallowed the next letters.
   const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
   const exInitials = n => String(n || '—').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '—';
-  const THUMB_BOX = 'width:28px;height:28px;flex:0 0 auto;border-radius:6px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center';
-  const initialsThumb = ex => h('span', { class: 'bd-ex-thumb', style: THUMB_BOX + ';font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
+  const initialsThumb = ex => h('span', { class: 'bd-ex-thumb', style: 'font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)' }, exInitials(ex.name));
   // Thumb with graceful degradation: YouTube's img.youtube.com is blocked by some
   // ad/privacy blockers and corporate DNS — retry on i.ytimg.com (same CDN, different
   // host), then fall back to the initials chip so the row never shows a broken image.
   const exThumb = ex => {
-    if (!ex._thumb) return initialsThumb(ex);
-    const box = h('span', { class: 'bd-ex-thumb', style: THUMB_BOX });
+    const playable = !!(youtubeId(ex.video_url) || ex.video_url || ex._thumb);
+    if (!ex._thumb) {
+      const chip = initialsThumb(ex);
+      if (playable) makePlayable(chip, ex);
+      return chip;
+    }
+    const box = h('span', { class: 'bd-ex-thumb' });
     const img = h('img', {
       src: ex._thumb, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer',
       style: 'width:100%;height:100%;object-fit:cover;display:block'
@@ -359,11 +363,55 @@
     img.addEventListener('error', () => {
       const alt = String(ex._thumb).replace('https://img.youtube.com/', 'https://i.ytimg.com/');
       if (alt !== img.getAttribute('src') && !img.dataset.retried) { img.dataset.retried = '1'; img.src = alt; return; }
-      box.replaceWith(initialsThumb(ex));
+      const chip = initialsThumb(ex);
+      if (playable) makePlayable(chip, ex);
+      box.replaceWith(chip);
     });
     box.appendChild(img);
+    if (ex.video_url) box.appendChild(h('span', { class: 'play' }, h('i', { class: 'ti ti-player-play-filled' })));
+    if (playable) makePlayable(box, ex);
     return box;
   };
+  // Clicking the thumb opens the media viewer; it must not toggle the row.
+  function makePlayable(node, ex) {
+    node.classList.add('is-playable');
+    node.setAttribute('title', _tt('block_drawer.view_media', 'View exercise'));
+    node.addEventListener('click', (e) => { e.stopPropagation(); openMediaViewer(ex); });
+  }
+
+  // ─── Media viewer · YouTube embed, or the image/GIF at full size ───
+  function openMediaViewer(ex) {
+    const vid = youtubeId(ex.video_url);
+    // Non-YouTube links (Vimeo, Drive…) have no embed we can trust — open them out.
+    if (!vid && ex.video_url) { window.open(ex.video_url, '_blank', 'noopener'); return; }
+    const frame = h('div', { class: 'bd-media-frame' });
+    if (vid) {
+      frame.appendChild(h('iframe', {
+        src: `https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0`,
+        allow: 'autoplay; encrypted-media; fullscreen', allowfullscreen: ''
+      }));
+    } else if (ex._thumb) {
+      frame.appendChild(h('img', { src: ex._thumb, alt: ex.name, referrerpolicy: 'no-referrer' }));
+    } else {
+      return;
+    }
+    const closeBtn = h('button', { class: 'bd-media-close', type: 'button', title: 'Close (Esc)' }, h('i', { class: 'ti ti-x' }));
+    const back = h('div', { class: 'bd-media-back' },
+      h('div', { class: 'bd-media-box' }, closeBtn, frame, h('div', { class: 'bd-media-cap' }, ex.name))
+    );
+    // Esc closes the viewer only — the drawer underneath stays open.
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); shut(); } };
+    function shut() {
+      document.removeEventListener('keydown', onKey, true);
+      const f = frame.querySelector('iframe');
+      if (f) f.src = '';                        // stop playback
+      back.remove();
+    }
+    document.addEventListener('keydown', onKey, true);
+    closeBtn.addEventListener('click', shut);
+    back.addEventListener('mousedown', (e) => { if (e.target === back) shut(); });
+    document.body.appendChild(back);
+  }
 
   let _exListBox = null;   // live .bd-ex-list node, repainted in place
 
