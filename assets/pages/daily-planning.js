@@ -492,7 +492,35 @@ async function dpChangeStatus(playerId, newStatus) {
   if (!_dpAvMap[playerId]) _dpAvMap[playerId] = { player_id: playerId, date: _dpCurrentDate, club_id: _dpClubId };
   _dpAvMap[playerId].status = newStatus;
   _dpAvMap[playerId].team_id = _teamId;
+  await _dpSyncStatusToGroup(playerId);
   dpRenderSquad(_dpAvMap);
+}
+
+// La convocatoria es una foto del momento en que se armó: no se enteraba de los cambios de
+// disponibilidad posteriores. Al que pasaba a disponible/parcial DESPUÉS de armado lo dejaba
+// en «Other session» — y por arrastre fuera de los pickers de grupos por tarea, que filtran
+// por convocatoria. Al cambiar el estado lo reconciliamos con el grupo de la sesión activa.
+// El de trabajo diferenciado (lesión/rehab) no se toca: ahí manda el tilde manual.
+async function _dpSyncStatusToGroup(playerId){
+  const parts = window._dpSessParts;
+  if (!parts || !_dpCurrentSessionId) return;   // sin grupo definido → entrenan todos, nada que sincronizar
+  const p = _dpPlayerById(playerId); if (!p) return;
+  const id = String(playerId), cls = _dpStatusCls(p);
+  const goesIn  = ['', 'partial'].includes(cls);
+  const goesOut = ['away','unavailable','dayoff','sick'].includes(cls);
+  try {
+    if (goesIn && !parts.has(id)) {
+      const { error } = await window.sb.from('session_participants')
+        .upsert({ session_id: _dpCurrentSessionId, player_id: playerId, club_id: _dpClubId }, { onConflict: 'session_id,player_id' });
+      if (error) throw error;
+      parts.add(id);
+    } else if (goesOut && parts.has(id)) {
+      const { error } = await window.sb.from('session_participants')
+        .delete().eq('session_id', _dpCurrentSessionId).eq('player_id', playerId);
+      if (error) throw error;
+      parts.delete(id);
+    }
+  } catch(e){ console.warn('[DP] group sync:', e && e.message); }
 }
 
 // ── Convocatoria por sesión (session_participants) ──────────────────────────

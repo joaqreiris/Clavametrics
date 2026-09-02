@@ -1228,6 +1228,44 @@
     const { error } = await window.sb.from('availability')
       .upsert({ player_id: pid, date, status, minutes, match_kind, club_id: CLUB_ID, team_id, notes: null }, { onConflict: 'player_id,date' });
     if (error) console.warn('[Availability] save error:', error.message);
+    else _avSyncSessionGroups(pid, date, status);
+  }
+
+  // La convocatoria por sesión (session_participants) es una foto del momento en que se armó:
+  // si el estado del jugador cambia DESPUÉS, el grupo se queda con la foto vieja y el jugador
+  // aparece en «Other session» en Daily Planning — y desaparece de los pickers de grupos por
+  // tarea, que filtran por la convocatoria. Acá lo reconciliamos.
+  // Sólo se tocan las sesiones que YA tienen grupo armado (sin filas entrenan todos, no hay
+  // nada que sincronizar) y sólo las del equipo activo. Lesión/rehab no se tocan: ahí manda el
+  // tilde manual (el diferenciado se anota a mano). Va sin await: no frena el guardado.
+  const _AV_GRP_IN  = new Set(['available', 'partial', 'limited']);
+  const _AV_GRP_OUT = new Set(['unavailable', 'away', 'day_off', 'sick', 'other_team']);
+  const _avGrpSessCache = {};
+  function _avGroupedSessions(date) {
+    if (!_avGrpSessCache[date]) _avGrpSessCache[date] = (async () => {
+      const { data, error } = await window.sb.from('training_sessions')
+        .select('id').eq('club_id', CLUB_ID).eq('team_id', _avTeamId)
+        .eq('session_date', date).neq('session_type', 'gym');
+      if (error || !data || !data.length) return [];
+      const { data: parts } = await window.sb.from('session_participants')
+        .select('session_id').in('session_id', data.map(r => r.id));
+      return [...new Set((parts || []).map(r => r.session_id))];
+    })();
+    return _avGrpSessCache[date];
+  }
+  async function _avSyncSessionGroups(pid, date, status) {
+    try {
+      if (!_avTeamId) return;
+      if (!_AV_GRP_IN.has(status) && !_AV_GRP_OUT.has(status)) return;
+      const ids = await _avGroupedSessions(date);
+      if (!ids.length) return;
+      if (_AV_GRP_IN.has(status)) {
+        await window.sb.from('session_participants')
+          .upsert(ids.map(id => ({ session_id: id, player_id: pid, club_id: CLUB_ID })), { onConflict: 'session_id,player_id' });
+      } else {
+        await window.sb.from('session_participants').delete().in('session_id', ids).eq('player_id', pid);
+      }
+    } catch (e) { console.warn('[Availability] group sync:', e && e.message); }
   }
 
   // Guarda/limpia la nota (motivo) de un día ya registrado. Update por (player_id, date) —
