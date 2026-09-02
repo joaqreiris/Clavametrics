@@ -6,16 +6,17 @@
  * closed; this function uses the service role and returns a plan ONLY when
  *   share_token = token  AND  shared = true.
  * The payload is sanitized: display name/number + programme data only — no ids,
- * no emails, no club data. Exercise media thumbnails are resolved server-side
- * (image → signed URL, youtube → thumbnail, else null) so the client needs no
- * storage access.
+ * no emails. The player's own club is included for branding (name, crest, colour
+ * — all of it already public on the club's page), nothing else. Exercise media
+ * thumbnails are resolved server-side (image → signed URL, youtube → thumbnail,
+ * else null) so the client needs no storage access.
  *
  * Request:
  *   GET  /share-individual-plan?token=<uuid>
  *   POST /share-individual-plan   { "token": "<uuid>" }
  * Response (200 JSON):
  *   { found:false }                                   // unknown token / shared=false
- *   { found:true, plan:{…}, phases:[…] }              // sanitized
+ *   { found:true, club:{…}, plan:{…}, phases:[…] }    // sanitized
  *
  * Required Supabase secrets (already set for all functions):
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -76,13 +77,25 @@ Deno.serve(async (req: Request) => {
     // 1) The plan — ONLY if share_token matches AND sharing is on.
     const { data: plan, error } = await supabase
       .from('individual_plans')
-      .select('id, name, goal, focus, start_date, programme_week, programme_total_weeks, status, content, players(first_name,last_name,number)')
+      .select('id, club_id, name, goal, focus, start_date, programme_week, programme_total_weeks, status, content, players(first_name,last_name,number)')
       .eq('share_token', token)
       .eq('shared', true)
       .maybeSingle();
 
     if (error) { console.error('[share-individual-plan] plan query', error); return json({ found: false }); }
     if (!plan) return json({ found: false });
+
+    // 1b) The club, for branding only. logo_url points at the public club-logos
+    //     bucket, so it needs no signing.
+    let club: { name: string; short_name: string | null; logo_url: string | null; primary_color: string | null } | null = null;
+    if (plan.club_id) {
+      const { data: c } = await supabase
+        .from('clubs')
+        .select('name, short_name, logo_url, primary_color')
+        .eq('id', plan.club_id)
+        .maybeSingle();
+      if (c) club = { name: c.name, short_name: c.short_name, logo_url: c.logo_url, primary_color: c.primary_color };
+    }
 
     // 2) Phases (sanitized).
     const { data: phaseRows } = await supabase
@@ -135,6 +148,7 @@ Deno.serve(async (req: Request) => {
     const pl: any = Array.isArray(plan.players) ? plan.players[0] : plan.players;
     const payload = {
       found: true,
+      club,
       plan: {
         name: plan.name,
         goal: plan.goal,

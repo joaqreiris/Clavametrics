@@ -9,74 +9,172 @@
 <meta name="theme-color" content="#15803D">
 <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
 <style>
+  /* The club's colour brands the page chrome (top bar, crest ring, day rails).
+     Links and actions keep the ClavaMetrics accent so they stay legible whatever
+     colour the club picked. */
+  :root{ --ps-club:#15803D; }
   html,body{background:var(--cm-bg,#0f1216)}
-  .ps-wrap{max-width:680px;margin:0 auto;padding:18px 16px 60px}
-  .ps-brand{display:flex;align-items:center;gap:8px;justify-content:center;margin:6px 0 18px;color:var(--cm-fg-muted)}
-  .ps-brand .mark{width:26px;height:26px;border-radius:7px;background:var(--cm-accent,#16A34A);color:#fff;display:flex;align-items:center;justify-content:center}
-  .ps-brand .mark i{font-size:16px}
-  .ps-brand .name{font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,14px);padding:16px;margin-bottom:14px}
-  /* Plan header */
-  .ps-head .who{display:flex;align-items:center;gap:12px}
-  .ps-head .av{width:46px;height:46px;flex:none;border-radius:50%;background:var(--cm-bg-soft);color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;font:600 16px/1 var(--cm-font-sans)}
-  .ps-head .name{font:700 18px/1.15 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-head .sub{font:500 12.5px/1.3 var(--cm-font-mono);letter-spacing:.03em;color:var(--cm-fg-muted);margin-top:3px;text-transform:uppercase}
-  .ps-head .plan{margin-top:12px;font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
-  .ps-chip{font:500 11px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;padding:5px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  body{-webkit-text-size-adjust:100%}
+  .ps-wrap{max-width:720px;margin:0 auto;padding:0 14px 56px}
+
+  /* ── Top bar: club crest + name, ClavaMetrics on the right ── */
+  .ps-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+    padding:10px 4px;margin:0 -14px 16px;padding-left:18px;padding-right:18px;
+    background:color-mix(in srgb, var(--cm-surface) 88%, transparent);
+    backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--cm-border-soft,var(--cm-border))}
+  .ps-top .crest{width:30px;height:30px;flex:none;border-radius:8px;object-fit:contain;background:var(--cm-bg-soft);
+    padding:2px;box-shadow:inset 0 0 0 1px var(--cm-border-soft,var(--cm-border))}
+  .ps-top .crest.is-mono{display:flex;align-items:center;justify-content:center;
+    font:700 12px/1 var(--cm-font-sans);color:#fff;background:var(--ps-club);padding:0}
+  .ps-top .club{font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-top .by{margin-left:auto;display:flex;align-items:center;gap:6px;flex:none;
+    font:500 11px/1 var(--cm-font-mono);letter-spacing:.04em;color:var(--cm-fg-faint)}
+  .ps-top .by .mark{width:18px;height:18px;border-radius:5px;background:var(--cm-accent,#16A34A);color:#fff;
+    display:flex;align-items:center;justify-content:center}
+  .ps-top .by .mark i{font-size:12px}
+
+  .ps-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,14px);
+    padding:16px;margin-bottom:12px}
+
+  /* ── Hero: who this plan is for ── */
+  .ps-hero{position:relative;overflow:hidden;padding-top:20px}
+  .ps-hero::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:var(--ps-club)}
+  .ps-hero .who{display:flex;align-items:center;gap:13px}
+  .ps-hero .av{width:52px;height:52px;flex:none;border-radius:50%;background:var(--cm-bg-soft);
+    color:var(--cm-fg-strong);display:flex;align-items:center;justify-content:center;
+    font:600 17px/1 var(--cm-font-sans);box-shadow:0 0 0 2px var(--cm-surface),0 0 0 4px color-mix(in srgb, var(--ps-club) 30%, transparent)}
+  .ps-hero .nm{min-width:0}
+  .ps-hero .name{font:700 21px/1.15 var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong)}
+  .ps-hero .name .num{font-weight:500;color:var(--cm-fg-muted)}
+  .ps-hero .sub{font:500 11px/1 var(--cm-font-mono);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--cm-fg-muted);margin-top:6px}
+  .ps-hero .plan{margin-top:14px;font:600 16px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .ps-chip{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;
+    padding:6px 9px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
   .ps-chip.is-status{background:rgba(21,128,61,.12);color:#15803D}
   .ps-chip.is-status.draft{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
-  /* Phasebar */
+  .ps-goal{display:flex;gap:7px;align-items:flex-start;margin-top:13px;padding-top:13px;
+    border-top:1px solid var(--cm-border-soft,var(--cm-border));font:var(--cm-body-sm);color:var(--cm-fg)}
+  .ps-goal i{color:var(--ps-club);font-size:15px;flex:none;margin-top:1px}
+
+  /* ── Week at a glance ── */
+  .ps-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .ps-stat{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;padding:11px 12px}
+  .ps-stat .v{font:700 19px/1 var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong)}
+  .ps-stat .l{font:500 9.5px/1.2 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;
+    color:var(--cm-fg-muted);margin-top:6px}
+
+  /* ── Phases ── */
   .ps-phases{display:flex;flex-wrap:wrap;gap:8px}
-  .ps-phase{flex:1 1 120px;border:1px solid var(--cm-border);border-left-width:4px;border-radius:8px;padding:9px 11px;background:var(--cm-bg-soft)}
+  .ps-phase{flex:1 1 150px;border:1px solid var(--cm-border);border-left-width:4px;border-radius:8px;
+    padding:10px 12px;background:var(--cm-bg-soft)}
   .ps-phase .pn{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-phase .pw{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px}
-  .ps-phase .po{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
-  .ps-sec-h{font:600 12px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:20px 2px 10px}
-  /* Day */
-  .ps-day{margin-bottom:12px}
-  .ps-day-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
-  .ps-day-h .dow{font:700 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-day-h .dom{font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .ps-rest{font:var(--cm-body-sm);color:var(--cm-fg-muted);padding:6px 2px}
-  /* Block */
-  .ps-block{border:1px solid var(--cm-border);border-radius:10px;overflow:hidden;margin-bottom:10px}
-  .ps-block-h{display:flex;align-items:center;gap:9px;padding:10px 12px;border-left:4px solid var(--cm-fg-faint);background:var(--cm-bg-soft)}
-  .ps-block-h .bn{font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1}
-  .ps-block-h .bt{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .ps-block-goal{padding:8px 12px 0;font:var(--cm-body-sm);color:#1D4ED8}
-  .ps-block-notes{padding:6px 12px 0;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
-  /* Exercise */
-  .ps-ex{display:flex;gap:11px;padding:11px 12px;border-top:1px solid var(--cm-border-soft,var(--cm-border))}
-  .ps-ex:first-child{border-top:0}
-  .ps-ex-thumb{width:52px;height:52px;flex:none;border-radius:8px;overflow:hidden;background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-muted);position:relative}
+  .ps-phase .pw{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:5px}
+  .ps-phase .po{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:6px}
+
+  .ps-sec-h{display:flex;align-items:center;gap:10px;margin:22px 2px 12px;
+    font:600 11px/1 var(--cm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .ps-sec-h::after{content:'';flex:1;height:1px;background:var(--cm-border-soft,var(--cm-border))}
+
+  /* ── Day ── */
+  .ps-day{margin-bottom:18px}
+  .ps-day-h{display:flex;align-items:baseline;gap:8px;padding:0 2px 9px}
+  .ps-day-h .dow{font:700 16px/1 var(--cm-font-sans);letter-spacing:-.01em;color:var(--cm-fg-strong);text-transform:capitalize}
+  .ps-day-h .dom{font:500 13px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .ps-day-h .tot{margin-left:auto;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;
+    text-transform:uppercase;color:var(--cm-fg-muted)}
+  .ps-rest{display:flex;align-items:center;gap:8px;padding:14px 16px;border-radius:12px;
+    border:1px dashed var(--cm-border);color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .ps-rest i{font-size:17px}
+
+  /* ── Block ── */
+  .ps-block{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;
+    overflow:hidden;margin-bottom:9px}
+  .ps-block-h{display:flex;align-items:center;gap:9px;padding:12px 14px;
+    border-left:4px solid var(--cm-fg-faint);background:var(--cm-bg-soft)}
+  .ps-block-h .bn{font:600 14.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1;min-width:0}
+  .ps-block-h .bt{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;
+    color:var(--cm-fg-muted);padding:5px 7px;border-radius:5px;background:var(--cm-surface);
+    border:1px solid var(--cm-border-soft,var(--cm-border));flex:none}
+  .ps-block-goal{display:flex;gap:7px;align-items:flex-start;padding:11px 14px 0;font:var(--cm-body-sm);color:var(--cm-fg)}
+  .ps-block-goal i{color:var(--ps-club);font-size:14px;flex:none;margin-top:1px}
+  .ps-block-notes{padding:8px 14px 0;font:var(--cm-body-sm);color:var(--cm-fg-muted)}
+
+  /* ── Exercise ── */
+  .ps-ex{display:flex;gap:12px;padding:13px 14px;border-top:1px solid var(--cm-border-soft,var(--cm-border))}
+  .ps-block-goal + .ps-ex,.ps-block-notes + .ps-ex{border-top:0;padding-top:11px}
+  .ps-ex-thumb{width:60px;height:60px;flex:none;border-radius:10px;overflow:hidden;background:var(--cm-bg-soft);
+    display:flex;align-items:center;justify-content:center;font:600 14px/1 var(--cm-font-sans);
+    color:var(--cm-fg-muted);position:relative;border:0;padding:0}
   .ps-ex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-  .ps-ex-thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);color:#fff}
-  .ps-ex-thumb .play i{font-size:20px}
+  .ps-ex-thumb > .ti{font-size:22px;color:var(--cm-fg-faint)}
+  .ps-ex-thumb.is-playable{cursor:zoom-in}
+  .ps-ex-thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(15,17,22,.28);color:#fff}
+  .ps-ex-thumb .play i{font-size:22px}
   .ps-ex-body{flex:1;min-width:0}
-  .ps-ex-name{font:600 13.5px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .ps-ex-sets{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-  .ps-set{font:500 11px/1 var(--cm-font-mono);padding:4px 7px;border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg)}
-  .ps-ex-extra{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:5px}
-  .ps-watch{display:inline-flex;align-items:center;gap:5px;margin-top:7px;font:600 12px/1 var(--cm-font-sans);color:var(--cm-accent,#16A34A);text-decoration:none}
-  /* States */
-  .ps-state{text-align:center;padding:60px 20px;color:var(--cm-fg-muted)}
+  .ps-ex-name{font:600 14px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .ps-ex-sets{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .ps-set{display:inline-flex;align-items:center;gap:6px;font:500 11.5px/1 var(--cm-font-mono);
+    padding:6px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .ps-set .x{font-weight:700;color:var(--cm-fg-strong)}
+  .ps-ex-extra{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:6px}
+  .ps-watch{display:inline-flex;align-items:center;gap:5px;margin-top:9px;padding:6px 10px;border-radius:7px;
+    border:1px solid var(--cm-border);background:transparent;cursor:pointer;
+    font:600 12px/1 var(--cm-font-sans);color:var(--cm-accent,#16A34A);text-decoration:none}
+  .ps-watch:hover{background:var(--cm-bg-soft);border-color:var(--cm-accent,#16A34A)}
+  .ps-watch i{font-size:14px}
+
+  /* ── Video / image viewer ── */
+  .ps-media{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.86);
+    display:flex;align-items:center;justify-content:center;padding:22px}
+  .ps-media-box{position:relative;width:100%;max-width:860px}
+  .ps-media-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+  .ps-media-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .ps-media-frame img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .ps-media-cap{margin-top:10px;text-align:center;font:600 13px/1.3 var(--cm-font-sans);color:#fff}
+  .ps-media-close{position:absolute;top:-42px;right:0;width:34px;height:34px;border-radius:9px;border:0;
+    background:#fff;color:#15181D;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .ps-media-close i{font-size:19px}
+
+  /* ── States / footer ── */
+  .ps-state{text-align:center;padding:64px 20px;color:var(--cm-fg-muted)}
   .ps-state i{font-size:40px;display:block;margin-bottom:14px;color:var(--cm-fg-faint)}
   .ps-state .t{font:600 17px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px}
-  .ps-foot{text-align:center;margin-top:24px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.05em;color:var(--cm-fg-faint);text-transform:uppercase}
-  @media print{ .ps-brand,.ps-foot{opacity:.6} .ps-block-h{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+  .ps-foot{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:26px;
+    font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;color:var(--cm-fg-faint);text-transform:uppercase}
+  .ps-foot .mark{width:16px;height:16px;border-radius:4px;background:var(--cm-accent,#16A34A);color:#fff;
+    display:flex;align-items:center;justify-content:center}
+  .ps-foot .mark i{font-size:11px}
+
+  @media (max-width:520px){
+    .ps-hero .name{font-size:19px}
+    .ps-stats{gap:6px}
+    .ps-stat{padding:10px}
+    .ps-stat .v{font-size:17px}
+    .ps-ex-thumb{width:52px;height:52px}
+  }
+  @media print{
+    .ps-top{position:static;backdrop-filter:none}
+    .ps-watch,.ps-media{display:none!important}
+    .ps-block,.ps-card,.ps-stat{break-inside:avoid}
+    .ps-block-h,.ps-hero::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
 </style>
 </head>
 <body class="cm">
 <div class="ps-wrap">
-  <div class="ps-brand">
-    <span class="mark"><i class="ti ti-activity-heartbeat"></i></span>
-    <span class="name">ClavaMetrics</span>
+  <div class="ps-top" id="ps-top">
+    <span class="crest is-mono" id="ps-crest">·</span>
+    <span class="club" id="ps-club">ClavaMetrics</span>
+    <span class="by"><span class="mark"><i class="ti ti-activity-heartbeat"></i></span>ClavaMetrics</span>
   </div>
   <div id="ps-root">
     <div class="ps-state"><i class="ti ti-loader-2"></i><div data-i18n="plan_share.loading">Loading…</div></div>
   </div>
-  <div class="ps-foot" data-i18n="plan_share.powered_by">Powered by ClavaMetrics</div>
+  <div class="ps-foot"><span class="mark"><i class="ti ti-activity-heartbeat"></i></span><span data-i18n="plan_share.powered_by">Powered by ClavaMetrics</span></div>
 </div>
 
 <script src="assets/i18n.js" defer></script>
@@ -94,6 +192,11 @@
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   // Bloquea javascript:/data: en href — solo permite http(s) o rutas relativas.
   function safeUrl(u){ var s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
+  function youtubeId(url){
+    if (!url) return null;
+    var m = String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
 
   var TYPE_COLOR = { warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E', str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D', cond:'#EA580C', cool:'#64748B', assess:'#0EA5E9' };
   var TYPE_LABEL_EN = { warmup:'Warm-up', myo:'Myofascial', mob:'Mobility', act:'Activation', str:'Strength', plyo:'Plyometrics', skills:'Skills', field:'On-field', cond:'Conditioning', cool:'Cooldown', assess:'Assessment' };
@@ -109,31 +212,87 @@
     root.innerHTML = '<div class="ps-state"><i class="ti '+icon+'"></i><div class="t">'+esc(title)+'</div><div>'+esc(body)+'</div></div>';
   }
 
+  // ── Club branding: crest + colour on the page chrome ──
+  // Very light colours would wash out against the white surface, so those fall
+  // back to the ClavaMetrics green instead of an invisible rail.
+  function isLightHex(hex){
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex||'').trim());
+    if (!m) return true;
+    var n = parseInt(m[1], 16);
+    var r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+    return (0.2126*r + 0.7152*g + 0.0722*b) / 255 > 0.72;
+  }
+  // Idempotent: the page re-renders on language change, and by then the crest
+  // placeholder may already have been swapped for the <img>.
+  function applyClub(club){
+    if (!club) return;
+    var nameEl = document.getElementById('ps-club');
+    var crest  = document.getElementById('ps-crest');
+    if (club.primary_color && !isLightHex(club.primary_color)){
+      document.documentElement.style.setProperty('--ps-club', club.primary_color);
+    }
+    var name = club.name || club.short_name || '';
+    if (name && nameEl) nameEl.textContent = name;
+    if (!crest) return;
+    if (club.logo_url && crest.tagName !== 'IMG'){
+      var img = new Image();
+      img.id = 'ps-crest';
+      img.className = 'crest';
+      img.alt = name;
+      img.referrerPolicy = 'no-referrer';
+      img.onload = function(){ var c = document.getElementById('ps-crest'); if (c && c !== img) c.replaceWith(img); };
+      img.src = safeUrl(club.logo_url);
+    } else if (!club.logo_url && crest.tagName !== 'IMG'){
+      crest.textContent = initials(name);
+    }
+  }
+
+  // ── Sets: collapse identical consecutive sets into "3 × 8 reps · rest 90s" ──
+  function setText(s){
+    var parts = [];
+    if (s.reps)  parts.push(esc(s.reps) + ' ' + tt('plan_share.reps','reps'));
+    if (s.time)  parts.push(esc(s.time));
+    if (s.load)  parts.push(esc(s.load));
+    if (s.tempo) parts.push(esc(s.tempo));
+    if (s.rest)  parts.push(tt('plan_share.rest','rest') + ' ' + esc(s.rest));
+    return parts.join(' · ');
+  }
   function renderSets(sets){
     if (!Array.isArray(sets) || !sets.length) return '';
-    var chips = sets.map(function(s, i){
-      var parts = [];
-      if (s.reps)  parts.push(esc(s.reps) + ' ' + tt('plan_share.reps','reps'));
-      if (s.load)  parts.push(esc(s.load));
-      if (s.rest)  parts.push(tt('plan_share.rest','rest') + ' ' + esc(s.rest));
-      var inner = parts.length ? parts.join(' · ') : (tt('plan_share.set','Set') + ' ' + (i+1));
-      return '<span class="ps-set">'+inner+'</span>';
+    var runs = [];
+    sets.forEach(function(s, i){
+      var txt = setText(s) || (tt('plan_share.set','Set') + ' ' + (i+1));
+      var last = runs[runs.length-1];
+      if (last && last.txt === txt) last.n++;
+      else runs.push({ txt: txt, n: 1, note: s.note || '' });
+    });
+    var chips = runs.map(function(r){
+      var count = r.n > 1 ? '<span class="x">'+r.n+' ×</span> ' : '';
+      return '<span class="ps-set">'+count+r.txt+'</span>';
     }).join('');
-    return '<div class="ps-ex-sets">'+chips+'</div>';
+    var notes = runs.map(function(r){ return r.note ? esc(r.note) : ''; }).filter(Boolean);
+    return '<div class="ps-ex-sets">'+chips+'</div>' +
+      (notes.length ? '<div class="ps-ex-extra">'+notes.join(' · ')+'</div>' : '');
   }
 
   function renderExercise(ex){
-    var thumb;
-    if (ex.thumb){
-      thumb = '<span class="ps-ex-thumb"><img src="'+esc(ex.thumb)+'" alt="" loading="lazy">'+(ex.videoUrl?'<span class="play"><i class="ti ti-player-play-filled"></i></span>':'')+'</span>';
-    } else {
-      thumb = '<span class="ps-ex-thumb">'+initials(ex.name)+'</span>';
-    }
+    var yt = youtubeId(ex.videoUrl);
+    var playable = !!(ex.videoUrl || ex.thumb);
+    var inner = ex.thumb
+      ? '<img src="'+esc(safeUrl(ex.thumb))+'" alt="" loading="lazy" referrerpolicy="no-referrer">'+(ex.videoUrl?'<span class="play"><i class="ti ti-player-play-filled"></i></span>':'')
+      : '<i class="ti ti-barbell"></i>';   // no media — a quiet placeholder beats stray initials
+    var thumb = playable
+      ? '<button type="button" class="ps-ex-thumb is-playable" data-media="1">'+inner+'</button>'
+      : '<span class="ps-ex-thumb">'+inner+'</span>';
     var extra = [];
     if (ex.side) extra.push(esc(ex.side));
     if (ex.flag) extra.push(esc(ex.flag));
-    var watch = ex.videoUrl ? '<a class="ps-watch" href="'+esc(safeUrl(ex.videoUrl))+'" target="_blank" rel="noopener"><i class="ti ti-brand-youtube"></i> '+tt('plan_share.watch_demo','Watch demo')+'</a>' : '';
-    return '<div class="ps-ex">'+thumb+
+    var watch = ex.videoUrl
+      ? (yt ? '<button type="button" class="ps-watch" data-media="1"><i class="ti ti-player-play-filled"></i> '+tt('plan_share.watch_demo','Watch demo')+'</button>'
+            : '<a class="ps-watch" href="'+esc(safeUrl(ex.videoUrl))+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> '+tt('plan_share.watch_demo','Watch demo')+'</a>')
+      : '';
+    var data = ' data-video="'+esc(safeUrl(ex.videoUrl||''))+'" data-thumb="'+esc(safeUrl(ex.thumb||''))+'" data-name="'+esc(ex.name||'')+'"';
+    return '<div class="ps-ex"'+data+'>'+thumb+
       '<div class="ps-ex-body">'+
         '<div class="ps-ex-name">'+esc(ex.name||'—')+'</div>'+
         renderSets(ex.sets)+
@@ -153,25 +312,34 @@
         (b.dur?'<span class="bt">'+esc(b.dur)+"'</span>":'')+
         (typeLabel?'<span class="bt">'+esc(typeLabel)+'</span>':'')+
       '</div>'+
-      (b.goal?'<div class="ps-block-goal"><i class="ti ti-target"></i> '+esc(b.goal)+'</div>':'')+
+      (b.goal?'<div class="ps-block-goal"><i class="ti ti-target"></i><span>'+esc(b.goal)+'</span></div>':'')+
       (b.notes?'<div class="ps-block-notes">'+esc(b.notes)+'</div>':'')+
       exHtml+
     '</div>';
   }
 
+  function blockMinutes(b){ var n = Number(b && b.dur); return isNaN(n) ? 0 : n; }
+  function exCount(b){
+    var list = Array.isArray(b.exList) ? b.exList : (Array.isArray(b.exercises) ? b.exercises : []);
+    return list.length;
+  }
+
   function renderDay(day){
     var blocks = Array.isArray(day.blocks) ? day.blocks : [];
-    var inner;
+    var head = '<div class="ps-day-h"><span class="dow">'+esc(day.dow||'')+'</span>'+
+      '<span class="dom">'+esc(day.dom!=null?day.dom:'')+'</span>';
     if (day.rest || !blocks.length){
-      if (day.rest) inner = '<div class="ps-rest"><i class="ti ti-bed"></i> '+tt('plan_share.rest_day','Rest day')+'</div>';
-      else return '';   // skip empty non-rest days
-    } else {
-      inner = blocks.map(renderBlock).join('');
+      if (!day.rest) return '';                       // skip empty non-rest days
+      return '<div class="ps-day">'+head+'</div>'+
+        '<div class="ps-rest"><i class="ti ti-bed"></i> '+tt('plan_share.rest_day','Rest day')+'</div></div>';
     }
-    return '<div class="ps-day"><div class="ps-day-h"><span class="dow">'+esc(day.dow||'')+'</span><span class="dom">'+esc(day.dom!=null?day.dom:'')+'</span></div>'+inner+'</div>';
+    var mins = blocks.reduce(function(a,b){ return a + blockMinutes(b); }, 0);
+    head += '<span class="tot">'+blocks.length+' '+esc(tt('plan_share.blocks','blocks'))+' · '+mins+"'</span></div>";
+    return '<div class="ps-day">'+head+blocks.map(renderBlock).join('')+'</div>';
   }
 
   function render(data){
+    applyClub(data.club);
     var plan = data.plan || {};
     var p = plan.player || {};
     var pname = ((p.first_name||'')+' '+(p.last_name||'')).trim() || plan.name || '—';
@@ -181,11 +349,18 @@
     var statusLabel = tt('individual_planner.status_'+status, STATUS_EN[status]||status);
     var wk = tt('plan_share.week_of', 'Week {x} of {y}', { x: plan.programme_week||1, y: plan.programme_total_weeks||1 });
 
+    var content = plan.content || {};
+    var days = Array.isArray(content) ? content : (Array.isArray(content.days) ? content.days : []);
+    var allBlocks = [];
+    days.forEach(function(d){ (Array.isArray(d.blocks)?d.blocks:[]).forEach(function(b){ allBlocks.push(b); }); });
+    var nDays = days.filter(function(d){ return !d.rest && Array.isArray(d.blocks) && d.blocks.length; }).length;
+    var nMin  = allBlocks.reduce(function(a,b){ return a + blockMinutes(b); }, 0);
+    var nEx   = allBlocks.reduce(function(a,b){ return a + exCount(b); }, 0);
+
     var html = '';
-    // Header card
-    html += '<div class="ps-card ps-head">'+
-      '<div class="who"><div class="av">'+initials(pname)+'</div>'+
-        '<div><div class="name">'+esc(pname)+(num?' <span style="color:var(--cm-fg-muted);font-weight:500">'+esc(num)+'</span>':'')+'</div>'+
+    html += '<div class="ps-card ps-hero">'+
+      '<div class="who"><div class="av">'+esc(initials(pname))+'</div>'+
+        '<div class="nm"><div class="name">'+esc(pname)+(num?' <span class="num">'+esc(num)+'</span>':'')+'</div>'+
         '<div class="sub">'+tt('plan_share.individual_sc','Individual S&C')+'</div></div></div>'+
       '<div class="plan">'+esc(plan.name||'—')+'</div>'+
       '<div class="ps-meta">'+
@@ -193,14 +368,21 @@
         '<span class="ps-chip">'+esc(wk)+'</span>'+
         '<span class="ps-chip is-status '+esc(status)+'">'+esc(statusLabel)+'</span>'+
       '</div>'+
-      (plan.goal?'<div class="ps-block-goal" style="padding-left:0"><i class="ti ti-target"></i> '+esc(plan.goal)+'</div>':'')+
+      (plan.goal?'<div class="ps-goal"><i class="ti ti-target"></i><span>'+esc(plan.goal)+'</span></div>':'')+
     '</div>';
 
-    // Phases
+    if (allBlocks.length){
+      html += '<div class="ps-stats">'+
+        '<div class="ps-stat"><div class="v">'+nDays+'</div><div class="l">'+tt('plan_share.stat_days','Sessions')+'</div></div>'+
+        '<div class="ps-stat"><div class="v">'+nMin+"'</div><div class=\"l\">"+tt('plan_share.stat_minutes','Minutes')+'</div></div>'+
+        '<div class="ps-stat"><div class="v">'+nEx+'</div><div class="l">'+tt('plan_share.stat_exercises','Exercises')+'</div></div>'+
+      '</div>';
+    }
+
     var phases = Array.isArray(data.phases) ? data.phases : [];
     if (phases.length){
       html += '<div class="ps-card"><div class="ps-phases">'+phases.map(function(ph){
-        var col = LOAD_COLOR[ph.load_level] || ph.color || 'var(--cm-accent)';
+        var col = LOAD_COLOR[ph.load_level] || ph.color || 'var(--ps-club)';
         var wr = 'W'+(ph.week_start||1)+((ph.week_end&&ph.week_end!==ph.week_start)?'–'+ph.week_end:'');
         var load = ph.load_level ? tt('individual_planner.load_'+ph.load_level, LOAD_EN[ph.load_level]) : '';
         return '<div class="ps-phase" style="border-left-color:'+esc(col)+'">'+
@@ -211,15 +393,48 @@
       }).join('')+'</div></div>';
     }
 
-    // Programme days
-    var content = plan.content || {};
-    var days = Array.isArray(content) ? content : (Array.isArray(content.days) ? content.days : []);
     var dayHtml = days.map(renderDay).join('');
     html += '<div class="ps-sec-h">'+tt('plan_share.programme','Programme')+'</div>';
-    html += '<div class="ps-card">'+(dayHtml.trim() ? dayHtml : '<div class="ps-rest">'+tt('plan_share.no_sessions','No sessions planned yet.')+'</div>')+'</div>';
+    html += dayHtml.trim() ? dayHtml
+      : '<div class="ps-card"><div class="ps-rest"><i class="ti ti-calendar-off"></i> '+tt('plan_share.no_sessions','No sessions planned yet.')+'</div></div>';
 
     root.innerHTML = html;
   }
+
+  // ── Media viewer (YouTube embed / image), closed with Esc, the X or the backdrop ──
+  function openMedia(exEl){
+    var video = exEl.getAttribute('data-video') || '';
+    var thumb = exEl.getAttribute('data-thumb') || '';
+    var name  = exEl.getAttribute('data-name') || '';
+    var vid = youtubeId(video);
+    if (!vid && video && video !== '#'){ window.open(video, '_blank', 'noopener'); return; }
+    var inner = vid
+      ? '<iframe src="https://www.youtube-nocookie.com/embed/'+esc(vid)+'?autoplay=1&rel=0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>'
+      : (thumb ? '<img src="'+esc(thumb)+'" alt="" referrerpolicy="no-referrer">' : '');
+    if (!inner) return;
+    var back = document.createElement('div');
+    back.className = 'ps-media';
+    back.innerHTML = '<div class="ps-media-box">'+
+      '<button type="button" class="ps-media-close" aria-label="'+esc(tt('plan_share.close','Close'))+'"><i class="ti ti-x"></i></button>'+
+      '<div class="ps-media-frame">'+inner+'</div>'+
+      (name?'<div class="ps-media-cap">'+esc(name)+'</div>':'')+
+    '</div>';
+    function shut(){
+      document.removeEventListener('keydown', onKey, true);
+      var f = back.querySelector('iframe'); if (f) f.src = '';
+      back.remove();
+    }
+    function onKey(e){ if (e.key === 'Escape'){ e.stopPropagation(); shut(); } }
+    document.addEventListener('keydown', onKey, true);
+    back.addEventListener('click', function(e){ if (e.target === back || e.target.closest('.ps-media-close')) shut(); });
+    document.body.appendChild(back);
+  }
+  root.addEventListener('click', function(e){
+    var trigger = e.target.closest('[data-media]');
+    if (!trigger) return;
+    var exEl = trigger.closest('.ps-ex');
+    if (exEl) openMedia(exEl);
+  });
 
   function showUnavailable(){
     stateMsg('ti-link-off', tt('plan_share.unavailable_title','This link is unavailable'), tt('plan_share.unavailable_body','The plan may have been unshared or the link is incorrect.'));
@@ -247,6 +462,7 @@
   document.addEventListener('cm:langchanged', function(){ if (_last) render(_last); });
   var _origRender = render;
   render = function(d){ _last = d; _origRender(d); };
+  window.__psRender = function(d){ render(d); };   // local preview hook
 
   if (document.readyState !== 'loading') load(); else document.addEventListener('DOMContentLoaded', load);
 })();
