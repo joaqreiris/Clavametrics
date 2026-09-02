@@ -560,6 +560,12 @@
           return (isNaN(d) || isNaN(b)) ? null : { day: d, block: b };
         },
         getDayIndex: (el) => { const d = parseInt(el.dataset.di, 10); return isNaN(d) ? null : d; },
+        dayCopy: true,                                  // ⧉ on the column + ⌘⇧C / ⌘⇧V
+        dayLabel: (el) => {
+          const di = parseInt(el.dataset.di, 10);
+          const d = !isNaN(di) && weekData()[di];
+          return d ? `${d.dow} ${d.dom}` : '';
+        },
         getBlock: (day, block) => {
           const days = ensureDays();
           const b = (days && days[day] && Array.isArray(days[day].blocks)) ? days[day].blocks[block] : null;
