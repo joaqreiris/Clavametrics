@@ -184,6 +184,7 @@
           <span class="l" data-i18n="individual_planner.programme">Programme</span>
           <span class="summary"></span>
           <div class="right">
+            <button class="cm-btn is-ghost" id="ip-edit-plan" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-adjustments"></i> <span data-i18n="individual_planner.edit_plan">Edit plan</span></button>
             <button class="cm-btn is-ghost" id="ip-edit-phases" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> <span data-i18n="individual_planner.edit_phases">Edit phases</span></button>
           </div>
         </div>
@@ -738,6 +739,136 @@
     ipToast(tt('individual_planner.plan_created','Plan created'));
   }
   document.getElementById('ip-new-plan')?.addEventListener('click', openNewPlan);
+
+  // ════════════════════ EDIT PLAN modal ════════════════════
+  // Everything the "new plan" form asks for, editable afterwards. The start date
+  // and the programme week decide which calendar days the board shows, so a typo
+  // there silently files the blocks under the wrong dates — it has to be fixable.
+  let _epOv = null;
+  function buildEditPlanModal(){
+    if (_epOv) return _epOv;
+    _epOv = document.createElement('div');
+    _epOv.className = 'ip-modal-ov';
+    _epOv.innerHTML = `
+      <div class="ip-modal" role="dialog" aria-modal="true">
+        <div class="ip-modal-h">
+          <h3>${tt('individual_planner.edit_plan_title','Edit plan')}</h3>
+          <button class="cm-btn is-ghost" data-close><i class="ti ti-x"></i></button>
+        </div>
+        <div class="ip-modal-b">
+          <div class="ip-form-row">
+            <label>${tt('individual_planner.field_name','Plan name')}</label>
+            <input class="cm-input" id="ep-name" type="text" placeholder="${tt('individual_planner.name_ph','e.g. Capacity block')}">
+          </div>
+          <div class="ip-form-grid">
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_focus','Focus')}</label>
+              <select class="cm-select" id="ep-focus">${FOCI.map(f => `<option value="${f}">${tt('individual_planner.focus_' + f.replace(/-/g,'_'), FOCUS_EN[f])}</option>`).join('')}</select>
+            </div>
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_goal','Goal (optional)')}</label>
+              <input class="cm-input" id="ep-goal" type="text" placeholder="${tt('individual_planner.goal_ph','e.g. aerobic capacity')}">
+            </div>
+          </div>
+          <div class="ip-form-grid" style="grid-template-columns:1.4fr 1fr 1fr">
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_start','Start date')}</label>
+              <input class="cm-input" id="ep-start" type="date">
+            </div>
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_week','Current week')}</label>
+              <input class="cm-input" id="ep-week" type="number" min="1" max="52" value="1">
+            </div>
+            <div class="ip-form-row">
+              <label>${tt('individual_planner.field_weeks','Total weeks')}</label>
+              <input class="cm-input" id="ep-weeks" type="number" min="1" max="52" value="12">
+            </div>
+          </div>
+          <div class="ip-form-row">
+            <div id="ep-dates" style="font:500 11.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)"></div>
+          </div>
+        </div>
+        <div class="ip-modal-f">
+          <button class="cm-btn is-ghost" data-close>${tt('common.cancel','Cancel')}</button>
+          <button class="cm-btn is-primary" id="ep-save"><i class="ti ti-device-floppy"></i> ${tt('common.save','Save')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(_epOv);
+    _epOv.addEventListener('click', (e) => { if (e.target === _epOv || e.target.closest('[data-close]')) _epOv.classList.remove('is-open'); });
+    _epOv.querySelector('#ep-save').addEventListener('click', savePlanMeta);
+    ['#ep-start', '#ep-week'].forEach(sel => _epOv.querySelector(sel).addEventListener('input', previewWeekDates));
+    return _epOv;
+  }
+
+  // Same maths the board uses (Monday of start_date + (week-1) weeks), shown live
+  // so you can see which days you are about to plan on before saving.
+  function previewWeekDates(){
+    const ov = _epOv; if (!ov) return;
+    const out = ov.querySelector('#ep-dates');
+    const start = ov.querySelector('#ep-start').value;
+    const wk = Math.max(1, parseInt(ov.querySelector('#ep-week').value, 10) || 1);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start || '');
+    if (!m){ out.textContent = ''; return; }
+    const base = new Date(+m[1], +m[2] - 1, +m[3]);
+    const mon = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7) + (wk - 1) * 7);
+    const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+    const loc = (window.CM_I18N && CM_I18N.current) || undefined;
+    const fmt = d => { try { return d.toLocaleDateString(loc, { day: 'numeric', month: 'short' }); } catch (_) { return d.getDate() + '/' + (d.getMonth() + 1); } };
+    out.textContent = tt('individual_planner.week_shows', 'Week {n} shows', { n: wk }) + ': ' + fmt(mon) + ' – ' + fmt(sun);
+  }
+
+  function openEditPlan(){
+    if (!currentRow){ ipToast(tt('individual_planner.no_plan_open','Open a plan first'), true); return; }
+    const ov = buildEditPlanModal();
+    ov.querySelector('#ep-name').value  = currentRow.name || '';
+    ov.querySelector('#ep-focus').value = currentRow.focus || 'strength';
+    ov.querySelector('#ep-goal').value  = currentRow.goal || '';
+    ov.querySelector('#ep-start').value = currentRow.start_date || '';
+    ov.querySelector('#ep-week').value  = currentRow.programme_week || 1;
+    ov.querySelector('#ep-weeks').value = currentRow.programme_total_weeks || 1;
+    previewWeekDates();
+    ov.classList.add('is-open');
+    setTimeout(() => { try { ov.querySelector('#ep-name').focus(); } catch (_) {} }, 30);
+  }
+
+  async function savePlanMeta(){
+    const ov = _epOv;
+    if (!ov || !currentRow) return;
+    const name = ov.querySelector('#ep-name').value.trim();
+    if (!name){ ipToast(tt('individual_planner.err_need_name','Enter a plan name'), true); ov.querySelector('#ep-name').focus(); return; }
+    const weeks = Math.min(52, Math.max(1, parseInt(ov.querySelector('#ep-weeks').value, 10) || 1));
+    const patch = {
+      name,
+      focus: ov.querySelector('#ep-focus').value,
+      goal: ov.querySelector('#ep-goal').value.trim() || null,
+      start_date: ov.querySelector('#ep-start').value || null,
+      programme_total_weeks: weeks,
+      programme_week: Math.min(weeks, Math.max(1, parseInt(ov.querySelector('#ep-week').value, 10) || 1))
+    };
+    const btn = ov.querySelector('#ep-save'); btn.disabled = true;
+    const { error } = await window.sb.from('individual_plans')
+      .update(patch).eq('id', currentRow.id).eq('club_id', clubId);
+    btn.disabled = false;
+    if (error){
+      console.error('[individual-sc] update plan failed:', error);
+      ipToast(tt('individual_planner.save_failed','Could not save') + ': ' + (error.message || error.code || ''), true);
+      return;
+    }
+    ov.classList.remove('is-open');
+
+    // Update in place — re-fetching would throw away unsaved board edits.
+    Object.assign(currentRow, patch);
+    const idx = plans.findIndex(p => p.id === currentRow.id);
+    if (idx >= 0) Object.assign(plans[idx], patch);
+    renderPicker();
+    const pname = document.getElementById('ip-athlete-name')?.textContent || '';
+    reflectAthlete(pname, currentRow.name, (idx >= 0 && plans[idx].players) || {});
+    if (window.__ipData && window.__ipData.plan) Object.assign(window.__ipData.plan, patch);
+    window.__ipApi?.loadPlan?.((window.__ipData && window.__ipData.plan) || currentRow, (window.__ipData && window.__ipData.phases) || []);
+    ipToast(tt('individual_planner.plan_saved','Plan updated'));
+  }
+  document.getElementById('ip-edit-plan')?.addEventListener('click', openEditPlan);
 
   // ════════════════════ PHASES modal ════════════════════
   const LOAD_LEVELS = ['low','moderate','high'];
