@@ -100,6 +100,7 @@
       '.dplg-gk .nm{flex:1;min-width:0;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dplg-gk input{width:52px;height:26px;padding:0 7px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:600 12px/1 var(--cm-font-mono);text-align:center;outline:none}',
       '.dplg-hint{font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:5px}',
+      '.dplg-sync{display:flex;align-items:center;gap:7px;padding:9px 11px;margin-bottom:12px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:8px;color:#92400E;font:500 12px/1.35 var(--cm-font-sans)}',
       '.dplg-pl{display:flex;flex-wrap:wrap;gap:5px}',
       '.dplg-pl button{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);cursor:pointer}',
       '.dplg-pl button .r{font:700 10px/1 var(--cm-font-mono);padding:2px 4px;border-radius:3px;color:#fff}',
@@ -140,6 +141,12 @@
         + '<span class="dot" style="background:' + esc(state.color) + '"></span>' + esc(state.label) + '</button>'
       : '<button class="dplg-pend" onclick="dpLgOpen(\'' + e.id + '\')">'
         + '<i class="ti ti-alert-triangle" style="font-size:12px"></i>' + esc(T('league.pending', 'Result pending')) + '</button>';
+    // El grupo de la tarea cambió después de repartir los puntos: sin este aviso el alta
+    // queda muda (los puntos sólo se recalculan al volver a guardar el resultado).
+    var drift = planDrift(ev, e);
+    if (drift) inner += '<button class="dplg-pend" onclick="dpLgOpen(\'' + e.id + '\')">'
+      + '<i class="ti ti-user-plus" style="font-size:12px"></i>'
+      + esc(T('league.drift', drift + ' without points', { count: drift })) + '</button>';
     return '<div class="dplg-row no-print" data-lg="' + e.id + '">' + sw + inner + '</div>';
   };
 
@@ -310,6 +317,35 @@
     };
   }
 
+  // Los grupos de la tarea pueden cambiar DESPUÉS de cargar el resultado (el que llegó tarde,
+  // el que se sumó desde el diferenciado). El snapshot congelado no se enteraba: el modal
+  // seguía mostrando la lista vieja — «lo agregué al grupo y no aparece».
+  // Fusión conservadora: se suman los que el plan tiene en un grupo del evento y que no están
+  // en NINGUNO de sus grupos. No se saca a nadie (el que ya puntuó conserva sus puntos) ni se
+  // toca ningún resultado ya marcado; los puntos de los nuevos recién se reparten al guardar.
+  function mergePlanGroups(evGroups, planGroups) {
+    var seen = {};
+    evGroups.forEach(function (g) { (g.players || []).forEach(function (p) { seen[String(p)] = 1; }); });
+    var added = 0;
+    var out = evGroups.map(function (g) {
+      var src = planGroups.filter(function (x) { return String(x.id) === String(g.id); })[0];
+      if (!src) return g;
+      var extra = (src.players || []).map(String).filter(function (p) { return !seen[p]; });
+      if (!extra.length) return g;
+      extra.forEach(function (p) { seen[p] = 1; });
+      added += extra.length;
+      return { id: g.id, name: g.name, color: g.color, outcome: g.outcome, players: (g.players || []).concat(extra) };
+    });
+    return { groups: out, added: added };
+  }
+  // Cuántos jugadores del plan quedaron fuera del evento ya puntuado (para avisar en la card
+  // sin tener que abrir el modal). 0 = el resultado está al día.
+  function planDrift(ev, task) {
+    if (!ev || !ev.results || !ev.results.length) return 0;
+    var plan = (window._dpExGroups ? window._dpExGroups(task) : []);
+    return mergePlanGroups(ev.groups || [], plan).added;
+  }
+
   window.dpLgOpen = function (seid) {
     if (!L() || !L().isOn()) return;
     var task = window._dpFindTask ? window._dpFindTask(seid) : null;
@@ -318,9 +354,15 @@
     var planGroups = (window._dpExGroups ? window._dpExGroups(task) : []).filter(function (g) { return (g.players || []).length; });
     // Mientras no haya resultado, el PLAN manda: se marca la tarea el lunes, se
     // reacomodan los grupos el martes y el resultado del miércoles usa los de ese
-    // día. Una vez cargado el resultado, gobierna el snapshot congelado.
+    // día. Una vez cargado el resultado, gobierna el snapshot — pero con los altas
+    // del plan fusionadas encima (mergePlanGroups).
     var pending = !(ev && ev.results && ev.results.length);
     _lg = stateFromEvent(pending ? null : ev, planGroups, task.name || '');
+    if (!pending) {
+      var m = mergePlanGroups(_lg.groups, planGroups);
+      _lg.groups = m.groups;
+      _lg.newFromPlan = m.added;
+    }
     if (ev) _lg.eventId = ev.id;
     _lg.seid = seid;
     openWith(task.name || T('league.loose_event', 'Field matchup'));
@@ -436,8 +478,15 @@
         + '</div><div class="dplg-hint">' + esc(T('league.players_hint', 'A corrected player keeps their result even if the group changes.')) + '</div></div>';
     }
 
-    body.innerHTML =
-        '<div><div class="dplg-sec-t">' + esc(T('league.groups', 'Groups')) + '</div>' + gHtml + addG + '</div>'
+    // 0) Altas traídas del plan al abrir: hay que guardar para que reciban puntos.
+    var syncHtml = _lg.newFromPlan
+      ? '<div class="dplg-sync"><i class="ti ti-arrow-down-circle" style="font-size:14px"></i><span>'
+        + esc(T('league.plan_added', _lg.newFromPlan + ' player(s) added from the task — save to give them points.', { count: _lg.newFromPlan }))
+        + '</span></div>'
+      : '';
+
+    body.innerHTML = syncHtml
+      + '<div><div class="dplg-sec-t">' + esc(T('league.groups', 'Groups')) + '</div>' + gHtml + addG + '</div>'
       + gkHtml + plHtml;
   }
 
