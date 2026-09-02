@@ -11,14 +11,22 @@
        getIds(blockEl) -> {day,block},// read the engine's dataset attrs (indices)
        getDayIndex(dayEl) -> number,  // day index for a day column
        getBlock(day,block) -> obj,    // return that block's data (module deep-clones it)
-       insertBlock(day, blockData),   // append a clone into that day → persist + re-render
-       moveBlock(from, fromBlock, to),// move a block between days → persist + re-render
+       insertBlock(day, blockData, at),  // insert a clone into that day → persist + re-render
+       moveBlock(from, fromBlock, to, at),// move a block between days → persist + re-render
+       reorderBlock(day, fromIdx, at),   // optional: reorder within one day
        onChange()                     // optional extra persist/re-render hook
      });
 
    Plain drag = MOVE. Alt/Option-drag (or drag from the ⧉ grip) = COPY.
    Cmd/Ctrl+C on a hovered block copies; Cmd/Ctrl+V on a hovered day pastes.
    All clones are deep copies with per-instance ids regenerated.
+
+   `at` is the drop position: the index the block should land on, counted in the
+   day's CURRENT list (so dropping on top of the 2nd card gives at=1). It is
+   undefined when the drop lands on empty space → append. Adapters that ignore
+   the argument keep the old append-only behaviour; `reorderBlock` is optional
+   too — planners without a stored order (rehab_sessions has no sort column)
+   simply don't reorder.
    ============================================================ */
 
 (function () {
@@ -41,7 +49,15 @@
 .ba-block:hover .ba-dup-btn{ display:inline-flex; }
 .ba-dup-btn:hover{ color:var(--cm-fg-strong); border-color:var(--cm-accent,#16A34A); }
 .ba-dup-btn .ti{ font-size:13px; }
-.ba-drop-target{ outline:2px dashed var(--cm-accent,#16A34A); outline-offset:-3px; border-radius:10px; background:rgba(22,163,74,.06); }`;
+.ba-drop-target{ outline:2px dashed var(--cm-accent,#16A34A); outline-offset:-3px; border-radius:10px; background:rgba(22,163,74,.06); }
+/* insertion caret — where the card will land */
+.ba-block.ba-drop-before::before,
+.ba-block.ba-drop-after::after{
+  content:''; position:absolute; left:0; right:0; height:3px; border-radius:2px;
+  background:var(--cm-accent,#16A34A); box-shadow:0 0 0 2px rgba(22,163,74,.18); z-index:4;
+}
+.ba-block.ba-drop-before::before{ top:-5px; }
+.ba-block.ba-drop-after::after{ bottom:-5px; }`;
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -170,12 +186,39 @@
       }
     });
 
-    // ── Drag: plain = move, Alt/grip = copy ──
-    function clearDrop() { if (dropDay) { dropDay.classList.remove('ba-drop-target'); dropDay = null; } }
+    // ── Drag: plain = move, Alt/grip = copy; the drop position sets the order ──
+    let dropAt;                       // index the card will land on (undefined = append)
+    function clearCaret() {
+      A.root.querySelectorAll('.ba-drop-before,.ba-drop-after')
+        .forEach(el => el.classList.remove('ba-drop-before', 'ba-drop-after'));
+      dropAt = undefined;
+    }
+    function clearDrop() { clearCaret(); if (dropDay) { dropDay.classList.remove('ba-drop-target'); dropDay = null; } }
     function cleanupDrag() {
       clearDrop();
       A.root.querySelectorAll('.ba-dragging').forEach(el => el.classList.remove('ba-dragging'));
       drag = null;
+    }
+    // Cards render in list order, so the card's position among its siblings is
+    // its index in the data — no need to read the engine's own ids here.
+    function dayCards(dayEl) { return Array.from(dayEl.querySelectorAll(A.blockSelector)); }
+    function paintCaret(dayEl, e) {
+      clearCaret();
+      // Only planners that store an order get the insertion caret — showing one
+      // where the drop always appends would be a lie (rehab_sessions has no
+      // sort column, so its adapter provides no reorderBlock).
+      if (!A.reorderBlock) return;
+      const cards = dayCards(dayEl);
+      const over = e.target.closest(A.blockSelector);
+      if (!over || !cards.includes(over)) {
+        // Empty space (or the "add block" button) → land at the end.
+        dropAt = undefined;
+        return;
+      }
+      const r = over.getBoundingClientRect();
+      const after = (e.clientY - r.top) > r.height / 2;
+      over.classList.add(after ? 'ba-drop-after' : 'ba-drop-before');
+      dropAt = cards.indexOf(over) + (after ? 1 : 0);
     }
 
     A.root.addEventListener('dragstart', (e) => {
@@ -195,6 +238,7 @@
       const copy = e.altKey || drag.fromGrip;
       try { e.dataTransfer.dropEffect = copy ? 'copy' : 'move'; } catch (_) {}
       if (dropDay !== dayEl) { clearDrop(); dropDay = dayEl; dayEl.classList.add('ba-drop-target'); }
+      paintCaret(dayEl, e);
     });
 
     A.root.addEventListener('dragleave', (e) => {
@@ -208,15 +252,25 @@
       e.preventDefault();
       const to = dayEl ? A.getDayIndex(dayEl) : null;
       const copy = e.altKey || drag.fromGrip;
+      const at = dropAt;
       if (hasDay(to)) {
+        let changed = true;
         if (copy) {
           const data = freshClone(A.getBlock(drag.day, drag.block));
-          if (data) { A.insertBlock(to, data); toast(tt('block_actions.duplicated', 'Block duplicated')); }
+          if (data) { A.insertBlock(to, data, at); toast(tt('block_actions.duplicated', 'Block duplicated')); }
+          else changed = false;
         } else if (String(to) !== String(drag.day) && A.moveBlock) {
-          A.moveBlock(drag.day, drag.block, to);
+          A.moveBlock(drag.day, drag.block, to, at);
           toast(tt('block_actions.moved', 'Block moved'));
+        } else if (String(to) === String(drag.day) && A.reorderBlock && at != null) {
+          // Dropping either side of its own gap leaves the order untouched.
+          const from = Number(drag.block);
+          if (!isNaN(from) && (at === from || at === from + 1)) changed = false;
+          else { A.reorderBlock(drag.day, drag.block, at); toast(tt('block_actions.reordered', 'Order updated')); }
+        } else {
+          changed = false;
         }
-        persist();
+        if (changed) persist();
       }
       cleanupDrag();
     });

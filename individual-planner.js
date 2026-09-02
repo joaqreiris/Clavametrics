@@ -565,20 +565,44 @@
           const b = (days && days[day] && Array.isArray(days[day].blocks)) ? days[day].blocks[block] : null;
           return b ? JSON.parse(JSON.stringify(b)) : null;
         },
-        insertBlock: (day, data) => {
+        // `at` is where the card was dropped (index in the day's current list);
+        // undefined means it landed on empty space → append.
+        insertBlock: (day, data, at) => {
           const days = ensureDays();
           if (!days || !days[day] || !data) return;
           if (!Array.isArray(days[day].blocks)) days[day].blocks = [];
-          days[day].blocks.push(data);
+          const arr = days[day].blocks;
+          arr.splice(at == null ? arr.length : Math.max(0, Math.min(at, arr.length)), 0, data);
           renderAll();
         },
-        moveBlock: (from, fromBlock, to) => {
+        moveBlock: (from, fromBlock, to, at) => {
           const days = ensureDays();
           if (!days || !days[from] || !days[to] || !Array.isArray(days[from].blocks)) return;
           const [b] = days[from].blocks.splice(fromBlock, 1);
           if (!b) return;
           if (!Array.isArray(days[to].blocks)) days[to].blocks = [];
-          days[to].blocks.push(b);
+          const arr = days[to].blocks;
+          arr.splice(at == null ? arr.length : Math.max(0, Math.min(at, arr.length)), 0, b);
+          renderAll();
+        },
+        // Reorder inside one day. `at` counts positions in the list BEFORE the
+        // card is pulled out, so dropping further down shifts one place back.
+        reorderBlock: (day, fromBlock, at) => {
+          const days = ensureDays();
+          if (!days || !days[day] || !Array.isArray(days[day].blocks)) return;
+          const arr = days[day].blocks;
+          const [b] = arr.splice(fromBlock, 1);
+          if (!b) return;
+          const idx = Math.max(0, Math.min(fromBlock < at ? at - 1 : at, arr.length));
+          arr.splice(idx, 0, b);
+          // The side panel points at a block by index — follow the cards around,
+          // otherwise it starts describing whichever block took that slot.
+          if (_selectedRef && _selectedRef.di === day) {
+            let s = _selectedRef.bi;
+            if (s === fromBlock) s = idx;
+            else { if (s > fromBlock) s--; if (s >= idx) s++; }
+            _selectedRef.bi = s;
+          }
           renderAll();
         },
         onChange: () => _fireContentChange()
