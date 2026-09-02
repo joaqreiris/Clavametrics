@@ -161,15 +161,48 @@
     // Parameters
     blockName: '',
     duration: 20,
-    owner: 'sc',
+    owner: 'sc',        // role bucket: 'sc' | 'physio' | 'coach'
+    ownerId: null,      // profiles.id of the staff member in charge (optional)
+    ownerName: '',
     rpe: 7,
     notes: '',
     ctxField: '',       // contraindication (rehab) / target (prev) / goal (ip)
-    sets: {},           // exId -> [{reps,load,tempo,rest}]
+    sets: {},           // exId -> [{reps,time,load,tempo,rest,note}]
     freeNames: {},      // __free__N -> name string
     exExtras: {},       // exId -> {side, flag}
+    exModes: {},        // exId -> 'reps' | 'time'
     freeCount: 0
   };
+
+  // ─── Club staff (owner picker) ───
+  // [{ id, name, owner }] where owner is the block's role bucket. Loaded once.
+  let STAFF = null;
+  const OWNER_FROM_BUCKET = { sc: 'sc', medical: 'physio', coach: 'coach' };
+  async function ensureStaff() {
+    if (STAFF) return STAFF;
+    try {
+      const clubId = await window.getClubId();
+      const { data } = await window.sb.from('profiles')
+        .select('id, full_name, first_name, last_name, role, club_role')
+        .eq('club_id', clubId);
+      STAFF = (data || [])
+        .filter(p => (p.role || '').toLowerCase() !== 'player')
+        .map(p => {
+          const buckets = window.cmRoleBuckets ? window.cmRoleBuckets(p) : new Set([p.role]);
+          // A dual-role member lands in the most hands-on area they cover.
+          let owner = null;
+          ['sc', 'medical', 'coach'].forEach(b => { if (!owner && buckets.has(b)) owner = OWNER_FROM_BUCKET[b]; });
+          const name = (p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || '').trim();
+          return owner && name ? { id: p.id, name, owner } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+      console.warn('[block-drawer] staff load failed:', err);
+      STAFF = [];
+    }
+    return STAFF;
+  }
 
   // ─── Helpers ───
   const h = (tag, attrs, ...children) => {
@@ -190,6 +223,8 @@
   };
 
   const TYPE_MAP = Object.fromEntries(TYPES.map(t => [t.id, t]));
+  // Type names are already translated for the planners — reuse those keys.
+  const typeLabel = t => _tt('individual_planner.type_' + t.id, t.label);
   const TYPE_COLOR = {
     warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E',
     str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D',
@@ -234,7 +269,7 @@
   // ─── Renderers ───
   function renderSteps() {
     stepsEl.innerHTML = '';
-    const labels = ['Type', 'Exercises', 'Parameters'];
+    const labels = [_tt('block_drawer.step_type', 'Type'), _tt('block_drawer.exercises', 'Exercises'), _tt('block_drawer.step_params', 'Parameters')];
     labels.forEach((lbl, i) => {
       const n = i + 1;
       const cls = ['bd-step'];
@@ -278,20 +313,20 @@
           const [exN, mins, rpe] = parseDefaults(t.defaults);
           state.duration = mins;
           state.rpe = rpe;
-          state.blockName = t.label;
+          state.blockName = typeLabel(t);
           renderAll();
         }
       },
         h('div', { class: 'head' },
           h('div', { class: 'glyph' }, h('i', { class: 'ti ' + t.icon })),
-          h('h4', null, t.label)
+          h('h4', null, typeLabel(t))
         ),
         h('div', { class: 'defaults' }, t.defaults)
       );
       grid.appendChild(card);
     });
     return h('div', { class: 'bd-step-content' },
-      h('div', { class: 'bd-section-h' }, 'Block type · pick one'),
+      h('div', { class: 'bd-section-h' }, _tt('block_drawer.pick_type', 'Block type · pick one')),
       grid
     );
   }
@@ -463,56 +498,72 @@
   function seedSets(/* ex */) {
     // The real library has no sets/reps — those are block parameters.
     // Seed 3 blank rows the coach fills in.
-    return [
-      { reps: '', load: '', tempo: '', rest: '' },
-      { reps: '', load: '', tempo: '', rest: '' },
-      { reps: '', load: '', tempo: '', rest: '' }
-    ];
+    return [blankSet(), blankSet(), blankSet()];
   }
 
+  // ─── Step 3 · block parameters ───
+  // Prescription mode per exercise: reps (sets × reps) or time (sets × duration).
+  const EX_MODES = [
+    { id: 'reps', label: () => _tt('block_drawer.mode_reps', 'Reps'), icon: 'ti-repeat' },
+    { id: 'time', label: () => _tt('block_drawer.mode_time', 'Time'), icon: 'ti-stopwatch' }
+  ];
+  const exMode = exId => state.exModes[exId] || 'reps';
+
   function renderStep3() {
-    const type = TYPE_MAP[state.type];
-    const ctxLabel = state.context === 'rehab' ? 'Contraindications'
-                  : state.context === 'prev'  ? 'Targets risk flag'
-                  : 'Goal · VBT target';
-    const ctxPh = state.context === 'rehab' ? 'e.g. Avoid deep ROM'
-                : state.context === 'prev'  ? 'e.g. Hamstring'
-                : 'e.g. 80% 1RM · 0.45 m/s';
+    const ctxLabel = state.context === 'rehab' ? _tt('block_drawer.contraindications', 'Contraindications')
+                  : state.context === 'prev'  ? _tt('block_drawer.targets_risk', 'Targets risk flag')
+                  : _tt('block_drawer.goal_target', 'Goal · target');
+    const ctxPh = state.context === 'rehab' ? _tt('block_drawer.ph_contra', 'e.g. Avoid deep ROM')
+                : state.context === 'prev'  ? _tt('block_drawer.ph_risk', 'e.g. Hamstring')
+                : _tt('block_drawer.ph_goal', 'e.g. 80% 1RM · 0.45 m/s');
+
+    const durField = h('div', { class: 'bd-field' },
+      h('label', null, _tt('block_drawer.duration', 'Duration')),
+      h('div', { class: 'bd-input-suffix' },
+        h('input', {
+          type: 'number', value: state.duration, min: '1', step: '1',
+          oninput: (e) => { state.duration = parseInt(e.target.value) || 0; renderFooter(); }
+        }),
+        h('span', null, _tt('block_drawer.min', 'min'))
+      )
+    );
+
+    // RPE 1–10 as a scale of buttons — faster than typing and it reads as an intensity.
+    const rpeScale = h('div', { class: 'bd-rpe-scale' });
+    for (let n = 1; n <= 10; n++) {
+      const b = h('button', {
+        class: 'bd-rpe-dot' + (state.rpe === n ? ' is-on' : ''),
+        'data-lvl': n <= 3 ? 'low' : n <= 6 ? 'mod' : n <= 8 ? 'high' : 'max',
+        title: 'RPE ' + n,
+        onclick: () => {
+          state.rpe = n;
+          Array.from(rpeScale.children).forEach(c => c.classList.toggle('is-on', c === b));
+          renderFooter();
+        }
+      }, String(n));
+      rpeScale.appendChild(b);
+    }
+    const rpeField = h('div', { class: 'bd-field' },
+      h('label', null, _tt('block_drawer.rpe_target', 'RPE target')),
+      rpeScale
+    );
 
     const blockHead = h('div', { class: 'bd-block-h' },
       h('div', { class: 'bd-field with-stripe', style: '--bd-stripe:' + TYPE_COLOR[state.type] },
-        h('label', null, 'Block name'),
+        h('label', null, _tt('block_drawer.block_name', 'Block name')),
         h('input', {
           type: 'text',
+          placeholder: TYPE_MAP[state.type] ? typeLabel(TYPE_MAP[state.type]) : '',
           value: state.blockName,
           oninput: (e) => { state.blockName = e.target.value; }
         })
       ),
+      durField,
       h('div', { class: 'bd-field' },
-        h('label', null, 'Duration'),
-        h('input', {
-          type: 'number',
-          value: state.duration,
-          min: '1',
-          oninput: (e) => { state.duration = parseInt(e.target.value) || 0; renderFooter(); }
-        })
-      ),
-      h('div', { class: 'bd-field' },
-        h('label', null, 'RPE target'),
-        h('input', {
-          type: 'number',
-          value: state.rpe,
-          min: '1', max: '10',
-          oninput: (e) => { state.rpe = parseInt(e.target.value) || 5; renderFooter(); }
-        })
-      ),
-      h('div', { class: 'bd-field' },
-        h('label', null, 'Owner'),
+        h('label', null, _tt('block_drawer.owner', 'Owner')),
         ownerSelect()
       )
     );
-
-    // colour the stripe by type — handled via --bd-stripe CSS var on the field
 
     const ctxRow = h('div', { class: 'bd-context-row' },
       h('div', { class: 'bd-field' },
@@ -523,9 +574,9 @@
         })
       ),
       h('div', { class: 'bd-field' },
-        h('label', null, 'Notes for athlete'),
+        h('label', null, _tt('block_drawer.notes_athlete', 'Notes for athlete')),
         h('input', {
-          type: 'text', placeholder: 'Optional cue / instruction', value: state.notes,
+          type: 'text', placeholder: _tt('block_drawer.ph_notes', 'Optional cue / instruction'), value: state.notes,
           oninput: (e) => { state.notes = e.target.value; }
         })
       )
@@ -535,16 +586,14 @@
 
     return h('div', { class: 'bd-step-content' },
       blockHead,
+      h('div', { class: 'bd-rpe-row' }, rpeField),
       ctxRow,
-      h('div', { class: 'bd-section-h' }, `Exercises · ${state.selected.length}`),
+      h('div', { class: 'bd-section-h' }, _tt('block_drawer.exercises', 'Exercises') + ' · ' + state.selected.length),
       ...exCards,
       h('button', {
         class: 'bd-add-ex',
         onclick: () => { state.step = 2; renderAll(); }
-      },
-        h('i', { class: 'ti ti-plus' }),
-        ' Add from library'
-      ),
+      }, h('i', { class: 'ti ti-plus' }), ' ' + _tt('block_drawer.add_from_library', 'Add from library')),
       h('button', {
         class: 'bd-add-ex',
         onclick: () => {
@@ -552,89 +601,157 @@
           state.selected.push(fid);
           state.freeNames[fid] = '';
           state.exExtras[fid]  = { side: '', flag: '' };
-          state.sets[fid]      = [{ reps: '', load: '', tempo: '', rest: '' }];
+          state.exModes[fid]   = 'reps';
+          state.sets[fid]      = [blankSet()];
           renderBody(); renderFooter();
         }
-      },
-        h('i', { class: 'ti ti-pencil' }),
-        ' Add free-text exercise'
-      )
+      }, h('i', { class: 'ti ti-pencil' }), ' ' + _tt('block_drawer.add_free_text', 'Add free-text exercise'))
     );
   }
 
+  // ── Owner: real club staff, grouped by area ──────────────────────────────────
+  // Falls back to plain role options when the staff list can't be read.
   function ownerSelect() {
-    const sel = h('select', { onchange: (e) => { state.owner = e.target.value; } },
-      h('option', { value: 'sc' }, 'S&C · L. Pérez'),
-      h('option', { value: 'physio' }, 'Physio · R. Martínez'),
-      h('option', { value: 'coach' }, 'Coach · D. Valdez')
-    );
-    sel.value = state.owner;
+    const sel = h('select', {
+      onchange: (e) => {
+        const opt = e.target.selectedOptions[0];
+        const v = e.target.value;
+        state.ownerId   = (v && v.indexOf('role:') !== 0) ? v : null;   // 'role:*' = role-only fallback
+        state.owner     = (opt && opt.dataset.owner) || 'sc';
+        state.ownerName = (opt && opt.dataset.name) || '';
+      }
+    });
+    const GROUPS = [
+      { key: 'sc',     label: _tt('block_drawer.owner_sc', 'S&C') },
+      { key: 'physio', label: _tt('block_drawer.owner_physio', 'Physio / medical') },
+      { key: 'coach',  label: _tt('block_drawer.owner_coach', 'Coaching staff') }
+    ];
+    sel.appendChild(h('option', { value: '', 'data-owner': state.owner || 'sc', 'data-name': '' },
+      '— ' + _tt('block_drawer.owner_unassigned', 'Unassigned') + ' —'));
+    if (STAFF && STAFF.length) {
+      GROUPS.forEach(g => {
+        const people = STAFF.filter(p => p.owner === g.key);
+        if (!people.length) return;
+        const og = h('optgroup', { label: g.label });
+        people.forEach(p => og.appendChild(h('option', { value: p.id, 'data-owner': p.owner, 'data-name': p.name }, p.name)));
+        sel.appendChild(og);
+      });
+      sel.value = state.ownerId && STAFF.some(p => p.id === state.ownerId) ? state.ownerId : '';
+    } else {
+      // No staff list yet (still loading, or no permission): plain role choices.
+      GROUPS.forEach(g => sel.appendChild(h('option', { value: 'role:' + g.key, 'data-owner': g.key, 'data-name': '' }, g.label)));
+      sel.value = 'role:' + (state.owner || 'sc');
+    }
     return sel;
   }
+
+  const blankSet = () => ({ reps: '', time: '', load: '', tempo: '', rest: '', note: '' });
 
   function renderExCard(exId, exIdx) {
     const isFree = exId.startsWith('__free__');
     const ex     = isFree ? null : LIB.find(e => e.id === exId);
-    const sets   = state.sets[exId] || [];
+    const sets   = state.sets[exId] || (state.sets[exId] = [blankSet()]);
     const extras = state.exExtras[exId] || (state.exExtras[exId] = { side: '', flag: '' });
+    const mode   = exMode(exId);
 
     const nameEl = isFree
       ? h('input', {
-          type: 'text', class: 'bd-free-name', placeholder: 'Exercise name…',
+          type: 'text', class: 'bd-free-name', placeholder: _tt('block_drawer.ph_ex_name', 'Exercise name…'),
           value: state.freeNames[exId] || '',
           oninput: (e) => { state.freeNames[exId] = e.target.value; }
         })
       : document.createTextNode(ex ? ex.name : exId);
 
+    // Prescription mode switch — repaints just this card, so the page keeps its scroll.
+    const modeSeg = h('div', { class: 'bd-mode-seg' });
+    EX_MODES.forEach(m => {
+      modeSeg.appendChild(h('button', {
+        class: 'bd-mode-btn' + (mode === m.id ? ' is-on' : ''),
+        onclick: () => {
+          if (exMode(exId) === m.id) return;
+          state.exModes[exId] = m.id;
+          const fresh = renderExCard(exId, exIdx);
+          card.replaceWith(fresh);
+        }
+      }, h('i', { class: 'ti ' + m.icon }), m.label()));
+    });
+
     const head = h('div', { class: 'bd-ex-card-h' },
       h('div', { class: 'n' }, String(exIdx + 1)),
       h('div', { class: 'name' }, nameEl),
-      isFree ? null : h('button', { class: 'ic', title: 'Duplicate', onclick: () => duplicateEx(exId) }, h('i', { class: 'ti ti-copy' })),
-      h('button', { class: 'ic', title: 'Remove', onclick: () => removeEx(exId) }, h('i', { class: 'ti ti-trash' }))
+      modeSeg,
+      isFree ? null : h('button', { class: 'ic', title: _tt('block_drawer.duplicate', 'Duplicate'), onclick: () => duplicateEx(exId) }, h('i', { class: 'ti ti-copy' })),
+      h('button', { class: 'ic', title: _tt('block_drawer.remove', 'Remove'), onclick: () => removeEx(exId) }, h('i', { class: 'ti ti-trash' }))
     );
 
+    // Side as chips (was free text) + flag note.
+    const SIDES = [
+      { v: '',      l: _tt('block_drawer.side_none', '—') },
+      { v: 'L',     l: _tt('block_drawer.side_l', 'L') },
+      { v: 'R',     l: _tt('block_drawer.side_r', 'R') },
+      { v: 'Both',  l: _tt('block_drawer.side_both', 'Both') }
+    ];
+    const sideRow = h('div', { class: 'bd-side-chips' });
+    SIDES.forEach(s => {
+      const b = h('button', {
+        class: 'bd-side-chip' + ((extras.side || '') === s.v ? ' is-on' : ''),
+        onclick: () => {
+          extras.side = s.v;
+          Array.from(sideRow.children).forEach(c => c.classList.toggle('is-on', c === b));
+        }
+      }, s.l);
+      sideRow.appendChild(b);
+    });
     const extrasRow = h('div', { class: 'bd-ex-extras' },
-      h('div', { class: 'bd-field-mini' },
-        h('label', null, 'Side'),
-        h('input', { type: 'text', placeholder: 'L / R / Both', value: extras.side,
-          oninput: (e) => { extras.side = e.target.value; }
-        })
-      ),
-      h('div', { class: 'bd-field-mini' },
-        h('label', null, 'Flag'),
-        h('input', { type: 'text', placeholder: 'e.g. Avoid lockout', value: extras.flag,
-          oninput: (e) => { extras.flag = e.target.value; }
-        })
+      h('div', { class: 'bd-field-mini' }, h('label', null, _tt('block_drawer.side', 'Side')), sideRow),
+      h('div', { class: 'bd-field-mini is-grow' },
+        h('label', null, _tt('block_drawer.flag', 'Flag')),
+        h('input', { type: 'text', placeholder: _tt('block_drawer.ph_flag', 'e.g. Avoid lockout'), value: extras.flag,
+          oninput: (e) => { extras.flag = e.target.value; } })
       )
     );
 
-    // Blank seed for "Add set" — values are plan-level, not from the library
-    const seedRow = { reps: '', load: '', tempo: '', rest: '' };
+    // Columns per mode: reps → reps/load/tempo/rest, time → time/load/rest.
+    const COLS = mode === 'time'
+      ? [ { k: 'time', l: _tt('block_drawer.col_time', 'Time'),  ph: '30 s' },
+          { k: 'load', l: _tt('block_drawer.col_load', 'Load'),  ph: '10 kg' },
+          { k: 'rest', l: _tt('block_drawer.col_rest', 'Rest'),  ph: '60 s' } ]
+      : [ { k: 'reps',  l: _tt('block_drawer.col_reps', 'Reps'),  ph: '10' },
+          { k: 'load',  l: _tt('block_drawer.col_load', 'Load'),  ph: '60 kg · 70%' },
+          { k: 'tempo', l: _tt('block_drawer.col_tempo', 'Tempo'), ph: '3-1-1' },
+          { k: 'rest',  l: _tt('block_drawer.col_rest', 'Rest'),  ph: '90 s' } ];
 
     const tbl = h('table', { class: 'bd-sets-tbl' },
       h('thead', null,
         h('tr', null,
-          h('th', { class: 'set-n' }, 'Set'),
-          h('th', null, 'Reps'),
-          h('th', null, 'Load'),
-          h('th', null, 'Tempo'),
-          h('th', null, 'Rest'),
+          h('th', { class: 'set-n' }, _tt('block_drawer.col_set', 'Set')),
+          ...COLS.map(c => h('th', null, c.l)),
+          h('th', { class: 'note-col' }, _tt('block_drawer.col_note', 'Note')),
           h('th', { style: 'width:58px' })
         )
       ),
       h('tbody', null,
         ...sets.map((s, i) => h('tr', null,
           h('td', { class: 'set-n' }, h('div', { class: 'set-n-badge' }, String(i + 1))),
-          h('td', null, h('input', { value: s.reps,  oninput: (e) => s.reps  = e.target.value })),
-          h('td', null, h('input', { value: s.load,  oninput: (e) => s.load  = e.target.value })),
-          h('td', null, h('input', { value: s.tempo, oninput: (e) => s.tempo = e.target.value })),
-          h('td', null, h('input', { value: s.rest,  oninput: (e) => s.rest  = e.target.value })),
+          ...COLS.map(c => h('td', null, h('input', {
+            value: s[c.k] || '', placeholder: c.ph,
+            oninput: (e) => { s[c.k] = e.target.value; }
+          }))),
+          h('td', { class: 'note-col' }, h('input', {
+            value: s.note || '', placeholder: _tt('block_drawer.ph_set_note', 'optional'),
+            oninput: (e) => { s.note = e.target.value; }
+          })),
           h('td', { style: 'white-space:nowrap' },
-            h('button', { class: 'rm-row', title: 'Copy this set to the ones below',
+            h('button', { class: 'rm-row', title: _tt('block_drawer.copy_down', 'Copy this set to the ones below'),
               style: i === sets.length - 1 ? 'opacity:.3;pointer-events:none' : '',
-              onclick: () => { for (let j = i + 1; j < sets.length; j++) { sets[j].reps = s.reps; sets[j].load = s.load; sets[j].tempo = s.tempo; sets[j].rest = s.rest; } renderBody(); renderFooter(); }
+              onclick: () => {
+                for (let j = i + 1; j < sets.length; j++) Object.assign(sets[j], s);
+                card.replaceWith(renderExCard(exId, exIdx));
+              }
             }, h('i', { class: 'ti ti-arrow-bar-to-down' })),
-            h('button', { class: 'rm-row', onclick: () => { sets.splice(i, 1); renderBody(); renderFooter(); } }, h('i', { class: 'ti ti-x' }))
+            h('button', { class: 'rm-row', title: _tt('block_drawer.remove_set', 'Remove set'),
+              onclick: () => { sets.splice(i, 1); card.replaceWith(renderExCard(exId, exIdx)); renderFooter(); }
+            }, h('i', { class: 'ti ti-x' }))
           )
         ))
       )
@@ -642,11 +759,15 @@
     const addSet = h('button', {
       class: 'bd-add-set',
       onclick: () => {
-        sets.push({ ...seedRow });
-        renderBody(); renderFooter();
+        const last = sets[sets.length - 1];
+        sets.push(last ? Object.assign(blankSet(), last, { note: '' }) : blankSet());   // repeat the last set
+        card.replaceWith(renderExCard(exId, exIdx));
+        renderFooter();
       }
-    }, h('i', { class: 'ti ti-plus' }), ' Add set');
-    return h('div', { class: 'bd-ex-card' }, head, extrasRow, tbl, addSet);
+    }, h('i', { class: 'ti ti-plus' }), ' ' + _tt('block_drawer.add_set', 'Add set'));
+
+    const card = h('div', { class: 'bd-ex-card' }, head, extrasRow, tbl, addSet);
+    return card;
   }
 
   function duplicateEx(exId) {
@@ -657,6 +778,8 @@
     const newKey = exId + '__' + (state.selected.filter(s => s.startsWith(exId)).length);
     state.selected.push(newKey);
     state.sets[newKey] = JSON.parse(JSON.stringify(state.sets[exId] || seedSets(ex)));
+    state.exModes[newKey] = exMode(exId);
+    state.exExtras[newKey] = { ...(state.exExtras[exId] || { side: '', flag: '' }) };
     // map the new key back to the original entry for lookup
     LIB.push({ ...ex, id: newKey });
     renderBody(); renderFooter();
@@ -666,14 +789,18 @@
     if (i < 0) return;
     state.selected.splice(i, 1);
     delete state.sets[exId];
+    delete state.exModes[exId];
+    delete state.exExtras[exId];
     renderBody(); renderFooter();
   }
 
+  // A set row counts only once the coach has actually filled something in.
+  const filledSets = arr => (arr || []).filter(s => Object.keys(s).some(k => String(s[k] || '').trim()));
+
   function computeAU() {
-    // Simple model: duration (min) * RPE * 1.2
-    // Plus 4 per set as a small bias.
+    // Simple model: duration (min) * RPE, plus 4 per filled set as a small bias.
     let setCount = 0;
-    Object.values(state.sets).forEach(arr => setCount += arr.length);
+    Object.values(state.sets).forEach(arr => setCount += filledSets(arr).length);
     return Math.round(state.duration * state.rpe * 1.0 + setCount * 4);
   }
 
@@ -689,7 +816,7 @@
     footEl.appendChild(h('div', { class: 'stat' }, h('strong', null, 'RPE ' + state.rpe), 'target'));
     footEl.appendChild(h('div', { class: 'spacer' }));
 
-    const cancel = h('button', { class: 'cm-btn is-ghost', onclick: close }, 'Cancel');
+    const cancel = h('button', { class: 'cm-btn is-ghost', onclick: close }, _tt('block_drawer.cancel', 'Cancel'));
     footEl.appendChild(cancel);
 
     // Delete action — only in edit mode at any step
@@ -698,7 +825,7 @@
         class: 'cm-btn is-ghost',
         style: 'color:#B91C1C',
         onclick: doDelete
-      }, h('i', { class: 'ti ti-trash', style: 'margin-right:5px' }), 'Delete');
+      }, h('i', { class: 'ti ti-trash', style: 'margin-right:5px' }), _tt('block_drawer.delete', 'Delete'));
       footEl.appendChild(del);
     }
 
@@ -707,10 +834,10 @@
         class: 'cm-btn is-primary' + (canAdvanceTo(state.step + 1) ? '' : ' is-disabled'),
         disabled: canAdvanceTo(state.step + 1) ? null : '',
         onclick: () => { if (canAdvanceTo(state.step + 1)) { state.step++; renderAll(); } }
-      }, 'Next', h('i', { class: 'ti ti-arrow-right', style: 'margin-left:6px' }));
+      }, _tt('block_drawer.next', 'Next'), h('i', { class: 'ti ti-arrow-right', style: 'margin-left:6px' }));
       footEl.appendChild(next);
     } else {
-      const saveLabel = state.mode === 'edit' ? 'Save changes' : 'Add block';
+      const saveLabel = state.mode === 'edit' ? _tt('block_drawer.save_changes', 'Save changes') : _tt('block_drawer.add_block', 'Add block');
       const save = h('button', {
         class: 'cm-btn is-primary',
         onclick: doSave
@@ -746,11 +873,13 @@
       blockName: existing ? (existing.name || '') : '',
       duration: existing ? (existing.duration || 20) : 20,
       owner: existing ? (existing.owner || 'sc') : 'sc',
+      ownerId: existing ? (existing.ownerId || null) : null,
+      ownerName: existing ? (existing.ownerName || '') : '',
       rpe: existing ? (existing.rpe || 7) : 7,
       notes: existing ? (existing.notes || '') : '',
       ctxField: existing ? (existing.ctxField || '') : '',
       sets: {},
-      freeNames: {}, exExtras: {}, freeCount: 0
+      freeNames: {}, exExtras: {}, exModes: {}, freeCount: 0
     };
     // Seed from DB exercises jsonb (edit flow — free-text). Does not need the library.
     if (existing?.exercises?.length) {
@@ -760,20 +889,22 @@
         state.selected.push(fid);
         state.freeNames[fid] = ex.name || '';
         state.exExtras[fid]  = { side: ex.side || '', flag: ex.flag || '' };
-        state.sets[fid]      = Array.isArray(ex.sets) ? ex.sets : [];
+        state.exModes[fid]   = ex.mode === 'time' ? 'time' : 'reps';
+        state.sets[fid]      = (Array.isArray(ex.sets) ? ex.sets : []).map(s => Object.assign(blankSet(), s));
       });
     }
-    headTitle.textContent = state.mode === 'edit' ? 'Edit block' : 'New block';
+    headTitle.textContent = state.mode === 'edit' ? _tt('block_drawer.edit_block', 'Edit block') : _tt('block_drawer.new_block', 'New block');
     headSub.textContent = (state.dayLabel ? state.dayLabel + ' · ' : '') +
-      ({ rehab: 'Rehab plan', prev: 'Preventive plan', ip: 'Individual S&C' }[state.context] || '');
+      ({ rehab: _tt('block_drawer.ctx_rehab', 'Rehab plan'), prev: _tt('block_drawer.ctx_prev', 'Preventive plan'), ip: _tt('block_drawer.ctx_ip', 'Individual S&C') }[state.context] || '');
     renderAll();
     setTimeout(() => {
       backdrop.classList.add('is-open');
       drawer.classList.add('is-open');
     }, 0);
 
-    // Load the shared library for this context, then seed library-linked sets + refresh
-    await ensureLibrary(state.context);
+    // Load the shared library for this context + the club staff (owner picker),
+    // then seed library-linked sets and refresh.
+    await Promise.all([ensureLibrary(state.context), ensureStaff()]);
     if (!state.open) return;
     if (existing && existing.exerciseIds) {
       existing.exerciseIds.forEach(exId => {
@@ -793,15 +924,17 @@
 
   function doSave() {
     let totalSets = 0;
-    state.selected.forEach(exId => { totalSets += (state.sets[exId] || []).length; });
+    state.selected.forEach(exId => { totalSets += filledSets(state.sets[exId]).length; });
 
     const payload = {
       mode:         state.mode,
       type:         state.type,
-      name:         state.blockName || (TYPE_MAP[state.type]?.label || 'Block'),
+      name:         state.blockName || (TYPE_MAP[state.type] ? typeLabel(TYPE_MAP[state.type]) : 'Block'),
       duration:     state.duration,
       rpe:          state.rpe,
       owner:        state.owner,
+      owner_id:     state.ownerId || null,     // profiles.id — ignored by callers that don't store it
+      owner_name:   state.ownerName || '',
       notes:        state.notes,
       ctxField:     state.ctxField,
       context_note: state.ctxField,
@@ -812,10 +945,13 @@
         const isFree = exId.startsWith('__free__');
         const ex     = isFree ? null : LIB.find(e => e.id === exId);
         const extras = state.exExtras[exId] || {};
+        // Drop set rows the coach left completely empty.
+        const sets = filledSets(state.sets[exId]);
         return {
           name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
           exercise_id: isFree ? null : (ex?.exercise_id || null),  // linked to gym_exercises
-          sets: state.sets[exId] || [],
+          mode: exMode(exId),
+          sets,
           side: extras.side  || null,
           flag: extras.flag  || null
         };
@@ -826,7 +962,7 @@
   }
 
   function doDelete() {
-    if (!confirm('Delete this block? This cannot be undone.')) return;
+    if (!confirm(_tt('block_drawer.delete_confirm', 'Delete this block? This cannot be undone.'))) return;
     window.dispatchEvent(new CustomEvent('blockdrawer:delete', {
       detail: { type: state.type, name: state.blockName }
     }));

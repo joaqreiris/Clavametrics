@@ -106,6 +106,8 @@
       dur: p.duration || 0,
       au: p.au || 0,
       resp: p.owner || 'sc',
+      respId: p.owner_id || undefined,        // staff member in charge (profiles.id)
+      respName: p.owner_name || undefined,
       rpe: p.rpe,
       exercises: (p.exercises || []).length,
       exList: p.exercises || [],
@@ -117,6 +119,7 @@
   function blockToExisting(b, dayLabel, di) {
     return {
       type: b.type, name: b.name, duration: b.dur, rpe: b.rpe, owner: b.resp,
+      ownerId: b.respId || null, ownerName: b.respName || '',
       notes: b.notes || '', ctxField: b.goal || '',
       exercises: b.exList || [],
       day: dayLabel, dayDate: String(di)
@@ -354,7 +357,7 @@
     if (day.dow) sub.push(esc(day.dow));
     sub.push(esc(typeLabel(block.type)));
     if (block.dur) sub.push(block.dur + ' ' + tt('individual_planner.min_short', 'min'));
-    if (block.resp) sub.push(esc(respLabel(block.resp)));
+    if (block.resp) sub.push(esc(respLabel(block.resp) + (block.respName ? ' · ' + block.respName : '')));
     const metrics = `<div class="rp-bd-metrics">
       <div class="rp-bd-metric"><div class="l">${tt('individual_planner.duration', 'Duration')}</div><div class="v">${block.dur || 0}<sub>${tt('individual_planner.min_short', 'min')}</sub></div></div>
       <div class="rp-bd-metric"><div class="l">${tt('individual_planner.rpe_target', 'RPE target')}</div><div class="v">${block.rpe != null ? block.rpe : '—'}<sub>/10</sub></div></div>
@@ -362,11 +365,16 @@
     </div>`;
     const exHtml = exs.length ? exs.map((ex, i) => {
       const sets = Array.isArray(ex.sets) ? ex.sets : [];
+      // One line per set: only the fields the coach actually filled in.
       const params = sets.map(s => {
         const bits = [];
-        if (s.reps) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_reps', 'reps')}</span>${esc(s.reps)}</span>`);
-        if (s.load) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_load', 'load')}</span>${esc(s.load)}</span>`);
-        if (s.rest) bits.push(`<span class="p"><span class="l">${tt('individual_planner.param_rest', 'rest')}</span>${esc(s.rest)}</span>`);
+        const add = (k, label) => { if (s[k]) bits.push(`<span class="p"><span class="l">${label}</span>${esc(s[k])}</span>`); };
+        add('reps',  tt('individual_planner.param_reps',  'reps'));
+        add('time',  tt('individual_planner.param_time',  'time'));
+        add('load',  tt('individual_planner.param_load',  'load'));
+        add('tempo', tt('individual_planner.param_tempo', 'tempo'));
+        add('rest',  tt('individual_planner.param_rest',  'rest'));
+        if (s.note) bits.push(`<span class="p" style="color:var(--cm-fg-muted)">${esc(s.note)}</span>`);
         return bits.join('');
       }).join('');
       const extra = [ex.side, ex.flag].filter(Boolean).map(esc).join(' · ');

@@ -14,7 +14,7 @@
 
 .bd-drawer {
   position:fixed; top:0; right:0; bottom:0;
-  width:min(760px, 100vw);
+  width:min(860px, 100vw);
   background:var(--cm-surface);
   border-left:1px solid var(--cm-border);
   box-shadow:-12px 0 32px -8px rgba(15,17,22,0.18);
@@ -206,9 +206,56 @@
    STEP 3 — Parameters
    ───────────────────────────────────────────── */
 .bd-block-h {
-  display:grid; grid-template-columns:1fr 110px 110px 130px; gap:10px;
-  margin-bottom:14px;
+  display:grid; grid-template-columns:1fr 118px minmax(150px, 210px); gap:10px;
+  margin-bottom:12px;
 }
+
+/* number input with a unit glued to it (duration → min) */
+.bd-input-suffix { display:flex; align-items:center; gap:0; }
+.bd-input-suffix input { border-top-right-radius:0; border-bottom-right-radius:0; }
+.bd-input-suffix span {
+  display:inline-flex; align-items:center; height:33px; padding:0 9px;
+  background:var(--cm-bg-subtle, var(--cm-bg-soft)); border:1px solid var(--cm-border); border-left:0;
+  border-radius:0 6px 6px 0;
+  font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+}
+
+/* RPE 1–10 scale */
+.bd-rpe-row { margin-bottom:14px; }
+.bd-rpe-scale { display:flex; gap:4px; flex-wrap:wrap; }
+.bd-rpe-dot {
+  width:30px; height:30px; border-radius:6px;
+  background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
+  font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); cursor:pointer;
+  transition:background var(--cm-dur-1), color var(--cm-dur-1), border-color var(--cm-dur-1);
+}
+.bd-rpe-dot:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+.bd-rpe-dot.is-on { color:#fff; border-color:transparent; }
+.bd-rpe-dot[data-lvl="low"].is-on  { background:#10B981; }
+.bd-rpe-dot[data-lvl="mod"].is-on  { background:#F59E0B; }
+.bd-rpe-dot[data-lvl="high"].is-on { background:#EA580C; }
+.bd-rpe-dot[data-lvl="max"].is-on  { background:#DC2626; }
+
+/* prescription-mode switch inside an exercise card header */
+.bd-mode-seg { display:inline-flex; gap:2px; padding:2px; background:var(--cm-bg); border:1px solid var(--cm-border-soft); border-radius:6px; flex-shrink:0; }
+.bd-mode-btn {
+  display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px; border:0; border-radius:4px;
+  background:transparent; color:var(--cm-fg-muted); cursor:pointer;
+  font:500 11px/1 var(--cm-font-sans);
+}
+.bd-mode-btn .ti { font-size:12px; }
+.bd-mode-btn:hover { color:var(--cm-fg); }
+.bd-mode-btn.is-on { background:var(--cm-accent); color:var(--cm-fg-on-accent); }
+
+/* side chips */
+.bd-side-chips { display:inline-flex; gap:3px; }
+.bd-side-chip {
+  min-width:30px; height:24px; padding:0 8px; border-radius:4px;
+  background:var(--cm-bg); border:1px solid var(--cm-border-soft);
+  font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); cursor:pointer;
+}
+.bd-side-chip:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+.bd-side-chip.is-on { background:var(--cm-accent-soft); border-color:var(--cm-accent); color:var(--cm-accent); }
 .bd-field { display:flex; flex-direction:column; gap:5px; }
 .bd-field label { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
 .bd-field input, .bd-field select, .bd-field textarea {
@@ -308,8 +355,10 @@
 .bd-free-name::placeholder { color:var(--cm-fg-faint); font-weight:500; }
 
 /* — side / flag extras row — */
-.bd-ex-extras { display:flex; gap:10px; padding:8px 12px; border-bottom:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
-.bd-field-mini { display:flex; flex-direction:column; gap:3px; flex:1; }
+.bd-ex-extras { display:flex; gap:14px; align-items:flex-end; padding:8px 12px; border-bottom:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+.bd-field-mini { display:flex; flex-direction:column; gap:4px; flex:0 0 auto; }
+.bd-field-mini.is-grow { flex:1; min-width:0; }
+.bd-sets-tbl th.note-col, .bd-sets-tbl td.note-col { width:22%; }
 .bd-field-mini label { font:500 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
 .bd-field-mini input {
   padding:5px 7px; background:var(--cm-bg); border:1px solid var(--cm-border-soft); border-radius:4px;

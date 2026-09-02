@@ -1011,7 +1011,9 @@ const escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           ${exArr.map((ex, i) => {
             const setCount = Array.isArray(ex.sets) ? ex.sets.length : 0;
             const first    = ex.sets?.[0];
-            const meta     = [setCount ? setCount+'×'+(first?.reps||'') : '', first?.load||'', ex.side||''].filter(Boolean).join(' · ');
+            // Time-prescribed exercises show the duration where reps would go.
+            const per      = first?.reps || first?.time || '';
+            const meta     = [setCount ? setCount+'×'+per : '', first?.load||'', ex.side||''].filter(Boolean).join(' · ');
             return `<div class="rp-bd-ex"><span class="n">${i+1}</span><div class="rp-bd-ex-body"><div class="nm">${escH(ex.name||'—')}</div><div class="rp-bd-ex-sub">${escH(meta)}${ex.flag?` <span class="rp-bd-ex-flag">${escH(ex.flag)}</span>`:''}</div></div></div>`;
           }).join('')}
         </div>
