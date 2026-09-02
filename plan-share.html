@@ -104,6 +104,13 @@
 
   /* ── Exercise ── */
   .ps-ex{display:flex;gap:12px;padding:13px 14px;border-top:1px solid var(--cm-border-soft,var(--cm-border))}
+  /* superset rows: A1/A2 tag + a rail joining the pair */
+  .ps-ex-tag{display:inline-flex;align-items:center;height:17px;padding:0 5px;margin-right:5px;border-radius:4px;
+    background:var(--ps-club);color:#fff;font:700 10.5px/1 var(--cm-font-mono);letter-spacing:.03em;vertical-align:1px}
+  .ps-ex.has-next{padding-bottom:7px}
+  .ps-ex.is-linked{border-top:0;padding-top:0}
+  .ps-ex.is-linked .ps-ex-thumb{margin-top:0}
+  .ps-ex.has-next .ps-ex-body,.ps-ex.is-linked .ps-ex-body{border-left:2px solid color-mix(in srgb, var(--ps-club) 35%, transparent);padding-left:10px}
   .ps-block-goal + .ps-ex,.ps-block-notes + .ps-ex{border-top:0;padding-top:11px}
   .ps-ex-thumb{width:60px;height:60px;flex:none;border-radius:10px;overflow:hidden;background:var(--cm-bg-soft);
     display:flex;align-items:center;justify-content:center;font:600 14px/1 var(--cm-font-sans);
@@ -275,7 +282,7 @@
       (notes.length ? '<div class="ps-ex-extra">'+notes.join(' · ')+'</div>' : '');
   }
 
-  function renderExercise(ex){
+  function renderExercise(ex, i, list){
     var yt = youtubeId(ex.videoUrl);
     var playable = !!(ex.videoUrl || ex.thumb);
     var inner = ex.thumb
@@ -292,9 +299,14 @@
             : '<a class="ps-watch" href="'+esc(safeUrl(ex.videoUrl))+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> '+tt('plan_share.watch_demo','Watch demo')+'</a>')
       : '';
     var data = ' data-video="'+esc(safeUrl(ex.videoUrl||''))+'" data-thumb="'+esc(safeUrl(ex.thumb||''))+'" data-name="'+esc(ex.name||'')+'"';
-    return '<div class="ps-ex"'+data+'>'+thumb+
+    // Paired work (A1/A2): the label comes from the planner, and the rows sit
+    // together so the athlete reads them as one round.
+    var next = (list || [])[i + 1];
+    var paired = !!(ex.link || (next && next.link));
+    var tag = paired && ex.label ? '<span class="ps-ex-tag">'+esc(ex.label)+'</span> ' : '';
+    return '<div class="ps-ex'+(ex.link?' is-linked':'')+(next && next.link?' has-next':'')+'"'+data+'>'+thumb+
       '<div class="ps-ex-body">'+
-        '<div class="ps-ex-name">'+esc(ex.name||'—')+'</div>'+
+        '<div class="ps-ex-name">'+tag+esc(ex.name||'—')+'</div>'+
         renderSets(ex.sets)+
         (extra.length?'<div class="ps-ex-extra">'+extra.join(' · ')+'</div>':'')+
         watch+
@@ -334,7 +346,8 @@
         '<div class="ps-rest"><i class="ti ti-bed"></i> '+tt('plan_share.rest_day','Rest day')+'</div></div>';
     }
     var mins = blocks.reduce(function(a,b){ return a + blockMinutes(b); }, 0);
-    head += '<span class="tot">'+blocks.length+' '+esc(tt('plan_share.blocks','blocks'))+' · '+mins+"'</span></div>";
+    const word = blocks.length === 1 ? tt('plan_share.block', 'block') : tt('plan_share.blocks', 'blocks');
+    head += '<span class="tot">'+blocks.length+' '+esc(word)+' · '+mins+"'</span></div>";
     return '<div class="ps-day">'+head+blocks.map(renderBlock).join('')+'</div>';
   }
 

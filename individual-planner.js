@@ -419,7 +419,10 @@
         return bits.join('');
       }).join('');
       const extra = [ex.side, ex.flag].filter(Boolean).map(esc).join(' · ');
-      return `<div class="rp-bd-ex"><div class="n">${i + 1}</div><div class="body"><div class="name">${esc(ex.name || '—')}</div><div class="params">${params}${extra ? `<span class="p">${extra}</span>` : ''}</div></div></div>`;
+      // A1/A2 when the coach paired exercises in the block drawer; plain index otherwise.
+      const paired = !!(ex.link || (exs[i + 1] && exs[i + 1].link));
+      const tag = ex.label ? esc(ex.label) : String(i + 1);
+      return `<div class="rp-bd-ex${paired ? ' is-paired' : ''}"><div class="n${paired ? ' is-grouped' : ''}">${tag}</div><div class="body"><div class="name">${esc(ex.name || '—')}</div><div class="params">${params}${extra ? `<span class="p">${extra}</span>` : ''}</div></div></div>`;
     }).join('') : `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">${tt('individual_planner.no_exercises', 'No exercises')}</div>`;
     const goal = block.goal ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('individual_planner.targets', 'Targets')}</div><div style="font:var(--cm-body-sm);color:#1D4ED8"><i class="ti ti-target"></i> ${esc(block.goal)}</div></div>` : '';
     const notes = block.notes ? `<div class="rp-bd-section"><div class="rp-bd-section-h">${tt('individual_planner.notes', 'Notes')}</div><div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${esc(block.notes)}</div></div>` : '';

@@ -810,6 +810,46 @@
   ];
   const exMode = exId => state.exModes[exId] || 'reps';
 
+  // ── Supersets / paired work ────────────────────────────────────────────────
+  // state.exLinks[exId] = true means "runs together with the one above it", which
+  // is how A1/A2 (superset, contrast, transfer pairs) are written on paper. The
+  // first exercise can never be linked — there is nothing above it.
+  function normalizeLinks() {
+    if (!state.exLinks) state.exLinks = {};
+    if (state.selected.length) delete state.exLinks[state.selected[0]];
+  }
+  // exId → 'A1' / 'A2' for grouped work, plain 'A' / 'B' for a lone exercise.
+  function exLabels() {
+    normalizeLinks();
+    const groups = [];
+    state.selected.forEach((id, i) => {
+      if (i === 0 || !state.exLinks[id]) groups.push([id]);
+      else groups[groups.length - 1].push(id);
+    });
+    const out = {};
+    groups.forEach((g, gi) => {
+      const letter = String.fromCharCode(65 + (gi % 26)) + (gi >= 26 ? String(Math.floor(gi / 26) + 1) : '');
+      g.forEach((id, i) => { out[id] = g.length > 1 ? letter + (i + 1) : letter; });
+    });
+    return out;
+  }
+  function toggleLink(exId) {
+    const i = state.selected.indexOf(exId);
+    if (i <= 0) return;                       // nothing above to pair with
+    if (!state.exLinks) state.exLinks = {};
+    if (state.exLinks[exId]) delete state.exLinks[exId];
+    else state.exLinks[exId] = true;
+    renderBody();
+  }
+  function moveEx(exId, dir) {
+    const i = state.selected.indexOf(exId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= state.selected.length) return;
+    state.selected.splice(j, 0, state.selected.splice(i, 1)[0]);
+    normalizeLinks();
+    renderBody();
+  }
+
   function renderStep3() {
     const ctxLabel = state.context === 'rehab' ? _tt('block_drawer.contraindications', 'Contraindications')
                   : state.context === 'prev'  ? _tt('block_drawer.targets_risk', 'Targets risk flag')
@@ -883,7 +923,8 @@
       )
     );
 
-    const exCards = state.selected.map((exId, exIdx) => renderExCard(exId, exIdx));
+    const labels = exLabels();
+    const exCards = state.selected.map((exId, exIdx) => renderExCard(exId, exIdx, labels));
 
     return h('div', { class: 'bd-step-content' },
       blockHead,
@@ -948,12 +989,15 @@
 
   const blankSet = () => ({ reps: '', time: '', load: '', tempo: '', rest: '', note: '' });
 
-  function renderExCard(exId, exIdx) {
+  function renderExCard(exId, exIdx, labels) {
     const isFree = exId.startsWith('__free__');
     const ex     = isFree ? null : LIB.find(e => e.id === exId);
     const sets   = state.sets[exId] || (state.sets[exId] = [blankSet()]);
     const extras = state.exExtras[exId] || (state.exExtras[exId] = { side: '', flag: '' });
     const mode   = exMode(exId);
+    labels = labels || exLabels();
+    const linked   = exIdx > 0 && !!(state.exLinks && state.exLinks[exId]);
+    const nextLink = !!(state.exLinks && state.exLinks[state.selected[exIdx + 1]]);
 
     const nameEl = isFree
       ? h('input', {
@@ -978,8 +1022,27 @@
     });
 
     const head = h('div', { class: 'bd-ex-card-h' },
-      h('div', { class: 'n' }, String(exIdx + 1)),
+      h('div', { class: 'n' + (linked || nextLink ? ' is-grouped' : '') }, labels[exId] || String(exIdx + 1)),
       h('div', { class: 'name' }, nameEl),
+      h('div', { class: 'bd-ex-ord' },
+        h('button', {
+          class: 'ic', title: _tt('block_drawer.move_up', 'Move up'),
+          disabled: exIdx === 0 ? '' : null,
+          onclick: () => moveEx(exId, -1)
+        }, h('i', { class: 'ti ti-chevron-up' })),
+        h('button', {
+          class: 'ic', title: _tt('block_drawer.move_down', 'Move down'),
+          disabled: exIdx === state.selected.length - 1 ? '' : null,
+          onclick: () => moveEx(exId, 1)
+        }, h('i', { class: 'ti ti-chevron-down' }))
+      ),
+      h('button', {
+        class: 'ic' + (linked ? ' is-on' : ''),
+        title: linked ? _tt('block_drawer.unlink', 'Unlink from the one above')
+                      : _tt('block_drawer.link_prev', 'Pair with the one above (superset)'),
+        disabled: exIdx === 0 ? '' : null,
+        onclick: () => toggleLink(exId)
+      }, h('i', { class: 'ti ' + (linked ? 'ti-link' : 'ti-link-plus') })),
       modeSeg,
       isFree ? null : h('button', { class: 'ic', title: _tt('block_drawer.duplicate', 'Duplicate'), onclick: () => duplicateEx(exId) }, h('i', { class: 'ti ti-copy' })),
       h('button', { class: 'ic', title: _tt('block_drawer.remove', 'Remove'), onclick: () => removeEx(exId) }, h('i', { class: 'ti ti-trash' }))
@@ -1067,7 +1130,9 @@
       }
     }, h('i', { class: 'ti ti-plus' }), ' ' + _tt('block_drawer.add_set', 'Add set'));
 
-    const card = h('div', { class: 'bd-ex-card' }, head, extrasRow, tbl, addSet);
+    const card = h('div', {
+      class: 'bd-ex-card' + (linked ? ' is-linked' : '') + (nextLink ? ' has-next' : '')
+    }, head, extrasRow, tbl, addSet);
     return card;
   }
 
@@ -1180,7 +1245,7 @@
       notes: existing ? (existing.notes || '') : '',
       ctxField: existing ? (existing.ctxField || '') : '',
       sets: {},
-      freeNames: {}, exExtras: {}, exModes: {}, freeCount: 0
+      freeNames: {}, exExtras: {}, exModes: {}, exLinks: {}, freeCount: 0
     };
     // Seed from DB exercises jsonb (edit flow — free-text). Does not need the library.
     if (existing?.exercises?.length) {
@@ -1191,6 +1256,7 @@
         state.freeNames[fid] = ex.name || '';
         state.exExtras[fid]  = { side: ex.side || '', flag: ex.flag || '' };
         state.exModes[fid]   = ex.mode === 'time' ? 'time' : 'reps';
+        if (i > 0 && ex.link) state.exLinks[fid] = true;   // keep A1/A2 pairs on edit
         state.sets[fid]      = (Array.isArray(ex.sets) ? ex.sets : []).map(s => Object.assign(blankSet(), s));
       });
     }
@@ -1242,21 +1308,28 @@
       volume_sets:  totalSets,
       au:           computeAU(),
       dayDate:      state.dayDate,
-      exercises: state.selected.map(exId => {
-        const isFree = exId.startsWith('__free__');
-        const ex     = isFree ? null : LIB.find(e => e.id === exId);
-        const extras = state.exExtras[exId] || {};
-        // Drop set rows the coach left completely empty.
-        const sets = filledSets(state.sets[exId]);
-        return {
-          name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
-          exercise_id: isFree ? null : (ex?.exercise_id || null),  // linked to gym_exercises
-          mode: exMode(exId),
-          sets,
-          side: extras.side  || null,
-          flag: extras.flag  || null
-        };
-      })
+      exercises: (function () {
+        const labels = exLabels();
+        return state.selected.map((exId, i) => {
+          const isFree = exId.startsWith('__free__');
+          const ex     = isFree ? null : LIB.find(e => e.id === exId);
+          const extras = state.exExtras[exId] || {};
+          // Drop set rows the coach left completely empty.
+          const sets = filledSets(state.sets[exId]);
+          return {
+            name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
+            exercise_id: isFree ? null : (ex?.exercise_id || null),  // linked to gym_exercises
+            mode: exMode(exId),
+            sets,
+            side: extras.side  || null,
+            flag: extras.flag  || null,
+            // Superset pairing: `link` is the round-trip flag, `label` (A1/A2) is
+            // what the plan, the side panel and the player's page show.
+            link: i > 0 && !!(state.exLinks && state.exLinks[exId]),
+            label: labels[exId] || ''
+          };
+        });
+      })()
     };
     window.dispatchEvent(new CustomEvent('blockdrawer:save', { detail: payload }));
     close();
