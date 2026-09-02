@@ -36,6 +36,18 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 const MEDIA_BUCKET = 'gym-exercise-media';
+const PHOTO_BUCKET = 'player-photos';
+
+// Storage path out of whatever players.photo_url holds (mirrors window.cmPhotoPath).
+// Returns null for an external link, which is then used as-is.
+function photoPath(u: string | null): string | null {
+  const s = String(u ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/\/storage\/v1\/object\/(?:public|sign)\/player-photos\/([^?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  if (!/^[a-z]+:/i.test(s) && /^[0-9a-f-]{36}\//i.test(s)) return s.split('?')[0];
+  return null;
+}
 
 function youtubeId(url: string | null): string | null {
   if (!url) return null;
@@ -77,7 +89,7 @@ Deno.serve(async (req: Request) => {
     // 1) The plan — ONLY if share_token matches AND sharing is on.
     const { data: plan, error } = await supabase
       .from('individual_plans')
-      .select('id, club_id, name, goal, focus, start_date, programme_week, programme_total_weeks, status, content, players(first_name,last_name,number)')
+      .select('id, club_id, name, goal, focus, start_date, programme_week, programme_total_weeks, status, content, players(first_name,last_name,number,photo_url)')
       .eq('share_token', token)
       .eq('shared', true)
       .maybeSingle();
@@ -109,7 +121,8 @@ Deno.serve(async (req: Request) => {
     const ids = new Set<string>();
     forEachExercise(content, (ex) => { if (ex.exercise_id) ids.add(ex.exercise_id); });
 
-    const mediaById: Record<string, { media_type: string | null; media_ref: string | null; video_url: string | null }> = {};
+    type Media = { media_type: string | null; media_ref: string | null; video_url: string | null };
+    const mediaById: Record<string, Media> = {};
     if (ids.size) {
       const { data: exRows } = await supabase
         .from('gym_exercises')
@@ -118,9 +131,44 @@ Deno.serve(async (req: Request) => {
       (exRows || []).forEach((e: any) => { mediaById[e.id] = { media_type: e.media_type, media_ref: e.media_ref, video_url: e.video_url }; });
     }
 
+    // Fallback by name for exercises saved without a library link (editing a block
+    // used to drop exercise_id). Exact, case-insensitive, within the club only.
+    const namesNeeded = new Set<string>();
+    forEachExercise(content, (ex) => {
+      if (!ex.exercise_id && ex.name) namesNeeded.add(String(ex.name).trim().toLowerCase());
+    });
+    const mediaByName: Record<string, Media> = {};
+    if (namesNeeded.size && plan.club_id) {
+      const { data: byName } = await supabase
+        .from('gym_exercises')
+        .select('name, media_type, media_ref, video_url')
+        .eq('club_id', plan.club_id)
+        .in('name', [...namesNeeded]);       // case-insensitive via the citext-ish match below
+      (byName || []).forEach((e: any) => {
+        mediaByName[String(e.name).trim().toLowerCase()] = { media_type: e.media_type, media_ref: e.media_ref, video_url: e.video_url };
+      });
+      // `in` is case-sensitive, so sweep the remaining names with one ilike query each
+      // only when something is still missing (kept small: names are deduped above).
+      const missing = [...namesNeeded].filter(n => !mediaByName[n]);
+      for (const n of missing.slice(0, 40)) {
+        const { data: one } = await supabase
+          .from('gym_exercises')
+          .select('name, media_type, media_ref, video_url')
+          .eq('club_id', plan.club_id)
+          .ilike('name', n)
+          .limit(1);
+        const row: any = (one || [])[0];
+        if (row) mediaByName[n] = { media_type: row.media_type, media_ref: row.media_ref, video_url: row.video_url };
+      }
+    }
+
     // Batch-sign image paths.
     const signed: Record<string, string> = {};
-    const paths = [...new Set(Object.values(mediaById).filter(m => m.media_type === 'image' && m.media_ref).map(m => m.media_ref!))];
+    const paths = [...new Set(
+      [...Object.values(mediaById), ...Object.values(mediaByName)]
+        .filter(m => m.media_type === 'image' && m.media_ref)
+        .map(m => m.media_ref!)
+    )];
     if (paths.length) {
       try {
         const { data: urls } = await supabase.storage.from(MEDIA_BUCKET).createSignedUrls(paths, 3600);
@@ -131,7 +179,8 @@ Deno.serve(async (req: Request) => {
     // 4) Rewrite each exercise into a display-only shape (drop internal ids).
     const sanitizeContent = JSON.parse(JSON.stringify(content));
     forEachExercise(sanitizeContent, (ex) => {
-      const m = ex.exercise_id ? mediaById[ex.exercise_id] : null;
+      const m = (ex.exercise_id ? mediaById[ex.exercise_id] : null)
+             || (ex.name ? mediaByName[String(ex.name).trim().toLowerCase()] : null);
       let thumb: string | null = null;
       let videoUrl: string | null = null;
       if (m) {
@@ -146,6 +195,20 @@ Deno.serve(async (req: Request) => {
     });
 
     const pl: any = Array.isArray(plan.players) ? plan.players[0] : plan.players;
+
+    // Player photo: player-photos is private, so sign it (external links pass through).
+    let photo: string | null = null;
+    if (pl?.photo_url) {
+      const p = photoPath(pl.photo_url);
+      if (!p) {
+        photo = /^https?:\/\//i.test(pl.photo_url) ? pl.photo_url : null;
+      } else {
+        try {
+          const { data: sig } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(p, 3600);
+          photo = sig?.signedUrl ?? null;
+        } catch (e) { console.warn('[share-individual-plan] photo sign', e); }
+      }
+    }
     const payload = {
       found: true,
       club,
@@ -158,7 +221,7 @@ Deno.serve(async (req: Request) => {
         programme_total_weeks: plan.programme_total_weeks,
         status: plan.status,
         content: sanitizeContent,
-        player: pl ? { first_name: pl.first_name, last_name: pl.last_name, number: pl.number } : null,
+        player: pl ? { first_name: pl.first_name, last_name: pl.last_name, number: pl.number, photo } : null,
       },
       phases: (phaseRows || []).map((p: any) => ({
         name: p.name, week_start: p.week_start, week_end: p.week_end,

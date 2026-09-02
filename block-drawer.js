@@ -1245,7 +1245,7 @@
       notes: existing ? (existing.notes || '') : '',
       ctxField: existing ? (existing.ctxField || '') : '',
       sets: {},
-      freeNames: {}, exExtras: {}, exModes: {}, exLinks: {}, freeCount: 0
+      freeNames: {}, exExtras: {}, exModes: {}, exLinks: {}, exSrcIds: {}, freeCount: 0
     };
     // Seed from DB exercises jsonb (edit flow — free-text). Does not need the library.
     if (existing?.exercises?.length) {
@@ -1256,6 +1256,10 @@
         state.freeNames[fid] = ex.name || '';
         state.exExtras[fid]  = { side: ex.side || '', flag: ex.flag || '' };
         state.exModes[fid]   = ex.mode === 'time' ? 'time' : 'reps';
+        // The edit flow re-seeds every exercise as free text, so remember which
+        // library row it came from — otherwise saving an edited block wipes
+        // exercise_id and the athlete loses the demo video and the thumbnail.
+        if (ex.exercise_id) state.exSrcIds[fid] = ex.exercise_id;
         if (i > 0 && ex.link) state.exLinks[fid] = true;   // keep A1/A2 pairs on edit
         state.sets[fid]      = (Array.isArray(ex.sets) ? ex.sets : []).map(s => Object.assign(blankSet(), s));
       });
@@ -1318,7 +1322,7 @@
           const sets = filledSets(state.sets[exId]);
           return {
             name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
-            exercise_id: isFree ? null : (ex?.exercise_id || null),  // linked to gym_exercises
+            exercise_id: isFree ? (state.exSrcIds[exId] || null) : (ex?.exercise_id || null),  // linked to gym_exercises
             mode: exMode(exId),
             sets,
             side: extras.side  || null,
