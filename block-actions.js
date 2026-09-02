@@ -23,6 +23,9 @@
    Cmd/Ctrl+C on a hovered block copies; Cmd/Ctrl+V on a hovered day pastes.
    With `dayCopy`, the column gets a ⧉ that copies every block of that day into
    another one, and Cmd/Ctrl+Shift+C / +V do the same over a hovered day.
+   Right-click (ctrl-click on a Mac) a day or a block for the same actions plus
+   paste — that is how a day copied on one week lands on another: the clipboard
+   lives in sessionStorage, so it survives paging between weeks and reloads.
    All clones are deep copies with per-instance ids regenerated.
 
    `at` is the drop position: the index the block should land on, counted in the
@@ -106,8 +109,21 @@
   }
   function freshClone(b) { const c = deepClone(b); return c ? stripIds(c) : null; }
 
-  // ─── Module-level clipboard (survives across days within the session) ───
+  // ─── Clipboard ───
+  // Kept in sessionStorage so it survives a reload (and the week pager re-render),
+  // keyed per page: a rehab block has a different shape than an individual one.
+  const CLIP_KEY = 'cm_ba_clip:' + (location.pathname || '');
   const clip = { block: null, day: null };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(CLIP_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      clip.block = saved.block || null;
+      clip.day = Array.isArray(saved.day) ? saved.day : null;
+    }
+  } catch (_) {}
+  function persistClip() { try { sessionStorage.setItem(CLIP_KEY, JSON.stringify(clip)); } catch (_) {} }
+  function setClipBlock(b) { clip.block = b; persistClip(); }
+  function setClipDay(d) { clip.day = d; persistClip(); }
 
   function isTyping() {
     const el = document.activeElement;
@@ -216,6 +232,8 @@
       return blocks.length;
     }
 
+    // ── Popup menu (shared by the ⧉ button and the right-click menu) ──
+    // items: { head } | { sep } | { icon, label, hint, disabled, run }
     let dayMenu = null;
     function closeDayMenu() {
       if (!dayMenu) return;
@@ -227,53 +245,102 @@
     const onDocDown = (e) => { if (dayMenu && !dayMenu.contains(e.target)) closeDayMenu(); };
     const onMenuKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeDayMenu(); } };
 
-    function openDayMenu(btn, dayEl) {
+    // anchor: an element (menu drops under it) or {x, y} for a pointer position.
+    function openMenu(anchor, items) {
       closeDayMenu();
-      const blocks = collectDay(dayEl);
-      if (!blocks.length) { toast(tt('block_actions.day_empty', 'This day has no blocks')); return; }
-      const from = A.getDayIndex(dayEl);
+      const live = items.filter(Boolean);
+      if (!live.some(i => i.run)) return;
       dayMenu = document.createElement('div');
       dayMenu.className = 'ba-menu';
-      const head = document.createElement('div');
-      head.className = 'hd';
-      head.textContent = tt('block_actions.copy_day_to', 'Copy day to…');
-      dayMenu.appendChild(head);
-
-      Array.from(A.root.querySelectorAll(A.daySelector))
-        .filter(d => String(A.getDayIndex(d)) !== String(from))
-        .forEach(d => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          const n = dayCards(d).length;
-          item.innerHTML = '<i class="ti ti-calendar-plus"></i>';
-          item.appendChild(document.createTextNode(dayLabel(d)));
-          if (n) { const c = document.createElement('span'); c.className = 'n'; c.textContent = '+' + n; item.appendChild(c); }
-          item.addEventListener('click', async () => {
-            closeDayMenu();
-            const n2 = await pasteDayInto(d, blocks);
-            if (n2) toast(tt('block_actions.day_pasted', 'Day copied') + ' · ' + n2);
-          });
-          dayMenu.appendChild(item);
-        });
-
-      const sep = document.createElement('div'); sep.className = 'sep'; dayMenu.appendChild(sep);
-      const clipItem = document.createElement('button');
-      clipItem.type = 'button';
-      clipItem.innerHTML = '<i class="ti ti-clipboard-copy"></i>';
-      clipItem.appendChild(document.createTextNode(tt('block_actions.copy_day', 'Copy day')));
-      clipItem.addEventListener('click', () => {
-        clip.day = blocks; closeDayMenu();
-        toast(tt('block_actions.day_copied', 'Day copied') + ' · ' + blocks.length);
+      live.forEach(it => {
+        if (it.head) {
+          const h = document.createElement('div');
+          h.className = 'hd'; h.textContent = it.head;
+          dayMenu.appendChild(h); return;
+        }
+        if (it.sep) {
+          const s = document.createElement('div'); s.className = 'sep';
+          dayMenu.appendChild(s); return;
+        }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = '<i class="ti ' + (it.icon || 'ti-point') + '"></i>';
+        b.appendChild(document.createTextNode(it.label));
+        if (it.hint) { const c = document.createElement('span'); c.className = 'n'; c.textContent = it.hint; b.appendChild(c); }
+        if (it.disabled) b.disabled = true;
+        else b.addEventListener('click', () => { closeDayMenu(); it.run(); });
+        dayMenu.appendChild(b);
       });
-      dayMenu.appendChild(clipItem);
-
       document.body.appendChild(dayMenu);
-      const r = btn.getBoundingClientRect(), m = dayMenu.getBoundingClientRect();
-      dayMenu.style.left = Math.max(8, Math.min(r.right - m.width, window.innerWidth - m.width - 8)) + 'px';
-      dayMenu.style.top  = (r.bottom + 6 + m.height > window.innerHeight ? Math.max(8, r.top - m.height - 6) : r.bottom + 6) + 'px';
-      btn.classList.add('is-open');
+      const m = dayMenu.getBoundingClientRect();
+      let left, top;
+      if (anchor && anchor.nodeType === 1) {
+        const r = anchor.getBoundingClientRect();
+        left = Math.min(r.right - m.width, window.innerWidth - m.width - 8);
+        top  = (r.bottom + 6 + m.height > window.innerHeight) ? r.top - m.height - 6 : r.bottom + 6;
+        anchor.classList.add('is-open');
+      } else {
+        left = Math.min(anchor.x, window.innerWidth - m.width - 8);
+        top  = (anchor.y + m.height > window.innerHeight) ? anchor.y - m.height : anchor.y;
+      }
+      dayMenu.style.left = Math.max(8, left) + 'px';
+      dayMenu.style.top  = Math.max(8, top) + 'px';
       document.addEventListener('mousedown', onDocDown, true);
       document.addEventListener('keydown', onMenuKey, true);
+    }
+
+    // "Copy day to…": the other days of the week on screen, then the clipboard.
+    function dayMenuItems(dayEl) {
+      const blocks = collectDay(dayEl);
+      const from = A.getDayIndex(dayEl);
+      const items = [];
+      if (blocks.length) {
+        items.push({ head: tt('block_actions.copy_day_to', 'Copy day to…') });
+        Array.from(A.root.querySelectorAll(A.daySelector))
+          .filter(d => String(A.getDayIndex(d)) !== String(from))
+          .forEach(d => {
+            const n = dayCards(d).length;
+            items.push({
+              icon: 'ti-calendar-plus', label: dayLabel(d), hint: n ? '+' + n : '',
+              run: async () => {
+                const n2 = await pasteDayInto(d, blocks);
+                if (n2) toast(tt('block_actions.day_pasted', 'Day copied') + ' · ' + n2);
+              }
+            });
+          });
+        items.push({ sep: true });
+        items.push({
+          icon: 'ti-clipboard-copy', label: tt('block_actions.copy_day', 'Copy day'),
+          hint: String(blocks.length),
+          run: () => { setClipDay(blocks); toast(tt('block_actions.day_copied', 'Day copied') + ' · ' + blocks.length); }
+        });
+      }
+      // Paste is what makes copying across weeks work: copy here, page to another
+      // week, right-click the target day, paste.
+      if (clip.day && clip.day.length) {
+        if (items.length) items.push({ sep: true });
+        items.push({
+          icon: 'ti-clipboard-check', label: tt('block_actions.paste_day', 'Paste day here'),
+          hint: String(clip.day.length),
+          run: async () => {
+            const n = await pasteDayInto(dayEl, clip.day);
+            if (n) toast(tt('block_actions.day_pasted', 'Day copied') + ' · ' + n);
+          }
+        });
+      }
+      if (clip.block) {
+        items.push({
+          icon: 'ti-clipboard-plus', label: tt('block_actions.paste_block', 'Paste block here'),
+          run: () => {
+            const di = A.getDayIndex(dayEl);
+            if (!hasDay(di)) return;
+            A.insertBlock(di, freshClone(clip.block));
+            persist();
+            toast(tt('block_actions.pasted', 'Block pasted'));
+          }
+        });
+      }
+      return items;
     }
 
     A.root.addEventListener('click', (e) => {
@@ -281,7 +348,47 @@
       if (!btn) return;
       e.preventDefault(); e.stopPropagation();
       const dayEl = btn.closest(A.daySelector);
-      if (dayEl) openDayMenu(btn, dayEl);
+      if (!dayEl) return;
+      const items = dayMenuItems(dayEl);
+      if (!items.length) { toast(tt('block_actions.day_empty', 'This day has no blocks')); return; }
+      openMenu(btn, items);
+    });
+
+    // ── Right-click (and ctrl-click on a Mac) anywhere on the board ──
+    A.root.addEventListener('contextmenu', (e) => {
+      const dayEl = e.target.closest(A.daySelector);
+      if (!dayEl) return;
+      const blockEl = e.target.closest(A.blockSelector);
+      const items = [];
+      if (blockEl) {
+        const ids = A.getIds(blockEl);
+        if (ids) {
+          items.push({
+            icon: 'ti-copy', label: tt('block_actions.copy_block', 'Copy block'),
+            run: () => {
+              const data = freshClone(A.getBlock(ids.day, ids.block));
+              if (!data) return;
+              setClipBlock(data);
+              toast(tt('block_actions.copied', 'Block copied'));
+            }
+          });
+          items.push({
+            icon: 'ti-copy-plus', label: tt('block_actions.duplicate', 'Duplicate'),
+            run: () => {
+              const data = freshClone(A.getBlock(ids.day, ids.block));
+              if (!data) return;
+              A.insertBlock(ids.day, data);
+              persist();
+              toast(tt('block_actions.duplicated', 'Block duplicated'));
+            }
+          });
+          items.push({ sep: true });
+        }
+      }
+      const dayItems = dayMenuItems(dayEl);
+      if (!items.length && !dayItems.length) return;      // nothing to offer → native menu
+      e.preventDefault();
+      openMenu({ x: e.clientX, y: e.clientY }, items.concat(dayItems));
     });
 
     // ── Keyboard copy / paste (scoped: only when hovering the kanban, not typing) ──
@@ -297,7 +404,7 @@
         if (k === 'c') {
           const blocks = collectDay(hoverDay);
           if (!blocks.length) { toast(tt('block_actions.day_empty', 'This day has no blocks')); return; }
-          clip.day = blocks;
+          setClipDay(blocks);
           toast(tt('block_actions.day_copied', 'Day copied') + ' · ' + blocks.length);
         } else if (clip.day) {
           pasteDayInto(hoverDay, clip.day).then(n => {
@@ -312,7 +419,7 @@
         const ids = A.getIds(hoverBlock);
         const data = ids && freshClone(A.getBlock(ids.day, ids.block));
         if (!data) return;
-        clip.block = data;
+        setClipBlock(data);
         e.preventDefault();
         toast(tt('block_actions.copied', 'Block copied'));
       } else {
