@@ -439,6 +439,249 @@
     exListItems().forEach(n => _exListBox.appendChild(n));
   }
 
+  // ─── Step 2b · quick "new exercise" ───
+  // Compact mirror of the Gym Library form: same table, same payload shape, minus
+  // the optional attribute clouds, folders and AI auto-tag (those stay in the full
+  // library screen). Needs lib/exercise-taxonomy.js — without it the button hides.
+  const NEWEX_CATEGORIES = ['strength', 'power', 'olympic', 'mobility', 'activation', 'core', 'balance', 'conditioning', 'prehab', 'speed', 'cooldown'];
+  const NEWEX_COMPLEXITY = [['Low', 'complexity_low'], ['Medium', 'complexity_medium'], ['High', 'complexity_high']];
+
+  let CUSTOM_EQUIP = null;                       // club materials: slug -> label (loaded once)
+  async function ensureCustomEquip() {
+    if (CUSTOM_EQUIP) return CUSTOM_EQUIP;
+    CUSTOM_EQUIP = {};
+    try {
+      const clubId = await window.getClubId();
+      const { data } = await window.sb.from('club_equipment').select('slug,label').eq('club_id', clubId);
+      (data || []).forEach(r => { CUSTOM_EQUIP[r.slug] = r.label; });
+    } catch (_) {}
+    return CUSTOM_EQUIP;
+  }
+  const equipLabel = t => (CUSTOM_EQUIP && CUSTOM_EQUIP[t]) || window.CMTaxonomy.label('equipment', t);
+
+  const readCloud = box => Array.from(box.querySelectorAll('.bd-chip.is-on')).map(b => b.dataset.token);
+  function chipCloud(dimension) {
+    const box = h('div', { class: 'bd-chips' });
+    (window.CMTaxonomy.LISTS[dimension] || []).forEach(it => box.appendChild(newexChip(it.token, it.label)));
+    return box;
+  }
+  function newexChip(token, label) {
+    const b = h('button', { type: 'button', class: 'bd-chip', 'data-token': token },
+      label);
+    b.addEventListener('click', () => b.classList.toggle('is-on'));
+    return b;
+  }
+  // Equipment = taxonomy + the club's own materials + a "+" that adds one inline.
+  function equipCloud() {
+    const box = h('div', { class: 'bd-chips' });
+    (window.CMTaxonomy.LISTS.equipment || []).forEach(it => box.appendChild(newexChip(it.token, it.label)));
+    Object.keys(CUSTOM_EQUIP || {}).forEach(slug => box.appendChild(newexChip(slug, CUSTOM_EQUIP[slug])));
+    const addBtn = h('button', { type: 'button', class: 'bd-chip-add', title: _tt('gym_library.add_material', 'Add material') },
+      h('i', { class: 'ti ti-plus', style: 'font-size:13px' }));
+    const input = h('input', { type: 'text', class: 'bd-chip-new', maxlength: '40', style: 'display:none', placeholder: _tt('gym_library.add_material', 'Add material') });
+    addBtn.addEventListener('click', () => { input.style.display = ''; input.focus(); });
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape') { input.value = ''; input.style.display = 'none'; return; }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const name = input.value.trim();
+      if (!name) return;
+      // Known material? Reuse its token instead of creating a duplicate.
+      const taxoTok = window.CMTaxonomy.resolve('equipment', name);
+      const existing = taxoTok || Object.keys(CUSTOM_EQUIP).find(s => CUSTOM_EQUIP[s].toLowerCase() === name.toLowerCase());
+      if (existing) {
+        const chip = box.querySelector(`.bd-chip[data-token="${existing}"]`);
+        if (chip) chip.classList.add('is-on');
+        input.value = ''; input.style.display = 'none';
+        return;
+      }
+      const slug = 'c_' + name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+      if (!slug || slug === 'c_') return;
+      input.disabled = true;
+      const clubId = await window.getClubId();
+      const { error } = await window.sb.from('club_equipment').insert({ club_id: clubId, slug, label: name });
+      input.disabled = false;
+      if (error) { alert(_tt('gym_library.material_save_failed', 'Could not save material:') + ' ' + error.message); return; }
+      CUSTOM_EQUIP[slug] = name;
+      const chip = newexChip(slug, name);
+      chip.classList.add('is-on');
+      box.insertBefore(chip, addBtn);
+      input.value = ''; input.style.display = 'none';
+    });
+    box.appendChild(addBtn);
+    box.appendChild(input);
+    return box;
+  }
+
+  async function openNewExercise() {
+    await ensureCustomEquip();
+    const T = window.CMTaxonomy;
+    const wantCtx = CTX_USABLE[state.context] || 'rehab';
+    const field = (labelNode, ctrl) => h('div', { class: 'bd-field' }, h('label', null, labelNode), ctrl);
+    const reqLabel = (txt) => [txt, ' ', h('span', { class: 'bd-req' }, '*')];
+
+    const nameIn = h('input', { type: 'text', maxlength: '120', placeholder: _tt('gym_library.name_ph', 'e.g. Back squat') });
+    const purposeSel = h('select', null,
+      h('option', { value: '' }, _tt('gym_library.select_ph', 'Select…')),
+      ...T.PURPOSE.map(p => h('option', { value: p.token }, p.label))
+    );
+    const catSel = h('select', null, ...NEWEX_CATEGORIES.map(c =>
+      h('option', { value: c }, _tt('gym_library.type_' + c, cap(c)))));
+    const cxSel = h('select', null, ...NEWEX_COMPLEXITY.map(([v, k]) =>
+      h('option', { value: v }, _tt('gym_library.' + k, v))));
+    const muscleBox  = chipCloud('muscle_group');
+    const patternBox = chipCloud('movement_pattern');
+    const equipBox   = equipCloud();
+    const descIn  = h('textarea', { rows: '2', maxlength: '600', placeholder: _tt('gym_library.description_ph', 'Coaching cues, execution notes…') });
+    const videoIn = h('input', { type: 'text', maxlength: '500', placeholder: _tt('gym_library.video_url_ph', 'https://youtube.com/…') });
+    const mediaIn = h('input', { type: 'file', accept: 'image/png,image/gif,image/jpeg,image/webp' });
+
+    // Usable in — the module you're planning from is pre-ticked, plus Gym.
+    const MODULES = [['gym', 'module_gym'], ['individual', 'module_individual'], ['rehab', 'module_rehab'], ['preventive', 'module_preventive']];
+    const usableBox = h('div', { class: 'bd-usable' });
+    const usableCbs = MODULES.map(([val, k]) => {
+      const cb = h('input', { type: 'checkbox', value: val });
+      cb.checked = (val === 'gym' || val === wantCtx);
+      // The module you're planning from stays locked on: creating an exercise here
+      // that this planner can't see would be a dead end.
+      if (val === wantCtx) cb.disabled = true;
+      usableBox.appendChild(h('label', null, cb, h('span', null, _tt('gym_library.' + k, cap(val)))));
+      return cb;
+    });
+
+    const errEl = h('div', { class: 'bd-newex-err', style: 'display:none' });
+    const cancelBtn = h('button', { class: 'cm-btn is-ghost is-sm', type: 'button' }, _tt('common.cancel', 'Cancel'));
+    const saveBtn   = h('button', { class: 'cm-btn is-primary is-sm', type: 'button' }, _tt('common.create', 'Create'));
+    const closeX    = h('button', { class: 'x', type: 'button' }, h('i', { class: 'ti ti-x' }));
+
+    const box = h('div', { class: 'bd-newex' },
+      h('div', { class: 'bd-newex-h' },
+        h('h3', null, _tt('gym_library.new_exercise', 'New exercise')),
+        closeX
+      ),
+      h('div', { class: 'bd-newex-b' },
+        field(reqLabel(_tt('gym_library.field_name', 'Name')), nameIn),
+        h('div', { class: 'bd-newex-g2' },
+          field(reqLabel(_tt('gym_library.primary_purpose', 'Primary purpose')), purposeSel),
+          field(_tt('gym_library.type', 'Type'), catSel)
+        ),
+        h('div', { class: 'bd-newex-g2' },
+          field(_tt('gym_library.complexity', 'Complexity'), cxSel),
+          field(_tt('gym_library.video_url', 'Video URL'), videoIn)
+        ),
+        field(reqLabel(_tt('gym_library.muscle_groups', 'Muscle groups')), muscleBox),
+        field(_tt('gym_library.movement_patterns', 'Movement patterns'), patternBox),
+        field(_tt('gym_library.equipment', 'Equipment'), equipBox),
+        field(_tt('gym_library.usable_in', 'Usable in'), usableBox),
+        field(_tt('gym_library.description', 'Description'), descIn),
+        field(_tt('gym_library.image_gif', 'Image / GIF'), mediaIn),
+        errEl
+      ),
+      h('div', { class: 'bd-newex-f' }, h('div', { class: 'spacer' }), cancelBtn, saveBtn)
+    );
+    const back = h('div', { class: 'bd-newex-back' }, box);
+    back.addEventListener('mousedown', (e) => { if (e.target === back) closeNewEx(); });
+    // Esc closes this modal, not the drawer underneath.
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeNewEx(); } };
+    function closeNewEx() { document.removeEventListener('keydown', onKey, true); back.remove(); }
+    document.addEventListener('keydown', onKey, true);
+    closeX.addEventListener('click', closeNewEx);
+    cancelBtn.addEventListener('click', closeNewEx);
+
+    const fail = (msg) => { errEl.textContent = msg; errEl.style.display = ''; };
+
+    saveBtn.addEventListener('click', async () => {
+      errEl.style.display = 'none';
+      const name = nameIn.value.trim();
+      if (!name) { nameIn.focus(); return fail(_tt('block_drawer.name_required', 'Give the exercise a name.')); }
+      const primaryPurpose = purposeSel.value;
+      if (!primaryPurpose) return fail(_tt('gym_library.pick_primary_purpose', 'Pick a primary purpose.'));
+      const muscleGroups = readCloud(muscleBox);
+      if (!muscleGroups.length) return fail(_tt('gym_library.pick_muscle_group', 'Pick at least one muscle group.'));
+
+      let usableIn = usableCbs.filter(cb => cb.checked).map(cb => cb.value);
+      if (!usableIn.length) usableIn = ['gym'];
+      const eqTags = readCloud(equipBox).length ? readCloud(equipBox) : ['bodyweight'];
+      const patterns = readCloud(patternBox);
+      const lbl = (dim, toks) => toks.map(t => dim === 'equipment' ? equipLabel(t) : T.label(dim, t));
+
+      const clubId = await window.getClubId();
+      const payload = {
+        club_id: clubId,
+        name,
+        category: catSel.value,
+        complexity: cxSel.value,
+        usable_in: usableIn,
+        description: descIn.value.trim() || null,
+        video_url: videoIn.value.trim() || null,
+        primary_purpose: primaryPurpose,
+        purposes: [primaryPurpose],
+        muscle_groups: muscleGroups,
+        movement_patterns: patterns.length ? patterns : null,
+        equipment_tags: eqTags,
+        muscle_group: lbl('muscle_group', muscleGroups).join(' / ') || null,
+        equipment: lbl('equipment', eqTags.filter(t => t !== 'bodyweight')).join(' / ') || null
+      };
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = _tt('gym_library.creating', 'Creating…');
+      const { data: row, error } = await window.sb.from('gym_exercises').insert(payload).select('id').single();
+      if (error) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = _tt('common.create', 'Create');
+        // _tt has no interpolation — the shared key carries a {msg} placeholder.
+        return fail(_tt('gym_library.error_saving', 'Error saving exercise: {msg}').replace('{msg}', error.message));
+      }
+
+      // Media is best-effort: the exercise stays created even if the upload fails.
+      let mediaRef = null;
+      const file0 = mediaIn.files && mediaIn.files[0];
+      if (file0) {
+        try {
+          const file = await window.cmShrinkImage(file0, { maxDim: 1200, maxBytes: 400 * 1024 });
+          const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+          const path = `${clubId}/${row.id}-${Date.now().toString(36)}.${ext}`;
+          const up = await window.sb.storage.from('gym-exercise-media').upload(path, file, { upsert: true, contentType: file.type, cacheControl: window.CM_CACHE_IMMUTABLE });
+          if (!up.error) {
+            await window.sb.from('gym_exercises').update({ media_type: 'image', media_ref: path }).eq('id', row.id).eq('club_id', clubId);
+            mediaRef = path;
+          }
+        } catch (_) {}
+      }
+
+      const mapped = {
+        id: row.id, exercise_id: row.id, name,
+        region: payload.muscle_group || 'Other',
+        equip: payload.equipment || 'None',
+        type: payload.category || '',
+        complexity: payload.complexity || '',
+        custom: true,
+        media_type: mediaRef ? 'image' : null,
+        media_ref: mediaRef,
+        video_url: payload.video_url,
+        _thumb: null
+      };
+      await resolveThumbs([mapped]);
+
+      // Other contexts refetch on next open; this one gets the row grafted in.
+      Object.keys(libCache).forEach(c => { if (c !== state.context) delete libCache[c]; });
+      if (usableIn.includes(wantCtx) && libCache[state.context]) {
+        libCache[state.context].unshift(mapped);
+        LIB = libCache[state.context].slice();
+        recomputeFilterOpts();
+        // Pre-select it and clear the filters that would hide it from the list.
+        state.selected.push(mapped.id);
+        state.sets[mapped.id] = seedSets(mapped);
+        state.query = ''; state.region = 'All'; state.equip = 'Any';
+      }
+      closeNewEx();
+      renderAll();
+    });
+
+    document.body.appendChild(back);
+    setTimeout(() => { try { nameIn.focus(); } catch (_) {} }, 30);
+  }
+
   function renderStep2() {
     // filters — chips update their own state so the search box keeps focus/caret
     const chipRow = (values, get, set) => {
@@ -480,11 +723,21 @@
       value: state.query,
       oninput: (e) => { state.query = e.target.value; refreshExList(); }
     });
+    // "New exercise" writes to the same gym_exercises table the library reads —
+    // needs the taxonomy lists, so it only shows where that script is loaded.
+    const newExBtn = window.CMTaxonomy ? h('button', {
+      class: 'bd-newex-btn', type: 'button',
+      title: _tt('gym_library.new_exercise', 'New exercise'),
+      onclick: () => { openNewExercise(); }
+    }, h('i', { class: 'ti ti-plus' }), _tt('gym_library.new_exercise', 'New exercise')) : null;
     const list = h('div', { class: 'bd-list-col' },
-      h('div', { class: 'bd-search' },
-        h('i', { class: 'ti ti-search' }),
-        searchInput,
-        h('span', { class: 'cm-kbd' }, '/')
+      h('div', { class: 'bd-search-row' },
+        h('div', { class: 'bd-search' },
+          h('i', { class: 'ti ti-search' }),
+          searchInput,
+          h('span', { class: 'cm-kbd' }, '/')
+        ),
+        newExBtn
       ),
       _exListBox
     );
