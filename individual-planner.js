@@ -60,14 +60,49 @@
     dow: d.dow, dom: d.dom, date: d.date, monthShort: d.monthShort, today: d.today, mode: [], blocks: []
   }));
 
-  // Resolve the day/blocks array the views render from: plan.content (array or {days:[…]})
-  // falling back to the empty scaffold so an empty/new plan still renders a week grid.
+  // ── Content shape ──────────────────────────────────────────────────────────
+  // Each programme week keeps its own 7 days: content.weeks = { "1": [...], … }.
+  // content.days stays as a live mirror (same array reference) of the week being
+  // shown, because the share link, the export and older plans all read `days`.
+  const curWeek = () => {
+    const plan = window.__ipData && window.__ipData.plan;
+    return Math.max(1, Number(plan && plan.programme_week) || 1);
+  };
+  const totalWeeks = () => {
+    const plan = window.__ipData && window.__ipData.plan;
+    return Math.max(1, Number(plan && plan.programme_total_weeks) || 1);
+  };
+
+  // Normalize in place and return the content object (null when no plan is open).
+  // Plans written before multi-week support carry only `days` — those become the
+  // week that was current when they were saved, so nothing is lost or duplicated.
+  function ensureContent() {
+    const plan = window.__ipData && window.__ipData.plan;
+    if (!plan) return null;
+    let c = plan.content;
+    if (Array.isArray(c)) c = { days: c };
+    if (!c || typeof c !== 'object') c = {};
+    if (!c.weeks || typeof c.weeks !== 'object' || Array.isArray(c.weeks)) c.weeks = {};
+    if (Array.isArray(c.days) && c.days.length && !Object.keys(c.weeks).length) {
+      c.weeks[String(curWeek())] = c.days;              // legacy migration (once)
+    }
+    plan.content = c;
+    return c;
+  }
+
+  // The stored day array for a week, or null when that week was never touched.
+  function weekDaysRaw(wk) {
+    const c = ensureContent();
+    if (!c) return null;
+    const days = c.weeks[String(wk == null ? curWeek() : wk)];
+    return Array.isArray(days) && days.length ? days : null;
+  }
+
   // Day headers are re-stamped from the real calendar week on every read, so content
   // saved earlier never shows stale day numbers or a stale TODAY marker.
   function weekData() {
-    const c = window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null;
-    const days = Array.isArray(c) ? c : (c && Array.isArray(c.days) ? c.days : null);
-    if (!days || !days.length) return emptyWeek();
+    const days = weekDaysRaw();
+    if (!days) return emptyWeek();
     const dates = ipWeekDates();
     return days.map((d, i) => {
       const dt = dates[i];
@@ -77,16 +112,22 @@
     });
   }
 
-  // Materialize plan.content.days from the scaffold on first edit, so mutations persist.
+  // Materialize the current week from the scaffold on first edit, so mutations persist.
   function ensureDays() {
-    const plan = window.__ipData && window.__ipData.plan;
-    if (!plan) return null;
-    let c = plan.content;
-    if (!c || typeof c !== 'object') c = {};
-    if (Array.isArray(c)) c = { days: c };
-    if (!Array.isArray(c.days) || !c.days.length) c.days = emptyWeek();
-    plan.content = c;
-    return c.days;
+    const c = ensureContent();
+    if (!c) return null;
+    const wk = String(curWeek());
+    if (!Array.isArray(c.weeks[wk]) || !c.weeks[wk].length) c.weeks[wk] = emptyWeek();
+    c.days = c.weeks[wk];        // same reference — edits land in both
+    return c.weeks[wk];
+  }
+
+  // Point content.days at the week now on screen (keeps the legacy mirror honest).
+  function syncDaysMirror() {
+    const c = ensureContent();
+    if (!c) return;
+    const days = weekDaysRaw();
+    if (days) c.days = days; else delete c.days;
   }
 
   // ─── Edit/persistence plumbing ───
@@ -404,11 +445,13 @@
   const focusColor = (b) => KPI_COLOR[b] || '#6B7280';
   const focusLabel = (b) => tt('individual_planner.type_' + b, KPI_LABEL_EN[b] || b);
 
-  // All days across the plan content (programme scope); [] when empty (no scaffold fallback).
+  // Every day of every planned week (programme scope); [] when empty.
   function programmeDays() {
-    const c = window.__ipData && window.__ipData.plan ? window.__ipData.plan.content : null;
-    const days = Array.isArray(c) ? c : (c && Array.isArray(c.days) ? c.days : null);
-    return days || [];
+    const c = ensureContent();
+    if (!c) return [];
+    const out = [];
+    Object.keys(c.weeks).forEach(k => { (c.weeks[k] || []).forEach(d => out.push(d)); });
+    return out;
   }
 
   // Pure: sum sessions (block count), AU (Σ block.au, fallback dur*rpe) and AU by block type.
@@ -531,7 +574,59 @@
         window.__ipData = { plan: plan || null, phases: phases || [] };
         _editingRef = null;
         _selectedRef = null;
+        ensureContent();          // migrate legacy single-week plans on open
+        syncDaysMirror();
         renderAll();
+      },
+      // ── Week navigation ──
+      // The caller owns persisting programme_week; here we just move the board.
+      getWeek: () => curWeek(),
+      getTotalWeeks: () => totalWeeks(),
+      weeksWithContent: () => {
+        const c = ensureContent();
+        if (!c) return [];
+        return Object.keys(c.weeks)
+          .filter(k => Array.isArray(c.weeks[k]) && c.weeks[k].some(d => (d.blocks || []).length))
+          .map(Number).filter(n => n > 0).sort((a, b) => a - b);
+      },
+      setWeek: (n) => {
+        const plan = window.__ipData && window.__ipData.plan;
+        if (!plan) return null;
+        const wk = Math.min(totalWeeks(), Math.max(1, Number(n) || 1));
+        if (wk === curWeek()) return wk;
+        plan.programme_week = wk;
+        _editingRef = null;
+        _selectedRef = null;
+        syncDaysMirror();         // week with no content yet → renders the empty scaffold
+        renderAll();
+        return wk;
+      },
+      // Deep-copies one week's blocks onto another. Returns how many blocks moved,
+      // or -1 when the source week is empty.
+      copyWeekTo: (target) => {
+        const c = ensureContent();
+        if (!c) return -1;
+        const from = weekDaysRaw();
+        if (!from || !from.some(d => (d.blocks || []).length)) return -1;
+        const to = Math.min(totalWeeks(), Math.max(1, Number(target) || 1));
+        if (to === curWeek()) return -1;
+        const key = String(to);
+        const dst = (Array.isArray(c.weeks[key]) && c.weeks[key].length) ? c.weeks[key] : emptyWeek();
+        let n = 0;
+        from.forEach((day, i) => {
+          if (!dst[i]) return;
+          if (!Array.isArray(dst[i].blocks)) dst[i].blocks = [];
+          (day.blocks || []).forEach(b => {
+            const clone = JSON.parse(JSON.stringify(b));
+            if ('selected' in clone) clone.selected = false;
+            dst[i].blocks.push(clone);
+            n++;
+          });
+          if (day.rest) dst[i].rest = true;
+        });
+        c.weeks[key] = dst;
+        _fireContentChange();
+        return n;
       },
       setPhases: (phases) => {
         if (window.__ipData) window.__ipData.phases = phases || [];
