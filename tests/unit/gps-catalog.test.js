@@ -12,16 +12,12 @@ function boot(rows, opts = {}) {
   globalThis.window = {
     addEventListener() {}, dispatchEvent() {},
     getClubId: () => Promise.resolve(o.noClub ? null : 'club-1'),
-    sb: {
-      from() {
-        const q = {
-          select() { return q; },
-          eq() { return q; },
-          order() { return Promise.resolve(o.error ? { error: new Error('boom') } : { data: rows }); },
-        };
-        return q;
-      },
+    // The list reads through gps-reader's cached getCatalog, not a query of its own.
+    getCatalog: () => {
+      o.calls = (o.calls || 0) + 1;
+      return o.error ? Promise.reject(new Error('boom')) : Promise.resolve(rows);
     },
+    invalidateCatalogCache() { o.invalidated = true; },
   };
   globalThis.document = { readyState: 'complete', addEventListener() {} };
   globalThis.CustomEvent = function () {};
@@ -185,5 +181,27 @@ describe('gps catalogue · a basketball club', () => {
     // Jumps and direction changes are counted up; they live in the key/value table.
     expect(cat.agg('jump_count')).toBe('sum');
     expect(cat.source('jump_count')).toBe('custom');
+  });
+});
+
+describe('gps catalogue · it does not query on its own', () => {
+  it('reads through gps-reader\'s cached getCatalog, once', async () => {
+    const opts = { calls: 0 };
+    const cat = boot(MOI_ROWS, opts);
+    // boot() already kicked one load off; wait for it, then check no consumer adds more.
+    await cat.ready();
+    const after = opts.calls;
+    await cat.ready();
+    await cat.ready();
+    expect(after).toBe(1);
+    expect(opts.calls).toBe(1);
+  });
+
+  it('drops the shared cache on refresh, or it would serve stale definitions', async () => {
+    const opts = {};
+    const cat = boot(MOI_ROWS, opts);
+    await cat.ready();
+    await cat.refresh();
+    expect(opts.invalidated).toBe(true);
   });
 });

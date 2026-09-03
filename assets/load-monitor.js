@@ -636,11 +636,16 @@
   }
 
   // ── Risk signals (multi-metric ACWR over a 28-day window) ────────────────────
-  // Core gps_reports metrics that can be a table column (master), + derived A+D.
-  const COL_ELIGIBLE = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','distance_per_minute','hmld'];
   const COL_DEFAULT  = ['total_distance','high_speed_distance','distance_per_minute','accel_decel','player_load'];   // the 5 legacy columns
-  // Metrics that can act as a risk signal (cumulative load; rates like m/min excluded).
-  const SIGNAL_KEYS  = new Set(['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','player_load','hmld','accel_decel']);
+  // A metric can be a risk signal when it ACCUMULATES: adding up a week of max speeds, or
+  // of metres-per-minute, produces a number that means nothing. This used to be a fixed
+  // list of football keys; cmGpsCatalog answers it per metric from the club's own
+  // catalogue, so a club that adds a cumulative metric of its own gets it here for free.
+  function isSignalKey(k){
+    if(k==='accel_decel') return true;            // derived: two counts added together
+    const C = window.cmGpsCatalog;
+    return C ? C.agg(k)==='sum' : false;
+  }
   const SIGNAL_DEFAULT = ['high_speed_distance','very_high_speed_distance','sprint_distance','accel_decel'];   // high-intensity
 
   function catalogKeys(){ return new Set((state.catalog||[]).map(m=>m.key)); }
@@ -651,13 +656,23 @@
   function colVal(row, key){ return key==='accel_decel'? (+row.accelerations||0)+(+row.decelerations||0) : (+row[key]||0); }
 
   // ── Columns (master) ─────────────────────────────────────────────────────────
-  function eligibleCols(){ const ck=catalogKeys(); const out=COL_ELIGIBLE.filter(k=>ck.has(k)); if(ck.has('accelerations')&&ck.has('decelerations')) out.push('accel_decel'); return out; }
+  // The picker offers what the CLUB measures, in the club's own order — not a hardcoded
+  // football list. Restricted to metrics that are real gps_reports columns, because
+  // fetchSignalRisk builds a SELECT out of these keys; custom (key/value) metrics need the
+  // join gps-reader does and are not wired here yet.
+  function eligibleCols(){
+    const ck=catalogKeys();
+    const C=window.cmGpsCatalog;
+    const out = (C ? C.columns().filter(k=>ck.has(k)) : Array.from(ck));
+    if(ck.has('accelerations')&&ck.has('decelerations')) out.push('accel_decel');
+    return out;
+  }
   function defaultCols(){ const el=new Set(eligibleCols()); const d=COL_DEFAULT.filter(k=>el.has(k)); if(d.length) return d; const e=eligibleCols(); return e.length? e.slice(0,5) : COL_DEFAULT.slice(); }
   function loadCols(){ try{ const s=JSON.parse(localStorage.getItem(`cm_lm_avail_cols_${state.clubId}`)||'null'); if(Array.isArray(s)){ const f=eligibleCols().filter(k=>s.includes(k)); if(f.length) return f; } }catch{} return defaultCols(); }
   function saveCols(){ try{ localStorage.setItem(`cm_lm_avail_cols_${state.clubId}`, JSON.stringify(state.cols)); }catch{} }
 
   // ── Signals = SUB-TOGGLE of active columns (only load metrics among them) ─────
-  function eligibleSignals(){ return (state.cols||[]).filter(k=> SIGNAL_KEYS.has(k)); }
+  function eligibleSignals(){ return (state.cols||[]).filter(isSignalKey); }
   function defaultSignalSet(){ const el=new Set(eligibleSignals()); const d=SIGNAL_DEFAULT.filter(k=>el.has(k)); return d.length? d : eligibleSignals().slice(0,3); }
   function loadSignalSet(){ try{ const s=JSON.parse(localStorage.getItem(`cm_lm_risk_signals_${state.clubId}`)||'null'); if(Array.isArray(s)){ const f=s.filter(k=>eligibleSignals().includes(k)); if(f.length) return f; } }catch{} return defaultSignalSet(); }
   function saveSignalSet(){ try{ localStorage.setItem(`cm_lm_risk_signals_${state.clubId}`, JSON.stringify(state.signalSet)); }catch{} }
@@ -704,7 +719,7 @@
     const sigTag=esc(tt('load_monitor.signal_tag','signal'));
     el.innerHTML=elig.map(k=>{
       const isCol=state.cols.includes(k);
-      const sigOk=isCol && SIGNAL_KEYS.has(k);   // signal only when shown as column AND load-metric eligible
+      const sigOk=isCol && isSignalKey(k);   // signal only when shown as column AND it accumulates
       const isSig=state.signalSet.includes(k);
       return `<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;color:var(--cm-fg)">`
         + `<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans)"><input type="checkbox" data-col="${esc(k)}" ${isCol?'checked':''}> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(colLabel(k))}</span></label>`

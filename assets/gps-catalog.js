@@ -23,7 +23,14 @@
    A club with no catalogue (or an offline page) still gets the fixed columns with their
    canonical labels, so a football club sees exactly what it saw before this existed.
 
+   IT DOES NOT QUERY
+   The rows come from window.getCatalog (assets/gps-reader.js), which already caches the
+   club's definitions for five minutes. This file adds the layer that was missing on top:
+   normalised labels and decimals, how each metric aggregates, whether it is a gps_reports
+   column or a key/value row, a synchronous answer, and a never-empty fallback.
+
    USAGE
+     <script src="assets/gps-reader.js"></script>
      <script src="assets/gps-catalog.js"></script>     (after supabase-init.js)
      await window.cmGpsCatalog.ready();                 // before you need it to be exact
      window.cmGpsCatalog.list()                         // sync, safe from the first frame
@@ -131,12 +138,13 @@
       try {
         const clubId = (typeof window.getClubId === 'function') ? await window.getClubId() : null;
         if (!clubId) { _promise = null; return _list; }   // no session yet — retry next call
-        const { data, error } = await window.sb
-          .from('gps_metric_definitions')
-          .select('key,label,unit,category,kind,decimals,is_core,squad_rollup,display_order')
-          .eq('club_id', clubId)
-          .order('display_order', { ascending: true });
-        if (error || !Array.isArray(data) || !data.length) {
+        // Go through gps-reader's getCatalog rather than querying again: it already caches
+        // the club's definitions for 5 minutes and three screens share that cache. Adding a
+        // second query here would be the very duplication this file exists to remove.
+        const data = (typeof window.getCatalog === 'function')
+          ? await window.getCatalog(clubId)
+          : null;
+        if (!Array.isArray(data) || !data.length) {
           // An empty catalogue is not an error: the club never customised it. Keep the
           // fallback so the screens look the way they always did.
           _loaded = true;
@@ -212,7 +220,12 @@
     /** The fixed gps_reports columns, regardless of catalogue. */
     FIXED_COLUMNS: FIXED_COLUMNS.slice(),
 
-    /** Re-read after the club edits its metrics. */
-    refresh() { _promise = null; _loaded = false; return load(); },
+    /** Re-read after the club edits its metrics. Also drops gps-reader's 5-minute cache,
+     *  which would otherwise keep serving the old definitions. */
+    refresh() {
+      try { window.invalidateCatalogCache && window.invalidateCatalogCache(); } catch (_e) {}
+      _promise = null; _loaded = false;
+      return load();
+    },
   };
 })();

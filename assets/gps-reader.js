@@ -41,7 +41,9 @@
 
     const { data, error } = await window.sb
       .from('gps_metric_definitions')
-      .select('key,label,unit,category,decimals,is_core,display_order')
+      // kind + squad_rollup are read by cmGpsCatalog (assets/gps-catalog.js) to decide
+      // whether a metric is summed or peaked, and whether it rolls up to a squad average.
+      .select('key,label,unit,category,kind,decimals,is_core,squad_rollup,display_order')
       .eq('club_id', clubId)
       .order('display_order', { ascending: true });
 
