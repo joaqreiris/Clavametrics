@@ -181,7 +181,11 @@
   .yt-row .yt-title{font:500 13px/1.3 var(--cm-font-sans);color:var(--cm-fg)}
   .yt-row.is-dup{opacity:.5}
   .yt-row.is-sim{border-color:var(--cm-warning-bd);background:var(--cm-warning-bg)}
+  .yt-row.is-swapping{border-color:var(--cm-accent);background:var(--cm-accent-soft,var(--cm-bg-soft))}
   .yt-row .yt-sim{display:block;margin-top:3px;font:500 11px/1.35 var(--cm-font-sans);color:var(--cm-warning)}
+  .yt-row .yt-sim.is-swap{color:var(--cm-accent)}
+  .yt-row .yt-swap{margin-left:4px;padding:0;border:0;background:none;cursor:pointer;
+    font:600 11px/1.35 var(--cm-font-sans);color:inherit;text-decoration:underline}
   .yt-row input{accent-color:var(--cm-accent);flex:none}
 </style>
 <!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
@@ -1156,7 +1160,9 @@ function clearFilters() {
 }
 
 let ytVideos = [];
-let ytSimilar = [];          // parallel to ytVideos: {name, score} of the closest library match, or null
+let ytSimilar = [];          // parallel to ytVideos: {id, name, score, hasVideo} of the closest library match, or null
+let ytSwap = {};             // video index -> true: don't import, put this video on the matched exercise instead
+let ytExistingIds = new Set();
 
 // ── Near-duplicate detection ───────────────────────────────────────────────
 // A YouTube title rarely matches the library word for word ("Nordic hamstring
@@ -1194,7 +1200,9 @@ function ytFindSimilar(title, index) {
     const sc = ytNameScore(t, e.tokens);
     if (sc > bestScore) { bestScore = sc; best = e; }
   }
-  return (best && bestScore >= YT_SIM_MIN) ? { name: best.name, score: bestScore } : null;
+  return (best && bestScore >= YT_SIM_MIN)
+    ? { id: best.id, name: best.name, score: bestScore, hasVideo: best.hasVideo }
+    : null;
 }
 
 function openYtModal() {
@@ -1204,22 +1212,35 @@ function openYtModal() {
   document.getElementById('yt-all').checked = true;
   const ib = document.getElementById('yt-import-btn');
   ib.disabled = true; ib.textContent = tt('common.import','Import');
-  ytVideos = []; ytSimilar = [];
+  ytVideos = []; ytSimilar = []; ytSwap = {}; ytExistingIds = new Set();
   document.getElementById('yt-modal').classList.add('is-open');
   document.getElementById('yt-url').focus();
 }
 function closeYtModal() { document.getElementById('yt-modal').classList.remove('is-open'); }
-function renderYtList(existing) {
+function renderYtList() {
   document.getElementById('yt-list').innerHTML = ytVideos.map((v, i) => {
-    const dup = existing.has(v.videoId);
+    const dup = ytExistingIds.has(v.videoId);
     // A near-match starts unticked: importing it anyway is one click, undoing a
-    // duplicated exercise across every plan that already uses it is not.
+    // duplicated exercise across every plan that already uses it is not. The
+    // third way out is the useful one — keep the exercise, take its video.
     const sim = !dup && ytSimilar[i];
-    const simLine = sim
-      ? `<span class="yt-sim"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ${esc(tt('gym_library.similar_to','similar to: {name}', { name: sim.name }))}</span>`
-      : '';
-    return `<label class="yt-row${dup?' is-dup':''}${sim?' is-sim':''}">
-      <input type="checkbox" class="yt-cb" data-i="${i}" ${dup?'disabled':(sim?'':'checked')}>
+    const swap = !!(sim && ytSwap[i]);
+    let simLine = '';
+    if (swap) {
+      simLine = `<span class="yt-sim is-swap"><i class="ti ti-repeat" style="font-size:12px"></i> ${
+        esc(sim.hasVideo
+          ? tt('gym_library.swap_on', 'the video of “{name}” will be replaced', { name: sim.name })
+          : tt('gym_library.swap_on_empty', 'this video will be added to “{name}”', { name: sim.name }))
+      } <button type="button" class="yt-swap" data-i="${i}">${esc(tt('common.undo','Undo'))}</button></span>`;
+    } else if (sim) {
+      simLine = `<span class="yt-sim"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ${
+        esc(tt('gym_library.similar_to','similar to: {name}', { name: sim.name }))
+      } <button type="button" class="yt-swap" data-i="${i}">${
+        esc(sim.hasVideo ? tt('gym_library.swap_video','replace its video') : tt('gym_library.swap_video_empty','use this video for it'))
+      }</button></span>`;
+    }
+    return `<label class="yt-row${dup?' is-dup':''}${sim&&!swap?' is-sim':''}${swap?' is-swapping':''}">
+      <input type="checkbox" class="yt-cb" data-i="${i}" ${dup||swap?'disabled':(sim?'':'checked')}>
       ${v.thumbnail ? `<img src="${esc(v.thumbnail)}" alt="" loading="lazy">` : ''}
       <span class="yt-title">${esc(v.title)}${dup?' · '+esc(tt('gym_library.already_imported','already imported')):''}${simLine}</span>
     </label>`;
@@ -1249,17 +1270,18 @@ async function ytFetch() {
     }
     if (data && data.error) throw new Error(data.error);
     ytVideos = (data && data.videos) || [];
-    const existing = new Set(ALL_EXERCISES.map(e => e.video_id).filter(Boolean));
+    ytExistingIds = new Set(ALL_EXERCISES.map(e => e.video_id).filter(Boolean));
     // Same video → already imported (hard block). Different video, close name →
     // flagged as a possible duplicate of something already in the library.
-    const index = ALL_EXERCISES.map(e => ({ name: e.name, tokens: new Set(ytNameTokens(e.name)) }));
-    ytSimilar = ytVideos.map(v => existing.has(v.videoId) ? null : ytFindSimilar(v.title, index));
-    renderYtList(existing);
-    const importable = ytVideos.filter(v => !existing.has(v.videoId)).length;
+    const index = ALL_EXERCISES.map(e => ({ id: e.id, name: e.name, hasVideo: !!e.video_url, tokens: new Set(ytNameTokens(e.name)) }));
+    ytSimilar = ytVideos.map(v => ytExistingIds.has(v.videoId) ? null : ytFindSimilar(v.title, index));
+    ytSwap = {};
+    renderYtList();
+    const importable = ytVideos.filter(v => !ytExistingIds.has(v.videoId)).length;
     const simCount = ytSimilar.filter(Boolean).length;
     status.textContent = tt('gym_library.videos_new', `${ytVideos.length} videos · ${importable} new`, { total: ytVideos.length, new: importable })
       + (simCount ? ' · ' + tt('gym_library.videos_similar', `${simCount} look like existing ones`, { n: simCount }) : '');
-    document.getElementById('yt-import-btn').disabled = importable === 0;
+    ytRefreshImportBtn();
   } catch (err) {
     const m = err.message || err;
     status.textContent = tt('gym_library.error_prefix', 'Error: ' + m, { msg: m });
@@ -1302,12 +1324,40 @@ function applyTags(row, t) {
   return row;
 }
 
+// Enabled while there is anything to do: something to import, or a video to move
+// onto an exercise that already exists.
+function ytRefreshImportBtn() {
+  const fresh = ytVideos.filter((v, i) => !ytExistingIds.has(v.videoId) && !ytSwap[i]).length;
+  document.getElementById('yt-import-btn').disabled = (fresh + Object.keys(ytSwap).length) === 0;
+}
+
 async function ytImport() {
   const checked = [...document.querySelectorAll('#yt-list .yt-cb:checked')].map(cb => ytVideos[+cb.dataset.i]);
-  if (!checked.length) return;
+  const swaps = Object.keys(ytSwap).map(Number)
+    .filter(i => ytSimilar[i] && ytVideos[i])
+    .map(i => ({ id: ytSimilar[i].id, videoId: ytVideos[i].videoId }));
+  if (!checked.length && !swaps.length) return;
   const btn = document.getElementById('yt-import-btn');
   const status = document.getElementById('yt-status');
   btn.disabled = true;
+
+  // 1) Videos the coach chose to hang on an exercise that already exists. Only the
+  //    video changes — name, tags and everything the plans point at stay put.
+  if (swaps.length) {
+    btn.textContent = tt('gym_library.updating','Updating…');
+    status.textContent = tt('gym_library.swapping_videos','Updating videos…');
+    for (const s of swaps) {
+      const { error } = await window.sb.from('gym_exercises')
+        .update({ video_url: `https://www.youtube.com/watch?v=${s.videoId}`, video_id: s.videoId })
+        .eq('id', s.id).eq('club_id', CLUB_ID);
+      if (error) {
+        status.textContent = tt('gym_library.error_prefix', 'Error: ' + error.message, { msg: error.message });
+        btn.disabled = false; btn.textContent = tt('common.import','Import');
+        return;
+      }
+    }
+    if (!checked.length) { closeYtModal(); await reloadExercises(); return; }
+  }
 
   const rows = checked.map(v => ({
     club_id: CLUB_ID,
@@ -1409,6 +1459,22 @@ function attachListeners() {
   document.getElementById('yt-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeYtModal(); });
   document.getElementById('yt-all').addEventListener('change', e => {
     document.querySelectorAll('#yt-list .yt-cb:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
+  });
+  // The rows are <label>s, so the button would toggle the checkbox on its way out.
+  document.getElementById('yt-list').addEventListener('click', e => {
+    const btn = e.target.closest('.yt-swap');
+    if (!btn) return;
+    e.preventDefault(); e.stopPropagation();
+    const i = +btn.dataset.i;
+    // The list is rebuilt whole, so carry the other rows' ticks across.
+    const ticks = {};
+    document.querySelectorAll('#yt-list .yt-cb').forEach(cb => { ticks[cb.dataset.i] = cb.checked; });
+    if (ytSwap[i]) delete ytSwap[i]; else ytSwap[i] = true;
+    renderYtList();
+    document.querySelectorAll('#yt-list .yt-cb:not(:disabled)').forEach(cb => {
+      if (+cb.dataset.i !== i && cb.dataset.i in ticks) cb.checked = ticks[cb.dataset.i];
+    });
+    ytRefreshImportBtn();
   });
   document.getElementById('yt-url').addEventListener('keydown', e => { if (e.key === 'Enter') ytFetch(); });
 
