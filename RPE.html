@@ -132,6 +132,9 @@
           <h1 data-i18n="rpe.sessionRpe">Session RPE</h1>
           <p id="pgSub" data-i18n="rpe.postSessionCheck">Post-session check</p>
         </div>
+        <!-- Vuelta al chooser: sin esto, entrando al board de una de las dos sesiones del día
+             no había forma de volver a elegir la otra sin recargar. -->
+        <button class="cm-btn is-ghost is-sm" id="rmBackChooser" style="display:none;flex:none;"><i class="ti ti-arrow-left"></i><span data-i18n="rpe.backToSessions">Today's sessions</span></button>
       </header>
 
       <!-- Summary -->
@@ -304,6 +307,8 @@
       <div>
         <h3 id="rmRemindTitle" data-i18n="rpe.remindPickTitle">Who to remind</h3>
         <p data-i18n="rpe.remindPickSub">Uncheck anyone who doesn't need to submit (injured, national team…).</p>
+        <!-- Qué sesión se está recordando: solo en días de doble sesión (lo llena wireRemind) -->
+        <div id="rmRemindSess" style="display:none;align-items:center;gap:6px;margin-top:7px;font:600 11.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em;"><i class="ti ti-versions" style="font-size:14px"></i><span></span></div>
       </div>
       <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
     </div>
@@ -426,6 +431,20 @@
     const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
     const ap = t ? (parseInt(t.slice(0, 2), 10) < 12 ? 'AM' : 'PM') : '';
     return [ap, base, t].filter(Boolean).join(' · ');
+  }
+  // Nombre de la sesión para los mensajes al jugador ("ACTIVATION GYM · 08:15"). Sin el AM/PM
+  // del chooser: con la hora al lado ya no aporta. En día de doble sesión es lo único que le
+  // dice al jugador cuál de las dos le están pidiendo.
+  function remindSessionLabel(s) {
+    if (!s) return '';
+    const base = s.title || s.session_type || tt('rpe.sessionFallback', 'Session');
+    const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    return t ? `${base} · ${t}` : base;
+  }
+  // Solo hace falta desambiguar cuando el día tiene más de una sesión.
+  function currentRemindLabel() {
+    if ((state.todaysSessions || []).length < 2) return '';
+    return remindSessionLabel(state.sessionsById[state.currentSessionId]);
   }
   function modelFromRow(r) {
     const dur = numOrNull(r.duration);
@@ -569,7 +588,10 @@
 
   function pendingCardHTML(p) {
     const lastName = p.name.split(/\s+/).pop();
-    const waMsg = T.escape(tt('rpe.waRemind', `Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`, { name: lastName }));
+    const sessLabel = currentRemindLabel();
+    const waMsg = T.escape(sessLabel
+      ? tt('rpe.waRemindSess', `Hi ${lastName} — need your RPE for ${sessLabel} (1–10) when you get a sec, thanks!`, { name: lastName, session: sessLabel })
+      : tt('rpe.waRemind', `Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`, { name: lastName }));
     return `
     <article class="pc is-pending">
       <div class="pc-pending-head">
@@ -688,6 +710,10 @@
     const summaryCard = document.getElementById('summaryCard');
     const toolbar = document.getElementById('toolbar');
     const gate = document.getElementById('sessionGate');
+    // El botón de volver solo existe si hoy hay más de una sesión que elegir.
+    const backBtn = document.getElementById('rmBackChooser');
+    if (backBtn) backBtn.style.display =
+      (state.view === 'board' && (state.todaysSessions || []).length >= 2) ? '' : 'none';
 
     // Session gate: on a double-session day (chooser) or a day with no session
     // (empty state), there is no single expected participant set — hide the
@@ -988,6 +1014,14 @@
     loadRpe();
   });
 
+  /* ── Volver al chooser: soltar la sesión del desplegable y recargar (loadRpe sin sesión
+     vuelve solo a 'chooser' cuando el día tiene dos o más) ── */
+  document.getElementById('rmBackChooser').addEventListener('click', () => {
+    document.getElementById('rmSessionSelect').value = '';
+    state.currentSessionId = null;
+    loadRpe();
+  });
+
   /* ── Teams (roles) for the share modal — identical to Wellness ── */
   async function initTeams() {
     const profile = await window.getProfile();
@@ -1261,6 +1295,12 @@
            <span>${T.escape(p.name)}</span>
          </label>`).join('');
       allEl.checked = true;
+      const sessEl = document.getElementById('rmRemindSess');
+      if (sessEl) {
+        const lab = currentRemindLabel();
+        sessEl.style.display = lab ? 'flex' : 'none';
+        sessEl.querySelector('span').textContent = lab;
+      }
       syncSend();
       modal.classList.add('is-open');
     });
@@ -1296,11 +1336,19 @@
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
         const names = picked.map(p => p.name).join(', ');
+        // Con doble sesión el link va atado a una sola de ellas y los dos recordatorios llegan
+        // al mismo grupo: sin el nombre de la sesión el jugador no sabe cuál le están pidiendo.
+        const sLabel = remindSessionLabel(sess) && (state.todaysSessions || []).length >= 2
+          ? remindSessionLabel(sess) : '';
         if (channel === 'tg') {
-          const text = tt('rpe.tgRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it (1–10):`, { names });
+          const text = sLabel
+            ? tt('rpe.tgRemindBulkSess', `Session RPE reminder — ${sLabel}.\nMissing: ${names}\nRate it (1–10):`, { names, session: sLabel })
+            : tt('rpe.tgRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it (1–10):`, { names });
           window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text), '_blank');
         } else {
-          const msg = tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
+          const msg = sLabel
+            ? tt('rpe.waRemindBulkSess', `Session RPE reminder — ${sLabel}.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url, session: sLabel })
+            : tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
           window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
         }
         modal.classList.remove('is-open');
