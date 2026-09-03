@@ -271,3 +271,42 @@ describe('ACWR · the metric list follows the club', () => {
     expect(keys).toContain('time_played');
   });
 });
+
+describe('Load Planner · which metrics you can plan on', () => {
+  // The planner fell back to eight football keys when a club had no explicit selection,
+  // which is MOI's case: no club_gps_settings row at all.
+  const PLANNER_BEFORE = [
+    'total_distance', 'high_speed_distance', 'very_high_speed_distance', 'sprint_distance',
+    'hmld', 'player_load', 'accelerations', 'decelerations',
+  ];
+  const EXCLUDE = new Set(['sprint_count']);   // the planner's own rule: sprint = distance
+  const plannable = cat => cat.list().filter(d => d.agg === 'sum').map(d => d.key)
+    .filter(k => !EXCLUDE.has(k));
+
+  it('a football club keeps every metric it could plan on before', async () => {
+    const cat = boot(MOI_ROWS);
+    await cat.ready();
+    const now = plannable(cat);
+    PLANNER_BEFORE.forEach(k => expect(now, k).toContain(k));
+  });
+
+  it('never offers a peak or a rate to plan a weekly total on', async () => {
+    const cat = boot(MOI_ROWS);
+    await cat.ready();
+    const now = plannable(cat);
+    // You cannot plan "3.0× the match average" of a maximum speed.
+    ['max_speed', 'avg_speed', 'distance_per_minute', 'max_hr', 'max_vel_pct']
+      .forEach(k => expect(now, k).not.toContain(k));
+  });
+
+  it('a club that measures something of its own can plan on it', async () => {
+    const cat = boot([
+      { key:'player_load', label:'Player Load', category:'load', display_order:1 },
+      { key:'jump_count',  label:'Jumps',       category:'count', display_order:2 },
+      { key:'max_speed',   label:'Max Speed',   category:'speed', display_order:3 },
+    ]);
+    await cat.ready();
+    const now = plannable(cat);
+    expect(now).toEqual(['player_load', 'jump_count']);   // jumps in, peak out
+  });
+});

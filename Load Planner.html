@@ -275,7 +275,9 @@
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
 <script src="lib/day-context.js"></script>
+<script src="assets/gps-units.js"></script>
 <script src="assets/gps-reader.js"></script>
+<script src="assets/gps-catalog.js"></script>
 <script>
 (function(){
 'use strict';
@@ -298,7 +300,14 @@ const META = {
   avg_speed:               {label:'Avg speed',              unit:'km/h', dec:1},
   time_played:             {label:'Time played',            unit:'min',  dec:0},
 };
-const PEAK = new Set(['max_speed','avg_speed','distance_per_minute']);
+// A metric you cannot plan a weekly total on: a peak, or a rate. The catalogue answers
+// this per metric from the club's own definitions; the set below is only the fallback for
+// a page that loaded before the catalogue did.
+const PEAK_FALLBACK = new Set(['max_speed','avg_speed','distance_per_minute']);
+const isPeak = k => {
+  const C = window.cmGpsCatalog;
+  return C && C.has(k) ? C.agg(k) !== 'sum' : PEAK_FALLBACK.has(k);
+};
 const ORDER = ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','hmld','player_load','accelerations','decelerations'];
 const ACCUM = ORDER.slice();
 const EXCLUDE = new Set(['sprint_count']);   // "número de sprints" no se usa; sprint = sprint_distance (band 5)
@@ -371,6 +380,7 @@ async function initTeamSwitch(){
 }
 
 async function loadCatalogMeta(){
+  try{ await window.cmGpsCatalog?.ready(); }catch(e){}
   try{ const cat=window.getCatalog?await window.getCatalog(CLUB):[];
     (cat||[]).forEach(m=>{ META_BY_KEY[m.key]={ label:m.label||META[m.key]?.label||m.key, unit:m.unit||META[m.key]?.unit||'', dec:(m.decimals!=null?m.decimals:(META[m.key]?.dec||0)) }; });
   }catch(e){}
@@ -386,7 +396,15 @@ function buildMcSelect(){
 }
 
 function buildMetrics(){
-  let keys=(ACTIVE_METRICS&&ACTIVE_METRICS.length?ACTIVE_METRICS:ACCUM).filter(k=>!PEAK.has(k)&&!EXCLUDE.has(k)&&(META_BY_KEY[k]||META[k]));
+  // Without an explicit club selection this fell back to ACCUM — eight football keys — so a
+  // club that measures something else could never plan on it. Fall back to what the club
+  // actually accumulates, in the club's own order.
+  const C=window.cmGpsCatalog;
+  const fallback=(C&&C.isLoaded())
+    ? C.list().filter(d=>d.agg==='sum').map(d=>d.key)
+    : ACCUM;
+  let keys=(ACTIVE_METRICS&&ACTIVE_METRICS.length?ACTIVE_METRICS:fallback)
+    .filter(k=>!isPeak(k)&&!EXCLUDE.has(k)&&(META_BY_KEY[k]||META[k]||(C&&C.has(k))));
   // keep a sensible order
   keys=ORDER.filter(k=>keys.includes(k)).concat(keys.filter(k=>!ORDER.includes(k)));
   if(!keys.length) keys=['total_distance'];
