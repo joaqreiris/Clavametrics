@@ -2907,6 +2907,51 @@ create table if not exists public.video_folders (
 CREATE INDEX IF NOT EXISTS idx_video_folders_club ON public.video_folders USING btree (club_id);
 CREATE INDEX IF NOT EXISTS idx_video_folders_team ON public.video_folders USING btree (team_id);
 
+-- Envío de cortes al jugador: UNA fila por jugador (link personal), agrupadas por
+-- batch_id cuando el mismo envío va a varios. El jugador no tiene cuenta: abre el
+-- link público (video-share.html) y la Edge Function share-video lo resuelve por
+-- token con service role, así que las políticas de abajo siguen siendo staff-only.
+create table if not exists public.video_shares (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  team_id uuid,
+  player_id uuid not null,
+  batch_id uuid default gen_random_uuid() not null,
+  token text default (gen_random_uuid())::text not null,
+  title text,
+  message text,
+  created_by uuid,
+  created_by_name text,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone,
+  revoked boolean default false not null,
+  opened_at timestamp with time zone,
+  last_opened_at timestamp with time zone,
+  open_count integer default 0 not null,
+  seen_at timestamp with time zone,
+  constraint video_shares_pkey primary key (id),
+  constraint video_shares_token_key UNIQUE (token)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS video_shares_token_idx ON public.video_shares USING btree (token);
+CREATE INDEX IF NOT EXISTS idx_video_shares_club ON public.video_shares USING btree (club_id);
+CREATE INDEX IF NOT EXISTS idx_video_shares_player ON public.video_shares USING btree (player_id);
+CREATE INDEX IF NOT EXISTS idx_video_shares_batch ON public.video_shares USING btree (batch_id);
+
+-- Los cortes de cada envío. Se copian por jugador (no por batch) para poder
+-- personalizar el comentario de uno sin tocar el del resto.
+create table if not exists public.video_share_items (
+  id uuid default gen_random_uuid() not null,
+  share_id uuid not null,
+  video_id uuid not null,
+  position integer default 0 not null,
+  comment text,
+  start_seconds integer,
+  created_at timestamp with time zone default now() not null,
+  constraint video_share_items_pkey primary key (id)
+);
+CREATE INDEX IF NOT EXISTS idx_video_share_items_share ON public.video_share_items USING btree (share_id);
+CREATE INDEX IF NOT EXISTS idx_video_share_items_video ON public.video_share_items USING btree (video_id);
+
 create table if not exists public.wellness (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -3206,6 +3251,12 @@ alter table public.videos add constraint videos_exercise_id_fkey FOREIGN KEY (ex
 alter table public.videos add constraint videos_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES video_folders(id) ON DELETE SET NULL;
 alter table public.video_folders add constraint video_folders_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.video_folders add constraint video_folders_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.video_shares add constraint video_shares_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.video_shares add constraint video_shares_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.video_shares add constraint video_shares_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.video_shares add constraint video_shares_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.video_share_items add constraint video_share_items_share_id_fkey FOREIGN KEY (share_id) REFERENCES video_shares(id) ON DELETE CASCADE;
+alter table public.video_share_items add constraint video_share_items_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
 alter table public.wellness add constraint wellness_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.wellness add constraint wellness_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.wellness add constraint wellness_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
@@ -7645,6 +7696,12 @@ create policy "video_players_plan_gate" on public.video_players as restrictive f
 create policy "video_sessions_plan_gate" on public.video_sessions as restrictive for all to public
   using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
   with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_shares_plan_gate" on public.video_shares as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
+create policy "video_share_items_plan_gate" on public.video_share_items as restrictive for all to public
+  using (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'))
+  with check (public.is_super_admin() or public.club_has_feature(public.get_user_club_id(), 'video_room'));
 
 alter table public.opponent_branding enable row level security;
 create policy "opponent_branding_all" on public.opponent_branding as permissive for all to authenticated
@@ -8148,6 +8205,34 @@ create policy "video_folders update club" on public.video_folders as permissive 
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
 create policy "video_folders_super_all" on public.video_folders as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.video_shares enable row level security;
+create policy "video_shares club" on public.video_shares as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "video_shares_super_all" on public.video_shares as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.video_share_items enable row level security;
+create policy "video_share_items club" on public.video_share_items as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM video_shares s
+  WHERE ((s.id = video_share_items.share_id) AND (s.club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))))))
+  with check ((EXISTS ( SELECT 1
+   FROM video_shares s
+  WHERE ((s.id = video_share_items.share_id) AND (s.club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))))));
+create policy "video_share_items_super_all" on public.video_share_items as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
 

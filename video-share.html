@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title data-i18n="video_share.title_tab">Videos — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<style>
+  :root{
+    --vs-bd:var(--cm-border,#E7E7E4); --vs-bd-soft:var(--cm-border-soft,#EFEFED);
+    --vs-surface:var(--cm-surface,#fff); --vs-soft:var(--cm-bg-soft,#F4F4F2); --vs-sunk:var(--cm-bg-sunk,#EDEDEA);
+    --vs-fg:var(--cm-fg,#0F1115); --vs-strong:var(--cm-fg-strong,#000); --vs-muted:var(--cm-fg-muted,#5B6470); --vs-faint:var(--cm-fg-faint,#8A93A0);
+    --vs-acc:var(--cm-accent,#15803D); --vs-acc-soft:var(--cm-accent-soft,#ECFDF5); --vs-acc-bd:#BBF7D0;
+    --vs-sans:var(--cm-font-sans,ui-sans-serif,system-ui,sans-serif); --vs-mono:var(--cm-font-mono,ui-monospace,menlo,monospace);
+  }
+  *{box-sizing:border-box;}
+  html,body{background:var(--vs-soft);margin:0;}
+  body{font-family:var(--vs-sans);color:var(--vs-fg);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:640px;margin:0 auto;padding:14px 14px calc(48px + env(safe-area-inset-bottom));}
+
+  .brand{display:flex;align-items:center;gap:8px;justify-content:center;margin:4px 0 16px;}
+  .brand .mark{width:26px;height:26px;border-radius:7px;background:var(--vs-acc);color:#fff;display:flex;align-items:center;justify-content:center;}
+  .brand .name{font:600 14px/1 var(--vs-sans);color:var(--vs-strong);}
+
+  .card{background:var(--vs-surface);border:1px solid var(--vs-bd);border-radius:16px;padding:16px;margin-bottom:12px;}
+
+  /* header */
+  .hero-top{display:flex;align-items:center;gap:13px;}
+  .avatar{width:50px;height:50px;border-radius:50%;background:var(--vs-acc);color:#fff;flex:none;display:flex;align-items:center;justify-content:center;font:700 17px/1 var(--vs-sans);box-shadow:0 0 0 3px var(--vs-acc-soft);}
+  .hero-name{font:680 18px/1.15 var(--vs-sans);letter-spacing:-.01em;color:var(--vs-strong);}
+  .hero-sub{font:500 12px/1.3 var(--vs-mono);letter-spacing:.03em;color:var(--vs-muted);margin-top:3px;text-transform:uppercase;}
+  .hero-msg{margin-top:14px;padding-top:13px;border-top:1px solid var(--vs-bd-soft);font:400 14px/1.55 var(--vs-sans);color:var(--vs-fg);white-space:pre-wrap;}
+  .meta-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .tag{font:600 11px/1 var(--vs-sans);color:var(--vs-muted);background:var(--vs-soft);border:1px solid var(--vs-bd-soft);padding:5px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;}
+  .tag b{color:var(--vs-fg);font-weight:700;}
+
+  .sec-h{font:600 12px/1 var(--vs-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--vs-muted);margin:18px 2px 10px;display:flex;align-items:center;gap:8px;}
+  .sec-h .n{font:600 11px/1 var(--vs-mono);color:var(--vs-faint);}
+
+  /* clip */
+  .clip{background:var(--vs-surface);border:1px solid var(--vs-bd);border-radius:16px;overflow:hidden;margin-bottom:12px;}
+  .clip-head{display:flex;align-items:flex-start;gap:10px;padding:13px 14px 11px;}
+  .clip-idx{width:22px;height:22px;flex:none;border-radius:7px;background:var(--vs-acc-soft);color:var(--vs-acc);border:1px solid var(--vs-acc-bd);display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--vs-mono);margin-top:1px;}
+  .clip-title{flex:1;min-width:0;font:640 15px/1.3 var(--vs-sans);color:var(--vs-strong);word-break:break-word;}
+  .clip-sub{margin-top:4px;font:500 11.5px/1 var(--vs-mono);color:var(--vs-muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .clip-sub .dot{width:3px;height:3px;border-radius:50%;background:var(--vs-faint);}
+
+  .frame{position:relative;background:#0E1116;aspect-ratio:16/9;}
+  .frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+  .frame.is-fallback{display:flex;align-items:center;justify-content:center;background-size:cover;background-position:center;}
+  .frame .fb{position:relative;z-index:2;text-align:center;padding:20px;color:#E6E8EB;}
+  .frame.is-fallback::after{content:'';position:absolute;inset:0;background:rgba(8,12,16,.55);}
+  .frame .fb .t{font:640 14px/1.35 var(--vs-sans);margin-bottom:5px;}
+  .frame .fb .b{font:400 12.5px/1.45 var(--vs-sans);opacity:.8;}
+
+  .clip-note{margin:0;padding:12px 14px;background:var(--vs-acc-soft);border-top:1px solid var(--vs-acc-bd);font:400 13.5px/1.55 var(--vs-sans);color:#14532D;white-space:pre-wrap;}
+  .clip-acts{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;}
+  .btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--vs-bd);background:var(--vs-surface);color:var(--vs-fg);font:600 13px/1 var(--vs-sans);text-decoration:none;cursor:pointer;}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--vs-acc);border-color:var(--vs-acc);color:#fff;}
+
+  /* seen */
+  .seen-card{display:flex;align-items:center;gap:12px;background:var(--vs-surface);border:1px solid var(--vs-bd);border-radius:16px;padding:14px 16px;margin-top:4px;}
+  .seen-card .txt{flex:1;min-width:0;}
+  .seen-card .t{font:640 14px/1.3 var(--vs-sans);color:var(--vs-strong);}
+  .seen-card .s{font:400 12.5px/1.4 var(--vs-sans);color:var(--vs-muted);margin-top:3px;}
+  .seen-btn{flex:none;display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--vs-acc);background:var(--vs-acc);color:#fff;font:700 13px/1 var(--vs-sans);cursor:pointer;}
+  .seen-btn.is-on{background:var(--vs-acc-soft);color:var(--vs-acc);}
+  .seen-btn:disabled{opacity:.6;}
+
+  .state{text-align:center;padding:56px 20px;color:var(--vs-muted);}
+  .state .ic{color:var(--vs-faint);margin-bottom:14px;display:flex;justify-content:center;}
+  .state .t{font:640 17px/1.3 var(--vs-sans);color:var(--vs-strong);margin-bottom:6px;}
+  .foot{text-align:center;margin-top:22px;font:500 10.5px/1 var(--vs-mono);letter-spacing:.05em;color:var(--vs-faint);text-transform:uppercase;}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+</style>
+</head>
+<body class="cm">
+<div class="wrap">
+  <div class="brand">
+    <span class="mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-8-4.5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6.5-8 11-8 11Z"/></svg></span>
+    <span class="name">ClavaMetrics</span>
+  </div>
+  <div id="root">
+    <div class="state"><div class="ic"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9" opacity=".4"/></svg></div><div data-i18n="video_share.loading">Loading…</div></div>
+  </div>
+  <div class="foot" data-i18n="video_share.powered_by">Powered by ClavaMetrics</div>
+</div>
+
+<script src="assets/i18n.js" defer></script>
+<script>
+(function(){
+  'use strict';
+  var SB_URL = 'https://xesrumijvdmqjrufgeka.supabase.co';
+  var SB_KEY = 'sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
+  var FN = SB_URL + '/functions/v1/share-video';
+
+  function tt(key, en, vars){
+    if (window.CM_I18N && CM_I18N.t){ var v = CM_I18N.t(key, vars); if (v != null && v !== key) return v; }
+    var s = (en != null ? en : key);
+    if (vars) s = s.replace(/\{(\w+)\}/g, function(_, k){ return vars[k] != null ? vars[k] : '{'+k+'}'; });
+    return s;
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // Bloquea javascript:/data: en href y src — solo http(s) o rutas relativas.
+  function safeUrl(u){ var s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
+  function initials(n){ return String(n||'—').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || '—'; }
+  function fmtDur(sec){ if (sec==null || isNaN(sec)) return null; var m=Math.floor(sec/60), s=Math.floor(sec%60); return m+':'+String(s).padStart(2,'0'); }
+  function fmtClock(sec){ return fmtDur(sec); }
+
+  var PROV_LABEL = { google_drive:'Google Drive', dropbox:'Dropbox', youtube:'YouTube', vimeo:'Vimeo', other:'Link' };
+
+  var root = document.getElementById('root');
+  var TOKEN = new URLSearchParams(location.search).get('token');
+  var DATA = null;
+
+  function stateMsg(iconSvg, title, body){
+    root.innerHTML = '<div class="state"><div class="ic">'+iconSvg+'</div><div class="t">'+esc(title)+'</div><div>'+esc(body)+'</div></div>';
+  }
+  function showUnavailable(expired){
+    stateMsg('<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 4 8M3 3l18 18"/></svg>',
+      expired ? tt('video_share.expired_title','This link expired') : tt('video_share.unavailable_title','This link is unavailable'),
+      expired ? tt('video_share.expired_body','Ask your staff to send it again.')
+              : tt('video_share.unavailable_body','The videos may have been unshared or the link is incorrect.'));
+  }
+
+  function clipHtml(c, i){
+    var provLabel = PROV_LABEL[c.provider] || PROV_LABEL.other;
+    var dur = fmtDur(c.duration_seconds);
+    var frame;
+    if (c.embed){
+      frame = '<div class="frame"><iframe src="'+esc(safeUrl(c.embed))+'" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
+    } else {
+      var bg = c.thumbnail_url ? ' style="background-image:url(\''+esc(safeUrl(c.thumbnail_url))+'\')"' : '';
+      frame = '<div class="frame is-fallback"'+bg+'><div class="fb">'+
+        '<div class="t">'+esc(tt('video_share.no_preview_title','Preview not available here'))+'</div>'+
+        '<div class="b">'+esc(tt('video_share.no_preview_body','Tap the button below to watch it in {name}.', { name: provLabel }))+'</div>'+
+      '</div></div>';
+    }
+    var startTag = (c.start_seconds > 0)
+      ? '<span class="dot"></span><span>'+esc(tt('video_share.from_minute','From {t}', { t: fmtClock(c.start_seconds) }))+'</span>' : '';
+    return '<article class="clip">'+
+      '<div class="clip-head"><span class="clip-idx">'+(i+1)+'</span>'+
+        '<div style="flex:1;min-width:0"><div class="clip-title">'+esc(c.title || tt('video_share.untitled','Video'))+'</div>'+
+          '<div class="clip-sub"><span>'+esc(provLabel)+'</span>'+(dur?'<span class="dot"></span><span>'+dur+'</span>':'')+startTag+'</div>'+
+        '</div>'+
+      '</div>'+
+      frame+
+      (c.comment ? '<p class="clip-note">'+esc(c.comment)+'</p>' : '')+
+      '<div class="clip-acts">'+
+        '<a class="btn primary" href="'+esc(safeUrl(c.open))+'" target="_blank" rel="noopener">'+
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>'+
+          esc(tt('video_share.open_in','Open in {name}', { name: provLabel }))+'</a>'+
+      '</div>'+
+    '</article>';
+  }
+
+  function seenHtml(seenAt){
+    var on = !!seenAt;
+    return '<div class="seen-card">'+
+      '<div class="txt"><div class="t">'+esc(on ? tt('video_share.seen_done_title','Marked as watched') : tt('video_share.seen_title','Did you watch them?'))+'</div>'+
+        '<div class="s">'+esc(on ? tt('video_share.seen_done_body','Your staff can see you watched this.') : tt('video_share.seen_body','Tap here so your staff knows.'))+'</div></div>'+
+      '<button class="seen-btn'+(on?' is-on':'')+'" id="seenBtn">'+
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'+
+        esc(on ? tt('video_share.seen_on','Watched') : tt('video_share.seen_off','Mark as watched'))+'</button>'+
+    '</div>';
+  }
+
+  function render(data){
+    DATA = data;
+    var s = data.share || {};
+    var p = s.player || {};
+    var pname = ((p.first_name||'')+' '+(p.last_name||'')).trim() || '—';
+    var num = p.number ? ('#'+p.number) : '';
+    var clips = Array.isArray(s.clips) ? s.clips : [];
+
+    var html = '';
+    html += '<div class="card">'+
+      '<div class="hero-top"><div class="avatar">'+esc(initials(pname))+'</div>'+
+        '<div><div class="hero-name">'+esc(pname)+(num?' <span style="color:var(--vs-muted);font-weight:500">'+esc(num)+'</span>':'')+'</div>'+
+        '<div class="hero-sub">'+esc(s.title || tt('video_share.kind','Video clips'))+'</div></div></div>'+
+      (s.message ? '<div class="hero-msg">'+esc(s.message)+'</div>' : '')+
+      '<div class="meta-tags">'+
+        (s.from ? '<span class="tag">'+esc(tt('video_share.from','From'))+' <b>'+esc(s.from)+'</b></span>' : '')+
+        (s.club ? '<span class="tag">'+esc(s.club)+'</span>' : '')+
+      '</div>'+
+    '</div>';
+
+    html += '<div class="sec-h">'+esc(tt('video_share.clips','Your clips'))+'<span class="n">'+clips.length+'</span></div>';
+    html += clips.length
+      ? clips.map(clipHtml).join('')
+      : '<div class="card"><div style="color:var(--vs-muted);font:400 13px/1.5 var(--vs-sans)">'+esc(tt('video_share.no_clips','No clips in this link yet.'))+'</div></div>';
+
+    if (clips.length) html += seenHtml(s.seen_at);
+
+    root.innerHTML = html;
+    wireSeen();
+  }
+
+  function wireSeen(){
+    var btn = document.getElementById('seenBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async function(){
+      var next = !(DATA && DATA.share && DATA.share.seen_at);
+      btn.disabled = true;
+      try {
+        var res = await fetch(FN, { method:'POST', headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+SB_KEY, 'Content-Type':'application/json' },
+          body: JSON.stringify({ token: TOKEN, action:'seen', value: next }) });
+        var data = await res.json();
+        if (data && data.found) render(data);
+      } catch (err){ console.error('[video-share] seen failed', err); }
+      btn.disabled = false;
+    });
+  }
+
+  async function load(){
+    if (window.CM_I18N && CM_I18N.ready){ try { await CM_I18N.ready; } catch(_){} }
+    if (!TOKEN){ showUnavailable(false); return; }
+    try {
+      // La apertura se cuenta en la misma llamada que trae los datos.
+      var res = await fetch(FN, { method:'POST', headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+SB_KEY, 'Content-Type':'application/json' },
+        body: JSON.stringify({ token: TOKEN, action:'open' }) });
+      var data = await res.json();
+      if (!data || !data.found){ showUnavailable(!!(data && data.expired)); return; }
+      render(data);
+    } catch (err){
+      console.error('[video-share] load failed', err);
+      showUnavailable(false);
+    }
+  }
+
+  document.addEventListener('cm:langchanged', function(){ if (DATA) render(DATA); });
+
+  if (document.readyState !== 'loading') load(); else document.addEventListener('DOMContentLoaded', load);
+})();
+</script>
+</body>
+</html>

@@ -208,6 +208,83 @@
 
   .vr-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
   .vr-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ── Tabs (Library / Sent) ── */
+  .vr-tabs { display:inline-flex; gap:3px; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); margin-bottom:18px; }
+  .vr-tabs button { display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 14px; border:0; background:transparent; border-radius:var(--cm-r-2); font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; }
+  .vr-tabs button .ti { font-size:15px; }
+  .vr-tabs button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); font-weight:600; box-shadow:var(--cm-shadow-1); }
+  .vr-tabs .badge { min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--cm-bg-sunk); color:var(--cm-fg-muted); font:600 10.5px/18px var(--cm-font-mono); text-align:center; }
+
+  /* ── Sent list ── */
+  .vr-sends { display:flex; flex-direction:column; gap:12px; }
+  /* display:grid/flex propios pisan [hidden]: hay que devolverle la prioridad. */
+  .vr-grid[hidden], .vr-sends[hidden] { display:none; }
+  .vr-send { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); padding:15px 16px; }
+  .vr-send .sh { display:flex; align-items:flex-start; gap:10px; }
+  .vr-send .sh h3 { flex:1; min-width:0; font:600 14.5px/1.32 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; word-break:break-word; }
+  .vr-send .sh .st { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px; border-radius:999px; font:600 11.5px/1 var(--cm-font-sans); flex-shrink:0; }
+  .vr-send .sh .st .ti { font-size:14px; }
+  .vr-send .sh .st.ok  { background:var(--cm-success-bg); color:var(--cm-success); border:1px solid var(--cm-success-bd); }
+  .vr-send .sh .st.mid { background:var(--cm-warning-bg); color:var(--cm-warning); border:1px solid var(--cm-warning-bd); }
+  .vr-send .sh .st.no  { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+  .vr-send .smeta { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:7px; font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .vr-send .smeta .ti { font-size:13px; }
+  .vr-send .smeta .dotsep { width:3px; height:3px; border-radius:50%; background:var(--cm-fg-faint); flex-shrink:0; }
+  .vr-send .smsg { margin-top:9px; padding:9px 11px; border-radius:var(--cm-r-3); background:var(--cm-bg-soft); border:1px solid var(--cm-border); font:var(--cm-body-sm); color:var(--cm-fg); white-space:pre-wrap; }
+  .vr-send .sclips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .vr-recips { display:flex; flex-direction:column; gap:2px; margin-top:12px; border-top:1px solid var(--cm-border); padding-top:10px; }
+  .vr-recip { display:flex; align-items:center; gap:9px; padding:6px 4px; border-radius:var(--cm-r-2); }
+  .vr-recip:hover { background:var(--cm-bg-soft); }
+  .vr-recip .nm { flex:1; min-width:0; font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-recip .stt { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .vr-recip .stt .ti { font-size:14px; }
+  .vr-recip .stt.ok { color:var(--cm-success); }
+  .vr-recip .ract { display:flex; gap:4px; flex-shrink:0; }
+  .vr-recip .ract button { width:28px; height:28px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:var(--cm-r-2); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-recip .ract button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vr-recip .ract button .ti { font-size:15px; }
+  .vr-recip.is-revoked { opacity:.55; }
+
+  /* ── Send modal ── */
+  .vr-modal.is-wide { width:min(620px,94vw); max-height:88vh; overflow-y:auto; }
+  .vr-modal textarea { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); padding:9px 11px; font:14px/1.45 var(--cm-font-sans); color:var(--cm-fg-strong); width:100%; box-sizing:border-box; resize:vertical; min-height:74px; }
+  .vr-modal textarea:focus { outline:2px solid var(--cm-accent); outline-offset:1px; }
+  .vr-modal select { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); padding:9px 11px; font:14px/1.4 var(--cm-font-sans); color:var(--cm-fg-strong); width:100%; }
+  .vr-sec { display:flex; flex-direction:column; gap:8px; }
+  .vr-sec-h { display:flex; align-items:center; gap:8px; font:600 12px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .vr-sec-h .cnt { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .vr-sec-h .lnk { margin-left:auto; border:0; background:transparent; color:var(--cm-accent); font:600 12px/1 var(--cm-font-sans); cursor:pointer; text-transform:none; letter-spacing:0; }
+
+  .vr-pick { border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); max-height:190px; overflow-y:auto; }
+  .vr-pick .opt { display:flex; align-items:center; gap:9px; padding:8px 11px; cursor:pointer; border-bottom:1px solid var(--cm-border-soft,var(--cm-border)); }
+  .vr-pick .opt:last-child { border-bottom:0; }
+  .vr-pick .opt:hover { background:var(--cm-bg-soft); }
+  .vr-pick .opt .box { width:17px; height:17px; flex:none; border:1.6px solid var(--cm-border-strong); border-radius:5px; display:flex; align-items:center; justify-content:center; color:transparent; }
+  .vr-pick .opt.is-on .box { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
+  .vr-pick .opt .box .ti { font-size:12px; }
+  .vr-pick .opt .nm { flex:1; min-width:0; font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-pick .opt .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); flex-shrink:0; }
+  .vr-pick .none { padding:14px; text-align:center; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+
+  .vr-clip { display:flex; align-items:flex-start; gap:9px; padding:10px 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
+  .vr-clip .ci { width:22px; height:22px; flex:none; border-radius:7px; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; font:700 11px/1 var(--cm-font-mono); margin-top:2px; }
+  .vr-clip .cb { flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
+  .vr-clip .cn { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); word-break:break-word; }
+  .vr-clip .crow { display:flex; gap:7px; }
+  .vr-clip input[type=text] { flex:1; }
+  .vr-clip input.tm { width:86px; flex:none; text-align:center; font-family:var(--cm-font-mono); }
+  .vr-clip .x { width:26px; height:26px; flex:none; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-clip .x:hover { background:var(--cm-bg-sunk); color:var(--cm-danger,#dc2626); }
+
+  .vr-links-out { display:flex; flex-direction:column; gap:7px; max-height:280px; overflow-y:auto; }
+  .vr-lrow { display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); }
+  .vr-lrow .nm { flex:1; min-width:0; font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-lrow .ract { display:flex; gap:5px; }
+  .vr-lrow .ract button { width:30px; height:30px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:var(--cm-r-2); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-lrow .ract button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vr-lrow .ract .wa:hover { color:#25D366; }
+  .vr-lrow .ract .tg:hover { color:#229ED9; }
 </style>
 </head>
 <body class="cm">
@@ -245,7 +322,12 @@
         </div>
       </div>
 
-      <div class="vr-bar">
+      <div class="vr-tabs" id="vrTabs" role="tablist">
+        <button type="button" data-tab="library" class="is-on" role="tab"><i class="ti ti-photo-video"></i><span data-i18n="video_room.tab_library">Library</span></button>
+        <button type="button" data-tab="sends" role="tab"><i class="ti ti-send"></i><span data-i18n="video_room.tab_sends">Sent to players</span><span class="badge" id="vrSendsBadge">0</span></button>
+      </div>
+
+      <div class="vr-bar" id="vrBar">
         <label class="vr-search">
           <i class="ti ti-search"></i>
           <input id="vrSearch" placeholder="Search videos…" aria-label="Search videos" data-i18n-ph="video_room.search_ph" data-i18n-attr="aria-label:video_room.search_aria">
@@ -272,6 +354,7 @@
 
         <div class="vr-right">
           <span class="vr-count" id="vrCount">—</span>
+          <button class="cm-btn is-ghost" id="vrSendBtn"><i class="ti ti-send" style="font-size:16px"></i><span data-i18n="video_room.send_to_players">Send to players</span></button>
           <button class="cm-btn is-ghost" id="vrAddFolderBtn"><i class="ti ti-folder-plus" style="font-size:16px"></i><span data-i18n="video_room.new_folder">New folder</span></button>
           <button class="cm-btn is-primary" id="vrAddBtn"><i class="ti ti-plus" style="font-size:16px"></i><span data-i18n="video_room.add_video">Add video</span></button>
         </div>
@@ -284,6 +367,7 @@
       </div>
 
       <div class="vr-grid" id="vrGrid"></div>
+      <div class="vr-sends" id="vrSends" hidden></div>
     </section>
   </main>
 </div>
@@ -327,8 +411,64 @@
   </div>
 </div>
 
+<!-- Send to players modal -->
+<div class="vr-modal-backdrop" id="vrSendBackdrop" role="dialog" aria-modal="true" aria-labelledby="vrSendTitle">
+  <div class="vr-modal is-wide">
+    <h3 id="vrSendTitle" data-i18n="video_room.send_title">Send videos to players</h3>
+
+    <!-- Step 1 — compose -->
+    <div id="vrSendForm" style="display:flex;flex-direction:column;gap:16px">
+      <div class="vr-sec">
+        <div class="vr-sec-h"><i class="ti ti-player-play"></i><span data-i18n="video_room.send_clips">Clips</span><span class="cnt" id="vrSendClipCount">0</span>
+          <button type="button" class="lnk" id="vrSendAddClip" data-i18n="video_room.send_add_clip">+ Add clip</button></div>
+        <div id="vrSendClips" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div class="vr-pick" id="vrSendVideoPick" hidden></div>
+      </div>
+
+      <div class="vr-sec">
+        <div class="vr-sec-h"><i class="ti ti-users"></i><span data-i18n="video_room.send_players">Players</span><span class="cnt" id="vrSendPlayerCount">0</span>
+          <button type="button" class="lnk" id="vrSendAllPlayers" data-i18n="video_room.send_select_all">Select all</button></div>
+        <label style="margin:0"><input type="text" id="vrSendPlayerSearch" placeholder="Search players…" data-i18n-ph="video_room.send_player_search_ph"></label>
+        <div class="vr-pick" id="vrSendPlayerPick"></div>
+      </div>
+
+      <label><span data-i18n="video_room.send_message">Message for the player</span> <span style="color:var(--cm-fg-faint)" data-i18n="video_room.optional">(optional)</span>
+        <textarea id="vrSendMessage" maxlength="1200" placeholder="e.g. Look at your body position before the pass." data-i18n-ph="video_room.send_message_ph"></textarea>
+      </label>
+
+      <label><span data-i18n="video_room.send_expiry">Link expires</span>
+        <select id="vrSendExpiry">
+          <option value="30" data-i18n="video_room.send_expiry_30">In 30 days</option>
+          <option value="7" data-i18n="video_room.send_expiry_7">In 7 days</option>
+          <option value="90" data-i18n="video_room.send_expiry_90">In 90 days</option>
+          <option value="0" data-i18n="video_room.send_expiry_never">Never</option>
+        </select>
+      </label>
+
+      <div class="vr-modal-actions">
+        <button class="cm-btn is-ghost is-sm" id="vrSendCancel" type="button" data-i18n="common.cancel">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="vrSendSave" type="button"><i class="ti ti-send" style="font-size:15px"></i><span data-i18n="video_room.send_create">Create links</span></button>
+      </div>
+    </div>
+
+    <!-- Step 2 — links ready -->
+    <div id="vrSendDone" style="display:none;flex-direction:column;gap:14px">
+      <div class="vr-note" style="margin-top:0">
+        <span class="ic"><i class="ti ti-check"></i></span>
+        <p data-i18n="video_room.send_done_note">One personal link per player. Send it over WhatsApp or Telegram — they open it with no login.</p>
+      </div>
+      <div class="vr-links-out" id="vrSendLinks"></div>
+      <div class="vr-modal-actions">
+        <button class="cm-btn is-ghost is-sm" id="vrSendCopyAll" type="button"><i class="ti ti-copy" style="font-size:15px"></i><span data-i18n="video_room.send_copy_all">Copy all links</span></button>
+        <button class="cm-btn is-primary is-sm" id="vrSendClose" type="button" data-i18n="common.done">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Card actions menu -->
 <div class="vr-cardmenu" id="vrCardMenu" hidden>
+  <button type="button" data-act="send"><i class="ti ti-send"></i><span data-i18n="video_room.send_to_players">Send to players</span></button>
   <button type="button" data-act="copy"><i class="ti ti-link"></i><span data-i18n="video_room.copy_link">Copy link</span></button>
   <button type="button" data-act="delete" class="danger"><i class="ti ti-trash"></i><span data-i18n="video_room.delete">Delete</span></button>
 </div>
@@ -621,6 +761,7 @@
     const b = e.target.closest('button'); if (!b || !menuTarget) return;
     const t = menuTarget;
     if (b.dataset.act === 'copy') { navigator.clipboard?.writeText(t.url).then(() => toast(tt('video_room.link_copied', 'Link copied'))); closeCardMenu(); return; }
+    if (b.dataset.act === 'send') { closeCardMenu(); await openSendModal([t.id]); return; }
     if (b.dataset.act === 'delete') { closeCardMenu(); await deleteVideo(t.id); }
   });
   document.addEventListener('click', e => { if (!e.target.closest('#vrCardMenu') && !e.target.closest('.vr-card .more')) closeCardMenu(); });
@@ -694,6 +835,8 @@
   document.addEventListener('click', () => document.querySelectorAll('.vr-menu').forEach(m => m.classList.remove('is-open')));
 
   let TEAM_ROWS = [];   // real team rows, for re-building the team menu on lang change
+  let MY_TEAMS  = [];   // equipos que este usuario ve (vacío = acceso completo)
+  let FULL_ACCESS = false;
   const teamOpts = () => [{ v:'all', label:tt('video_room.all_teams', 'All teams'), icon:'ti-users-group' }, ...TEAM_ROWS.map(t => ({ v:t.id, label:t.name, icon:'ti-users' }))];
   function buildFilterMenus() {
     buildMenu('link', LINK_OPTS());
@@ -704,13 +847,14 @@
   buildMenu('date', DATE_OPTS());
 
   // Team filter — only the teams this user can see
-  (async () => {
+  const teamScopeReady = (async () => {
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
     let full = bucket === 'admin' || bucket === 'owner';
     if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
     let teams = await window.getTeams(clubId);
-    if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {} const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
+    if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {} MY_TEAMS = mine; const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
+    FULL_ACCESS = full;
     TEAM_ROWS = teams;
     buildMenu('team', teamOpts());
   })();
@@ -814,8 +958,389 @@
     await loadVideos();
   });
 
+  // ── Enviar cortes al jugador ───────────────────────────────────────────────
+  // El jugador no tiene cuenta: cada envío crea UNA fila de video_shares por
+  // jugador (link personal con token) y la página pública video-share.html lo
+  // resuelve por la Edge Function share-video. Así se puede ver quién lo abrió.
+  const SHARE_BASE = new URL('video-share.html', location.href).href;
+  const shareUrl = token => `${SHARE_BASE}?token=${encodeURIComponent(token)}`;
+
+  let PLAYERS   = [];     // roster visible (lazy)
+  let SENDS     = [];     // filas de video_shares enriquecidas
+  let sendClips = [];     // [{ video_id, title, comment, start }]
+  const sendPlayers = new Set();
+  let playersLoaded = false;
+
+  function fmtSecs(sec) {
+    if (sec == null || isNaN(sec)) return '';
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+  // Acepta "90", "1:30" o "1:30:05" y devuelve segundos (null si está vacío/inválido).
+  function parseSecs(txt) {
+    const t = String(txt || '').trim();
+    if (!t) return null;
+    if (/^\d+$/.test(t)) return parseInt(t, 10);
+    const p = t.split(':').map(x => parseInt(x, 10));
+    if (p.some(isNaN)) return null;
+    return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p.length === 2 ? p[0]*60 + p[1] : p[0];
+  }
+
+  async function loadPlayers() {
+    if (playersLoaded) return;
+    await teamScopeReady;   // sin esto, un modal abierto rápido vería MY_TEAMS vacío
+    // Por MEMBRESÍA (player_teams!inner) para incluir a los secundarios de la categoría.
+    // Sin equipo activo, se acota a los equipos que este usuario ve — nunca todo el club.
+    const teamId = sessionStorage.getItem('cal_active_team') || null;
+    const scopeTeams = teamId ? [teamId] : (FULL_ACCESS ? null : MY_TEAMS);
+    let q = window.sb.from('players')
+      .select('id,first_name,last_name,number' + (scopeTeams ? ', player_teams!inner(team_id)' : ''))
+      .eq('club_id', clubId).is('archived_at', null);
+    if (scopeTeams) q = q.in('player_teams.team_id', scopeTeams);
+    const { data } = await q;
+    // El join !inner duplica al jugador que está en dos equipos del scope.
+    PLAYERS = [...new Map((data || []).map(p => [p.id, p])).values()]
+      .sort((a, b) => (a.last_name || a.first_name || '').localeCompare(b.last_name || b.first_name || ''));
+    playersLoaded = true;
+  }
+  const playerName = p => `${(p.last_name || '').trim()}${p.last_name && p.first_name ? ', ' : ''}${(p.first_name || '').trim()}`.trim() || '—';
+
+  // ── Modal: armado del envío ────────────────────────────────────────────────
+  const sendBackdrop = $('#vrSendBackdrop');
+
+  function renderSendClips() {
+    const box = $('#vrSendClips');
+    $('#vrSendClipCount').textContent = sendClips.length;
+    if (!sendClips.length) {
+      box.innerHTML = `<div class="vr-pick"><div class="none">${esc(tt('video_room.send_no_clips', 'Add at least one clip.'))}</div></div>`;
+      return;
+    }
+    box.innerHTML = sendClips.map((c, i) => `
+      <div class="vr-clip" data-i="${i}">
+        <span class="ci">${i + 1}</span>
+        <div class="cb">
+          <div class="cn">${esc(c.title || tt('video_room.untitled_video', 'Untitled video'))}</div>
+          <div class="crow">
+            <input type="text" data-clip-comment="${i}" maxlength="600" value="${esc(c.comment || '')}" placeholder="${esc(tt('video_room.send_clip_comment_ph', 'Comment for this clip…'))}">
+            <input type="text" class="tm" data-clip-start="${i}" value="${esc(c.start != null ? fmtSecs(c.start) : '')}" placeholder="${esc(tt('video_room.send_clip_start_ph', 'min 1:30'))}" title="${esc(tt('video_room.send_clip_start_title', 'Start the video at this minute (YouTube / Vimeo)'))}">
+          </div>
+        </div>
+        <button class="x" data-clip-del="${i}" title="${esc(tt('video_room.send_clip_remove', 'Remove'))}"><i class="ti ti-x"></i></button>
+      </div>`).join('');
+  }
+
+  function renderVideoPick() {
+    const box = $('#vrSendVideoPick');
+    const chosen = new Set(sendClips.map(c => c.video_id));
+    const rows = VIDEOS.filter(v => !chosen.has(v.id)).slice(0, 60);
+    box.innerHTML = rows.length
+      ? rows.map(v => `
+          <div class="opt" data-add-video="${esc(v.id)}">
+            <span class="box"><i class="ti ti-check"></i></span>
+            <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
+            <span class="sub">${esc((PROV[v.provider] || PROV.other).label)}</span>
+          </div>`).join('')
+      : `<div class="none">${esc(tt('video_room.send_all_added', 'Every video is already in this send.'))}</div>`;
+  }
+
+  function renderPlayerPick() {
+    const q = ($('#vrSendPlayerSearch').value || '').trim().toLowerCase();
+    const rows = PLAYERS.filter(p => !q || playerName(p).toLowerCase().includes(q));
+    $('#vrSendPlayerCount').textContent = sendPlayers.size;
+    const box = $('#vrSendPlayerPick');
+    box.innerHTML = rows.length
+      ? rows.map(p => `
+          <div class="opt ${sendPlayers.has(p.id) ? 'is-on' : ''}" data-player="${esc(p.id)}">
+            <span class="box"><i class="ti ti-check"></i></span>
+            <span class="nm">${esc(playerName(p))}</span>
+            ${p.number != null ? `<span class="sub">#${esc(p.number)}</span>` : ''}
+          </div>`).join('')
+      : `<div class="none">${esc(tt('video_room.send_no_players', 'No players found.'))}</div>`;
+  }
+
+  async function openSendModal(videoIds) {
+    sendClips = (videoIds || []).map(id => {
+      const v = VIDEOS.find(x => x.id === id);
+      return { video_id: id, title: v?.title || '', comment: '', start: null };
+    });
+    sendPlayers.clear();
+    $('#vrSendMessage').value = '';
+    $('#vrSendPlayerSearch').value = '';
+    $('#vrSendExpiry').value = '30';
+    $('#vrSendForm').style.display = 'flex';
+    $('#vrSendDone').style.display = 'none';
+    renderSendClips();
+    // Si se abrió sin cortes (botón de la barra), el picker arranca desplegado.
+    $('#vrSendVideoPick').hidden = !!sendClips.length;
+    if (!sendClips.length) renderVideoPick();
+    sendBackdrop.classList.add('is-open');
+    await loadPlayers();
+    renderPlayerPick();
+  }
+  function closeSendModal() { sendBackdrop.classList.remove('is-open'); }
+
+  $('#vrSendBtn').addEventListener('click', () => openSendModal([]));
+  $('#vrSendCancel').addEventListener('click', closeSendModal);
+  $('#vrSendClose').addEventListener('click', closeSendModal);
+  sendBackdrop.addEventListener('click', e => { if (e.target === sendBackdrop) closeSendModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSendModal(); });
+
+  $('#vrSendAddClip').addEventListener('click', () => {
+    const pick = $('#vrSendVideoPick');
+    pick.hidden = !pick.hidden;
+    if (!pick.hidden) renderVideoPick();
+  });
+  $('#vrSendVideoPick').addEventListener('click', e => {
+    const opt = e.target.closest('[data-add-video]'); if (!opt) return;
+    const v = VIDEOS.find(x => x.id === opt.dataset.addVideo); if (!v) return;
+    sendClips.push({ video_id: v.id, title: v.title || '', comment: '', start: null });
+    renderSendClips(); renderVideoPick();
+  });
+  $('#vrSendClips').addEventListener('click', e => {
+    const del = e.target.closest('[data-clip-del]'); if (!del) return;
+    sendClips.splice(+del.dataset.clipDel, 1);
+    renderSendClips();
+    if (!$('#vrSendVideoPick').hidden) renderVideoPick();
+  });
+  $('#vrSendClips').addEventListener('input', e => {
+    const c = e.target.dataset.clipComment, s = e.target.dataset.clipStart;
+    if (c != null) sendClips[+c].comment = e.target.value;
+    if (s != null) sendClips[+s].start = parseSecs(e.target.value);
+  });
+
+  $('#vrSendPlayerSearch').addEventListener('input', renderPlayerPick);
+  $('#vrSendPlayerPick').addEventListener('click', e => {
+    const opt = e.target.closest('[data-player]'); if (!opt) return;
+    const id = opt.dataset.player;
+    if (sendPlayers.has(id)) sendPlayers.delete(id); else sendPlayers.add(id);
+    opt.classList.toggle('is-on', sendPlayers.has(id));
+    $('#vrSendPlayerCount').textContent = sendPlayers.size;
+  });
+  $('#vrSendAllPlayers').addEventListener('click', () => {
+    const q = ($('#vrSendPlayerSearch').value || '').trim().toLowerCase();
+    const rows = PLAYERS.filter(p => !q || playerName(p).toLowerCase().includes(q));
+    const allOn = rows.length && rows.every(p => sendPlayers.has(p.id));
+    rows.forEach(p => { if (allOn) sendPlayers.delete(p.id); else sendPlayers.add(p.id); });
+    renderPlayerPick();
+  });
+
+  $('#vrSendSave').addEventListener('click', async () => {
+    if (!sendClips.length)   { toast(tt('video_room.send_no_clips', 'Add at least one clip.')); return; }
+    if (!sendPlayers.size)   { toast(tt('video_room.send_pick_players', 'Pick at least one player.')); return; }
+
+    const btn = $('#vrSendSave');
+    btn.disabled = true;
+    const days  = parseInt($('#vrSendExpiry').value, 10) || 0;
+    const expAt = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
+    const msg   = $('#vrSendMessage').value.trim() || null;
+    const title = sendClips.length === 1
+      ? (sendClips[0].title || null)
+      : tt('video_room.send_default_title', `${sendClips.length} clips`, { count: sendClips.length });
+    const batchId  = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+    const teamId   = sessionStorage.getItem('cal_active_team') || null;
+
+    const { data: shares, error } = await window.sb.from('video_shares').insert(
+      [...sendPlayers].map(pid => ({
+        club_id: clubId, team_id: teamId, player_id: pid, batch_id: batchId,
+        title, message: msg, expires_at: expAt,
+        created_by: userId, created_by_name: profileName,
+      }))
+    ).select('id,token,player_id');
+
+    if (error || !shares?.length) {
+      btn.disabled = false;
+      alert(tt('video_room.send_error', 'Error creating links: ' + (error?.message || ''), { msg: error?.message || '' }));
+      return;
+    }
+
+    const items = [];
+    shares.forEach(s => sendClips.forEach((c, i) => items.push({
+      share_id: s.id, video_id: c.video_id, position: i,
+      comment: (c.comment || '').trim() || null, start_seconds: c.start ?? null,
+    })));
+    const { error: e2 } = await window.sb.from('video_share_items').insert(items);
+    btn.disabled = false;
+    if (e2) { alert(tt('video_room.send_error', 'Error creating links: ' + e2.message, { msg: e2.message })); return; }
+
+    // Los cortes también quedan vinculados al jugador en la biblioteca (video_players),
+    // así la card muestra "Player · X" sin tener que mirar los envíos.
+    const links = [];
+    sendClips.forEach(c => [...sendPlayers].forEach(pid => links.push({ video_id: c.video_id, player_id: pid })));
+    await window.sb.from('video_players').upsert(links, { onConflict: 'video_id,player_id', ignoreDuplicates: true });
+
+    renderSendLinks(shares);
+    toast(tt('video_room.send_created', `${shares.length} link${shares.length === 1 ? '' : 's'} ready`, { count: shares.length }));
+    await Promise.all([loadSends(), loadVideos()]);
+  });
+
+  function waHref(p, url) {
+    const txt = tt('video_room.send_wa_text', `Hi ${p ? (p.first_name || '') : ''}, here are your clips: ${url}`,
+                   { name: p?.first_name || '', url });
+    return 'https://wa.me/?text=' + encodeURIComponent(txt);
+  }
+  const tgHref = url => 'https://t.me/share/url?url=' + encodeURIComponent(url);
+
+  function renderSendLinks(shares) {
+    const byId = new Map(PLAYERS.map(p => [p.id, p]));
+    $('#vrSendForm').style.display = 'none';
+    $('#vrSendDone').style.display = 'flex';
+    $('#vrSendLinks').innerHTML = shares.map(s => {
+      const p = byId.get(s.player_id);
+      const url = shareUrl(s.token);
+      return `
+        <div class="vr-lrow" data-url="${esc(url)}">
+          <span class="nm">${esc(p ? playerName(p) : '—')}</span>
+          <span class="ract">
+            <button class="cp" title="${esc(tt('video_room.copy_link', 'Copy link'))}"><i class="ti ti-copy"></i></button>
+            <a class="wa" href="${esc(waHref(p, url))}" target="_blank" rel="noopener" title="WhatsApp" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--cm-border);border-radius:var(--cm-r-2);color:var(--cm-fg-muted)"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i></a>
+            <a class="tg" href="${esc(tgHref(url))}" target="_blank" rel="noopener" title="Telegram" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--cm-border);border-radius:var(--cm-r-2);color:var(--cm-fg-muted)"><i class="ti ti-brand-telegram" style="font-size:15px"></i></a>
+            <a class="op" href="${esc(url)}" target="_blank" rel="noopener" title="${esc(tt('video_room.send_preview', 'Preview'))}" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--cm-border);border-radius:var(--cm-r-2);color:var(--cm-fg-muted)"><i class="ti ti-external-link" style="font-size:15px"></i></a>
+          </span>
+        </div>`;
+    }).join('');
+  }
+  $('#vrSendLinks').addEventListener('click', e => {
+    const cp = e.target.closest('.cp'); if (!cp) return;
+    const url = cp.closest('.vr-lrow')?.dataset.url;
+    navigator.clipboard?.writeText(url).then(() => toast(tt('video_room.link_copied', 'Link copied')));
+  });
+  $('#vrSendCopyAll').addEventListener('click', () => {
+    const lines = [...document.querySelectorAll('#vrSendLinks .vr-lrow')]
+      .map(r => `${r.querySelector('.nm').textContent} — ${r.dataset.url}`).join('\n');
+    navigator.clipboard?.writeText(lines).then(() => toast(tt('video_room.send_all_copied', 'All links copied')));
+  });
+
+  // ── Pestaña "Enviados" ─────────────────────────────────────────────────────
+  async function loadSends() {
+    const { data, error } = await window.sb.from('video_shares')
+      .select('id,token,batch_id,title,message,created_at,expires_at,revoked,opened_at,open_count,seen_at,created_by_name,player_id,players(first_name,last_name,number),video_share_items(video_id,position,comment,start_seconds)')
+      .eq('club_id', clubId).order('created_at', { ascending: false }).limit(400);
+    if (error) { console.error('[VideoRoom] sends load error:', error); SENDS = []; }
+    else SENDS = data || [];
+    const batches = new Set(SENDS.map(s => s.batch_id));
+    $('#vrSendsBadge').textContent = batches.size;
+    if (!$('#vrSends').hidden) renderSends();
+  }
+
+  function renderSends() {
+    const box = $('#vrSends');
+    if (!SENDS.length) {
+      box.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ti-send"></i></span>
+        <h3>${esc(tt('video_room.sends_empty_title', 'Nothing sent yet'))}</h3>
+        <p>${esc(tt('video_room.sends_empty_body', 'Pick a clip, add your comments and send each player their own link.'))}</p>
+        <button class="cm-btn is-primary is-sm" id="vrSendsEmptyBtn"><i class="ti ti-send" style="font-size:15px"></i>${esc(tt('video_room.send_to_players', 'Send to players'))}</button></div>`;
+      $('#vrSendsEmptyBtn')?.addEventListener('click', () => openSendModal([]));
+      return;
+    }
+    const titleOf = vid => VIDEOS.find(v => v.id === vid)?.title || tt('video_room.untitled_video', 'Untitled video');
+
+    // Un envío = un batch. Las filas del batch comparten título, mensaje y cortes.
+    const batches = new Map();
+    SENDS.forEach(s => {
+      if (!batches.has(s.batch_id)) batches.set(s.batch_id, []);
+      batches.get(s.batch_id).push(s);
+    });
+
+    box.innerHTML = [...batches.values()].map(rows => {
+      const head    = rows[0];
+      const live    = rows.filter(r => !r.revoked);
+      const seen    = live.filter(r => r.seen_at).length;
+      const opened  = live.filter(r => r.opened_at && !r.seen_at).length;
+      const stCls   = live.length && seen === live.length ? 'ok' : (seen + opened) ? 'mid' : 'no';
+      const stTxt   = tt('video_room.sends_seen_of', `${seen}/${live.length} watched`, { seen, total: live.length });
+      const clips   = (head.video_share_items || []).slice().sort((a,b) => a.position - b.position);
+      const expired = head.expires_at && new Date(head.expires_at).getTime() < Date.now();
+
+      const recips = rows.map(r => {
+        const p    = r.players || {};
+        const name = `${(p.last_name || '').trim()}${p.last_name && p.first_name ? ', ' : ''}${(p.first_name || '').trim()}`.trim() || '—';
+        const url  = shareUrl(r.token);
+        const st   = r.revoked  ? { c:'',   i:'ti-link-off',      t: tt('video_room.sends_revoked', 'Revoked') }
+                   : r.seen_at  ? { c:'ok', i:'ti-circle-check-filled', t: tt('video_room.sends_watched', 'Watched') }
+                   : r.opened_at? { c:'',   i:'ti-eye',           t: tt('video_room.sends_opened', 'Opened') }
+                                : { c:'',   i:'ti-clock',         t: tt('video_room.sends_not_opened', 'Not opened') };
+        return `
+          <div class="vr-recip ${r.revoked ? 'is-revoked' : ''}" data-url="${esc(url)}" data-share="${esc(r.id)}">
+            <span class="nm">${esc(name)}</span>
+            <span class="stt ${st.c}"><i class="ti ${st.i}"></i>${esc(st.t)}</span>
+            <span class="ract">
+              <button data-act="copy" title="${esc(tt('video_room.copy_link', 'Copy link'))}"><i class="ti ti-copy"></i></button>
+              <button data-act="wa" data-first="${esc(p.first_name || '')}" title="WhatsApp"><i class="ti ti-brand-whatsapp"></i></button>
+              <button data-act="revoke" title="${esc(r.revoked ? tt('video_room.sends_restore', 'Restore link') : tt('video_room.sends_revoke', 'Revoke link'))}"><i class="ti ${r.revoked ? 'ti-rotate' : 'ti-ban'}"></i></button>
+            </span>
+          </div>`;
+      }).join('');
+
+      return `
+        <article class="vr-send" data-batch="${esc(head.batch_id)}">
+          <div class="sh">
+            <h3>${esc(head.title || tt('video_room.send_title', 'Send videos to players'))}</h3>
+            <span class="st ${stCls}"><i class="ti ti-eye-check"></i>${esc(stTxt)}</span>
+            <button class="more" data-del-batch="${esc(head.batch_id)}" title="${esc(tt('video_room.sends_delete', 'Delete send'))}" style="width:28px;height:28px;border:0;background:transparent;border-radius:var(--cm-r-2);color:var(--cm-fg-faint);display:flex;align-items:center;justify-content:center;cursor:pointer"><i class="ti ti-trash" style="font-size:16px"></i></button>
+          </div>
+          <div class="smeta">
+            <i class="ti ti-calendar-event"></i>${fmtDate(head.created_at)}
+            ${head.created_by_name ? `<span class="dotsep"></span>${esc(head.created_by_name)}` : ''}
+            <span class="dotsep"></span>${esc(tt('video_room.sends_players_n', `${rows.length} player${rows.length === 1 ? '' : 's'}`, { count: rows.length }))}
+            ${expired ? `<span class="dotsep"></span><span style="color:var(--cm-warning)">${esc(tt('video_room.sends_expired', 'Expired'))}</span>`
+                      : head.expires_at ? `<span class="dotsep"></span>${esc(tt('video_room.sends_expires', `Expires ${fmtDate(head.expires_at)}`, { date: fmtDate(head.expires_at) }))}` : ''}
+          </div>
+          ${head.message ? `<div class="smsg">${esc(head.message)}</div>` : ''}
+          <div class="sclips">${clips.map(c => `
+            <span class="vr-chip session"><i class="ti ti-player-play"></i><span>${esc(titleOf(c.video_id))}${c.start_seconds ? ` · ${fmtSecs(c.start_seconds)}` : ''}</span></span>`).join('')}</div>
+          <div class="vr-recips">${recips}</div>
+        </article>`;
+    }).join('');
+  }
+
+  $('#vrSends').addEventListener('click', async e => {
+    const delBatch = e.target.closest('[data-del-batch]');
+    if (delBatch) {
+      if (!confirm(tt('video_room.sends_delete_confirm', 'Delete this send? The links stop working. The videos stay in the library.'))) return;
+      const { error } = await window.sb.from('video_shares').delete().eq('batch_id', delBatch.dataset.delBatch);
+      if (error) { alert(error.message); return; }
+      toast(tt('video_room.sends_deleted', 'Send deleted'));
+      await loadSends(); renderSends();
+      return;
+    }
+    const btn = e.target.closest('.vr-recip .ract button'); if (!btn) return;
+    const row = btn.closest('.vr-recip');
+    const url = row.dataset.url;
+    if (btn.dataset.act === 'copy') { navigator.clipboard?.writeText(url).then(() => toast(tt('video_room.link_copied', 'Link copied'))); return; }
+    if (btn.dataset.act === 'wa')   { window.open(waHref({ first_name: btn.dataset.first }, url), '_blank', 'noopener'); return; }
+    if (btn.dataset.act === 'revoke') {
+      const share = SENDS.find(s => s.id === row.dataset.share); if (!share) return;
+      const { error } = await window.sb.from('video_shares').update({ revoked: !share.revoked }).eq('id', share.id);
+      if (error) { alert(error.message); return; }
+      toast(share.revoked ? tt('video_room.sends_restored', 'Link restored') : tt('video_room.sends_revoked_toast', 'Link revoked'));
+      await loadSends(); renderSends();
+    }
+  });
+
+  // ── Pestañas ───────────────────────────────────────────────────────────────
+  let tab = 'library';
+  function setTab(next) {
+    tab = next;
+    document.querySelectorAll('#vrTabs button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === next));
+    const isLib = next === 'library';
+    $('#vrBar').style.display = isLib ? '' : 'none';
+    $('#vrGrid').hidden  = !isLib;
+    $('#vrSends').hidden = isLib;
+    if (isLib) { renderCrumb(); render(); } else { $('#vrCrumb').hidden = true; renderSends(); }
+  }
+  $('#vrTabs').addEventListener('click', e => {
+    const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab);
+  });
+  document.addEventListener('cm:langchanged', () => { if (tab === 'sends') renderSends(); });
+
   // ── Go ─────────────────────────────────────────────────────────────────────
   await loadVideos();
+  await loadSends();
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('tab') === 'sends') setTab('sends');
+  // Video Detail manda acá con ?send=<id> para abrir el envío con ese corte cargado.
+  const sendId = qs.get('send');
+  if (sendId && VIDEOS.some(v => v.id === sendId)) await openSendModal([sendId]);
 })();
 </script>
 

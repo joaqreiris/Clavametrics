@@ -533,6 +533,7 @@
           <button class="cm-btn is-primary" id="vdOpen"><i class="ti ${prov.icon}" style="font-size:16px"></i>${esc(openLabel)}<i class="ti ti-external-link" style="font-size:15px"></i></button>
           ${dlUrl ? `<button class="cm-btn" id="vdDownload"><i class="ti ti-download" style="font-size:15px"></i>${esc(tt('video_detail.download', 'Download'))}</button>` : ''}
           <button class="cm-btn" id="vdCopy"><i class="ti ti-copy" style="font-size:15px"></i>${esc(tt('video_detail.copy_link', 'Copy link'))}</button>
+          <button class="cm-btn" id="vdSend"><i class="ti ti-send" style="font-size:15px"></i>${esc(tt('video_detail.send_to_players', 'Send to players'))}</button>
         </div>
         <div class="vd-titlecard">
           <h1>${esc(v.title || tt('video_detail.untitled_video', 'Untitled video'))}</h1>
@@ -558,6 +559,14 @@
         <div class="vd-panel">
           <div class="vd-panel-hd"><i class="ti ti-vector"></i><h2>${esc(tt('video_detail.exercise', 'Exercise'))}</h2></div>
           <div class="vd-panel-bd" id="vdExerciseBd"><div class="vd-empty-links">${esc(tt('common.loading', 'Loading…'))}</div></div>
+        </div>
+
+        <div class="vd-panel">
+          <div class="vd-panel-hd">
+            <i class="ti ti-send"></i><h2>${esc(tt('video_detail.sent_to', 'Sent to players'))}</h2>
+            <button class="add" id="vdSendBtn2"><i class="ti ti-plus"></i>${esc(tt('video_detail.send_action', 'Send'))}</button>
+          </div>
+          <div class="vd-panel-bd" id="vdSends"><div class="vd-empty-links">${esc(tt('common.loading', 'Loading…'))}</div></div>
         </div>
 
         <div class="vd-panel">
@@ -596,6 +605,10 @@
   // ── Actions ──────────────────────────────────────────────────────────────────
   document.getElementById('vdOpen').addEventListener('click', () => window.open(safeUrl(v.url), '_blank', 'noopener'));
   document.getElementById('vdCopy').addEventListener('click', () => navigator.clipboard?.writeText(v.url).then(() => toast(tt('video_detail.link_copied', 'Link copied'))));
+  // El armado del envío vive en Video Room (un solo modal): venimos con ?send=<id>.
+  const goSend = () => { window.location.href = 'Video%20Room.html?send=' + encodeURIComponent(id); };
+  document.getElementById('vdSend').addEventListener('click', goSend);
+  document.getElementById('vdSendBtn2')?.addEventListener('click', goSend);
   const dlBtn = document.getElementById('vdDownload');
   if (dlBtn) dlBtn.addEventListener('click', () => {
     window.open(safeUrl(dlUrl), '_blank', 'noopener');
@@ -995,8 +1008,34 @@
     });
   })();
 
+  // ── Enviado a jugadores (estado de cada link) ────────────────────────────────
+  async function loadVideoSends() {
+    const box = document.getElementById('vdSends'); if (!box) return;
+    const empty = `<div class="vd-empty-links">${esc(tt('video_detail.no_sends', 'Not sent to any player yet.'))}</div>`;
+    const { data: items } = await window.sb.from('video_share_items').select('share_id').eq('video_id', id);
+    const sids = [...new Set((items || []).map(r => r.share_id))];
+    if (!sids.length) { box.innerHTML = empty; return; }
+    const { data: shares } = await window.sb.from('video_shares')
+      .select('id,token,created_at,revoked,opened_at,seen_at,players(first_name,last_name)')
+      .in('id', sids).order('created_at', { ascending: false });
+    if (!shares?.length) { box.innerHTML = empty; return; }
+    const shareBase = new URL('video-share.html', location.href).href;
+    box.innerHTML = `<div class="vd-lchips">${shares.map(s => {
+      const p = s.players || {};
+      const name = (p.last_name || p.first_name || '—');
+      const st = s.revoked   ? { i:'ti-link-off',            t: tt('video_detail.send_revoked', 'Revoked') }
+               : s.seen_at   ? { i:'ti-circle-check-filled', t: tt('video_detail.send_watched', 'Watched') }
+               : s.opened_at ? { i:'ti-eye',                 t: tt('video_detail.send_opened', 'Opened') }
+                             : { i:'ti-clock',               t: tt('video_detail.send_not_opened', 'Not opened') };
+      return `<a class="vd-lchip player" href="${esc(shareBase)}?token=${encodeURIComponent(s.token)}" target="_blank" rel="noopener"
+                 title="${esc(st.t)} · ${esc(fmtDate(s.created_at))}" style="text-decoration:none">
+                <i class="ti ${st.i} lead"></i><span class="lbl">${esc(name)}</span></a>`;
+    }).join('')}</div>`;
+  }
+  await loadVideoSends();
+
   // Re-render JS-built content on language change (player node is preserved).
-  document.addEventListener('cm:langchanged', () => { renderMain(); loadLinks(); renderExercisePanel(); });
+  document.addEventListener('cm:langchanged', () => { renderMain(); loadLinks(); renderExercisePanel(); loadVideoSends(); });
 })();
 </script>
 
