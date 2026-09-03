@@ -68,7 +68,9 @@
   }
 
   /* Page --------------------------------------------------- */
-  .tr-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+  /* margin-inline:auto — en monitores anchos el bloque quedaba pegado a la izquierda con
+     todo el aire sobrante a la derecha; centrado, las dos columnas caen a los lados del eje. */
+  .tr-page { padding:24px 28px 64px; max-width:1400px; width:100%; margin-inline:auto; }
   .tr-page > .cm-page-header { align-items:flex-start; margin-bottom:16px; }
   .tr-page h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
   .tr-page #pgSub { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
@@ -479,6 +481,14 @@
     const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
     return t ? `${base} · ${t}` : base;
   }
+  // Negrita en el mensaje: WhatsApp marca con *un asterisco*; Telegram, con **dos** (y sólo
+  // en Desktop, que es el único cliente que convierte markdown al escribir — en el móvil se
+  // ven los asteriscos, que es la degradación aceptable).
+  function mdBold(txt, channel) {
+    if (!txt) return '';
+    const m = channel === 'tg' ? '**' : '*';
+    return m + txt + m;
+  }
   // Solo hace falta desambiguar cuando el día tiene más de una sesión.
   function currentRemindLabel() {
     if ((state.todaysSessions || []).length < 2) return '';
@@ -626,7 +636,7 @@
 
   function pendingCardHTML(p) {
     const lastName = p.name.split(/\s+/).pop();
-    const sessLabel = currentRemindLabel();
+    const sessLabel = mdBold(currentRemindLabel(), 'wa');   // este botón siempre abre WhatsApp
     const waMsg = T.escape(sessLabel
       ? tt('rpe.waRemindSess', `Hi ${lastName} — need your RPE for ${sessLabel} (1–10) when you get a sec, thanks!`, { name: lastName, session: sessLabel })
       : tt('rpe.waRemind', `Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`, { name: lastName }));
@@ -1516,10 +1526,13 @@
         const names = picked.map(x => x.p.name).join(', ');
         // Con doble sesión el link va atado a una sola de ellas y los dos recordatorios llegan
         // al mismo grupo: sin el nombre de la sesión el jugador no sabe cuál le están pidiendo.
-        const sLabel = single && (state.todaysSessions || []).length >= 2 ? (single.label || '') : '';
-        // Una línea por sesión: "GIMNASIO · 08:15: Pérez, Gómez"
-        const lines = bySess.map(g => tt('rpe.remindLineSess', `${g.label}: ${g.names.join(', ')}`,
-          { session: g.label, names: g.names.join(', ') })).join('\n');
+        // El nombre de la sesión va en negrita: es lo que el jugador tiene que ver de un
+        // saque cuando el mensaje cae en el grupo.
+        const bold = t => mdBold(t, channel);
+        const sLabel = single && (state.todaysSessions || []).length >= 2 ? bold(single.label || '') : '';
+        // Una línea por sesión: "*GIMNASIO · 08:15*: Pérez, Gómez"
+        const lines = bySess.map(g => tt('rpe.remindLineSess', `${bold(g.label)}: ${g.names.join(', ')}`,
+          { session: bold(g.label), names: g.names.join(', ') })).join('\n');
         let text;
         if (!single) {
           text = channel === 'tg'
