@@ -976,6 +976,11 @@ function checkOldDate() {
 }
 let _phaseModalPhaseId = null, _phaseModalInjId = null;
 let _returnManuallyEdited = false;
+// Firma del protocolo con el que se ABRIÓ la edición. Mientras no cambie, la fecha guardada
+// manda (puede ser una corrección a mano o el reflow por avance real); cuando cambia — típico
+// caso: llega la resonancia y se carga el grado BAMIC — se recalcula la estimación y se
+// re-encadena la línea de tiempo con el protocolo nuevo.
+let _editProtoSig = null, _editOrigReturn = null;
 let _clubId = null, _profile = null;
 // Time scope for body map + type breakdown — an ISO [_scopeFrom, _scopeTo] window
 // (either bound may be null = unbounded). Driven by the CMDateRange picker.
@@ -2008,6 +2013,65 @@ async function reflowPhaseDates(injId) {
   applyFilters();
 }
 
+// ═══════════════ RESINCRONIZAR FASES AL CAMBIAR DE PROTOCOLO ═══════════════
+// Caso típico: la lesión se carga el día 1 con el protocolo por gravedad y días después llega
+// la resonancia con el grado BAMIC (o se corrige la gravedad / sub-clasificación). Los tiempos
+// del protocolo cambian, así que la línea de tiempo tiene que cambiar con ellos.
+// Lo ya cumplido es registro clínico y no se toca: las fases 'done' quedan intactas (fechas
+// reales, criterios marcados, notas). Las abiertas toman las duraciones del protocolo nuevo,
+// se agregan o quitan fases si el protocolo nuevo tiene otra cantidad, y al final
+// reflowPhaseDates las re-encadena desde el avance real y baja el nuevo «Regreso est.».
+async function resyncPhasesToProtocol(injId, { start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area }) {
+  const cur = _phasesMap[injId];
+  if (!cur || !cur.length) return false;
+  const target = buildPhases(injId, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area);
+  if (!target || !target.length) return false;
+
+  const ordered = [...cur].sort((a, b) => a.phase_number - b.phase_number);
+  const updates = [], inserts = [], deletes = [];
+
+  ordered.forEach(p => {
+    const t = target[p.phase_number - 1];
+    if (!t) {
+      // El protocolo nuevo es más corto: sobra esta fase. Solo se borra si no tiene historia.
+      if (p.status !== 'done') deletes.push(p);
+      return;
+    }
+    if (p.status === 'done') return; // registro histórico: intacto
+    // Criterios: si el cuerpo médico ya marcó algo en esta fase, se conservan los suyos
+    // (no le borramos el trabajo hecho); si está sin tocar, adopta los del protocolo nuevo.
+    const touched = p.criteria_completed && Object.keys(p.criteria_completed).length > 0;
+    const patch = {
+      phase_name: t.phase_name, phase_type: t.phase_type,
+      start_date: t.start_date, end_date: t.end_date,
+    };
+    if (!touched) { patch.criteria = t.criteria; patch.criteria_items = t.criteria_items; }
+    const changed = Object.keys(patch).some(k => JSON.stringify(p[k] ?? null) !== JSON.stringify(patch[k] ?? null));
+    if (changed) { Object.assign(p, patch); updates.push({ id: p.id, patch }); }
+  });
+
+  // El protocolo nuevo es más largo: faltan fases al final.
+  const maxNum = ordered[ordered.length - 1]?.phase_number || 0;
+  target.slice(maxNum).forEach(t => inserts.push({ ...t, status: 'pending' }));
+
+  if (!updates.length && !inserts.length && !deletes.length) return false;
+
+  try {
+    if (deletes.length) {
+      await window.sb.from('injury_phases').delete().in('id', deletes.map(p => p.id));
+      _phasesMap[injId] = _phasesMap[injId].filter(p => !deletes.some(d => d.id === p.id));
+    }
+    await Promise.all(updates.map(u => window.sb.from('injury_phases').update(u.patch).eq('id', u.id)));
+    if (inserts.length) {
+      const { data: added } = await window.sb.from('injury_phases').insert(inserts).select();
+      if (added) _phasesMap[injId] = [..._phasesMap[injId], ...added];
+    }
+  } catch(e) { console.warn('[Injuries] phase resync failed:', e.message); }
+
+  await reflowPhaseDates(injId);
+  return true;
+}
+
 async function savePhaseStatus(status) {
   const phaseId = _phaseModalPhaseId; // capture before closePhaseModal clears globals
   const injId   = _phaseModalInjId;
@@ -2288,6 +2352,19 @@ async function savePhaseStatus(status) {
   // Auto-calculate expected return from category + sub-classification
   function autoFillReturn() {
     if (_returnManuallyEdited) return;
+    // Editando un caso ya creado: la fecha guardada se respeta mientras el protocolo sea el
+    // mismo (viene de una corrección a mano o del reflow por avance real). Recién cuando
+    // cambia el protocolo — p. ej. se carga el grado BAMIC de la resonancia — se propone la
+    // fecha nueva.
+    if (_editingInjuryId && _editProtoSig !== null && protoSigFromModal() === _editProtoSig) {
+      // Volvió al protocolo con el que se abrió (se probó un grado y se deshizo): vuelve
+      // también la fecha que tenía guardada.
+      const retEl = document.getElementById('logReturn');
+      if (retEl && _editOrigReturn !== null && retEl.value !== _editOrigReturn) retEl.value = _editOrigReturn;
+      const h = document.getElementById('logReturnHint');
+      if (h) h.style.display = 'none';
+      return;
+    }
     const { est, bamicGrade, injType, injCategory, subCls } = protocolEstimate();
     const hintEl = document.getElementById('logReturnHint');
     if (hintEl) hintEl.style.color = 'var(--cm-accent)';
@@ -2997,6 +3074,7 @@ function openLogModal() {
   _hideAllSubClsSections();
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = false;
+  _editProtoSig = null; _editOrigReturn = null;
   resetLogCriteria();
   document.getElementById('logModeWrap').style.display = '';
   document.getElementById('logModeDesc').style.display = '';
@@ -3040,8 +3118,11 @@ function openEditInjury(id) {
     document.getElementById('boneHighRiskAlert').style.display = inj.sub_classification === 'stress_high' ? 'flex' : 'none';
   }
   document.getElementById('logReturnHint').style.display = 'none';
-  _returnManuallyEdited = !!(inj.expected_return);
-  resetLogCriteria(); // editar una lesión no regenera las fases: los criterios se tocan en cada fase
+  // La fecha guardada no se pisa por sí sola: solo si cambia el protocolo (ver autoFillReturn).
+  _returnManuallyEdited = false;
+  _editProtoSig   = protoSigFromModal();
+  _editOrigReturn = inj.expected_return || '';
+  resetLogCriteria(); // editar no propone criterios nuevos: se tocan fase por fase
   // Historical/active toggle is only for new records — hide when editing
   _logMode = 'active';
   document.getElementById('logModeWrap').style.display = 'none';
@@ -3090,8 +3171,7 @@ function renderLogCriteria() {
     resetLogCriteria(); return;
   }
 
-  const sig = [startDate, injCategory, severity, bamicGrade || '', subCls || '', bodyArea || '',
-               /acl|cruciate/i.test(injType || '') ? 'acl' : ''].join('|');
+  const sig = protoSigFromModal();
   if (sig === _logCritSig && _logCriteria) { wrap.style.display = ''; return; } // no pisar lo ya editado
 
   const phases = buildPhases(null, startDate, severity, injType, bamicGrade, injCategory, subCls, bodyArea) || [];
@@ -3144,6 +3224,21 @@ function applyLogCriteria(phases) {
   return phases;
 }
 
+// Todo lo que define qué protocolo se genera (tiempos + criterios), en una sola cadena:
+// si esto no cambió, el protocolo es el mismo.
+function protoSigFromModal() {
+  const injCategory = document.getElementById('logCategory')?.value || '';
+  return [
+    document.getElementById('logStart')?.value || '',
+    injCategory,
+    document.getElementById('logSev')?.value || '',
+    document.getElementById('logBamic')?.value || '',
+    getSubClsFromModal(injCategory) || '',
+    document.getElementById('logAreaSel')?.value || '',
+    /acl|cruciate/i.test(document.getElementById('logType')?.value || '') ? 'acl' : '',
+  ].join('|');
+}
+
 function getSubClsFromModal(category) {
   if (category === 'ligament') return document.getElementById('logLigamentGrade')?.value || null;
   if (category === 'tendon')   return document.getElementById('logTendonStage')?.value   || null;
@@ -3173,10 +3268,24 @@ async function saveInjury() {
   const payload = { player_id, injury_type, injury_category, sub_classification, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes, bamic_grade };
 
   if (_editingInjuryId) {
-    const { error } = await window.sb.from('injuries').update(payload).eq('id', _editingInjuryId);
+    const injId      = _editingInjuryId;
+    const protoMoved = _editProtoSig !== null && protoSigFromModal() !== _editProtoSig;
+    const { error } = await window.sb.from('injuries').update(payload).eq('id', injId);
     if (error) { alert(tt('injuries.err_updating', `Error updating: ${error.message}`, { msg: error.message })); return; }
-    const idx = _allInjuries.findIndex(i => i.id === _editingInjuryId);
+    const idx = _allInjuries.findIndex(i => i.id === injId);
     if (idx >= 0) Object.assign(_allInjuries[idx], payload);
+    // Cambió el protocolo (grado BAMIC de la resonancia, gravedad, sub-clasificación…):
+    // la línea de tiempo de fases se re-encadena con los tiempos nuevos.
+    if (protoMoved && _allInjuries[idx] && _allInjuries[idx].status !== 'cleared') {
+      const manualRet = _returnManuallyEdited ? expected_return : null;
+      await resyncPhasesToProtocol(injId, { start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area: body_area || null });
+      // El reflow alinea el «Regreso est.» con el fin de la última fase; si el cuerpo médico
+      // fijó una fecha a mano en este mismo guardado, esa manda.
+      if (manualRet && _allInjuries[idx] && _allInjuries[idx].expected_return !== manualRet) {
+        _allInjuries[idx].expected_return = manualRet;
+        await window.sb.from('injuries').update({ expected_return: manualRet }).eq('id', injId);
+      }
+    }
   } else {
     const isHistorical = _logMode === 'historical';
     if (isHistorical && !expected_return) {
