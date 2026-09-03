@@ -76,6 +76,39 @@
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
   .tr-gate-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
 
+  /* ── Vista lado a lado (día de doble sesión) ─────────────────────────────
+     Las dos sesiones del día, cada una con su cabecera y su lista. Debajo de
+     1100px de ancho útil las columnas se apilan solas: en media pantalla las
+     tarjetas de siempre no entran. */
+  .rpe-split { display:grid; grid-template-columns:repeat(auto-fit, minmax(390px, 1fr)); gap:16px; align-items:start; }
+  .rpe-col { min-width:0; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); padding:14px 14px 16px; }
+  .rc-head { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--cm-border); }
+  .rc-head .ic { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:var(--cm-r-3); background:var(--cm-bg-soft); color:var(--cm-fg-muted); flex-shrink:0; }
+  .rc-head .ic .ti { font-size:17px; }
+  .rc-head .tx { min-width:0; flex:1; }
+  .rc-head .nm { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rc-head .tm { display:block; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:4px; }
+  .rc-head .nums { font:600 15px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
+  .rc-head .nums span { color:var(--cm-fg-faint); font-weight:500; }
+  .rc-head .nums.is-done { color:var(--cm-success); }
+  .rc-meta { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:10px 2px 12px; font:500 11px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .rc-meta b { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); }
+  .rc-empty { padding:22px 8px; text-align:center; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  /* Tarjetas en media pantalla: la cabecera de 4 columnas fijas no entra */
+  /* Dos filas: identidad + RPE arriba, cifras + banderas abajo */
+  .rpe-split .pc-head { grid-template-columns:1fr auto; gap:10px 14px; padding:12px 14px; }
+  .rpe-split .pc-flags { justify-self:end; }
+  .rpe-split .pc-pending-head { gap:10px; padding:10px 12px; }
+  .rpe-split .cm-avatar.is-md { width:34px; height:34px; }
+  /* Franja del recordatorio conjunto */
+  .rpe-remind-all { display:flex; align-items:center; gap:12px; padding:12px 16px; margin-bottom:14px; background:var(--cm-warning-bg, var(--cm-bg-soft)); border:1px solid var(--cm-warning-bd, var(--cm-border)); border-radius:var(--cm-r-4); }
+  .rpe-remind-all .ic { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:var(--cm-r-3); background:var(--cm-surface); color:var(--cm-warning, var(--cm-fg-muted)); flex-shrink:0; }
+  .rpe-remind-all .tx { flex:1; min-width:0; }
+  .rpe-remind-all .t { font:600 13.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .rpe-remind-all .s { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-top:3px; }
+  /* Agrupador por sesión dentro del modal de recordatorio */
+  .rm-grp { font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-faint); padding:12px 6px 5px; }
+
   /* Duración editable por jugador (solo partidos): la figura es clickeable */
   .pc-fig .v.pc-min-edit { cursor:pointer; border-radius:6px; padding:1px 4px; margin:-1px -4px; }
   .pc-fig .v.pc-min-edit:hover { background:var(--cm-bg-soft); }
@@ -204,6 +237,9 @@
         </div>
         <div class="tr-list" id="listPending" style="gap:8px;"></div>
       </div>
+
+      <!-- Las dos (o más) sesiones del día, lado a lado. Lo llena renderSplit(). -->
+      <div id="splitWrap" style="display:none;"></div>
 
       <!-- Loading skeleton (wired next step) -->
       <div id="skeleton" style="display:none;">
@@ -380,7 +416,9 @@
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
                   currentSessionId:null, currentIsMatch:false, currentMatchKind:null, sessionDuration:null,
-                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0 };
+                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0,
+                  boards:{},        // vista lado a lado: un board por sesión del día
+                  remindPool:[] };  // a quién ofrece recordar el modal abierto (con su sesión)
 
   const T = window.Triage;
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
@@ -650,42 +688,68 @@
   }
 
   /* ── Render ── */
-  // ── Session gate builders (double-session chooser / no-session-today) ──
-  // Respondieron/total por sesión en los botones del chooser, para saber de un vistazo
-  // cuál board necesita atención. Async tras el render; los partidos del calendario aún
-  // sin materializar ('evt:…') no tienen board todavía → sin contador.
-  async function loadChooserCounts() {
-    const list = (state.todaysSessions || []).filter(s => !String(s.id).startsWith('evt:'));
-    await Promise.all(list.map(async s => {
-      try {
-        const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: s.id });
-        if (error) return;
-        const rows = data || [];
-        const done = rows.filter(r => r.responded).length;
-        const el = document.querySelector(`.ch-cnt[data-cnt="${s.id}"]`);
-        if (!el) return; // la vista cambió mientras cargaba
-        el.textContent = `· ${done}/${rows.length}`;
-        if (rows.length && done === rows.length) {
-          el.textContent += ' ✓';
-          el.style.color = 'var(--cm-success, #16A34A)';
-        }
-      } catch (_) {}
-    }));
+  // ── Vista lado a lado: una columna por sesión del día ──
+  const SESS_ICON = { gym: 'ti-barbell', match: 'ti-trophy' };
+  function sessIcon(s) { return SESS_ICON[s.session_type] || 'ti-run'; }
+
+  // Las tarjetas leen la media y el máximo de sRPE del estado global (state.avgSrpe /
+  // maxSrpe / currentIsMatch). Con dos boards en pantalla cada columna tiene los suyos:
+  // se prestan mientras se arma su HTML y se devuelven al terminar.
+  function withBoardCtx(sess, board, fn) {
+    const keep = { avgSrpe: state.avgSrpe, maxSrpe: state.maxSrpe, currentIsMatch: state.currentIsMatch, currentSessionId: state.currentSessionId };
+    // currentIsMatch queda en false a propósito: la edición de minutos por jugador es del
+    // board de la sesión (su listener cuelga de #listResponded) y acá no funcionaría.
+    Object.assign(state, {
+      avgSrpe: board.avgSrpe, maxSrpe: board.maxSrpe,
+      currentIsMatch: false, currentSessionId: sess.id,
+    });
+    try { return fn(); } finally { Object.assign(state, keep); }
   }
 
-  function chooserHTML() {
+  function colHTML(s) {
+    const board = state.boards[s.id];
+    const label = T.escape(s.title || s.session_type || tt('rpe.sessionFallback', 'Session'));
+    const time = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    const open = `<button class="cm-btn is-ghost is-sm" data-pick="${s.id}">${tt('rpe.openSession','Open session')}<i class="ti ti-arrow-right"></i></button>`;
+    const head = `<header class="rc-head">
+        <span class="ic"><i class="ti ${sessIcon(s)}"></i></span>
+        <div class="tx"><div class="nm">${label}</div>${time ? `<span class="tm">${time}</span>` : ''}</div>
+        ${board ? `<span class="nums${board.total && board.responders.length === board.total ? ' is-done' : ''}">${board.responders.length}<span>/${board.total}</span></span>` : ''}
+        ${open}
+      </header>`;
+    // Partido del calendario todavía sin materializar: no hay board hasta abrirlo.
+    if (!board) {
+      return `<section class="rpe-col">${head}
+        <div class="rc-empty">${tt('rpe.openToLoad','Open the session to load its RPE.')}</div></section>`;
+    }
+    const high = board.responders.filter(p => p.rpe != null && p.rpe >= 8).length;
+    const meta = `<div class="rc-meta">
+        <span>${tt('rpe.avgSrpe','Avg sRPE')} <b>${board.avgSrpe || 0}</b></span>
+        <span>${tt('rpe.highRpe','High RPE (≥8)')} <b>${high}</b></span>
+        <span>${tt('rpe.pending','Pending')} <b>${board.pending.length}</b></span>
+      </div>`;
+    const list = state.tab === 'responded' ? board.responders : board.pending;
+    const body = list.length
+      ? withBoardCtx(s, board, () => `<div class="tr-list"${state.tab === 'responded' ? '' : ' style="gap:8px"'}>${list.map(state.tab === 'responded' ? cardHTML : pendingCardHTML).join('')}</div>`)
+      : `<div class="rc-empty">${state.tab === 'responded'
+            ? tt('rpe.noneRespondedYet','Nobody has submitted yet.')
+            : tt('rpe.allSubmitted','Everyone submitted. Nothing pending.')}</div>`;
+    return `<section class="rpe-col">${head}${meta}${body}</section>`;
+  }
+
+  function splitHTML() {
     const list = state.todaysSessions;
-    const n = list.length;
-    const title = n === 2 ? tt('rpe.twoSessionsToday', 'Two sessions today') : tt('rpe.nSessionsToday', `${n} sessions today`, { count: n });
-    const btns = list.map(s =>
-      `<button class="cm-btn is-secondary" data-pick="${s.id}"><i class="ti ti-player-play"></i>${T.escape(todaySessionBtnLabel(s))}<span class="ch-cnt" data-cnt="${s.id}" style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px;"></span></button>`
-    ).join('');
-    return `<div class="tr-empty">
-      <span class="ic"><i class="ti ti-versions"></i></span>
-      <h3>${title}</h3>
-      <p>${tt('rpe.whichReview','Which one do you want to review?')}</p>
-      <div class="tr-gate-actions">${btns}</div>
-    </div>`;
+    const missing = list.reduce((n, s) => n + (state.boards[s.id]?.pending.length || 0), 0);
+    // Una sola franja para recordar los que faltan en cualquiera de las sesiones.
+    const bar = missing ? `<div class="rpe-remind-all">
+        <span class="ic"><i class="ti ti-clock-pause"></i></span>
+        <div class="tx">
+          <div class="t">${tt('rpe.missingAcross', `${missing} RPE missing across today's sessions`, { count: missing })}</div>
+          <div class="s">${tt('rpe.remindSub','Session ended recently · RPE window is best within 30 min of finishing.')}</div>
+        </div>
+        <button class="cm-btn is-wa" id="remindAllBtn"><i class="ti ti-brand-whatsapp"></i>${tt('rpe.remindMissing', `Remind missing (${missing})`, { count: missing })}</button>
+      </div>` : '';
+    return bar + `<div class="rpe-split">${list.map(colHTML).join('')}</div>`;
   }
   function noSessionHTML() {
     const past = state.sessionsList[0]; // most recent overall — no today sessions in this branch
@@ -715,23 +779,54 @@
     if (backBtn) backBtn.style.display =
       (state.view === 'board' && (state.todaysSessions || []).length >= 2) ? '' : 'none';
 
-    // Session gate: on a double-session day (chooser) or a day with no session
-    // (empty state), there is no single expected participant set — hide the
-    // summary/lists/counts and show the gate. Capture + orphans stay visible.
-    if (state.view === 'chooser' || state.view === 'nosession') {
+    const split = document.getElementById('splitWrap');
+
+    // Día sin sesión: no hay grupo esperado que contar — se esconde todo el board y queda
+    // el cartel. La captura y los sueltos siguen visibles.
+    if (state.view === 'nosession') {
       summaryCard.style.display = 'none';
       toolbar.style.display = 'none';
       respWrap.style.display = 'none';
       pendWrap.style.display = 'none';
+      split.style.display = 'none';
       skel.style.display = 'none';
       empty.style.display = 'none';
       if (err) err.style.display = 'none';
       gate.style.display = '';
-      gate.innerHTML = (state.view === 'chooser') ? chooserHTML() : noSessionHTML();
-      if (state.view === 'chooser') loadChooserCounts();
+      gate.innerHTML = noSessionHTML();
       orphanWrap.style.display = state.orphans.length ? '' : 'none';
       return;
     }
+
+    // Día de doble sesión: las dos columnas, con las pestañas de arriba mandando en ambas.
+    // No hay tarjeta de resumen — cada columna trae la suya.
+    if (state.view === 'both') {
+      gate.style.display = 'none';
+      summaryCard.style.display = 'none';
+      respWrap.style.display = 'none';
+      pendWrap.style.display = 'none';
+      empty.style.display = 'none';
+      const boards = state.todaysSessions.map(s => state.boards[s.id]).filter(Boolean);
+      const nResp = boards.reduce((n, b) => n + b.responders.length, 0);
+      const nPend = boards.reduce((n, b) => n + b.pending.length, 0);
+      document.getElementById('pipResp').textContent = nResp;
+      document.getElementById('pipPend').textContent = nPend;
+      toolbar.style.display = state.loading ? 'none' : '';
+      // Ordenar y cambiar de vista de tarjeta aplican a una sola lista: no acá.
+      ['rmMoveBtn'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+      toolbar.querySelectorAll('.tr-sortnote, .tr-layout-toggle').forEach(el => { el.style.display = 'none'; });
+      skel.style.display = state.loading ? '' : 'none';
+      if (state.loading) skel.querySelector('.tr-list').innerHTML = skeletonHTML();
+      if (err) err.style.display = state.error ? '' : 'none';
+      split.style.display = (state.loading || state.error) ? 'none' : '';
+      if (!state.loading && !state.error) split.innerHTML = splitHTML();
+      orphanWrap.style.display = (state.loading || state.error || !state.orphans.length) ? 'none' : '';
+      return;
+    }
+
+    // Board de una sesión: lo de siempre (lo que la vista doble esconde vuelve).
+    split.style.display = 'none';
+    toolbar.querySelectorAll('.tr-sortnote, .tr-layout-toggle').forEach(el => { el.style.display = ''; });
     gate.style.display = 'none';
     summaryCard.style.display = '';
     toolbar.style.display = '';
@@ -854,6 +949,65 @@
     } catch (e) { console.warn('[RPE] recent_matches:', e && e.message); state.matches = []; }
   }
 
+  // Las filas de session_rpe_status → el board de una sesión (listas, media, totales). Vive
+  // aparte del estado global porque en la vista lado a lado se arma un board por sesión.
+  function buildBoard(rows, sessionId) {
+    // Session duration drives the sRPE default. Con minutos por jugador, las filas ya no
+    // comparten duración: el campo del header muestra la de la SESIÓN (default), no la de
+    // una fila cualquiera.
+    const metaDur = state.sessionsById[sessionId]?.duration;
+    const durRow = rows.find(r => r.duration != null);
+    const sessionDuration = (metaDur != null) ? Number(metaDur) : (durRow ? Number(durRow.duration) : null);
+    const all = rows.map(modelFromRow);
+    // El lesionado/limitado cuenta como uno más del board (total, pendientes, remind):
+    // lo único que no hace es mover la media de la sesión. Va al final de su lista,
+    // marcado, para que se lea de un vistazo que su carga es de trabajo diferenciado.
+    const out = p => isOutOfAvg(p) ? 1 : 0;
+    const responders = all.filter(p => p.responded);
+    const pending = all.filter(p => !p.responded);
+    // highest-first: rpe DESC, then load (sRPE) DESC — los diferenciados al final
+    responders.sort((a, b) => (out(a) - out(b)) || (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
+    pending.sort((a, b) => out(a) - out(b));
+    // La media de la sesión sale del grupo que entrenó completo: los lesionados y los
+    // de trabajo limitado quedan fuera (su carga distorsiona la referencia del equipo).
+    const loads = responders.filter(p => !isOutOfAvg(p)).map(p => p.load).filter(v => v != null);
+    const allLoads = responders.map(p => p.load).filter(v => v != null);
+    return {
+      sessionDuration,
+      responders, pending,
+      total: all.length,
+      avgSrpe: loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0,
+      maxSrpe: allLoads.length ? Math.max(...allLoads) : 1,
+      excludedFromAvg: responders.filter(p => isOutOfAvg(p) && p.load != null).length,
+    };
+  }
+
+  // Vista lado a lado: un board por cada sesión de hoy, en paralelo. Los partidos del
+  // calendario todavía sin materializar ('evt:…') no tienen board — su columna muestra
+  // solo la cabecera y se materializan recién cuando el staff la abre.
+  async function loadBoth() {
+    state.view = 'both';
+    state.loading = true; state.error = false;
+    document.getElementById('pgSub').textContent =
+      tt('rpe.todayNSessions', `Today · ${state.todaysSessions.length} sessions`, { count: state.todaysSessions.length });
+    renderRpe();
+    const list = state.todaysSessions;
+    const boards = {};
+    await Promise.all(list.map(async s => {
+      if (String(s.id).startsWith('evt:')) return;
+      try {
+        const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: s.id });
+        if (error) throw error;
+        boards[s.id] = buildBoard(data || [], s.id);
+      } catch (e) { console.warn('[RPE] board', s.id, e && e.message); }
+    }));
+    if (state.view !== 'both') return;   // el usuario abrió una sesión mientras cargaba
+    state.boards = boards;
+    state.loading = false;
+    state.error = list.some(s => !String(s.id).startsWith('evt:')) && !Object.keys(boards).length;
+    renderRpe();
+  }
+
   async function loadRpe() {
     const sel = document.getElementById('rmSessionSelect');
     let sessionId = sel.value || null;
@@ -871,11 +1025,13 @@
       sessionId = realId;
     }
     if (!sessionId) {
-      // No concrete session picked → chooser (double-session day) or no-session-today.
-      // Never fall through to the latest past session.
-      state.view = (state.todaysSessions.length >= 2) ? 'chooser' : 'nosession';
-      document.getElementById('pgSub').textContent = (state.view === 'chooser') ? tt('rpe.todayChooseSession', 'Today · choose a session') : tt('rpe.todayNoSession', 'Today · no session');
+      // Sin sesión concreta: con dos o más hoy se ven todas lado a lado; si no, el cartel de
+      // "hoy no hay sesión". Nunca se cae a la última sesión pasada.
       state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
+      state.currentSessionId = null;
+      if (state.todaysSessions.length >= 2) { await loadBoth(); return; }
+      state.view = 'nosession';
+      document.getElementById('pgSub').textContent = tt('rpe.todayNoSession', 'Today · no session');
       state.loading = false; state.error = false;
       renderRpe();
       return;
@@ -898,33 +1054,7 @@
     try {
       const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sessionId });
       if (error) throw error;
-      const rows = data || [];
-      // Session duration drives the sRPE default. Con minutos por jugador, las filas ya no
-      // comparten duración: el campo del header muestra la de la SESIÓN (default), no la de
-      // una fila cualquiera.
-      const metaDur = state.sessionsById[sessionId]?.duration;
-      const durRow = rows.find(r => r.duration != null);
-      state.sessionDuration = (metaDur != null) ? Number(metaDur) : (durRow ? Number(durRow.duration) : null);
-      const all = rows.map(modelFromRow);
-      // El lesionado/limitado cuenta como uno más del board (total, pendientes, remind):
-      // lo único que no hace es mover la media de la sesión. Va al final de su lista,
-      // marcado, para que se lea de un vistazo que su carga es de trabajo diferenciado.
-      const out = p => isOutOfAvg(p) ? 1 : 0;
-      const responders = all.filter(p => p.responded);
-      const pending = all.filter(p => !p.responded);
-      // highest-first: rpe DESC, then load (sRPE) DESC — los diferenciados al final
-      responders.sort((a, b) => (out(a) - out(b)) || (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
-      pending.sort((a, b) => out(a) - out(b));
-      // La media de la sesión sale del grupo que entrenó completo: los lesionados y los
-      // de trabajo limitado quedan fuera (su carga distorsiona la referencia del equipo).
-      const loads = responders.filter(p => !isOutOfAvg(p)).map(p => p.load).filter(v => v != null);
-      const allLoads = responders.map(p => p.load).filter(v => v != null);
-      state.avgSrpe = loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0;
-      state.maxSrpe = allLoads.length ? Math.max(...allLoads) : 1;
-      state.excludedFromAvg = responders.filter(p => isOutOfAvg(p) && p.load != null).length;
-      state.responders = responders;
-      state.pending = pending;
-      state.total = all.length;
+      Object.assign(state, buildBoard(data || [], sessionId));
       state.loading = false; state.error = false;
       renderRpe();
     } catch (e) {
@@ -994,7 +1124,7 @@
       state.view = 'board';
     } else if (state.todaysSessions.length >= 2) {
       sel.value = '';
-      state.view = 'chooser';
+      state.view = 'both';   // las dos (o más) del día, lado a lado
     } else {
       sel.value = '';
       state.view = 'nosession';
@@ -1003,16 +1133,21 @@
     sel.addEventListener('change', () => { loadRpe(); });
   }
 
-  /* ── Session gate buttons: pick a today's session / review last session ── */
-  document.getElementById('sessionGate').addEventListener('click', e => {
-    const el = e.target.closest('[data-pick],[data-review]');
-    if (!el) return;
-    const id = el.getAttribute('data-pick') || el.getAttribute('data-review');
-    if (!id) return;
-    document.getElementById('rmSessionSelect').value = id;
-    state.view = 'board';
-    loadRpe();
-  });
+  /* ── Abrir una sesión: "Abrir sesión" de cada columna, o el "revisar la última" del
+       cartel de día sin sesión ── */
+  function wireSessionPick(hostId) {
+    document.getElementById(hostId).addEventListener('click', e => {
+      const el = e.target.closest('[data-pick],[data-review]');
+      if (!el) return;
+      const id = el.getAttribute('data-pick') || el.getAttribute('data-review');
+      if (!id) return;
+      document.getElementById('rmSessionSelect').value = id;
+      state.view = 'board';
+      loadRpe();
+    });
+  }
+  wireSessionPick('sessionGate');
+  wireSessionPick('splitWrap');
 
   /* ── Volver al chooser: soltar la sesión del desplegable y recargar (loadRpe sin sesión
      vuelve solo a 'chooser' cuando el día tiene dos o más) ── */
@@ -1263,7 +1398,12 @@
       icon.style.transform = 'rotate(360deg)';
       setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
       await Promise.all([loadRpe(), loadOrphans()]);
-      if (!state.error) T.toast(tt('rpe.refreshedToast', `RPE refreshed · ${state.responders.length} of ${state.total} in`, { n: state.responders.length, total: state.total }), 'ti-refresh');
+      if (state.error) return;
+      // En la vista lado a lado los números son la suma de las sesiones del día.
+      const bs = state.view === 'both' ? state.todaysSessions.map(s => state.boards[s.id]).filter(Boolean) : null;
+      const n = bs ? bs.reduce((a, b) => a + b.responders.length, 0) : state.responders.length;
+      const total = bs ? bs.reduce((a, b) => a + b.total, 0) : state.total;
+      T.toast(tt('rpe.refreshedToast', `RPE refreshed · ${n} of ${total} in`, { n, total }), 'ti-refresh');
     });
   }
 
@@ -1285,24 +1425,53 @@
       tgTxt.textContent = tt('rpe.remindSendTg', `Telegram (${n})`, { count: n });
     }
 
-    // Open the picker with one checked row per pending player
-    btn.addEventListener('click', () => {
-      if (!state.pending.length) return;
-      listEl.innerHTML = state.pending.map((p, i) =>
-        `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:10px;cursor:pointer;">
+    // Abre el picker con una fila tildada por jugador pendiente. El pool trae de qué sesión
+    // es cada uno: desde el board de una sesión son todos de esa; desde la vista lado a lado,
+    // los que faltan en cualquiera de las dos, agrupados por sesión.
+    function openPicker(pool) {
+      if (!pool.length) return;
+      state.remindPool = pool;
+      const multi = new Set(pool.map(x => x.sid)).size > 1;
+      let html = '', lastSid = null;
+      pool.forEach((x, i) => {
+        if (multi && x.sid !== lastSid) { html += `<div class="rm-grp">${T.escape(x.label)}</div>`; lastSid = x.sid; }
+        html += `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:10px;cursor:pointer;">
            <input type="checkbox" data-idx="${i}" checked style="width:16px;height:16px;cursor:pointer;">
-           <span class="cm-avatar is-sm" style="opacity:.55;" data-cm-photo="${p.id}">${initials(p.name)}</span>
-           <span>${T.escape(p.name)}</span>
-         </label>`).join('');
+           <span class="cm-avatar is-sm" style="opacity:.55;" data-cm-photo="${x.p.id}">${initials(x.p.name)}</span>
+           <span>${T.escape(x.p.name)}</span>
+         </label>`;
+      });
+      listEl.innerHTML = html;
       allEl.checked = true;
+      // Con una sola sesión, el cartel de arriba dice cuál (en la vista doble ya lo dicen
+      // los subtítulos de cada grupo).
       const sessEl = document.getElementById('rmRemindSess');
       if (sessEl) {
-        const lab = currentRemindLabel();
+        const lab = multi ? '' : (pool[0].label || '');
         sessEl.style.display = lab ? 'flex' : 'none';
         sessEl.querySelector('span').textContent = lab;
       }
       syncSend();
       modal.classList.add('is-open');
+    }
+
+    // Desde el board de una sesión
+    btn.addEventListener('click', () => {
+      const lab = currentRemindLabel();
+      openPicker(state.pending.map(p => ({ p, sid: state.currentSessionId, label: lab })));
+    });
+
+    // Desde la vista lado a lado: los que faltan en todas las sesiones del día
+    document.getElementById('splitWrap').addEventListener('click', e => {
+      if (!e.target.closest('#remindAllBtn')) return;
+      const pool = [];
+      state.todaysSessions.forEach(s => {
+        const b = state.boards[s.id];
+        if (!b) return;
+        const label = remindSessionLabel(s);
+        b.pending.forEach(p => pool.push({ p, sid: s.id, label }));
+      });
+      openPicker(pool);
     });
 
     // Master "select all" toggle
@@ -1321,35 +1490,54 @@
     // Confirm → share_link + open the chosen messenger with only the selected names
     async function send(channel) {
       const picked = [...listEl.querySelectorAll('input[type=checkbox]:checked')]
-        .map(c => state.pending[+c.dataset.idx]).filter(Boolean);
+        .map(c => state.remindPool[+c.dataset.idx]).filter(Boolean);
       if (!picked.length) return;
+      // Los elegidos pueden ser de una sesión o de las dos. Con una, el link va atado a ella
+      // y el jugador entra derecho a calificarla. Con dos, va un link suelto: el survey le
+      // muestra las dos y no lo deja irse hasta calificar las que le tocaban.
+      const bySess = [];
+      picked.forEach(x => {
+        let g = bySess.find(g => g.sid === x.sid);
+        if (!g) bySess.push(g = { sid: x.sid, label: x.label, names: [] });
+        g.names.push(x.p.name);
+      });
+      const single = bySess.length === 1 ? bySess[0] : null;
       sendBtn.disabled = tgBtn.disabled = true;
       try {
-        const sessionId = document.getElementById('rmSessionSelect').value || null;
-        const sess = sessionId ? state.sessionsById[sessionId] : null;
-        const teamId = sess ? (sess.team_id || null) : null;
+        const sess = single ? state.sessionsById[single.sid] : null;
+        const teamId = (sess && sess.team_id) || activeTeamId() || null;
         const token = crypto.randomUUID().replace(/-/g, '');
         const { error } = await window.sb.from('share_links').insert({
-          club_id: state.cid, scope: 'rpe', team_id: teamId, session_id: sessionId, token,
+          club_id: state.cid, scope: 'rpe', team_id: teamId, session_id: single ? single.sid : null, token,
           expires_at: new Date(Date.now() + 7 * 86400000).toISOString()
         });
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
-        const names = picked.map(p => p.name).join(', ');
+        const names = picked.map(x => x.p.name).join(', ');
         // Con doble sesión el link va atado a una sola de ellas y los dos recordatorios llegan
         // al mismo grupo: sin el nombre de la sesión el jugador no sabe cuál le están pidiendo.
-        const sLabel = remindSessionLabel(sess) && (state.todaysSessions || []).length >= 2
-          ? remindSessionLabel(sess) : '';
-        if (channel === 'tg') {
-          const text = sLabel
+        const sLabel = single && (state.todaysSessions || []).length >= 2 ? (single.label || '') : '';
+        // Una línea por sesión: "GIMNASIO · 08:15: Pérez, Gómez"
+        const lines = bySess.map(g => tt('rpe.remindLineSess', `${g.label}: ${g.names.join(', ')}`,
+          { session: g.label, names: g.names.join(', ') })).join('\n');
+        let text;
+        if (!single) {
+          text = channel === 'tg'
+            ? tt('rpe.tgRemindMulti', `Session RPE reminder — today's sessions.\n${lines}\nRate them (1–10):`, { lines })
+            : tt('rpe.waRemindMulti', `Session RPE reminder — today's sessions.\n${lines}\nRate them here (1–10): ${url}`, { lines, url });
+        } else if (sLabel) {
+          text = channel === 'tg'
             ? tt('rpe.tgRemindBulkSess', `Session RPE reminder — ${sLabel}.\nMissing: ${names}\nRate it (1–10):`, { names, session: sLabel })
-            : tt('rpe.tgRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it (1–10):`, { names });
+            : tt('rpe.waRemindBulkSess', `Session RPE reminder — ${sLabel}.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url, session: sLabel });
+        } else {
+          text = channel === 'tg'
+            ? tt('rpe.tgRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it (1–10):`, { names })
+            : tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
+        }
+        if (channel === 'tg') {
           window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text), '_blank');
         } else {
-          const msg = sLabel
-            ? tt('rpe.waRemindBulkSess', `Session RPE reminder — ${sLabel}.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url, session: sLabel })
-            : tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
-          window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+          window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
         }
         modal.classList.remove('is-open');
       } catch (e) {
@@ -1488,12 +1676,13 @@
   /* ── Re-render on language change (static tags handled by sidebar.js) ── */
   document.addEventListener('cm:langchanged', () => {
     try {
-      // Gate subtitle: fixed strings for chooser / no-session; board keeps the session label.
-      if (state.view === 'chooser' || state.view === 'nosession') {
-        const sub = document.getElementById('pgSub');
-        if (sub) sub.textContent = (state.view === 'chooser')
-          ? tt('rpe.todayChooseSession', 'Today · choose a session')
-          : tt('rpe.todayNoSession', 'Today · no session');
+      // Subtítulo: textos fijos para la vista doble y el día sin sesión; el board de una
+      // sesión conserva su etiqueta.
+      const sub = document.getElementById('pgSub');
+      if (sub && state.view === 'both') {
+        sub.textContent = tt('rpe.todayNSessions', `Today · ${state.todaysSessions.length} sessions`, { count: state.todaysSessions.length });
+      } else if (sub && state.view === 'nosession') {
+        sub.textContent = tt('rpe.todayNoSession', 'Today · no session');
       }
       // Session dropdown placeholder (the DB-driven options stay as-is).
       const sel = document.getElementById('rmSessionSelect');
