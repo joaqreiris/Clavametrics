@@ -138,7 +138,7 @@ Deno.serve(async (req: Request) => {
           return {
             name: ex?.name || null,
             sets: Array.isArray(ex?.sets)
-              ? ex.sets.map((st: any) => ({ reps: st?.reps ?? null, load: st?.load ?? null, tempo: st?.tempo ?? null, rest: st?.rest ?? null }))
+              ? ex.sets.map((st: any) => ({ reps: st?.reps ?? null, load: st?.load ?? null, tempo: st?.tempo ?? null, rest: st?.rest ?? null, note: st?.note || null }))
               : [],
             side: ex?.side || null,
             flag: ex?.flag || null,

@@ -80,6 +80,11 @@
   .rx-meta{display:flex;flex-wrap:wrap;gap:6px;}
   .chip{font:500 11px/1 var(--pv-mono);color:var(--pv-muted);background:var(--pv-soft);border:1px solid var(--pv-bd-soft);padding:5px 8px;border-radius:7px;}
   .chip b{color:var(--pv-fg);font-weight:700;}
+  .rx-list{display:flex;flex-direction:column;gap:5px;}
+  .rx-row{display:flex;align-items:baseline;gap:8px;background:var(--pv-soft);border:1px solid var(--pv-bd-soft);border-radius:7px;padding:6px 9px;}
+  .rx-row .n{flex:none;font:700 10px/1.4 var(--pv-mono);color:var(--pv-fg);}
+  .rx-row .d{min-width:0;font:500 11px/1.4 var(--pv-mono);color:var(--pv-muted);}
+  .rx-row .nt{display:block;margin-top:3px;font:500 11.5px/1.4 var(--pv-sans);color:var(--pv-fg);}
   .watch{display:inline-flex;align-items:center;gap:6px;font:600 12.5px/1 var(--pv-sans);color:var(--pv-acc);text-decoration:none;padding-top:1px;}
   .ex.done{opacity:.6;border-color:var(--pv-bd-soft);}
   .ex.done .ex-name{text-decoration:line-through;text-decoration-color:var(--pv-faint);}
@@ -168,8 +173,25 @@
       tt('prev_share.unavailable_body','The plan may have been unshared or the link is incorrect.'));
   }
 
+  // Sets with a note, one row each: the note is an instruction for THAT set
+  // ("2 left, 1 right"), so it has to stay next to the set it belongs to.
+  function rxList(sets, notes){
+    var rows = sets.map(function(s, i){
+      var parts=[];
+      if (s.reps)  parts.push(esc(s.reps) + (isNumeric(s.reps) ? (' '+tt('prev_share.reps','reps')) : ''));
+      if (s.load)  parts.push(esc(s.load));
+      if (s.tempo) parts.push(esc(s.tempo));
+      if (s.rest)  parts.push(tt('prev_share.rest','rest')+' '+esc(s.rest));
+      var d = parts.length ? parts.join(' · ') : (tt('prev_share.set','Set')+' '+(i+1));
+      return '<div class="rx-row"><span class="n">'+(i+1)+'</span>'+
+        '<span class="d">'+d+(notes[i]?'<span class="nt">'+esc(notes[i])+'</span>':'')+'</span></div>';
+    }).join('');
+    return '<div class="rx-list">'+rows+'</div>';
+  }
+
   function rxHtml(sets){
     if (!Array.isArray(sets) || !sets.length) return '';
+    var notes = sets.map(function(s){ return s && s.note ? String(s.note).trim() : ''; });
     var reps0 = sets[0].reps;
     var uniformReps = sets.every(function(s){ return String(s.reps||'') === String(reps0||''); });
     var big='', chips=[];
@@ -190,6 +212,8 @@
         return '<span class="chip">'+(parts.length?parts.join(' · '):(tt('prev_share.set','Set')+' '+(i+1)))+'</span>';
       });
     }
+    // Any note on any set → drop the summary chips and list the sets one by one.
+    if (notes.some(Boolean)) return '<div class="rx">'+big+'</div>'+rxList(sets, notes);
     return '<div class="rx">'+big+'</div>'+(chips.length?'<div class="rx-meta">'+chips.join('')+'</div>':'');
   }
 

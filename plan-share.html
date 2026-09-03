@@ -127,8 +127,10 @@
   .ps-ex-name{font:600 14px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
   .ps-ex-sets{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
   .ps-set{display:inline-flex;align-items:center;gap:6px;font:500 11.5px/1 var(--cm-font-mono);
-    padding:6px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg)}
+    max-width:100%;padding:6px 8px;border-radius:6px;background:var(--cm-bg-soft);color:var(--cm-fg)}
   .ps-set .x{font-weight:700;color:var(--cm-fg-strong)}
+  .ps-set .nt{min-width:0;padding-left:7px;border-left:1px solid var(--cm-border);
+    font:500 11px/1.35 var(--cm-font-sans);color:var(--cm-fg-muted)}
   .ps-ex-extra{font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:6px}
   .ps-watch{display:inline-flex;align-items:center;gap:5px;margin-top:9px;padding:6px 10px;border-radius:7px;
     border:1px solid var(--cm-border);background:transparent;cursor:pointer;
@@ -269,17 +271,19 @@
     var runs = [];
     sets.forEach(function(s, i){
       var txt = setText(s) || (tt('plan_share.set','Set') + ' ' + (i+1));
+      // The note belongs to ITS set ("2 left, 1 right"), so it is part of what makes
+      // two sets identical — collapsing across different notes would lose the point.
+      var note = s.note ? String(s.note).trim() : '';
       var last = runs[runs.length-1];
-      if (last && last.txt === txt) last.n++;
-      else runs.push({ txt: txt, n: 1, note: s.note || '' });
+      if (last && last.txt === txt && last.note === note) last.n++;
+      else runs.push({ txt: txt, n: 1, note: note });
     });
     var chips = runs.map(function(r){
       var count = r.n > 1 ? '<span class="x">'+r.n+' ×</span> ' : '';
-      return '<span class="ps-set">'+count+r.txt+'</span>';
+      var note = r.note ? '<span class="nt">'+esc(r.note)+'</span>' : '';
+      return '<span class="ps-set">'+count+r.txt+note+'</span>';
     }).join('');
-    var notes = runs.map(function(r){ return r.note ? esc(r.note) : ''; }).filter(Boolean);
-    return '<div class="ps-ex-sets">'+chips+'</div>' +
-      (notes.length ? '<div class="ps-ex-extra">'+notes.join(' · ')+'</div>' : '');
+    return '<div class="ps-ex-sets">'+chips+'</div>';
   }
 
   function renderExercise(ex, i, list){

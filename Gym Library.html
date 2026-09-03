@@ -180,6 +180,8 @@
   .yt-row img{width:72px;height:40px;object-fit:cover;border-radius:4px;background:var(--cm-bg-soft);flex:none}
   .yt-row .yt-title{font:500 13px/1.3 var(--cm-font-sans);color:var(--cm-fg)}
   .yt-row.is-dup{opacity:.5}
+  .yt-row.is-sim{border-color:var(--cm-warning-bd);background:var(--cm-warning-bg)}
+  .yt-row .yt-sim{display:block;margin-top:3px;font:500 11px/1.35 var(--cm-font-sans);color:var(--cm-warning)}
   .yt-row input{accent-color:var(--cm-accent);flex:none}
 </style>
 <!-- supabase-js servido desde nuestro propio dominio, con la versión fija.
@@ -1154,6 +1156,47 @@ function clearFilters() {
 }
 
 let ytVideos = [];
+let ytSimilar = [];          // parallel to ytVideos: {name, score} of the closest library match, or null
+
+// ── Near-duplicate detection ───────────────────────────────────────────────
+// A YouTube title rarely matches the library word for word ("Nordic hamstring
+// curl" vs "Nordic curl"), and video_id only catches the very same video. So we
+// compare normalized WORD SETS: strip accents, punctuation, hashtags, bracketed
+// noise and the "| channel" tail, drop filler words and crude plurals, then
+// score with Dice. This only flags — the coach still decides what to import.
+const YT_STOP = new Set(['de','del','la','el','los','las','con','en','y','a','al','un','una','por','sobre',
+  'the','of','with','for','and','to','on','in','da','do','dos','das','e','em','com','o','os','as',
+  'exercise','exercises','ejercicio','ejercicios','exercicio','exercicios','tutorial','video','shorts','hd','gym']);
+function ytNameTokens(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/#[a-z0-9_]+/g, ' ')                    // #shorts and friends
+    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')       // "(HD)", "[2024]"
+    .replace(/\|.*$/, ' ')                             // "… | Channel name"
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim().split(/\s+/)
+    .map(w => (w.length > 3 && w.endsWith('s')) ? w.slice(0, -1) : w)
+    .filter(w => w && !YT_STOP.has(w));
+}
+function ytNameScore(a, b) {
+  if (!a.size || !b.size) return 0;
+  let hit = 0;
+  a.forEach(w => { if (b.has(w)) hit++; });
+  return (2 * hit) / (a.size + b.size);                // Dice coefficient
+}
+const YT_SIM_MIN = 0.6;
+function ytFindSimilar(title, index) {
+  const t = new Set(ytNameTokens(title));
+  if (!t.size) return null;
+  let best = null, bestScore = 0;
+  for (const e of index) {
+    const sc = ytNameScore(t, e.tokens);
+    if (sc > bestScore) { bestScore = sc; best = e; }
+  }
+  return (best && bestScore >= YT_SIM_MIN) ? { name: best.name, score: bestScore } : null;
+}
+
 function openYtModal() {
   document.getElementById('yt-url').value = '';
   document.getElementById('yt-list').innerHTML = '';
@@ -1161,7 +1204,7 @@ function openYtModal() {
   document.getElementById('yt-all').checked = true;
   const ib = document.getElementById('yt-import-btn');
   ib.disabled = true; ib.textContent = tt('common.import','Import');
-  ytVideos = [];
+  ytVideos = []; ytSimilar = [];
   document.getElementById('yt-modal').classList.add('is-open');
   document.getElementById('yt-url').focus();
 }
@@ -1169,10 +1212,16 @@ function closeYtModal() { document.getElementById('yt-modal').classList.remove('
 function renderYtList(existing) {
   document.getElementById('yt-list').innerHTML = ytVideos.map((v, i) => {
     const dup = existing.has(v.videoId);
-    return `<label class="yt-row${dup?' is-dup':''}">
-      <input type="checkbox" class="yt-cb" data-i="${i}" ${dup?'disabled':'checked'}>
+    // A near-match starts unticked: importing it anyway is one click, undoing a
+    // duplicated exercise across every plan that already uses it is not.
+    const sim = !dup && ytSimilar[i];
+    const simLine = sim
+      ? `<span class="yt-sim"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ${esc(tt('gym_library.similar_to','similar to: {name}', { name: sim.name }))}</span>`
+      : '';
+    return `<label class="yt-row${dup?' is-dup':''}${sim?' is-sim':''}">
+      <input type="checkbox" class="yt-cb" data-i="${i}" ${dup?'disabled':(sim?'':'checked')}>
       ${v.thumbnail ? `<img src="${esc(v.thumbnail)}" alt="" loading="lazy">` : ''}
-      <span class="yt-title">${esc(v.title)}${dup?' · '+esc(tt('gym_library.already_imported','already imported')):''}</span>
+      <span class="yt-title">${esc(v.title)}${dup?' · '+esc(tt('gym_library.already_imported','already imported')):''}${simLine}</span>
     </label>`;
   }).join('');
 }
@@ -1201,9 +1250,15 @@ async function ytFetch() {
     if (data && data.error) throw new Error(data.error);
     ytVideos = (data && data.videos) || [];
     const existing = new Set(ALL_EXERCISES.map(e => e.video_id).filter(Boolean));
+    // Same video → already imported (hard block). Different video, close name →
+    // flagged as a possible duplicate of something already in the library.
+    const index = ALL_EXERCISES.map(e => ({ name: e.name, tokens: new Set(ytNameTokens(e.name)) }));
+    ytSimilar = ytVideos.map(v => existing.has(v.videoId) ? null : ytFindSimilar(v.title, index));
     renderYtList(existing);
     const importable = ytVideos.filter(v => !existing.has(v.videoId)).length;
-    status.textContent = tt('gym_library.videos_new', `${ytVideos.length} videos · ${importable} new`, { total: ytVideos.length, new: importable });
+    const simCount = ytSimilar.filter(Boolean).length;
+    status.textContent = tt('gym_library.videos_new', `${ytVideos.length} videos · ${importable} new`, { total: ytVideos.length, new: importable })
+      + (simCount ? ' · ' + tt('gym_library.videos_similar', `${simCount} look like existing ones`, { n: simCount }) : '');
     document.getElementById('yt-import-btn').disabled = importable === 0;
   } catch (err) {
     const m = err.message || err;
