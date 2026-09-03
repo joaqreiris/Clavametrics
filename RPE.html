@@ -481,13 +481,13 @@
     const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
     return t ? `${base} · ${t}` : base;
   }
-  // Negrita en el mensaje: WhatsApp marca con *un asterisco*; Telegram, con **dos** (y sólo
-  // en Desktop, que es el único cliente que convierte markdown al escribir — en el móvil se
-  // ven los asteriscos, que es la degradación aceptable).
+  // Negrita en el mensaje: WhatsApp la marca con *un asterisco* y la convierte en todos sus
+  // clientes. Telegram queda sin marcar a propósito: t.me/share/url manda texto plano y el
+  // markdown precargado no se interpreta (solo lo hace Desktop con lo que uno tipea), así que
+  // los asteriscos llegarían crudos al chat.
   function mdBold(txt, channel) {
-    if (!txt) return '';
-    const m = channel === 'tg' ? '**' : '*';
-    return m + txt + m;
+    if (!txt || channel === 'tg') return txt || '';
+    return '*' + txt + '*';
   }
   // Solo hace falta desambiguar cuando el día tiene más de una sesión.
   function currentRemindLabel() {

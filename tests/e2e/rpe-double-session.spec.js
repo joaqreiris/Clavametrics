@@ -87,7 +87,7 @@ test('el mensaje nombra las dos sesiones y lleva un link suelto', async ({ page 
   expect(msg).toContain('*Training · 08:30*: Jugador 2, Jugador 3, Jugador 5');
 });
 
-test('por Telegram la negrita va con doble asterisco', async ({ page }) => {
+test('por Telegram el texto va plano, sin asteriscos', async ({ page }) => {
   await page.addInitScript(() => { window.open = (u) => { window.__waUrl = u; return null; }; });
   await page.reload();
   await page.waitForSelector('.rpe-split');
@@ -95,7 +95,8 @@ test('por Telegram la negrita va con doble asterisco', async ({ page }) => {
   await page.locator('#btnRemindTg').click();
   await expect.poll(() => page.evaluate(() => window.__waUrl)).toContain('t.me');
   const msg = decodeURIComponent((await page.evaluate(() => window.__waUrl)).split('&text=')[1]);
-  expect(msg).toContain('**Activation gym · 08:15**: Jugador 3, Jugador 4');
+  expect(msg).toContain('Activation gym · 08:15: Jugador 3, Jugador 4');
+  expect(msg).not.toContain('*');
 });
 
 test('con una sola sesión elegida el mensaje la nombra y ata el link', async ({ page }) => {
