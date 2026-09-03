@@ -96,6 +96,29 @@
   const _ensureModel = loadClubModel;   // alias for readability at call sites
 
   function getMetric(key) { return METRICS.find(m => m.key === key) || METRICS[0]; }
+
+  /** Add the club's own accumulating metrics to the list above.
+   *
+   *  METRICS was written by hand and stopped at six GPS keys, so a club that measures VHSR
+   *  or HMLD could not chart an ACWR on them even though the data was right there. This
+   *  pulls whatever the club actually measures out of cmGpsCatalog.
+   *
+   *  Only metrics that ACCUMULATE qualify: an acute:chronic ratio of max speeds or of
+   *  metres-per-minute is not a workload ratio, it is noise. And only real gps_reports
+   *  columns, because _fetchGps selects by column name. */
+  function registerFromCatalog() {
+    const C = window.cmGpsCatalog;
+    if (!C) return METRICS;
+    const known = new Set(METRICS.map(m => m.key));
+    C.list().forEach(d => {
+      if (known.has(d.key)) return;
+      if (d.agg !== 'sum') return;
+      if (d.source !== 'column') return;
+      METRICS.push({ key: d.key, label: d.label, unit: d.unit || '', source: 'gps' });
+      known.add(d.key);
+    });
+    return METRICS;
+  }
   function metricValue(metric, row) {
     if (typeof metric.derive === 'function') return metric.derive(row);
     return Number(row[metric.column || metric.key]);
@@ -442,7 +465,7 @@
 
   window.gpsACWR = {
     // config + metadata
-    METRICS, ZONES, CONFIG, getMetric, getZone,
+    METRICS, ZONES, CONFIG, getMetric, getZone, registerFromCatalog,
     // unified model source (single source of truth: club_gps_settings.acwr_model)
     configure, loadClubModel,
     // pure core

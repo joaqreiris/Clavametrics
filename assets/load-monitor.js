@@ -101,7 +101,29 @@
     }catch{ state.seasonStart=null; }
   }
 
-  function metricKey(){ return METRIC_MAP[state.metric] || 'srpe_load'; }
+  // The <select> value is either one of the legacy short aliases above (kept so a saved
+  // preference keeps working) or, for anything the club added, the metric key itself.
+  function metricKey(){ return METRIC_MAP[state.metric] || state.metric || 'srpe_load'; }
+
+  /** Fill the ACWR metric picker from what the CLUB measures.
+   *  It used to be six <option>s written into the markup, so MOI could not chart VHSR —
+   *  the data was there, the option was not. */
+  function fillMetricSel(){
+    const sel=$('metricSel'); if(!sel||!window.gpsACWR) return;
+    const keep=sel.value;
+    try { window.gpsACWR.registerFromCatalog(); } catch(_e){}
+    const legacy=Object.entries(METRIC_MAP).reduce((m,[alias,key])=>{ m[key]=alias; return m; },{});
+    sel.innerHTML=(window.gpsACWR.METRICS||[]).map(m=>{
+      // Legacy aliases keep their value AND their translated label; new ones use the key
+      // and the club's own label.
+      const alias=legacy[m.key];
+      const value=alias||m.key;
+      const label=alias ? tt('load_monitor.metric_'+alias, m.label) : m.label;
+      return `<option value="${esc(value)}">${esc(label)}</option>`;
+    }).join('');
+    if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
+    else if(state.metric) sel.value=state.metric;
+  }
   function metricLabel(){ const m=window.gpsACWR?.getMetric(metricKey()); return tt('load_monitor.metric_'+state.metric, m? m.label : 's-RPE'); }
   function modelLabel(){ return state.model==='ewma' ? tt('load_monitor.model_ewma','EWMA 7:28') : tt('load_monitor.model_ra','rolling 7:28'); }
 
@@ -1037,6 +1059,9 @@
     try { state.model = await window.gpsACWR?.loadClubModel?.(state.clubId) || state.model; state.coupled = false; } catch {}
 
     try { state.catalog = await window.getCatalog?.(state.clubId) || []; } catch { state.catalog=[]; }
+    // The picker needs the club's metrics, which arrive with the catalogue.
+    try { await window.cmGpsCatalog?.ready(); } catch(_e){}
+    fillMetricSel();
     state.cols = loadCols();
     state.signalSet = loadSignalSet();
 

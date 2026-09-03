@@ -205,3 +205,69 @@ describe('gps catalogue · it does not query on its own', () => {
     expect(opts.invalidated).toBe(true);
   });
 });
+
+describe('ACWR · the metric list follows the club', () => {
+  // The ACWR chart offered six metrics written into the markup. MOI measures VHSR and
+  // charts it nowhere, because the data was there but the <option> was not.
+  function bootAcwr(rows) {
+    const cat = boot(rows);
+    load('assets/gps-acwr.js');
+    return cat.ready().then(() => window.gpsACWR);
+  }
+
+  it('adds the club metrics the hand-written list left out', async () => {
+    const acwr = await bootAcwr(MOI_ROWS);
+    const before = acwr.METRICS.map(m => m.key);
+    expect(before).not.toContain('very_high_speed_distance');
+    acwr.registerFromCatalog();
+    const after = acwr.METRICS.map(m => m.key);
+    expect(after).toContain('very_high_speed_distance');
+    expect(after).toContain('hmld');
+    expect(after).toContain('time_played');
+  });
+
+  it('refuses metrics an acute:chronic ratio cannot be built on', async () => {
+    const acwr = await bootAcwr(MOI_ROWS);
+    acwr.registerFromCatalog();
+    const keys = acwr.METRICS.map(m => m.key);
+    // A ratio of max speeds, or of metres-per-minute, is not a workload ratio.
+    expect(keys).not.toContain('max_speed');
+    expect(keys).not.toContain('avg_speed');
+    expect(keys).not.toContain('distance_per_minute');
+  });
+
+  it('refuses key/value metrics, which the GPS query cannot select', async () => {
+    const acwr = await bootAcwr(MOI_ROWS);
+    acwr.registerFromCatalog();
+    const keys = acwr.METRICS.map(m => m.key);
+    expect(keys).not.toContain('max_hr');
+    expect(keys).not.toContain('max_vel_pct');
+  });
+
+  it('never duplicates a metric, however many times it runs', async () => {
+    const acwr = await bootAcwr(MOI_ROWS);
+    acwr.registerFromCatalog();
+    const n = acwr.METRICS.length;
+    acwr.registerFromCatalog();
+    acwr.registerFromCatalog();
+    expect(acwr.METRICS.length).toBe(n);
+  });
+
+  it('keeps s-RPE, which is not a GPS metric at all', async () => {
+    const acwr = await bootAcwr(MOI_ROWS);
+    acwr.registerFromCatalog();
+    expect(acwr.METRICS[0].key).toBe('srpe_load');
+    expect(acwr.METRICS.find(m => m.key === 'srpe_load').source).toBe('rpe');
+  });
+
+  it('a basketball club charts its own load, not football distances', async () => {
+    const acwr = await bootAcwr([
+      { key:'player_load', label:'Player Load', unit:'AU', category:'load', display_order:1 },
+      { key:'time_played', label:'Minutes',     unit:'min',category:'time', display_order:2 },
+    ]);
+    acwr.registerFromCatalog();
+    const keys = acwr.METRICS.map(m => m.key);
+    expect(keys).toContain('player_load');
+    expect(keys).toContain('time_played');
+  });
+});
