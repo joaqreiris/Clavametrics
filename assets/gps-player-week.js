@@ -270,21 +270,47 @@
   // ── KPI helpers ───────────────────────────────────────────────
   function _pwResolveChipDef(idx) {
     const override = _pwKpiOverride[idx];
-    if (!override) return _PW_DEFAULT_CHIPS[idx];
+    if (!override) return _pwDefaultChip(idx);
+    // Label, unit, decimals and — the one that matters — HOW TO COMBINE the metric all
+    // come from the club's catalogue. This used to hardcode `override === 'max_speed'
+    // ? 'max' : 'sum'`, so picking any other peak or rate (Avg Speed, Distance/min, a
+    // club's own Max HR) silently added a week of them together.
+    const C = window.cmGpsCatalog;
     const cat = (window._gpCatalog || []).find(d => d.key === override);
     return {
       key:   override,
-      label: cat?.label || override,
-      unit:  override === 'total_distance' ? 'm' : (cat?.unit || ''),
-      dec:   override === 'total_distance' ? 0    : (cat?.decimals ?? 0),
-      agg:   override === 'max_speed' ? 'max' : 'sum',
+      label: (C && C.has(override) ? C.label(override) : (cat?.label || override)),
+      unit:  (C && C.has(override) ? C.unit(override)  : (cat?.unit || '')),
+      dec:   (C && C.has(override) ? C.decimals(override) : (cat?.decimals ?? 0)),
+      agg:   (C && C.has(override) ? C.agg(override) : 'sum'),
     };
+  }
+
+  /** A default chip, with its key swapped for something the club actually measures.
+   *  The six defaults are football keys; a club that does not measure HSR would show an
+   *  empty chip it could not even name. */
+  function _pwDefaultChip(idx) {
+    const def = _PW_DEFAULT_CHIPS[idx];
+    if (!def) return def;
+    const C = window.cmGpsCatalog;
+    if (!C || !C.isLoaded() || def.key === 'acc_dec' || C.has(def.key)) return def;
+    const used = new Set(_PW_DEFAULT_CHIPS.map(d => d.key));
+    const spare = C.keys().find(k => !used.has(k));
+    if (!spare) return def;
+    return { key: spare, label: C.label(spare), unit: C.unit(spare),
+             dec: C.decimals(spare), agg: C.agg(spare) };
   }
 
   function _pwAggVal(reports, def) {
     if (!reports.length) return 0;
     if (def.agg === 'accdec') return reports.reduce((s, r) => s + (r.accelerations || 0) + (r.decelerations || 0), 0);
     if (def.agg === 'max')    return Math.max(...reports.map(r => r[def.key] || 0));
+    if (def.agg === 'avg') {
+      // Rates and percentages: the mean over the sessions that actually have a value,
+      // not over every row, or a missing session would drag the average down.
+      const vals = reports.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
+      return vals.length ? vals.reduce((s, v) => s + (+v), 0) / vals.length : 0;
+    }
     const raw = reports.reduce((s, r) => s + (r[def.key] || 0), 0);
     return raw;   // distances stored in meters → sum as-is (no km conversion)
   }
@@ -322,7 +348,7 @@
     const catalog = window._gpCatalog || [];
     if (!catalog.length) return;
 
-    const currentKey = _pwKpiOverride[idx] || _PW_DEFAULT_CHIPS[idx]?.key;
+    const currentKey = _pwKpiOverride[idx] || _pwDefaultChip(idx)?.key;
 
     const popup = document.createElement('div');
     popup.className = 'pw-km-popup';

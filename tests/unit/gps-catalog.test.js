@@ -310,3 +310,33 @@ describe('Load Planner · which metrics you can plan on', () => {
     expect(now).toEqual(['player_load', 'jump_count']);   // jumps in, peak out
   });
 });
+
+describe('player week · a peak is never summed', () => {
+  // _pwResolveChipDef used to decide this with `key === 'max_speed' ? 'max' : 'sum'`, so
+  // picking Avg Speed, Distance/min or a club's own Max HR added a week of them together.
+  it('the catalogue classifies every metric a chip can be switched to', async () => {
+    const cat = boot(MOI_ROWS);
+    await cat.ready();
+    const summed = cat.keys().filter(k => cat.agg(k) === 'sum');
+    const notSummed = cat.keys().filter(k => cat.agg(k) !== 'sum');
+    expect(summed).toContain('total_distance');
+    expect(notSummed).toEqual(
+      expect.arrayContaining(['max_speed', 'avg_speed', 'distance_per_minute', 'max_hr', 'max_vel_pct']));
+  });
+});
+
+describe('GPS exposure · the club\'s own metrics get a tile', () => {
+  it('keeps the eight curated ones and adds the rest', async () => {
+    const cat = boot(MOI_ROWS);
+    await cat.ready();
+    const CURATED = ['total_distance','high_speed_distance','sprint_distance','accelerations',
+                     'decelerations','player_load','distance_per_minute','max_speed'];
+    // Only real columns get a tile: the exposure query selects by column name.
+    const added = cat.list().filter(d => !CURATED.includes(d.key) && d.source === 'column')
+      .map(d => d.key);
+    expect(added).toEqual(['very_high_speed_distance', 'sprint_count', 'avg_speed', 'hmld', 'time_played']);
+    // …and the club's key/value metrics stay out, or the SELECT would break.
+    const skipped = cat.list().filter(d => d.source !== 'column').map(d => d.key);
+    expect(skipped).toEqual(['max_hr', 'max_vel_pct']);
+  });
+});

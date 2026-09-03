@@ -27,6 +27,32 @@
     { key: 'distance_per_minute', label: 'Metrage/min', unit: 'm/min', agg: 'mean', fmt: 'dec1' },
     { key: 'max_speed',           label: 'Max Speed',   unit: 'km/h',  agg: 'mean', fmt: 'dec1' },
   ];
+
+  /** Append whatever else the club measures, keeping the eight above exactly as they are.
+   *
+   *  Deliberately additive: those eight carry curated labels and aggregations (Max Speed
+   *  is shown as the WEEK'S MEAN peak, not the peak of peaks) and changing them would move
+   *  numbers a coach is already reading. Anything the club adds simply shows up too.
+   *
+   *  Only gps_reports columns: line 119 builds a SELECT out of these keys. */
+  let _catalogMerged = false;
+  function mergeCatalogMetrics() {
+    const C = window.cmGpsCatalog;
+    if (!C || !C.isLoaded() || _catalogMerged) return METRICS;
+    const known = new Set(METRICS.map(m => m.key));
+    C.list().forEach(d => {
+      if (known.has(d.key) || d.source !== 'column') return;
+      const dec = C.decimals(d.key);
+      METRICS.push({
+        key: d.key, label: d.label, unit: d.unit || '',
+        agg: d.agg === 'sum' ? 'sum' : 'mean',        // this module says 'mean', not 'avg'
+        fmt: d.category === 'distance' ? 'dist' : (dec > 0 ? 'dec1' : 'int'),
+      });
+      known.add(d.key);
+    });
+    _catalogMerged = true;
+    return METRICS;
+  }
   const WEEKS_SHOWN   = 6;   // sparkline length
   const BASELINE_WEEKS = 4;  // trailing weeks used as baseline
   const MIN_BASELINE_WEEKS = 2;   // need this many complete in-season weeks before a % is trustworthy
@@ -278,6 +304,8 @@
   async function render({ clubId, players, mount, refDate }) {
     if (!mount) return;
     styleInject();
+    // Pull in the club's own metrics before the tiles are built.
+    try { await window.cmGpsCatalog?.ready(); mergeCatalogMetrics(); } catch (_e) {}
     const ref = refDate || iso(new Date());
     mount.innerHTML = `<div class="gpx-card"><div class="gpx-loading"><i class="ti ti-loader-2"></i> Loading GPS exposure…</div></div>`;
 
@@ -371,5 +399,5 @@
     paint();
   }
 
-  window.gpsExposure = { render, compute, metricDetail, METRICS, fmtVal, sparkline };
+  window.gpsExposure = { render, compute, metricDetail, METRICS, fmtVal, sparkline, mergeCatalogMetrics };
 })();
