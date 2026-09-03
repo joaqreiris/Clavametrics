@@ -1946,15 +1946,30 @@
     developing:   { name:'Developing',           color:'var(--cm-danger)' },
   };
   var EV_LEVEL_ORDER = ['elite','advanced','intermediate','developing'];
-  var EV_LEVEL_I18N = { elite:'evaluations.level_elite', advanced:'evaluations.level_advanced', intermediate:'evaluations.level_intermediate', developing:'evaluations.level_developing' };
+  // Not a level: where players land when the test has no reference bands for this sport.
+  EV_LEVEL_META.unranked = { name:'No reference', color:'var(--cm-fg-muted)' };
+  var EV_LEVEL_I18N = { elite:'evaluations.level_elite', advanced:'evaluations.level_advanced', intermediate:'evaluations.level_intermediate', developing:'evaluations.level_developing', unranked:'evaluations.level_unranked' };
   function levelName(lvl){ return tt(EV_LEVEL_I18N[lvl] || '', (EV_LEVEL_META[lvl]||{}).name || lvl); }
-  // simple value bands per test (IFT bands are the male-threshold fallback; level usually comes from computed)
-  var EV_BANDS = {
+  // Value bands per test (IFT bands are the male-threshold fallback; level usually comes
+  // from computed). They come from the sport pack: the ones below are FOOTBALL norms —
+  // the Yo-Yo IR1 was built on footballers — and a club of another sport gets none rather
+  // than being judged against them. See assets/sport-packs.js → testBands.
+  var EV_BANDS_FALLBACK = {
     ift:    { unit:'km/h', bands:[['elite',19.5,Infinity],['advanced',17.5,19.5],['intermediate',15.5,17.5],['developing',0,15.5]] },
     yoyo1:  { unit:'m',    bands:[['elite',2400,Infinity],['advanced',1800,2400],['intermediate',1200,1800],['developing',0,1200]] },
     yoyo2:  { unit:'m',    bands:[['elite',1000,Infinity],['advanced',750,1000],['intermediate',500,750],['developing',0,500]] },
     cooper: { unit:'m',    bands:[['elite',3000,Infinity],['advanced',2700,3000],['intermediate',2400,2700],['developing',0,2400]] },
   };
+  function evBandsFor(key){
+    // Read the pack directly: CMSport.at() treats null as "missing" and hands back the
+    // fallback, but here null is the answer — the sport declares it has no norms, which is
+    // a decision, not a gap. Only a page with no pack at all falls back to football.
+    var pack = (window.CMSport && window.CMSport.pack) ? window.CMSport.pack() : null;
+    var src = pack ? (pack.testBands || {}) : EV_BANDS_FALLBACK;
+    return src[key] || null;
+  }
+  // The level shown when a test has no reference bands at all.
+  var EV_UNRANKED = 'unranked';
   var IFT_LEVEL_MAP = { 'Elite/Professional':'elite', 'Advanced':'advanced', 'Intermediate':'intermediate', 'Developing':'developing' };
   // Interval prescription presets (velocity-based tests). pct of VIFT · run/rest seconds.
   var EV_RX_PRESETS = [
@@ -2016,7 +2031,9 @@
     return esc(String(notes));                      // plain text (or a bare number) → as-is
   }
   function evBandKey(key, value){
-    var spec = EV_BANDS[key]; if (!spec) return 'developing';
+    // A test with no bands used to return 'developing', so every player on Léger or the
+    // 1600 m TT was shown in red as if they had tested badly. They are simply unranked.
+    var spec = evBandsFor(key); if (!spec) return EV_UNRANKED;
     for (var i=0;i<spec.bands.length;i++){ var b=spec.bands[i]; if (value>=b[1] && value<b[2]) return b[0]; }
     return 'developing';
   }
@@ -2029,7 +2046,7 @@
     return evBandKey(test.key, value);
   }
   function evBandRangeLabel(key, lvlKey){
-    var spec = EV_BANDS[key]; if (!spec) return '';
+    var spec = evBandsFor(key); if (!spec) return '';
     var b = spec.bands.find(function(x){ return x[0]===lvlKey; }); if (!b) return '';
     var u = spec.unit;
     if (b[2]===Infinity) return '≥ '+b[1]+' '+u;
@@ -2037,7 +2054,7 @@
     return b[1]+'–'+b[2]+' '+u;
   }
   function renderEnduranceGroups(root, rows, opts){
-    var test = opts.test, unit = opts.unit || (EV_BANDS[test.key] && EV_BANDS[test.key].unit) || '';
+    var test = opts.test, unit = opts.unit || (evBandsFor(test.key) || {}).unit || '';
     if (!rows.length){
       root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
         + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">'+esc(tt('evaluations.no_values_test_yet','No values for this test yet'))+'</div>'
@@ -2049,8 +2066,12 @@
     var refLabel = isVel ? evRefSpeed(test, 0).label : '';   // VIFT (ift) | VAM (cooper)
     var showRef = isVel && test.key !== 'ift';  // show the derived reference speed when value isn't already a speed
     rows.forEach(function(r){ r.level = evEnduranceLevel(test, r.value, r.notes); });
-    var groupsHtml = EV_LEVEL_ORDER.map(function(lvl){
-      var meta = EV_LEVEL_META[lvl];
+    // Players with no reference land in their own group at the end. Without it they would
+    // match no level and drop out of the list entirely.
+    var levelOrder = EV_LEVEL_ORDER.concat(
+      rows.some(function(r){ return r.level === EV_UNRANKED; }) ? [EV_UNRANKED] : []);
+    var groupsHtml = levelOrder.map(function(lvl){
+      var meta = EV_LEVEL_META[lvl] || { name: tt('evaluations.level_unranked','No reference'), color:'var(--cm-fg-muted)' };
       var grp = rows.filter(function(r){ return r.level===lvl; }).sort(function(a,b){ return b.value - a.value; });
       if (!grp.length) return '';
       var rowsHtml = grp.map(function(r){

@@ -519,3 +519,40 @@ describe('sport packs · Training:Match bands', () => {
     });
   });
 });
+
+describe('sport packs · endurance reference bands', () => {
+  it('football carries the published norms', () => {
+    const b = PACKS.football.testBands;
+    expect(b).toBeTruthy();
+    expect(Object.keys(b)).toEqual(['ift', 'yoyo1', 'yoyo2', 'cooper']);
+    expect(b.yoyo1.bands[0]).toEqual(['elite', 2400, Infinity]);
+  });
+
+  it('no other sport inherits them', () => {
+    // The Yo-Yo IR1 was built on footballers. Judging a centre against "elite ≥ 2400 m"
+    // would put every one of them in the red for no reason at all.
+    ['futsal', 'basketball', 'rugby', 'hockey', 'other'].forEach(k =>
+      expect(PACKS[k].testBands, k).toBeNull());
+  });
+
+  it('bands are ordered, contiguous and cover the whole range', () => {
+    Object.entries(PACKS.football.testBands).forEach(([key, spec]) => {
+      expect(spec.unit, key).toBeTruthy();
+      const bands = spec.bands;
+      expect(bands.map(b => b[0]), key).toEqual(['elite', 'advanced', 'intermediate', 'developing']);
+      // Top band is open-ended, bottom starts at zero, and each one hands over to the next.
+      expect(bands[0][2], key).toBe(Infinity);
+      expect(bands[bands.length - 1][1], key).toBe(0);
+      for (let i = 0; i < bands.length - 1; i++) {
+        expect(bands[i][1], `${key} band ${i}`).toBe(bands[i + 1][2]);
+      }
+    });
+  });
+
+  it('null means "this sport has no norms", not "not configured yet"', () => {
+    // CMSport.at() collapses null onto its fallback, so evaluations.js reads pack()
+    // directly. If that ever changes, basketball silently gets football's bands back.
+    expect('testBands' in PACKS.basketball).toBe(true);
+    expect(PACKS.basketball.testBands).toBeNull();
+  });
+});

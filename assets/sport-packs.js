@@ -508,6 +508,16 @@
                      hmld:                    [2.0, 2.5],
                    } },
       tests:     ['cmj', 'sj', 'slcmj', 'sprint', 'cod505', 'illinois', 'rsa', 'yoyo1', 'yoyo2', 'nordic'],
+      // Reference bands for the endurance tests. These are FOOTBALL norms — the Yo-Yo IR1
+      // was designed on footballers — so no other sport inherits them: judging a centre by
+      // "elite ≥ 2400 m" would put every one of them in the red for no reason. A sport with
+      // no bands shows the players unranked instead of inventing a level.
+      testBands: {
+        ift:    { unit:'km/h', bands:[['elite',19.5,Infinity],['advanced',17.5,19.5],['intermediate',15.5,17.5],['developing',0,15.5]] },
+        yoyo1:  { unit:'m',    bands:[['elite',2400,Infinity],['advanced',1800,2400],['intermediate',1200,1800],['developing',0,1200]] },
+        yoyo2:  { unit:'m',    bands:[['elite',1000,Infinity],['advanced',750,1000],['intermediate',500,750],['developing',0,500]] },
+        cooper: { unit:'m',    bands:[['elite',3000,Infinity],['advanced',2700,3000],['intermediate',2400,2700],['developing',0,2400]] },
+      },
       micro:     { anchor: 'MD', multiGamePerWeek: false,
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
@@ -554,6 +564,7 @@
                    // de fútbol sería inventarlos. El club puede definir las suyas.
                    epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'illinois', 'rsa', 'yoyo1'],
+      testBands: null,   // sin normas propias todavía: mejor sin nivel que con uno de otro deporte
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
@@ -602,6 +613,7 @@
                    // de fútbol sería inventarlos. El club puede definir las suyas.
                    epBands: null },
       tests:     ['cmj', 'sj', 'slcmj', 'sprint', 'cod505', 'lane_agility', 'standing_reach', 'yoyo1'],
+      testBands: null,   // sin normas propias todavía: mejor sin nivel que con uno de otro deporte
       // Two or three games a week is the norm, so the day code anchors on the NEAREST
       // game, not on "the match of the week".
       micro:     { anchor: 'GD', multiGamePerWeek: true,
@@ -659,6 +671,7 @@
                    // de fútbol sería inventarlos. El club puede definir las suyas.
                    epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'bronco', 'yoyo1', 'nordic'],
+      testBands: null,   // sin normas propias todavía: mejor sin nivel que con uno de otro deporte
       micro:     { anchor: 'MD', multiGamePerWeek: false,
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
@@ -700,6 +713,7 @@
                    // de fútbol sería inventarlos. El club puede definir las suyas.
                    epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'yoyo1', 'nordic'],
+      testBands: null,   // sin normas propias todavía: mejor sin nivel que con uno de otro deporte
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
@@ -738,6 +752,7 @@
                    // de fútbol sería inventarlos. El club puede definir las suyas.
                    epBands: null },
       tests:     ['cmj', 'sprint'],
+      testBands: null,   // sin normas propias todavía: mejor sin nivel que con uno de otro deporte
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'other'] },
