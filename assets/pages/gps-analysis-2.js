@@ -20,8 +20,14 @@
 // ══════════════════════════════════════════════════════════════
 
 // ── × Match avg (weekly MC total ÷ match avg) ─────────────────
-// Metrics that use MAX (not SUM) because they are peak values per session
-const _XM_PEAK_METRICS = new Set(['max_speed','avg_speed','distance_per_minute']);
+// Metrics that use MAX (not SUM) because they are peak values per session.
+// The set below is only the fallback: cmGpsCatalog answers this per metric from the club's
+// own definitions, so a metric the club added is classified instead of being summed blind.
+const _XM_PEAK_FALLBACK = new Set(['max_speed','avg_speed','distance_per_minute']);
+function _xmIsPeak(key) {
+  const C = window.cmGpsCatalog;
+  return (C && C.has(key)) ? C.agg(key) !== 'sum' : _XM_PEAK_FALLBACK.has(key);
+}
 
 // Core columns available directly in gps_reports
 const _XM_CORE_KEYS = new Set([
@@ -101,7 +107,7 @@ async function renderMatchMax(report) {
           .eq('player_id', pid), { label: 'xmatch.core' }).catch(() => []);
         coreKeys.forEach(k => {
           const vals = (rpts || []).map(r => +(r[k] || 0)).filter(v => v > 0);
-          aggregated[k] = _XM_PEAK_METRICS.has(k)
+          aggregated[k] = _xmIsPeak(k)
             ? (vals.length ? Math.max(...vals) : 0)   // peak: take max across sessions
             : vals.reduce((s, v) => s + v, 0);        // accumulable: sum across sessions
         });
@@ -123,7 +129,7 @@ async function renderMatchMax(report) {
             .in('metric_key', customKeys);
           customKeys.forEach(k => {
             const vals = (eav || []).filter(r => r.metric_key === k).map(r => +(r.value) || 0).filter(v => v > 0);
-            aggregated[k] = _XM_PEAK_METRICS.has(k)
+            aggregated[k] = _xmIsPeak(k)
               ? (vals.length ? Math.max(...vals) : 0)
               : vals.reduce((s, v) => s + v, 0);
           });
@@ -145,14 +151,21 @@ async function renderMatchMax(report) {
   // fail-closed code default) on the first render for a club with an override row.
   if (window.getClubFlags) { try { await window.getClubFlags(); } catch (_e) {} }
   const epOn    = window.clubFlagSync ? window.clubFlagSync('gps_ep_ratio') : false;
-  const epBands = epOn && window.clubFlagConfigSync ? (window.clubFlagConfigSync('gps_ep_ratio').bands || {}) : {};
+  // Where a band comes from, in order: what the CLUB configured, else the sport's own
+  // published ranges. Football has them; no other sport does, and applying football's
+  // "2.5–3.5× the match" to a basketball week would be inventing a reference, so those
+  // clubs get no band until someone sets one.
+  const epOverride = (epOn && window.clubFlagOverrideSync)
+    ? (window.clubFlagOverrideSync('gps_ep_ratio') || {}).bands : null;
+  const epSport = (window.CMSport && window.CMSport.at('load.epBands', null)) || null;
+  const epBands = epOn ? (epOverride || epSport || {}) : {};
 
   const rows = metricKeys.map((k, i) => {
     const { icon, label } = _xmMetricMeta(k);
     const val     = aggregated[k] || 0;
     const bl      = baselineResults[i];
     const ratio   = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
-    const isPeak  = _XM_PEAK_METRICS.has(k);
+    const isPeak  = _xmIsPeak(k);
     const conf    = bl.confidence === 'high' ? '✓' : bl.confidence === 'medium' ? '~' : '';
 
     // E:P mode: colour vs the target band and rescale the track so the band sits centred. The
@@ -246,7 +259,7 @@ function _openXmatchMetricsEditor(card, anchor) {
         <span style="width:13px;height:13px;border-radius:3px;border:1.5px solid var(--cm-border-soft);background:${isOn ? 'var(--cm-accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">
           ${isOn ? '<i class="ti ti-check" style="font-size:9px;color:#fff"></i>' : ''}
         </span>
-        <span>${_gpEsc(m.label)}${_XM_PEAK_METRICS.has(m.key) ? ' <span style="font-size:9.5px;color:var(--cm-fg-muted)">(pico)</span>' : ''}</span>`;
+        <span>${_gpEsc(m.label)}${_xmIsPeak(m.key) ? ' <span style="font-size:9.5px;color:var(--cm-fg-muted)">(pico)</span>' : ''}</span>`;
       row.addEventListener('click', e => {
         e.stopPropagation();
         if (isOn) {

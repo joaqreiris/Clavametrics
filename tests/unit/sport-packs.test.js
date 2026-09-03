@@ -490,3 +490,32 @@ describe('sport packs · body measurements', () => {
     expect(PACKS.football.anthro.extra).toEqual([]);
   });
 });
+
+describe('sport packs · Training:Match bands', () => {
+  it('football carries the published ranges', () => {
+    const b = PACKS.football.load.epBands;
+    expect(b).toBeTruthy();
+    // You can run three matches' worth of distance in a week; three matches' worth of
+    // sprints is what tears hamstrings. The bands are not one number for everything.
+    expect(b.total_distance).toEqual([2.5, 3.5]);
+    expect(b.sprint_distance).toEqual([1.5, 2.5]);
+    expect(b.sprint_distance[1]).toBeLessThan(b.total_distance[1]);
+  });
+
+  it('no other sport gets football ranges by default', () => {
+    ['futsal', 'basketball', 'rugby', 'hockey', 'other'].forEach(k =>
+      expect(PACKS[k].load.epBands, k).toBeNull());
+  });
+
+  it('every band is a sane [low, high] pair on an accumulating metric', () => {
+    const bands = PACKS.football.load.epBands;
+    Object.entries(bands).forEach(([key, band]) => {
+      expect(Array.isArray(band), key).toBe(true);
+      expect(band.length, key).toBe(2);
+      expect(band[0], key).toBeGreaterThan(0);
+      expect(band[1], `${key} high must exceed low`).toBeGreaterThan(band[0]);
+      // A ratio only means something on something you accumulate.
+      expect(['max_speed', 'avg_speed', 'distance_per_minute'], key).not.toContain(key);
+    });
+  });
+});

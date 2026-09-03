@@ -288,6 +288,13 @@
   window.clubFlagConfigSync = function (key) {
     return Object.assign({}, _flagCfgBase(key), (_flagsMap && _flagsMap[key] && _flagsMap[key].config) || {});
   };
+  /** ONLY what this club overrode, without the code default merged in. Lets a caller tell
+   *  "the club configured this" apart from "nobody configured it and we fell back", which
+   *  matters when the default is sport-specific: football's E:P bands are published
+   *  reference ranges and would be an invention applied to any other sport. */
+  window.clubFlagOverrideSync = function (key) {
+    return (_flagsMap && _flagsMap[key] && _flagsMap[key].config) || null;
+  };
 
   // ── Signed Storage URLs, cached across page loads (Storage egress) ────────────
   // A signed URL carries a one-off token, so re-signing the SAME file on every page load

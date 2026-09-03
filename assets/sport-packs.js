@@ -490,7 +490,23 @@
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'gps', speedBands: true, topUpEnabled: true,
                    coreMetrics: ['total_distance', 'high_speed_distance', 'sprint_distance',
-                                 'accelerations', 'decelerations', 'max_speed', 'player_load'] },
+                                 'accelerations', 'decelerations', 'max_speed', 'player_load'],
+                   // Training:Match target ranges — how many times a match a player should
+                   // accumulate in a week. Not one number: you can run three matches' worth
+                   // of distance in a week, but three matches' worth of sprints is what
+                   // tears hamstrings. These are published football ranges; a club can
+                   // override them, and no other sport gets them by default because no
+                   // equivalent consensus exists.
+                   epBands: {
+                     total_distance:          [2.5, 3.5],
+                     high_speed_distance:     [2.0, 2.5],
+                     very_high_speed_distance:[2.0, 2.5],
+                     sprint_distance:         [1.5, 2.5],
+                     accelerations:           [2.6, 3.05],
+                     decelerations:           [2.6, 3.05],
+                     player_load:             [2.5, 3.5],
+                     hmld:                    [2.0, 2.5],
+                   } },
       tests:     ['cmj', 'sj', 'slcmj', 'sprint', 'cod505', 'illinois', 'rsa', 'yoyo1', 'yoyo2', 'nordic'],
       micro:     { anchor: 'MD', multiGamePerWeek: false,
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
@@ -533,7 +549,10 @@
                    scoring: 'goals', sanctions: 'accumulated_fouls',
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'imu', speedBands: false, topUpEnabled: false,
-                   coreMetrics: ['player_load', 'accelerations', 'decelerations', 'total_distance', 'minutes'] },
+                   coreMetrics: ['player_load', 'accelerations', 'decelerations', 'total_distance', 'minutes'],
+                   // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
+                   // de fútbol sería inventarlos. El club puede definir las suyas.
+                   epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'illinois', 'rsa', 'yoyo1'],
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
@@ -578,7 +597,10 @@
       // deficit model are meaningless on a 28 m court.
       load:      { tracking: 'imu', speedBands: false, topUpEnabled: false,
                    coreMetrics: ['player_load', 'accelerations', 'decelerations',
-                                 'change_of_direction', 'jump_count', 'minutes'] },
+                                 'change_of_direction', 'jump_count', 'minutes'],
+                   // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
+                   // de fútbol sería inventarlos. El club puede definir las suyas.
+                   epBands: null },
       tests:     ['cmj', 'sj', 'slcmj', 'sprint', 'cod505', 'lane_agility', 'standing_reach', 'yoyo1'],
       // Two or three games a week is the norm, so the day code anchors on the NEAREST
       // game, not on "the match of the week".
@@ -632,7 +654,10 @@
       load:      { tracking: 'gps', speedBands: true, topUpEnabled: true,
                    coreMetrics: ['total_distance', 'high_speed_distance', 'sprint_distance',
                                  'accelerations', 'decelerations', 'max_speed',
-                                 'player_load', 'collisions', 'impacts'] },
+                                 'player_load', 'collisions', 'impacts'],
+                   // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
+                   // de fútbol sería inventarlos. El club puede definir las suyas.
+                   epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'bronco', 'yoyo1', 'nordic'],
       micro:     { anchor: 'MD', multiGamePerWeek: false,
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
@@ -670,7 +695,10 @@
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'gps', speedBands: true, topUpEnabled: true,
                    coreMetrics: ['total_distance', 'high_speed_distance', 'sprint_distance',
-                                 'accelerations', 'decelerations', 'max_speed', 'player_load'] },
+                                 'accelerations', 'decelerations', 'max_speed', 'player_load'],
+                   // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
+                   // de fútbol sería inventarlos. El club puede definir las suyas.
+                   epBands: null },
       tests:     ['cmj', 'sj', 'sprint', 'cod505', 'yoyo1', 'nordic'],
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
@@ -705,7 +733,10 @@
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'points', sanctions: null,
                    competitions: ['league', 'cup', 'international', 'friendly'] },
-      load:      { tracking: 'none', speedBands: false, topUpEnabled: false, coreMetrics: ['minutes'] },
+      load:      { tracking: 'none', speedBands: false, topUpEnabled: false, coreMetrics: ['minutes'],
+                   // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
+                   // de fútbol sería inventarlos. El club puede definir las suyas.
+                   epBands: null },
       tests:     ['cmj', 'sprint'],
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
