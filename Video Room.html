@@ -264,6 +264,10 @@
   .vr-pick .opt.is-on .box { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
   .vr-pick .opt .box .ti { font-size:12px; }
   .vr-pick .opt .nm { flex:1; min-width:0; font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vr-th { width:58px; height:33px; flex:none; border-radius:6px; overflow:hidden; background-size:cover; background-position:center; position:relative; display:flex; align-items:center; justify-content:center; }
+  .vr-th img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .vr-th .ti { position:relative; z-index:2; font-size:15px; color:rgba(255,255,255,.85); text-shadow:0 1px 3px rgba(0,0,0,.5); }
+  .vr-clip .vr-th { width:74px; height:42px; margin-top:1px; }
   .vr-pick .opt .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); flex-shrink:0; }
   .vr-pick .none { padding:14px; text-align:center; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
 
@@ -1021,9 +1025,12 @@
       box.innerHTML = `<div class="vr-pick"><div class="none">${esc(tt('video_room.send_no_clips', 'Add at least one clip.'))}</div></div>`;
       return;
     }
-    box.innerHTML = sendClips.map((c, i) => `
+    box.innerHTML = sendClips.map((c, i) => {
+      const v = VIDEOS.find(x => x.id === c.video_id);
+      return `
       <div class="vr-clip" data-i="${i}">
         <span class="ci">${i + 1}</span>
+        ${v ? thumbHtml(v) : ''}
         <div class="cb">
           <div class="cn">${esc(c.title || tt('video_room.untitled_video', 'Untitled video'))}</div>
           <div class="crow">
@@ -1032,7 +1039,33 @@
           </div>
         </div>
         <button class="x" data-clip-del="${i}" title="${esc(tt('video_room.send_clip_remove', 'Remove'))}"><i class="ti ti-x"></i></button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+    wireThumbs(box);
+  }
+
+  // Miniatura para reconocer el corte antes de elegirlo. YouTube y Drive la sirven
+  // solos; si el archivo de Drive no es público la imagen falla y queda el degradé.
+  function thumbFor(v) {
+    if (v.thumbnail_url) return v.thumbnail_url;
+    if (v.provider === 'youtube') { const y = v.external_id || ytId(v.url); if (y) return `https://img.youtube.com/vi/${y}/mqdefault.jpg`; }
+    if (v.provider === 'google_drive' && v.kind !== 'folder') {
+      const fid = v.external_id || ((v.url || '').match(/\/file\/d\/([^/]+)/) || (v.url || '').match(/[?&]id=([^&]+)/) || [])[1];
+      if (fid) return `https://drive.google.com/thumbnail?id=${fid}&sz=w320`;
+    }
+    return null;
+  }
+  function thumbHtml(v) {
+    const url  = thumbFor(v);
+    const icon = v.kind === 'folder' ? 'ti-folder' : (PROV[v.provider] || PROV.other).icon;
+    return `<span class="vr-th" style="background-image:${pitchFor(v.id)}">
+      ${url ? `<img src="${safeCssUrl(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
+      <i class="ti ${icon}"></i></span>`;
+  }
+  // La miniatura rota deja un icono de imagen partida: se saca y queda el degradé.
+  function wireThumbs(root) {
+    root.querySelectorAll('.vr-th img')
+      .forEach(img => img.addEventListener('error', () => img.remove(), { once: true }));
   }
 
   // Los cortes individuales suelen vivir en su propia carpeta (aparte de los de
@@ -1060,6 +1093,7 @@
       ? rows.map(v => `
           <div class="opt" data-add-video="${esc(v.id)}">
             <span class="box"><i class="ti ti-check"></i></span>
+            ${thumbHtml(v)}
             <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
             ${v.folder_id && folder === 'all' ? `<span class="sub"><i class="ti ti-folder" style="font-size:12px"></i> ${esc(fName(v.folder_id))}</span>` : ''}
             <span class="sub">${esc((PROV[v.provider] || PROV.other).label)}</span>
@@ -1068,6 +1102,7 @@
       : `<div class="none">${esc(q || folder !== 'all'
             ? tt('video_room.send_no_results', 'No clips match this search.')
             : tt('video_room.send_all_added', 'Every video is already in this send.'))}</div>`;
+    wireThumbs(box);
   }
 
   function renderPlayerPick() {
