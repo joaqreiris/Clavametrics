@@ -1363,40 +1363,43 @@ async function exportPNG() {
 // ═══════════════════════════════════════════════════════════════
 let _dsState = null, _dsBound = false;
 
+// Iconos de la hoja del día: los oficiales de Tabler, los mismos que usan los eventos del
+// Calendar. Van inline (no por webfont) porque la hoja se exporta con html2canvas y un
+// glifo de fuente no siempre sobrevive al clon. El comentario dice de qué ti-* sale cada uno.
 const DS_ICONS = {
-  departure:'<path d="M4 16V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10M4 16h13M4 16v2a1 1 0 0 0 1 1h1M17 16h3v-4l-3-3M17 16v3h-1M8 19h6"/><circle cx="7" cy="19" r="1.6"/><circle cx="16" cy="19" r="1.6"/>',
-  arrival:'<path d="M12 21s-6-5.7-6-10a6 6 0 1 1 12 0c0 4.3-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/>',
-  activation:'<path d="M4 12h3l2-5 3 10 2-6 2 3h4"/>',
-  training:'<path d="M6 4v5a6 6 0 0 0 12 0V4M9 4h6M12 15v3M9 21h6"/>',
-  gym:'<path d="M6 8v8M18 8v8M4 10v4M20 10v4M6 12h12"/>',
-  meal:'<path d="M5 3v8a2 2 0 0 0 4 0V3M7 11v10M19 3c-1.5 0-3 1.8-3 5s1.5 4 3 4v9"/>',
-  meeting:'<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5.2"/>',
-  video:'<rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/>',
-  travel:'<path d="M21 15.5 3 10.5V7l3 1 4-3 1 1-2.5 3 5 1.5L18 6l1.5.5-1 4 3 1v2l-3.5 1Z"/>',
-  kickoff:'<circle cx="12" cy="12" r="8"/><path d="m12 8 3 2-1 4h-4l-1-4 3-2Z"/>',
-  recovery:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15 5 17 3 17 3c1 4 .5 12-6 17M5 14c2 0 4 1 5 3"/>',
-  meds:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
-  physio:'<circle cx="6.5" cy="13.3" r="1.7"/><path d="M9 15h6.5l4 1.5M3 18h18M6 18v2.5M18 18v2.5"/>',
-  custom:'<circle cx="12" cy="12" r="3"/>',
+  departure:'<path d="M6 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M18 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-4 0h-8"/> <path d="M16 5l1.5 7l4.5 0"/> <path d="M2 10l15 0"/> <path d="M7 5l0 5"/> <path d="M12 5l0 5"/>', // ti-bus
+  arrival:'<path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/> <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/>', // ti-map-pin
+  activation:'<path d="M3 12h4l3 8l4 -16l3 8h4"/>', // ti-activity
+  training:'<path d="M21 5.002v.5l-8.13 14.99a1 1 0 0 1 -1.74 0l-8.13 -14.989v-.5c0 -1.659 4.03 -3.003 9 -3.003s9 1.344 9 3.002"/>', // ti-cone-2
+  gym:'<path d="M2 12h1"/> <path d="M6 8h-2a1 1 0 0 0 -1 1v6a1 1 0 0 0 1 1h2"/> <path d="M6 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1z"/> <path d="M9 12h6"/> <path d="M15 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1z"/> <path d="M18 8h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2"/> <path d="M22 12h-1"/>', // ti-barbell
+  meal:'<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>', // ti-tools-kitchen-2
+  meeting:'<path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/> <path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/> <path d="M16 3.13a4 4 0 0 1 0 7.75"/> <path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/>', // ti-users
+  video:'<path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z"/> <path d="M7 20h10"/> <path d="M9 16v4"/> <path d="M15 16v4"/>', // ti-device-desktop
+  travel:'<path d="M16 10h4a2 2 0 0 1 0 4h-4l-4 7h-3l2 -7h-4l-2 2h-3l2 -4l-2 -4h3l2 2h4l-2 -7h3z"/>', // ti-plane
+  kickoff:'<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/> <path d="M12 7l4.76 3.45l-1.76 5.55h-6l-1.76 -5.55z"/> <path d="M12 7v-4m3 13l2.5 3m-.74 -8.55l3.74 -1.45m-11.44 7.05l-2.56 2.95m.74 -8.55l-3.74 -1.45"/>', // ti-ball-football
+  recovery:'<path d="M3 4m0 1a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1z"/> <path d="M7 20h10"/> <path d="M9 16v4"/> <path d="M15 16v4"/> <path d="M7 10h2l2 3l2 -6l1 3h3"/>', // ti-heart-rate-monitor
+  meds:'<path d="M6 4h-1a2 2 0 0 0 -2 2v3.5h0a5.5 5.5 0 0 0 11 0v-3.5a2 2 0 0 0 -2 -2h-1"/> <path d="M8 15a6 6 0 1 0 12 0v-3"/> <path d="M11 3v2"/> <path d="M6 3v2"/> <path d="M20 10m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>', // ti-stethoscope
+  physio:'<path d="M9 15l-1 -3l4 -2l4 1h3.5"/> <path d="M4 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/> <path d="M12 6m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/> <path d="M12 17v-7"/> <path d="M8 20h7l1 -4l4 -2"/> <path d="M18 20h3"/>', // ti-physotherapist
+  custom:'<path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/> <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>', // ti-circle-dot
   // --- extra glyphs, pickable per timeline row (override the type icon) ---
-  bus:'<path d="M5 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M4 11h16"/><path d="M7 15v2M17 15v2"/><circle cx="8" cy="17.5" r="1.3"/><circle cx="16" cy="17.5" r="1.3"/>',
-  car:'<path d="M5 11l1.5-4A2 2 0 0 1 8.4 5.7h7.2a2 2 0 0 1 1.9 1.3L19 11M4 11h16v5H4zM4 16v2M20 16v2"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/>',
-  train:'<rect x="6" y="4" width="12" height="12" rx="3"/><path d="M6 11h12M8 20l-2 2M16 20l2 2"/><circle cx="9" cy="13.5" r="1"/><circle cx="15" cy="13.5" r="1"/>',
-  hotel:'<path d="M3 20v-6h13a4 4 0 0 1 4 4v2M3 20h18M3 14V6"/><circle cx="7.5" cy="10" r="1.8"/>',
-  coffee:'<path d="M5 8h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8Z"/><path d="M16 9h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M11.5 3v2"/><path d="M5 20h11"/>',
-  water:'<path d="M9 3h6M9.5 7h5M9.5 7l-.5 2.5M14.5 7l.5 2.5M9 9.5h6v9a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-9Z"/>',
-  snack:'<path d="M12 7c.8-1.8 3-2.6 4.8-1.6 2 1.7 1.2 7.4-1.8 10.6-1 1-2 1-3 0-1 1-2 1-3 0C6 12.8 5.2 7.1 7.2 5.4 9 4.4 11.2 5.2 12 7Z"/><path d="M12 7V4.5c.5-1 1.8-1.2 2.5-1"/>',
-  ice:'<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5 4.2 16.5"/>',
-  pitch:'<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 12h16M12 5v14"/><circle cx="12" cy="12" r="2"/>',
-  run:'<circle cx="14" cy="5" r="1.8"/><path d="M13.5 8l-3.5 3 2 3.5.5 5.5M12 14.5l-3.5 1.2M10 11 6.2 12.4M13.5 8l4 1.8"/>',
-  stretch:'<circle cx="12" cy="4.5" r="1.8"/><path d="M12 6.5v6M12 12.5l-3.5 6M12 12.5l3.5 6M7 9.5l5 1 5-1"/>',
-  bolt:'<path d="M13 3 5 13h6l-1 8 8-11h-6l1-7Z"/>',
-  tactics:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v3h6V3M8 11h8M8 15h5"/>',
-  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/>',
-  flag:'<path d="M6 21V4M6 4h11l-2.2 3.2L17 10.5H6"/>',
-  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>',
-  moon:'<path d="M20 13.5A8 8 0 1 1 10.5 4a6 6 0 0 0 9.5 9.5Z"/>',
-  clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4.2l3 1.8"/>',
+  bus:'<path d="M6 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M18 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-4 0h-8"/> <path d="M16 5l1.5 7l4.5 0"/> <path d="M2 10l15 0"/> <path d="M7 5l0 5"/> <path d="M12 5l0 5"/>', // ti-bus
+  car:'<path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M17 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/>', // ti-car
+  train:'<path d="M21 13c0 -3.87 -3.37 -7 -10 -7h-8"/> <path d="M3 15h16a2 2 0 0 0 2 -2"/> <path d="M3 6v5h17.5"/> <path d="M3 10l0 4"/> <path d="M8 11l0 -5"/> <path d="M13 11l0 -4.5"/> <path d="M3 19l18 0"/>', // ti-train
+  hotel:'<path d="M7 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/> <path d="M22 17v-3h-20"/> <path d="M2 8v9"/> <path d="M12 14h10v-2a3 3 0 0 0 -3 -3h-7v5z"/>', // ti-bed
+  coffee:'<path d="M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1"/> <path d="M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/> <path d="M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/> <path d="M3 10h14v5a6 6 0 0 1 -6 6h-2a6 6 0 0 1 -6 -6v-5z"/> <path d="M16.746 16.726a3 3 0 1 0 .252 -5.555"/>', // ti-coffee
+  water:'<path d="M10 5h4v-2a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v2z"/> <path d="M14 3.5c0 1.626 .507 3.212 1.45 4.537l.05 .07a8.093 8.093 0 0 1 1.5 4.694v6.199a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-6.2c0 -1.682 .524 -3.322 1.5 -4.693l.05 -.07a7.823 7.823 0 0 0 1.45 -4.537"/> <path d="M7 14.803a2.4 2.4 0 0 0 1 -.803a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 1 -.805"/>', // ti-bottle
+  snack:'<path d="M4 11.319c0 3.102 .444 5.319 2.222 7.978c1.351 1.797 3.156 2.247 5.08 .988c.426 -.268 .97 -.268 1.397 0c1.923 1.26 3.728 .809 5.079 -.988c1.778 -2.66 2.222 -4.876 2.222 -7.977c0 -2.661 -1.99 -5.32 -4.444 -5.32c-1.267 0 -2.41 .693 -3.22 1.44a.5 .5 0 0 1 -.672 0c-.809 -.746 -1.953 -1.44 -3.22 -1.44c-2.454 0 -4.444 2.66 -4.444 5.319"/> <path d="M7 12c0 -1.47 .454 -2.34 1.5 -3"/> <path d="M12 7c0 -1.2 .867 -4 3 -4"/>', // ti-apple
+  ice:'<path d="M10 4l2 1l2 -1"/> <path d="M12 2v6.5l3 1.72"/> <path d="M17.928 6.268l.134 2.232l1.866 1.232"/> <path d="M20.66 7l-5.629 3.25l.01 3.458"/> <path d="M19.928 14.268l-1.866 1.232l-.134 2.232"/> <path d="M20.66 17l-5.629 -3.25l-2.99 1.738"/> <path d="M14 20l-2 -1l-2 1"/> <path d="M12 22v-6.5l-3 -1.72"/> <path d="M6.072 17.732l-.134 -2.232l-1.866 -1.232"/> <path d="M3.34 17l5.629 -3.25l-.01 -3.458"/> <path d="M4.072 9.732l1.866 -1.232l.134 -2.232"/> <path d="M3.34 7l5.629 3.25l2.99 -1.738"/>', // ti-snowflake
+  pitch:'<path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/> <path d="M3 9h3v6h-3z"/> <path d="M18 9h3v6h-3z"/> <path d="M3 5m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/> <path d="M12 5l0 14"/>', // ti-soccer-field
+  run:'<path d="M13 4m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/> <path d="M4 17l5 1l.75 -1.5"/> <path d="M15 21l0 -4l-4 -3l1 -6"/> <path d="M7 12l0 -3l5 -1l3 3l3 1"/>', // ti-run
+  stretch:'<path d="M16 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/> <path d="M5 20l5 -.5l1 -2"/> <path d="M18 20v-5h-5.5l2.5 -6.5l-5.5 1l1.5 2"/>', // ti-stretching
+  bolt:'<path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11"/>', // ti-bolt
+  tactics:'<path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2"/> <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z"/> <path d="M9 12l.01 0"/> <path d="M13 12l2 0"/> <path d="M9 16l.01 0"/> <path d="M13 16l2 0"/>', // ti-clipboard-list
+  mic:'<path d="M9 2m0 3a3 3 0 0 1 3 -3h0a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3h0a3 3 0 0 1 -3 -3z"/> <path d="M5 10a7 7 0 0 0 14 0"/> <path d="M8 21l8 0"/> <path d="M12 17l0 4"/>', // ti-microphone
+  flag:'<path d="M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0v-9z"/> <path d="M5 21v-7"/>', // ti-flag
+  sun:'<path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/> <path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/>', // ti-sun
+  moon:'<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>', // ti-moon
+  clock:'<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/> <path d="M12 7v5l3 3"/>', // ti-clock
 };
 const DS_TYPES = ['departure','arrival','activation','training','gym','meal','meeting','video','travel','kickoff','recovery','meds','custom'];
 // Icon picker: order shown in the per-moment popover ('' = follow the type).
