@@ -524,7 +524,19 @@
       // `objects` is the Objects menu of the drill board, in menu order. Ball, cone, pole
       // and barrier are universal kit; the rest is what a given sport actually owns.
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'],
+                   // Area per player → what the drill trains. More room means more room to
+                   // run, so the bands climb: <40 activation, 40-80 strength, 80-160 speed,
+                   // >160 endurance. Only for sports played on a FULL-SIZE field, where all
+                   // four bands are actually reachable.
+                   //
+                   // A court sport gets null, and not because the numbers need tuning: the
+                   // whole of basketball lives between 20 and 105 m² per player, so two of
+                   // the four bands never occur — and the relationship inverts. Less space
+                   // means MORE intensity there (2v2 peaks ~93% HRmax vs 5v5's 84%), so the
+                   // axis measures something else entirely. A confident label that means
+                   // nothing is worse than no label.
+                   m2Bands: [40, 80, 160] },
       anthro:    { dominantSide: 'foot', extra: [] },
       // Sidebar: nothing hidden, nothing renamed — football is the vocabulary the app
       // was written in. Other packs diff against this.
@@ -569,7 +581,8 @@
                    dayCodes: ['MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['2v2', '3v3', '4v4', '5v5'],
-                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'],
+                   m2Bands: null },   // cancha de 40×20: ver la nota en football
       anthro:    { dominantSide: 'foot', extra: [] },
       // Indoor: the Top-Up calculator works off % of Vmax with 19.8/25.2 km/h fallbacks,
       // which nobody reaches on a 40 m court.
@@ -620,7 +633,8 @@
                    dayCodes: ['GD-3','GD-2','GD-1','GD','GD+1','GD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['1v1', '2v2', '3v3', '4v4', '5v5'],
-                   objects: ['ball', 'cone', 'pole', 'barrier', 'hoop', 'chair', 'ladder', 'mannequin'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'hoop', 'chair', 'ladder', 'mannequin'],
+                   m2Bands: null },   // cancha de 28×15: ver la nota en football
       anthro:    { dominantSide: 'hand', extra: ['wingspan', 'standing_reach'] },
       nav:       { hidden: ['top-up'], icons: { 'daily-planning': 'ti-ball-basketball' } },
       // Wording that differs from football, as i18n key → i18n key. Applied to any
@@ -676,7 +690,8 @@
                    dayCodes: ['MD-6','MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2','MD+3'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'mannequin'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'tackle_bag', 'ruck_pad', 'ladder', 'mannequin'],
+                   m2Bands: [40, 80, 160] },   // campo del mismo orden que el de fútbol
       anthro:    { dominantSide: 'foot', extra: [] },
       nav:       { hidden: [], icons: { 'daily-planning': 'ti-ball-american-football' } },
       i18n:      { 'lineup.starting_xi': 'lineup.starting_xv', 'lineup.xi': 'lineup.xv' },
@@ -718,7 +733,8 @@
                    dayCodes: ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'transition_off', 'transition_def', 'set_pieces', 'other'] },
       drills:    { gameTypes: ['SSG', 'MSG', 'LSG'],
-                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'] },
+                   objects: ['ball', 'cone', 'pole', 'barrier', 'goal', 'goalpost', 'mannequin'],
+                   m2Bands: [40, 80, 160] },   // campo del mismo orden que el de fútbol
       anthro:    { dominantSide: 'hand', extra: [] },
       nav:       { hidden: [], icons: {} },
       i18n:      { 'squad.dominant_foot': 'squad.dominant_hand' },   // se juega con palo, no con el pie
@@ -756,7 +772,7 @@
       micro:     { anchor: 'MD', multiGamePerWeek: true,
                    dayCodes: ['MD-3','MD-2','MD-1','MD','MD+1','MD+2'] },
       tactics:   { categories: ['offensive', 'defensive', 'other'] },
-      drills:    { gameTypes: [], objects: ['ball', 'cone', 'pole', 'barrier'] },
+      drills:    { gameTypes: [], objects: ['ball', 'cone', 'pole', 'barrier'], m2Bands: null },
       anthro:    { dominantSide: 'hand', extra: [] },
       // No lineup, no match module: we do not know this sport's shape, so we do not
       // pretend to. Everything transversal (gym, wellness, medical, load) stays.

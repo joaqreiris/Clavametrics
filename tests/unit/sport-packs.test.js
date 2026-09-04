@@ -556,3 +556,39 @@ describe('sport packs · endurance reference bands', () => {
     expect(PACKS.basketball.testBands).toBeNull();
   });
 });
+
+describe('sport packs · area-per-player bands', () => {
+  const bands = k => PACKS[k].drills.m2Bands;
+
+  it('full-size fields keep the football scale', () => {
+    // Football 105×68, rugby 100×70, hockey 91×55 — the same order of magnitude, so all
+    // four bands are reachable.
+    ['football', 'rugby', 'hockey'].forEach(k =>
+      expect(bands(k), k).toEqual([40, 80, 160]));
+  });
+
+  it('court sports get none', () => {
+    // Basketball 28×15 and futsal 40×20: every session lands in the bottom two bands, and
+    // the relationship inverts (less space = MORE intensity), so the axis measures
+    // something else. No label beats a confident wrong one.
+    ['futsal', 'basketball', 'other'].forEach(k =>
+      expect(bands(k), k).toBeNull());
+  });
+
+  it('bands are three ascending cuts', () => {
+    ['football', 'rugby', 'hockey'].forEach(k => {
+      const b = bands(k);
+      expect(b.length, k).toBe(3);
+      expect(b[0], k).toBeLessThan(b[1]);
+      expect(b[1], k).toBeLessThan(b[2]);
+    });
+  });
+
+  it('a real basketball session would fall in the bottom band, which is the point', () => {
+    // 5v5 on a full court: 28 × 15 ÷ 10 = 42 m²/player → "strength" on the football scale.
+    // A full-court five-a-side is not strength work.
+    const m2 = Math.round((28 * 15) / 10);
+    expect(m2).toBe(42);
+    expect(bands('basketball')).toBeNull();   // …so no label is offered at all
+  });
+});

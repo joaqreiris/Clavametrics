@@ -1129,11 +1129,13 @@
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
             <span style="font:500 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap" data-i18n="planner.m2_player">m²/player</span>
             <span style="font:700 15px/1 var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong)" id="plM2Val">—<small style="font:500 9px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">m²</small></span>
+            <!-- Suggested orientation + the reference scale: both hidden by
+                 plApplySportToSpace() in sports whose court makes the bands meaningless. -->
             <div class="pl-m2-orient" id="plM2Orient" style="flex:1;margin:0;padding:4px 7px;font-size:9.5px">
               <i class="ti ti-target-arrow" style="font-size:11px"></i><span id="plM2OrientText">—</span>
             </div>
           </div>
-          <div class="pl-m2-ref" style="margin-bottom:6px">
+          <div class="pl-m2-ref" id="plM2Ref" style="margin-bottom:6px">
             <div class="r-act" data-ref="ACTIVATION"><b data-i18n="planner.orient_short_act">Act</b><span>&lt;40</span></div>
             <div class="r-str" data-ref="STRENGTH"><b data-i18n="planner.orient_short_str">Str</b><span>40–80</span></div>
             <div class="r-vel" data-ref="VELOCITY"><b data-i18n="planner.orient_short_vel">Vel</b><span>80–160</span></div>
@@ -4258,6 +4260,7 @@
   function plApplySportToForm() {
     plFillMdSelect();
     plApplySportToObjects();
+    plApplySportToSpace();
 
     // Goalkeeper flag — meaningless in basketball, so the whole block goes away.
     const gkGroup = document.getElementById('plExGkGroup');
@@ -4280,12 +4283,32 @@
   window.addEventListener('cm:sport-change', plApplySportToForm);
 
   // ── Orientation helpers ─────────────────────────────────────────
+  // Area per player → suggested orientation. The cuts come from the sport pack, and a
+  // sport that declares none gets no suggestion at all: on a 28×15 court every session
+  // lands in the bottom two bands and the label would be confidently wrong.
+  function plM2Bands() {
+    const pack = (window.CMSport && window.CMSport.pack) ? window.CMSport.pack() : null;
+    if (!pack) return [40, 80, 160];                 // no pack on the page → football
+    return (pack.drills && pack.drills.m2Bands) || null;
+  }
   function calcOrientFromM2(m2) {
     if (!m2 || m2 <= 0) return null;
-    if (m2 < 40)  return 'ACTIVATION';
-    if (m2 < 80)  return 'STRENGTH';
-    if (m2 < 160) return 'VELOCITY';
+    const b = plM2Bands();
+    if (!b) return null;
+    if (m2 < b[0]) return 'ACTIVATION';
+    if (m2 < b[1]) return 'STRENGTH';
+    if (m2 < b[2]) return 'VELOCITY';
     return 'ENDURANCE';
+  }
+
+  /** Hide the suggestion and its scale where the bands do not apply. The m²/player figure
+   *  stays: it is an objective measurement and useful in any sport. */
+  function plApplySportToSpace() {
+    const on = !!plM2Bands();
+    const badge = document.getElementById('plM2Orient');
+    const ref   = document.getElementById('plM2Ref');
+    if (badge) badge.style.display = on ? '' : 'none';
+    if (ref)   ref.style.display   = on ? '' : 'none';
   }
 
   const ORIENT_META = {
