@@ -425,7 +425,24 @@
     try {
       const res = await window.sb.from('player_match_stats').upsert(payloads, { onConflict: 'match_id,player_id' });
       if (res.error) throw res.error;
-      if (msg){ msg.style.color = 'var(--cm-success)'; msg.textContent = tt('match_reports.imported_n_players', `✓ Imported ${payloads.length} player${payloads.length === 1 ? '' : 's'}`, { count: payloads.length }); }
+
+      // Recount accumulated sanctions and warn the staff about anyone who just reached a
+      // suspension — or is one card away. Until this existed you could record a yellow and
+      // nothing anywhere added it up. Never blocks the import: if it fails, the stats are
+      // still saved.
+      let alerts = [];
+      try {
+        const names = {};
+        (_players || []).forEach(p => { names[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' '); });
+        alerts = await window.cmSanctionsSync?.afterMatchSaved({ clubId: _clubId, playerNames: names }) || [];
+      } catch (_e) {}
+
+      if (msg){
+        msg.style.color = 'var(--cm-success)';
+        let txt = tt('match_reports.imported_n_players', `✓ Imported ${payloads.length} player${payloads.length === 1 ? '' : 's'}`, { count: payloads.length });
+        if (alerts.length) txt += ' · ' + tt('sanctions.n_alerts', `${alerts.length} sanction alert(s)`, { count: alerts.length });
+        msg.textContent = txt;
+      }
       close();
       location.reload();
     } catch (e){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.import_error', 'Import error: {msg}', { msg: (e.message || e) }); } }

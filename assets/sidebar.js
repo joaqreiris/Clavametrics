@@ -719,7 +719,7 @@ html.cm-rail .hub-nav-grip{display:none}
   function _visibleNotifs() { return _notifData.filter(_passesTeamFilter); }
 
   function _notifIcon(type) {
-    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'] };
+    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], task_assigned: ['task','ti-checkbox'], task_completed: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'], player_birthday: ['birthday','ti-cake'], staff_birthday: ['birthday','ti-cake'], sanction_accumulation: ['injury','ti-cards'] };
     const [cls, icon] = map[type] || ['def','ti-bell'];
     return `<div class="cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>`;
   }
