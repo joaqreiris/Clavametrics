@@ -406,7 +406,7 @@
             <div class="tu-chips" id="tu-targetbands"></div>
           </div>
           <div class="tu-field" style="max-width:230px">
-            <label data-i18n="topup.preset">Formato (piques)</label>
+            <label id="tu-preset-lbl">Formato (carreras)</label>
             <select id="tu-preset" class="tu-select"></select>
           </div>
         </div>
@@ -787,6 +787,14 @@
     const bt = $('tu-bands-toggle'); if (bt) bt.style.display = state.speedModel === 'vift' ? 'none' : '';
     renderTargetBand();
     renderBandsEditor();
+    renderPresetLabel();
+  }
+  // El formato son carreras; si TODAS las bandas elegidas son de sprint, son sprints.
+  function renderPresetLabel(){
+    const lbl = $('tu-preset-lbl'); if (!lbl) return;
+    const bs = state.speedModel === 'vift' ? [] : selectedBands();
+    const allSprint = bs.length && bs.every(b => (TU.METRIC_DEFS[b.metric] || {}).kind === 'sprint');
+    lbl.textContent = allSprint ? tt('topup.preset_sprints','Formato (sprints)') : tt('topup.preset_runs','Formato (carreras)');
   }
   // Chips multi-selección: una banda o varias (HSR + VHSR + …). Siempre queda al
   // menos una marcada — sin banda no hay velocidad de carrera que prescribir.
@@ -806,7 +814,7 @@
       // Al menos una banda DE ESTE MODELO tiene que quedar marcada.
       if (i >= 0){ if (selectedBands().length > 1) state.targetBands.splice(i, 1); }
       else state.targetBands.push(id);
-      savePrefs(); renderTargetBand();
+      savePrefs(); renderTargetBand(); renderPresetLabel();
       await reloadRefs();   // la banda nueva puede necesitar una métrica sin resolver
     }));
   }
@@ -950,7 +958,7 @@
     let html = `<div class="tu-line">${RUN_IC}
       <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speed} km/h <span class="dim">(${p2.run}-${p2.rest}) · ${esc(bLabel)}${asrTxt}</span></span>
       <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
-    if (rx.tooHard) html += `<div class="tu-hwarn">${tt('topup.too_hard', `Muy alto en su reserva (${rx.asrPct}% ASR): acortá piques o subí pausa.`, { p: rx.asrPct })}</div>`;
+    if (rx.tooHard) html += `<div class="tu-hwarn">${tt('topup.too_hard', `Muy alto en su reserva (${rx.asrPct}% ASR): acortá la carrera o alargá la pausa.`, { p: rx.asrPct })}</div>`;
     return { html, rx };
   }
   // Un bloque de carrera POR banda elegida (HSR, VHSR, sprint…), más un total
@@ -1114,10 +1122,10 @@
     ['ti-database',       'src',     'Fuente del déficit', '<b>Estimado</b>: lo calcula con los minutos que jugó (referencia × minutos que le faltaron). Es lo normal el mismo día del partido, cuando todavía no hay GPS. <b>Medido</b>: toma el GPS real de su último partido y resta lo que ya hizo. <b>Manual</b>: cargás vos lo que hizo, si el dato viene de otro lado.'],
     ['ti-clock',          'min',     'Duración del partido y minutos', '«Duración partido» es el partido completo (90, u 80/70 en formativas). Los minutos de cada jugador se cargan arriba a la derecha de su ficha. Con 0 minutos el déficit es el partido entero.'],
     ['ti-gauge',          'speed',   'Velocidad de carrera', 'Define a qué ritmo corre cada uno. <b>%Vmax</b>: la velocidad sale de un porcentaje de la velocidad máxima de ese jugador (la toma del GPS). Es lo más individual; sin Vmax ese jugador no calcula. <b>Absoluto</b>: umbrales fijos en km/h iguales para todos, el plan B cuando no hay Vmax. <b>%VIFT</b>: HIIT clásico anclado al 30-15 IFT (hace falta el test cargado en Evaluaciones); trabaja sólo el déficit de HSR y por eso no usa bandas.'],
-    ['ti-layers-subtract','bands',   'Bandas objetivo', 'La banda es la zona de velocidad que querés rellenar, y cada una está atada a una métrica (HSR, muy alta velocidad, sprint). <b>Podés marcar varias</b>: si elegís HSR y VHSR sale un bloque de carrera para cada una, con su velocidad, sus metros por pique y sus repeticiones, más el total de la carrera. La velocidad la manda la banda, así que los metros caen seguro en esa zona. En «Editar bandas» ajustás los cortes a los de tu club.'],
-    ['ti-repeat',         'fmt',     'Formato (piques)', 'Cuánto dura cada pique y cuánta pausa hay entre piques (por ejemplo 15-15). Con %Vmax o Absoluto el porcentaje del formato no se usa: la velocidad la pone la banda y el formato sólo define el largo del pique. Con %VIFT sí manda ese porcentaje. En «Editar formatos» agregás los tuyos.'],
+    ['ti-layers-subtract','bands',   'Bandas objetivo', 'La banda es la zona de velocidad que querés rellenar, y cada una está atada a una métrica (HSR, muy alta velocidad, sprint). <b>Podés marcar varias</b>: si elegís HSR y VHSR sale un bloque de carrera para cada una, con su velocidad, sus metros por carrera y la cantidad de carreras, más el total. La velocidad la manda la banda, así que los metros caen seguro en esa zona. En «Editar bandas» ajustás los cortes a los de tu club.'],
+    ['ti-repeat',         'fmt',     'Formato (carreras)', 'Cuánto dura cada carrera y cuánta pausa hay entre carreras (por ejemplo 15-15). Cuando la banda elegida es la de sprint, esas carreras son sprints. Con %Vmax o Absoluto el porcentaje del formato no se usa: la velocidad la pone la banda y el formato sólo define el largo de la carrera. Con %VIFT sí manda ese porcentaje. En «Editar formatos» agregás los tuyos.'],
     ['ti-adjustments-horizontal','metrics','Métricas objetivo', 'Son las que aparecen abajo de cada ficha como déficit / referencia. Aceleraciones y desaceleraciones además alimentan el bloque de cambios de dirección.'],
-    ['ti-eye',            'read',    'Cómo leer la ficha', '<b>ref:</b> de dónde salió la referencia (personal, GPS, posición o manual). <b>ASR</b> es la reserva de velocidad (Vmax − VIFT): cuanto más alto el %ASR del bloque, más cerca del máximo está corriendo. Si avisa «muy alto en su reserva», acortá el pique o alargá la pausa. «Sin déficit» quiere decir que en esa métrica ya llegó a su referencia.'],
+    ['ti-eye',            'read',    'Cómo leer la ficha', '<b>ref:</b> de dónde salió la referencia (personal, GPS, posición o manual). <b>ASR</b> es la reserva de velocidad (Vmax − VIFT): cuanto más alto el %ASR del bloque, más cerca del máximo está corriendo. Si avisa «muy alto en su reserva», acortá la carrera o alargá la pausa. «Sin déficit» quiere decir que en esa métrica ya llegó a su referencia.'],
   ];
   function renderHelp(){
     const box = $('tu-help'); if (!box) return;
