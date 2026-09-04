@@ -596,6 +596,16 @@
         <!-- RIGHT: shot map + heatmap + stat compare -->
         <div style="display:flex;flex-direction:column;gap:14px">
 
+          <!-- Accumulated sanctions: who is close to missing a match. Filled by
+               renderSanctions() from card_accumulations; empty when nobody is near. -->
+          <div class="mr-card" id="mrSanctionsCard" style="display:none;margin-bottom:14px">
+            <div class="mr-card-h">
+              <h3 data-i18n="match_reports.sanctions_title">Accumulated sanctions</h3>
+              <span class="sub" id="mrSanctionsLeague"></span>
+            </div>
+            <div id="mrSanctionsBody" style="padding:10px 14px"></div>
+          </div>
+
           <!-- Shot map — no shot-event source in our model yet -->
           <div class="mr-card">
             <div class="mr-card-h"><h3 data-i18n="match_reports.shot_map">Shot map</h3></div>
@@ -716,6 +726,7 @@
         `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">${tt('match_reports.no_match_sessions', 'No match sessions found')}</td></tr>`;
     }
     _mrCtx = { match, result: _mrResult, club, stats: _mrStats, clubId };
+    renderSanctions(clubId);
     renderHero(match, _mrResult, club);
     renderScorers(_mrStats);
   }
@@ -901,6 +912,51 @@
     if (notice) notice.style.display = 'none';
     if (crumb) crumb.textContent = `${tt('match_reports.vs', 'vs')} ${opponent}${shortDate ? ' · ' + shortDate : ''}`;
     const sc = document.getElementById('mrScorers'); if (sc) sc.style.display = '';
+  }
+
+  /* Who is close to a suspension, without waiting for the alarm.
+     Shows only players who need attention: at the threshold, or one away. A quiet squad
+     hides the card entirely rather than showing a list of zeros. */
+  async function renderSanctions(clubId){
+    const card = document.getElementById('mrSanctionsCard');
+    const body = document.getElementById('mrSanctionsBody');
+    if (!card || !body || !window.cmSanctions || !window.cmSanctionsSync) return;
+    if (!window.cmSanctions.accumulating().length) { card.style.display='none'; return; }
+    let league = null, rows = [];
+    try { ({ league, rows } = await window.cmSanctionsSync.standings(clubId)); } catch(_e){}
+    if (!rows.length) { card.style.display='none'; return; }
+
+    // Names, so the list reads like a squad and not like a set of ids.
+    let names = {};
+    try {
+      const ids = rows.map(r => r.player_id);
+      const { data } = await window.sb.from('players').select('id,first_name,last_name').in('id', ids);
+      (data||[]).forEach(p => { names[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' '); });
+    } catch(_e){}
+
+    const alerts = window.cmSanctions.alerts(league, rows.map(r => ({
+      player_id: r.player_id, name: names[r.player_id] || '—', counts: r.counts,
+    })));
+    if (!alerts.length) { card.style.display='none'; return; }
+
+    const lbl = document.getElementById('mrSanctionsLeague');
+    if (lbl) lbl.textContent = (league && league.name) || '';
+    const sName = k => { const t = window.cmSanctions.typeOf(k); return t ? tt(t.i18n, k) : k; };
+    body.innerHTML = alerts.map(a => {
+      const banned = a.status === 'reached';
+      const color  = banned ? 'var(--cm-danger)' : 'var(--cm-warning)';
+      const note   = banned
+        ? tt('match_reports.sanction_misses', 'misses {n} match(es)', { n: a.banGames })
+        : tt('match_reports.sanction_one_away', 'one away', {});
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--cm-border-soft)">
+        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex:none"></span>
+        <span style="flex:1;min-width:0;font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</span>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${esc(sName(a.sanction))}</span>
+        <span style="font:600 12px/1 var(--cm-font-mono);color:${color};font-variant-numeric:tabular-nums">${a.count}/${a.threshold}</span>
+        <span style="font:500 10.5px/1 var(--cm-font-sans);color:${color}">${esc(note)}</span>
+      </div>`;
+    }).join('');
+    card.style.display = '';
   }
 
   function renderScorers(stats){

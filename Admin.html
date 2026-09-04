@@ -36,6 +36,7 @@
 <script src="assets/vendor/supabase-js-2.112.4.min.js"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sport-packs.js"></script>
+<script src="assets/sanctions.js"></script>
 <script src="assets/sport.js"></script>
 <script src="assets/positions.js"></script>
 <script src="assets/sidebar.js" defer></script>
@@ -670,6 +671,31 @@
             </div>
           </div>
 
+          <!-- Competition rules: how many sanctions cost a player a match. This is a LEAGUE
+               rule, not a sport one — Cambodia suspends at 3 yellows where most leagues use
+               5 — so it lives here and not in the sport pack. -->
+          <div class="ad-card" id="adLeagueCard">
+            <div class="ad-card-h">
+              <h3 data-i18n="admin.league_rules_title">Competition rules</h3>
+              <span class="sub" data-i18n="admin.league_rules_sub">sanctions &amp; suspensions</span>
+            </div>
+            <div style="padding:4px 2px 2px">
+              <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px" data-i18n="admin.league_rules_help">How many sanctions a player can pick up before missing a match. The app warns the staff one sanction before the suspension, and again when it happens.</div>
+              <div class="cm-field" style="margin-bottom:10px">
+                <label class="cm-label" for="adLeagueName" data-i18n="admin.league_name">Competition</label>
+                <input id="adLeagueName" class="cm-input" placeholder="e.g. Cambodian Premier League" data-i18n-ph="admin.league_name_ph">
+              </div>
+              <div id="adLeagueRules"><!-- one row per accumulating sanction (renderLeagueRules) --></div>
+              <div class="cm-field" style="margin-top:10px">
+                <label class="cm-label" for="adLeagueReset" data-i18n="admin.league_reset">Counters reset on</label>
+                <input type="date" id="adLeagueReset" class="cm-input">
+                <span class="cm-hint" data-i18n="admin.league_reset_hint">Sanctions before this date stop counting. Leave empty to count the whole history.</span>
+              </div>
+              <button class="cm-btn is-sm" id="adLeagueSave" style="margin-top:10px"><i class="ti ti-device-floppy" style="font-size:14px"></i> <span data-i18n="common.save">Save</span></button>
+              <span id="adLeagueMsg" style="margin-left:8px;font:500 12px/1 var(--cm-font-sans)"></span>
+            </div>
+          </div>
+
           <div class="ad-card" id="adSharingCard">
             <div class="ad-card-h">
               <h3 data-i18n="admin.exercise_sharing_title">Exercise sharing</h3>
@@ -1250,6 +1276,80 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
     };
   });
 
+  /* ── Competition rules ─────────────────────────────────────────────
+     One row per sanction that ACCUMULATES in this sport: football counts yellows,
+     basketball technicals (personal fouls reset every game and never accumulate).
+     The thresholds start from the sport's defaults and the club overrides them —
+     which is the whole point, because the number is a league rule. */
+  let _leagueRow = null;
+
+  function renderLeagueRules() {
+    const box = document.getElementById('adLeagueRules');
+    if (!box || !window.cmSanctions) return;
+    const acc = window.cmSanctions.accumulating();
+    if (!acc.length) {
+      box.innerHTML = `<div style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('admin.league_no_sanctions','This sport has no sanctions that build up across matches.')}</div>`;
+      return;
+    }
+    box.innerHTML = acc.map(t => {
+      const rule = window.cmSanctions.ruleFor(_leagueRow, t.key);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px" data-sanction="${t.key}">
+        <span style="flex:1;min-width:0;font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt(t.i18n, t.key)}</span>
+        <input type="number" min="1" max="30" class="cm-input" data-rule="threshold" value="${rule.threshold || ''}" style="width:64px;text-align:center" title="${tt('admin.league_threshold','How many before a suspension')}">
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">→</span>
+        <input type="number" min="0" max="10" class="cm-input" data-rule="ban" value="${rule.banGames != null ? rule.banGames : 1}" style="width:56px;text-align:center" title="${tt('admin.league_ban','Matches missed')}">
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('admin.league_games','matches')}</span>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadLeagueConfig() {
+    if (!document.getElementById('adLeagueCard')) return;
+    try {
+      const { data } = await window.sb.from('league_configs')
+        .select('id,name,rules,yellow_threshold,yellow_ban_games,red_direct_games,reset_date,active')
+        .eq('club_id', clubId).eq('active', true).limit(1);
+      _leagueRow = (data && data[0]) || null;
+    } catch (_e) { _leagueRow = null; }
+    const nameEl = document.getElementById('adLeagueName');
+    const resEl  = document.getElementById('adLeagueReset');
+    if (nameEl) nameEl.value = _leagueRow?.name || '';
+    if (resEl)  resEl.value  = _leagueRow?.reset_date || '';
+    renderLeagueRules();
+  }
+
+  async function saveLeagueConfig() {
+    const msg = document.getElementById('adLeagueMsg');
+    const name = document.getElementById('adLeagueName')?.value.trim();
+    if (!name) { if (msg){ msg.style.color='var(--cm-danger)'; msg.textContent = tt('admin.league_need_name','Give the competition a name first.'); } return; }
+    const rules = [...document.querySelectorAll('#adLeagueRules [data-sanction]')].map(row => ({
+      sanction:    row.getAttribute('data-sanction'),
+      accumulates: true,
+      threshold:   parseInt(row.querySelector('[data-rule="threshold"]').value, 10) || null,
+      ban_games:   parseInt(row.querySelector('[data-rule="ban"]').value, 10) || 0,
+    })).filter(r => r.threshold);
+    const payload = {
+      club_id: clubId, name, rules, active: true,
+      reset_date: document.getElementById('adLeagueReset')?.value || null,
+      // Keep the legacy column in step for any code still reading it.
+      yellow_threshold: (rules.find(r => r.sanction === 'yellow') || {}).threshold ?? null,
+    };
+    try {
+      const q = _leagueRow
+        ? window.sb.from('league_configs').update(payload).eq('id', _leagueRow.id).select().single()
+        : window.sb.from('league_configs').insert(payload).select().single();
+      const { data, error } = await q;
+      if (error) throw error;
+      _leagueRow = data;
+      if (msg){ msg.style.color='var(--cm-success)'; msg.textContent = tt('common.saved','Saved'); setTimeout(()=>{ msg.textContent=''; }, 2500); }
+    } catch (e) {
+      if (msg){ msg.style.color='var(--cm-danger)'; msg.textContent = (e.message || String(e)); }
+    }
+  }
+  document.getElementById('adLeagueSave')?.addEventListener('click', saveLeagueConfig);
+  // The sport decides which sanctions are listed, and it may be confirmed after paint.
+  window.addEventListener('cm:sport-change', renderLeagueRules);
+
   async function renderModules() {
     const [{ data: saved }, { data: memMods }] = await Promise.all([
       window.sb.from('club_modules').select('module_key, enabled').eq('club_id', clubId),
@@ -1295,6 +1395,10 @@ const _esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&a
   } else {
     const _mc = document.getElementById('adModulesCard'); if (_mc) _mc.style.display = 'none';
   }
+
+  // Competition rules — every admin, not just the owner: it is a sporting setting, not a
+  // plan one.
+  await loadLeagueConfig();
 
   // ── Exercise sharing: designate the first team ──
   // The open-sharing toggle is gone: exercises no longer travel between categories at all
