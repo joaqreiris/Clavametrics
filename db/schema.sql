@@ -241,12 +241,20 @@ CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USIN
 CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
 CREATE UNIQUE INDEX calendar_events_match_uniq ON public.calendar_events USING btree (team_id, date, opponent) WHERE (type = 'match'::text);
 
+-- Contador de sanciones acumuladas por jugador y competición. `yellow_count` era el
+-- único contador (fútbol); `counts` lleva uno por tipo de sanción para el resto de los
+-- deportes: { "yellow": 2 } | { "technical": 1 }.
 create table if not exists public.card_accumulations (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
   player_id uuid,
   league_config_id uuid,
   yellow_count integer default 0,
+  counts jsonb default '{}'::jsonb not null,
+  -- Última vez que se avisó, y con qué conteo, para no repetir la misma alarma en cada
+  -- guardado del partido.
+  notified_at timestamp with time zone,
+  notified_count integer,
   updated_at timestamp with time zone default now(),
   player_uuid uuid,
   constraint card_accumulations_pkey primary key (id),
@@ -1365,15 +1373,25 @@ CREATE INDEX idx_invoices_club ON public.invoices USING btree (club_id);
 CREATE INDEX idx_invoices_status ON public.invoices USING btree (status);
 CREATE INDEX idx_invoices_created ON public.invoices USING btree (created_at DESC);
 
+-- Reglas de sanción de UNA competición. Cuántas tarjetas (o técnicas, o exclusiones)
+-- cuestan un partido depende de la liga, no del deporte: en Camboya son 3 amarillas y en
+-- la mayoría de las ligas 5. Un club puede jugar dos competiciones con reglas distintas.
 create table if not exists public.league_configs (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
   name text not null,
   season text default '2025/26'::text,
+  -- Columnas originales, pensadas solo para tarjetas de fútbol. Se mantienen porque
+  -- `rules` puede estar vacío en una fila vieja; el código lee rules y cae a estas.
   yellow_threshold integer default 5,
   yellow_ban_games integer default 1,
   red_direct_games integer default 2,
   red_serious_games integer default 3,
+  -- Reglas por tipo de sanción, para deportes que no cuentan tarjetas:
+  --   [{ "sanction":"yellow", "accumulates":true, "threshold":3, "ban_games":1 },
+  --    { "sanction":"red",    "accumulates":false, "ban_games":2 }]
+  -- Los tipos disponibles los declara el pack del deporte (match.sanctionTypes).
+  rules jsonb default '[]'::jsonb not null,
   reset_date date,
   active boolean default true,
   created_at timestamp with time zone default now(),

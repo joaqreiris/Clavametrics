@@ -592,3 +592,43 @@ describe('sport packs · area-per-player bands', () => {
     expect(bands('basketball')).toBeNull();   // …so no label is offered at all
   });
 });
+
+describe('sport packs · sanctions', () => {
+  const locales = ['en', 'es', 'pt'].map(l =>
+    [l, JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', `${l}.json`), 'utf8'))]);
+
+  it('every sanction type is translated', () => {
+    const missing = [];
+    locales.forEach(([lang, dict]) =>
+      Object.entries(PACKS).forEach(([sport, p]) =>
+        (p.match.sanctionTypes || []).forEach(t => {
+          if (!(t.i18n in dict)) missing.push(`${lang}: ${sport} → ${t.i18n}`);
+        })));
+    expect(missing).toEqual([]);
+  });
+
+  it('an accumulating sanction declares a threshold, a direct one does not need it', () => {
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      (p.match.sanctionTypes || []).forEach(t => {
+        if (t.accumulates) {
+          expect(t.threshold, `${sport}.${t.key}`).toBeGreaterThan(0);
+          expect(t.banGames, `${sport}.${t.key}`).toBeGreaterThan(0);
+        }
+        expect(typeof t.banGames, `${sport}.${t.key}`).toBe('number');
+      }));
+  });
+
+  it('basketball accumulates technicals, not personal fouls', () => {
+    // Personal fouls reset every game; counting them across a season counts nothing.
+    const keys = PACKS.basketball.match.sanctionTypes.map(t => t.key);
+    expect(keys).toEqual(['technical', 'disqualifying']);
+    expect(keys).not.toContain('foul');
+  });
+
+  it('sanction keys are unique within a sport', () => {
+    Object.entries(PACKS).forEach(([sport, p]) => {
+      const keys = (p.match.sanctionTypes || []).map(t => t.key);
+      expect(new Set(keys).size, sport).toBe(keys.length);
+    });
+  });
+});

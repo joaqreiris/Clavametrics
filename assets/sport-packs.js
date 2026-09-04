@@ -487,6 +487,15 @@
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'goals', sanctions: 'cards',
+                   // Sanctions that can cost a player a match. `accumulates` means they
+                   // pile up across the season until a threshold; `direct` means the single
+                   // card carries its own ban. The threshold is a LEAGUE rule, not a sport
+                   // one — Cambodia suspends at 3 yellows where most leagues use 5 — so
+                   // these are only the defaults a new league config starts from.
+                   sanctionTypes: [
+                     { key: 'yellow', i18n: 'sanction.yellow', accumulates: true,  threshold: 5, banGames: 1 },
+                     { key: 'red',    i18n: 'sanction.red',    accumulates: false, banGames: 2 },
+                   ],
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'gps', speedBands: true, topUpEnabled: true,
                    coreMetrics: ['total_distance', 'high_speed_distance', 'sprint_distance',
@@ -569,6 +578,10 @@
       // which is a different sanction model from football's cards.
       match:     { periods: { count: 2, minutes: 20 }, periodLabel: 'half',
                    scoring: 'goals', sanctions: 'accumulated_fouls',
+                   sanctionTypes: [
+                     { key: 'yellow', i18n: 'sanction.yellow', accumulates: true,  threshold: 5, banGames: 1 },
+                     { key: 'red',    i18n: 'sanction.red',    accumulates: false, banGames: 2 },
+                   ],
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'imu', speedBands: false, topUpEnabled: false,
                    coreMetrics: ['player_load', 'accelerations', 'decelerations', 'total_distance', 'minutes'],
@@ -615,6 +628,12 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 10 }, periodLabel: 'quarter',
                    scoring: 'points', sanctions: 'fouls',
+                   // Personal fouls reset every game, so they never accumulate. What does
+                   // carry over is technicals: FIBA suspends after a set number in a season.
+                   sanctionTypes: [
+                     { key: 'technical',     i18n: 'sanction.technical',     accumulates: true,  threshold: 5, banGames: 1 },
+                     { key: 'disqualifying', i18n: 'sanction.disqualifying', accumulates: false, banGames: 1 },
+                   ],
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       // Indoor: no GPS. IMU/LPS gives PlayerLoad, IMA accel/decel/CoD and jump counts;
       // minutes played is the primary internal-load unit. Speed bands and the Top-Up
@@ -674,6 +693,10 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 40 }, periodLabel: 'half',
                    scoring: 'points', sanctions: 'cards',
+                   sanctionTypes: [
+                     { key: 'yellow', i18n: 'sanction.yellow_rugby', accumulates: true,  threshold: 3, banGames: 1 },
+                     { key: 'red',    i18n: 'sanction.red',          accumulates: false, banGames: 2 },
+                   ],
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       // GPS outdoors like football, but collisions are the distinguishing load: forwards
       // take the contacts, backs the high-speed running.
@@ -720,6 +743,12 @@
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 15 }, periodLabel: 'quarter',
                    scoring: 'goals', sanctions: 'cards',
+                   // Field hockey has a third card: green is a 2-minute suspension.
+                   sanctionTypes: [
+                     { key: 'green',  i18n: 'sanction.green',  accumulates: false, banGames: 0 },
+                     { key: 'yellow', i18n: 'sanction.yellow', accumulates: true,  threshold: 5, banGames: 1 },
+                     { key: 'red',    i18n: 'sanction.red',    accumulates: false, banGames: 2 },
+                   ],
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'gps', speedBands: true, topUpEnabled: true,
                    coreMetrics: ['total_distance', 'high_speed_distance', 'sprint_distance',
@@ -762,6 +791,7 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'points', sanctions: null,
+                   sanctionTypes: [],   // deporte sin modelo: no se asume ninguna sanción
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'none', speedBands: false, topUpEnabled: false, coreMetrics: ['minutes'],
                    // Sin bandas E:P: no hay rangos publicados para este deporte y copiar los
