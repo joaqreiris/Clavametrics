@@ -496,7 +496,7 @@ function showMatchPopover(anchor, items) {
 // ── Upcoming Events ───────────────────────────────────────────
 // ── Upcoming filters ──────────────────────────────────────────
 const UPCOMING_FILTER_GROUPS = [
-  { label:'Training',  key:'calendar.grp_training',  types:['training','gym','recovery','walkthrough'] },
+  { label:'Training',  key:'calendar.grp_training',  types:['training','gym','recovery','walkthrough','prehab','warmup'] },
   { label:'Match',     key:'calendar.grp_match',     types:['match'] },
   { label:'Meals',     key:'calendar.grp_meals',     types:['breakfast','lunch','dinner','snack'] },
   { label:'Logistics', key:'calendar.grp_logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
@@ -537,7 +537,7 @@ const _UPCOMING_TYPE_KEYS = {
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
   bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   press:'calendar.type_press', medical_check:'calendar.type_medical_check', physio:'calendar.type_physio',
-  prevention:'calendar.type_prevention',
+  prevention:'calendar.type_prevention', prehab:'calendar.type_prehab_short', warmup:'calendar.type_warmup',
   walkthrough:'calendar.type_walkthrough_short', scouting:'calendar.type_scouting',
   day_off:'calendar.type_day_off', meeting:'calendar.type_meeting', evaluation:'calendar.type_evaluation', video_session:'calendar.type_video_session',
 };
@@ -964,6 +964,8 @@ const CAL_TYPE_META = {
   outdoor:    { abbr:'OUT',   fg:'#0F766E', bg:'#ECFDF5', bd:'#A7F3D0', label:'Outdoor endurance' },
   gym:        { abbr:'GYM',   fg:'#5B21B6', bg:'#F5F2FF', bd:'#DDD3FB', label:'Gym' },
   prevention: { abbr:'PREV',  fg:'#9D174D', bg:'#FDF2F8', bd:'#FBCFE8', label:'Prevention work' },
+  prehab:     { abbr:'PREHAB',fg:'#A21CAF', bg:'#FDF4FF', bd:'#F0ABFC', label:'Prehab' },
+  warmup:     { abbr:'W-UP',  fg:'#C2410C', bg:'#FFF7ED', bd:'#FED7AA', label:'Warm-up' },
   match:      { abbr:'MATCH', fg:'#991B1B', bg:'#FCE9E9', bd:'#F1B9B9', label:'Match' },
   recovery:   { abbr:'REC',   fg:'#14532D', bg:'#ECFBF1', bd:'#BBEBCB', label:'Recovery' },
   walkthrough:{ abbr:'ACT',   fg:'#1D4ED8', bg:'#F5F8FF', bd:'#DCE6FD', label:'Walkthrough' },
@@ -1007,6 +1009,7 @@ const CAL_TYPE_LABEL_KEY = {
   training:'calendar.type_label_training', tactical:'calendar.type_label_training', conditioning:'calendar.type_label_training',
   beach:'calendar.type_beach', outdoor:'calendar.type_outdoor',
   gym:'calendar.type_label_gym', prevention:'calendar.type_prevention', match:'calendar.type_label_match',
+  prehab:'calendar.type_prehab_short', warmup:'calendar.type_warmup',
   recovery:'calendar.type_label_recovery', walkthrough:'calendar.type_walkthrough_short',
   travel:'calendar.type_label_travel', bus_departure:'calendar.type_bus_departure', bus_arrival:'calendar.type_bus_arrival',
   hotel_checkin:'calendar.type_hotel_checkin', hotel_checkout:'calendar.type_hotel_checkout',
@@ -1496,9 +1499,9 @@ function dsReopenKitPop(id){
   const pop = document.querySelector(`#dsEditor .ds-kitpop[data-kitpop="${id}"]`);
   if (pop){ pop.hidden = false; try { pop.scrollIntoView({ block:'nearest' }); } catch(_){} }
 }
-function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',prevention:'gym',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
+function dsMapType(st){ return ({training:'training',tactical:'training',beach:'training',outdoor:'training',gym:'gym',match:'kickoff',recovery:'recovery',travel:'travel',meeting:'meeting',video:'video',video_session:'video',breakfast:'meal',lunch:'meal',dinner:'meal',snack:'meal',bus_departure:'departure',bus_arrival:'arrival',hotel_checkin:'travel',hotel_checkout:'travel',press:'meeting',medical_check:'meds',physio:'meds',prevention:'gym',prehab:'activation',warmup:'activation',walkthrough:'meeting',scouting:'meeting',evaluation:'custom',day_off:'custom'})[st] || 'custom'; }
 // Icono específico por tipo de evento del Calendar (pisa el icono genérico del type)
-const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun', snack:'snack' };
+const DS_EVT_ICONS = { bus_departure:'bus', bus_arrival:'bus', hotel_checkin:'hotel', hotel_checkout:'hotel', press:'mic', physio:'physio', walkthrough:'tactics', scouting:'flag', evaluation:'bolt', day_off:'sun', snack:'snack', prehab:'stretch', warmup:'run' };
 function dsEvLabel(e){ if (e.session_type === 'match') return (tt('calendar.daysheet.vs','vs')+' '+(e.opponent||e.title||'')).trim(); return e.title || calMetaLabel(e.session_type); }
 
 async function dsInlineImg(url){
@@ -1532,6 +1535,17 @@ async function dsPrefillFromEvents(){
   } else _dsState.match = null;
   const timed = evs.filter(e => e.start_time && e.session_type !== 'match').sort((a,b) => (a.start_time||'').localeCompare(b.start_time||''));
   _dsState.tl = timed.map(e => ({ t:_fmtTime(e.start_time), type:dsMapType(e.session_type), icon:DS_EVT_ICONS[e.session_type]||'', label:dsEvLabel(e), sub:e.notes || e.location || '' }));
+  // Partido con hora → además del bloque destacado, una fila de kick-off en su horario:
+  // el jugador lee el día entero en una sola lista (activación, calentamiento, kick-off).
+  // Se arma desde matchEv y no desde el filtro para no repetirla si el partido llega
+  // duplicado (vive a la vez en calendar_events y en training_sessions).
+  if (matchEv && matchEv.start_time){
+    const ko = { t:_fmtTime(matchEv.start_time), type:'kickoff', icon:'kickoff',
+      label: dsT('kickoff') + ' · ' + dsEvLabel(matchEv),
+      sub: matchEv.location || matchEv.notes || '' };
+    const at = _dsState.tl.findIndex(r => (r.t||'') > ko.t);
+    if (at < 0) _dsState.tl.push(ko); else _dsState.tl.splice(at, 0, ko);
+  }
   // Day off (total o parcial) → fila al inicio del cronograma; el parcial lista los jugadores libres
   const offs = data.filter(e => e.session_type === 'day_off');
   if (offs.length){

@@ -42,8 +42,8 @@
   function calBucket(t) {
     t = (t || '').toLowerCase();
     if (t === 'recovery') return 'recovery';
-    if (t === 'gym') return 'gym';
-    if (t === 'tactical' || t === 'beach' || t === 'outdoor') return 'field';
+    if (t === 'gym' || t === 'prehab') return 'gym';
+    if (t === 'tactical' || t === 'beach' || t === 'outdoor' || t === 'warmup') return 'field';
     if (t === 'travel' || t === 'bus_departure' || t === 'bus_arrival' || t === 'hotel_checkin' || t === 'hotel_checkout') return 'travel';
     return 'other'; // meeting, meals, day_off, press, medical_check, video_session, walkthrough, scouting, evaluation, other
   }
@@ -51,7 +51,7 @@
     travel: 'ti-plane', bus_departure: 'ti-bus', bus_arrival: 'ti-bus', hotel_checkin: 'ti-bed', hotel_checkout: 'ti-bed',
     meeting: 'ti-users', evaluation: 'ti-clipboard-list', video_session: 'ti-device-desktop',
     breakfast: 'ti-coffee', lunch: 'ti-soup', dinner: 'ti-tools-kitchen', snack: 'ti-apple',
-    press: 'ti-microphone', medical_check: 'ti-stethoscope', physio: 'ti-physotherapist', prevention: 'ti-shield-check', walkthrough: 'ti-walk', scouting: 'ti-binoculars',
+    press: 'ti-microphone', medical_check: 'ti-stethoscope', physio: 'ti-physotherapist', prevention: 'ti-shield-check', prehab: 'ti-stretching', warmup: 'ti-flame', walkthrough: 'ti-walk', scouting: 'ti-binoculars',
     day_off: 'ti-beach', recovery: 'ti-heart-rate-monitor', gym: 'ti-barbell', tactical: 'ti-soccer-field', beach: 'ti-beach', outdoor: 'ti-run'
   };
   function calIcon(t) { t = (t || '').toLowerCase(); return CAL_ICONS[t] || 'ti-calendar-event'; }

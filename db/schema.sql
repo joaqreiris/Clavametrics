@@ -235,7 +235,7 @@ create table if not exists public.calendar_events (
   constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
   -- 'prevention' = preventivos obligatorios. Es informativo puro: avisa al jugador que
   -- ese día pasa por el gym, sin colgarse del Gym Planner ni de Daily Planning.
-  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'snack'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text, 'prevention'::text])))
+  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'snack'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'physio'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text, 'prevention'::text, 'prehab'::text, 'warmup'::text])))
 );
 CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
@@ -370,6 +370,12 @@ create table if not exists public.club_gps_settings (
   gps_builder_enabled boolean default true not null,
   acwr_model text default 'ewma'::text not null,
   include_archived boolean default false not null,
+  -- Qué partidos valen como referencia de carga (Top-Up, y a futuro el resto):
+  --   ref_min_minutes → minutos mínimos jugados para que el partido cuente (0 = sin filtro)
+  --   ref_from_date   → antes de esa fecha las bandas de velocidad estaban definidas
+  --                     de otra forma, así que el HSR viejo no es comparable (NULL = todos)
+  ref_min_minutes integer default 0 not null,
+  ref_from_date date,
   constraint club_gps_settings_pkey primary key (club_id),
   constraint club_gps_settings_baseline_n_check CHECK (((baseline_n >= 3) AND (baseline_n <= 10))),
   constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text]))),
