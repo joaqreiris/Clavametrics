@@ -53,10 +53,6 @@
     const acc = S ? S.accumulating() : [];
     if (!acc.length) return {};
 
-    // Which stat column or extra key holds each sanction. Football's yellows have their
-    // own column; anything else lives in player_match_stats.extra.
-    const COLUMN = { yellow: 'yellow_cards', red: 'red_cards' };
-
     let rows = [];
     try {
       let q = sb().from('player_match_stats')
@@ -72,10 +68,13 @@
       const date = r.match && r.match.match_date;
       if (from && date && date < from) return;   // before the counter was reset
       const per = (out[r.player_id] = out[r.player_id] || {});
+      // Where each sanction lives on the row is the sport's business: football keeps
+      // yellows in a column, basketball keeps technicals in `extra`. cmMatchStats knows.
+      const counts = window.cmMatchStats
+        ? window.cmMatchStats.sanctionCounts(r)
+        : { yellow: +r.yellow_cards || 0, red: +r.red_cards || 0 };
       acc.forEach(t => {
-        const col = COLUMN[t.key];
-        const raw = col ? r[col] : (r.extra && r.extra[t.key]);
-        const n = +raw || 0;
+        const n = +counts[t.key] || 0;
         if (n) per[t.key] = (per[t.key] || 0) + n;
       });
     });

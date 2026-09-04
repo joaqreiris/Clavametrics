@@ -193,23 +193,43 @@
   function _slug(s){ return _norm(s).replace(/ /g,'_') || 'col'; }
 
   // Target fields the user can map a source column to.
-  const STAT_TARGETS = [
+  // Who the player is — the same in every sport.
+  const IDENTITY_TARGETS = [
     ['player_name','Player name (match)'],
     ['player_first','First name (match)'],
     ['player_last','Last name (match)'],
     ['jersey','Jersey # (match)'],
-    ['minutes','Minutes'],
-    ['goals','Goals'],
-    ['assists','Assists'],
-    ['yellow_cards','Yellow cards'],
-    ['red_cards','Red cards'],
-    ['rating','Rating'],
     ['position','Position'],
   ];
+  // The stat columns a file can be mapped onto come from the SPORT (match.playerStats):
+  // football's goals and cards, basketball's points and rebounds, rugby's tries and
+  // tackles. This used to be eleven football keys, so a basketball box score had nowhere
+  // to land — every column would have been dropped as unmapped.
+  function statTargets() {
+    const fields = window.cmMatchStats ? window.cmMatchStats.fields() : [];
+    const fromSport = fields.map(f => [f.key, window.cmMatchStats.label(f.key)]);
+    return IDENTITY_TARGETS.slice(0, 4).concat(fromSport, [IDENTITY_TARGETS[4]]);
+  }
+  // Kept as a live getter so existing call sites keep working unchanged.
+  const STAT_TARGETS = new Proxy([], {
+    get(_t, prop) {
+      const arr = statTargets();
+      const v = arr[prop];
+      return typeof v === 'function' ? v.bind(arr) : v;
+    },
+    has(_t, prop) { return prop in statTargets(); },
+    ownKeys() { return Reflect.ownKeys(statTargets()); },
+    getOwnPropertyDescriptor(_t, prop) {
+      return Object.getOwnPropertyDescriptor(statTargets(), prop);
+    },
+  });
   // Localized display label for a stat target key (falls back to the EN label above).
   function statLabel(k, fallbackEN){ return tt('match_reports.stat_' + k, fallbackEN); }
-  const TARGET_ORDER = STAT_TARGETS.map(t => t[0]); // autoMap priority
-  const ALIASES_GENERIC = {
+  function targetOrder(){ return statTargets().map(t => t[0]); }   // autoMap priority
+  // Header spellings we know. The identity rows and the football stats were here from the
+  // start; the rest is generated from the sport's own keys so a basketball export maps on
+  // its column names without anyone maintaining a second table.
+  const ALIASES_BASE = {
     player_name:['player','name','player name','jugador','nombre','full name'],
     player_first:['first name','nombre'],
     player_last:['last name','apellido','surname'],
@@ -221,10 +241,35 @@
     red_cards:['red cards','red','rojas','rc'],
     rating:['rating','rate','nota','score'],
     position:['position','pos','posición','posicion'],
+    // basketball
+    points:['points','pts','puntos'], rebounds_off:['offensive rebounds','oreb','reb of'],
+    rebounds_def:['defensive rebounds','dreb','reb def'], steals:['steals','stl','robos'],
+    blocks:['blocks','blk','tapones'], turnovers:['turnovers','to','pérdidas','perdidas'],
+    fouls:['fouls','pf','faltas'], technical:['technical fouls','technicals','técnicas','tecnicas'],
+    fg2m:['2pm','fg2m','2 points made'], fg2a:['2pa','fg2a','2 points attempted'],
+    fg3m:['3pm','fg3m','3 points made'], fg3a:['3pa','fg3a','3 points attempted'],
+    ftm:['ftm','free throws made','libres'], fta:['fta','free throws attempted'],
+    plus_minus:['+/-','plus minus','plusminus'],
+    // rugby
+    tries:['tries','try','ensayos'], conversions:['conversions','conv'],
+    penalties:['penalties','pens'], tackles:['tackles','tkl'],
+    missed_tackles:['missed tackles','tackles missed'],
+    green_cards:['green cards','green','verdes'],
   };
+  function aliasesFor(keys) {
+    const out = {};
+    keys.forEach(k => { out[k] = (ALIASES_BASE[k] || [k.replace(/_/g, ' ')]).slice(); });
+    return out;
+  }
+  const ALIASES_GENERIC = new Proxy({}, {
+    get(_t, k) { return (ALIASES_BASE[k] || [String(k).replace(/_/g, ' ')]); },
+    has(_t, k) { return targetOrder().includes(k) || k in ALIASES_BASE; },
+    ownKeys() { return targetOrder(); },
+    getOwnPropertyDescriptor() { return { enumerable: true, configurable: true }; },
+  });
   // Wyscout preset = generic + Wyscout's exact export headers.
   const ALIASES_WYSCOUT = (function(){
-    const w = {}; for (const k in ALIASES_GENERIC) w[k] = ALIASES_GENERIC[k].slice();
+    const w = aliasesFor(Object.keys(ALIASES_BASE));
     w.player_name = w.player_name.concat(['player']);
     w.minutes = w.minutes.concat(['minutes played','minutes on field','min played']);
     w.goals = w.goals.concat(['goals']);
@@ -236,7 +281,7 @@
   function aliasDict(){ return _provider === 'wyscout' ? ALIASES_WYSCOUT : ALIASES_GENERIC; }
   function autoMapHeader(header){
     const nh = _norm(header), dict = aliasDict();
-    for (const key of TARGET_ORDER){ if ((dict[key]||[]).map(_norm).includes(nh)) return key; }
+    for (const key of targetOrder()){ if ((dict[key]||[]).map(_norm).includes(nh)) return key; }
     return '__extra__';
   }
   function autoMapAll(){ _mapping = {}; (_parsed.headers||[]).forEach(h => { _mapping[h] = autoMapHeader(h); }); }
@@ -409,16 +454,24 @@
       const extra = {};
       for (const h in _mapping){ if (_mapping[h] === '__extra__'){ const v = row[h]; if (v != null && String(v).trim() !== '') extra[_slug(h)] = String(v).trim(); } }
       const g = t => mappedVal(row, t);
-      const gi = t => { const n = toInt(g(t)); return n == null ? 0 : n; };
-      byPlayer[r.id] = {
-        club_id: _clubId, match_id: _matchId, player_id: r.id,
-        minutes: toInt(g('minutes')),
-        goals: gi('goals'), assists: gi('assists'),
-        yellow_cards: gi('yellow_cards'), red_cards: gi('red_cards'),
-        rating: toFloat(g('rating')),
-        position: g('position') || null,
-        extra,
-      };
+      // Build the row from the SPORT's box score: cmMatchStats puts each value in its
+      // column when there is one, and in `extra` otherwise. Unmapped columns the user
+      // flagged as extra are preserved alongside.
+      const values = {};
+      (window.cmMatchStats ? window.cmMatchStats.fields() : []).forEach(f => {
+        const raw = g(f.key);
+        if (raw != null && String(raw).trim() !== '') values[f.key] = raw;
+      });
+      const base = { club_id: _clubId, match_id: _matchId, player_id: r.id,
+                     position: g('position') || null, extra };
+      byPlayer[r.id] = window.cmMatchStats
+        ? window.cmMatchStats.toRow(values, base)
+        : Object.assign(base, {
+            minutes: toInt(g('minutes')),
+            goals: toInt(g('goals')) || 0, assists: toInt(g('assists')) || 0,
+            yellow_cards: toInt(g('yellow_cards')) || 0, red_cards: toInt(g('red_cards')) || 0,
+            rating: toFloat(g('rating')),
+          });
     });
     const payloads = Object.values(byPlayer);
     if (!payloads.length){ if (msg) msg.textContent = tt('match_reports.no_matched_players', 'No matched players to import.'); return; }

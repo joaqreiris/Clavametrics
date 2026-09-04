@@ -487,6 +487,18 @@
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'goals', sanctions: 'cards',
+                   // What goes on a player's line in the box score. `column` names a real
+                   // player_match_stats field; anything without one is stored in `extra`,
+                   // the jsonb the table already had. Football's six ARE the columns, so
+                   // nothing about football moves.
+                   playerStats: [
+                     { key: 'minutes',      i18n: 'stat.minutes',      column: 'minutes' },
+                     { key: 'goals',        i18n: 'stat.goals',        column: 'goals' },
+                     { key: 'assists',      i18n: 'stat.assists',      column: 'assists' },
+                     { key: 'yellow_cards', i18n: 'stat.yellow_cards', column: 'yellow_cards', sanction: 'yellow' },
+                     { key: 'red_cards',    i18n: 'stat.red_cards',    column: 'red_cards',    sanction: 'red' },
+                     { key: 'rating',       i18n: 'stat.rating',       column: 'rating', decimals: 1 },
+                   ],
                    // Sanctions that can cost a player a match. `accumulates` means they
                    // pile up across the season until a threshold; `direct` means the single
                    // card carries its own ban. The threshold is a LEAGUE rule, not a sport
@@ -578,6 +590,14 @@
       // which is a different sanction model from football's cards.
       match:     { periods: { count: 2, minutes: 20 }, periodLabel: 'half',
                    scoring: 'goals', sanctions: 'accumulated_fouls',
+                   playerStats: [
+                     { key: 'minutes',      i18n: 'stat.minutes',      column: 'minutes' },
+                     { key: 'goals',        i18n: 'stat.goals',        column: 'goals' },
+                     { key: 'assists',      i18n: 'stat.assists',      column: 'assists' },
+                     { key: 'yellow_cards', i18n: 'stat.yellow_cards', column: 'yellow_cards', sanction: 'yellow' },
+                     { key: 'red_cards',    i18n: 'stat.red_cards',    column: 'red_cards',    sanction: 'red' },
+                     { key: 'rating',       i18n: 'stat.rating',       column: 'rating', decimals: 1 },
+                   ],
                    sanctionTypes: [
                      { key: 'yellow', i18n: 'sanction.yellow', accumulates: true,  threshold: 5, banGames: 1 },
                      { key: 'red',    i18n: 'sanction.red',    accumulates: false, banGames: 2 },
@@ -628,6 +648,28 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 10 }, periodLabel: 'quarter',
                    scoring: 'points', sanctions: 'fouls',
+                   // A basketball box score. Only minutes, assists and rating map onto the
+                   // existing columns; the rest lives in `extra`. Points deliberately do NOT
+                   // reuse the `goals` column — the Dossier sums that as goals scored.
+                   playerStats: [
+                     { key: 'minutes',       i18n: 'stat.minutes',       column: 'minutes' },
+                     { key: 'points',        i18n: 'stat.points' },
+                     { key: 'rebounds_off',  i18n: 'stat.rebounds_off' },
+                     { key: 'rebounds_def',  i18n: 'stat.rebounds_def' },
+                     { key: 'assists',       i18n: 'stat.assists',       column: 'assists' },
+                     { key: 'steals',        i18n: 'stat.steals' },
+                     { key: 'blocks',        i18n: 'stat.blocks' },
+                     { key: 'turnovers',     i18n: 'stat.turnovers' },
+                     { key: 'fouls',         i18n: 'stat.fouls' },
+                     { key: 'technical',     i18n: 'sanction.technical', sanction: 'technical' },
+                     { key: 'fg2m',          i18n: 'stat.fg2m' },
+                     { key: 'fg2a',          i18n: 'stat.fg2a' },
+                     { key: 'fg3m',          i18n: 'stat.fg3m' },
+                     { key: 'fg3a',          i18n: 'stat.fg3a' },
+                     { key: 'ftm',           i18n: 'stat.ftm' },
+                     { key: 'fta',           i18n: 'stat.fta' },
+                     { key: 'plus_minus',    i18n: 'stat.plus_minus', signed: true },
+                   ],
                    // Personal fouls reset every game, so they never accumulate. What does
                    // carry over is technicals: FIBA suspends after a set number in a season.
                    sanctionTypes: [
@@ -693,6 +735,16 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 40 }, periodLabel: 'half',
                    scoring: 'points', sanctions: 'cards',
+                   playerStats: [
+                     { key: 'minutes',      i18n: 'stat.minutes',      column: 'minutes' },
+                     { key: 'tries',        i18n: 'stat.tries' },
+                     { key: 'conversions',  i18n: 'stat.conversions' },
+                     { key: 'penalties',    i18n: 'stat.penalties' },
+                     { key: 'tackles',      i18n: 'stat.tackles' },
+                     { key: 'missed_tackles', i18n: 'stat.missed_tackles' },
+                     { key: 'yellow_cards', i18n: 'stat.yellow_cards', column: 'yellow_cards', sanction: 'yellow' },
+                     { key: 'red_cards',    i18n: 'stat.red_cards',    column: 'red_cards',    sanction: 'red' },
+                   ],
                    sanctionTypes: [
                      { key: 'yellow', i18n: 'sanction.yellow_rugby', accumulates: true,  threshold: 3, banGames: 1 },
                      { key: 'red',    i18n: 'sanction.red',          accumulates: false, banGames: 2 },
@@ -743,6 +795,14 @@
                    staffRoles: ['head', 'assistant', 'gk_coach', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 4, minutes: 15 }, periodLabel: 'quarter',
                    scoring: 'goals', sanctions: 'cards',
+                   playerStats: [
+                     { key: 'minutes',      i18n: 'stat.minutes',      column: 'minutes' },
+                     { key: 'goals',        i18n: 'stat.goals',        column: 'goals' },
+                     { key: 'assists',      i18n: 'stat.assists',      column: 'assists' },
+                     { key: 'green_cards',  i18n: 'sanction.green',    sanction: 'green' },
+                     { key: 'yellow_cards', i18n: 'stat.yellow_cards', column: 'yellow_cards', sanction: 'yellow' },
+                     { key: 'red_cards',    i18n: 'stat.red_cards',    column: 'red_cards',    sanction: 'red' },
+                   ],
                    // Field hockey has a third card: green is a 2-minute suspension.
                    sanctionTypes: [
                      { key: 'green',  i18n: 'sanction.green',  accumulates: false, banGames: 0 },
@@ -791,6 +851,9 @@
                    staffRoles: ['head', 'assistant', 'fitness', 'physio', 'analyst', 'other'] },
       match:     { periods: { count: 2, minutes: 45 }, periodLabel: 'half',
                    scoring: 'points', sanctions: null,
+                   playerStats: [
+                     { key: 'minutes', i18n: 'stat.minutes', column: 'minutes' },
+                   ],
                    sanctionTypes: [],   // deporte sin modelo: no se asume ninguna sanción
                    competitions: ['league', 'cup', 'international', 'friendly'] },
       load:      { tracking: 'none', speedBands: false, topUpEnabled: false, coreMetrics: ['minutes'],

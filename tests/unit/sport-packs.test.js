@@ -632,3 +632,58 @@ describe('sport packs · sanctions', () => {
     });
   });
 });
+
+describe('sport packs · box score', () => {
+  const locales = ['en', 'es', 'pt'].map(l =>
+    [l, JSON.parse(fs.readFileSync(path.join(ROOT, 'locales', `${l}.json`), 'utf8'))]);
+
+  it('every stat is translated in all three languages', () => {
+    const missing = [];
+    locales.forEach(([lang, dict]) =>
+      Object.entries(PACKS).forEach(([sport, p]) =>
+        (p.match.playerStats || []).forEach(f => {
+          if (!(f.i18n in dict)) missing.push(`${lang}: ${sport} → ${f.i18n}`);
+        })));
+    expect(missing).toEqual([]);
+  });
+
+  it('only maps onto columns player_match_stats actually has', () => {
+    const COLUMNS = new Set(['minutes', 'goals', 'assists', 'yellow_cards', 'red_cards', 'rating']);
+    Object.entries(PACKS).forEach(([sport, p]) =>
+      (p.match.playerStats || []).forEach(f => {
+        if (!f.column) return;
+        expect(COLUMNS.has(f.column), `${sport}.${f.key} → ${f.column}`).toBe(true);
+      }));
+  });
+
+  it('no two stats fight over the same column', () => {
+    Object.entries(PACKS).forEach(([sport, p]) => {
+      const cols = (p.match.playerStats || []).filter(f => f.column).map(f => f.column);
+      expect(new Set(cols).size, sport).toBe(cols.length);
+    });
+  });
+
+  it('every sanction a stat reports is one the sport declares', () => {
+    Object.entries(PACKS).forEach(([sport, p]) => {
+      const declared = new Set((p.match.sanctionTypes || []).map(t => t.key));
+      (p.match.playerStats || []).forEach(f => {
+        if (!f.sanction) return;
+        expect(declared.has(f.sanction), `${sport}.${f.key} → ${f.sanction}`).toBe(true);
+      });
+    });
+  });
+
+  it('every accumulating sanction has somewhere to be recorded', () => {
+    // A sanction nothing can record would never reach the counter.
+    Object.entries(PACKS).forEach(([sport, p]) => {
+      const recorded = new Set((p.match.playerStats || []).map(f => f.sanction).filter(Boolean));
+      (p.match.sanctionTypes || []).filter(t => t.accumulates).forEach(t =>
+        expect(recorded.has(t.key), `${sport}: nothing records ${t.key}`).toBe(true));
+    });
+  });
+
+  it('basketball points never reuse the goals column', () => {
+    const pts = PACKS.basketball.match.playerStats.find(f => f.key === 'points');
+    expect(pts.column).toBeUndefined();
+  });
+});
