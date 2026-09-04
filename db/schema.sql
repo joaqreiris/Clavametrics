@@ -6133,6 +6133,7 @@ CREATE OR REPLACE FUNCTION public.trg_injury_fill_availability()
 AS $function$
 declare
   v_end date;
+  v_old_end date;
 begin
   if NEW.status <> 'active' then
     return NEW;   -- only an active injury blocks availability; cleared/returning don't auto-fill
@@ -6145,6 +6146,46 @@ begin
   select NEW.player_id::text, d::date, 'injured', 0, NEW.club_id
   from generate_series(NEW.start_date, v_end, interval '1 day') as d
   on conflict (player_id, date) do nothing;
+
+  -- Cuando el rango se ACORTA (se corrige el regreso estimado, se atrasa el inicio), los días
+  -- de baja que este mismo trigger había creado dejan de corresponder. Sin esto el jugador
+  -- queda rojo en Availability / Daily Planning / Squad hasta la fecha vieja.
+  -- Solo se tocan días DENTRO DEL RANGO ANTERIOR de ESTA lesión, marcados 'injured' sin
+  -- minutos (la huella de la carga automática) y que ninguna otra lesión activa cubra.
+  if TG_OP = 'UPDATE' then
+    v_old_end := coalesce(OLD.returned_date, OLD.expected_return, current_date);
+    delete from public.availability a
+    where a.player_id = NEW.player_id::text
+      and a.status = 'injured'
+      and coalesce(a.minutes, 0) = 0
+      and a.date between least(OLD.start_date, NEW.start_date) and greatest(v_old_end, v_end)
+      and (a.date < NEW.start_date or a.date > v_end)
+      and not exists (
+        select 1 from public.injuries i2
+        where i2.player_id = NEW.player_id
+          and i2.id <> NEW.id
+          and i2.status = 'active'
+          and a.date between i2.start_date
+                         and coalesce(i2.returned_date, i2.expected_return, current_date)
+      );
+  end if;
+  return NEW;
+end $function$
+;
+
+-- Las fases heredan el club de su lesión: el refresco en vivo (cm-realtime) escucha
+-- injury_phases filtrando por club_id, y una fase con club_id NULL nunca llega al resto
+-- del staff — se veía solo al recargar la página.
+CREATE OR REPLACE FUNCTION public.trg_injury_phase_club()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if NEW.club_id is null then
+    select i.club_id into NEW.club_id from public.injuries i where i.id = NEW.injury_id;
+  end if;
   return NEW;
 end $function$
 ;
@@ -6564,6 +6605,7 @@ CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_
 CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
 CREATE TRIGGER injury_fill_availability AFTER INSERT OR UPDATE OF status, start_date, expected_return, returned_date ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_injury_fill_availability();
+CREATE TRIGGER injury_phase_set_club BEFORE INSERT OR UPDATE OF injury_id ON public.injury_phases FOR EACH ROW EXECUTE FUNCTION trg_injury_phase_club();
 CREATE TRIGGER lineup_players_sync_participants AFTER INSERT OR UPDATE OR DELETE ON public.lineup_players FOR EACH ROW EXECUTE FUNCTION trg_sync_lineup_participants();
 CREATE TRIGGER act_lineup_pub AFTER INSERT OR UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_act_lineup_pub();
 CREATE TRIGGER lineups_clear_participants AFTER DELETE ON public.lineups FOR EACH ROW EXECUTE FUNCTION trg_clear_lineup_participants();

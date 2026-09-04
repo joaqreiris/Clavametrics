@@ -160,6 +160,7 @@
   .tl-phase.active .cr { color:var(--cm-accent); opacity:0.8; }
   .tl-phase.done .cr { color:var(--cm-success); opacity:0.7; }
   .inj-reinjury-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; background:rgba(220,38,38,0.10); color:var(--cm-danger); font:600 10.5px/1 var(--cm-font-mono); }
+  .inj-late-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; background:var(--cm-warning-bg); color:var(--cm-warning); border:1px solid var(--cm-warning-bd); font:600 10.5px/1 var(--cm-font-mono); }
 
   /* progress bar */
   .inj-progress-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
@@ -381,7 +382,7 @@
           <div class="ctx" id="injCtx"><strong>— active</strong> · loading…</div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="injuries.export_report">Export report</span></button>
+          <button class="cm-btn is-outline is-sm" onclick="exportInjuriesCsv()"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="injuries.export_report">Export report</span></button>
           <button class="cm-btn is-primary is-sm" onclick="openLogModal()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="injuries.log_injury">Log injury</span></button>
         </div>
       </header>
@@ -392,14 +393,14 @@
           <div class="inj-kpi-l"><i class="ti ti-bandage"></i><span data-i18n="injuries.active_cases">Active cases</span></div>
           <div class="inj-kpi-v" id="kpiInjActive">—</div>
           <div class="inj-kpi-t" id="kpiActiveT"><span data-i18n="common.loading">Loading…</span></div>
-          <svg class="inj-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
-            <polyline points="0,28 14,22 28,24 42,18 56,16 70,12 84,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <svg class="inj-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none" aria-hidden="true">
+            <polyline id="kpiActiveSpark" points="" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-clock"></i><span data-i18n="injuries.days_lost_mtd">Days lost MTD</span></div>
           <div class="inj-kpi-v" id="kpiDaysLost">— <sub data-i18n="injuries.days">days</sub></div>
-          <div class="inj-kpi-t" id="kpiDaysT"><span data-i18n="injuries.across_active_injuries">Across active injuries</span></div>
+          <div class="inj-kpi-t" id="kpiDaysT"><span data-i18n="injuries.days_lost_sub">All injuries this month</span></div>
         </div>
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-target-arrow"></i><span data-i18n="injuries.avg_time_to_rtp">Avg time to RTP</span></div>
@@ -939,6 +940,7 @@ function ttFmtDate(dateStr, opts) {
 // ═══════════════ STATE ═══════════════
 let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
 let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
+let _filteredInjuries = [];   // lo último que se pintó en la lista: es lo que exporta el informe
 let _editingInjuryId = null, _dischargeId = null;
 let _logMode = 'active'; // 'active' = with rehab protocol | 'historical' = past resolved injury
 
@@ -2052,7 +2054,8 @@ async function resyncPhasesToProtocol(injId, { start_date, severity, injury_type
 
   // El protocolo nuevo es más largo: faltan fases al final.
   const maxNum = ordered[ordered.length - 1]?.phase_number || 0;
-  target.slice(maxNum).forEach(t => inserts.push({ ...t, status: 'pending' }));
+  // club_id explícito: el refresco en vivo escucha injury_phases filtrando por club.
+  target.slice(maxNum).forEach(t => inserts.push({ ...t, status: 'pending', club_id: _clubId }));
 
   if (!updates.length && !inserts.length && !deletes.length) return false;
 
@@ -2453,13 +2456,62 @@ async function loadAll() {
   renderBodyRegionFilter();
 }
 
+// ═══════════════ ATRASO ═══════════════
+// Un caso va «atrasado» cuando la fase en curso pasó su fecha estimada de fin, o cuando el
+// regreso estimado ya quedó atrás y el jugador sigue sin alta. Es lo que el cuerpo médico
+// necesita ver de un vistazo: qué rehabilitaciones se están estirando más de lo planificado.
+function injLateInfo(inj) {
+  if (!inj || inj.status !== 'active') return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dayDiff = ymd => Math.round((today - new Date(ymd + 'T00:00:00')) / 86400000);
+  const phs  = _phasesMap[inj.id];
+  const cur  = phs?.find(p => p.status === 'in_progress');
+  const phaseLate  = (cur?.end_date && dayDiff(cur.end_date) > 0) ? dayDiff(cur.end_date) : 0;
+  const returnLate = (inj.expected_return && dayDiff(inj.expected_return) > 0) ? dayDiff(inj.expected_return) : 0;
+  if (!phaseLate && !returnLate) return null;
+  return { phaseLate, returnLate, phaseName: cur?.phase_name || null, days: Math.max(phaseLate, returnLate) };
+}
+
+// Curva de casos abiertos de las últimas 8 semanas, reconstruida desde las fechas de cada
+// lesión (antes era una polilínea dibujada a mano en el HTML: siempre subía, dijera lo que
+// dijera el dato). Una sola semana con datos o todo plano → no se dibuja nada.
+function drawActiveSparkline() {
+  const el = document.getElementById('kpiActiveSpark');
+  if (!el) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pts = [];
+  for (let k = 7; k >= 0; k--) {
+    const d = new Date(today); d.setDate(today.getDate() - k * 7);
+    pts.push(_allInjuries.filter(i => {
+      if (!i.start_date || new Date(i.start_date) > d) return false;
+      const end = i.returned_date ? new Date(i.returned_date) : null;
+      return !end || end >= d;
+    }).length);
+  }
+  const max = Math.max(...pts), min = Math.min(...pts);
+  if (max === 0) { el.setAttribute('points', ''); return; }
+  const span = max - min || 1;
+  el.setAttribute('points', pts.map((v, i) =>
+    `${(i / (pts.length - 1) * 84).toFixed(1)},${(32 - (v - min) / span * 28).toFixed(1)}`).join(' '));
+}
+
 // ═══════════════ KPIs ═══════════════
 function updateKPIs() {
   const today = new Date(); today.setHours(0,0,0,0);
   const firstMo = new Date(today.getFullYear(), today.getMonth(), 1);
 
+  // Casos abiertos: NO se recortan por temporada — una lesión que sigue abierta lo sigue
+  // estando aunque haya empezado la temporada pasada.
   const active = _allInjuries.filter(i => i.status === 'active');
   document.getElementById('kpiInjActive').textContent = active.length;
+
+  // Subtítulo: cuántos de esos casos van atrasados respecto del plan
+  const lateCount = active.filter(i => injLateInfo(i)).length;
+  const actT = document.getElementById('kpiActiveT');
+  if (actT) actT.textContent = !active.length ? tt('injuries.kpi_active_none','No open cases')
+    : lateCount ? tt('injuries.kpi_active_late', `${lateCount} behind schedule`, { n: lateCount })
+                : tt('injuries.kpi_active_ontrack','All on schedule');
+  drawActiveSparkline();
 
   // Days lost MTD
   let daysLost = 0;
@@ -2479,14 +2531,13 @@ function updateKPIs() {
     : null;
   document.getElementById('kpiAvgRTP').innerHTML = avgRTP != null ? `${avgRTP} <sub>${tt('injuries.days','days')}</sub>` : `— <sub>${tt('injuries.days','days')}</sub>`;
 
-  // Re-injury rate (same player + same body_area, prior injury exists in last 90d)
+  // Re-lesión (consenso UEFA / Fuller 2006): misma zona del mismo jugador DENTRO DE LOS 2 MESES
+  // posteriores al alta de la lesión anterior. Una lesión en la misma zona dos años después es
+  // una lesión nueva, no una recaída. Se mide sobre las lesiones de los últimos 90 días de la
+  // temporada en curso, igual recorte que el resto de las cards.
   const ninety = new Date(today); ninety.setDate(today.getDate() - 90);
-  const recent = _allInjuries.filter(i => new Date(i.start_date) >= ninety);
-  const reInj  = recent.filter(i =>
-    _allInjuries.some(o => o.id !== i.id && o.player_id === i.player_id &&
-      (o.body_area || '').toLowerCase() === (i.body_area || '').toLowerCase() &&
-      new Date(o.start_date) < new Date(i.start_date))
-  ).length;
+  const recent = _allInjuries.filter(i => i.start_date && new Date(i.start_date) >= ninety && injInSeason(i));
+  const reInj  = recent.filter(i => isReinjuryOf(i) != null).length;
   const rate = recent.length ? Math.round(reInj / recent.length * 100) : 0;
   document.getElementById('kpiReinjury').innerHTML = `${rate}% <sub>${tt('injuries.three_mo','3-mo')}</sub>`;
 
@@ -2553,6 +2604,24 @@ function getPriorInjury(inj) {
   ) || null;
 }
 
+// Re-lesión propiamente dicha (consenso UEFA / Fuller 2006): misma zona del mismo jugador
+// dentro de los 2 MESES posteriores al alta de la lesión anterior. Devuelve la lesión previa
+// o null. Distinto de getPriorInjury(), que es la señal de RIESGO que se muestra en la tarjeta
+// (misma zona o categoría en los 90 días previos, con o sin alta).
+function isReinjuryOf(inj) {
+  if (!inj.start_date || !inj.body_area) return null;
+  const injStart = new Date(inj.start_date);
+  return _allInjuries.find(o => {
+    if (o.id === inj.id || o.player_id !== inj.player_id) return false;
+    if ((o.body_area || '').toLowerCase() !== inj.body_area.toLowerCase()) return false;
+    if (!o.returned_date) return false;                 // sin alta no hay recaída: es el mismo episodio
+    const back = new Date(o.returned_date);
+    if (back >= injStart) return false;
+    const limit = new Date(back); limit.setMonth(limit.getMonth() + 2);
+    return injStart <= limit;
+  }) || null;
+}
+
 function updateTabCounts() {
   const active    = _allInjuries.filter(i => getInjuryTab(i) === 'active');
   const returning = _allInjuries.filter(i => getInjuryTab(i) === 'returning');
@@ -2605,8 +2674,46 @@ function applyFilters() {
     list.sort((a,b) => (now - new Date(b.start_date)) - (now - new Date(a.start_date)));
   }
 
+  _filteredInjuries = list;
   renderInjuries(list);
   updateTabCounts();
+}
+
+// ═══════════════ EXPORT ═══════════════
+// Exporta EXACTAMENTE lo que está en pantalla (pestaña + gravedad + zona + búsqueda), para que
+// el informe se pueda acotar desde los filtros. CSV con BOM: Excel lo abre con los acentos bien.
+function exportInjuriesCsv() {
+  const list = _filteredInjuries;
+  if (!list.length) { alert(tt('injuries.export_empty','There is nothing to export with the current filters.')); return; }
+  const T = (k, d) => tt('injuries.csv_' + k, d);
+  const head = [T('player','Player'), T('number','Number'), T('position','Position'), T('diagnosis','Diagnosis'),
+    T('category','Category'), T('area','Body area'), T('severity','Severity'), T('grade','Grade / sub-classification'),
+    T('start','Injury date'), T('est_return','Est. return'), T('returned','Returned'), T('days','Days injured'),
+    T('status','Status'), T('phase','Current phase'), T('late','Days behind'), T('mechanism','Mechanism'), T('notes','Notes')];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rows = list.map(i => {
+    const pl   = i.players || _playersMap[i.player_id] || {};
+    const phs  = _phasesMap[i.id];
+    const cur  = phs?.find(p => p.status === 'in_progress') || [...(phs||[])].reverse().find(p => p.status === 'done');
+    const end  = i.returned_date ? new Date(i.returned_date) : today;
+    const late = injLateInfo(i);
+    return [
+      `${pl.first_name||''} ${pl.last_name||''}`.trim(), pl.number || '', pl.position || '',
+      i.injury_type || '', i.injury_category ? catLabel(i.injury_category) : '', bodyAreaLabel(i.body_area) || '',
+      i.severity ? tt('injuries.sev_' + i.severity, i.severity) : '', i.bamic_grade || i.sub_classification || '',
+      i.start_date || '', i.expected_return || '', i.returned_date || '',
+      i.start_date ? Math.max(0, Math.round((end - new Date(i.start_date)) / 86400000)) : '',
+      i.status || '', cur ? `${cur.phase_number} · ${cur.phase_name}` : '', late ? late.days : 0,
+      i.mechanism || '', (i.notes || '').replace(/\r?\n/g, ' '),
+    ];
+  });
+  const cell = v => { const s = String(v ?? ''); return /[",;\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+  const csv  = '﻿' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
+  const url  = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a    = document.createElement('a');
+  a.href = url; a.download = `injuries-${cmToday()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function renderInjuries(list) {
@@ -2752,6 +2859,14 @@ function injCard(inj) {
         </div>
       </div>
     </div>
+    ${(() => {
+      const late = injLateInfo(inj);
+      if (!late) return '';
+      const txt = late.returnLate
+        ? tt('injuries.late_return', `Return date passed ${late.returnLate}d ago — review or discharge`, { days: late.returnLate })
+        : tt('injuries.late_phase', `Phase «${late.phaseName}» ${late.phaseLate}d past its estimated end`, { phase: late.phaseName, days: late.phaseLate });
+      return `<div style="padding:4px 16px 10px"><span class="inj-late-badge"><i class="ti ti-clock-exclamation" style="font-size:11px"></i>${esc(txt)}</span></div>`;
+    })()}
     ${(() => {
     const prior = getPriorInjury(inj);
     if (!prior) return '';
@@ -3302,8 +3417,10 @@ async function saveInjury() {
     // Auto-create phases (active protocol only — historical records skip the rehab timeline)
     if (!isHistorical) {
       try {
+        // club_id explícito: el refresco en vivo escucha injury_phases filtrando por club.
         const phases = applyLogCriteria(
-          buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area));
+          buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification, body_area))
+          .map(p => ({ ...p, club_id: _clubId }));
         const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
         if (insertedPhs) {
           _phasesMap[newInj.id] = insertedPhs;
@@ -3472,22 +3589,32 @@ async function confirmDischarge() {
     } catch(e) { console.warn('[Injuries] availability cleanup failed:', e.message); }
   }
 
-  // Step 3: insert notifications for coaches / admins / staff
+  // Step 3: insert notifications for coaches / admins / staff.
+  // Cada fila va en el idioma de quien la recibe: la notificación se guarda como texto, así que
+  // no se puede traducir al mostrarla (mismo criterio que el aviso de lesión nueva).
   try {
     const pl    = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
     const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
-    const retFmt = new Date(returnDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const CL = {
+      en: { locale:'en-GB', title:n=>`${n} cleared — available for training`, body:d=>`Medical clearance confirmed. Player available from ${d}.`, anon:'A player' },
+      es: { locale:'es-ES', title:n=>`${n} recibió el alta médica`,           body:d=>`Alta médica confirmada. Disponible desde el ${d}.`,      anon:'Un jugador' },
+      pt: { locale:'pt-BR', title:n=>`${n} recebeu alta médica`,              body:d=>`Alta médica confirmada. Disponível a partir de ${d}.`,   anon:'Um jogador' },
+    };
     const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
     if (recips.length) {
       const { error: nErr } = await window.sb.from('notifications').insert(
-        recips.map(p => ({
-          user_id: p.id,
-          club_id: _clubId,
-          type:    'medical_clearance',
-          title:   `${pName} cleared — available for training`,
-          body:    `Medical clearance confirmed. Player available from ${retFmt}.`,
-          link:    '/Daily Planning.html'
-        }))
+        recips.map(p => {
+          const L = CL[p.preferred_lang] || CL.en;
+          const d = new Date(returnDate).toLocaleDateString(L.locale, { day:'numeric', month:'short' });
+          return {
+            user_id: p.id,
+            club_id: _clubId,
+            type:    'medical_clearance',
+            title:   L.title(pName || L.anon),
+            body:    L.body(d),
+            link:    '/Daily Planning.html'
+          };
+        })
       );
       if (nErr) console.warn('[notif] medical_clearance insert failed:', nErr.message);
     }
@@ -3497,12 +3624,15 @@ async function confirmDischarge() {
   try {
     const pl    = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
     const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
-    const retFmt = new Date(returnDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const retFmt = ttFmtDate(returnDate, { day:'numeric', month:'short' });
     await window.sb.from('messages').insert({
       club_id:      _clubId,
       sender_id:    _profile?.id || null,
-      sender_name:  _profile?.full_name || 'Medical Staff',
-      content:      `Medical clearance: ${pName} — ${inj?.injury_type || 'injury'} — cleared ${retFmt}.${disNotes ? '\n' + disNotes : ''}`,
+      sender_name:  _profile?.full_name || tt('injuries.medical_staff','Medical Staff'),
+      content:      tt('injuries.clearance_msg',
+                       `Medical clearance: ${pName} — ${inj?.injury_type || tt('injuries.injury_word','injury')} — cleared ${retFmt}.`,
+                       { name: pName, type: inj?.injury_type || tt('injuries.injury_word','injury'), date: retFmt })
+                    + (disNotes ? '\n' + disNotes : ''),
       message_type: 'medical_clearance',
       recipient_id: null
     });
