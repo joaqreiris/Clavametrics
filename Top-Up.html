@@ -922,42 +922,66 @@
   function mountPitch(id, rx){
     const host = $(id); if (!host || !rx) return;
     const g = pitchGeom(), lenM = pitchLen();
-    host.style.aspectRatio = `${g.vbW} / ${g.vbH}`;
+    // Igual que el plan: se recorta a la franja que la carrera usa, si no el
+    // dibujo se pierde en 68 m de césped vacío.
+    const bandH = 230, yTop = (g.vbH - bandH) / 2;
+    host.style.aspectRatio = `${g.vbW} / ${bandH}`;
     host.innerHTML = '';
     try { window.CMField?.renderField(host, g.sport, 'full', 'h'); } catch (_) {}
+    const vb = `0 ${yTop.toFixed(1)} ${g.vbW} ${bandH}`;
+    host.querySelectorAll('svg').forEach(el => el.setAttribute('viewBox', vb));
 
     const K = g.playW / lenM;                       // unidades del dibujo por metro
     const launch = rx.rolling ? rx.launchM : 0;
-    const total = launch + rx.distM + rx.brakeM;
+    const total = rx.shuttle ? (rx.endM * 2 + rx.distM) : (launch + rx.distM + rx.brakeM);
     const x = g.x0 + Math.max(0, (g.playW - total * K) / 2);
-    const yc = g.vbH / 2, h = 46;
+    const yc = yTop + bandH / 2, h = 46;
     const box = (xa, w, fill, op) => `<rect x="${xa.toFixed(1)}" y="${(yc - h / 2).toFixed(1)}" width="${Math.max(0, w).toFixed(1)}" height="${h}" rx="6" fill="${fill}" fill-opacity="${op}"/>`;
     const cone = (xa) => `<path d="M${xa.toFixed(1)},${(yc - h / 2 - 13).toFixed(1)} l6,13 l-12,0 z" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1"/>`;
     const lbl = (xa, y, txt, anchor) => `<text x="${xa.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor || 'middle'}" font-family="ui-monospace,monospace" font-size="${(txt+"").length > 12 ? 22 : 27}" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.45)" stroke-width="3.5" paint-order="stroke">${txt}</text>`;
 
     let s = '';
     let cur = x;
-    if (launch > 0){ s += box(cur, launch * K, '#fbbf24', .55) + lbl(cur + launch * K / 2, yc + h / 2 + 30, `${Math.round(launch)} m`); cur += launch * K; }
+    // Ida y vuelta: las dos puntas miden lo mismo (el frenado de la ida es el
+    // lanzamiento de la vuelta) y ahí es donde el jugador espera la pausa.
+    const endW = rx.endM * K;
+    if (rx.shuttle){
+      s += box(cur, endW, '#fbbf24', .5) + lbl(cur + endW / 2, yc + h / 2 + 30, `${Math.round(rx.endM)} m`);
+      cur += endW;
+    } else if (launch > 0){
+      s += box(cur, launch * K, '#fbbf24', .55) + lbl(cur + launch * K / 2, yc + h / 2 + 30, `${Math.round(launch)} m`);
+      cur += launch * K;
+    }
     s += box(cur, rx.distM * K, '#22c55e', .70) + cone(cur) + cone(cur + rx.distM * K)
-       + lbl(cur + rx.distM * K / 2, yc + 8, `${rx.distM} m`)
-       + lbl(cur + rx.distM * K / 2, yc + h / 2 + 30, `${rx.runSec}s · ${rx.speed} km/h`);
+       + lbl(cur + rx.distM * K / 2, yc + 8, `${rx.distM} m · ${rx.runSec}s`)
+       + lbl(cur + rx.distM * K / 2, yc + h / 2 + 30, `${rx.speed} km/h`);
     cur += rx.distM * K;
-    s += box(cur, rx.brakeM * K, '#ef4444', .55) + lbl(cur + rx.brakeM * K / 2, yc + h / 2 + 30, `${Math.round(rx.brakeM)} m`);
-    // flecha de dirección
-    s += `<path d="M${x.toFixed(1)},${(yc - h / 2 - 34).toFixed(1)} H${(x + total * K - 14).toFixed(1)}" stroke="#fff" stroke-width="2.5" stroke-opacity=".85" fill="none" marker-end=""/>`
-       + `<path d="M${(x + total * K).toFixed(1)},${(yc - h / 2 - 34).toFixed(1)} l-14,-7 l0,14 z" fill="#fff" fill-opacity=".85"/>`
-       + lbl(x, yc - h / 2 - 46, `${tt('topup.pitch_total','ocupa')} ${Math.round(total)} m / ${lenM} m`, 'start');
+    if (rx.shuttle){
+      s += box(cur, endW, '#fbbf24', .5) + lbl(cur + endW / 2, yc + h / 2 + 30, `${Math.round(rx.endM)} m`);
+    } else {
+      s += box(cur, rx.brakeM * K, '#ef4444', .55) + lbl(cur + rx.brakeM * K / 2, yc + h / 2 + 30, `${Math.round(rx.brakeM)} m`);
+    }
+    // Dónde espera la pausa: en la punta (o en las dos, si es ida y vuelta).
+    const restTxt = `⏱ ${rx.rest}s`;
+    s += lbl(x + (rx.shuttle ? endW / 2 : 4), yc - h / 2 - 12, restTxt, 'middle', 20);
+    if (rx.shuttle) s += lbl(x + total * K - endW / 2, yc - h / 2 - 12, restTxt, 'middle', 20);
+    // flechas de dirección (dos, si vuelve)
+    const yA = yc - h / 2 - 40;
+    s += `<path d="M${(x + 6).toFixed(1)},${yA.toFixed(1)} H${(x + total * K - 14).toFixed(1)}" stroke="#fff" stroke-width="2.5" stroke-opacity=".85" fill="none"/>`
+       + `<path d="M${(x + total * K).toFixed(1)},${yA.toFixed(1)} l-14,-7 l0,14 z" fill="#fff" fill-opacity=".85"/>`;
+    if (rx.shuttle) s += `<path d="M${x.toFixed(1)},${yA.toFixed(1)} l14,-7 l0,14 z" fill="#fff" fill-opacity=".85"/>`;
+    s += lbl(x, yc - h / 2 - 52, `${tt('topup.pitch_total','ocupa')} ${Math.round(total)} m / ${lenM} m`, 'start');
 
     const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    ov.setAttribute('viewBox', `0 0 ${g.vbW} ${g.vbH}`);
+    ov.setAttribute('viewBox', vb);
     ov.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     ov.innerHTML = s;
     host.appendChild(ov);
   }
-  const pitchLegendHTML = () => `<div class="tu-runlegend">
-    <span><i class="lz"></i>${tt('topup.zone_launch','lanzamiento')}</span>
+  const pitchLegendHTML = (shuttle) => `<div class="tu-runlegend">
+    <span><i class="lz"></i>${shuttle ? tt('topup.zone_end','punta: lanzamiento de un lado, frenado del otro') : tt('topup.zone_launch','lanzamiento')}</span>
     <span><i class="mz"></i>${tt('topup.zone_measured','zona medida (cuenta en la banda)')}</span>
-    <span><i class="bz"></i>${tt('topup.zone_brake','frenado')}</span></div>`;
+    ${shuttle ? '' : `<span><i class="bz"></i>${tt('topup.zone_brake','frenado')}</span>`}</div>`;
 
   // ── PLAN DE CAMPO: una foto por banda con TODOS los elegidos ──
   // Los conos de la zona medida son los mismos para todos (por eso se alinean en
@@ -974,7 +998,7 @@
       if (deficitM <= 0) return;
       const f = runFmtFor(band);
       const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
-        deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+        deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
       if (!rx || rx.noRoom || !rx.reps) return;
       rows.push({ pd, rx });
     });
@@ -982,12 +1006,13 @@
     // Un carril por (zona medida · lanzamiento redondeado a 5 m).
     const groups = new Map();
     rows.forEach(r => {
-      const launch = r.rx.rolling ? Math.ceil(r.rx.launchM / 5) * 5 : 0;
-      const key = r.rx.distM + '|' + launch;
-      if (!groups.has(key)) groups.set(key, { distM: r.rx.distM, launchM: launch, brakeM: r.rx.brakeM, rows: [] });
-      const g = groups.get(key); g.rows.push(r); g.brakeM = Math.max(g.brakeM, r.rx.brakeM);
+      const head = Math.ceil((r.rx.shuttle ? r.rx.endM : (r.rx.rolling ? r.rx.launchM : 0)) / 5) * 5;
+      const key = r.rx.distM + '|' + head;
+      if (!groups.has(key)) groups.set(key, { distM: r.rx.distM, headM: head, tailM: r.rx.shuttle ? head : r.rx.brakeM,
+                                             shuttle: r.rx.shuttle, rest: r.rx.rest, rows: [] });
+      const g = groups.get(key); g.rows.push(r); g.tailM = Math.max(g.tailM, r.rx.shuttle ? head : r.rx.brakeM);
     });
-    const lanes = [...groups.values()].sort((a, b) => b.launchM - a.launchM);
+    const lanes = [...groups.values()].sort((a, b) => b.headM - a.headM);
     return { band, lanes, rows };
   }
   function mountFieldPlan(id, plan){
@@ -1008,10 +1033,10 @@
     const K = g.playW / lenM;
     // Todos comparten los conos: se centra el bloque más largo y desde ahí se
     // dibuja hacia atrás el lanzamiento de cada carril.
-    const maxLaunch = Math.max(...plan.lanes.map(l => l.launchM));
-    const maxDist   = Math.max(...plan.lanes.map(l => l.distM));
-    const maxBrake  = Math.max(...plan.lanes.map(l => l.brakeM));
-    const xCone = g.x0 + Math.max(0, (g.playW - (maxLaunch + maxDist + maxBrake) * K) / 2) + maxLaunch * K;
+    const maxHead = Math.max(...plan.lanes.map(l => l.headM));
+    const maxDist = Math.max(...plan.lanes.map(l => l.distM));
+    const maxTail = Math.max(...plan.lanes.map(l => l.tailM));
+    const xCone = g.x0 + Math.max(0, (g.playW - (maxHead + maxDist + maxTail) * K) / 2) + maxHead * K;
 
     const txt = (x, y, t, anchor, size, weight) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor || 'start'}" font-family="ui-monospace,monospace" font-size="${size || 22}" font-weight="${weight || 700}" fill="#fff" stroke="rgba(0,0,0,.5)" stroke-width="3.2" paint-order="stroke">${t}</text>`;
     let s = '', yCur = yTop + 20;
@@ -1019,11 +1044,16 @@
       const laneH = 66 + 26 * nameLines(lane), barH = 42;
       const yc = yCur + 33, y = yc - barH / 2;
       yCur += laneH;
-      const xs = xCone - lane.launchM * K;
+      const xs = xCone - lane.headM * K, xEnd = xCone + lane.distM * K;
       const rect = (xa, w, fill, op) => `<rect x="${xa.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(0, w).toFixed(1)}" height="${barH.toFixed(1)}" rx="5" fill="${fill}" fill-opacity="${op}"/>`;
-      if (lane.launchM > 0) s += rect(xs, lane.launchM * K, '#fbbf24', .55);
+      if (lane.headM > 0) s += rect(xs, lane.headM * K, '#fbbf24', lane.shuttle ? .5 : .55);
       s += rect(xCone, lane.distM * K, '#22c55e', .70)
-         + rect(xCone + lane.distM * K, lane.brakeM * K, '#ef4444', .5);
+         + rect(xEnd, lane.tailM * K, lane.shuttle ? '#fbbf24' : '#ef4444', .5);
+      // flechas: dos puntas si vuelve desde donde llegó
+      const yA = y - 9;
+      s += `<path d="M${(xs + 5).toFixed(1)},${yA.toFixed(1)} H${(xEnd + lane.tailM * K - 10).toFixed(1)}" stroke="#fff" stroke-width="2" stroke-opacity=".8" fill="none"/>`
+         + `<path d="M${(xEnd + lane.tailM * K).toFixed(1)},${yA.toFixed(1)} l-10,-5 l0,10 z" fill="#fff" fill-opacity=".8"/>`;
+      if (lane.shuttle) s += `<path d="M${xs.toFixed(1)},${yA.toFixed(1)} l10,-5 l0,10 z" fill="#fff" fill-opacity=".8"/>`;
       // conos
       [xCone, xCone + lane.distM * K].forEach(cx => {
         s += `<path d="M${cx.toFixed(1)},${(y - 11).toFixed(1)} l5.5,11 l-11,0 z" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1"/>`;
@@ -1044,7 +1074,8 @@
       const tLo = Math.min(...ts), tHi = Math.max(...ts);
       const tTxt = tLo === tHi ? `${tLo}s` : `${tLo}-${tHi}s`;
       s += txt(xCone + lane.distM * K / 2, yc + 7, `${lane.distM} m · ${tTxt}`, 'middle', 24);
-      if (lane.launchM > 0) s += txt(xs + 4, yc + 7, `${lane.launchM}`, 'start', 19);
+      if (lane.headM > 0) s += txt(xs + 4, yc + 7, `${lane.headM}`, 'start', 19);
+      s += txt(xEnd + lane.tailM * K + 10, yc + 7, `⏱ ${lane.rest}s`, 'start', 20);
     });
     const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     ov.setAttribute('viewBox', vb);
@@ -1066,13 +1097,13 @@
         const f = runFmtFor(p.band);
         return `<div class="tu-fp">
           <div class="tu-fp-h"><span class="bn">${esc(bLabel)}</span>
-            <span class="bm">${esc(mLabel(p.band.metric))} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s</span></div>
-          ${pitchHTML('tu-fp-' + p.band.id)}${pitchLegendHTML()}
+            <span class="bm">${esc(mLabel(p.band.metric))} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s · ${tt('topup.setrest_abbr','entre series')} ${Math.round(f.setRest/60*10)/10}′</span></div>
+          ${pitchHTML('tu-fp-' + p.band.id)}${pitchLegendHTML(p.lanes[0] && p.lanes[0].shuttle)}
           <table class="tu-fp-tbl"><tbody>` + p.rows.map(r => `<tr>
               <td class="nm">${r.pd.player.number != null ? `<b>${r.pd.player.number}</b> ` : ''}${esc(r.pd.player.name)}</td>
               <td class="num">${r.rx.reps} × ${r.rx.distM} m</td>
               <td class="num"><b>${r.rx.runSec}s</b></td>
-              <td class="num">${r.rx.speed} km/h</td>
+              <td class="num">${r.rx.startSec}s <small>${tt('topup.from_start','desde salida')}</small></td>
               <td class="num">${r.rx.sets} ${tt('topup.sets_abbr','ser')} · ${r.rx.timeMin}′</td>
             </tr>`).join('') + `</tbody></table></div>`;
       }).join('') + `</div>`;
@@ -1091,11 +1122,11 @@
     const d = def[band.metric];
     const f = runFmtFor(band);
     const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
-      deficitM: (d && d.deficit) || 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+      deficitM: (d && d.deficit) || 0, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
     if (!rx || rx.noRoom){ box.innerHTML = `<div class="tu-note warn">${tt('topup.no_room_short','No entra en el campo configurado.')}</div>`; return; }
     const bLabel = tt('topup.band_'+band.id, band.id.toUpperCase());
     box.innerHTML = `<div class="tu-note" style="margin-top:0"><b>${esc(pd.player.name)}</b> · ${esc(bLabel)} · ${rx.reps} × ${rx.distM} m @ ${rx.speed} km/h</div>
-      ${pitchHTML('tu-pitch-view')}${pitchLegendHTML()}
+      ${pitchHTML('tu-pitch-view')}${pitchLegendHTML(rx.shuttle)}
       <div class="tu-note">${tt('topup.pitch_note','Los conos marcan la zona medida. El lanzamiento es para llegar a la velocidad antes del primer cono; después del segundo, frenar sin brusquedad.')}</div>`;
     mountPitch('tu-pitch-view', rx);
   }
@@ -1163,29 +1194,32 @@
       + bands.map(b => {
         const f = runFmtFor(b);
         const rx = TU.prescribeRunDist({ band: b, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
-          deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+          deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
         const bLabel = tt('topup.band_'+b.id, b.id.toUpperCase());
         return `<div class="tu-rowfmt" data-bfmt="${b.id}">
           <div class="rf-h"><span class="nm">${esc(bLabel)}</span><span class="mt">${esc(mLabel(b.metric))}</span></div>
           <div class="rf-f">
             <div class="f"><label>${tt('topup.rfmt_dist','Zona medida (m)')}</label><input type="number" min="5" max="120" inputmode="numeric" data-bf="dist" value="${f.dist}"></div>
             <div class="f"><label>${tt('topup.rfmt_rest','Pausa (s)')}</label><input type="number" min="0" max="300" inputmode="numeric" data-bf="rest" value="${f.rest}"></div>
+            <div class="f"><label>${tt('topup.rfmt_setrest','Entre series (s)')}</label><input type="number" min="0" max="600" inputmode="numeric" data-bf="setRest" value="${f.setRest}"></div>
             <label class="tu-switch"><input type="checkbox" data-bf="rolling" ${f.rolling ? 'checked' : ''}>${tt('topup.rfmt_rolling','Arranque rodado')}</label>
+            <label class="tu-switch"><input type="checkbox" data-bf="shuttle" ${f.shuttle ? 'checked' : ''}>${tt('topup.rfmt_shuttle','Ida y vuelta')}</label>
           </div>
-          ${rx ? `<div class="tu-note">${tt('topup.rfmt_sum', `${rx.speed} km/h · ${rx.runSec}s por carrera · ocupa ${Math.round(rx.totalSpaceM)} m de campo`, { s: rx.speed, t: rx.runSec, m: Math.round(rx.totalSpaceM) })}</div>
-             ${pitchHTML('tu-pitch-' + b.id)}${pitchLegendHTML()}` : ''}
+          ${rx ? `<div class="tu-note">${tt('topup.rfmt_sum', `${rx.runSec}s entre conos · ${rx.startSec}s desde la salida · ${rx.speed} km/h · ocupa ${Math.round(rx.totalSpaceM)} m`, { t: rx.runSec, ts: rx.startSec, s: rx.speed, m: Math.round(rx.totalSpaceM) })}
+             · ${tt('topup.rfmt_ratio', `pausa 1:${rx.restRatio}`, { r: rx.restRatio })}</div>
+             ${pitchHTML('tu-pitch-' + b.id)}${pitchLegendHTML(rx.shuttle)}` : ''}
         </div>`;
       }).join('');
     bands.forEach(b => {
       const f = runFmtFor(b);
       const rx = TU.prescribeRunDist({ band: b, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
-        deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+        deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
       if (rx) mountPitch('tu-pitch-' + b.id, rx);
     });
     box.querySelectorAll('[data-bf]').forEach(inp => inp.addEventListener('change', () => {
       const id = inp.closest('[data-bfmt]').dataset.bfmt, k = inp.dataset.bf;
       const cur = Object.assign(runFmtFor(selectedBands().find(b => b.id === id)), state.runFmt[id] || {});
-      cur[k] = k === 'rolling' ? inp.checked : (+inp.value || 0);
+      cur[k] = (k === 'rolling' || k === 'shuttle') ? inp.checked : (+inp.value || 0);
       state.runFmt[id] = cur;
       savePrefs(); renderRunFmtEditor(); renderResults();
     }));
@@ -1307,14 +1341,15 @@
     const deficitM = d && d.deficit != null ? d.deficit : 0;
     const f = runFmtFor(band);
     const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
-      deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+      deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
     if (!rx) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_run','No se puede calcular la velocidad.')}</span></div>` };
     if (rx.noRoom) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_room', `No entra en ${pitchLen()} m de campo (necesita ${rx.launchM} m de lanzamiento y ${rx.brakeM} de frenado).`, { l: rx.launchM, b: rx.brakeM })}</span></div>` };
     if (deficitM <= 0) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_deficit_band','sin déficit')}</span></div>` };
     const asrTxt = rx.asrPct != null ? ` · ${rx.asrPct}% ASR` : '';
-    const start = rx.rolling ? tt('topup.start_rolling','lanzado') : tt('topup.start_still','parado');
+    const start = (rx.rolling ? tt('topup.start_rolling','lanzado') : tt('topup.start_still','parado'))
+      + (rx.shuttle ? ' · ' + tt('topup.shuttle_short','ida y vuelta') : '');
     let html = `<div class="tu-line">${RUN_IC}
-      <span class="main"><b>${rx.reps} × ${rx.distM} m ${tt('topup.in_secs','en')} ${rx.runSec}s</b> <span class="dim">· ${rx.speed} km/h · ${start} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s · ${esc(bLabel)}${asrTxt}</span></span>
+      <span class="main"><b>${rx.reps} × ${rx.distM} m ${tt('topup.in_secs','en')} ${rx.runSec}s</b> <span class="dim">· ${rx.speed} km/h · ${start} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s${rx.restRatio ? ` (1:${rx.restRatio})` : ''} · ${esc(bLabel)}${asrTxt}</span></span>
       <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span>
       <button class="seebtn" data-seepitch="${pid}:${band.id}" title="${tt('topup.see_pitch','Ver en el campo')}"><i class="ti ti-map-2"></i></button></div>`;
     if (rx.trimmed) html += `<div class="tu-hwarn">${tt('topup.trimmed', `Recortada a ${rx.distM} m: es lo que entra en ${pitchLen()} m de campo.`, { d: rx.distM, p: pitchLen() })}</div>`;

@@ -150,10 +150,17 @@
 
   // Formato por defecto según el tipo de banda. El sprint es otra cosa: menos
   // metros y mucha más pausa (con 15 s de pausa no hay sprint que se sostenga).
+  // La pausa se rige por el RATIO trabajo:pausa, y ese ratio lo decide el objetivo:
+  //   HSR    ~1:2   → alcanza para repetir a esa velocidad (HIIT de intervalos cortos)
+  //   VHSR   ~1:5   → con menos, la velocidad cae y los metros dejan de caer en la banda
+  //   sprint ~1:20  → la fosfocreatina vuelve al ~50% a los 30 s y al ~90% a los 2-3 min:
+  //                   con menos pausa, la segunda repetición ya no es un sprint.
+  // Se guardan en segundos (con un grupo se maneja con una sola voz) y la UI muestra
+  // el ratio que queda, para ver si te fuiste de rango. setRest = pausa ENTRE SERIES.
   const RUN_FMT_DEFAULT = {
-    hsr:    { dist: 60, rest: 20, rolling: true },
-    vhsr:   { dist: 60, rest: 40, rolling: true },
-    sprint: { dist: 30, rest: 75, rolling: true },
+    hsr:    { dist: 60, rest: 20, rolling: true, shuttle: true, setRest: 120 },
+    vhsr:   { dist: 60, rest: 40, rolling: true, shuttle: true, setRest: 180 },
+    sprint: { dist: 30, rest: 75, rolling: true, shuttle: true, setRest: 180 },
   };
   // La banda puede ser custom del club: se resuelve por el `kind` de su métrica.
   function defaultRunFmt(band) {
@@ -198,16 +205,22 @@
     const pitch   = +opts.pitchLen > 0 ? +opts.pitchLen : 105;
     const rolling = opts.rolling !== false;
 
+    // IDA Y VUELTA: nadie vuelve caminando al punto de partida — sale desde donde
+    // llegó. Entonces el frenado de la ida es el lanzamiento de la vuelta y las dos
+    // puntas tienen que medir lo mismo: la mayor de las dos.
+    const shuttle = opts.shuttle !== false;
+    const endM = shuttle ? (rolling ? Math.max(launchM, brakeM) : brakeM) : brakeM;
+
     // Lo que ocupa la tarea en el campo. Con arranque parado el lanzamiento pasa
     // a estar DENTRO de la zona marcada (no se suma), pero se descuenta de los
     // metros que cuentan en la banda.
     let distM = Math.max(5, Math.round(+opts.dist || 0));
-    const spaceFor = (d) => (rolling ? launchM + d : d) + brakeM;
+    const spaceFor = (d) => shuttle ? (endM * 2 + d) : ((rolling ? launchM + d : d) + brakeM);
     let trimmed = false;
     if (spaceFor(distM) > pitch) {
-      const room = Math.floor(pitch - brakeM - (rolling ? launchM : 0));
+      const room = Math.floor(pitch - (shuttle ? endM * 2 : brakeM + (rolling ? launchM : 0)));
       if (room >= 5) { distM = room; trimmed = true; }
-      else return { speed, launchM, brakeM, distM: 0, usableM: 0, reps: 0, sets: 0,
+      else return { speed, launchM, brakeM, endM, shuttle, distM: 0, usableM: 0, reps: 0, sets: 0,
                     totalRunM: 0, timeMin: 0, asrPct: pctASR(speed, opts.vift, opts.vmax),
                     totalSpaceM: +spaceFor(distM).toFixed(1), trimmed: true, noRoom: true };
     }
@@ -220,19 +233,30 @@
       ? distM / kmhToMs(speed)
       : accelTime(speed, opts.vmax) + Math.max(0, distM - launchM) / kmhToMs(speed)).toFixed(1);
 
+    // Tiempo DESDE LA SALIDA hasta el segundo cono: es el que se puede cronometrar
+    // a la voz (lanzado, el crono real corre solo entre conos).
+    const startSec = +(rolling ? accelTime(speed, opts.vmax) + runSec : runSec).toFixed(1);
+
+    const setRest = +opts.setRest >= 0 ? +opts.setRest : 120;
     let reps = 0, sets = 0, repsPerSet = 0, totalRunM = 0, timeMin = 0;
     if (opts.deficitM > 0 && usableM > 0) {
       reps = Math.max(1, Math.ceil(opts.deficitM / usableM));
+      // Ida y vuelta: par, para que termine donde arrancó.
+      if (shuttle && reps % 2) reps += 1;
       // Series más cortas cuanto más rápido: un sprint no se repite 10 veces seguidas.
       repsPerSet = Math.min(reps, (METRIC_DEFS[opts.band.metric] || {}).kind === 'sprint' ? 5 : 8);
       sets = Math.max(1, Math.ceil(reps / repsPerSet));
       totalRunM = reps * usableM;
-      timeMin = +(reps * (runSec + (+opts.rest || 0)) / 60).toFixed(1);
+      // El tiempo del bloque incluye la macropausa entre series (antes faltaba y
+      // el total quedaba corto de varios minutos).
+      timeMin = +((reps * (runSec + (+opts.rest || 0)) + (sets - 1) * setRest) / 60).toFixed(1);
     }
     const asrPct = pctASR(speed, opts.vift, opts.vmax);
     return {
-      speed, distM, usableM, runSec, reps, sets, repsPerSet, totalRunM, timeMin, asrPct,
-      launchM, brakeM, rolling, trimmed,
+      speed, distM, usableM, runSec, startSec, reps, sets, repsPerSet, totalRunM, timeMin, asrPct,
+      launchM, brakeM, endM, rolling, shuttle, trimmed, rest: +opts.rest || 0, setRest,
+      // Control de dosis: qué ratio trabajo:pausa quedó (1:x).
+      restRatio: runSec > 0 ? Math.round((+opts.rest || 0) / runSec) : null,
       totalSpaceM: +spaceFor(distM).toFixed(1),
       // Sin arranque rodado y con la banda alta, la carrera se va casi entera en
       // acelerar: hay que avisarlo, no devolver un número que miente.
