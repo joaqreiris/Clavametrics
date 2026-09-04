@@ -257,6 +257,13 @@
   .vc-row .nm { flex:1; min-width:0; font:500 13px/1.35 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vc-row .sub { font:var(--cm-meta); color:var(--cm-fg-muted); white-space:nowrap; }
   .vc-day .dempty { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0; }
+  .vc-day .dh .sub { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  /* Sin fecha: la fila no navega entera (tiene el selector de día adentro) */
+  #vcUndated .vc-row { cursor:default; }
+  #vcUndated .vc-row .nm { cursor:pointer; }
+  #vcUndated .vc-row .nm:hover { color:var(--cm-accent); }
+  .vc-setdate { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); padding:4px 8px; font:13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:none; }
+  .vc-setdate:focus { outline:2px solid var(--cm-accent); outline-offset:1px; }
 
   /* ── Sent list ── */
   .vr-sends { display:flex; flex-direction:column; gap:12px; }
@@ -425,6 +432,8 @@
         </div>
         <div class="vc-grid" id="vcGrid"></div>
         <div class="vc-day" id="vcDay" hidden></div>
+        <!-- Videos sin día: no se los inventa por la fecha de carga, se pide acá. -->
+        <div class="vc-day" id="vcUndated" hidden></div>
       </div>
 
       <div class="vr-sends" id="vrSends" hidden></div>
@@ -636,9 +645,10 @@
   let currentFolder = null;                         // folder id when drilled in, else null
   const filters = { q:'', link:'all', date:'any' };
 
-  // Día del video para el calendario: la fecha de lo filmado; si el video es viejo
-  // (o nunca se cargó la fecha), cae en la de carga, para que el mes no salga vacío.
-  const dayOf = r => r.event_date || String(r.created_at || '').slice(0, 10);
+  // Día del video = el día que PASÓ lo filmado. Nunca la fecha de carga: un corte
+  // del partido del sábado subido el martes es del sábado. Sin fecha, el video no
+  // cuelga de ningún día y aparece en la lista "Sin fecha" del calendario.
+  const dayOf = r => r.event_date || null;
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
   function renderSkeleton() {
@@ -703,7 +713,14 @@
       mRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'match',   icon:'ti-ball-football',  label: matchLabel(eMap.get(r.event_id)) }));
     }
 
-    VIDEOS = list.map(v => ({ ...v, links: linksByVideo[v.id] || [] }));
+    // Orden de la biblioteca: por el día filmado (lo más reciente primero); los que
+    // todavía no tienen día quedan al final, no mezclados por fecha de carga.
+    VIDEOS = list.map(v => ({ ...v, links: linksByVideo[v.id] || [] }))
+      .sort((a, b) => {
+        if (!a.event_date !== !b.event_date) return a.event_date ? -1 : 1;
+        if (a.event_date && a.event_date !== b.event_date) return a.event_date < b.event_date ? 1 : -1;
+        return String(b.created_at).localeCompare(String(a.created_at));
+      });
     $('#vrTotal').textContent = tt('video_room.count', `${VIDEOS.length} video${VIDEOS.length === 1 ? '' : 's'}`, { count: VIDEOS.length });
     render();
   }
@@ -717,8 +734,10 @@
       else if (!types.has(filters.link)) return false;
     }
     if (filters.date !== 'any') {
+      // Por fecha de lo filmado. El que no la tiene no entra en ningún rango:
+      // no se sabe de cuándo es, y la de carga no lo dice.
       const days = { d7:7, d30:30, d90:90 }[filters.date];
-      if (days && new Date(v.created_at).getTime() < Date.now() - days * 86400000) return false;
+      if (days && (!v.event_date || parseYmd(v.event_date).getTime() < Date.now() - days * 86400000)) return false;
     }
     return true;
   }
@@ -756,7 +775,8 @@
             <button class="more" data-menu="${esc(v.id)}" data-copy="${esc(v.url)}" title="${esc(tt('video_room.more_actions', 'More'))}"><i class="ti ti-dots"></i></button>
           </div>
           <div class="vr-meta">
-            <i class="ti ti-calendar-event"></i>${fmtDate(v.created_at)}
+            <!-- La fecha que importa es la del día filmado, no la de carga. -->
+            <i class="ti ti-calendar-event"></i>${v.event_date ? fmtDate(v.event_date) : `<span style="color:var(--cm-fg-faint)">${esc(tt('video_room.no_date', 'No date'))}</span>`}
             ${v.uploaded_by_name ? `<span class="dotsep"></span>${esc(v.uploaded_by_name)}` : ''}
           </div>
           <div class="vr-links">${chips}</div>
@@ -1053,7 +1073,48 @@
     }
     $('#vcGrid').innerHTML = html;
     renderDayPanel();
+    renderUndated();
   }
+
+  // Los que no tienen día: se listan aparte con un selector de fecha, porque
+  // adivinarlo por la fecha de carga sería mentir sobre cuándo pasó.
+  function renderUndated() {
+    const box = $('#vcUndated');
+    const rows = VIDEOS.filter(v => !v.event_date);
+    if (!rows.length) { box.hidden = true; return; }
+    box.innerHTML = `
+      <div class="dh">
+        <h3>${esc(tt('video_room.undated_title', 'Videos without a day'))}</h3>
+        <span class="sub">${esc(tt('video_room.undated_hint', 'Set the day it happened so they show up in the calendar.'))}</span>
+      </div>
+      <div class="dsec">
+        ${rows.map(v => `
+          <div class="vc-row">
+            <span class="ic"><i class="ti ${v.kind === 'folder' ? 'ti-folder' : 'ti-player-play'}"></i></span>
+            <span class="nm" data-open-video="${esc(v.id)}">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
+            <span class="sub">${esc(tt('video_room.uploaded_on', `uploaded ${fmtDate(v.created_at)}`, { date: fmtDate(v.created_at) }))}</span>
+            <input type="date" class="vc-setdate" data-set-date="${esc(v.id)}" aria-label="${esc(tt('video_room.date_label', 'Date of the content'))}">
+          </div>`).join('')}
+      </div>`;
+    box.hidden = false;
+  }
+
+  // Poner el día de un video suelto: se guarda y salta al calendario.
+  $('#vcUndated').addEventListener('change', async e => {
+    const inp = e.target.closest('[data-set-date]');
+    if (!inp || !inp.value) return;
+    const { error } = await window.sb.from('videos')
+      .update({ event_date: inp.value, updated_at: new Date().toISOString() }).eq('id', inp.dataset.setDate);
+    if (error) { alert(error.message); return; }
+    const v = VIDEOS.find(x => x.id === inp.dataset.setDate);
+    if (v) v.event_date = inp.value;
+    toast(tt('video_room.date_saved', 'Date saved'));
+    renderCal();
+  });
+  $('#vcUndated').addEventListener('click', e => {
+    const v = e.target.closest('[data-open-video]');
+    if (v) window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(v.dataset.openVideo);
+  });
 
   function renderDayPanel() {
     const box = $('#vcDay');
@@ -1076,7 +1137,6 @@
       <div class="vc-row" data-open-video="${esc(v.id)}">
         <span class="ic"><i class="ti ${v.kind === 'folder' ? 'ti-folder' : 'ti-player-play'}"></i></span>
         <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
-        <span class="sub">${esc(v.event_date ? '' : tt('video_room.by_upload_date', 'by upload date'))}</span>
       </div>`).join('');
 
     box.innerHTML = `
@@ -1175,9 +1235,11 @@
     $('#vrProvHint').querySelector('b').textContent = '—';
     $('#vrKindLabel').textContent = '—';
     document.querySelectorAll('#vrKindToggle button').forEach(b => b.classList.toggle('is-on', b.dataset.kind === 'video'));
-    // Fecha: la del día elegido en el calendario, la de la carpeta abierta, o hoy.
+    // Fecha del día que pasó: la del día elegido en el calendario o la de la carpeta.
+    // Si no viene de ahí queda VACÍA a propósito: poner "hoy" por defecto haría que
+    // el video del partido del sábado quedara con la fecha en que se subió.
     const folder = currentFolder ? FOLDERS.find(f => f.id === currentFolder) : null;
-    const day = opts.date || (folder && folder.event_date) || window.cmToday();
+    const day = opts.date || (folder && folder.event_date) || '';
     $('#vrDate').value = day;
     const inherited = folder && (folder.event_id ? 'm:' + folder.event_id : folder.session_id ? 's:' + folder.session_id : null);
     fillLinkOptions(day, inherited);
@@ -1197,6 +1259,9 @@
     const url   = urlInput.value.trim();
     if (!title) { $('#vrTitle').focus(); return; }
     if (!url)   { urlInput.focus(); return; }
+    // La fecha es la del día que pasó (partido/entrenamiento), no la de hoy: se pide
+    // siempre, porque es lo único que ubica el video en el calendario.
+    if (!$('#vrDate').value) { alert(tt('video_room.date_required', 'Set the day this was filmed — it\'s what places the video in the calendar.')); $('#vrDate').focus(); return; }
 
     // Todo video pertenece a un equipo: dentro de una carpeta hereda el suyo,
     // si no, el equipo activo. Sin equipo no se guarda (quedaría suelto en el club).
