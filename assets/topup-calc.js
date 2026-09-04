@@ -132,6 +132,105 @@
     };
   }
 
+  // ── Carreras por distancia (el formato real del campo) ─────────────────
+  // El formato por TIEMPO (15-15) sirve para el HIIT anclado al VIFT, pero para
+  // rellenar una banda produce disparates: 15 s a 27 km/h son 113 m, que no
+  // entran en un campo de 105 y que además NO son 113 m en la banda (arrancar
+  // y frenar se comen buena parte). Acá el formato es la DISTANCIA de la zona
+  // medida, y el motor calcula lo demás:
+  //   • lanzamiento = metros hasta alcanzar la velocidad objetivo (arranque rodado)
+  //   • zona medida = los metros que de verdad caen en la banda
+  //   • frenado     = metros para parar sin lesionarse
+  // Refs: perfiles de aceleración (Samozino/Morin, modelo monoexponencial de
+  // velocidad); repeated-sprint con recuperación 1:8-1:10 (Girard et al. 2011);
+  // formatos de HIIT corto anclados al VIFT (Buchheit & Laursen 2013).
+  const ACC_TAU   = 1.2;   // s — constante de tiempo de la curva de aceleración
+  const DEC_MS2   = 4.0;   // m/s² — desaceleración usada para la zona de frenado
+  const MIN_BRAKE = 5;     // m — nunca menos que esto, aunque el cálculo dé poco
+
+  // Formato por defecto según el tipo de banda. El sprint es otra cosa: menos
+  // metros y mucha más pausa (con 15 s de pausa no hay sprint que se sostenga).
+  const RUN_FMT_DEFAULT = {
+    hsr:    { dist: 60, rest: 20, rolling: true },
+    vhsr:   { dist: 60, rest: 40, rolling: true },
+    sprint: { dist: 30, rest: 75, rolling: true },
+  };
+  // La banda puede ser custom del club: se resuelve por el `kind` de su métrica.
+  function defaultRunFmt(band) {
+    if (!band) return Object.assign({}, RUN_FMT_DEFAULT.hsr);
+    if (RUN_FMT_DEFAULT[band.id]) return Object.assign({}, RUN_FMT_DEFAULT[band.id]);
+    const kind = (METRIC_DEFS[band.metric] || {}).kind;
+    return Object.assign({}, kind === 'sprint' ? RUN_FMT_DEFAULT.sprint : RUN_FMT_DEFAULT.hsr);
+  }
+
+  // Metros que tarda en alcanzar `speedKmh` acelerando desde parado, con la
+  // curva v(t) = V·(1 − e^(−t/τ)) hacia su propia Vmax. Sin Vmax no hay curva:
+  // se cae a una estimación plana (aceleración media de 3,5 m/s²).
+  function accelDistance(speedKmh, vmaxKmh) {
+    const v = kmhToMs(speedKmh);
+    if (!(v > 0)) return 0;
+    const V = kmhToMs(vmaxKmh || 0);
+    if (!(V > v)) return +(v * v / (2 * 3.5)).toFixed(1);
+    const t = -ACC_TAU * Math.log(1 - v / V);
+    const d = V * t + V * ACC_TAU * (Math.exp(-t / ACC_TAU) - 1);
+    return +Math.max(0, d).toFixed(1);
+  }
+  function brakeDistance(speedKmh) {
+    const v = kmhToMs(speedKmh);
+    return +Math.max(MIN_BRAKE, v * v / (2 * DEC_MS2)).toFixed(1);
+  }
+
+  // Prescripción por distancia. opts:
+  //   { band, mode, aim, vmax, vift, deficitM, dist, rest, rolling, pitchLen }
+  // Devuelve, además de reps/series/tiempo, la geometría para dibujarlo en el campo.
+  function prescribeRunDist(opts) {
+    const speed = bandTargetSpeed(opts.band, opts.mode, opts.aim, opts.vmax);
+    if (speed == null || speed <= 0) return null;
+    const launchM = accelDistance(speed, opts.vmax);
+    const brakeM  = brakeDistance(speed);
+    const pitch   = +opts.pitchLen > 0 ? +opts.pitchLen : 105;
+    const rolling = opts.rolling !== false;
+
+    // Lo que ocupa la tarea en el campo. Con arranque parado el lanzamiento pasa
+    // a estar DENTRO de la zona marcada (no se suma), pero se descuenta de los
+    // metros que cuentan en la banda.
+    let distM = Math.max(5, Math.round(+opts.dist || 0));
+    const spaceFor = (d) => (rolling ? launchM + d : d) + brakeM;
+    let trimmed = false;
+    if (spaceFor(distM) > pitch) {
+      const room = Math.floor(pitch - brakeM - (rolling ? launchM : 0));
+      if (room >= 5) { distM = room; trimmed = true; }
+      else return { speed, launchM, brakeM, distM: 0, usableM: 0, reps: 0, sets: 0,
+                    totalRunM: 0, timeMin: 0, asrPct: pctASR(speed, opts.vift, opts.vmax),
+                    totalSpaceM: +spaceFor(distM).toFixed(1), trimmed: true, noRoom: true };
+    }
+    // Metros que caen DENTRO de la banda en cada carrera.
+    const usableM = Math.max(0, Math.round(rolling ? distM : distM - launchM));
+    const runSec  = +(distM / kmhToMs(speed)).toFixed(1);
+
+    let reps = 0, sets = 0, repsPerSet = 0, totalRunM = 0, timeMin = 0;
+    if (opts.deficitM > 0 && usableM > 0) {
+      reps = Math.max(1, Math.ceil(opts.deficitM / usableM));
+      // Series más cortas cuanto más rápido: un sprint no se repite 10 veces seguidas.
+      repsPerSet = Math.min(reps, (METRIC_DEFS[opts.band.metric] || {}).kind === 'sprint' ? 5 : 8);
+      sets = Math.max(1, Math.ceil(reps / repsPerSet));
+      totalRunM = reps * usableM;
+      timeMin = +(reps * (runSec + (+opts.rest || 0)) / 60).toFixed(1);
+    }
+    const asrPct = pctASR(speed, opts.vift, opts.vmax);
+    return {
+      speed, distM, usableM, runSec, reps, sets, repsPerSet, totalRunM, timeMin, asrPct,
+      launchM, brakeM, rolling, trimmed,
+      totalSpaceM: +spaceFor(distM).toFixed(1),
+      // Sin arranque rodado y con la banda alta, la carrera se va casi entera en
+      // acelerar: hay que avisarlo, no devolver un número que miente.
+      mostlyAccel: !rolling && usableM > 0 && usableM < distM * 0.4,
+      // Recortada a un pañuelo: 18 carreras de 7 m no son un bloque de sprint.
+      tooShort: distM < ((METRIC_DEFS[opts.band.metric] || {}).kind === 'sprint' ? 15 : 20),
+      tooHard: asrPct != null && asrPct > 70,
+    };
+  }
+
   // Change-of-direction dose bands, keyed by total (acc+dec) deficit count.
   const COD_BANDS = [
     { id: 'low',  max: 12, label: 'Baja',  reps: '2 × (5-10-5) shuttle',
@@ -768,6 +867,7 @@
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     getRefFilters, saveRefFilters, invalidateRefFilters, REF_FILTERS_DEFAULT,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
+    prescribeRunDist, defaultRunFmt, RUN_FMT_DEFAULT, accelDistance, brakeDistance,
     prescribeContinuous, fieldPerimeter, normalizePreset,
     resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax, hrmaxScore, listClubMetrics,
     bandTargetSpeed, anaerobicSpeedReserve, pctASR, speedProfile,

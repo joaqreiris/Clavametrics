@@ -207,6 +207,29 @@
   .tu-hrrow .hrl{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
   .tu-hrrow .hrk{font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
   .tu-hrrow .hrsug{font:700 9px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.04em;color:#15803d;background:rgba(22,163,74,.13);padding:2px 6px;border-radius:99px;vertical-align:middle}
+  /* ── dibujo de la carrera sobre el campo ── */
+  .tu-pitch{position:relative;width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--cm-border);
+    --pf-grass:#2f7d4c;--pf-grass-2:#2b7446;--pf-line:rgba(255,255,255,.92);--pf-seam:transparent;--pf-seam-gap:0px;
+    background:repeating-linear-gradient(90deg,var(--pf-grass) 0 9%,var(--pf-grass-2) 9% 18%)}
+  [data-theme="dark"] .tu-pitch{--pf-grass:#16331f;--pf-grass-2:#132c1b;--pf-line:rgba(255,255,255,.74)}
+  .tu-pitch svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .tu-pitch .tu-pitch-sizer{display:block;width:100%;height:auto}
+  .tu-runlegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .tu-runlegend span{display:inline-flex;align-items:center;gap:5px;font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-runlegend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .tu-runlegend .lz{background:#fbbf24}.tu-runlegend .mz{background:#22c55e}.tu-runlegend .bz{background:#ef4444}
+  /* editor de carreras por banda */
+  .tu-rowfmt{border:1px solid var(--cm-border);border-radius:11px;padding:11px;margin-bottom:10px;background:var(--cm-bg-soft)}
+  .tu-rowfmt .rf-h{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .tu-rowfmt .rf-h .nm{font:700 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-rowfmt .rf-h .mt{font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-rowfmt .rf-f{display:flex;flex-wrap:wrap;gap:9px;align-items:flex-end}
+  .tu-rowfmt .rf-f .f{display:flex;flex-direction:column;gap:3px}
+  .tu-rowfmt .rf-f label{font:600 9px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .tu-rowfmt .rf-f input[type=number]{width:78px;height:34px;padding:0 8px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-rowfmt .rf-f input:focus{outline:none;border-color:var(--cm-accent)}
+  .tu-line .seebtn{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:16px;padding:4px;flex:none}
+  .tu-line .seebtn:hover{color:var(--cm-accent)}
   /* ── mini guide (help modal) ── */
   .tu-help-intro{font:500 12.5px/1.55 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 14px}
   .tu-help-sec{padding:11px 0;border-top:1px solid var(--cm-border)}
@@ -320,6 +343,7 @@
 <script src="assets/sport.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
+<script src="assets/field-system.js"></script>
 <script src="assets/gps-baseline.js"></script>
 <script src="assets/topup-calc.js"></script>
 </head>
@@ -405,14 +429,15 @@
             <label><span data-i18n="topup.target_band">Banda objetivo</span> <span class="dim" data-i18n="topup.target_band_multi">· podés elegir varias</span></label>
             <div class="tu-chips" id="tu-targetbands"></div>
           </div>
-          <div class="tu-field" style="max-width:230px">
-            <label id="tu-preset-lbl">Formato (carreras)</label>
+          <div class="tu-field" id="tu-preset-field" style="max-width:230px">
+            <label id="tu-preset-lbl">Formato (intervalos)</label>
             <select id="tu-preset" class="tu-select"></select>
           </div>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
           <button class="tu-linkbtn" id="tu-bands-toggle" style="padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
           <button class="tu-linkbtn" id="tu-presets-toggle" style="padding-left:0" data-i18n="topup.edit_presets">⚙ Editar formatos</button>
+          <button class="tu-linkbtn" id="tu-runfmt-toggle" style="padding-left:0" data-i18n="topup.edit_runfmt">⚙ Carreras por banda</button>
           <button class="tu-linkbtn" id="tu-reffilter-toggle" style="padding-left:0" data-i18n="topup.edit_reffilter">⚙ Partidos válidos</button>
         </div>
         <div id="tu-reffilter-hint" class="tu-note"></div>
@@ -488,6 +513,8 @@
       <div id="tu-hrmax-picker" class="hide"></div>
       <div id="tu-help" class="hide"></div>
       <div id="tu-reffilter-editor" class="hide"></div>
+      <div id="tu-runfmt-editor" class="hide"></div>
+      <div id="tu-pitchview" class="hide"></div>
     </div>
   </div>
 </div>
@@ -574,6 +601,11 @@
     bandsPct: Array.isArray(prefs.bandsPct) && prefs.bandsPct.length ? prefs.bandsPct : TU.DEFAULT_BANDS_PCT.bands.map(b => ({...b})),
     bandsAbs: Array.isArray(prefs.bandsAbs) && prefs.bandsAbs.length ? prefs.bandsAbs : TU.DEFAULT_BANDS_ABS.bands.map(b => ({...b})),
     bandsOpen: false,
+    // Formato de carrera POR BANDA: distancia de la zona medida, pausa y si el
+    // arranque es rodado. Nada de tiempo fijo — ver prescribeRunDist().
+    runFmt: (prefs.runFmt && typeof prefs.runFmt === 'object') ? prefs.runFmt : {},
+    runFmtOpen: false,
+    pitchView: null,
     // Qué partidos entran en la referencia. Es config DEL CLUB (club_gps_settings),
     // no del usuario: se pisa con lo de la base apenas termina de cargar.
     refFilters: Object.assign({}, TU.REF_FILTERS_DEFAULT),
@@ -585,7 +617,7 @@
   const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({
     duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics,
     speedModel: state.speedModel, aim: state.aim, targetBands: state.targetBands, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
-    customPresets: state.customPresets,
+    customPresets: state.customPresets, runFmt: state.runFmt,
     tab: state.tab, compl: { targets: state.compl.targets, cfg: state.compl.cfg, blocks: state.compl.blocks },
   })); } catch {} };
 
@@ -602,6 +634,10 @@
     return out;
   };
   const preset = () => allPresets().find(p => p.id === state.presetId) || TU.DEFAULT_PRESET;
+  // Formato de carrera de una banda: lo del club si lo tocó, si no el de la literatura.
+  const runFmtFor = (band) => Object.assign(TU.defaultRunFmt(band), state.runFmt[band.id] || {});
+  // Largo útil del campo: el mismo que ya se configura en el complementario.
+  const pitchLen = () => +state.compl.cfg.len > 0 ? +state.compl.cfg.len : 105;
   // Active band set for the current speed model (pct/abs). Only bands whose metric
   // is a known GPS metric — so a club with just HSR+Sprint (or custom) never breaks.
   const activeBands = () => (state.speedModel === 'abs' ? state.bandsAbs : state.bandsPct).filter(b => TU.METRIC_DEFS[b.metric]);
@@ -789,19 +825,21 @@
   // ── run-speed model + bands UI ──
   function renderSpeedModelUI(){
     $('tu-speedmodel').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.sm === state.speedModel));
-    // target band only applies to band models (pct/abs)
-    $('tu-band-field').style.display = state.speedModel === 'vift' ? 'none' : '';
-    const bt = $('tu-bands-toggle'); if (bt) bt.style.display = state.speedModel === 'vift' ? 'none' : '';
+    const isVift = state.speedModel === 'vift';
+    // Las bandas (y sus carreras por distancia) son de los modelos %Vmax/Absoluto;
+    // el formato por tiempo (15-15) es del HIIT anclado al VIFT. Nunca los dos.
+    $('tu-band-field').style.display = isVift ? 'none' : '';
+    $('tu-preset-field').style.display = isVift ? '' : 'none';
+    const bt = $('tu-bands-toggle'); if (bt) bt.style.display = isVift ? 'none' : '';
+    const rt = $('tu-runfmt-toggle'); if (rt) rt.style.display = isVift ? 'none' : '';
+    const pt = $('tu-presets-toggle'); if (pt) pt.style.display = isVift ? '' : 'none';
     renderTargetBand();
     renderBandsEditor();
     renderPresetLabel();
   }
-  // El formato son carreras; si TODAS las bandas elegidas son de sprint, son sprints.
   function renderPresetLabel(){
     const lbl = $('tu-preset-lbl'); if (!lbl) return;
-    const bs = state.speedModel === 'vift' ? [] : selectedBands();
-    const allSprint = bs.length && bs.every(b => (TU.METRIC_DEFS[b.metric] || {}).kind === 'sprint');
-    lbl.textContent = allSprint ? tt('topup.preset_sprints','Formato (sprints)') : tt('topup.preset_runs','Formato (carreras)');
+    lbl.textContent = tt('topup.preset_intervals','Formato (intervalos)');
   }
   // Chips multi-selección: una banda o varias (HSR + VHSR + …). Siempre queda al
   // menos una marcada — sin banda no hay velocidad de carrera que prescribir.
@@ -852,6 +890,82 @@
     }));
   }
 
+  // ── dibujo de la carrera sobre el campo ──
+  // El campo lo pone CMField (el mismo del Drill Designer), y encima va un SVG
+  // con el MISMO viewBox: así los metros que dibujamos caen donde caen de verdad.
+  // En fútbol el rectángulo de juego son 990 unidades dentro de un viewBox de
+  // 1050 (30 de banda a cada lado); en el resto se usa el viewBox entero.
+  const PITCH_INSET = { football: 30 };
+  function pitchGeom(){
+    const sport = (window.CMSport && CMSport.key()) || 'football';
+    const def = (window.CMField && CMField.FIELDS[sport]) || null;
+    const vb = (def && (def.vb.full || def.vb[def.variants[0]])) || [0, 0, 1050, 680];
+    const inset = PITCH_INSET[sport] || 0;
+    return { sport, vbW: vb[2], vbH: vb[3], x0: inset, playW: vb[2] - inset * 2 };
+  }
+  // Devuelve el <div> host; hay que llamar a mountPitch() cuando esté en el DOM.
+  function pitchHTML(id){ return `<div class="tu-pitch" id="${id}"></div>`; }
+  function mountPitch(id, rx){
+    const host = $(id); if (!host || !rx) return;
+    const g = pitchGeom(), lenM = pitchLen();
+    host.style.aspectRatio = `${g.vbW} / ${g.vbH}`;
+    host.innerHTML = '';
+    try { window.CMField?.renderField(host, g.sport, 'full', 'h'); } catch (_) {}
+
+    const K = g.playW / lenM;                       // unidades del dibujo por metro
+    const launch = rx.rolling ? rx.launchM : 0;
+    const total = launch + rx.distM + rx.brakeM;
+    const x = g.x0 + Math.max(0, (g.playW - total * K) / 2);
+    const yc = g.vbH / 2, h = 46;
+    const box = (xa, w, fill, op) => `<rect x="${xa.toFixed(1)}" y="${(yc - h / 2).toFixed(1)}" width="${Math.max(0, w).toFixed(1)}" height="${h}" rx="6" fill="${fill}" fill-opacity="${op}"/>`;
+    const cone = (xa) => `<path d="M${xa.toFixed(1)},${(yc - h / 2 - 13).toFixed(1)} l6,13 l-12,0 z" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1"/>`;
+    const lbl = (xa, y, txt, anchor) => `<text x="${xa.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor || 'middle'}" font-family="ui-monospace,monospace" font-size="${(txt+"").length > 12 ? 22 : 27}" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.45)" stroke-width="3.5" paint-order="stroke">${txt}</text>`;
+
+    let s = '';
+    let cur = x;
+    if (launch > 0){ s += box(cur, launch * K, '#fbbf24', .55) + lbl(cur + launch * K / 2, yc + h / 2 + 30, `${Math.round(launch)} m`); cur += launch * K; }
+    s += box(cur, rx.distM * K, '#22c55e', .70) + cone(cur) + cone(cur + rx.distM * K)
+       + lbl(cur + rx.distM * K / 2, yc + 8, `${rx.distM} m`)
+       + lbl(cur + rx.distM * K / 2, yc + h / 2 + 30, `${rx.speed} km/h · ${rx.runSec}s`);
+    cur += rx.distM * K;
+    s += box(cur, rx.brakeM * K, '#ef4444', .55) + lbl(cur + rx.brakeM * K / 2, yc + h / 2 + 30, `${Math.round(rx.brakeM)} m`);
+    // flecha de dirección
+    s += `<path d="M${x.toFixed(1)},${(yc - h / 2 - 34).toFixed(1)} H${(x + total * K - 14).toFixed(1)}" stroke="#fff" stroke-width="2.5" stroke-opacity=".85" fill="none" marker-end=""/>`
+       + `<path d="M${(x + total * K).toFixed(1)},${(yc - h / 2 - 34).toFixed(1)} l-14,-7 l0,14 z" fill="#fff" fill-opacity=".85"/>`
+       + lbl(x, yc - h / 2 - 46, `${tt('topup.pitch_total','ocupa')} ${Math.round(total)} m / ${lenM} m`, 'start');
+
+    const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ov.setAttribute('viewBox', `0 0 ${g.vbW} ${g.vbH}`);
+    ov.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    ov.innerHTML = s;
+    host.appendChild(ov);
+  }
+  const pitchLegendHTML = () => `<div class="tu-runlegend">
+    <span><i class="lz"></i>${tt('topup.zone_launch','lanzamiento')}</span>
+    <span><i class="mz"></i>${tt('topup.zone_measured','zona medida (cuenta en la banda)')}</span>
+    <span><i class="bz"></i>${tt('topup.zone_brake','frenado')}</span></div>`;
+
+  // Modal "ver en el campo" de una carrera concreta (jugador + banda).
+  function renderPitchView(){
+    const box = $('tu-pitchview'); if (!box) return;
+    const v = state.pitchView;
+    if (!v){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const pd = state.pdata[v.pid]; const band = selectedBands().find(b => b.id === v.bandId);
+    if (!pd || !band){ box.innerHTML = ''; return; }
+    const def = deficitFor(pd, resolveRef(pd)) || {};
+    const d = def[band.metric];
+    const f = runFmtFor(band);
+    const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
+      deficitM: (d && d.deficit) || 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+    if (!rx || rx.noRoom){ box.innerHTML = `<div class="tu-note warn">${tt('topup.no_room_short','No entra en el campo configurado.')}</div>`; return; }
+    const bLabel = tt('topup.band_'+band.id, band.id.toUpperCase());
+    box.innerHTML = `<div class="tu-note" style="margin-top:0"><b>${esc(pd.player.name)}</b> · ${esc(bLabel)} · ${rx.reps} × ${rx.distM} m @ ${rx.speed} km/h</div>
+      ${pitchHTML('tu-pitch-view')}${pitchLegendHTML()}
+      <div class="tu-note">${tt('topup.pitch_note','Los conos marcan la zona medida. El lanzamiento es para llegar a la velocidad antes del primer cono; después del segundo, frenar sin brusquedad.')}</div>`;
+    mountPitch('tu-pitch-view', rx);
+  }
+
   // ── qué partidos entran en la referencia (config del club) ──
   function renderRefFilterHint(){
     const el = $('tu-reffilter-hint'); if (!el) return;
@@ -896,6 +1010,51 @@
       closeModal();
       await reloadRefs();
     });
+  }
+
+  // ── carreras por banda: distancia, pausa y arranque ──
+  // El jugador de referencia del dibujo es el primero seleccionado con Vmax; si no
+  // hay ninguno, se usa un Vmax típico solo para que el dibujo tenga escala.
+  function refPlayerForDraw(){
+    for (const pid of state.selected){ const pd = state.pdata[pid]; if (pd && pd.vmax) return pd; }
+    return { vmax: 32, vift: 17, player: null };
+  }
+  function renderRunFmtEditor(){
+    const box = $('tu-runfmt-editor'); if (!box) return;
+    if (!state.runFmtOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const pd = refPlayerForDraw();
+    const bands = selectedBands();
+    box.innerHTML = `<p class="tu-note" style="margin-top:0">${tt('topup.rfmt_help','La carrera se prescribe por distancia, no por tiempo: elegís los metros de la zona medida y el motor calcula cuántas carreras hacen falta, cuánto duran y cuánto campo ocupan.')}</p>`
+      + bands.map(b => {
+        const f = runFmtFor(b);
+        const rx = TU.prescribeRunDist({ band: b, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
+          deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+        const bLabel = tt('topup.band_'+b.id, b.id.toUpperCase());
+        return `<div class="tu-rowfmt" data-bfmt="${b.id}">
+          <div class="rf-h"><span class="nm">${esc(bLabel)}</span><span class="mt">${esc(mLabel(b.metric))}</span></div>
+          <div class="rf-f">
+            <div class="f"><label>${tt('topup.rfmt_dist','Zona medida (m)')}</label><input type="number" min="5" max="120" inputmode="numeric" data-bf="dist" value="${f.dist}"></div>
+            <div class="f"><label>${tt('topup.rfmt_rest','Pausa (s)')}</label><input type="number" min="0" max="300" inputmode="numeric" data-bf="rest" value="${f.rest}"></div>
+            <label class="tu-switch"><input type="checkbox" data-bf="rolling" ${f.rolling ? 'checked' : ''}>${tt('topup.rfmt_rolling','Arranque rodado')}</label>
+          </div>
+          ${rx ? `<div class="tu-note">${tt('topup.rfmt_sum', `${rx.speed} km/h · ${rx.runSec}s por carrera · ocupa ${Math.round(rx.totalSpaceM)} m de campo`, { s: rx.speed, t: rx.runSec, m: Math.round(rx.totalSpaceM) })}</div>
+             ${pitchHTML('tu-pitch-' + b.id)}${pitchLegendHTML()}` : ''}
+        </div>`;
+      }).join('');
+    bands.forEach(b => {
+      const f = runFmtFor(b);
+      const rx = TU.prescribeRunDist({ band: b, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
+        deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+      if (rx) mountPitch('tu-pitch-' + b.id, rx);
+    });
+    box.querySelectorAll('[data-bf]').forEach(inp => inp.addEventListener('change', () => {
+      const id = inp.closest('[data-bfmt]').dataset.bfmt, k = inp.dataset.bf;
+      const cur = Object.assign(runFmtFor(selectedBands().find(b => b.id === id)), state.runFmt[id] || {});
+      cur[k] = k === 'rolling' ? inp.checked : (+inp.value || 0);
+      state.runFmt[id] = cur;
+      savePrefs(); renderRunFmtEditor(); renderResults();
+    }));
   }
 
   // ── custom interval formats (presets) ──
@@ -1008,28 +1167,36 @@
   }
   // Band model (% Vmax or absolute) — speed comes from the target band so the
   // metres are guaranteed to land in the zone we're filling; %ASR reported.
-  function runLineBand(pd, def, p2, band){
+  function runLineBand(pd, def, p2, band, pid){
     const bLabel = tt('topup.band_'+band.id, band.id.toUpperCase());
     const d = def[band.metric];
     const deficitM = d && d.deficit != null ? d.deficit : 0;
-    const rx = TU.prescribeRun({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift, deficitM, runSec: p2.run, restSec: p2.rest });
+    const f = runFmtFor(band);
+    const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
+      deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
     if (!rx) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_run','No se puede calcular la velocidad.')}</span></div>` };
+    if (rx.noRoom) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_room', `No entra en ${pitchLen()} m de campo (necesita ${rx.launchM} m de lanzamiento y ${rx.brakeM} de frenado).`, { l: rx.launchM, b: rx.brakeM })}</span></div>` };
     if (deficitM <= 0) return { html: `<div class="tu-line muted">${RUN_IC}<span class="main">${esc(bLabel)}: ${tt('topup.no_deficit_band','sin déficit')}</span></div>` };
     const asrTxt = rx.asrPct != null ? ` · ${rx.asrPct}% ASR` : '';
+    const start = rx.rolling ? tt('topup.start_rolling','lanzado') : tt('topup.start_still','parado');
     let html = `<div class="tu-line">${RUN_IC}
-      <span class="main"><b>${rx.reps} × ${rx.mPerRep} m</b> @ ${rx.speed} km/h <span class="dim">(${p2.run}-${p2.rest}) · ${esc(bLabel)}${asrTxt}</span></span>
-      <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span></div>`;
+      <span class="main"><b>${rx.reps} × ${rx.distM} m</b> @ ${rx.speed} km/h <span class="dim">(${start} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s) · ${esc(bLabel)}${asrTxt}</span></span>
+      <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span>
+      <button class="seebtn" data-seepitch="${pid}:${band.id}" title="${tt('topup.see_pitch','Ver en el campo')}"><i class="ti ti-map-2"></i></button></div>`;
+    if (rx.trimmed) html += `<div class="tu-hwarn">${tt('topup.trimmed', `Recortada a ${rx.distM} m: es lo que entra en ${pitchLen()} m de campo.`, { d: rx.distM, p: pitchLen() })}</div>`;
+    if (rx.tooShort) html += `<div class="tu-hwarn">${tt('topup.too_short','Zona medida muy corta para esta banda: buscá más espacio o bajá de banda.')}</div>`;
+    if (rx.mostlyAccel) html += `<div class="tu-hwarn">${tt('topup.mostly_accel', `Con arranque parado solo ${rx.usableM} m de los ${rx.distM} caen en la banda.`, { u: rx.usableM, d: rx.distM })}</div>`;
     if (rx.tooHard) html += `<div class="tu-hwarn">${tt('topup.too_hard', `Muy alto en su reserva (${rx.asrPct}% ASR): acortá la carrera o alargá la pausa.`, { p: rx.asrPct })}</div>`;
     return { html, rx };
   }
   // Un bloque de carrera POR banda elegida (HSR, VHSR, sprint…), más un total
   // cuando hay más de uno con déficit: el preparador ve de una cuánto dura todo.
-  function runLinesBands(pd, def, p2){
+  function runLinesBands(pd, def, p2, pid){
     const bands = selectedBands();
     if (!bands.length) return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.no_band','Configurá una banda objetivo.')}</span></div>`;
     if (state.speedModel === 'pct' && !pd.vmax)
       return `<div class="tu-line muted">${RUN_IC}<span class="main">${tt('topup.need_vmax','Sin Vmax: usá modo Absoluto o cargá GPS.')}</span></div>`;
-    const parts = bands.map(b => runLineBand(pd, def, p2, b));
+    const parts = bands.map(b => runLineBand(pd, def, p2, b, pid));
     const done = parts.filter(p => p.rx && p.rx.reps > 0);
     let out = parts.map(p => p.html).join('');
     if (done.length > 1){
@@ -1081,7 +1248,7 @@
 
     // Running block — speed from the chosen model (%Vmax band / absolute band / %VIFT)
     const p2 = preset();
-    const hiit = state.speedModel === 'vift' ? runLineVIFT(pd, def, p2) : runLinesBands(pd, def, p2);
+    const hiit = state.speedModel === 'vift' ? runLineVIFT(pd, def, p2) : runLinesBands(pd, def, p2, pid);
 
     // COD line
     const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
@@ -1127,6 +1294,12 @@
   // Event delegation on the results container — attached ONCE, survives body re-renders.
   function wireResultsDelegation(){
     const box = $('tu-results');
+    box.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('[data-seepitch]');
+      if (!btn) return;
+      const [pid, bandId] = btn.dataset.seepitch.split(':');
+      openModal('pitch', { pid, bandId });
+    });
     box.addEventListener('input', (e) => {
       const ds = e.target.dataset || {};
       if (ds.mins != null){                       // minutes input lives in the header
@@ -1161,16 +1334,20 @@
     hrmax:   () => tt('topup.hr_metric','Métrica de FCmax'),
     help:    () => tt('topup.help_title','Cómo se usa el complemento'),
     reffilter: () => tt('topup.edit_reffilter_title','Partidos válidos'),
+    runfmt:  () => tt('topup.edit_runfmt_title','Carreras por banda'),
+    pitch:   () => tt('topup.see_pitch','Ver en el campo'),
   };
   function closeModal(){
-    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false; state.refOpen = false;
-    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help','tu-reffilter-editor'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
+    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false; state.refOpen = false; state.runFmtOpen = false; state.pitchView = null;
+    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help','tu-reffilter-editor','tu-runfmt-editor','tu-pitchview'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
     $('tu-modal-back').classList.add('hide');
   }
-  function openModal(which){
+  function openModal(which, data){
     closeModal();
     if (which === 'help'){ renderHelp(); }
     else if (which === 'reffilter'){ state.refOpen = true; renderRefFilterEditor(); }
+    else if (which === 'runfmt'){ state.runFmtOpen = true; renderRunFmtEditor(); }
+    else if (which === 'pitch'){ state.pitchView = data || null; renderPitchView(); }
     else if (which === 'bands'){ state.bandsOpen = true; renderBandsEditor(); }
     else if (which === 'presets'){ state.presetsOpen = true; renderPresetsEditor(); }
     else if (which === 'compl'){ state.compl.settingsOpen = true; renderComplSettings(); }
@@ -1187,7 +1364,7 @@
     ['ti-clock',          'min',     'Duración del partido y minutos', '«Duración partido» es el partido completo (90, u 80/70 en formativas). Los minutos de cada jugador se cargan arriba a la derecha de su ficha. Con 0 minutos el déficit es el partido entero.'],
     ['ti-gauge',          'speed',   'Velocidad de carrera', 'Define a qué ritmo corre cada uno. <b>%Vmax</b>: la velocidad sale de un porcentaje de la velocidad máxima de ese jugador (la toma del GPS). Es lo más individual; sin Vmax ese jugador no calcula. <b>Absoluto</b>: umbrales fijos en km/h iguales para todos, el plan B cuando no hay Vmax. <b>%VIFT</b>: HIIT clásico anclado al 30-15 IFT (hace falta el test cargado en Evaluaciones); trabaja sólo el déficit de HSR y por eso no usa bandas.'],
     ['ti-layers-subtract','bands',   'Bandas objetivo', 'La banda es la zona de velocidad que querés rellenar, y cada una está atada a una métrica (HSR, muy alta velocidad, sprint). <b>Podés marcar varias</b>: si elegís HSR y VHSR sale un bloque de carrera para cada una, con su velocidad, sus metros por carrera y la cantidad de carreras, más el total. La velocidad la manda la banda, así que los metros caen seguro en esa zona. En «Editar bandas» ajustás los cortes a los de tu club.'],
-    ['ti-repeat',         'fmt',     'Formato (carreras)', 'Cuánto dura cada carrera y cuánta pausa hay entre carreras (por ejemplo 15-15). Cuando la banda elegida es la de sprint, esas carreras son sprints. Con %Vmax o Absoluto el porcentaje del formato no se usa: la velocidad la pone la banda y el formato sólo define el largo de la carrera. Con %VIFT sí manda ese porcentaje. En «Editar formatos» agregás los tuyos.'],
+    ['ti-repeat',         'fmt',     'Carreras y formato', 'Con %Vmax o Absoluto la carrera se prescribe <b>por distancia</b>: elegís los metros de la zona medida («⚙ Carreras por banda») y el motor calcula cuántas carreras hacen falta, cuánto dura cada una y cuánto campo ocupan. Cada banda tiene su formato, porque no se entrena igual: HSR unos 60 m con pausa corta, sprint unos 30 m con pausa larga. El <b>arranque rodado</b> significa que entra a la zona medida ya a la velocidad objetivo, así que esos metros cuentan enteros en la banda; con arranque parado se descuentan los metros que tarda en acelerar. Con %VIFT sigue siendo un formato por tiempo (15-15 y compañía).'],
     ['ti-adjustments-horizontal','metrics','Métricas objetivo', 'Son las que aparecen abajo de cada ficha como déficit / referencia. Aceleraciones y desaceleraciones además alimentan el bloque de cambios de dirección.'],
     ['ti-eye',            'read',    'Cómo leer la ficha', '<b>ref:</b> de dónde salió la referencia (personal, GPS, posición o manual). <b>ASR</b> es la reserva de velocidad (Vmax − VIFT): cuanto más alto el %ASR del bloque, más cerca del máximo está corriendo. Si avisa «muy alto en su reserva», acortá la carrera o alargá la pausa. «Sin déficit» quiere decir que en esa métrica ya llegó a su referencia.'],
   ];
@@ -1597,6 +1774,7 @@
     state.speedModel = b.dataset.sm; savePrefs(); renderSpeedModelUI(); renderResults();
   }));
   $('tu-bands-toggle').addEventListener('click', () => openModal('bands'));
+  $('tu-runfmt-toggle').addEventListener('click', () => openModal('runfmt'));
   $('tu-reffilter-toggle').addEventListener('click', () => openModal('reffilter'));
   $('tu-help-btn').addEventListener('click', () => openModal('help'));
 
