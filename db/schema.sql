@@ -2882,6 +2882,10 @@ create table if not exists public.videos (
   updated_at timestamp with time zone default now() not null,
   kind text default 'video'::text not null,
   folder_id uuid,
+  -- Fecha de LO FILMADO (el partido, el entrenamiento), no la de carga (created_at).
+  -- Es lo que ordena la vista de calendario del Video Room. Se completa sola cuando
+  -- el video se vincula a un partido o a una sesión.
+  event_date date,
   constraint videos_pkey primary key (id),
   constraint videos_provider_check CHECK ((provider = ANY (ARRAY['google_drive'::text, 'dropbox'::text, 'youtube'::text, 'vimeo'::text, 'other'::text]))),
   constraint videos_kind_check CHECK ((kind = ANY (ARRAY['video'::text, 'folder'::text])))
@@ -2891,8 +2895,11 @@ CREATE INDEX idx_videos_team ON public.videos USING btree (team_id);
 CREATE INDEX idx_videos_uploaded_by ON public.videos USING btree (uploaded_by);
 CREATE INDEX IF NOT EXISTS idx_videos_exercise ON public.videos USING btree (exercise_id);
 CREATE INDEX IF NOT EXISTS idx_videos_folder ON public.videos USING btree (folder_id);
+CREATE INDEX IF NOT EXISTS idx_videos_event_date ON public.videos USING btree (club_id, team_id, event_date);
 
 -- Native (in-app) folders to organize video links inside Video Room.
+-- Una carpeta puede colgar de un día del calendario (event_id = partido/evento,
+-- session_id = entrenamiento): lo que se sube adentro hereda fecha y vínculo.
 create table if not exists public.video_folders (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2902,10 +2909,14 @@ create table if not exists public.video_folders (
   created_by_name text,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  event_date date,
+  event_id uuid,
+  session_id uuid,
   constraint video_folders_pkey primary key (id)
 );
 CREATE INDEX IF NOT EXISTS idx_video_folders_club ON public.video_folders USING btree (club_id);
 CREATE INDEX IF NOT EXISTS idx_video_folders_team ON public.video_folders USING btree (team_id);
+CREATE INDEX IF NOT EXISTS idx_video_folders_event_date ON public.video_folders USING btree (club_id, team_id, event_date);
 
 -- Envío de cortes al jugador: UNA fila por jugador (link personal), agrupadas por
 -- batch_id cuando el mismo envío va a varios. El jugador no tiene cuenta: abre el
@@ -3251,6 +3262,8 @@ alter table public.videos add constraint videos_exercise_id_fkey FOREIGN KEY (ex
 alter table public.videos add constraint videos_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES video_folders(id) ON DELETE SET NULL;
 alter table public.video_folders add constraint video_folders_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.video_folders add constraint video_folders_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.video_folders add constraint video_folders_event_id_fkey FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE SET NULL;
+alter table public.video_folders add constraint video_folders_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
 alter table public.video_shares add constraint video_shares_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.video_shares add constraint video_shares_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
 alter table public.video_shares add constraint video_shares_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;

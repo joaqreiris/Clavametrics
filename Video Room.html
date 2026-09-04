@@ -219,10 +219,49 @@
   .vr-tabs button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); font-weight:600; box-shadow:var(--cm-shadow-1); }
   .vr-tabs .badge { min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--cm-bg-sunk); color:var(--cm-fg-muted); font:600 10.5px/18px var(--cm-font-mono); text-align:center; }
 
+  /* ── Calendar view ── */
+  .vr-cal { display:flex; flex-direction:column; gap:14px; }
+  .vc-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .vc-bar h2 { margin:0; min-width:180px; text-align:center; font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); text-transform:capitalize; }
+  .vc-nav { width:30px; height:30px; border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:var(--cm-r-2); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vc-nav:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vc-legend { margin-left:auto; display:flex; align-items:center; gap:12px; font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .vc-legend i { font-size:14px; }
+
+  .vc-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+  .vc-dow { font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-faint); text-align:center; padding:2px 0 4px; }
+  .vc-cell { min-height:104px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); padding:7px 8px 8px; display:flex; flex-direction:column; gap:4px; cursor:pointer; text-align:left; }
+  .vc-cell:hover { border-color:var(--cm-border-strong); }
+  .vc-cell.is-out { background:var(--cm-bg-soft); opacity:.55; }
+  .vc-cell.is-today .dnum { background:var(--cm-accent); color:#fff; }
+  .vc-cell.is-sel { outline:2px solid var(--cm-accent); outline-offset:-1px; }
+  .vc-cell .dnum { align-self:flex-start; min-width:21px; height:21px; padding:0 5px; border-radius:999px; font:600 11.5px/21px var(--cm-font-mono); color:var(--cm-fg-muted); text-align:center; }
+  .vc-evt { display:flex; align-items:center; gap:5px; padding:2px 6px; border-radius:var(--cm-r-2); font:600 10.5px/1.35 var(--cm-font-sans); border:1px solid transparent; overflow:hidden; }
+  .vc-evt span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vc-evt .ti { font-size:12px; flex:none; }
+  .vc-evt.match { background:var(--cm-accent-soft); border-color:var(--cm-success-bd); color:var(--cm-accent); }
+  .vc-evt.train { background:var(--cm-bg-sunk); border-color:var(--cm-border); color:var(--cm-fg-muted); }
+  .vc-tags { margin-top:auto; display:flex; gap:5px; flex-wrap:wrap; }
+  .vc-tag { display:inline-flex; align-items:center; gap:4px; padding:1px 6px; border-radius:999px; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); font:600 10.5px/17px var(--cm-font-mono); color:var(--cm-fg); }
+  .vc-tag .ti { font-size:12px; color:var(--cm-fg-muted); }
+
+  /* Panel del día seleccionado */
+  .vc-day { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
+  .vc-day .dh { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .vc-day .dh h3 { flex:1; min-width:0; margin:0; font:600 15px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); text-transform:capitalize; }
+  .vc-day .devts { display:flex; flex-wrap:wrap; gap:6px; }
+  .vc-day .dsec { display:flex; flex-direction:column; gap:6px; }
+  .vc-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); cursor:pointer; }
+  .vc-row:hover { background:var(--cm-bg-sunk); }
+  .vc-row .ic { width:28px; height:28px; flex:none; border-radius:var(--cm-r-2); background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); }
+  .vc-row .nm { flex:1; min-width:0; font:500 13px/1.35 var(--cm-font-sans); color:var(--cm-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vc-row .sub { font:var(--cm-meta); color:var(--cm-fg-muted); white-space:nowrap; }
+  .vc-day .dempty { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0; }
+
   /* ── Sent list ── */
   .vr-sends { display:flex; flex-direction:column; gap:12px; }
   /* display:grid/flex propios pisan [hidden]: hay que devolverle la prioridad. */
-  .vr-grid[hidden], .vr-sends[hidden] { display:none; }
+  .vr-grid[hidden], .vr-sends[hidden], .vr-cal[hidden], .vc-day[hidden] { display:none; }
   .vr-send { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); padding:15px 16px; }
   .vr-send .sh { display:flex; align-items:flex-start; gap:10px; }
   .vr-send .sh h3 { flex:1; min-width:0; font:600 14.5px/1.32 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; word-break:break-word; }
@@ -331,6 +370,7 @@
 
       <div class="vr-tabs" id="vrTabs" role="tablist">
         <button type="button" data-tab="library" class="is-on" role="tab"><i class="ti ti-photo-video"></i><span data-i18n="video_room.tab_library">Library</span></button>
+        <button type="button" data-tab="calendar" role="tab"><i class="ti ti-calendar-month"></i><span data-i18n="video_room.tab_calendar">Calendar</span></button>
         <button type="button" data-tab="sends" role="tab"><i class="ti ti-send"></i><span data-i18n="video_room.tab_sends">Sent to players</span><span class="badge" id="vrSendsBadge">0</span></button>
       </div>
 
@@ -368,6 +408,25 @@
       </div>
 
       <div class="vr-grid" id="vrGrid"></div>
+
+      <!-- Vista calendario: el mes del equipo con sus partidos/entrenamientos y el
+           material colgando de cada día (por videos.event_date). -->
+      <div class="vr-cal" id="vrCal" hidden>
+        <div class="vc-bar">
+          <button class="vc-nav" type="button" id="vcPrev" aria-label="Previous month" data-i18n-attr="aria-label:video_room.prev_month"><i class="ti ti-chevron-left"></i></button>
+          <h2 id="vcMonth">—</h2>
+          <button class="vc-nav" type="button" id="vcNext" aria-label="Next month" data-i18n-attr="aria-label:video_room.next_month"><i class="ti ti-chevron-right"></i></button>
+          <button class="cm-btn is-ghost is-sm" type="button" id="vcToday" data-i18n="video_room.today">Today</button>
+          <span class="vc-legend">
+            <span><i class="ti ti-ball-football"></i> <span data-i18n="video_room.legend_match">Match</span></span>
+            <span><i class="ti ti-clipboard-list"></i> <span data-i18n="video_room.legend_training">Training</span></span>
+            <span><i class="ti ti-movie"></i> <span data-i18n="video_room.legend_videos">Videos</span></span>
+          </span>
+        </div>
+        <div class="vc-grid" id="vcGrid"></div>
+        <div class="vc-day" id="vcDay" hidden></div>
+      </div>
+
       <div class="vr-sends" id="vrSends" hidden></div>
     </section>
   </main>
@@ -388,6 +447,13 @@
       <button type="button" data-kind="video" class="is-on"><i class="ti ti-player-play"></i><span data-i18n="video_room.video">Video</span></button>
       <button type="button" data-kind="folder"><i class="ti ti-folder"></i><span data-i18n="video_room.folder">Folder</span></button>
     </div>
+    <!-- Fecha de lo filmado (no la de carga): es la que ubica el video en el calendario. -->
+    <label><span data-i18n="video_room.date_label">Date of the content</span>
+      <input type="date" id="vrDate">
+    </label>
+    <label id="vrLinkWrap" hidden><span data-i18n="video_room.link_to_label">Link to that day's event</span>
+      <select id="vrLinkSel"></select>
+    </label>
     <label><span data-i18n="video_room.thumbnail_url">Thumbnail URL</span> <span style="color:var(--cm-fg-faint)" data-i18n="video_room.optional">(optional)</span>
       <input type="url" id="vrThumb" placeholder="https://…">
     </label>
@@ -405,6 +471,8 @@
     <label><span data-i18n="video_room.folder_name_label">Folder name</span>
       <input type="text" id="vrFolderName" placeholder="e.g. Matches, Opponents, Set pieces" maxlength="120" data-i18n-ph="video_room.folder_name_ph">
     </label>
+    <!-- Carpeta de un día del calendario: lo que entre después hereda fecha y vínculo. -->
+    <div class="vr-prov-hint" id="vrFolderDayHint" hidden><i class="ti ti-calendar-event"></i><span id="vrFolderDayText"></span></div>
     <div class="vr-modal-actions">
       <button class="cm-btn is-ghost is-sm" id="vrFolderCancelBtn" type="button" data-i18n="common.cancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="vrFolderSaveBtn" type="button" data-i18n="video_room.create_folder">Create folder</button>
@@ -567,6 +635,10 @@
   let FOLDERS = [];                                 // native (in-app) folders
   let currentFolder = null;                         // folder id when drilled in, else null
   const filters = { q:'', link:'all', date:'any' };
+
+  // Día del video para el calendario: la fecha de lo filmado; si el video es viejo
+  // (o nunca se cargó la fecha), cae en la de carga, para que el mes no salga vacío.
+  const dayOf = r => r.event_date || String(r.created_at || '').slice(0, 10);
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
   function renderSkeleton() {
@@ -885,6 +957,169 @@
 
   $('#vrSearch').addEventListener('input', e => { filters.q = e.target.value.trim().toLowerCase(); render(); });
 
+  // ── Vista calendario ───────────────────────────────────────────────────────
+  // El mes del equipo activo (partidos + entrenamientos) con el material colgando
+  // de cada día. Los videos ya están todos en memoria: acá sólo se piden eventos.
+  const CAL = { month: startOfMonth(new Date()), sel: null, events: [], sessions: [], key: '' };
+
+  function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function parseYmd(s) { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); }
+  // Lunes de la primera semana + 6 semanas: la grilla siempre tiene 42 celdas.
+  function monthGridStart(m) {
+    const first = startOfMonth(m);
+    const s = new Date(first);
+    s.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+    return s;
+  }
+  const locale = () => (window.CM_I18N && CM_I18N.current) || 'en-GB';
+  const fmtMonth = m => { try { return m.toLocaleDateString(locale(), { month:'long', year:'numeric' }); } catch { return ''; } };
+  const fmtDayLong = s => { try { return parseYmd(s).toLocaleDateString(locale(), { weekday:'long', day:'numeric', month:'long' }); } catch { return s; } };
+
+  const evtLabel = e => e.type === 'match'
+    ? (e.opponent ? tt('video_room.vs_opponent', `vs ${e.opponent}`, { name: e.opponent }) : (e.title || tt('video_room.link_match', 'Match')))
+    : (e.title || tt('video_room.event_word', 'Event'));
+  const sesLabel = s => s.title
+    || (s.match_day_offset != null ? (window.cmMdNorm ? window.cmMdNorm(s.match_day_offset) : String(s.match_day_offset)) : null)
+    || tt('video_room.label_session_none', 'Session');
+
+  async function loadCalMonth() {
+    const start = monthGridStart(CAL.month);
+    const end = new Date(start); end.setDate(start.getDate() + 41);
+    const from = window.cmYMD(start), to = window.cmYMD(end);
+    const key = `${from}|${to}|${activeTeamId || ''}`;
+    if (CAL.key === key) return;
+    // Igual que en los pickers: lo histórico sin equipo se sigue mostrando.
+    const scope = activeTeamId ? `team_id.is.null,team_id.eq.${activeTeamId}` : null;
+    let qe = window.sb.from('calendar_events').select('id,date,type,title,opponent,home_away,start_time')
+      .eq('club_id', clubId).gte('date', from).lte('date', to);
+    let qs = window.sb.from('training_sessions').select('id,session_date,title,session_type,match_day_offset,session_time')
+      .eq('club_id', clubId).gte('session_date', from).lte('session_date', to);
+    if (scope) { qe = qe.or(scope); qs = qs.or(scope); }
+    const [e, s] = await Promise.all([qe, qs]);
+    if (e.error) console.warn('[VideoRoom] calendar events:', e.error.message);
+    if (s.error) console.warn('[VideoRoom] calendar sessions:', s.error.message);
+    CAL.events = e.data || [];
+    CAL.sessions = s.data || [];
+    CAL.key = key;
+  }
+
+  // Índice fecha → material, armado una vez por pintada (la grilla son 42 días).
+  function dayIndex() {
+    const vi = {}, fi = {};
+    VIDEOS.forEach(v => { const k = dayOf(v); if (k) (vi[k] = vi[k] || []).push(v); });
+    // Las carpetas sólo caen en un día si se crearon para ese día.
+    FOLDERS.forEach(f => { if (f.event_date) (fi[f.event_date] = fi[f.event_date] || []).push(f); });
+    return { vi, fi };
+  }
+
+  function dayItems(key, idx) {
+    idx = idx || dayIndex();
+    return {
+      matches:  CAL.events.filter(e => e.date === key && e.type === 'match'),
+      events:   CAL.events.filter(e => e.date === key && e.type !== 'match'),
+      sessions: CAL.sessions.filter(s => s.session_date === key),
+      videos:   idx.vi[key] || [],
+      folders:  idx.fi[key] || [],
+    };
+  }
+
+  function renderCal() {
+    const start = monthGridStart(CAL.month);
+    const today = window.cmToday();
+    const idx = dayIndex();
+    $('#vcMonth').textContent = fmtMonth(CAL.month);
+
+    let html = '';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      html += `<div class="vc-dow">${esc(d.toLocaleDateString(locale(), { weekday:'short' }))}</div>`;
+    }
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const key = window.cmYMD(d);
+      const it = dayItems(key, idx);
+      const chips = [
+        ...it.matches.map(e => `<span class="vc-evt match"><i class="ti ti-ball-football"></i><span>${esc(evtLabel(e))}</span></span>`),
+        ...it.sessions.map(s => `<span class="vc-evt train"><i class="ti ti-clipboard-list"></i><span>${esc(sesLabel(s))}</span></span>`),
+      ].slice(0, 3).join('');
+      const tags = (it.folders.length ? `<span class="vc-tag"><i class="ti ti-folder"></i>${it.folders.length}</span>` : '')
+                 + (it.videos.length  ? `<span class="vc-tag"><i class="ti ti-movie"></i>${it.videos.length}</span>`  : '');
+      const cls = ['vc-cell'];
+      if (d.getMonth() !== CAL.month.getMonth()) cls.push('is-out');
+      if (key === today) cls.push('is-today');
+      if (key === CAL.sel) cls.push('is-sel');
+      html += `<button type="button" class="${cls.join(' ')}" data-day="${key}">
+        <span class="dnum">${d.getDate()}</span>${chips}<span class="vc-tags">${tags}</span></button>`;
+    }
+    $('#vcGrid').innerHTML = html;
+    renderDayPanel();
+  }
+
+  function renderDayPanel() {
+    const box = $('#vcDay');
+    if (!CAL.sel) { box.hidden = true; return; }
+    const it = dayItems(CAL.sel);
+    const evChips = [
+      ...it.matches.map(e => `<span class="vc-evt match"><i class="ti ti-ball-football"></i><span>${esc(evtLabel(e))}</span></span>`),
+      ...it.sessions.map(s => `<span class="vc-evt train"><i class="ti ti-clipboard-list"></i><span>${esc(sesLabel(s))}</span></span>`),
+      ...it.events.map(e => `<span class="vc-evt train"><i class="ti ti-calendar-event"></i><span>${esc(evtLabel(e))}</span></span>`),
+    ].join('');
+    const anchor = it.matches[0] || it.sessions[0] || null;   // a qué se ataría una carpeta del día
+
+    const folderRows = it.folders.map(f => `
+      <div class="vc-row" data-open-folder="${esc(f.id)}">
+        <span class="ic"><i class="ti ti-folder"></i></span>
+        <span class="nm">${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}</span>
+        <span class="sub">${esc(tt('video_room.folder_count', `${folderVideoCount(f.id)} videos`, { count: folderVideoCount(f.id) }))}</span>
+      </div>`).join('');
+    const videoRows = it.videos.map(v => `
+      <div class="vc-row" data-open-video="${esc(v.id)}">
+        <span class="ic"><i class="ti ${v.kind === 'folder' ? 'ti-folder' : 'ti-player-play'}"></i></span>
+        <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
+        <span class="sub">${esc(v.event_date ? '' : tt('video_room.by_upload_date', 'by upload date'))}</span>
+      </div>`).join('');
+
+    box.innerHTML = `
+      <div class="dh">
+        <h3>${esc(fmtDayLong(CAL.sel))}</h3>
+        ${anchor ? `<button class="cm-btn is-ghost is-sm" type="button" id="vcAddFolder"><i class="ti ti-folder-plus" style="font-size:15px"></i>${esc(tt('video_room.folder_for_day', 'Folder for this day'))}</button>` : ''}
+        <button class="cm-btn is-primary is-sm" type="button" id="vcAddVideo"><i class="ti ti-plus" style="font-size:15px"></i>${esc(tt('video_room.add_video', 'Add video'))}</button>
+      </div>
+      ${evChips ? `<div class="devts">${evChips}</div>` : ''}
+      ${(folderRows || videoRows)
+        ? `<div class="dsec">${folderRows}${videoRows}</div>`
+        : `<p class="dempty">${esc(tt('video_room.day_empty', 'No videos on this day yet.'))}</p>`}`;
+    box.hidden = false;
+  }
+
+  $('#vcGrid').addEventListener('click', e => {
+    const cell = e.target.closest('.vc-cell');
+    if (!cell) return;
+    CAL.sel = (CAL.sel === cell.dataset.day) ? null : cell.dataset.day;
+    renderCal();
+  });
+  $('#vcDay').addEventListener('click', e => {
+    const f = e.target.closest('[data-open-folder]');
+    if (f) { currentFolder = f.dataset.openFolder; setTab('library'); return; }
+    const v = e.target.closest('[data-open-video]');
+    if (v) { window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(v.dataset.openVideo); return; }
+    if (e.target.closest('#vcAddVideo'))  { openModal({ date: CAL.sel }); return; }
+    if (e.target.closest('#vcAddFolder')) { openFolderModal({ date: CAL.sel }); return; }
+  });
+  async function goMonth(delta) {
+    CAL.month = new Date(CAL.month.getFullYear(), CAL.month.getMonth() + delta, 1);
+    await loadCalMonth();
+    renderCal();
+  }
+  $('#vcPrev').addEventListener('click', () => goMonth(-1));
+  $('#vcNext').addEventListener('click', () => goMonth(1));
+  $('#vcToday').addEventListener('click', async () => {
+    CAL.month = startOfMonth(new Date());
+    CAL.sel = window.cmToday();
+    await loadCalMonth();
+    renderCal();
+  });
+
   // ── Add video modal ────────────────────────────────────────────────────────
   const backdrop = $('#vrModalBackdrop');
   const urlInput = $('#vrUrl');
@@ -897,16 +1132,60 @@
     $('#vrKindLabel').textContent = k ? (k === 'folder' ? tt('video_room.folder', 'Folder') : tt('video_room.video', 'Video')) : '—';
     document.querySelectorAll('#vrKindToggle button').forEach(b => b.classList.toggle('is-on', b.dataset.kind === (k || 'video')));
   }
-  function openModal() {
+  // Partidos y entrenamientos de un día: del mes ya cargado si está ahí, si no una
+  // consulta puntual (el modal se puede abrir con cualquier fecha).
+  async function eventsForDay(key) {
+    if (!key) return { matches: [], sessions: [] };
+    const [from, to] = CAL.key ? CAL.key.split('|') : [null, null];
+    if (from && key >= from && key <= to) {
+      return {
+        matches:  CAL.events.filter(e => e.date === key && e.type === 'match'),
+        sessions: CAL.sessions.filter(s => s.session_date === key),
+      };
+    }
+    const scope = activeTeamId ? `team_id.is.null,team_id.eq.${activeTeamId}` : null;
+    let qe = window.sb.from('calendar_events').select('id,date,type,title,opponent').eq('club_id', clubId).eq('date', key).eq('type', 'match');
+    let qs = window.sb.from('training_sessions').select('id,session_date,title,match_day_offset').eq('club_id', clubId).eq('session_date', key);
+    if (scope) { qe = qe.or(scope); qs = qs.or(scope); }
+    const [e, s] = await Promise.all([qe, qs]);
+    return { matches: e.data || [], sessions: s.data || [] };
+  }
+
+  // Selector "vincular a": el partido/sesión de esa fecha. Vacío = no se muestra.
+  let linkFillToken = 0;
+  async function fillLinkOptions(key, preferred) {
+    const token = ++linkFillToken;
+    const wrap = $('#vrLinkWrap'), sel = $('#vrLinkSel');
+    const it = await eventsForDay(key);
+    if (token !== linkFillToken) return;   // la fecha cambió mientras se consultaba
+    const opts = [
+      ...it.matches.map(e => ({ v: 'm:' + e.id, label: evtLabel(e) })),
+      ...it.sessions.map(s => ({ v: 's:' + s.id, label: sesLabel(s) })),
+    ];
+    if (!opts.length) { sel.innerHTML = ''; wrap.hidden = true; return; }
+    sel.innerHTML = `<option value="">${esc(tt('video_room.link_none', "Don't link"))}</option>`
+      + opts.map(o => `<option value="${esc(o.v)}">${esc(o.label)}</option>`).join('');
+    sel.value = (preferred && opts.some(o => o.v === preferred)) ? preferred : opts[0].v;
+    wrap.hidden = false;
+  }
+
+  function openModal(opts = {}) {
     $('#vrTitle').value = ''; urlInput.value = ''; $('#vrThumb').value = '';
     kindManual = null;
     $('#vrProvHint').querySelector('b').textContent = '—';
     $('#vrKindLabel').textContent = '—';
     document.querySelectorAll('#vrKindToggle button').forEach(b => b.classList.toggle('is-on', b.dataset.kind === 'video'));
+    // Fecha: la del día elegido en el calendario, la de la carpeta abierta, o hoy.
+    const folder = currentFolder ? FOLDERS.find(f => f.id === currentFolder) : null;
+    const day = opts.date || (folder && folder.event_date) || window.cmToday();
+    $('#vrDate').value = day;
+    const inherited = folder && (folder.event_id ? 'm:' + folder.event_id : folder.session_id ? 's:' + folder.session_id : null);
+    fillLinkOptions(day, inherited);
     backdrop.classList.add('is-open'); $('#vrTitle').focus();
   }
   function closeModal() { backdrop.classList.remove('is-open'); }
-  $('#vrAddBtn').addEventListener('click', openModal);
+  $('#vrDate').addEventListener('change', e => fillLinkOptions(e.target.value || null));
+  $('#vrAddBtn').addEventListener('click', () => openModal());
   $('#vrCancelBtn').addEventListener('click', closeModal);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
@@ -933,7 +1212,10 @@
     if (provider === 'youtube') { externalId = ytId(url); if (externalId) autoThumb = `https://img.youtube.com/vi/${externalId}/hqdefault.jpg`; }
     else if (provider === 'vimeo') { externalId = vimeoId(url); }
 
-    const { error } = await window.sb.from('videos').insert({
+    const eventDate = $('#vrDate').value || null;
+    const link      = $('#vrLinkWrap').hidden ? '' : ($('#vrLinkSel').value || '');
+
+    let { data: row, error } = await window.sb.from('videos').insert({
       club_id:          clubId,
       team_id:          activeTeam,
       title,
@@ -942,22 +1224,66 @@
       external_id:      externalId,
       kind:             effectiveKind() || 'video',
       folder_id:        currentFolder || null,
+      event_date:       eventDate,
       thumbnail_url:    $('#vrThumb').value.trim() || autoThumb || null,
       uploaded_by:      userId,
       uploaded_by_name: profileName,
-    });
+    }).select('id').maybeSingle();
+
+    // La columna event_date es nueva: si el SQL todavía no se aplicó, guardar igual
+    // (sin fecha) en vez de perder lo que la persona acaba de cargar.
+    if (error && /event_date/.test(error.message || '')) {
+      const retry = await window.sb.from('videos').insert({
+        club_id: clubId, team_id: activeTeam, title, url, provider,
+        external_id: externalId, kind: effectiveKind() || 'video',
+        folder_id: currentFolder || null,
+        thumbnail_url: $('#vrThumb').value.trim() || autoThumb || null,
+        uploaded_by: userId, uploaded_by_name: profileName,
+      }).select('id').maybeSingle();
+      row = retry.data; error = retry.error;
+    }
+
+    // El vínculo con el partido/sesión del día: lo que hace que aparezca en el
+    // calendario y en la ficha del evento sin cargarlo a mano después.
+    if (!error && row?.id && link) {
+      const [kind, refId] = [link.slice(0, 1), link.slice(2)];
+      const t = kind === 'm'
+        ? window.sb.from('video_matches').insert({ video_id: row.id, event_id: refId })
+        : window.sb.from('video_sessions').insert({ video_id: row.id, session_id: refId });
+      const { error: le } = await t;
+      if (le) console.warn('[VideoRoom] link:', le.message);
+    }
 
     btn.disabled = false; btn.textContent = tt('video_room.save_video', 'Save video');
     if (error) { alert(tt('video_room.save_error', 'Error saving video: ' + error.message, { msg: error.message })); return; }
     closeModal(); toast(tt('video_room.video_added', 'Video added'));
     await loadVideos();
+    if (tab === 'calendar') renderCal();
   });
 
   // ── New folder modal ────────────────────────────────────────────────────────
   const folderBackdrop = $('#vrFolderBackdrop');
-  function openFolderModal() { $('#vrFolderName').value = ''; folderBackdrop.classList.add('is-open'); $('#vrFolderName').focus(); }
+  // Cuando la carpeta nace de un día del calendario, se guarda atada a ese
+  // partido/sesión: los videos que entren después heredan fecha y vínculo.
+  let folderDay = null;   // { date, event_id, session_id }
+  async function openFolderModal(opts = {}) {
+    folderDay = null;
+    $('#vrFolderName').value = '';
+    $('#vrFolderDayHint').hidden = true;
+    if (opts.date) {
+      const it = await eventsForDay(opts.date);
+      const match = it.matches[0], ses = it.sessions[0];
+      folderDay = { date: opts.date, event_id: match?.id || null, session_id: match ? null : (ses?.id || null) };
+      const what = match ? evtLabel(match) : ses ? sesLabel(ses) : '';
+      $('#vrFolderName').value = [what, fmtDayShort(opts.date)].filter(Boolean).join(' — ');
+      $('#vrFolderDayText').textContent = tt('video_room.folder_day_hint', `Linked to ${fmtDayLong(opts.date)}`, { day: fmtDayLong(opts.date) });
+      $('#vrFolderDayHint').hidden = false;
+    }
+    folderBackdrop.classList.add('is-open'); $('#vrFolderName').focus();
+  }
+  const fmtDayShort = s => { try { return parseYmd(s).toLocaleDateString(locale(), { day:'2-digit', month:'short' }); } catch { return s; } };
   function closeFolderModal() { folderBackdrop.classList.remove('is-open'); }
-  $('#vrAddFolderBtn').addEventListener('click', openFolderModal);
+  $('#vrAddFolderBtn').addEventListener('click', () => openFolderModal());
   $('#vrFolderCancelBtn').addEventListener('click', closeFolderModal);
   folderBackdrop.addEventListener('click', e => { if (e.target === folderBackdrop) closeFolderModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFolderModal(); });
@@ -969,17 +1295,22 @@
     if (!activeTeamId) { alert(tt('video_room.no_team_folder', 'Pick a team in the sidebar before creating a folder — every folder belongs to a team.')); return; }
     const btn = $('#vrFolderSaveBtn');
     btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
-    const { error } = await window.sb.from('video_folders').insert({
-      club_id:         clubId,
-      team_id:         activeTeamId,
-      name,
-      created_by:      userId,
-      created_by_name: profileName,
+    const base = { club_id: clubId, team_id: activeTeamId, name, created_by: userId, created_by_name: profileName };
+    let { error } = await window.sb.from('video_folders').insert({
+      ...base,
+      event_date: folderDay?.date || null,
+      event_id:   folderDay?.event_id || null,
+      session_id: folderDay?.session_id || null,
     });
+    // Columnas nuevas: si el SQL todavía no está aplicado, se crea igual (sin día).
+    if (error && /event_date|event_id|session_id/.test(error.message || '')) {
+      ({ error } = await window.sb.from('video_folders').insert(base));
+    }
     btn.disabled = false; btn.textContent = tt('video_room.create_folder', 'Create folder');
     if (error) { alert(error.message); return; }
     closeFolderModal(); toast(tt('video_room.folder_created', 'Folder created'));
     await loadVideos();
+    if (tab === 'calendar') renderCal();
   });
 
   // ── Enviar cortes al jugador ───────────────────────────────────────────────
@@ -1401,25 +1732,41 @@
 
   // ── Pestañas ───────────────────────────────────────────────────────────────
   let tab = 'library';
-  function setTab(next) {
+  async function setTab(next) {
     tab = next;
     document.querySelectorAll('#vrTabs button').forEach(b => b.classList.toggle('is-on', b.dataset.tab === next));
-    const isLib = next === 'library';
+    const isLib = next === 'library', isCal = next === 'calendar';
     $('#vrBar').style.display = isLib ? '' : 'none';
     $('#vrGrid').hidden  = !isLib;
-    $('#vrSends').hidden = isLib;
-    if (isLib) { renderCrumb(); render(); } else { $('#vrCrumb').hidden = true; renderSends(); }
+    $('#vrCal').hidden   = !isCal;
+    $('#vrSends').hidden = isLib || isCal;
+    if (isLib) { renderCrumb(); render(); return; }
+    $('#vrCrumb').hidden = true;
+    if (isCal) { await loadCalMonth(); renderCal(); } else renderSends();
   }
   $('#vrTabs').addEventListener('click', e => {
     const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab);
   });
-  document.addEventListener('cm:langchanged', () => { if (tab === 'sends') renderSends(); });
+  document.addEventListener('cm:langchanged', () => {
+    if (tab === 'sends') renderSends();
+    if (tab === 'calendar') renderCal();
+  });
 
   // ── Go ─────────────────────────────────────────────────────────────────────
   await loadVideos();
   await loadSends();
   const qs = new URLSearchParams(location.search);
   if (qs.get('tab') === 'sends') setTab('sends');
+  // El Calendar y el Day sheet mandan acá con ?date=YYYY-MM-DD para caer parados
+  // en ese día del mes.
+  const qDate = qs.get('date');
+  if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) {
+    CAL.month = startOfMonth(parseYmd(qDate));
+    CAL.sel = qDate;
+    await setTab('calendar');
+  } else if (qs.get('tab') === 'calendar') {
+    await setTab('calendar');
+  }
   // Video Detail manda acá con ?send=<id> para abrir el envío con ese corte cargado.
   const sendId = qs.get('send');
   if (sendId && VIDEOS.some(v => v.id === sendId)) await openSendModal([sendId]);

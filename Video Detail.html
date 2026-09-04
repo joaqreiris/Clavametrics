@@ -599,7 +599,9 @@
             <div class="vd-dl">
               <div class="drow"><span class="dk"><i class="ti ti-cloud"></i>${esc(tt('video_detail.detail_source', 'Source'))}</span><span class="dv"><i class="ti ${prov.icon}" style="${v.provider==='google_drive'?'color:#1FA463':v.provider==='dropbox'?'color:#0061FF':''}"></i>${esc(prov.label)}</span></div>
               <div class="drow"><span class="dk"><i class="ti ${isFolder ? 'ti-folder' : 'ti-file'}"></i>${isFolder ? esc(tt('video_detail.detail_folder', 'Folder')) : esc(tt('video_detail.detail_file', 'File'))}</span><span class="dv"><span class="truncate">${esc(fileLabel())}</span></span></div>
-              <div class="drow"><span class="dk"><i class="ti ti-calendar"></i>${esc(tt('common.date', 'Date'))}</span><span class="dv">${fmtDate(v.created_at)}</span></div>
+              <!-- Fecha de lo filmado: es la que ubica el video en el calendario del Video Room. -->
+              <div class="drow"><span class="dk"><i class="ti ti-calendar-event"></i>${esc(tt('video_detail.detail_recorded', 'Recorded'))}</span><span class="dv"><input type="date" id="vdEventDate" value="${esc(v.event_date || '')}" style="background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-2);padding:3px 7px;font:13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)"></span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-calendar"></i>${esc(tt('video_detail.detail_uploaded', 'Uploaded'))}</span><span class="dv">${fmtDate(v.created_at)}</span></div>
               <div class="drow"><span class="dk"><i class="ti ti-user-up"></i>${esc(tt('video_detail.detail_author', 'Author'))}</span><span class="dv">${v.uploaded_by_name ? `<span class="av" style="width:20px;height:20px;border-radius:50%;background:var(--cm-violet-bg);color:var(--cm-violet);display:inline-flex;align-items:center;justify-content:center;font:700 8.5px/1 var(--cm-font-sans)">${esc(initials(v.uploaded_by_name))}</span>${esc(v.uploaded_by_name)}` : '—'}</span></div>
               <div class="drow"><span class="dk"><i class="ti ti-external-link"></i>${esc(tt('video_detail.detail_open', 'Open'))}</span><span class="dv"><a href="${esc(safeUrl(v.url))}" target="_blank" rel="noopener">${esc(tt('video_detail.view_in', `View in ${prov.label}`, { name:prov.label }))}</a></span></div>
             </div>
@@ -626,6 +628,16 @@
   if (dlBtn) dlBtn.addEventListener('click', () => {
     window.open(safeUrl(dlUrl), '_blank', 'noopener');
     toast(tt('video_detail.download_started', 'Download started — check your browser downloads'));
+  });
+
+  // Cambiar la fecha de lo filmado mueve el video de día en el calendario.
+  document.getElementById('vdEventDate')?.addEventListener('change', async e => {
+    const day = e.target.value || null;
+    const { error: de } = await window.sb.from('videos')
+      .update({ event_date: day, updated_at: new Date().toISOString() }).eq('id', id);
+    if (de) { alert(de.message); e.target.value = v.event_date || ''; return; }
+    v.event_date = day;
+    toast(tt('video_detail.date_saved', 'Date saved'));
   });
 
   // ── Notes save ───────────────────────────────────────────────────────────────
@@ -922,13 +934,13 @@
         qm.order('date', { ascending: false }),
       ]);
       const sLab = r => r.title || (r.match_day_offset != null ? (window.cmMdNorm ? window.cmMdNorm(r.match_day_offset) : String(r.match_day_offset)) : (r.session_date ? fmtDate(r.session_date) : tt('video_detail.block_session', 'Session')));
-      LISTS.session = (s.data || []).map(r => ({ id:r.id, label:sLab(r), sub:r.session_date ? fmtDate(r.session_date) : '', search:`${r.title || ''} ${sLab(r)}`.toLowerCase() }));
+      LISTS.session = (s.data || []).map(r => ({ id:r.id, label:sLab(r), date:r.session_date || null, sub:r.session_date ? fmtDate(r.session_date) : '', search:`${r.title || ''} ${sLab(r)}`.toLowerCase() }));
       LISTS.player  = (p || []).map(r => {
         const full = `${r.first_name || ''} ${r.last_name || ''}`.trim();
         const label = `${r.last_name || ''}${r.last_name && r.first_name ? ', ' : ''}${r.first_name || ''}`.trim() || '—';
         return { id:r.id, label, initials:initials(full), sub:[r.number ? `#${r.number}` : '', r.position].filter(Boolean).join(' · '), search:full.toLowerCase() };
       });
-      LISTS.match = (m.data || []).map(r => ({ id:r.id, label:r.opponent ? tt('video_detail.vs_opponent', `vs ${r.opponent}`, { name:r.opponent }) : (r.title || tt('video_detail.block_match', 'Match')), sub:r.date ? fmtDate(r.date) : '', search:`${r.opponent || ''} ${r.title || ''}`.toLowerCase() }));
+      LISTS.match = (m.data || []).map(r => ({ id:r.id, label:r.opponent ? tt('video_detail.vs_opponent', `vs ${r.opponent}`, { name:r.opponent }) : (r.title || tt('video_detail.block_match', 'Match')), date:r.date || null, sub:r.date ? fmtDate(r.date) : '', search:`${r.opponent || ''} ${r.title || ''}`.toLowerCase() }));
       listsLoaded = true;
     }
 
@@ -1024,6 +1036,19 @@
       btn.disabled = false; btn.innerHTML = `<i class="ti ti-link" style="font-size:16px"></i>${esc(tt('video_detail.link_action', 'Link'))}`;
       const err = results.find(r => r.error);
       if (err) { alert(tt('video_detail.link_error', `Error linking: ${err.error.message}`, { msg:err.error.message })); return; }
+
+      // Si el video todavía no tenía fecha propia, la hereda del partido o de la
+      // sesión que se acaba de vincular: así aparece en el día que corresponde
+      // en la vista de calendario del Video Room.
+      if (!v.event_date) {
+        const mId = [...sel.match.keys()][0], sId = [...sel.session.keys()][0];
+        const day = mId ? (LISTS.match.find(r => r.id === mId)?.date || null)
+                        : sId ? (LISTS.session.find(r => r.id === sId)?.date || null) : null;
+        if (day) {
+          const { error: de } = await window.sb.from('videos').update({ event_date: day, updated_at: new Date().toISOString() }).eq('id', id);
+          if (de) console.warn('[VideoDetail] event_date:', de.message); else v.event_date = day;
+        }
+      }
       close();
       await loadLinks();   // refresh "Linked to" without reload
       toast(tt('video_detail.links_added', 'Links added'));

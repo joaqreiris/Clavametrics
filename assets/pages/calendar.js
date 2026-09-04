@@ -504,11 +504,17 @@ function renderGrid() {
     // In player view hide the + Add button
     const addBtn = (isPlayerView || hasDayOff) ? '' : `<button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">${tt('calendar.add','+ Add')}</button>`;
 
+    // Chip de video: cuántos hay de ese día y atajo al Video Room parado ahí.
+    const _vidN = _videoDays[dateStr] || 0;
+    const _vidChip = (!isPlayerView && _vidN)
+      ? `<a class="mc-day-vid" href="Video Room.html?date=${dateStr}" title="${_esc(tt('calendar.videos_n','{n} videos',{n:_vidN}))}"><i class="ti ti-movie"></i>${_vidN}</a>`
+      : '';
+
     html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}${hasDayOff ? ' is-dayoff' : ''}" data-date="${dateStr}">
       <div class="mc-day-head">
         <span class="mc-day-dow">${dayShort(d)}</span>
         <span class="mc-day-num">${d.getDate()}</span>
-        ${tagText ? `<span class="mc-day-md${_fromOverride ? ' is-manual' : ''}${_showAmbiguous ? ' is-ambiguous' : ''}" style="${tagStyle}" title="${_esc(mdTip)}">${tagText}</span>` : ''}${groupChips}
+        ${tagText ? `<span class="mc-day-md${_fromOverride ? ' is-manual' : ''}${_showAmbiguous ? ' is-ambiguous' : ''}" style="${tagStyle}" title="${_esc(mdTip)}">${tagText}</span>` : ''}${groupChips}${_vidChip}
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
@@ -996,6 +1002,23 @@ async function fetchAllEvents(dateFrom, dateTo) {
 // ── Load sessions for current MC ──────────────────────────────
 // opts.silent: recarga sin pintar el "Loading…" — para el refresco en vivo, que
 // no debe hacer parpadear la grilla mientras el usuario la está mirando.
+// ── Videos por día (Video Room) ────────────────────────────────
+// Cuántos videos hay de cada fecha del microciclo, para el chip de la cabecera del
+// día y el popover del evento. Se cuenta por videos.event_date (la fecha de lo
+// filmado). Silencioso si algo falla: es un adorno, no puede romper el calendario.
+let _videoDays = {};
+async function loadVideoDays(from, to) {
+  _videoDays = {};
+  try {
+    let q = window.sb.from('videos').select('event_date')
+      .eq('club_id', _clubId).gte('event_date', from).lte('event_date', to);
+    if (_activeTeamId) q = q.eq('team_id', _activeTeamId);
+    const { data, error } = await q;
+    if (error) return;
+    (data || []).forEach(r => { if (r.event_date) _videoDays[r.event_date] = (_videoDays[r.event_date] || 0) + 1; });
+  } catch (_) {}
+}
+
 async function loadSessions(opts) {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
@@ -1008,6 +1031,7 @@ async function loadSessions(opts) {
   }
   _sessions = data;
   _weekOffset = 0;
+  await loadVideoDays(mc.start_date, mc.end_date);
 
   // Travel Days KPI
   const travelEvts = _sessions.filter(s => s.session_type === 'travel');
@@ -1709,6 +1733,11 @@ function showEvtPopover(anchor, session) {
       planBtn = `<a class="cm-btn is-ghost is-sm" href="Daily Planning.html?date=${date}${session.source === 'session' && session.id ? `&session=${session.id}` : ''}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-clipboard-list" style="font-size:11px"></i>${tt('calendar.daily_planning','Daily Planning')}</a>`;
     } else if (cat === 'match' && isCalEvt) {
       planBtn = `<a class="cm-btn is-ghost is-sm" href="Lineup.html?match=${session.id}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-users" style="font-size:11px"></i>${tt('calendar.lineup','Lineup')}</a>`;
+    }
+    // Videos de ese día: atajo al Video Room ya parado en la fecha.
+    const _vidN = _videoDays[date] || 0;
+    if (_vidN) {
+      planBtn += `<a class="cm-btn is-ghost is-sm" href="Video Room.html?date=${date}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-movie" style="font-size:11px"></i>${tt('calendar.videos_n','{n} videos',{n:_vidN})}</a>`;
     }
   }
 
