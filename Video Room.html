@@ -422,7 +422,13 @@
         <div class="vr-sec-h"><i class="ti ti-player-play"></i><span data-i18n="video_room.send_clips">Clips</span><span class="cnt" id="vrSendClipCount">0</span>
           <button type="button" class="lnk" id="vrSendAddClip" data-i18n="video_room.send_add_clip">+ Add clip</button></div>
         <div id="vrSendClips" style="display:flex;flex-direction:column;gap:8px"></div>
-        <div class="vr-pick" id="vrSendVideoPick" hidden></div>
+        <div id="vrSendVideoBox" style="display:none;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:7px">
+            <select id="vrSendFolder" style="flex:none;width:42%"></select>
+            <input type="text" id="vrSendVideoSearch" placeholder="Search clips…" data-i18n-ph="video_room.send_clip_search_ph">
+          </div>
+          <div class="vr-pick" id="vrSendVideoPick"></div>
+        </div>
       </div>
 
       <div class="vr-sec">
@@ -1029,18 +1035,39 @@
       </div>`).join('');
   }
 
+  // Los cortes individuales suelen vivir en su propia carpeta (aparte de los de
+  // entrenamiento), así que el buscador filtra por carpeta y por título.
+  function buildSendFolderSelect() {
+    const sel = $('#vrSendFolder');
+    const prev = sel.value;
+    sel.innerHTML = `<option value="all">${esc(tt('video_room.send_folder_all', 'All folders'))}</option>`
+      + `<option value="none">${esc(tt('video_room.send_folder_none', 'Outside any folder'))}</option>`
+      + FOLDERS.map(f => `<option value="${esc(f.id)}">${esc(f.name || tt('video_room.untitled_folder', 'Untitled folder'))}</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === prev) ? prev : (currentFolder || 'all');
+  }
+
   function renderVideoPick() {
     const box = $('#vrSendVideoPick');
     const chosen = new Set(sendClips.map(c => c.video_id));
-    const rows = VIDEOS.filter(v => !chosen.has(v.id)).slice(0, 60);
+    const folder = $('#vrSendFolder').value || 'all';
+    const q = ($('#vrSendVideoSearch').value || '').trim().toLowerCase();
+    const all = VIDEOS.filter(v => !chosen.has(v.id)
+      && (folder === 'all' || (folder === 'none' ? !v.folder_id : v.folder_id === folder))
+      && (!q || (v.title || '').toLowerCase().includes(q)));
+    const rows = all.slice(0, 200);
+    const fName = id => FOLDERS.find(f => f.id === id)?.name || '';
     box.innerHTML = rows.length
       ? rows.map(v => `
           <div class="opt" data-add-video="${esc(v.id)}">
             <span class="box"><i class="ti ti-check"></i></span>
             <span class="nm">${esc(v.title || tt('video_room.untitled_video', 'Untitled video'))}</span>
+            ${v.folder_id && folder === 'all' ? `<span class="sub"><i class="ti ti-folder" style="font-size:12px"></i> ${esc(fName(v.folder_id))}</span>` : ''}
             <span class="sub">${esc((PROV[v.provider] || PROV.other).label)}</span>
           </div>`).join('')
-      : `<div class="none">${esc(tt('video_room.send_all_added', 'Every video is already in this send.'))}</div>`;
+        + (all.length > rows.length ? `<div class="none">${esc(tt('video_room.send_more_results', `+${all.length - rows.length} more — refine your search`, { count: all.length - rows.length }))}</div>` : '')
+      : `<div class="none">${esc(q || folder !== 'all'
+            ? tt('video_room.send_no_results', 'No clips match this search.')
+            : tt('video_room.send_all_added', 'Every video is already in this send.'))}</div>`;
   }
 
   function renderPlayerPick() {
@@ -1070,9 +1097,10 @@
     $('#vrSendForm').style.display = 'flex';
     $('#vrSendDone').style.display = 'none';
     renderSendClips();
-    // Si se abrió sin cortes (botón de la barra), el picker arranca desplegado.
-    $('#vrSendVideoPick').hidden = !!sendClips.length;
-    if (!sendClips.length) renderVideoPick();
+    // Si se abrió sin cortes (botón de la barra), el buscador arranca desplegado.
+    $('#vrSendVideoSearch').value = '';
+    buildSendFolderSelect();
+    setVideoPickOpen(!sendClips.length);
     sendBackdrop.classList.add('is-open');
     await loadPlayers();
     renderPlayerPick();
@@ -1085,11 +1113,15 @@
   sendBackdrop.addEventListener('click', e => { if (e.target === sendBackdrop) closeSendModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSendModal(); });
 
-  $('#vrSendAddClip').addEventListener('click', () => {
-    const pick = $('#vrSendVideoPick');
-    pick.hidden = !pick.hidden;
-    if (!pick.hidden) renderVideoPick();
-  });
+  // display:flex propio pisaría [hidden], así que se maneja por style.
+  const videoPickOpen = () => $('#vrSendVideoBox').style.display !== 'none';
+  function setVideoPickOpen(open) {
+    $('#vrSendVideoBox').style.display = open ? 'flex' : 'none';
+    if (open) { renderVideoPick(); $('#vrSendVideoSearch').focus(); }
+  }
+  $('#vrSendAddClip').addEventListener('click', () => setVideoPickOpen(!videoPickOpen()));
+  $('#vrSendFolder').addEventListener('change', renderVideoPick);
+  $('#vrSendVideoSearch').addEventListener('input', renderVideoPick);
   $('#vrSendVideoPick').addEventListener('click', e => {
     const opt = e.target.closest('[data-add-video]'); if (!opt) return;
     const v = VIDEOS.find(x => x.id === opt.dataset.addVideo); if (!v) return;
@@ -1100,7 +1132,7 @@
     const del = e.target.closest('[data-clip-del]'); if (!del) return;
     sendClips.splice(+del.dataset.clipDel, 1);
     renderSendClips();
-    if (!$('#vrSendVideoPick').hidden) renderVideoPick();
+    if (videoPickOpen()) renderVideoPick();
   });
   $('#vrSendClips').addEventListener('input', e => {
     const c = e.target.dataset.clipComment, s = e.target.dataset.clipStart;

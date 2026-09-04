@@ -18,7 +18,11 @@
   }
   *{box-sizing:border-box;}
   html,body{background:var(--vs-soft);margin:0;}
-  body{font-family:var(--vs-sans);color:var(--vs-fg);-webkit-font-smoothing:antialiased;}
+  /* Material interno: se corta el copiado, el arrastre y el menú largo del móvil.
+     No impide grabar la pantalla — eso no existe en la web — pero saca las vías fáciles. */
+  body{font-family:var(--vs-sans);color:var(--vs-fg);-webkit-font-smoothing:antialiased;
+       -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  img,video{-webkit-user-drag:none;user-drag:none;pointer-events:none;}
   .wrap{max-width:640px;margin:0 auto;padding:14px 14px calc(48px + env(safe-area-inset-bottom));}
 
   .brand{display:flex;align-items:center;gap:8px;justify-content:center;margin:4px 0 16px;}
@@ -70,6 +74,12 @@
   .seen-btn{flex:none;display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--vs-acc);background:var(--vs-acc);color:#fff;font:700 13px/1 var(--vs-sans);cursor:pointer;}
   .seen-btn.is-on{background:var(--vs-acc-soft);color:var(--vs-acc);}
   .seen-btn:disabled{opacity:.6;}
+
+  /* aviso de uso interno */
+  .warn{display:flex;align-items:flex-start;gap:10px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:14px;padding:12px 14px;margin-bottom:12px;}
+  .warn .ic{flex:none;width:26px;height:26px;border-radius:8px;background:#FFEDD5;color:#C2410C;display:flex;align-items:center;justify-content:center;}
+  .warn .tx{font:500 12.5px/1.5 var(--vs-sans);color:#7C2D12;}
+  .warn .tx b{font-weight:700;}
 
   .state{text-align:center;padding:56px 20px;color:var(--vs-muted);}
   .state .ic{color:var(--vs-faint);margin-bottom:14px;display:flex;justify-content:center;}
@@ -151,11 +161,14 @@
       '</div>'+
       frame+
       (c.comment ? '<p class="clip-note">'+esc(c.comment)+'</p>' : '')+
-      '<div class="clip-acts">'+
-        '<a class="btn primary" href="'+esc(safeUrl(c.open))+'" target="_blank" rel="noopener">'+
-          '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>'+
-          esc(tt('video_share.open_in','Open in {name}', { name: provLabel }))+'</a>'+
-      '</div>'+
+      // Con reproducción embebida no se ofrece el archivo original: ahí el jugador
+      // tendría el botón de descarga del proveedor. Solo aparece si no hay otra vía.
+      (c.embed ? '' :
+        '<div class="clip-acts">'+
+          '<a class="btn primary" href="'+esc(safeUrl(c.open))+'" target="_blank" rel="noopener">'+
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>'+
+            esc(tt('video_share.open_in','Open in {name}', { name: provLabel }))+'</a>'+
+        '</div>')+
     '</article>';
   }
 
@@ -189,6 +202,13 @@
         (s.club ? '<span class="tag">'+esc(s.club)+'</span>' : '')+
       '</div>'+
     '</div>';
+
+    // Aviso de uso interno: el material es del club y el link es personal.
+    html += '<div class="warn"><span class="ic">'+
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>'+
+      '</span><div class="tx"><b>'+esc(tt('video_share.warn_title','Club material — do not share.'))+'</b> '+
+        esc(tt('video_share.warn_body','This link is personal and identifies you. Recording or forwarding these clips is not allowed.'))+
+      '</div></div>';
 
     html += '<div class="sec-h">'+esc(tt('video_share.clips','Your clips'))+'<span class="n">'+clips.length+'</span></div>';
     html += clips.length
@@ -234,6 +254,11 @@
   }
 
   document.addEventListener('cm:langchanged', function(){ if (DATA) render(DATA); });
+
+  // Menú contextual y arrastre fuera: no frena a nadie decidido, pero saca el
+  // «guardar video como» y el arrastre a otra app de un toque.
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  document.addEventListener('dragstart',   function(e){ e.preventDefault(); });
 
   if (document.readyState !== 'loading') load(); else document.addEventListener('DOMContentLoaded', load);
 })();
