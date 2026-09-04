@@ -2583,10 +2583,10 @@ function renderTasks(tasks, view = 'my') {
       .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', date7)
       .lte('session_date', today),
-    // Total videos for the club — source for Video room module footer
+    // Videos del equipo activo — pie del módulo Video room (que también es por equipo)
     window.sb.from('videos')
       .select('id', { count: 'exact', head: true })
-      .eq('club_id', clubId),
+      .eq('club_id', clubId).match(_teamEq),
   ]);
 
   // ── Dynamic module footers ─────────────────────────────────────────────────

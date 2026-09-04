@@ -8203,61 +8203,66 @@ create policy "video_sessions rw via video" on public.video_sessions as permissi
   WHERE (v.id = video_sessions.video_id))));
 
 alter table public.videos enable row level security;
+-- Todo video vive dentro de un equipo: escribir/borrar exige que sea uno de los míos
+-- (o acceso completo de planificación). El SELECT ya era team-scoped.
 create policy "videos delete club" on public.videos as permissive for delete to public
-  using ((club_id IN ( SELECT profiles.club_id
+  using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (uploaded_by = auth.uid()))));
 create policy "videos insert club" on public.videos as permissive for insert to public
-  with check ((club_id IN ( SELECT profiles.club_id
+  with check (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (team_id IS NOT NULL) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "videos select team-scoped" on public.videos as permissive for select to public
   using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (uploaded_by = auth.uid()))));
 create policy "videos update club" on public.videos as permissive for update to public
-  using ((club_id IN ( SELECT profiles.club_id
+  using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))))
-  with check ((club_id IN ( SELECT profiles.club_id
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (uploaded_by = auth.uid()))))
+  with check (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (team_id IS NOT NULL) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "videos_super_all" on public.videos as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
 
 alter table public.video_folders enable row level security;
+-- Misma regla que videos: la carpeta es de un equipo, no del club entero.
 create policy "video_folders delete club" on public.video_folders as permissive for delete to public
-  using ((club_id IN ( SELECT profiles.club_id
+  using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))));
 create policy "video_folders insert club" on public.video_folders as permissive for insert to public
-  with check ((club_id IN ( SELECT profiles.club_id
+  with check (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (team_id IS NOT NULL) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "video_folders select team-scoped" on public.video_folders as permissive for select to public
   using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))));
 create policy "video_folders update club" on public.video_folders as permissive for update to public
-  using ((club_id IN ( SELECT profiles.club_id
+  using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))))
-  with check ((club_id IN ( SELECT profiles.club_id
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))))
+  with check (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (team_id IS NOT NULL) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
 create policy "video_folders_super_all" on public.video_folders as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());
 
 alter table public.video_shares enable row level security;
+-- El envío pertenece al equipo del jugador: cada categoría ve sólo los suyos.
+-- (La Edge Function share-video usa service role, así que el link del jugador sigue andando.)
 create policy "video_shares club" on public.video_shares as permissive for all to public
-  using ((club_id IN ( SELECT profiles.club_id
+  using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))))
-  with check ((club_id IN ( SELECT profiles.club_id
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))))
+  with check (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()))));
 create policy "video_shares_super_all" on public.video_shares as permissive for all to authenticated
   using (is_super_admin())
   with check (is_super_admin());

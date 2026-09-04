@@ -429,6 +429,19 @@
   if (error) { console.error('[VideoDetail] load error:', error); notFound(tt('video_detail.nf_load_title', "Couldn't load video"), error.message); return; }
   if (!v) { notFound(tt('video_detail.nf_missing_title', 'Video not found'), tt('video_detail.nf_missing_body', "This video doesn't exist or you don't have access to it.")); return; }
 
+  // El video es de una categoría: si estás parado en otra, no se abre (un admin ve
+  // todo el club por RLS, y sin este corte se mezclaría material entre equipos).
+  const activeTeamId = (window.getActiveTeamId ? window.getActiveTeamId() : null)
+                    || sessionStorage.getItem('cal_active_team') || null;
+  if (v.team_id && activeTeamId && v.team_id !== activeTeamId) {
+    let teamName = '';
+    try { const { data: t } = await window.sb.from('teams').select('name').eq('id', v.team_id).maybeSingle(); teamName = t?.name || ''; } catch {}
+    const team = teamName || tt('video_detail.other_team_word', 'another team');
+    notFound(tt('video_detail.nf_other_team_title', 'Video from another team'),
+             tt('video_detail.nf_other_team_body', `This video belongs to ${team}. Switch team in the sidebar to open it.`, { team }));
+    return;
+  }
+
   document.title = `${v.title || tt('video_detail.video_word', 'Video')} — ClavaMetrics`;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -894,10 +907,19 @@
 
     async function ensureLists() {
       if (listsLoaded) return;
+      // Sólo se vincula con material del mismo equipo que el video.
+      const linkTeam = v.team_id || activeTeamId || null;
+      let qs = window.sb.from('training_sessions').select('id,title,session_date,match_day_offset').eq('club_id', clubId);
+      let qm = window.sb.from('calendar_events').select('id,opponent,title,date').eq('club_id', clubId).eq('type', 'match');
+      // Las sesiones/partidos históricos sin equipo siguen siendo vinculables.
+      if (linkTeam) {
+        const scope = `team_id.is.null,team_id.eq.${linkTeam}`;
+        qs = qs.or(scope); qm = qm.or(scope);
+      }
       const [s, p, m] = await Promise.all([
-        window.sb.from('training_sessions').select('id,title,session_date,match_day_offset').eq('club_id', clubId).order('session_date', { ascending: false }),
-        window.getActivePlayers(clubId),
-        window.sb.from('calendar_events').select('id,opponent,title,date').eq('club_id', clubId).eq('type', 'match').order('date', { ascending: false }),
+        qs.order('session_date', { ascending: false }),
+        window.getActivePlayers(clubId, linkTeam || undefined),
+        qm.order('date', { ascending: false }),
       ]);
       const sLab = r => r.title || (r.match_day_offset != null ? (window.cmMdNorm ? window.cmMdNorm(r.match_day_offset) : String(r.match_day_offset)) : (r.session_date ? fmtDate(r.session_date) : tt('video_detail.block_session', 'Session')));
       LISTS.session = (s.data || []).map(r => ({ id:r.id, label:sLab(r), sub:r.session_date ? fmtDate(r.session_date) : '', search:`${r.title || ''} ${sLab(r)}`.toLowerCase() }));

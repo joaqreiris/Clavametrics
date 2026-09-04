@@ -58,6 +58,9 @@
   .vr-head .ttl h1 { font:var(--cm-h1); letter-spacing:-0.01em; color:var(--cm-fg-strong); margin:0; }
   .vr-head .ttl p  { font:var(--cm-body); color:var(--cm-fg-muted); margin:5px 0 0; }
   .vr-head .ttl p strong { color:var(--cm-fg); font-weight:600; }
+  /* Equipo activo: la biblioteca está siempre acotada a él (selector del sidebar). */
+  .vr-teamtag { display:inline-flex; align-items:center; gap:5px; margin-left:8px; padding:2px 9px; border-radius:999px; background:var(--cm-surface-2); border:1px solid var(--cm-bd); font:var(--cm-body-sm); font-weight:600; color:var(--cm-fg); vertical-align:middle; }
+  .vr-teamtag .ti { font-size:13px; color:var(--cm-fg-muted); }
 
   /* Storage note */
   .vr-note { display:inline-flex; align-items:center; gap:9px; padding:8px 13px; margin-top:14px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
@@ -318,7 +321,7 @@
       <div class="vr-head">
         <div class="ttl">
           <h1 data-i18n="video_room.title">Video room</h1>
-          <p><strong id="vrTotal">—</strong> <span data-i18n="video_room.subtitle">· organized and linked to your sessions, players and matches.</span></p>
+          <p><strong id="vrTotal">—</strong> <span data-i18n="video_room.subtitle">· organized and linked to your sessions, players and matches.</span><span class="vr-teamtag" id="vrTeamTag" hidden><i class="ti ti-users"></i><span id="vrTeamName"></span></span></p>
           <div class="vr-note">
             <span class="ic"><i class="ti ti-cloud"></i></span>
             <p data-i18n-html="video_room.storage_note">Videos live in <strong>your club's Google Drive &amp; Dropbox</strong> — ClavaMetrics doesn't host them, it links &amp; organizes them.</p>
@@ -346,12 +349,6 @@
         <div class="vr-filter-wrap" data-filter="date">
           <button class="vr-filter" type="button">
             <i class="ti ti-calendar"></i><span class="val">Any time</span><i class="ti ti-chevron-down chev"></i>
-          </button>
-          <div class="vr-menu"></div>
-        </div>
-        <div class="vr-filter-wrap" data-filter="team">
-          <button class="vr-filter" type="button">
-            <i class="ti ti-users-group"></i><span class="val">All teams</span><i class="ti ti-chevron-down chev"></i>
           </button>
           <div class="vr-menu"></div>
         </div>
@@ -506,6 +503,11 @@
   const userId      = user?.id || null;
   const profileName = window.__cm_profile?.full_name || null;
 
+  // Equipo activo (selector del sidebar): TODO el Video Room vive dentro de él —
+  // biblioteca, carpetas, envíos y lo que se sube nuevo. Sin mezclar categorías.
+  const activeTeamId = (window.getActiveTeamId ? window.getActiveTeamId() : null)
+                    || sessionStorage.getItem('cal_active_team') || null;
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   function tt(key, fallbackEN, vars) {
     const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
@@ -564,7 +566,7 @@
   let VIDEOS = [];                                  // enriched video rows
   let FOLDERS = [];                                 // native (in-app) folders
   let currentFolder = null;                         // folder id when drilled in, else null
-  const filters = { q:'', link:'all', date:'any', team:'all' };
+  const filters = { q:'', link:'all', date:'any' };
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
   function renderSkeleton() {
@@ -576,9 +578,13 @@
   // ── Data load ────────────────────────────────────────────────────────────
   async function loadVideos() {
     renderSkeleton();
+    // Acotado al equipo activo: cada categoría ve sólo su material.
+    let qV = window.sb.from('videos').select('*').eq('club_id', clubId);
+    let qF = window.sb.from('video_folders').select('*').eq('club_id', clubId);
+    if (activeTeamId) { qV = qV.eq('team_id', activeTeamId); qF = qF.eq('team_id', activeTeamId); }
     const [{ data: videos, error }, { data: folders }] = await Promise.all([
-      window.sb.from('videos').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
-      window.sb.from('video_folders').select('*').eq('club_id', clubId).order('name', { ascending: true }),
+      qV.order('created_at', { ascending: false }),
+      qF.order('name', { ascending: true }),
     ]);
     FOLDERS = folders || [];
     if (currentFolder && !FOLDERS.some(f => f.id === currentFolder)) currentFolder = null;  // folder gone → back to root
@@ -633,7 +639,6 @@
   // ── Filtering + render ─────────────────────────────────────────────────────
   function passesFilters(v) {
     if (filters.q && !(v.title || '').toLowerCase().includes(filters.q)) return false;
-    if (filters.team !== 'all' && v.team_id !== filters.team) return false;
     if (filters.link !== 'all') {
       const types = new Set(v.links.map(l => l.type));
       if (filters.link === 'unlinked') { if (v.links.length) return false; }
@@ -713,10 +718,9 @@
   function render() {
     renderCrumb();
 
-    // Folders shown only at root, honouring search + team filter.
+    // Folders shown only at root, honouring search (el equipo ya viene acotado en la carga).
     const folderRows = currentFolder ? [] : FOLDERS.filter(f =>
-      (!filters.q || (f.name || '').toLowerCase().includes(filters.q)) &&
-      (filters.team === 'all' || f.team_id === filters.team));
+      (!filters.q || (f.name || '').toLowerCase().includes(filters.q)));
 
     // Videos: scoped to the current folder (or the root/loose ones), then filtered.
     const rows = VIDEOS.filter(v => (v.folder_id || null) === currentFolder && passesFilters(v));
@@ -844,19 +848,17 @@
   }
   document.addEventListener('click', () => document.querySelectorAll('.vr-menu').forEach(m => m.classList.remove('is-open')));
 
-  let TEAM_ROWS = [];   // real team rows, for re-building the team menu on lang change
+  let TEAM_ROWS = [];   // real team rows (para resolver el nombre del equipo activo)
   let MY_TEAMS  = [];   // equipos que este usuario ve (vacío = acceso completo)
   let FULL_ACCESS = false;
-  const teamOpts = () => [{ v:'all', label:tt('video_room.all_teams', 'All teams'), icon:'ti-users-group' }, ...TEAM_ROWS.map(t => ({ v:t.id, label:t.name, icon:'ti-users' }))];
   function buildFilterMenus() {
     buildMenu('link', LINK_OPTS());
     buildMenu('date', DATE_OPTS());
-    buildMenu('team', teamOpts());
   }
   buildMenu('link', LINK_OPTS());
   buildMenu('date', DATE_OPTS());
 
-  // Team filter — only the teams this user can see
+  // Scope de equipos del usuario (para el roster del envío) + nombre del equipo activo
   const teamScopeReady = (async () => {
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
@@ -866,8 +868,17 @@
     if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {} MY_TEAMS = mine; const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
     FULL_ACCESS = full;
     TEAM_ROWS = teams;
-    buildMenu('team', teamOpts());
+    paintTeamTag();
   })();
+
+  // Chip con el equipo activo: deja claro que la biblioteca es de esa categoría.
+  function paintTeamTag() {
+    const tag = $('#vrTeamTag');
+    const t = activeTeamId ? TEAM_ROWS.find(x => x.id === activeTeamId) : null;
+    if (!t) { tag.hidden = true; return; }
+    $('#vrTeamName').textContent = t.name;
+    tag.hidden = false;
+  }
 
   // Re-render everything dynamic when the language changes.
   document.addEventListener('cm:langchanged', () => { buildFilterMenus(); render(); });
@@ -908,11 +919,14 @@
     if (!title) { $('#vrTitle').focus(); return; }
     if (!url)   { urlInput.focus(); return; }
 
+    // Todo video pertenece a un equipo: dentro de una carpeta hereda el suyo,
+    // si no, el equipo activo. Sin equipo no se guarda (quedaría suelto en el club).
+    const folder = currentFolder ? FOLDERS.find(f => f.id === currentFolder) : null;
+    const activeTeam = (folder ? folder.team_id : activeTeamId) || null;
+    if (!activeTeam) { alert(tt('video_room.no_team_video', 'Pick a team in the sidebar before adding a video — every video belongs to a team.')); return; }
+
     const btn = $('#vrSaveBtn');
     btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
-    // Inside a folder, inherit its team; otherwise fall back to the active team.
-    const folder = currentFolder ? FOLDERS.find(f => f.id === currentFolder) : null;
-    const activeTeam = folder ? (folder.team_id || null) : (sessionStorage.getItem('cal_active_team') || null);
 
     const provider = detectProvider(url);
     let externalId = null, autoThumb = null;
@@ -952,12 +966,12 @@
   $('#vrFolderSaveBtn').addEventListener('click', async () => {
     const name = $('#vrFolderName').value.trim();
     if (!name) { $('#vrFolderName').focus(); return; }
+    if (!activeTeamId) { alert(tt('video_room.no_team_folder', 'Pick a team in the sidebar before creating a folder — every folder belongs to a team.')); return; }
     const btn = $('#vrFolderSaveBtn');
     btn.disabled = true; btn.textContent = tt('video_room.saving', 'Saving…');
-    const activeTeam = sessionStorage.getItem('cal_active_team') || null;
     const { error } = await window.sb.from('video_folders').insert({
       club_id:         clubId,
-      team_id:         activeTeam,
+      team_id:         activeTeamId,
       name,
       created_by:      userId,
       created_by_name: profileName,
@@ -1001,8 +1015,7 @@
     await teamScopeReady;   // sin esto, un modal abierto rápido vería MY_TEAMS vacío
     // Por MEMBRESÍA (player_teams!inner) para incluir a los secundarios de la categoría.
     // Sin equipo activo, se acota a los equipos que este usuario ve — nunca todo el club.
-    const teamId = sessionStorage.getItem('cal_active_team') || null;
-    const scopeTeams = teamId ? [teamId] : (FULL_ACCESS ? null : MY_TEAMS);
+    const scopeTeams = activeTeamId ? [activeTeamId] : (FULL_ACCESS ? null : MY_TEAMS);
     let q = window.sb.from('players')
       .select('id,first_name,last_name,number' + (scopeTeams ? ', player_teams!inner(team_id)' : ''))
       .eq('club_id', clubId).is('archived_at', null);
@@ -1204,11 +1217,10 @@
       ? (sendClips[0].title || null)
       : tt('video_room.send_default_title', `${sendClips.length} clips`, { count: sendClips.length });
     const batchId  = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
-    const teamId   = sessionStorage.getItem('cal_active_team') || null;
 
     const { data: shares, error } = await window.sb.from('video_shares').insert(
       [...sendPlayers].map(pid => ({
-        club_id: clubId, team_id: teamId, player_id: pid, batch_id: batchId,
+        club_id: clubId, team_id: activeTeamId, player_id: pid, batch_id: batchId,
         title, message: msg, expires_at: expAt,
         created_by: userId, created_by_name: profileName,
       }))
@@ -1279,9 +1291,12 @@
 
   // ── Pestaña "Enviados" ─────────────────────────────────────────────────────
   async function loadSends() {
-    const { data, error } = await window.sb.from('video_shares')
+    // Los envíos también son del equipo activo: no se ven los de otra categoría.
+    let q = window.sb.from('video_shares')
       .select('id,token,batch_id,title,message,created_at,expires_at,revoked,opened_at,open_count,seen_at,created_by_name,player_id,players(first_name,last_name,number),video_share_items(video_id,position,comment,start_seconds)')
-      .eq('club_id', clubId).order('created_at', { ascending: false }).limit(400);
+      .eq('club_id', clubId);
+    if (activeTeamId) q = q.eq('team_id', activeTeamId);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(400);
     if (error) { console.error('[VideoRoom] sends load error:', error); SENDS = []; }
     else SENDS = data || [];
     const batches = new Set(SENDS.map(s => s.batch_id));
