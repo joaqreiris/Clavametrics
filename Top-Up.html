@@ -230,6 +230,17 @@
   .tu-rowfmt .rf-f input:focus{outline:none;border-color:var(--cm-accent)}
   .tu-line .seebtn{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:16px;padding:4px;flex:none}
   .tu-line .seebtn:hover{color:var(--cm-accent)}
+  /* plan de campo */
+  .tu-fp{margin-top:12px}
+  .tu-fp+.tu-fp{padding-top:14px;border-top:1px dashed var(--cm-border)}
+  .tu-fp-h{display:flex;align-items:baseline;gap:9px;margin-bottom:8px}
+  .tu-fp-h .bn{font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-fp-h .bm{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .tu-fp-tbl{width:100%;border-collapse:collapse;margin-top:9px}
+  .tu-fp-tbl td{padding:6px 8px;border-bottom:1px solid var(--cm-border);font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .tu-fp-tbl tr:last-child td{border-bottom:0}
+  .tu-fp-tbl td.nm{width:40%}
+  .tu-fp-tbl td.num{font:600 12px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap;text-align:right}
   /* ── mini guide (help modal) ── */
   .tu-help-intro{font:500 12.5px/1.55 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 14px}
   .tu-help-sec{padding:11px 0;border-top:1px solid var(--cm-border)}
@@ -486,6 +497,9 @@
       <div id="tu-results">
         <div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i><span data-i18n="topup.pick_prompt_multi">Seleccioná uno o más jugadores para ver sus prescripciones.</span></div></div>
       </div>
+
+      <!-- plan de campo: una sola foto de cómo armar la tarea con todos los elegidos -->
+      <div id="tu-fieldplan"></div>
 
       <!-- output (complementary tab): per-player preview + document export -->
       <div id="tu-compl-out" class="hide">
@@ -945,6 +959,121 @@
     <span><i class="mz"></i>${tt('topup.zone_measured','zona medida (cuenta en la banda)')}</span>
     <span><i class="bz"></i>${tt('topup.zone_brake','frenado')}</span></div>`;
 
+  // ── PLAN DE CAMPO: una foto por banda con TODOS los elegidos ──
+  // Los conos de la zona medida son los mismos para todos (por eso se alinean en
+  // el centro); lo que cambia por jugador es desde dónde arranca —cuanto más
+  // rápido corre, más lanzamiento necesita— y cuántas carreras hace. Los jugadores
+  // que arrancan casi del mismo lugar comparten carril: con 20 tipos en pantalla,
+  // 20 carriles no se leen y además en el campo se hace por grupos.
+  function fieldPlanFor(band){
+    const rows = [];
+    state.selected.forEach(pid => {
+      const pd = state.pdata[pid]; if (!pd || pd.loading) return;
+      const def = deficitFor(pd, resolveRef(pd)); if (!def) return;
+      const d = def[band.metric]; const deficitM = (d && d.deficit) || 0;
+      if (deficitM <= 0) return;
+      const f = runFmtFor(band);
+      const rx = TU.prescribeRunDist({ band, mode: state.speedModel, aim: state.aim, vmax: pd.vmax, vift: pd.vift,
+        deficitM, dist: f.dist, rest: f.rest, rolling: f.rolling, pitchLen: pitchLen() });
+      if (!rx || rx.noRoom || !rx.reps) return;
+      rows.push({ pd, rx });
+    });
+    if (!rows.length) return null;
+    // Un carril por (zona medida · lanzamiento redondeado a 5 m).
+    const groups = new Map();
+    rows.forEach(r => {
+      const launch = r.rx.rolling ? Math.ceil(r.rx.launchM / 5) * 5 : 0;
+      const key = r.rx.distM + '|' + launch;
+      if (!groups.has(key)) groups.set(key, { distM: r.rx.distM, launchM: launch, brakeM: r.rx.brakeM, rows: [] });
+      const g = groups.get(key); g.rows.push(r); g.brakeM = Math.max(g.brakeM, r.rx.brakeM);
+    });
+    const lanes = [...groups.values()].sort((a, b) => b.launchM - a.launchM);
+    return { band, lanes, rows };
+  }
+  function mountFieldPlan(id, plan){
+    const host = $(id); if (!host || !plan) return;
+    const g = pitchGeom(), lenM = pitchLen();
+    // Alto de cada carril: la barra + las líneas de nombres que le toquen.
+    const nameLines = (lane) => Math.min(2, Math.ceil(Math.min(lane.rows.length, 6) / 3));
+    const laneHs = plan.lanes.map(l => 66 + 26 * nameLines(l));
+    const bandH = Math.max(190, Math.min(g.vbH, laneHs.reduce((s, h) => s + h, 0) + 40));
+    const yTop = (g.vbH - bandH) / 2;
+    host.style.aspectRatio = `${g.vbW} / ${bandH}`;
+    host.innerHTML = '';
+    try { window.CMField?.renderField(host, g.sport, 'full', 'h'); } catch (_) {}
+    // Se recorta el campo a la franja que se usa: el campo entero para una tira
+    // de 60 m es un desperdicio, y así las etiquetas se leen mucho mejor.
+    const vb = `0 ${yTop.toFixed(1)} ${g.vbW} ${bandH.toFixed(1)}`;
+    host.querySelectorAll('svg').forEach(el => el.setAttribute('viewBox', vb));
+    const K = g.playW / lenM;
+    // Todos comparten los conos: se centra el bloque más largo y desde ahí se
+    // dibuja hacia atrás el lanzamiento de cada carril.
+    const maxLaunch = Math.max(...plan.lanes.map(l => l.launchM));
+    const maxDist   = Math.max(...plan.lanes.map(l => l.distM));
+    const maxBrake  = Math.max(...plan.lanes.map(l => l.brakeM));
+    const xCone = g.x0 + Math.max(0, (g.playW - (maxLaunch + maxDist + maxBrake) * K) / 2) + maxLaunch * K;
+
+    const txt = (x, y, t, anchor, size, weight) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor || 'start'}" font-family="ui-monospace,monospace" font-size="${size || 22}" font-weight="${weight || 700}" fill="#fff" stroke="rgba(0,0,0,.5)" stroke-width="3.2" paint-order="stroke">${t}</text>`;
+    let s = '', yCur = yTop + 20;
+    plan.lanes.forEach((lane) => {
+      const laneH = 66 + 26 * nameLines(lane), barH = 42;
+      const yc = yCur + 33, y = yc - barH / 2;
+      yCur += laneH;
+      const xs = xCone - lane.launchM * K;
+      const rect = (xa, w, fill, op) => `<rect x="${xa.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(0, w).toFixed(1)}" height="${barH.toFixed(1)}" rx="5" fill="${fill}" fill-opacity="${op}"/>`;
+      if (lane.launchM > 0) s += rect(xs, lane.launchM * K, '#fbbf24', .55);
+      s += rect(xCone, lane.distM * K, '#22c55e', .70)
+         + rect(xCone + lane.distM * K, lane.brakeM * K, '#ef4444', .5);
+      // conos
+      [xCone, xCone + lane.distM * K].forEach(cx => {
+        s += `<path d="M${cx.toFixed(1)},${(y - 11).toFixed(1)} l5.5,11 l-11,0 z" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1"/>`;
+      });
+      // quién corre en este carril y cuántas carreras hace cada uno
+      const tag = (r) => {
+        const p = r.pd.player;
+        return `${p.number != null ? p.number + ' ' : ''}${(p.name.split(/\s+/).pop() || p.name).slice(0, 10)} ×${r.rx.reps}`;
+      };
+      const shown = lane.rows.slice(0, nameLines(lane) * 3);
+      for (let li = 0; li < nameLines(lane); li++){
+        const part = shown.slice(li * 3, li * 3 + 3).map(tag).join('  ·  ');
+        const extra = (li === nameLines(lane) - 1 && lane.rows.length > shown.length) ? `  +${lane.rows.length - shown.length}` : '';
+        if (part) s += txt(xs, yc + barH / 2 + 22 + li * 26, esc(part + extra), 'start', 20);
+      }
+      s += txt(xCone + lane.distM * K / 2, yc + 7, `${lane.distM} m`, 'middle', 24);
+      if (lane.launchM > 0) s += txt(xs + 4, yc + 7, `${lane.launchM}`, 'start', 19);
+    });
+    const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ov.setAttribute('viewBox', vb);
+    ov.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    ov.innerHTML = s;
+    host.appendChild(ov);
+  }
+  function renderFieldPlan(){
+    const box = $('tu-fieldplan'); if (!box) return;
+    const off = state.tab !== 'match' || state.speedModel === 'vift' || !state.selected.length;
+    if (off){ box.innerHTML = ''; return; }
+    const plans = selectedBands().map(fieldPlanFor).filter(Boolean);
+    if (!plans.length){ box.innerHTML = ''; return; }
+    box.innerHTML = `<div class="tu-card">
+      <h3><i class="ti ti-map-2"></i><span data-i18n="topup.fieldplan">Plan de campo</span></h3>
+      <p class="tu-note" style="margin-top:-4px">${tt('topup.fieldplan_help','Los conos son los mismos para todos: lo que cambia por jugador es desde dónde arranca y cuántas carreras hace.')}</p>`
+      + plans.map(p => {
+        const bLabel = tt('topup.band_'+p.band.id, p.band.id.toUpperCase());
+        const f = runFmtFor(p.band);
+        return `<div class="tu-fp">
+          <div class="tu-fp-h"><span class="bn">${esc(bLabel)}</span>
+            <span class="bm">${esc(mLabel(p.band.metric))} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s</span></div>
+          ${pitchHTML('tu-fp-' + p.band.id)}${pitchLegendHTML()}
+          <table class="tu-fp-tbl"><tbody>` + p.rows.map(r => `<tr>
+              <td class="nm">${r.pd.player.number != null ? `<b>${r.pd.player.number}</b> ` : ''}${esc(r.pd.player.name)}</td>
+              <td class="num">${r.rx.reps} × ${r.rx.distM} m</td>
+              <td class="num">${r.rx.speed} km/h</td>
+              <td class="num">${r.rx.sets} ${tt('topup.sets_abbr','ser')} · ${r.rx.timeMin}′</td>
+            </tr>`).join('') + `</tbody></table></div>`;
+      }).join('') + `</div>`;
+    plans.forEach(p => mountFieldPlan('tu-fp-' + p.band.id, p));
+  }
+
   // Modal "ver en el campo" de una carrera concreta (jugador + banda).
   function renderPitchView(){
     const box = $('tu-pitchview'); if (!box) return;
@@ -1274,16 +1403,22 @@
     const box = $('tu-results');
     if (!state.selected.length){
       box.innerHTML = `<div class="tu-card"><div class="tu-empty"><i class="ti ti-arrow-up"></i>${tt('topup.pick_prompt_multi','Seleccioná uno o más jugadores para ver sus prescripciones.')}</div></div>`;
+      renderFieldPlan();
       return;
     }
     box.innerHTML = state.selected.map(pid => playerCardHTML(pid)).join('');
+    renderFieldPlan();
   }
+  // El plan se redibuja solo (SVG) — con debounce para no hacerlo en cada tecla.
+  let _fpT = null;
+  function renderFieldPlanSoon(){ clearTimeout(_fpT); _fpT = setTimeout(renderFieldPlan, 220); }
 
   // Re-render ONLY a card's body (header + its minutes input stay put → smooth typing).
   function updateBody(pid, focusKey, kind){
     const el = $('tu-results').querySelector(`[data-body="${pid}"]`);
     if (!el) return;
     el.innerHTML = bodyHTML(pid);
+    renderFieldPlanSoon();
     if (focusKey){
       const sel = kind === 'mref' ? `input[data-mref="${focusKey}"]` : `input[data-actual="${focusKey}"]`;
       const inp = el.querySelector(sel);
@@ -1364,7 +1499,7 @@
     ['ti-clock',          'min',     'Duración del partido y minutos', '«Duración partido» es el partido completo (90, u 80/70 en formativas). Los minutos de cada jugador se cargan arriba a la derecha de su ficha. Con 0 minutos el déficit es el partido entero.'],
     ['ti-gauge',          'speed',   'Velocidad de carrera', 'Define a qué ritmo corre cada uno. <b>%Vmax</b>: la velocidad sale de un porcentaje de la velocidad máxima de ese jugador (la toma del GPS). Es lo más individual; sin Vmax ese jugador no calcula. <b>Absoluto</b>: umbrales fijos en km/h iguales para todos, el plan B cuando no hay Vmax. <b>%VIFT</b>: HIIT clásico anclado al 30-15 IFT (hace falta el test cargado en Evaluaciones); trabaja sólo el déficit de HSR y por eso no usa bandas.'],
     ['ti-layers-subtract','bands',   'Bandas objetivo', 'La banda es la zona de velocidad que querés rellenar, y cada una está atada a una métrica (HSR, muy alta velocidad, sprint). <b>Podés marcar varias</b>: si elegís HSR y VHSR sale un bloque de carrera para cada una, con su velocidad, sus metros por carrera y la cantidad de carreras, más el total. La velocidad la manda la banda, así que los metros caen seguro en esa zona. En «Editar bandas» ajustás los cortes a los de tu club.'],
-    ['ti-repeat',         'fmt',     'Carreras y formato', 'Con %Vmax o Absoluto la carrera se prescribe <b>por distancia</b>: elegís los metros de la zona medida («⚙ Carreras por banda») y el motor calcula cuántas carreras hacen falta, cuánto dura cada una y cuánto campo ocupan. Cada banda tiene su formato, porque no se entrena igual: HSR unos 60 m con pausa corta, sprint unos 30 m con pausa larga. El <b>arranque rodado</b> significa que entra a la zona medida ya a la velocidad objetivo, así que esos metros cuentan enteros en la banda; con arranque parado se descuentan los metros que tarda en acelerar. Con %VIFT sigue siendo un formato por tiempo (15-15 y compañía).'],
+    ['ti-repeat',         'fmt',     'Carreras y formato', 'Con %Vmax o Absoluto la carrera se prescribe <b>por distancia</b>: elegís los metros de la zona medida («⚙ Carreras por banda») y el motor calcula cuántas carreras hacen falta, cuánto dura cada una y cuánto campo ocupan. Cada banda tiene su formato, porque no se entrena igual: HSR unos 60 m con pausa corta, sprint unos 30 m con pausa larga. El <b>arranque rodado</b> significa que entra a la zona medida ya a la velocidad objetivo, así que esos metros cuentan enteros en la banda; con arranque parado se descuentan los metros que tarda en acelerar. Con %VIFT sigue siendo un formato por tiempo (15-15 y compañía). Abajo de todo, el <b>Plan de campo</b> dibuja la tarea con todos los elegidos: los conos van en el mismo lugar para todos y al lado de cada nombre está el número de carreras que le toca.'],
     ['ti-adjustments-horizontal','metrics','Métricas objetivo', 'Son las que aparecen abajo de cada ficha como déficit / referencia. Aceleraciones y desaceleraciones además alimentan el bloque de cambios de dirección.'],
     ['ti-eye',            'read',    'Cómo leer la ficha', '<b>ref:</b> de dónde salió la referencia (personal, GPS, posición o manual). <b>ASR</b> es la reserva de velocidad (Vmax − VIFT): cuanto más alto el %ASR del bloque, más cerca del máximo está corriendo. Si avisa «muy alto en su reserva», acortá la carrera o alargá la pausa. «Sin déficit» quiere decir que en esa métrica ya llegó a su referencia.'],
   ];
@@ -1749,6 +1884,7 @@
     $('tu-results').classList.toggle('hide', isC);
     $('tu-compl-out').classList.toggle('hide', !isC);
     if (isC){ renderComplTargets(); renderPalette(); renderBlocks(); renderTally(); renderComplPreview(); }
+    renderFieldPlan();   // vive solo en el tab de partido
   }
 
   // ── wire global controls ──
