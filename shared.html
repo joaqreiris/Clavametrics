@@ -254,7 +254,20 @@
   .sh-day.is-open .sh-day-body { display: block; }
 
   /* Expandir / contraer todo */
-  .sh-tools { display: flex; justify-content: flex-end; margin: 0 2px 8px; }
+  .sh-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 8px; }
+  /* Marca de frescura: el plan se lee en vivo, pero una pestaña que quedó abierta desde
+     ayer muestra datos de ayer. Decir cuándo se trajo (y dejar tocar para traerlo de nuevo)
+     es la diferencia entre confiar en el horario y no confiar. */
+  .sh-sync {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 8px; border-radius: 8px; border: 1px solid transparent;
+    background: none; color: var(--sh-fg-3);
+    font: 500 11px/1 var(--sh-font); cursor: pointer;
+  }
+  .sh-sync .ti { font-size: 13px; }
+  .sh-sync.is-stale { color: var(--sh-fg-2); border-color: var(--sh-border); background: var(--sh-surf); }
+  .sh-sync.is-busy .ti { animation: spin 1s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .sh-sync.is-busy .ti { animation: none; } }
   .sh-tool-btn {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 6px 10px; border-radius: 8px;
@@ -385,7 +398,7 @@
   @media (prefers-reduced-motion: reduce) { .sh-spinner .ti { animation: none; } }
 
   @media print {
-    .sh-ics-btn, .sh-footer, .sh-strip, .sh-tools { display: none !important; }
+    .sh-ics-btn, .sh-footer, .sh-strip, .sh-tools, .sh-sync { display: none !important; }
     body { background: #fff; }
     .sh-header { position: static; }
     .sh-day, .sh-match { break-inside: avoid; box-shadow: none; }
@@ -542,12 +555,17 @@
       var L = (0.299 * parseInt(h.slice(0, 2), 16) + 0.587 * parseInt(h.slice(2, 4), 16) + 0.114 * parseInt(h.slice(4, 6), 16)) / 255;
       document.documentElement.style.setProperty('--sh-accent-fg', L > 0.62 ? '#0F172A' : '#FFFFFF');
     }
+    // El escudo se hereda entre renders (idioma, refresco): el <img> se queda con el id
+    // del hueco al que reemplaza, si no el segundo render busca un nodo que ya no existe.
     var wrap = document.getElementById('shLogoWrap');
+    if (!wrap) return;
     if (club.logo_url) {
+      if (wrap.tagName === 'IMG') { wrap.src = club.logo_url; return; }
       var img = new Image();
+      img.id = 'shLogoWrap';
       img.className = 'sh-logo';
       img.alt = club.name || '';
-      img.onload = function () { wrap.replaceWith(img); };
+      img.onload = function () { if (wrap.isConnected) wrap.replaceWith(img); };
       img.src = club.logo_url;
     } else {
       wrap.textContent = initials(club.short_name || club.name);
@@ -598,6 +616,7 @@
 
   // ── render ───────────────────────────────────────────────────
   var _data = null;
+  var _loadedAt = 0;
 
   function render(data) {
     var club   = data.club || {};
@@ -714,9 +733,14 @@
     var openDay = days.indexOf(today) >= 0 && (byDay[today] || []).length ? today
       : (days.filter(function (d) { return (byDay[d] || []).length; })[0] || null);
 
-    html += '<div class="sh-tools"><button type="button" class="sh-tool-btn" id="shToggleAll">' +
-      '<i class="ti ti-arrows-vertical"></i><span id="shToggleAllLabel">' +
-      esc(tt('player_week.expand_all', 'Expand all')) + '</span></button></div>';
+    html += '<div class="sh-tools">' +
+      '<button type="button" class="sh-sync" id="shSync">' +
+        '<i class="ti ti-refresh"></i><span id="shSyncLabel"></span>' +
+      '</button>' +
+      '<button type="button" class="sh-tool-btn" id="shToggleAll">' +
+        '<i class="ti ti-arrows-vertical"></i><span id="shToggleAllLabel">' +
+        esc(tt('player_week.expand_all', 'Expand all')) + '</span>' +
+      '</button></div>';
 
     var anyEvent = false;
     var lastMonth = null;
@@ -783,7 +807,55 @@
 
     main.innerHTML = html;
     wireDays();
+    wireSync();
     wireIcs(club, events);
+  }
+
+  // ── frescura: cuándo se trajo el plan y cómo volver a traerlo ─
+  // El link no es una foto: consulta la base en el momento. Lo que puede quedar viejo es
+  // la pantalla, no el link — por eso acá se recarga la data, no la página entera.
+  function syncLabel() {
+    var lbl = document.getElementById('shSyncLabel');
+    var btn = document.getElementById('shSync');
+    if (!lbl || !_loadedAt) return;
+    var mins = Math.floor((Date.now() - _loadedAt) / 60000);
+    var txt;
+    if (mins < 1)       txt = tt('player_week.updated_now', 'Updated just now');
+    else if (mins < 60) txt = tt('player_week.updated_min', 'Updated {n} min ago', { n: mins });
+    else if (mins < 1440) {
+      txt = tt('player_week.updated_hour', 'Updated {n} h ago', { n: Math.floor(mins / 60) });
+    } else {
+      txt = tt('player_week.updated_at', 'Updated {time}',
+        { time: new Date(_loadedAt).toLocaleString(lang(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) });
+    }
+    lbl.textContent = txt;
+    if (btn) btn.classList.toggle('is-stale', mins >= 30);
+  }
+
+  // Traer de nuevo sin perderle al jugador el día que tenía abierto ni el scroll.
+  async function refreshData() {
+    var open = Array.prototype.map.call(main.querySelectorAll('.sh-day.is-open'), function (s) { return s.id; });
+    var y = window.scrollY;
+    try { await load(true); } catch (_) { return; }
+    if (open.length) {
+      main.querySelectorAll('.sh-day').forEach(function (s) { setOpen(s, open.indexOf(s.id) >= 0); });
+      syncToggleAllLabel();
+    }
+    window.scrollTo(0, y);
+  }
+
+  function wireSync() {
+    var btn = document.getElementById('shSync');
+    if (!btn) return;
+    syncLabel();
+    btn.addEventListener('click', function () {
+      if (btn.classList.contains('is-busy')) return;
+      btn.classList.add('is-busy');
+      refreshData().then(function () {
+        var b = document.getElementById('shSync');
+        if (b) b.classList.remove('is-busy');
+      });
+    });
   }
 
   // ── plegado de los días ──────────────────────────────────────
@@ -924,7 +996,9 @@
   }
 
   // ── carga ────────────────────────────────────────────────────
-  async function load() {
+  var _sb = null;
+
+  async function load(isRefresh) {
     if (window.CM_I18N && CM_I18N.ready) { try { await CM_I18N.ready; } catch (_) {} }
     document.documentElement.lang = lang();
 
@@ -934,24 +1008,39 @@
       return;
     }
 
-    var sb = supabase.createClient(SB_URL, SB_KEY);
+    if (!_sb) _sb = supabase.createClient(SB_URL, SB_KEY);
     var res;
     try {
-      res = await sb.rpc('get_shared_calendar', { p_token: TOKEN });
+      res = await _sb.rpc('get_shared_calendar', { p_token: TOKEN });
     } catch (_) { res = { error: true }; }
 
     if (res.error || !res.data || res.data.error) {
+      // Al refrescar, un corte de señal no puede borrarle el plan que ya tenía en pantalla;
+      // el link revocado sí se avisa, porque a partir de ahí no hay nada válido que mostrar.
+      var revoked = !!(res.data && res.data.error);
+      if (isRefresh && !revoked) return;
       show(tt('player_week.not_found_title', 'Plan not found'),
            tt('player_week.revoked', 'This link expired or was revoked by the coaching staff.'));
       return;
     }
     _data = res.data;
+    _loadedAt = Date.now();
     render(_data);
   }
 
   document.addEventListener('cm:langchanged', function () { if (_data) render(_data); });
+  // El reloj de "actualizado hace…" corre solo: una pestaña abierta desde ayer tiene que
+  // decirlo, no seguir mostrando "ahora".
+  setInterval(syncLabel, 60000);
+  // Volver a la pestaña después de un rato trae lo último: si el staff movió un horario
+  // mientras el teléfono estaba en el bolsillo, el jugador no se entera al recargar a mano.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible' || !_loadedAt) return;
+    if (Date.now() - _loadedAt < 5 * 60000) { syncLabel(); return; }
+    refreshData();
+  });
   if (document.readyState !== 'loading') load();
-  else document.addEventListener('DOMContentLoaded', load);
+  else document.addEventListener('DOMContentLoaded', function () { load(); });
 })();
 </script>
 
