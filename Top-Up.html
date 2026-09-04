@@ -413,7 +413,9 @@
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
           <button class="tu-linkbtn" id="tu-bands-toggle" style="padding-left:0" data-i18n="topup.edit_bands">⚙ Editar bandas</button>
           <button class="tu-linkbtn" id="tu-presets-toggle" style="padding-left:0" data-i18n="topup.edit_presets">⚙ Editar formatos</button>
+          <button class="tu-linkbtn" id="tu-reffilter-toggle" style="padding-left:0" data-i18n="topup.edit_reffilter">⚙ Partidos válidos</button>
         </div>
+        <div id="tu-reffilter-hint" class="tu-note"></div>
         <div id="tu-source-hint" class="tu-note"></div>
       </div>
 
@@ -485,6 +487,7 @@
       <div id="tu-compl-settings" class="hide"></div>
       <div id="tu-hrmax-picker" class="hide"></div>
       <div id="tu-help" class="hide"></div>
+      <div id="tu-reffilter-editor" class="hide"></div>
     </div>
   </div>
 </div>
@@ -571,6 +574,10 @@
     bandsPct: Array.isArray(prefs.bandsPct) && prefs.bandsPct.length ? prefs.bandsPct : TU.DEFAULT_BANDS_PCT.bands.map(b => ({...b})),
     bandsAbs: Array.isArray(prefs.bandsAbs) && prefs.bandsAbs.length ? prefs.bandsAbs : TU.DEFAULT_BANDS_ABS.bands.map(b => ({...b})),
     bandsOpen: false,
+    // Qué partidos entran en la referencia. Es config DEL CLUB (club_gps_settings),
+    // no del usuario: se pisa con lo de la base apenas termina de cargar.
+    refFilters: Object.assign({}, TU.REF_FILTERS_DEFAULT),
+    refOpen: false,
     // user-defined interval formats (merged after the built-in TU.PRESETS)
     customPresets: (Array.isArray(prefs.customPresets) ? prefs.customPresets.map(TU.normalizePreset).filter(Boolean) : []),
     presetsOpen: false,
@@ -677,7 +684,7 @@
     const [vift, vmax, ref] = await Promise.all([
       TU.getLatestVift(pid, clubId),
       TU.getPlayerVmax(pid, clubId),
-      TU.getReference(pid, clubId, need, state.mode),
+      TU.getReference(pid, clubId, need, state.mode, state.refFilters),
     ]);
     if (!state.pdata[pid]) return;   // deselected while loading
     pd.vift = vift ? vift.vift : null;
@@ -686,7 +693,7 @@
     // The all-sessions fallback scans every session (heaviest query) — only run it
     // when personal match data is missing on some needed metric.
     const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
-    pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode) : {};
+    pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode, state.refFilters) : {};
     if (!state.pdata[pid]) return;
     if (state.source === 'measured') await loadMeasured(pid);
     pd.loading = false;
@@ -711,7 +718,7 @@
     if (!position || state.posRef[position]) return;
     state.posRef[position] = { loading: true, ref: null };
     const ids = state.players.filter(p => p.position === position).map(p => p.id);
-    const ref = await TU.getPositionReference(ids, clubId, neededMetrics(), state.mode);
+    const ref = await TU.getPositionReference(ids, clubId, neededMetrics(), state.mode, state.refFilters);
     state.posRef[position] = { loading: false, ref };
     renderResults();
   }
@@ -751,14 +758,14 @@
       // so any new GPS import (Vmax) or test load (VIFT) is reflected here.
       const need = neededMetrics();
       const [ref, vift, vmax] = await Promise.all([
-        TU.getReference(pid, clubId, need, state.mode),
+        TU.getReference(pid, clubId, need, state.mode, state.refFilters),
         TU.getLatestVift(pid, clubId),
         TU.getPlayerVmax(pid, clubId),
       ]);
       pd.ref = ref; pd.vift = vift ? vift.vift : null; pd.vmax = vmax;
       // Heavy all-sessions fallback only when personal match data is missing.
       const missingPersonal = need.some(m => !ref[m] || ref[m].baseline == null);
-      pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode) : {};
+      pd.refAll = missingPersonal ? await TU.getAllGpsReference(pid, clubId, need, state.mode, state.refFilters) : {};
       const needsPos = need.some(m => (!pd.ref[m] || pd.ref[m].baseline == null) && (!pd.refAll[m] || pd.refAll[m].baseline == null));
       if (needsPos && pd.player && pd.player.position) ensurePosRef(pd.player.position);
     }));
@@ -845,6 +852,52 @@
     }));
   }
 
+  // ── qué partidos entran en la referencia (config del club) ──
+  function renderRefFilterHint(){
+    const el = $('tu-reffilter-hint'); if (!el) return;
+    const f = state.refFilters, bits = [];
+    if (f.minMinutes > 0) bits.push(tt('topup.rf_hint_min', `solo partidos de ${f.minMinutes}′ o más`, { m: f.minMinutes }));
+    if (f.fromDate) bits.push(tt('topup.rf_hint_from', `desde el ${f.fromDate}`, { d: f.fromDate }));
+    el.textContent = bits.length
+      ? tt('topup.rf_hint_on','Referencia:') + ' ' + bits.join(' · ')
+      : tt('topup.rf_hint_off','Referencia: todos los partidos con GPS.');
+  }
+  function renderRefFilterEditor(){
+    const box = $('tu-reffilter-editor'); if (!box) return;
+    if (!state.refOpen){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const f = state.refFilters;
+    box.innerHTML = `
+      <p class="tu-note" style="margin-top:0">${tt('topup.rf_help','Qué partidos valen como referencia. Es un ajuste del club: lo ven todos.')}</p>
+      <div class="tu-row">
+        <div class="tu-field">
+          <label data-i18n="topup.rf_min">Minutos mínimos</label>
+          <input id="tu-rf-min" class="tu-input" type="number" min="0" max="120" inputmode="numeric" value="${f.minMinutes || 0}">
+          <div class="tu-note">${tt('topup.rf_min_help','Un partido en el que entró unos minutos no es referencia de partido. 0 = sin filtro.')}</div>
+        </div>
+        <div class="tu-field">
+          <label data-i18n="topup.rf_from">Contar desde</label>
+          <input id="tu-rf-from" class="tu-input" type="date" value="${esc(f.fromDate || '')}">
+          <div class="tu-note">${tt('topup.rf_from_help','Si antes de esa fecha las bandas de velocidad estaban definidas de otra manera, esos partidos no son comparables. Vacío = todos.')}</div>
+        </div>
+      </div>
+      <div class="tu-genbar" style="margin-top:14px">
+        <button class="tu-btn primary" id="tu-rf-save"><i class="ti ti-check"></i>${tt('common.save','Guardar')}</button>
+        <span class="tu-note" id="tu-rf-msg"></span>
+      </div>`;
+    $('tu-rf-save').addEventListener('click', async () => {
+      const f2 = { minMinutes: Math.max(0, +$('tu-rf-min').value || 0), fromDate: $('tu-rf-from').value || null };
+      const msg = $('tu-rf-msg');
+      msg.textContent = tt('common.saving','Guardando…');
+      const ok = await TU.saveRefFilters(clubId, f2);
+      if (!ok){ msg.className = 'tu-note warn'; msg.textContent = tt('topup.rf_save_err','No se pudo guardar (falta la migración de club_gps_settings).'); return; }
+      state.refFilters = f2;
+      renderRefFilterHint();
+      closeModal();
+      await reloadRefs();
+    });
+  }
+
   // ── custom interval formats (presets) ──
   function renderPresetSelect(){
     const sel = $('tu-preset');
@@ -925,11 +978,19 @@
   // when the whole card was replaced on each keystroke).
   function refBadgeFor(pd){
     const resolved = resolveRef(pd);
-    const primarySrc = (resolved.srcBy['high_speed_distance'] && resolved.srcBy['high_speed_distance'] !== 'none')
-      ? resolved.srcBy['high_speed_distance']
-      : (Object.values(resolved.srcBy).find(s => s !== 'none') || 'none');
-    return primarySrc !== 'none'
-      ? `<span class="tu-refsrc ${primarySrc}">${tt('topup.ref','ref')}: ${(REF_SRC_LABEL[primarySrc] ? REF_SRC_LABEL[primarySrc]() : primarySrc)}</span>` : '';
+    const metric = (resolved.srcBy['high_speed_distance'] && resolved.srcBy['high_speed_distance'] !== 'none')
+      ? 'high_speed_distance'
+      : (Object.keys(resolved.srcBy).find(m => resolved.srcBy[m] !== 'none') || null);
+    const primarySrc = metric ? resolved.srcBy[metric] : 'none';
+    if (primarySrc === 'none') return '';
+    // Cuántos partidos hay detrás de la referencia: con el filtro de minutos/fecha
+    // puesto, saber si son 5 o 3 cambia cuánto te podés fiar del número.
+    const pos = pd.player && pd.player.position;
+    const src = primarySrc === 'personal' ? pd.ref
+      : primarySrc === 'gps' ? pd.refAll
+      : primarySrc === 'position' ? (pos && state.posRef[pos] && state.posRef[pos].ref) : null;
+    const n = (src && src[metric] && src[metric].count) || 0;
+    return `<span class="tu-refsrc ${primarySrc}">${tt('topup.ref','ref')}: ${(REF_SRC_LABEL[primarySrc] ? REF_SRC_LABEL[primarySrc]() : primarySrc)}${n ? ' · n=' + n : ''}</span>`;
   }
 
   const RUN_IC = `<span class="ic"><i class="ti ti-run"></i></span>`;
@@ -1099,15 +1160,17 @@
     compl:   () => tt('topup.compl_settings','Ajustes de la sesión'),
     hrmax:   () => tt('topup.hr_metric','Métrica de FCmax'),
     help:    () => tt('topup.help_title','Cómo se usa el complemento'),
+    reffilter: () => tt('topup.edit_reffilter_title','Partidos válidos'),
   };
   function closeModal(){
-    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false;
-    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
+    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false; state.refOpen = false;
+    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help','tu-reffilter-editor'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
     $('tu-modal-back').classList.add('hide');
   }
   function openModal(which){
     closeModal();
     if (which === 'help'){ renderHelp(); }
+    else if (which === 'reffilter'){ state.refOpen = true; renderRefFilterEditor(); }
     else if (which === 'bands'){ state.bandsOpen = true; renderBandsEditor(); }
     else if (which === 'presets'){ state.presetsOpen = true; renderPresetsEditor(); }
     else if (which === 'compl'){ state.compl.settingsOpen = true; renderComplSettings(); }
@@ -1119,6 +1182,7 @@
   const HELP_SECS = [
     ['ti-list-numbers',   'steps',   'En cuatro pasos', '1) Elegí la referencia de carga y de dónde sale el déficit. 2) Elegí el modelo de velocidad y una o más bandas objetivo. 3) Marcá los jugadores. 4) Cargá los minutos que jugó cada uno: la prescripción se arma sola.'],
     ['ti-target',         'ref',     'Referencia de carga', '<b>Mejores 5</b>: el promedio de sus 5 partidos más altos. Es un techo exigente, para el que tiene que llegar entero a un partido grande. <b>Promedio partido</b>: el promedio de todos sus partidos, más conservador (vuelta de lesión, mantenimiento). Si no tiene partidos suficientes se usa el promedio de todas sus sesiones con GPS y, si tampoco alcanza, la referencia de los jugadores de su posición.'],
+    ['ti-filter',         'valid',   'Qué partidos cuentan', 'La referencia se arma con los partidos que el club marca como válidos («⚙ Partidos válidos»). <b>Minutos mínimos</b>: un partido en el que entró unos minutos no es referencia de partido y tira el promedio para abajo. <b>Contar desde</b>: si antes de cierta fecha las bandas de velocidad estaban definidas de otra manera, ese HSR no es comparable con el de hoy. Es un ajuste del club, lo ven todos. En la ficha, el <b>n=</b> del badge dice cuántos partidos quedaron detrás de esa referencia.'],
     ['ti-database',       'src',     'Fuente del déficit', '<b>Estimado</b>: lo calcula con los minutos que jugó (referencia × minutos que le faltaron). Es lo normal el mismo día del partido, cuando todavía no hay GPS. <b>Medido</b>: toma el GPS real de su último partido y resta lo que ya hizo. <b>Manual</b>: cargás vos lo que hizo, si el dato viene de otro lado.'],
     ['ti-clock',          'min',     'Duración del partido y minutos', '«Duración partido» es el partido completo (90, u 80/70 en formativas). Los minutos de cada jugador se cargan arriba a la derecha de su ficha. Con 0 minutos el déficit es el partido entero.'],
     ['ti-gauge',          'speed',   'Velocidad de carrera', 'Define a qué ritmo corre cada uno. <b>%Vmax</b>: la velocidad sale de un porcentaje de la velocidad máxima de ese jugador (la toma del GPS). Es lo más individual; sin Vmax ese jugador no calcula. <b>Absoluto</b>: umbrales fijos en km/h iguales para todos, el plan B cuando no hay Vmax. <b>%VIFT</b>: HIIT clásico anclado al 30-15 IFT (hace falta el test cargado en Evaluaciones); trabaja sólo el déficit de HSR y por eso no usa bandas.'],
@@ -1533,6 +1597,7 @@
     state.speedModel = b.dataset.sm; savePrefs(); renderSpeedModelUI(); renderResults();
   }));
   $('tu-bands-toggle').addEventListener('click', () => openModal('bands'));
+  $('tu-reffilter-toggle').addEventListener('click', () => openModal('reffilter'));
   $('tu-help-btn').addEventListener('click', () => openModal('help'));
 
   // ── modal close (backdrop click · × · Esc) ──
@@ -1548,6 +1613,8 @@
   $('tu-doc-share').addEventListener('click', shareDoc);
 
   // ── boot ──
+  state.refFilters = await TU.getRefFilters(clubId);   // antes de resolver ninguna referencia
+  renderRefFilterHint();
   wireResultsDelegation();   // once — survives body re-renders
   renderSpeedModelUI();
   renderMetricChips();
@@ -1556,7 +1623,7 @@
   await loadPlayers();
   renderPicker();
   renderResults();
-  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPresetSelect(); renderPicker(); renderResults(); showTab(state.tab); });
+  window.CM_I18N?.ready?.then(() => { renderSpeedModelUI(); renderMetricChips(); renderPresetSelect(); renderRefFilterHint(); renderPicker(); renderResults(); showTab(state.tab); });
 })();
 </script>
 

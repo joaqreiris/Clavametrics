@@ -175,16 +175,21 @@
   // session_type='training' and are never promoted to 'match'). Matches are
   // usually a player's highest-load sessions, so best-N over all GPS is a sound
   // proxy. source:'gps' so the UI can label it as not-match-tagged.
-  async function getAllGpsReference(playerId, clubId, metrics, mode) {
+  async function getAllGpsReference(playerId, clubId, metrics, mode, filters) {
     const out = {}; metrics.forEach(m => out[m] = { baseline: null, count: 0, source: 'gps' });
     const core = Array.from(new Set(metrics.filter(m => METRIC_DEFS[m])));
     if (!playerId || !clubId || !core.length) return out;
+    const f = filters || {};
     try {
-      const { data } = await window.sb
+      // La fecha de corte también manda acá: son las mismas bandas viejas. El mínimo
+      // de minutos NO se aplica: esto son sesiones de entrenamiento, no partidos.
+      let q = window.sb
         .from('gps_reports')
-        .select(core.join(',') + ',is_invalid')
+        .select(core.join(',') + ',is_invalid' + (f.fromDate ? ', training_sessions!inner(session_date)' : ''))
         .eq('player_id', playerId)
         .eq('club_id', clubId);
+      if (f.fromDate) q = q.gte('training_sessions.session_date', f.fromDate);
+      const { data } = await q;
       const rows = (data || []).filter(r => !r.is_invalid);
       const n = 5, MIN = 3;
       core.forEach(m => {
@@ -227,26 +232,79 @@
     } catch { return null; }
   }
 
+  // ── Qué partidos entran en la referencia (regla del club) ──────────────
+  // Dos filtros, porque el historial crudo miente de dos maneras distintas:
+  //   minMinutes → un partido en el que entró 15' no es una referencia de partido;
+  //                arrastra el promedio hacia abajo. Las filas SIN minutos cargados
+  //                se aceptan (no hay con qué filtrarlas).
+  //   fromDate   → antes de esa fecha las bandas de velocidad estaban definidas de
+  //                otra manera (umbrales fijos vs % de Vmax), así que el HSR de
+  //                entonces no es comparable con el de hoy.
+  // Viven en club_gps_settings para que cualquier pantalla lea la MISMA regla.
+  const _refFiltersCache = {};
+  const REF_FILTERS_DEFAULT = { minMinutes: 0, fromDate: null };
+  async function getRefFilters(clubId) {
+    if (!clubId) return Object.assign({}, REF_FILTERS_DEFAULT);
+    if (_refFiltersCache[clubId]) return _refFiltersCache[clubId];
+    let f = Object.assign({}, REF_FILTERS_DEFAULT);
+    try {
+      const { data, error } = await window.sb
+        .from('club_gps_settings')
+        .select('ref_min_minutes, ref_from_date')
+        .eq('club_id', clubId)
+        .maybeSingle();
+      // Sin la migración aplicada, error → se sigue con los defaults (sin filtro).
+      if (!error && data) f = { minMinutes: +data.ref_min_minutes || 0, fromDate: data.ref_from_date || null };
+    } catch { /* defaults */ }
+    _refFiltersCache[clubId] = f;
+    return f;
+  }
+  async function saveRefFilters(clubId, f) {
+    if (!clubId) return false;
+    const row = { club_id: clubId, ref_min_minutes: Math.max(0, +f.minMinutes || 0), ref_from_date: f.fromDate || null };
+    try {
+      const { error } = await window.sb.from('club_gps_settings').upsert(row, { onConflict: 'club_id' });
+      if (error) return false;
+      _refFiltersCache[clubId] = { minMinutes: row.ref_min_minutes, fromDate: row.ref_from_date };
+      return true;
+    } catch { return false; }
+  }
+  function invalidateRefFilters(clubId) {
+    if (clubId) delete _refFiltersCache[clubId]; else Object.keys(_refFiltersCache).forEach(k => delete _refFiltersCache[k]);
+  }
+  // Filas válidas para la referencia: sin descartes de GPS y con minutos suficientes.
+  function filterRefRows(data, f) {
+    const min = (f && +f.minMinutes) || 0;
+    return (data || []).filter(r => {
+      if (r.is_invalid) return false;
+      if (min > 0 && r.time_played != null && +r.time_played < min) return false;
+      return true;
+    });
+  }
+
   // ── Reference load per metric (best-5 or typical-match average) ────────
   // metrics: array of metric keys. mode: 'best' | 'avg'.
   // PERF: one round-trip for ALL metrics (fetch the player's match-day rows once,
   // reduce every metric client-side) instead of one getMatchBaseline query per
   // metric (~6 round-trips). Same best-5/avg + MIN=3 logic as getAllGpsReference.
-  async function getReference(playerId, clubId, metrics, mode) {
+  async function getReference(playerId, clubId, metrics, mode, filters) {
     const out = {};
     const core = Array.from(new Set(metrics.filter(m => METRIC_DEFS[m])));
     metrics.forEach(m => out[m] = { baseline: null, count: 0, source: 'personal' });
     if (!playerId || !clubId || !core.length) return out;
+    const f = filters || {};
     try {
       const matchDates = window.gpsGetMatchDates ? await window.gpsGetMatchDates(clubId) : null;
       if (!matchDates || !matchDates.size) return out;   // no tagged matches → let gps/position fallbacks fill in
+      const dates = f.fromDate ? [...matchDates].filter(d => d >= f.fromDate) : [...matchDates];
+      if (!dates.length) return out;
       const { data } = await window.sb
         .from('gps_reports')
-        .select(core.join(',') + ',is_invalid, training_sessions!inner(session_date)')
+        .select(core.concat(core.includes('time_played') ? [] : ['time_played']).join(',') + ',is_invalid, training_sessions!inner(session_date)')
         .eq('player_id', playerId)
         .eq('club_id', clubId)
-        .in('training_sessions.session_date', [...matchDates]);
-      const rows = (data || []).filter(r => !r.is_invalid);
+        .in('training_sessions.session_date', dates);
+      const rows = filterRefRows(data, f);
       const n = 5, MIN = 3;
       core.forEach(m => {
         const vals = rows.map(r => r[m]).filter(v => v != null).map(Number);
@@ -262,9 +320,9 @@
   // ── Positional reference (fallback when a player lacks personal match data) ─
   // Mean of the same-position teammates' personal baselines, per metric.
   // playerIds = same-position squad members (with data). Respects best/avg mode.
-  async function getPositionReference(playerIds, clubId, metrics, mode) {
+  async function getPositionReference(playerIds, clubId, metrics, mode, filters) {
     if (!playerIds || !playerIds.length) { const o = {}; metrics.forEach(m => o[m] = { baseline: null, count: 0, source: 'position' }); return o; }
-    const rows = await Promise.all(playerIds.map(pid => getReference(pid, clubId, metrics, mode)));
+    const rows = await Promise.all(playerIds.map(pid => getReference(pid, clubId, metrics, mode, filters)));
     const out = {};
     metrics.forEach(m => {
       const vals = rows.map(r => r[m] && r[m].baseline).filter(v => v != null);
@@ -708,6 +766,7 @@
     COMPL_BANDS, PASS_METRIC, complPassSpeed, prescribePasses, computeComplBlock, buildComplDoc,
     DEFAULT_BANDS_PCT, DEFAULT_BANDS_ABS, CONT_ZONES, CONT_DEFAULT_ZONE,
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
+    getRefFilters, saveRefFilters, invalidateRefFilters, REF_FILTERS_DEFAULT,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
     prescribeContinuous, fieldPerimeter, normalizePreset,
     resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax, hrmaxScore, listClubMetrics,
