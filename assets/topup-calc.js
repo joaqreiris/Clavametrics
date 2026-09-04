@@ -166,6 +166,13 @@
   // Metros que tarda en alcanzar `speedKmh` acelerando desde parado, con la
   // curva v(t) = V·(1 − e^(−t/τ)) hacia su propia Vmax. Sin Vmax no hay curva:
   // se cae a una estimación plana (aceleración media de 3,5 m/s²).
+  // Segundos que tarda en alcanzar `speedKmh` desde parado (misma curva).
+  function accelTime(speedKmh, vmaxKmh) {
+    const v = kmhToMs(speedKmh), V = kmhToMs(vmaxKmh || 0);
+    if (!(v > 0)) return 0;
+    if (!(V > v)) return +(v / 3.5).toFixed(2);      // sin Vmax: aceleración media plana
+    return +(-ACC_TAU * Math.log(1 - v / V)).toFixed(2);
+  }
   function accelDistance(speedKmh, vmaxKmh) {
     const v = kmhToMs(speedKmh);
     if (!(v > 0)) return 0;
@@ -206,7 +213,12 @@
     }
     // Metros que caen DENTRO de la banda en cada carrera.
     const usableM = Math.max(0, Math.round(rolling ? distM : distM - launchM));
-    const runSec  = +(distM / kmhToMs(speed)).toFixed(1);
+    // TIEMPO OBJETIVO de cono a cono: es lo único que el jugador puede ejecutar
+    // (nadie corre "a 21,8 km/h", corre "60 m en 9,9 s"). Lanzado = velocidad
+    // constante; parado = lo que tarda en acelerar + el resto ya a velocidad.
+    const runSec = +(rolling
+      ? distM / kmhToMs(speed)
+      : accelTime(speed, opts.vmax) + Math.max(0, distM - launchM) / kmhToMs(speed)).toFixed(1);
 
     let reps = 0, sets = 0, repsPerSet = 0, totalRunM = 0, timeMin = 0;
     if (opts.deficitM > 0 && usableM > 0) {
@@ -867,7 +879,7 @@
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     getRefFilters, saveRefFilters, invalidateRefFilters, REF_FILTERS_DEFAULT,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
-    prescribeRunDist, defaultRunFmt, RUN_FMT_DEFAULT, accelDistance, brakeDistance,
+    prescribeRunDist, defaultRunFmt, RUN_FMT_DEFAULT, accelDistance, accelTime, brakeDistance,
     prescribeContinuous, fieldPerimeter, normalizePreset,
     resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax, hrmaxScore, listClubMetrics,
     bandTargetSpeed, anaerobicSpeedReserve, pctASR, speedProfile,

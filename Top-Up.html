@@ -940,7 +940,7 @@
     if (launch > 0){ s += box(cur, launch * K, '#fbbf24', .55) + lbl(cur + launch * K / 2, yc + h / 2 + 30, `${Math.round(launch)} m`); cur += launch * K; }
     s += box(cur, rx.distM * K, '#22c55e', .70) + cone(cur) + cone(cur + rx.distM * K)
        + lbl(cur + rx.distM * K / 2, yc + 8, `${rx.distM} m`)
-       + lbl(cur + rx.distM * K / 2, yc + h / 2 + 30, `${rx.speed} km/h · ${rx.runSec}s`);
+       + lbl(cur + rx.distM * K / 2, yc + h / 2 + 30, `${rx.runSec}s · ${rx.speed} km/h`);
     cur += rx.distM * K;
     s += box(cur, rx.brakeM * K, '#ef4444', .55) + lbl(cur + rx.brakeM * K / 2, yc + h / 2 + 30, `${Math.round(rx.brakeM)} m`);
     // flecha de dirección
@@ -1029,9 +1029,10 @@
         s += `<path d="M${cx.toFixed(1)},${(y - 11).toFixed(1)} l5.5,11 l-11,0 z" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1"/>`;
       });
       // quién corre en este carril y cuántas carreras hace cada uno
+      // Solo el apellido: el dorsal no aporta nada en el dibujo y roba ancho.
       const tag = (r) => {
         const p = r.pd.player;
-        return `${p.number != null ? p.number + ' ' : ''}${(p.name.split(/\s+/).pop() || p.name).slice(0, 10)} ×${r.rx.reps}`;
+        return `${(p.name.split(/\s+/).pop() || p.name).slice(0, 12)} ×${r.rx.reps}`;
       };
       const shown = lane.rows.slice(0, nameLines(lane) * 3);
       for (let li = 0; li < nameLines(lane); li++){
@@ -1039,7 +1040,10 @@
         const extra = (li === nameLines(lane) - 1 && lane.rows.length > shown.length) ? `  +${lane.rows.length - shown.length}` : '';
         if (part) s += txt(xs, yc + barH / 2 + 22 + li * 26, esc(part + extra), 'start', 20);
       }
-      s += txt(xCone + lane.distM * K / 2, yc + 7, `${lane.distM} m`, 'middle', 24);
+      const ts = lane.rows.map(r => r.rx.runSec);
+      const tLo = Math.min(...ts), tHi = Math.max(...ts);
+      const tTxt = tLo === tHi ? `${tLo}s` : `${tLo}-${tHi}s`;
+      s += txt(xCone + lane.distM * K / 2, yc + 7, `${lane.distM} m · ${tTxt}`, 'middle', 24);
       if (lane.launchM > 0) s += txt(xs + 4, yc + 7, `${lane.launchM}`, 'start', 19);
     });
     const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1067,6 +1071,7 @@
           <table class="tu-fp-tbl"><tbody>` + p.rows.map(r => `<tr>
               <td class="nm">${r.pd.player.number != null ? `<b>${r.pd.player.number}</b> ` : ''}${esc(r.pd.player.name)}</td>
               <td class="num">${r.rx.reps} × ${r.rx.distM} m</td>
+              <td class="num"><b>${r.rx.runSec}s</b></td>
               <td class="num">${r.rx.speed} km/h</td>
               <td class="num">${r.rx.sets} ${tt('topup.sets_abbr','ser')} · ${r.rx.timeMin}′</td>
             </tr>`).join('') + `</tbody></table></div>`;
@@ -1309,7 +1314,7 @@
     const asrTxt = rx.asrPct != null ? ` · ${rx.asrPct}% ASR` : '';
     const start = rx.rolling ? tt('topup.start_rolling','lanzado') : tt('topup.start_still','parado');
     let html = `<div class="tu-line">${RUN_IC}
-      <span class="main"><b>${rx.reps} × ${rx.distM} m</b> @ ${rx.speed} km/h <span class="dim">(${start} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s) · ${esc(bLabel)}${asrTxt}</span></span>
+      <span class="main"><b>${rx.reps} × ${rx.distM} m ${tt('topup.in_secs','en')} ${rx.runSec}s</b> <span class="dim">· ${rx.speed} km/h · ${start} · ${tt('topup.rest_abbr','pausa')} ${f.rest}s · ${esc(bLabel)}${asrTxt}</span></span>
       <span class="meta">${rx.sets} ${tt('topup.sets_abbr','ser')} · ${rx.timeMin}′</span>
       <button class="seebtn" data-seepitch="${pid}:${band.id}" title="${tt('topup.see_pitch','Ver en el campo')}"><i class="ti ti-map-2"></i></button></div>`;
     if (rx.trimmed) html += `<div class="tu-hwarn">${tt('topup.trimmed', `Recortada a ${rx.distM} m: es lo que entra en ${pitchLen()} m de campo.`, { d: rx.distM, p: pitchLen() })}</div>`;
