@@ -6,7 +6,9 @@
    (mismas posiciones y tamaños), porque ese orden ES la lectura que quiso darle.
 
    El informe se COMPONE con jsPDF: los textos con pdf.text (vectoriales, nítidos
-   y seleccionables) y cada gráfico con la imagen de su canvas de Chart.js. NO se
+   y seleccionables), cada gráfico con la imagen de su canvas de Chart.js, y lo que no es
+   canvas —una tabla con formato condicional, un gauge— redibujado con sus propios colores
+   leídos del DOM, para que la hoja diga lo mismo que la pantalla. NO se
    captura la pantalla — clonar las cards a una hoja HTML da textos fantasma
    (probado a fondo: ver la memoria del proyecto), así que Imprimir y Exportar
    usan el MISMO camino: uno abre el visor con el diálogo listo, el otro descarga.
@@ -94,6 +96,46 @@
     });
   }
 
+  // ── Color ───────────────────────────────────────────────────────────────
+  // getComputedStyle YA resuelve var(), color-mix() y demás, pero devuelve formatos que jsPDF
+  // no entiende (oklab(), color(srgb …)). El canvas sí los entiende: se pinta un píxel y se lee.
+  // Así el informe hereda EXACTAMENTE el color que el usuario ve en la tabla o en el gauge.
+  let _cx2d = null;
+  function rgbOf(css, fb) {
+    const def = fb || null;
+    const v = String(css == null ? '' : css).trim();
+    if (!v || v === 'none' || v === 'transparent') return def;
+    try {
+      if (!_cx2d) {
+        const c = document.createElement('canvas'); c.width = c.height = 1;
+        _cx2d = c.getContext('2d', { willReadFrequently: true });
+      }
+      _cx2d.fillStyle = '#010203';                       // centinela: un color inválido no lo pisa
+      _cx2d.fillStyle = v;
+      if (_cx2d.fillStyle === '#010203' && !/010203/i.test(v)) return def;
+      _cx2d.clearRect(0, 0, 1, 1);
+      _cx2d.fillRect(0, 0, 1, 1);
+      const d = _cx2d.getImageData(0, 0, 1, 1).data;
+      if (!d[3]) return def;
+      const a = d[3] / 255;                              // compuesto sobre el blanco de la hoja
+      return [0, 1, 2].map(i => Math.round(d[i] * a + 255 * (1 - a)));
+    } catch (_) { return def; }
+  }
+  /** Color de una propiedad de un elemento, con su opacity ya aplicada sobre blanco. */
+  function elColor(el, prop, fb) {
+    if (!el) return fb || null;
+    const cs = getComputedStyle(el);
+    const c = rgbOf(cs[prop], null);
+    if (!c) return fb || null;
+    const op = parseFloat(cs.opacity);
+    return (isFinite(op) && op < 1) ? c.map(v => Math.round(v * op + 255 * (1 - op))) : c;
+  }
+  const isWhite = c => !!c && c[0] > 250 && c[1] > 250 && c[2] > 250;
+  const lum = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  /** Un color pensado para fondo oscuro no se lee sobre la hoja blanca: en tema oscuro
+   *  los textos vienen casi blancos, así que ahí se cae al color del informe. */
+  const onWhite = (c, fb) => (c && lum(c) < 205) ? c : (fb || PDF.fg);
+
   // ── Composición del PDF ─────────────────────────────────────────────────
   // NO se captura HTML: html2canvas re-resuelve el CSS de la app en un iframe propio y ahí los
   // textos chicos salen fantasma (medido: el título de una card se dibujaba en gris 240 sobre
@@ -167,6 +209,8 @@
 
   /** Qué hay adentro de una card, para saber cómo dibujarla. */
   function cardKind(el) {
+    // El gauge va primero: es un SVG, no un canvas, y antes caía en «texto suelto».
+    if (el.querySelector('.gp-gauges-row svg, .gp-gauge svg')) return 'gauge';
     if (el.querySelector('canvas')) return 'chart';
     if (el.querySelector('table')) return 'table';
     if (el.querySelector('.gp-kpi')) return 'kpi';
@@ -219,6 +263,8 @@
       drawKpi(pdf, el, x, bodyY, w, bodyH);
     } else if (kind === 'table') {
       drawTable(pdf, el.querySelector('table'), x, bodyY, w, bodyH);
+    } else if (kind === 'gauge') {
+      drawGauge(pdf, el, x, bodyY, w, bodyH, k);
     } else {
       // Texto suelto (estados «elegí un jugador», leyendas): al menos se lee.
       setFont(pdf, 8, 'normal', PDF.muted);
@@ -251,35 +297,312 @@
     });
   }
 
-  /** Tabla: se redibuja fila por fila (texto real, no una foto). */
+  /**
+   * Lee UNA celda como se VE en pantalla: su texto, su alineación y el color que lleva encima.
+   * Los formatos condicionales de la tabla (heat / bar / pct / icon) y las celdas del heatmap
+   * son parte de la lectura, no decoración: sin ellos el informe pierde la mitad del mensaje.
+   */
+  function cellInfo(td) {
+    const cs = getComputedStyle(td);
+    const out = { text: (td.innerText || '').trim(), align: cs.textAlign || 'left',
+      fg: elColor(td, 'color', null), bg: null, bar: null, dot: null, shape: 'dot' };
+    const chip = td.querySelector('.tf-c, .gp-zc');
+    if (!chip) return out;
+    const val = chip.querySelector('.tf-val');
+    out.text = ((val ? val.innerText : chip.innerText) || '').trim();
+    out.fg = elColor(val || chip, 'color', out.fg);
+    const cls = chip.classList;
+    if (cls.contains('bar') || cls.contains('pct')) {
+      const fill = chip.querySelector('.tf-fill, .tf-track > span');
+      const pct = fill ? parseFloat(fill.style.width) : NaN;
+      out.bar = {
+        pct: isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0,
+        color: elColor(fill, 'backgroundColor', [148, 163, 184]),
+        track: rgbOf(getComputedStyle(cls.contains('pct') ? (chip.querySelector('.tf-track') || chip) : chip).backgroundColor, null),
+        thin: cls.contains('pct'),      // pct = riel fino al lado del número; bar = barra de fondo
+      };
+      return out;
+    }
+    const dot = chip.querySelector('.tf-dot');
+    const ico = chip.querySelector('.ti');
+    if (dot || ico) {
+      out.dot = elColor(dot || ico, dot ? 'backgroundColor' : 'color', null);
+      // El formato «icono» viene como punto o como flecha de tendencia: se dibuja la misma
+      // figura, porque la forma es parte de la lectura (sube / se mantiene / baja).
+      const ic = ico ? ico.className : '';
+      out.shape = dot ? 'dot'
+        : /trending-up|arrow-up/.test(ic) ? 'up'
+        : /trending-down|arrow-down/.test(ic) ? 'down'
+        : /minus/.test(ic) ? 'flat'
+        : /alert-triangle/.test(ic) ? 'warn' : 'dot';
+    }
+    const bg = rgbOf(getComputedStyle(chip).backgroundColor, null);
+    if (bg && !isWhite(bg)) out.bg = bg;
+    return out;
+  }
+
+  /** Punto / flecha de tendencia del formato «icono», centrado en (x, y). */
+  function drawStatus(pdf, shape, color, x, y) {
+    const c = color || [148, 163, 184];
+    if (shape === 'dot' || shape === 'warn') {
+      pdf.setFillColor(c[0], c[1], c[2]);
+      pdf.circle(x + 0.7, y, 0.6, 'F');
+      return;
+    }
+    pdf.setDrawColor(c[0], c[1], c[2]);
+    pdf.setLineWidth(0.35); pdf.setLineCap('round');
+    if (shape === 'flat') pdf.line(x, y, x + 1.6, y);
+    else {
+      const dy = shape === 'up' ? -0.8 : 0.8;
+      pdf.line(x, y - dy / 2, x + 1.6, y + dy / 2);
+      pdf.line(x + 1.6, y + dy / 2, x + 1.0, y + dy / 2);     // puntita de la flecha
+      pdf.line(x + 1.6, y + dy / 2, x + 1.6, y - dy / 2 + dy * 0.6);
+    }
+    pdf.setLineCap('butt'); pdf.setLineWidth(0.2);
+  }
+
+  /** Tabla: se redibuja fila por fila (texto real, no una foto) CON sus colores. */
   function drawTable(pdf, table, x, y, w, h) {
     if (!table) return;
-    const head = [...table.querySelectorAll('thead th')].map(t => t.innerText.trim());
-    const rows = [...table.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(td => td.innerText.trim()));
+    const ths  = [...table.querySelectorAll('thead th')];
+    const head = ths.map(t => t.innerText.trim());
+    const rows = [...table.querySelectorAll('tbody tr')].map(tr => [...tr.children].map(cellInfo));
     if (!head.length && !rows.length) return;
     const cols = Math.max(head.length, rows[0]?.length || 0);
     if (!cols) return;
+
+    const inner = w - PDF.PAD * 2;
+    // Anchos PROPORCIONALES a los de pantalla: ahí la columna del jugador es ancha y las de
+    // enteros angostas. Repartir en partes iguales recortaba los nombres («PHARAN…») para
+    // regalarle espacio a una columna de tres cifras.
+    const px  = Array.from({ length: cols }, (_, i) => (ths[i] ? ths[i].getBoundingClientRect().width : 0));
+    const tot = px.reduce((a, b) => a + b, 0);
+    let cw = tot > 0 ? px.map(v => Math.max(inner * 0.045, inner * v / tot)) : Array(cols).fill(inner / cols);
+    const sum = cw.reduce((a, b) => a + b, 0);
+    if (sum > 0 && sum !== inner) cw = cw.map(v => v * inner / sum);
+    const cx = []; let acc = x + PDF.PAD;
+    for (let i = 0; i < cols; i++) { cx.push(acc); acc += cw[i]; }
+
+    const PADC = 0.8;
+    const put = (txt, i, yy, al) => {
+      const t = clip(pdf, txt, cw[i] - PADC * 2);
+      if (!t) return;
+      if (al === 'right')       pdf.text(t, cx[i] + cw[i] - PADC, yy, { align: 'right' });
+      else if (al === 'center') pdf.text(t, cx[i] + cw[i] / 2, yy, { align: 'center' });
+      else                      pdf.text(t, cx[i] + PADC, yy);
+    };
+
     const rowH = 4.2, avail = Math.max(0, h - 2);
     const maxRows = Math.max(0, Math.floor(avail / rowH) - 1);
-    const cw = (w - PDF.PAD * 2) / cols;
     let yy = y + 3.5;
     if (head.length) {
       setFont(pdf, 6.2, 'bold', PDF.muted);
-      head.forEach((t, i) => pdf.text(clip(pdf, t.toUpperCase(), cw - 1), x + PDF.PAD + cw * i, yy));
+      head.forEach((t, i) => put(t.toUpperCase(), i, yy, (ths[i] && getComputedStyle(ths[i]).textAlign) || 'left'));
       pdf.setDrawColor(...PDF.line); pdf.setLineWidth(0.2);
       pdf.line(x + PDF.PAD, yy + 1.2, x + w - PDF.PAD, yy + 1.2);
       yy += rowH;
     }
     rows.slice(0, maxRows).forEach((r, ri) => {
       if (ri % 2) { pdf.setFillColor(250, 250, 249); pdf.rect(x + PDF.PAD - 0.5, yy - 3, w - PDF.PAD * 2 + 1, rowH, 'F'); }
-      setFont(pdf, 6.6, 'normal');
-      r.slice(0, cols).forEach((t, i) => pdf.text(clip(pdf, t, cw - 1), x + PDF.PAD + cw * i, yy));
+      r.slice(0, cols).forEach((c, i) => {
+        const bx = cx[i] + 0.4, bw = Math.max(1, cw[i] - 0.8), top = yy - 2.8, bh = 3.5;
+        // Sobre un chip de color el texto va con SU color (el blanco de un heatmap saturado
+        // es intencional); suelto sobre la hoja, sólo si se lee.
+        setFont(pdf, 6.6, 'normal', c.bg ? (c.fg || PDF.fg) : onWhite(c.fg, PDF.fg));
+        const txt = clip(pdf, c.text, cw[i] - (c.dot ? 3 : PADC * 2));
+        const tw  = pdf.getTextWidth(txt);
+        if (c.bar) {
+          if (c.bar.thin) {                    // riel fino + número a la derecha, como en pantalla
+            const rw = Math.max(3, bw - tw - 1.2);
+            if (c.bar.track) { pdf.setFillColor(...c.bar.track); pdf.roundedRect(bx, yy - 1.9, rw, 1.3, 0.65, 0.65, 'F'); }
+            if (c.bar.pct > 0) { pdf.setFillColor(...c.bar.color); pdf.roundedRect(bx, yy - 1.9, Math.max(0.7, rw * c.bar.pct / 100), 1.3, 0.65, 0.65, 'F'); }
+          } else {
+            if (c.bar.track) { pdf.setFillColor(...c.bar.track); pdf.roundedRect(bx, top, bw, bh, 0.8, 0.8, 'F'); }
+            if (c.bar.pct > 0) { pdf.setFillColor(...c.bar.color); pdf.roundedRect(bx, top, Math.max(0.8, bw * c.bar.pct / 100), bh, 0.8, 0.8, 'F'); }
+          }
+        } else if (c.bg) {
+          pdf.setFillColor(...c.bg);
+          pdf.roundedRect(bx, top, bw, bh, 0.8, 0.8, 'F');
+        }
+        if (c.dot) {                                          // punto/flecha de estado + número
+          const sx = cx[i] + cw[i] / 2 - (tw + 2.6) / 2;
+          drawStatus(pdf, c.shape, c.dot, sx, yy - 0.9);
+          pdf.text(txt, sx + 2.6, yy);
+        } else {
+          put(c.text, i, yy, c.bar ? 'right' : c.bg ? 'center' : c.align);
+        }
+      });
       yy += rowH;
     });
     if (rows.length > maxRows) {
       setFont(pdf, 6.2, 'normal', PDF.faint);
       pdf.text(T('gps_analysis.export_rows_more', '+{n} more rows', { n: rows.length - maxRows }), x + PDF.PAD, yy);
     }
+  }
+
+  // ── Gauges ──────────────────────────────────────────────────────────────
+  // El gauge del dashboard es un SVG (arcos + aguja + textos), no un canvas de Chart.js: no hay
+  // bitmap que copiar. Se REDIBUJA vectorial leyendo el propio SVG del DOM — la geometría la
+  // muestrea el navegador (getPointAtLength) y los colores salen de getComputedStyle, así que
+  // el informe muestra el mismo arco, la misma aguja y el mismo número que la pantalla.
+
+  /** Muestrea un <path> en puntos del viewBox. */
+  function samplePath(p, step) {
+    let len = 0;
+    try { len = p.getTotalLength(); } catch (_) { return []; }
+    if (!(len > 0)) return [];
+    const n = Math.max(2, Math.min(400, Math.ceil(len / (step || 2))));
+    const out = [];
+    for (let i = 0; i <= n; i++) { const pt = p.getPointAtLength(len * i / n); out.push([pt.x, pt.y]); }
+    return out;
+  }
+
+  /** Stops de un <linearGradient> referenciado con url(#id) → [{off, c:[r,g,b]}]. */
+  function gradStops(svg, ref) {
+    const id = (String(ref).match(/url\(["']?#([^"')]+)/) || [])[1];
+    if (!id) return null;
+    let g = null;
+    try { g = svg.querySelector('#' + (window.CSS && CSS.escape ? CSS.escape(id) : id)); } catch (_) { return null; }
+    if (!g) return null;
+    const st = [...g.querySelectorAll('stop')].map(n => {
+      const raw = String(n.getAttribute('offset') || '0');
+      const num = parseFloat(raw) || 0;
+      return { off: raw.includes('%') ? num / 100 : num,
+        c: rgbOf(getComputedStyle(n).stopColor || n.getAttribute('stop-color'), [148, 163, 184]) };
+    });
+    return st.length ? st : null;
+  }
+  function stopAt(stops, t) {
+    t = Math.max(0, Math.min(1, t));
+    let a = stops[0], b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (t >= stops[i].off && t <= stops[i + 1].off) { a = stops[i]; b = stops[i + 1]; break; }
+    }
+    const d = (b.off - a.off) || 1, k = (t - a.off) / d;
+    return [0, 1, 2].map(i => Math.round(a.c[i] + (b.c[i] - a.c[i]) * k));
+  }
+
+  /** Dibuja un SVG (arcos, aguja, textos) dentro de la caja dada. Devuelve el alto usado en mm. */
+  function drawSvg(pdf, svg, x, y, w, h) {
+    const vb = String(svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || vb.some(v => !isFinite(v))) return 0;
+    const [vx, vy, vw, vh] = vb;
+    const s = Math.min(w / vw, h / vh);
+    if (!(s > 0) || !(vw > 0) || !(vh > 0)) return 0;
+    const ox = x + (w - vw * s) / 2, oy = y;
+    const X = px => ox + (px - vx) * s, Y = py => oy + (py - vy) * s;
+    const at = (el, k, d) => { const v = parseFloat(el.getAttribute(k)); return isFinite(v) ? v : (d || 0); };
+
+    [...svg.querySelectorAll('path, line, circle, text')].forEach(el => {
+      const cs = getComputedStyle(el);
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'text') {
+        const t = (el.textContent || '').trim();
+        if (!t) return;
+        const fs = parseFloat(cs.fontSize) || 10;
+        const bold = (parseInt(cs.fontWeight, 10) || 400) >= 600;
+        setFont(pdf, fs * s / 0.3528, bold ? 'bold' : 'normal', onWhite(elColor(el, 'fill', PDF.fg), PDF.fg));
+        const an = cs.textAnchor || el.getAttribute('text-anchor') || 'start';
+        pdf.text(t, X(at(el, 'x')), Y(at(el, 'y')),
+          { align: an === 'middle' ? 'center' : an === 'end' ? 'right' : 'left' });
+        return;
+      }
+      if (tag === 'circle') {
+        const f0 = elColor(el, 'fill', null);
+        if (!f0) return;
+        const f = onWhite(f0, PDF.fg);
+        pdf.setFillColor(f[0], f[1], f[2]);
+        pdf.circle(X(at(el, 'cx')), Y(at(el, 'cy')), at(el, 'r') * s, 'F');
+        return;
+      }
+      pdf.setLineWidth((parseFloat(cs.strokeWidth) || 1) * s);
+      pdf.setLineJoin('round');
+      if (tag === 'line') {
+        const c = onWhite(elColor(el, 'stroke', PDF.fg), PDF.fg);
+        pdf.setLineCap('round');
+        pdf.setDrawColor(c[0], c[1], c[2]);
+        pdf.line(X(at(el, 'x1')), Y(at(el, 'y1')), X(at(el, 'x2')), Y(at(el, 'y2')));
+        return;
+      }
+      const pts = samplePath(el, 1.4);
+      if (pts.length < 2) return;
+      const raw = cs.stroke || el.getAttribute('stroke') || '';
+      const stops = /url\(/.test(raw) ? gradStops(svg, raw) : null;
+      if (stops) {
+        // Degradado: tramo a tramo con su color interpolado (jsPDF no tiene gradientes de trazo).
+        let bb = null;
+        try { bb = el.getBBox(); } catch (_) { bb = null; }
+        // Cap PLANO como en pantalla (un cap redondo alargaría el arco medio trazo en cada
+        // punta); los tramos se solapan un poco entre sí para que no queden costuras.
+        pdf.setLineCap('butt');
+        for (let i = 0; i < pts.length - 1; i++) {
+          const mid = (pts[i][0] + pts[i + 1][0]) / 2;
+          const c = stopAt(stops, (bb && bb.width) ? (mid - bb.x) / bb.width : 0.5);
+          pdf.setDrawColor(c[0], c[1], c[2]);
+          const x1 = X(pts[i][0]), y1 = Y(pts[i][1]);
+          const x2 = X(pts[i + 1][0]), y2 = Y(pts[i + 1][1]);
+          const over = i < pts.length - 2 ? 1.6 : 1;      // el último tramo no se pasa del arco
+          pdf.line(x1, y1, x1 + (x2 - x1) * over, y1 + (y2 - y1) * over);
+        }
+      } else {
+        const c = elColor(el, 'stroke', PDF.line);
+        pdf.setDrawColor(c[0], c[1], c[2]);
+        pdf.setLineCap('butt');
+        const d = [];
+        for (let i = 1; i < pts.length; i++) {
+          d.push([X(pts[i][0]) - X(pts[i - 1][0]), Y(pts[i][1]) - Y(pts[i - 1][1])]);
+        }
+        pdf.lines(d, X(pts[0][0]), Y(pts[0][1]), [1, 1], 'S');
+      }
+    });
+    pdf.setLineCap('butt');
+    pdf.setLineWidth(0.2);
+    return vh * s;
+  }
+
+  /** Card de gauge(s): el título propio del cuerpo, la fila de gauges y su línea de comparación.
+   *  `k` = mm por píxel de pantalla: el gauge se dibuja del MISMO tamaño que se ve (en la app
+   *  nunca pasa de ~180 px de ancho); estirarlo a la columna entera agrandaba las etiquetas. */
+  function drawGauge(pdf, el, x, y, w, h, k) {
+    const body = el.querySelector('.gp-c-b') || el;
+    let top = y;
+    const l  = body.querySelector(':scope > .l');
+    const sb = body.querySelector(':scope > .sb');
+    // El gauge de una sola métrica lleva su título DENTRO del cuerpo (la cabecera se le quita,
+    // como al KPI): sin esto la card salía sin nombre.
+    const head = (el, size, weight, color, dy) => {
+      const t = el && el.innerText.trim();
+      if (!t) return 0;
+      setFont(pdf, size, weight, color);
+      const al = getComputedStyle(el).textAlign;
+      const txt = clip(pdf, t, w - PDF.PAD * 2);
+      if (al === 'center')     pdf.text(txt, x + w / 2, top + dy, { align: 'center' });
+      else if (al === 'right') pdf.text(txt, x + w - PDF.PAD, top + dy, { align: 'right' });
+      else                     pdf.text(txt, x + PDF.PAD, top + dy);
+      return 1;
+    };
+    if (head(l, 9, 'bold', PDF.fg, 4)) top += 5.4;
+    if (head(sb, 7, 'normal', PDF.muted, 2.8)) top += 4.2;
+    let wraps = [...el.querySelectorAll('.gp-gauge-wrap')];
+    if (!wraps.length) wraps = [...el.querySelectorAll('svg')];
+    if (!wraps.length) return;
+    const cw = (w - PDF.PAD * 2) / wraps.length;
+    const avail = Math.max(8, y + h - top);
+    wraps.forEach((wrap, i) => {
+      const svg = wrap.tagName.toLowerCase() === 'svg' ? wrap : wrap.querySelector('svg');
+      if (!svg) return;
+      const gx = x + PDF.PAD + cw * i;
+      const dl = [...wrap.children].find(n => n.tagName.toLowerCase() === 'div');
+      const box = Math.max(4, cw - 2), boxH = Math.max(6, avail - (dl ? 4.5 : 0));
+      const r = svg.getBoundingClientRect();
+      const gw = (k > 0 && r.width)  ? Math.min(box,  r.width  * k) : box;
+      const gh = (k > 0 && r.height) ? Math.min(boxH, r.height * k) : boxH;
+      const used = drawSvg(pdf, svg, gx + (cw - gw) / 2, top, gw, gh);
+      if (dl && dl.innerText.trim()) {
+        setFont(pdf, 7, 'normal', PDF.muted);
+        pdf.text(clip(pdf, dl.innerText.trim().replace(/\s+/g, ' '), cw - 2), gx + cw / 2, top + used + 3.2, { align: 'center' });
+      }
+    });
   }
 
   /** Escudo del club → data URI (jsPDF no acepta una URL remota). */

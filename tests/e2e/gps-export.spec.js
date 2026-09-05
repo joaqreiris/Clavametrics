@@ -48,6 +48,20 @@ const CARDS = [
     schema: 'gp.card/v1', title: 'Player Load', viz: 'bars', scope: { level: 'squad' },
     metrics: [{ id: 'player_load', agg: 'avg' }], dimensions: [{ id: 'player' }],
     range: { type: 'last30' }, style: { color: '#2563EB' } } },
+  // Tabla con formato condicional (chip de color + barra) y gauge: no son canvas, cada uno se
+  // dibuja con su propio camino en el informe.
+  { id: 'card-3', position: 2, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'All values', viz: 'table', scope: { level: 'squad' },
+    dimensions: [{ id: 'player' }],
+    metrics: [
+      { id: 'total_distance', agg: 'avg', format: { mode: 'heat', heatScale: 'gyr', dec: 0, align: 'right' } },
+      { id: 'player_load', agg: 'avg', format: { mode: 'bar', dec: 0, align: 'right' } },
+    ],
+    range: { type: 'last30' }, style: { color: '#7C3AED' } } },
+  { id: 'card-4', position: 3, source: 'builder', size: 'md', config: {
+    schema: 'gp.card/v1', title: 'Total Distance', viz: 'gauge', scope: { level: 'squad' },
+    metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [{ id: 'player' }],
+    range: { type: 'last30' }, style: { color: '#15803D', gaugeMode: 'value' } } },
 ];
 
 async function openDashboard(page) {
@@ -146,5 +160,26 @@ test.describe('GPS · informe PDF', () => {
     expect(last.kinds.chart).toBeGreaterThan(0);   // y los gráficos entraron como tales
     await expect(page.locator('#gxBody')).toHaveCount(0);
     expect(last.mode).toBe('save');
+  });
+
+  // La tabla se redibuja CON los colores de sus formatos condicionales y el gauge —que es un SVG,
+  // no un canvas— se redibuja vectorial. Antes ambos caían en «texto suelto»: la tabla salía en
+  // blanco y negro y el gauge, como una línea de texto.
+  test('la tabla con colores y el gauge se dibujan como tales', async ({ page }) => {
+    await openDashboard(page);
+    await expect.poll(async () => page.evaluate(() =>
+      document.querySelectorAll('.gp-view.is-on .gp-c .gp-zt .tf-c.heat, .gp-view.is-on .gp-c .gp-gauge svg').length
+    ), { timeout: 30_000, message: 'la tabla con formato o el gauge nunca se dibujaron' }).toBeGreaterThan(0);
+
+    await page.locator('#gpExportBtn').click();
+    await expect(page.locator('#gxBody')).toBeVisible();
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      page.locator('#gxPdf').click(),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/\.pdf$/);
+    const last = await page.evaluate(() => window.__gxLast);
+    expect(last.kinds.table).toBeGreaterThan(0);
+    expect(last.kinds.gauge).toBeGreaterThan(0);
   });
 });
