@@ -300,15 +300,15 @@
       cones: [[0, 3], [5, 3], [10, 3]], start: [5, 3],
       path: [[5, 3], [0, 3], [10, 3], [5, 3]],
       // cotas explícitas (a mano): derivarlas de conos consecutivos las superpone
-      dims: [{ a: [0, 3], b: [5, 3], t: '5 m', dy: -20 }, { a: [5, 3], b: [10, 3], t: '5 m', dy: -20 }],
+      dims: [{ a: [0, 3], b: [5, 3], t: '5 m', dy: -48 }, { a: [5, 3], b: [10, 3], t: '5 m', dy: -48 }],
     },
     {
       id: 'tdrill', label: 'T-drill', acc: 5, dec: 5, distM: 40, w: 10, h: 10,
       detail: '4 conos en T · 10 m de frente, 5 a un lado, 10 al otro, 5 y vuelta',
       cones: [[5, 10], [5, 0], [0, 0], [10, 0]], start: [5, 10],
       path: [[5, 10], [5, 0], [0, 0], [10, 0], [5, 0], [5, 10]],
-      dims: [{ a: [5, 10], b: [5, 0], t: '10 m', dx: 22 }, { a: [5, 0], b: [0, 0], t: '5 m', dy: -20 },
-             { a: [5, 0], b: [10, 0], t: '5 m', dy: -20 }],
+      dims: [{ a: [5, 10], b: [5, 0], t: '10 m', dx: 34 }, { a: [5, 0], b: [0, 0], t: '5 m', dy: -48 },
+             { a: [5, 0], b: [10, 0], t: '5 m', dy: -48 }],
     },
     {
       id: 'zigzag', label: 'Zig-zag', acc: 4, dec: 4, distM: 20, w: 20, h: 6,

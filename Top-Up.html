@@ -993,8 +993,8 @@
   function codDrawHTML(id){ return `<div class="tu-pitch tu-coddraw" id="${id}"></div>`; }
   function mountCodDraw(id, drill){
     const host = $(id); if (!host || !drill) return;
-    const pad = 3.2;                                   // metros de margen
-    const W = drill.w + pad * 2, H = drill.h + pad + 5;
+    const pad = 5.5;                                   // metros de margen (entran los carriles + cotas)
+    const W = drill.w + pad * 2, H = drill.h + pad + 5.5;
     const U = 10;                                      // unidades por metro
     host.style.aspectRatio = `${W} / ${H}`;
     const X = (m) => ((m + pad) * U).toFixed(1);
@@ -1005,21 +1005,25 @@
       const a = drill.path[i];
       const x1 = +X(a[0]), y1 = +X(a[1]), x2 = +X(p[0]), y2 = +X(p[1]);
       const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
-      const off = Math.min(38, 14 + len * 0.22);          // arco proporcional al tramo
-      // El lado del arco se fija en coordenadas ABSOLUTAS (arriba/abajo alternando):
-      // con el perpendicular a secas, un tramo de vuelta se curva para el mismo lado
-      // que el de ida y los dos se tapan.
+      // Rectas, desplazadas en paralelo: en el 5-10-5 los tres tramos van sobre la
+      // misma línea de conos y, sin separarlos, se taparían entre sí. El lado se fija
+      // en coordenadas ABSOLUTAS (arriba/abajo), no según la dirección del tramo, para
+      // que la ida y la vuelta no caigan en el mismo carril.
+      // Un carril por tramo, escalonado (−1,5 m · +1,5 m · −3 m …): con solo dos
+      // carriles, la ida y la vuelta del 5-10-5 se leen como una sola línea.
+      // Tope al escalón: en un drill de 5 tramos como el T, seguir alejando cada
+      // carril lo desarma; con dos niveles alcanza para que nada se tape.
+      const off = 12 + Math.min(1, Math.floor(i / 2)) * 10;
       let px = -dy / len, py = dx / len;
       const vertical = Math.abs(dy) > Math.abs(dx);
       const want = (i % 2) ? 1 : -1;
       if ((vertical ? px : py) * want < 0){ px = -px; py = -py; }
-      const mx = (x1 + x2) / 2 + px * off, my = (y1 + y2) / 2 + py * off;
-      // punta de flecha orientada según la tangente de llegada
-      const ang = Math.atan2(y2 - my, x2 - mx), s = 8;
-      const head = `${x2 - s * Math.cos(ang - 0.4)},${y2 - s * Math.sin(ang - 0.4)} ${x2},${y2} ${x2 - s * Math.cos(ang + 0.4)},${y2 - s * Math.sin(ang + 0.4)}`;
-      return `<path d="M${x1},${y1} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2},${y2}" fill="none" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`
-           + `<polyline points="${head}" fill="none" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`
-;
+      const ax = x1 + px * off, ay = y1 + py * off;      // extremos del carril
+      const bx = x2 + px * off, by = y2 + py * off;
+      const ang = Math.atan2(by - ay, bx - ax), sz = 9;
+      const head = `${(bx - sz * Math.cos(ang - 0.45)).toFixed(1)},${(by - sz * Math.sin(ang - 0.45)).toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)} ${(bx - sz * Math.cos(ang + 0.45)).toFixed(1)},${(by - sz * Math.sin(ang + 0.45)).toFixed(1)}`;
+      return `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`
+           + `<polyline points="${head}" fill="none" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`;
     }).join('');
     // cotas entre conos consecutivos
     const dimList = drill.dims || drill.cones.slice(1).map((p, i) => ({
