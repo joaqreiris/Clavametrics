@@ -213,6 +213,7 @@
     background:repeating-linear-gradient(90deg,var(--pf-grass) 0 9%,var(--pf-grass-2) 9% 18%)}
   [data-theme="dark"] .tu-pitch{--pf-grass:#16331f;--pf-grass-2:#132c1b;--pf-line:rgba(255,255,255,.74)}
   .tu-pitch svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .tu-coddraw{max-width:420px;margin-top:8px}
   .tu-pitch .tu-pitch-sizer{display:block;width:100%;height:auto}
   .tu-runlegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
   .tu-runlegend span{display:inline-flex;align-items:center;gap:5px;font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
@@ -529,6 +530,7 @@
       <div id="tu-reffilter-editor" class="hide"></div>
       <div id="tu-runfmt-editor" class="hide"></div>
       <div id="tu-pitchview" class="hide"></div>
+      <div id="tu-codview" class="hide"></div>
     </div>
   </div>
 </div>
@@ -620,6 +622,8 @@
     runFmt: (prefs.runFmt && typeof prefs.runFmt === 'object') ? prefs.runFmt : {},
     runFmtOpen: false,
     pitchView: null,
+    // Cambios de dirección: qué drill, cuánta pausa y cuánto "rinde" en acc/dec.
+    codFmt: Object.assign({}, TU.COD_FMT_DEFAULT, (prefs.codFmt && typeof prefs.codFmt === 'object') ? prefs.codFmt : {}),
     // Qué partidos entran en la referencia. Es config DEL CLUB (club_gps_settings),
     // no del usuario: se pisa con lo de la base apenas termina de cargar.
     refFilters: Object.assign({}, TU.REF_FILTERS_DEFAULT),
@@ -631,7 +635,7 @@
   const savePrefs = () => { try { localStorage.setItem(PK, JSON.stringify({
     duration: state.duration, mode: state.mode, presetId: state.presetId, metrics: state.metrics,
     speedModel: state.speedModel, aim: state.aim, targetBands: state.targetBands, bandsPct: state.bandsPct, bandsAbs: state.bandsAbs,
-    customPresets: state.customPresets, runFmt: state.runFmt,
+    customPresets: state.customPresets, runFmt: state.runFmt, codFmt: state.codFmt,
     tab: state.tab, compl: { targets: state.compl.targets, cfg: state.compl.cfg, blocks: state.compl.blocks },
   })); } catch {} };
 
@@ -983,6 +987,66 @@
     <span><i class="mz"></i>${tt('topup.zone_measured','zona medida (cuenta en la banda)')}</span>
     ${shuttle ? '' : `<span><i class="bz"></i>${tt('topup.zone_brake','frenado')}</span>`}</div>`;
 
+  // ── dibujo del drill de cambios de dirección ──
+  // A escala propia: un 5-10-5 mide 10 m y sobre un campo de 105 no se vería.
+  // Césped liso (sin líneas del campo: a esta escala no significan nada).
+  function codDrawHTML(id){ return `<div class="tu-pitch tu-coddraw" id="${id}"></div>`; }
+  function mountCodDraw(id, drill){
+    const host = $(id); if (!host || !drill) return;
+    const pad = 3.2;                                   // metros de margen
+    const W = drill.w + pad * 2, H = drill.h + pad + 5;
+    const U = 10;                                      // unidades por metro
+    host.style.aspectRatio = `${W} / ${H}`;
+    const X = (m) => ((m + pad) * U).toFixed(1);
+    const cone = (p) => `<path d="M${X(p[0])},${(+X(p[1]) - 9).toFixed(1)} l6,11 l-12,0 z" fill="#fff" stroke="rgba(0,0,0,.4)" stroke-width="1"/>`;
+    // Cada tramo va curvado y alternando de lado: en el 5-10-5 los tres pasan por
+    // la misma línea de conos y, rectos, se taparían entre sí.
+    const seg = drill.path.slice(1).map((p, i) => {
+      const a = drill.path[i];
+      const x1 = +X(a[0]), y1 = +X(a[1]), x2 = +X(p[0]), y2 = +X(p[1]);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const off = Math.min(38, 14 + len * 0.22);          // arco proporcional al tramo
+      // El lado del arco se fija en coordenadas ABSOLUTAS (arriba/abajo alternando):
+      // con el perpendicular a secas, un tramo de vuelta se curva para el mismo lado
+      // que el de ida y los dos se tapan.
+      let px = -dy / len, py = dx / len;
+      const vertical = Math.abs(dy) > Math.abs(dx);
+      const want = (i % 2) ? 1 : -1;
+      if ((vertical ? px : py) * want < 0){ px = -px; py = -py; }
+      const mx = (x1 + x2) / 2 + px * off, my = (y1 + y2) / 2 + py * off;
+      // punta de flecha orientada según la tangente de llegada
+      const ang = Math.atan2(y2 - my, x2 - mx), s = 8;
+      const head = `${x2 - s * Math.cos(ang - 0.4)},${y2 - s * Math.sin(ang - 0.4)} ${x2},${y2} ${x2 - s * Math.cos(ang + 0.4)},${y2 - s * Math.sin(ang + 0.4)}`;
+      return `<path d="M${x1},${y1} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2},${y2}" fill="none" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`
+           + `<polyline points="${head}" fill="none" stroke="#fbbf24" stroke-width="3" stroke-opacity=".95"/>`
+;
+    }).join('');
+    // cotas entre conos consecutivos
+    const dimList = drill.dims || drill.cones.slice(1).map((p, i) => ({
+      a: drill.cones[i], b: p, t: Math.round(Math.hypot(p[0] - drill.cones[i][0], p[1] - drill.cones[i][1])) + ' m', dy: -20,
+    }));
+    const dims = dimList.map(d => `<text x="${(( +X(d.a[0]) + +X(d.b[0])) / 2 + (d.dx || 0)).toFixed(1)}" y="${((+X(d.a[1]) + +X(d.b[1])) / 2 + (d.dy || 0) + 5).toFixed(1)}" text-anchor="middle" font-family="ui-monospace,monospace" font-size="13" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.5)" stroke-width="2.5" paint-order="stroke">${d.t}</text>`).join('');
+    host.innerHTML = `<svg viewBox="0 0 ${W * U} ${H * U}" preserveAspectRatio="xMidYMid meet">${seg}${drill.cones.map(cone).join('')}${dims}
+      <circle cx="${X(drill.start[0])}" cy="${(+X(drill.start[1]) + 30).toFixed(1)}" r="6" fill="#22c55e" stroke="#fff" stroke-width="2"/>
+      <text x="${(+X(drill.start[0]) + 11).toFixed(1)}" y="${(+X(drill.start[1]) + 35).toFixed(1)}" font-family="ui-monospace,monospace" font-size="12" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.5)" stroke-width="2.5" paint-order="stroke">${tt('topup.cod_start','salida')}</text></svg>`;
+  }
+  // Modal del drill: dibujo + qué rinde + la dosis de ese jugador.
+  function renderCodView(){
+    const box = $('tu-codview'); if (!box) return;
+    const pid = state.codView;
+    if (!pid){ box.classList.add('hide'); return; }
+    box.classList.remove('hide');
+    const pd = state.pdata[pid]; if (!pd){ box.innerHTML = ''; return; }
+    const def = deficitFor(pd, resolveRef(pd)) || {};
+    const cod = codFor(pd, def);
+    const d = cod.drill;
+    box.innerHTML = `<div class="tu-note" style="margin-top:0"><b>${esc(pd.player.name)}</b> · ${cod.reps} × ${esc(d.label)} · ${tt('topup.rest_abbr','pausa')} ${cod.rest}s</div>
+      ${codDrawHTML('tu-cod-view')}
+      <div class="tu-note">${esc(tt('topup.coddrill_'+d.id+'_detail', d.detail))}</div>
+      <div class="tu-note">${tt('topup.cod_yield', `Cada repetición deja ~${cod.accPer} aceleraciones y ~${cod.decPer} desaceleraciones.`, { a: cod.accPer, d: cod.decPer })}</div>`;
+    mountCodDraw('tu-cod-view', d);
+  }
+
   // ── PLAN DE CAMPO: una foto por banda con TODOS los elegidos ──
   // Los conos de la zona medida son los mismos para todos (por eso se alinean en
   // el centro); lo que cambia por jugador es desde dónde arranca —cuanto más
@@ -1088,7 +1152,7 @@
     const off = state.tab !== 'match' || state.speedModel === 'vift' || !state.selected.length;
     if (off){ box.innerHTML = ''; return; }
     const plans = selectedBands().map(fieldPlanFor).filter(Boolean);
-    if (!plans.length){ box.innerHTML = ''; return; }
+    if (!plans.length && !codPlanHTML()){ box.innerHTML = ''; return; }
     box.innerHTML = `<div class="tu-card">
       <h3><i class="ti ti-map-2"></i><span data-i18n="topup.fieldplan">Plan de campo</span></h3>
       <p class="tu-note" style="margin-top:-4px">${tt('topup.fieldplan_help','Los conos son los mismos para todos: lo que cambia por jugador es desde dónde arranca y cuántas carreras hace.')}</p>`
@@ -1106,8 +1170,33 @@
               <td class="num">${r.rx.startSec}s <small>${tt('topup.from_start','desde salida')}</small></td>
               <td class="num">${r.rx.sets} ${tt('topup.sets_abbr','ser')} · ${r.rx.timeMin}′</td>
             </tr>`).join('') + `</tbody></table></div>`;
-      }).join('') + `</div>`;
+      }).join('') + codPlanHTML() + `</div>`;
     plans.forEach(p => mountFieldPlan('tu-fp-' + p.band.id, p));
+    const dsel = TU.codDrill(state.codFmt.drill);
+    if ($('tu-fp-cod')) mountCodDraw('tu-fp-cod', dsel);
+  }
+  // Bloque de COD del plan: el drill dibujado una vez + cuántas le tocan a cada uno.
+  function codPlanHTML(){
+    const rows = [];
+    state.selected.forEach(pid => {
+      const pd = state.pdata[pid]; if (!pd || pd.loading) return;
+      const def = deficitFor(pd, resolveRef(pd)); if (!def) return;
+      const cod = codFor(pd, def);
+      if (cod.reps > 0) rows.push({ pd, cod });
+    });
+    if (!rows.length) return '';
+    const c = state.codFmt, d = TU.codDrill(c.drill);
+    return `<div class="tu-fp">
+      <div class="tu-fp-h"><span class="bn">${tt('topup.cod_title','Cambios de dirección')}</span>
+        <span class="bm">${esc(tt('topup.coddrill_'+d.id, d.label))} · ${tt('topup.rest_abbr','pausa')} ${c.rest}s · ${tt('topup.setrest_abbr','entre series')} ${Math.round(c.setRest/60*10)/10}′</span></div>
+      ${codDrawHTML('tu-fp-cod')}
+      <div class="tu-note">${esc(tt('topup.coddrill_'+d.id+'_detail', d.detail))}</div>
+      <table class="tu-fp-tbl"><tbody>` + rows.map(r => `<tr>
+          <td class="nm">${r.pd.player.number != null ? `<b>${r.pd.player.number}</b> ` : ''}${esc(r.pd.player.name)}</td>
+          <td class="num">${r.cod.reps} × ${esc(r.cod.drill.label)}</td>
+          <td class="num">${r.cod.accTotal} ${tt('topup.acc_abbr','acc')} / ${r.cod.decTotal} ${tt('topup.dec_abbr','dec')}</td>
+          <td class="num">${r.cod.sets} ${tt('topup.sets_abbr','ser')} · ${r.cod.timeMin}′</td>
+        </tr>`).join('') + `</tbody></table></div>`;
   }
 
   // Modal "ver en el campo" de una carrera concreta (jugador + banda).
@@ -1216,6 +1305,33 @@
         deficitM: 0, dist: f.dist, rest: f.rest, rolling: f.rolling, shuttle: f.shuttle, setRest: f.setRest, pitchLen: pitchLen() });
       if (rx) mountPitch('tu-pitch-' + b.id, rx);
     });
+    // ── cambios de dirección: drill, pausa y cuánto rinde en acc/dec ──
+    const c = state.codFmt, dsel = TU.codDrill(c.drill);
+    const accPer = +c.acc > 0 ? +c.acc : dsel.acc, decPer = +c.dec > 0 ? +c.dec : dsel.dec;
+    box.insertAdjacentHTML('beforeend', `<div class="tu-rowfmt" id="tu-codfmt">
+      <div class="rf-h"><span class="nm">${tt('topup.cod_title','Cambios de dirección')}</span>
+        <span class="mt">${tt('topup.cod_from_deficit','las repeticiones salen del déficit de acc/dec')}</span></div>
+      <div class="rf-f">
+        <div class="f" style="min-width:150px"><label>${tt('topup.cod_drill','Ejercicio')}</label>
+          <select class="tu-select" data-cf="drill" style="height:34px;font:600 13px/1 var(--cm-font-sans)">
+            ${TU.COD_DRILLS.map(d => `<option value="${d.id}" ${d.id===c.drill?'selected':''}>${esc(tt('topup.coddrill_'+d.id, d.label))}</option>`).join('')}
+          </select></div>
+        <div class="f"><label>${tt('topup.rfmt_rest','Pausa (s)')}</label><input type="number" min="0" max="300" inputmode="numeric" data-cf="rest" value="${c.rest}"></div>
+        <div class="f"><label>${tt('topup.rfmt_setrest','Entre series (s)')}</label><input type="number" min="0" max="600" inputmode="numeric" data-cf="setRest" value="${c.setRest}"></div>
+        <div class="f"><label>${tt('topup.cod_acc','Acc por rep')}</label><input type="number" min="1" max="20" inputmode="numeric" data-cf="acc" value="${accPer}"></div>
+        <div class="f"><label>${tt('topup.cod_dec','Dec por rep')}</label><input type="number" min="1" max="20" inputmode="numeric" data-cf="dec" value="${decPer}"></div>
+      </div>
+      <div class="tu-note">${esc(tt('topup.coddrill_'+dsel.id+'_detail', dsel.detail))} · ${tt('topup.cod_calibrate','el rinde es una estimación: hacela una vez con GPS y ajustá estos números')}</div>
+      ${codDrawHTML('tu-cod-fmt')}
+    </div>`);
+    mountCodDraw('tu-cod-fmt', dsel);
+    box.querySelectorAll('[data-cf]').forEach(inp => inp.addEventListener('change', () => {
+      const k = inp.dataset.cf;
+      if (k === 'drill'){ state.codFmt.drill = inp.value; delete state.codFmt.acc; delete state.codFmt.dec; }
+      else state.codFmt[k] = +inp.value || 0;
+      savePrefs(); renderRunFmtEditor(); renderResults();
+    }));
+
     box.querySelectorAll('[data-bf]').forEach(inp => inp.addEventListener('change', () => {
       const id = inp.closest('[data-bfmt]').dataset.bfmt, k = inp.dataset.bf;
       const cur = Object.assign(runFmtFor(selectedBands().find(b => b.id === id)), state.runFmt[id] || {});
@@ -1355,7 +1471,7 @@
     if (rx.trimmed) html += `<div class="tu-hwarn">${tt('topup.trimmed', `Recortada a ${rx.distM} m: es lo que entra en ${pitchLen()} m de campo.`, { d: rx.distM, p: pitchLen() })}</div>`;
     if (rx.tooShort) html += `<div class="tu-hwarn">${tt('topup.too_short','Zona medida muy corta para esta banda: buscá más espacio o bajá de banda.')}</div>`;
     if (rx.mostlyAccel) html += `<div class="tu-hwarn">${tt('topup.mostly_accel', `Con arranque parado solo ${rx.usableM} m de los ${rx.distM} caen en la banda.`, { u: rx.usableM, d: rx.distM })}</div>`;
-    if (rx.tooHard) html += `<div class="tu-hwarn">${tt('topup.too_hard', `Muy alto en su reserva (${rx.asrPct}% ASR): acortá la carrera o alargá la pausa.`, { p: rx.asrPct })}</div>`;
+    if (rx.restShort) html += `<div class="tu-hwarn">${tt('topup.rest_short', `Al ${rx.asrPct}% de su reserva la pausa se queda corta: subila a ~${rx.suggestRest}s (1:${rx.needRatio}).`, { p: rx.asrPct, s: rx.suggestRest, r: rx.needRatio })}</div>`;
     return { html, rx };
   }
   // Un bloque de carrera POR banda elegida (HSR, VHSR, sprint…), más un total
@@ -1376,6 +1492,16 @@
         <span class="meta">${mins}′</span></div>`;
     }
     return out;
+  }
+
+  // Dosis de cambios de dirección de un jugador, desde su déficit real de acc/dec.
+  function codFor(pd, def){
+    const c = state.codFmt;
+    return TU.prescribeCODDrill({
+      accDef: (def['accelerations'] || {}).deficit || 0,
+      decDef: (def['decelerations'] || {}).deficit || 0,
+      drill: c.drill, acc: c.acc, dec: c.dec, rest: c.rest, setRest: c.setRest, perSet: c.perSet,
+    });
   }
 
   function playerCardHTML(pid){
@@ -1421,10 +1547,13 @@
 
     // COD line
     const accDef = (def['accelerations']||{}).deficit || 0, decDef = (def['decelerations']||{}).deficit || 0;
-    const cod = TU.prescribeCOD(accDef, decDef);
+    const cod = codFor(pd, def);
     let codLine;
     if (accDef + decDef <= 0) codLine = `<div class="tu-line muted"><span class="ic"><i class="ti ti-arrows-shuffle"></i></span><span class="main">${tt('topup.no_cod','Sin déficit de acc/dec.')}</span></div>`;
-    else codLine = `<div class="tu-line"><span class="ic"><i class="ti ti-arrows-shuffle"></i></span><span class="lband ${cod.band.id}">${tt('topup.band_'+cod.band.id, cod.band.label)}</span><span class="main">${tt('topup.cod_'+cod.band.id, cod.band.reps)}</span></div>`;
+    else codLine = `<div class="tu-line"><span class="ic"><i class="ti ti-arrows-shuffle"></i></span>
+      <span class="main"><b>${cod.reps} × ${esc(cod.drill.label)}</b> <span class="dim">· ${tt('topup.rest_abbr','pausa')} ${cod.rest}s · ${cod.accTotal} ${tt('topup.acc_abbr','acc')} / ${cod.decTotal} ${tt('topup.dec_abbr','dec')}</span></span>
+      <span class="meta">${cod.sets} ${tt('topup.sets_abbr','ser')} · ${cod.timeMin}′</span>
+      <button class="seebtn" data-seecod="${pid}" title="${tt('topup.see_pitch','Ver en el campo')}"><i class="ti ti-map-2"></i></button></div>`;
 
     // compact deficit chips (deficit / reference per selected metric)
     const chips = state.metrics.map(k => {
@@ -1470,6 +1599,8 @@
   function wireResultsDelegation(){
     const box = $('tu-results');
     box.addEventListener('click', (e) => {
+      const cbtn = e.target.closest && e.target.closest('[data-seecod]');
+      if (cbtn){ openModal('cod', cbtn.dataset.seecod); return; }
       const btn = e.target.closest && e.target.closest('[data-seepitch]');
       if (!btn) return;
       const [pid, bandId] = btn.dataset.seepitch.split(':');
@@ -1511,10 +1642,11 @@
     reffilter: () => tt('topup.edit_reffilter_title','Partidos válidos'),
     runfmt:  () => tt('topup.edit_runfmt_title','Carreras por banda'),
     pitch:   () => tt('topup.see_pitch','Ver en el campo'),
+    cod:     () => tt('topup.cod_title','Cambios de dirección'),
   };
   function closeModal(){
-    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false; state.refOpen = false; state.runFmtOpen = false; state.pitchView = null;
-    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help','tu-reffilter-editor','tu-runfmt-editor','tu-pitchview'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
+    state.bandsOpen = false; state.presetsOpen = false; state.compl.settingsOpen = false; state.hrmaxOpen = false; state.refOpen = false; state.runFmtOpen = false; state.pitchView = null; state.codView = null;
+    ['tu-bands-editor','tu-presets-editor','tu-compl-settings','tu-hrmax-picker','tu-help','tu-reffilter-editor','tu-runfmt-editor','tu-pitchview','tu-codview'].forEach(id => { const el = $(id); if (el) el.classList.add('hide'); });
     $('tu-modal-back').classList.add('hide');
   }
   function openModal(which, data){
@@ -1523,6 +1655,7 @@
     else if (which === 'reffilter'){ state.refOpen = true; renderRefFilterEditor(); }
     else if (which === 'runfmt'){ state.runFmtOpen = true; renderRunFmtEditor(); }
     else if (which === 'pitch'){ state.pitchView = data || null; renderPitchView(); }
+    else if (which === 'cod'){ state.codView = data || null; renderCodView(); }
     else if (which === 'bands'){ state.bandsOpen = true; renderBandsEditor(); }
     else if (which === 'presets'){ state.presetsOpen = true; renderPresetsEditor(); }
     else if (which === 'compl'){ state.compl.settingsOpen = true; renderComplSettings(); }
@@ -1540,6 +1673,7 @@
     ['ti-gauge',          'speed',   'Velocidad de carrera', 'Define a qué ritmo corre cada uno. <b>%Vmax</b>: la velocidad sale de un porcentaje de la velocidad máxima de ese jugador (la toma del GPS). Es lo más individual; sin Vmax ese jugador no calcula. <b>Absoluto</b>: umbrales fijos en km/h iguales para todos, el plan B cuando no hay Vmax. <b>%VIFT</b>: HIIT clásico anclado al 30-15 IFT (hace falta el test cargado en Evaluaciones); trabaja sólo el déficit de HSR y por eso no usa bandas.'],
     ['ti-layers-subtract','bands',   'Bandas objetivo', 'La banda es la zona de velocidad que querés rellenar, y cada una está atada a una métrica (HSR, muy alta velocidad, sprint). <b>Podés marcar varias</b>: si elegís HSR y VHSR sale un bloque de carrera para cada una, con su velocidad, sus metros por carrera y la cantidad de carreras, más el total. La velocidad la manda la banda, así que los metros caen seguro en esa zona. En «Editar bandas» ajustás los cortes a los de tu club.'],
     ['ti-repeat',         'fmt',     'Carreras y formato', 'Con %Vmax o Absoluto la carrera se prescribe <b>por distancia</b>: elegís los metros de la zona medida («⚙ Carreras por banda») y el motor calcula cuántas carreras hacen falta, cuánto dura cada una y cuánto campo ocupan. Cada banda tiene su formato, porque no se entrena igual: HSR unos 60 m con pausa corta, sprint unos 30 m con pausa larga. El <b>arranque rodado</b> significa que entra a la zona medida ya a la velocidad objetivo, así que esos metros cuentan enteros en la banda; con arranque parado se descuentan los metros que tarda en acelerar. Con %VIFT sigue siendo un formato por tiempo (15-15 y compañía). Abajo de todo, el <b>Plan de campo</b> dibuja la tarea con todos los elegidos: los conos van en el mismo lugar para todos y al lado de cada nombre está el número de carreras que le toca.'],
+    ['ti-arrows-shuffle', 'cod',     'Cambios de dirección', 'El bloque de acc/dec sale del mismo déficit que las carreras: cada ejercicio «rinde» un número de aceleraciones y desaceleraciones por repetición, y las repeticiones son las que hacen falta para cubrir lo que le faltó. El <b>5-10-5</b> son 3 conos en línea cada 5 m: sale del medio, 5 m a un lado, 10 al otro y 5 de vuelta al medio. El rinde es una estimación: hacé la tarea una vez con GPS, mirá cuántas contó y ajustá el número en «⚙ Carreras por banda».'],
     ['ti-adjustments-horizontal','metrics','Métricas objetivo', 'Son las que aparecen abajo de cada ficha como déficit / referencia. Aceleraciones y desaceleraciones además alimentan el bloque de cambios de dirección.'],
     ['ti-eye',            'read',    'Cómo leer la ficha', '<b>ref:</b> de dónde salió la referencia (personal, GPS, posición o manual). <b>ASR</b> es la reserva de velocidad (Vmax − VIFT): cuanto más alto el %ASR del bloque, más cerca del máximo está corriendo. Si avisa «muy alto en su reserva», acortá la carrera o alargá la pausa. «Sin déficit» quiere decir que en esa métrica ya llegó a su referencia.'],
   ];

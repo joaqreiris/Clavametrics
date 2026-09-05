@@ -252,19 +252,91 @@
       timeMin = +((reps * (runSec + (+opts.rest || 0)) + (sets - 1) * setRest) / 60).toFixed(1);
     }
     const asrPct = pctASR(speed, opts.vift, opts.vmax);
+    // Control de dosis: qué ratio trabajo:pausa quedó (1:x) y cuál pide la intensidad.
+    const restRatio = runSec > 0 ? Math.round((+opts.rest || 0) / runSec) : null;
+    const need = needRestRatio(asrPct);
     return {
       speed, distM, usableM, runSec, startSec, reps, sets, repsPerSet, totalRunM, timeMin, asrPct,
       launchM, brakeM, endM, rolling, shuttle, trimmed, rest: +opts.rest || 0, setRest,
-      // Control de dosis: qué ratio trabajo:pausa quedó (1:x).
-      restRatio: runSec > 0 ? Math.round((+opts.rest || 0) / runSec) : null,
+      restRatio,
       totalSpaceM: +spaceFor(distM).toFixed(1),
       // Sin arranque rodado y con la banda alta, la carrera se va casi entera en
       // acelerar: hay que avisarlo, no devolver un número que miente.
       mostlyAccel: !rolling && usableM > 0 && usableM < distM * 0.4,
       // Recortada a un pañuelo: 18 carreras de 7 m no son un bloque de sprint.
       tooShort: distM < ((METRIC_DEFS[opts.band.metric] || {}).kind === 'sprint' ? 15 : 20),
-      tooHard: asrPct != null && asrPct > 70,
+      // Correr al 90% de la reserva NO es un problema: en la banda de sprint es
+      // justamente el objetivo. El problema es esa intensidad CON POCA PAUSA, así
+      // que se avisa cuando el ratio se queda corto para lo que se está pidiendo.
+      restShort: need > 0 && restRatio != null && restRatio < need,
+      needRatio: need,
+      suggestRest: Math.max(5, Math.round(runSec * need / 5) * 5),
     };
+  }
+  // Ratio trabajo:pausa mínimo para sostener esa intensidad repetición tras
+  // repetición (PCr: ~50% a los 30 s, ~90% a los 2-3 min → cuanto más cerca del
+  // máximo, más pausa hace falta para que la siguiente siga siendo igual).
+  function needRestRatio(asrPct) {
+    if (asrPct == null) return 0;
+    if (asrPct > 85) return 12;
+    if (asrPct > 70) return 6;
+    if (asrPct > 50) return 2;
+    return 1;
+  }
+
+  // ── Cambios de dirección dosificados por el DÉFICIT REAL ──────────────
+  // Antes se elegía una receta fija (baja/media/alta) según el total de acc+dec.
+  // Ahora es al revés, igual que las carreras: cada drill "rinde" un número de
+  // aceleraciones y desaceleraciones por repetición, y las repeticiones salen de
+  // dividir el déficit por ese rinde. El rinde es una estimación honesta y
+  // CONFIGURABLE: se calibra haciendo la tarea una vez con GPS y mirando qué contó.
+  //
+  // Geometría en metros (para dibujarla): `cones` son los conos y `path` el
+  // recorrido, ambos en un sistema x→derecha, y→abajo, origen arriba-izquierda.
+  const COD_DRILLS = [
+    {
+      id: 's5105', label: '5-10-5', acc: 3, dec: 3, distM: 20, w: 10, h: 6,
+      detail: '3 conos en línea cada 5 m · sale del medio, 5 m a un lado, 10 al otro, 5 al medio',
+      cones: [[0, 3], [5, 3], [10, 3]], start: [5, 3],
+      path: [[5, 3], [0, 3], [10, 3], [5, 3]],
+      // cotas explícitas (a mano): derivarlas de conos consecutivos las superpone
+      dims: [{ a: [0, 3], b: [5, 3], t: '5 m', dy: -20 }, { a: [5, 3], b: [10, 3], t: '5 m', dy: -20 }],
+    },
+    {
+      id: 'tdrill', label: 'T-drill', acc: 5, dec: 5, distM: 40, w: 10, h: 10,
+      detail: '4 conos en T · 10 m de frente, 5 a un lado, 10 al otro, 5 y vuelta',
+      cones: [[5, 10], [5, 0], [0, 0], [10, 0]], start: [5, 10],
+      path: [[5, 10], [5, 0], [0, 0], [10, 0], [5, 0], [5, 10]],
+      dims: [{ a: [5, 10], b: [5, 0], t: '10 m', dx: 22 }, { a: [5, 0], b: [0, 0], t: '5 m', dy: -20 },
+             { a: [5, 0], b: [10, 0], t: '5 m', dy: -20 }],
+    },
+    {
+      id: 'zigzag', label: 'Zig-zag', acc: 4, dec: 4, distM: 20, w: 20, h: 6,
+      detail: '5 conos en zig-zag cada 5 m, 3 m de amplitud',
+      cones: [[0, 5], [5, 1], [10, 5], [15, 1], [20, 5]], start: [0, 5],
+      path: [[0, 5], [5, 1], [10, 5], [15, 1], [20, 5]],
+      dims: [{ a: [0, 5], b: [5, 1], t: '5 m', dx: -14 }, { a: [5, 1], b: [10, 5], t: '3 m', dx: 16 }],
+    },
+  ];
+  const COD_FMT_DEFAULT = { drill: 's5105', rest: 45, setRest: 120, perSet: 6 };
+  const codDrill = (id) => COD_DRILLS.find(d => d.id === id) || COD_DRILLS[0];
+
+  // opts: { accDef, decDef, drill, acc, dec, rest, setRest, perSet }
+  function prescribeCODDrill(opts) {
+    const o = Object.assign({}, COD_FMT_DEFAULT, opts || {});
+    const d = codDrill(o.drill);
+    const accPer = +o.acc > 0 ? +o.acc : d.acc;
+    const decPer = +o.dec > 0 ? +o.dec : d.dec;
+    const accDef = clamp0(+o.accDef || 0), decDef = clamp0(+o.decDef || 0);
+    if (accDef + decDef <= 0) return { drill: d, reps: 0, sets: 0, timeMin: 0, accTotal: 0, decTotal: 0, accPer, decPer };
+    // El que más lejos esté manda: si faltan 12 acc y 26 dec, hay que cubrir las dec.
+    const reps = Math.max(1, Math.ceil(accDef / accPer), Math.ceil(decDef / decPer));
+    const perSet = Math.max(1, +o.perSet || 6);
+    const sets = Math.ceil(reps / perSet);
+    const repSec = +(d.distM / 3.5).toFixed(1);          // ~3,5 m/s con los giros
+    const timeMin = +((reps * (repSec + (+o.rest || 0)) + (sets - 1) * (+o.setRest || 0)) / 60).toFixed(1);
+    return { drill: d, reps, sets, perSet, repSec, timeMin, accPer, decPer,
+             accTotal: reps * accPer, decTotal: reps * decPer, rest: +o.rest || 0, setRest: +o.setRest || 0 };
   }
 
   // Change-of-direction dose bands, keyed by total (acc+dec) deficit count.
@@ -903,6 +975,7 @@
     getLatestVift, getPlayerVmax, getReference, getAllGpsReference, getPositionReference, getLatestMatchActual,
     getRefFilters, saveRefFilters, invalidateRefFilters, REF_FILTERS_DEFAULT,
     computeDeficit, prescribeHIIT, prescribeCOD, prescribeRun,
+    COD_DRILLS, COD_FMT_DEFAULT, codDrill, prescribeCODDrill, needRestRatio,
     prescribeRunDist, defaultRunFmt, RUN_FMT_DEFAULT, accelDistance, accelTime, brakeDistance,
     prescribeContinuous, fieldPerimeter, normalizePreset,
     resolveHRmaxMetric, getPlayerHRmax, looksLikeHRmax, hrmaxScore, listClubMetrics,
