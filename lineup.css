@@ -304,6 +304,13 @@
   height: 1040px;
   position: relative;
   overflow: hidden;
+  /* El pliego mide siempre 660×1040, pero la banda de suplentes crece con el banco
+     (hasta 15). Con el pie posicionado en absoluto su línea divisoria terminaba
+     cruzando por encima de la última fila de nombres. En columna flexible el pie
+     va en el flujo y el campo —el único bloque elástico— cede los píxeles que la
+     banda necesita. */
+  display: flex;
+  flex-direction: column;
   font-feature-settings: "ss01", "cv11", "tnum";
   --pst-fg: #FFFFFF;
   --pst-fg-muted: rgba(255,255,255,0.62);
@@ -314,6 +321,9 @@
 }
 
 .lu-poster * { box-sizing: border-box; }
+
+/* Todo lo que no es el campo mantiene su alto: solo .pst-pitch se encoge. */
+.pst-head, .pst-banner, .pst-matchmeta, .pst-rule, .pst-band, .pst-foot { flex: none; }
 
 /* Common building blocks --------------------------------- */
 .pst-head {
@@ -398,6 +408,10 @@
   aspect-ratio: 68 / 105;
   height: 660px;
   width: auto;
+  /* Único bloque elástico del pliego: cede alto cuando el banco tiene muchos
+     suplentes. Los spots van en %, así que la formación acompaña sin descuadrarse. */
+  flex: 0 1 auto;
+  min-height: 0;
   margin: 4px auto 0;
   border-radius: 12px;
   overflow: hidden;
@@ -475,10 +489,15 @@
   overflow: hidden;
   max-width: 100%;
 }
+/* La bandera va pegada al apellido (no en su propia línea) para que el cupo de
+   extranjeros se lea de un golpe sin ensanchar el spot. */
+.pst-spot .name .flag { font-size: 10px; margin-right: 3px; text-shadow: none; }
 
 /* ─── Substitutes + staff bands ────────────────────────── */
 .pst-band {
-  padding: 16px 26px 10px;
+  /* El aire de abajo es la separación mínima con la línea del pie cuando el banco
+     está lleno: con el campo elástico esos píxeles no le sacan nada al pliego. */
+  padding: 16px 26px 14px;
 }
 .pst-band-h {
   display: flex; align-items: baseline; gap: 8px;
@@ -505,6 +524,7 @@
   text-align: right;
   letter-spacing: -0.02em;
 }
+.pst-sub .flag { font-size: 11px; line-height: 1; flex-shrink: 0; }
 .pst-sub .nm {
   flex: 1;
   white-space: nowrap;
@@ -513,8 +533,9 @@
 }
 
 .pst-foot {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
+  /* En el flujo (no absoluto) para que su borde superior nunca pise la banda de
+     suplentes; `margin-top:auto` lo sigue pegando al pie cuando sobra espacio. */
+  margin-top: auto;
   padding: 14px 26px 16px;
   display: flex; align-items: center; gap: 12px;
   border-top: 1px solid var(--pst-line);

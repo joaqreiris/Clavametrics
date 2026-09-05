@@ -39,6 +39,7 @@
 <script src="assets/cm-realtime.js"></script>
 <script src="assets/sport-packs.js"></script>
 <script src="assets/sport.js"></script>
+<script src="assets/countries.js"></script>
 <script src="assets/positions.js"></script>
 <script src="assets/sidebar.js" defer></script>
 <script src="assets/global-search.js" defer></script>
@@ -338,6 +339,7 @@
   .sq-modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .sq-modal-field { display:flex; flex-direction:column; gap:5px; }
   .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .sq-nat-flag { font-size:13px; line-height:1; vertical-align:-1px; }
   .sq-pos-sec { display:inline-block; font:600 9.5px/1 var(--cm-font-mono); padding:3px 5px; border-radius:5px; border:1px solid var(--cm-border-strong); color:var(--cm-fg-faint); vertical-align:middle; margin-left:3px; }
   .sq-postags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
   .sq-postag { display:inline-flex; align-items:center; gap:4px; font:600 11px/1 var(--cm-font-mono); padding:5px 6px 5px 9px; border-radius:7px; background:var(--cm-accent-soft); border:1px solid var(--cm-accent); color:var(--cm-fg-strong); }
@@ -634,8 +636,10 @@
           <input type="date" id="sqF_dob">
         </div>
         <div class="sq-modal-field">
-          <label for="sqF_nationality" data-i18n="squad.nationality">Nationality</label>
-          <input type="text" id="sqF_nationality" placeholder="e.g. Argentina" data-i18n-ph="squad.eg_argentina">
+          <label for="sqF_nationality"><span data-i18n="squad.nationality">Nationality</span> <span id="sqF_natFlag" class="sq-nat-flag" aria-hidden="true"></span></label>
+          <select id="sqF_nationality">
+            <option value="" data-i18n="squad.pick_country">— Select country —</option>
+          </select>
         </div>
       </div>
       <div class="sq-modal-row">
@@ -1012,6 +1016,55 @@ function sportAnthroExtra() {
 function applySportToPlayerForm() {
   const row = document.getElementById('sqAnthroExtra');
   if (row) row.style.display = sportAnthroExtra().length ? '' : 'none';
+}
+
+// ── Nacionalidad: desplegable de países ───────────────────────────
+// Antes era texto libre y cada uno escribía lo suyo ("Brasil", "Brazil", "brasil"),
+// así que la bandera del Lineup acertaba de casualidad. Ahora se elige de la lista
+// canónica (assets/countries.js) y guardamos el NOMBRE del país —no el código— para
+// no tocar las pantallas que ya muestran `nationality` como texto (Player, Dossier,
+// Evaluations, GPS). El resolvedor indexa en/es/pt, así que una ficha cargada en
+// español sigue mostrando su bandera con la app en inglés.
+let _natSelectLang = null;
+function fillNationalitySelect(force) {
+  const sel = document.getElementById('sqF_nationality');
+  if (!sel || !window.cmCountries) return;
+  const lang = (window.CM_I18N && window.CM_I18N.current) || 'en';
+  if (!force && _natSelectLang === lang) return;   // ya está armada en este idioma
+  _natSelectLang = lang;
+  const keep = sel.value;
+  const ph = tt('squad.pick_country', '— Select country —');
+  sel.innerHTML = `<option value="">${esc(ph)}</option>`
+    + window.cmCountries.list().map(c =>
+        `<option value="${esc(c.name)}">${esc(window.cmCountries.flag(c.code))} ${esc(c.name)}</option>`).join('');
+  if (keep) setNationality(keep);
+}
+
+// Selecciona el país guardado. Las fichas viejas pueden traer texto en otro idioma
+// ("Brazil" con la app en español): se resuelve a su código y se elige el nombre
+// equivalente. Si no resuelve, entra como opción suelta para no perder el dato.
+function setNationality(value) {
+  const sel = document.getElementById('sqF_nationality');
+  if (!sel) return;
+  const raw = String(value || '').trim();
+  if (!raw) { sel.value = ''; renderNatFlag(); return; }
+  const has = v => Array.from(sel.options).some(o => o.value === v);
+  if (has(raw)) { sel.value = raw; renderNatFlag(); return; }
+  const code = window.cmCountries?.iso2(raw);
+  const canon = code ? window.cmCountries.name(code) : '';
+  if (canon && has(canon)) { sel.value = canon; renderNatFlag(); return; }
+  const o = document.createElement('option');
+  o.value = raw; o.textContent = raw;
+  sel.appendChild(o);
+  sel.value = raw;
+  renderNatFlag();
+}
+
+function renderNatFlag() {
+  const el = document.getElementById('sqF_natFlag');
+  if (!el) return;
+  const code = window.cmCountries?.iso2(document.getElementById('sqF_nationality')?.value);
+  el.textContent = code ? window.cmCountries.flag(code) : '';
 }
 
 // Normalize a free-text position (CSV import, etc.) to a code POS_CFG understands.
@@ -1819,7 +1872,8 @@ async function reloadPlayers() {
     setSecPositions((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
     document.getElementById('sqF_joined_date').value = player?.joined_date     || '';
-    document.getElementById('sqF_nationality').value = player?.nationality     || '';
+    fillNationalitySelect();
+    setNationality(player?.nationality);
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
     document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
     document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
@@ -2101,6 +2155,7 @@ async function reloadPlayers() {
   document.getElementById('sqModalCancel').addEventListener('click', closeModal);
   document.getElementById('sqModalSave').addEventListener('click', saveModal);
   document.getElementById('sqModalDelete').addEventListener('click', onArchiveRestoreClick);
+  document.getElementById('sqF_nationality').addEventListener('change', renderNatFlag);
   document.getElementById('sqModalBackdrop').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal();
   });
@@ -2810,6 +2865,8 @@ async function reloadPlayers() {
       // too, not just on a manual switch).
       if (typeof fillPositionFilters === 'function') fillPositionFilters();
       if (typeof fillPositionSelects === 'function') fillPositionSelects();
+      // Lista de países: los nombres viajan en el idioma de la app.
+      if (typeof fillNationalitySelect === 'function') fillNationalitySelect(true);
       // Header summary + pill counts (re-derived from cached players, no refetch).
       if (typeof reloadPlayers === 'function') reloadPlayers();
       // Re-render whichever data view is currently visible.

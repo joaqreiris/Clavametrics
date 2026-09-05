@@ -29,56 +29,14 @@
   function spotsFor (name) { return shapes()[name] || shapes()[defaultShape()] || []; }
 
   // ── Country flags ────────────────────────────────────────────
-  // `players.nationality` is FREE TEXT ("Brazil", "Brasil", "Camboya"…). The old code took the
-  // first two letters and matched them against 8 hand-drawn CSS gradients — so Brazil rendered
-  // as a flat green block, Uruguay ("ur") never matched 'uy', and everyone else got nothing.
-  // Instead: resolve the text to an ISO-3166 alpha-2 code and render the flag emoji.
-  // The name→code index is built from Intl.DisplayNames over every possible code in en/es/pt,
-  // so every country is covered without shipping a lookup table.
-  const _normCountry = s => String(s || '').trim().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '');
-
-  // Informal names Intl doesn't know, plus split-nation cases.
-  const COUNTRY_ALIASES = {
-    usa: 'US', eeuu: 'US', 'estados unidos': 'US', uk: 'GB', inglaterra: 'GB', england: 'GB',
-    scotland: 'GB', wales: 'GB', holanda: 'NL', holland: 'NL', 'corea del sur': 'KR',
-    'south korea': 'KR', 'costa de marfil': 'CI', 'ivory coast': 'CI', 'cabo verde': 'CV',
-    'republica checa': 'CZ', 'czech republic': 'CZ', rusia: 'RU', turquia: 'TR',
-  };
-
-  let _isoIndex = null;
-  function _countryIso2 (raw) {
-    const key = _normCountry(raw);
-    if (!key) return null;
-    if (COUNTRY_ALIASES[key]) return COUNTRY_ALIASES[key];
-    // Already an ISO-2 code?
-    if (/^[a-z]{2}$/.test(key)) return key.toUpperCase();
-    if (!_isoIndex) {
-      _isoIndex = new Map();
-      const dns = ['en', 'es', 'pt'].map(l => {
-        try { return new Intl.DisplayNames([l], { type: 'region' }); } catch (_) { return null; }
-      }).filter(Boolean);
-      for (let i = 0; i < 26; i++) {
-        for (let j = 0; j < 26; j++) {
-          const code = String.fromCharCode(65 + i) + String.fromCharCode(65 + j);
-          dns.forEach(d => {
-            let name; try { name = d.of(code); } catch (_) { return; }
-            if (!name || name === code) return;          // unassigned code
-            const k = _normCountry(name);
-            if (k && !_isoIndex.has(k)) _isoIndex.set(k, code);
-          });
-        }
-      }
-    }
-    return _isoIndex.get(key) || null;
-  }
-
-  // ISO-2 → regional-indicator pair. Platforms without flag glyphs (Windows) show the
-  // two letters instead, which still reads as the country.
-  function flagEmoji (iso2) {
-    if (!iso2 || iso2.length !== 2) return '';
-    return String.fromCodePoint(...[...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
-  }
+  // `players.nationality` guarda el NOMBRE del país: Squad lo elige de un desplegable
+  // y las fichas viejas siguen siendo texto libre ("Brazil", "Brasil", "brasil ").
+  // El catálogo compartido (assets/countries.js) resuelve ese texto a ISO-3166
+  // alpha-2 y de ahí sale el emoji de bandera.
+  const _countryIso2 = raw => (window.cmCountries ? window.cmCountries.iso2(raw) : null);
+  // ISO-2 → par de indicadores regionales. Sin glifo de bandera (Windows) se ven las
+  // dos letras, que igual leen como el país.
+  const flagEmoji = iso2 => (window.cmCountries ? window.cmCountries.flag(iso2) : '');
 
   // ── Bench size: cada competición permite un banco distinto (5, 7, 9, 12…),
   //    así que el nº de slots es configurable por lineup (persistido en style_config).
@@ -173,6 +131,13 @@
     };
   }
 
+  // Bandera del jugador — va en la lista del armador Y en el pliego (campo y banco):
+  // el DT necesita ver de un vistazo cuántos extranjeros tiene en cancha antes de
+  // mover una ficha.
+  const flagHtml = p => p && p.flag
+    ? `<span class="flag" title="${String(p.nat || '').replace(/"/g, '&quot;')}">${flagEmoji(p.flag)}</span>`
+    : '';
+
   // ── Render the poster spots (player circles on the pitch)
   function renderPitch () {
     const stage = document.querySelector('.pst-pitch');
@@ -191,7 +156,7 @@
       spot.style.top = pos.y + '%';
       spot.innerHTML = `
         <div class="badge" data-cm-photo="${p.id}"${state.showNumbers ? ' data-cm-photo-keep-text="1"' : ''}>${esc(state.showNumbers ? p.num : (p.last[0] + (p.first[0]||'')))}</div>
-        <div class="name">${esc(p.last)}</div>
+        <div class="name">${flagHtml(p)}${esc(p.last)}</div>
       `;
       stage.appendChild(spot);
     });
@@ -202,10 +167,6 @@
     const xi = document.querySelector('[data-list="xi"]');
     const sub = document.querySelector('[data-list="subs"]');
     if (!xi || !sub) return;
-
-    const flagHtml = p => p.flag
-      ? `<span class="flag" title="${(p.nat || '').replace(/"/g, '&quot;')}">${flagEmoji(p.flag)}</span>`
-      : '';
 
     const filledRow = (p, idx, kind) => `
       <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click to change">
@@ -267,7 +228,7 @@
     if (!band) return;
     const filled = state.subs.filter(Boolean);
     band.innerHTML = filled.map(p => `
-      <div class="pst-sub"><span class="n">${esc(p.num)}</span><span class="nm">${esc(p.last)}</span></div>
+      <div class="pst-sub"><span class="n">${esc(p.num)}</span>${flagHtml(p)}<span class="nm">${esc(p.last)}</span></div>
     `).join('');
     const ct = document.querySelector('[data-poster-subs-count]');
     if (ct) ct.textContent = filled.length;
@@ -434,6 +395,65 @@
     const bg = state.bgColor || POSTER_BG_DEFAULT;
     poster.style.setProperty('--pst-bg', bg);
     poster.classList.toggle('is-light', _isLightHex(bg));
+  }
+
+  // ── Paleta por defecto del club ──────────────────────────────
+  // Los colores viven en `lineups.style_config`, o sea POR PARTIDO: el DT los elegía
+  // y al partido siguiente el pliego volvía al default. La última combinación usada
+  // queda como la del club y se hereda en cualquier lineup que todavía no tenga la
+  // suya. La copia en localStorage es solo para pintar sin esperar a la consulta;
+  // la fuente compartida (otro dispositivo, otro ayudante) es el último lineup con
+  // colores guardados.
+  const _POSTER_PREFS_KEY = 'cm_lineup_poster_colors:';
+  const _hasColors = c => !!(c && (c.title_color || c.accent_color || c.bg_color));
+
+  function _posterPrefsRead (clubId) {
+    if (!clubId) return null;
+    try { return JSON.parse(localStorage.getItem(_POSTER_PREFS_KEY + clubId) || 'null'); }
+    catch (_) { return null; }
+  }
+
+  function _posterPrefsWrite (clubId) {
+    if (!clubId) return;
+    const v = {};
+    if (state.titleColor)  v.title_color  = state.titleColor;
+    if (state.accentColor) v.accent_color = state.accentColor;
+    if (state.bgColor)     v.bg_color     = state.bgColor;
+    try { localStorage.setItem(_POSTER_PREFS_KEY + clubId, JSON.stringify(v)); } catch (_) {}
+  }
+
+  async function clubPosterDefaults (clubId) {
+    const local = _posterPrefsRead(clubId);
+    if (_hasColors(local)) return local;
+    if (!clubId || !window.sb) return null;
+    // El índice (club_id, created_at DESC) hace esta consulta barata. Miramos unos
+    // pocos lineups porque los más nuevos pueden ser borradores sin colores propios.
+    const { data, error } = await window.sb
+      .from('lineups')
+      .select('style_config')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) return null;
+    const hit = (data || []).map(r => r.style_config).find(_hasColors);
+    return hit || null;
+  }
+
+  // Aplica una paleta heredada al state + a los selectores de color. No pisa nada que
+  // el lineup ya tenga guardado.
+  function applyPosterDefaults (defaults) {
+    if (!_hasColors(defaults)) return false;
+    const put = (key, cfgKey, inputId) => {
+      if (state[key] || !defaults[cfgKey]) return;
+      state[key] = defaults[cfgKey];
+      const p = document.getElementById(inputId);
+      if (p) p.value = state[key];
+    };
+    put('titleColor',  'title_color',  'luTitleColor');
+    put('accentColor', 'accent_color', 'luAccentColor');
+    put('bgColor',     'bg_color',     'luBgColor');
+    applyColors();
+    return true;
   }
 
   // Resolved --cm-accent as a #rrggbb hex (or null). <input type="color"> only accepts hex.
@@ -944,6 +964,8 @@
       if (state.accentColor) styleConfig.accent_color = state.accentColor;
       if (state.bgColor)     styleConfig.bg_color     = state.bgColor;
       if (state.subSlots !== SUB_DEFAULT) styleConfig.sub_slots = state.subSlots;
+      // La última paleta usada pasa a ser la del club (ver clubPosterDefaults).
+      _posterPrefsWrite(_clubId);
       const { error } = await window.sb.from('lineups').update({
         formation:    state.formation,
         poster_style: state.style,
@@ -1317,6 +1339,13 @@
         const savedSlots = parseInt(lineup.style_config?.sub_slots, 10);
         if (savedSlots >= SUB_MIN && savedSlots <= SUB_MAX) state.subSlots = savedSlots;
         applyColors();
+
+        // Lineup nuevo (o viejo sin paleta propia): hereda la del club para que el
+        // DT no tenga que volver a elegir los colores en cada partido.
+        if (!_hasColors(lineup.style_config)) {
+          const defaults = await clubPosterDefaults(_clubId);
+          if (applyPosterDefaults(defaults)) scheduleSave();
+        }
 
         const [starters, subs] = await Promise.all([
           loadLineupPlayers(lineup.id, 'starter'),
