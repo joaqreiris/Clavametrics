@@ -153,4 +153,41 @@ describe('cmLive.watch', () => {
     await vi.advanceTimersByTimeAsync(700);
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
+
+  it('suelta el canal si la pestaña queda oculta un rato, y lo rehace al volver', async () => {
+    const onRefresh = vi.fn(async () => {});
+    const w = cmLive.watch({ name: 't7', tables: [{ table: 'rpe' }], onRefresh });
+
+    document.hidden = true;
+    removed = false;
+    w.armSleep();
+
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(removed).toBe(false);        // un alt-tab corto no desconecta
+
+    await vi.advanceTimersByTimeAsync(31000);
+    expect(removed).toBe(true);         // pasado el minuto sí: deja de costarle a la base
+
+    document.hidden = false;
+    const antes = handlers.length;
+    w.resume();
+    expect(handlers.length).toBeGreaterThan(antes);   // canal rehecho
+
+    await vi.advanceTimersByTimeAsync(700);
+    expect(onRefresh).toHaveBeenCalledTimes(1);       // y recupera lo que pasó mientras dormía
+  });
+
+  it('un alt-tab corto no llega a soltar el canal', async () => {
+    const w = cmLive.watch({ name: 't8', tables: [{ table: 'wellness' }], onRefresh: async () => {} });
+
+    document.hidden = true;
+    removed = false;
+    w.armSleep();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    document.hidden = false;
+    w.resume();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(removed).toBe(false);        // el timer de sueño quedó cancelado
+  });
 });

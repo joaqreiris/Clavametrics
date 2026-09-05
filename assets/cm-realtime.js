@@ -29,7 +29,10 @@
      se espera a que amaine la ráfaga de guardados.
    · Si el usuario está editando (busy), no se le pisa la pantalla: aparece un
      chip «Hay cambios nuevos · Actualizar» y se refresca cuando suelta.
-   · Con la pestaña en segundo plano no se refresca; se hace al volver.
+   · Con la pestaña en segundo plano no se refresca; se hace al volver. Y si
+     lleva más de HIDDEN_MS oculta, además se SUELTA el canal: cada suscripción
+     viva obliga a Realtime a sondear la base cada 100 ms y a evaluar las RLS
+     aunque nadie esté mirando. Al volver se reconecta y se refresca una vez.
    · Al reconectar (caída de red / socket) se refresca una vez para recuperar
      lo que se perdió mientras no había canal.
    ──────────────────────────────────────────────────────────────────────────── */
@@ -41,9 +44,10 @@
     return (v && v !== k) ? v : (fb != null ? fb : k);
   };
 
-  const ECHO_MS  = 4000;   // ventana en la que un cambio se asume propio
-  const QUIET_MS = 600;    // coalescing de ráfagas ajenas
-  const RETRY_MS = 1500;   // reintento mientras el usuario está ocupado
+  const ECHO_MS   = 4000;  // ventana en la que un cambio se asume propio
+  const QUIET_MS  = 600;   // coalescing de ráfagas ajenas
+  const RETRY_MS  = 1500;  // reintento mientras el usuario está ocupado
+  const HIDDEN_MS = 60000; // pestaña oculta antes de soltar el canal
 
   // ── Detección de escrituras propias ───────────────────────────────────────
   // supabase-js habla por fetch: cualquier POST/PATCH/DELETE a /rest/v1/<tabla>
@@ -109,6 +113,7 @@
     const busy    = typeof opts.busy === 'function' ? opts.busy : () => false;
     const relevant= typeof opts.relevant === 'function' ? opts.relevant : null;
     let chan = null, timer = null, pending = false, stopped = false, sawError = false, running = false;
+    let asleep = false, sleepTimer = null;
 
     function schedule(delay) {
       pending = true;
@@ -148,16 +153,27 @@
       schedule(echo ? ECHO_MS : QUIET_MS);
     }
 
-    chan = window.sb.channel('cmlive-' + id);
-    opts.tables.forEach(t => {
-      chan.on('postgres_changes',
-        { event: t.event || '*', schema: 'public', table: t.table, ...(t.filter ? { filter: t.filter } : {}) },
-        onEvent);
-    });
-    chan.subscribe(status => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { sawError = true; return; }
-      if (status === 'SUBSCRIBED' && sawError) { sawError = false; schedule(QUIET_MS); }  // recuperar lo perdido
-    });
+    function connect() {
+      if (chan || stopped) return;
+      chan = window.sb.channel('cmlive-' + id);
+      opts.tables.forEach(t => {
+        chan.on('postgres_changes',
+          { event: t.event || '*', schema: 'public', table: t.table, ...(t.filter ? { filter: t.filter } : {}) },
+          onEvent);
+      });
+      chan.subscribe(status => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { sawError = true; return; }
+        if (status === 'SUBSCRIBED' && sawError) { sawError = false; schedule(QUIET_MS); }  // recuperar lo perdido
+      });
+    }
+
+    function disconnect() {
+      if (!chan) return;
+      try { window.sb.removeChannel(chan); } catch (_) {}
+      chan = null;
+    }
+
+    connect();
 
     const api = {
       id,
@@ -166,17 +182,37 @@
         try { await opts.onRefresh(); } catch (e) { console.warn('[cmLive]', id, e); } finally { running = false; }
       }); },
       wake() { if (pending) schedule(QUIET_MS); },
+      // La pestaña se fue a segundo plano: se le da un margen antes de soltar
+      // el canal, para no reconectar por un alt-tab de dos segundos.
+      armSleep() {
+        if (stopped || asleep) return;
+        clearTimeout(sleepTimer);
+        sleepTimer = setTimeout(() => {
+          if (stopped || asleep || !document.hidden) return;
+          asleep = true; disconnect();
+        }, HIDDEN_MS);
+      },
+      // Vuelve el usuario: se rehace el canal y se refresca una vez, porque
+      // mientras dormía no llegó ningún evento.
+      resume() {
+        clearTimeout(sleepTimer);
+        if (stopped || !asleep) return;
+        asleep = false; connect(); schedule(QUIET_MS);
+      },
       stop() {
-        stopped = true; clearTimeout(timer); chipHide(api);
+        stopped = true; clearTimeout(timer); clearTimeout(sleepTimer); chipHide(api);
         _watchers.delete(api);
-        try { window.sb.removeChannel(chan); } catch (_) {}
+        disconnect();
       },
     };
     _watchers.add(api);
     return api;
   }
 
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) _watchers.forEach(w => w.wake()); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { _watchers.forEach(w => w.armSleep()); return; }
+    _watchers.forEach(w => { w.resume(); w.wake(); });
+  });
   window.addEventListener('online', () => _watchers.forEach(w => w.wake()));
   window.addEventListener('beforeunload', () => _watchers.forEach(w => w.stop()));
 
