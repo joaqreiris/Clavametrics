@@ -1001,9 +1001,13 @@ async function aiTagOpenExercise() {
   btn.disabled = true; btn.textContent = tt('gym_library.tagging','Tagging…');
   try {
     const desc = document.getElementById('gm-desc').value.trim();
-    const tags = await aiTagItems([{ idx: 0, name, description: desc }]);
+    const { tags, stopped } = await aiTagItems([{ idx: 0, name, description: desc }]);
     const t = tags[0];
-    if (!t) { btn.textContent = tt('gym_library.no_suggestion','No suggestion'); }
+    if (stopped === 'quota') {
+      btn.textContent = tt('gym_library.ai_limit_short','Daily limit');
+      alert(tt('gym_library.ai_limit_reached','The club reached its daily AI tagging limit. Try again tomorrow, or tag this exercise by hand.'));
+    }
+    else if (!t) { btn.textContent = tt('gym_library.no_suggestion','No suggestion'); }
     else {
       if (t.primary_purpose) document.getElementById('gm-primary-purpose').value = t.primary_purpose;
       renderAllChips({
@@ -1296,18 +1300,27 @@ function buildVocab() {
   return v;
 }
 async function aiTagItems(items) {
-  // items: [{ idx, name, description }] → returns { idx: suggestion }
+  // items: [{ idx, name, description }] → { tags: { idx: suggestion }, stopped }
+  // Cada chunk es una llamada a la Edge Function, que tiene cupo diario por club. Si el
+  // cupo se agota (429) hay que CORTAR el loop: seguir pidiendo chunk tras chunk contra
+  // una puerta cerrada no tagea nada y solo suma llamadas. `stopped` avisa al caller.
   const vocabulary = buildVocab();
-  const out = {};
+  const tags = {};
+  let stopped = null;
   for (let i = 0; i < items.length; i += 30) {
     const chunk = items.slice(i, i + 30);
     try {
       const { data, error } = await window.sb.functions.invoke('tag-exercise', { body: { exercises: chunk, vocabulary } });
-      if (error || !data || data.error) continue;
-      for (const r of (data.results || [])) out[r.idx] = r;
+      if (error) {
+        const st = error.context && error.context.status;
+        if (st === 429 || st === 403) { stopped = st === 429 ? 'quota' : 'auth'; break; }
+        continue;   // fallo puntual de este chunk: seguir con el resto
+      }
+      if (!data || data.error) continue;
+      for (const r of (data.results || [])) tags[r.idx] = r;
     } catch (_) { /* skip chunk on failure */ }
   }
-  return out;
+  return { tags, stopped };
 }
 function applyTags(row, t) {
   if (!t) return row;
@@ -1373,9 +1386,11 @@ async function ytImport() {
   // AI pre-tagging (graceful: import proceeds even if this fails)
   btn.textContent = tt('gym_library.tagging','Tagging…');
   status.textContent = tt('gym_library.auto_tagging_ai','Auto-tagging with AI…');
+  let taggingStopped = null;
   try {
     const items = checked.map((v, i) => ({ idx: i, name: v.title, description: v.description || '' }));
-    const tags = await aiTagItems(items);
+    const { tags, stopped } = await aiTagItems(items);
+    taggingStopped = stopped;
     rows.forEach((row, i) => applyTags(row, tags[i]));
   } catch (_) { /* proceed untagged */ }
 
@@ -1390,6 +1405,11 @@ async function ytImport() {
   }
   closeYtModal();
   await reloadExercises();
+  // El import se guardó igual; solo parte quedó sin etiquetar. Se avisa después de
+  // guardar para no interrumpir el flujo ni dejar ejercicios a medio importar.
+  if (taggingStopped === 'quota') {
+    alert(tt('gym_library.ai_limit_import','The club reached its daily AI tagging limit, so some exercises were imported without tags. You can tag them by hand, or re-run the AI tagging tomorrow.'));
+  }
 }
 
 function attachListeners() {

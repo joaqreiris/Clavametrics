@@ -40,6 +40,27 @@ const json = (body: unknown, status = 200) =>
 const MODEL     = 'claude-haiku-4-5-20251001';
 const MAX_BATCH = 30;
 
+// ── Rate limit ──────────────────────────────────────────────────────────────
+// El cupo diario por club lo lleva la DB (`ai_rate_limit_take`, migración 129): cuenta e
+// inserta en la misma transacción, sobre una tabla que el cliente no puede leer ni borrar.
+// Acá solo se corta. Fail-closed a propósito: si el chequeo no se puede hacer, no se gasta
+// cuota de Anthropic. Devuelve la Response de rechazo, o null si hay cupo.
+async function takeQuota(supabase: any, fn: string): Promise<Response | null> {
+  const { data, error } = await supabase.rpc('ai_rate_limit_take', { p_fn: fn });
+  if (error) {
+    console.error(`${fn}: rate limit check failed:`, error.message);
+    return json({ error: 'Could not verify the daily limit. Try again in a moment.' }, 503);
+  }
+  if (!data?.allowed) {
+    if (data?.reason === 'no_club') return json({ error: 'Your user is not linked to a club.' }, 403);
+    return json({
+      error: `Daily limit reached (${data?.limit} calls/day for the club). Try again tomorrow.`,
+      used: data?.used, limit: data?.limit,
+    }, 429);
+  }
+  return null;
+}
+
 // dimension key (in vocabulary) → output column name
 const DIM_COL: Record<string, string> = {
   purpose:          'purposes',
@@ -137,6 +158,11 @@ Deno.serve(async (req: Request) => {
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+
+    // ── Cupo ──────────────────────────────────────────────────────────────
+    // Después de validar el body: un request mal formado no consume cupo.
+    const denied = await takeQuota(supabase, 'tag-exercise');
+    if (denied) return denied;
 
     // ── Prompt ────────────────────────────────────────────────────────────
     const system = buildSystem(vocabulary as Vocab);

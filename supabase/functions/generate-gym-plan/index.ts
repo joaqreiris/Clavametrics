@@ -38,6 +38,27 @@ const json = (body: unknown, status = 200) =>
 const MODEL          = 'claude-sonnet-4-6';
 const MAX_CANDIDATES = 150;
 
+// ── Rate limit ──────────────────────────────────────────────────────────────
+// El cupo diario por club lo lleva la DB (`ai_rate_limit_take`, migración 129): cuenta e
+// inserta en la misma transacción, sobre una tabla que el cliente no puede leer ni borrar.
+// Acá solo se corta. Fail-closed a propósito: si el chequeo no se puede hacer, no se gasta
+// cuota de Anthropic. Devuelve la Response de rechazo, o null si hay cupo.
+async function takeQuota(supabase: any, fn: string): Promise<Response | null> {
+  const { data, error } = await supabase.rpc('ai_rate_limit_take', { p_fn: fn });
+  if (error) {
+    console.error(`${fn}: rate limit check failed:`, error.message);
+    return json({ error: 'Could not verify the daily limit. Try again in a moment.' }, 503);
+  }
+  if (!data?.allowed) {
+    if (data?.reason === 'no_club') return json({ error: 'Your user is not linked to a club.' }, 403);
+    return json({
+      error: `Daily limit reached (${data?.limit} plans/day for the club). Try again tomorrow.`,
+      used: data?.used, limit: data?.limit,
+    }, 429);
+  }
+  return null;
+}
+
 interface Candidate {
   id: string; name: string;
   primary_purpose?: string; purposes?: string[];
@@ -154,6 +175,10 @@ Deno.serve(async (req: Request) => {
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+
+    // Después de validar el body: un request mal formado no consume cupo.
+    const denied = await takeQuota(supabase, 'generate-gym-plan');
+    if (denied) return denied;
 
     const list: Candidate[] = candidates.slice(0, MAX_CANDIDATES);
     const byId = new Map(list.map((c) => [c.id, c]));

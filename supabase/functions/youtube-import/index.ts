@@ -36,6 +36,27 @@ const json = (body: unknown, status = 200) =>
 const MAX_VIDEOS = 300;   // hard cap to bound quota + response size
 const PAGE_SIZE  = 50;    // YouTube max per page
 
+// ── Rate limit ──────────────────────────────────────────────────────────────
+// El cupo diario por club lo lleva la DB (`ai_rate_limit_take`, migración 129): cuenta e
+// inserta en la misma transacción, sobre una tabla que el cliente no puede leer ni borrar.
+// Acá solo se corta. Fail-closed a propósito: si el chequeo no se puede hacer, no se gasta
+// cuota de YouTube. Devuelve la Response de rechazo, o null si hay cupo.
+async function takeQuota(supabase: any, fn: string): Promise<Response | null> {
+  const { data, error } = await supabase.rpc('ai_rate_limit_take', { p_fn: fn });
+  if (error) {
+    console.error(`${fn}: rate limit check failed:`, error.message);
+    return json({ error: 'Could not verify the daily limit. Try again in a moment.' }, 503);
+  }
+  if (!data?.allowed) {
+    if (data?.reason === 'no_club') return json({ error: 'Your user is not linked to a club.' }, 403);
+    return json({
+      error: `Daily limit reached (${data?.limit} playlists/day for the club). Try again tomorrow.`,
+      used: data?.used, limit: data?.limit,
+    }, 429);
+  }
+  return null;
+}
+
 // Extract a playlist id from a URL or accept a raw id (PL…/UU…/FL…/OL…).
 function parsePlaylistId(input: string): string | null {
   const s = (input || '').trim();
@@ -117,6 +138,10 @@ Deno.serve(async (req: Request) => {
     if (!playlistId) {
       return json({ error: 'Could not find a playlist in that URL. Paste a playlist link (it contains "list=").' }, 400);
     }
+
+    // Después de validar la playlist: una URL mal formada no consume cupo.
+    const denied = await takeQuota(supabase, 'youtube-import');
+    if (denied) return denied;
 
     const cap = Math.min(Number(max) || MAX_VIDEOS, MAX_VIDEOS);
     const videos = await fetchPlaylist(playlistId, apiKey, cap);

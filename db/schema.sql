@@ -3,6 +3,9 @@
 -- Reconstruido por introspeccion en vivo via Supabase Management API
 -- (proyecto xesrumijvdmqjrufgeka / Kime-app, PostgreSQL 17.6).
 -- Generado: 2026-07-05.  NO editar a mano: regenerar desde la DB.
+-- Parche manual 2026-09-05 (migracion 129, rate limit de las Edge Functions con API
+-- externa): tabla ai_usage_events + sus 2 FKs + RLS deny-all, y la funcion
+-- ai_rate_limit_take(). Los contadores de arriba no incluyen este parche.
 --
 -- 118 tablas | 247 FKs | 5 vistas | 75 funciones
 -- | 39 triggers | 273 politicas RLS
@@ -43,6 +46,21 @@ create table if not exists public.ai_card_generations (
   created_at timestamp with time zone default now(),
   constraint ai_card_generations_pkey primary key (id)
 );
+
+-- migracion 129: contador de cuota de las Edge Functions con API externa.
+-- RLS habilitada SIN policies a proposito (deny-all): solo la toca
+-- ai_rate_limit_take() (SECURITY DEFINER). No agregarle policies: el contador
+-- tiene que quedar fuera del alcance del cliente.
+create table if not exists public.ai_usage_events (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  user_id uuid,
+  fn text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint ai_usage_events_pkey primary key (id)
+);
+create index if not exists idx_ai_usage_events_club_fn_time
+  on public.ai_usage_events (club_id, fn, created_at desc);
 
 create table if not exists public.assessment_column_maps (
   id uuid default gen_random_uuid() not null,
@@ -3021,6 +3039,8 @@ CREATE INDEX wellness_date_idx ON public.wellness USING btree (club_id, submitte
 
 alter table public.ai_card_generations add constraint ai_card_generations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
 alter table public.ai_card_generations add constraint ai_card_generations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.ai_usage_events add constraint ai_usage_events_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.ai_usage_events add constraint ai_usage_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.assessment_column_maps add constraint assessment_column_maps_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.assessment_test_defs add constraint assessment_test_defs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.audit_log add constraint audit_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
@@ -3390,6 +3410,58 @@ CREATE OR REPLACE FUNCTION public.activity_team_for_player(p_player uuid)
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$ select team_id from public.players where id = p_player $function$
+;
+
+-- migracion 129: cupo diario por club de las Edge Functions con API externa.
+-- GRANTs (fuera del alcance de este archivo): revoke de public y anon, execute solo a
+-- authenticated. Los limites viven aca: se ajustan con CREATE OR REPLACE, sin redeploy.
+CREATE OR REPLACE FUNCTION public.ai_rate_limit_take(p_fn text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_club  uuid;
+  v_limit int;
+  v_used  int;
+begin
+  v_limit := case p_fn
+    when 'generate-card'     then 20
+    when 'generate-gym-plan' then 20
+    when 'tag-exercise'      then 60
+    when 'youtube-import'    then 30
+    else null
+  end;
+
+  if v_limit is null then
+    raise exception 'ai_rate_limit_take: fn desconocida %', p_fn
+      using errcode = 'invalid_parameter_value';
+  end if;
+
+  select club_id into v_club from public.profiles where id = auth.uid();
+  if v_club is null then
+    return jsonb_build_object('allowed', false, 'reason', 'no_club', 'used', 0, 'limit', v_limit);
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(v_club::text || ':' || p_fn, 0));
+
+  select count(*) into v_used
+    from public.ai_usage_events
+   where club_id = v_club
+     and fn = p_fn
+     and created_at >= now() - interval '24 hours';
+
+  if v_used >= v_limit then
+    return jsonb_build_object('allowed', false, 'reason', 'daily_limit', 'used', v_used, 'limit', v_limit);
+  end if;
+
+  insert into public.ai_usage_events (club_id, user_id, fn)
+  values (v_club, auth.uid(), p_fn);
+
+  return jsonb_build_object('allowed', true, 'used', v_used + 1, 'limit', v_limit);
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.apply_role_template(p_club uuid, p_profile uuid, p_role text)
@@ -6689,6 +6761,10 @@ create policy "club members manage ai generations" on public.ai_card_generations
   with check ((club_id = ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
+
+-- migracion 129: RLS SIN policies = deny-all para anon/authenticated (mismo patron que
+-- gps_integration_secrets). El contador solo se toca via ai_rate_limit_take().
+alter table public.ai_usage_events enable row level security;
 
 alter table public.assessment_column_maps enable row level security;
 create policy "assessment_col_map club" on public.assessment_column_maps as permissive for all to public

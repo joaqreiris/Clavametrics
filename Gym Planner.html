@@ -1661,7 +1661,20 @@ async function gpRunAi() {
     } catch(_) {}
 
     const { data, error } = await window.sb.functions.invoke('generate-gym-plan', { body: { objective, constraints, candidates: cands } });
-    if (error) throw error;
+    if (error) {
+      // supabase-js pone un mensaje genérico en cualquier non-2xx; el motivo real (p. ej.
+      // el cupo diario del club, 429) viene en el cuerpo de la respuesta.
+      let msg = error.message || String(error);
+      try {
+        const ctx = error.context;
+        if (ctx && typeof ctx.text === 'function') {
+          const raw = await (ctx.clone ? ctx.clone() : ctx).text();
+          try { const b = JSON.parse(raw); if (b && b.error) msg = b.error; }
+          catch (_) { if (raw) msg = raw; }
+        }
+      } catch (_) { /* keep generic message */ }
+      throw new Error(msg);
+    }
     if (data && data.error) throw new Error(data.error);
     const plan = data && data.plan;
     if (!plan) throw new Error('Empty plan');

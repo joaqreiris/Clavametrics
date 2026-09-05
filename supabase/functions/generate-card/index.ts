@@ -39,8 +39,7 @@ const VIZ_BOUNDS: Record<string,[number,number]> = {
   line:[1,6], radar:[3,8], table:[1,12], heatmap:[1,12],
 };
 
-// ── Rate limit: max 20 AI generations per club per 24 h ──────────────────
-const DAILY_LIMIT = 20;
+// Rate limit: el cupo diario por club vive en la DB (ai_rate_limit_take, migración 129).
 
 // ── System prompt template ────────────────────────────────────────────────
 const SYSTEM_TEMPLATE = `You are the chart builder for ClavaMetrics GPS analysis.
@@ -154,15 +153,27 @@ async function fetchCatalog(clubId: string, supabase: ReturnType<typeof createCl
   return { map, lines };
 }
 
-// ── Rate limit check ──────────────────────────────────────────────────────
-async function checkRateLimit(clubId: string, supabase: ReturnType<typeof createClient>): Promise<boolean> {
-  const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count } = await supabase
-    .from('ai_card_generations')
-    .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId)
-    .gte('created_at', since);
-  return (count ?? 0) < DAILY_LIMIT;
+// ── Rate limit ──────────────────────────────────────────────────────────────
+// El cupo lo lleva la DB (`ai_rate_limit_take`, migración 129), sobre una tabla que el
+// cliente no puede leer ni escribir: un contador modificable por el usuario no es un
+// límite. `ai_card_generations` queda solo como audit log.
+// Fail-closed: si el chequeo no se puede hacer, no se gasta cuota de Anthropic.
+async function takeQuota(supabase: ReturnType<typeof createClient>, fn: string): Promise<Response | null> {
+  const { data, error } = await supabase.rpc('ai_rate_limit_take', { p_fn: fn });
+  const reply = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  if (error) {
+    console.error(`${fn}: rate limit check failed:`, error.message);
+    return reply({ error: 'Could not verify the daily limit. Try again in a moment.' }, 503);
+  }
+  if (!(data as any)?.allowed) {
+    if ((data as any)?.reason === 'no_club') return reply({ error: 'Your user is not linked to a club.' }, 403);
+    return reply({
+      error: `Daily limit reached (${(data as any)?.limit} generations/day for the club). Try again tomorrow.`,
+      used: (data as any)?.used, limit: (data as any)?.limit,
+    }, 429);
+  }
+  return null;
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────
@@ -232,10 +243,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Rate limit ────────────────────────────────────────────────────────
-    const withinLimit = await checkRateLimit(clubId, supabase);
-    if (!withinLimit) {
-      return new Response(JSON.stringify({ error: 'Daily limit reached (20 generations/day). Try again tomorrow.' }), { status: 429, headers: { ...CORS, 'Content-Type': 'application/json' } });
-    }
+    // El cupo se toma contra el club del JWT, no contra el `clubId` del body: un usuario
+    // no puede gastar el cupo de otro club mandando su id.
+    const denied = await takeQuota(supabase, 'generate-card');
+    if (denied) return denied;
 
     // ── Catalog ───────────────────────────────────────────────────────────
     const { map: catalogMap, lines: catalogLines } = await fetchCatalog(clubId, supabase);
