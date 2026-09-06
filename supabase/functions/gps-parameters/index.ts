@@ -63,6 +63,18 @@ Deno.serve(async (req: Request) => {
     const { data: callerClub } = await userClient.rpc('get_user_club_id');
     if (!callerClub) return json({ error: 'No club found for caller' }, 403);
 
+    // AUTHZ (rol): configurar la integración GPS es de admin + S&C, igual que el canConfig
+    // del panel (assets/gps-integrations.js). Hasta ahora alcanzaba con ser miembro del
+    // staff: la regla vivía en la UI y no en el servidor. can_configure_gps() (migración
+    // 131) mira el rol principal y el secundario; se ajusta en la DB, sin redeploy.
+    // Fail-closed: si el chequeo falla, no se sigue.
+    const { data: canConfig, error: roleErr } = await userClient.rpc('can_configure_gps');
+    if (roleErr) {
+      console.error('gps-parameters: role check failed:', roleErr.message);
+      return json({ error: 'Could not verify your permissions. Try again in a moment.' }, 503);
+    }
+    if (!canConfig) return json({ error: 'Forbidden: only admins and S&C staff can configure the GPS integration' }, 403);
+
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,

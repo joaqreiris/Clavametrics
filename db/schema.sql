@@ -6,6 +6,8 @@
 -- Parche manual 2026-09-05 (migracion 129, rate limit de las Edge Functions con API
 -- externa): tabla ai_usage_events + sus 2 FKs + RLS deny-all, y la funcion
 -- ai_rate_limit_take(). Los contadores de arriba no incluyen este parche.
+-- Parche manual 2026-09-05 (migracion 131, gate de rol de la integracion GPS): funcion
+-- can_configure_gps() y la rama 'gps-verify' en el CASE de ai_rate_limit_take().
 --
 -- 118 tablas | 247 FKs | 5 vistas | 75 funciones
 -- | 39 triggers | 273 politicas RLS
@@ -916,10 +918,10 @@ create table if not exists public.gps_context_rules (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   pattern text not null,                    -- ILIKE sobre period_name: 'Rehab PISETH' | '%rehab%' | '%top%up%'
-  work_context text not null,               -- 'rehab' | 'individual' | 'topup' (sin regla = 'team')
+  work_context text not null,               -- 'rehab' | 'individual' | 'topup' | 'team' (anulación: "esto SÍ es equipo", corta los patrones por defecto del trigger)
   created_at timestamp with time zone default now() not null,
   constraint gps_context_rules_pkey primary key (id),
-  constraint gps_context_rules_context_check CHECK ((work_context = ANY (ARRAY['rehab'::text, 'individual'::text, 'topup'::text]))),
+  constraint gps_context_rules_context_check CHECK ((work_context = ANY (ARRAY['team'::text, 'rehab'::text, 'individual'::text, 'topup'::text]))),
   constraint gps_context_rules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_gps_context_rules_club ON public.gps_context_rules USING btree (club_id);
@@ -934,12 +936,32 @@ declare v_ctx text;
 begin
   -- Solo autocompleta el default: respeta cualquier contexto ya seteado (manual/explícito).
   if (NEW.work_context is null or NEW.work_context = 'team') and NEW.period_name is not null then
+    -- a) Reglas del club. Patrón más específico (más largo) gana. Una regla 'team' es una
+    --    anulación explícita: matchea, no cambia nada y corta la búsqueda.
     select r.work_context into v_ctx
       from public.gps_context_rules r
       where r.club_id = NEW.club_id and NEW.period_name ilike r.pattern
-      order by length(r.pattern) desc   -- patrón más específico gana
+      order by length(r.pattern) desc
       limit 1;
-    if v_ctx is not null then NEW.work_context := v_ctx; end if;
+
+    -- b) Sin regla del club que matchee → patrones POR DEFECTO (migración 130). Nombres que en
+    --    la práctica nunca son trabajo de equipo, para que un club sin reglas cargadas no cuente
+    --    un "Complementary" como partido. Ojo: "extra time" (prórroga) SÍ es partido → fuera.
+    if v_ctx is null then
+      select d.ctx into v_ctx
+        from (values
+          ('%top up%','topup'),('%top-up%','topup'),('%topup%','topup'),
+          ('%complementar%','topup'),('%complemento%','topup'),
+          ('%compensator%','topup'),('%compensac%','topup'),
+          ('%rehab%','rehab'),('%readapt%','rehab'),('%reatlet%','rehab'),
+          ('%individual%','individual')
+        ) as d(pattern, ctx)
+        where NEW.period_name ilike d.pattern
+        order by length(d.pattern) desc
+        limit 1;
+    end if;
+
+    if v_ctx is not null and v_ctx <> 'team' then NEW.work_context := v_ctx; end if;
   end if;
   return NEW;
 end;
@@ -3431,6 +3453,7 @@ begin
     when 'generate-gym-plan' then 20
     when 'tag-exercise'      then 60
     when 'youtube-import'    then 30
+    when 'gps-verify'        then 30
     else null
   end;
 
@@ -5389,6 +5412,28 @@ $function$
 -- Who can SEE a dashboard: the owner (personal) · club-wide defaults · a team the
 -- user belongs to (team-shared) · admins/owners (all of their club). SECURITY DEFINER
 -- so the check itself never re-triggers dashboards RLS (no recursion).
+-- migracion 131: gate de rol de la integracion GPS. Equivale al canConfig del panel
+-- (assets/gps-integrations.js): buckets admin y sc, mirando rol principal y secundario.
+-- La usan las Edge Functions gps-verify / gps-athletes / gps-parameters.
+-- GRANTs (fuera del alcance de este archivo): revoke de public y anon, execute a authenticated.
+CREATE OR REPLACE FUNCTION public.can_configure_gps()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1
+      from public.profiles p
+     where p.id = auth.uid()
+       and (
+         public.role_bucket(p.role)      in ('admin', 'sc') or
+         public.role_bucket(p.club_role) in ('admin', 'sc')
+       )
+  );
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.can_view_dashboard(p_dash uuid)
  RETURNS boolean
  LANGUAGE sql
