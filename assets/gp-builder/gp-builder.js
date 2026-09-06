@@ -625,7 +625,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, quadrants: S.quadrants || 'mean',
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -894,6 +894,14 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_rich_tooltip">Rich tooltip</span><span class="s" data-i18n="gps_analysis.builder_rich_tooltip_sub">Show a mini trend on hover</span></span>
                 <button class="es-sw-t is-on" data-toggle="richTooltip"></button>
               </div>
+              <div class="es-toggle is-stack" data-only="scatter">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_quadrants">Quadrants</span><span class="s" data-i18n="gps_analysis.builder_quadrants_sub">Reference cross + a label per corner</span></span>
+                <div class="es-seg" id="gpbQuadMode">
+                  <button data-qmode="off" data-i18n="gps_analysis.builder_quadrants_off">None</button>
+                  <button data-qmode="mean" class="is-on" data-i18n="gps_analysis.builder_quadrants_mean">Mean</button>
+                  <button data-qmode="median" data-i18n="gps_analysis.builder_quadrants_median">Median</button>
+                </div>
+              </div>
               <div class="es-toggle is-stack" data-only="gauge">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.gauge_mode">Gauge mode</span></span>
                 <div class="es-seg" id="gpbGaugeMode">
@@ -1040,7 +1048,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, quadrants:'mean', horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1469,6 +1477,7 @@
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
       S.comboLine = cfg.comboLine !== false;   // ausente (cards viejas) → true (línea unida)
+      S.quadrants = cfg.quadrants || 'mean';   // ausente → media, que es lo que ya se dibujaba
       S.horizontal = !!cfg.horizontal;
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
@@ -1508,6 +1517,7 @@
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
       S.comboLine = rawConfig.style?.comboLine !== false;   // ausente (cards viejas) → true
+      S.quadrants = rawConfig.style?.quadrants || 'mean';   // ausente → media (lo de siempre)
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
@@ -1767,6 +1777,16 @@
         if (!S) return;
         document.getElementById('gpbScatterLabel').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
         S.scatterLabel = b.dataset.slabel;
+        renderCard();
+      };
+    });
+
+    // scatter: cruz de referencia / cuadrantes (ninguna · media · mediana)
+    document.getElementById('gpbQuadMode')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        if (!S) return;
+        document.getElementById('gpbQuadMode').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
+        S.quadrants = b.dataset.qmode;
         renderCard();
       };
     });
@@ -2179,6 +2199,9 @@
     );
     document.getElementById('gpbGaugeMode')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.gmode === (S.gaugeMode || 'value'))
+    );
+    document.getElementById('gpbQuadMode')?.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.qmode === (S.quadrants || 'mean'))
     );
     _syncFmtControls();   // title/subtitle format controls reflect S.titleFormat / S.subtitleFormat
     // viz-specific style options (data-only="line" / "bars") hidden for other types
@@ -5489,6 +5512,20 @@
   };
 
   /** Draws the average reference lines (vertical avg-X, horizontal avg-Y) as a thin dashed grey cross. */
+  /**
+   * Cruz de referencia del scatter y, con ella, los CUADRANTES.
+   *
+   * La cruz (media o mediana de cada eje) ya partía la nube en cuatro, pero sin decir en qué
+   * consistía cada parte: había que mirar los ejes y deducirlo. Ahora cada esquina lleva su
+   * lectura —"↑ Distancia · ↓ m/min"— así que un punto se clasifica sin traducir nada.
+   * Sin `labels` (o con la cruz apagada) dibuja exactamente lo de antes.
+   */
+  /** Nombre de métrica para una etiqueta de cuadrante: entero si entra, con « … » si no. */
+  function _quadLbl(name) {
+    const t = String(name == null ? '' : name).trim();
+    return t.length > 15 ? t.slice(0, 14).trimEnd() + '…' : t;
+  }
+
   const _scatterAvgPlugin = {
     id: 'gpbScatterAvg',
     afterDatasetsDraw(chart, _args, opts) {
@@ -5496,15 +5533,46 @@
       const { ctx, chartArea, scales } = chart;
       const px = scales.x.getPixelForValue(opts.avgX);
       const py = scales.y.getPixelForValue(opts.avgY);
+      const { top: A_T, bottom: A_B, left: A_L, right: A_R } = chartArea;
       ctx.save();
       ctx.strokeStyle = 'rgba(148,163,184,0.75)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
-      if (px >= chartArea.left && px <= chartArea.right) {
-        ctx.beginPath(); ctx.moveTo(px, chartArea.top); ctx.lineTo(px, chartArea.bottom); ctx.stroke();
-      }
-      if (py >= chartArea.top && py <= chartArea.bottom) {
-        ctx.beginPath(); ctx.moveTo(chartArea.left, py); ctx.lineTo(chartArea.right, py); ctx.stroke();
+      if (px >= A_L && px <= A_R) { ctx.beginPath(); ctx.moveTo(px, A_T); ctx.lineTo(px, A_B); ctx.stroke(); }
+      if (py >= A_T && py <= A_B) { ctx.beginPath(); ctx.moveTo(A_L, py); ctx.lineTo(A_R, py); ctx.stroke(); }
+
+      const lb = opts.labels;
+      if (lb && lb.x && lb.y) {
+        ctx.setLineDash([]);
+        ctx.font = '500 9.5px Geist, Inter, sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        const PAD = 5;
+        // Los puntos mandan: si en esa esquina hay uno, la etiqueta se calla en vez de taparlo.
+        const pts = [];
+        chart.data.datasets.forEach((_, i) => {
+          const meta = chart.getDatasetMeta(i);
+          if (!meta || meta.hidden) return;
+          (meta.data || []).forEach(el => {
+            if (el && Number.isFinite(el.x) && Number.isFinite(el.y)) {
+              pts.push({ x: el.x, y: el.y, r: (el.options && el.options.radius ? el.options.radius : 5) + 2 });
+            }
+          });
+        });
+        const put = (txt, x, y, align, baseline) => {
+          const w = ctx.measureText(txt).width, h = 12;
+          const bx = align === 'right' ? x - w : x;
+          const by = baseline === 'bottom' ? y - h : y;
+          if (pts.some(p => p.x + p.r > bx && p.x - p.r < bx + w && p.y + p.r > by && p.y - p.r < by + h)) return;
+          ctx.textAlign = align; ctx.textBaseline = baseline;
+          ctx.strokeText(txt, x, y);
+          ctx.fillStyle = 'rgba(107,114,128,0.95)';
+          ctx.fillText(txt, x, y);
+        };
+        put(`↑ ${lb.x} · ↑ ${lb.y}`, A_R - PAD, A_T + PAD, 'right', 'top');
+        put(`↓ ${lb.x} · ↑ ${lb.y}`, A_L + PAD, A_T + PAD, 'left',  'top');
+        put(`↑ ${lb.x} · ↓ ${lb.y}`, A_R - PAD, A_B - PAD, 'right', 'bottom');
+        put(`↓ ${lb.x} · ↓ ${lb.y}`, A_L + PAD, A_B - PAD, 'left',  'bottom');
       }
       ctx.restore();
     },
@@ -5711,8 +5779,20 @@
       };
     });
 
-    const avgX = paired.reduce((a, p) => a + p.x, 0) / paired.length;
-    const avgY = paired.reduce((a, p) => a + p.y, 0) / paired.length;
+    // Cruz de referencia: media (como siempre), MEDIANA —más firme cuando hay un valor extremo—
+    // o ninguna. La mediana es la que convierte la nube en cuatro grupos de igual tamaño.
+    const _qmode = config.style?.quadrants || 'mean';
+    const _median = arr => {
+      const v = arr.slice().sort((a, b) => a - b), n = v.length;
+      if (!n) return null;
+      return n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
+    };
+    const avgX = _qmode === 'off' ? null
+      : _qmode === 'median' ? _median(paired.map(p => p.x))
+      : paired.reduce((a, p) => a + p.x, 0) / paired.length;
+    const avgY = _qmode === 'off' ? null
+      : _qmode === 'median' ? _median(paired.map(p => p.y))
+      : paired.reduce((a, p) => a + p.y, 0) / paired.length;
     const xUnit = sX.unit || '', yUnit = sY.unit || '';
 
     // Reference lines/bands (scatter): each item declares axis 'x'|'y'. Auto tokens are computed over
@@ -5729,7 +5809,7 @@
     };
 
     return {
-      datasets, avgX, avgY, showAxes, showLbl,
+      datasets, avgX, avgY, quadMode: _qmode, showAxes, showLbl,
       showLeg: hasCat && config.style?.legend !== false,
       hasSize, sizeName, sizeUnit, sizeMin, sizeMax, rMin: R_MIN, rMax: R_MAX,
       xName: sX.name, yName: sY.name, xUnit, yUnit,
@@ -6077,7 +6157,12 @@
                 },
               },
             },
-            gpbScatterAvg:      { avgX: d.avgX, avgY: d.avgY },
+            gpbScatterAvg:      { avgX: d.avgX, avgY: d.avgY,
+              // Nombre de cada métrica, recortado para que la etiqueta entre en la esquina. Se
+              // recorta entero y no por la primera palabra: "Total Distance" y "Distance / Min"
+              // empezaban distinto pero terminaban diciendo "Total" y "Distance".
+              labels: (d.quadMode !== 'off' && d.showAxes)
+                ? { x: _quadLbl(d.xName), y: _quadLbl(d.yName) } : null },
             gpbScatterLabels:   { show: d.showLbl },
             gpbScatterRefLines: { lines: d.referenceLines },
           },
