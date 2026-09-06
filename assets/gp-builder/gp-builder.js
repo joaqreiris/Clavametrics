@@ -61,6 +61,10 @@
     ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
     table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4 },
     heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1 },
+    // Caja y bigotes: la ÚNICA card que muestra dispersión. Una métrica, una dimensión para
+    // agrupar (posición, MD code…); la caja se calcula sobre los valores de cada jugador dentro
+    // del grupo, así que la consulta agrupa además por jugador (ver _boxQueryConfig).
+    box:     { name: 'Box plot', icon: 'ti-chart-candle', min: 1, max: 1, dimMax: 1 },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -137,8 +141,8 @@
     const ids = dimList(S);
     return Array.from({ length: n }, (_, r) => ids.map(id => { const a = DIM_MOCK[id] || DIM_MOCK.player_name; return a[r % a.length]; }));
   }
-  const VIZ_FULLNAME  = { kpi:'KPI', gauge:'Gauge', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap' };
-  const VIZ_REQ_LBL   = { kpi:'pick 1', gauge:'pick 1+', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
+  const VIZ_FULLNAME  = { kpi:'KPI', gauge:'Gauge', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap', box:'Box plot' };
+  const VIZ_REQ_LBL   = { kpi:'pick 1', gauge:'pick 1+', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+', box:'pick 1' };
 
   const AGGS = [
     { id:'avg',    name:'Average',             short:'AVG',  icon:'ti-divide',     peakOk:true  },
@@ -936,7 +940,7 @@
             <!-- Title/subtitle format (Paso 3a + 3b). data-only is a HARDCODED type list: if you add a
                  new viz type that shows a title/subtitle, add it here too. KPI and single GAUGE format
                  their body .l/.sb via gpApplyHeaderFormat; the rest format the .gp-c-h header spans. -->
-            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi,gauge">
+            <div class="es-sec" data-only="bars,line,scatter,radar,ranking,table,heatmap,kpi,gauge,box">
               <div class="lab" data-i18n="gps_analysis.builder_header_format">Title &amp; subtitle</div>
               ${_fmtBlockHTML('title', 'builder_header_title', 'Title')}
               ${_fmtBlockHTML('sub',   'builder_header_subtitle', 'Subtitle')}
@@ -2487,6 +2491,7 @@
     else if (S.type === 'gauge') mountGaugePreview(body, S);
     else if (S.type === 'ranking') mountRankingPreview(body, S);
     else if (S.type === 'table') mountTablePreview(body, S);
+    else if (S.type === 'box') mountBoxPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -2726,8 +2731,21 @@
       case 'gauge':   mountGaugeCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, acwrMap: opts.acwrMap || null, example: opts.example }); break;
       case 'ranking': mountRankingCard(container, config, series); break;
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
+      case 'box':     mountBoxCard(container, config, series, { example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
+  }
+
+  /**
+   * Config de CONSULTA de un box plot. La caja necesita los valores individuales, no un promedio,
+   * así que se agrupa además por la unidad de observación: el jugador (o la fecha, si el usuario
+   * ya está agrupando por jugador). El config que se guarda no cambia: esto vive sólo en la
+   * consulta, y el render vuelve a juntar los puntos por el grupo real.
+   */
+  function _boxQueryConfig(config) {
+    const dims = (config.dimensions || []).slice(0, 1);
+    const unit = dims[0]?.id === 'player_name' ? 'session_date' : 'player_name';
+    return { ...config, dimensions: [...dims, { id: unit }] };
   }
 
   // ── Resolve real data and re-render a saved card ──────────────────────
@@ -2953,7 +2971,8 @@
         } catch (e) { console.warn('gpb player-agg fast path — raw fallback:', e); }
       }
       if (!_usedFastAgg) {
-        const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+        const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config) : config;
+        const rawRows = await fetchReports(sessionIds, _cfgQ, ctx, catalogMap, sb);
         rows = _fbFilterRows(rawRows, FBcard, config.source);
         if (stale()) return;
         // PIN DEBUG: always log for a pinned card so we can see the exact stage it dies at
@@ -2966,11 +2985,11 @@
         }
 
         // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas) + RPE
-        eavMap = await fetchExtraMetrics(rows, config, catalogMap, _clubId, sb);
+        eavMap = await fetchExtraMetrics(rows, _cfgQ, catalogMap, _clubId, sb);
         if (stale()) return;
 
         // Step 4: aggregate
-        series = aggregateSeries(rows, eavMap, config, catalogMap);
+        series = aggregateSeries(rows, eavMap, _cfgQ, catalogMap);
 
         // Auditoría: compara la serie del RPC (player-agg o player×mc según corresponda) contra la
         // cruda (que es la que se dibuja).
@@ -6619,6 +6638,231 @@
     mountGaugeCard(body, config, series, { baselineMap, acwrMap, example: true });
   }
 
+  // ── Caja y bigotes ──────────────────────────────────────────────────────
+  // La primera card que muestra DISPERSIÓN: hasta ahora todo resumía un grupo en un número, y
+  // dos sesiones con la misma media podían ser un plantel parejo o cuatro jugadores tapando a
+  // ocho. Cada caja son los cuartiles del grupo, la línea es la mediana, los bigotes llegan al
+  // último valor dentro de 1,5·IQR y lo que queda fuera se dibuja como punto con su nombre.
+
+  /** Cuantil por interpolación lineal (el método 7 de R, el de toda la vida). */
+  function _quantile(sorted, q) {
+    const n = sorted.length;
+    if (!n) return null;
+    if (n === 1) return sorted[0];
+    const pos = (n - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+  }
+
+  /** Estadísticos de un grupo: cuartiles, bigotes a 1,5·IQR y los valores que quedan fuera. */
+  function _boxStats(items) {
+    const vals = items.map(i => i.v).filter(v => v != null && isFinite(v)).sort((a, b) => a - b);
+    if (!vals.length) return null;
+    const q1 = _quantile(vals, 0.25), med = _quantile(vals, 0.5), q3 = _quantile(vals, 0.75);
+    const iqr = q3 - q1;
+    const loFence = q1 - 1.5 * iqr, hiFence = q3 + 1.5 * iqr;
+    const inside = vals.filter(v => v >= loFence && v <= hiFence);
+    const lo = inside.length ? inside[0] : vals[0];
+    const hi = inside.length ? inside[inside.length - 1] : vals[vals.length - 1];
+    const out = items.filter(i => i.v != null && isFinite(i.v) && (i.v < loFence || i.v > hiFence));
+    return { q1, med, q3, lo, hi, n: vals.length, out, min: vals[0], max: vals[vals.length - 1] };
+  }
+
+  /** Pure: (config, series) → una caja por grupo, con sus outliers etiquetados. */
+  function boxCardData(config, series) {
+    const s = (series || [])[0];
+    const size = config.style?.size || 'md';
+    const empty = { boxes: [], name: '', unit: '', showAxes: config.style?.axes !== false,
+      height: _BAR_SIZE_H[size] || 240 };
+    if (!s || !s.points?.length) return empty;
+    // Los puntos vienen con dims = [grupo, unidad] (o sólo [unidad] si no se eligió grupo).
+    const grouped = (config.dimensions || []).length > 0;
+    const byGroup = new Map();
+    for (const p of s.points) {
+      if (p.y == null || !isFinite(p.y)) continue;
+      const dims = p.dims || [p.x];
+      const key  = grouped ? String(dims[0] ?? '—') : '';
+      const unit = String((grouped ? dims[1] : dims[0]) ?? '');
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key).push({ label: unit, v: Number(p.y) });
+    }
+    // UN solo color para todas las cajas: el grupo ya está escrito en el eje, así que pintarlas
+    // de colores distintos no agrega información — sólo ruido. El color por serie se reserva
+    // para cuando distingue algo.
+    const accent = config.style?.colors?.[s.label] || config.style?.color || _cssVar('--cm-accent', '#15803D');
+    const boxes = [];
+    for (const [key, items] of byGroup) {
+      const st = _boxStats(items);
+      if (!st) continue;
+      boxes.push({ label: grouped ? key : (s.name || ''), color: accent, ...st });
+    }
+    return { ...empty, boxes, name: s.name || '', unit: s.unit || '',
+      dec: catalogMap.get(s.label)?.decimals ?? 0 };
+  }
+
+  /**
+   * Dibuja cajas, bigotes y outliers sobre las barras flotantes de Chart.js: el dataset lleva
+   * [q1, q3] (la caja, que Chart.js pinta nativo) y este plugin agrega lo que le falta.
+   */
+  const _boxPlugin = {
+    id: 'gpbBox',
+    afterDatasetsDraw(chart, _args, opts) {
+      const boxes = opts && Array.isArray(opts.boxes) ? opts.boxes : null;
+      if (!boxes || !boxes.length) return;
+      const { ctx, chartArea, scales } = chart;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data) return;
+      ctx.save();
+      ctx.lineCap = 'butt';
+      boxes.forEach((b, i) => {
+        const el = meta.data[i];
+        if (!el) return;
+        const x = el.x, half = Math.max(6, (el.width || 24) / 2);
+        const Y = v => scales.y.getPixelForValue(v);
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = 1.4;
+        // Bigote: del extremo de la caja al último valor dentro de 1,5·IQR, con su tapa.
+        ctx.beginPath(); ctx.moveTo(x, Y(b.hi)); ctx.lineTo(x, Y(b.q3)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, Y(b.lo)); ctx.lineTo(x, Y(b.q1)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - half * 0.5, Y(b.hi)); ctx.lineTo(x + half * 0.5, Y(b.hi)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - half * 0.5, Y(b.lo)); ctx.lineTo(x + half * 0.5, Y(b.lo)); ctx.stroke();
+        // Mediana: la línea que de verdad se lee.
+        ctx.lineWidth = 2.4;
+        ctx.beginPath(); ctx.moveTo(x - half, Y(b.med)); ctx.lineTo(x + half, Y(b.med)); ctx.stroke();
+        // Outliers, con nombre mientras haya sitio.
+        ctx.lineWidth = 1.4;
+        (b.out || []).forEach(o => {
+          const py = Y(o.v);
+          if (py < chartArea.top - 2 || py > chartArea.bottom + 2) return;
+          ctx.beginPath(); ctx.arc(x, py, 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff'; ctx.fill();
+          ctx.strokeStyle = b.color; ctx.stroke();
+          if (opts.showLabels !== false && o.label) {
+            ctx.font = '500 9.5px Geist, Inter, sans-serif';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+            ctx.strokeText(o.label, x + half + 4, py);
+            ctx.fillStyle = 'rgba(107,114,128,0.95)';
+            ctx.fillText(o.label, x + half + 4, py);
+            ctx.lineWidth = 1.4;
+          }
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  /** Monta la card de caja y bigotes. */
+  function mountBoxCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const d = boxCardData(config, series);
+    if (!d.boxes.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.'));
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = ''; showEmptyBody(body, 'Chart.js no está disponible'); return; }
+
+    const wrap = document.createElement('div');
+    if (body.closest && body.closest('.gp-grid.is-canvas')) {
+      body.style.position = 'relative';
+      wrap.style.cssText = 'position:absolute;inset:0';
+    } else {
+      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+    }
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    body.innerHTML = '';
+    body.appendChild(wrap);
+    Chart.getChart(canvas)?.destroy();
+
+    // La escala tiene que dar aire a bigotes y outliers, no sólo a la caja.
+    const all = d.boxes.flatMap(b => [b.min, b.max]);
+    const lo = Math.min(...all), hi = Math.max(...all);
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.08;
+    const fmtV = v => `${fmtVal(v, d.dec)}${d.unit ? ' ' + d.unit : ''}`;
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'bar',
+      data: {
+        labels: d.boxes.map(b => b.label),
+        datasets: [{
+          label: d.name,
+          data: d.boxes.map(b => [b.q1, b.q3]),     // barra flotante = la caja (cuartiles)
+          backgroundColor: d.boxes.map(b => `color-mix(in srgb, ${b.color} 22%, transparent)`),
+          borderColor: d.boxes.map(b => b.color),
+          borderWidth: 1.4,
+          borderSkipped: false,
+          maxBarThickness: 54,
+          categoryPercentage: 0.7,
+          barPercentage: 0.8,
+        }],
+      },
+      plugins: [_boxPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 260 },
+        scales: {
+          y: {
+            display: d.showAxes, min: lo - pad, max: hi + pad,
+            grid: { display: d.showAxes, color: 'rgba(148,163,184,0.18)', drawTicks: false },
+            border: { display: false },
+            ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+          },
+          x: {
+            display: d.showAxes,
+            grid: { display: false, drawTicks: false },
+            border: { display: d.showAxes },
+            ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 52, autoSkip: true },
+          },
+        },
+        plugins: {
+          legend: { display: false },              // una sola métrica: el título ya la nombra
+          gpbBox: { boxes: d.boxes, showLabels: config.style?.dataLabels !== false },
+          tooltip: {
+            callbacks: {
+              title: items => (items.length ? String(d.boxes[items[0].dataIndex]?.label ?? '') : ''),
+              label: ctx => {
+                const b = d.boxes[ctx.dataIndex];
+                if (!b) return '';
+                return [
+                  `${_tt('gps_analysis.box_median', 'Median')}: ${fmtV(b.med)}`,
+                  `${_tt('gps_analysis.box_quartiles', 'Q1–Q3')}: ${fmtV(b.q1)} – ${fmtV(b.q3)}`,
+                  `${_tt('gps_analysis.box_whiskers', 'Whiskers')}: ${fmtV(b.lo)} – ${fmtV(b.hi)}`,
+                  `n = ${b.n}${b.out.length ? ` · ${b.out.length} ${_tt('gps_analysis.box_outliers', 'outside')}` : ''}`,
+                ];
+              },
+            },
+          },
+        },
+      },
+    });
+    if (opts.example) _appendExampleBadge(body);
+  }
+
+  /** Preview de la caja: datos reales si hay backend, si no un plantel de ejemplo. */
+  function mountBoxPreview(body, S) {
+    const m0 = catalogMap.get(S.metrics[0]?.id);
+    if (!m0) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    // Mock: cuatro grupos con dispersión distinta y un valor que se sale, para que el preview
+    // muestre lo que la card sabe hacer y no una fila de cajas iguales.
+    const base = metSample(m0);
+    const groups = S.dimensions?.length ? dimMockLabels(S).slice(0, 4) : [''];
+    const spread = [0.10, 0.06, 0.16, 0.09];
+    const points = [];
+    groups.forEach((g, gi) => {
+      for (let i = 0; i < 8; i++) {
+        const k = 1 + spread[gi % spread.length] * Math.sin(i * 1.7 + gi);
+        points.push({ x: `${g}|${i}`, dims: g ? [g, `J${i + 1}`] : [`J${i + 1}`], y: Math.round(base * k) });
+      }
+      if (gi === 2) points.push({ x: `${g}|out`, dims: g ? [g, 'ATÍPICO'] : ['ATÍPICO'], y: Math.round(base * 1.55) });
+    });
+    const config = { viz: 'box', metrics: S.metrics, dimensions: S.dimensions || [],
+      scope: { level: S.scope }, style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes },
+      __example: true };
+    mountBoxCard(body, config, [{ label: m0.id, name: m0.name, unit: m0.unit, points }], { example: true });
+  }
+
   /** Pure: (config, series) → ranking view model (sorted rows + bar widths). */
   function rankingCardData(config, series) {
     const size    = config.style?.size || 'md';
@@ -7943,6 +8187,7 @@
     ranking: { name:'Ranking', icon:'ti-list-numbers', dimAx:'entity (dim)',          metAx:'metric to rank' },
     table:   { name:'Table',   icon:'ti-table',        dimAx:'rows',                  metAx:'columns' },
     heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
+    box:     { name:'Box plot', icon:'ti-chart-candle', dimAx:'group (optional dim)',  metAx:'metric to spread' },
   };
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
@@ -8136,8 +8381,8 @@
 
   // i18n getters for module-load literals (VIZ_FULLNAME / DD_TYPES / VIZ_REQ_LBL) — the objects are
   // built before _tt exists, so translate at the USE site. English fallbacks stay exact.
-  const _VIZFULL_KEY = { kpi:'builder_type_kpi', bars:'builder_vizfull_bars', line:'builder_vizfull_line', scatter:'builder_type_scatter', radar:'builder_type_radar', ranking:'builder_type_ranking', table:'builder_type_table', heatmap:'builder_type_heatmap' };
-  const _REQ_KEY     = { kpi:'builder_req_pick1', gauge:'builder_req_pick1plus', ranking:'builder_req_pick1', scatter:'builder_req_pick2xy', bars:'builder_req_pick12', line:'builder_req_pick1plus', table:'builder_req_pick1plus', heatmap:'builder_req_pick1plus', radar:'builder_req_pick3plus' };
+  const _VIZFULL_KEY = { box:'builder_type_box', kpi:'builder_type_kpi', bars:'builder_vizfull_bars', line:'builder_vizfull_line', scatter:'builder_type_scatter', radar:'builder_type_radar', ranking:'builder_type_ranking', table:'builder_type_table', heatmap:'builder_type_heatmap' };
+  const _REQ_KEY     = { box:'builder_req_pick1', kpi:'builder_req_pick1', gauge:'builder_req_pick1plus', ranking:'builder_req_pick1', scatter:'builder_req_pick2xy', bars:'builder_req_pick12', line:'builder_req_pick1plus', table:'builder_req_pick1plus', heatmap:'builder_req_pick1plus', radar:'builder_req_pick3plus' };
   const _vizFull  = t => _tt('gps_analysis.' + (_VIZFULL_KEY[t] || ('builder_type_' + t)), VIZ_FULLNAME[t] || t);
   const _typeName = t => _tt('gps_analysis.builder_type_' + t, (DD_TYPES[t] && DD_TYPES[t].name) || t);
   const _reqLbl   = t => _tt('gps_analysis.' + (_REQ_KEY[t] || 'builder_req_pick1'), VIZ_REQ_LBL[t] || t);
