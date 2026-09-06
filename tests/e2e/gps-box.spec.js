@@ -138,13 +138,14 @@ test.describe('GPS · caja y bigotes', () => {
       { timeout: 10_000 }).toBe('squad');
   });
 
-  // Las cards de caja creadas ANTES del arreglo quedaron con alcance de jugador y sin datos.
-  // El genérico «no hay datos» no decía qué hacer; ahora la card lo explica.
-  test('con alcance de jugador, la card dice qué le falta', async ({ page }) => {
-    await open(page, card({ dimensions: [{ id: 'position' }], scope: { level: 'player' } }), { waitCanvas: false });
-    const txt = await page.evaluate(() =>
-      document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-box"] .gp-c-b')?.innerText || '');
-    expect(txt.toLowerCase()).toMatch(/plantel|squad/);
+  // Las cards de caja creadas antes de que el tipo naciera en plantel quedaron con alcance de
+  // jugador. Una caja compara jugadores entre sí, así que se lee como plantel y dibuja igual,
+  // en vez de quedarse muda (el config guardado no se toca).
+  test('una caja guardada con alcance de jugador se dibuja igual', async ({ page }) => {
+    await open(page, card({ dimensions: [{ id: 'position' }], scope: { level: 'player' } }));
+    const bs = await boxes(page);
+    expect(bs.length).toBeGreaterThan(0);
+    expect(bs.find(b => b.label === 'CB')?.n).toBe(5);
   });
 
   // Quién se salió es la lectura principal de la card. Antes el nombre dependía del interruptor

@@ -4143,6 +4143,12 @@ window.gpbStripKpiHeader = function (cardEl) {
 async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
   const body = cardEl.querySelector('.gp-c-b');
   if (!body) return;
+  // Tabla, ranking, caja, heatmap y scatter comparan jugadores ENTRE SÍ: guardadas con alcance de
+  // jugador quedaban con una marca sola o vacías. Se leen como plantel — sólo el dibujo; en la
+  // base no se toca nada. Mismo criterio que el builder (window.gpbSquadOnlyViz).
+  if (window.gpbSquadOnlyViz?.(config?.viz) && config?.scope?.level === 'player') {
+    config = { ...config, scope: { ...(config.scope || {}), level: 'squad' } };
+  }
   try {
     const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS, neededKeys } =
       await import('./lib/gp-card/resolver.js').catch(() => ({}));

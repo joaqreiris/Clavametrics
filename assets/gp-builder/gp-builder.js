@@ -50,7 +50,7 @@
     // `roles`: ordered encoding table (data-driven role resolver — resolveEncodings()). Only
     // scatter declares it for now; other types keep their current path (no `roles`). min/max/
     // dimMax stay because ddAddField still reads them.
-    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1,
+    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1, squadOnly: true,
       roles: [
         { role:'x',     kind:'metric', min:1, max:1 },
         { role:'y',     kind:'metric', min:1, max:1 },
@@ -58,13 +58,16 @@
         { role:'color', kind:'dim',    min:0, max:1 },
       ] },
     radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 1 },
-    ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
-    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4 },
-    heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1 },
+    // squadOnly: el gráfico compara jugadores ENTRE SÍ (una fila, un punto o una caja por
+    // jugador). Con alcance de un jugador queda una sola marca — nunca es lo que se quiere, y
+    // era una de las formas de terminar con una card muda. En estos, el alcance no se pregunta.
+    ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1, squadOnly: true },
+    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4, squadOnly: true },
+    heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1, squadOnly: true },
     // Caja y bigotes: la ÚNICA card que muestra dispersión. Una métrica, una dimensión para
     // agrupar (posición, MD code…); la caja se calcula sobre los valores de cada jugador dentro
     // del grupo, así que la consulta agrupa además por jugador (ver _boxQueryConfig).
-    box:     { name: 'Box plot', icon: 'ti-chart-candle', min: 1, max: 1, dimMax: 1 },
+    box:     { name: 'Box plot', icon: 'ti-chart-candle', min: 1, max: 1, dimMax: 1, squadOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -2538,7 +2541,8 @@
     } else if (kind === 'load') {
       body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">${_tt('gps_analysis.builder_querying', 'Querying GPS data…')}</div><div class="d">${esc(autoTitle(S))} · ${_rangeName(S.range)}</div></div>`;
     } else if (kind === 'nodata') {
-      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">${_tt('gps_analysis.builder_no_data', 'No data for this selection')}</div><div class="d">${esc(msg)}</div><button class="cm-btn is-outline is-sm" id="gpbFixScope" style="margin-top:4px"><i class="ti ti-user" style="font-size:14px"></i>${_tt('gps_analysis.builder_switch_to_player', 'Switch to Player')}</button></div>`;
+      const _offerPlayer = !VIZ_TYPES[S.type]?.squadOnly;   // en los de plantel, ese atajo rompe la card
+      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">${_tt('gps_analysis.builder_no_data', 'No data for this selection')}</div><div class="d">${esc(msg)}</div>${_offerPlayer ? `<button class="cm-btn is-outline is-sm" id="gpbFixScope" style="margin-top:4px"><i class="ti ti-user" style="font-size:14px"></i>${_tt('gps_analysis.builder_switch_to_player', 'Switch to Player')}</button>` : ''}</div>`;
       document.getElementById('gpbFixScope')?.addEventListener('click', () => {
         S.scope = 'player'; S.scopeTouched = true;
         ddSyncFromS();   // reflect in the D&D Config scope + re-render the card (no classic pane)
@@ -2856,14 +2860,12 @@
         _tt('gps_analysis.builder_stuck', 'Took too long to load. Reload the page — details are in the console.'), config);
     }, 25000);
 
-    // Una caja y bigotes con alcance de JUGADOR no tiene de qué calcular cuartiles: un jugador es
-    // un valor. En vez del genérico «no hay datos», que no dice qué hacer, la card lo explica.
-    // (Las cards nuevas ya nacen con el plantel; esto es para las que quedaron guardadas antes.)
-    if (config?.viz === 'box' && config?.scope?.level === 'player') {
-      clearTimeout(cardEl.__loadWatchdog);
-      _showCardState(cardEl, body, 'nodata',
-        _tt('gps_analysis.box_needs_squad', 'A box plot needs the whole squad: set this card’s scope to Squad.'), config);
-      return;
+    // Card guardada de un tipo que compara jugadores entre sí (tabla, ranking, caja, heatmap,
+    // scatter) con alcance de JUGADOR: se lee como plantel, que es lo único que tiene sentido —
+    // con un jugador quedaría una marca sola. Sólo cambia cómo se dibuja: en la base no se toca
+    // nada, así que la card sigue siendo la que el usuario guardó.
+    if (VIZ_TYPES[config?.viz]?.squadOnly && config?.scope?.level === 'player') {
+      config = { ...config, scope: { ...(config.scope || {}), level: 'squad' } };
     }
 
     try {
@@ -8495,10 +8497,14 @@
         </div>
         <div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_scope', 'Scope')}</span>
-          <div class="es-seg" id="gpbDDScope">
+          ${VIZ_TYPES[S.type]?.squadOnly
+            // Este gráfico compara jugadores entre sí: preguntar el alcance sólo daba lugar a
+            // elegir el que deja la card con una marca sola (o vacía). Se dice y se sigue.
+            ? `<span class="bdd-cfg-fixed" title="${esc(_tt('gps_analysis.builder_scope_squad_only_hint', 'This chart compares players with each other, so it always uses the whole squad.'))}"><i class="ti ti-users"></i>${_tt('gps_analysis.builder_scope_squad', 'Squad')}<i class="ti ti-lock-open-off" style="opacity:.45;font-size:12px;margin-left:2px"></i></span>`
+            : `<div class="es-seg" id="gpbDDScope">
             <button data-scope="player" class="${S.scope==='player'?'is-on':''}"><i class="ti ti-user"></i>${_tt('gps_analysis.builder_scope_player', 'Player')}</button>
             <button data-scope="squad" class="${S.scope==='squad'?'is-on':''}"><i class="ti ti-users"></i>${_tt('gps_analysis.builder_scope_squad', 'Squad')}</button>
-          </div>
+          </div>`}
         </div>
         ${_squadAggApplies(S) ? `<div class="bdd-cfg-f">
           <span class="k">${_tt('gps_analysis.builder_combine_players', 'Combine players')}</span>
@@ -8568,12 +8574,10 @@
   function ddSetType(id) {
     if (!S || !VIZ_TYPES[id]) return;
     S.type = id;
-    // A NEW table card defaults to squad scope (a player-scoped table shows a single player →
-    // confusing). Ported from the removed classic setType(). scopeTouched===false = untouched.
-    // La caja y bigotes va por lo mismo, y más fuerte: una caja ES la dispersión del plantel; con
-    // scope de jugador la card no tiene de qué calcular cuartiles y se queda sin datos.
-    if ((id === 'table' || id === 'box') && S.scopeTouched === false) S.scope = 'squad';
     const t = VIZ_TYPES[id];
+    // Los tipos que comparan jugadores entre sí van SIEMPRE a plantel (no es una preferencia:
+    // con un jugador quedaría una sola marca). El resto conserva lo que el usuario haya elegido.
+    if (t && t.squadOnly) S.scope = 'squad';
     if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
     S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
     if (!S.dimensions) S.dimensions = [];
@@ -9197,6 +9201,10 @@
     try { window.invalidateCatalogCache?.(cid); } catch (_e) {}
     await loadCatalog(cid);
   }
+
+  // ¿Este tipo compara jugadores entre sí? Lo consulta gps-analysis, que resuelve por su cuenta
+  // las cards de las cinco vistas fijas — el criterio tiene que ser UNO solo.
+  window.gpbSquadOnlyViz = viz => !!(VIZ_TYPES[viz] && VIZ_TYPES[viz].squadOnly);
 
   window.GpBuilder = {
     get catalogMap() { return catalogMap; },

@@ -43,6 +43,13 @@ async function open(page, cards) {
   await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: SESSIONS }));
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PLAYERS }));
   await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: REPORTS }));
+  // Las cards de plantel van por el fast-path: una fila por jugador, ya sumada (ver el smoke).
+  await page.route(`${SB}/rest/v1/rpc/gps_player_agg`, r => r.fulfill({ json: REPORTS.map(rep => ({
+    player_id: rep.player_id, first_name: rep.players.first_name, last_name: rep.players.last_name,
+    n_rows: 1, n_sessions: 1, w_sum: rep.time_played,
+    total_distance_sum: rep.total_distance, total_distance_max: rep.total_distance,
+    total_distance_min: rep.total_distance, total_distance_swv: rep.total_distance * rep.time_played,
+  })) }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
@@ -77,5 +84,35 @@ test.describe('GPS · alcance de una card', () => {
     // Sin jugador en la barra, «de un jugador» no tiene a quién mostrar: la card nace de plantel.
     await expect.poll(async () => page.evaluate(() => window.GpBuilder?.currentConfig?.()?.scope?.level),
       { timeout: 10_000 }).toBe('squad');
+  });
+
+  // Tabla, ranking, caja, heatmap y scatter comparan jugadores ENTRE SÍ: con un jugador queda una
+  // marca sola. Ahí el alcance dejó de ser una pregunta.
+  test('en los gráficos que comparan jugadores, el alcance no se pregunta', async ({ page }) => {
+    await open(page, []);
+    await page.locator('#gpbOpenBtn').first().click();
+    await expect(page.locator('#gpbPanel.is-open').first()).toBeVisible();
+
+    await page.locator('#gpbPanel [data-type="bars"]').click();      // acá sí decide algo
+    await expect(page.locator('#gpbDDScope')).toHaveCount(1);
+
+    for (const t of ['table', 'ranking', 'box', 'heatmap']) {
+      await page.locator(`#gpbPanel [data-type="${t}"]`).click();
+      await expect(page.locator('#gpbDDScope'), `${t} no debería preguntar el alcance`).toHaveCount(0);
+      await expect(page.locator('.bdd-cfg-fixed')).toHaveCount(1);
+      expect(await page.evaluate(() => window.GpBuilder?.currentConfig?.()?.scope?.level), t).toBe('squad');
+    }
+  });
+
+  // Una card ya guardada de esos tipos con alcance de jugador se lee como plantel en vez de
+  // quedarse muda. En la base no se toca nada.
+  test('una tabla guardada con alcance de jugador se dibuja igual', async ({ page }) => {
+    await open(page, [{ id: 'card-t', position: 0, source: 'builder', size: 'lg', config: {
+      schema: 'gp.card/v1', title: 'Tabla vieja', viz: 'table', scope: { level: 'player' },
+      metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [{ id: 'player_name' }],
+      range: { type: 'last30' }, style: { color: '#15803D' } } }]);
+    await expect.poll(async () => page.evaluate(() =>
+      document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-t"] tbody tr').length
+    ), { timeout: 20_000 }).toBe(3);                    // los 3 jugadores del fixture
   });
 });
