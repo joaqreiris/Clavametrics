@@ -153,7 +153,7 @@
       const grid   = viewEl?.querySelector('.gp-grid');
       if (grid && !grid.dataset.gptBuilderMounted) {
         const builderCards = (d.cards || []).filter(c => c.source === 'builder');
-        builderCards.forEach(card => grid.appendChild(_buildCardElement(card)));
+        builderCards.forEach(card => { const el = _buildCardElement(card); if (el) grid.appendChild(el); });
         if (builderCards.length) {
           grid.dataset.gptBuilderMounted = '1';
           wireCardDrag(grid, d.id);
@@ -247,7 +247,7 @@
       if (cards?.length) {
         for (const card of cards) {
           const el = _buildCardElement(card);
-          grid.appendChild(el);
+          if (el) grid.appendChild(el);   // null = card de catálogo que ya no está disponible
         }
         wireCardDrag(grid, dash.id);
 
@@ -414,8 +414,10 @@
     if (_menuOwner === trigger) { closeMenu(); return; }
     closeMenu();
 
-    const isPredefined = !!REPORT_TYPE_TO_VIEW[dash.report_type];
-    const canDelete    = !isPredefined && _dashboards.length > 1 && canManage(dash);
+    // CUALQUIER dashboard se puede borrar, también los cinco que vienen de fábrica: el club
+    // decide qué quiere ver. La única guarda es no quedarse sin ninguno, y el permiso de siempre.
+    // (ensureDefaultDashboards ya no re-siembra los que falten, así que el borrado persiste.)
+    const canDelete    = _dashboards.length > 1 && canManage(dash);
     const canRename    = canManage(dash);
 
     _menuEl.classList.remove('gpt-icon-menu');   // in case it was left in icon-picker mode
@@ -518,6 +520,11 @@
     if (!window.deleteDashboard || !window.sb) return;
     if (_dashboards.length <= 1) return;
     if (!canManage(dash)) { showPermissionError(); return; }
+    // Borrar un dashboard se lleva sus cards y no se puede deshacer: se pregunta, con el nombre
+    // delante, porque ahora también alcanza a los de fábrica.
+    const _msg = tt('gps_analysis.dash_delete_confirm',
+      'Delete this dashboard? Its cards go with it and this cannot be undone.');
+    if (typeof window.confirm === 'function' && !window.confirm(`${dash.name || ''}\n\n${_msg}`)) return;
 
     const idx = _dashboards.indexOf(dash);
     _dashboards.splice(idx, 1);
@@ -570,7 +577,31 @@
 
   // ── Card element builder (for custom dashboards) ──────────────
 
+  /**
+   * Card de CATÁLOGO adoptada por un dashboard propio (config.schema = 'gp.static/v1').
+   * No se construye nada: la card ya existe una sola vez en el HTML de la página, con su lógica
+   * atada a su id, así que se la trae hasta este grid. La fila de dashboard_cards sólo guarda
+   * cuál es y dónde va; `rowId` la ata a esa fila para poder moverla o borrarla después.
+   * Devuelve null si el elemento no está (otro dashboard se la llevó primero).
+   */
+  function _adoptStaticCard(card) {
+    const staticId = card.config?.staticId;
+    if (!staticId) return null;
+    const el = document.getElementById(staticId)
+      || document.querySelector(`.gp-c[data-card-id="${String(staticId).replace(/^card-/, '')}"]`)
+      || window.gpCardStash?.get?.(staticId) || null;
+    if (!el) return null;
+    window.gpCardStash?.delete?.(staticId);
+    el.dataset.rowId = card.id;
+    const cv = card.config?.style?.canvas;
+    if (cv && ['x', 'y', 'w', 'h'].every(k => Number.isFinite(cv[k])) && window.gpCanvas?.applyCoords) {
+      window.gpCanvas.applyCoords(el, { x: cv.x, y: cv.y, w: cv.w, h: cv.h });
+    }
+    return el;
+  }
+
   function _buildCardElement(card) {
+    if (card.config?.schema === 'gp.static/v1') return _adoptStaticCard(card);
     const config = card.config || {};
     const el = document.createElement('div');
     el.className = 'gp-c';

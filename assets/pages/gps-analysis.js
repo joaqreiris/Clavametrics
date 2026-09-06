@@ -298,6 +298,7 @@ const GP_CARD_DEFS = {
 
 // Stash: card elements removed from dashboard but recoverable
 const _cardStash = new Map(); // cardId → HTMLElement
+window.gpCardStash = _cardStash;   // gp-tabs lo consulta al adoptar una card en un dashboard propio
 
 // REMOVED — the one-time "layout reset (v2)" mechanism. It was gated by a localStorage flag
 // (gpsLayoutReset_v2_<view>), so clearing the browser cache / "Clear site data" wiped the flag and
@@ -441,10 +442,11 @@ function _acPaths(active) {
     ${card('ti-flask','Evidence-based template','Ready cards, scientifically validated.','recommended',active==='tpl','tpl')}
     ${card('ti-adjustments-alt','Build custom','Pick metrics, type and aggregation · opens the Chart builder.','',active==='custom','custom')}</div>`;
 }
-// Dashboard dueño de una plantilla (su card estática vive en el HTML de UNA sola vista), o null
-// si puede ir a cualquiera. Una card estática es UN elemento del DOM con id único y lógica
-// bindeada a ese id: no puede existir en dos dashboards a la vez, y saveLayout descarta la que
-// aparezca fuera de su vista dueña. Por eso la galería la ofrece sólo donde de verdad persiste.
+// Dashboard donde vive hoy la card de una plantilla (su elemento existe una sola vez en el HTML),
+// o null si no tiene casa fija. NO es un bloqueo: la plantilla se puede agregar a cualquier
+// dashboard y la card se MUEVE hasta ahí — una card estática es un único elemento del DOM con su
+// lógica atada a ese id, así que puede estar en un dashboard a la vez, pero el club elige en cuál.
+// La galería lo usa para sugerir dónde encaja mejor, no para impedir nada.
 function _acTplOwner(t) {
   const cid = String(t.cardId || '').replace(/^card-/, '');
   return _STATIC_CARD_OWNER.get(cid) || null;
@@ -458,7 +460,7 @@ function _acTplForeign(t, view) {
 }
 function _acTplCard(t, view) {
   const foreign = _acTplForeign(t, view);
-  return `<div class="ac-tpl${foreign ? ' is-foreign' : ''}" data-actpl="${t.id}">
+  return `<div class="ac-tpl" data-actpl="${t.id}">
     <div class="ac-tpl-top">
       <span class="spark" style="background:color-mix(in srgb, ${t.color} 14%, var(--cm-surface)); color:${t.color}"><i class="ti ${t.icon}"></i></span>
       <span class="nm">${_acEsc(t.nm)}</span>
@@ -469,8 +471,9 @@ function _acTplCard(t, view) {
       <span class="ac-info"><i class="ti ti-info-circle"></i>${_acEsc(t.info)}</span></div>
     <div class="ac-tpl-foot"><span class="type"><i class="ti ti-chart-histogram"></i>${_acEsc(t.type)}</span>
       ${foreign
-        ? `<span class="ac-owned" title="${_acEsc(tt('gps_analysis.tpl_owned_hint', 'This card lives on {dash}. To have a copy here, build it with the Chart builder.', { dash: foreign }))}"><i class="ti ti-lock"></i>${_acEsc(tt('gps_analysis.tpl_owned', 'On {dash}', { dash: foreign }))}</span>`
-        : `<button class="ac-add" type="button"><i class="ti ti-plus"></i>Add</button>`}</div>
+        ? `<span class="ac-owned" title="${_acEsc(tt('gps_analysis.tpl_suggested_hint', 'Right now this card is on {dash}. If you add it here, it moves.', { dash: foreign }).replace('{dash}', foreign))}"><i class="ti ti-bulb"></i>${_acEsc(tt('gps_analysis.tpl_suggested', 'Suggested on {dash}', { dash: foreign }).replace('{dash}', foreign))}</span>`
+        : ''}
+      <button class="ac-add" type="button"><i class="ti ti-plus"></i>${_acEsc(tt('gps_analysis.tpl_add', 'Add'))}</button></div>
     <div class="ac-refpop" hidden>
       <div class="ac-refpop-h"><span class="ic"><i class="ti ti-book"></i></span>
         <span class="m"><span class="t">${_acEsc(t.ref.title)}</span><span class="a">${_acEsc(t.ref.author)}</span></span></div>
@@ -488,10 +491,11 @@ function _acPanel(active, dashName, view) {
       <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Not sure where to start? Try an evidence-based template.</span>
         <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
   }
-  const _avail = AC_TPLS.filter(t => !_acTplForeign(t, view)).length;
+  // Todas las plantillas se pueden agregar en cualquier dashboard: el contador es el total.
+  const _avail = AC_TPLS.length;
   return `<div class="ac-panel">${_acHeader(dashName)}${_acPaths('tpl')}
     <div class="ac-gallery"><div class="ac-gallery-h"><span class="t">Templates</span><span class="n">${_avail}</span>
-      <span class="all"><i class="ti ti-circle-check"></i>${_acEsc(tt('gps_analysis.tpl_avail_here', 'Available on this dashboard'))}</span></div>
+      <span class="all"><i class="ti ti-circle-check"></i>${_acEsc(tt('gps_analysis.tpl_all_here', 'All of them can go on this dashboard'))}</span></div>
       <div class="ac-grid">${AC_TPLS.map(t => _acTplCard(t, view)).join('')}</div></div>
     <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Templates come with metrics, type and thresholds preconfigured.</span>
       <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
@@ -501,23 +505,40 @@ let _acOverlay = null;
 function _acClose() { if (_acOverlay) { _acOverlay.remove(); _acOverlay = null; } }
 function _acDashName() { return _AC_DASH_NAMES[document.querySelector('.gp-view.is-on')?.dataset.view] || 'este dashboard'; }
 
-// Inserta la science card bespoke (la que ya existe) en el dashboard ACTUAL.
+// Inserta la science card bespoke (la que ya existe) en el dashboard ACTUAL. Si hoy está en otro
+// dashboard, se MUEVE hasta acá: el elemento es único en el HTML, así que vive donde el club
+// decida. Se registra la adopción para que saveLayout no la descarte por venir de otra vista, y
+// se re-guarda el layout de origen para que allá deje de figurar.
 function _acInsertCard(cardId, name) {
   const grid = document.querySelector('.gp-view.is-on .gp-grid');
   if (!grid) { showToast('No active dashboard', true); return; }
-  if (grid.querySelector('#' + cardId + ', [data-card-id="' + cardId.replace(/^card-/, '') + '"]')) {
+  const cid = cardId.replace(/^card-/, '');
+  if (grid.querySelector('#' + cardId + ', [data-card-id="' + cid + '"]')) {
     showToast(`${name} ya está en este dashboard`); return;
   }
   let card = document.getElementById(cardId) || _cardStash.get(cardId);
   if (!card) { showToast(`${name}: card unavailable`, true); return; }
+  const from = card.closest ? (card.closest('.gp-view')?.dataset.view || null) : null;
   _cardStash.delete(cardId);
   const addBtn = grid.querySelector('.gp-add');
   if (addBtn) grid.insertBefore(card, addBtn); else grid.appendChild(card);
   _acClose();
-  showToast(`${name} agregada`);
-  try { window.refreshDashboard?.(); } catch (e) { /* best-effort repaint */ }
   const v = document.querySelector('.gp-view.is-on')?.dataset.view;
+  const owner = _STATIC_CARD_OWNER.get(cid);
+  if (v && owner && owner !== v) _gpAdopt(cid, v);
+  const fromName = (from && from !== v) ? (_AC_DASH_NAMES[from] || '') : '';
+  showToast(fromName ? `${name}: movida desde ${fromName}` : `${name} agregada`);
+  try { window.refreshDashboard?.(); } catch (e) { /* best-effort repaint */ }
+  if (from && from !== v) saveLayout(from).catch(e => console.warn('saveLayout (add-chart, origen):', e));
   if (v) saveLayout(v).catch(e => console.warn('saveLayout (add-chart):', e));
+  // Dashboard propio del club: su contenido no vive en gps_dashboard_layouts sino en
+  // dashboard_cards, así que la card queda anotada ahí como card de catálogo adoptada.
+  if (v && v.startsWith('db-') && window.insertCardIntoDashboard && window.sb && !card.dataset.rowId) {
+    window.insertCardIntoDashboard({ schema: 'gp.static/v1', staticId: cardId, title: name },
+      v.slice(3), window._gpUserId || null, window.sb)
+      .then(rowId => { if (rowId) card.dataset.rowId = rowId; })
+      .catch(e => console.warn('add-chart (dashboard propio):', e));
+  }
 }
 
 function _acRender(active) {
@@ -587,6 +608,38 @@ const _STATIC_CARD_OWNER = (() => {
 // 'ind' pero es una comparación de microciclos → también válida en 'mc'.
 const _EXTRA_CARD_OWNERS = { 'weekly-bars': new Set(['ind', 'mc']) };
 
+// Cards de catálogo que el USUARIO llevó a otro dashboard. Antes la galería las bloqueaba fuera
+// de su vista dueña ("On Player Week Report") porque saveLayout descartaba cualquier card estática
+// que apareciera en un dashboard ajeno — un guard contra la contaminación cruzada que también
+// impedía la decisión legítima de moverla. Ahora se distinguen los dos casos: la que se filtró
+// por un bug se sigue descartando; la que el usuario eligió mover queda registrada acá, y el
+// registro viaja en el layout (item.adopted) para sobrevivir a la recarga.
+const _gpAdopted = new Map();   // card_id (sin el prefijo "card-") → Set(viewKey)
+function _gpAdopt(cardId, view) {
+  if (!cardId || !view) return;
+  if (!_gpAdopted.has(cardId)) _gpAdopted.set(cardId, new Set());
+  _gpAdopted.get(cardId).add(view);
+}
+function _gpIsAdopted(cardId, view) {
+  const s = cardId ? _gpAdopted.get(cardId) : null;
+  return !!(s && s.has(view));
+}
+/** Trae al grid las cards que este dashboard adoptó y que hoy viven en el HTML de otra vista. */
+function _gpBringAdopted(grid, viewKey, layout) {
+  if (!grid || !Array.isArray(layout)) return;
+  for (const it of layout) {
+    if (!it || !it.adopted || !it.card_id) continue;
+    _gpAdopt(it.card_id, viewKey);
+    if (grid.querySelector(`[data-card-id="${it.card_id}"]`)) continue;
+    const el = _cardStash.get('card-' + it.card_id)
+      || document.querySelector(`.gp-c[data-card-id="${it.card_id}"]`);
+    if (!el) continue;
+    _cardStash.delete('card-' + it.card_id);
+    const addBtn = grid.querySelector('.gp-add');
+    if (addBtn) grid.insertBefore(el, addBtn); else grid.appendChild(el);
+  }
+}
+
 // Custom dashboards (viewKey "db-<uuid>") store their layout GLOBALLY on the dashboard: the
 // {x,y,w,h,size} of each card is written into that card's own config in dashboard_cards. That way
 // the arrangement is shared by everyone who opens the dashboard, travels on duplicate (the config
@@ -610,6 +663,18 @@ async function _saveCustomDashboardLayout(viewKey) {
       // Never write a card whose live config we don't hold — that would clobber its metrics/config
       // with a style-only object. All builder-mounted cards carry __config (gp-tabs _buildCardElement,
       // builder save); a card without it is skipped (its coords persist on the next reload).
+      // Card de catálogo adoptada: no tiene __config (su contenido lo maneja la página), pero sí
+      // una fila propia. Se le guarda qué card es y dónde quedó, para que vuelva a su sitio.
+      if ((!el.__config || typeof el.__config !== 'object') && el.dataset.rowId && el.id) {
+        const sx = _coord(el, 'x'), sy = _coord(el, 'y'), sw = _coord(el, 'w'), sh = _coord(el, 'h');
+        const scfg = { schema: 'gp.static/v1', staticId: el.id,
+          style: { size: el.dataset.size || 'md',
+            ...([sx, sy, sw, sh].every(Number.isFinite)
+              ? { canvas: { x: sx, y: sy, w: sw, h: sh, size: el.dataset.size || 'md' } } : {}) } };
+        return window.sb.from('dashboard_cards')
+          .update({ config: scfg, size: el.dataset.size || 'md', position: idx })
+          .eq('id', el.dataset.rowId);
+      }
       if (!el.__config || typeof el.__config !== 'object') return Promise.resolve();
       const cfg = { ...el.__config };
       const style = { ...(cfg.style || {}) };
@@ -648,12 +713,17 @@ async function saveLayout(viewKey, overrideDid) {
     const _kept = [...grid.querySelectorAll('.gp-c')].filter(el => {
       const owner = _STATIC_CARD_OWNER.get(el.dataset.cardId);
       const _allowedExtra = _EXTRA_CARD_OWNERS[el.dataset.cardId]?.has(viewKey);
-      if (owner && owner !== viewKey && !_allowedExtra) { console.warn(`saveLayout(${viewKey}): dropping foreign card "${el.dataset.cardId}" (owner=${owner})`); return false; }
+      if (owner && owner !== viewKey && !_allowedExtra && !_gpIsAdopted(el.dataset.cardId, viewKey)) { console.warn(`saveLayout(${viewKey}): dropping foreign card "${el.dataset.cardId}" (owner=${owner})`); return false; }
       return true;
     });
     const layout = _kept.map((el, idx) => {
+      const _cid = _deriveCardId(el, idx);
+      const _own = _STATIC_CARD_OWNER.get(_cid);
       const item = {
-        card_id: _deriveCardId(el, idx),
+        card_id: _cid,
+        // La card vive en el HTML de otra vista y está acá porque el usuario la trajo: se anota,
+        // para poder volver a traerla en la próxima carga (ver _gpBringAdopted).
+        ...(_own && _own !== viewKey ? { adopted: true } : {}),
         size: el.dataset.size || 'md',
         // `span` is NO LONGER persisted as an independent width source — it used to contradict the
         // coord `w` (stale span:6 vs w:12) and win at mount, painting cards half-width (auto-flow look).
@@ -905,6 +975,7 @@ async function applyLayoutToView(viewKey) {
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
   const activeIds = new Set(layout.map(c => c.card_id));
+  _gpBringAdopted(grid, viewKey, layout);
   _stashAbsentCards(viewKey, activeIds);
   for (const { card_id, size, span, config, x, y, w, h } of layout) {
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
@@ -962,6 +1033,7 @@ async function applyGrpDefaultLayout() {
 
     // Restore: stash cards not present in saved layout
     const activeIds = new Set(layout.map(c => c.card_id));
+    _gpBringAdopted(grid, 'grp', layout);
     _stashAbsentCards('grp', activeIds);
 
     // Restore metric_key / config per card (delegates to applyLayoutToView logic)
@@ -1009,6 +1081,7 @@ async function applyMcDefaultLayout() {
 
     // Restore: stash cards not present in saved layout
     const activeIds = new Set(layout.map(c => c.card_id));
+    _gpBringAdopted(grid, 'mc', layout);
     _stashAbsentCards('mc', activeIds);
 
     for (const { card_id, size, config, x, y, w, h } of layout) {
@@ -1051,6 +1124,7 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
     // Subsequent loads — stash absent, apply size/metric_key, reorder
     const activeIds = new Set(layout.map(c => c.card_id));
     _migrateTitleKeyedIds(grid, activeIds);
+    _gpBringAdopted(grid, viewKey, layout);
     _stashAbsentCards(viewKey, activeIds);
     for (const { card_id, size, config, x, y, w, h } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`) || _cardByTitleKey(grid, card_id);
@@ -1132,6 +1206,7 @@ async function _svLoad(viewKey, snapDid, name) {
   const activeIds = new Set(snapLayout.map(c => c.card_id));
 
   // Stash cards absent from snapshot, un-stash cards required by snapshot
+  _gpBringAdopted(grid, viewKey, snapLayout);
   _stashAbsentCards(viewKey, activeIds);
   _unstashToGrid(viewKey, activeIds, grid);
 
@@ -2663,15 +2738,37 @@ async function _gpOpenPeriodPanel() {
   await _gpRenderPeriods(clubId, teamId, ov.querySelector('#pctxBody'), ov);
 }
 
+// Patrones POR DEFECTO — espejo de public.apply_gps_context_rule() (migración 130). Solo
+// informativos acá: los aplica el trigger cuando NINGUNA regla del club matchea. Para anular
+// uno, el club crea una regla con el mismo nombre y contexto "Team".
+const _CTX_DEFAULT_RULES = [
+  { pattern: '%top up%', work_context: 'topup' },
+  { pattern: '%top-up%', work_context: 'topup' },
+  { pattern: '%topup%', work_context: 'topup' },
+  { pattern: '%complementar%', work_context: 'topup' },
+  { pattern: '%complemento%', work_context: 'topup' },
+  { pattern: '%compensator%', work_context: 'topup' },
+  { pattern: '%compensac%', work_context: 'topup' },
+  { pattern: '%rehab%', work_context: 'rehab' },
+  { pattern: '%readapt%', work_context: 'rehab' },
+  { pattern: '%reatlet%', work_context: 'rehab' },
+  { pattern: '%individual%', work_context: 'individual' },
+];
+
 // Barra de reglas de auto-etiquetado: chips (patrón → contexto, borrable) + alta inline.
 // El nombre que escribís se guarda como '%nombre%' (contains) salvo que ya pongas %.
 function _gpRulesBarHTML(rules) {
   const esc = s => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
   const chips = (rules || []).map(r => `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--cm-border);border-radius:99px;font-size:11.5px;background:var(--cm-bg)"><b>${esc(r.pattern)}</b> → ${_ctxLabel(r.work_context)} <button class="rule-del" data-rule="${r.id}" title="${tt('common.delete','Delete')}" style="border:0;background:none;color:var(--cm-fg-muted);cursor:pointer;font-size:14px;line-height:1;padding:0">×</button></span>`).join('');
-  const ctxOpts = ['rehab', 'individual', 'topup'].map(c => `<option value="${c}">${_ctxLabel(c)}</option>`).join('');
+  // Defaults: mismo chip, atenuado y sin ×. Se ocultan los que el club ya anuló con una regla propia.
+  const own = new Set((rules || []).map(r => String(r.pattern).toLowerCase()));
+  const defChips = _CTX_DEFAULT_RULES.filter(d => !own.has(d.pattern)).map(d =>
+    `<span title="${tt('gps_analysis.rules_default_hint', 'Built-in rule. To override it, add a rule with the same name and context Team.')}" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px dashed var(--cm-border);border-radius:99px;font-size:11.5px;color:var(--cm-fg-muted);background:transparent"><b>${esc(d.pattern)}</b> → ${_ctxLabel(d.work_context)}</span>`).join('');
+  // 'team' = anulación ("esto SÍ es trabajo de equipo"), no un contexto que se etiquete.
+  const ctxOpts = ['topup', 'rehab', 'individual', 'team'].map(c => `<option value="${c}">${c === 'team' ? tt('gps_analysis.rules_ctx_team', 'Team (ignore)') : _ctxLabel(c)}</option>`).join('');
   return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--cm-border);border-radius:10px;margin-bottom:12px;background:var(--cm-surface)">
     <span style="font:600 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gps_analysis.rules_title', 'Auto-tag by period name')}</span>
-    ${chips || `<span style="font-size:11.5px;color:var(--cm-fg-muted)">${tt('gps_analysis.rules_empty', 'No rules yet')}</span>`}
+    ${chips}${defChips}${(chips || defChips) ? '' : `<span style="font-size:11.5px;color:var(--cm-fg-muted)">${tt('gps_analysis.rules_empty', 'No rules yet')}</span>`}
     <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">
       <input id="ruleName" placeholder="${tt('gps_analysis.rules_name_ph', 'name contains… e.g. Rehab')}" style="height:28px;padding:0 8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:190px">
       <select id="ruleCtx" style="height:28px;padding:0 6px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${ctxOpts}</select>
@@ -2684,7 +2781,7 @@ function _gpWireRulesBar(body, clubId, teamId, ov) {
   const add = body.querySelector('#ruleAdd');
   add?.addEventListener('click', async () => {
     const name = (body.querySelector('#ruleName')?.value || '').trim();
-    const ctx = body.querySelector('#ruleCtx')?.value || 'topup';
+    const ctx = body.querySelector('#ruleCtx')?.value || 'topup';   // 'team' = anular un default
     if (!name) { showToast(tt('gps_analysis.rules_need_name', 'Type a name first'), true); return; }
     const pat = /%/.test(name) ? name : '%' + name + '%';   // "Rehab" → "%Rehab%" (contains)
     await _gpAddContextRule(clubId, teamId, pat, ctx, body, ov);
@@ -2695,8 +2792,15 @@ async function _gpAddContextRule(clubId, teamId, pattern, ctx, body, ov) {
     const { error } = await window.sb.from('gps_context_rules').insert({ club_id: clubId, pattern, work_context: ctx });
     if (error) throw error;
     // Back-fill: aplicar a los períodos YA importados que matchean y siguen en 'team'.
-    await window.sb.from('gps_period_reports').update({ work_context: ctx })
-      .eq('club_id', clubId).eq('work_context', 'team').ilike('period_name', pattern);
+    // Una regla 'team' es una ANULACIÓN de un patrón por defecto: devuelve a 'team' lo que el
+    // trigger había etiquetado solo (nunca toca lo que ya estaba en 'team').
+    if (ctx === 'team') {
+      await window.sb.from('gps_period_reports').update({ work_context: 'team' })
+        .eq('club_id', clubId).neq('work_context', 'team').ilike('period_name', pattern);
+    } else {
+      await window.sb.from('gps_period_reports').update({ work_context: ctx })
+        .eq('club_id', clubId).eq('work_context', 'team').ilike('period_name', pattern);
+    }
     showToast(tt('gps_analysis.rules_added', 'Rule added'));
     window.cmInvalidateGpsCache?.();
     try { window.refreshDashboard?.(); } catch {}
@@ -3557,7 +3661,17 @@ function _gpRemoveCardCoherent(card, opts) {
   const silent = opts && opts.silent;
   const view = card.closest('.gp-view')?.dataset.view || document.querySelector('.gp-view.is-on')?.dataset.view;
   const defs = GP_CARD_DEFS[view] || [];
-  const isCatalogCard = card.id && defs.some(d => d.id === card.id);
+  // Card de catálogo = la que vive en el HTML, la reconozca o no ESTE dashboard: desde que se
+  // pueden mover entre dashboards, mirar sólo el catálogo de la vista activa la dejaba fuera del
+  // stash (se borraba del DOM y no había forma de recuperarla).
+  const isCatalogCard = !!card.id
+    && (defs.some(d => d.id === card.id) || _STATIC_CARD_OWNER.has(card.dataset.cardId || ''));
+  // Estaba anotada en un dashboard propio → esa fila se va con ella.
+  const rowId = card.dataset.rowId;
+  if (rowId && window.deleteDashboardCard && window.sb) {
+    window.deleteDashboardCard(rowId, window.sb).catch(e => console.warn('remove (fila adoptada):', e));
+    delete card.dataset.rowId;
+  }
   if (card === _gpSelectedCard) window.gpDeselectCards();
   if (isCatalogCard) {
     _cardStash.set(card.id, card);

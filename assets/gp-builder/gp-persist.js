@@ -139,6 +139,13 @@
         .select('report_type')
         .eq('club_id', clubId);
 
+      // SIEMBRA SÓLO EN UN CLUB VACÍO. Antes se re-creaba cualquier report_type que faltara, así
+      // que un dashboard de fábrica borrado volvía en la siguiente carga y el borrado no existía
+      // de verdad. Con un club que ya tiene aunque sea un dashboard, esta función no toca nada:
+      // lo que hay es lo que el club decidió. (Un default nuevo tampoco se cuela solo en clubes
+      // existentes — se agrega desde el propio producto, no por detrás.)
+      if (existing && existing.length) return;
+
       const existingTypes = new Set((existing || []).map(d => d.report_type));
 
       for (const def of DEFAULT_DASHBOARDS) {
