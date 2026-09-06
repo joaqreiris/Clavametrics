@@ -600,11 +600,23 @@
     return el;
   }
 
+  /**
+   * KPI y gauge de una sola métrica se pintan como un tile compacto (2×3, 180 px) por CSS. Hay que
+   * reservar ese hueco DESDE EL MOUNT: si la card nace con el ancho de su bucket (6×7) y se encoge
+   * cuando llega el dato, el dashboard entero se reacomoda a mitad de carga — eso es el baile de
+   * cards al abrir un dashboard propio. Mismo criterio que las reglas :has() del CSS.
+   */
+  function _isKpiSlot(cfg) {
+    return cfg?.viz === 'kpi'
+      || (cfg?.viz === 'gauge' && cfg?.scope?.level === 'squad' && (cfg?.metrics?.length ?? 1) <= 1);
+  }
+
   function _buildCardElement(card) {
     if (card.config?.schema === 'gp.static/v1') return _adoptStaticCard(card);
     const config = card.config || {};
     const el = document.createElement('div');
     el.className = 'gp-c';
+    if (_isKpiSlot(config)) el.classList.add('gp-c-kpi-slot');
     el.dataset.size     = card.size || config.style?.size || 'md';
     el.dataset.card     = 'chart';
     el.dataset.cardId   = card.id;

@@ -640,6 +640,24 @@ function _gpBringAdopted(grid, viewKey, layout) {
   }
 }
 
+// Tamaño y posición EFECTIVOS de una card, que es lo que hay que guardar: lo que se ve.
+// Los tiles compactos (KPI y gauge de una métrica) llevan su ancho y alto en el CSS con
+// !important —2×3, 180 px—, así que su dataset seguía diciendo el bucket con el que nacieron
+// (6×7) y era eso lo que se persistía: el layout reservaba para esa card un hueco tres veces
+// más grande del que ocupa, y las vecinas se colocaban contra un tamaño que nadie ve.
+// Se lee primero el valor computado de la variable (el que gana), y sólo si no hay, el dataset.
+window.gpCoord = _gpCoord;   // gp-builder lo usa al re-adjuntar el layout de una card editada
+function _gpCoord(el, key) {
+  if (!el) return NaN;
+  let v = NaN;
+  try { v = parseInt(getComputedStyle(el).getPropertyValue('--gp-' + key), 10); } catch (_) { v = NaN; }
+  if (Number.isFinite(v)) return v;
+  const d = parseInt(el.dataset[key], 10);
+  if (Number.isFinite(d)) return d;
+  const inline = parseInt(el.style.getPropertyValue('--gp-' + key), 10);
+  return Number.isFinite(inline) ? inline : NaN;
+}
+
 // Custom dashboards (viewKey "db-<uuid>") store their layout GLOBALLY on the dashboard: the
 // {x,y,w,h,size} of each card is written into that card's own config in dashboard_cards. That way
 // the arrangement is shared by everyone who opens the dashboard, travels on duplicate (the config
@@ -652,12 +670,7 @@ async function _saveCustomDashboardLayout(viewKey) {
   if (!grid) return;
   const cards = [...grid.querySelectorAll('.gp-c[data-card-id]')];
   if (!cards.length) return;
-  const _coord = (el, key) => {
-    const d = parseInt(el.dataset[key], 10);
-    if (Number.isFinite(d)) return d;
-    const v = parseInt(el.style.getPropertyValue('--gp-' + key), 10);
-    return Number.isFinite(v) ? v : NaN;
-  };
+  const _coord = (el, key) => _gpCoord(el, key);
   try {
     await Promise.all(cards.map((el, idx) => {
       // Never write a card whose live config we don't hold — that would clobber its metrics/config
@@ -735,12 +748,7 @@ async function saveLayout(viewKey, overrideDid) {
       // the live CSS var that actually drives the grid placement (--gp-x/y/w/h). This keeps
       // the save correct even if dataset and the CSS var ever desync — the size/position the
       // user SEES is what gets persisted.
-      const _coord = (key) => {
-        const d = parseInt(el.dataset[key], 10);
-        if (Number.isFinite(d)) return d;
-        const v = parseInt(el.style.getPropertyValue('--gp-' + key), 10);
-        return Number.isFinite(v) ? v : NaN;
-      };
+      const _coord = (key) => _gpCoord(el, key);
       const x = _coord('x'), y = _coord('y'), w = _coord('w'), h = _coord('h');
       // Persist the on-screen coords of EVERY card. The auto-flow flag (dataset.autoFlow, set by
       // gp-canvas for an invented position) only matters DURING load — there we must NOT freeze a

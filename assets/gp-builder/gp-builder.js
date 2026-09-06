@@ -1179,7 +1179,10 @@
   function _carryCardLayout(cfg, el, sizeChanged) {
     if (!cfg || !el) return;
     const prev = (el.__config && el.__config.style) || {};
+    // Mismo criterio que al guardar el layout: manda el valor EFECTIVO (un tile compacto de
+    // KPI o gauge mide 2×3 por CSS, no lo que diga su dataset).
     const num = k => {
+      if (typeof window.gpCoord === 'function') return window.gpCoord(el, k);
       const d = parseInt(el.dataset[k], 10);
       if (Number.isFinite(d)) return d;
       const v = parseInt(el.style.getPropertyValue('--gp-' + k), 10);

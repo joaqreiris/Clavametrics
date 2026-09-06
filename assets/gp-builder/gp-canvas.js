@@ -31,21 +31,36 @@
         && Number.isFinite(item.w) && Number.isFinite(item.h);
   }
 
+  const _hits = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  /** Primer hueco libre (arriba-izquierda) para una caja w×h que no pise a las ya colocadas. */
+  function _freeSlot(taken, w, h) {
+    for (let y = 0; y < 400; y++) {
+      for (let x = 0; x + w <= COLS; x++) {
+        const box = { x, y, w, h };
+        if (!taken.some(t => _hits(box, t))) return box;
+      }
+    }
+    return { x: 0, y: 0, w, h };
+  }
+
   function toCanvasLayout(layout) {
     if (!Array.isArray(layout)) return [];
     const ordered = layout.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-    let cx = 0, cy = 0, rowH = 0;
+    // Las cards que YA tienen sitio son terreno ocupado: una card sin coordenadas se coloca en el
+    // primer hueco que quede libre, nunca encima de otra. Antes el cursor saltaba a la posición de
+    // la última card colocada y seguía desde ahí, así que en un dashboard mixto (unas colocadas,
+    // otras no) las nuevas aterrizaban ENCIMA de las que ya tenían su lugar.
+    const taken = ordered.filter(hasCoords).map(i => ({ x: i.x, y: i.y, w: i.w, h: i.h }));
     return ordered.map(item => {
-      if (hasCoords(item)) { cx = item.x; cy = item.y; rowH = Math.max(rowH, item.h); return { ...item }; }
+      if (hasCoords(item)) return { ...item };
       const w = Math.min(COLS, spanOf(item));
       const h = rowsOf(item);
-      if (cx + w > COLS) { cx = 0; cy += (rowH || h); rowH = 0; }
+      const slot = _freeSlot(taken, w, h);
+      taken.push(slot);
       // _autoFlow: these coords are INVENTED by this pass (the item had none). They must be
       // re-derivable — a later authoritative pass (once the saved layout is loaded/reordered)
       // has to be free to re-flow them in the CURRENT order instead of treating them as final.
-      const placed = { ...item, x: cx, y: cy, w, h, _autoFlow: true };
-      cx += w; rowH = Math.max(rowH, h);
-      return placed;
+      return { ...item, x: slot.x, y: slot.y, w, h, _autoFlow: true };
     });
   }
   function syncLegacyFields(item) {

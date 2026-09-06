@@ -54,10 +54,22 @@ async function mount(page, cards) {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH, CUSTOM] });
   });
+  // La "base": lo que la app manda por PATCH queda guardado y sale en el siguiente GET, para
+  // poder recargar la página y ver con qué se encuentra.
+  const db = new Map(cards.map(c => [c.id, c]));
   await page.route(`${SB}/rest/v1/dashboard_cards**`, r => {
     const req = r.request();
-    if (req.method() === 'PATCH') { try { patches.push(JSON.parse(req.postData() || '{}')); } catch { /* body no-JSON */ } return r.fulfill({ json: [{}] }); }
-    return r.fulfill({ json: cards });
+    if (req.method() === 'PATCH') {
+      try {
+        const body = JSON.parse(req.postData() || '{}');
+        patches.push(body);
+        const id = (req.url().match(/id=eq\.([^&]+)/) || [])[1];
+        const row = id && db.get(id);
+        if (row && body.config) db.set(id, { ...row, config: body.config, size: body.size || row.size });
+      } catch { /* body no-JSON */ }
+      return r.fulfill({ json: [{}] });
+    }
+    return r.fulfill({ json: [...db.values()] });
   });
 
   await injectSession(page);
@@ -67,7 +79,7 @@ async function mount(page, cards) {
   // Pasar al dashboard propio: es ahí donde la posición vive en el config de la card.
   await page.locator(`[data-view="db-${CUSTOM.id}"]`).first().click();
   await expect(page.locator(`.gp-view[data-view="db-${CUSTOM.id}"].is-on`)).toBeVisible({ timeout: 15_000 });
-  return patches;
+  return { patches, db };
 }
 
 /** Coordenadas con las que quedó pintada una card. */
@@ -77,7 +89,7 @@ const coordsOf = (page, id) => page.evaluate((cid) => {
 }, id);
 
 test('editar una card no le borra su sitio en el canvas', async ({ page }) => {
-  const patches = await mount(page, [CARD]);
+  const { patches } = await mount(page, [CARD]);
   const card = page.locator(`.gp-view.is-on .gp-c[data-card-id="${CARD.id}"]`).first();
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect.poll(async () => (await coordsOf(page, CARD.id) || []).join(','),
@@ -106,9 +118,92 @@ test('una card sin coordenadas no aterriza encima de una ya colocada', async ({ 
     config: { ...CARD.config, title: 'Suelta', style: { color: '#DC2626', size: 'md' } } };   // sin canvas
   await mount(page, [FIJA, SUELTA]);
   await expect(page.locator(`.gp-view.is-on .gp-c[data-card-id="${SUELTA.id}"]`).first()).toBeVisible({ timeout: 30_000 });
+  // Las dos tienen que estar YA colocadas: medir a mitad del pintado da coordenadas a medio hacer.
+  await expect.poll(async () => {
+    const [a, b] = await Promise.all([coordsOf(page, FIJA.id), coordsOf(page, SUELTA.id)]);
+    return [...(a || []), ...(b || [])].filter(Number.isFinite).length;
+  }, { timeout: 20_000 }).toBe(8);
   const a = await coordsOf(page, FIJA.id);
   const b = await coordsOf(page, SUELTA.id);
   expect(a).toEqual([0, 0, 12, 10]);                          // la colocada se queda donde estaba
   const solapan = a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
   expect(solapan).toBe(false);
+});
+
+// Un tile compacto (KPI, o gauge de una sola métrica) mide 2×3 por CSS —con !important— pero su
+// dataset seguía diciendo el bucket con el que nació (6×7), y ESO era lo que se guardaba: el
+// layout reservaba un hueco tres veces mayor que la card, y las vecinas se colocaban contra un
+// tamaño que nadie ve. Se guarda el tamaño efectivo.
+test('el layout guarda el tamaño que la card ocupa de verdad, no el de su bucket', async ({ page }) => {
+  const KPI = { id: '44444444-4444-4444-8444-444444444444', position: 0, source: 'builder', size: 'md',
+    config: { schema: 'gp.card/v1', title: 'Total Distance', viz: 'kpi', scope: { level: 'squad' },
+      metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [],
+      range: { type: 'last30' }, style: { color: '#15803D', size: 'md' } } };
+  const { patches } = await mount(page, [KPI]);
+  const card = page.locator(`.gp-view.is-on .gp-c[data-card-id="${KPI.id}"]`).first();
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1200);
+
+  // Lo que se ve: el tile compacto ocupa 2 columnas × 3 filas.
+  const painted = await page.evaluate((cid) => {
+    const el = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${cid}"]`);
+    const cs = getComputedStyle(el);
+    return { w: parseInt(cs.getPropertyValue('--gp-w'), 10), h: parseInt(cs.getPropertyValue('--gp-h'), 10) };
+  }, KPI.id);
+  expect(painted).toEqual({ w: 2, h: 3 });
+
+  patches.length = 0;
+  await page.evaluate(() => window.saveLayout(document.querySelector('.gp-view.is-on').dataset.view));
+  await expect.poll(() => patches.length, { timeout: 15_000 }).toBeGreaterThan(0);
+  const canvas = patches[patches.length - 1].config?.style?.canvas;
+  expect(canvas).toBeTruthy();
+  expect({ w: canvas.w, h: canvas.h }).toEqual(painted);    // se guarda lo que ocupa
+});
+
+// El ciclo entero, que es lo que el usuario vive: acomodar, guardar, recargar. Si algo del camino
+// pierde o falsea coordenadas, las cards vuelven a otro sitio — el desorden que se reportó.
+test('acomodar, guardar y recargar deja las cards donde estaban', async ({ page }) => {
+  const A = { ...CARD, id: '55555555-5555-4555-8555-555555555555',
+    config: { ...CARD.config, title: 'Tabla', viz: 'table',
+      metrics: [{ id: 'total_distance', agg: 'avg' }],
+      style: { ...CARD.config.style, canvas: { x: 0, y: 0, w: 12, h: 9, size: 'full' }, span: 12 } } };
+  const B = { id: '66666666-6666-4666-8666-666666666666', position: 1, source: 'builder', size: 'md',
+    config: { schema: 'gp.card/v1', title: 'Total Distance', viz: 'kpi', scope: { level: 'squad' },
+      metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [],
+      range: { type: 'last30' }, style: { color: '#15803D', size: 'md' } } };
+
+  // La "base": los PATCH que manda la app se guardan y se devuelven en el siguiente GET.
+  const { db } = await mount(page, [A, B]);
+
+  const wait = async () => expect.poll(async () => {
+    const c = await Promise.all([coordsOf(page, A.id), coordsOf(page, B.id)]);
+    return c.flat().filter(Number.isFinite).length;
+  }, { timeout: 20_000 }).toBe(8);
+  await wait();
+
+  // El usuario mueve el KPI y guarda — con la carga ya terminada, como en el uso real: mientras
+  // el layout se está aplicando, el guardado se descarta a propósito (no cementar coords
+  // provisionales), así que guardar antes de eso no prueba nada.
+  await expect.poll(() => page.evaluate(() => window._gpLayoutReady !== false), { timeout: 20_000 }).toBe(true);
+  await page.evaluate((id) => {
+    const el = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"]`);
+    window.gpCanvas.applyCoords(el, { x: 4, y: 10, w: 2, h: 3 });
+  }, B.id);
+  await page.evaluate(() => window.saveLayout(document.querySelector('.gp-view.is-on').dataset.view));
+  // Se espera al guardado real, no a un reloj: lo que quedó en la base tiene que decir lo mismo
+  // que la pantalla.
+  await expect.poll(() => db.get(B.id)?.config?.style?.canvas?.x, { timeout: 15_000 }).toBe(4);
+  expect(db.get(B.id)?.config?.style?.canvas).toMatchObject({ x: 4, y: 10, w: 2, h: 3 });
+
+  const before = { a: await coordsOf(page, A.id), b: await coordsOf(page, B.id) };
+  expect(before.b).toEqual([4, 10, 2, 3]);
+
+  await page.reload();
+  await page.waitForSelector('.gp-sections', { timeout: 15_000 });
+  await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
+  await page.locator(`[data-view="db-${CUSTOM.id}"]`).first().click();
+  await wait();
+
+  expect(await coordsOf(page, A.id)).toEqual(before.a);   // la tabla, donde estaba
+  expect(await coordsOf(page, B.id)).toEqual(before.b);   // y el KPI, donde lo dejaron
 });
