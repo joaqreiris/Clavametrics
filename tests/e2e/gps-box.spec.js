@@ -37,7 +37,8 @@ const card = (cfg) => ([{ id: 'card-box', position: 0, source: 'builder', size: 
   metrics: [{ id: 'total_distance', agg: 'avg' }], range: { type: 'last30' },
   style: { color: '#15803D' }, ...cfg } }]);
 
-async function open(page, cards) {
+/** Monta la página con la card dada. `waitCanvas:false` para los casos que NO dibujan (avisos). */
+async function open(page, cards, { waitCanvas = true } = {}) {
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -59,10 +60,12 @@ async function open(page, cards) {
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
-  await expect.poll(async () => page.evaluate(() =>
-    document.querySelectorAll('.gp-view.is-on .gp-c[data-card-id="card-box"] canvas').length
+  await expect.poll(async () => page.evaluate((sel) =>
+    document.querySelectorAll(sel).length,
+    waitCanvas ? '.gp-view.is-on .gp-c[data-card-id="card-box"] canvas'
+               : '.gp-view.is-on .gp-c[data-card-id="card-box"] .cb2-state:not(.load)'
   ), { timeout: 30_000 }).toBeGreaterThan(0);
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(waitCanvas ? 1200 : 300);
 }
 
 /** Las cajas ya calculadas, tal como las recibió el plugin que las dibuja. */
@@ -106,10 +109,24 @@ test.describe('GPS · caja y bigotes', () => {
     expect(bs[0].n).toBe(9);                      // los 9 jugadores, no un promedio
   });
 
-  test('el tipo está disponible en el editor', async ({ page }) => {
+  test('el tipo está en el editor y nace con el plantel entero', async ({ page }) => {
     await open(page, card({ dimensions: [{ id: 'position' }] }));
     await page.locator('#gpbOpenBtn').first().click();
     await expect(page.locator('#gpbPanel.is-open').first()).toBeVisible();
     await expect(page.locator('#gpbPanel [data-type="box"]')).toHaveCount(1);
+    await page.locator('#gpbPanel [data-type="box"]').click();
+    // Una caja ES la dispersión del plantel: con el scope de jugador que traen las cards nuevas
+    // se quedaba sin datos, que es como llegó al dashboard la primera vez.
+    await expect.poll(async () => page.evaluate(() => window.GpBuilder?.currentConfig?.()?.scope?.level),
+      { timeout: 10_000 }).toBe('squad');
+  });
+
+  // Las cards de caja creadas ANTES del arreglo quedaron con alcance de jugador y sin datos.
+  // El genérico «no hay datos» no decía qué hacer; ahora la card lo explica.
+  test('con alcance de jugador, la card dice qué le falta', async ({ page }) => {
+    await open(page, card({ dimensions: [{ id: 'position' }], scope: { level: 'player' } }), { waitCanvas: false });
+    const txt = await page.evaluate(() =>
+      document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-box"] .gp-c-b')?.innerText || '');
+    expect(txt.toLowerCase()).toMatch(/plantel|squad/);
   });
 });

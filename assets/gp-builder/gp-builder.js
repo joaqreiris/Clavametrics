@@ -2822,6 +2822,16 @@
         _tt('gps_analysis.builder_stuck', 'Took too long to load. Reload the page — details are in the console.'), config);
     }, 25000);
 
+    // Una caja y bigotes con alcance de JUGADOR no tiene de qué calcular cuartiles: un jugador es
+    // un valor. En vez del genérico «no hay datos», que no dice qué hacer, la card lo explica.
+    // (Las cards nuevas ya nacen con el plantel; esto es para las que quedaron guardadas antes.)
+    if (config?.viz === 'box' && config?.scope?.level === 'player') {
+      clearTimeout(cardEl.__loadWatchdog);
+      _showCardState(cardEl, body, 'nodata',
+        _tt('gps_analysis.box_needs_squad', 'A box plot needs the whole squad: set this card’s scope to Squad.'), config);
+      return;
+    }
+
     try {
       // Context readiness (TIMING): a card can be rendered during dashboard boot —
       // before the club context is resolved. Wait, showing the spinner, for clubId +
@@ -8495,7 +8505,9 @@
     S.type = id;
     // A NEW table card defaults to squad scope (a player-scoped table shows a single player →
     // confusing). Ported from the removed classic setType(). scopeTouched===false = untouched.
-    if (id === 'table' && S.scopeTouched === false) S.scope = 'squad';
+    // La caja y bigotes va por lo mismo, y más fuerte: una caja ES la dispersión del plantel; con
+    // scope de jugador la card no tiene de qué calcular cuartiles y se queda sin datos.
+    if ((id === 'table' || id === 'box') && S.scopeTouched === false) S.scope = 'squad';
     const t = VIZ_TYPES[id];
     if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
     S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
