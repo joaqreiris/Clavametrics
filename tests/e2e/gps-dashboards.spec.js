@@ -18,7 +18,7 @@ const DASHES = [
 ];
 
 /** Monta la página con los dashboards dados. Devuelve los POST que se hagan a /dashboards. */
-async function mount(page, { dashboards = DASHES } = {}) {
+async function mount(page, { dashboards = DASHES, cards = [] } = {}) {
   const posts = [];
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
@@ -28,20 +28,50 @@ async function mount(page, { dashboards = DASHES } = {}) {
   await page.route(`${SB}/rest/v1/gps_metric_definitions**`, r => r.fulfill({ json: [
     { key: 'total_distance', label: 'Total Distance', unit: 'm', kind: 'accum', category: 'distance', is_core: true, decimals: 0, display_order: 1, squad_rollup: true },
   ] }));
+  const live = [...dashboards];                 // la "base": el borrado y el alta se reflejan acá
+  const cardsDb = [...cards];
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
-    const req = r.request();
-    if (req.method() === 'POST') { try { posts.push(JSON.parse(req.postData() || '{}')); } catch { /* body no-JSON */ } return r.fulfill({ json: [{ id: 'new-dash' }] }); }
+    const req = r.request(), url = req.url();
+    if (req.method() === 'POST') {
+      let body = {};
+      try { body = JSON.parse(req.postData() || '{}'); } catch { /* body no-JSON */ }
+      posts.push(body);
+      const row = { id: 'dash-nuevo', club_id: CLUB_ID, ...body };
+      live.push(row);
+      return r.fulfill({ json: [row] });
+    }
+    if (req.method() === 'DELETE') {
+      const id = (url.match(/id=eq\.([^&]+)/) || [])[1];
+      const i = live.findIndex(d => d.id === id);
+      if (i >= 0) live.splice(i, 1);
+      return r.fulfill({ json: [] });
+    }
     const acc = req.headers()['accept'] || '';
-    return r.fulfill({ json: acc.includes('object') ? dashboards[0] : dashboards });
+    return r.fulfill({ json: acc.includes('object') ? live[0] : live });
   });
-  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => r.fulfill({ json: [] }));
+  await page.route(`${SB}/rest/v1/dashboard_cards**`, r => {
+    const req = r.request(), url = req.url();
+    if (req.method() === 'POST') {
+      let body = [];
+      try { body = JSON.parse(req.postData() || '[]'); } catch { /* body no-JSON */ }
+      (Array.isArray(body) ? body : [body]).forEach((c, i) => cardsDb.push({ id: 'card-nueva-' + (cardsDb.length + i), ...c }));
+      return r.fulfill({ json: [] });
+    }
+    if (req.method() === 'DELETE') {
+      const did = (url.match(/dashboard_id=eq\.([^&]+)/) || [])[1];
+      for (let i = cardsDb.length - 1; i >= 0; i--) if (cardsDb[i].dashboard_id === did) cardsDb.splice(i, 1);
+      return r.fulfill({ json: [] });
+    }
+    const did = (url.match(/dashboard_id=eq\.([^&]+)/) || [])[1];
+    return r.fulfill({ json: did ? cardsDb.filter(c => c.dashboard_id === did) : cardsDb });
+  });
 
   await injectSession(page);
   await page.goto('/GPS Analysis.html');
   await page.waitForSelector('.gp-sections', { timeout: 15_000 });
   await page.evaluate((cid) => { window._gpClubId = cid; window._gpUserId = 'user-1'; }, CLUB_ID);
   await page.waitForTimeout(1500);
-  return posts;
+  return { posts, live, cardsDb };
 }
 
 test.describe('GPS · dashboards y catálogo de cards', () => {
@@ -95,11 +125,39 @@ test.describe('GPS · dashboards y catálogo de cards', () => {
     await expect(page.locator('.gpt-menu [data-act="delete"]')).toBeVisible();
   });
 
+  // Borrar un dashboard se lleva sus cards y no hay vuelta atrás en la base: el «Deshacer» del
+  // aviso es la única red. Se comprueba con uno de fábrica, que es el caso nuevo.
+  test('el aviso deja deshacer el borrado, con sus cards', async ({ page }) => {
+    const CARD = { id: 'c1', dashboard_id: 'dash-ind', config: { schema: 'gp.card/v1', viz: 'kpi', title: 'Mi KPI',
+      scope: { level: 'squad' }, metrics: [{ id: 'total_distance', agg: 'avg' }], range: { type: 'last30' }, style: {} },
+      size: 'md', position: 0, source: 'builder' };
+    const { live, cardsDb } = await mount(page, { cards: [CARD] });
+
+    page.on('dialog', d => d.accept());          // la confirmación de borrado
+    const tab = page.locator('#sections .gp-sec[data-view="ind"]').first();
+    await tab.hover();
+    await tab.locator('.gpt-kb').first().click();
+    await page.locator('.gpt-menu [data-act="delete"]').click();
+
+    await expect.poll(() => live.some(d => d.id === 'dash-ind'), { timeout: 10_000 }).toBe(false);
+    expect(cardsDb.some(c => c.dashboard_id === 'dash-ind')).toBe(false);   // sus cards se fueron con él
+
+    // El aviso ofrece deshacer…
+    const undo = page.locator('#gpbToast.is-on #gpbToastAct');
+    await expect(undo).toBeVisible({ timeout: 5_000 });
+    await undo.click();
+
+    // …y vuelve: la fila del dashboard, con su report_type, y la card que tenía.
+    await expect.poll(() => live.some(d => d.report_type === 'ind'), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => cardsDb.filter(c => c.config?.title === 'Mi KPI').length, { timeout: 10_000 }).toBe(1);
+    await expect(page.locator('#sections .gp-sec[data-view="ind"]')).toHaveCount(1);
+  });
+
   test('un club que ya tiene dashboards no recibe los de fábrica otra vez', async ({ page }) => {
     // Sólo queda uno de los cinco: antes, los cuatro que faltaban se re-creaban solos en la
     // siguiente carga y el borrado no existía de verdad. Se llama a la siembra a mano para que
     // el test mida ESO y no el momento en que la página la dispara sola.
-    const posts = await mount(page, { dashboards: [DASHES[1]] });
+    const { posts } = await mount(page, { dashboards: [DASHES[1]] });
     posts.length = 0;
     const ran = await page.evaluate(async (cid) => {
       if (typeof window.ensureDefaultDashboards !== 'function') return false;

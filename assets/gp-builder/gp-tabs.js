@@ -92,6 +92,63 @@
     setTimeout(() => toast.classList.remove('is-on'), 4000);
   }
 
+  /**
+   * Toast con una acción a mano — el «Deshacer» de un borrado. Reusa el toast del builder
+   * (#gpbToast), le presta el botón por unos segundos y le devuelve su handler al cerrarse.
+   * Devuelve la función de cierre.
+   */
+  function showActionToast(title, sub, actLabel, onAct, ms, icon) {
+    const toast = document.getElementById('gpbToast');
+    const tEl = document.getElementById('gpbToastTitle');
+    const sEl = document.getElementById('gpbToastSub');
+    const aEl = document.getElementById('gpbToastAct');
+    if (!toast || !tEl || !sEl || !aEl) return () => {};
+    const iEl = toast.querySelector('.ic .ti');
+    const prevAct = aEl.onclick;
+    const prevTxt = aEl.textContent;
+    const prevIcon = iEl ? iEl.className : null;
+    let timer = null;
+    const close = () => {
+      clearTimeout(timer);
+      toast.classList.remove('is-on');
+      aEl.onclick = prevAct;
+      aEl.textContent = prevTxt;
+      if (iEl && prevIcon) iEl.className = prevIcon;   // el toast vuelve a ser el del builder
+    };
+    if (iEl && icon) iEl.className = 'ti ' + icon;
+    tEl.textContent = title;
+    sEl.textContent = sub || '';
+    aEl.textContent = actLabel;
+    aEl.onclick = () => { close(); try { onAct && onAct(); } catch (e) { console.warn('gpt toast action:', e); } };
+    toast.classList.add('is-on');
+    timer = setTimeout(close, ms || 12000);
+    return close;
+  }
+
+  /**
+   * Vuelve a crear un dashboard borrado con sus cards. Es una copia, no una resurrección: la fila
+   * nueva tiene otro id. Para uno de fábrica da igual —lo que lo identifica es su report_type— y
+   * para uno propio las cards se re-insertan apuntando al id nuevo, así que el dashboard queda
+   * como estaba.
+   */
+  async function _undoDeleteDashboard(dash, cards) {
+    const KEEP = ['club_id', 'report_type', 'name', 'scope', 'sort_order', 'is_shared', 'team_id', 'owner_id', 'created_by'];
+    const row = { club_id: _clubId };
+    KEEP.forEach(k => { if (dash[k] !== undefined && dash[k] !== null) row[k] = dash[k]; });
+    const { data, error } = await window.sb.from('dashboards').insert(row).select('id').single();
+    if (error || !data) throw new Error(error?.message || 'insert dashboard');
+    if (cards && cards.length) {
+      const { error: cErr } = await window.sb.from('dashboard_cards').insert(cards.map((c, i) => ({
+        dashboard_id: data.id, config: c.config, size: c.size || 'md',
+        position: c.position ?? i, source: c.source || 'builder', created_by: _userId || null,
+      })));
+      if (cErr) console.warn('gpt undo: cards no restauradas:', cErr.message);
+    }
+    _dashboards = await window.loadDashboards(_clubId, window.sb);
+    reRender();
+    switchToView(REPORT_TYPE_TO_VIEW[dash.report_type] || `db-${data.id}`);
+  }
+
   function waitForClubId(maxMs = 12000) {
     return new Promise((resolve, reject) => {
       const t0 = Date.now();
@@ -526,6 +583,18 @@
       'Delete this dashboard? Its cards go with it and this cannot be undone.');
     if (typeof window.confirm === 'function' && !window.confirm(`${dash.name || ''}\n\n${_msg}`)) return;
 
+    // Copia de seguridad ANTES de borrar: la fila y sus cards, tal como están. Es lo único que
+    // hace posible el «Deshacer» — deleteDashboard borra las cards primero, y de la base no se
+    // recupera nada después.
+    let snapCards = [];
+    try {
+      const { data } = await window.sb.from('dashboard_cards')
+        .select('config, size, position, source')
+        .eq('dashboard_id', dash.id)
+        .order('position', { ascending: true });
+      snapCards = data || [];
+    } catch (e) { console.warn('gpt delete: sin copia de las cards:', e); }
+
     const idx = _dashboards.indexOf(dash);
     _dashboards.splice(idx, 1);
 
@@ -534,7 +603,19 @@
     switchToView(fallbackView);
     reRender();
 
-    try { await window.deleteDashboard(dash.id, window.sb); }
+    try {
+      await window.deleteDashboard(dash.id, window.sb);
+      showActionToast(
+        tt('gps_analysis.dash_deleted', 'Dashboard deleted'),
+        dash.name || '',
+        tt('gps_analysis.undo', 'Undo'),
+        () => _undoDeleteDashboard(dash, snapCards).catch(e => {
+          console.warn('gpt undo delete:', e);
+          showActionToast(tt('gps_analysis.dash_undo_failed', 'Could not bring it back'), dash.name || '', 'OK', null, 6000, 'ti-alert-triangle');
+        }),
+        12000, 'ti-trash',
+      );
+    }
     catch (e) {
       console.warn('gpt deleteDashboard:', e);
       // rollback local state on server error
