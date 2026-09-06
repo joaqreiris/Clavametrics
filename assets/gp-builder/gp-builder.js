@@ -625,7 +625,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -909,6 +909,10 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_points">Points</span><span class="s" data-i18n="gps_analysis.builder_points_sub">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
               </div>
+              <div class="es-toggle" data-only="bars">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_combo_line">Join the line</span><span class="s" data-i18n="gps_analysis.builder_combo_line_sub">Off: only the dots of the line metric</span></span>
+                <button class="es-sw-t is-on" data-toggle="comboLine"></button>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_area_fill">Area fill</span><span class="s" data-i18n="gps_analysis.builder_area_fill_sub">Soft fill under the line</span></span>
                 <button class="es-sw-t" data-toggle="area"></button>
@@ -1036,7 +1040,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1427,6 +1431,7 @@
       S.richTooltip    = cfg.richTooltip !== false;   // ausente (cards viejas) → true (default ON)
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
+      S.comboLine = cfg.comboLine !== false;   // ausente (cards viejas) → true (línea unida)
       S.horizontal = !!cfg.horizontal;
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
@@ -1465,6 +1470,7 @@
       S.richTooltip    = rawConfig.style?.richTooltip !== false;   // ausente (cards viejas) → true (default ON)
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
+      S.comboLine = rawConfig.style?.comboLine !== false;   // ausente (cards viejas) → true
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
@@ -4505,9 +4511,19 @@
         if (isLine[i]) {                            // combo: línea REAL (no Δ%) en el eje secundario
           const lc = config.style?.colors?.[s.label] || lineCol;
           refMetricMap.set(s.label, { vals, valsByGrp, isLine: true, color: lc });
+          // showLine:false = sólo los puntos (estilo Power BI), sin el trazo que los une.
+          const joined = config.style?.comboLine !== false;
           return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
             yAxisID: 'y1', borderColor: lc, backgroundColor: 'transparent',
-            borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
+            // Sin trazo, borderWidth 0: así la leyenda muestra un PUNTO y no una raya de una
+            // línea que no existe (el legend usa el borderWidth del dataset para el trazo).
+            borderWidth: joined ? 2.4 : 0, tension: 0.25,
+            pointRadius: joined ? 3.5 : 4.5, pointHoverRadius: joined ? 5.5 : 6.5,
+            showLine: joined,
+            // Chart.js dibuja los datasets del ÚLTIMO al primero según `order`, así que el order
+            // MÁS BAJO queda arriba: la línea (0) por delante de las barras (1). El orden del array
+            // no alcanzaba — así se dibujaba detrás de las barras y quedaba tapada.
+            order: 0,
             pointBackgroundColor: lc, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true, _rel: false };
         }
         const col = config.style?.colors?.[s.label] || barCols[bi++];   // per-series override wins; else next palette slot
@@ -4518,13 +4534,14 @@
         const rel = relByBar[s.label];
         const bg = rel ? rel.pct.map(v => v == null ? col : (_relBandColor(v, config.style?.relBands) || (v >= 0 ? relUp : relDn))) : col;
         return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
+          order: 1,                                   // detrás de la línea del combo (ver order:0)
           backgroundColor: bg, borderColor: bg, borderWidth: 0,
           borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
           maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
           stack: stacked ? 'stk' : undefined,
           _relPct: rel ? rel.pct : null, _relCap: rel ? rel.cap : null };
       }).filter(Boolean);
-      datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
+      datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // barras primero en la leyenda (el dibujo lo manda `order`)
       hasLine = datasets.some(d => d._isLine);
       if (hasLine) {
         const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null).map(Number));
@@ -5066,8 +5083,10 @@
                           text: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
                           fillStyle:   ds._isLine ? ds.borderColor : ds.backgroundColor,
                           strokeStyle: ds._isLine ? ds.borderColor : ds.backgroundColor,
-                          lineWidth:   ds._isLine ? 2 : 0,
-                          pointStyle:  ds._isLine ? 'line' : 'rectRounded',
+                          // Serie en línea sin trazo (modo «sólo puntos») → en la leyenda va un
+                          // punto, no una raya: la muestra dice lo mismo que el gráfico.
+                          lineWidth:   (ds._isLine && ds.showLine !== false) ? 2 : 0,
+                          pointStyle:  ds._isLine ? (ds.showLine === false ? 'circle' : 'line') : 'rectRounded',
                           hidden: !ch.isDatasetVisible(i), datasetIndex: i,
                         })) },
               onClick: (e, item, legend) => {
