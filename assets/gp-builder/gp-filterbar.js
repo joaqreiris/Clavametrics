@@ -44,6 +44,9 @@
     const t = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(k) : null;
     return (t && t !== k) ? t : en;
   }
+  // Desde que se puede AGRUPAR por contexto, el resolver necesita la misma etiqueta que el
+  // filtro: si no, el eje diría 'topup' donde el desplegable dice 'Top-up'.
+  window.gpWorkContextLabel = _wcLabel;
 
   // Session-type value → i18n label (training_sessions.session_type). Raw value stays the
   // filter key (what the resolver matches); only the display label is translated.

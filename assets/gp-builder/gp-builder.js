@@ -79,6 +79,10 @@
     { id:'md_code',      name:'MD code',     icon:'ti-calendar-event', group:'Time',    sessionOnly:true },
     { id:'microcycle',   name:'Microcycle',  icon:'ti-calendar-week',  group:'Time',    sessionOnly:true },
     { id:'rival',        name:'Rival',       icon:'ti-ball-football',  group:'Context', sessionOnly:true },
+    // Contexto del trabajo (equipo · rehab · individual · top-up). Agrupar por él separa lo que
+    // el filtro sólo sabía mezclar: hasta ahora, sumar rehab al filtro metía esas filas en la
+    // misma barra o la misma caja que las del equipo.
+    { id:'work_context', name:'Context',     icon:'ti-tag',            group:'Context', sessionOnly:true },
     // Task source only (v_gps_task_analysis)
     { id:'drill',          name:'Drill',          icon:'ti-soccer-field', group:'Task', task:true },
     { id:'field_size',     name:'Field size',     icon:'ti-ruler',        group:'Task', task:true },
