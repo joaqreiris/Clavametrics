@@ -8,6 +8,10 @@
 -- ai_rate_limit_take(). Los contadores de arriba no incluyen este parche.
 -- Parche manual 2026-09-05 (migracion 131, gate de rol de la integracion GPS): funcion
 -- can_configure_gps() y la rama 'gps-verify' en el CASE de ai_rate_limit_take().
+-- Parche manual 2026-09-05 (migraciones 132 y 133, guards que no cortaban por NULL):
+-- set_member_role, set_member_secondary_role, assign_user_to_club, set_gps_credential,
+-- clear_gps_credential y toggle_adaptation_applied. Los GRANT/REVOKE que las acompanan
+-- (revoke de PUBLIC y de anon) quedan fuera del alcance de este archivo.
 --
 -- 118 tablas | 247 FKs | 5 vistas | 75 funciones
 -- | 39 triggers | 273 politicas RLS
@@ -5642,17 +5646,25 @@ BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $function$
 ;
 
+-- migracion 133: is distinct from + club del llamador no NULL (antes `<>` contra NULL
+-- daba NULL y el `if` no cortaba).
 CREATE OR REPLACE FUNCTION public.set_gps_credential(p_integration_id uuid, p_credential text)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare v_club uuid;
+declare
+  v_club   uuid;
+  v_caller uuid;
 begin
   select club_id into v_club from public.gps_integrations where id = p_integration_id;
   if v_club is null then raise exception 'integration not found'; end if;
-  if v_club <> public.get_user_club_id() then raise exception 'not authorized'; end if;
+
+  v_caller := public.get_user_club_id();
+  if v_caller is null or v_club is distinct from v_caller then
+    raise exception 'not authorized';
+  end if;
 
   insert into public.gps_integration_secrets (integration_id, credential, set_at)
        values (p_integration_id, p_credential, now())
@@ -5661,9 +5673,12 @@ begin
   update public.gps_integrations
      set status = 'configured', connected_at = null, updated_at = now()
    where id = p_integration_id;
-end; $function$
+end;
+$function$
 ;
 
+-- migracion 132: guard a prueba de NULL. Cada termino con coalesce y el club con
+-- is distinct from: un booleano NULL hacia que el `if` no ejecutara el raise.
 CREATE OR REPLACE FUNCTION public.set_member_role(target_id uuid, new_role text)
  RETURNS void
  LANGUAGE plpgsql
@@ -5671,32 +5686,51 @@ CREATE OR REPLACE FUNCTION public.set_member_role(target_id uuid, new_role text)
  SET search_path TO 'public'
 AS $function$
 declare
-  caller_club uuid; caller_is_admin boolean; caller_is_owner boolean; caller_super boolean; target_club uuid;
+  caller_club      uuid;
+  caller_role      text;
+  caller_club_role text;
+  caller_is_admin  boolean;
+  caller_is_owner  boolean;
+  caller_super     boolean;
+  target_club      uuid;
 begin
-  select club_id,
-         (role in ('admin','owner') or club_role in ('admin','owner')),
-         (role = 'owner' or club_role = 'owner')
-    into caller_club, caller_is_admin, caller_is_owner
-  from public.profiles where id = auth.uid();
-  caller_super := public.is_super_admin();
+  select club_id, role, club_role
+    into caller_club, caller_role, caller_club_role
+    from public.profiles
+   where id = auth.uid();
 
-  if not caller_is_admin and not caller_super then raise exception 'Not authorized'; end if;
+  caller_is_admin := coalesce(caller_role      in ('admin','owner'), false)
+                  or coalesce(caller_club_role in ('admin','owner'), false);
+  caller_is_owner := coalesce(caller_role      = 'owner', false)
+                  or coalesce(caller_club_role = 'owner', false);
+  caller_super    := coalesce(public.is_super_admin(), false);
+
+  if not caller_is_admin and not caller_super then
+    raise exception 'Not authorized';
+  end if;
 
   select club_id into target_club from public.profiles where id = target_id;
-  if target_club is null then raise exception 'Target not found'; end if;
-  if not caller_super and target_club <> caller_club then raise exception 'Target not in your club'; end if;
+  if target_club is null then
+    raise exception 'Target not found';
+  end if;
+
+  if not caller_super and (caller_club is null or target_club is distinct from caller_club) then
+    raise exception 'Target not in your club';
+  end if;
 
   if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff',
                       'sc_coach','fitness_coach','gk_coach','assistant_coach',
                       'director_football','head_performance','methodology_director','team_manager') then
     raise exception 'Invalid role';
   end if;
+
   if new_role = 'owner' and not (caller_is_owner or caller_super) then
     raise exception 'Only an owner can grant owner';
   end if;
 
   update public.profiles set role = new_role where id = target_id;
-end; $function$
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.set_member_secondary_role(target_id uuid, new_role text)
