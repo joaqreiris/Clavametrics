@@ -2833,6 +2833,8 @@
     if (config?.viz === 'kpi' || (config?.viz === 'gauge' && (config.metrics || []).length === 1)) window.gpbStripKpiHeader?.(cardEl);
     // Per-card player picker for player-scope cards (mixed dashboards).
     window._gpEnsureCardPlayerPicker?.(cardEl, config);
+    // …y el selector de métrica, para cambiarla sin abrir el editor.
+    window._gpEnsureCardMetricPicker?.(cardEl, config);
     _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
 
     // Per-element request token: the live builder preview re-resolves on every change,

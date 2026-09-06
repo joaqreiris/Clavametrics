@@ -2096,6 +2096,90 @@ window._gpEnsureCardPlayerPicker = function (cardEl, config) {
   }
 };
 
+// ── Cambiar la métrica de una card, sin abrir el editor ────────────────────────
+// Una card de UNA métrica no necesita un gemelo por cada métrica: el chip de la cabecera la
+// cambia en el sitio. Es la versión de card de lo que Power BI llama «field parameters» — el
+// selector es un control, no una copia del gráfico. Sólo para cards guardadas del builder con
+// una sola métrica; el scatter queda fuera (sus dos métricas son los ejes X e Y).
+function _gpCardMetricEligible(config) {
+  return !!config && (config.metrics || []).length === 1 && config.viz !== 'scatter'
+    && config.source !== 'task';
+}
+// `esc` de gps-analysis vive dentro de otra función, no en este ámbito: acá se escapa con lo suyo.
+const _gpEscTxt = v => String(v == null ? '' : v)
+  .replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+function _gpMetricOptions() {
+  const list = window.cmGpsCatalog?.list?.() || [];
+  return list.map(m => ({ value: m.key, label: m.unit ? `${m.label} (${m.unit})` : m.label, def: m }));
+}
+window._gpEnsureCardMetricPicker = function (cardEl, config) {
+  if (!cardEl) return;
+  const existing = cardEl.querySelector(':scope .gp-card-metric-pick');
+  if (!_gpCardMetricEligible(config)) { existing?.remove(); return; }
+  const head = cardEl.querySelector(':scope > .gp-c-h');
+  if (!head) { existing?.remove(); return; }   // KPI/gauge compactos no tienen cabecera
+
+  const mid = config.metrics[0]?.id;
+  const def = window.cmGpsCatalog?.get?.(mid) || null;
+  let chip = existing;
+  if (!chip) {
+    chip = document.createElement('span');
+    chip.className = 'gp-c-pick gp-card-metric-pick';
+    chip.setAttribute('data-card-metric-pick', '');
+    let picks = head.querySelector('.gp-c-picks');
+    if (!picks) {
+      picks = document.createElement('div');
+      picks.className = 'gp-c-picks';
+      picks.style.cssText = 'margin-left:6px';
+      (head.querySelector('.sub') || head.querySelector('.ttl'))?.after(picks);
+    }
+    picks.appendChild(chip);
+  }
+  chip.title = tt('gps_analysis.card_metric_hint', 'Change the metric of this card');
+  chip.innerHTML = `<i class="ti ti-ruler-measure"></i>${_gpEscTxt(def?.label || mid || '—')} <i class="ti ti-chevron-down"></i>`;
+};
+
+/** Popover con el catálogo del club; al elegir, la card cambia de métrica y queda guardada. */
+function _openCardMetricPicker(anchor, cardEl) {
+  const config = cardEl?.__config;
+  if (!_gpCardMetricEligible(config)) return;
+  const cur = config.metrics[0]?.id;
+  const opts = _gpMetricOptions();
+  if (!opts.length) return;
+  makePopover(anchor, opts.map(o => ({ label: (o.value === cur ? '✓ ' : '') + o.label, value: o.value })), item => {
+    if (!item.value || item.value === cur) return;
+    const def = window.cmGpsCatalog?.get?.(item.value) || null;
+    const prev = config.metrics[0] || {};
+    // El agregado del anterior puede no valer para la nueva: sumar velocidades máximas da un
+    // número que no significa nada. El catálogo ya sabe cómo se combina cada métrica
+    // (cmGpsCatalog.agg → 'sum' | 'max' | 'avg'), y ése es el criterio — `kind` viene NULL en los
+    // catálogos que nunca lo llenaron, así que mirarlo a él solo dejaba pasar la suma.
+    const sug = window.cmGpsCatalog?.agg?.(item.value) || def?.agg || 'sum';
+    const sumLike = a => a === 'total' || a === 'sum';
+    const keepAgg = (sug === 'max' && sumLike(prev.agg)) ? 'max'
+                  : (prev.agg || (sug === 'sum' ? 'total' : sug));
+    config.metrics = [{ ...prev, id: item.value, agg: keepAgg, unit: def?.unit || '' }];
+    // Título automático = el nombre de la métrica. Si el usuario le puso uno propio, se respeta.
+    if (!config.titleCustom && def?.label) {
+      config.title = def.label;
+      const ttlEl = cardEl.querySelector(':scope > .gp-c-h .ttl');
+      if (ttlEl) ttlEl.textContent = def.label;
+    }
+    _persistCardMetric(cardEl, config);
+  });
+}
+
+/** Refresca el chip, persiste (sólo cards guardadas) y re-resuelve esa card. */
+function _persistCardMetric(cardEl, config) {
+  cardEl.__config = config;
+  window._gpEnsureCardMetricPicker(cardEl, config);
+  const cardId = cardEl.dataset.cardId;
+  if (cardId && window.updateDashboardCard) {
+    window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('card metric persist:', e));
+  }
+  window.GpBuilder?.resolveAndRenderCard?.(cardEl, config);
+}
+
 // Popover to PIN this card to a player (or "Follow the bar filter" → clear the pin).
 // The bar (gpFilterBar) is the only player FILTER; this only sets an explicit per-card pin.
 function _openCardPlayerPicker(anchor, cardEl) {
@@ -3810,6 +3894,12 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   // Per-card player pick (builder cards with scope.level='player')
   if (pick.hasAttribute('data-card-player-pick')) {
     _openCardPlayerPicker(pick, pick.closest('.gp-c'));
+    return;
+  }
+
+  // Cambiar la métrica de la card sin abrir el editor (cards del builder de una sola métrica).
+  if (pick.hasAttribute('data-card-metric-pick')) {
+    _openCardMetricPicker(pick, pick.closest('.gp-c'));
     return;
   }
 
