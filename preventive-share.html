@@ -41,9 +41,25 @@
   .tag b{color:var(--pv-fg);font-weight:700;}
   .tag.status{background:var(--pv-acc-soft);color:var(--pv-acc);border-color:var(--pv-acc-bd);}
 
-  /* day */
-  .day{margin-bottom:14px;}
-  .day-h{display:flex;align-items:center;gap:9px;margin:0 2px 9px;}
+  /* day — one collapsible per session, so the week is a short list of bars
+     instead of one endless column. The progress counter stays on the bar, which
+     keeps a folded day informative. */
+  .day{margin-bottom:8px;}
+  .day-h{display:flex;align-items:center;gap:9px;padding:12px 13px;cursor:pointer;list-style:none;
+    background:var(--pv-surface);border:1px solid var(--pv-bd);border-radius:14px;-webkit-tap-highlight-color:transparent;}
+  .day-h::-webkit-details-marker{display:none;}
+  .day-h::marker{content:'';}
+  .day-h:hover{border-color:var(--pv-faint);}
+  .day[open] > .day-h{border-radius:14px 14px 0 0;border-bottom-color:transparent;}
+  .day.today > .day-h{border-color:var(--pv-acc-bd);}
+  .day-body{padding:11px 11px 3px;background:var(--pv-soft);
+    border:1px solid var(--pv-bd);border-top:0;border-radius:0 0 14px 14px;}
+  .day-chev{flex:none;display:flex;color:var(--pv-faint);transition:transform .18s ease;}
+  .day[open] .day-chev{transform:rotate(180deg);}
+  .toggle-all{margin-left:auto;flex:none;padding:5px 9px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--pv-bd);background:var(--pv-surface);font:700 9.5px/1 var(--pv-mono);
+    letter-spacing:.06em;text-transform:uppercase;color:var(--pv-muted);}
+  .toggle-all:hover{color:var(--pv-strong);border-color:var(--pv-faint);}
   .day-dot{width:9px;height:9px;border-radius:50%;background:var(--pv-faint);flex:none;}
   .day.today .day-dot{background:var(--pv-acc);box-shadow:0 0 0 3px var(--pv-acc-soft);}
   .day-dow{font:680 15px/1 var(--pv-sans);color:var(--pv-strong);text-transform:capitalize;}
@@ -94,14 +110,14 @@
   .note .ic{color:var(--pv-acc);flex:none;margin-top:1px;}
   .note .txt{font:400 12.8px/1.5 var(--pv-sans);color:#14532D;}
 
-  .sec-h{font:600 12px/1 var(--pv-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--pv-muted);margin:18px 2px 10px;}
+  .sec-h{display:flex;align-items:center;gap:10px;font:600 12px/1 var(--pv-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--pv-muted);margin:18px 2px 10px;}
   .state{text-align:center;padding:56px 20px;color:var(--pv-muted);}
   .state .ic{color:var(--pv-faint);margin-bottom:14px;display:flex;justify-content:center;}
   .state .t{font:640 17px/1.3 var(--pv-sans);color:var(--pv-strong);margin-bottom:6px;}
   .foot{text-align:center;margin-top:22px;font:500 10.5px/1 var(--pv-mono);letter-spacing:.05em;color:var(--pv-faint);text-transform:uppercase;}
 
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
-  @media print{ .brand,.foot,.check{display:none;} .ex,.card{break-inside:avoid;} }
+  @media print{ .brand,.foot,.check,.toggle-all,.day-chev{display:none;} .ex,.card,.day{break-inside:avoid;} .day-h{cursor:default;} }
 </style>
 </head>
 <body class="cm">
@@ -151,13 +167,19 @@
   try { done = JSON.parse(localStorage.getItem(LSKEY) || '{}') || {}; } catch(_){ done = {}; }
   function saveDone(){ try { localStorage.setItem(LSKEY, JSON.stringify(done)); } catch(_){} }
 
-  function lang(){ return (window.CM_I18N && CM_I18N.lang) || document.documentElement.lang || 'es'; }
+  // CM_I18N exposes `current`, not `lang` — reading the wrong one silently pinned
+  // every date to the <html lang> fallback instead of the visitor's language.
+  function lang(){ return (window.CM_I18N && CM_I18N.current) || document.documentElement.lang || 'en'; }
+  var DOW_FULL_EN = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];   // getDay() order
+  var CHEV_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   function localToday(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function fmtDay(dateStr){
     // dateStr is YYYY-MM-DD (date-only) — parse as local, never UTC
     var p = String(dateStr).split('-'); var d = new Date(+p[0], (+p[1]||1)-1, +p[2]||1);
-    var dow = '', dom = String(d.getDate());
-    try { dow = new Intl.DateTimeFormat(lang(), { weekday:'long' }).format(d); } catch(_){ dow = ''; }
+    var dom = String(d.getDate());
+    // The weekday comes from the locale files (same source as the rest of the page);
+    // Intl only fills in the short month, which has no translation key.
+    var dow = tt('dowfull.' + d.getDay(), DOW_FULL_EN[d.getDay()]);
     var mon = '';
     try { mon = new Intl.DateTimeFormat(lang(), { month:'short' }).format(d).replace('.',''); } catch(_){}
     return { dow: dow, dom: dom + (mon?(' '+mon):'') };
@@ -257,7 +279,7 @@
     '</div>';
   }
 
-  function dayHtml(day, dayIdx, today){
+  function dayHtml(day, dayIdx, today, open){
     var blocks = Array.isArray(day.blocks) ? day.blocks : [];
     if (!blocks.length) return '';
     var d = fmtDay(day.date);
@@ -266,12 +288,14 @@
     blocks.forEach(function(b, bi){ (b.exercises||[]).forEach(function(_, ei){ total++; if (done[dayIdx+'-'+bi+'-'+ei]) doneCount++; }); });
     var pct = total ? Math.round(doneCount/total*100) : 0;
     var inner = blocks.map(function(b, bi){ return blockHtml(b, dayIdx, bi); }).join('');
-    return '<div class="day'+(isToday?' today':'')+'" data-day="'+dayIdx+'" data-date="'+esc(day.date)+'">'+
-      '<div class="day-h"><span class="day-dot"></span>'+
+    return '<details class="day'+(isToday?' today':'')+'"'+(open?' open':'')+' data-day="'+dayIdx+'" data-date="'+esc(day.date)+'">'+
+      '<summary class="day-h"><span class="day-dot"></span>'+
         '<span class="day-dow">'+esc(d.dow)+'</span><span class="day-dom">'+esc(d.dom)+'</span>'+
         (isToday?'<span class="today-pill">'+tt('prev_share.today','Today')+'</span>':'')+
         '<span class="day-prog"><span class="cnt" data-cnt>'+doneCount+'/'+total+'</span><span class="mini-bar"><span data-fill style="width:'+pct+'%"></span></span></span>'+
-      '</div>'+inner+'</div>';
+        '<span class="day-chev">'+CHEV_SVG+'</span>'+
+      '</summary>'+
+      '<div class="day-body">'+inner+'</div></details>';
   }
 
   var _lastData = null;
@@ -304,8 +328,21 @@
     // programme days
     var content = plan.content || {};
     var days = Array.isArray(content) ? content : (Array.isArray(content.days) ? content.days : []);
-    var daysHtml = days.map(function(day, i){ return dayHtml(day, i, today); }).join('');
-    html += '<div class="sec-h">'+tt('prev_share.programme','Your programme')+'</div>';
+    // Today's session opens on arrival; otherwise the first one, so the page never
+    // lands fully folded.
+    var openIdx = -1;
+    days.forEach(function(d, i){
+      var has = Array.isArray(d.blocks) && d.blocks.length;
+      if (has && openIdx < 0 && d.date === today) openIdx = i;
+    });
+    if (openIdx < 0) days.forEach(function(d, i){
+      if (openIdx < 0 && Array.isArray(d.blocks) && d.blocks.length) openIdx = i;
+    });
+    var daysHtml = days.map(function(day, i){ return dayHtml(day, i, today, i === openIdx); }).join('');
+    html += '<div class="sec-h">'+tt('prev_share.programme','Your programme')+
+      (daysHtml.trim() ? '<button type="button" class="toggle-all" data-toggle-all="1">'+
+        esc(tt('prev_share.expand_all','Expand all'))+'</button>' : '')+
+    '</div>';
     html += daysHtml.trim() ? daysHtml : '<div class="card"><div style="color:var(--pv-muted);font:var(--cm-body-sm,400 13px/1.5) var(--pv-sans)">'+tt('prev_share.no_sessions','No sessions planned yet.')+'</div></div>';
 
     root.innerHTML = html;
@@ -337,6 +374,38 @@
       });
     });
   }
+
+  // ── Expand / collapse every day ──
+  // The button offers whatever is left to do, so it says "collapse" only once every
+  // day is open — including when the visitor opened them one by one.
+  function syncToggleAll(){
+    var btn = root.querySelector('[data-toggle-all]');
+    if (!btn) return;
+    var closed = [].some.call(root.querySelectorAll('details.day'), function(d){ return !d.open; });
+    btn.textContent = closed ? tt('prev_share.expand_all','Expand all') : tt('prev_share.collapse_all','Collapse all');
+  }
+  root.addEventListener('toggle', syncToggleAll, true);   // `toggle` does not bubble
+  root.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-toggle-all]');
+    if (!btn) return;
+    var days = root.querySelectorAll('details.day');
+    var opening = [].some.call(days, function(d){ return !d.open; });
+    [].forEach.call(days, function(d){ d.open = opening; });
+    syncToggleAll();
+  });
+
+  // Printing a folded page would lose most of the plan, so every day is opened for
+  // the print job and restored afterwards.
+  var _printClosed = [];
+  window.addEventListener('beforeprint', function(){
+    _printClosed = [].filter.call(root.querySelectorAll('details.day'), function(d){ return !d.open; });
+    _printClosed.forEach(function(d){ d.open = true; });
+  });
+  window.addEventListener('afterprint', function(){
+    _printClosed.forEach(function(d){ d.open = false; });
+    _printClosed = [];
+    syncToggleAll();
+  });
 
   async function load(){
     if (window.CM_I18N && CM_I18N.ready){ try { await CM_I18N.ready; } catch(_){} }

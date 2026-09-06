@@ -80,16 +80,37 @@
     font:600 11px/1 var(--cm-font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .ps-sec-h::after{content:'';flex:1;height:1px;background:var(--cm-border-soft,var(--cm-border))}
 
-  /* ── Day ── */
-  .ps-day{margin-bottom:18px}
-  .ps-day-h{display:flex;align-items:baseline;gap:8px;padding:0 2px 9px}
-  .ps-day-h .dow{font:700 16px/1 var(--cm-font-sans);letter-spacing:-.01em;color:var(--cm-fg-strong);text-transform:capitalize}
-  .ps-day-h .dom{font:500 13px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
-  .ps-day-h .tot{margin-left:auto;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;
-    text-transform:uppercase;color:var(--cm-fg-muted)}
+  /* ── Day (collapsible) ──
+     One <details> per day, so the week reads as a short list of bars and only the
+     session being looked at is unfolded, instead of one endless column of blocks. */
+  .ps-day{margin-bottom:8px}
+  .ps-day-h{display:flex;align-items:center;gap:9px;padding:13px 14px;cursor:pointer;list-style:none;
+    background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;
+    border-left:4px solid var(--ps-club);-webkit-tap-highlight-color:transparent}
+  .ps-day-h::-webkit-details-marker{display:none}
+  .ps-day-h::marker{content:''}
+  .ps-day-h:hover{border-color:color-mix(in srgb, var(--ps-club) 45%, var(--cm-border))}
+  .ps-day[open] > .ps-day-h{border-radius:12px 12px 0 0;border-bottom-color:transparent}
+  .ps-day .dow{font:700 15px/1.2 var(--cm-font-sans);letter-spacing:-.01em;color:var(--cm-fg-strong);text-transform:capitalize}
+  .ps-day .dom{font:500 13px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .ps-day .tot{margin-left:auto;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;
+    text-transform:uppercase;color:var(--cm-fg-muted);text-align:right}
+  .ps-day .chev{flex:none;font-size:17px;color:var(--cm-fg-faint);transition:transform .18s ease}
+  .ps-day[open] .chev{transform:rotate(180deg)}
+  .ps-day-body{padding:10px 10px 1px;background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border);border-top:0;border-radius:0 0 12px 12px}
+  /* A rest day has nothing to unfold, so it stays a plain dashed bar. */
+  .ps-day.is-rest .ps-day-h{cursor:default;background:transparent;border-style:dashed;
+    border-left-color:var(--cm-border)}
+  .ps-day.is-rest .dow{color:var(--cm-fg-muted);font-weight:600}
+  .ps-day.is-rest .tot{display:flex;align-items:center;gap:6px;text-transform:none}
   .ps-rest{display:flex;align-items:center;gap:8px;padding:14px 16px;border-radius:12px;
     border:1px dashed var(--cm-border);color:var(--cm-fg-muted);font:var(--cm-body-sm)}
   .ps-rest i{font-size:17px}
+  .ps-toggle-all{flex:none;padding:5px 9px;border-radius:7px;cursor:pointer;
+    border:1px solid var(--cm-border);background:var(--cm-surface);
+    font:600 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)}
+  .ps-toggle-all:hover{color:var(--cm-fg-strong);border-color:var(--cm-fg-faint)}
 
   /* ── Block ── */
   .ps-block{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;
@@ -167,7 +188,9 @@
   }
   @media print{
     .ps-top{position:static;backdrop-filter:none}
-    .ps-watch,.ps-media{display:none!important}
+    .ps-watch,.ps-media,.ps-toggle-all,.ps-day .chev{display:none!important}
+    .ps-day-h{cursor:default}
+    .ps-day{break-inside:avoid}
     .ps-block,.ps-card,.ps-stat{break-inside:avoid}
     .ps-block-h,.ps-hero::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
@@ -213,6 +236,26 @@
   var LOAD_EN = { low:'Low', moderate:'Moderate', high:'High' };
   var FOCUS_EN = { 'strength':'Strength','power':'Power','return-to-perform':'Return to perform','prevention':'Prevention','custom':'Custom' };
   var STATUS_EN = { draft:'Draft', active:'Active', completed:'Completed', archived:'Archived' };
+  // The planner stamps day.dow in the COACH's language, so it can never be shown here:
+  // the visitor may read another one. The weekday is re-derived from the date (or from
+  // the day's position, since a week is always stored Monday-first) and translated.
+  var DOW_FULL_EN = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  function dowIndex(day, i){
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String((day && day.date) || ''));
+    if (m){
+      var d = new Date(+m[1], +m[2]-1, +m[3]);
+      if (!isNaN(d.getTime())) return (d.getDay() + 6) % 7;   // 0 = Monday
+    }
+    return ((i % 7) + 7) % 7;
+  }
+  function dowName(day, i){
+    var idx = dowIndex(day, i);
+    return tt('dowfull.' + ((idx + 1) % 7), DOW_FULL_EN[idx]);   // dowfull.0 = Sunday
+  }
+  function todayYMD(){
+    var d = new Date(), p2 = function(n){ return (n<10?'0':'')+n; };
+    return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+  }
 
   var root = document.getElementById('ps-root');
   function initials(n){ return String(n||'—').split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || '—'; }
@@ -340,19 +383,25 @@
     return list.length;
   }
 
-  function renderDay(day){
+  function renderDay(day, i, open){
     var blocks = Array.isArray(day.blocks) ? day.blocks : [];
-    var head = '<div class="ps-day-h"><span class="dow">'+esc(day.dow||'')+'</span>'+
+    var head = '<span class="dow">'+esc(dowName(day, i))+'</span>'+
       '<span class="dom">'+esc(day.dom!=null?day.dom:'')+'</span>';
     if (day.rest || !blocks.length){
       if (!day.rest) return '';                       // skip empty non-rest days
-      return '<div class="ps-day">'+head+'</div>'+
-        '<div class="ps-rest"><i class="ti ti-bed"></i> '+tt('plan_share.rest_day','Rest day')+'</div></div>';
+      return '<div class="ps-day is-rest"><div class="ps-day-h">'+head+
+        '<span class="tot"><i class="ti ti-bed"></i> '+esc(tt('plan_share.rest_day','Rest day'))+'</span>'+
+      '</div></div>';
     }
     var mins = blocks.reduce(function(a,b){ return a + blockMinutes(b); }, 0);
     const word = blocks.length === 1 ? tt('plan_share.block', 'block') : tt('plan_share.blocks', 'blocks');
-    head += '<span class="tot">'+blocks.length+' '+esc(word)+' · '+mins+"'</span></div>";
-    return '<div class="ps-day">'+head+blocks.map(renderBlock).join('')+'</div>';
+    return '<details class="ps-day"'+(open?' open':'')+'>'+
+      '<summary class="ps-day-h">'+head+
+        '<span class="tot">'+blocks.length+' '+esc(word)+' · '+mins+"'</span>"+
+        '<i class="ti ti-chevron-down chev"></i>'+
+      '</summary>'+
+      '<div class="ps-day-body">'+blocks.map(renderBlock).join('')+'</div>'+
+    '</details>';
   }
 
   function render(data){
@@ -413,8 +462,20 @@
       }).join('')+'</div></div>';
     }
 
-    var dayHtml = days.map(renderDay).join('');
-    html += '<div class="ps-sec-h">'+tt('plan_share.programme','Programme')+'</div>';
+    // Today's session opens on arrival; otherwise the first one, so the page never
+    // lands fully closed.
+    var ymd = todayYMD(), openIdx = -1;
+    days.forEach(function(d, i){
+      if (openIdx < 0 && !d.rest && Array.isArray(d.blocks) && d.blocks.length && d.date === ymd) openIdx = i;
+    });
+    if (openIdx < 0) days.forEach(function(d, i){
+      if (openIdx < 0 && !d.rest && Array.isArray(d.blocks) && d.blocks.length) openIdx = i;
+    });
+    var dayHtml = days.map(function(d, i){ return renderDay(d, i, i === openIdx); }).join('');
+    html += '<div class="ps-sec-h">'+tt('plan_share.programme','Programme')+
+      (dayHtml.trim() ? '<button type="button" class="ps-toggle-all" data-toggle-all="1">'+
+        esc(tt('plan_share.expand_all','Expand all'))+'</button>' : '')+
+    '</div>';
     html += dayHtml.trim() ? dayHtml
       : '<div class="ps-card"><div class="ps-rest"><i class="ti ti-calendar-off"></i> '+tt('plan_share.no_sessions','No sessions planned yet.')+'</div></div>';
 
@@ -449,11 +510,42 @@
     back.addEventListener('click', function(e){ if (e.target === back || e.target.closest('.ps-media-close')) shut(); });
     document.body.appendChild(back);
   }
+  // The button offers whatever is left to do — it says "collapse" only once every
+  // day is open, including when the visitor opened them one by one.
+  function syncToggleAll(){
+    var btn = root.querySelector('[data-toggle-all]');
+    if (!btn) return;
+    var closed = [].some.call(root.querySelectorAll('details.ps-day'), function(d){ return !d.open; });
+    btn.textContent = closed ? tt('plan_share.expand_all','Expand all') : tt('plan_share.collapse_all','Collapse all');
+  }
+  root.addEventListener('toggle', syncToggleAll, true);   // `toggle` does not bubble
+
   root.addEventListener('click', function(e){
+    var all = e.target.closest('[data-toggle-all]');
+    if (all){
+      var days = root.querySelectorAll('details.ps-day');
+      var opening = [].some.call(days, function(d){ return !d.open; });
+      [].forEach.call(days, function(d){ d.open = opening; });
+      syncToggleAll();
+      return;
+    }
     var trigger = e.target.closest('[data-media]');
     if (!trigger) return;
     var exEl = trigger.closest('.ps-ex');
     if (exEl) openMedia(exEl);
+  });
+
+  // Printing a folded page would lose most of the plan, so every day is opened
+  // for the print job and restored afterwards.
+  var _printClosed = [];
+  window.addEventListener('beforeprint', function(){
+    _printClosed = [].filter.call(root.querySelectorAll('details.ps-day'), function(d){ return !d.open; });
+    _printClosed.forEach(function(d){ d.open = true; });
+  });
+  window.addEventListener('afterprint', function(){
+    _printClosed.forEach(function(d){ d.open = false; });
+    _printClosed = [];
+    syncToggleAll();
   });
 
   function showUnavailable(){

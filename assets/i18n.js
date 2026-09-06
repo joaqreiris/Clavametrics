@@ -233,6 +233,9 @@
   function render() {
     applyChrome();
     applyTo(document);
+    // Keep <html lang> honest: screen readers, hyphenation and any Intl call that
+    // falls back to the document language all read it.
+    try { document.documentElement.lang = current; } catch (e) {}
     try {
       document.dispatchEvent(new CustomEvent("cm:langchanged", { detail: { lang: current } }));
     } catch (e) {}
