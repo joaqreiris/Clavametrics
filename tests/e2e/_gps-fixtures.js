@@ -90,3 +90,47 @@ export const SMOKE_REPORTS = SMOKE_SESSIONS.flatMap((s, si) =>
     };
   })
 );
+
+// ── El fast-path por RPC ────────────────────────────────────────────────────────
+// Desde b72b326 ("RPC fast-path ON por defecto") una card de plantel no lee gps_reports: pide
+// gps_player_agg, que devuelve UNA fila por jugador con los bloques ya sumados. El mock de la
+// tabla dejó de alcanzar y las cards se quedaron en "No data" — con los tests del smoke en rojo
+// desde entonces, sin cubrir nada.
+//
+// Esto reproduce el contrato del RPC a partir de los MISMOS reports de arriba, así que el
+// fast-path y el camino crudo dicen exactamente lo mismo (que es justamente lo que el RPC promete).
+const AGG_KEYS = [
+  'total_distance', 'high_speed_distance', 'very_high_speed_distance', 'sprint_distance',
+  'sprint_count', 'accelerations', 'decelerations', 'max_speed', 'avg_speed',
+  'player_load', 'hmld', 'time_played', 'distance_per_minute',
+];
+
+/** Filas de gps_player_agg para las sesiones dadas (todas, si no se pasa ninguna). */
+export function smokePlayerAgg(sessionIds) {
+  const want = Array.isArray(sessionIds) && sessionIds.length ? new Set(sessionIds) : null;
+  const byPlayer = new Map();
+  for (const r of SMOKE_REPORTS) {
+    if (want && !want.has(r.session_id)) continue;
+    let a = byPlayer.get(r.player_id);
+    if (!a) {
+      const p = SMOKE_PLAYERS.find(x => x.id === r.player_id) || {};
+      a = { player_id: r.player_id, first_name: p.first_name || '', last_name: p.last_name || '',
+        n_rows: 0, n_sessions: 0, w_sum: 0, _sessions: new Set() };
+      byPlayer.set(r.player_id, a);
+    }
+    a.n_rows += 1;
+    a._sessions.add(r.session_id);
+    const w = Number(r.time_played) || 0;
+    a.w_sum += w;
+    for (const k of AGG_KEYS) {
+      const v = r[k];
+      if (v == null) continue;
+      const n = Number(v);
+      a[`${k}_sum`] = (a[`${k}_sum`] || 0) + n;
+      a[`${k}_swv`] = (a[`${k}_swv`] || 0) + n * w;
+      a[`${k}_max`] = a[`${k}_max`] == null ? n : Math.max(a[`${k}_max`], n);
+      a[`${k}_min`] = a[`${k}_min`] == null ? n : Math.min(a[`${k}_min`], n);
+    }
+  }
+  return [...byPlayer.values()].map(({ _sessions, ...row }) => ({ ...row, n_sessions: _sessions.size }));
+}

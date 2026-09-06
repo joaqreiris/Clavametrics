@@ -18,7 +18,7 @@
 
 import { test, expect } from '@playwright/test';
 import { SB, MICROCYCLE, injectSession } from './_shared.js';
-import { SMOKE_SESSIONS, SMOKE_PLAYERS, SMOKE_REPORTS, SMOKE_METRICS } from './_gps-fixtures.js';
+import { SMOKE_SESSIONS, SMOKE_PLAYERS, SMOKE_REPORTS, SMOKE_METRICS, smokePlayerAgg } from './_gps-fixtures.js';
 
 // Real uuid — required by the resolver's isUuid(clubId) guard (lib/gp-card/resolver.js:191).
 const CLUB_ID = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +67,14 @@ async function mockGpsData(page) {
     headers: { 'Content-Range': `0-${SMOKE_SESSIONS.length - 1}/${SMOKE_SESSIONS.length}`, 'Content-Type': 'application/json' },
   }));
   await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: SMOKE_REPORTS }));
+  // Las cards de plantel NO leen gps_reports: piden el fast-path por RPC (una fila por jugador,
+  // ya sumada). Sin este mock la card recibe [] y se queda en "No data" — que es exactamente por
+  // qué estos tests llevaban desde el 16/08 en rojo sin cubrir nada.
+  await page.route(`${SB}/rest/v1/rpc/gps_player_agg`, r => {
+    let body = {};
+    try { body = JSON.parse(r.request().postData() || '{}'); } catch { /* body no-JSON */ }
+    return r.fulfill({ json: smokePlayerAgg(body.p_session_ids) });
+  });
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: SMOKE_PLAYERS }));
   await page.route(`${SB}/rest/v1/rpe**`, r => r.fulfill({ json: [] }));
 }
@@ -136,6 +144,32 @@ test.describe('GPS smoke — render with data', () => {
     ).toMatch(/\d/);
 
     expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  // El RPC promete dar lo MISMO que sumar las filas crudas. Si un día deja de cumplirlo, el
+  // número cambia según por dónde se resuelva la card y nadie se entera: acá se comparan los dos.
+  test('el fast-path por RPC y el camino crudo dan el mismo número', async ({ page }) => {
+    await gotoGps(page);
+    await gotoView(page, 'ind');
+    const kpi = page.locator('#card-gen-week-kpi .gp-kpi .v').first();
+    await expect.poll(async () => (await kpi.textContent().catch(() => ''))?.trim() || '',
+      { timeout: 15_000 }).toMatch(/\d/);
+    const conRpc = (await kpi.textContent())?.trim();
+
+    // Se apaga el fast-path como lo hace el propio resolver cuando el RPC no está disponible, y
+    // ADEMÁS el RPC pasa a devolver vacío: si el número no cambia, es que de verdad se está
+    // resolviendo por el camino crudo y no reusando el atajo ni una caché.
+    await page.route(`${SB}/rest/v1/rpc/gps_player_agg`, r => r.fulfill({ json: [] }));
+    await page.evaluate(() => {
+      window.__cmRpcAvail = { ...(window.__cmRpcAvail || {}), gps_player_agg: false };
+      window.__gpResolverCache?.clear?.();
+      window.refreshDashboard?.();
+    });
+    // Se espera a que el valor SE ASIENTE: durante el re-render la card pasa por estados
+    // intermedios, y leer el primer número que aparece compara con una foto a medio hacer.
+    await expect.poll(async () => (await kpi.textContent().catch(() => ''))?.trim() || '',
+      { timeout: 15_000, message: 'el camino crudo nunca llegó al mismo número que el RPC' }
+    ).toBe(conRpc);
   });
 
   test('table card renders one row per player', async ({ page }) => {
