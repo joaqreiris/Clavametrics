@@ -58,6 +58,10 @@ const json = (body: unknown, status = 200) =>
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  // Referencia de diagnostico: viaja al cliente y queda en los logs, para poder cruzar
+  // "me dio error 3f2a9c11" con la linea del log sin mandarle al navegador la respuesta
+  // cruda de Paddle (ids internos, precios, estados de suscripcion de terceros).
+  const ref = crypto.randomUUID().slice(0, 8);
   try {
     const URL     = Deno.env.get('SUPABASE_URL')!;
     const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -199,8 +203,8 @@ Deno.serve(async (req) => {
         });
         const payload = await res.json();
         if (!res.ok) {
-          console.error('Paddle remove item failed', res.status, JSON.stringify(payload));
-          return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+          console.error(`[ref=${ref}] Paddle remove item failed`, res.status, JSON.stringify(payload));
+          return json({ error: 'paddle_error', ref }, res.status);
         }
         return json({ ok: true, cancel: true, partial: true, effective_at: sub.current_period_end });
       }
@@ -208,8 +212,8 @@ Deno.serve(async (req) => {
       const res = await paddle(`/subscriptions/${subId}/cancel`, 'POST', { effective_from: 'next_billing_period' });
       const payload = await res.json();
       if (!res.ok) {
-        console.error('Paddle cancel failed', res.status, JSON.stringify(payload));
-        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        console.error(`[ref=${ref}] Paddle cancel failed`, res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', ref }, res.status);
       }
       return json({ ok: true, cancel: true, effective_at: payload?.data?.scheduled_change?.effective_at ?? sub.current_period_end });
     }
@@ -227,8 +231,8 @@ Deno.serve(async (req) => {
       });
       const payload = await res.json();
       if (!res.ok) {
-        console.error('Paddle apply_discount failed', res.status, JSON.stringify(payload));
-        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        console.error(`[ref=${ref}] Paddle apply_discount failed`, res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', ref }, res.status);
       }
       return json({ ok: true, discount_applied: true });
     }
@@ -238,8 +242,8 @@ Deno.serve(async (req) => {
       const res = await paddle(`/subscriptions/${subId}`, 'GET');
       const payload = await res.json();
       if (!res.ok) {
-        console.error('Paddle get sub failed', res.status, JSON.stringify(payload));
-        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        console.error(`[ref=${ref}] Paddle get sub failed`, res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', ref }, res.status);
       }
       const mu = payload?.data?.management_urls ?? {};
       return json({ ok: true, update_payment_method: mu.update_payment_method ?? null, cancel_url: mu.cancel ?? null });
@@ -267,8 +271,8 @@ Deno.serve(async (req) => {
       }
       const payload = await res.json();
       if (!res.ok) {
-        console.error('Paddle undo failed', res.status, JSON.stringify(payload));
-        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        console.error(`[ref=${ref}] Paddle undo failed`, res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', ref }, res.status);
       }
       // Limpiar el agendado en nuestra DB (el webhook también lo hará al reflejar el evento).
       await admin.from('subscriptions')
@@ -310,8 +314,8 @@ Deno.serve(async (req) => {
       });
       const payload = await res.json();
       if (!res.ok) {
-        console.error('Paddle preview failed', res.status, JSON.stringify(payload));
-        return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+        console.error(`[ref=${ref}] Paddle preview failed`, res.status, JSON.stringify(payload));
+        return json({ error: 'paddle_error', ref }, res.status);
       }
       return json({ ok: true, preview: true, downgrade: false, adding, update_summary: payload?.data?.update_summary ?? null });
     }
@@ -322,12 +326,12 @@ Deno.serve(async (req) => {
     });
     const payload = await res.json();
     if (!res.ok) {
-      console.error('Paddle change-plan failed', res.status, JSON.stringify(payload));
-      return json({ error: 'paddle_error', detail: payload?.error ?? payload }, res.status);
+      console.error(`[ref=${ref}] Paddle change-plan failed`, res.status, JSON.stringify(payload));
+      return json({ error: 'paddle_error', ref }, res.status);
     }
     return json({ ok: true, downgrade: isDowngrade, effective_at: isDowngrade ? sub.current_period_end : null });
   } catch (e) {
-    console.error(e);
-    return json({ error: String((e as any)?.message ?? e) }, 500);
+    console.error(`[ref=${ref}]`, e);
+    return json({ error: 'internal_error', ref }, 500);
   }
 });
