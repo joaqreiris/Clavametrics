@@ -1061,7 +1061,12 @@
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     // Default: NO comparison → the card shows RAW values, not %. Comparison is opt-in
     // per card (the Comparison dropdown writes config.comparison; null = raw).
-    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
+    // Una card NUEVA habla del plantel, que es lo que casi siempre se está mirando. Sólo nace
+    // «de un jugador» cuando la barra tiene exactamente uno elegido: ahí es lo que el usuario
+    // tiene delante. Antes nacía siempre de jugador y, sin nadie en el filtro, llegaba muda al
+    // dashboard — el usuario veía una card vacía sin saber qué le faltaba.
+    const _fbPidsNew = window.gpFilterBar?.getState?.()?.playerIds || [];
+    return { type:'bars', source:'session', metrics:[], dimensions:[], scope: _fbPidsNew.length === 1 ? 'player' : 'squad', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
              points:true, area:false, comboLine:true, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
@@ -2908,6 +2913,17 @@
       const _fbPids = window.gpFilterBar?.getState?.()?.playerIds || [];
       const _chosenPid = (_fbPids.length === 1 ? _fbPids[0] : null)
                       || window._gpPlayerId || window.gpState?.playerId || null;
+      // Una card de nivel JUGADOR sin jugador no tiene nada que mostrar. Antes decía «no hay datos
+      // para esta selección» —el mismo texto que cuando de verdad no hay GPS— y no había forma de
+      // saber que faltaba elegir a alguien. Ahora lo dice, y dice las dos salidas.
+      if (config.scope?.level === 'player' && !_chosenPid && !config.scope?.playerId) {
+        clearTimeout(cardEl.__loadWatchdog);
+        _showCardState(cardEl, body, 'nodata', _fbPids.length > 1
+          ? _tt('gps_analysis.card_needs_one_player', 'This card shows one player and the filter has several. Leave just one, or set its scope to Squad.')
+          : _tt('gps_analysis.card_needs_player', 'This card shows one player. Pick one in the filter above, or set its scope to Squad.'),
+          config);
+        return;
+      }
       const ctx = {
         clubId:   _clubId || window._gpClubId || null,
         // Use the chosen player as-is — no clamp to the current roster. The resolver
