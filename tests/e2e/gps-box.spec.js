@@ -12,6 +12,13 @@ const PROFILE = { id: 'user-1', club_id: CLUB_ID, first_name: 'Test', last_name:
 const CLUB = { id: CLUB_ID, name: 'Test FC', primary_color: '#3B82F6', logo_url: null };
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 const SESSIONS = [{ id: 's-a', club_id: CLUB_ID, session_date: daysAgo(3), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false }];
+// Cuatro sesiones del microciclo, DESORDENADAS a propósito en el fixture: MD-1 antes que MD-4.
+const MD_SESSIONS = [
+  { id: 'md1', club_id: CLUB_ID, session_date: daysAgo(3), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false, match_day_offset: -1 },
+  { id: 'md4', club_id: CLUB_ID, session_date: daysAgo(6), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false, match_day_offset: -4 },
+  { id: 'md',  club_id: CLUB_ID, session_date: daysAgo(2), session_type: 'match',    team_id: null, microcycle_id: 'mc-a', is_historical: false, match_day_offset: 0 },
+  { id: 'md3', club_id: CLUB_ID, session_date: daysAgo(5), session_type: 'training', team_id: null, microcycle_id: 'mc-a', is_historical: false, match_day_offset: -3 },
+];
 const MCS = [{ id: 'mc-a', club_id: CLUB_ID, name: 'MC 03', start_date: daysAgo(8), end_date: daysAgo(2), match_date: daysAgo(2), rival: 'A', home_away: 'home' }];
 
 // Defensas con valores 1000..4000 (cuartiles redondos) y un extremo que se sale por arriba;
@@ -38,7 +45,7 @@ const card = (cfg) => ([{ id: 'card-box', position: 0, source: 'builder', size: 
   style: { color: '#15803D' }, ...cfg } }]);
 
 /** Monta la página con la card dada. `waitCanvas:false` para los casos que NO dibujan (avisos). */
-async function open(page, cards, { waitCanvas = true } = {}) {
+async function open(page, cards, { waitCanvas = true, sessions = SESSIONS, reports = REPORTS } = {}) {
   await page.route(`${SB}/rest/v1/**`, r => r.fulfill({ json: [], headers: { 'Content-Range': '0-0/0', 'Content-Type': 'application/json' } }));
   await page.route(`${SB}/auth/v1/**`, r => r.fulfill({ json: { access_token: 'test-token', user: { id: 'user-1', email: 'test@test.com' } } }));
   await page.route(`${SB}/rest/v1/profiles**`, r => r.fulfill({ json: [PROFILE] }));
@@ -48,9 +55,9 @@ async function open(page, cards, { waitCanvas = true } = {}) {
     { key: 'total_distance', label: 'Total Distance', unit: 'm', kind: 'accum', category: 'distance', is_core: true, decimals: 0, display_order: 1, squad_rollup: true },
   ] }));
   await page.route(`${SB}/rest/v1/microcycles**`, r => r.fulfill({ json: MCS }));
-  await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: SESSIONS }));
+  await page.route(`${SB}/rest/v1/training_sessions**`, r => r.fulfill({ json: sessions }));
   await page.route(`${SB}/rest/v1/players**`, r => r.fulfill({ json: PLAYERS }));
-  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: REPORTS }));
+  await page.route(`${SB}/rest/v1/gps_reports**`, r => r.fulfill({ json: reports }));
   await page.route(`${SB}/rest/v1/dashboards**`, r => {
     const acc = r.request().headers()['accept'] || '';
     return r.fulfill({ json: acc.includes('object') ? DASH : [DASH] });
@@ -68,6 +75,13 @@ async function open(page, cards, { waitCanvas = true } = {}) {
   await page.waitForTimeout(waitCanvas ? 1200 : 300);
 }
 
+/** Opciones con las que se dibujan los que se salen. */
+const outOpts = (page) => page.evaluate(() => {
+  const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-box"] canvas');
+  const o = window.Chart.getChart(cv).options.plugins.gpbBox;
+  return { mode: o.mode, highlight: o.highlight, alertColor: o.alertColor };
+});
+
 /** Las cajas ya calculadas, tal como las recibió el plugin que las dibuja. */
 const boxes = (page) => page.evaluate(() => {
   const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-box"] canvas');
@@ -77,6 +91,9 @@ const boxes = (page) => page.evaluate(() => {
 });
 
 test.describe('GPS · caja y bigotes', () => {
+  // Montar la página entera por test es pesado; bajo carga el arranque se pasa de los 30 s.
+  test.describe.configure({ timeout: 60_000 });
+
   test('agrupada por posición: cuartiles, bigotes y el que se sale', async ({ page }) => {
     await open(page, card({ dimensions: [{ id: 'position' }] }));
     const bs = await boxes(page);
@@ -128,5 +145,35 @@ test.describe('GPS · caja y bigotes', () => {
     const txt = await page.evaluate(() =>
       document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-box"] .gp-c-b')?.innerText || '');
     expect(txt.toLowerCase()).toMatch(/plantel|squad/);
+  });
+
+  // Quién se salió es la lectura principal de la card. Antes el nombre dependía del interruptor
+  // genérico de «etiquetas de datos», apagado por defecto: los puntos salían anónimos.
+  test('los que se salen vienen con nombre y destacados, sin depender de otro interruptor', async ({ page }) => {
+    await open(page, card({ dimensions: [{ id: 'position' }] }));
+    expect(await outOpts(page)).toMatchObject({ mode: 'named', highlight: true });
+  });
+
+  test('se pueden dejar en puntos, o esconderlos', async ({ page }) => {
+    await open(page, card({ dimensions: [{ id: 'position' }], style: { color: '#15803D', boxOut: 'dots', boxOutHi: false } }));
+    expect(await outOpts(page)).toMatchObject({ mode: 'dots', highlight: false });
+  });
+
+  // El eje salía en el orden en que aparecían los datos: MD-4, MD-1, MD-2, MD, MD-3. Un
+  // microciclo tiene un orden y es el suyo.
+  test('agrupada por MD code, las cajas van en el orden del microciclo', async ({ page }) => {
+    const mdReports = MD_SESSIONS.flatMap(sess => PLAYERS.slice(0, 4).map((p, i) => ({
+      player_id: p.id, session_id: sess.id, club_id: CLUB_ID, is_invalid: false, work_context: 'team',
+      total_distance: 4000 + i * 300 + (sess.match_day_offset + 4) * 500,
+      high_speed_distance: 200, very_high_speed_distance: 80, sprint_distance: 10, sprint_count: 4,
+      accelerations: 20, decelerations: 18, max_speed: 28, avg_speed: 6, player_load: 300, hmld: 400,
+      time_played: 90, distance_per_minute: 60,
+      players: { first_name: p.first_name, last_name: p.last_name, number: p.number, position: p.position, positions: p.positions },
+      training_sessions: { session_date: sess.session_date, session_attributes: null, microcycle_id: 'mc-a',
+        team_id: null, session_type: sess.session_type, match_day_offset: sess.match_day_offset, season_id: null },
+    })));
+    await open(page, card({ dimensions: [{ id: 'md_code' }] }), { sessions: MD_SESSIONS, reports: mdReports });
+    const labels = (await boxes(page)).map(b => b.label);
+    expect(labels).toEqual(['MD-4', 'MD-3', 'MD-1', 'MD']);   // el fixture no tiene MD-2
   });
 });

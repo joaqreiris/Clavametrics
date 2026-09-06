@@ -629,7 +629,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
-      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, quadrants: S.quadrants || 'mean',
+      style: { size:S.size, color:S.color, ...(S.icon ? { icon:S.icon } : {}), palette:S.palette, ...(_compactColors(S) ? { colors: _compactColors(S) } : {}), ...(S.relBands ? { relBands: S.relBands } : {}), axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points, comboLine: S.comboLine !== false, quadrants: S.quadrants || 'mean', boxOut: S.boxOut || 'named', boxOutHi: S.boxOutHi !== false,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked, scatterLabel: S.scatterLabel || 'name', scatterAvatars: !!S.scatterAvatars, richTooltip: S.richTooltip !== false, gaugeMode: S.gaugeMode || 'value', showSub: S.showSub !== false,
                // Title/subtitle format (Paso 3a). Compacted to only non-default props; absent when
                // unset → cards without formatting stay byte-identical to today.
@@ -898,6 +898,18 @@
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_rich_tooltip">Rich tooltip</span><span class="s" data-i18n="gps_analysis.builder_rich_tooltip_sub">Show a mini trend on hover</span></span>
                 <button class="es-sw-t is-on" data-toggle="richTooltip"></button>
               </div>
+              <div class="es-toggle is-stack" data-only="box">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_box_out">Values outside</span><span class="s" data-i18n="gps_analysis.builder_box_out_sub">What to show for whoever falls outside the whiskers</span></span>
+                <div class="es-seg" id="gpbBoxOut">
+                  <button data-boxout="named" class="is-on" data-i18n="gps_analysis.builder_box_out_named">With name</button>
+                  <button data-boxout="dots" data-i18n="gps_analysis.builder_box_out_dots">Dots</button>
+                  <button data-boxout="off" data-i18n="gps_analysis.builder_box_out_off">Hide</button>
+                </div>
+              </div>
+              <div class="es-toggle" data-only="box">
+                <span class="tx"><span class="t" data-i18n="gps_analysis.builder_box_out_hi">Highlight them</span><span class="s" data-i18n="gps_analysis.builder_box_out_hi_sub">Alert colour instead of the box colour</span></span>
+                <button class="es-sw-t is-on" data-toggle="boxOutHi"></button>
+              </div>
               <div class="es-toggle is-stack" data-only="scatter">
                 <span class="tx"><span class="t" data-i18n="gps_analysis.builder_quadrants">Quadrants</span><span class="s" data-i18n="gps_analysis.builder_quadrants_sub">Reference cross + a label per corner</span></span>
                 <div class="es-seg" id="gpbQuadMode">
@@ -1052,7 +1064,7 @@
     return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, squadAgg:'pooled',
              compare:'none', compareMethod:'avg', compareStat:'median', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', icon:null, palette:'pitch', colors:{}, title:'', titleCustom:false, axes:true, legend:true, labels:false, gaugeMode:'value', showSub:true,
-             points:true, area:false, comboLine:true, quadrants:'mean', horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
+             points:true, area:false, comboLine:true, quadrants:'mean', boxOut:'named', boxOutHi:true, horizontal:false, stacked:false, sort:null, scatterLabel:'name', scatterAvatars:false, richTooltip:true, referenceLines:[],
              titleFormat:{}, subtitleFormat:{} };
   }
 
@@ -1485,6 +1497,8 @@
       S.area    = !!cfg.area;
       S.comboLine = cfg.comboLine !== false;   // ausente (cards viejas) → true (línea unida)
       S.quadrants = cfg.quadrants || 'mean';   // ausente → media, que es lo que ya se dibujaba
+      S.boxOut    = cfg.boxOut || 'named';
+      S.boxOutHi  = cfg.boxOutHi !== false;
       S.horizontal = !!cfg.horizontal;
       S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
@@ -1525,6 +1539,8 @@
       S.area    = !!rawConfig.style?.area;
       S.comboLine = rawConfig.style?.comboLine !== false;   // ausente (cards viejas) → true
       S.quadrants = rawConfig.style?.quadrants || 'mean';   // ausente → media (lo de siempre)
+      S.boxOut    = rawConfig.style?.boxOut || 'named';
+      S.boxOutHi  = rawConfig.style?.boxOutHi !== false;
       S.horizontal = rawConfig.style?.orientation === 'horizontal';
       S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
@@ -1784,6 +1800,16 @@
         if (!S) return;
         document.getElementById('gpbScatterLabel').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
         S.scatterLabel = b.dataset.slabel;
+        renderCard();
+      };
+    });
+
+    // caja y bigotes: qué hacer con los que se salen (con nombre · puntos · ocultar)
+    document.getElementById('gpbBoxOut')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        if (!S) return;
+        document.getElementById('gpbBoxOut').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o === b));
+        S.boxOut = b.dataset.boxout;
         renderCard();
       };
     });
@@ -2209,6 +2235,9 @@
     );
     document.getElementById('gpbQuadMode')?.querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.qmode === (S.quadrants || 'mean'))
+    );
+    document.getElementById('gpbBoxOut')?.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.boxout === (S.boxOut || 'named'))
     );
     _syncFmtControls();   // title/subtitle format controls reflect S.titleFormat / S.subtitleFormat
     // viz-specific style options (data-only="line" / "bars") hidden for other types
@@ -6699,9 +6728,17 @@
     // de colores distintos no agrega información — sólo ruido. El color por serie se reserva
     // para cuando distingue algo.
     const accent = config.style?.colors?.[s.label] || config.style?.color || _cssVar('--cm-accent', '#15803D');
+    // Orden natural de la dimensión, el MISMO que usan las barras: MD-4 · MD-3 · MD-2 · MD-1 · MD,
+    // los microciclos por fecha de inicio y las posiciones por línea. Sin esto las cajas salían en
+    // el orden en que aparecían los datos, que no es ninguno.
+    const keys = [...byGroup.keys()];
+    if (grouped) {
+      const cmp = _natCmpFor((config.dimensions || [])[0]?.id);
+      if (typeof cmp === 'function') keys.sort(cmp);
+    }
     const boxes = [];
-    for (const [key, items] of byGroup) {
-      const st = _boxStats(items);
+    for (const key of keys) {
+      const st = _boxStats(byGroup.get(key) || []);
       if (!st) continue;
       boxes.push({ label: grouped ? key : (s.name || ''), color: accent, ...st });
     }
@@ -6738,24 +6775,33 @@
         // Mediana: la línea que de verdad se lee.
         ctx.lineWidth = 2.4;
         ctx.beginPath(); ctx.moveTo(x - half, Y(b.med)); ctx.lineTo(x + half, Y(b.med)); ctx.stroke();
-        // Outliers, con nombre mientras haya sitio.
-        ctx.lineWidth = 1.4;
-        (b.out || []).forEach(o => {
-          const py = Y(o.v);
-          if (py < chartArea.top - 2 || py > chartArea.bottom + 2) return;
-          ctx.beginPath(); ctx.arc(x, py, 3.2, 0, Math.PI * 2);
-          ctx.fillStyle = '#fff'; ctx.fill();
-          ctx.strokeStyle = b.color; ctx.stroke();
-          if (opts.showLabels !== false && o.label) {
-            ctx.font = '500 9.5px Geist, Inter, sans-serif';
-            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-            ctx.strokeText(o.label, x + half + 4, py);
-            ctx.fillStyle = 'rgba(107,114,128,0.95)';
-            ctx.fillText(o.label, x + half + 4, py);
-            ctx.lineWidth = 1.4;
-          }
-        });
+        // Los que se salen: son la lectura principal de la card —no «hubo dispersión» sino QUIÉN
+        // se fue— así que van con nombre por defecto y, si se pide, en el color de alerta.
+        if (opts.mode !== 'off') {
+          const outCol = opts.highlight === false ? b.color : (opts.alertColor || '#DC2626');
+          ctx.lineWidth = 1.4;
+          let lastLabelY = null;                 // para que dos nombres seguidos no se pisen
+          (b.out || []).slice().sort((p, q) => Y(p.v) - Y(q.v)).forEach(o => {
+            const py = Y(o.v);
+            if (py < chartArea.top - 2 || py > chartArea.bottom + 2) return;
+            ctx.beginPath(); ctx.arc(x, py, 3.4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff'; ctx.fill();
+            ctx.strokeStyle = outCol; ctx.stroke();
+            if (opts.mode !== 'dots' && o.label) {
+              // Si el de arriba dejó su nombre a menos de 11 px, este baja hasta que entre.
+              const ly = (lastLabelY != null && py - lastLabelY < 11) ? lastLabelY + 11 : py;
+              if (ly > chartArea.bottom - 2) return;
+              lastLabelY = ly;
+              ctx.font = '500 9.5px Geist, Inter, sans-serif';
+              ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+              ctx.strokeText(o.label, x + half + 5, ly);
+              ctx.fillStyle = outCol;
+              ctx.fillText(o.label, x + half + 5, ly);
+              ctx.lineWidth = 1.4;
+            }
+          });
+        }
       });
       ctx.restore();
     },
@@ -6827,7 +6873,10 @@
         },
         plugins: {
           legend: { display: false },              // una sola métrica: el título ya la nombra
-          gpbBox: { boxes: d.boxes, showLabels: config.style?.dataLabels !== false },
+          gpbBox: { boxes: d.boxes,
+            mode: config.style?.boxOut || 'named',           // named · dots · off
+            highlight: config.style?.boxOutHi !== false,     // en color de alerta
+            alertColor: _cssVar('--cm-danger', '#DC2626') },
           tooltip: {
             callbacks: {
               title: items => (items.length ? String(d.boxes[items[0].dataIndex]?.label ?? '') : ''),
