@@ -1155,12 +1155,49 @@
     if (saveBtn) saveBtn.textContent = _tt('gps_analysis.builder_add_card', 'Add card');
   }
 
+  /**
+   * Re-adjunta a un config recién construido el LAYOUT que ya tenía la card.
+   *
+   * En un dashboard propio del usuario ("db-<uuid>") la posición de cada card NO vive en
+   * gps_dashboard_layouts sino DENTRO de su config (style.canvas = {x,y,w,h,size}, ver
+   * _saveCustomDashboardLayout en gps-analysis.js). buildConfig() lo arma desde el estado del
+   * editor, que no conoce ese dato: guardar una edición borraba style.canvas y la card volvía
+   * a colocarse sola, encimada sobre las que sí conservaban sus coordenadas.
+   *
+   * Se toman las coordenadas VIVAS del DOM (lo que el usuario ve) y, si no las hay, las del
+   * config anterior. Si durante la edición cambió el bucket de tamaño (S/M/L/Full), ese cambio
+   * sí manda sobre el ancho — es lo que el usuario acaba de pedir.
+   */
+  function _carryCardLayout(cfg, el, sizeChanged) {
+    if (!cfg || !el) return;
+    const prev = (el.__config && el.__config.style) || {};
+    const num = k => {
+      const d = parseInt(el.dataset[k], 10);
+      if (Number.isFinite(d)) return d;
+      const v = parseInt(el.style.getPropertyValue('--gp-' + k), 10);
+      return Number.isFinite(v) ? v : NaN;
+    };
+    const live = { x: num('x'), y: num('y'), w: num('w'), h: num('h') };
+    let canvas = ['x', 'y', 'w', 'h'].every(k => Number.isFinite(live[k])) ? live
+      : (prev.canvas && ['x', 'y', 'w', 'h'].every(k => Number.isFinite(prev.canvas[k])) ? { ...prev.canvas } : null);
+    if (!canvas) { if (prev.span != null) cfg.style.span = prev.span; return; }
+    canvas = { ...canvas, size: cfg.style?.size || el.dataset.size || 'md' };
+    if (sizeChanged && typeof window.gpSpanFromSize === 'function') {
+      const w = window.gpSpanFromSize(canvas.size, el.classList.contains('is-table'));
+      if (Number.isFinite(w)) canvas.w = Math.max(1, Math.min(12, w));
+    }
+    cfg.style.canvas = canvas;
+    cfg.style.span = Math.max(1, Math.min(12, canvas.w));
+  }
+
   async function saveCard() {
     if (!S || !draftCard) return;
     const t = VIZ_TYPES[S.type];
     if (S.metrics.length < t.min) return;
 
     const config = buildConfig(S);
+    // Editar una card no la mueve: su sitio en el canvas viaja dentro del config (ver arriba).
+    if (_editCardDom) _carryCardLayout(config, _editCardDom, S.size !== _editCardOrigSize);
 
     if (_editCardDom) {
       // ── Edit mode: update the card in place (draftCard === _editCardDom). The card
