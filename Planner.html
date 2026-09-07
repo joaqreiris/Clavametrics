@@ -50,9 +50,12 @@
   body.cm { background: var(--cm-bg); }
 
   .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
-  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  /* Una sola línea: el nombre del ejercicio es lo único que puede crecer, así que es lo
+     único que se recorta. Si el crumb envuelve, la barra crece de alto y empuja el campo. */
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); min-width:0; white-space:nowrap; }
   .hub-crumb .ti { font-size:14px; }
   .hub-crumb .sep { color:var(--cm-fg-faint); }
+  #plCrumbEx { overflow:hidden; text-overflow:ellipsis; }
   .hub-topbar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
   .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
 
@@ -883,7 +886,12 @@
 
     <div class="hub-topbar">
       <div class="hub-crumb">
-        <i class="ti ti-home"></i><span data-i18n="planner.technical">Technical</span><span class="sep">/</span>
+        <!-- Vuelta a la pantalla desde la que se abrió el ejercicio. La rellena
+             plInitBackLink() con ?from=; sin ese parámetro no se muestra. -->
+        <a class="cm-btn is-outline is-sm" id="plBackLink" href="#" style="display:none;margin-right:6px;text-decoration:none">
+          <i class="ti ti-arrow-left" style="font-size:14px"></i><span id="plBackLabel"></span>
+        </a>
+        <span id="plCrumbSection"><i class="ti ti-home"></i><span data-i18n="planner.technical">Technical</span><span class="sep">/</span></span>
         <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="planner.drill_designer">Drill Designer</span>
         <span class="sep">/</span>
         <span id="plCrumbEx" data-i18n="planner.exercises_library">Exercises Library</span>
@@ -1788,6 +1796,50 @@
       });
     }
   }
+
+  // ── Volver a donde se abrió el ejercicio ────────────────────────
+  // Las pantallas que traen acá (Daily planning, Exercises Library, Video detail) suman
+  // ?from=<clave> al deep-link. La clave sale de una lista cerrada en vez de viajar como
+  // URL suelta: el parámetro no puede convertirse en un salto a cualquier lado. Sin
+  // ?from= no hay botón — quien entró por el sidebar no tiene a dónde volver.
+  function _plQs(params) {
+    const p = Object.entries(params).filter(([, v]) => v)
+      .map(([k, v]) => k + '=' + encodeURIComponent(v));
+    return p.length ? '?' + p.join('&') : '';
+  }
+  function plInitBackLink() {
+    const link = document.getElementById('plBackLink');
+    const label = document.getElementById('plBackLabel');
+    if (!link || !label) return;
+    const qs = new URLSearchParams(location.search);
+    const ORIGINS = {
+      daily: () => ({
+        label: tt('planner.back_daily_planning', 'Daily planning'),
+        // date + session devuelven exactamente a la sesión que se estaba armando.
+        href: 'Daily%20Planning.html' + _plQs({ date: qs.get('date'), session: qs.get('session') }),
+      }),
+      library: () => ({
+        label: tt('planner.back_exercises_library', 'Exercises Library'),
+        href: 'Exercises%20Library.html',
+      }),
+      video: () => ({
+        label: tt('planner.back_video', 'Video'),
+        href: 'Video%20Detail.html' + _plQs({ id: qs.get('v') }),
+      }),
+    };
+    const section = document.getElementById('plCrumbSection');
+    const origin = ORIGINS[qs.get('from')];
+    if (!origin) { link.style.display = 'none'; if (section) section.style.display = ''; return; }
+    const o = origin();
+    link.href = o.href;
+    label.textContent = o.label;
+    link.style.display = '';
+    // El botón ya dice de dónde se viene: «Técnico» sólo le roba ancho al nombre del
+    // ejercicio, que es lo único del crumb que cambia.
+    if (section) section.style.display = 'none';
+  }
+  plInitBackLink();
+  document.addEventListener('cm:langchanged', plInitBackLink);
 
   plInitFieldSelector();
   plRenderField(_plField.type, _plField.variant, _plField.orient);
@@ -4672,7 +4724,7 @@
       document.getElementById('plExSummarySection').style.display='none';
       document.getElementById('plExConfigSection').style.display='none';
       const lbl=document.getElementById('plFieldLabel'); if(lbl)lbl.textContent=tt('planner.no_exercise_selected','No exercise selected');
-      const crumb=document.getElementById('plCrumbEx'); if(crumb)crumb.textContent=tt('planner.exercises_library','Exercises Library');
+      const crumb=document.getElementById('plCrumbEx'); if(crumb){const _t=tt('planner.exercises_library','Exercises Library');crumb.textContent=_t;crumb.title=_t;}
       const stat=document.getElementById('plCanvasStat'); if(stat)stat.textContent=tt('planner.no_exercise_selected','No exercise selected');
     }
     await loadExercises();
@@ -4868,7 +4920,8 @@
     const label = document.getElementById('plFieldLabel');
     if (label) label.textContent = ex.name || tt('planner.untitled','Untitled');
     const crumb = document.getElementById('plCrumbEx');
-    if (crumb) crumb.textContent = ex.name || tt('planner.untitled','Untitled');
+    // title además del texto: el crumb recorta con «…» y así el nombre largo se puede leer.
+    if (crumb) { crumb.textContent = crumb.title = ex.name || tt('planner.untitled','Untitled'); }
     const canvasStat = document.getElementById('plCanvasStat');
     if (canvasStat) canvasStat.innerHTML = `${tt('planner.exercise_cap','Exercise')} · <strong style="color:var(--cm-fg)">${ex.name || tt('planner.untitled','Untitled')}</strong>`;
 
@@ -5266,7 +5319,7 @@
       const label = document.getElementById('plFieldLabel');
       if (label) label.textContent = newName;
       const crumb = document.getElementById('plCrumbEx');
-      if (crumb) crumb.textContent = newName;
+      if (crumb) crumb.textContent = crumb.title = newName;
       const canvasStat = document.getElementById('plCanvasStat');
       if (canvasStat) canvasStat.innerHTML = `${tt('planner.exercise_cap','Exercise')} · <strong style="color:var(--cm-fg)">${newName}</strong>`;
       renderExerciseList();
@@ -5404,7 +5457,7 @@
       if (ex) {
         const nm = ex.name || tt('planner.untitled','Untitled');
         const label = document.getElementById('plFieldLabel'); if (label) label.textContent = nm;
-        const crumb = document.getElementById('plCrumbEx'); if (crumb) crumb.textContent = nm;
+        const crumb = document.getElementById('plCrumbEx'); if (crumb) crumb.textContent = crumb.title = nm;
         const cs = document.getElementById('plCanvasStat');
         if (cs) cs.innerHTML = `${tt('planner.exercise_cap','Exercise')} · <strong style="color:var(--cm-fg)">${nm}</strong>`;
         renderPlGpsProfile(currentExerciseId);

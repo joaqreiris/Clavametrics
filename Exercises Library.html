@@ -1005,7 +1005,7 @@
 
     // Open in Planner → carry the exercise id so the Planner loads it for editing.
     const openBtn = document.getElementById('prevOpenBtn');
-    if (openBtn) openBtn.onclick = () => { window.location.href = 'Planner.html?exercise=' + encodeURIComponent(ex.id); };
+    if (openBtn) openBtn.onclick = () => { window.location.href = 'Planner.html?exercise=' + encodeURIComponent(ex.id) + '&from=library'; };
 
     document.querySelector('.sl-grid')?.classList.add('has-rail');
     document.getElementById('slPreview').classList.add('is-visible');
@@ -1127,7 +1127,7 @@
       `<div class="sl-lb-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('');
     document.getElementById('lbTags').innerHTML = _slTagsHtml(ex);
 
-    let acts = `<a class="cm-btn is-outline is-sm" href="Planner.html?exercise=${encodeURIComponent(ex.id)}"><i class="ti ti-edit" style="font-size:13px"></i>${esc(tt('exlib.open_in_planner','Open in Planner'))}</a>`;
+    let acts = `<a class="cm-btn is-outline is-sm" href="Planner.html?exercise=${encodeURIComponent(ex.id)}&amp;from=library"><i class="ti ti-edit" style="font-size:13px"></i>${esc(tt('exlib.open_in_planner','Open in Planner'))}</a>`;
     if (ex.video_url) acts += `<a class="cm-btn is-sm" href="${esc(ex.video_url)}" target="_blank" rel="noopener"><i class="ti ti-external-link" style="font-size:13px"></i>${esc(tt('exlib.open_video','Open video'))}</a>`;
     document.getElementById('lbActs').innerHTML = acts;
 
