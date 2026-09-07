@@ -24,12 +24,21 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;      /* pills stay on ONE row (thin bar); scroll instead of stacking when they overflow */
-  overflow-x: auto;
-  scrollbar-width: thin;
+  /* Envuelve en vez de scrollear: con la barra mostrando sólo los filtros PUESTOS casi nunca
+     pasa de una fila, y cuando pasa es porque hay muchos activos — que es justo lo que hay que
+     ver. Un filtro activo escondido detrás de un scroll horizontal es un filtro que no existe. */
+  flex-wrap: wrap;
+  row-gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* Encabezado de familia dentro del menú «Filtrar» */
+.fb-addgroup {
+  font: 500 10px/1 var(--cm-font-mono); letter-spacing: .07em; text-transform: uppercase;
+  color: var(--cm-fg-faint); padding: 8px 10px 4px;
+}
+.fb-addgroup:first-child { padding-top: 4px; }
 
 .gp-fbar-right {
   display: flex;

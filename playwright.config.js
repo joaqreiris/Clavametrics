@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir:       './tests/e2e',
+  // 60 s por test. Estos e2e montan la app ENTERA por caso (GPS Analysis carga catálogo, filtros,
+  // dashboards y resuelve cada card), y con la suite completa en un worker el arranque se pasa de
+  // los 30 s que trae Playwright por defecto: aparecían fallos que aislados pasaban siempre.
+  timeout:       60_000,
   fullyParallel: false,
   retries:       process.env.CI ? 1 : 0,
   reporter:      'html',

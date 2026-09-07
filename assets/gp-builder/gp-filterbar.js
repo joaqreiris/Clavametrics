@@ -28,6 +28,15 @@
     { key: 'work_context', icon: 'ti-tag',           placeholder: 'All contexts',    multi: true },
   ];
 
+  // Familia de cada filtro: ordena el menú de «Filtrar» y, de paso, enseña —quien no sabía que
+  // existe «Contexto» lo encuentra mirando Sesión.
+  const FILTER_FAMILY = {
+    md_code: 'time', date: 'time', microcycle: 'time',
+    player: 'squad', position: 'squad',
+    session_type: 'session', rival: 'session', work_context: 'session',
+  };
+  const FAMILY_LABEL = { time: 'Time', squad: 'Squad', session: 'Session' };
+
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
   const FILTER_LABELS = {
     md_code: 'Matchday', date: 'Date', player: 'Players',
@@ -78,6 +87,7 @@
     'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals','All types':'filterbar.all_types','All contexts':'filterbar.all_contexts',
     'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
     'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
+    'Time':'filterbar.family_time','Squad':'filterbar.family_squad','Session':'filterbar.family_session',
     'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
     'Search…':'filterbar.search','Search date…':'filterbar.search_date','No club data yet.':'filterbar.no_club_data',
     'No dates with data yet.':'filterbar.no_dates_data','No dates for the current filters.':'filterbar.no_dates_filter',
@@ -108,9 +118,16 @@
     // work_context VISIBLE por defecto (filtro "Context"): el usuario tiene que poder acotar
     // por team/rehab/individual/top-up sin cavar. Sus opciones se llenan con el set conocido
     // aunque todavía no haya datos etiquetados (ver options.work_context).
-    visibleFilters: DROPS.map(d => d.key),
+    // Sólo los filtros PUESTOS (ver _defaultVisible). Antes arrancaban los ocho, casi todos
+    // diciendo «All …»: la barra gastaba su ancho en avisar que no había ningún filtro, y el
+    // octavo quedaba fuera de pantalla.
+    visibleFilters: _defaultVisible(),
   };
-  function isFilterVisible(key) { return state.visibleFilters.includes(key); }
+  /** Con qué filtros arranca la barra: la fecha (siempre tiene rango) y nada más. */
+  function _defaultVisible() { return ['date']; }
+  // Un filtro CON VALOR se ve siempre, esté o no en la lista: una barra que esconde algo que está
+  // filtrando miente sobre lo que se está mirando.
+  function isFilterVisible(key) { return state.visibleFilters.includes(key) || isActive(key); }
   // opciones reales por desplegable: [{ value, label }]
   const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], session_type: [], work_context: [], date: [] };
   // Real seasons rows (team-scoped), for a "pick a specific season" section in the date panel.
@@ -330,8 +347,19 @@
     clearTimeout(_fireT);
     _fireT = setTimeout(() => { _fireT = null; fireNow(); }, 170);
   }
+  /** Sincroniza qué filtros se ven: los de la lista + cualquiera que TENGA valor. */
+  function syncFilterVisibility() {
+    if (!root) return;
+    DROPS.forEach(d => root.querySelector(`.fb-drop[data-key="${d.key}"]`)
+      ?.classList.toggle('fb-hidden', !isFilterVisible(d.key)));
+    refreshAddMenu();
+  }
+
   function fireNow() {
     clearTimeout(_fireT); _fireT = null;
+    // Un filtro recién puesto tiene que aparecer en la barra aunque no estuviera en la lista
+    // (y desaparecer al limpiarlo, si el usuario no lo había agregado a mano).
+    syncFilterVisibility();
     // El filtro ya tiene estado confiable (equipo resuelto + opciones cargadas): habilita a las
     // cards del builder a resolver (esperan este flag para no renderizar con estado provisional).
     if (typeof window !== 'undefined') window._gpFiltersReady = true;
@@ -369,7 +397,7 @@
     state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = []; state.session_type = []; state.work_context = [];
     state.date = { preset: null, from: null, to: null, days: [] };
     state.posGranularity = 'detailed';
-    state.visibleFilters = DROPS.map(d => d.key);
+    state.visibleFilters = _defaultVisible();
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
@@ -393,7 +421,10 @@
             seasonId: s.date.seasonId || null, seasonName: s.date.seasonName || null };
           _dateUserSet = true;
         }
-        state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
+        // Un guardado con TODOS los filtros es el default viejo, no una elección: se le aplica el
+        // nuevo (sólo los puestos). Cualquier otra lista sí la eligió el usuario y se respeta.
+        const _savedAll = Array.isArray(s.visibleFilters) && s.visibleFilters.length >= DROPS.length;
+        state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length && !_savedAll)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
           : DROPS.map(d => d.key);
       }
@@ -1003,9 +1034,15 @@
       menu.innerHTML = `<div class="fb-addempty">${T('All filters added')}</div>`;
       return;
     }
-    menu.innerHTML = hidden.map(d =>
-      `<button class="fb-additem" type="button" data-key="${d.key}"><i class="ti ${d.icon}"></i><span>${FILTER_LABELS[d.key] || d.key}</span></button>`
-    ).join('');
+    // Agrupado por familia (Tiempo · Plantel · Sesión), en el orden de DROPS dentro de cada una.
+    const fams = ['time', 'squad', 'session'];
+    menu.innerHTML = fams.map(f => {
+      const items = hidden.filter(d => FILTER_FAMILY[d.key] === f);
+      if (!items.length) return '';
+      return `<div class="fb-addgroup">${T(FAMILY_LABEL[f])}</div>` + items.map(d =>
+        `<button class="fb-additem" type="button" data-key="${d.key}"><i class="ti ${d.icon}"></i><span>${FILTER_LABELS[d.key] || d.key}</span></button>`
+      ).join('');
+    }).join('');
     menu.querySelectorAll('.fb-additem').forEach(b => b.addEventListener('click', (e) => {
       e.stopPropagation();
       addFilter(b.dataset.key);
