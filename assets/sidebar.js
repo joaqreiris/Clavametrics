@@ -7,6 +7,11 @@
   // before .hub-shell exists / first paint) so there's no expanded→collapsed flash.
   try { if (localStorage.getItem('cm_sidebar_collapsed') === '1') document.documentElement.classList.add('cm-rail'); } catch (_) {}
 
+  // Base para resolver los scripts hermanos (i18n, buscador global) sin asumir la ruta:
+  // este archivo se sirve tanto desde /assets como desde previews con otro prefijo.
+  const _sbSelfSrc = (document.currentScript && document.currentScript.src) || '';
+  const _sbSibling = f => _sbSelfSrc ? _sbSelfSrc.replace(/sidebar\.js(\?.*)?$/, f) : 'assets/' + f;
+
   // ── i18n runtime ─────────────────────────────────────────────
   // Load the shared i18n runtime once, on every app page that has a sidebar,
   // so nav + chrome translate without touching each page's <head>.
@@ -1624,14 +1629,130 @@ html.cm-rail .hub-nav-grip{display:none}
   }
   window.addEventListener('cm:sport-change', _applySportToNav);
 
+  // ── TOPBAR CHROME ────────────────────────────────────────────
+  // El chrome superior — buscador global, campana, ayuda y ajustes — estaba copiado a
+  // mano en el markup de cada página, así que unas lo tenían entero, otras a medias y
+  // otras nada. Y como el panel de mensajes, el de notificaciones y la presencia se
+  // anclan a la campana, en las páginas sin campana el DM rápido no existía: había que
+  // entrar a Chat & Tasks. Se completa acá, una sola vez y para todas, de forma síncrona
+  // (antes de que corran _initNotifications/_initChatNotif/_initPresence, que lo buscan).
+  const _TOPBAR_SEL  = '.hub-topbar, .cm-topbar, .co-topbar';
+  const _ACTIONS_SEL = '.actions, .cm-topbar-actions, .right';
+
+  function _chromeBtn(iconClass, i18nKey, fallback, extraAttr) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cm-icon-btn';
+    const label = _ttx(i18nKey, fallback);
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.setAttribute('data-i18n-attr', `title:${i18nKey};aria-label:${i18nKey}`);
+    if (extraAttr) b.setAttribute(extraAttr, '');
+    b.innerHTML = `<i class="ti ${iconClass}"></i>`;
+    return b;
+  }
+
+  function _ensureTopbarChrome() {
+    const scope = document.querySelector('.hub-main') || document.body;
+    if (!scope) return;
+    const bar = scope.querySelector(_TOPBAR_SEL);
+    // Dossier y demás vistas de export no montan shell a propósito: sin barra, sin chrome.
+    if (!bar || bar.dataset.cmChrome === '1') return;
+    bar.dataset.cmChrome = '1';
+
+    // 1) Cluster de acciones, a la derecha. Cuando la barra anida varios (Drill Designer
+    //    tiene un .actions dentro de un .right) mandamos el que ya contiene el chrome,
+    //    para no plantar la ayuda a la izquierda de los CTA de la página.
+    const chromeAnchor = bar.querySelector('[data-open-settings]')
+      || [...bar.querySelectorAll('.cm-icon-btn')].find(b => b.querySelector('.ti-bell'));
+    let actions = (chromeAnchor && chromeAnchor.closest(_ACTIONS_SEL)) || bar.querySelector(_ACTIONS_SEL);
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'actions';
+      actions.style.cssText = 'display:flex;align-items:center;gap:8px;margin-left:auto';
+      bar.appendChild(actions);
+    }
+
+    // 2) Caja del buscador. Load Monitor la tenía con su propia clase: le sumamos la
+    //    canónica en vez de plantarle una segunda caja al lado. El contenido (ícono,
+    //    input, ⌘K y el dropdown de resultados) lo completa global-search.js.
+    const search = bar.querySelector('.hub-search') || bar.querySelector('.cm-topbar-search');
+    if (search) search.classList.add('hub-search');
+    else {
+      const box = document.createElement('div');
+      box.className = 'hub-search';
+      actions.parentNode.insertBefore(box, actions);
+    }
+
+    // 3) Campana → ayuda → ajustes. Se insertan sólo los que falten, pegados al chrome
+    //    que ya exista, para no partir en dos los CTA propios de la página. Si no hay
+    //    ninguno, el bloque abre el cluster (como en el Hub, a la izquierda del CTA).
+    const findIco = ico => [...bar.querySelectorAll('.cm-icon-btn')]
+      .find(b => b.querySelector('.' + ico)) || null;
+    const specs = [
+      ['ti-bell',     'shell.notifications', 'Notifications', null],
+      ['ti-help',     'shell.help',          'Help',          null],
+      ['ti-settings', 'shell.nav.settings',  'Settings',      'data-open-settings'],
+    ];
+    let after = null;
+    for (const [ico, key, fb, extra] of specs) {
+      const existing = extra ? bar.querySelector('[' + extra + ']') : findIco(ico);
+      if (existing) { if (existing.parentNode === actions) after = existing; continue; }
+      const btn = _chromeBtn(ico, key, fb, extra);
+      actions.insertBefore(btn, after ? after.nextSibling : actions.firstChild);
+      after = btn;
+    }
+
+    // 4) El buscador necesita su runtime, y varias páginas nunca incluyeron el <script>.
+    if (!document.querySelector('script[src*="global-search.js"]')) {
+      const s = document.createElement('script');
+      s.src = _sbSibling('global-search.js');
+      s.defer = true;
+      document.head.appendChild(s);
+    }
+
+    _resolveHelpHref();
+    _applyI18n(bar);
+  }
+
+  // ── HELP → centro de soporte ─────────────────────────────────
+  // El botón de ayuda estaba pintado en media docena de páginas y no hacía nada en
+  // ninguna. support/help-map.json ya mapeaba página → artículo; lo usamos.
+  // El destino se resuelve al arrancar, no al hacer clic: abrir la ventana después de un
+  // await pierde el gesto del usuario y el bloqueador de popups la mata.
+  let _helpMap = null;
+  let _helpHref = 'support/index.html';
+  async function _resolveHelpHref() {
+    if (!_helpMap) {
+      try { _helpMap = await fetch('support/help-map.json', { cache: 'force-cache' }).then(r => r.json()); }
+      catch (_) { _helpMap = {}; }
+    }
+    const lang = (window.CM_I18N && window.CM_I18N.current) || 'en';
+    const base = 'support/' + (lang === 'en' ? '' : lang + '/');
+    // El mapa se indexa por nombre de archivo; la raíz es el Hub y algunos servidores
+    // sirven la URL sin extensión.
+    let page = currentPage() || 'Hub.html';
+    if (!/\.html$/.test(page)) page += '.html';
+    const slug = _helpMap[page];
+    _helpHref = slug ? base + slug + '.html' : base + 'index.html';
+  }
+  document.addEventListener('cm:langchanged', _resolveHelpHref);
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.cm-icon-btn');
+    if (!btn || !btn.querySelector('.ti-help')) return;
+    e.preventDefault();
+    window.open(_helpHref, '_blank', 'noopener');
+  });
+
   // ── BOOT ─────────────────────────────────────────────────────
   // Re-translate the whole shell whenever the i18n runtime boots or the user
   // switches language (covers the sidebar + the dynamically-built chrome panels).
   document.addEventListener('cm:langchanged', () => _applyI18n(document));
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { inject(); _paintCachedBrand(); loadData(); _initNotifications(); _initChatNotif(); _initPresence(); });
+    document.addEventListener('DOMContentLoaded', () => { inject(); _ensureTopbarChrome(); _paintCachedBrand(); loadData(); _initNotifications(); _initChatNotif(); _initPresence(); });
   } else {
     inject();
+    _ensureTopbarChrome();
     _paintCachedBrand();
     loadData();
     _initNotifications();
