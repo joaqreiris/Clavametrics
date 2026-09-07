@@ -556,6 +556,12 @@
     border-radius:50%; text-align:center; font:700 14px/1 monospace;
     border:2.5px solid rgba(255,255,255,0.9); background:rgba(0,0,0,0.65); color:white;
     outline:none; padding:0; box-sizing:border-box; }
+  /* Inline edit of a pinned measurement chip — mirrors the chip painted on the canvas */
+  #plDimInput { display:none; position:absolute; z-index:56; width:64px; height:18px;
+    transform:translate(-50%,-50%); text-align:center;
+    font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    border:1px solid rgba(255,255,255,0.6); border-radius:4px;
+    background:rgba(15,23,42,0.94); color:#fff; outline:none; padding:0; box-sizing:border-box; }
   #plAngleBadge { display:none; position:absolute; z-index:55; transform:translate(-50%,-50%);
     padding:3px 8px; border-radius:6px; font:700 12px/1 monospace; letter-spacing:.02em;
     background:rgba(17,24,29,0.9); color:#fff; border:1px solid rgba(255,255,255,0.25);
@@ -1284,6 +1290,8 @@
             <button id="plPolyCancelBtn" data-i18n="common.cancel">Cancel</button>
           </div>
           <input type="text" id="plPlayerNumInput" maxlength="3" autocomplete="off">
+          <input type="text" id="plDimInput" maxlength="7" autocomplete="off" inputmode="decimal"
+                 data-i18n-attr="title:planner.dim_edit_title" title="Measurement in metres — empty to measure again">
           <div id="plAngleBadge"></div>
 
           <div class="pl-field-fab">
@@ -1805,7 +1813,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowWavy','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role','_showDims'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_arrowWavy','_arrowNoHead','_arrowStartCap','_arrowEndCap','_arrowWidth','_coneColor','_barrierColor','_goalpostColor','_poleColor','_team','_playerId','_objPath','_role','_showDims','_dimEdit'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1939,10 +1947,20 @@
   // Painted straight onto the canvas context after every render instead of being added as
   // fabric objects: they never touch history/serialization, always match the live geometry
   // (move/resize/rotate/undo), and still land in the PNG/PDF export — html2canvas copies the
-  // canvas as painted. Only the `_showDims` flag is persisted (see ARROW_PROPS).
+  // canvas as painted. Only `_showDims` and `_dimEdit` are persisted (see ARROW_PROPS).
   const DIM_TYPES = new Set(['zone', 'goal', 'arrow', 'custom_object']);
   function _canMeasure(o) { return !!o && DIM_TYPES.has(o._type); }
-  function _dimChip(ctx, x, y, txt) {
+
+  // Cota escrita a mano (metros), por objeto y por lado: `_dimEdit = { w, h, len }`. Sobre
+  // el césped sin campo la escala sale de una cancha de 105 m que no existe, así que el
+  // número medido es una convención; esto deja fijar el real. Persistido vía ARROW_PROPS.
+  function _dimManual(o, key) {
+    const v = o._dimEdit && o._dimEdit[key];
+    return typeof v === 'number' && isFinite(v) && v > 0;
+  }
+  function _dimValue(o, key, measured) { return _dimManual(o, key) ? o._dimEdit[key] : measured; }
+
+  function _dimChip(ctx, x, y, txt, manual) {
     ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, monospace';
     const w = ctx.measureText(txt).width + 10, h = 16;
     ctx.fillStyle = 'rgba(15,23,42,0.82)';
@@ -1950,13 +1968,17 @@
     if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, 4);
     else ctx.rect(x - w / 2, y - h / 2, w, h);
     ctx.fill();
+    // Borde tenue cuando el número es escrito a mano: avisa que ya no sigue a la geometría
+    // (redimensionar el objeto no lo va a mover) sin ensuciar el export.
+    if (manual) { ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.stroke(); }
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(txt, x, y);
+    return { x: x - w / 2, y: y - h / 2, w, h };
   }
   // Dimension line along a→b, pushed `off` px along its normal (negative = outside a
   // clockwise contour), with end ticks and the label chip.
-  function _dimSpan(ctx, ax, ay, bx, by, off, txt) {
+  function _dimSpan(ctx, ax, ay, bx, by, off, txt, manual) {
     const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
     const nx = -dy / L, ny = dx / L;
     const x1 = ax + nx * off, y1 = ay + ny * off, x2 = bx + nx * off, y2 = by + ny * off;
@@ -1966,7 +1988,7 @@
     ctx.moveTo(x1 - nx * 4, y1 - ny * 4); ctx.lineTo(x1 + nx * 4, y1 + ny * 4);
     ctx.moveTo(x2 - nx * 4, y2 - ny * 4); ctx.lineTo(x2 + nx * 4, y2 + ny * 4);
     ctx.stroke();
-    _dimChip(ctx, (x1 + x2) / 2 + nx * off * 0.62, (y1 + y2) / 2 + ny * off * 0.62, txt);
+    return _dimChip(ctx, (x1 + x2) / 2 + nx * off * 0.62, (y1 + y2) / 2 + ny * off * 0.62, txt, manual);
   }
   function _arrowGeom(o) {
     const d = _arrowData.get(o._arrowId);
@@ -1983,8 +2005,13 @@
     }
     return len;
   }
+  // Rectángulos de los chips del último render, en el espacio interno del canvas (el mismo
+  // que devuelve fc.getPointer con ignoreZoom): como las cotas se pintan sobre el contexto
+  // y no son objetos de fabric, el doble clic se resuelve contra esta lista.
+  let _dimHits = [];
   function _drawDimOverlay(ctx) {
     if (!ctx) return;
+    _dimHits = [];
     const objs = fc.getObjects().filter(o => o._showDims && _canMeasure(o));
     if (!objs.length) return;
     const mpp = _metersPerPixel(); if (!mpp) return;
@@ -2001,7 +2028,9 @@
         const mid = _arrowBasePoint(d, 0.5);
         const tl  = Math.hypot(mid.tx, mid.ty) || 1;
         const nx  = -mid.ty / tl, ny = mid.tx / tl;
-        _dimChip(ctx, sx(mid) + nx * 15, sy(mid) + ny * 15, _fmtM(_arrowLength(d) * mpp));
+        const lenM = _dimValue(o, 'len', _arrowLength(d) * mpp);
+        const r = _dimChip(ctx, sx(mid) + nx * 15, sy(mid) + ny * 15, _fmtM(lenM), _dimManual(o, 'len'));
+        _dimHits.push({ obj: o, key: 'len', m: lenM, ...r });
         return;
       }
       // Corners from the full transform matrix (parent group included), so the labels stay
@@ -2010,23 +2039,88 @@
       const w = o.width || 0, h = o.height || 0;
       const P = (dx, dy) => fabric.util.transformPoint(new fabric.Point(dx, dy), m);
       const a = P(-w / 2, -h / 2), b = P(w / 2, -h / 2), c = P(w / 2, h / 2);
-      const wM = Math.hypot(b.x - a.x, b.y - a.y) * mpp;
-      const hM = Math.hypot(c.x - b.x, c.y - b.y) * mpp;
+      const wM = _dimValue(o, 'w', Math.hypot(b.x - a.x, b.y - a.y) * mpp);
+      const hM = _dimValue(o, 'h', Math.hypot(c.x - b.x, c.y - b.y) * mpp);
       // Push the dimension lines outside the shape — flipped objects wind the other way.
       const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
       const off = cross < 0 ? 15 : -15;
       if (o.type === 'circle') {                    // a circle has one meaningful figure
-        _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, '⌀ ' + _fmtM(wM));
+        const rc = _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, '⌀ ' + _fmtM(wM), _dimManual(o, 'w'));
+        _dimHits.push({ obj: o, key: 'w', m: wM, ...rc });
         return;
       }
-      _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, _fmtM(wM));
-      _dimSpan(ctx, sx(b), sy(b), sx(c), sy(c), off, _fmtM(hM));
+      const rw = _dimSpan(ctx, sx(a), sy(a), sx(b), sy(b), off, _fmtM(wM), _dimManual(o, 'w'));
+      const rh = _dimSpan(ctx, sx(b), sy(b), sx(c), sy(c), off, _fmtM(hM), _dimManual(o, 'h'));
+      _dimHits.push({ obj: o, key: 'w', m: wM, ...rw });
+      _dimHits.push({ obj: o, key: 'h', m: hM, ...rh });
     });
     ctx.restore();
   }
   // Only the main render passes a ctx (renderTop fires the same event bare, for the
   // selection layer) — painting on that one would double-draw every chip.
   fc.on('after:render', e => { if (e && e.ctx) _drawDimOverlay(e.ctx); });
+
+  // ── Edición manual de una cota ──────────────────────────────────
+  // Doble clic sobre el chip → se escribe el número. Vacío = vuelve a medir solo.
+  const _dimInput = document.getElementById('plDimInput');
+  let _editingDim = null;
+  function _dimHitAt(px, py) {
+    for (let i = _dimHits.length - 1; i >= 0; i--) {
+      const h = _dimHits[i];
+      if (px >= h.x - 2 && px <= h.x + h.w + 2 && py >= h.y - 2 && py <= h.y + h.h + 2) return h;
+    }
+    return null;
+  }
+  // Fabric dibuja en los píxeles internos del canvas; un input flotante se posiciona en
+  // CSS dentro de #plField. Los dos espacios dejan de coincidir en cuanto el ancho CSS del
+  // canvas no es el de su atributo width — pasa al plegar la barra lateral, que cambia el
+  // layout sin disparar el resize de ventana del que cuelga _refitCanvas. Sin convertir,
+  // el cuadro de edición cae corrido.
+  function _canvasToCss(x, y, el) {
+    const cv = fc.upperCanvasEl, b = cv.getBoundingClientRect();
+    const par = ((el && el.offsetParent) || cv.parentNode).getBoundingClientRect();
+    const kx = (b.width  || cv.width)  / (cv.width  || 1);
+    const ky = (b.height || cv.height) / (cv.height || 1);
+    return { x: b.left - par.left + x * kx, y: b.top - par.top + y * ky };
+  }
+  function _openDimEditor(hit) {
+    if (!_dimInput) return;
+    _editingDim = hit;
+    // Arranca con lo que se está viendo, medido o escrito: se corrige, no se reescribe.
+    _dimInput.value = String(Math.round(hit.m * 10) / 10);
+    const at = _canvasToCss(hit.x + hit.w / 2, hit.y + hit.h / 2, _dimInput);
+    _dimInput.style.left = at.x + 'px';
+    _dimInput.style.top  = at.y + 'px';
+    _dimInput.style.display = 'block';
+    _dimInput.focus(); _dimInput.select();
+  }
+  function _closeDimEditor() { _editingDim = null; if (_dimInput) _dimInput.style.display = 'none'; }
+  function _commitDimEdit() {
+    const hit = _editingDim; if (!hit) return;
+    _closeDimEditor();
+    const raw = _dimInput.value.trim().replace(',', '.');
+    const n = raw === '' ? null : parseFloat(raw);
+    if (raw !== '' && (!isFinite(n) || n <= 0)) return;          // basura: se ignora, la cota queda como estaba
+    const before = (hit.obj._dimEdit || {})[hit.key];
+    if ((before == null && n == null) || before === n) return;   // sin cambio: no ensuciar el historial
+    const edit = Object.assign({}, hit.obj._dimEdit);
+    if (n == null) delete edit[hit.key]; else edit[hit.key] = n;
+    hit.obj._dimEdit = Object.keys(edit).length ? edit : undefined;
+    fc.requestRenderAll(); pushHistory(); markDirty();
+  }
+  _dimInput?.addEventListener('keydown', e => {
+    e.stopPropagation();                                          // Delete/flechas son atajos del board
+    if (e.key === 'Enter')  { e.preventDefault(); _commitDimEdit(); }
+    if (e.key === 'Escape') { e.preventDefault(); _closeDimEditor(); }
+  });
+  _dimInput?.addEventListener('blur', () => _commitDimEdit());
+  // Pista de que el chip es editable. Fabric fija su cursor en su propio mousemove, así
+  // que esto va como listener nativo (corre después) y sólo pisa cuando hay chip debajo.
+  fc.upperCanvasEl?.addEventListener('mousemove', e => {
+    if (_editingDim || !_dimHits.length) return;
+    const p = fc.getPointer(e, true);
+    if (_dimHitAt(p.x, p.y)) fc.upperCanvasEl.style.cursor = 'text';
+  });
 
   fc.on('object:moving', e => {
     const obj = e.target; if (!obj) return;
@@ -2766,6 +2860,7 @@
     const old=d.grp;
     d.grp=_buildArrowGroup(d);
     d.grp._showDims = !!old?._showDims;   // pinned metre label survives every reshape/rebuild
+    d.grp._dimEdit  = old?._dimEdit;      // ...y el número escrito a mano con él
     const _prev=_suppressHistory;
     _suppressHistory=true; _rebuilding=true;
     fc.remove(old);
@@ -2943,6 +3038,11 @@
 
   fc.on('mouse:dblclick', e => {
     if (currentTool === 'free_polygon') { _finishFreePolygon(); return; }
+    // Double-click on a pinned measurement → type the metres by hand. Va primero: el chip
+    // se pinta encima de todo, y puede caer sobre otro objeto que también reacciona al 2×.
+    const p = fc.getPointer(e.e, true);
+    const hit = _dimHitAt(p.x, p.y);
+    if (hit) { _openDimEditor(hit); return; }
     // Double-click on player → edit label
     const obj = fc.getActiveObject();
     if (obj?._type === 'player') {
@@ -2955,8 +3055,11 @@
       const inp = document.getElementById('plPlayerNumInput');
       if (!inp) return;
       inp.value = textObj.text;
-      inp.style.left = (px - 20) + 'px';
-      inp.style.top  = (py - 20) + 'px';
+      // Mismo salto de espacios que el editor de cotas: sin convertir, el círculo de
+      // edición cae corrido cuando el canvas quedó a otra escala que su caja CSS.
+      const at = _canvasToCss(px, py, inp);
+      inp.style.left = (at.x - 20) + 'px';
+      inp.style.top  = (at.y - 20) + 'px';
       inp.style.display = 'block';
       inp.focus(); inp.select();
     }
@@ -3382,6 +3485,7 @@
     const _k = (e.key && e.key.length === 1) ? e.key.toLowerCase() : e.key;
     if (e.key==='Escape') {
       if (currentTool === 'free_polygon') { setTool('select'); return; }
+      if (_editingDim) { _closeDimEditor(); return; }
       if (_editingPlayer) {
         document.getElementById('plPlayerNumInput').style.display='none'; _editingPlayer=null; return;
       }
@@ -4062,7 +4166,7 @@
     try {
       const canvas = await html2canvas(fieldEl, {
         useCORS: true, allowTaint: true, scale: 2, backgroundColor: '#1a472a',
-        ignoreElements: el => el.id === 'plPolyDoneBar' || el.id === 'plPropBar' || el.id === 'plPlayerNumInput' || el.classList?.contains('pl-field-fab') || el.classList?.contains('pl-field-tag')
+        ignoreElements: el => el.id === 'plPolyDoneBar' || el.id === 'plPropBar' || el.id === 'plPlayerNumInput' || el.id === 'plDimInput' || el.classList?.contains('pl-field-fab') || el.classList?.contains('pl-field-tag')
       });
       const link = document.createElement('a');
       link.download = (document.getElementById('plExName')?.value || 'exercise') + '.png';
@@ -5184,7 +5288,8 @@
         useCORS: true, allowTaint: true, scale: 2, backgroundColor: '#1a472a',
         ignoreElements: el =>
           el.id === 'plPolyDoneBar' || el.id === 'plPropBar' ||
-          el.id === 'plPlayerNumInput' || el.classList?.contains('pl-field-fab') ||
+          el.id === 'plPlayerNumInput' || el.id === 'plDimInput' ||
+          el.classList?.contains('pl-field-fab') ||
           el.classList?.contains('pl-field-tag')
       });
       const imageData = snapshot.toDataURL('image/png');
