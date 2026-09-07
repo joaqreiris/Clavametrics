@@ -86,4 +86,17 @@ test.describe('GPS · barra de filtros', () => {
     // …y la barra lo muestra igual: esconder algo que está filtrando sería mentir.
     await expect.poll(async () => (await visibles(page)).includes('session_type'), { timeout: 6_000 }).toBe(true);
   });
+
+  // Los nombres del menú eran los últimos textos de la barra en inglés. Ahora pasan por i18n,
+  // igual que los placeholders — y de paso viajan traducidos al informe PDF (describeActive).
+  test('el menú habla el idioma del usuario', async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem('cm_lang', 'es'); } catch { /* sin storage */ } });
+    await open(page);
+    await page.locator('.fb-addfilter').first().click();
+    const menu = page.locator('.fb-addmenu.is-open').first();
+    await expect(menu).toBeVisible({ timeout: 5_000 });
+    await expect(menu.locator('.fb-additem[data-key="player"]')).toContainText('Jugadores');
+    await expect(menu.locator('.fb-additem[data-key="work_context"]')).toContainText('Contexto');
+    await expect(menu.locator('.fb-addgroup').first()).toContainText(/tiempo/i);
+  });
 });

@@ -88,6 +88,11 @@
     'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
     'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
     'Time':'filterbar.family_time','Squad':'filterbar.family_squad','Session':'filterbar.family_session',
+    // Nombres del menú «Agregar filtro» (y de los filtros aplicados en el informe PDF, que sale
+    // de describeActive): hasta ahora eran los únicos textos de la barra que quedaban en inglés.
+    'Matchday':'filterbar.label_md','Date':'filterbar.label_date','Players':'filterbar.label_players',
+    'Positions':'filterbar.label_positions','Microcycle':'filterbar.label_microcycle','Rival':'filterbar.label_rival',
+    'Session type':'filterbar.label_type','Context':'filterbar.label_context',
     'All filters added':'filterbar.all_added','Remove filter':'filterbar.remove_filter','Drag to reorder':'filterbar.drag_reorder',
     'Search…':'filterbar.search','Search date…':'filterbar.search_date','No club data yet.':'filterbar.no_club_data',
     'No dates with data yet.':'filterbar.no_dates_data','No dates for the current filters.':'filterbar.no_dates_filter',
@@ -1040,7 +1045,7 @@
       const items = hidden.filter(d => FILTER_FAMILY[d.key] === f);
       if (!items.length) return '';
       return `<div class="fb-addgroup">${T(FAMILY_LABEL[f])}</div>` + items.map(d =>
-        `<button class="fb-additem" type="button" data-key="${d.key}"><i class="ti ${d.icon}"></i><span>${FILTER_LABELS[d.key] || d.key}</span></button>`
+        `<button class="fb-additem" type="button" data-key="${d.key}"><i class="ti ${d.icon}"></i><span>${T(FILTER_LABELS[d.key] || d.key)}</span></button>`
       ).join('');
     }).join('');
     menu.querySelectorAll('.fb-additem').forEach(b => b.addEventListener('click', (e) => {
