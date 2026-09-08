@@ -68,6 +68,10 @@
     // agrupar (posición, MD code…); la caja se calcula sobre los valores de cada jugador dentro
     // del grupo, así que la consulta agrupa además por jugador (ver _boxQueryConfig).
     box:     { name: 'Box plot', icon: 'ti-chart-candle', min: 1, max: 1, dimMax: 1, squadOnly: true },
+    // % de la demanda de partido: cada métrica se dibuja como su porcentaje de la referencia de
+    // PARTIDO del jugador (media de sus N mejores partidos, gps-baseline.js). El 100% es el eje,
+    // no un valor más. Sin dimensiones: una barra por métrica es toda la lectura.
+    demand:  { name: 'Match demand', icon: 'ti-percentage', min: 1, max: 8, dimMax: 0 },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -148,7 +152,7 @@
     const ids = dimList(S);
     return Array.from({ length: n }, (_, r) => ids.map(id => { const a = DIM_MOCK[id] || DIM_MOCK.player_name; return a[r % a.length]; }));
   }
-  const VIZ_FULLNAME  = { kpi:'KPI', gauge:'Gauge', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap', box:'Box plot' };
+  const VIZ_FULLNAME  = { kpi:'KPI', gauge:'Gauge', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap', box:'Box plot', demand:'% of match demand' };
   const VIZ_REQ_LBL   = { kpi:'pick 1', gauge:'pick 1+', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+', box:'pick 1' };
 
   const AGGS = [
@@ -2533,6 +2537,7 @@
     else if (S.type === 'ranking') mountRankingPreview(body, S);
     else if (S.type === 'table') mountTablePreview(body, S);
     else if (S.type === 'box') mountBoxPreview(body, S);
+    else if (S.type === 'demand') mountDemandPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -2774,6 +2779,7 @@
       case 'ranking': mountRankingCard(container, config, series); break;
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
       case 'box':     mountBoxCard(container, config, series, { example: opts.example }); break;
+      case 'demand':  mountDemandCard(container, config, series, { demand: opts.demand || null, mixedTypes: opts.demandMixed || 0, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
@@ -2817,6 +2823,17 @@
    * ya está agrupando por jugador). El config que se guarda no cambia: esto vive sólo en la
    * consulta, y el render vuelve a juntar los puntos por el grupo real.
    */
+  /**
+   * Config de CONSULTA del «% de la demanda de partido». Necesita el valor de CADA jugador para
+   * dividirlo por SU referencia de partido (la de otro no dice nada), así que agrupa por jugador
+   * aunque la card no muestre jugadores. Y normaliza el acumulado a media POR SESIÓN: sumar cinco
+   * entrenamientos y compararlos contra un partido daría 400% sin que nadie haya corrido de más.
+   */
+  function _demandQueryConfig(config) {
+    const metrics = (config.metrics || []).map(m => ({ ...m, agg: m.agg === 'total' ? 'avg' : (m.agg || 'avg') }));
+    return { ...config, viz: 'bars', metrics, dimensions: [{ id: 'player_name' }] };
+  }
+
   function _boxQueryConfig(config) {
     const dims = (config.dimensions || []).slice(0, 1);
     const unit = dims[0]?.id === 'player_name' ? 'session_date' : 'player_name';
@@ -3071,7 +3088,8 @@
         } catch (e) { console.warn('gpb player-agg fast path — raw fallback:', e); }
       }
       if (!_usedFastAgg) {
-        const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config) : config;
+        const _cfgQ = config.viz === 'box' ? _boxQueryConfig(config)
+                    : config.viz === 'demand' ? _demandQueryConfig(config) : config;
         const rawRows = await fetchReports(sessionIds, _cfgQ, ctx, catalogMap, sb);
         rows = _fbFilterRows(rawRows, FBcard, config.source);
         if (stale()) return;
@@ -3341,6 +3359,18 @@
             drawOpts.scatterSparks = _buildScatterSparks(rows, eavMap, _xId, CORE_COLS);
           } catch (e) { /* sparkline opcional — nunca romper la card */ }
         }
+      } else if (config.viz === 'demand') {
+        // El % sale de dividir el valor de CADA jugador por SU referencia de partido, así que se
+        // calcula acá (la serie ya viene agrupada por jugador) y el render sólo dibuja.
+        try {
+          drawOpts.demand = await _buildDemandData(config, series);
+          // Un partido pesa ~2,5× un entrenamiento: si el período mezcla los dos, el promedio
+          // por sesión se compara contra el partido midiendo cosas distintas. Aviso, no bloqueo.
+          const _t = new Set((rows || []).map(r => r.training_sessions?.session_type ?? r.session_type).filter(Boolean));
+          drawOpts.demandMixed = _t.size > 1 ? _t.size : 0;
+        }
+        catch (e) { console.warn('gpb demand:', e); drawOpts.demand = []; }
+        if (stale()) return;
       } else if (config.viz === 'kpi') {
         // Per-metric delta from the EXISTING comparison block:
         //  · mc    → already on the series points (.diff), enriched by Step 5a above.
@@ -6983,6 +7013,245 @@
     mountBoxCard(body, config, [{ label: m0.id, name: m0.name, unit: m0.unit, points }], { example: true });
   }
 
+
+  // ── % de la demanda de partido ────────────────────────────────────────────────
+  // Cada métrica como su porcentaje de la referencia de PARTIDO del jugador (media de sus N
+  // mejores partidos, gps-baseline.js). El 100% es el eje: la lectura es «hoy hicimos el 58% del
+  // volumen pero el 109% del sprint», que es la que el staff hace a mano todas las semanas.
+  //
+  // Plantel: el porcentaje se calcula POR JUGADOR contra SU referencia y después se promedian los
+  // porcentajes. Sumar el plantel y dividir por la suma de referencias daría el número del equipo
+  // «promedio», que pesa más a quien más corre; acá cada jugador cuenta una vez.
+
+  /** Referencia de partido: cuántos partidos entran en la media. Vacío → el ajuste del club. */
+  function _demandOpts(config) {
+    const n = Number(config.style?.demandN);
+    return (Number.isFinite(n) && n >= 1) ? { n } : {};
+  }
+
+  /**
+   * (config, series por jugador) → una fila por métrica con su % y de dónde sale.
+   * Sin referencia suficiente (menos de 3 partidos) la fila queda igual, marcada: la métrica se
+   * pidió y hay que ver que no se pudo comparar, no hacerla desaparecer.
+   */
+  async function _buildDemandData(config, series) {
+    const opts = _demandOpts(config);
+    const out = [];
+    for (const s of (series || [])) {
+      const met  = catalogMap.get(s.label);
+      const pts  = (s.points || []).filter(p => p.fid && p.y != null && isFinite(p.y));
+      const pids = [...new Set(pts.map(p => String(p.fid)))];
+      let bl = {};
+      if (pids.length && window.getMatchBaselineBatch && _clubId) {
+        try { bl = (await window.getMatchBaselineBatch(pids, s.label, _clubId, opts)) || {}; }
+        catch (e) { console.warn('gpb demand baseline:', e); }
+      }
+      const per = [];
+      // minCount: los partidos que tiene el que MENOS tiene, para decir con qué se comparó. Si
+      // nadie llegó al mínimo, el que más se acercó — «2 de 3 partidos» explica la fila vacía;
+      // un 0 fijo mentiría sobre lo que falta.
+      let missing = 0, minCount = null, bestShort = 0;
+      for (const p of pts) {
+        const b = bl[String(p.fid)];
+        if (!b || b.baseline == null || !(b.baseline > 0)) {
+          missing++; bestShort = Math.max(bestShort, b?.count || 0); continue;
+        }
+        per.push({ name: p.x, pct: (p.y / b.baseline) * 100, val: p.y, ref: b.baseline, count: b.count });
+        minCount = (minCount == null) ? b.count : Math.min(minCount, b.count);
+      }
+      if (minCount == null) minCount = bestShort;
+      const pct = per.length ? per.reduce((a, r) => a + r.pct, 0) / per.length : null;
+      out.push({
+        id: s.label, name: met?.name || s.name || s.label, unit: s.unit || met?.unit || '',
+        dec: met?.decimals ?? 0, pct, n: per.length, missing, minCount, per,
+      });
+    }
+    return out;
+  }
+
+  /** Dibuja el eje del 100% y el porcentaje al final de cada barra. */
+  const _demandPlugin = {
+    id: 'gpbDemand',
+    afterDatasetsDraw(chart, _a, o) {
+      const { ctx, chartArea: A, scales } = chart;
+      const rows = o?.rows || [];
+      const x100 = scales.x.getPixelForValue(100);
+      ctx.save();
+      // El 100% no es una marca más: es contra lo que se lee todo lo demás.
+      ctx.strokeStyle = o.refColor || '#334155';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x100, A.top - 2); ctx.lineTo(x100, A.bottom + 2); ctx.stroke();
+      if (o.refLabel) {
+        ctx.font = '600 10px system-ui, sans-serif';
+        ctx.fillStyle = o.refColor || '#334155';
+        ctx.textAlign = x100 > A.right - 70 ? 'right' : 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(o.refLabel, x100 + (ctx.textAlign === 'right' ? -4 : 4), A.top - 3);
+      }
+      const meta = chart.getDatasetMeta(0);
+      ctx.textBaseline = 'middle';
+      meta.data.forEach((bar, i) => {
+        const r = rows[i];
+        if (!r) return;
+        const txt = (r.pct == null)
+          ? (o.noRefLabel || 'no reference')
+          : `${Math.round(r.pct)}%`;
+        ctx.font = (r.pct == null) ? '400 10px system-ui, sans-serif' : '600 11px system-ui, sans-serif';
+        ctx.fillStyle = (r.pct == null) ? (o.mutedColor || '#9CA3AF') : (o.textColor || '#374151');
+        const w = ctx.measureText(txt).width;
+        // La etiqueta va después de la barra; si no entra, adentro y en blanco.
+        const end = bar.x;
+        if (end + 6 + w <= A.right) { ctx.textAlign = 'left'; ctx.fillText(txt, end + 6, bar.y); }
+        else { ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.fillText(txt, end - 6, bar.y); }
+      });
+      ctx.restore();
+    },
+  };
+
+  function mountDemandCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const rows = opts.demand || [];
+    if (!rows.length) {
+      body.innerHTML = '';
+      showEmptyBody(body, _tt('gps_analysis.builder_no_rows_match', 'No rows match the current scope, range and filters.'));
+      return;
+    }
+    if (typeof Chart === 'undefined') { body.innerHTML = ''; showEmptyBody(body, 'Chart.js no está disponible'); return; }
+    // Ninguna métrica llegó al mínimo de partidos: eso no es una card vacía, es una respuesta.
+    if (rows.every(r => r.pct == null)) {
+      body.innerHTML = '';
+      const min = window.BASELINE_MIN_MATCHES || 3;
+      showEmptyBody(body, _tt('gps_analysis.demand_no_ref',
+        'No match reference yet: at least {n} matches per player are needed.', { n: min }));
+      return;
+    }
+
+    const size   = config.style?.size || 'md';
+    // La altura la mandan las filas, no el tamaño de la card: con dos métricas, el alto fijo
+    // dejaba dos barras perdidas en medio de un vacío. (En lienzo libre manda la card.)
+    const height = Math.max(120, Math.min(440, 40 + rows.length * 38));
+    const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
+
+    const wrap = document.createElement('div');
+    if (body.closest && body.closest('.gp-grid.is-canvas')) {
+      body.style.position = 'relative';
+      wrap.style.cssText = 'position:absolute;inset:0';
+    } else {
+      wrap.style.cssText = `position:relative;width:100%;height:${height}px`;
+    }
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    body.innerHTML = '';
+    body.appendChild(wrap);
+    Chart.getChart(canvas)?.destroy();
+
+    // El eje llega siempre al 100% aunque nadie lo alcance (si no, el 58% parece pegado al tope)
+    // y deja aire para la etiqueta del porcentaje.
+    // El eje cierra en una decena redonda por encima del máximo, con el 100% siempre adentro y
+    // con aire: pegado al borde, la línea de referencia se lee como el marco de la card.
+    const maxPct = Math.max(100, ...rows.map(r => r.pct || 0));
+    const axMax  = Math.ceil((maxPct * 1.1) / 10) * 10;
+    const showAxes = config.style?.axes !== false;
+
+    body.__chart = _newChart(body, canvas, {
+      type: 'bar',
+      data: {
+        labels: rows.map(r => r.name),
+        datasets: [{
+          label: '%',
+          data: rows.map(r => r.pct ?? 0),
+          backgroundColor: rows.map(r => (r.pct == null
+            ? 'rgba(148,163,184,0.20)'
+            : `color-mix(in srgb, ${accent} 82%, transparent)`)),
+          borderRadius: 4,
+          borderSkipped: false,
+          maxBarThickness: 34,
+          categoryPercentage: 0.82,
+          barPercentage: 0.9,
+        }],
+      },
+      plugins: [_demandPlugin],
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 260 },
+        layout: { padding: { right: 46, top: 14 } },
+        scales: {
+          x: {
+            display: showAxes, min: 0, max: axMax,
+            grid: { display: showAxes, color: 'rgba(148,163,184,0.16)', drawTicks: false },
+            border: { display: false },
+            ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 4, maxTicksLimit: 6,
+                     callback: v => `${Math.round(v)}%` },
+          },
+          y: {
+            grid: { display: false, drawTicks: false },
+            border: { display: false },
+            ticks: { font: { size: 11 }, color: '#6B7280', crossAlign: 'far' },
+          },
+        },
+        plugins: {
+          legend: { display: false },        // una barra por métrica: el eje ya las nombra
+          gpbDemand: {
+            rows,
+            refLabel: _tt('gps_analysis.demand_ref_axis', '100% = match'),
+            noRefLabel: _tt('gps_analysis.demand_no_ref_short', 'no reference'),
+            refColor: _cssVar('--cm-fg', '#334155'),
+            textColor: _cssVar('--cm-fg', '#374151'),
+            mutedColor: '#9CA3AF',
+          },
+          tooltip: {
+            callbacks: {
+              title: items => (items.length ? String(rows[items[0].dataIndex]?.name ?? '') : ''),
+              label: c => {
+                const r = rows[c.dataIndex];
+                if (!r) return '';
+                if (r.pct == null) {
+                  return _tt('gps_analysis.demand_tip_none', 'No match reference ({n} of {min} matches)',
+                    { n: r.minCount ?? 0, min: window.BASELINE_MIN_MATCHES || 3 });
+                }
+                const u = r.unit ? ' ' + r.unit : '';
+                const val = r.per.reduce((a, x) => a + x.val, 0) / r.per.length;
+                const ref = r.per.reduce((a, x) => a + x.ref, 0) / r.per.length;
+                const out = [
+                  `${Math.round(r.pct)}% ${_tt('gps_analysis.demand_of_match', 'of the match reference')}`,
+                  `${fmtVal(val, r.dec)}${u} · ${_tt('gps_analysis.demand_ref', 'reference')} ${fmtVal(ref, r.dec)}${u}`,
+                  `${_tt('gps_analysis.demand_players', 'players')}: ${r.n}`,
+                ];
+                if (r.missing) out.push(_tt('gps_analysis.demand_missing', '{n} without reference', { n: r.missing }));
+                return out;
+              },
+            },
+          },
+        },
+      },
+    });
+    if (opts.mixedTypes > 1) {
+      const warn = document.createElement('div');
+      warn.style.cssText = 'text-align:center;margin-top:2px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-warning,#b45309)';
+      warn.innerHTML = `<i class="ti ti-alert-triangle" style="font-size:11px;vertical-align:-1px"></i> ${
+        _tt('gps_analysis.demand_mixed_types', 'The period mixes matches and training — filter by one type to read this fairly')}`;
+      body.appendChild(warn);
+    }
+    if (opts.example) _appendExampleBadge(body);
+  }
+
+  /** Preview: datos reales si hay backend; si no, un perfil de sesión corta e intensa. */
+  function mountDemandPreview(body, S) {
+    if (!S.metrics?.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    const pcts = [58, 66, 82, 98, 109, 74, 91, 63];
+    const demand = S.metrics.slice(0, 8).map((m, i) => {
+      const c = catalogMap.get(m.id);
+      return { id: m.id, name: c?.name || m.id, unit: c?.unit || '', dec: c?.decimals ?? 0,
+        pct: pcts[i % pcts.length], n: 11, missing: 0, minCount: 5,
+        per: [{ name: 'J1', pct: pcts[i % pcts.length], val: 1, ref: 1, count: 5 }] };
+    });
+    const config = { viz: 'demand', metrics: S.metrics, dimensions: [], scope: { level: S.scope },
+      style: { size: S.size, color: S.color, axes: S.axes }, __example: true };
+    mountDemandCard(body, config, [], { demand, example: true });
+  }
+
   /** Pure: (config, series) → ranking view model (sorted rows + bar widths). */
   function rankingCardData(config, series) {
     const size    = config.style?.size || 'md';
@@ -8308,6 +8577,7 @@
     table:   { name:'Table',   icon:'ti-table',        dimAx:'rows',                  metAx:'columns' },
     heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
     box:     { name:'Box plot', icon:'ti-chart-candle', dimAx:'group (optional dim)',  metAx:'metric to spread' },
+    demand:  { name:'Match demand', icon:'ti-percentage', dimAx:'(no dimension)',        metAx:'metrics to compare vs the match' },
   };
   let _bMode   = 'dd';       // el builder es SOLO Drag & drop (el Clásico fue eliminado); constante 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
