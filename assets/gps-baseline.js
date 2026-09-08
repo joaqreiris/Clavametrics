@@ -38,23 +38,41 @@
   function _cacheKey(pid, metric, n) { return `${pid}:${metric}:${n}`; }
 
   // ── Club settings ──────────────────────────────────────────────
+  const _SETTINGS_DEF = { baseline_n: DEFAULT_N, baseline_mode: 'personal', active_metrics: null,
+                          ref_min_minutes: 0, ref_from_date: null };
+  // ref_min_minutes / ref_from_date son la REGLA DEL CLUB sobre qué partidos valen como
+  // referencia (un partido de 15' no lo es; antes de la fecha de corte las bandas de velocidad
+  // estaban definidas de otra manera). Las escribe Top-Up y hasta ahora sólo las leía él: dos
+  // pantallas daban referencias distintas del mismo jugador. Ahora las lee el motor, que es
+  // quien las tiene que aplicar. Si el club no tiene la migración, se cae al select viejo.
   async function _loadClubSettings(clubId) {
     if (_settingsCache[clubId]) return _settingsCache[clubId];
+    let settings = null;
     try {
-      const { data } = await window.sb
+      const { data, error } = await window.sb
         .from('club_gps_settings')
-        .select('baseline_n, baseline_mode, active_metrics')
+        .select('baseline_n, baseline_mode, active_metrics, ref_min_minutes, ref_from_date')
         .eq('club_id', clubId)
         .maybeSingle();
-      const settings = data || { baseline_n: DEFAULT_N, baseline_mode: 'personal', active_metrics: null };
-      _settingsCache[clubId] = settings;
-      return settings;
+      if (error) throw error;
+      settings = data;
     } catch {
-      const def = { baseline_n: DEFAULT_N, baseline_mode: 'personal', active_metrics: null };
-      _settingsCache[clubId] = def;
-      return def;
+      try {
+        const { data } = await window.sb
+          .from('club_gps_settings')
+          .select('baseline_n, baseline_mode, active_metrics')
+          .eq('club_id', clubId)
+          .maybeSingle();
+        settings = data;
+      } catch { /* defaults */ }
     }
+    const out = Object.assign({}, _SETTINGS_DEF, settings || {});
+    out.ref_min_minutes = +out.ref_min_minutes || 0;
+    _settingsCache[clubId] = out;
+    return out;
   }
+  // Un solo lugar donde se resuelve la regla, para que Top-Up y las cards no se separen.
+  window.gpsRefSettings = _loadClubSettings;
 
   window.invalidateSettingsCache = function (clubId) {
     if (clubId) delete _settingsCache[clubId];
@@ -125,6 +143,22 @@
     return p;
   }
 
+  // Expuesto: Top-Up leía los días de partido por su cuenta y SIN este recorte, así que un día
+  // que para el jugador fue sólo top-up le contaba como partido.
+  window.gpsScopeMatchRowsToTeam = (rows, clubId, playerIds, select) => _scopeToTeam(rows, clubId, playerIds, select);
+
+  // Regla del club sobre qué partidos valen: fecha de corte (antes de ella las bandas de
+  // velocidad estaban definidas de otra manera, el HSR no es comparable) y minutos mínimos (un
+  // partido en el que entró 15' no es una referencia). Las filas SIN minutos cargados se
+  // aceptan: no hay con qué filtrarlas. Devuelve las fechas recortadas y el predicado.
+  function _refRule(settings, matchDates) {
+    const minMin = +settings.ref_min_minutes || 0;
+    const from   = settings.ref_from_date || null;
+    const dates  = from ? [...matchDates].filter(d => d >= from) : [...matchDates];
+    return { dates, longEnough: r => !(minMin > 0 && r.time_played != null && +r.time_played < minMin) };
+  }
+  window.gpsRefRule = _refRule;
+
   async function _scopeToTeam(rows, clubId, playerIds, select) {
     if (!rows?.length) return rows || [];
     const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))].sort();
@@ -175,13 +209,19 @@
       _cache[key] = { result, ts: now };
       return result;
     }
-    const _datesArr = [...matchDates];
+    const { dates: _datesArr, longEnough: _longEnough } = _refRule(settings, matchDates);
+    if (!_datesArr.length) {
+      const result = { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
+                       warning: 'No match days after the club cut-off date' };
+      _cache[key] = { result, ts: now };
+      return result;
+    }
 
     if (isCore) {
       // Core metric — column in gps_reports.
       // Sin order/limit en servidor: el recorte por contexto puede tirar filas (solo top-up) o
       // bajar valores (partido + top-up), así que el top-N se elige DESPUÉS, en cliente.
-      const _sel = `session_id, player_id, ${metric}, training_sessions!inner(session_date)`;
+      const _sel = `session_id, player_id, ${metric}${metric === 'time_played' ? '' : ', time_played'}, training_sessions!inner(session_date)`;
       const { data, error } = await window.sb
         .from('gps_reports')
         .select(_sel)
@@ -191,13 +231,13 @@
         .not(metric, 'is', null);
       queryError = error;
       const scoped = await _scopeToTeam(data || [], clubId, [player_id], _sel);
-      vals = scoped.map(r => r[metric]).filter(v => v != null && isFinite(+v)).map(v => +v);
+      vals = scoped.filter(_longEnough).map(r => r[metric]).filter(v => v != null && isFinite(+v)).map(v => +v);
       // 'best' → top-N by value; 'avg' → every match (typical-match mean)
       if (mode !== 'avg') vals = vals.sort((a, b) => b - a).slice(0, n);
     } else {
       // Custom metric — EAV in gps_report_metrics
       // Step 1: get report IDs for the player's reports on match days
-      const _selEav = 'id, session_id, player_id, training_sessions!inner(session_date)';
+      const _selEav = 'id, session_id, player_id, time_played, training_sessions!inner(session_date)';
       const { data: matchReports, error: e1 } = await window.sb
         .from('gps_reports')
         .select(_selEav)
@@ -208,7 +248,7 @@
       // Las EAV no se pueden recortar por período (limitación conocida), pero al jugador que no
       // jugó sí se lo saca: su fila no sobrevive al recorte.
       const scopedEav = await _scopeToTeam(matchReports || [], clubId, [player_id], _selEav);
-      const reportIds = scopedEav.map(r => r.id);
+      const reportIds = scopedEav.filter(_longEnough).map(r => r.id);
       if (reportIds.length) {
         let q2 = window.sb
           .from('gps_report_metrics')
@@ -270,7 +310,8 @@
     // Match days = the single source of truth (session_type='match' OR calendar match).
     const matchDates = await _loadMatchDates(clubId);
     if (!matchDates.size) return {};
-    const _datesArr = [...matchDates];
+    const { dates: _datesArr, longEnough: _longEnough } = _refRule(settings, matchDates);
+    if (!_datesArr.length) return {};
 
     /** Elige qué valores entran, según el modo. Recibe [{v, d}] (valor y fecha). */
     function _pick(items) {
@@ -289,7 +330,7 @@
       // Paginated (server caps at ~1000): a full squad of match rows exceeds that and would
       // truncate some players' baselines. Paging is id-ordered, so do the top-n-by-value
       // selection client-side (same result as the old server .order(metric).slice(n)).
-      const _sel = `session_id, player_id, ${metric}, training_sessions!inner(session_date)`;
+      const _sel = `session_id, player_id, ${metric}${metric === 'time_played' ? '' : ', time_played'}, training_sessions!inner(session_date)`;
       const data = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
         .select(_sel)
@@ -301,6 +342,7 @@
       const scoped = await _scopeToTeam(data, clubId, player_ids, _sel);
       const _vals = {};
       scoped.forEach(r => {
+        if (!_longEnough(r)) return;              // entró pocos minutos → ese día no es referencia
         const v = r[metric];
         if (v == null || !isFinite(+v)) return;   // sin parte de equipo ese día → no es un partido suyo
         (_vals[r.player_id] = _vals[r.player_id] || []).push({ v: +v, d: r.training_sessions?.session_date });
@@ -310,7 +352,7 @@
       // Custom metric — two-step via gps_report_metrics
       // Paginated: full-squad match reports can exceed the server's ~1000-row cap →
       // truncated report-id set → incomplete custom-metric baselines.
-      const _selEav = 'id, session_id, player_id, training_sessions!inner(session_date)';
+      const _selEav = 'id, session_id, player_id, time_played, training_sessions!inner(session_date)';
       const matchReports = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
         .select(_selEav)
@@ -323,7 +365,7 @@
       const scopedEav = await _scopeToTeam(matchReports, clubId, player_ids, _selEav);
       if (!scopedEav.length) return {};
       const reportToPlayer = {}, reportToDate = {};
-      scopedEav.forEach(r => { reportToPlayer[r.id] = r.player_id; reportToDate[r.id] = r.training_sessions?.session_date; });
+      scopedEav.filter(_longEnough).forEach(r => { reportToPlayer[r.id] = r.player_id; reportToDate[r.id] = r.training_sessions?.session_date; });
       const allReportIds = scopedEav.map(r => r.id);
 
       const { data: eav, error: e2 } = await window.sb

@@ -398,7 +398,7 @@
       if (f.fromDate) q = q.gte('training_sessions.session_date', f.fromDate);
       const { data } = await q;
       const rows = (data || []).filter(r => !r.is_invalid);
-      const n = 5, MIN = 3;
+      const n = await _refN(clubId), MIN = 3;
       core.forEach(m => {
         let vals = rows.map(r => r[m]).filter(v => v != null).map(Number);
         if (vals.length < MIN) { out[m] = { baseline: null, count: vals.length, source: 'gps' }; return; }
@@ -480,6 +480,16 @@
     if (clubId) delete _refFiltersCache[clubId]; else Object.keys(_refFiltersCache).forEach(k => delete _refFiltersCache[k]);
   }
   // Filas válidas para la referencia: sin descartes de GPS y con minutos suficientes.
+  // Cuántos partidos entran en la media: club_gps_settings.baseline_n, vía el motor de
+  // baselines (que ya lo cachea). Sin él, el 5 de siempre.
+  async function _refN(clubId) {
+    try {
+      const st = window.gpsRefSettings ? await window.gpsRefSettings(clubId) : null;
+      const n = st && +st.baseline_n;
+      return (Number.isFinite(n) && n >= 1) ? n : 5;
+    } catch { return 5; }
+  }
+
   function filterRefRows(data, f) {
     const min = (f && +f.minMinutes) || 0;
     return (data || []).filter(r => {
@@ -505,14 +515,28 @@
       if (!matchDates || !matchDates.size) return out;   // no tagged matches → let gps/position fallbacks fill in
       const dates = f.fromDate ? [...matchDates].filter(d => d >= f.fromDate) : [...matchDates];
       if (!dates.length) return out;
+      // session_id/player_id van en el select porque el recorte por contexto los necesita.
+      const _sel = core.concat(core.includes('time_played') ? [] : ['time_played']).join(',')
+                 + ',id, session_id, player_id, is_invalid, training_sessions!inner(session_date)';
       const { data } = await window.sb
         .from('gps_reports')
-        .select(core.concat(core.includes('time_played') ? [] : ['time_played']).join(',') + ',is_invalid, training_sessions!inner(session_date)')
+        .select(_sel)
         .eq('player_id', playerId)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', dates);
-      const rows = filterRefRows(data, f);
-      const n = 5, MIN = 3;
+      // Un día de partido puede traer top-up / rehab / individual mezclado, o ser SÓLO top-up
+      // (el suplente que no jugó). Una referencia de PARTIDO tiene que medir el partido: se
+      // recalcula desde los períodos del equipo y, si no tiene ninguno, ese día no fue partido
+      // suyo. Misma función que usa el motor de baselines: una sola regla para todo el producto.
+      let scoped = data || [];
+      if (window.gpsScopeMatchRowsToTeam) {
+        try { scoped = await window.gpsScopeMatchRowsToTeam(scoped, clubId, [playerId], _sel); }
+        catch (e) { console.warn('[topup] recorte por contexto no aplicado:', e?.message || e); }
+      }
+      const rows = filterRefRows(scoped, f);
+      // Cuántos partidos entran: el ajuste del club, el mismo que leen las cards. Estaba fijo en
+      // 5 acá y en baseline_n allá, así que las dos pantallas podían dar referencias distintas.
+      const n = await _refN(clubId), MIN = 3;
       core.forEach(m => {
         const vals = rows.map(r => r[m]).filter(v => v != null).map(Number);
         if (vals.length < MIN) { out[m] = { baseline: null, count: vals.length, source: 'personal' }; return; }
