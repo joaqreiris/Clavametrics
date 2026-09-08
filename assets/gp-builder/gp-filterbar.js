@@ -440,7 +440,7 @@
         const _savedAll = Array.isArray(s.visibleFilters) && s.visibleFilters.length >= DROPS.length;
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length && !_savedAll)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
-          : DROPS.map(d => d.key);
+          : _defaultVisible();
       }
     } catch (e) { /* ignore */ }
     // Sin fecha elegida por el usuario → default inteligente (temporada actual o 90 días).

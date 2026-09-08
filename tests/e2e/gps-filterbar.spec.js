@@ -53,6 +53,25 @@ test.describe('GPS · barra de filtros', () => {
     expect(v.length).toBeLessThan(4);       // antes eran 8, todos en una fila con scroll
   });
 
+  // Quien ya usó la barra tiene guardados los OCHO filtros: no fue una elección suya, era el
+  // default viejo. Ese guardado se migra al nuevo default; si no, la barra sigue mostrándolos
+  // todos y el cambio no se nota nunca.
+  test('un guardado con los ocho filtros es el default viejo, no una elección', async ({ page }) => {
+    const ALL = ['md_code', 'date', 'player', 'position', 'microcycle', 'rival', 'session_type', 'work_context'];
+    await page.addInitScript((all) => {
+      // La clave lleva usuario y dashboard, que se resuelven durante la carga: se siembran todas
+      // las combinaciones plausibles para que la migración se ejercite sí o sí.
+      const saved = JSON.stringify({ visibleFilters: all, md_code: [], player: [], position: [] });
+      for (const u of ['?', 'user-1']) for (const d of ['default', 'ind', 'grp', 'dash-1']) {
+        try { localStorage.setItem(`cm_gpfilters_${u}_${d}`, saved); } catch { /* sin storage */ }
+      }
+    }, ALL);
+    await open(page);
+    const v = await visibles(page);
+    expect(v).toContain('date');
+    expect(v.length).toBeLessThan(4);
+  });
+
   test('la barra envuelve: nunca hay scroll horizontal', async ({ page }) => {
     await open(page);
     const scroll = await page.evaluate(() => {

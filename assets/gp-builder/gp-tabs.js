@@ -878,7 +878,15 @@
 
   // ── Re-render all tab decorations ─────────────────────────────
 
+  // renderCustomTabs BORRA y vuelve a crear las pestañas y vistas custom, y las nuevas nacen sin
+  // `is-on`. Si el usuario estaba parado en un dashboard custom (renombrar, crear otro, cambiar
+  // con quién se comparte…), la página se quedaba SIN ninguna vista activa: la barra de filtros
+  // arriba y nada debajo, como si el dashboard estuviera vacío. Se recuerda cuál estaba abierta
+  // y se vuelve a abrir cuando la reconstrucción se la llevó por delante.
   function reRender() {
+    const _active = document.querySelector('#sections .gp-sec.is-on')?.dataset.view
+                 || document.querySelector('.gp-view.is-on')?.dataset.view
+                 || null;
     enhancePredefinedTabs(_dashboards);
     renderCustomTabs(_dashboards);
     renderAddTabButton();
@@ -886,6 +894,7 @@
     applyTabIcons();
     wireTabDrag();
     wireAllGridDrags();
+    if (_active && !document.querySelector('.gp-view.is-on')) switchToView(_active);
   }
 
   // ── Init ──────────────────────────────────────────────────────

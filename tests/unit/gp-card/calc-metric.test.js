@@ -27,7 +27,8 @@ describe('calc-formula · evalFormulaRow', () => {
 describe('resolver · neededKeys (fetch base deps of calc formulas)', () => {
   it('fetches the base metrics, not the calc id', () => {
     const cfg = { viz: 'kpi', metrics: [calcMetric('avg')], dimensions: [], scope: { level: 'squad' } };
-    expect(neededKeys(cfg, catalog)).toEqual({ core: ['high_speed_distance', 'time_played'], eav: [] });
+    // `rpe` se sumó al contrato cuando el RPE entró como métrica del builder.
+    expect(neededKeys(cfg, catalog)).toEqual({ core: ['high_speed_distance', 'time_played'], rpe: [], eav: [] });
   });
 });
 

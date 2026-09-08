@@ -92,3 +92,25 @@ describe('roleNormAgg · normalización por exposición', () => {
     ['avg', 'max', 'min', 'median', 'wavg'].forEach(a => expect(roleNormAgg(a)).toBe(a));
   });
 });
+
+// Las filas de EJERCICIOS (v_gps_task_analysis) no traen el join a players: la posición viene
+// como columna plana. Leyendo sólo la anidada, el grupo de puesto quedaba vacío y la card de
+// drills comparada «vs puesto» se dibujaba sin referencia.
+describe('fetchRoleBaseline · filas de ejercicios (posición plana)', () => {
+  const taskRow = (player_id, position) => ({ player_id, position });
+
+  it('agrupa por puesto con la posición plana de la vista de tareas', () => {
+    const rows = [taskRow('me', 'CB'), taskRow('a', 'CB'), taskRow('b', 'CB'), taskRow('c', 'ST')];
+    const g = _roleGroupFor(rows, 'me', 'CB');
+    expect(g.peers).toBe(2);
+    expect(g.level).toBe('detailed');
+    expect(g.rows.every(r => r.player_id !== 'me')).toBe(true);
+  });
+
+  it('mezcla de formas: la anidada sigue mandando cuando está', () => {
+    const rows = [row('me', 'CB'), row('a', 'CB'), taskRow('b', 'CB')];
+    const g = _roleGroupFor(rows, 'me', 'CB');
+    expect(g.peers).toBe(2);
+  });
+});
+
