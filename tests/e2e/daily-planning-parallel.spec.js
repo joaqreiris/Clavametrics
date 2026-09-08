@@ -40,32 +40,48 @@ async function gotoDP(page, exercises) {
   await page.waitForSelector('#dpExGrid .dp-ex', { timeout: 10_000 });
 }
 
-test('dos tareas enlazadas se dibujan dentro de un mismo corchete', async ({ page }) => {
+test('las tareas enlazadas se marcan sin sacarlas de su sitio', async ({ page }) => {
   await gotoDP(page, [
     ex('se-1', 'Rondo 4v2',    { position: 0, parallel_group: 'pg1' }),
     ex('se-2', 'Finalización', { position: 1, parallel_group: 'pg1', duration: 12 }),
     ex('se-3', 'Partido',      { position: 2 }),
   ]);
-  const block = page.locator('#dpExGrid .dp-par');
-  await expect(block).toHaveCount(1);
-  await expect(block.locator('.dp-ex')).toHaveCount(2);
-  await expect(block.locator('.dp-ex-name').first()).toHaveText('Rondo 4v2');
-  // La tarea suelta queda fuera del corchete.
-  await expect(page.locator('#dpExGrid > .dp-ex')).toHaveCount(1);
-  // La cabecera del corchete cuenta las dos y sus minutos (10 + 12).
-  await expect(block.locator('.dp-par-h .ct')).toContainText('2');
-  await expect(block.locator('.dp-par-h .ct')).toContainText('22');
+  // Las tres siguen siendo hijas directas de la rejilla: nada se envuelve ni se corre abajo.
+  await expect(page.locator('#dpExGrid > .dp-ex')).toHaveCount(3);
+  const marked = page.locator('#dpExGrid > .dp-ex.is-par');
+  await expect(marked).toHaveCount(2);
+  await expect(marked.locator('.dp-par-mark')).toHaveCount(2);
+  // Las dos del bloque comparten color y quedan pegadas; la suelta va sin marca.
+  const colors = await marked.evaluateAll(els => els.map(el => el.style.getPropertyValue('--par')));
+  expect(colors[0]).toBeTruthy();
+  expect(colors[1]).toBe(colors[0]);
+  const order = await page.locator('#dpExGrid > .dp-ex').evaluateAll(els => els.map(el => el.dataset.seid));
+  expect(order).toEqual(['se-1', 'se-2', 'se-3']);
 });
 
-test('sin vínculo no aparece ningún corchete', async ({ page }) => {
+test('dos bloques distintos se marcan con colores distintos', async ({ page }) => {
+  await gotoDP(page, [
+    ex('se-1', 'A1', { position: 0, parallel_group: 'pg1' }),
+    ex('se-2', 'A2', { position: 1, parallel_group: 'pg1' }),
+    ex('se-3', 'B1', { position: 2, parallel_group: 'pg2' }),
+    ex('se-4', 'B2', { position: 3, parallel_group: 'pg2' }),
+  ]);
+  const colors = await page.locator('#dpExGrid > .dp-ex.is-par')
+    .evaluateAll(els => els.map(el => el.style.getPropertyValue('--par')));
+  expect(colors[0]).toBe(colors[1]);
+  expect(colors[2]).toBe(colors[3]);
+  expect(colors[0]).not.toBe(colors[2]);
+});
+
+test('sin vínculo no hay ninguna marca', async ({ page }) => {
   await gotoDP(page, [ex('se-1', 'Rondo 4v2'), ex('se-2', 'Finalización', { position: 1 })]);
-  await expect(page.locator('#dpExGrid .dp-par')).toHaveCount(0);
+  await expect(page.locator('#dpExGrid .dp-par-mark')).toHaveCount(0);
   await expect(page.locator('#dpExGrid > .dp-ex')).toHaveCount(2);
 });
 
-test('un vínculo huérfano (quedó una sola tarea) se dibuja suelto', async ({ page }) => {
+test('un vínculo huérfano (quedó una sola tarea) se dibuja sin marca', async ({ page }) => {
   await gotoDP(page, [ex('se-1', 'Rondo 4v2', { parallel_group: 'pg1' })]);
-  await expect(page.locator('#dpExGrid .dp-par')).toHaveCount(0);
+  await expect(page.locator('#dpExGrid .dp-par-mark')).toHaveCount(0);
   await expect(page.locator('#dpExGrid > .dp-ex')).toHaveCount(1);
 });
 

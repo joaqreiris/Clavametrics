@@ -328,19 +328,18 @@ function dpRepaintPhase(e){
   else renderExerciseList(_dpFieldExercises || []);
   renderGpsProjection();
 }
-// Pinta una lista de tarjetas de campo metiendo bajo un corchete las que van a la vez.
+// Color con el que se marca cada bloque en paralelo. Se reparten por orden de aparición
+// dentro de la sección: con dos bloques en el mismo día se distinguen de un vistazo.
+const _DP_PAR_COLORS = ['#2563EB', '#D97706', '#7C3AED', '#0891B2', '#DB2777'];
+// Pinta una lista de tarjetas de campo. Las que van a la vez salen CONTIGUAS y marcadas
+// con el borde de su bloque; no se envuelven en un contenedor propio, porque eso les daba
+// una fila entera y empujaba hacia abajo todo lo que venía después.
 function dpParListHTML(items){
+  let n = 0;
   return _dpParChunks(items).map(c => {
     if (!c.par) return dpExerciseCardHTML(c.items[0]);
-    const mins = Math.round(c.items.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
-    return `<div class="dp-par" data-par="${_dpEsc(c.par)}">
-      <div class="dp-par-h">
-        <i class="ti ti-arrows-split-2"></i>
-        <span class="lb">${tt('daily_planning.parallel_tag','At the same time')}</span>
-        <span class="ct">${c.items.length} · ${tt('daily_planning.min_count', `${mins} min`, {count: mins})}</span>
-      </div>
-      <div class="dp-par-grid">${c.items.map(dpExerciseCardHTML).join('')}</div>
-    </div>`;
+    const par = { id: c.par, color: _DP_PAR_COLORS[n++ % _DP_PAR_COLORS.length] };
+    return c.items.map(e => dpExerciseCardHTML(e, par)).join('');
   }).join('');
 }
 // Menú del botón de cadena: con qué otra tarea de la sección va en simultáneo.
@@ -1484,7 +1483,11 @@ function dpStrengthSectionHTML(items, phase, showAdd = true) {
     + addBtn;
 }
 
-function dpExerciseCardHTML(e) {
+function dpExerciseCardHTML(e, par) {
+    const _par = (par && par.color) ? par : null;   // `.map(dpExerciseCardHTML)` pasa el índice: no cuenta
+    const _parCls  = _par ? ' is-par' : '';
+    const _parStyle = _par ? ` style="--par:${_par.color}"` : '';
+    const _parMark = _par ? `<div class="dp-par-mark"><i class="ti ti-arrows-split-2"></i>${tt('daily_planning.parallel_tag','At the same time')}</div>` : '';
     const _eff = Math.round(dpBlockMins(e).total_min);
     const dur = _eff ? `${_eff}′` : '—';
     // Enlazar con otra tarea de la sección: las que van a la vez comparten corchete.
@@ -1503,7 +1506,7 @@ function dpExerciseCardHTML(e) {
       const _loading  = !!e.planner_exercise_id && !_resolved && !e._previewPng;
       const _vurl     = (_dpDescCache[e.planner_exercise_id] || {}).video_url || '';
       const _playBadge = _vurl ? `<button type="button" class="dp-ex-play no-print" onclick="dpOpenVideo(event,'${e.id}')" title="${tt('daily_planning.preview_video','Preview video')}"><i class="ti ti-player-play-filled"></i></button>` : '';
-      return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
+      return `<div class="dp-ex${_parCls}" data-seid="${e.id}" draggable="true"${_parStyle}>
         ${e._previewPng ? `<div class="dp-ex-thumb has-img">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
@@ -1522,6 +1525,7 @@ function dpExerciseCardHTML(e) {
           ${_playBadge}
         </div>`}
         <div class="dp-ex-b">
+          ${_parMark}
           <div class="dp-ex-name">${_dpEsc(e.name || '—')}</div>
           <div class="dp-ex-meta">
             ${players ? `<span class="it"><i class="ti ti-users"></i>${players} ${tt('daily_planning.pl','pl')}</span>` : ''}
@@ -1618,9 +1622,10 @@ function dpExerciseCardHTML(e) {
         : `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
             <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="${tt('daily_planning.min_ph','min')}" oninput="dpEditDur('${e.id}',this.value)" title="${tt('daily_planning.duration_min_attr','Duration (min)')}" style="${EI};width:54px"><span>${tt('daily_planning.min_short','min')}</span>
           </div>`;
-      return `<div class="dp-ex" data-seid="${e.id}" draggable="true">
+      return `<div class="dp-ex${_parCls}" data-seid="${e.id}" draggable="true"${_parStyle}>
         ${thumb}
         <div class="dp-ex-b">
+          ${_parMark}
           <div class="dp-ex-name">${nm}</div>
           <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
           ${desc ? `<div class="dp-ex-desc" title="${tt('daily_planning.strength_library','Strength Library')}">${desc}</div>` : ''}
@@ -2159,7 +2164,8 @@ async function dpRenderPrintSheet() {
 
     // Shared diagram-card renderer for both Field and Activation
     const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
-    const printExCard = e => {
+    const printExCard = (e, parColor) => {
+      const parMark = parColor ? `<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;font:700 8px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:${parColor}"><span style="width:10px;height:2px;background:${parColor};border-radius:2px"></span>${esc(tt('daily_planning.parallel_tag','At the same time'))}</div>` : '';
       const tag = e.exercise_id ? dpCatLabel((e.gym_exercises?.category || 'strength').toLowerCase()) : orientShort(e);
       const meta = [];
       if (e.players_count) meta.push(`${e.players_count} pl`);
@@ -2195,12 +2201,13 @@ async function dpRenderPrintSheet() {
       const phBg = e.exercise_id ? '#2B3038' : '#1F7A43';   // strength → neutral slate, field → pitch green
       const thumb = src ? `<img src="${esc(src)}" crossorigin="anonymous" style="display:block;width:100%;height:auto">`
                         : `<div style="width:100%;height:124px;background:${phBg}"></div>`;
-      return `<div class="dsp-brk" style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
+      return `<div class="dsp-brk" style="border:1px solid ${parColor || '#E7E7E4'};${parColor ? `box-shadow:0 0 0 1px ${parColor};` : ''}border-radius:10px;overflow:hidden;break-inside:avoid">
         <div style="position:relative;background:${phBg};line-height:0">${thumb}
           ${tag?`<span style="position:absolute;top:6px;left:6px;background:var(--club-accent);color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
           ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
         </div>
         <div style="padding:8px 10px 9px">
+          ${parMark}
           <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}${window.dpLgPrintBadge ? window.dpLgPrintBadge(e.id, FONT, MONO) : ''}</div>
           ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
           ${workLine ? `<div style="font:500 10.5px ${MONO};color:#15803D;margin-top:4px">${esc(workLine)}</div>` : ''}
@@ -2238,19 +2245,21 @@ async function dpRenderPrintSheet() {
         </div>
       </div>`;
     };
-    // Rejilla de tarjetas de campo: las tareas que van a la vez salen dentro de un
-    // recuadro común, para que quien lee la hoja no las tome por dos bloques seguidos.
-    // (Un corchete que mezclara campo y fuerza llega partido: la fuerza se imprime en su
+    // Rejilla de tarjetas de campo: las tareas que van a la vez salen CONTIGUAS y con el
+    // borde del color de su bloque, igual que en pantalla. Nada de recuadro aparte — les
+    // daría una fila entera y correría hacia abajo todo lo que sigue.
+    // (Un bloque que mezclara campo y fuerza llega partido: la fuerza se imprime en su
     // propia sub-sección. Por eso el botón de enlazar sólo se ofrece entre tareas de campo.)
     const exGrid = (items, cols) => {
       const chunks = _dpParChunks(items);
       if (!chunks.length) return '';
-      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">${chunks.map(c => c.par
-        ? `<div class="dsp-brk" style="grid-column:1/-1;border:1px dashed #C9CDD3;border-radius:11px;padding:9px;background:#FBFBFA;break-inside:avoid">
-             <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font:700 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#8A93A0"><span style="width:12px;height:2px;background:var(--club-accent);border-radius:2px"></span>${esc(tt('daily_planning.parallel_tag','At the same time'))}</div>
-             <div style="display:grid;grid-template-columns:repeat(${Math.min(c.items.length, cols)},1fr);gap:10px">${c.items.map(printExCard).join('')}</div>
-           </div>`
-        : printExCard(c.items[0])).join('')}</div>`;
+      let n = 0;
+      const cards = chunks.map(c => {
+        if (!c.par) return printExCard(c.items[0]);
+        const color = _DP_PAR_COLORS[n++ % _DP_PAR_COLORS.length];
+        return c.items.map(e => printExCard(e, color)).join('');
+      }).join('');
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">${cards}</div>`;
     };
 
     // Sub-section label inside a section (e.g. "Strength").
