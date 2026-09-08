@@ -2135,8 +2135,20 @@ window._gpEnsureCardMetricPicker = function (cardEl, config) {
     }
     picks.appendChild(chip);
   }
-  chip.title = tt('gps_analysis.card_metric_hint', 'Change the metric of this card');
-  chip.innerHTML = `<i class="ti ti-ruler-measure"></i>${_gpEscTxt(def?.label || mid || '—')} <i class="ti ti-chevron-down"></i>`;
+  // Dos estados, como el chip de jugador: SIGUE el selector de la barra (y muestra lo que está
+  // aplicando), o está ANCLADA a su métrica y no se mueve.
+  const picked = (window.gpFilterBar?.getState?.().metrics) || [];
+  const follows = config.style?.metricFollow !== false && picked.length > 0 && config.viz !== 'scatter';
+  chip.classList.toggle('is-accent', follows);
+  if (follows) {
+    const shown = window.cmGpsCatalog?.label?.(picked[0]) || picked[0];
+    const extra = picked.length > 1 ? ` <i class="gp-c-pick-n">1/${picked.length}</i>` : '';
+    chip.title = tt('gps_analysis.card_metric_follow_hint', 'Following the metric selector — click to pin this card to one metric');
+    chip.innerHTML = `<i class="ti ti-ruler-measure"></i>${_gpEscTxt(shown)}${extra} <i class="ti ti-chevron-down"></i>`;
+  } else {
+    chip.title = tt('gps_analysis.card_metric_hint', 'Change the metric of this card');
+    chip.innerHTML = `<i class="ti ti-pin"></i>${_gpEscTxt(def?.label || mid || '—')} <i class="ti ti-chevron-down"></i>`;
+  }
 };
 
 /** Popover con el catálogo del club; al elegir, la card cambia de métrica y queda guardada. */
@@ -2146,8 +2158,24 @@ function _openCardMetricPicker(anchor, cardEl) {
   const cur = config.metrics[0]?.id;
   const opts = _gpMetricOptions();
   if (!opts.length) return;
-  makePopover(anchor, opts.map(o => ({ label: (o.value === cur ? '✓ ' : '') + o.label, value: o.value })), item => {
-    if (!item.value || item.value === cur) return;
+  const picked = (window.gpFilterBar?.getState?.().metrics) || [];
+  const follows = config.style?.metricFollow !== false && picked.length > 0;
+  // Primera opción: volver a seguir la barra. Sólo tiene sentido ofrecerla si hay algo elegido allá.
+  const head = picked.length
+    ? [{ value: '__follow', label: (follows ? '✓ ' : '') + tt('gps_analysis.card_metric_follow', 'Follow the metric selector') }]
+    : [];
+  makePopover(anchor, [...head, ...opts.map(o => ({ label: (!follows && o.value === cur ? '✓ ' : '') + o.label, value: o.value }))], item => {
+    if (item.value === '__follow') {
+      config.style = config.style || {};
+      delete config.style.metricFollow;         // seguir es el default: se saca la marca
+      _persistCardMetric(cardEl, config);
+      return;
+    }
+    if (!item.value) return;
+    // Elegir una métrica ANCLA la card: deja de seguir el selector del dashboard.
+    config.style = config.style || {};
+    config.style.metricFollow = false;
+    if (item.value === cur && !follows) return;
     const def = window.cmGpsCatalog?.get?.(item.value) || null;
     const prev = config.metrics[0] || {};
     // El agregado del anterior puede no valer para la nueva: sumar velocidades máximas da un

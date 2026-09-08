@@ -106,4 +106,41 @@ test.describe('GPS · cambiar la métrica desde la card', () => {
     expect(m.id).toBe('max_speed');
     expect(m.agg).not.toBe('total');        // sumar velocidades máximas no significa nada
   });
+
+  // ── Paso 2: el selector de la barra gobierna varias cards ────────────────────────────────
+  test('con el selector puesto, la card muestra esa métrica sin tocar su config', async ({ page }) => {
+    const patches = await open(page);
+    await page.evaluate(() => window.gpFilterBar.setMetrics(['high_speed_distance']));
+    // El gráfico pasa a HSR (400/450/500 en el fixture)…
+    await expect.poll(async () => page.evaluate((id) => {
+      const cv = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`);
+      const ch = cv && window.Chart.getChart(cv);
+      return ch ? ch.data.datasets[0].data.slice().sort((a, b) => a - b).join(',') : '';
+    }, CARD.id), { timeout: 20_000 }).toBe('400,450,500');
+    // …y la card sigue guardada con la suya: el selector cambia lo que se ve, no la card.
+    expect(patches).toHaveLength(0);
+    await expect(chip(page)).toContainText('HSR');
+  });
+
+  test('una card anclada no se mueve cuando cambia el selector', async ({ page }) => {
+    await open(page, [{ ...CARD, config: { ...CARD.config, style: { ...CARD.config.style, metricFollow: false } } }]);
+    await page.evaluate(() => window.gpFilterBar.setMetrics(['high_speed_distance']));
+    await page.waitForTimeout(2500);
+    const data = await page.evaluate((id) => {
+      const cv = document.querySelector(`.gp-view.is-on .gp-c[data-card-id="${id}"] canvas`);
+      const ch = cv && window.Chart.getChart(cv);
+      return ch ? ch.data.datasets[0].data.slice().sort((a, b) => a - b).join(',') : '';
+    }, CARD.id);
+    expect(data).toBe('7000,8000,9000');       // su métrica: distancia total
+  });
+
+  test('el selector de la barra tiene tope de seis', async ({ page }) => {
+    await open(page);
+    const n = await page.evaluate(() => {
+      window.gpFilterBar.setMetrics(['total_distance', 'high_speed_distance', 'max_speed',
+        'very_high_speed_distance', 'sprint_distance', 'sprint_count', 'player_load']);
+      return window.gpFilterBar.getState().metrics.length;
+    });
+    expect(n).toBe(6);
+  });
 });

@@ -87,6 +87,7 @@
     'All positions':'filterbar.all_positions','All microcycles':'filterbar.all_microcycles','All rivals':'filterbar.all_rivals','All types':'filterbar.all_types','All contexts':'filterbar.all_contexts',
     'Last 7 days':'filterbar.last_7','Last 30 days':'filterbar.last_30','Last 90 days':'filterbar.last_90','Season':'filterbar.season',
     'Add filter':'filterbar.add_filter','No filters':'filterbar.no_filters','Clear':'filterbar.clear',
+    'All metrics':'filterbar.all_metrics','Metrics':'filterbar.metrics','Six is the most that reads well.':'filterbar.metrics_max',
     'Time':'filterbar.family_time','Squad':'filterbar.family_squad','Session':'filterbar.family_session',
     // Nombres del menú «Agregar filtro» (y de los filtros aplicados en el informe PDF, que sale
     // de describeActive): hasta ahora eran los únicos textos de la barra que quedaban en inglés.
@@ -127,6 +128,9 @@
     // diciendo «All …»: la barra gastaba su ancho en avisar que no había ningún filtro, y el
     // octavo quedaba fuera de pantalla.
     visibleFilters: _defaultVisible(),
+    // Métricas elegidas en la barra. [] = cada card usa la suya, que es como funcionó siempre:
+    // hasta que el usuario elige una, nada cambia.
+    metrics: [],
   };
   /** Con qué filtros arranca la barra: la fecha (siempre tiene rango) y nada más. */
   function _defaultVisible() { return ['date']; }
@@ -340,6 +344,7 @@
       rivals:        state.rival.slice(),
       sessionTypes:  state.session_type.slice(),
       workContexts:  state.work_context.slice(),   // [] = solo 'team' (default); resolver excluye no-team
+      metrics:       state.metrics.slice(),        // [] = cada card con la suya
       posGranularity: state.posGranularity,
       date:          { ...state.date },
       activeCount: activeCount(),
@@ -365,6 +370,7 @@
     // Un filtro recién puesto tiene que aparecer en la barra aunque no estuviera en la lista
     // (y desaparecer al limpiarlo, si el usuario no lo había agregado a mano).
     syncFilterVisibility();
+    syncMetricTrigger();
     // El filtro ya tiene estado confiable (equipo resuelto + opciones cargadas): habilita a las
     // cards del builder a resolver (esperan este flag para no renderizar con estado provisional).
     if (typeof window !== 'undefined') window._gpFiltersReady = true;
@@ -395,6 +401,7 @@
         date: _dateUserSet ? state.date : { preset: null, from: null, to: null, days: [] },
         posGranularity: state.posGranularity,
         visibleFilters: state.visibleFilters,
+        metrics: state.metrics,
       }));
     } catch (e) { /* storage no disponible */ }
   }
@@ -403,6 +410,7 @@
     state.date = { preset: null, from: null, to: null, days: [] };
     state.posGranularity = 'detailed';
     state.visibleFilters = _defaultVisible();
+    state.metrics = [];
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
@@ -419,6 +427,7 @@
         state.rival      = Array.isArray(s.rival)      ? s.rival      : [];
         state.session_type = Array.isArray(s.session_type) ? s.session_type : [];
         state.work_context = Array.isArray(s.work_context) ? s.work_context : [];
+        state.metrics    = Array.isArray(s.metrics) ? s.metrics.slice(0, METRIC_MAX) : [];
         state.posGranularity = ['detailed','basic','group'].includes(s.posGranularity) ? s.posGranularity : 'detailed';
         // Fecha guardada por el usuario (incluido "All time" explícito) manda; si no hay, default abajo.
         if (s.date && typeof s.date === 'object' && _dateIsSet(s.date)) {
@@ -465,6 +474,7 @@
     const bar = el('div', 'gp-fbar');
     bar.id = 'gpFilterBar';
     const drops = el('div', 'gp-fbar-drops');
+    drops.appendChild(buildMetricPicker());   // «Métrica»: qué se está midiendo, antes del resto
 
     DROPS.forEach(cfg => {
       const drop = el('div', 'fb-drop');
@@ -557,6 +567,100 @@
     bar.appendChild(addWrap);   // between the scrolling pills and the right-side controls
     bar.appendChild(right);
     return bar;
+  }
+
+  // ── Selector de MÉTRICA (no es un filtro: no achica las filas, cambia qué se mide) ──────
+  // Las cards de una métrica pasan a mostrar la elegida, sin duplicar una card por métrica.
+  // Lo que Power BI llama field parameters. Vacío = cada card con la suya (comportamiento de
+  // siempre), así que hasta que el usuario elige, esto no toca nada.
+  const METRIC_MAX = 6;   // más que esto no entra en un radar ni en una tabla sin volverse ilegible
+
+  function metricList() {
+    try { return (window.cmGpsCatalog?.list?.() || []); } catch (_) { return []; }
+  }
+  function metricLabel(key) {
+    try { return window.cmGpsCatalog?.label?.(key) || key; } catch (_) { return key; }
+  }
+  function buildMetricPicker() {
+    const drop = el('div', 'fb-drop fb-metricdrop');
+    drop.dataset.key = '__metrics';
+    const trig = el('button', 'fb-trigger');
+    trig.type = 'button';
+    trig.innerHTML =
+      `<i class="ti ti-ruler-measure"></i>` +
+      `<span class="fb-trigger-label">${T('All metrics')}</span>` +
+      `<span class="fb-count"></span>` +
+      `<span class="fb-clear" role="button" title="${T('Clear')}"><i class="ti ti-x"></i></span>` +
+      `<i class="ti ti-chevron-down fb-caret"></i>`;
+    const panel = el('div', 'fb-panel fb-mpanel');
+    panel.innerHTML =
+      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="${T('Search…')}"></div>` +
+      `<div class="fb-actions-top"><button class="fb-link" type="button" data-act="none">${T('Clear')}</button></div>` +
+      `<div class="fb-list"></div>` +
+      `<div class="fb-mhint"></div>`;
+    drop.appendChild(trig);
+    drop.appendChild(panel);
+
+    trig.addEventListener('click', e => {
+      if (e.target.closest('.fb-clear')) { e.stopPropagation(); setMetrics([]); return; }
+      e.stopPropagation();
+      const open = !panel.classList.contains('is-open');
+      closePanel();
+      if (open) { renderMetricList(); panel.classList.add('is-open'); _positionFloat(trig, panel); }
+    });
+    panel.addEventListener('click', e => e.stopPropagation());
+    panel.querySelector('.fb-search input').addEventListener('input', renderMetricList);
+    panel.querySelector('[data-act="none"]').addEventListener('click', () => { setMetrics([]); renderMetricList(); });
+    panel.querySelector('.fb-list').addEventListener('click', e => {
+      const row = e.target.closest('.fb-opt');
+      if (!row || row.classList.contains('is-off')) return;
+      const key = row.dataset.value;
+      const cur = state.metrics.slice();
+      const i = cur.indexOf(key);
+      if (i >= 0) cur.splice(i, 1);
+      else if (cur.length >= METRIC_MAX) return;      // el tope no bloquea: avisa (ver el hint)
+      else cur.push(key);
+      setMetrics(cur);
+      renderMetricList();
+    });
+    return drop;
+  }
+
+  function renderMetricList() {
+    const panel = root?.querySelector('.fb-mpanel');
+    if (!panel) return;
+    const q = (panel.querySelector('.fb-search input')?.value || '').trim().toLowerCase();
+    const list = metricList().filter(m => !q || String(m.label).toLowerCase().includes(q));
+    const full = state.metrics.length >= METRIC_MAX;
+    panel.querySelector('.fb-list').innerHTML = list.length
+      ? list.map(m => {
+          const on = state.metrics.includes(m.key);
+          return `<label class="fb-opt${(!on && full) ? ' is-off' : ''}" data-value="${m.key}">` +
+            `<input type="checkbox" ${on ? 'checked' : ''} ${(!on && full) ? 'disabled' : ''}>` +
+            `<span class="fb-opt-l">${m.label}</span>` +
+            `${m.unit ? `<span class="fb-opt-n">${m.unit}</span>` : ''}</label>`;
+        }).join('')
+      : `<div class="fb-empty">${T('No club data yet.')}</div>`;
+    const hint = panel.querySelector('.fb-mhint');
+    if (hint) hint.textContent = full ? T('Six is the most that reads well.') : '';
+  }
+
+  function setMetrics(next) {
+    state.metrics = (next || []).slice(0, METRIC_MAX);
+    syncMetricTrigger();
+    fire();
+  }
+  function syncMetricTrigger() {
+    const drop = root?.querySelector('.fb-metricdrop');
+    if (!drop) return;
+    const n = state.metrics.length;
+    drop.classList.toggle('fb-on', n > 0);
+    const lbl = drop.querySelector('.fb-trigger-label');
+    const cnt = drop.querySelector('.fb-count');
+    if (lbl) lbl.textContent = n === 0 ? T('All metrics')
+      : n === 1 ? metricLabel(state.metrics[0])
+      : T('Metrics');
+    if (cnt) cnt.textContent = n > 1 ? String(n) : '';
   }
 
   function buildMultiPanel(cfg) {
@@ -1678,6 +1782,7 @@
     getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     setValue,   // set programático (cross-filter) — mismo pipeline que un click de checkbox
+    setMetrics, // selector de métrica del dashboard ([] = cada card con la suya)
     clearAll: clearAll_,
     // reload() recarga las opciones/rangos (p.ej. tras resolverse el equipo o mutar datos) Y
     // re-dispara el render de las cards: si no, la agregación queda con los microciclos de la

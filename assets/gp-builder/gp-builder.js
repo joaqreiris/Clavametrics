@@ -2779,6 +2779,39 @@
   }
 
   /**
+   * Aplica el selector de MÉTRICA de la barra a una card.
+   *
+   * Vacío en la barra → la card usa la suya, que es como funcionó siempre. Con métricas elegidas,
+   * la card muestra las que su tipo admite, en orden: una tabla o unas barras las toman todas, un
+   * KPI toma la primera (y su chip lo dice). Una card ANCLADA (style.metricFollow === false) no se
+   * mueve — es el equivalente, para métricas, del pin de jugador.
+   *
+   * El scatter queda afuera: sus dos métricas son los ejes X e Y, no una lista.
+   */
+  function _applyBarMetrics(config) {
+    if (!config || config.viz === 'scatter' || config.source === 'task') return config;
+    if (config.style?.metricFollow === false) return config;
+    const picked = (window.gpFilterBar?.getState?.().metrics) || [];
+    if (!picked.length) return config;
+    const t = VIZ_TYPES[config.viz];
+    if (!t) return config;
+    const cat = key => catalogMap.get(key);
+    const use = picked.filter(k => cat(k)).slice(0, Math.max(1, t.max || 1));
+    if (!use.length) return config;
+    const prev = (config.metrics || [])[0] || {};
+    const metrics = use.map(id => {
+      const c = cat(id);
+      // El agregado de la métrica anterior no siempre vale para la nueva (sumar velocidades
+      // máximas no significa nada): manda el que sugiere el catálogo, salvo que el previo ya sea
+      // válido para ella.
+      const sug = c?.agg || defaultAgg(c?.kind || 'accum');
+      const keep = (prev.agg && !(sug === 'max' && (prev.agg === 'total' || prev.agg === 'sum'))) ? prev.agg : sug;
+      return { id, agg: keep, ...(prev.format ? { format: { ...prev.format } } : {}) };
+    });
+    return { ...config, metrics, __barMetrics: use.length, __barMetricsTotal: picked.length };
+  }
+
+  /**
    * Config de CONSULTA de un box plot. La caja necesita los valores individuales, no un promedio,
    * así que se agrupa además por la unidad de observación: el jugador (o la fecha, si el usuario
    * ya está agrupando por jugador). El config que se guarda no cambia: esto vive sólo en la
@@ -2865,6 +2898,10 @@
       _showCardState(cardEl, body, 'err',
         _tt('gps_analysis.builder_stuck', 'Took too long to load. Reload the page — details are in the console.'), config);
     }, 25000);
+
+    // El selector de métrica de la barra manda sobre las cards que lo siguen (ver _applyBarMetrics).
+    // Sólo cambia lo que se DIBUJA: el config guardado de la card no se toca.
+    config = _applyBarMetrics(config);
 
     // Card guardada de un tipo que compara jugadores entre sí (tabla, ranking, caja, heatmap,
     // scatter) con alcance de JUGADOR: se lee como plantel, que es lo único que tiene sentido —
