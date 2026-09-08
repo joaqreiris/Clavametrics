@@ -58,6 +58,11 @@ const CARDS = [
       { id: 'player_load', agg: 'avg', format: { mode: 'bar', dec: 0, align: 'right' } },
     ],
     range: { type: 'last30' }, style: { color: '#7C3AED' } } },
+  // Card de HTML puro (barras y etiquetas, sin canvas): salía como una línea de texto.
+  { id: 'card-5', position: 4, source: 'builder', size: 'lg', config: {
+    schema: 'gp.card/v1', title: 'Ranking', viz: 'ranking', scope: { level: 'squad' },
+    metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [{ id: 'player' }],
+    range: { type: 'last30' }, style: { color: '#15803D' } } },
   { id: 'card-4', position: 3, source: 'builder', size: 'md', config: {
     schema: 'gp.card/v1', title: 'Total Distance', viz: 'gauge', scope: { level: 'squad' },
     metrics: [{ id: 'total_distance', agg: 'avg' }], dimensions: [{ id: 'player' }],
@@ -181,5 +186,34 @@ test.describe('GPS · informe PDF', () => {
     const last = await page.evaluate(() => window.__gxLast);
     expect(last.kinds.table).toBeGreaterThan(0);
     expect(last.kinds.gauge).toBeGreaterThan(0);
+  });
+
+  // Ranking, zonas de velocidad y × match avg son HTML puro: no hay canvas que copiar ni tabla
+  // que releer. Salían como una línea de texto suelta; ahora se redibujan leyendo su layout.
+  test('las cards de HTML se dibujan, no se resumen en una línea de texto', async ({ page }) => {
+    await openDashboard(page);
+    await expect.poll(async () => page.evaluate(() =>
+      document.querySelectorAll('.gp-view.is-on .gp-c .gp-rank-row').length
+    ), { timeout: 30_000, message: 'el ranking nunca se dibujó' }).toBeGreaterThan(0);
+
+    await page.locator('#gpExportBtn').click();
+    await expect(page.locator('#gxBody')).toBeVisible();
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      page.locator('#gxPdf').click(),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/\.pdf$/);
+    const last = await page.evaluate(() => window.__gxLast);
+    expect(last.html).toBeGreaterThan(0);
+  });
+
+  // La barra del ranking vivía en una columna que colapsaba a 0 px: las barras y los nombres
+  // estaban en el DOM y no se veían — sólo el número y el valor.
+  test('las barras del ranking tienen ancho de verdad', async ({ page }) => {
+    await openDashboard(page);
+    await expect.poll(async () => page.evaluate(() => {
+      const bar = document.querySelector('.gp-view.is-on .gp-c .gp-rank-row .gp-rank-bar');
+      return bar ? Math.round(bar.getBoundingClientRect().width) : 0;
+    }), { timeout: 30_000 }).toBeGreaterThan(40);
   });
 });

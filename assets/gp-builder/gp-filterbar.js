@@ -1767,6 +1767,11 @@
     // (nombres de jugador / microciclo, no ids) y el rango de fechas ya formateado.
     describeActive() {
       const out = [];
+      // La métrica elegida encabeza la lista: es lo primero que hay que saber para leer el
+      // informe — sin esto, quien lo recibe no sabe si mira distancia o sprints.
+      if (state.metrics.length) {
+        out.push({ key: 'metrics', name: T('Metrics'), values: state.metrics.map(metricLabel).join(', ') });
+      }
       DROPS.forEach(cfg => {
         if (!isActive(cfg.key)) return;
         const name = T(FILTER_LABELS[cfg.key] || cfg.placeholder);

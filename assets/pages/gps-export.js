@@ -143,6 +143,8 @@
   // los textos con pdf.text —vectoriales, nítidos a cualquier zoom y seleccionables— y cada
   // gráfico con la imagen de SU canvas de Chart.js, que ya está pintado y no pasa por ningún
   // intermediario. Sale más fiel, más liviano y sin depender de un capturador.
+  let _htmlDrawn = 0;   // cards de HTML redibujadas en el informe (lo miran los tests)
+
   const PDF = {
     M: 10, FOOT: 12, GAP: 4, PAD: 3,            // mm
     fg: [15, 23, 42], muted: [100, 116, 139], faint: [148, 163, 184], line: [226, 232, 240],
@@ -266,10 +268,18 @@
     } else if (kind === 'gauge') {
       drawGauge(pdf, el, x, bodyY, w, bodyH, k);
     } else {
-      // Texto suelto (estados «elegí un jugador», leyendas): al menos se lee.
-      setFont(pdf, 8, 'normal', PDF.muted);
-      const txt = (el.querySelector('.gp-c-b')?.innerText || '').trim().split('\n').filter(Boolean).slice(0, 6).join(' · ');
-      if (txt) pdf.text(pdf.splitTextToSize(txt, w - PDF.PAD * 2), x + PDF.PAD, bodyY + 4);
+      // Card de HTML (ranking, zonas, × match avg): se redibuja tal como está en pantalla. Si no
+      // hay nada que dibujar, queda el texto suelto de siempre — mejor eso que una card vacía.
+      const host = el.querySelector('.gp-c-b') || el;
+      let drew = 0;
+      try { drew = drawHtmlBlock(pdf, host, x + PDF.PAD, bodyY, w - PDF.PAD * 2, Math.max(6, bodyH)); }
+      catch (e) { console.warn('[gps export] bloque HTML omitido:', e); }
+      if (drew) _htmlDrawn += 1;
+      if (!drew) {
+        setFont(pdf, 8, 'normal', PDF.muted);
+        const txt = (host.innerText || '').trim().split('\n').filter(Boolean).slice(0, 6).join(' · ');
+        if (txt) pdf.text(pdf.splitTextToSize(txt, w - PDF.PAD * 2), x + PDF.PAD, bodyY + 4);
+      }
     }
 
     if (card.note) {
@@ -560,6 +570,86 @@
     return vh * s;
   }
 
+  // ── Cards hechas de HTML (ranking, zonas de velocidad, × match avg…) ────────────────────
+  // No son un canvas ni una tabla ni un gauge: son barras y etiquetas de HTML puro. Salían como
+  // una línea de texto suelta —lo que quedaba del informe cuando no había nada que copiar— así
+  // que se REDIBUJAN leyendo el layout: cada bloque con color es un rectángulo en su posición, y
+  // cada texto va donde está, con su color y su tamaño. Es genérico a propósito: sirve para estas
+  // tres y para la próxima card de HTML que aparezca.
+
+  /** ¿Vale la pena dibujar este elemento? Fuera lo invisible y lo que no aporta. */
+  function _visible(el, cs) {
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    if (parseFloat(cs.opacity) === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0.5 && r.height > 0.5;
+  }
+
+  /** Dibuja el contenido HTML de una card dentro de la caja dada. Devuelve el alto usado (mm). */
+  function drawHtmlBlock(pdf, host, x, y, w, h) {
+    const base = host.getBoundingClientRect();
+    if (!(base.width > 0) || !(base.height > 0)) return 0;
+    const s = Math.min(w / base.width, h / base.height, 0.5);   // mm por px, sin agrandar de más
+    const X = px => x + (px - base.left) * s;
+    const Y = py => y + (py - base.top) * s;
+
+    // 1) Fondos: todo lo que tenga color propio, en orden de documento (los hijos tapan al padre,
+    //    igual que en pantalla).
+    const nodes = [host, ...host.querySelectorAll('*')];
+    nodes.forEach(el => {
+      if (el.tagName === 'I' || el.tagName === 'SVG' || el.closest('svg')) return;   // iconos de fuente: no hay glifo en el PDF
+      const cs = getComputedStyle(el);
+      if (!_visible(el, cs)) return;
+      let bg = elColor(el, 'backgroundColor', null);
+      // Un degradado no tiene backgroundColor: se toma su primer color, que es con el que
+      // empieza a pintarse. Sin esto, los tracks con degradado salían como un hueco.
+      if (!bg) {
+        const img = cs.backgroundImage || '';
+        if (/gradient/.test(img)) {
+          const m = img.match(/(rgba?\([^)]+\)|#[0-9a-f]{3,8})/i);
+          if (m) bg = rgbOf(m[1], null);
+        }
+      }
+      if (!bg || isWhite(bg)) return;
+      const r = el.getBoundingClientRect();
+      const rw = (r.width) * s, rh = (r.height) * s;
+      if (rw < 0.3 || rh < 0.3) return;
+      const rad = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, r.height / 2) * s;
+      pdf.setFillColor(bg[0], bg[1], bg[2]);
+      if (rad > 0.2) pdf.roundedRect(X(r.left), Y(r.top), rw, rh, rad, rad, 'F');
+      else pdf.rect(X(r.left), Y(r.top), rw, rh, 'F');
+    });
+
+    // 2) Textos: sólo en los elementos HOJA (si no, el mismo texto se dibujaría dos veces, una
+    //    por cada ancestro que lo contiene).
+    nodes.forEach(el => {
+      if (el.tagName === 'I' || el.tagName === 'SVG' || el.closest('svg')) return;
+      // «Hoja de texto» = nadie debajo aporta texto. Mirar sólo querySelector('*') dejaba fuera
+      // las etiquetas que llevan un icono al lado (el × match avg tiene <i class="ti"> + nombre),
+      // que es justo la columna que explica cada fila.
+      if ([...el.children].some(c => (c.textContent || '').trim())) return;
+      const txt = (el.textContent || '').trim().replace(/\s+/g, ' ');
+      if (!txt) return;
+      const cs = getComputedStyle(el);
+      if (!_visible(el, cs)) return;
+      const r = el.getBoundingClientRect();
+      const fs = (parseFloat(cs.fontSize) || 12) * s / 0.3528;  // px → pt
+      if (fs < 3.2) return;                                     // ilegible: mejor no ensuciar
+      const bold = (parseInt(cs.fontWeight, 10) || 400) >= 600;
+      // Sobre un fondo de color mandan sus colores; suelto sobre la hoja, sólo si se lee.
+      const onBg = elColor(el.parentElement, 'backgroundColor', null);
+      const col = (onBg && !isWhite(onBg)) ? elColor(el, 'color', PDF.fg) : onWhite(elColor(el, 'color', PDF.fg), PDF.fg);
+      setFont(pdf, Math.min(fs, 11), bold ? 'bold' : 'normal', col);
+      const al = cs.textAlign;
+      const cy = Y(r.top + r.height / 2) + fs * 0.13;           // centrado vertical de la línea
+      const t = clip(pdf, txt, r.width * s + 1);
+      if (al === 'right')       pdf.text(t, X(r.right), cy, { align: 'right' });
+      else if (al === 'center') pdf.text(t, X(r.left + r.width / 2), cy, { align: 'center' });
+      else                      pdf.text(t, X(r.left), cy);
+    });
+    return base.height * s;
+  }
+
   /** Card de gauge(s): el título propio del cuerpo, la fila de gauges y su línea de comparación.
    *  `k` = mm por píxel de pantalla: el gauge se dibuja del MISMO tamaño que se ve (en la app
    *  nunca pasa de ~180 px de ancho); estirarlo a la columna entera agrandaba las etiquetas. */
@@ -623,6 +713,7 @@
     const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
     const x0 = PDF.M, contentW = pageW - PDF.M * 2, bottom = pageH - PDF.FOOT;
 
+    _htmlDrawn = 0;
     opts.crestData = await crestData(opts.crest);
     let y = drawHeader(pdf, opts, x0, PDF.M + 2, contentW);
     if (opts.showFilters) y = drawFilters(pdf, filterLines(), x0, y, contentW);
@@ -655,7 +746,7 @@
     const total = pdf.internal.getNumberOfPages();
     for (let p = 1; p <= total; p++) { pdf.setPage(p); drawFooter(pdf, pageW, pageH, p, total, opts); }
     // Resumen de lo que se dibujó — lo leen los tests y sirve para diagnosticar un informe raro.
-    window.__gxLast = { pages: total, cards: opts.cards.length, mode: mode || 'save',
+    window.__gxLast = { pages: total, cards: opts.cards.length, mode: mode || 'save', html: _htmlDrawn,
       kinds: opts.cards.reduce((a, c) => { const k = cardKind(c.el); a[k] = (a[k] || 0) + 1; return a; }, {}) };
     if (mode === 'print') {
       // Imprimir = EL MISMO informe, abierto en el visor de PDF con el diálogo de impresión listo.
