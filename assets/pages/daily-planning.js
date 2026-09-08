@@ -285,6 +285,139 @@ function _dpExGroups(e){ return Array.isArray(e?.player_groups) ? e.player_group
 function _dpEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function _dpSafeUrl(u){ const s=String(u==null?'':u).trim(); return /^(https?:\/\/|\/|\.\/|#)/i.test(s) ? s : '#'; }
 
+// ── Tareas simultáneas ─────────────────────────────────────────────────────
+// La lista de una sesión era estrictamente una secuencia, pero hay días en que el
+// grupo A hace un rondo MIENTRAS el grupo B va a finalización. Las tareas que van a
+// la vez comparten parallel_group y se dibujan bajo un mismo corchete.
+// Los minutos se siguen sumando igual que siempre (el corchete es un vínculo, no un
+// cálculo): lo único que cambia de fondo es la proyección GPS, que deja de sumar las
+// dos cargas sobre todo el plantel porque nadie hizo las dos (ver dpProjWeights).
+function _dpParGroup(e){ const v = e && e.parallel_group; return (v == null || v === '') ? null : String(v); }
+function _dpNewParId(){ return 'pg_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+// La lista de tareas de la MISMA fase y del mismo tipo que ésta — las candidatas a ir
+// en simultáneo. Sólo tareas de campo: las de fuerza viven en su propia sub-sección
+// (dpSplitByKind), así que un corchete que las mezclara quedaría partido en pantalla.
+function _dpParPeers(e){
+  const ph = (e && e.phase) || 'main';
+  const list = ph === 'activation' ? (window._dpActItems || [])
+             : ph === 'goalkeepers' ? (window._dpGkItems || [])
+             : (_dpFieldExercises || []);
+  return list.filter(x => !x.exercise_id);
+}
+// Parte una lista de tareas en tramos respetando el orden: { par:<id|null>, items:[…] }.
+// Las enlazadas se juntan en el lugar de la PRIMERA de ellas, así el corchete no salta
+// aunque el orden guardado las haya dejado separadas.
+function _dpParChunks(list){
+  const out = [], byPar = {};
+  (list || []).forEach(e => {
+    const pg = _dpParGroup(e);
+    if (!pg) { out.push({ par: null, items: [e] }); return; }
+    if (byPar[pg]) { byPar[pg].items.push(e); return; }
+    byPar[pg] = { par: pg, items: [e] };
+    out.push(byPar[pg]);
+  });
+  // Un corchete de una sola tarea ya no es un corchete (la compañera se borró): suelta.
+  out.forEach(c => { if (c.items.length < 2) c.par = null; });
+  return out;
+}
+// Repinta la sección a la que pertenece una tarea (campo / activación / porteros).
+function dpRepaintPhase(e){
+  const ph = (e && e.phase) || 'main';
+  if (ph === 'activation') dpPaintActStrip();
+  else if (ph === 'goalkeepers') dpPaintGkStrip();
+  else renderExerciseList(_dpFieldExercises || []);
+  renderGpsProjection();
+}
+// Pinta una lista de tarjetas de campo metiendo bajo un corchete las que van a la vez.
+function dpParListHTML(items){
+  return _dpParChunks(items).map(c => {
+    if (!c.par) return dpExerciseCardHTML(c.items[0]);
+    const mins = Math.round(c.items.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
+    return `<div class="dp-par" data-par="${_dpEsc(c.par)}">
+      <div class="dp-par-h">
+        <i class="ti ti-arrows-split-2"></i>
+        <span class="lb">${tt('daily_planning.parallel_tag','At the same time')}</span>
+        <span class="ct">${c.items.length} · ${tt('daily_planning.min_count', `${mins} min`, {count: mins})}</span>
+      </div>
+      <div class="dp-par-grid">${c.items.map(dpExerciseCardHTML).join('')}</div>
+    </div>`;
+  }).join('');
+}
+// Menú del botón de cadena: con qué otra tarea de la sección va en simultáneo.
+function dpOpenParMenu(seid, btn){
+  const e = _dpFindTask(seid); if (!e) return;
+  const menu = document.getElementById('dpExPlayersMenu'); if (!menu) return;
+  const mine = _dpParGroup(e);
+  const others = _dpParPeers(e).filter(x => x.id !== seid && !(mine && _dpParGroup(x) === mine));
+  const rows = others.map(x => {
+    const nm = x.name || tt('daily_planning.untitled','Untitled');
+    const tag = _dpParGroup(x) ? `<span class="num">${tt('daily_planning.in_parallel_short','block')}</span>` : '';
+    return `<div class="dp-exp-opt" onclick="dpLinkParallel('${seid}','${x.id}')"><i class="ti ti-arrows-split-2" style="font-size:15px;color:var(--cm-fg-muted)"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${_dpEsc(nm)}</span>${tag}</div>`;
+  }).join('') || `<div style="padding:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('daily_planning.no_task_to_link','No other field task in this section.')}</div>`;
+  const unlink = mine ? `<div class="dp-exp-opt" onclick="dpUnlinkParallel('${seid}')"><i class="ti ti-unlink" style="font-size:15px;color:var(--cm-fg-muted)"></i><span style="flex:1">${tt('daily_planning.unlink_parallel','Take out of the block')}</span></div>` : '';
+  menu.innerHTML = `<div class="hd"><span>${tt('daily_planning.run_at_same_time','Runs at the same time as…')}</span></div>${unlink}${rows}`;
+  const r = btn.getBoundingClientRect();
+  menu.style.top  = Math.min(r.bottom + 6, window.innerHeight - 340) + 'px';
+  menu.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  menu.classList.remove('is-tall');
+  menu.classList.add('is-open');
+}
+async function dpLinkParallel(seid, otherSeid){
+  const a = _dpFindTask(seid), b = _dpFindTask(otherSeid); if (!a || !b) return;
+  document.getElementById('dpExPlayersMenu')?.classList.remove('is-open');
+  const pa = _dpParGroup(a), pb = _dpParGroup(b);
+  const pg = pb || pa || _dpNewParId();   // sumarse a un corchete que ya existe antes que abrir otro
+  const list = _dpParPeers(a);
+  // Cada lado se lleva a sus compañeros: enlazar con una tarea que ya estaba en un
+  // bloque funde los dos bloques en uno y no deja a nadie a medio camino.
+  const moved = list.filter(x => x === a || x === b
+    || (pa && _dpParGroup(x) === pa) || (pb && _dpParGroup(x) === pb));
+  moved.forEach(x => { x.parallel_group = pg; });
+  dpRepaintPhase(a);
+  const res = await Promise.all(moved.map(x => window.sb.from('session_exercises')
+    .update({ parallel_group: pg }).eq('id', x.id).eq('club_id', _dpClubId)));
+  const bad = res.find(r => r.error);
+  if (bad) { console.warn('[dp-parallel] link failed:', bad.error.message); dpToast(tt('daily_planning.parallel_save_failed','Could not save the link.')); }
+}
+async function dpUnlinkParallel(seid){
+  const e = _dpFindTask(seid); if (!e) return;
+  document.getElementById('dpExPlayersMenu')?.classList.remove('is-open');
+  const pg = _dpParGroup(e); if (!pg) return;
+  const list = _dpParPeers(e);
+  e.parallel_group = null;
+  const ids = [seid];
+  // Si al salir queda una sola tarea en el corchete, se suelta también: un bloque
+  // en paralelo de uno no existe, y así no queda un vínculo huérfano en la base.
+  const rest = list.filter(x => _dpParGroup(x) === pg);
+  if (rest.length === 1) { rest[0].parallel_group = null; ids.push(rest[0].id); }
+  dpRepaintPhase(e);
+  const res = await Promise.all(ids.map(id => window.sb.from('session_exercises')
+    .update({ parallel_group: null }).eq('id', id).eq('club_id', _dpClubId)));
+  const bad = res.find(r => r.error);
+  if (bad) { console.warn('[dp-parallel] unlink failed:', bad.error.message); dpToast(tt('daily_planning.parallel_save_failed','Could not save the link.')); }
+}
+// Cuántos jugadores hace esta tarea: manda el reparto en grupos de la card (es el del
+// día); si no hay grupos, los que pide el ejercicio; si tampoco, cuenta como una más.
+function _dpTaskPlayers(e){
+  const n = _dpExGroups(e).reduce((s, g) => s + ((g.players||[]).length), 0);
+  return n || Number(e && e.players_count) || 1;
+}
+// Cuánto pesa cada tarea en la proyección GPS. Una tarea suelta aporta su carga entera.
+// Dos en paralelo NO se suman —cada jugador hizo una sola—: el bloque aporta el promedio
+// de las dos ponderado por cuántos jugadores fue a cada una. Al promedio sólo entran las
+// tareas con perfil GPS; las que no lo tienen quedan fuera igual que hoy (lo dice la
+// nota "cubre X de Y" al pie del panel).
+function dpProjWeights(covered){
+  const byPar = {};
+  covered.forEach(e => { const pg = _dpParGroup(e); if (pg) (byPar[pg] = byPar[pg] || []).push(e); });
+  return covered.map(e => {
+    const peers = byPar[_dpParGroup(e)];
+    if (!peers || peers.length < 2) return { e, factor: 1 };
+    const total = peers.reduce((s, x) => s + _dpTaskPlayers(x), 0) || peers.length;
+    return { e, factor: _dpTaskPlayers(e) / total };
+  });
+}
+
 // Inline groups row inside an exercise card: several named groups, each a multi-select.
 function dpExGroupsRow(e){
   const rows = _dpExGroups(e).map(g => {
@@ -471,7 +604,7 @@ function dpCopyGroupsFrom(targetSeid, sourceSeid){
 }
 document.addEventListener('click', e => {
   const menu = document.getElementById('dpExPlayersMenu');
-  if (menu && menu.classList.contains('is-open') && !menu.contains(e.target) && !e.target.closest('.dp-exp-add')) {
+  if (menu && menu.classList.contains('is-open') && !menu.contains(e.target) && !e.target.closest('.dp-exp-add,.dp-par-btn')) {
     menu.classList.remove('is-open');
   }
 });
@@ -1021,7 +1154,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description,media_type,media_ref,video_id)')
+    .select('id,name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,parallel_group,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description,media_type,media_ref,video_id)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -1098,7 +1231,7 @@ function renderExerciseList(exercises) {
   const ct    = document.getElementById('dpExCt');
   const { field, strength } = dpSplitByKind(exercises);
   const fieldAdd = `<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.add_exercise','Add exercise')}</button>`;
-  grid.innerHTML = field.map(dpExerciseCardHTML).join('') + fieldAdd;
+  grid.innerHTML = dpParListHTML(field) + fieldAdd;
   if (strEl) strEl.innerHTML = dpStrengthSectionHTML(strength, 'main', false);   // no add button in Field — strength is added from Activation only
   if (ct) {
     const totalMin = Math.round(exercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
@@ -1172,7 +1305,7 @@ function dpPaintActStrip(){
   const strip = document.getElementById('dpActStrip'); if (!strip) return;
   const { field, strength } = dpSplitByKind(window._dpActItems || []);
   const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
-  strip.innerHTML = field.map(dpExerciseCardHTML).join('') + addBtn;
+  strip.innerHTML = dpParListHTML(field) + addBtn;
   const strEl = document.getElementById('dpActStrength');
   if (strEl) strEl.innerHTML = dpStrengthSectionHTML(strength, 'activation');
   dpPaintGpsBadges();
@@ -1182,7 +1315,7 @@ function dpPaintGkStrip(){
   const strip = document.getElementById('dpGkStrip'); if (!strip) return;
   const gks = window._dpGkItems || [];
   const addBtn = `<button class="dp-ex-add no-print" onclick="openLibModal('goalkeepers')"><i class="ti ti-plus" style="font-size:14px"></i>${tt('daily_planning.activity','Activity')}</button>`;
-  strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+  strip.innerHTML = dpParListHTML(gks) + addBtn;
   dpPaintGpsBadges();
 }
 // Load the FULL profile row for these exercises into the shared cache. Always select('*'):
@@ -1232,12 +1365,24 @@ async function dpReorderExercise(dragSeid, targetSeid, after, kind){
   const arr = kind === 'activation' ? (window._dpActItems || [])
             : kind === 'goalkeepers' ? (window._dpGkItems || [])
             : _dpFieldExercises;
-  const from = arr.findIndex(x => x.id === dragSeid);
-  if (from < 0) return;
-  const [moved] = arr.splice(from, 1);
-  let to = arr.findIndex(x => x.id === targetSeid);
-  if (to < 0) { arr.splice(from, 0, moved); return; }   // target vanished — undo
-  arr.splice(after ? to + 1 : to, 0, moved);
+  const drag = arr.find(x => x.id === dragSeid), target = arr.find(x => x.id === targetSeid);
+  if (!drag || !target) return;   // one of them vanished — nothing to do
+  // Un bloque en paralelo se mueve entero: arrastrar una de sus tareas se lleva a las
+  // demás, y soltar sobre cualquiera de ellas deja al bloque completo delante o detrás.
+  const dpg = _dpParGroup(drag);
+  const moving = dpg ? arr.filter(x => _dpParGroup(x) === dpg) : [drag];
+  if (moving.includes(target)) return;   // dentro del mismo bloque no hay orden que cambiar
+  const rest = arr.filter(x => !moving.includes(x));
+  const tpg = _dpParGroup(target);
+  // Con el destino dentro de un bloque, el ancla es su primera o su última tarea según
+  // el lado del drop: así nunca se cae EN MEDIO del corchete y lo parte.
+  const anchor = tpg ? (after ? [...rest].reverse().find(x => _dpParGroup(x) === tpg)
+                              : rest.find(x => _dpParGroup(x) === tpg))
+                     : target;
+  const to = rest.indexOf(anchor);
+  if (to < 0) return;
+  rest.splice(after ? to + 1 : to, 0, ...moving);
+  arr.length = 0; arr.push(...rest);          // in place: otras partes guardan la referencia
   arr.forEach((x, i) => { x.position = i; });
   if (kind === 'activation') dpPaintActStrip(); else if (kind === 'goalkeepers') dpPaintGkStrip(); else renderExerciseList(arr);   // optimistic repaint
   // Persist every row's position (list is small); log but don't block on errors.
@@ -1342,6 +1487,8 @@ function dpStrengthSectionHTML(items, phase, showAdd = true) {
 function dpExerciseCardHTML(e) {
     const _eff = Math.round(dpBlockMins(e).total_min);
     const dur = _eff ? `${_eff}′` : '—';
+    // Enlazar con otra tarea de la sección: las que van a la vez comparten corchete.
+    const _parBtn = `<button class="no-print dp-par-btn${_dpParGroup(e) ? ' is-on' : ''}" onclick="dpOpenParMenu('${e.id}',this)" title="${_dpParGroup(e) ? tt('daily_planning.parallel_tag','At the same time') : tt('daily_planning.link_parallel','Runs at the same time as another task')}"><i class="ti ti-arrows-split-2"></i></button>`;
     if (e.planner_exercise_id) {
       // Planner (field) exercise
       const orient  = e.calc_orientation || null;
@@ -1424,6 +1571,7 @@ function dpExerciseCardHTML(e) {
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${tt('daily_planning.planner','PLANNER')}</span>
             <span class="grow"></span>
             <a class="no-print" href="Planner.html?exercise=${e.planner_exercise_id}&amp;from=daily&amp;date=${encodeURIComponent(_dpCurrentDate || '')}&amp;session=${encodeURIComponent(_dpCurrentSessionId || '')}" title="${tt('daily_planning.open_in_drill_designer','Open in Drill Designer')}" style="width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);text-decoration:none" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''"><i class="ti ti-external-link" style="font-size:13px"></i></a>
+            ${_parBtn}
             <button class="no-print" onclick="deleteExercise('${e.id}')" title="${tt('daily_planning.remove','Remove')}"><i class="ti ti-trash"></i></button>
           </div>
         </div>
@@ -1482,6 +1630,7 @@ function dpExerciseCardHTML(e) {
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${gx ? tt('daily_planning.library','LIBRARY') : tt('daily_planning.manual_tag','MANUAL')}</span>
             <span class="grow"></span>
+            ${isGym ? '' : _parBtn}
             <button class="no-print" onclick="deleteExercise('${e.id}')" title="${tt('daily_planning.remove','Remove')}"><i class="ti ti-trash"></i></button>
           </div>
         </div>
@@ -1709,12 +1858,13 @@ async function renderGpsProjection(){
     return { w: ratio > 1.1 ? 100 : Math.min(ratio, 1) * 100,
              c: ratio < 0.9 ? 'var(--cm-fg-muted)' : ratio <= 1.1 ? 'var(--cm-success,#16a34a)' : 'var(--cm-warning,#d97706)' };
   };
+  const contribs = dpProjWeights(covered);   // paralelo → promedio ponderado por jugadores
   const body = document.getElementById('dpProjBody');
   body.innerHTML = keys.map(k => {
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
     // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
     let proj = 0;
-    covered.forEach(e => { proj += num(_dpGpsProfiles[e.planner_exercise_id][k]) * dpBlockMins(e).work_min; });
+    contribs.forEach(({ e, factor }) => { proj += num(_dpGpsProfiles[e.planner_exercise_id][k]) * dpBlockMins(e).work_min * factor; });
     proj = Math.round(proj * m.mult);
     projVals[k] = proj;
     const unit = m.avgUnit || '';
@@ -1748,9 +1898,13 @@ async function renderGpsProjection(){
   body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('change', async () => { await dpSaveTargets(); dpFlushTargets(); }));
 
   const Y = withId.length, X = covered.length, Z = Y - X;
+  // Cuántos bloques en paralelo entraron: se promediaron por jugadores en vez de sumarse,
+  // y eso baja la proyección respecto de lo que daría la lista leída en fila.
+  const P = new Set(contribs.filter(c => c.factor < 1).map(c => _dpParGroup(c.e))).size;
   const note = document.getElementById('dpProjNote');
   if (note) note.textContent = Y
     ? tt('daily_planning.projection_covers', `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`, {covered: X, total: Y, extra: Z ? ' ' + tt('daily_planning.projection_no_profile', `(${Z} have no GPS profile yet)`, {count: Z}) : ''})
+      + (P ? ' ' + tt('daily_planning.projection_parallel', `${P} parallel block${P!==1?'s':''} averaged by players.`, {count: P}) : '')
     : tt('daily_planning.no_mapped_drills','No mapped drills with a GPS profile yet.');
 }
 
@@ -2084,6 +2238,21 @@ async function dpRenderPrintSheet() {
         </div>
       </div>`;
     };
+    // Rejilla de tarjetas de campo: las tareas que van a la vez salen dentro de un
+    // recuadro común, para que quien lee la hoja no las tome por dos bloques seguidos.
+    // (Un corchete que mezclara campo y fuerza llega partido: la fuerza se imprime en su
+    // propia sub-sección. Por eso el botón de enlazar sólo se ofrece entre tareas de campo.)
+    const exGrid = (items, cols) => {
+      const chunks = _dpParChunks(items);
+      if (!chunks.length) return '';
+      return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">${chunks.map(c => c.par
+        ? `<div class="dsp-brk" style="grid-column:1/-1;border:1px dashed #C9CDD3;border-radius:11px;padding:9px;background:#FBFBFA;break-inside:avoid">
+             <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;font:700 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#8A93A0"><span style="width:12px;height:2px;background:var(--club-accent);border-radius:2px"></span>${esc(tt('daily_planning.parallel_tag','At the same time'))}</div>
+             <div style="display:grid;grid-template-columns:repeat(${Math.min(c.items.length, cols)},1fr);gap:10px">${c.items.map(printExCard).join('')}</div>
+           </div>`
+        : printExCard(c.items[0])).join('')}</div>`;
+    };
+
     // Sub-section label inside a section (e.g. "Strength").
     const subTitle = t => `<div style="display:flex;align-items:center;gap:6px;margin:2px 0 8px;font:700 9.5px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0"><span style="width:14px;height:2px;background:var(--club-accent);border-radius:2px"></span>${esc(t)}</div>`;
     const strGrid = items => items.length ? `${subTitle(tt('daily_planning.strength','Strength'))}<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${items.map(printStrCard).join('')}</div>` : '';
@@ -2094,7 +2263,7 @@ async function dpRenderPrintSheet() {
     const actBlock = acts.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_activation_hdr', `Activation · ${acts.length} · ${actMin} min`, {count: acts.length, min: actMin}), true)}
       ${strGrid(actStr)}
-      ${actField.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:${actStr.length?'12px':'0'}">${actField.map(printExCard).join('')}</div>` : ''}
+      ${actField.length ? `<div style="margin-top:${actStr.length?'12px':'0'}">${exGrid(actField, 3)}</div>` : ''}
     </div>` : '';
 
     // 6) Field exercises — field diagram cards, then a separate strength sub-section
@@ -2102,7 +2271,7 @@ async function dpRenderPrintSheet() {
     const { field: fxField, strength: fxStr } = dpSplitByKind(fx);
     const fieldBlock = fx.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_field_hdr', `Field exercises · ${fx.length} · ${fieldMin} min`, {count: fx.length, min: fieldMin}), true)}
-      ${fxField.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fxField.map(printExCard).join('')}</div>` : ''}
+      ${exGrid(fxField, 3)}
       ${fxStr.length ? `<div style="margin-top:${fxField.length?'12px':'0'}">${strGrid(fxStr)}</div>` : ''}
     </div>` : '';
 
@@ -2111,7 +2280,7 @@ async function dpRenderPrintSheet() {
     const gkMin = gks.reduce((s, a) => s + (a.duration || 0), 0);
     const gkBlock = (gks.length && !window._dpGkHidden) ? `<div class="dsp-page" style="break-before:page;page-break-before:always;margin-bottom:16px">
       ${sectionTitle(tt('daily_planning.sheet_goalkeepers_hdr', `Goalkeeper training · ${gks.length} · ${gkMin} min`, {count: gks.length, min: gkMin}), true)}
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${gks.map(printExCard).join('')}</div>
+      ${exGrid(gks, 3)}
     </div>` : '';
 
     // 7) Footer
@@ -2148,6 +2317,14 @@ async function dpRenderPrintSheet() {
 }
 
 async function deleteExercise(seid) {
+  // Si la tarea estaba en un bloque en paralelo y sólo queda una compañera, el vínculo
+  // ya no significa nada: se suelta antes de recargar para no dejarlo huérfano en la base.
+  const _gone = _dpFindTask(seid), _pg = _dpParGroup(_gone);
+  if (_pg) {
+    const _left = _dpParPeers(_gone).filter(x => x.id !== seid && _dpParGroup(x) === _pg);
+    if (_left.length === 1) await window.sb.from('session_exercises')
+      .update({ parallel_group: null }).eq('id', _left[0].id).eq('club_id', _dpClubId);
+  }
   const { error } = await window.sb.from('session_exercises').delete().eq('id', seid).eq('club_id', _dpClubId);
   if (!error) { await loadSessionExercises(_dpCurrentSessionId); await loadActivationActivities(_dpCurrentSessionId); await loadGoalkeeperActivities(_dpCurrentSessionId); }
 }
@@ -2741,7 +2918,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,intensity,exercise_id,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups,gym_exercises(name,category,description,media_type,media_ref,video_id)')
+    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,intensity,exercise_id,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups,parallel_group,gym_exercises(name,category,description,media_type,media_ref,video_id)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
@@ -2810,7 +2987,7 @@ async function loadGoalkeeperActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups')
+    .select('id,name,duration,series,work_time,rest_time,dose_mode,reps,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase,position,player_groups,parallel_group')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','goalkeepers').order('position');
   const gks = data || [];
   window._dpGkItems = gks;
@@ -2821,7 +2998,7 @@ async function loadGoalkeeperActivities(sessionId) {
   _dpGkTotalMin = total;
   if (ctEl) ctEl.textContent = total ? tt('daily_planning.min_count', `${total} min`, {count: total}) : (gks.length ? String(gks.length) : '—');
   if (durEl) durEl.value = total || '';
-  strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+  strip.innerHTML = dpParListHTML(gks) + addBtn;
   dpInitReorder();
 
   const _reqSession = sessionId;
@@ -2830,7 +3007,7 @@ async function loadGoalkeeperActivities(sessionId) {
     dpResolvePreviews(need).then(() => {
       if (_dpCurrentSessionId !== _reqSession) return;
       gks.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
-      strip.innerHTML = gks.map(dpExerciseCardHTML).join('') + addBtn;
+      strip.innerHTML = dpParListHTML(gks) + addBtn;
     });
   }
 }
@@ -3137,7 +3314,7 @@ async function dpConfirmDuplicate() {
 
   // 3. Copy every exercise/activity (all phases: main / activation / goalkeepers).
   const { data: exRows } = await window.sb.from('session_exercises')
-    .select('name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation')
+    .select('name,phase,duration,series,work_time,rest_time,dose_mode,reps,dosing_overrides,position,player_groups,parallel_group,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation')
     .eq('session_id', _dpDupSourceId).eq('club_id', _dpClubId).order('position');
   if (exRows && exRows.length) {
     const copies = exRows.map(r => ({ ...r, session_id: targetId, club_id: _dpClubId }));
@@ -3365,7 +3542,8 @@ let _dpRoByRole = false, _dpLock = null;
    'openLibModal','openGymLibModal','openManualExModal','addPlannerExercise','addGymExercise','saveManualExercise',
    'dpCreateSession','dpMarkDayOff','dpRemoveDayOff','dpActAdd','dpActSave','dpActDelete','dpGkAdd','dpGkSave','dpGkDelete',
    'dpOpenDuplicate','dpConfirmDuplicate','dpDeletePlan','dpPublish',
-   'dpOpenExGroup','dpExAddGroup','dpExDelGroup','dpExRenameGroup','dpToggleExGroupPlayer','dpCopyGroupsFrom']
+   'dpOpenExGroup','dpExAddGroup','dpExDelGroup','dpExRenameGroup','dpToggleExGroupPlayer','dpCopyGroupsFrom',
+   'dpLinkParallel','dpUnlinkParallel']
     .forEach(n => wrap(n, false));
 })();
 

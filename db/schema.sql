@@ -2521,6 +2521,7 @@ create table if not exists public.session_exercises (
   reps integer,
   dosing_overrides text[] default '{}'::text[] not null,
   player_groups jsonb,
+  parallel_group text,
   constraint session_exercises_pkey primary key (id),
   constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text, 'goalkeepers'::text])))
 );

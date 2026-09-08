@@ -90,8 +90,10 @@ test.describe('Daily Planning — Squad section', () => {
 
   test('squad count reflects loaded players', async ({ page }) => {
     await gotoDP(page, { players: [PLAYER, { ...PLAYER, id: 'p-2', first_name: 'Marco', number: 9 }] });
-    const ct = await page.locator('#dpSquadCt').textContent();
-    expect(ct).toMatch(/\d/);
+    // #dpSquadBody ya está en el HTML estático, así que gotoDP vuelve antes de que el
+    // plantel se haya pintado: sin esperar, esto leía el "—" del placeholder según cómo
+    // cayera la carrera.
+    await expect(page.locator('#dpSquadCt')).toHaveText(/\d/, { timeout: 8000 });
   });
 
   test('renders squad summary row', async ({ page }) => {
