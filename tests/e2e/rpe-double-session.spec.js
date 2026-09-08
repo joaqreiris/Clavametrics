@@ -153,3 +153,18 @@ test('dentro del board, recordar sigue funcionando y nombra la sesión', async (
   const msg = decodeURIComponent((await page.evaluate(() => window.__waUrl)).split('text=')[1]);
   expect(msg).toContain('Training · 08:30');
 });
+
+test('el «⋯» de una columna excusa en SU sesión, no en la otra', async ({ page }) => {
+  const saved = [];
+  await page.route(`${SB}/rest/v1/rpe_exemptions**`, route => {
+    if (route.request().method() === 'POST') saved.push(route.request().postDataJSON());
+    return route.fulfill({ json: [] });
+  });
+  await page.locator('[data-tab="pending"]').click();
+  // segunda columna (campo, s-fld): su primer pendiente
+  const col = page.locator('.rpe-col').nth(1);
+  await col.locator('.pc.is-pending [data-rowmenu]').first().click();
+  await page.locator('#rpeRowMenu [data-act="ignore"]').click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0]).toMatchObject({ session_id: 's-fld', kind: 'ignored' });
+});

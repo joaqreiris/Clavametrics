@@ -115,6 +115,55 @@
   .pc-fig .v.pc-min-edit { cursor:pointer; border-radius:6px; padding:1px 4px; margin:-1px -4px; }
   .pc-fig .v.pc-min-edit:hover { background:var(--cm-bg-soft); }
   .pc-fig .v.pc-min-edit:hover .ti-pencil { color:var(--cm-fg-muted); }
+
+  /* ── Resolver un pendiente: menú por jugador ─────────────────────────────
+     No todo el que falta es un olvido: hay quien no hizo la sesión (solo gym,
+     trabajo diferenciado) y quien lo dijo de palabra. El «⋯» de cada tarjeta
+     resuelve el caso sin tener que inventarle un RPE ni dejarlo pendiente
+     para siempre. El menú va en un portal fijo: dentro de la tarjeta lo
+     recortaría la columna en la vista de doble sesión. */
+  #rpeRowMenu { position:fixed; min-width:232px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3, 10px); box-shadow:var(--cm-shadow-pop); z-index:9999; overflow:hidden; display:none; padding:5px; }
+  #rpeRowMenu.is-open { display:block; }
+  #rpeRowMenu .mi { display:flex; align-items:flex-start; gap:10px; width:100%; padding:8px 9px; border:0; background:none; border-radius:var(--cm-r-2, 8px); cursor:pointer; text-align:left; }
+  #rpeRowMenu .mi:hover { background:var(--cm-bg-soft); }
+  #rpeRowMenu .mi .ti { font-size:17px; color:var(--cm-fg-muted); flex-shrink:0; margin-top:1px; }
+  #rpeRowMenu .mi .tx { min-width:0; }
+  #rpeRowMenu .mi .t { display:block; font:600 13px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  #rpeRowMenu .mi .s { display:block; font:500 11.5px/1.35 var(--cm-font-sans); color:var(--cm-fg-faint); margin-top:2px; white-space:normal; }
+  #rpeRowMenu .sep { height:1px; background:var(--cm-border); margin:5px 4px; }
+  #rpeRowMenu .mi.is-danger .t, #rpeRowMenu .mi.is-danger .ti { color:var(--cm-danger, #DC2626); }
+  .pc-pending-head .right .cm-icon-btn { flex-shrink:0; }
+
+  /* Excusados / ignorados: siguen visibles pero apagados, y se pueden deshacer */
+  .rpe-resolved-grp { margin-top:14px; }
+  .rpe-resolved-grp > .h { display:flex; align-items:center; gap:7px; padding:0 2px 7px; font:600 10.5px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .rpe-resolved-grp > .h .ti { font-size:13px; }
+  .pc.is-resolved { background:transparent; box-shadow:none; border-style:dashed; opacity:.72; }
+  .pc.is-resolved:hover { opacity:1; box-shadow:none; }
+  .pc.is-resolved .pc-name { text-decoration:line-through; text-decoration-color:var(--cm-fg-faint); }
+  .pc-why { display:inline-flex; align-items:center; gap:6px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); min-width:0; }
+  .pc-why .ti { font-size:14px; flex-shrink:0; }
+  .pc-why .nt { color:var(--cm-fg-faint); font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* Chip del RPE que cargó el staff (no lo mandó el jugador) */
+  .pc-by-staff { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px; border-radius:var(--cm-r-1, 5px); background:var(--cm-bg-soft); color:var(--cm-fg-faint); font:600 10px/1 var(--cm-font-sans); letter-spacing:.03em; text-transform:uppercase; }
+  .pc-by-staff .ti { font-size:12px; }
+
+  /* Selector 1–10 del RPE cargado a mano */
+  .rpe-scale { display:grid; grid-template-columns:repeat(10, 1fr); gap:6px; }
+  .rpe-scale button { height:44px; border:1px solid var(--cm-border); border-radius:var(--cm-r-2, 8px); background:var(--cm-surface); color:var(--cm-fg-strong); font:600 15px/1 var(--cm-font-mono); cursor:pointer; }
+  .rpe-scale button:hover { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
+  .rpe-scale button.is-on { background:var(--cm-accent, #16A34A); border-color:var(--cm-accent, #16A34A); color:#fff; }
+  .rpe-scale-legend { display:flex; justify-content:space-between; margin-top:7px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-faint); }
+
+  /* Motivos (no corresponde / no disponible) */
+  .rpe-reasons { display:flex; flex-direction:column; gap:2px; }
+  .rpe-reasons label { display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:var(--cm-r-2, 8px); cursor:pointer; font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .rpe-reasons label:hover { background:var(--cm-bg-soft); }
+  .rpe-reasons input { width:16px; height:16px; cursor:pointer; flex-shrink:0; }
+  .rpe-reasons .ti { font-size:17px; color:var(--cm-fg-muted); }
+  .rpe-modal-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; border-radius:var(--cm-r-3, 10px); background:var(--cm-bg-soft); font:500 12px/1.45 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .rpe-modal-note .ti { font-size:15px; flex-shrink:0; margin-top:1px; }
 </style>
 </head>
 <body class="cm">
@@ -394,6 +443,110 @@
   </div>
 </div>
 
+<!-- ── Menú por jugador pendiente (portal: se posiciona al abrirlo) ── -->
+<div id="rpeRowMenu" role="menu"></div>
+
+<!-- ── «No corresponde»: excusar a un jugador de ESTA sesión ── -->
+<div class="tr-overlay" id="rmExcuseModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="rmExcuseTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-user-minus"></i></span>
+      <div>
+        <h3 id="rmExcuseTitle" data-i18n="rpe.excuseTitle">No RPE required</h3>
+        <p id="rmExcuseSub" data-i18n="rpe.excuseSub">Pick why this player didn't have to submit for this session.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <div class="rpe-reasons" id="rmExcuseReasons">
+        <label><input type="radio" name="rmExcuseReason" value="gym_only" checked><i class="ti ti-barbell"></i><span data-i18n="rpe.reasonGymOnly">Gym only — didn't do this session</span></label>
+        <label><input type="radio" name="rmExcuseReason" value="differentiated"><i class="ti ti-run"></i><span data-i18n="rpe.reasonDifferentiated">Differentiated work</span></label>
+        <label><input type="radio" name="rmExcuseReason" value="rehab"><i class="ti ti-bandage"></i><span data-i18n="rpe.reasonRehab">Rehab with the medical staff</span></label>
+        <label><input type="radio" name="rmExcuseReason" value="permission"><i class="ti ti-door-exit"></i><span data-i18n="rpe.reasonPermission">Permission / left early</span></label>
+        <label><input type="radio" name="rmExcuseReason" value="other"><i class="ti ti-dots"></i><span data-i18n="rpe.reasonOther">Other</span></label>
+      </div>
+      <div>
+        <div class="tr-field-lab" data-i18n="rpe.noteOptional">Note (optional)</div>
+        <textarea class="cm-textarea" id="rmExcuseNote" rows="2" data-i18n-ph="rpe.excuseNotePh" placeholder="Only for the staff — e.g. did the gym block and went home"></textarea>
+      </div>
+      <div class="rpe-modal-note">
+        <i class="ti ti-info-circle"></i>
+        <span id="rmExcuseScope" data-i18n="rpe.excuseScope">Applies to this session only — the player leaves its total, so the response rate isn't dragged down.</span>
+      </div>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
+      <button class="cm-btn is-primary" id="btnExcuseSave"><i class="ti ti-check"></i><span data-i18n="rpe.excuseSave">Mark as not required</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Cargar el RPE a mano (el jugador lo dijo de palabra) ── -->
+<div class="tr-overlay" id="rmManualModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="rmManualTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-pencil-plus"></i></span>
+      <div>
+        <h3 id="rmManualTitle" data-i18n="rpe.manualTitle">Enter RPE</h3>
+        <p id="rmManualSub" data-i18n="rpe.manualSub">For when the player told you in person. It counts as submitted and is flagged as staff-entered.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <div>
+        <div class="tr-field-lab" data-i18n="rpe.manualScale">How hard was the session? (1–10)</div>
+        <div class="rpe-scale" id="rmManualScale"></div>
+        <div class="rpe-scale-legend">
+          <span data-i18n="rpe.scaleEasy">1 · very easy</span>
+          <span data-i18n="rpe.scaleMax">10 · maximal</span>
+        </div>
+      </div>
+      <div>
+        <div class="tr-field-lab" data-i18n="rpe.noteOptional">Note (optional)</div>
+        <textarea class="cm-textarea" id="rmManualNote" rows="2" data-i18n-ph="rpe.manualNotePh" placeholder="Anything the player mentioned"></textarea>
+      </div>
+      <div class="rpe-modal-note">
+        <i class="ti ti-calculator"></i>
+        <span id="rmManualLoad"></span>
+      </div>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
+      <button class="cm-btn is-primary" id="btnManualSave" disabled><i class="ti ti-check"></i><span data-i18n="rpe.manualSave">Save RPE</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── No disponible: escribe la disponibilidad del día entero ── -->
+<div class="tr-overlay" id="rmAvailModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="rmAvailTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-calendar-x"></i></span>
+      <div>
+        <h3 id="rmAvailTitle" data-i18n="rpe.availTitle">Mark as unavailable</h3>
+        <p id="rmAvailSub" data-i18n="rpe.availSub">Sets the player's availability for the whole day.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
+    </div>
+    <div class="tr-modal-body">
+      <div class="rpe-reasons" id="rmAvailReasons">
+        <label><input type="radio" name="rmAvailStatus" value="injured" checked><i class="ti ti-bandage"></i><span data-i18n="rpe.availInjured">Injured</span></label>
+        <label><input type="radio" name="rmAvailStatus" value="sick"><i class="ti ti-virus"></i><span data-i18n="rpe.availSick">Sick</span></label>
+        <label><input type="radio" name="rmAvailStatus" value="away"><i class="ti ti-plane"></i><span data-i18n="rpe.availAway">National team / away</span></label>
+        <label><input type="radio" name="rmAvailStatus" value="unavailable"><i class="ti ti-ban"></i><span data-i18n="rpe.availUnavailable">Unavailable (personal)</span></label>
+      </div>
+      <div class="rpe-modal-note">
+        <i class="ti ti-alert-triangle"></i>
+        <span data-i18n="rpe.availScope">This changes the Availability screen too: the player drops out of every session of the day, not just this one.</span>
+      </div>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" data-modal-close><span data-i18n="rpe.cancel">Cancel</span></button>
+      <button class="cm-btn is-primary" id="btnAvailSave"><i class="ti ti-check"></i><span data-i18n="rpe.availSave">Save availability</span></button>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -418,7 +571,7 @@
                   view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
                   matches:[], matSessCache:{},
                   currentSessionId:null, currentIsMatch:false, currentMatchKind:null, sessionDuration:null,
-                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0,
+                  responders:[], pending:[], excused:[], ignored:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1, excludedFromAvg:0,
                   boards:{},        // vista lado a lado: un board por sesión del día
                   remindPool:[] };  // a quién ofrece recordar el modal abierto (con su sesión)
 
@@ -508,8 +661,34 @@
       time: fmtTime(r.submitted_at),
       av: r.av_status || null,
       responded: !!r.responded,
+      // 'not_required' (no le tocaba) | 'ignored' (le tocaba, no se insiste) | null
+      exempt: r.exempt_kind || null,
+      exemptReason: r.exempt_reason || null,
+      exemptNote: r.exempt_note || '',
+      byStaff: !!r.entered_by,
     };
   }
+
+  // ── Pendientes resueltos a mano ───────────────────────────────────────────
+  // Un pendiente no siempre es un olvido. El staff marca el caso desde el «⋯» de
+  // la tarjeta y deja de perseguirlo: 'not_required' sale del total de la sesión
+  // (no le correspondía), 'ignored' sigue contando como no respondido.
+  const EXCUSE_REASONS = {
+    gym_only:       { icon: 'ti-barbell',    key: 'rpe.reasonGymOnlyShort',       en: 'Gym only' },
+    differentiated: { icon: 'ti-run',        key: 'rpe.reasonDifferentiatedShort', en: 'Differentiated work' },
+    rehab:          { icon: 'ti-bandage',    key: 'rpe.reasonRehabShort',          en: 'Rehab' },
+    permission:     { icon: 'ti-door-exit',  key: 'rpe.reasonPermissionShort',     en: 'Permission' },
+    other:          { icon: 'ti-dots',       key: 'rpe.reasonOtherShort',          en: 'Other' },
+  };
+  function excuseLabel(reason) {
+    const r = EXCUSE_REASONS[reason] || EXCUSE_REASONS.other;
+    return tt(r.key, r.en);
+  }
+  function excuseIcon(reason) { return (EXCUSE_REASONS[reason] || EXCUSE_REASONS.other).icon; }
+  // La exención solo vale mientras no haya respuesta: si el jugador terminó mandando
+  // su RPE, manda el dato y la marca queda dormida.
+  function isExcused(p) { return !p.responded && p.exempt === 'not_required'; }
+  function isIgnored(p) { return !p.responded && p.exempt === 'ignored'; }
 
   // Lesionado / trabajo limitado: sigue en la lista (puede cargar su RPE de trabajo
   // diferenciado) pero su carga NO entra en la media de la sesión — no representa lo
@@ -579,7 +758,7 @@
           <span class="cm-avatar is-md" data-cm-photo="${p.id}">${initials(p.name)}</span>
           <div class="pc-who">
             <div class="pc-name">${T.escape(p.name)}</div>
-            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}${avTagHTML(p)}</div>
+            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}${avTagHTML(p)}${p.byStaff ? `<span class="pc-by-staff" title="${T.escape(tt('rpe.byStaffTip','Entered by the staff, not submitted by the player'))}"><i class="ti ti-pencil"></i>${tt('rpe.byStaff','Staff')}</span>` : ''}</div>
           </div>
         </div>
         <div class="pc-metric">
@@ -653,9 +832,51 @@
         <span class="status"><i class="ti ti-clock-x"></i>${tt('rpe.notSubmitted','Not submitted')}</span>
         <div class="right">
           <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('rpe.remind','Remind')}</button>
+          <button class="cm-icon-btn is-flush" data-rowmenu="${p.id}" data-sess="${state.currentSessionId || ''}"
+            aria-haspopup="menu" title="${T.escape(tt('rpe.rowMenuTitle','Resolve this pending RPE'))}"><i class="ti ti-dots-vertical"></i></button>
         </div>
       </div>
     </article>`;
+  }
+
+  // Ya resuelto a mano (excusado o ignorado): queda a la vista, apagado y con deshacer.
+  function resolvedCardHTML(p) {
+    const ign = isIgnored(p);
+    const why = ign ? tt('rpe.ignoredWhy', 'Not chased') : excuseLabel(p.exemptReason);
+    const icon = ign ? 'ti-bell-off' : excuseIcon(p.exemptReason);
+    return `
+    <article class="pc is-pending is-resolved">
+      <div class="pc-pending-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md" style="opacity:.55;" data-cm-photo="${p.id}">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${T.escape(p.name)}</div>
+          </div>
+        </div>
+        <span class="pc-why"><i class="ti ${icon}"></i>${T.escape(why)}${p.exemptNote ? `<span class="nt">· ${T.escape(p.exemptNote)}</span>` : ''}</span>
+        <div class="right">
+          <button class="cm-btn is-ghost is-sm" data-unexempt="${p.id}" data-sess="${state.currentSessionId || ''}"><i class="ti ti-arrow-back-up"></i>${tt('rpe.undo','Undo')}</button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  // Los dos grupos que cuelgan de la lista de pendientes.
+  function resolvedGroupsHTML(board) {
+    let html = '';
+    if (board.ignored && board.ignored.length) {
+      html += `<div class="rpe-resolved-grp">
+        <div class="h"><i class="ti ti-bell-off"></i>${tt('rpe.ignoredGroup', `Not chased (${board.ignored.length})`, { count: board.ignored.length })}</div>
+        <div class="tr-list" style="gap:8px">${board.ignored.map(resolvedCardHTML).join('')}</div>
+      </div>`;
+    }
+    if (board.excused && board.excused.length) {
+      html += `<div class="rpe-resolved-grp">
+        <div class="h"><i class="ti ti-user-minus"></i>${tt('rpe.excusedGroup', `No RPE required (${board.excused.length}) · out of this session's total`, { count: board.excused.length })}</div>
+        <div class="tr-list" style="gap:8px">${board.excused.map(resolvedCardHTML).join('')}</div>
+      </div>`;
+    }
+    return html;
   }
 
   function orphanHTML(o) {
@@ -739,11 +960,12 @@
         <span>${tt('rpe.pending','Pending')} <b>${board.pending.length}</b></span>
       </div>`;
     const list = state.tab === 'responded' ? board.responders : board.pending;
+    const resolved = state.tab === 'responded' ? '' : withBoardCtx(s, board, () => resolvedGroupsHTML(board));
     const body = list.length
-      ? withBoardCtx(s, board, () => `<div class="tr-list"${state.tab === 'responded' ? '' : ' style="gap:8px"'}>${list.map(state.tab === 'responded' ? cardHTML : pendingCardHTML).join('')}</div>`)
-      : `<div class="rc-empty">${state.tab === 'responded'
+      ? withBoardCtx(s, board, () => `<div class="tr-list"${state.tab === 'responded' ? '' : ' style="gap:8px"'}>${list.map(state.tab === 'responded' ? cardHTML : pendingCardHTML).join('')}</div>`) + resolved
+      : (resolved || `<div class="rc-empty">${state.tab === 'responded'
             ? tt('rpe.noneRespondedYet','Nobody has submitted yet.')
-            : tt('rpe.allSubmitted','Everyone submitted. Nothing pending.')}</div>`;
+            : tt('rpe.allSubmitted','Everyone submitted. Nothing pending.')}</div>`);
     return `<section class="rpe-col">${head}${meta}${body}</section>`;
   }
 
@@ -898,7 +1120,7 @@
 
     if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
     if (state.error) { if (err) err.style.display = ''; return; }
-    if (total === 0) {
+    if (total === 0 && !(state.excused || []).length) {
       document.getElementById('emptyH').textContent = tt('rpe.noPlayersTitle', 'No players in this session');
       document.getElementById('emptyP').textContent = tt('rpe.noPlayersSub', 'There are no players to show for the selected session.');
       empty.style.display = ''; return;
@@ -909,7 +1131,8 @@
       document.getElementById('listResponded').innerHTML = state.responders.map(cardHTML).join('');
     } else {
       pendWrap.style.display = '';
-      document.getElementById('listPending').innerHTML = state.pending.map(pendingCardHTML).join('');
+      document.getElementById('listPending').innerHTML =
+        state.pending.map(pendingCardHTML).join('') + resolvedGroupsHTML(state);
     }
   }
   window.renderRpe = renderRpe;
@@ -969,12 +1192,18 @@
     const durRow = rows.find(r => r.duration != null);
     const sessionDuration = (metaDur != null) ? Number(metaDur) : (durRow ? Number(durRow.duration) : null);
     const all = rows.map(modelFromRow);
+    // Excusado = no le correspondía esta sesión: sale del total, del % y del remind,
+    // como si no hubiera estado convocado. Ignorado sí sigue en el total (el
+    // incumplimiento queda registrado), pero fuera de la lista de pendientes.
+    const excused = all.filter(isExcused);
+    const ignored = all.filter(isIgnored);
+    const counted = all.filter(p => !isExcused(p));
     // El lesionado/limitado cuenta como uno más del board (total, pendientes, remind):
     // lo único que no hace es mover la media de la sesión. Va al final de su lista,
     // marcado, para que se lea de un vistazo que su carga es de trabajo diferenciado.
     const out = p => isOutOfAvg(p) ? 1 : 0;
-    const responders = all.filter(p => p.responded);
-    const pending = all.filter(p => !p.responded);
+    const responders = counted.filter(p => p.responded);
+    const pending = counted.filter(p => !p.responded && !isIgnored(p));
     // highest-first: rpe DESC, then load (sRPE) DESC — los diferenciados al final
     responders.sort((a, b) => (out(a) - out(b)) || (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
     pending.sort((a, b) => out(a) - out(b));
@@ -982,10 +1211,12 @@
     // de trabajo limitado quedan fuera (su carga distorsiona la referencia del equipo).
     const loads = responders.filter(p => !isOutOfAvg(p)).map(p => p.load).filter(v => v != null);
     const allLoads = responders.map(p => p.load).filter(v => v != null);
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    excused.sort(byName); ignored.sort(byName);
     return {
       sessionDuration,
-      responders, pending,
-      total: all.length,
+      responders, pending, excused, ignored,
+      total: counted.length,
       avgSrpe: loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0,
       maxSrpe: allLoads.length ? Math.max(...allLoads) : 1,
       excludedFromAvg: responders.filter(p => isOutOfAvg(p) && p.load != null).length,
@@ -1037,7 +1268,8 @@
     if (!sessionId) {
       // Sin sesión concreta: con dos o más hoy se ven todas lado a lado; si no, el cartel de
       // "hoy no hay sesión". Nunca se cae a la última sesión pasada.
-      state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
+      state.responders = []; state.pending = []; state.excused = []; state.ignored = [];
+      state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1; state.excludedFromAvg = 0;
       state.currentSessionId = null;
       if (state.todaysSessions.length >= 2) { await loadBoth(); return; }
       state.view = 'nosession';
@@ -1398,6 +1630,260 @@
     });
   }
 
+  /* ── Resolver un pendiente sin inventarle un RPE ──────────────────────────
+     El «⋯» de cada tarjeta pendiente abre este menú. Las cuatro salidas cubren
+     lo que pasa de verdad en el campo: el jugador te lo dijo de palabra, no hizo
+     esa sesión, no vale la pena perseguirlo, o directamente no estuvo en el día.
+     El menú vive en un portal fijo (#rpeRowMenu): dentro de la tarjeta lo
+     recortaría la columna de la vista de doble sesión. */
+
+  let rowCtx = null;   // { pid, sid, name } del jugador sobre el que se está actuando
+
+  function sessMeta(sid) { return state.sessionsById[sid] || {}; }
+  // La duración que se usa para el sRPE de un RPE cargado a mano: la del board si
+  // ya está cargado, si no la de la sesión.
+  function sessDuration(sid) {
+    const board = (state.boards && state.boards[sid]) || (sid === state.currentSessionId ? state : null);
+    if (board && board.sessionDuration != null) return board.sessionDuration;
+    return numOrNull(sessMeta(sid).duration);
+  }
+  function playerInBoard(pid, sid) {
+    const board = (state.boards && state.boards[sid]) || (sid === state.currentSessionId ? state : null);
+    if (!board) return null;
+    return [...(board.pending || []), ...(board.excused || []), ...(board.ignored || [])].find(p => p.id === pid) || null;
+  }
+
+  function rowMenuHTML() {
+    const item = (act, icon, t, sub, cls) =>
+      `<button class="mi${cls ? ' ' + cls : ''}" data-act="${act}" role="menuitem">
+         <i class="ti ${icon}"></i><span class="tx"><span class="t">${T.escape(t)}</span><span class="s">${T.escape(sub)}</span></span>
+       </button>`;
+    return item('manual', 'ti-pencil-plus',
+        tt('rpe.actManual', 'Enter the RPE myself'),
+        tt('rpe.actManualSub', 'They told you in person — it counts as submitted'))
+      + item('excuse', 'ti-user-minus',
+        tt('rpe.actExcuse', "No RPE required…"),
+        tt('rpe.actExcuseSub', "Didn't do this session — leaves its total"))
+      + item('ignore', 'ti-bell-off',
+        tt('rpe.actIgnore', 'Stop chasing'),
+        tt('rpe.actIgnoreSub', 'Out of the reminders, still counts as missing'))
+      + '<div class="sep"></div>'
+      + item('avail', 'ti-calendar-x',
+        tt('rpe.actAvail', 'Mark as unavailable…'),
+        tt('rpe.actAvailSub', 'Injury, illness or leave — the whole day'))
+      + item('profile', 'ti-user-circle',
+        tt('rpe.actProfile', 'Open player profile'),
+        tt('rpe.actProfileSub', 'Load, wellness and injury history'));
+  }
+
+  function closeRowMenu() {
+    const menu = document.getElementById('rpeRowMenu');
+    if (menu) menu.classList.remove('is-open');
+  }
+
+  function openRowMenu(btn) {
+    const menu = document.getElementById('rpeRowMenu');
+    const pid = btn.dataset.rowmenu;
+    const sid = btn.dataset.sess || state.currentSessionId;
+    const card = btn.closest('.pc');
+    const nameEl = card && card.querySelector('.pc-name');
+    rowCtx = { pid, sid, name: nameEl ? nameEl.textContent.trim() : '' };
+    menu.innerHTML = rowMenuHTML();
+    menu.classList.add('is-open');
+    // Anclado al botón, corregido para no salirse de la ventana.
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    let left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    let top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-rowmenu]');
+    if (btn) { e.stopPropagation(); openRowMenu(btn); return; }
+    const item = e.target.closest('#rpeRowMenu .mi');
+    if (item) { closeRowMenu(); runRowAction(item.dataset.act); return; }
+    if (!e.target.closest('#rpeRowMenu')) closeRowMenu();
+  });
+  window.addEventListener('scroll', closeRowMenu, true);
+  window.addEventListener('resize', closeRowMenu);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRowMenu(); });
+
+  function runRowAction(act) {
+    if (!rowCtx) return;
+    if (act === 'profile') { window.open('Player.html?id=' + encodeURIComponent(rowCtx.pid), '_blank'); return; }
+    if (act === 'ignore')  { saveExemption('ignored', null, null); return; }
+    if (act === 'excuse')  { openExcuseModal(); return; }
+    if (act === 'manual')  { openManualModal(); return; }
+    if (act === 'avail')   { openAvailModal(); return; }
+  }
+
+  /* ── Marcar / desmarcar la exención ── */
+  async function saveExemption(kind, reason, note) {
+    if (!rowCtx || !rowCtx.sid) return;
+    const { pid, sid, name } = rowCtx;
+    try {
+      const { error } = await window.sb.from('rpe_exemptions').upsert({
+        session_id: sid, player_id: pid, club_id: state.cid,
+        kind, reason: reason || null, note: (note || '').trim() || null,
+        created_by: state.me || null,
+      }, { onConflict: 'session_id,player_id' });
+      if (error) throw error;
+      T.toast(kind === 'ignored'
+        ? tt('rpe.ignoredToast', `${name} — out of the reminders`, { name })
+        : tt('rpe.excusedToast', `${name} — no RPE required for this session`, { name }), 'ti-check');
+      await loadRpe();
+    } catch (e) {
+      console.warn('[RPE] exemption:', e && e.message);
+      T.toast(tt('rpe.exemptionError', "Couldn't save that"), 'ti-alert-triangle');
+    }
+  }
+
+  async function clearExemption(pid, sid) {
+    try {
+      const { error } = await window.sb.from('rpe_exemptions')
+        .delete().eq('session_id', sid).eq('player_id', pid);
+      if (error) throw error;
+      T.toast(tt('rpe.undoneToast', 'Back to pending'), 'ti-arrow-back-up');
+      await loadRpe();
+    } catch (e) {
+      console.warn('[RPE] clear exemption:', e && e.message);
+      T.toast(tt('rpe.exemptionError', "Couldn't save that"), 'ti-alert-triangle');
+    }
+  }
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-unexempt]');
+    if (!btn) return;
+    btn.disabled = true;
+    clearExemption(btn.dataset.unexempt, btn.dataset.sess || state.currentSessionId);
+  });
+
+  /* ── Modal «no corresponde» ── */
+  function openExcuseModal() {
+    const modal = document.getElementById('rmExcuseModal');
+    const prev = playerInBoard(rowCtx.pid, rowCtx.sid);
+    const sub = document.getElementById('rmExcuseSub');
+    if (sub) sub.textContent = tt('rpe.excuseSubName', `Why ${rowCtx.name} didn't have to submit for this session.`, { name: rowCtx.name });
+    // Reabrir una exención ya puesta muestra lo que se eligió, no el default.
+    const reason = (prev && prev.exempt === 'not_required' && prev.exemptReason) || 'gym_only';
+    const radio = modal.querySelector(`input[name="rmExcuseReason"][value="${reason}"]`);
+    if (radio) radio.checked = true;
+    document.getElementById('rmExcuseNote').value = (prev && prev.exemptNote) || '';
+    modal.classList.add('is-open');
+  }
+
+  document.getElementById('btnExcuseSave').addEventListener('click', async function () {
+    const modal = document.getElementById('rmExcuseModal');
+    const reason = (modal.querySelector('input[name="rmExcuseReason"]:checked') || {}).value || 'other';
+    const note = document.getElementById('rmExcuseNote').value;
+    this.disabled = true;
+    modal.classList.remove('is-open');
+    await saveExemption('not_required', reason, note);
+    this.disabled = false;
+  });
+
+  /* ── Modal del RPE cargado a mano ── */
+  let manualVal = null;
+  function syncManualFoot() {
+    const dur = sessDuration(rowCtx && rowCtx.sid);
+    const info = document.getElementById('rmManualLoad');
+    if (info) {
+      info.textContent = (manualVal != null && dur != null)
+        ? tt('rpe.manualLoadCalc', `sRPE ${manualVal} × ${dur}′ = ${manualVal * dur} au`, { rpe: manualVal, dur, load: manualVal * dur })
+        : tt('rpe.manualLoadPending', 'Pick a value — the load is RPE × session duration.');
+    }
+    document.getElementById('btnManualSave').disabled = manualVal == null;
+  }
+
+  function openManualModal() {
+    manualVal = null;
+    const sub = document.getElementById('rmManualSub');
+    if (sub) sub.textContent = tt('rpe.manualSubName', `${rowCtx.name} told you in person. It counts as submitted and stays flagged as staff-entered.`, { name: rowCtx.name });
+    const scale = document.getElementById('rmManualScale');
+    scale.innerHTML = Array.from({ length: 10 }, (_, i) => `<button type="button" data-v="${i + 1}">${i + 1}</button>`).join('');
+    document.getElementById('rmManualNote').value = '';
+    syncManualFoot();
+    document.getElementById('rmManualModal').classList.add('is-open');
+  }
+
+  document.getElementById('rmManualScale').addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]');
+    if (!b) return;
+    manualVal = parseInt(b.dataset.v, 10);
+    [...e.currentTarget.querySelectorAll('button')].forEach(x => x.classList.toggle('is-on', x === b));
+    syncManualFoot();
+  });
+
+  document.getElementById('btnManualSave').addEventListener('click', async function () {
+    if (!rowCtx || manualVal == null) return;
+    const { pid, sid, name } = rowCtx;
+    const meta = sessMeta(sid);
+    const dur = sessDuration(sid);
+    const note = document.getElementById('rmManualNote').value.trim();
+    this.disabled = true;
+    document.getElementById('rmManualModal').classList.remove('is-open');
+    try {
+      const { error } = await window.sb.from('rpe').insert({
+        player_id: pid, session_id: sid, rpe: manualVal,
+        duration: dur, load: dur != null ? manualVal * dur : null,
+        club_id: state.cid, session_date: meta.session_date || null,
+        note: note || null, entered_by: state.me || null,
+      });
+      if (error) throw error;
+      // Si estaba excusado o ignorado, el dato manda: se limpia la marca.
+      await window.sb.from('rpe_exemptions').delete().eq('session_id', sid).eq('player_id', pid);
+      T.toast(tt('rpe.manualSavedToast', `RPE ${manualVal} saved for ${name}`, { rpe: manualVal, name }), 'ti-check');
+      await Promise.all([loadRpe(), loadOrphans()]);
+    } catch (e) {
+      console.warn('[RPE] manual rpe:', e && e.message);
+      T.toast(tt('rpe.manualError', "Couldn't save the RPE"), 'ti-alert-triangle');
+    }
+    this.disabled = false;
+  });
+
+  /* ── Modal «no disponible» — escribe availability, como la pantalla del mismo
+     nombre: lesión/enfermedad/selección son globales (team_id NULL) y el resto
+     queda atado al equipo de la sesión. ── */
+  const RPE_AV_GLOBAL = new Set(['injured', 'sick', 'away']);
+
+  function openAvailModal() {
+    const sub = document.getElementById('rmAvailSub');
+    if (sub) sub.textContent = tt('rpe.availSubName', `Sets ${rowCtx.name}'s availability for the whole day.`, { name: rowCtx.name });
+    const first = document.querySelector('#rmAvailReasons input[value="injured"]');
+    if (first) first.checked = true;
+    document.getElementById('rmAvailModal').classList.add('is-open');
+  }
+
+  document.getElementById('btnAvailSave').addEventListener('click', async function () {
+    if (!rowCtx) return;
+    const { pid, sid, name } = rowCtx;
+    const meta = sessMeta(sid);
+    const status = (document.querySelector('#rmAvailReasons input[name="rmAvailStatus"]:checked') || {}).value;
+    if (!status || !meta.session_date) {
+      T.toast(tt('rpe.availError', "Couldn't set availability"), 'ti-alert-triangle');
+      return;
+    }
+    this.disabled = true;
+    document.getElementById('rmAvailModal').classList.remove('is-open');
+    try {
+      const { error } = await window.sb.from('availability').upsert({
+        player_id: String(pid), date: meta.session_date, status, minutes: 0,
+        club_id: state.cid, notes: null,
+        team_id: RPE_AV_GLOBAL.has(status) ? null : (meta.team_id || null),
+      }, { onConflict: 'player_id,date' });
+      if (error) throw error;
+      T.toast(tt('rpe.availSavedToast', `${name} marked for the day`, { name }), 'ti-calendar-check');
+      await loadRpe();
+    } catch (e) {
+      console.warn('[RPE] availability:', e && e.message);
+      T.toast(tt('rpe.availError', "Couldn't set availability"), 'ti-alert-triangle');
+    }
+    this.disabled = false;
+  });
+
   /* ── Refresh ── */
   function wireRefresh() {
     const btn = document.getElementById('rmRefresh');
@@ -1668,6 +2154,9 @@
     try {
       if (!(await window.guardModule())) return;
       state.cid = await window.getClubId();
+      // Quién marca la exención / carga un RPE a mano (rpe_exemptions.created_by,
+      // rpe.entered_by). Si falla, se guarda igual sin autor.
+      try { state.me = (await window.getProfile())?.id || null; } catch (e) { state.me = null; }
       if (window.cmLoadPlayerPhotos) window.cmLoadPlayerPhotos(state.cid);
       if (window.applyClubTheme) await window.applyClubTheme();
       await initTeams(); // must run first: initSessionSelect/loadRecentMatches resolve the active team from state.teams
