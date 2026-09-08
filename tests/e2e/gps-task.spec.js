@@ -158,4 +158,84 @@ test.describe('GPS · cards de ejercicios (source=task)', () => {
     await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-task"]')).toHaveCount(1, { timeout: 15_000 });
     await expect(page.locator('.gp-sec[data-custom].is-on')).toHaveCount(1);
   });
+
+  // La LÍNEA agrupa por tiempo, y el rótulo del eje leía la fecha sólo de la forma anidada
+  // (join a training_sessions). Las filas de ejercicios la traen plana: sin esto, todas las
+  // tareas caían en un único punto llamado «?».
+  test('la línea reparte las tareas por fecha, no en un único punto', async ({ page }) => {
+    const cards = [{ id: 'card-line', position: 0, source: 'builder', size: 'md', config: {
+      schema: 'gp.card/v1', title: 'Distancia por día', viz: 'line', source: 'task',
+      scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+      metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
+      dimensions: [], style: { color: '#15803D' } } }];
+    await open(page, cards);
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-line"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const labels = await page.evaluate(() => {
+      const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-line"] canvas');
+      return window.Chart.getChart(cv).data.labels;
+    });
+    // Dos sesiones en el fixture ⇒ dos puntos con su fecha.
+    expect(labels).toHaveLength(2);
+    expect(labels.every(l => /^\d{4}-\d{2}-\d{2}$/.test(String(l)))).toBe(true);
+  });
+
+  // El scatter siempre dibujaba UN PUNTO POR JUGADOR y usaba la dimensión sólo como color. Con
+  // ejercicios eso no dice nada: cada jugador hace varios drills, así que el color salía del
+  // primero que apareciera y no había forma de comparar ejercicios entre sí — que es justamente
+  // para lo que se abre un scatter en un dashboard de drills.
+  test('el scatter de ejercicios dibuja un punto por ejercicio', async ({ page }) => {
+    const cards = [{ id: 'card-sc', position: 0, source: 'builder', size: 'lg', config: {
+      schema: 'gp.card/v1', title: 'HMLD vs intensidad', viz: 'scatter', source: 'task',
+      scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+      metrics: [{ id: 'total_distance', agg: 'avg', kind: 'accum', unit: 'm' },
+                { id: 'high_speed_distance', agg: 'avg', kind: 'accum', unit: 'm' }],
+      dimensions: [{ id: 'drill' }], style: { color: '#15803D' } } }];
+    await open(page, cards);
+    await page.locator('.gp-sec[data-custom]').click();
+    await expect(page.locator('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas')).toHaveCount(1, { timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const pts = await page.evaluate(() => {
+      const cv = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-sc"] canvas');
+      const ch = window.Chart.getChart(cv);
+      return ch.data.datasets.flatMap(d => (d.data || []).map(p => p.label || p.name || ''));
+    });
+    // Dos ejercicios en el fixture ⇒ dos puntos, con el nombre del ejercicio.
+    expect(pts).toHaveLength(2);
+    expect(pts.sort()).toEqual(['Partido reducido', 'Rondo']);
+  });
+
+  // Barrido: con fuente «tarea», ¿qué tipos dibujan algo con sentido y cuáles se quedan mudos?
+  // Cada uno con la forma que le corresponde (el radar necesita 3 métricas, la caja una).
+  const M = (id, agg = 'avg') => ({ id, agg, kind: 'accum', unit: 'm' });
+  const TIPOS = [
+    { viz: 'kpi',     metrics: [M('total_distance')],                                   dims: [] },
+    { viz: 'gauge',   metrics: [M('total_distance')],                                   dims: [] },
+    { viz: 'box',     metrics: [M('total_distance')],                                   dims: [{ id: 'drill' }] },
+    { viz: 'radar',   metrics: [M('total_distance'), M('high_speed_distance'), M('sprint_distance')], dims: [] },
+    { viz: 'heatmap', metrics: [M('total_distance')],                                   dims: [{ id: 'drill' }] },
+    { viz: 'ranking', metrics: [M('total_distance')],                                   dims: [{ id: 'drill' }] },
+  ];
+  for (const t of TIPOS) {
+    test(`«${t.viz}» con ejercicios dibuja algo, no un cartel vacío`, async ({ page }) => {
+      const cards = [{ id: 'card-x', position: 0, source: 'builder', size: 'lg', config: {
+        schema: 'gp.card/v1', title: t.viz, viz: t.viz, source: 'task',
+        scope: { level: 'squad' }, range: { type: 'last30' }, comparison: null,
+        metrics: t.metrics, dimensions: t.dims, style: { color: '#15803D' } } }];
+      await open(page, cards);
+      await page.locator('.gp-sec[data-custom]').click();
+      const body = page.locator('.gp-view.is-on .gp-c[data-card-id="card-x"] .gp-c-b');
+      await expect(body).toHaveCount(1, { timeout: 20_000 });
+      await expect.poll(async () => body.innerHTML(), { timeout: 25_000 }).not.toContain('cb2-spin');
+      const html = await body.innerHTML();
+      // Ni «sin datos» ni cuerpo vacío: o hay canvas (gráfico) o hay números en el DOM.
+      expect(html).not.toMatch(/No GPS data|No rows match|no hay datos/i);
+      const pinta = await page.evaluate(() => {
+        const b = document.querySelector('.gp-view.is-on .gp-c[data-card-id="card-x"] .gp-c-b');
+        return !!b.querySelector('canvas') || /\d/.test(b.innerText || '');
+      });
+      expect(pinta).toBe(true);
+    });
+  }
 });

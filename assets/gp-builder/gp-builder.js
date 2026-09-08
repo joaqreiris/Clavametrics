@@ -71,7 +71,10 @@
     // % de la demanda de partido: cada métrica se dibuja como su porcentaje de la referencia de
     // PARTIDO del jugador (media de sus N mejores partidos, gps-baseline.js). El 100% es el eje,
     // no un valor más. Sin dimensiones: una barra por métrica es toda la lectura.
-    demand:  { name: 'Match demand', icon: 'ti-percentage', min: 1, max: 8, dimMax: 0 },
+    // sessionOnly: la referencia es el PARTIDO COMPLETO del jugador. Comparar contra ella un
+    // ejercicio suelto daría un 12% que no significa nada, así que con fuente «tarea» este tipo
+    // ni se ofrece.
+    demand:  { name: 'Match demand', icon: 'ti-percentage', min: 1, max: 8, dimMax: 0, sessionOnly: true },
   };
 
   // DIMENSIONS — fields you group / label / filter by (no aggregation).
@@ -95,6 +98,12 @@
   const DIM_MAP = new Map(DIMENSIONS.map(d => [d.id, d]));
   // Which dimensions apply to a given source. task dims → task only; md/mc/rival → session
   // only; the rest (player/position/date) → both.
+  /** ¿Este tipo de gráfico aplica a esta fuente? (ver VIZ_TYPES.<t>.sessionOnly) */
+  function _typeAllowed(t, source) {
+    const v = VIZ_TYPES[t];
+    if (!v) return true;
+    return !(v.sessionOnly && source === 'task');
+  }
   function dimAllowed(d, source) {
     if (!d) return false;
     if (d.task)        return source === 'task';
@@ -2065,6 +2074,9 @@
     if (!S || (src !== 'session' && src !== 'task') || S.source === src) return;
     S.source = src;
     if (src === 'task') S.range = 'season';                 // task default scope (all-time still pickable)
+    // Un tipo que no aplica a la fuente nueva volvería una card muda: se cae a barras, que
+    // dibujan cualquier combinación.
+    if (!_typeAllowed(S.type, src)) S.type = 'bars';
     S.dimensions = (S.dimensions || []).filter(d => dimAllowed(DIM_MAP.get(d.id), src));
     if (src !== 'task') S.metrics = (S.metrics || []).filter(m => !TASK_METRIC_IDS.has(m.id));
     pulseNext = true; closeFly(); syncAll();
@@ -2885,6 +2897,7 @@
     window._gpEnsureCardPlayerPicker?.(cardEl, config);
     // …y el selector de métrica, para cambiarla sin abrir el editor.
     window._gpEnsureCardMetricPicker?.(cardEl, config);
+    window._gpEnsureCardRefPicker?.(cardEl, config);
     _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
 
     // Per-element request token: the live builder preview re-resolves on every change,
@@ -7023,10 +7036,16 @@
   // porcentajes. Sumar el plantel y dividir por la suma de referencias daría el número del equipo
   // «promedio», que pesa más a quien más corre; acá cada jugador cuenta una vez.
 
-  /** Referencia de partido: cuántos partidos entran en la media. Vacío → el ajuste del club. */
+  /**
+   * Contra qué partidos se compara: el modo ('best' N mejores · 'recent' N últimos · 'avg' todos)
+   * y cuántos. Sin elección, los N mejores con el N del club — el default de siempre.
+   */
   function _demandOpts(config) {
+    const mode = config.style?.demandRef || 'best';
     const n = Number(config.style?.demandN);
-    return (Number.isFinite(n) && n >= 1) ? { n } : {};
+    const o = (mode === 'best') ? {} : { mode };
+    if (mode !== 'avg' && Number.isFinite(n) && n >= 1) o.n = n;
+    return o;
   }
 
   /**
@@ -8844,7 +8863,7 @@
     const cur = S && S.type;
     return `<div class="bdd-bar">
       <span class="lbl">${_tt('gps_analysis.builder_type_label', 'Type')}</span>
-      <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).map(k =>
+      <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).filter(k => _typeAllowed(k, S?.source)).map(k =>
         `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${_typeName(k)}</button>`).join('')}</div>
     </div>`;
   }

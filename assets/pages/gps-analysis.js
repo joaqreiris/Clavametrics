@@ -2208,6 +2208,72 @@ function _persistCardMetric(cardEl, config) {
   window.GpBuilder?.resolveAndRenderCard?.(cardEl, config);
 }
 
+// ── Referencia de partido de una card «% del partido» ────────────────────────────────
+// Contra qué se compara es la mitad del significado del número: un 82% contra los 5 mejores
+// partidos y un 82% contra el partido típico dicen cosas distintas. Así que la card lo DICE en
+// la cabecera, y desde ahí se cambia — sin abrir el editor.
+const _GP_REF_MODES = [
+  { mode: 'best',   n: 5, key: 'card_ref_best5',  def: '5 mejores partidos' },
+  { mode: 'best',   n: 3, key: 'card_ref_best3',  def: '3 mejores partidos' },
+  { mode: 'recent', n: 5, key: 'card_ref_last5',  def: 'Últimos 5 partidos' },
+  { mode: 'avg',    n: 0, key: 'card_ref_all',    def: 'Todos los partidos' },
+];
+function _gpRefOf(config) {
+  const mode = config?.style?.demandRef || 'best';
+  const n    = Number(config?.style?.demandN) || 5;
+  return _GP_REF_MODES.find(o => o.mode === mode && (o.mode === 'avg' || o.n === n))
+      || _GP_REF_MODES[0];
+}
+window._gpEnsureCardRefPicker = function (cardEl, config) {
+  if (!cardEl) return;
+  const existing = cardEl.querySelector(':scope .gp-card-ref-pick');
+  if (!config || config.viz !== 'demand') { existing?.remove(); return; }
+  const head = cardEl.querySelector(':scope > .gp-c-h');
+  if (!head) { existing?.remove(); return; }
+
+  let chip = existing;
+  if (!chip) {
+    chip = document.createElement('span');
+    chip.className = 'gp-c-pick gp-card-ref-pick';
+    chip.setAttribute('data-card-ref-pick', '');
+    let picks = head.querySelector('.gp-c-picks');
+    if (!picks) {
+      picks = document.createElement('div');
+      picks.className = 'gp-c-picks';
+      picks.style.cssText = 'margin-left:6px';
+      (head.querySelector('.sub') || head.querySelector('.ttl'))?.after(picks);
+    }
+    picks.appendChild(chip);
+  }
+  const cur = _gpRefOf(config);
+  chip.title = tt('gps_analysis.card_ref_hint',
+    'The 100% of each metric is this reference, calculated per player. Click to change it.');
+  chip.innerHTML = `<i class="ti ti-target-arrow"></i>${_gpEscTxt(tt('gps_analysis.' + cur.key, cur.def))} <i class="ti ti-chevron-down"></i>`;
+};
+
+/** Elegir contra qué partido se compara. Se guarda con la card: la ve todo el club. */
+function _openCardRefPicker(anchor, cardEl) {
+  const config = cardEl?.__config;
+  if (!config || config.viz !== 'demand') return;
+  const cur = _gpRefOf(config);
+  makePopover(anchor, _GP_REF_MODES.map((o, i) => ({
+    label: (o === cur ? '✓ ' : '') + tt('gps_analysis.' + o.key, o.def), value: String(i),
+  })), item => {
+    const o = _GP_REF_MODES[Number(item.value)];
+    if (!o) return;
+    config.style = config.style || {};
+    config.style.demandRef = o.mode;
+    if (o.mode === 'avg') delete config.style.demandN; else config.style.demandN = o.n;
+    cardEl.__config = config;
+    window._gpEnsureCardRefPicker(cardEl, config);
+    const cardId = cardEl.dataset.cardId;
+    if (cardId && window.updateDashboardCard) {
+      window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('card ref persist:', e));
+    }
+    window.GpBuilder?.resolveAndRenderCard?.(cardEl, config);
+  });
+}
+
 // Popover to PIN this card to a player (or "Follow the bar filter" → clear the pin).
 // The bar (gpFilterBar) is the only player FILTER; this only sets an explicit per-card pin.
 function _openCardPlayerPicker(anchor, cardEl) {
@@ -3922,6 +3988,12 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   // Per-card player pick (builder cards with scope.level='player')
   if (pick.hasAttribute('data-card-player-pick')) {
     _openCardPlayerPicker(pick, pick.closest('.gp-c'));
+    return;
+  }
+
+  // Contra qué partido se compara una card «% del partido».
+  if (pick.hasAttribute('data-card-ref-pick')) {
+    _openCardRefPicker(pick, pick.closest('.gp-c'));
     return;
   }
 

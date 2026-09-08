@@ -95,6 +95,7 @@
     Object.keys(_cache).forEach(k => {
       if (!prefix || k.startsWith(prefix)) delete _cache[k];
     });
+    Object.keys(_nonTeamCache).forEach(k => delete _nonTeamCache[k]);   // pudo llegar un top-up nuevo
   };
 
   // Listen for import events (fired by GPS import pipeline after UPSERT)
@@ -103,6 +104,41 @@
     window.invalidateMatchDatesCache(e.detail?.clubId);   // new sessions/matches may have arrived
     if (e.detail?.clubId) window.invalidateSettingsCache(e.detail.clubId);
   });
+
+  // ── Recorte por contexto de trabajo (Modelo B) ─────────────────
+  // Un día de partido puede traer top-up / rehab / individual MEZCLADO en la misma fila de
+  // sesión — o ser SOLO top-up, en el caso del suplente que no jugó. Un baseline de PARTIDO
+  // tiene que medir el partido: se recalculan los valores desde los períodos 'team' y, si el
+  // jugador no tiene ninguno, la fila se cae (para él ese día no hubo partido). Sesiones sin
+  // períodos importados (CSV/manual) quedan intactas.
+  // Ver docs/gps-work-context.md · lib/gp-card/resolver.js.
+  // Fast-path: getAllBaselines pide 13 métricas sobre las MISMAS sesiones. Sin este cache cada
+  // una repetiría el sondeo de períodos no-team. Promesa cacheada → una sola query por set.
+  const _nonTeamCache = {};   // 'clubId|sids' → { p:Promise<boolean>, ts }
+  function _hasNonTeam(clubId, sessionIds) {
+    const key = clubId + '|' + sessionIds.join(',');
+    const hit = _nonTeamCache[key];
+    if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.p;
+    const p = import('../lib/gp-card/resolver.js')
+      .then(mod => mod.hasNonTeamPeriods(window.sb, clubId, sessionIds));
+    _nonTeamCache[key] = { p, ts: Date.now() };
+    return p;
+  }
+
+  async function _scopeToTeam(rows, clubId, playerIds, select) {
+    if (!rows?.length) return rows || [];
+    const sessionIds = [...new Set(rows.map(r => r.session_id).filter(Boolean))].sort();
+    if (!sessionIds.length) return rows;
+    try {
+      if (!(await _hasNonTeam(clubId, sessionIds))) return rows;   // nada que recortar
+      const mod = await import('../lib/gp-card/resolver.js');
+      return await mod.applyCtxToRows(window.sb, { clubId }, sessionIds, ['team'],
+        (playerIds && playerIds.length) ? playerIds : null, rows, select);
+    } catch (e) {
+      console.warn('[baseline] ctx scope no aplicado:', e?.message || e);
+      return rows;
+    }
+  }
 
   // ── Single player, single metric ──────────────────────────────
   /**
@@ -142,30 +178,37 @@
     const _datesArr = [...matchDates];
 
     if (isCore) {
-      // Core metric — column in gps_reports
-      let q = window.sb
+      // Core metric — column in gps_reports.
+      // Sin order/limit en servidor: el recorte por contexto puede tirar filas (solo top-up) o
+      // bajar valores (partido + top-up), así que el top-N se elige DESPUÉS, en cliente.
+      const _sel = `session_id, player_id, ${metric}, training_sessions!inner(session_date)`;
+      const { data, error } = await window.sb
         .from('gps_reports')
-        .select(`${metric}, training_sessions!inner(session_date)`)
+        .select(_sel)
         .eq('player_id', player_id)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', _datesArr)
         .not(metric, 'is', null);
-      // 'best' → top-N by value; 'avg' → every match (typical-match mean)
-      if (mode !== 'avg') q = q.order(metric, { ascending: false }).limit(n);
-      const { data, error } = await q;
       queryError = error;
-      vals = (data || []).map(r => +(r[metric] || 0));
+      const scoped = await _scopeToTeam(data || [], clubId, [player_id], _sel);
+      vals = scoped.map(r => r[metric]).filter(v => v != null && isFinite(+v)).map(v => +v);
+      // 'best' → top-N by value; 'avg' → every match (typical-match mean)
+      if (mode !== 'avg') vals = vals.sort((a, b) => b - a).slice(0, n);
     } else {
       // Custom metric — EAV in gps_report_metrics
       // Step 1: get report IDs for the player's reports on match days
+      const _selEav = 'id, session_id, player_id, training_sessions!inner(session_date)';
       const { data: matchReports, error: e1 } = await window.sb
         .from('gps_reports')
-        .select('id, training_sessions!inner(session_date)')
+        .select(_selEav)
         .eq('player_id', player_id)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', _datesArr);
       queryError = e1;
-      const reportIds = (matchReports || []).map(r => r.id);
+      // Las EAV no se pueden recortar por período (limitación conocida), pero al jugador que no
+      // jugó sí se lo saca: su fila no sobrevive al recorte.
+      const scopedEav = await _scopeToTeam(matchReports || [], clubId, [player_id], _selEav);
+      const reportIds = scopedEav.map(r => r.id);
       if (reportIds.length) {
         let q2 = window.sb
           .from('gps_report_metrics')
@@ -215,45 +258,73 @@
     const isCore = BASELINE_METRICS.includes(metric);
     const settings = await _loadClubSettings(clubId);
     const n = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
+    // Qué partidos entran en la media. Tres reglas, y cada una responde otra pregunta:
+    //   best   → los N MEJORES: «lo que este jugador da cuando el partido lo exige».
+    //   recent → los N ÚLTIMOS por fecha (media móvil): sigue su momento actual, así que un
+    //            jugador que vuelve de lesión se compara contra cómo está, no contra su pico.
+    //   avg    → TODOS los partidos: el partido típico, picos y flojos incluidos.
+    // 'best' sigue siendo el default: es el de la literatura (Miguel et al.) y el que ya usaban
+    // todas las pantallas, así que nada cambia para quien no elija.
+    const mode = (opts && opts.mode) || 'best';
 
     // Match days = the single source of truth (session_type='match' OR calendar match).
     const matchDates = await _loadMatchDates(clubId);
     if (!matchDates.size) return {};
     const _datesArr = [...matchDates];
 
-    // byPlayer: player_id → number[] (top-N values, descending)
+    /** Elige qué valores entran, según el modo. Recibe [{v, d}] (valor y fecha). */
+    function _pick(items) {
+      if (mode === 'avg') return items.map(i => i.v);
+      if (mode === 'recent') {
+        return items.slice().sort((a, b) => String(b.d || '').localeCompare(String(a.d || '')))
+                    .slice(0, n).map(i => i.v);
+      }
+      return items.slice().sort((a, b) => b.v - a.v).slice(0, n).map(i => i.v);
+    }
+
+    // byPlayer: player_id → number[] (los valores elegidos por _pick)
     const byPlayer = {};
 
     if (isCore) {
       // Paginated (server caps at ~1000): a full squad of match rows exceeds that and would
       // truncate some players' baselines. Paging is id-ordered, so do the top-n-by-value
       // selection client-side (same result as the old server .order(metric).slice(n)).
+      const _sel = `session_id, player_id, ${metric}, training_sessions!inner(session_date)`;
       const data = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
-        .select(`player_id, ${metric}, training_sessions!inner(session_date)`)
+        .select(_sel)
         .in('player_id', player_ids)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', _datesArr)
         .not(metric, 'is', null), { label: 'baseline.squad-core' }).catch(() => null);
       if (!data) return {};
+      const scoped = await _scopeToTeam(data, clubId, player_ids, _sel);
       const _vals = {};
-      data.forEach(r => { (_vals[r.player_id] = _vals[r.player_id] || []).push(+(r[metric] || 0)); });
-      Object.keys(_vals).forEach(pid => { byPlayer[pid] = _vals[pid].sort((a, b) => b - a).slice(0, n); });
+      scoped.forEach(r => {
+        const v = r[metric];
+        if (v == null || !isFinite(+v)) return;   // sin parte de equipo ese día → no es un partido suyo
+        (_vals[r.player_id] = _vals[r.player_id] || []).push({ v: +v, d: r.training_sessions?.session_date });
+      });
+      Object.keys(_vals).forEach(pid => { byPlayer[pid] = _pick(_vals[pid]); });
     } else {
       // Custom metric — two-step via gps_report_metrics
       // Paginated: full-squad match reports can exceed the server's ~1000-row cap →
       // truncated report-id set → incomplete custom-metric baselines.
+      const _selEav = 'id, session_id, player_id, training_sessions!inner(session_date)';
       const matchReports = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
-        .select('id, player_id, training_sessions!inner(session_date)')
+        .select(_selEav)
         .in('player_id', player_ids)
         .eq('club_id', clubId)
         .in('training_sessions.session_date', _datesArr), { label: 'baseline.squad-eav' }).catch(() => null);
       if (!matchReports?.length) return {};
 
-      const reportToPlayer = {};
-      matchReports.forEach(r => { reportToPlayer[r.id] = r.player_id; });
-      const allReportIds = matchReports.map(r => r.id);
+      // Ídem single: el valor EAV sigue siendo el de sesión completa, pero el que no jugó se cae.
+      const scopedEav = await _scopeToTeam(matchReports, clubId, player_ids, _selEav);
+      if (!scopedEav.length) return {};
+      const reportToPlayer = {}, reportToDate = {};
+      scopedEav.forEach(r => { reportToPlayer[r.id] = r.player_id; reportToDate[r.id] = r.training_sessions?.session_date; });
+      const allReportIds = scopedEav.map(r => r.id);
 
       const { data: eav, error: e2 } = await window.sb
         .from('gps_report_metrics')
@@ -264,12 +335,16 @@
         .order('value', { ascending: false });
       if (e2 || !eav) return {};
 
+      // Igual que en el camino core: se junta TODO y después elige el modo. (Antes se cortaba
+      // en n acá mismo, aprovechando que la query venía ordenada por valor: con 'recent' o 'avg'
+      // eso descartaría justo los que hay que mirar.)
+      const _eavVals = {};
       eav.forEach(row => {
         const pid = reportToPlayer[row.report_id];
         if (!pid) return;
-        if (!byPlayer[pid]) byPlayer[pid] = [];
-        if (byPlayer[pid].length < n) byPlayer[pid].push(+(row.value || 0));
+        (_eavVals[pid] = _eavVals[pid] || []).push({ v: +(row.value || 0), d: reportToDate[row.report_id] });
       });
+      Object.keys(_eavVals).forEach(pid => { byPlayer[pid] = _pick(_eavVals[pid]); });
     }
 
     const out = {};
@@ -281,14 +356,16 @@
           warning: `Insufficient match data (${count}/${MIN_MATCHES} minimum)` };
       } else {
         const mean = vals.reduce((s, v) => s + v, 0) / count;
-        const confidence = count >= n ? 'high' : 'medium';
+        // Con 'avg' entran todos los partidos que haya: la confianza la da el número de partidos,
+        // no si se llegó a N (N no significa nada en ese modo).
+        const confidence = (mode === 'avg' || count >= n) ? 'high' : 'medium';
         out[pid] = {
           baseline: +mean.toFixed(2), count, confidence,
-          source: count >= n ? 'full' : 'partial',
-          warning: count < n ? `Baseline from ${count} matches (recommended: ${n})` : null,
+          source: (mode === 'avg' || count >= n) ? 'full' : 'partial',
+          warning: (mode !== 'avg' && count < n) ? `Baseline from ${count} matches (recommended: ${n})` : null,
         };
       }
-      const key = _cacheKey(pid, metric, n);
+      const key = _cacheKey(pid, metric, mode === 'best' ? n : `${mode}:${n}`);
       if (!_cache[key]) _cache[key] = { result: out[pid], ts: Date.now() };
     });
 
