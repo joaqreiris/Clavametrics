@@ -1,6 +1,6 @@
 // Subir esta versión en cada despliegue que cambie assets: al activarse borra
 // los cachés de versiones anteriores.
-const CACHE_VERSION = 'clava-v6';
+const CACHE_VERSION = 'clava-v7';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 // Lo que usa TODA página autenticada. Se baja en la instalación para que la

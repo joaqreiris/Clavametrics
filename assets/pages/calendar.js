@@ -3485,3 +3485,138 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
     btn.addEventListener('click', () => openEvtModal(null));
   }
 });
+
+// ── Deslizar sobre la tira de días para cambiar de microciclo ──────────────────
+// El ribbon sigue estando, pero estando parado en las fechas se pasa de micro con el
+// dedo (swipe) o con el gesto horizontal del trackpad, sin subir a pinchar el chip.
+// Regla: primero se recorre la tira; sólo cuando ya no puede seguir hacia ese lado,
+// el gesto salta de microciclo. Así el scroll horizontal de la tira no se pierde.
+const MC_SWIPE_PX = 60;    // distancia mínima del dedo
+const MC_WHEEL_PX = 140;   // deltaX acumulado del trackpad
+let _mcSwipeBusy = false, _mcSlideAnim = null;
+
+function _mcSwipeReduced(){
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function _mcViewIsGrid(){ return _calView === 'microcycle' || _calView === 'player'; }
+
+// ¿La tira ya llegó al borde en esa dirección? dir=+1 avanza en el tiempo (dedo hacia
+// la izquierda). Sin overflow (desktop ancho) los dos bordes son verdaderos a la vez.
+function _mcGridAtEdge(grid, dir){
+  if (!grid) return true;
+  const max = grid.scrollWidth - grid.clientWidth;
+  return dir > 0 ? grid.scrollLeft >= max - 2 : grid.scrollLeft <= 2;
+}
+
+function _mcSwipeSlide(el, fromX, toX, fromOp, toOp, ms){
+  if (!el || !el.animate || _mcSwipeReduced()) return Promise.resolve();
+  try { if (_mcSlideAnim) _mcSlideAnim.cancel(); } catch (_) {}
+  _mcSlideAnim = el.animate(
+    [{ transform: `translateX(${fromX}px)`, opacity: fromOp },
+     { transform: `translateX(${toX}px)`,   opacity: toOp }],
+    { duration: ms, easing: 'cubic-bezier(.22,.7,.3,1)', fill: 'forwards' });
+  return _mcSlideAnim.finished.catch(() => {});
+}
+
+// Rebote corto: no hay micro de ese lado (primero o último de la temporada).
+function _mcSwipeBump(el, dir){
+  if (!el || !el.animate || _mcSwipeReduced()) return;
+  el.animate(
+    [{ transform: 'translateX(0)' },
+     { transform: `translateX(${dir > 0 ? -14 : 14}px)` },
+     { transform: 'translateX(0)' }],
+    { duration: 240, easing: 'ease-out' });
+}
+
+// Mueve el anillo azul del ribbon al micro que se está viendo y lo trae a la vista,
+// porque loadSessions() no repinta el ribbon.
+function calSyncRibbonActive(){
+  const mc = _allMCs[_mcIdx];
+  const cyclesEl = document.getElementById('calV2Cycles');
+  if (!mc || !cyclesEl) return;
+  let active = null;
+  cyclesEl.querySelectorAll('.mc-chip').forEach(c => {
+    const on = c.dataset.mcId === String(mc.id);
+    c.classList.toggle('mc-chip--active', on);
+    if (on) active = c;
+  });
+  const vp = document.getElementById('calRibbonV2');
+  if (!active || !vp) return;
+  const left = active.offsetLeft - (vp.clientWidth - active.offsetWidth) / 2;
+  try { vp.scrollTo({ left: Math.max(0, left), behavior: 'smooth' }); }
+  catch (_) { vp.scrollLeft = Math.max(0, left); }
+}
+
+// dir=+1 → el siguiente en el tiempo. _allMCs viene ordenado por start_date DESC,
+// así que avanzar es restarle uno al índice.
+async function calGoToMcOffset(dir){
+  const grid = document.getElementById('calDaysGrid');
+  if (_mcSwipeBusy || !_allMCs.length) return;
+  const next = _mcIdx - dir;
+  if (next < 0 || next >= _allMCs.length) { _mcSwipeBump(grid, dir); return; }
+  _mcSwipeBusy = true;
+  _mcIdx = next;
+  _weekOffset = 0;
+  calSyncRibbonActive();
+  try {
+    await _mcSwipeSlide(grid, 0, dir > 0 ? -28 : 28, 1, 0, 110);
+    await loadSessions({ silent: true });   // silent: sin el cartel de «Loading…» bajo la animación
+    if (grid) grid.scrollLeft = 0;          // la tira nueva arranca por su primer día
+    await _mcSwipeSlide(grid, dir > 0 ? 36 : -36, 0, 0, 1, 200);
+  } finally {
+    try { if (_mcSlideAnim) _mcSlideAnim.cancel(); } catch (_) {}
+    _mcSlideAnim = null;
+    _mcSwipeBusy = false;
+  }
+}
+
+(function initMcSwipe(){
+  const grid = document.getElementById('calDaysGrid');
+  if (!grid) return;
+
+  // Trackpad / rueda horizontal
+  let wheelAccum = 0, wheelTimer = null, wheelLock = false;
+  grid.addEventListener('wheel', e => {
+    if (!_mcViewIsGrid()) return;
+    const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+    if (ax < 2 || ax <= ay) return;   // gesto vertical: es el scroll de la página
+    const dir = e.deltaX > 0 ? 1 : -1;
+    if (!_mcGridAtEdge(grid, dir)) { wheelAccum = 0; return; }
+    e.preventDefault();               // y de paso corta el «atrás» por gesto del navegador
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => { wheelAccum = 0; wheelLock = false; }, 260);
+    if (wheelLock) return;            // un gesto = un micro (el momentum no encadena saltos)
+    wheelAccum += e.deltaX;
+    if (Math.abs(wheelAccum) >= MC_WHEEL_PX) {
+      wheelAccum = 0; wheelLock = true;
+      calGoToMcOffset(dir);
+    }
+  }, { passive: false });
+
+  // Dedo
+  let tX = 0, tY = 0, tT = 0, tEdgeFwd = false, tEdgeBack = false, tracking = false;
+  grid.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    const t = e.touches[0];
+    tX = t.clientX; tY = t.clientY; tT = Date.now();
+    // El borde se mira al empezar: si había tira por recorrer, el gesto era para scrollearla
+    tEdgeFwd  = _mcGridAtEdge(grid, 1);
+    tEdgeBack = _mcGridAtEdge(grid, -1);
+    tracking = true;
+  }, { passive: true });
+
+  grid.addEventListener('touchend', e => {
+    if (!tracking) return;
+    tracking = false;
+    if (!_mcViewIsGrid()) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - tX, dy = t.clientY - tY;
+    if (Date.now() - tT > 800) return;
+    if (Math.abs(dx) < MC_SWIPE_PX || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    const dir = dx < 0 ? 1 : -1;
+    if (!(dir > 0 ? tEdgeFwd : tEdgeBack)) return;
+    if (!_mcGridAtEdge(grid, dir)) return;
+    calGoToMcOffset(dir);
+  }, { passive: true });
+})();

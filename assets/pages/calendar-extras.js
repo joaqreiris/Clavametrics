@@ -292,6 +292,7 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
       chip.className = 'mc-chip' + (hasMatch ? '' : ' mc-chip--rest') + (isToday ? ' mc-chip--today' : '') + (isActive ? ' mc-chip--active' : '');
       chip.style.left = left + 'px';
       chip.style.width = width + 'px';
+      chip.dataset.mcId = mc.id;   // el swipe de la tira de días mueve el anillo por aquí
       const mcNo = 'MC' + (ordIdx + 1);
       if (hasMatch) {
         mdCounter++;
