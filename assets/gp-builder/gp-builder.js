@@ -137,6 +137,18 @@
   // is 0/null in migrated period data → use 'Work time' instead. distance_per_minute (DB
   // catalog) is hidden in favour of the cleaner 'Distance / min' (same value).
   const TASK_HIDE_METRICS = new Set(['time_played', 'distance_per_minute']);
+  /**
+   * Por qué una métrica NO se puede usar con esta fuente (null = se puede).
+   * Las métricas cargadas a mano se registran por SESIÓN (gps_report_metrics): no existe el dato
+   * a nivel de ejercicio, así que con fuente «tarea» se ofrecían y devolvían la card vacía. Se
+   * muestran igual, marcadas y con el motivo: que falte de la lista sin explicación es peor.
+   */
+  function _metricBlockedFor(m, source) {
+    if (source === 'task' && m && m.is_custom && !m.calculated) {
+      return _tt('gps_analysis.builder_metric_task_eav', 'Loaded by session, not per drill');
+    }
+    return null;
+  }
   // Built-in DERIVED metrics — the lib/gp-card resolver computes them per row (see DERIVED
   // there). The builder only needs to OFFER them in the catalog (no formula needed here).
   const DERIVED_METRICS = { acc_dec: { name: 'Acc+Dec', unit: '' } };
@@ -8474,11 +8486,14 @@
         const on  = S.metrics.some(f => f.id === m.id);
         // clic = agregar otra instancia (repetible) → sólo bloquea el cupo lleno… o que la
         // métrica todavía no tenga ni un dato importado (se muestra, pero no se puede usar).
-        const dis = full || !!m.noData;
+        const _blocked = _metricBlockedFor(m, S.source);
+        const dis = full || !!m.noData || !!_blocked;
         const isCalc = m.calculated;
         const tail = isCalc
           ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="${_tt('gps_analysis.calc_edit_formula_title', 'Edit formula')}"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="${_tt('gps_analysis.calc_delete_title', 'Delete')}"><i class="ti ti-trash"></i></button></span>`
-          : (m.noData
+          : (_blocked
+              ? `<span class="kind nodata"><i class="ti ti-calendar-off"></i>${esc(_tt('gps_analysis.builder_metric_task_eav_tag', 'by session'))}</span>`
+              : m.noData
               ? `<span class="kind nodata"><i class="ti ti-cloud-off"></i>${esc(_tt('gps_analysis.builder_metric_nodata_tag', 'no data'))}</span>`
               : `<span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>`);
         const tag = (!isCalc && m.is_custom) ? ' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>' : '';
@@ -8664,9 +8679,10 @@
 
   // Fila arrastrable del panel. Las ya colocadas (is-placed) no se arrastran; las que aún no
   // tienen datos (is-nodata) tampoco, pero SE MUESTRAN con el motivo, en vez de desaparecer.
-  function ddFieldRow(id, kind, name, icon, unit, placed, noData) {
+  function ddFieldRow(id, kind, name, icon, unit, placed, noData, reason) {
     const off = placed || noData;
-    const hint = noData ? esc(_tt('gps_analysis.builder_metric_nodata', 'No data yet — sync to use it')) : '';
+    const hint = reason ? esc(reason)
+               : noData ? esc(_tt('gps_analysis.builder_metric_nodata', 'No data yet — sync to use it')) : '';
     return `<div class="bdd-field${placed ? ' is-placed' : ''}${noData ? ' is-nodata' : ''}" draggable="${off ? 'false' : 'true'}" data-id="${esc(id)}" data-kind="${kind}"${hint ? ` title="${hint}"` : ''}>
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(icon)}"></i></span>
@@ -8686,7 +8702,10 @@
     const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
     // Las métricas NUNCA se marcan is-placed: se pueden repetir (misma métrica con otro agg,
     // ej. valor + Nº de sesiones). Sólo las dimensiones siguen siendo únicas.
-    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, false, !!m.noData));
+    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated
+      ? ddCalcFieldHTML(m)
+      : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, false,
+                   !!m.noData || !!_metricBlockedFor(m, S?.source), _metricBlockedFor(m, S?.source)));
     const none = `<div class="bdd-grp-h"><span class="hint">${_tt('gps_analysis.builder_no_matches', 'No matches')}</span></div>`;
     const addCalc = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>${_tt('gps_analysis.builder_calculated_metric', 'Calculated metric')}</button>`;
     return `
